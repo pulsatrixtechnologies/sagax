@@ -1,5 +1,7 @@
 // Small, stateless probes for CLI onboarding. The caller owns consent for the
 // metered completion and persistence; neither credentials nor replies are logged.
+import { stripOpenAiEndpointSuffix } from "../../shared/openai-compat-url.ts";
+
 export const API_ENDPOINTS = [
   { id: "openai", label: "OpenAI API", url: "https://api.openai.com/v1", keyUrl: "https://platform.openai.com/api-keys" },
   { id: "openrouter", label: "OpenRouter", url: "https://openrouter.ai/api/v1", keyUrl: "https://openrouter.ai/settings/keys" },
@@ -19,7 +21,7 @@ export function normalizeApiUrl(value: string): string {
     input.slice(input.indexOf("://") + 3).split("/")[0]?.includes("@") ||
     (url.protocol !== "https:" && !(url.protocol === "http:" && local))
   ) throw invalid();
-  return url.href.replace(/\/+$/u, "");
+  return stripOpenAiEndpointSuffix(url.href);
 }
 
 class SetupApiError extends Error {}

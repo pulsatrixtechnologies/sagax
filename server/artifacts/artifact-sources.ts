@@ -26,7 +26,10 @@ import { RemoteMcpClient } from "../mcp/mcp-http.ts";
 import { DISPATCH_KPI_TOOL } from "./dispatch-kpi.ts";
 import { parseToolId } from "../../shared/approval-describe.ts";
 import type { Artifact } from "../../shared/artifacts.ts";
+import type { ToolAnswer } from "./artifact-source-types.ts";
 import type { ArtifactRun } from "./artifacts.ts";
+
+export type { ToolAnswer } from "./artifact-source-types.ts";
 
 export interface ArtifactSourceBot {
   id: string;
@@ -66,11 +69,6 @@ export interface ArtifactSourceDeps {
     state(botId: string): Promise<"running" | "stopped" | "held">;
     exec(botId: string, command: string): Promise<{ exitCode: number; stdout: string; stderr: string; timedOut?: boolean }>;
   };
-}
-
-export interface ToolAnswer {
-  isError: boolean;
-  value: unknown;
 }
 
 export const SOURCE_BLOCKED = {

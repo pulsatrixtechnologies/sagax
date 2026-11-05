@@ -539,6 +539,8 @@ function routineField(key: string, field: string, value: SettingValue, label: st
 routineField("routine.name", "name", "string", "Name", "Automations > routine");
 routineField("routine.prompt", "prompt", "text", "Instructions", "Automations > routine");
 routineField("routine.schedule", "schedule", "object", "Schedule ({type: once|daily|cron|interval, ...})", "Automations > routine > Schedule");
+routineField("routine.model", "model", "string?", "Model for routine runs (null follows the bot)", "Automations > routine > Model");
+routineField("routine.effort", "effort", "string?", "Reasoning effort for routine runs (null follows the bot)", "Automations > routine > Effort");
 routineField("routine.enabled", "enabled", "boolean", "On or off", "Bot panel > Details > Routines; Automations");
 routineField("routine.engine", "runOn", "enum:maus|cloud", "Where it runs", "Automations > routine > Runs on");
 routineField("routine.bot", "botId", "string", "Bot that runs it", "Automations > routine > Bot");
@@ -550,6 +552,15 @@ routineField("routine.deleteWhenFinished", "deleteWhenFinished", "boolean", "Del
 routineField("routine.autoPauseAfter", "autoPauseAfter", "number?", "Pause after this many failures in a row (0 never, null the default 5)", "Automations > routine > Advanced");
 // 2026-10-28 the folder of its bot's Routines list (shared/routine-folders.ts).
 routineField("routine.folder", "folder", "string?", "Folder in the bot's Routines list (null: no folder)", "Bot panel > Details > Routines > row menu > Move to folder");
+// #1996: the Requirements "Needs its computer" box; the handler keeps the
+// routine's skills and MCP needs (server/settings-actions.ts)
+add({
+  key: "routine.requiresComputer", family: "routine", target: "routine", value: "boolean",
+  label: "Needs its computer: the pre-run check waits for the bot's computer to be online (true), or not (false); skills and MCP requirements stay",
+  where: "Automations > routine > Requirements",
+  read: () => ({ path: "/api/routines", list: "routines", match: "id", field: "requires" }),
+  write: (ids) => ({ method: "PATCH", path: `/api/routines/${enc(ids.target!)}`, body: { requires: null } }),
+});
 routineField("routine.runAs", "runAs", "string", "Runs as (a person)", "Automations > routine > Runs as", always("others"));
 // 2026-10-26 run only when something changes (shared/routine-watch.ts). A
 // watch command runs on each check with no card: what runs without asking
@@ -843,6 +854,7 @@ pref("appearance.botAccent", "appearance", "sagax.botAccent.v1", "enum:1|0", "Th
 pref("appearance.sidebarHidden", "appearance", "sagax.sidebarHidden.v1", "object", "Rows hidden from the sidebar ({items: [{kind, id, at}], unhideOnMessage: {people, bots}})", "Settings > Appearance > Hidden from the sidebar");
 pref("appearance.busySend", "appearance", "sagax.busySend.v1", "string", "Sending to a busy bot", "Settings > Appearance");
 pref("appearance.streamReplies", "appearance", "sagax.streamReplies.v1", "enum:on|off", "Show replies as they are written (on, the default; off shows each reply once it is finished)", "Settings > Appearance > Conversation");
+pref("appearance.chatWidth", "appearance", "sagax.chatWidth.v1", "enum:reading|wide|full", "Chat width (reading 960px, the default; wide ~1280px; full fills the pane)", "Settings > Appearance > Conversation");
 pref("notifications.sounds", "notifications", "omb-notification-sounds", "boolean", "Notification sounds", "Settings > Notifications");
 pref("notifications.soundChoice", "notifications", "sagax.notificationSound.v1", "enum:system|tick|double-tick|chime-a|chime-b|blip", "Notification sound (the system's, Tick, Double tick, Chime A, Chime B, Blip)", "Settings > Notifications");
 pref("notifications.persistent", "notifications", "omb-notification-persistent", "boolean", "Persistent notifications", "Settings > Notifications");

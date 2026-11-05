@@ -543,6 +543,17 @@ describe("the model menu from the sidebar (windowOnly)", () => {
     (list.props as { onEscape?: () => void }).onEscape?.();
     expect(closed).toHaveBeenCalledOnce();
   });
+
+  // Refs #1979: CSS bottom: innerHeight - 96 put the menu above the window.
+  it("pins the open-alone menu by its top inside the viewport", () => {
+    fixture.instances = [signedIn()];
+    const shown = render(bot("claude", "claude-opus-5-5"), { windowOnly: true, threadId: undefined });
+    const menu = shown.nodes.find((node) => "data-model-menu" in node.props)!;
+    const style = menu.props.style as { top?: number; bottom?: number; left?: number; maxHeight?: number };
+    expect(style).toMatchObject({ left: 24, top: 96 });
+    expect(style.bottom).toBeUndefined();
+    expect(style.maxHeight).toBeGreaterThan(0);
+  });
 });
 
 describe("Connected is said once", () => {

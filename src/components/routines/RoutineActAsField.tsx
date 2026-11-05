@@ -163,6 +163,8 @@ export function RoutineActAsField({ coverage, value, onChange, viewing = false, 
       <PanelValue>{actAsLabel(savedOnly)}</PanelValue>
     </PanelRow>;
   }
+  // Only a routine that runs a Pulsatrix Flow recipe picks a role (JC 2026-11-05).
+  if (!answer.recipe) return null;
   const slug = value ?? answer.suggested;
   const options = [
     { value: ME_ROLE, label: t("roles.me") },
@@ -183,5 +185,5 @@ export function RoutineActAsField({ coverage, value, onChange, viewing = false, 
 export function actAsToSave(saved: string | undefined, chosen: string | undefined, answer: RoutineRoleCoverageAnswer | undefined): string | undefined {
   if (chosen !== undefined) return chosen;
   if (saved !== undefined) return undefined;
-  return answer ? answer.suggested : undefined;
+  return answer?.recipe ? answer.suggested : undefined;
 }

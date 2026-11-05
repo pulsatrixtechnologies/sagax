@@ -157,6 +157,7 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       // 2026-11-04: a routine's model reaches its sub-agents too (Claude);
       // #2038: so do a routine's sub-agent model and the bot's fast model.
       ...(state.subagentModel ? { subagentModel: state.subagentModel } : {}),
+      ...(state.routineEffort ? { subagentEffort: turnEffort } : {}),
       effort: turnEffort,
       variant: state.variant,
       // a rewound thread never resumes the abandoned branch's session

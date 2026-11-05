@@ -163,6 +163,55 @@ export function artifactWindowNavigationAllowed(url, origin) {
   }
 }
 
+/**
+ * A claude.ai artifact (#2018) in a window of its own: the claude.ai page
+ * itself, in a persistent session of its own so the person's claude.ai
+ * sign-in stays from one opening to the next. It never shares the app's
+ * session, gets no preload, and may only navigate on claude.ai and the hosts
+ * its sign-in goes through; any other link goes to the system browser.
+ */
+export const CLAUDE_AI_PARTITION = "persist:claude-ai";
+const CLAUDE_AI_PATH_RE = /^\/(code\/)?artifact\/([A-Za-z0-9-]{8,64})\/?$/;
+/** claude.ai and the sign-in hosts it sends the person through. */
+const CLAUDE_AI_HOSTS = ["claude.ai", "claude.com", "anthropic.com"];
+const CLAUDE_AI_AUTH_HOSTS = new Set(["accounts.google.com", "appleid.apple.com"]);
+
+/** The canonical https://claude.ai/[code/]artifact/<id> URL of `raw`, or null. */
+export function claudeAiArtifactUrl(raw) {
+  if (!isString(raw)) return null;
+  let url;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" || url.username || url.password) return null;
+  if (url.hostname !== "claude.ai" && url.hostname !== "www.claude.ai") return null;
+  const match = CLAUDE_AI_PATH_RE.exec(url.pathname);
+  if (!match) return null;
+  return `https://claude.ai/${match[1] ?? ""}artifact/${match[2]}`;
+}
+
+/** Whether the claude.ai window may go to `url`: https on claude.ai (and its
+ * subdomains, claude.com, anthropic.com) or a sign-in host. */
+export function claudeAiNavigationAllowed(url) {
+  try {
+    const target = new URL(url);
+    if (target.protocol !== "https:" || target.username || target.password) return false;
+    const host = target.hostname.toLowerCase();
+    if (CLAUDE_AI_AUTH_HOSTS.has(host)) return true;
+    return CLAUDE_AI_HOSTS.some((allowed) => host === allowed || host.endsWith(`.${allowed}`));
+  } catch {
+    return false;
+  }
+}
+
+/** What a claude.ai page may ask of its session: copy to the clipboard and
+ * full screen, nothing else (no camera, microphone, location, notifications). */
+export function claudeAiPermissionAllowed(permission) {
+  return permission === "clipboard-sanitized-write" || permission === "fullscreen";
+}
+
 function pageOrigin(event) {
   const url = event?.senderFrame?.url || event?.sender?.getURL?.() || "";
   try {
@@ -185,6 +234,7 @@ function pageOrigin(event) {
  * @param {Pick<import("electron").Screen, "getPrimaryDisplay" | "getAllDisplays" | "getDisplayMatching">} [deps.screen]
  * @param {{ read(): unknown, write(value: unknown): void }} [deps.boundsStore] where each artifact's place is kept
  * @param {() => void} [deps.onChange] the open windows or their titles changed (the Window menu)
+ * @param {Pick<typeof import("electron").session, "fromPartition">} [deps.session] the claude.ai window's persistent session
  */
 export function createArtifactWindows(deps) {
   const { BrowserWindow, ipcMain, getMainWindow, isTrustedMain } = deps;
@@ -406,6 +456,114 @@ export function createArtifactWindows(deps) {
     return "created";
   }
 
+  /** claude.ai windows, canonical url -> BrowserWindow. */
+  const claudeWindows = new Map();
+  let claudeSessionReady = false;
+  const claudeSession = () => {
+    if (claudeSessionReady) return;
+    claudeSessionReady = true;
+    try {
+      const shared = deps.session?.fromPartition?.(CLAUDE_AI_PARTITION);
+      shared?.setPermissionCheckHandler?.((_webContents, permission) => claudeAiPermissionAllowed(permission));
+      shared?.setPermissionRequestHandler?.((_webContents, permission, callback) => callback(claudeAiPermissionAllowed(permission)));
+    } catch (error) {
+      log(`claude.ai window: its session was not set up (${error?.message ?? error})`);
+    }
+  };
+
+  /** "created" or "focused", or "refused" (not the main window's page, not a
+   * claude.ai artifact, too many windows). */
+  function openClaudeAi(event, raw) {
+    if (!fromMainWindow(event)) return "refused";
+    const url = claudeAiArtifactUrl(raw && typeof raw === "object" ? raw.url : undefined);
+    if (!url) return "refused";
+    const existing = claudeWindows.get(url);
+    if (existing && !existing.isDestroyed()) {
+      bringForward(existing);
+      return "focused";
+    }
+    claudeWindows.delete(url);
+    if (claudeWindows.size + windows.size >= MAX_ARTIFACT_WINDOWS) return "refused";
+    claudeSession();
+    const placed = resolveArtifactWindowBounds({
+      place: undefined,
+      workAreas: screenAreas(),
+      home: homeArea(),
+      request: { width: ARTIFACT_WINDOW_SIZE.width, height: ARTIFACT_WINDOW_SIZE.height },
+    });
+    const win = new BrowserWindow({
+      ...placed.bounds,
+      minWidth: ARTIFACT_WINDOW_MIN.width,
+      minHeight: ARTIFACT_WINDOW_MIN.height,
+      resizable: true,
+      movable: true,
+      minimizable: true,
+      maximizable: true,
+      fullscreenable: true,
+      show: false,
+      title: "Claude",
+      ...(deps.icon ? { icon: deps.icon() } : {}),
+      autoHideMenuBar: true,
+      webPreferences: {
+        // The person's claude.ai sign-in lives in this session, apart from the app's.
+        partition: CLAUDE_AI_PARTITION,
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+      },
+    });
+    claudeWindows.set(url, win);
+    win.once("ready-to-show", () => {
+      if (win.isDestroyed()) return;
+      win.show();
+      win.focus();
+    });
+    win.on("closed", () => {
+      if (claudeWindows.get(url) === win) claudeWindows.delete(url);
+    });
+    const leave = (target) => {
+      try {
+        const parsed = new URL(target);
+        if (parsed.protocol === "http:" || parsed.protocol === "https:") deps.openExternal?.(parsed.toString());
+      } catch {
+        // not a web link: nothing to open
+      }
+    };
+    // A sign-in popup on an allowed host opens in this session; any other
+    // link goes to the system browser.
+    win.webContents.setWindowOpenHandler(({ url: target }) => {
+      if (claudeAiNavigationAllowed(target)) {
+        return {
+          action: "allow",
+          overrideBrowserWindowOptions: {
+            autoHideMenuBar: true,
+            webPreferences: { partition: CLAUDE_AI_PARTITION, contextIsolation: true, nodeIntegration: false, sandbox: true },
+          },
+        };
+      }
+      leave(target);
+      return { action: "deny" };
+    });
+    const guard = (navigationEvent, target) => {
+      if (claudeAiNavigationAllowed(target)) return;
+      navigationEvent.preventDefault();
+      leave(target);
+    };
+    win.webContents.on("will-navigate", guard);
+    win.webContents.on("will-redirect", guard);
+    void Promise.resolve(win.loadURL(url)).catch((error) => {
+      log(`claude.ai window: the page did not load (${error?.message ?? error})`);
+    });
+    return "created";
+  }
+
+  const closeClaudeWindows = () => {
+    for (const win of claudeWindows.values()) {
+      if (!win.isDestroyed()) win.close();
+    }
+    claudeWindows.clear();
+  };
+
   /** The page docked or deleted the artifact: its window goes, without
    * telling the page it was closed. */
   function close(event, raw) {
@@ -418,10 +576,12 @@ export function createArtifactWindows(deps) {
 
   ipcMain.handle("artifact-window:open", (event, raw) => open(event, raw));
   ipcMain.handle("artifact-window:close", (event, raw) => close(event, raw));
+  ipcMain.handle("artifact-window:open-claude-ai", (event, raw) => openClaudeAi(event, raw));
 
   return {
     open,
     close,
+    openClaudeAi,
     /** Artifact ids with a window open. */
     list: () => [...windows.keys()].filter((artifactId) => live(artifactId)),
     /** The open windows for the Window menu, in the order they opened. */
@@ -456,10 +616,12 @@ export function createArtifactWindows(deps) {
     /** The app quits: every artifact window closes with it. */
     closeAll() {
       for (const artifactId of windows.keys()) closeQuietly(artifactId);
+      closeClaudeWindows();
     },
     dispose() {
       ipcMain.removeHandler("artifact-window:open");
       ipcMain.removeHandler("artifact-window:close");
+      ipcMain.removeHandler("artifact-window:open-claude-ai");
     },
   };
 }

@@ -31,27 +31,11 @@ function mount(element: React.ReactElement): HTMLElement {
 beforeAll(() => setLocale("fr"));
 
 describe("role chip", () => {
-  it("shows the role's name, keeps the id in the tooltip and explains a fallback", () => {
-    const tool = { name: "mcp__perspicax__cw_psa_query", ok: true, role: { slug: "", name: "", reason: "fallback" as const, refusedTool: "cw_psa_query", previous: { slug: "service-desk", name: "Service Desk" }, person: "Alex Martin" } };
-    const view = mount(createElement(ToolActivity, { tool }));
-    const chip = view.querySelector<HTMLElement>("[data-role-chip]")!;
-    expect(chip.dataset.roleChanged).toBe("true");
-    const button = chip.querySelector("button")!;
-    expect(button.textContent).toBe("Moi");
-    expect(button.title).toBe("Accès d'Alex Martin");
-    flushSync(() => button.click());
-    expect(view.querySelector("[data-role-why]")!.textContent).toContain("Service Desk a été refusé");
-    expect(view.querySelector("[data-role-why]")!.textContent).toMatch(/au nom d.Alex Martin/);
-  });
-
-  it("keeps a GUID out of sight and the chip quiet when the role did not change", () => {
+  it("no role chip on a chat step: the role lives on Flow routines only (JC 2026-11-05)", () => {
     const tool = { name: "cw_psa_find_tickets", ok: true, role: { slug: "service-desk", name: "Service Desk", reason: "routine" as const } };
     const view = mount(createElement(ToolActivity, { tool }));
-    const chip = view.querySelector<HTMLElement>("[data-role-chip]")!;
-    expect(chip.dataset.roleChanged).toBeUndefined();
-    expect(chip.querySelector("button")!.title).toBe("Identifiant du rôle : service-desk");
-    const guid = mount(createElement(ToolActivity, { tool: { ...tool, role: { slug: "3f2b8c1e-1111-4222-8333-944455556666", name: "3f2b8c1e-1111-4222-8333-944455556666", reason: "routine" as const } } }));
-    expect(guid.textContent).not.toContain("3f2b8c1e");
+    expect(view.querySelector("[data-role-chip]")).toBeNull();
+    expect(view.textContent).not.toContain("Service Desk");
   });
 });
 

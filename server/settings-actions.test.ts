@@ -71,6 +71,18 @@ describe("sagax_settings", () => {
     expect(h.audits).toEqual([expect.objectContaining({ key: "bot.approvalMode", value: "auto", how: "run", actor: "pr_owner" })]);
   });
 
+  it("applies routine model and effort as own settings without an access grant card", async () => {
+    for (const mode of ["auto", "full"] as const) {
+      const h = harness({ mode, keyRequired: (_person, classes) => classes.includes("always-grant") ? ["always-grant"] : [] });
+      for (const [key, value] of [["routine.model", "fast"], ["routine.effort", "low"], ["routine.effort", null]] as const) {
+        const result = await h.call({ action: "set", key, target: "r1", value });
+        expect(result.body.text).toContain("Done");
+        expect(h.planned.at(-1)?.effect).toBe("run");
+        expect(h.planned.at(-1)?.stepUpClasses).not.toContain("always-grant");
+      }
+    }
+  });
+
   it("applies the managed teams of the owner's Primary Bot and a routine's new name", async () => {
     const h = harness();
     await h.call({ action: "set", key: "bot.managedSections", value: ["Built-in"] });
@@ -971,6 +983,18 @@ describe("sagax_settings: plugins, MCP servers and a routine's webhook (2026-10-
     expect(JSON.stringify(h.planned)).not.toMatch(/POST only|\/api\/me\/mcp\/servers"/);
     const enabled = await h.call({ action: "get", key: "connections.mcpServerEnabled" });
     expect(JSON.parse(String(enabled.body.text))).toEqual({ key: "connections.mcpServerEnabled", value: servers });
+  });
+
+  it("routine.requiresComputer turns the need on and off and keeps the skills and MCP needs (#1996)", async () => {
+    const answer = { routines: [{ id: "r1", botId: "bot-a", requires: { skills: ["osprey-digest"], mcpServers: ["wren"] } }] };
+    const h = harness({ mode: "full", answer });
+    const on = await h.call({ action: "set", key: "routine.requiresComputer", target: "r1", value: true });
+    expect(on.status, JSON.stringify(on.body)).toBe(200);
+    expect(h.planned.at(-1)).toMatchObject({ method: "PATCH", path: "/api/routines/r1", body: { requires: { skills: ["osprey-digest"], mcpServers: ["wren"], computer: true } } });
+    const bare = harness({ mode: "full", answer: { routines: [{ id: "r1", botId: "bot-a", requires: { computer: true } }] } });
+    await bare.call({ action: "set", key: "routine.requiresComputer", target: "r1", value: false });
+    expect(bare.planned.at(-1)).toMatchObject({ method: "PATCH", path: "/api/routines/r1", body: { requires: null } });
+    expect((await h.call({ action: "set", key: "routine.requiresComputer", target: "r1", value: "yes" })).status).toBe(400);
   });
 
   it("reads a webhook routine's address, never a key, and rotates its key for the person to copy", async () => {

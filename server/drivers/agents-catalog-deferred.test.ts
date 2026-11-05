@@ -98,6 +98,32 @@ describe("deferred rare agents tools", () => {
     expect(claude.find((tool) => tool.name === "list_routines" || tool.name === "run_routine")).toBeDefined();
   }, 30_000);
 
+  // #1997: what a Claude call carries up front is the loaded part of this
+  // listing, sent on every request of every conversation. A ceiling per
+  // profile (measured 2026-11-05: direct 28 tools / 31,780 B, everything
+  // 64 / 64,051 B) so a new always-loaded tool is a choice, not a drift; a
+  // rare one goes in DEFERRED_AGENT_TOOL_NAMES. The listing is byte-stable
+  // between two processes, which a prompt cache needs.
+  it("keeps the loaded part of a Claude listing under its budget, byte-stable (#1997)", async () => {
+    const DIRECT = { SAGAX_BOT_ID: "bot-a", SAGAX_CHIEF_OF_STAFF: "1", SAGAX_SKILL_AUTHORING_ENABLED: "1", SAGAX_SHARED_COMPUTERS_ENABLED: "1", SAGAX_VOICE_NOTES: "1" };
+    const budgets = [
+      { name: "direct", env: DIRECT, maxTools: 30, maxBytes: 33_000 },
+      { name: "everything", env: EVERYTHING, maxTools: 66, maxBytes: 66_000 },
+    ];
+    for (const budget of budgets) {
+      const env = { ...budget.env, SAGAX_DEFER_RARE_TOOLS: "1", SAGAX_MERGED_TOOLS: "1" };
+      const [first, second] = [await listTools(env), await listTools(env)];
+      expect(JSON.stringify(second), budget.name).toBe(JSON.stringify(first));
+      const loaded = first!.filter((tool) => tool._meta?.["anthropic/alwaysLoad"] !== false);
+      expect(loaded.length, `${budget.name}: loaded tools`).toBeLessThanOrEqual(budget.maxTools);
+      expect(JSON.stringify(loaded).length, `${budget.name}: loaded bytes`).toBeLessThanOrEqual(budget.maxBytes);
+      // Deferred, not removed: every tool is still served by name.
+      for (const name of ["make_video", "show_html", "wait_until", "open_connector_setup"]) {
+        const tool = first!.find((entry) => entry.name === name);
+        if (tool) expect(tool._meta?.["anthropic/alwaysLoad"], name).toBe(false);
+      }
+    }
+  }, 60_000);
   // #2037: a compact Claude turn used to list the core and the pins whole and
   // hide every other tool behind search_tools / call_tool (two round trips a
   // call, names invisible). With ToolSearch the rest is listed by name and

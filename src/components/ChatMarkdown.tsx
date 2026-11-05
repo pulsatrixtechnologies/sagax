@@ -73,6 +73,8 @@ import {
 import { cwWidgetRejection, parseCwWidgetText } from "../../shared/cw-widgets/validate.ts";
 import { CwWidgetView } from "./cw/CwWidgetView";
 import { ArtifactCard } from "./ArtifactCard";
+import { ClaudeArtifactCard, ClaudeArtifactConsentCard } from "./ClaudeArtifactCard";
+import { claudeArtifactUrl, parseArtifactConsent } from "../../shared/claude-chat-blocks";
 import { EmailCard } from "./EmailCard";
 import { WidgetFrame } from "./WidgetFrame";
 import { ChartBlock } from "./ChartBlock";
@@ -1437,7 +1439,17 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
         const email = kind === "email" || !kind ? parseEmailBlock(code, lang) : null;
         if (email) return <EmailCard draft={email} pending={pending} threadId={threadId} botId={botId} draftsEnabled={emailDrafts} />;
         if (kind === "widget") {
+          // the engine could not open another account's claude.ai artifact
+          const consent = pending ? null : parseArtifactConsent(code);
+          if (consent) return <ClaudeArtifactConsentCard url={consent.url} account={consent.account} onSendToBot={youtubeSendToBot} />;
           const page = parseArtifactPage(code);
+          // a claude.ai artifact is read live through the engine's session
+          const claudeUrl = page?.url ? claudeArtifactUrl(page.url) : null;
+          if (page && claudeUrl) {
+            const offset = nodeOffset(node);
+            const publishKey = !pending && offset !== undefined ? `${messageId ?? prefix}:${offset}` : undefined;
+            return <ClaudeArtifactCard url={claudeUrl} title={page.title} pending={pending} publishKey={publishKey} onSendToBot={youtubeSendToBot} />;
+          }
           // a YouTube page is the video itself: the player, not a page card
           const pageVideo = page?.url && !pending ? youtubeVideoId(page.url) : null;
           if (pageVideo) return <YouTubeMiniPlayer videoId={pageVideo} message={scopedMessage} onSendToBot={youtubeSendToBot} />;
@@ -1519,6 +1531,8 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
           const copy = delivered && Object.hasOwn(delivered, fileName(localPath)) ? delivered[fileName(localPath)] : undefined;
           return <LocalFileLink filePath={copy ?? localPath} name={copy ? fileName(localPath) : undefined} message={scopedMessage}>{children}</LocalFileLink>;
         }
+        const claudeUrl = href && !inert ? claudeArtifactUrl(href) : null;
+        if (claudeUrl) return <ClaudeArtifactCard url={claudeUrl} onSendToBot={youtubeSendToBot} />;
         const ytId = href && !inert ? youtubeVideoId(href) : null;
         if (ytId) {
           return (

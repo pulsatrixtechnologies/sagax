@@ -1,3 +1,4 @@
+import type { EffortLevel } from "./model-selection.ts";
 import type { RoutineRequirements, RoutineReadinessCheck } from "./routine-readiness.ts";
 /** Routine wire shapes — the routine and run records as they ride the REST
  * snapshot and the `routine` / `routine.run` live frames. Moved verbatim
@@ -189,7 +190,7 @@ export interface Routine {
   /** A pre-check run before each scheduled turn (server/routines/routine-precheck.ts):
    * a condition on its own receipts, or (2026-10-26) a watch that starts the
    * run only when something changes (shared/routine-watch.ts). */
-  precheck?: RoutineWatchPrecheck | { kind: "condition"; test: string; [field: string]: unknown };
+  precheck?: RoutineWatchPrecheck | { kind: "condition"; test: string; [field: string]: unknown } | { kind: "code"; check: string };
   /** 2026-10-28 (shared/routine-folders.ts): the folder of its bot it sits
    * in. Absent: no folder. */
   folder?: string;
@@ -210,6 +211,8 @@ export interface Routine {
   /** 2026-11-05 (shared/routine-act-as.ts): the Perspicax role its runs act
    * as ("Au nom de"); "" is "Moi". Absent: not chosen yet. */
   actAs?: string;
+  /** Reasoning effort for runs only; absent follows the bot. */
+  effort?: EffortLevel;
   nextRunAt: number | null;
   /** Scheduled slot a flexible routine advances from. Absent for exact timing. */
   nominalRunAt?: number;
@@ -323,6 +326,8 @@ export interface RoutineRun {
   subagentModel?: string;
   /** Snapshot of the routine's "Au nom de" role for this run ("" = Moi). */
   actAs?: string;
+  /** Reasoning effort for runs only; absent follows the bot. */
+  effort?: EffortLevel;
   /** Items its routine's checks handed this run, so they are kept or released once it ends. */
   checkKey?: string;
 }
@@ -373,6 +378,8 @@ export interface RoutineInput {
   /** The role its runs act as on Perspicax ("" = Moi); null clears the
    * choice, omission preserves it on updates. */
   actAs?: string | null;
+  /** null resets to the bot; omission preserves it on updates. */
+  effort?: EffortLevel | null;
 }
 
 /** True when the schedule has a known last occurrence: a one-time run, or

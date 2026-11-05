@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { normalizeImageGenerationUrl, type ImageGenerationConfig } from "../shared/image-generation.ts";
+import { stripOpenAiEndpointSuffix } from "../shared/openai-compat-url.ts";
 
 import { writeFileAtomic } from "./atomic.ts";
 import { applyStoredEngineEnv } from "./engines/engine-api-keys.ts";
@@ -1657,7 +1658,9 @@ export function syncCredentialEnv(patch: Partial<Omit<AppConfig, "threads">>): v
   // loadConfig() also prefers env for url/model/provider, so a saved value
   // must follow the same set-when-truthy / delete-when-cleared rule as keys.
   const settings: Array<[value: string | undefined, name: string]> = [
-    [patch.openaiCompat?.url, "OPENAI_COMPAT_URL"],
+    [patch.openaiCompat?.url !== undefined
+      ? (patch.openaiCompat.url ? stripOpenAiEndpointSuffix(patch.openaiCompat.url) : patch.openaiCompat.url)
+      : undefined, "OPENAI_COMPAT_URL"],
     [patch.anthropic?.url, "SAGAX_ANTHROPIC_API_URL"],
     [patch.openaiCompat?.model, "OPENAI_COMPAT_MODEL"],
     [patch.openaiCompat?.provider, "OPENAI_COMPAT_PROVIDER"],
@@ -1921,6 +1924,10 @@ export function saveConfig(
     // New provider-key writes never opt existing subscription bots into an
     // API bill. Only stored pre-retirement configs need the boot migration.
     if (key === "anthropic" && Object.hasOwn(section, "key")) merged.everyClaudeBot = false;
+    // A pasted ".../v1/chat/completions" is stored as its base (#2022).
+    if (key === "openaiCompat" && typeof merged.url === "string" && merged.url) {
+      merged.url = stripOpenAiEndpointSuffix(merged.url);
+    }
     // null is the patch's explicit "remove this key" marker (the threads
     // event-log knobs use it); a key the patch omits keeps its value.
     for (const [sectionKey, sectionValue] of Object.entries(section as Record<string, unknown>)) {

@@ -1,3 +1,4 @@
+import type { EffortLevel } from "../../shared/model-selection.ts";
 import { loadRoutineReadiness } from "./routine-readiness.ts";
 import { noteEngineRefusal, clearEngineRefusal } from "../engines/engine-refusals.ts";
 import type { RoutineRequirements, RoutineReadinessAnswer, RoutineReadinessResult } from "../../shared/routine-readiness.ts";
@@ -21,16 +22,20 @@ import { meaningfulLine } from "../../shared/routine-result.ts";
 import { stopCause } from "../drivers/engine-errors.ts";
 import {
   evaluateRoutinePrecheck,
+  isCodePrecheck,
   isWatchPrecheck,
+  ROUTINE_CODE_CHECK_TIMEOUT_MS,
   loadRoutinePrecheck,
   parseRoutinePrecheck,
   runRoutinePrecheck,
+  type RoutineCodePrecheck,
   type RoutinePrecheck,
   type RoutinePrecheckFacts,
   type RoutinePrecheckVerdict,
 } from "./routine-precheck.ts";
 import { ROUTINE_WATCH_LIMITS, type RoutineWatchPrecheck } from "../../shared/routine-watch.ts";
 import { parseMailAlias } from "../../shared/routine-mail-alias.ts";
+import { loadRoutineEffort, parseRoutineEffort } from "../../shared/routine-effort.ts";
 import { loadRoutineModel, parseRoutineModel } from "../../shared/routine-model.ts";
 import { loadRoutineActAs, parseRoutineActAs } from "../../shared/routine-act-as.ts";
 import { watchNoteBlock } from "./routine-watch.ts";
@@ -211,6 +216,8 @@ export interface Routine {
   /** 2026-11-05 (shared/routine-act-as.ts): the Perspicax role its runs act
    * as ("Au nom de"); "" is "Moi". Absent: not chosen yet. */
   actAs?: string;
+  /** Reasoning effort for runs only; absent follows the bot. */
+  effort?: EffortLevel;
   /** Confined runs: read Gmail/Calendar and write reply drafts only. */
   access?: RoutineAccess;
   nextRunAt: number | null;
@@ -456,6 +463,8 @@ export interface RoutineInput {
   /** The role its runs act as on Perspicax ("" = Moi); null clears the
    * choice, omission preserves it on updates. */
   actAs?: string | null;
+  /** null resets to the bot; omission preserves it on updates. */
+  effort?: EffortLevel | null;
 }
 
 interface RoutineFile {
@@ -672,6 +681,7 @@ export interface RoutineManagerOptions {
   /** 2026-11-04: why a routine model cannot be saved for this bot (not
    * offered by its engine, turned off), or null. Absent: any id that reads. */
   checkModel?: (botId: string, model: string) => string | null;
+  checkEffort?: (botId: string, effort: EffortLevel, model?: string) => string | null;
   /** Readiness probes run beside the pass, after admission and before createTask. */
   readiness?: (routine: Routine, run: RoutineRun, mode: "run" | "check") => Promise<RoutineReadinessResult>;
   /** Replaces the pure pre-check evaluator (tests, later wired checks). It
@@ -682,6 +692,10 @@ export interface RoutineManagerOptions {
    * ROUTINE_WATCH_LIMITS.timeoutMs; a throw or timeout fails the run.
    * Absent: a watch fails its run (nothing can read it). */
   evaluateWatch?: (routine: Routine, watch: RoutineWatchPrecheck, run: RoutineRun) => Promise<RoutinePrecheckVerdict>;
+  /** 2026-11-05 (#2018): runs a code pre-check by name (routine-precheck.ts
+   * ROUTINE_CODE_CHECKS), beside the pass like a watch, under
+   * ROUTINE_CODE_CHECK_TIMEOUT_MS. Absent: such a routine fails its run. */
+  evaluateCode?: (routine: Routine, precheck: RoutineCodePrecheck, run: RoutineRun) => Promise<RoutinePrecheckVerdict>;
   /** A routine with a watch was deleted: its kept state goes too. */
   forgetWatch?: (routineId: string) => void;
   memoryHint?: (run: RoutineRun, prompt: string) => Promise<{ hint: RoutineMemoryHint; note: string } | null>;
@@ -749,7 +763,7 @@ const WORK_FIELDS = ["prompt", "botId", "groupId", "target", "attachments", "pre
 const ROUTINE_DEFINITION_FIELDS = [
   "name", "prompt", "target", "botId", "groupId", "runOn", "schedule",
   "durationMinutes", "timeoutMinutes", "attachments", "continuity", "overlap",
-  "onlyWhenPresent", "precheck", "requires", "autoPauseAfter", "mailAlias", "deleteWhenFinished", "model", "subagentModel", "actAs",
+  "onlyWhenPresent", "precheck", "requires", "autoPauseAfter", "mailAlias", "deleteWhenFinished", "model", "subagentModel", "actAs", "effort",
 ] as const;
 
 /** A run still in flight: auto-delete waits until none of these remain. */
@@ -1380,7 +1394,8 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
   if (continuity && target === "room-goal") {
     throw new Error("Room goals do not carry continuity yet");
   }
-  if ((input.precheck as { kind?: unknown } | null | undefined)?.kind === "watch") {
+  const precheckKind = (input.precheck as { kind?: unknown } | null | undefined)?.kind;
+  if (precheckKind === "watch" || precheckKind === "code") {
     const kind = (input.schedule as { type?: unknown } | undefined)?.type;
     if (kind === "once" || kind === "webhook" || kind === "event" || isTriggerSchedule(input.schedule as RoutineSchedule)) {
       throw new RoutineInputError("A watch checks on a repeating schedule: choose every N minutes, daily or a custom schedule");
@@ -1393,6 +1408,9 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
   const mailAlias = parseMailAlias(input.mailAlias);
   if (!mailAlias.ok) throw new RoutineInputError(mailAlias.error);
   const folder = cleanRoutineFolder(input.folder);
+  const effort = parseRoutineEffort(input.effort);
+  if (!effort.ok) throw new RoutineInputError(effort.error);
+  if (effort.effort && target === "room-goal") throw new RoutineInputError("Choose the effort on a bot routine; room goals follow each bot.");
   const model = parseRoutineModel(input.model);
   if (!model.ok) throw new RoutineInputError(model.error);
   if (model.model && target === "room-goal") throw new RoutineInputError("A room goal runs on each bot's own model: choose the model on a bot routine");
@@ -1430,6 +1448,7 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
     ...(model.model ? { model: model.model } : {}),
     ...(subagentModel.model ? { subagentModel: subagentModel.model } : {}),
     ...(actAs.actAs !== undefined ? { actAs: actAs.actAs } : {}),
+    ...(effort.effort ? { effort: effort.effort } : {}),
   };
 }
 
@@ -1591,10 +1610,12 @@ export class RoutineManager {
               model: loadRoutineModel(routine.model),
               subagentModel: loadRoutineModel(routine.subagentModel),
               actAs: loadRoutineActAs(routine.actAs),
+              effort: loadRoutineEffort(routine.effort),
             };
             if (loaded.model === undefined) delete loaded.model;
             if (loaded.subagentModel === undefined) delete loaded.subagentModel;
             if (loaded.actAs === undefined) delete loaded.actAs;
+            if (loaded.effort === undefined) delete loaded.effort;
             if (loaded.folder === undefined) delete loaded.folder;
             if (loaded.precheck === undefined) delete loaded.precheck;
             if (loaded.autoPauseAfter === undefined) delete loaded.autoPauseAfter;
@@ -1878,6 +1899,12 @@ export class RoutineManager {
     return { routine, cancelled };
   }
 
+  private assertEffort(clean: { botId: string; effort?: EffortLevel; model?: string }): void {
+    if (!clean.effort) return;
+    const refusal = this.options.checkEffort?.(clean.botId, clean.effort, clean.model);
+    if (refusal) throw new RoutineInputError(refusal);
+  }
+
   private assertModel(clean: { botId: string; model?: string; subagentModel?: string }): void {
     if (!this.options.checkModel) return;
     for (const model of [clean.model, clean.subagentModel]) {
@@ -2083,6 +2110,7 @@ export class RoutineManager {
     const clean = validInput(input, at);
     if (this.targetState(clean) === "missing") throw new RoutineInputError(this.missingTargetMessage(clean.target));
     this.assertModel(clean);
+    this.assertEffort(clean);
     if (clean.folder) clean.folder = this.admitFolder(clean.botId, clean.folder);
     const id = randomUUID();
     const placed = clean.enabled ? this.placeInitial(id, clean.schedule, at, clean) : { start: null as number | null };
@@ -2164,11 +2192,13 @@ export class RoutineManager {
       subagentModel: Object.hasOwn(patch, "subagentModel") ? patch.subagentModel : routine.subagentModel,
       // null clears the choice, "" is "Moi"; omission keeps it.
       actAs: Object.hasOwn(patch, "actAs") ? patch.actAs : routine.actAs,
+      effort: Object.hasOwn(patch, "effort") ? patch.effort : routine.effort,
     }, now);
     if (this.targetState(clean) === "missing") throw new RoutineInputError(this.missingTargetMessage(clean.target));
     // Checked when it is chosen or the bot changes; a kept model whose
     // engine moved on is ignored at run start instead (shared/routine-model.ts).
     if (clean.model !== routine.model || clean.subagentModel !== routine.subagentModel || clean.botId !== routine.botId) this.assertModel(clean);
+    if (clean.effort !== routine.effort || clean.botId !== routine.botId) this.assertEffort(clean);
     if (clean.folder) clean.folder = this.admitFolder(clean.botId, clean.folder);
     const previousBotId = routine.botId;
     const scheduleChanged = JSON.stringify(clean.schedule) !== JSON.stringify(routine.schedule);
@@ -2249,6 +2279,7 @@ export class RoutineManager {
       if (!clean.model) delete routine.model;
       if (!clean.subagentModel) delete routine.subagentModel;
       if (clean.actAs === undefined) delete routine.actAs;
+      if (!clean.effort) delete routine.effort;
       foldersChanged = this.settleFolders(routine.botId);
       if (previousBotId !== routine.botId) this.settleFolders(previousBotId);
       // Turned back on (Resume on the notice, the switch, the editor): the
@@ -2543,6 +2574,7 @@ export class RoutineManager {
       ...(owned?.model ? { model: owned.model } : {}),
       ...(owned?.subagentModel ? { subagentModel: owned.subagentModel } : {}),
       ...(owned?.target === "bot" && owned.actAs !== undefined ? { actAs: owned.actAs } : {}),
+      ...(owned?.effort ? { effort: owned.effort } : {}),
       ...(input.eventSource ? { eventSource: input.eventSource } : {}),
       ...(input.resultsThreadId ? { resultsThreadId: input.resultsThreadId } : {}),
       createdAt: this.now(),
@@ -2834,6 +2866,8 @@ export class RoutineManager {
       // A watch wakes its computer only when the person chose it
       // (whenAsleep: wake); by default it checks only while it is awake.
       if (isWatchPrecheck(routine.precheck) && routine.precheck.whenAsleep !== "wake") continue;
+      // A code check runs on the server: nothing to wake.
+      if (isCodePrecheck(routine.precheck)) continue;
       this.prewoken.set(routine.id, dueAt);
       try { prewake(cloneRoutine(routine), dueAt); } catch { /* best effort */ }
     }
@@ -2951,7 +2985,7 @@ export class RoutineManager {
       if (routine.onlyWhenPresent && awayDecision(routine, this.presenceOf(routine)) === "skip") continue;
       // A watch starts a turn only on a change: no engine warmed for every
       // check that will most often read nothing new.
-      if (isWatchPrecheck(routine.precheck)) continue;
+      if (isWatchPrecheck(routine.precheck) || isCodePrecheck(routine.precheck)) continue;
       // Already running or queued: its run has its thread, or will wait.
       if (this.runs.some((run) => run.routineId === routine.id && (run.status === "queued" || run.status === "running" || run.status === "waiting"))) continue;
       const pseudoRun = { routineId: routine.id, routineName: routine.name, botId: routine.botId, target: routine.target, runOn: routine.runOn ?? "maus",
@@ -3023,13 +3057,21 @@ export class RoutineManager {
 
   /** Read a run's watch beside the pass: the pass goes on with the other
    * runs, and the answer starts (or quiets) the run on the next pass. */
-  private startWatch(run: RoutineRun, routine: Routine, watch: RoutineWatchPrecheck): void {
+  private startWatch(run: RoutineRun, routine: Routine, watch: RoutineWatchPrecheck | RoutineCodePrecheck): void {
     if (this.watchInFlight.has(run.id)) return;
     this.watchInFlight.add(run.id);
-    const evaluate = this.options.evaluateWatch;
-    const reading = evaluate
-      ? runRoutinePrecheck(() => evaluate(cloneRoutine(routine), structuredClone(watch), cloneRun(run)), ROUTINE_WATCH_LIMITS.timeoutMs)
-      : Promise.reject(new Error("Watching for changes is not available on this server"));
+    let reading: Promise<RoutinePrecheckVerdict>;
+    if (isCodePrecheck(watch)) {
+      const evaluate = this.options.evaluateCode;
+      reading = evaluate
+        ? runRoutinePrecheck(() => evaluate(cloneRoutine(routine), { ...watch }, cloneRun(run)), ROUTINE_CODE_CHECK_TIMEOUT_MS)
+        : Promise.reject(new Error("This check is not available on this server"));
+    } else {
+      const evaluate = this.options.evaluateWatch;
+      reading = evaluate
+        ? runRoutinePrecheck(() => evaluate(cloneRoutine(routine), structuredClone(watch), cloneRun(run)), ROUTINE_WATCH_LIMITS.timeoutMs)
+        : Promise.reject(new Error("Watching for changes is not available on this server"));
+    }
     void reading.then(
       (verdict) => ({ ok: true as const, verdict }),
       (error: unknown) => ({ ok: false as const, error: `Pre-check failed, the run did not start: ${error instanceof Error ? error.message : String(error)}` }),
@@ -3314,7 +3356,7 @@ export class RoutineManager {
           const routine = this.routines.find((candidate) => candidate.id === run.routineId);
           if (routine?.precheck && !this.precheckPassed.has(run.id) && run.watchNote === undefined) {
             let verdict: { ok: true; verdict: RoutinePrecheckVerdict } | { ok: false; error: string };
-            if (isWatchPrecheck(routine.precheck)) {
+            if (isWatchPrecheck(routine.precheck) || isCodePrecheck(routine.precheck)) {
               // A watch reads a file, a command or a tool: never inside the
               // pass. Its answer comes back for a later pass.
               const settled = this.watchSettled.get(run.id);
@@ -4399,6 +4441,7 @@ export class RoutineManager {
       ...(routine.target === "bot" && routine.model ? { model: routine.model } : {}),
       ...(routine.target === "bot" && routine.subagentModel ? { subagentModel: routine.subagentModel } : {}),
       ...(routine.target === "bot" && routine.actAs !== undefined ? { actAs: routine.actAs } : {}),
+      ...(routine.target === "bot" && routine.effort ? { effort: routine.effort } : {}),
       createdAt: this.now(),
     };
     this.runs.push(run);

@@ -74,6 +74,11 @@ describe("\"Au nom de\" coverage preview (2026-11-05)", () => {
     expect(host.textContent).toContain("Service Desk (suggéré)");
   });
 
+  it("a routine that does not run a Flow recipe shows no role field and saves no role", () => {
+    flushSync(() => root.render(createElement(RoutineActAsField, { coverage: { answer: answer({ recipe: undefined }) }, value: undefined, onChange: () => {} })));
+    expect(host.querySelector("[data-routine-act-as]")).toBeNull();
+    expect(actAsToSave(undefined, undefined, answer({ recipe: undefined }))).toBeUndefined();
+  });
   it("names its mandate items and leaves unknown ones unnamed", () => {
     expect(mandateItemLabel("invoice_status")).toBe("Changer le statut des factures");
     expect(mandateItemLabel("custom_step")).toBeNull();

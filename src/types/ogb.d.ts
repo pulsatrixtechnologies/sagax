@@ -388,6 +388,9 @@ const __BASE_VERSION__: string;
          * `page:<pageId>` is a page window, not an artifact. */
         open(request: { botId: string; artifactId: string; title: string; width?: number; height?: number; x?: number; y?: number; focus?: boolean }): Promise<"created" | "focused" | "refused">;
         close(artifactId: string): Promise<boolean>;
+        /** A claude.ai artifact URL on claude.ai, in a window with the
+         * persistent `persist:claude-ai` session (absent on an older app). */
+        openClaudeAi?(url: string): Promise<"created" | "focused" | "refused">;
         onClosed(cb: (detail: { botId: string; artifactId: string }) => void): () => void;
       };
       /** The renderer-drawn Windows caption buttons; absent outside the

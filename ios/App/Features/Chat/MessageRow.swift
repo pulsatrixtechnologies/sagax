@@ -289,7 +289,10 @@ struct MessageRow: View {
         case .options:
             // A structured ask draws its own card: its answers are the
             // model's questions, not an allow/deny a tap could stand for.
-            if message.card?.phoneCallConsent != nil {
+            if message.card?.roleTransition != nil {
+                // 2026-11-05 (JC): no "Agit comme" card in the chat
+                EmptyView()
+            } else if message.card?.phoneCallConsent != nil {
                 // one-time phone-call consent (PhoneCallConsentCard.tsx)
                 PhoneCallConsentCardView(
                     chat: chat,
@@ -317,7 +320,10 @@ struct MessageRow: View {
                 TextBubble(message: message, chat: chat, tailed: endsRun, openLink: openLink, cwAsk: askCw)
             }
         case .activity:
-            if let widget = message.tool?.widget, widget.isKnown, CwWidgets.isViewTool(message.tool?.name) {
+            if message.tool?.roleNotice != nil {
+                // 2026-11-05 (JC): no role notice in the chat
+                EmptyView()
+            } else if let widget = message.tool?.widget, widget.isKnown, CwWidgets.isViewTool(message.tool?.name) {
                 CwWidgetCard(widget: widget, threadId: chat.threadId, botId: message.from?.botId, brand: message.tool?.product) { action in
                     Task { await session.requestCwAction(action, threadId: chat.threadId, botId: message.from?.botId) }
                 }
@@ -492,6 +498,13 @@ struct MessageRow: View {
                 }
             }
         }
+    }
+
+    /// The bot a role banner names ("Nova s'est arrêté").
+    private var roleNoticeBotName: String? {
+        if let id = message.from?.botId, let bot = session.state.bot(id) { return bot.name }
+        if case let .bot(bot) = chat { return bot.name }
+        return nil
     }
 
     private func routineRunOpener(_ card: RoutineRunCard) -> (() -> Void)? {

@@ -56,6 +56,17 @@ describe("OpenAICompatDriver", () => {
     expect(cfg.apiKeyEnv).toBe("GROQ_KEY");
   });
 
+  it("strips a pasted /chat/completions (or /models) path at call time (#2022)", () => {
+    expect(OpenAICompatDriver.decodeConfig({ url: "https://provider.example/v1/chat/completions" }).url)
+      .toBe("https://provider.example/v1");
+    expect(OpenAICompatDriver.decodeConfig({ url: "https://provider.example/v1/chat/completions/" }).url)
+      .toBe("https://provider.example/v1");
+    expect(OpenAICompatDriver.decodeConfig({ url: "https://provider.example/compatibility/v1/models/" }).url)
+      .toBe("https://provider.example/compatibility/v1");
+    expect(OpenAICompatDriver.decodeConfig({ url: "https://provider.example/compatibility/v1" }).url)
+      .toBe("https://provider.example/compatibility/v1");
+  });
+
   it("allows an isolated connection to disable an inherited OpenRouter provider pin", () => {
     const before = process.env.OPENAI_COMPAT_PROVIDER;
     process.env.OPENAI_COMPAT_PROVIDER = "fixture-upstream";

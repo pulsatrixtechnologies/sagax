@@ -353,17 +353,23 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   "add_mcp_server", "skill_manage", "rules_update", "docs_update",
   "launch_cloud_agent", "list_cloud_agents", "get_cloud_agent", "cancel_cloud_agent", "archive_cloud_agent",
   "cloud_agent_follow_up", "cloud_agent_transcript", "find_cloud_agent_by_pr", "list_cloud_agent_artifacts",
-  "save_artifact", "update_artifact", "delete_artifact", "list_artifacts",
+  "save_artifact", "update_artifact", "delete_artifact", "list_artifacts", "claude_artifact",
   "manage_settings", "sagax_settings", "manage_pairing", "offer_shell_terminal", "list_terminal_resources", "resource_usage", "vm_exec",
   "shared_computer", "list_shared_computers", "nudge_person", "remove_reaction", "retry_thread",
   "read_transcript", "read_transcript_cold", "read_transcript_page", "read_latest_page", "read_latest_page_with_threads",
   "find_agents", "get_agent", "list_agents", "send_prompt", "await_turn", "create_agent", "delete_agent",
+  // #2023 / #1944: fleet Edit-bot writes are occasional; keep them behind ToolSearch.
+  "list_agent_models", "update_agent_model", "update_agent_settings", "update_routine",
   "workspace_read", "workspace_search", "session_read", "close_thread", "list_threads",
   "request_login", "place_phone_call", "place_call", "send_dtmf", "transfer", "hang_up",
   // The person's iPhone (agents-phone-tools.ts): rare, and long.
   "phone_tool",
   // A post into a room from a 1:1 chat: rare.
   "list_rooms", "post_to_room",
+  // #1997: long or occasional in a chat turn (about 7 KB of schema loaded on
+  // every Claude call): a video, an HTML page, a wait on an event, a
+  // connector sign-in card. Each one is still one ToolSearch step away.
+  "make_video", "show_html", "update_html", "wait_until", "list_waits", "cancel_wait", "open_connector_setup",
 ]);
 
 /** #1276: the tools at the heart of a chat turn, listed whole in a compact

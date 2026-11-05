@@ -121,6 +121,22 @@ function call(
   return { ctx, sent, run: () => route(ctx) };
 }
 
+describe("routine effort HTTP", () => {
+  it("passes effort through POST and preserves a null reset through PATCH", async () => {
+    const create = vi.fn((_body: unknown) => routine as never);
+    const patchAs = vi.fn((_auth: unknown, _req: unknown, _id: string, _body: unknown) => ({ status: 200, body: { routine } }));
+    const route = createRoutinesHttpRoutes(deps({ create, patchAs }));
+    const created = call(route, { method: "POST", body: { botId: "b1", model: "fast", effort: "low" } });
+    await created.run();
+    expect(created.sent[0]?.status).toBe(201);
+    expect(create.mock.calls[0]?.[0]).toMatchObject({ model: "fast", effort: "low" });
+    const changed = call(route, { path: "/api/routines/r1", method: "PATCH", body: { effort: null } });
+    await changed.run();
+    expect(changed.sent[0]?.status).toBe(200);
+    expect(patchAs.mock.calls[0]?.[3]).toEqual({ effort: null });
+  });
+});
+
 describe("routine readiness HTTP", () => {
   it("keeps the run-as options route ahead of generic routine detail", async () => {
     const route = createRoutinesHttpRoutes(deps());

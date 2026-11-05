@@ -1,3 +1,4 @@
+import type { EffortLevel } from "../../shared/model-selection.ts";
 import type { RoutineRequirements, RoutineReadinessCheck } from "../../shared/routine-readiness.ts";
 import type { GroupGoalRunStatus } from "../../shared/group-goal-run.ts";
 import type { ProactiveMode } from "../../shared/proactive-mode.ts";
@@ -53,6 +54,8 @@ export interface RoutineRun {
   /** 2026-11-05: snapshot of the routine's "Au nom de" role
    * (shared/routine-act-as.ts); "" is "Moi". Absent: not chosen. */
   actAs?: string;
+  /** Reasoning effort for runs only; absent follows the bot. */
+  effort?: EffortLevel;
   /** Snapshot of the optional active-work safety cap. */
   timeoutMinutes?: number;
   attachments?: RoutineContextAttachment[];

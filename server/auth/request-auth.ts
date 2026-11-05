@@ -655,6 +655,10 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/background-brief\/pass$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/background-brief\/[\w-]+\/(?:reject|keep)$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/artifacts\/art_[\w-]+\/refresh$/ },
+  // claude.ai artifacts (server/routes/claude-artifacts.ts, #2018): every
+  // call runs through the session person's own Claude account
+  { methods: ["GET"], path: /^\/api\/claude-artifacts\/(?:summary|comments)$/ },
+  { methods: ["POST"], path: /^\/api\/claude-artifacts\/(?:comments\/(?:reply|resolve)|copy)$/ },
   // Share as Template: a single-bot package without secrets (owner or admin).
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/export$/ },
   // The bot's standing instructions for the profile's Instructions row
@@ -1481,16 +1485,19 @@ export function resolveRequestAuth(req: IncomingMessage, options: ResolveOptions
 
 /** How much GET /api/health tells this caller.
  *
- * - `full`: the app, pid, static flag, capabilities and the engines installed
- *   on the server with their versions (spec section 4 bis). For a session
- *   (any person signed in) and for a loopback caller trusted as the owner
- *   (the desktop's boot probe keys on the pid; the serving CLI proves itself
- *   with its secret and is let in as the owner for this route).
+ * Every detail level includes the Sagax release (`version`, forkVersion)
+ * so a routine can signal a version change (#1996).
+ *
+ * - `full`: the app, version, pid, static flag, capabilities and the engines
+ *   installed on the server with their versions (spec section 4 bis). For a
+ *   session (any person signed in) and for a loopback caller trusted as the
+ *   owner (the desktop's boot probe keys on the pid; the serving CLI proves
+ *   itself with its secret and is let in as the owner for this route).
  * - `capabilities`: a session-less `service`-trust caller on a hosted
  *   workspace. The cloud Slack worker reads the guarded send contract there;
  *   pid, static and engines stay behind a session.
  * - `app`: everyone else, and a session-less loopback caller on an
- *   organization server, where loopback is any bot's shell. */
+ *   organization server, where loopback is any bot's shell (app + version). */
 export type HealthDetail = "full" | "capabilities" | "app";
 
 export function healthDetail(auth: RequestAuth | null, options: { organization: boolean }): HealthDetail {

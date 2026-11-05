@@ -61,6 +61,16 @@ extension CompanionClient {
 
     /// 2026-10-30: the person's answer to a proactive proposal card
     /// (`ProactiveProposalRules`): yes starts the bot's wake, no closes it.
+    /// An "Agit comme" card answered (visible roles, 2026-11-05):
+    /// `POST /api/bots/:botId/cards/:messageId/role-transition`.
+    public func answerRoleTransition(botId: String, messageId: String, threadId: String, choice: RoleTransitionChoice) async throws {
+        guard Self.validRouteID(botId), Self.validRouteID(messageId) else { throw APIError.badURL }
+        try await send(try makeRequest(
+            "POST", "/api/bots/\(botId)/cards/\(messageId)/role-transition",
+            body: ["threadId": threadId, "choice": choice.rawValue]
+        ))
+    }
+
     public func answerProactiveProposal(botId: String, proposalId: String, accept: Bool) async throws {
         try await send(try makeRequest("POST", "/api/bots/\(botId)/proactive/\(proposalId)", body: ["accept": accept]))
     }

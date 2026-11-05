@@ -563,6 +563,20 @@ final class CardClientTests: XCTestCase {
         XCTAssertEqual(try last().path, "/api/bots/b1/secret-cards/m2/dismiss")
     }
 
+    func testRoleTransitionAnswersOnItsOwnRoute() async throws {
+        try await client.answerRoleTransition(botId: "b1", messageId: "m3", threadId: "t1", choice: .stay)
+        let sent = try last()
+        XCTAssertEqual(sent.method, "POST")
+        XCTAssertEqual(sent.path, "/api/bots/b1/cards/m3/role-transition")
+        XCTAssertEqual(sent.body["threadId"] as? String, "t1")
+        XCTAssertEqual(sent.body["choice"] as? String, "stay")
+        do {
+            try await client.answerRoleTransition(botId: "b1", messageId: "../x", threadId: "t1", choice: .continue)
+            XCTFail("bad id")
+        } catch {}
+        XCTAssertEqual(CardRequestStub.requests.count, 1)
+    }
+
     func testParallelStopRefusesARouteIdThatIsNotOne() async throws {
         do {
             try await client.stopParallelTask(botId: "b1", threadId: "../x")

@@ -231,6 +231,8 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Name | Automations > routine | `sagax_settings` get, set `routine.name` | simple |
 | Instructions | Automations > routine | `sagax_settings` get, set `routine.prompt` | simple |
 | Schedule ({type: once/daily/cron/interval, ...}) | Automations > routine > Schedule | `sagax_settings` get, set `routine.schedule` | simple |
+| Model for routine runs (null follows the bot) | Automations > routine > Model | `sagax_settings` get, set `routine.model` | simple |
+| Reasoning effort for routine runs (null follows the bot) | Automations > routine > Effort | `sagax_settings` get, set `routine.effort` | simple |
 | On or off | Bot panel > Details > Routines; Automations | `sagax_settings` get, set `routine.enabled` | simple |
 | Where it runs | Automations > routine > Runs on | `sagax_settings` get, set `routine.engine` | simple |
 | Bot that runs it | Automations > routine > Bot | `sagax_settings` get, set `routine.bot` | simple |
@@ -241,6 +243,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Delete once finished | Automations > routine > Advanced | `sagax_settings` get, set `routine.deleteWhenFinished` | simple |
 | Pause after this many failures in a row (0 never, null the default 5) | Automations > routine > Advanced | `sagax_settings` get, set `routine.autoPauseAfter` | simple |
 | Folder in the bot's Routines list (null: no folder) | Bot panel > Details > Routines > row menu > Move to folder | `sagax_settings` get, set `routine.folder` | simple |
+| Needs its computer: the pre-run check waits for the bot's computer to be online (true), or not (false); skills and MCP requirements stay | Automations > routine > Requirements | `sagax_settings` get, set `routine.requiresComputer` | simple |
 | Runs as (a person) | Automations > routine > Runs as | `sagax_settings` get, set `routine.runAs` | autrui |
 | Run only when something changes ({kind: watch, source: {type: files, path} / {type: command, command} / {type: tool, tool, args}, condition?, wakeOn?, track?, firstRun?, whenAsleep?}; null: every due time) | Automations > routine > Only when something changes | `sagax_settings` get, set `routine.precheck` | simple |
 | New routine ({name, prompt, botId, schedule, ...}) | Automations > New routine | `sagax_settings` set `routine.create` | simple |
@@ -343,6 +346,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Rows hidden from the sidebar ({items: [{kind, id, at}], unhideOnMessage: {people, bots}}) | Settings > Appearance > Hidden from the sidebar | `sagax_settings` get, set `appearance.sidebarHidden` | simple |
 | Sending to a busy bot | Settings > Appearance | `sagax_settings` get, set `appearance.busySend` | simple |
 | Show replies as they are written (on, the default; off shows each reply once it is finished) | Settings > Appearance > Conversation | `sagax_settings` get, set `appearance.streamReplies` | simple |
+| Chat width (reading 960px, the default; wide ~1280px; full fills the pane) | Settings > Appearance > Conversation | `sagax_settings` get, set `appearance.chatWidth` | simple |
 
 ### Notifications et confidentialité
 

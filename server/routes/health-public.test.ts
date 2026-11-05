@@ -15,7 +15,7 @@ const healthzOk = { ok: true, app: "openmausbot", product: "sagax" };
 const healthzUnready = { ok: false, shuttingDown: true, app: "openmausbot", product: "sagax" };
 const environment = { environmentId: "env-1", label: "test" };
 const brand = { brand: { name: "Sagax" }, source: "default", file: "/tmp/brand.json" };
-const identity = { app: "openmausbot", product: "sagax" } as const;
+const identity = { app: "openmausbot", product: "sagax", version: "0.8.45-test" } as const;
 
 function publicDeps(over: Partial<HealthPublicRouteDeps> = {}): HealthPublicRouteDeps {
   return {
@@ -94,7 +94,7 @@ describe("createUnauthHealthBrandRoutes", () => {
     expect(await route(ctx("/api/health", "POST").context)).toBe(PASS);
   });
 
-  it("answers /api/health without auth with the minimal identity", async () => {
+  it("answers /api/health without auth with the identity and Sagax version (#1996)", async () => {
     const route = createUnauthHealthBrandRoutes(unauthDeps());
     const call = ctx("/api/health");
     await route(call.context);

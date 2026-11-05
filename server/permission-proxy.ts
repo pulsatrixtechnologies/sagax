@@ -32,6 +32,8 @@ const SEARCHED = searchedServersFromEnv(process.env.SAGAX_PERMISSION_SEARCHED);
 // #1374: what the turn pre-allows by name (claude.ts), so a call_tool or the
 // agents bridge's use_tool runs unasked exactly when its target would have.
 const PREALLOWED = preallowedFromEnv(process.env.SAGAX_PERMISSION_PREALLOWED);
+// #2018: Auto turns let Artifact reads run unasked.
+const ARTIFACT_READS = process.env.SAGAX_PERMISSION_ARTIFACT_READS === "1";
 
 const selection = parseToolScope(process.env.SAGAX_PERMISSION_TOOL_SCOPE === undefined
   ? undefined : (() => { try { return JSON.parse(process.env.SAGAX_PERMISSION_TOOL_SCOPE); } catch { return null; } })());
@@ -244,7 +246,7 @@ async function handle(msg: any) {
     // suggested rule would allow every call_tool of the server: never handed back.
     // #1374: the agents bridge's use_tool likewise; one naming no tool, or
     // another meta tool, runs nothing and is refused without a card.
-    const route = isQuestion || typeof args.tool_name !== "string" ? null : permissionRoute(args.tool_name, args.input, SEARCHED, PREALLOWED);
+    const route = isQuestion || typeof args.tool_name !== "string" ? null : permissionRoute(args.tool_name, args.input, SEARCHED, PREALLOWED, ARTIFACT_READS);
     if (route?.kind === "deny") return reply(JSON.stringify({ behavior: "deny", message: route.message }));
     if (route?.kind === "allow") return reply(JSON.stringify({ behavior: "allow", updatedInput: args.input ?? {} } satisfies AllowPermissionResult));
     const runs = route?.kind === "ask" ? route : null;

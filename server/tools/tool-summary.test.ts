@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { askInputDetail, askInputSummary, commandSummary, EDIT_PREVIEW_MAX, inputPreviewMax, toolDetailPreview, toolFailurePreview } from "./tool-summary.ts";
+import { askInputDetail, askInputSummary, commandSummary, EDIT_PREVIEW_MAX, inputPreviewMax, toolDetailPreview, toolFailurePreview, toolFailureSource } from "./tool-summary.ts";
 
 describe("toolDetailPreview", () => {
   it("keeps useful input and results while removing nested credentials and binary data", () => {
@@ -138,5 +138,36 @@ describe("toolFailurePreview", () => {
   it("falls back to the preview when the failure has no words", () => {
     expect(toolFailurePreview({ output: null, exitCode: 2 })).toContain("exitCode");
     expect(toolFailurePreview(undefined)).toBeUndefined();
+  });
+});
+
+describe("toolFailureSource (#1988)", () => {
+  const body = {
+    code: "params_invalid",
+    details: { status: 400 },
+    hint: "call flow_run with {\"command\": \"run.finish\"}",
+    message: "flow_run read only runs read commands, and `run close` is not one: call flow_run {\"command\": \"run.finish\"} instead",
+  };
+  const result = { content: [{ type: "text", text: JSON.stringify(body) }], structuredContent: body, _meta: null };
+
+  it("keeps a Codex mcpToolCall result when error is null, empty, or wordless", () => {
+    for (const error of [null, undefined, "", {}, { code: "params_invalid" }, { message: "" }]) {
+      const text = toolFailurePreview(toolFailureSource(error, result));
+      expect(text).toContain("call flow_run {\"command\": \"run.finish\"} instead (params_invalid)");
+      expect(text).toContain("call flow_run with");
+    }
+  });
+
+  it("prefers an error that already has words", () => {
+    expect(toolFailurePreview(toolFailureSource({ message: "HTTP 401 Unauthorized" }, result))).toBe("HTTP 401 Unauthorized");
+  });
+
+  it("does not let error ?? result hide the server's message behind an empty error", () => {
+    // the old Codex path: empty error won over result (`??` keeps "" / {}) and the card had no words
+    const oldSource = (error: unknown, value: unknown) => (error !== undefined && error !== null ? error : value);
+    expect(toolFailurePreview(oldSource("", result))).toBeUndefined();
+    expect(toolFailurePreview(oldSource({}, result))).toBeUndefined();
+    expect(toolFailurePreview(toolFailureSource("", result))).toContain("params_invalid");
+    expect(toolFailurePreview(toolFailureSource({}, result))).toContain("params_invalid");
   });
 });

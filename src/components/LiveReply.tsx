@@ -13,7 +13,7 @@
 // whole as before.
 import { useLayoutEffect, useMemo, type MutableRefObject } from "react";
 import { cn } from "@/lib/cn";
-import { CHAT_BUBBLE_WIDTH_CLASS } from "@/lib/chat-bubble-width";
+import { useChatBubbleWidthClasses, useChatRoomFitClass } from "@/lib/chat-bubble-width";
 import { splitLiveMarkdown } from "@/lib/live-markdown-blocks";
 import { prefersWideBubble } from "@/lib/rich-blocks";
 import { useStreamReplies } from "@/lib/stream-replies-preference";
@@ -60,6 +60,8 @@ export function LiveReply({
   }, [visible, shownRef]);
   const blocks = useMemo(() => (visible ? splitLiveMarkdown(text) : []), [visible, text]);
   const wide = useMemo(() => visible && prefersWideBubble(text), [visible, text]);
+  const bubbleWidths = useChatBubbleWidthClasses();
+  const roomFit = useChatRoomFitClass();
   if (!visible) return null;
   return (
     <div data-live-reply="" className="flex w-full flex-col items-start">
@@ -69,7 +71,7 @@ export function LiveReply({
         aria-busy="true"
         className={cn(
           "rounded-[18px] bg-bubble-bot px-3 py-[7px] text-[13px] leading-5 text-ink",
-          room && !wide ? "w-fit max-w-[min(94%,780px,calc(100%-82px))]" : CHAT_BUBBLE_WIDTH_CLASS[wide ? "wide" : "fit"],
+          room && !wide ? roomFit : bubbleWidths[wide ? "wide" : "fit"],
         )}
       >
         <div className="flex min-w-0 flex-col gap-2">

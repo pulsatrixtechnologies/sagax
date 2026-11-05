@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.107",
   "baseVersion": "0.1.107",
-  "forkVersion": "0.8.48",
+  "forkVersion": "0.8.49",
   "description": "Pulsatrix Sagax: a local-first chat app for running a team of AI agents.",
   "homepage": "https://github.com/pulsatrixtechnologies/sagax",
   "repository": {
@@ -64,6 +64,7 @@
     "test:unit": "node scripts/testing/vitest-shards.mjs --group unit",
     "test:e2e": "node scripts/testing/vitest-shards.mjs --group e2e",
     "test:shards": "node scripts/testing/vitest-shards.mjs",
+    "test:routine-smoke": "vitest run server/testing/fake-perspicax-mcp-server.test.ts server/routines/routine-smoke/routine-smoke.test.ts",
     "test:cua": "pnpm build:cua && node scripts/smoke-cua.mjs",
     "test:cua-container": "node scripts/smoke-cua-container.mjs",
     "check:electron": "node scripts/check-electron.mjs",

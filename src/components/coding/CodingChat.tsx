@@ -50,7 +50,7 @@ import { useSideTranscript } from "@/lib/use-side-transcript";
 import { useWaitingCards } from "@/lib/use-waiting-cards";
 import { waitingSources } from "@/lib/activity-waiting-sources";
 import { openExternalLink } from "@/lib/app-links";
-import { CHAT_COLUMN_CLASS } from "@/lib/chat-bubble-width";
+import { useChatColumnClass } from "@/lib/chat-bubble-width";
 import { MAUS_COLORS, mausInk } from "@/lib/mascot";
 import { botBubbleVars } from "@/lib/bubble-colors";
 import { cn } from "@/lib/cn";
@@ -146,6 +146,7 @@ export function ChangesBand({ files, tests, place, onJump }: {
   place: ReturnType<typeof codingPlace>;
   onJump: (file: ChangedFile) => void;
 }) {
+  const chatColumnClassName = useChatColumnClass();
   const [open, setOpen] = useState(false);
   const added = files.reduce((sum, file) => sum + file.added, 0);
   const removed = files.reduce((sum, file) => sum + file.removed, 0);
@@ -155,7 +156,7 @@ export function ChangesBand({ files, tests, place, onJump }: {
   const chip = "inline-flex min-w-0 max-w-[14rem] items-center gap-1 rounded-md px-1.5 py-0.5 text-[12px] text-ink-secondary";
   return (
     <div data-coding-changes className="shrink-0 border-t border-hairline/40 bg-app px-5 pt-2">
-      <div className={cn(CHAT_COLUMN_CLASS, "flex flex-col gap-1.5")}>
+      <div className={cn(chatColumnClassName, "flex flex-col gap-1.5")}>
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           {files.length > 0 ? (
             <button
@@ -287,6 +288,7 @@ export interface CodingChatSheetProps {
 
 /** The sheet, without fetching: tests and galleries draw it with fixed data. */
 export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMore = false, loadingOlder = false, onLoadOlder, onRetry, now, bot, bots, onClose, onStop, stopping = false, onSend, waiting, composing = false }: CodingChatSheetProps) {
+  const chatColumnClassName = useChatColumnClass();
   const column = useExchangePortalHost();
   const shown = detail ?? item;
   const live = activityStatusActive(shown.status);
@@ -375,7 +377,7 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
       </header>
 
       <div ref={scroller} onScroll={onScroll} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-5" data-testid="coding-chat-scroll">
-        <div className={cn(CHAT_COLUMN_CLASS, "flex flex-col gap-3 py-6")} role="log" aria-live="off">
+        <div className={cn(chatColumnClassName, "flex flex-col gap-3 py-6")} role="log" aria-live="off">
           {hasMore && onLoadOlder && (
             <button type="button" data-coding-older onClick={onLoadOlder} disabled={loadingOlder} className="self-center rounded-full bg-raised px-3 py-1 text-[12.5px] text-ink-secondary hover:bg-raised-hover disabled:opacity-60">
               {loadingOlder ? t("codingChat.loadingOlder") : t("codingChat.loadOlder")}
@@ -404,7 +406,7 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
         </div>
       </div>
 
-      {waiting && <div className="max-h-[40%] shrink-0 overflow-y-auto overscroll-contain px-5 pb-2"><div className={CHAT_COLUMN_CLASS}>{waiting}</div></div>}
+      {waiting && <div className="max-h-[40%] shrink-0 overflow-y-auto overscroll-contain px-5 pb-2"><div className={chatColumnClassName}>{waiting}</div></div>}
 
       <ChangesBand files={files} tests={tests} place={place} onJump={jump} />
 

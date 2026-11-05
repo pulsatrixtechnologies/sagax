@@ -156,7 +156,7 @@ import { CallRecordRow } from "./CallRecordRow";
 import { AttachmentGallery, collectMessageFiles, replyAttachmentGroup, splitMessageAttachments } from "./AttachmentGallery";
 import { ConversationGalleryProvider } from "./ConversationGallery";
 import { prefersWideBubble } from "@/lib/rich-blocks";
-import { CHAT_BUBBLE_WIDTH_CLASS, CHAT_COLUMN_CLASS, chatBubbleWidth } from "@/lib/chat-bubble-width";
+import { chatBubbleWidth, useChatBubbleWidthClasses, useChatColumnClass } from "@/lib/chat-bubble-width";
 import { ScreenFrame } from "./ScreenFrame";
 import { CompactionChip, DigestChip } from "./DigestChip";
 import { RenameTitle } from "./RenameTitle";
@@ -635,6 +635,7 @@ const Bubble = memo(function Bubble({
 }) {
   "use memo";
   const { botId, threadId, botName, viewerName, voiceId, tts, localVoice, busy, bots, mentionPeers, focus, dispatch, onBranch, reactionSelf } = useChatRows();
+  const bubbleWidths = useChatBubbleWidthClasses();
   // Emoji reactions (src/components/Reactions.tsx): the smiley of the hover
   // row and the head of its "…" menu, the chips under the bubble.
   const toggleReactionOn = useToggleReaction(threadId, dispatch);
@@ -770,7 +771,7 @@ const Bubble = memo(function Bubble({
             "text-[13px] leading-5",
             emerging && "turn-answer",
             "rounded-[18px]",
-            CHAT_BUBBLE_WIDTH_CLASS[chatBubbleWidth({ terminal: !user && Boolean(message.terminalEmbed), wide: wideBubble || remoteCard })],
+            bubbleWidths[chatBubbleWidth({ terminal: !user && Boolean(message.terminalEmbed), wide: wideBubble || remoteCard })],
             user && webhookView
               ? "overflow-hidden border border-accent/25 bg-card text-ink shadow-[0_10px_30px_rgba(0,0,0,0.18)]"
               : remoteCard && !visibleText.trim()
@@ -2006,6 +2007,7 @@ function useStreamAnchor(
 
 export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   "use memo";
+  const chatColumnClassName = useChatColumnClass();
   const showInspector = useShowInspectorButton();
   const advanced = useAdvancedMode();
   // A switch under way with a cached page of its thread (Bot.switchPreview)
@@ -2638,7 +2640,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
           ref={transcriptRef}
           inert={preview ? true : undefined}
           aria-busy={preview ? true : undefined}
-          className={cn(CHAT_COLUMN_CLASS, "pt-14")}
+          className={cn(chatColumnClassName, "pt-14")}
           style={{ paddingBottom: composerDock.pad }}
           role="log"
           // off: a polite log re-reads every tick and chip while the bot

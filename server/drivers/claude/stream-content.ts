@@ -24,6 +24,7 @@ import {
   claudeVersionTooOld,
 } from "./limits.ts";
 import { COMPACTED_VOLATILE } from "./messages.ts";
+import { noteArtifactPublished } from "../../claude-artifacts/events.ts";
 import { claudeAccountEmail, firstText, readArtifactHtml } from "./helpers.ts";
 import {
   STEERED_CONTINUATION_SILENCE_MS,
@@ -294,6 +295,7 @@ case "user": {
         // then a JSON tool_result from an older CLI
         const page = parseArtifactPublish(o.tool_use_result ?? o.toolUseResult) ?? parseArtifactPublish(b.content);
         if (page) {
+          if (page.url) noteArtifactPublished({ url: page.url, title: page.title, ...(page.owned !== undefined ? { owned: page.owned } : {}), ...(session.turn?.input?.botId ? { botId: session.turn.input.botId } : {}), threadId });
           const html = page.path ? readArtifactHtml(page.path) : undefined;
           emit({
             ...base(threadId, currentTurnId()),

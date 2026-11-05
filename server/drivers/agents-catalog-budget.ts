@@ -131,7 +131,7 @@ export const AGENT_TOOL_GROUPS: readonly AgentToolGroup[] = [
   {
     id: "artifacts",
     title: "Artifacts the bot keeps",
-    tools: ["save_artifact", "update_artifact", "delete_artifact", "list_artifacts"],
+    tools: ["save_artifact", "update_artifact", "delete_artifact", "list_artifacts", "claude_artifact"],
   },
   {
     id: "settings",

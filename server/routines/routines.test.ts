@@ -4450,6 +4450,58 @@ describe("routine watch: runs only when something changes (2026-10-26)", () => {
   });
 });
 
+describe("routine code pre-check: a named check run as code (#2018)", () => {
+  const start = Date.parse("2026-10-20T08:00:00Z");
+  const code = { kind: "code" as const, check: "claude_artifact_comments" as const };
+  const input = () => ({ name: "Commentaires des artefacts", prompt: "Answer the comments", botId: "maus-1",
+    schedule: { type: "interval" as const, everyMinutes: 15, anchorAt: start }, precheck: code });
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it("quiet when the check finds nothing: no turn", async () => {
+    const h = harness(start);
+    let calls = 0;
+    h.options.evaluateCode = async () => { calls += 1; return { wake: false, reason: "no comment waits for Claude" }; };
+    const routine = h.manager.create(input());
+    expect(routine.precheck).toEqual(code);
+    h.setNow(routine.nextRunAt!);
+    await h.manager.tick();
+    await settle(); await settle();
+    await h.manager.tick();
+    expect(calls).toBe(1);
+    expect(h.manager.listRuns()[0].status).toBe("nothing_to_report");
+    expect(h.started).toHaveLength(0);
+  });
+
+  it("wakes the bot with the thread text inside the untrusted data fence", async () => {
+    const h = harness(start);
+    h.options.evaluateCode = async () => ({ wake: true, note: "- thread_id th1 (sent_to_claude) : make it blue" });
+    const routine = h.manager.create(input());
+    h.setNow(routine.nextRunAt!);
+    await h.manager.tick();
+    await settle(); await settle();
+    await h.manager.tick();
+    expect(h.started).toHaveLength(1);
+    expect(h.started[0].prompt).toMatch(/\[UNTRUSTED ROUTINE WATCH DATA [0-9a-f]{32}\][\s\S]*make it blue/);
+  });
+
+  it("fails the run when the server has no such check", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.setNow(routine.nextRunAt!);
+    await h.manager.tick();
+    await settle(); await settle();
+    await h.manager.tick();
+    expect(h.manager.listRuns()[0].status).toBe("failed");
+    expect(h.started).toHaveLength(0);
+  });
+
+  it("refuses an unknown check and a one-time schedule", () => {
+    const h = harness(start);
+    expect(() => h.manager.create({ ...input(), precheck: { kind: "code", check: "anything" } as never })).toThrow();
+    expect(() => h.manager.create({ ...input(), schedule: { type: "once", at: start + 60_000 } as never })).toThrow();
+  });
+});
+
 describe("background runs: nothing to report (Owner 2026-10-22)", () => {
   const at = new Date(2026, 7, 17, 8, 1).getTime();
   const runOnce = async (output: string, prompt = "Check the invoices") => {

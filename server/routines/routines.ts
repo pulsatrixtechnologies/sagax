@@ -21,10 +21,13 @@ import { meaningfulLine } from "../../shared/routine-result.ts";
 import { stopCause } from "../drivers/engine-errors.ts";
 import {
   evaluateRoutinePrecheck,
+  isCodePrecheck,
   isWatchPrecheck,
+  ROUTINE_CODE_CHECK_TIMEOUT_MS,
   loadRoutinePrecheck,
   parseRoutinePrecheck,
   runRoutinePrecheck,
+  type RoutineCodePrecheck,
   type RoutinePrecheck,
   type RoutinePrecheckFacts,
   type RoutinePrecheckVerdict,
@@ -675,6 +678,10 @@ export interface RoutineManagerOptions {
    * ROUTINE_WATCH_LIMITS.timeoutMs; a throw or timeout fails the run.
    * Absent: a watch fails its run (nothing can read it). */
   evaluateWatch?: (routine: Routine, watch: RoutineWatchPrecheck, run: RoutineRun) => Promise<RoutinePrecheckVerdict>;
+  /** 2026-11-05 (#2018): runs a code pre-check by name (routine-precheck.ts
+   * ROUTINE_CODE_CHECKS), beside the pass like a watch, under
+   * ROUTINE_CODE_CHECK_TIMEOUT_MS. Absent: such a routine fails its run. */
+  evaluateCode?: (routine: Routine, precheck: RoutineCodePrecheck, run: RoutineRun) => Promise<RoutinePrecheckVerdict>;
   /** A routine with a watch was deleted: its kept state goes too. */
   forgetWatch?: (routineId: string) => void;
   memoryHint?: (run: RoutineRun, prompt: string) => Promise<{ hint: RoutineMemoryHint; note: string } | null>;
@@ -1373,7 +1380,8 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
   if (continuity && target === "room-goal") {
     throw new Error("Room goals do not carry continuity yet");
   }
-  if ((input.precheck as { kind?: unknown } | null | undefined)?.kind === "watch") {
+  const precheckKind = (input.precheck as { kind?: unknown } | null | undefined)?.kind;
+  if (precheckKind === "watch" || precheckKind === "code") {
     const kind = (input.schedule as { type?: unknown } | undefined)?.type;
     if (kind === "once" || kind === "webhook" || kind === "event" || isTriggerSchedule(input.schedule as RoutineSchedule)) {
       throw new RoutineInputError("A watch checks on a repeating schedule: choose every N minutes, daily or a custom schedule");
@@ -2814,6 +2822,8 @@ export class RoutineManager {
       // A watch wakes its computer only when the person chose it
       // (whenAsleep: wake); by default it checks only while it is awake.
       if (isWatchPrecheck(routine.precheck) && routine.precheck.whenAsleep !== "wake") continue;
+      // A code check runs on the server: nothing to wake.
+      if (isCodePrecheck(routine.precheck)) continue;
       this.prewoken.set(routine.id, dueAt);
       try { prewake(cloneRoutine(routine), dueAt); } catch { /* best effort */ }
     }
@@ -2931,7 +2941,7 @@ export class RoutineManager {
       if (routine.onlyWhenPresent && awayDecision(routine, this.presenceOf(routine)) === "skip") continue;
       // A watch starts a turn only on a change: no engine warmed for every
       // check that will most often read nothing new.
-      if (isWatchPrecheck(routine.precheck)) continue;
+      if (isWatchPrecheck(routine.precheck) || isCodePrecheck(routine.precheck)) continue;
       // Already running or queued: its run has its thread, or will wait.
       if (this.runs.some((run) => run.routineId === routine.id && (run.status === "queued" || run.status === "running" || run.status === "waiting"))) continue;
       const pseudoRun = { routineId: routine.id, routineName: routine.name, botId: routine.botId, target: routine.target, runOn: routine.runOn ?? "maus",
@@ -3003,13 +3013,21 @@ export class RoutineManager {
 
   /** Read a run's watch beside the pass: the pass goes on with the other
    * runs, and the answer starts (or quiets) the run on the next pass. */
-  private startWatch(run: RoutineRun, routine: Routine, watch: RoutineWatchPrecheck): void {
+  private startWatch(run: RoutineRun, routine: Routine, watch: RoutineWatchPrecheck | RoutineCodePrecheck): void {
     if (this.watchInFlight.has(run.id)) return;
     this.watchInFlight.add(run.id);
-    const evaluate = this.options.evaluateWatch;
-    const reading = evaluate
-      ? runRoutinePrecheck(() => evaluate(cloneRoutine(routine), structuredClone(watch), cloneRun(run)), ROUTINE_WATCH_LIMITS.timeoutMs)
-      : Promise.reject(new Error("Watching for changes is not available on this server"));
+    let reading: Promise<RoutinePrecheckVerdict>;
+    if (isCodePrecheck(watch)) {
+      const evaluate = this.options.evaluateCode;
+      reading = evaluate
+        ? runRoutinePrecheck(() => evaluate(cloneRoutine(routine), { ...watch }, cloneRun(run)), ROUTINE_CODE_CHECK_TIMEOUT_MS)
+        : Promise.reject(new Error("This check is not available on this server"));
+    } else {
+      const evaluate = this.options.evaluateWatch;
+      reading = evaluate
+        ? runRoutinePrecheck(() => evaluate(cloneRoutine(routine), structuredClone(watch), cloneRun(run)), ROUTINE_WATCH_LIMITS.timeoutMs)
+        : Promise.reject(new Error("Watching for changes is not available on this server"));
+    }
     void reading.then(
       (verdict) => ({ ok: true as const, verdict }),
       (error: unknown) => ({ ok: false as const, error: `Pre-check failed, the run did not start: ${error instanceof Error ? error.message : String(error)}` }),
@@ -3294,7 +3312,7 @@ export class RoutineManager {
           const routine = this.routines.find((candidate) => candidate.id === run.routineId);
           if (routine?.precheck && !this.precheckPassed.has(run.id) && run.watchNote === undefined) {
             let verdict: { ok: true; verdict: RoutinePrecheckVerdict } | { ok: false; error: string };
-            if (isWatchPrecheck(routine.precheck)) {
+            if (isWatchPrecheck(routine.precheck) || isCodePrecheck(routine.precheck)) {
               // A watch reads a file, a command or a tool: never inside the
               // pass. Its answer comes back for a later pass.
               const settled = this.watchSettled.get(run.id);

@@ -10559,6 +10559,35 @@ A bot saves a widget as an artifact (`save_artifact`, `update_artifact`,
   makes no call and counts no failure. Never widen this list without the
   same review as `PERSPICAX_READ_ONLY_TOOLS`.
 
+## claude.ai artifacts through the person's own Claude account (#2018, 2026-11-05)
+
+`claude_artifact` (server/drivers/agents-artifact-tools.ts, call
+server/drivers/agents-call-claude-artifact.ts) is one call to Claude's
+`Artifact`, `ArtifactData` or `ArtifactComments` tool: `{tool, input, html?,
+file?}`. The internal route `/api/internal/claude-artifact`
+(server/routes/claude-artifacts.ts) runs it as a short `claude -p`
+(server/claude-artifacts/runner.ts) in the config dir of the person who speaks
+in the conversation (`claudeAccountForPrincipal`). Rules:
+
+- Only that person's own account, never another person's: no account picked
+  by the runner, no fallback. No Claude login is a 409 `claude_not_signed_in`.
+  A page of another claude.ai account answers `blocked: other_account`; the
+  bot offers to publish a copy from this account.
+- The page goes in as `html` or `file` (a regular file inside the bot's
+  workspace, realpath checked); `file_path` and the other local-path keys in
+  `input` are refused. The runner stages it in a private temp folder and the
+  CLI reads only that folder. Every result is untrusted data, fenced.
+- The person's routes (`/api/claude-artifacts/summary|comments`, `comments/
+  reply|resolve`, `copy`) use the session person only. The summary is plain
+  text (tags dropped), cached 60 s per (person, url); a publish drops it.
+- A published owned page is tracked per person (`DATA_DIR/claude-artifacts.json`)
+  and creates, once and lazily, the person's ACTIVE routine "Commentaires des
+  artefacts" (every 15 min, runAs that person). Its pre-check is code
+  (`{kind: "code", check: "claude_artifact_comments"}`,
+  server/routines/routine-precheck.ts): it reads the comment threads and wakes
+  the bot only on `sent_to_claude` or `awaiting_reply` threads, with their
+  text in the untrusted watch fence.
+
 ## Bot reactions to the person's message (2026-10-18)
 
 Decision: "make sure the bots use, when needed, reactions to the user message".

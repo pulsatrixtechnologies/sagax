@@ -190,7 +190,7 @@ describe("OpenAICompatDriver", () => {
       }), { status: 200, headers: { "content-type": "application/json" } });
     }));
     const inst = await OpenAICompatDriver.create({
-      instanceId: "personal-fixture", displayName: "Own server", enabled: true, access: "api",
+      instanceId: "personal-fixture", displayName: "Own server", enabled: true,
       config: OpenAICompatDriver.decodeConfig({
         url: "https://models.example.test/v1", protocol: "openai", apiKeyEnv: "SAGAX_COMPAT_SERVER_API_KEY",
         allowNoKey: true, personal: true, managedModels: ["vendor-chat"],

@@ -2101,6 +2101,7 @@ import {
   type InstallationServerInput,
   type OrgDeclarationInput
 } from "./capabilities/capabilities.ts";
+import { consoleBotCapabilities as resolveConsoleBotCapabilities } from "./capabilities/console-bot-capabilities.ts";
 import { createBotCapabilitiesRoutes, type BotCapabilitiesAnswer } from "./routes/bot-capabilities.ts";
 import { engineWorksInFiles, type BotCapabilities } from "../shared/capabilities.ts";
 import { reservedMcpName } from "../shared/mcp-reserved-names.ts";
@@ -10343,27 +10344,31 @@ function botCapabilitiesFor(auth: RequestAuth, botId: string, engineId: string |
     : level === "owner" || level === "manage" || orgAdminCaller(auth);
   return botCapabilitiesAs(bot, engineId, { ...(principal ? { principal } : {}), mayChange, marketplace: marketplaceViewer(auth) });
 }
-/** The Perspicax console's `GET bots/{id}/capabilities` (lot 1d): the same
- * list for the console person, whose reach the admin router checked. Read
- * only: the console never switches anything, so `canToggle` says what that
- * person could change in Sagax. */
+/** The Perspicax console's `GET bots/{id}/capabilities` (lot 1d): what the
+ * bot receives, resolved for its owner (#2029: their servers, Roles, "Me"
+ * plugins and the organization's Flow as a routine of the bot runs them),
+ * never for the console person looking. The console person's reach was
+ * checked by the admin router; read only: the console never switches
+ * anything, so `canToggle` says what that person could change in Sagax. */
 function consoleBotCapabilities(botId: string, viewer: { principalId: string; orgAdmin: boolean }): BotCapabilities | null {
-  const bot = store.bot(botId);
-  if (!bot) return null;
-  const principal = viewer.principalId.trim().toLowerCase();
-  const person = authzViewerFromId(principal);
-  const level = person ? botLevel({ viewer: { ...person, orgAdmin: person.orgAdmin || viewer.orgAdmin }, ...botFacts(bot) }) : null;
-  const answer = botCapabilitiesAs(bot, undefined, {
-    principal,
-    mayChange: viewer.orgAdmin || level === "owner" || level === "manage",
-    marketplace: { principal }
-  });
-  return answer.ok ? answer.capabilities : null;
+  return resolveConsoleBotCapabilities({
+    bot: (id) => store.bot(id) ?? undefined,
+    owner: (bot) => effectiveBotOwner(bot),
+    level: (looking, orgAdmin, bot) => {
+      const person = authzViewerFromId(looking);
+      return person ? botLevel({ viewer: { ...person, orgAdmin: person.orgAdmin || orgAdmin }, ...botFacts(bot) }) : null;
+    },
+    name: (id) => pageThreadName(id),
+    resolve: (bot, as) => {
+      const answer = botCapabilitiesAs(bot, undefined, { principal: as.principal, mayChange: as.mayChange, marketplace: { principal: as.principal }, ...(as.computedFor ? { computedFor: as.computedFor } : {}) });
+      return answer.ok ? answer.capabilities : null;
+    }
+  }, botId, viewer);
 }
 function botCapabilitiesAs(
   bot: NonNullable<ReturnType<typeof store.bot>>,
   engineId: string | undefined,
-  viewer: { principal?: string; mayChange: boolean; marketplace: MarketplaceViewer },
+  viewer: { principal?: string; mayChange: boolean; marketplace: MarketplaceViewer; computedFor?: { principalId: string; name: string } },
 ): BotCapabilitiesAnswer {
   const instance = registry.get(engineId ?? bot.modelSelection.instanceId);
   if (!instance) return { ok: false, status: engineId ? 400 : 404, error: "Unknown engine.", code: "unknown_engine" };
@@ -10422,13 +10427,12 @@ function botCapabilitiesAs(
       const folder = botPlugins.installedFolder(bot.id, plugin);
       let contents: PluginContents = { skills: [], commands: [], agents: [] };
       try { if (folder.present) contents = readPluginContents(folder.dir); } catch { /* listed without its contents */ }
-      const by = plugin.installedBy ? pageThreadName(plugin.installedBy) : "";
       return {
         key: plugin.key, name: plugin.name, marketplace: plugin.marketplace, enabled: plugin.enabled, declaredMcpServers: plugin.declaredMcpServers,
         dir: folder.dir, present: folder.present, contents,
         ...(plugin.description ? { description: plugin.description } : {}),
         ...(plugin.version ? { version: plugin.version } : {}),
-        ...(by ? { installedBy: by } : {}),
+        ...readableInstaller(plugin.installedBy),
         ...(offered.get(plugin.key) ? { updateAvailable: true } : {})
       };
     }),
@@ -10438,7 +10442,9 @@ function botCapabilitiesAs(
       const folder = personalPlugins.installedFolder(principal ?? localPrincipalId(), plugin);
       let contents: PluginContents = { skills: [], commands: [], agents: [] };
       try { if (folder.present) contents = readPluginContents(folder.dir); } catch { /* listed without its contents */ }
-      return { ...plugin, dir: folder.dir, present: folder.present, contents };
+      // the stored installer is a principal id: a readable name, or nothing (#2029)
+      const { installedBy: _storedInstaller, ...rest } = plugin;
+      return { ...rest, ...readableInstaller(plugin.installedBy), dir: folder.dir, present: folder.present, contents };
     }),
     pluginMcp: principal || !organization ? scopedPluginMcp(bot, principal ?? localPrincipalId()) : [],
     pluginEnvironment: Boolean(userSandbox),
@@ -10487,7 +10493,15 @@ function botCapabilitiesAs(
     })() } : { rides: false },
     grokCloud: grokCloudOnTurn(account, instance, bot)
   };
-  return { ok: true, capabilities: resolveBotCapabilities(inputs, { ...(principal ? { principalId: principal } : {}), mayChange }) };
+  return { ok: true, capabilities: resolveBotCapabilities(inputs, { ...(principal ? { principalId: principal } : {}), mayChange, ...(viewer.computedFor ? { computedFor: viewer.computedFor } : {}) }) };
+}
+/** Who installed a plugin, as a capability shows it (#2029): a readable
+ * name, with the id kept for a tooltip only; nothing when no name is known
+ * (an id is never shown as text). */
+function readableInstaller(id: string | undefined): { installedBy?: string; installedById?: string } {
+  if (!id) return {};
+  const name = pageThreadName(id);
+  return name && name !== id ? { installedBy: name, installedById: id } : {};
 }
 ROUTES.push(createBotCapabilitiesRoutes({ resolve: botCapabilitiesFor }));
 // "Create a Team Bot from this conversation" (routes/team-bot-from-thread.ts):
@@ -32151,7 +32165,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
   // (first path of each slice). Each worker replaces only its own line with
   // createXRoutes({...}).
   createInternalMemoryRoutes({
-    bot: (id) => store.bot(id),
+    bot: (id) => store.bot(id) ?? undefined,
     botByThread: (threadId) => store.botByThread(threadId),
     groupByThread: (threadId) => store.groupByThread(threadId),
     taskByThread: (botId, threadId) => store.taskByThread(botId, threadId),
@@ -32228,7 +32242,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     notify
   }),
   createInternalEnvironmentsRoutes({
-    bot: (id) => store.bot(id),
+    bot: (id) => store.bot(id) ?? undefined,
     projectBotForTask: (botId, threadId) => store.projectBotForTask(botId, threadId),
     isConfidentialThread: (threadId) => store.isConfidentialThread(threadId),
     requireActive: (capability) => {
@@ -32634,7 +32648,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     }
   }),
   createInternalIntegrationsRoutes({
-    bot: (id) => store.bot(id),
+    bot: (id) => store.bot(id) ?? undefined,
     isPerspicax: () => IDENTITY.kind === "perspicax",
     ownsThread: (botId, threadId) => {
       const owner = connectorThread(botId, threadId);

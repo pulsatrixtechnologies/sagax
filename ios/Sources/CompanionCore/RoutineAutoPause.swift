@@ -32,9 +32,12 @@ public enum RoutineAutoPause {
         return count == 1 ? "After 1 failed run" : "After \(count) failed runs in a row"
     }
 
-    /// The notice's, the list's and the history's words.
+    /// The notice's, the list's and the history's words (Localizable.xcstrings;
+    /// desktop `routines.autoPause.pausedAfter` / `pausedAfterOne`).
     public static func pausedText(_ failures: Int) -> String {
-        failures == 1 ? "Paused after a failure" : "Paused after \(failures) failures in a row"
+        failures == 1
+            ? String(localized: "Paused after a failure")
+            : String(localized: "Paused after \(failures) failures in a row")
     }
 
     /// Paused by itself and not turned back on since.

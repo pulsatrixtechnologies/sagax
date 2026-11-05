@@ -55613,7 +55613,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ouvrir la conversation"
+            "value": "Ouvrir le fil"
           }
         },
         "pt-BR": {
@@ -61613,7 +61613,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "En file d'attente"
+            "value": "En file"
           }
         },
         "pt-BR": {
@@ -76793,7 +76793,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Arrêtée"
+            "value": "Arrêté"
           }
         },
         "pt-BR": {
@@ -111328,6 +111328,12 @@
             "state": "translated",
             "value": "%@ a une question pour toi"
           }
+        },
+        "en": {
+          "stringUnit": {
+            "value": "%@ has a question for you",
+            "state": "translated"
+          }
         }
       }
     },
@@ -111337,6 +111343,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ a besoin d'une décision"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "value": "%@ needs a decision",
+            "state": "translated"
           }
         }
       }
@@ -111348,6 +111360,12 @@
             "state": "translated",
             "value": "%@ a besoin de toi"
           }
+        },
+        "en": {
+          "stringUnit": {
+            "value": "%@ needs you",
+            "state": "translated"
+          }
         }
       }
     },
@@ -111357,6 +111375,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "De la routine %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "value": "From the routine %@",
+            "state": "translated"
           }
         }
       }
@@ -111368,6 +111392,12 @@
             "state": "translated",
             "value": "Du travail confié par %@"
           }
+        },
+        "en": {
+          "stringUnit": {
+            "value": "From work %@ handed over",
+            "state": "translated"
+          }
         }
       }
     },
@@ -111377,6 +111407,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ouvrir le billet %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "value": "Open ticket %@",
+            "state": "translated"
           }
         }
       }
@@ -111457,6 +111493,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "un coéquipier"
+          }
+        }
+      }
+    },
+    "Completed with problems": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Completed with problems"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminée avec des problèmes"
+          }
+        }
+      }
+    },
+    "Deferred: target busy": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deferred: target busy"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Différée : cible occupée"
           }
         }
       }

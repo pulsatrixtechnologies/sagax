@@ -159,7 +159,7 @@ struct RoutineRunCardView: View {
                     .foregroundStyle(card.goalStatus == "needs-input" ? Theme.warning : tint)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(actionLabel) for \(card.routineName)")
+                .accessibilityLabel(Text("\(actionLabel) for \(card.routineName)"))
             }
         }
         .padding(14)
@@ -198,7 +198,7 @@ struct RoutineRunCardView: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(card.headline)
+        .accessibilityLabel(Text(verbatim: "\(card.routineName.isEmpty ? String(localized: "Routine") : card.routineName) · \(card.stateLabel)"))
     }
 
     private var scheduled: Date {

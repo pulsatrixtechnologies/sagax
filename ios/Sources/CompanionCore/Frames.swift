@@ -105,6 +105,12 @@ public enum Frame: Sendable {
     /// `bot.tasks`: this bot's task list changed (ids only). The panel
     /// reads the list again with its own rights.
     case botTasks(botId: String)
+    /// `server.restarting` (#2013): the server is about to close the stream
+    /// for a planned restart (an update, a restart). Sent without an id.
+    case serverRestarting(at: Double?)
+    /// `connector.status` (#2013): this organization server's reach of its
+    /// Perspicax connector changed.
+    case connectorStatus(ConnectorStatus)
     case unknown(kind: String)
 }
 
@@ -124,6 +130,7 @@ extension Frame: Decodable {
         case participantId, read, reset
         case callId, by
         case requestId
+        case perspicax
     }
 
     public init(from decoder: Decoder) throws {
@@ -253,6 +260,14 @@ extension Frame: Decodable {
                 return
             }
             self = .botTasks(botId: botId)
+        case "server.restarting":
+            self = .serverRestarting(at: try? container.decodeIfPresent(Double.self, forKey: .at))
+        case "connector.status":
+            guard let perspicax = try? container.decode(ConnectorPerspicaxWire.self, forKey: .perspicax) else {
+                self = .unknown(kind: kind)
+                return
+            }
+            self = .connectorStatus(ConnectorStatus(perspicaxUnreachable: perspicax.state == "unreachable", since: perspicax.since))
         default:
             // routines, and whatever the harness adds next
             self = .unknown(kind: kind)
@@ -370,4 +385,10 @@ public struct OrgApprovalsFrame: Hashable, Sendable {
         self.count = count
         self.added = added
     }
+}
+
+/// `connector.status`'s `perspicax` body.
+private struct ConnectorPerspicaxWire: Decodable {
+    var state: String
+    var since: Double?
 }

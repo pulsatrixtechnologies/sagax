@@ -1,6 +1,11 @@
 import { checkRoutineReadiness, routineEngineRefusal, routineFlowSkills, type RoutineReadinessDeps, type ReadinessRoutine, type ReadinessRun, type ReadinessComputer } from "./routines/routine-readiness.ts";
 import { routineFlowInput } from "./routines/routine-flow-input.ts";
 import { noteEngineRefusal, clearEngineRefusal, activeEngineRefusal } from "./engines/engine-refusals.ts";
+import { PreSendRefusals } from "./engines/presend-refusals.ts";
+import { PerspicaxReachability, gatewayProbe, observedFetch } from "./perspicax/perspicax-reachability.ts";
+import { createConnectorStatusRoutes } from "./routes/connector-status.ts";
+import { preSendRefusalKind, isCodexAmbientMcpRefusal } from "../shared/presend-refusal.ts";
+import { ambientRefusalFor, clearAmbientRefusal, fixAmbientMcp } from "./drivers/codex/ambient-mcp.ts";
 import { classifyRoutineFailure as readinessFailureClass } from "./routines/routine-recovery.ts";
 import { canUseMcpServer } from "../shared/tool-scope.ts";
 import { createBotAvatarGenerateRoutes } from "./routes/bot-avatar-generate.ts";
@@ -241,9 +246,13 @@ import {
   cwActionCard,
   cwActionLanguage,
   cwToolRowWidget,
-  createCwActionPasses
+  createCwActionPasses,
+  cwSiteFromEnv
 } from "./widgets/cw-widget-actions.ts";
 import { cwActionInstruction, parseCwAction } from "../shared/cw-widgets/actions.ts";
+import { cwRecordLink, cwSite } from "../shared/cw-widgets/links.ts";
+import { attentionCard, mirrorLateRunReply, relayPersonAttention, type AttentionRelayDeps } from "./turns/person-attention-relay.ts";
+import { personAttention } from "../shared/person-attention.ts";
 import { createApprovalModeSupport } from "./capabilities/harness-capabilities.ts";
 import { escapeAttribute } from "../src/lib/composer-attachments.ts";
 import { threadRefUrl } from "../src/lib/thread-refs.ts";
@@ -734,6 +743,9 @@ import {
 } from "../shared/custom-rules.ts";
 import { createCustomRuleRoutes } from "./routes/custom-rules.ts";
 import { createAutoApprovalNotes, type ToolAutoApproval } from "./approvals/tool-auto-approval.ts";
+import { RoleJournal } from "./perspicax/role-journal.ts";
+import { createRoleEvents, meWriteSummary } from "./perspicax/role-events.ts";
+import { createPerspicaxRoleRoutes } from "./routes/perspicax-roles.ts";
 import { createEmailDraftRoutes } from "./routes/email-drafts.ts";
 import { createThreadWarmRoutes, warmBotAccessRefusal } from "./routes/thread-warm.ts";
 import { createEmailSendPasses, emailSendCard, sendWithMailer } from "./mail/email-draft-send.ts";
@@ -2450,6 +2462,7 @@ import {
 } from "./agent-api.ts";
 import { type PriorityDelivery } from "./proactive/priority-wake.ts";
 import { parseHideList, planHiddenAgentThreads, planHiddenBotThreads } from "./threads/agent-threads.ts";
+import { backgroundIdleMs, planBackgroundSweep, RESERVED_RUN_PREFIX, sweepSummary } from "./threads/background-sweep.ts";
 import { MemberLiveText } from "./people/member-live-text.ts";
 import { computersRoutes, type ComputersDeps } from "./org/org-admin-computers.ts";
 import {
@@ -5167,6 +5180,8 @@ const internalCapabilities = new Map<string, InternalCapability>();
  * the server is linked to Perspicax; declared here because capability revokes
  * reach it. */
 let perspicaxMcp: PerspicaxMcp | null = null;
+/** #2013: whether this server reaches its Perspicax connector (organization servers). */
+let perspicaxReach: PerspicaxReachability | null = null;
 /** 2026-10-11: the work rows and duplicate checks sent to Perspicax's
  * organization memory (server/memory/perspicax-memory.ts); null without a link. */
 let perspicaxMemory: PerspicaxMemory | null = null;
@@ -12813,12 +12828,14 @@ const coordinator: Coordinator = createCoordinator({
         const source = store.bot(parent.botId);
         if (source) markTaskContextExternallyUpdated(source, parent.threadId, markUnread);
       }
-      // A successful direct work thread closes after its result is reported:
-      // folded out of the sidebar, never deleted, and reopened if addressed.
-      // Failed or withheld work stays visible, and so does a thread whose
-      // next request is already waiting there.
+      // A direct work thread closes once its hand-off is answered, whatever
+      // the answer (unified chat, 2026-11-05): the outcome, a failure
+      // included, is on the card in the conversation that asked, which still
+      // opens the thread. Never deleted, reopened if addressed, archived once
+      // idle (background-sweep.ts). A thread whose next request is already
+      // waiting there stays open.
       const childTask = store.taskByThread(child.botId, child.threadId);
-      if (!child.groupId && child.status === "completed" && !problem && !childTask?.closedBy && !coordinator.activeDirect(child.threadId)
+      if (!child.groupId && !childTask?.closedBy && !coordinator.activeDirect(child.threadId)
         && childTask?.openedBy?.kind === "work" && childTask.openedBy.botId === parent.botId) {
         store.setTaskClosedBy(child.botId, child.threadId,
           { botId: parent.botId, name: store.bot(parent.botId)?.name ?? childTask.openedBy.name, at: Date.now() });
@@ -15996,6 +16013,19 @@ function stoppedRowSinceLastPerson(threadId: string, turnId: string | undefined)
 /** 2026-10-28: what answered a call's ask with no card, kept until the
  * call's own row exists (server/approvals/tool-auto-approval.ts). */
 const autoApprovals = createAutoApprovalNotes();
+/** 2026-11-05 (visible roles): the Perspicax role of each tool step, the
+ * transitions, the refusals and the owner's rules (server/perspicax/role-journal.ts). */
+const roleJournal = new RoleJournal(process.env.VITEST ? null : join(DATA_DIR, "perspicax-roles.json"));
+const roleEvents = createRoleEvents({
+  journal: roleJournal,
+  messagesFor: (threadId) => store.messagesFor(threadId),
+  patchTool: (threadId, messageId, tool) => { store.patchMessage(threadId, messageId, { tool: tool as NonNullable<Message["tool"]> }); },
+  appendRow: (threadId, row) => { store.appendMessage(threadId, { role: "bot", ...row } as Omit<Message, "id" | "at">); },
+  personName: (principalId) => (isPrincipalId(principalId) ? personDisplayName(principals.byId(principalId)) : "") || "",
+  botName: (botId) => store.bot(botId)?.name ?? "",
+  ownerOf: (botId) => { const bot = store.bot(botId); return bot ? effectiveBotOwner(bot) || undefined : undefined; },
+  language: (principalId) => languageOfPerson(principalId),
+});
 /** Put what answered an ask with no card on the call's own row: the newest
  * row of this tool in the conversation that has none yet (Claude writes the
  * row before it asks), else on the row the engine writes next. */
@@ -19314,6 +19344,7 @@ bus.subscribe((event: RuntimeEvent) => {
         // chip aloud without re-deriving it — and so the phrase a user
         // hears and the chip they see can never drift apart
         const approved = autoApprovals.takePending(event.threadId, name);
+        const actedAs = roleEvents.takePending(event.threadId, name);
         const product = declaredToolProduct(bot?.id, name, event.input);
         // 2026-10-29: the step the working line names, the same for every
         // engine (shared/working-step.ts); older clients ignore the field
@@ -19323,6 +19354,7 @@ bus.subscribe((event: RuntimeEvent) => {
           kind: "activity",
           tool: { name, spoken: narrateTool(name) ?? undefined, summary: event.summary, input: event.input, itemId: event.itemId ?? event.eventId, ...(event.files?.length ? { files: event.files } : {}),
             ...(approved ? { autoApproval: approved.approval, ...(approved.notice ? { ruleNotice: approved.notice } : {}) } : {}),
+            ...(actedAs ? { role: actedAs } : {}),
             ...product,
             ...(step ? { step } : {}),
             ...(event.parentItemId ? { parentItemId: event.parentItemId } : {}) },
@@ -20359,6 +20391,9 @@ bus.subscribe((event: RuntimeEvent) => {
       break;
     }
     case "turn.retrying":
+      // #2013: Codex relaunching to turn its own native MCP entries off for
+      // a tool selection is Sagax's housekeeping, not a failure to show.
+      if (event.reason === "ambient_mcp") break;
       // the driver is about to relaunch the turn after a transient failure;
       // the activity chip keeps the bot visibly busy through the backoff
       pushMessage({
@@ -20470,7 +20505,16 @@ bus.subscribe((event: RuntimeEvent) => {
         }
       } else {
         const tool = failedTurnTool(event.message, event);
-        if (!engineLimited && !repeatsShownFailure(store.messagesFor(event.threadId), { role: "bot", kind: "activity", tool, from: failureFrom }, bot?.id ?? "")) {
+        // #2013 (the maintainer, 2026-11-05): a refusal before any prompt went out (the
+        // engine not ready, its own configuration in conflict, its sign-in
+        // expired) is no red card in a bot's chat: the composer says it with
+        // its action (sendStateFor, shared/send-state.ts engine_refused).
+        const preSend = bot && !group && !tool.place ? preSendRefusalKind(event.message, event) : null;
+        const refusedOn = bot ? registry.get(event.providerInstanceId ?? bot.modelSelection.instanceId) : null;
+        if (preSend && preSend !== "engine_limit" && bot && refusedOn) {
+          const fix = preSend === "config_conflict" && isCodexAmbientMcpRefusal(event.message) && ambientRefusalFor(event.threadId) ? "codex_native_mcp" as const : undefined;
+          preSendRefusals.note(event.threadId, { kind: preSend, cause: redactSecretsInText(event.message).slice(0, 600), instanceId: refusedOn.instanceId, ...(fix ? { fix } : {}), at: Date.now() });
+        } else if (!engineLimited && !repeatsShownFailure(store.messagesFor(event.threadId), { role: "bot", kind: "activity", tool, from: failureFrom }, bot?.id ?? "")) {
           pushMessage({ role: "bot", kind: "activity", tool });
         }
       }
@@ -20499,6 +20543,7 @@ bus.subscribe((event: RuntimeEvent) => {
       safePoints.clear(event.threadId);
       turnReplyRepeats.settle(event.threadId, event.turnId);
       autoApprovals.clear(event.threadId);
+      roleJournal.endTurn(event.threadId);
       appPiecesByThread.delete(event.threadId);
       settleWaitingOnPersonChips(event.threadId);
       // A peer-started turn settles as coordination, not as news. What keeps
@@ -20809,6 +20854,17 @@ bus.subscribe((event: RuntimeEvent) => {
             notify(deliverableNotification("done", bot, incidentsReport!, reply, { avatarUrl: bot.avatarUrl }));
           }
         }
+        // 2026-11-05: a result that needs the person reaches the person,
+        // whatever thread it came from (server/turns/person-attention-relay.ts):
+        // a hand-off, a thread another bot opened, a routine run's task the
+        // run no longer reports from. Never from the person's own conversation.
+        try {
+          const attentionInput = { bot, threadId: event.threadId, turnId: completedTurnId, ok: event.ok, stopped, runTurn: Boolean(routineRun) };
+          const relayed = relayPersonAttention(attentionInput, personAttentionDeps);
+          if (!relayed.posted) mirrorLateRunReply(attentionInput, personAttentionDeps);
+        } catch (error) {
+          console.error(`[attention] not relayed: ${error instanceof Error ? error.message.slice(0, 160) : "error"}`);
+        }
         const routineReportThread = routineRun ? routineSourceThread(routineRun) : null;
         // A routine's result belongs to its reporting thread's unread state.
         // Its internal execution should not light up the sidebar as well.
@@ -20827,7 +20883,9 @@ bus.subscribe((event: RuntimeEvent) => {
         // post results to the conversation, rings nothing (2026-10-22).
         // A Team incidents report rang once above, on the conversation it was
         // copied to: one piece of news, one push.
-        if ((!routineRun || (routineRun.status === "completed" && !routineRun.quiet && routineEffectivePostResults(routineRun))) && !internal && !incidentsCopied && !computerSelectionTurns.get(event.threadId)?.selected) {
+        // A report with items for the person rang "needs you" from its card
+        // (syncRoutineRunToSource): one piece of news, one push.
+        if ((!routineRun || (routineRun.status === "completed" && !routineRun.quiet && routineEffectivePostResults(routineRun) && !personAttention(routineRun.output))) && !internal && !incidentsCopied && !computerSelectionTurns.get(event.threadId)?.selected) {
           // the frame carries the bot's avatar so every desktop client can
           // show the notification under that bot's own face
           const completionDetail = routineRun
@@ -21420,6 +21478,60 @@ function routineRunSpeaker(run: { runAs?: string; botId: string }): TurnSpeaker 
 function roomRoutineSpeaker(threadId: string): TurnSpeaker | null {
   const run = routines?.runForThread(threadId);
   return run && run.target === "room-goal" ? routineRunSpeaker(run) : null;
+}
+
+/** The person whose conversation a bot's result is carried to: the thread's
+ * own person, the run's, the one who opened the work, else the bot's owner. */
+function attentionPerson(bot: BotRecord, threadId: string): string | undefined {
+  if (!privateThreads()) return undefined;
+  const task = store.taskByThread(bot.id, threadId);
+  return task?.ownerPrincipalId || routines?.runForThread(threadId)?.runAs || threadPersonKey(threadId) || effectiveBotOwner(bot) || undefined;
+}
+const CW_OPEN_RECORD = /https:\/\/([a-z0-9.-]+)\/v4_6_release\/services\/system_io\/router\/openrecord\.rails\?[^"\s]*?companyName=([A-Za-z0-9_.-]+)/i;
+/** A ConnectWise ticket's deep link: the site the server is told
+ * (SAGAX_CW_SITE), else the one the thread's own ConnectWise cards link to. */
+function attentionTicketUrl(threadId: string, ticketId: number): string | undefined {
+  let site = cwSiteFromEnv();
+  if (!site) {
+    for (const message of store.messagesFor(threadId).slice(-400).reverse()) {
+      if (!message.tool?.widget) continue;
+      const found = CW_OPEN_RECORD.exec(JSON.stringify(message.tool.widget));
+      if (found) { site = cwSite(found[1], found[2]); if (site) break; }
+    }
+  }
+  return cwRecordLink(site, "ServiceFv", ticketId);
+}
+const personAttentionDeps: AttentionRelayDeps<BotRecord> = {
+  task: (botId, threadId) => store.taskByThread(botId, threadId) ?? undefined,
+  messages: (threadId) => store.activePath(threadId),
+  append: (threadId, message) => store.appendMessage(threadId, message),
+  patch: (threadId, messageId, patch) => { store.patchMessage(threadId, messageId, patch); },
+  markUnread: (botId, threadId) => store.patchTask(botId, threadId, { unread: true }),
+  conversation: (bot, threadId) => conversationOrStart(bot, attentionPerson(bot, threadId)),
+  // an outside agent's conversation, or an AI client's hidden one (#291):
+  // the client reads it. A peer's hidden work thread is not one.
+  agentConversation: (botId, threadId) => {
+    const task = store.taskByThread(botId, threadId);
+    return isAgentConversation(task) || (task?.hidden === true && !task.routineRunId && !task.openedBy?.botId);
+  },
+  routineRun: (threadId) => {
+    const run = routines?.runForThread(threadId);
+    return run && run.target === "bot" ? { id: run.id, routineName: run.routineName, status: run.status } : null;
+  },
+  ticketUrl: attentionTicketUrl,
+  notify: (bot, threadId, title, body) => notify(deliverableNotification("needs-you", bot, threadId, body, { avatarUrl: bot.avatarUrl, title })),
+};
+/** 2026-11-05 (visible roles): the role a Perspicax turn starts under. The
+ * person's composer pick for this thread's next turn (theirs only), else a
+ * routine run's "Au nom de" role. Undefined: the default surface ("Moi"). */
+function perspicaxTurnRole(turn: { threadId: string; botId: string; principalId: string; routine: boolean }): { slug: string; reason: "person" | "routine" } | undefined {
+  const picked = roleJournal.takePick(turn.threadId, turn.principalId);
+  if (picked !== undefined) return { slug: picked, reason: "person" };
+  if (!turn.routine) return undefined;
+  const run = activeRoutineRunForThread(turn.threadId);
+  const routine = run ? routines?.getRoutine(run.routineId) : null;
+  const actAs = routine && typeof (routine as { actAs?: unknown }).actAs === "string" ? (routine as { actAs?: string }).actAs : undefined;
+  return actAs !== undefined && routine?.botId === turn.botId ? { slug: actAs, reason: "routine" } : undefined;
 }
 
 function activeRoutineRunForThread(threadId: string): RoutineRun | null {
@@ -22032,7 +22144,7 @@ const threadPrewarm = new ThreadPrewarm({
   perPersonPerMinute: prewarmPerPersonPerMinute(),
 });
 /** routineRunId of a task reserved for a scheduled run not started yet. */
-const RESERVED_RUN_PREFIX = "prewarm:";
+
 type PrewarmOutcome = "started" | "extended" | "limited" | "skipped";
 type PrewarmTurnOpts = { speaker: TurnSpeaker; runOn?: RoutineRunOn; automationSource?: "schedule" | "manual"; commsDepth?: number; cardContinuation?: boolean; warmCoordination?: boolean };
 /** Why a thread is not warmed now, or null when it may be. */
@@ -23690,6 +23802,7 @@ async function acceptDirectSend(
           });
           // Written here, as the words that start a turn are (startTurn).
           store.setTaskAskedAt(botId, threadId, message.at);
+          if (store.taskByThread(botId, threadId)?.openedBy?.kind !== "agent") store.restoreAutoArchived(botId, threadId);
           // Durable while the engine process holds them: a crash or stop can
           // resume them once (held-steers.ts).
           try {
@@ -24337,7 +24450,10 @@ function routineEffectivePostResults(run: Pick<RoutineRun, "routineId" | "proact
  * turns unread. Replaying a transition never adds another message. */
 function syncRoutineRunToSource(run: RoutineRun): string | null {
   const known = routineSourceOwner(run);
-  const reportable = routineRunReportable({ ...run, needsPerson: run.status === "waiting" && routineRunNeedsPerson(run), postResults: routineEffectivePostResults(run) });
+  // 2026-11-05: a completed report with items only the person can do
+  // ([HUMAIN], needs_human, a question) always posts, as a card with them.
+  const attentionFound = run.status === "completed" && !run.quiet ? personAttention(routineFullReport(run) ?? run.output) : undefined;
+  const reportable = routineRunReportable({ ...run, needsPerson: run.status === "waiting" && routineRunNeedsPerson(run), postResults: routineEffectivePostResults(run), attention: Boolean(attentionFound) });
   // A bot run's task stays hidden (Automations, Open run) from its start.
   // 2026-10-28: a webhook's run too (it used to take the bot's live chat;
   // now it runs in its own task and reports into the one conversation).
@@ -24378,14 +24494,21 @@ function syncRoutineRunToSource(run: RoutineRun): string | null {
   const card = routineRunCard(run, sourceThreadId, routineFullReport(run));
   const text = routineRunFallbackText(card);
   const statusChanged = existing?.routineRun?.status !== run.status;
+  const runBotRecord = store.bot(run.botId);
+  const attention = attentionFound && runBotRecord && run.threadId
+    ? attentionCard(runBotRecord, run.threadId, store.taskByThread(run.botId, run.threadId) ?? undefined,
+      `run:${run.id}`, attentionFound, { id: run.id, routineName: run.routineName }, { ticketUrl: attentionTicketUrl })
+    : undefined;
+  const attentionNew = Boolean(attention && !existing?.attention);
   if (existing) {
-    store.patchMessage(sourceThreadId, existing.id, { text, routineRun: card });
+    store.patchMessage(sourceThreadId, existing.id, { text, routineRun: card, ...(attention ? { attention } : {}) });
   } else {
     const message: Omit<Message, "id" | "at"> = {
       role: "bot",
       kind: "routine.run",
       text,
-      routineRun: card
+      routineRun: card,
+      ...(attention ? { attention } : {})
     };
     if (source.group) {
       message.from = { botId: source.bot.id, name: source.bot.name, color: source.bot.color };
@@ -24393,9 +24516,15 @@ function syncRoutineRunToSource(run: RoutineRun): string | null {
     store.appendMessage(sourceThreadId, message);
   }
   // Something for the person turns the conversation unread, once per state.
-  if (reportable && statusChanged) {
+  if (reportable && (statusChanged || attentionNew)) {
     if (source.group) store.patchGroup(source.group.id, { unread: true });
     else store.patchTask(source.bot.id, sourceThreadId, { unread: true });
+  }
+  // Items only the person can do ring once, whatever postResults says.
+  if (attention && attentionNew && runBotRecord) {
+    notify(deliverableNotification("needs-you", runBotRecord, sourceThreadId,
+      attention.items.map((entry) => entry.text.replace(/\*\*|__|`/g, "").replace(/\s+/g, " ")).join("\n"),
+      { avatarUrl: runBotRecord.avatarUrl, routineRunId: run.id, routineName: run.routineName }));
   }
   return sourceThreadId;
 }
@@ -25675,6 +25804,35 @@ function startProactiveWake(batch: ProactiveWakeBatch, accepted = false, runAs?:
   });
 }
 
+/** 2026-11-05 (visible roles): the person's answer to an "Agit comme" card.
+ * continue keeps going; stay puts the thread back in the previous role with
+ * no further fallback from it; always (the bot's owner only) saves a plain
+ * rule on the bot's Permissions page and continues. */
+function answerRoleTransition(input: { botId: string; threadId: string; messageId: string; choice: "continue" | "stay" | "always"; actor: string }): { status: number; body: Record<string, unknown> } {
+  const bot = store.bot(input.botId);
+  if (!bot) return { status: 404, body: { error: "no such card" } };
+  let threadId: string;
+  try { threadId = routeThreadId(bot, input.threadId); } catch { return { status: 404, body: { error: "no such card" } }; }
+  const message = store.messagesFor(threadId).find((row) => row.id === input.messageId);
+  const card = message?.card;
+  const transition = card?.roleTransition;
+  if (!message || !card || !transition || transition.botId !== bot.id) return { status: 404, body: { error: "no such card" } };
+  if (card.answered) return { status: 409, body: { error: "this card was already answered" } };
+  if (input.choice === "always") {
+    const owner = effectiveBotOwner(bot);
+    if (!owner || owner !== input.actor) return { status: 403, body: { error: "Only the bot's owner can save a rule for this bot." } };
+    roleJournal.addRule(bot.id, { from: transition.from, to: transition.to, path: transition.reason === "fallback" ? transition.path ?? "" : "", ownerId: owner });
+  }
+  if (input.choice === "stay") {
+    roleJournal.stay(threadId, transition.from.slug);
+    perspicaxMcp?.stayInRole(threadId, transition.from.slug);
+  }
+  const index = input.choice === "continue" ? 0 : input.choice === "stay" ? 1 : 2;
+  const picked = card.options[index] ?? input.choice;
+  store.patchMessage(threadId, message.id, { card: { ...card, answered: picked, answeredText: picked, roleTransition: { ...transition, choice: input.choice } } });
+  return { status: 200, body: { ok: true, choice: input.choice } };
+}
+
 /** Legacy proposal cards (propose mode, retired 2026-11-01) remain answerable:
  * accept runs the wake at the bot's level; decline closes the card. */
 function answerProactiveProposal(botId: string, proposalId: string, accept: boolean): { status: number; body: Record<string, unknown> } {
@@ -25708,6 +25866,20 @@ function answerProactiveProposal(botId: string, proposalId: string, accept: bool
 }
 
 ROUTES.push(createProactiveProposalRoutes({ answer: answerProactiveProposal }));
+ROUTES.push(createPerspicaxRoleRoutes({
+  actor: (auth) => channelViewerId(auth) ?? localPrincipalId(),
+  mayUseBot: (auth, botId) => {
+    const bot = store.bot(botId);
+    if (!bot) return false;
+    const viewerId = channelFilterViewerId(auth);
+    if (!viewerId) return true;
+    const viewer = authzViewerFromId(viewerId);
+    return Boolean(viewer && canOnBot(viewer, "bot.use", botFacts(bot)));
+  },
+  answerTransition: (input) => answerRoleTransition(input),
+  rules: ({ botId, actor }) => ({ status: 200, body: { rules: roleJournal.rulesFor(botId, actor) } }),
+  removeRule: ({ botId, actor, id }) => roleJournal.removeRule(botId, actor, id) ? { status: 200, body: { ok: true } } : { status: 404, body: { error: "no such rule" } },
+}));
 
 // Whether an oldest thread is someone else's (frozenResultsThread) is known
 // only now: an earlier key of the owner's is theirs once settled.
@@ -29848,6 +30020,32 @@ function ownerModelOfflineRefusal(bot: BotRecord, instance: { instanceId: string
     ...(speaker.origin === "person" && speaker.principalId ? { speakerPrincipalId: speaker.principalId } : {})
   };
 }
+/** #2013: each conversation's last pre-send refusal (server/engines/presend-refusals.ts). */
+const preSendRefusals = new PreSendRefusals();
+bus.subscribe((event: RuntimeEvent) => {
+  // A new turn speaks for the engine again; one that succeeds clears it.
+  if (event.type === "turn.started" || (event.type === "turn.completed" && event.ok)) {
+    preSendRefusals.clear(event.threadId);
+    if (event.type === "turn.completed") clearAmbientRefusal(event.threadId);
+  }
+});
+/** #2013: the composer's Fix for a refusal Sagax can repair itself. Codex
+ * with a tool selection: turn the account's own native MCP entries off in
+ * its config.toml (server/drivers/codex/ambient-mcp.ts). The caller then
+ * sends the last message again. */
+function fixSendState(bot: BotRecord, fix: string): { ok: boolean; disabled?: string[]; missing?: string[] } {
+  if (fix !== "codex_native_mcp") return { ok: false };
+  const refusal = ambientRefusalFor(bot.threadId);
+  if (!refusal) {
+    preSendRefusals.clear(bot.threadId);
+    return { ok: true, disabled: [], missing: [] };
+  }
+  const result = fixAmbientMcp(refusal);
+  clearAmbientRefusal(bot.threadId);
+  preSendRefusals.clear(bot.threadId);
+  console.info(`[send-state] ${bot.id}: disabled ${result.disabled.length} native Codex MCP server(s)${result.missing.length ? `, ${result.missing.length} not found in the account's config` : ""}`);
+  return { ok: true, ...result };
+}
 /** The composer's send state for this person (shared/send-state.ts). Any
  * doubt, or a failure to judge, is no block: the message sends as before. */
 async function sendStateFor(bot: BotRecord, speaker: TurnSpeaker): Promise<SendBlock | null> {
@@ -29859,11 +30057,13 @@ async function sendStateFor(bot: BotRecord, speaker: TurnSpeaker): Promise<SendB
     const ownerOffline = ownerModelOfflineRefusal(bot, instance, speaker, selection.model);
     const refused = IDENTITY.kind === "perspicax" && !ownerOffline && orgEngineRefusal(bot, instance, speaker, selection.model) !== null &&
       speakerTurnSelection(bot, speaker) === null;
+    const preSend = preSendRefusals.for(bot.threadId, instance.instanceId);
     return sendBlockFor({
       auto: false, engine, accessRefused: refused,
       ownerComputerOffline: ownerOffline ? { ownerName: ownerOffline.ownerName ?? "" } : null,
       local: desktopLocalModels.reach(selection.model),
-      limited: await sendStateLimit(bot, speaker)
+      limited: await sendStateLimit(bot, speaker),
+      refused: preSend ? { kind: preSend.kind, cause: preSend.cause, ...(preSend.fix ? { fix: preSend.fix } : {}) } : null
     });
   } catch (error) {
     console.warn(`[send-state] ${bot.id}: ${error instanceof Error ? error.message : String(error)}`);
@@ -37594,6 +37794,36 @@ function migrateBotRuntimeSettings(): void {
     console.warn(`[bot-runtime-settings] could not copy the global values onto the bots: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
+/** A person wrote a line here from an app: never an AI client's line, a
+ * teammate's, a routine's, a webhook's or a relayed one (background-sweep.ts
+ * never archives such a thread). Read from the decrypted transcript. */
+function personWroteIn(threadId: string): boolean {
+  return store.messagesFor(threadId).some((message) => message.role === "user" && message.kind === "text"
+    && typeof message.sendId === "string" && !message.peerAsk && !message.relayed && !message.aiClient);
+}
+/** Archive the finished, idle background threads (server/threads/background-sweep.ts):
+ * at start, then every BACKGROUND_SWEEP_EVERY_MS. Counts only in the log. */
+const BACKGROUND_SWEEP_EVERY_MS = 10 * 60_000;
+function sweepBackgroundThreads(): number {
+  try {
+    const onScreen = new Set(viewerSelections.values());
+    const plan = planBackgroundSweep(store.bots.map((bot) => ({ id: bot.id, threadId: bot.threadId, tasks: store.tasks(bot.id) })), {
+      now: Date.now(),
+      idleMs: backgroundIdleMs(),
+      held: (botId, threadId) => onScreen.has(threadId) || threadBusy(botId, threadId) || coordinator.activeDirect(threadId)
+        || coordinator.outstandingDirect(threadId).length > 0 || coordinator.awaitsTeammates(threadId)
+        || Boolean(activeRoutineRunForThread(threadId)) || pendingComputerResumes.has(threadId) || delegationWatch.has(threadId)
+        || reservedWorkThreads.has(threadId) || continuationHolds.has(threadId),
+      personWroteIn,
+    });
+    const archived = plan.length ? store.autoArchiveTasks(plan) : 0;
+    if (archived) console.log(`[background-threads] archived ${archived} finished background thread(s): ${sweepSummary(plan)}`);
+    return archived;
+  } catch (error) {
+    console.warn(`[background-threads] sweep skipped: ${error instanceof Error ? error.message : String(error)}`);
+    return 0;
+  }
+}
 function hideBotThreadsOnce(): void {
   const marker = join(DATA_DIR, "agent-threads-hidden.v2");
   if (existsSync(marker)) return;
@@ -38487,9 +38717,11 @@ ROUTES.push(createBotHistoryRoutes<BotRecord, ReturnType<typeof wireBot>>({
   wireBot: (bot) => wireBot(bot),
   broadcast: (event) => broadcast(event)
 }));
+ROUTES.push(createConnectorStatusRoutes({ perspicax: () => perspicaxReach?.status() ?? null }));
 ROUTES.push(createBotSendStateRoutes({
   requestedTaskBot: (botId, threadId) => requestedTaskBot(botId, threadId),
-  sendStateFor: (bot, auth) => sendStateFor(bot, speakerFor(auth))
+  sendStateFor: (bot, auth) => sendStateFor(bot, speakerFor(auth)),
+  fixSendState: (bot, fix) => fixSendState(bot, fix)
 }));
 ROUTES.push(createRoutineWatchCheckRoutes({
   watchDeps: routineWatchDeps,
@@ -40585,12 +40817,36 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
   const directory = perspicaxDirectory;
   perspicaxMemory = new PerspicaxMemory({ link: () => directory });
   const issuer = IDENTITY.issuer;
+  // #2013: the people of the organization hear when the connector cannot be
+  // reached (a calm notice in their app), from this traffic and a light probe.
+  perspicaxReach = new PerspicaxReachability({
+    probe: gatewayProbe(() => { try { return directory?.mcpEndpoint() ?? null; } catch { return null; } }),
+    onChange: (status) => {
+      console.log(`perspicax connector: ${status.state}`);
+      broadcast({ kind: "connector.status", perspicax: status });
+    }
+  });
+  perspicaxReach.start();
+  const reach = perspicaxReach;
   perspicaxMcp = new PerspicaxMcp({
     issuer,
     link: () => directory,
+    fetch: observedFetch(fetch, reach),
     onIdentityWarning: ({ threadId, principalId, reason }) => {
       store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: identityWarning(reason, personLanguageOf(principalId, (id) => userPreferenceStore.get(id).preferences, cfg.language)), ok: false } });
     },
+    // 2026-11-05 (visible roles): each step's role, transitions, refusals
+    onRole: (event) => roleEvents.onRole(event),
+    turnRole: (turn) => perspicaxTurnRole(turn),
+    roleFallback: ({ threadId, botId, principalId, from, path }) => {
+      const bot = store.bot(botId);
+      return roleJournal.fallbackFor({ threadId, botId, principalId, ...(bot ? { ownerId: effectiveBotOwner(bot) } : {}), from, path });
+    },
+    askMeWrite: ({ threadId, botId, principalId, role, tool, permission }) => confirmHeldCard({
+      threadId, botId, tool: "perspicax-role",
+      summary: meWriteSummary(languageOfPerson(principalId), { person: (isPrincipalId(principalId) ? personDisplayName(principals.byId(principalId)) : "") || "", role: role.name || role.slug, tool, permission }),
+      fingerprint: `role-me-write:${role.slug}:${tool}`,
+    }),
     // Routine runs and teammate turns: the same write twice at once is one.
     writeOnceScope: ({ threadId }) => activeRoutineRunForThread(threadId) || internalTurnThreads.has(threadId) ? "unattended" : null,
     // a live call keeps its Perspicax tools mounted from turn to turn
@@ -43129,6 +43385,14 @@ const agentApi = createAgentApi({
   },
   async interrupt(agentId, threadId) {
     await interruptDirectThread(agentId, threadId);
+  },
+  collected(agentId, threadId) {
+    // Only an AI client's own conversation (openedBy kind "agent"), never a
+    // person's chat a peer bot's send_prompt landed in; never one at work.
+    const task = store.taskByThread(agentId, threadId);
+    if (!task || task.openedBy?.kind !== "agent" || task.archivedAt !== undefined || task.pinned === true) return;
+    if (threadBusy(agentId, threadId) || coordinator.activeDirect(threadId) || personWroteIn(threadId)) return;
+    store.autoArchiveTasks([{ botId: agentId, threadId }]);
   },
   notify(caller, agent, result) {
     if (caller.kind !== "bot" || !caller.sourceThreadId) return;
@@ -47340,6 +47604,12 @@ settleMemberAutoLevelsFor(store.bots.map((bot) => bot.id), "at start");
 hideEarlierAgentThreads();
 hideBotThreadsOnce();
 migrateBotRuntimeSettings();
+// Unified chat (2026-11-05): background threads that finished are archived,
+// the backlog first, a minute after start so nothing restarting is caught.
+setTimeout(() => {
+  sweepBackgroundThreads();
+  setInterval(sweepBackgroundThreads, BACKGROUND_SWEEP_EVERY_MS).unref();
+}, 60_000).unref();
 
 try {
   const closedRows = closeRowsLeftByRestart(store, Date.now() - SUBAGENT_SWEEP_WINDOW_MS, Date.now());
@@ -47640,9 +47910,14 @@ async function drainTurnsBeforeShutdown(): Promise<void> {
   markShuttingDown();
   // 2. End live SSE streams so clients reconnect with their cursor; the
   //    edge holds those reconnects until the next process is ready.
+  //    #2013: each first hears that this is a planned restart (an update
+  //    or a restart), so the app says "back in a moment", not "unreachable".
+  //    No id: it is transport news, never a replay boundary.
+  const restarting = `data: ${JSON.stringify({ kind: "server.restarting", at: Date.now() })}\n\n`;
   // A copy on purpose: close() removes the client from the live set.
   // oxlint-disable-next-line unicorn/no-useless-spread
   for (const client of [...sseClients]) {
+    try { deliverSseFrame(client, "server.restarting", restarting); } catch { /* already gone */ }
     try { client.close(); } catch { /* already gone */ }
   }
   routines?.pause();
@@ -47808,6 +48083,7 @@ const gracefulShutdown = createGracefulShutdown({
       for (const idle of localVmIdles.values()) idle.cancel();
       vps.closeAllVpsDesktopTunnels();
       watchdog.stop();
+      perspicaxReach?.stop();
       botWaits.stop();
       routines?.stop();
       headlessTasks.stop();

@@ -23,6 +23,16 @@ import { CodexRpcError, archivedNativeCodexThread, missingNativeCodexThread } fr
 import { codexShellDisabled } from "./launch-args.ts";
 import type { CodexSession } from "./session-types.ts";
 import { redactSecretsInText } from "../../redact.ts";
+import { CODEX_AMBIENT_MCP_REFUSAL } from "../../../shared/presend-refusal.ts";
+import { clearAmbientRefusal, codexHomeOf, forgetAmbientMcp, learnAmbientMcp, learnedAmbientMcp, noteAmbientRefusal } from "./ambient-mcp.ts";
+
+/** A mount's `env` table as Codex reports it equals the one Sagax wrote. */
+function sameLiteralEnv(actual: unknown, expected: Record<string, string>): boolean {
+  if (actual == null) return Object.keys(expected).length === 0;
+  if (typeof actual !== "object" || Array.isArray(actual)) return false;
+  const entries = Object.entries(actual as Record<string, unknown>);
+  return entries.length === Object.keys(expected).length && entries.every(([key, value]) => expected[key] === value);
+}
 import { CODEX_WITHHELD_APPROVAL, CODEX_WITHHELD_FULL_APPROVAL } from "../host-tools.ts";
 
 export async function finishCodexLaunch(s: CodexSession): Promise<void> {
@@ -63,6 +73,12 @@ try {
     // codex itself rejected is the one case worth naming: the person
     // can act on it, and the message carries no credential.
     const invalid = error instanceof CodexRpcError && /^invalid configuration\b/i.test(error.message);
+    // #2013: a server remembered as ambient that no layer declares any more
+    // makes its `enabled=false` override invalid. Forget and launch again.
+    if (invalid && turn.toolScope !== undefined && learnedAmbientMcp(codexHomeOf(s.env), turn.cwd ?? homedir()).size
+      && s.attempt < RETRY_MAX_ATTEMPTS + 1 && forgetAmbientMcp(codexHomeOf(s.env), turn.cwd ?? homedir()) && !s.abandoned && !s.stopRequested) {
+      return s.relaunch("ambient_mcp", "Codex rejected its configuration as invalid.", "rpc_error");
+    }
     throw new Error(
       invalid
         ? "Codex rejected its configuration as invalid. Check ~/.codex/config.toml (or CODEX_HOME) for a broken entry, then retry."
@@ -103,19 +119,38 @@ try {
   if (turn.toolScope !== undefined) {
     const catalog = (effectiveConfig as { mcp_servers?: unknown } | null)?.mcp_servers;
     if (!catalog || typeof catalog !== "object" || Array.isArray(catalog)) throw new Error("Codex could not confirm its selected MCP configuration. No prompt was sent.");
+    const ambient: string[] = [];
+    let conflict = false;
     for (const [name, entry] of Object.entries(catalog)) {
       if (entry && typeof entry === "object" && (entry as { enabled?: unknown }).enabled === false) continue;
       const expected = s.selectedMcp.get(name);
+      // #2013: a server Sagax did not mount is the account's own: disabled
+      // below by a relaunch, never a reason to ask the person.
+      if (!expected) { ambient.push(name); continue; }
       const actual = entry as { command?: unknown; args?: unknown; env_vars?: unknown; env?: unknown; default_tools_approval_mode?: unknown; tools?: unknown } | null;
-      if (!expected || actual?.command !== expected.command
+      const literal = s.selectedLiterals?.get(name) ?? {};
+      if (actual?.command !== expected.command
         || JSON.stringify(actual?.args ?? []) !== JSON.stringify(expected.args ?? [])
         || !Array.isArray(actual?.env_vars) || JSON.stringify([...actual.env_vars].sort()) !== JSON.stringify(Object.keys(expected.env).sort())
         || actual.default_tools_approval_mode !== (s.selectedApprovals.get(name) ?? "prompt")
-        || (actual.env != null && (typeof actual.env !== "object" || Array.isArray(actual.env) || Object.keys(actual.env).length > 0))
+        || !sameLiteralEnv(actual.env, literal)
         || (actual.tools != null && (typeof actual.tools !== "object" || Array.isArray(actual.tools) || Object.keys(actual.tools).length > 0))) {
-        throw new Error("Codex has an MCP server outside the selected configuration. Disable native MCP entries for this account before using tool selection. No prompt was sent.");
+        conflict = true;
       }
     }
+    const cwd = turn.cwd ?? homedir();
+    const codexHome = codexHomeOf(s.env);
+    // Each name is learned from what Codex itself reported: the relaunch
+    // disables it with `mcp_servers.<name>.enabled=false` (prepare-launch.ts).
+    if (ambient.length && s.attempt < RETRY_MAX_ATTEMPTS + 1 && learnAmbientMcp(codexHome, cwd, ambient) && !s.abandoned && !s.stopRequested) {
+      console.info(`[codex] disabling ${ambient.length} native MCP server(s) outside the tool selection, relaunching`);
+      return s.relaunch("ambient_mcp", "Codex has an MCP server outside the selected configuration.", "rpc_error");
+    }
+    if (ambient.length || conflict) {
+      noteAmbientRefusal(s.threadId, { codexHome, cwd, names: ambient, at: Date.now() });
+      throw new Error(`${CODEX_AMBIENT_MCP_REFUSAL} No prompt was sent.`);
+    }
+    clearAmbientRefusal(s.threadId);
   }
   // Proven before the turn starts: a Codex that did not take the
   // overrides runs nothing for a guest.

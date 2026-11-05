@@ -136,8 +136,21 @@ const calls: Array<{ method: string; params: unknown }> = [];
 // Opt-in config resolution for scope tests; mirror the native -c precedence.
 const mcpOverrides: Record<string, Record<string, unknown>> = {};
 for (let index = 0; process.env.FAKE_CODEX_MCP_OVERRIDES === "1" && index < process.argv.length; index++) {
-  const match = process.argv[index - 1] === "-c" ? /^mcp_servers\.([^.]+)\.([^.]+)=(.*)$/.exec(process.argv[index]!) : null;
-  if (match) (mcpOverrides[match[1]!] ??= {})[match[2]!] = JSON.parse(match[3]!);
+  const match = process.argv[index - 1] === "-c" ? /^mcp_servers\.([^.]+)\.([^.=]+)=(.*)$/.exec(process.argv[index]!) : null;
+  // an inline table (`{ "K" = "V" }`) becomes an object, as in mcpMounts
+  const raw = match?.[3];
+  if (match && raw !== undefined) (mcpOverrides[match[1]!] ??= {})[match[2]!] = raw.startsWith("{")
+    ? Object.fromEntries([...raw.matchAll(/("(?:[^"\\]|\\.)*")\s*=\s*("(?:[^"\\]|\\.)*")/g)].map((pair) => [JSON.parse(pair[1]!), JSON.parse(pair[2]!)]))
+    : JSON.parse(raw);
+}
+// FAKE_CODEX_MCP_AMBIENT: JSON of servers another config layer declares (a
+// project's .codex/config.toml); `-c` overrides merge over them, as natively.
+function withAmbientMcp(overrides: Record<string, Record<string, unknown>>): Record<string, Record<string, unknown>> {
+  const ambient = process.env.FAKE_CODEX_MCP_AMBIENT ? JSON.parse(process.env.FAKE_CODEX_MCP_AMBIENT) as Record<string, Record<string, unknown>> : {};
+  const merged: Record<string, Record<string, unknown>> = {};
+  for (const [name, entry] of Object.entries(ambient)) merged[name] = { ...entry };
+  for (const [name, entry] of Object.entries(overrides)) merged[name] = { ...merged[name], ...entry };
+  return merged;
 }
 // codex-cli 0.160 config/read reports every shell_environment_policy field,
 // null when unset, even for an empty config.toml. A `-c
@@ -527,7 +540,7 @@ process.stdin.on("data", (chunk) => {
                   approval_policy: "never",
                   approvals_reviewer: "auto_review",
                   sandbox_mode: "read-only",
-                  mcp_servers: process.env.FAKE_CODEX_MCP_OVERRIDES === "1" ? mcpOverrides : process.env.FAKE_CODEX_MCP_CONFIG ? JSON.parse(process.env.FAKE_CODEX_MCP_CONFIG) : {
+                  mcp_servers: process.env.FAKE_CODEX_MCP_OVERRIDES === "1" ? withAmbientMcp(mcpOverrides) : process.env.FAKE_CODEX_MCP_CONFIG ? JSON.parse(process.env.FAKE_CODEX_MCP_CONFIG) : {
                     harmless_name: { env: { DISPLAY_LABEL: "innocuous-config-secret-7a9c" } },
                   },
                 }),

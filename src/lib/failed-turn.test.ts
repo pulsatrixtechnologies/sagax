@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Bot, InstanceInfo } from "@/state/store";
 
 vi.hoisted(() => vi.stubGlobal("window", {}));
-const { activityPreview, botEngine, failedTurnCause, isEngineLimitFailure, signedOutEngine } = await import("./failed-turn");
+const { activityPreview, botEngine, failedTurnCause, isEngineLimitFailure, isPreSendRefusal, signedOutEngine } = await import("./failed-turn");
 
 const engine = (patch: Partial<InstanceInfo> = {}, snapshot: Partial<InstanceInfo["snapshot"]> = {}): InstanceInfo => ({
   instanceId: "claude", driverKind: "claudeAgent", displayName: "Claude",
@@ -106,5 +106,18 @@ describe("isEngineLimitFailure", () => {
     expect(isEngineLimitFailure({ name: "error: something else", limitResetsAt: 1 })).toBe(true);
     expect(isEngineLimitFailure({ name: "error: the engine stalled" })).toBe(false);
     expect(isEngineLimitFailure({ name: "Read file" })).toBe(false);
+  });
+});
+
+describe("isPreSendRefusal (#2013)", () => {
+  it("hides the stored refusals made before any prompt went out", () => {
+    expect(isPreSendRefusal({ name: "error: Codex has an MCP server outside the selected configuration. Disable native MCP entries for this account before using tool selection. No prompt was sent.", ok: false })).toBe(true);
+    expect(isPreSendRefusal({ name: "error: Claude Code is not installed", ok: false, setup: true })).toBe(true);
+  });
+
+  it("keeps a failure after the model started, a place row and any other activity", () => {
+    expect(isPreSendRefusal({ name: "error: the model stopped mid-reply", ok: false })).toBe(false);
+    expect(isPreSendRefusal({ name: "error: Codex could not start. No prompt was sent.", ok: false, place: { state: "offline" } as never })).toBe(false);
+    expect(isPreSendRefusal({ name: "Read file", ok: true })).toBe(false);
   });
 });

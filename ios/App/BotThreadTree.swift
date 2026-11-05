@@ -19,6 +19,9 @@ struct BotThreadTree: View {
     /// this when the nearest expiry passes so its row folds back in without
     /// waiting for the next snapshot. Mirrors the desktop's useSnoozeExpiry.
     @State private var snoozeTick = 0
+    /// "Show background": the bot's background threads (hand-offs, threads
+    /// it opened, an AI client's) listed under its own, which never hold them.
+    @State private var showBackground = false
 
     private var searching: Bool {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -111,6 +114,30 @@ struct BotThreadTree: View {
                             }
                         } else {
                             threadLinks(group.tasks, bot: bot)
+                        }
+                    }
+                    let background = bot.backgroundTasks
+                    if !searching && !background.isEmpty {
+                        Button {
+                            Haptics.selection()
+                            showBackground.toggle()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "square.stack.3d.up")
+                                    .font(.system(size: 11, weight: .medium))
+                                Text(showBackground ? "Hide background" : "Show background")
+                                Text("\(background.count)").monospacedDigit().opacity(0.6)
+                                Spacer(minLength: 0)
+                            }
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Theme.parity(Color.secondary, Theme.textSecondary))
+                            .frame(minHeight: 40)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("threads-background.\(bot.id)")
+                        if showBackground {
+                            threadLinks(background, bot: bot).padding(.leading, 8)
                         }
                     }
                 }

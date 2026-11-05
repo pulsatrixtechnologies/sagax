@@ -8,6 +8,7 @@
  * server/store.ts; the wire projection is typed so a new server field
  * fails compilation until it is either declared here or explicitly listed
  * as server-private. */
+import type { PersonAttentionCard } from "./person-attention.ts";
 import type { LimitFailoverLine } from "./limit-failover.ts";
 import type { OrderTracking } from "./order-tracking.ts";
 import type { SoloGoalLine } from "./solo-goal-line.ts";
@@ -67,6 +68,38 @@ import type { ArtifactsFrame } from "./artifacts.ts";
 import type { BotTasksFrame } from "./bot-task-list.ts";
 import type { WaitCardField, WaitLineField } from "./wait-request.ts";
 import { EFFORT_LEVELS, isEffortLevel, type EffortLevel, type ModelSelection } from "./model-selection.ts";
+
+import type { CwPermission, ToolRole } from "./perspicax-roles.ts";
+
+/** A role fact as a banner row (visible roles, 2026-11-05). */
+export interface RoleNotice {
+  kind: "lapsed" | "write_refused" | "read_refused";
+  role: { slug: string; name: string };
+  tool: string;
+  permission?: CwPermission;
+  /** the person the bot acts for (the "Moi" of this thread) */
+  person?: string;
+  /** cw_member:<identifier> behind the role */
+  target?: string;
+}
+
+/** An "Agit comme" card (visible roles, 2026-11-05). */
+export interface RoleTransitionCard {
+  botId: string;
+  botName: string;
+  /** the person the bot acts for: "au nom de <person>" */
+  person: string;
+  from: { slug: string; name: string };
+  to: { slug: string; name: string };
+  reason: ToolRole["reason"];
+  refusedTool?: string;
+  /** CW path of the refused read ("" for a switch) */
+  path?: string;
+  /** whether the reader may save "Toujours ainsi" (the bot's owner) */
+  canAlways?: boolean;
+  /** continue | stay | always, once answered */
+  choice?: "continue" | "stay" | "always";
+}
 
 export { EFFORT_LEVELS, isEffortLevel, type EffortLevel, type ModelSelection };
 
@@ -186,6 +219,14 @@ export interface WireTask {
   confidential?: true;
   /** Set when a bot, not a person, opened this thread. */
   openedBy?: TaskOpenedBy;
+  /** A person wrote here from an app (TaskRecord.askedAt), so a thread a bot
+   * opened is theirs too and stays in their list (shared/background-threads.ts).
+   * Derived at projection, never stored; only `true` is sent. */
+  personWrote?: true;
+  /** The server archived this finished background thread on its own
+   * (server/threads/background-sweep.ts); a person's write brings it back.
+   * Only `true` is stored. */
+  autoArchived?: true;
   /** A parallel task: the conversation and request it answers. */
   parallelOf?: TaskParallelOf;
   /** Organization server: the person this 1:1 thread belongs to (who
@@ -786,6 +827,14 @@ export interface WireMessage extends WaitLineField {
   secret?: SecretRequestCardData;
   /** One idempotently updated status card for a routine run. */
   routineRun?: RoutineRunCardData;
+  /** 2026-11-05: what a bot's finished turn elsewhere (a hand-off, a
+   * routine run, a thread another bot opened) left for the person, carried
+   * into their own conversation with that bot (shared/person-attention.ts).
+   * On a routine.run row it rides beside the report. `text` is the fallback. */
+  attention?: PersonAttentionCard;
+  /** 2026-11-05: a bot's answer in a routine run's task after the run had
+   * ended (a teammate's result resumed it), mirrored here: the source id. */
+  lateRunReplyOf?: string;
   /** Terminal receipt for a bounded multi-bot channel goal. */
   goalRun?: GroupGoalRunCardData;
   /** call rows (kind "call"): the finished Live call this row records. The
@@ -837,6 +886,14 @@ export interface WireMessage extends WaitLineField {
      * what answered it, shown only in the row's details, never on the line.
      * `source` is the decision log's source (auto-approve.ts). */
     autoApproval?: { source: string; rule?: string };
+    /** 2026-11-05 (visible roles): the Perspicax role this call ran under
+     * (shared/perspicax-roles.ts); "" slug is "Moi". Absent: not a
+     * Perspicax call, or one from before roles were shown. */
+    role?: ToolRole;
+    /** 2026-11-05: a role fact shown as a banner row: a lapsed role that
+     * stopped a call, a refused write (stop) or a read refused with no
+     * fallback, with the CW permission it needs. */
+    roleNotice?: RoleNotice;
     /** 2026-10-18: the bot left an engine the organization no longer
      * offers and now runs on Auto (shared/offered-engines.ts). */
     engineMove?: OrgEngineMove;
@@ -1060,6 +1117,9 @@ export interface OptionCardData extends WaitCardField {
    * on cards from older computers. */
   outboundRequest?: { tool: string; app: string | null; calls?: Array<{ app: string | null; label: string }> };
   teamMemoryRequest?: { section: string; entryId: string; kind: string };
+  /** 2026-11-05 (visible roles): an "Agit comme" card at a role transition,
+   * answered through POST /api/threads/:id/role-transition (never typed). */
+  roleTransition?: RoleTransitionCard;
   /** 2026-10-30: a proactive proposal (server/proactive/proactive-wake.ts): the bot
    * offers to handle an event; the person's click answers it through
    * POST /api/bots/:id/proactive/:id (options[0] accepts, options[1]
@@ -1572,6 +1632,11 @@ export type ServerFrame =
    * people only; with `audience`, that person's own real state (`hidden`
    * when others see them offline), to their streams only. */
   | { kind: "presence.changed"; audience?: string; people: Array<{ principalId: string; state: "online" | "away" | "offline"; lastSeenAt: number | null; hidden?: true }> }
+  /** #2013: the server is about to restart on purpose (an update, a
+   * restart): sent once, without an id, just before the live stream closes. */
+  | { kind: "server.restarting"; at: number }
+  /** #2013: this organization server's reach of its Perspicax connector changed. */
+  | { kind: "connector.status"; perspicax: { state: "ok" | "unreachable"; since: number } }
   | { kind: "live.call"; botId: string; threadId: string; call: LiveCallState | null }
   /** A short first sentence spoken ahead of the bot's own reply on a duplex
    * call (server/voice/voice-first-sentence.ts). The speaker's streams only. Not

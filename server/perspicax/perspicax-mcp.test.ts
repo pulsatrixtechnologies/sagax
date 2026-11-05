@@ -5,7 +5,7 @@ import type { McpAuditRecord } from "../mcp/mcp-permissions.ts";
 import { WarmResourceBudget, MiB } from "../resources/warm-resources.ts";
 import type { SubjectTokenOutcome } from "../auth/idp-session.ts";
 import type { ExchangeResult } from "./perspicax-link.ts";
-import { PERSPICAX_ACCESS_ENDED, PERSPICAX_KEEPALIVE_PER_PERSON, PERSPICAX_ROUTINE_RETRY_MS, PERSPICAX_SESSION_RESET, PERSPICAX_UNAVAILABLE_WHY, PerspicaxMcp, parseMcpBody, perspicaxReadOnlyToolsOf, perspicaxReplayable, reviewedReadsOf, perspicaxSessionLost, perspicaxUnavailableRow, perspicaxUnavailableWhy, type PerspicaxMcpLink, type PerspicaxMcpOptions } from "./perspicax-mcp.ts";
+import { PERSPICAX_ACCESS_ENDED, PERSPICAX_KEEPALIVE_PER_PERSON, PERSPICAX_ROUTINE_RETRY_MS, PERSPICAX_SESSION_RESET, PERSPICAX_UNAVAILABLE_WHY, PerspicaxMcp, parseMcpBody, perspicaxReadOnlyToolsOf, perspicaxReplayable, reviewedReadsOf, perspicaxSessionLost, perspicaxUnavailableRow, perspicaxUnavailableWhy, withFailureWords, type PerspicaxMcpLink, type PerspicaxMcpOptions } from "./perspicax-mcp.ts";
 
 const ISS = "https://px.example.test";
 const ALICE = "pr_alice";
@@ -1196,5 +1196,21 @@ describe("PerspicaxMcp reviewedReads", () => {
     expect(h.mcp.reviewedReads("x", "ACME_DESK_SERVICE")).toBe(true);
     expect(h.mcp.reviewedReads("x", "vpn_api")).toBe(false);
     expect(h.mcp.reviewedReads("y", "acme_desk")).toBe(false);
+  });
+});
+
+describe("withFailureWords (2026-11-05)", () => {
+  it("gives an empty isError result words from structuredContent, else a sentence", () => {
+    const structured = withFailureWords({ jsonrpc: "2.0", id: 1, result: { isError: true, content: [], structuredContent: { status: "blocked", reason: "run_not_yours", detail: "this run is not held by your account" } } }, "flow_run") as any;
+    expect(structured.result.content).toEqual([{ type: "text", text: "this run is not held by your account" }]);
+    const bare = withFailureWords({ jsonrpc: "2.0", id: 1, result: { isError: true, content: [{ type: "text", text: " " }] } }, "flow_run") as any;
+    expect(bare.result.content).toEqual([{ type: "text", text: "flow_run failed on Perspicax and its answer carried no error message." }]);
+  });
+
+  it("leaves a result with words, and a success, as they are", () => {
+    const worded = { jsonrpc: "2.0", id: 1, result: { isError: true, content: [{ type: "text", text: "refused" }] } };
+    expect(withFailureWords(worded, "flow_run")).toBe(worded);
+    const ok = { jsonrpc: "2.0", id: 1, result: { content: [] } };
+    expect(withFailureWords(ok, "flow_run")).toBe(ok);
   });
 });

@@ -332,6 +332,12 @@ struct DesktopMarkdownField<Footer: View>: View {
     }
 
     private func choose(_ next: Mode) {
+        // Drop first responder before Write is removed from the tree so the
+        // fields under the card (Do not finish until) can take focus (#1939).
+        if next != .write {
+            controller.view?.resignFirstResponder()
+            controller.view?.window?.endEditing(true)
+        }
         mode = next
         UserDefaults.standard.set(next == .split ? Mode.split.rawValue : Mode.write.rawValue, forKey: Self.viewKey)
     }
@@ -397,6 +403,7 @@ struct DesktopMarkdownTextView: UIViewRepresentable {
         view.text = text
         controller.view = view
         controller.commit = { [weak coordinator = context.coordinator] value in coordinator?.parent.text = value }
+        context.coordinator.watchOtherFields()
         view.restyle()
         return view
     }
@@ -418,11 +425,54 @@ struct DesktopMarkdownTextView: UIViewRepresentable {
         context.coordinator.measure(view)
     }
 
+    /// Leaving Write (Preview / Side by side) or the page must drop first
+    /// responder: a UITextView torn down while focused leaves the window
+    /// unable to focus the "Do not finish until" field below (#1939).
+    static func dismantleUIView(_ view: DesktopMarkdownUITextView, coordinator: Coordinator) {
+        view.resignFirstResponder()
+        view.window?.endEditing(true)
+        if coordinator.parent.controller.view === view {
+            coordinator.parent.controller.view = nil
+        }
+        coordinator.stopWatching()
+    }
+
     @MainActor
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: DesktopMarkdownTextView
+        private var fieldObserver: NSObjectProtocol?
+        private var editorObserver: NSObjectProtocol?
 
         init(_ parent: DesktopMarkdownTextView) { self.parent = parent }
+
+        deinit {
+            if let fieldObserver { NotificationCenter.default.removeObserver(fieldObserver) }
+            if let editorObserver { NotificationCenter.default.removeObserver(editorObserver) }
+        }
+
+        /// When a SwiftUI TextField / TextEditor below the SOUL card takes
+        /// focus, resign this UITextView so the hand-off actually lands.
+        func watchOtherFields() {
+            guard fieldObserver == nil else { return }
+            let resign: (Notification) -> Void = { [weak self] note in
+                guard let self, let view = self.parent.controller.view, view.isFirstResponder else { return }
+                if let other = note.object as? UIView, other === view { return }
+                view.resignFirstResponder()
+            }
+            fieldObserver = NotificationCenter.default.addObserver(
+                forName: UITextField.textDidBeginEditingNotification, object: nil, queue: .main, using: resign
+            )
+            editorObserver = NotificationCenter.default.addObserver(
+                forName: UITextView.textDidBeginEditingNotification, object: nil, queue: .main, using: resign
+            )
+        }
+
+        func stopWatching() {
+            if let fieldObserver { NotificationCenter.default.removeObserver(fieldObserver) }
+            if let editorObserver { NotificationCenter.default.removeObserver(editorObserver) }
+            fieldObserver = nil
+            editorObserver = nil
+        }
 
         func measure(_ view: UITextView) {
             let width = view.bounds.width
@@ -435,6 +485,8 @@ struct DesktopMarkdownTextView: UIViewRepresentable {
                 DispatchQueue.main.async { [weak self] in self?.parent.height = fitted }
             }
         }
+
+        func textViewShouldEndEditing(_ textView: UITextView) -> Bool { true }
 
         func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText replacement: String) -> Bool {
             guard textView.markedTextRange == nil else { return true }

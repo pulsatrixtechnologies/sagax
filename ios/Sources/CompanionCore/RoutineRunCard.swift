@@ -138,8 +138,8 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
     /// the desktop card's pill words for a finished run.
     public var stateLabel: String {
         if goalStatus == nil || goalStatus == "completed" {
-            if knownStatus == .completed { return "Done" }
-            if knownStatus == .nothingToReport { return "Nothing to report" }
+            if knownStatus == .completed { return String(localized: "Done") }
+            if knownStatus == .nothingToReport { return String(localized: "Nothing to report") }
         }
         let text = stateText
         guard let first = text.first else { return "" }

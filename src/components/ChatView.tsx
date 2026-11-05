@@ -80,7 +80,7 @@ import { CODEX_USAGE_URL, codexUsageLimitReached } from "../../shared/codex-usag
 import { ClaudeUpdatePrompt } from "./ClaudeUpdatePrompt";
 import { MacCuaRecoveryActions } from "./MacCuaRecoveryActions";
 import { macCuaPermissionMessage, missingMacCuaPermissions } from "@/lib/mac-cua-permissions";
-import { failedTurnCause, isEngineLimitFailure, signedOutEngine } from "@/lib/failed-turn";
+import { failedTurnCause, isEngineLimitFailure, isPreSendRefusal, signedOutEngine } from "@/lib/failed-turn";
 import { localizedEngineCause } from "@/lib/engine-error-text";
 import { plainErrorLine, readableError } from "@/lib/plain-error";
 import { openPlaceAction, placeRowViewFor, usePlaceSeat, worksOnSimpleLabel } from "@/lib/place-view";
@@ -117,6 +117,7 @@ import { askText, runSkill, runSteps, runSummary, showRun, skillPrompt } from "@
 import { useShowRunCard } from "@/lib/run-card-preferences";
 import { sendsMessage, useSendKey } from "@/lib/send-key";
 import { ToolActivity, botNames } from "./ToolActivity";
+import { RoleNoticeRow } from "./RoleNoticeRow";
 import { StepRow } from "./StepRow";
 import { stepLabel } from "@/lib/step-label";
 import { DataResultChip } from "./DataResultChip";
@@ -150,6 +151,7 @@ import { ChatFindBar } from "./ChatFindBar";
 import { ReplyQuote } from "./ReplyQuote";
 import { SecretRequestCard } from "./SecretRequestCard";
 import { RoutineRunCard } from "./RoutineRunCard";
+import { AttentionCard } from "./AttentionCard";
 import { CallRecordRow } from "./CallRecordRow";
 import { AttachmentGallery, collectMessageFiles, replyAttachmentGroup, splitMessageAttachments } from "./AttachmentGallery";
 import { ConversationGalleryProvider } from "./ConversationGallery";
@@ -518,6 +520,21 @@ export function FailedTurnRow({ tool, engine, onRetry, botId, threadId }: {
       setupInstance={tool.setup && !pinnedUnavailable ? engine : undefined}
       claudeUpdateInstance={updateTarget}
     />
+  );
+}
+
+/** #2013: a room has no composer line for a bot's engine, so an engine
+ * that refused a turn before any prompt went out is said there quietly, in
+ * the reader's words, never as a red card. */
+export function PreSendRefusalLine({ tool }: { tool: NonNullable<Message["tool"]> }) {
+  const rawCause = failedTurnCause(tool.name) ?? tool.name;
+  const cause = localizedEngineCause(rawCause) ?? rawCause;
+  const line = plainErrorLine(rawCause) ?? cause;
+  return (
+    <div role="status" data-presend-refusal className="flex w-fit max-w-[min(42rem,78%)] items-start gap-2 rounded-xl border border-hairline/40 bg-panel px-3 py-2 text-[13px] text-ink-secondary">
+      <Info size={13} aria-hidden="true" className="mt-0.5 shrink-0" />
+      <span className="min-w-0 break-words">{line}</span>
+    </div>
   );
 }
 
@@ -988,7 +1005,7 @@ function PeerLabel({ peer, autoModel }: { peer: PeerLine; autoModel?: Message["a
 /** A tool run as a quiet step row (StepRow), or a receipt that opens a conversation. */
 const ActivityChip = memo(function ActivityChip({ message, place = "auto" }: { message: Message; place?: EffectivePlace }) {
   "use memo";
-  const { bots, dispatch, botDmIds } = useChatRows();
+  const { bots, dispatch, botDmIds, botName } = useChatRows();
   const tool = message.tool;
   if (!tool) return null;
   if (message.inputRequest) return <InputRequestCard message={message} />;
@@ -1014,8 +1031,30 @@ const ActivityChip = memo(function ActivityChip({ message, place = "auto" }: { m
       </div>
     );
   }
+  // 2026-11-05 (visible roles): a lapsed role, a refused write or read
+  if (tool.roleNotice) return <RoleNoticeRow notice={tool.roleNotice} botName={bots.find((b) => b.id === message.from?.botId)?.name ?? botName} />;
   return <ToolActivity tool={tool} place={toolPlace(tool.name, place)} nameOf={botNames(bots)} />;
 });
+
+/** What a bot's turn elsewhere left for the person (2026-11-05): its card,
+ * with the thread it was said in and the run it came from one click away. */
+export function AttentionRow({ message }: { message: Message }) {
+  "use memo";
+  const dispatch = useStoreDispatch();
+  const getState = useStoreGetter();
+  const showThreads = useShowThreads();
+  const card = message.attention;
+  const owner = useStoreSelector((state) => state.bots.find((candidate) => candidate.id === card?.botId));
+  if (!card) return null;
+  return (
+    <AttentionCard
+      card={card}
+      bot={owner}
+      onOpenThread={(botId, threadId) => { openThread(dispatch, { botId, threadId }, getState(), showThreads); }}
+      onOpenRun={(runId) => openRoutineRun(dispatch, { runId })}
+    />
+  );
+}
 
 /** A routine run's receipt. View run opens the run's detail (2026-10-29),
  * a run of a deleted routine too, to read. */
@@ -1453,6 +1492,10 @@ const MessagesList = memo(function MessagesList({
           if (m.outbound && m.role === "bot") {
             return <MessageBoundary fallbackText={m.text ?? ""}><OutboundCard message={m} /></MessageBoundary>;
           }
+          // 2026-11-05: what a bot's turn elsewhere left for the person (src/components/AttentionCard.tsx)
+          if (m.attention && m.role === "bot" && m.kind === "text") {
+            return <MessageBoundary fallbackText={m.text ?? ""}><AttentionRow message={m} /></MessageBoundary>;
+          }
           // a widget row whose tree never arrived still reads as its text
           switch (m.kind === "widget" && !m.widget ? "text" : m.kind) {
             case "access":
@@ -1491,6 +1534,8 @@ const MessagesList = memo(function MessagesList({
               if (isTurnStoppedNotice(m)) return null;
               if (m.tool && failedTurnCause(m.tool.name) !== null) {
                 if (isEngineLimitFailure(m.tool)) return null;
+                // #2013: refused before any prompt went out: the composer says it
+                if (isPreSendRefusal(m.tool)) return null;
                 return (
                   <FailedTurnRow
                     tool={m.tool}
@@ -2770,6 +2815,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
         onEditLast={lastUserMessage && !lastUserMessageHasAttachments && !bot.busy && !lastUserMessage.id.startsWith("optimistic-")
           ? () => setEditingId(lastUserMessage.id)
           : undefined}
+        onRetryLast={regenerate}
       />
       )}
       {canWrite !== false && (

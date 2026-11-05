@@ -220,6 +220,34 @@ describe("CodexDriver turns (fake app-server)", () => {
     expect(recorder.events.some((event) => event.type === "runtime.error" && /outside the selected configuration/.test(event.message))).toBe(true);
   });
 
+  // #2013: Sagax turns the account's own servers off instead of asking the person.
+  it("disables an ambient MCP server from another config layer by itself, then sends the scoped prompt", async () => {
+    const dump = join(scratch, "scope-ambient-fixed.json"); process.env.FAKE_CODEX_DUMP = dump;
+    await create({ environment: { HOME: scratch, CODEX_HOME: join(scratch, ".codex"), FAKE_CODEX_MCP_OVERRIDES: "1",
+      FAKE_CODEX_MCP_AMBIENT: JSON.stringify({ project_tool: { command: "project-tool", args: [] } }) } });
+    const { turnId } = await instance.adapter.sendTurn({ threadId: "scope-ambient-fixed", text: "Fixture", toolScope: { allow: ["native:*"] } });
+    const completed = await recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId);
+    expect(completed).toMatchObject({ ok: true });
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.argv).toContain("mcp_servers.project_tool.enabled=false");
+    expect(seen.calls.filter((call: { method: string }) => call.method === "turn/start")).toHaveLength(1);
+    expect(recorder.events.some((event) => event.type === "runtime.error")).toBe(false);
+  });
+
+  it("accepts the person's own environment mount under a tool selection", async () => {
+    const dump = join(scratch, "scope-workplace.json"); process.env.FAKE_CODEX_DUMP = dump;
+    await create({ environment: { HOME: scratch, CODEX_HOME: join(scratch, ".codex"), FAKE_CODEX_MCP_OVERRIDES: "1" } });
+    const { turnId } = await instance.adapter.sendTurn({ threadId: "scope-workplace", text: "Fixture", toolScope: { allow: ["native:*"] },
+      integrations: { custom: { "sagax-environment": { command: process.execPath, args: ["/fixture/user-sandbox-proxy.js"], env: { SAGAX_SANDBOX_TOKEN: "synthetic-fixture-token", ELECTRON_RUN_AS_NODE: "1" } } } } });
+    const completed = await recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId);
+    expect(completed).toMatchObject({ ok: true });
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.calls.filter((call: { method: string }) => call.method === "turn/start")).toHaveLength(1);
+    const thread = seen.calls.find((call: { method: string }) => call.method === "thread/start");
+    expect(thread.params.config.mcp_servers["sagax-environment"].env).toMatchObject({ ELECTRON_RUN_AS_NODE: "1" });
+    expect(JSON.stringify({ argv: seen.argv, calls: seen.calls })).not.toContain("synthetic-fixture-token");
+  });
+
   it.each(["ask", "custom", "full"] as const)("preserves shell exclusions for scoped %s turns on new and resumed threads", async (approvalMode) => {
     const dump = join(scratch, "shell-policy.json"); process.env.FAKE_CODEX_DUMP = dump;
     const policy = { inherit: "all", ignore_default_excludes: true, exclude: ["USER_SECRET_*"],

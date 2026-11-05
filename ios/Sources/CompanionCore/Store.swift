@@ -565,7 +565,8 @@ public struct CompanionState: Sendable {
         // Nothing to fold: config and provisioning state are not part of
         // this client's job yet. A bot's task list is read by its panel
         // (Session signals it).
-        case .computer, .config, .nudge, .personLabel, .presenceChanged, .orgApprovals, .preferences, .threadRead, .botTasks, .unknown:
+        case .computer, .config, .nudge, .personLabel, .presenceChanged, .orgApprovals, .preferences, .threadRead, .botTasks,
+             .serverRestarting, .connectorStatus, .unknown:
             break
         }
     }

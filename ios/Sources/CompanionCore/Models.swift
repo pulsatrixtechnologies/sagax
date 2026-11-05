@@ -289,6 +289,12 @@ public struct ToolActivity: Codable, Hashable, Sendable {
     /// Usage-limit switch / return / wait (shared/limit-failover.ts). A
     /// switched or back row stays out of the chat (#1668 / #1698).
     public var limitFailover: LimitFailoverLine? = nil
+    /// Epoch ms when the usage limit that stopped this turn resets, when
+    /// the engine said (shared/wire.ts `tool.limitResetsAt`).
+    public var limitResetsAt: Double? = nil
+    /// The row carries a place (shared/wire.ts `tool.place`): a failed turn
+    /// with one stays in the chat (#2013). Only its presence is kept here.
+    public var hasPlace: Bool = false
 
     public init(name: String, ok: Bool? = nil, spoken: String? = nil, setup: Bool? = nil, claudeUpdate: Bool? = nil, output: String? = nil, summary: String? = nil, widget: CwWidget? = nil) {
         self.name = name
@@ -303,6 +309,7 @@ public struct ToolActivity: Codable, Hashable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case name, ok, spoken, setup, claudeUpdate, output, summary, widget, input, durationMs, product, productId, autoApproval, finishUntil, step, limitFailover
+        case limitResetsAt, place
     }
 
     public init(from decoder: Decoder) throws {
@@ -322,6 +329,8 @@ public struct ToolActivity: Codable, Hashable, Sendable {
         autoApproval = try? box.decodeIfPresent(ToolAutoApproval.self, forKey: .autoApproval)
         step = try? box.decodeIfPresent(WorkingStep.self, forKey: .step)
         limitFailover = try? box.decodeIfPresent(LimitFailoverLine.self, forKey: .limitFailover)
+        limitResetsAt = try? box.decodeIfPresent(Double.self, forKey: .limitResetsAt)
+        hasPlace = box.contains(.place) && (try? box.decodeNil(forKey: .place)) == false
         do {
             widget = try box.decodeIfPresent(CwWidget.self, forKey: .widget)
         } catch {
@@ -346,6 +355,9 @@ public struct ToolActivity: Codable, Hashable, Sendable {
         try box.encodeIfPresent(autoApproval, forKey: .autoApproval)
         try box.encodeIfPresent(step, forKey: .step)
         try box.encodeIfPresent(limitFailover, forKey: .limitFailover)
+        try box.encodeIfPresent(limitResetsAt, forKey: .limitResetsAt)
+        // presence only: the app never reads the place itself
+        if hasPlace { try box.encode([String: String](), forKey: .place) }
     }
 
     /// The output worth expanding the chip for; nil when there is none.
@@ -472,6 +484,42 @@ public struct CommChip: Codable, Hashable, Sendable {
     public var text: String? = nil
 }
 
+/// One item a bot's result needs the person for (shared/person-attention.ts).
+public struct PersonAttentionItem: Codable, Hashable, Sendable {
+    public var text: String
+    public var ticketId: Int? = nil
+    /// A ConnectWise deep link the computer built; https only is opened.
+    public var ticketUrl: String? = nil
+
+    public var safeTicketURL: URL? {
+        guard let raw = ticketUrl, let url = URL(string: raw), url.scheme == "https" else { return nil }
+        return url
+    }
+}
+
+/// The card a person's conversation shows for what a bot's turn elsewhere
+/// left for them (`WireMessage.attention`, desktop `AttentionCard.tsx`).
+public struct PersonAttentionCard: Codable, Hashable, Sendable {
+    public struct Opener: Codable, Hashable, Sendable {
+        public var botId: String
+        public var name: String
+    }
+    /// "human", "question" or "failure"; an unknown kind reads as "human".
+    public var kind: String
+    public var items: [PersonAttentionItem]
+    public var botId: String
+    public var botName: String
+    public var threadId: String
+    public var threadTitle: String? = nil
+    public var sourceMessageId: String
+    public var openedBy: Opener? = nil
+    public var routineRunId: String? = nil
+    public var routineName: String? = nil
+
+    /// Where the person opens it: the thread the bot said it in.
+    public var threadRef: ThreadRef { ThreadRef(botId: botId, threadId: threadId, title: threadTitle ?? botName) }
+}
+
 public struct Message: Codable, Hashable, Identifiable, Sendable {
     public enum Kind: String, Codable, Sendable {
         case text, options, activity, screen, video, secret
@@ -549,6 +597,11 @@ public struct Message: Codable, Hashable, Identifiable, Sendable {
     /// leaves the message's text, which the computer writes for exactly
     /// the clients that cannot read the card.
     public var routineRun: RoutineRunCard?
+    /// 2026-11-05: what a bot's turn elsewhere (a hand-off, a thread another
+    /// bot opened, a routine run) left for the person, carried into their own
+    /// conversation with that bot (shared/person-attention.ts). On a
+    /// routine-run row it rides beside the report.
+    public var attention: PersonAttentionCard? = nil
     /// The message this one follows; nil at the thread root. Two messages
     /// sharing a parent are a fork.
     public var parentId: String?
@@ -695,6 +748,9 @@ public struct ThreadOpener: Codable, Hashable, Sendable {
     public var name: String
     public var delegationId: String?
     public var at: Double
+    /// `work` or `pair` for a teammate's hand-off, `agent` for an AI
+    /// client's conversation over MCP; nil for a thread a bot opened.
+    public var kind: String? = nil
 }
 
 /// The bot that closed a thread with close_thread, once its result was
@@ -783,9 +839,26 @@ public struct BotTask: Codable, Hashable, Sendable {
     /// reports now go to the person's own conversation, so this old thread is
     /// kept but never listed, previewed or counted unread.
     public var routineResults: Bool? = nil
-    /// Out of the person's thread list: a routine run's execution, an
-    /// automatic routine results thread or an AI client's hidden conversation.
-    public var isHiddenFromPerson: Bool { routineRunId != nil || routineResults == true || hidden == true }
+    /// A person wrote here from an app, so a thread a bot opened is theirs
+    /// too. Server-derived; absent on older computers.
+    public var personWrote: Bool? = nil
+    /// The server archived this finished background thread on its own.
+    public var autoArchived: Bool? = nil
+    /// A background thread (shared/background-threads.ts, the same cases): a
+    /// routine run, a teammate's hand-off, a thread a bot opened, an AI
+    /// client's conversation. Never in the person's thread list; its card
+    /// in the conversation opens it, and so does "Show background".
+    public var isBackground: Bool {
+        if routineRunId != nil || routineResults == true || hidden == true { return true }
+        guard let openedBy else { return false }
+        if openedBy.kind == "agent" { return true }
+        return personWrote != true
+    }
+    /// What "Show background" lists: background threads but routine runs,
+    /// whose home is the run card.
+    public var isListedBackground: Bool { isBackground && routineRunId == nil }
+    /// Out of the person's thread list: every background thread.
+    public var isHiddenFromPerson: Bool { isBackground }
     /// A confidential thread ("Fil confidentiel"): never remembered,
     /// exported or shared beyond its owner. Permanent once set; only
     /// deleting the thread ends it. Absent means an ordinary thread.
@@ -1095,9 +1168,17 @@ public struct Bot: Codable, Hashable, Identifiable, Sendable {
         (AvatarFraming.clampZoom(avatarZoom), AvatarFraming.clampFocus(avatarFocusX), AvatarFraming.clampFocus(avatarFocusY))
     }
 
-    /// Routine runs' executions and automatic results threads are hidden.
+    /// The person's own conversations: background threads (runs, hand-offs,
+    /// threads a bot opened, an AI client's) are left out, except the one on
+    /// screen when it is not a routine run (opened from its card).
     public var visibleTasks: [BotTask] {
-        (tasks ?? []).filter { !$0.isHiddenFromPerson }
+        (tasks ?? []).filter { !$0.isHiddenFromPerson || ($0.threadId == threadId && $0.routineRunId == nil) }
+    }
+
+    /// "Show background": the bot's background threads but routine runs,
+    /// newest first, archived ones included.
+    public var backgroundTasks: [BotTask] {
+        (tasks ?? []).filter(\.isListedBackground).sorted { $0.listStamp > $1.listStamp }
     }
 
     /// Older computers only send the profile default. Newer ones snapshot

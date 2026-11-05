@@ -38,6 +38,7 @@ import { OrgEngineNotice } from "@/components/OrgEngineSetup";
 
 import { RetroAssistantHost } from "@/components/RetroAssistantHost";
 import { AchievementToaster } from "@/components/achievements/AchievementToaster";
+import { ConnectionNotice } from "@/components/ConnectionNotice";
 import { MyChromeIndicator } from "@/components/MyChromeIndicator";
 import { HostControlIndicator } from "@/components/HostControlIndicator";
 import { reportAchievement } from "@/lib/achievements";
@@ -666,6 +667,8 @@ export function Shell() {
       <TeamBotFromThreadHost />
       <RetroAssistantHost />
       <AchievementToaster />
+      {/* #2013: server updating or unreachable, Perspicax unreachable, Reconnected */}
+      <ConnectionNotice />
       <CallEngineHost />
       <FloatingBotsHost />
       <RetroBootSlot />

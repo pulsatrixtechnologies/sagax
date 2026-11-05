@@ -17,6 +17,12 @@ public struct SendBlock: Equatable, Sendable {
         /// (the maintainer, 2026-11-04): the composer locks whole until it resets or
         /// the bot moves to another engine or account.
         case engineLimit = "engine_limit"
+        /// #2013: the engine refused this conversation's last turn before
+        /// any prompt went out (not ready, or its own configuration
+        /// conflicts with the bot's). Advisory: the composer still sends.
+        case engineRefused = "engine_refused"
+        /// #2013: the engine's sign-in expired or was refused. Advisory.
+        case engineSignedOut = "engine_signed_out"
     }
 
     public enum Action: Equatable, Sendable {
@@ -26,6 +32,24 @@ public struct SendBlock: Equatable, Sendable {
         case retry
         /// Move the bot to another engine or account (the model menu).
         case switchEngine
+        /// Send the conversation's last user message again (Retry).
+        case resend
+        /// Sagax repairs the cause itself (POST .../send-state/fix), then
+        /// sends the last message again. The wire's fix id, such as
+        /// "codex_native_mcp".
+        case fix(String)
+    }
+
+    /// #2013: what kind of pre-send refusal, and the engine's own words
+    /// for the Details disclosure.
+    public struct Refusal: Equatable, Sendable {
+        /// "config_conflict", "engine_not_ready" or "signed_out".
+        public var kind: String
+        public var cause: String
+        public init(kind: String, cause: String) {
+            self.kind = kind
+            self.cause = cause
+        }
     }
 
     /// The wire reason. A reason this build does not know still blocks, and
@@ -40,18 +64,32 @@ public struct SendBlock: Equatable, Sendable {
     public var limitCause: String?
     /// engine_limit: when the limit resets, when the provider said.
     public var resetsAt: Date?
+    /// #2013: true when the line only informs and the composer still
+    /// sends (engine_refused, engine_signed_out).
+    public var advisory: Bool
+    public var refusal: Refusal?
 
-    public init(reasonCode: String, message: String, action: Action, name: String? = nil, limitCause: String? = nil, resetsAt: Date? = nil) {
+    public init(reasonCode: String, message: String, action: Action, name: String? = nil, limitCause: String? = nil, resetsAt: Date? = nil,
+                advisory: Bool = false, refusal: Refusal? = nil) {
         self.reasonCode = reasonCode
         self.message = message
         self.action = action
         self.name = name
         self.limitCause = limitCause
         self.resetsAt = resetsAt
+        self.advisory = advisory
+        self.refusal = refusal
     }
 
     /// No typing, no send, no action in the chat while this shows.
     public var locksComposer: Bool { reason == .engineLimit }
+
+    /// The line informs; the next message still goes out.
+    public var isAdvisory: Bool { advisory }
+
+    /// The composer refuses to send while this shows (every block but an
+    /// advisory one; an unknown reason still blocks).
+    public var blocksSend: Bool { !advisory }
 
     public var reason: Reason? { Reason(rawValue: reasonCode) }
 
@@ -82,6 +120,11 @@ public struct SendBlock: Equatable, Sendable {
             parsed = .retry
         case "switch_engine":
             parsed = .switchEngine
+        case "resend":
+            parsed = .resend
+        case "fix":
+            guard let fix = action["fix"] as? String, !fix.isEmpty else { return nil }
+            parsed = .fix(fix)
         case "connect":
             guard let instanceId = action["instanceId"] as? String,
                   let engine = action["engine"] as? String else { return nil }
@@ -93,7 +136,13 @@ public struct SendBlock: Equatable, Sendable {
         let limit = block["limit"] as? [String: Any]
         let cause = limit?["cause"] as? String
         let resetsAt = (limit?["resetsAt"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue / 1000) }
-        return SendBlock(reasonCode: reason, message: message, action: parsed, name: name, limitCause: cause, resetsAt: resetsAt)
+        let advisory = (block["advisory"] as? Bool) == true
+        let refusal = (block["refusal"] as? [String: Any]).flatMap { raw -> Refusal? in
+            guard let kind = raw["kind"] as? String else { return nil }
+            return Refusal(kind: kind, cause: raw["cause"] as? String ?? "")
+        }
+        return SendBlock(reasonCode: reason, message: message, action: parsed, name: name, limitCause: cause, resetsAt: resetsAt,
+                         advisory: advisory, refusal: refusal)
     }
 }
 
@@ -129,7 +178,8 @@ public struct SendBlockState: Equatable, Sendable {
     }
 
     /// The composer may send to `scope`.
-    public func allowsSend(for scope: String?) -> Bool { block(for: scope) == nil }
+    /// An advisory block (#2013) informs and still lets the message go.
+    public func allowsSend(for scope: String?) -> Bool { block(for: scope)?.blocksSend != true }
 
     /// The answer of a check. `nil` (no block, an error, no answer) unblocks.
     public mutating func record(_ answer: SendBlock?, for scope: String?) {
@@ -159,8 +209,45 @@ public extension CompanionClient {
         }
     }
 
+    /// `POST /api/bots/<id>/send-state/fix?threadId=` with `{ "fix": <id> }`
+    /// (#2013): Sagax repairs the cause itself. Answers `{ ok, block }`;
+    /// nil when the request failed.
+    func fixSendState(botId: String, threadId: String?, fix: String) async -> SendStateFixResult? {
+        guard Self.validRouteID(botId) else { return nil }
+        do {
+            let request = try sendStateFixRequest(botId: botId, threadId: threadId, fix: fix)
+            let (data, response) = try await perform(request)
+            try Self.check(response, data)
+            return SendStateFixResult.parse(data)
+        } catch {
+            return nil
+        }
+    }
+
+    func sendStateFixRequest(botId: String, threadId: String?, fix: String) throws -> URLRequest {
+        let query = threadId.flatMap { $0.isEmpty ? nil : [URLQueryItem(name: "threadId", value: $0)] } ?? []
+        return try makeRequest("POST", "/api/bots/\(botId)/send-state/fix", query: query, body: ["fix": fix])
+    }
+
     func sendStateRequest(botId: String, threadId: String?) throws -> URLRequest {
         let query = threadId.flatMap { $0.isEmpty ? nil : [URLQueryItem(name: "threadId", value: $0)] } ?? []
         return try makeRequest("GET", "/api/bots/\(botId)/send-state", query: query)
+    }
+}
+
+/// The answer of a Fix (#2013): whether the repair held, and the send
+/// state after it.
+public struct SendStateFixResult: Equatable, Sendable {
+    public var ok: Bool
+    public var block: SendBlock?
+
+    public init(ok: Bool, block: SendBlock?) {
+        self.ok = ok
+        self.block = block
+    }
+
+    public static func parse(_ data: Data) -> SendStateFixResult? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return SendStateFixResult(ok: (object["ok"] as? Bool) == true, block: SendBlock.parse(object["block"]))
     }
 }

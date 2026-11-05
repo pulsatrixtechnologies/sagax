@@ -384,7 +384,12 @@ public func settledPermissionLeavesChat(_ message: Message) -> Bool {
 /// that opens another conversation (a thread chip, "Go to conversation")
 /// leaves the chat, as the desktop's unified chat drops it (ChatView.tsx,
 /// #1026).
-public func transcriptRows(_ messages: [Message], detail: ActivityDetail, showThreads: Bool = true, threadBotId: String = "") -> [TranscriptRow] {
+///
+/// `hidesPreSendRefusals` is a 1:1 bot chat (#2013): a failed turn the
+/// engine refused before any prompt went out (PreSendRefusal) is not drawn;
+/// the composer says it instead. A room keeps it as a quiet line.
+public func transcriptRows(_ messages: [Message], detail: ActivityDetail, showThreads: Bool = true, threadBotId: String = "",
+                           hidesPreSendRefusals: Bool = false) -> [TranscriptRow] {
     let voice = makeVoiceCallPlan(messages)
     // The same failure of the same bot, repeated since it last answered,
     // draws once: the last row (FailureDedup, desktop repeatedFailureIds).
@@ -451,6 +456,7 @@ public func transcriptRows(_ messages: [Message], detail: ActivityDetail, showTh
         }
         if isHiddenStatusNotice(message) || isHiddenReceipt(message) { continue }
         if repeatedFailures.contains(message.id) { continue }
+        if hidesPreSendRefusals, PreSendRefusal.kind(of: message) != nil { continue }
         // A failed routine run and a routine's access card pass as a
         // banner (TransientNotices), never a row.
         if TransientNotices.isTransient(message) { continue }

@@ -20,6 +20,7 @@
 //     a fresh subject; when that fails the call answers "Perspicax access
 //     for this turn ended" (a disabled person mid-turn, S5-10);
 //   - no token is ever logged or put in an error.
+import { toolFailureText } from "../../shared/tool-failure-text.ts";
 import { randomUUID } from "node:crypto";
 import { guardToolCall, type GuardOptions } from "../mcp/mcp-permissions.ts";
 import { MiB, warmResources, type WarmResourceBudget, type WarmResourceLease } from "../resources/warm-resources.ts";
@@ -32,6 +33,7 @@ import { executionKey, WriteOnce } from "../write-once.ts";
 import { PerspicaxIdentity, identityFailureReason, identityLapsed, identityValue, type IdentityFailure } from "./perspicax-identity.ts";
 import type { RoutineFlowInput } from "../routines/routine-flow-input.ts";
 import type { ReadinessFlow } from "../routines/routine-readiness.ts";
+import { ME_ROLE, cwPermissionFor, heldRolesOf, roleRefusalOf, type CwPermission, type HeldRole, type RoleReason, type ToolRole } from "../../shared/perspicax-roles.ts";
 
 export type PerspicaxUnavailableReason = "not_held" | "no_session" | "unreachable" | "rate_limited" | "no_delegation" | "unknown_speaker";
 
@@ -101,6 +103,20 @@ export interface PerspicaxMcpOptions {
   /** False when the bot was deleted while its turn was still alive. */
   botExists?(botId: string): boolean;
   onIdentityWarning?(input: { threadId: string; botId: string; principalId: string; reason: IdentityFailure }): void;
+  /** 2026-11-05 (visible roles): the role of every engine tools/call, a read
+   * that fell back to "Moi", a refused write, a lapse
+   * (server/perspicax/role-journal.ts). Never changes the answer itself. */
+  onRole?(event: PerspicaxRoleEvent): void;
+  /** The role a turn starts under: the person's composer pick (fixed for the
+   * turn) or the routine's "Au nom de". Undefined: the default surface. */
+  turnRole?(turn: { threadId: string; botId: string; principalId: string; routine: boolean }): { slug: string; reason: "person" | "routine" } | undefined;
+  /** What a read refused (403) under `from` does: one fallback to "Moi"
+   * with a card, the owner's saved rule (no card), or stay. Absent: fallback. */
+  roleFallback?(turn: { threadId: string; botId: string; principalId: string; from: string; path: string }): "fallback" | "rule" | "stay";
+  /** Writing as "Moi" in a routine that runs under a role changes the
+   * vendor attribution: the person's GO, on the approval card family.
+   * Absent: such a write is refused. */
+  askMeWrite?(input: { threadId: string; botId: string; principalId: string; role: { slug: string; name: string }; tool: string; permission: CwPermission }): Promise<"allow" | "deny" | "timeout">;
   /** The thread is on a live voice call: a turn's tokens are kept for its
    * next turn instead of revoked, so the call's tools stay mounted from turn
    * to turn without a new exchange (server/voice/voice-call-session.ts). */
@@ -302,6 +318,22 @@ interface Entry {
   profileChoice?: string;
   profileChoiceNeedsRestore?: boolean;
   profileChoiceRestoreFailed?: boolean;
+  /** Visible roles (2026-11-05): the held roles this turn's listing named. */
+  heldRoles?: HeldRole[];
+  /** cw_member:<identifier> (or credential:) behind the acting role. */
+  targetIdentity?: string;
+  /** Why the current role is the current one. */
+  roleReason?: RoleReason;
+  /** The person picked the role for this turn: the bot may not switch away. */
+  roleLocked?: boolean;
+  /** The routine's "Au nom de" role (a write as "Moi" then asks the person). */
+  routineRole?: string;
+  /** A write was refused (403): no switch to get around it in this turn. */
+  writeRefused?: boolean;
+  /** Tools the person allowed to write as "Moi" in this routine turn. */
+  meWritesAllowed?: Set<string>;
+  /** The role lapsed during the last call and could not be renewed. */
+  lapsedNow?: boolean;
   /** A remote `tools/list_changed` that the stdio bridge must forward to its
    * MCP client before the response which caused it. */
   toolsChangedPending?: boolean;
@@ -328,6 +360,46 @@ interface Entry {
   keepAliveArmedAt?: number;
   /** True while a keep-alive ping is in flight (do not re-arm over it). */
   keepAlivePing?: boolean;
+}
+
+/** One role fact of an engine tools/call (visible roles, 2026-11-05). */
+export interface PerspicaxRoleEvent {
+  threadId: string;
+  botId: string;
+  principalId: string;
+  /** the turn runs on a routine delegation */
+  routine: boolean;
+  /** step: the call ran under `role`; read_refused / write_refused: a 403
+   * Sagax did not get around; lapsed: the role lapsed and the call stopped. */
+  kind: "step" | "read_refused" | "write_refused" | "lapsed";
+  tool: string;
+  role: ToolRole;
+  /** refusals: the CW permission the call needed */
+  permission?: CwPermission;
+  /** refusals and fallbacks: the role that was refused */
+  refusedRole?: { slug: string; name: string };
+  /** cw_member:<identifier> behind the role, when Perspicax said */
+  target?: string;
+  /** the roles held, as this turn's listing said (names) */
+  held?: HeldRole[];
+}
+
+/** Tools whose writes reach a vendor under the acting role (attribution). */
+const VENDOR_TOOL = /^(cw_|sentinelone_|twilio_|x360recover_|bookstack_|voice_|connectwise_)/;
+function vendorWriteTool(name: string): boolean {
+  return VENDOR_TOOL.test(name) || name === "flow_action";
+}
+
+/** The note a model reads in front of an answer (a text block first). */
+function withNote(answer: PerspicaxRelayAnswer, note: string): PerspicaxRelayAnswer {
+  if (!isObject(answer.body) || !isObject(answer.body.result)) return answer;
+  const result = answer.body.result;
+  const content = Array.isArray(result.content) ? result.content : [];
+  return { ...answer, body: { ...answer.body, result: { ...result, content: [{ type: "text", text: note }, ...content] } } };
+}
+
+function toolError(id: unknown, text: string): PerspicaxRelayAnswer {
+  return { status: 200, body: { jsonrpc: "2.0", id, result: { content: [{ type: "text", text }], isError: true } } };
 }
 
 export interface PerspicaxRelayAnswer {
@@ -460,6 +532,20 @@ export function parseMcpBody(text: string, id: unknown): unknown {
       }
     });
   return frames.findLast((frame) => frame.id === id) ?? frames.at(-1) ?? null;
+}
+
+/** 2026-11-05: a tools/call result flagged isError whose content has no
+ * words (the engine then shows "returned no error message"): the words
+ * Perspicax gave elsewhere (structuredContent, _meta) become its text, else
+ * a plain sentence naming the tool. A result with words is left as it is. */
+export function withFailureWords(body: unknown, tool: string): unknown {
+  if (!isObject(body) || !isObject(body.result) || body.result.isError !== true) return body;
+  const result = body.result;
+  const content = Array.isArray(result.content) ? result.content : [];
+  if (toolFailureText(content)) return body;
+  const found = toolFailureText(result.structuredContent) ?? toolFailureText(result._meta);
+  const text = found ?? `${tool || "The tool"} failed on Perspicax and its answer carried no error message${result.structuredContent !== undefined ? `: ${JSON.stringify(result.structuredContent).slice(0, 600)}` : ""}.`;
+  return { ...body, result: { ...result, content: [...content.filter((block) => !(isObject(block) && block.type === "text")), { type: "text", text }] } };
 }
 
 /** The `elicitation` capability added to a client's own (2026-10-26). */
@@ -956,6 +1042,7 @@ export class PerspicaxMcp {
         const previous = this.entries.get(key(input.threadId, input.generation));
         if (previous && previous !== kept) void this.close(previous);
         this.entries.set(key(input.threadId, input.generation), kept);
+        this.applyTurnRole(kept, source === "delegation");
         plan.mounted.push({ name: "Perspicax" });
         this.log(`perspicax mcp: account token kept for the ${this.options.keepWarm?.(input.threadId) ? "call" : "warm engine"}'s next turn; opening a fresh session`);
         return plan;
@@ -1028,8 +1115,94 @@ export class PerspicaxMcp {
         return this.close(entry);
       },
     });
+    this.applyTurnRole(entry, source === "delegation");
     plan.mounted.push({ name: "Perspicax" });
     return plan;
+  }
+
+  /** Visible roles: the role this turn starts under. The person's composer
+   * pick fixes it for the turn; a routine's "Au nom de" is its one pick at
+   * the start (the relay switches once more only on a refused read). No
+   * pick: the default surface ("Moi"), never a stored choice. */
+  private applyTurnRole(entry: Entry, routine: boolean): void {
+    entry.writeRefused = false;
+    entry.meWritesAllowed = undefined;
+    entry.lapsedNow = false;
+    entry.roleLocked = false;
+    entry.routineRole = undefined;
+    entry.roleReason = routine ? "routine" : "default";
+    let picked: { slug: string; reason: "person" | "routine" } | undefined;
+    try { picked = this.options.turnRole?.({ threadId: entry.threadId, botId: entry.botId, principalId: entry.principalId, routine }); } catch { picked = undefined; }
+    if (!picked) return;
+    const slug = picked.slug.trim();
+    entry.roleReason = picked.reason;
+    entry.roleLocked = picked.reason === "person";
+    if (picked.reason === "routine" && slug) entry.routineRole = slug;
+    if (slug && slug !== this.currentRole(entry)) this.setIdentity(entry, slug);
+  }
+
+  /** "Rester en …" on an "Agit comme" card: every live connection of this
+   * thread goes back to (or stays in) `slug` and the bot may not switch away
+   * for the rest of the turn. The next call applies it (identity ensure). */
+  stayInRole(threadId: string, slug: string): void {
+    for (const entry of this.entries.values()) {
+      if (entry.threadId !== threadId || entry.ended) continue;
+      if (this.currentRole(entry) !== slug) {
+        if (slug) this.setIdentity(entry, slug);
+        else {
+          const identity = entry.identity;
+          entry.identity = undefined;
+          void identity?.clear().catch(() => undefined);
+          if (entry.profileChoice) {
+            entry.profileChoice = undefined;
+            void this.identityRpc(entry, "tools/call", { name: "profile_use", arguments: { clear: true } }).catch(() => undefined);
+          }
+        }
+        this.clearToolCatalog(entry);
+        entry.toolsChangedPending = true;
+      }
+      entry.roleLocked = true;
+      entry.roleReason = "person";
+    }
+  }
+
+  /** The role the connection acts as now ("" = Moi, the default surface). */
+  private currentRole(entry: Entry): string {
+    return entry.identity ? entry.identity.profile() : entry.profileChoice ?? ME_ROLE;
+  }
+
+  private roleView(entry: Entry, slug: string): { slug: string; name: string } {
+    // "" is "Moi": the client words it in the reader's language
+    if (!slug) return { slug: ME_ROLE, name: "" };
+    return { slug, name: entry.heldRoles?.find((role) => role.slug === slug)?.name ?? slug };
+  }
+
+  /** The held roles' names, read once per turn when a role must be named
+   * (identity_switch without argument: a read, on this very connection). */
+  private async ensureHeldRoles(entry: Entry): Promise<void> {
+    if (entry.heldRoles || (entry.servedTools && !entry.servedTools.has("identity_switch"))) return;
+    entry.heldRoles = [];
+    try {
+      const body = await this.identityRpc(entry, "tools/call", { name: "identity_switch", arguments: {} });
+      this.noteListing(entry, identityValue(body));
+    } catch { /* names fall back to the slug */ }
+  }
+
+  private noteListing(entry: Entry, value: Json): void {
+    const held = heldRolesOf(value);
+    if (held.length) entry.heldRoles = held;
+    const acting = isObject(value.acting_as) ? value.acting_as : null;
+    if (acting && typeof acting.target_identity === "string") entry.targetIdentity = acting.target_identity.slice(0, 200);
+  }
+
+  private emitRole(entry: Entry, kind: PerspicaxRoleEvent["kind"], tool: string, role: ToolRole, extra: Partial<PerspicaxRoleEvent> = {}): void {
+    try {
+      this.options.onRole?.({
+        threadId: entry.threadId, botId: entry.botId, principalId: entry.principalId, routine: entry.source === "delegation",
+        kind, tool, role, ...(entry.targetIdentity ? { target: entry.targetIdentity } : {}),
+        ...(entry.heldRoles?.length ? { held: entry.heldRoles } : {}), ...extra,
+      });
+    } catch { /* a role note never changes the answer */ }
   }
 
   /** Relay one JSON-RPC frame from a bridge to Perspicax /mcp. `judged`:
@@ -1085,7 +1258,125 @@ export class PerspicaxMcp {
     return executionKey([scope, entry.principalId, entry.identity?.profile() || entry.profileChoice || "default", name, params.arguments ?? {}]);
   }
 
+  /** Visible roles around one engine frame: the identity tools keep the
+   * role rules (a role the person fixed, a refused write), a write as "Moi"
+   * in a routine under a role asks the person, a read refused (403) under a
+   * role is read once more as "Moi", a refused write stops, a lapse stops
+   * the call; every call's role is reported (onRole). */
   private async relayFrame(input: { threadId: string; generation: string; botId: string; frame: unknown; judged?: boolean }): Promise<PerspicaxRelayAnswer> {
+    const entry = this.entries.get(key(input.threadId, input.generation));
+    const frame = isObject(input.frame) ? input.frame : null;
+    const params = frame && isObject(frame.params) ? frame.params : null;
+    const name = params && typeof params.name === "string" ? params.name : "";
+    if (input.judged || !this.options.onRole || !entry || entry.botId !== input.botId || !frame || frame.method !== "tools/call" || frame.id === undefined || !name) {
+      return this.relayFrameCore(input);
+    }
+    const id = frame.id;
+    const args = params && isObject(params.arguments) ? params.arguments : {};
+    const before = this.currentRole(entry);
+    if (name === "identity_switch" || name === "profile_use") {
+      const target = typeof args.profile === "string" && args.profile.trim() ? args.profile.trim() : args.clear === true ? ME_ROLE : undefined;
+      if (target !== undefined && target !== before && (entry.roleLocked || entry.writeRefused)) {
+        await this.ensureHeldRoles(entry);
+        const now = this.roleView(entry, before);
+        const why = entry.roleLocked
+          ? `Refused by Sagax: the person fixed the role for this turn (${now.name || "their own account"}). Keep working under it; do not switch roles.`
+          : "Refused by Sagax: a write was refused (403) in this turn. Stop and report the missing permission; switching roles to get around it is not allowed.";
+        this.emitRole(entry, "step", name, { ...now, reason: entry.roleReason ?? "default" });
+        return toolError(id, why);
+      }
+      const answer = await this.relayFrameCore(input);
+      this.noteListing(entry, identityValue(answer.body));
+      const after = this.currentRole(entry);
+      if (after !== before) entry.roleReason = "switch";
+      if (after) await this.ensureHeldRoles(entry);
+      this.emitRole(entry, "step", name, { ...this.roleView(entry, after), reason: entry.roleReason ?? "default", ...(after !== before ? { previous: this.roleView(entry, before) } : {}) });
+      return answer;
+    }
+    // a role change forgets the catalogue: read it again on this very
+    // connection before telling a read from a write
+    if (!entry.readOnlyTools && !PERSPICAX_READ_ONLY_TOOLS.has(name)) await this.identityRpc(entry, "tools/list").catch(() => undefined);
+    const read = perspicaxReplayable(frame, entry.readOnlyTools);
+    if (!read && entry.source === "delegation" && entry.routineRole && before === ME_ROLE && vendorWriteTool(name) && !entry.meWritesAllowed?.has(name)) {
+      await this.ensureHeldRoles(entry);
+      const role = this.roleView(entry, entry.routineRole);
+      const permission = cwPermissionFor(name, args, false);
+      let answer: "allow" | "deny" | "timeout" = "deny";
+      try { answer = this.options.askMeWrite ? await this.options.askMeWrite({ threadId: entry.threadId, botId: entry.botId, principalId: entry.principalId, role, tool: name, permission }) : "deny"; } catch { answer = "deny"; }
+      if (answer !== "allow") {
+        return toolError(id, `Not sent: this routine runs as ${role.name}; writing in the person's own name changes who the vendor records as the author, and the person did not approve it. Switch back to ${role.name} (identity_switch) or report what is missing.`);
+      }
+      (entry.meWritesAllowed ??= new Set()).add(name);
+    }
+    const answer = await this.relayFrameCore(input);
+    if (entry.lapsedNow || (isObject(answer.body) && isObject(answer.body.error) && /could not restore the explicitly selected/.test(String(answer.body.error.message ?? "")))) {
+      const lapsed = entry.lapsedNow;
+      entry.lapsedNow = false;
+      await this.ensureHeldRoles(entry);
+      this.emitRole(entry, "lapsed", name, { ...this.roleView(entry, before), reason: entry.roleReason ?? "default" });
+      if (lapsed) return toolError(id, `Stopped by Sagax: the role ${this.roleView(entry, before).name || before} lapsed and could not be renewed, so this call did not run under it. Tell the person; do not retry under another role.`);
+      return answer;
+    }
+    const refusal = answer.status === 200 ? roleRefusalOf(answer.body) : null;
+    if (!refusal) {
+      if (before) await this.ensureHeldRoles(entry);
+      this.emitRole(entry, "step", name, { ...this.roleView(entry, before), reason: entry.roleReason ?? "default" });
+      return answer;
+    }
+    if (before) await this.ensureHeldRoles(entry);
+    const permission = cwPermissionFor(name, args, read);
+    const refusedRole = this.roleView(entry, before);
+    const label = refusedRole.name || "the person's own account";
+    const needs = `${permission.module ? `${permission.module} > ${permission.func}` : permission.func}${permission.path ? ` (${permission.path})` : ""}, ${permission.operation}`;
+    if (!read) {
+      entry.writeRefused = true;
+      this.emitRole(entry, "write_refused", name, { ...refusedRole, reason: entry.roleReason ?? "default" }, { permission, refusedRole });
+      return withNote(answer, `STOP: this write was refused (403) under ${label}. Missing permission: ${needs}. Do not retry it under another role; report the missing permission to the person.`);
+    }
+    const decision = before ? this.options.roleFallback?.({ threadId: entry.threadId, botId: entry.botId, principalId: entry.principalId, from: before, path: permission.path }) ?? "fallback" : "stay";
+    if (decision === "stay") {
+      this.emitRole(entry, "read_refused", name, { ...refusedRole, reason: entry.roleReason ?? "default" }, { permission, refusedRole });
+      return before ? withNote(answer, `This read was refused (403) under ${label}, and the person asked to stay in that role: no fallback. Missing permission: ${needs}.`) : answer;
+    }
+    const again = await this.readAsMe(entry, frame, before);
+    if (!again || again.status !== 200 || roleRefusalOf(again.body) || (isObject(again.body) && isObject(again.body.error))) {
+      this.emitRole(entry, "read_refused", name, { ...refusedRole, reason: entry.roleReason ?? "default" }, { permission, refusedRole });
+      return answer;
+    }
+    this.emitRole(entry, "step", name, { slug: ME_ROLE, name: "", reason: decision === "rule" ? "rule" : "fallback", refusedTool: name, previous: refusedRole }, { permission, refusedRole });
+    return withNote(again, `Sagax read this once in the person's own name: ${label} was refused (403) for it (missing ${needs}). The next call runs under ${label} again.`);
+  }
+
+  /** One read sent again in the person's own name ("Moi") after a 403 under
+   * `previous`, then `previous` put back for the next call. Never a write;
+   * never more than once per call. */
+  private async readAsMe(entry: Entry, frame: Json, previous: string): Promise<PerspicaxRelayAnswer | null> {
+    const link = this.options.link();
+    if (!link || entry.ended) return null;
+    const viaChoice = !entry.identity && entry.profileChoice === previous;
+    const tool = viaChoice ? "profile_use" : "identity_switch";
+    try {
+      await this.identityRpc(entry, "tools/call", { name: tool, arguments: { clear: true } });
+      this.clearToolCatalog(entry);
+      const sent = await this.send(link, entry, { ...frame }, undefined, true);
+      if (typeof sent === "string" || !sent.response.ok) return null;
+      return { status: 200, body: parseMcpBody(sent.text, frame.id) };
+    } catch {
+      return null;
+    } finally {
+      try {
+        const back = await this.identityRpc(entry, "tools/call", { name: tool, arguments: { profile: previous } });
+        if (!viaChoice) await entry.identity?.observe(back);
+        else entry.profileChoiceNeedsRestore = false;
+      } catch {
+        entry.identity?.invalidate();
+        if (viaChoice) entry.profileChoiceNeedsRestore = true;
+      }
+      this.clearToolCatalog(entry);
+    }
+  }
+
+  private async relayFrameCore(input: { threadId: string; generation: string; botId: string; frame: unknown; judged?: boolean }): Promise<PerspicaxRelayAnswer> {
     const entry = this.entries.get(key(input.threadId, input.generation));
     if (!entry || entry.botId !== input.botId) return { status: 403, body: { error: "the Perspicax connection is not mounted in this turn", code: "profile_not_mounted" } };
     if (!isObject(input.frame)) return { status: 400, body: rpcError(null, -32600, "Invalid Request") };
@@ -1249,6 +1540,8 @@ export class PerspicaxMcp {
         this.clearToolCatalog(entry);
         await entry.identity.ensure(true);
         if (!entry.identity.active()) {
+          // Visible roles: a lapsed role stops the call (relayFrame says so).
+          entry.lapsedNow = true;
           return { status: 200, body };
         }
         // act_as_expired explicitly says the operation was refused. One retry,
@@ -1314,6 +1607,7 @@ export class PerspicaxMcp {
         entry.twilioTools = new Set(named.slice(0, 500));
         entry.toolsListBody = body;
       }
+      if (frame.method === "tools/call") body = withFailureWords(body, isObject(frame.params) ? String(frame.params.name ?? "") : "");
       const answer: PerspicaxRelayAnswer = body === null
         ? { status: 200, body: rpcError(id, -32000, "Perspicax sent no answer") }
         : { status: 200, body };

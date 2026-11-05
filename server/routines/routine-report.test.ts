@@ -169,3 +169,13 @@ describe("a wake on teammates' messages is never quiet (production, 2026-11-02)"
     expect(peerWakeOutcome({}, routineReportOutcome("NOTHING_TO_REPORT")).quiet).toBe(true);
   });
 });
+
+describe("items only the person can do (2026-11-05)", () => {
+  it("are never quiet and always post, whatever postResults says", () => {
+    const outcome = routineReportOutcome("- [HUMAIN] **100201**: decide which client it belongs to.\nNOTHING_TO_REPORT");
+    expect(outcome.quiet).toBe(false);
+    expect(outcome.report).toBe("- [HUMAIN] **100201**: decide which client it belongs to.");
+    expect(routineRunReportable({ status: "completed", postResults: false, attention: true })).toBe(true);
+    expect(routineRunReportable({ status: "completed", postResults: false })).toBe(false);
+  });
+});

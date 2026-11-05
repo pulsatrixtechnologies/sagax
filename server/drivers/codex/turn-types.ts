@@ -28,6 +28,8 @@ export type PreparedCodexLaunch = {
   provenPrivateEnv: boolean;
   selectedMcp: Map<string, StdioMcpSpec>;
   selectedApprovals: Map<string, McpApprovalMode>;
+  /** A selected mount's own `env` table (the person's environment proxy). */
+  selectedLiterals: Map<string, Record<string, string>>;
   directoryMounts: Set<string>;
   selectionConfig: { config?: Record<string, unknown> };
   commandCwd: string;

@@ -1,0 +1,16 @@
+{
+  "about": "The background-thread rule (shared/background-threads.ts), the same cases on the server, the desktop and the phone (CompanionCore BotTask.isBackground). origin: why a thread is background, null for the person's own. listed: in the person's thread list with nothing open. background: in the Show background filter.",
+  "cases": [
+    { "name": "a person's own thread", "task": { "threadId": "own", "createdAt": 1 }, "origin": null, "listed": true, "background": false },
+    { "name": "a routine run", "task": { "threadId": "run", "createdAt": 1, "routineRunId": "r1" }, "origin": "routine-run", "listed": false, "background": false },
+    { "name": "an automatic results thread", "task": { "threadId": "res", "createdAt": 1, "routineResults": true }, "origin": "routine-results", "listed": false, "background": true },
+    { "name": "a teammate's work hand-off", "task": { "threadId": "work", "createdAt": 1, "openedBy": { "botId": "parker", "name": "Parker", "kind": "work", "at": 1 } }, "origin": "handoff", "listed": false, "background": true },
+    { "name": "a pair conversation", "task": { "threadId": "pair", "createdAt": 1, "openedBy": { "botId": "parker", "name": "Parker", "kind": "pair", "at": 1 } }, "origin": "handoff", "listed": false, "background": true },
+    { "name": "a thread the bot opened on itself", "task": { "threadId": "self", "createdAt": 1, "openedBy": { "botId": "scout", "name": "Scout", "at": 1 } }, "origin": "bot-opened", "listed": false, "background": true },
+    { "name": "a thread a bot opened that the person wrote in", "task": { "threadId": "adopted", "createdAt": 1, "personWrote": true, "openedBy": { "botId": "scout", "name": "Scout", "at": 1 } }, "origin": null, "listed": true, "background": false },
+    { "name": "an AI client's conversation over MCP", "task": { "threadId": "agent", "createdAt": 1, "openedBy": { "botId": "agent:claude", "name": "Claude", "kind": "agent", "at": 1 } }, "origin": "ai-client", "listed": false, "background": true },
+    { "name": "an AI client's conversation stays background though its prompts write as the person", "task": { "threadId": "agent2", "createdAt": 1, "personWrote": true, "openedBy": { "botId": "agent:claude", "name": "Claude", "kind": "agent", "at": 1 } }, "origin": "ai-client", "listed": false, "background": true },
+    { "name": "a #291 hidden conversation", "task": { "threadId": "hidden", "createdAt": 1, "hidden": true }, "origin": "ai-client", "listed": false, "background": true },
+    { "name": "a parallel task the person started", "task": { "threadId": "par", "createdAt": 1, "parallelOf": { "threadId": "own", "messageId": "m" } }, "origin": null, "listed": true, "background": false }
+  ]
+}

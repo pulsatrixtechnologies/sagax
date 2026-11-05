@@ -11,12 +11,19 @@ import SwiftUI
 /// The computer patches the same message as the run moves, so the card
 /// redraws in place from queued to its result; nothing here keeps state
 /// about the run beyond whether the report is expanded.
+///
+/// 2026-11-05 (#2008 follow-up): the bot's mascot leads the header and each
+/// hand-off row shows the teammate's mascot, as on desktop.
 struct RoutineRunCardView: View {
     @Environment(\.themePalette) var themePalette
+    @EnvironmentObject private var session: Session
     let card: RoutineRunCard
     /// When the message landed; stands in for runs with no scheduled time.
     let at: Date
     let tint: Color
+    /// The bot that ran the routine: its mascot leads the card. Nil keeps
+    /// the clock glyph (a room card, or a bot this phone no longer lists).
+    var bot: Bot? = nil
     /// Opens the execution thread; nil when this phone cannot reach it.
     var openRun: (() -> Void)? = nil
     /// 2026-10-26: the failure paused its routine (RoutineAutoPause): turn
@@ -33,6 +40,8 @@ struct RoutineRunCardView: View {
     /// does not, and the toggle only has to appear for the second kind.
     private static let collapsedCharacters = 320
     private static let collapsedLines = 6
+    private static let headerMascot: CGFloat = 30
+    private static let handoffMascot: CGFloat = 22
 
     private var summary: String? {
         guard let text = card.summary?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return nil }
@@ -61,7 +70,7 @@ struct RoutineRunCardView: View {
 
     /// "Review" when the run is stopped on the person, as on desktop.
     private var actionLabel: String {
-        card.goalStatus == "needs-input" ? "Review" : "Open run"
+        card.goalStatus == "needs-input" ? String(localized: "Review") : String(localized: "Open run")
     }
 
     var body: some View {
@@ -76,7 +85,7 @@ struct RoutineRunCardView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
                 if isLong {
-                    Button(expanded ? "Show less" : "Show report") {
+                    Button(expanded ? String(localized: "Show less") : String(localized: "Show report")) {
                         Haptics.selection()
                         withAnimation(.snappy) { expanded.toggle() }
                     }
@@ -162,20 +171,31 @@ struct RoutineRunCardView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+        HStack(alignment: .top, spacing: 10) {
+            if let bot {
+                BotMascotView(bot: bot, size: Self.headerMascot, state: .idle, animated: false)
+                    .frame(width: Self.headerMascot, height: Self.headerMascot)
+                    .accessibilityHidden(true)
+            } else {
                 Image(systemName: "clock.arrow.circlepath")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(Theme.textSecondary)
-                Text(card.routineName.isEmpty ? "Routine" : card.routineName)
-                    .font(.system(size: 15, weight: .semibold))
-                    .lineLimit(1)
-                Spacer(minLength: 4)
-                statusPill(card.stateLabel, color: toneColor, live: card.knownStatus == .running && card.goalStatus == nil)
+                    .frame(width: Self.headerMascot, height: Self.headerMascot)
+                    .background(Theme.inset, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .accessibilityHidden(true)
             }
-            Text(scheduled, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.textSecondary)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(card.routineName.isEmpty ? String(localized: "Routine") : card.routineName)
+                        .font(.system(size: 15, weight: .semibold))
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    statusPill(card.stateLabel, color: toneColor, live: card.knownStatus == .running && card.goalStatus == nil)
+                }
+                Text(scheduled, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textSecondary)
+            }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(card.headline)
@@ -200,16 +220,29 @@ struct RoutineRunCardView: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// One teammate the run handed work to: "Sent work to <name>", where
-    /// that work stands, and a button to its thread.
+    /// One teammate the run handed work to: its mascot, "Sent work to <name>",
+    /// where that work stands, and a button to its thread.
     private func handoffRow(_ entry: RoutineRunCard.Handoff) -> some View {
-        let name = entry.name?.isEmpty == false ? entry.name! : String(localized: "a teammate")
+        let teammate = session.state.bot(entry.botId)
+        let name: String = {
+            if let named = entry.name, !named.isEmpty { return named }
+            if let teammate, !teammate.name.isEmpty { return teammate.name }
+            return String(localized: "a teammate")
+        }()
         let state = RoutineRunCard(runId: "", routineId: "", routineName: "", status: entry.status)
         return HStack(spacing: 8) {
-            Image(systemName: "arrow.turn.down.right")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Theme.textSecondary)
-            Text(verbatim: "Sent work to \(name)")
+            if let teammate {
+                BotMascotView(bot: teammate, size: Self.handoffMascot, state: .idle, animated: false)
+                    .frame(width: Self.handoffMascot, height: Self.handoffMascot)
+                    .accessibilityHidden(true)
+            } else {
+                Image(systemName: "arrow.turn.down.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.textSecondary)
+                    .frame(width: Self.handoffMascot, height: Self.handoffMascot)
+                    .accessibilityHidden(true)
+            }
+            Text(String(localized: "Sent work to \(name)"))
                 .font(.system(size: 14))
                 .foregroundStyle(Theme.textPrimary)
                 .lineLimit(1)
@@ -223,14 +256,14 @@ struct RoutineRunCardView: View {
                     openThread(ThreadRef(botId: entry.botId, threadId: entry.threadId, title: name))
                 } label: {
                     HStack(spacing: 4) {
-                        Text("Open thread")
+                        Text(String(localized: "Open \(name)'s thread"))
                         Image(systemName: "arrow.right").font(.system(size: 11, weight: .semibold))
                     }
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Theme.readable(tint))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(Text(verbatim: "Open \(name)'s thread"))
+                .accessibilityLabel(Text(verbatim: String(localized: "Open \(name)'s thread")))
                 .accessibilityIdentifier("routine-run-teammate-thread")
             }
         }

@@ -71,6 +71,7 @@ describe("self-knowledge base", () => {
     // The audit itself catches what it must (the generator exits 1 on any).
     expect(auditKnowledgeText("key sk-ant-abcdefghijklmnopqrstuvwxyz0123")).toHaveLength(1);
     expect(auditKnowledgeText("write to someone@gmail.com")).toHaveLength(1);
+    expect(auditKnowledgeText("PI_KIT_PACKAGES=\"npm:example-pi-package@1.2.3\"")).toEqual([]);
     expect(auditKnowledgeText("which team holds client:Acme")).toHaveLength(1);
     expect(auditKnowledgeText("disk-and-expired-approvals and hello@pulsatrix.ca")).toEqual([]);
   });

@@ -445,7 +445,8 @@ const ALLOWED_EMAIL = /@(example\.(?:com|org|test|net)|[\w-]+\.example(?:\.\w+)?
 export function auditKnowledgeText(text: string): string[] {
   const problems: string[] = [];
   for (const pattern of SECRET_PATTERNS) if (pattern.test(text)) problems.push(`secret-like text ${pattern}`);
-  for (const match of text.matchAll(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g)) {
+  for (const match of text.matchAll(/[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}\b/gi)) {
+    // a letter TLD: an npm spec (name@1.2.3) is not an address
     const email = match[0].toLowerCase();
     if (!ALLOWED_EMAIL.test(email) && !/^(git@|noreply@|no-reply@)/.test(email)) problems.push(`email address ${email}`);
   }

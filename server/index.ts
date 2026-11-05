@@ -18962,7 +18962,7 @@ bus.subscribe((event: RuntimeEvent) => {
         // 2026-10-29: the step the working line names, the same for every
         // engine (shared/working-step.ts); older clients ignore the field
         const step = toolWorkingStep({ name, summary: event.summary, input: event.input, product: product?.product });
-        // 2026-11-05 (JC #2033): no tool.role on chat steps; the role journal keeps it
+        // 2026-11-05 (#2033): no tool.role on chat steps; the role journal keeps it
         const message = pushMessage({
           role: "bot",
           kind: "activity",

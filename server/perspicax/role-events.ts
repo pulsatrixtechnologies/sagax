@@ -49,7 +49,7 @@ export function createRoleEvents(deps: RoleEventsDeps) {
         });
       }
       if (event.kind === "lapsed" || event.kind === "write_refused" || event.kind === "read_refused") {
-        // 2026-11-05 (JC): no role notice in the chat; the journal keeps it
+        // 2026-11-05: no role notice in the chat; the journal keeps it
         return;
       }
       const previous = journal.advance(event.threadId, { slug: event.role.slug, name: event.role.name });
@@ -59,7 +59,7 @@ export function createRoleEvents(deps: RoleEventsDeps) {
           from: previous, to: { slug: event.role.slug, name: event.role.name }, reason: event.role.reason,
           ...(event.role.refusedTool ? { refusedTool: event.role.refusedTool } : {}),
         });
-        // 2026-11-05 (JC): no "Agit comme" card in the chat; the journal keeps the transition
+        // 2026-11-05: no "Agit comme" card in the chat; the journal keeps the transition
       }
     },
 

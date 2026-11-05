@@ -38571,17 +38571,20 @@ function orgSectionNames(): string[] {
 /** The section names an organization member may see (#2045): only the
  * ones they own, or a legacy one they were made a member of. A section is
  * never shown because it holds a bot or room someone shared: the bot is
- * shared, the other person's team stays theirs. Admins included. */
+ * shared, the other person's team stays theirs. Admins included. Two people
+ * may share a display name; each still only sees their own. */
 function orgVisibleSections(all: readonly string[], viewerId: string | undefined): string[] {
   if (IDENTITY.kind !== "perspicax" || !viewerId || !sectionChannels) return [...all];
   const viewer = authzViewerFromId(viewerId)!;
   const me = viewerId.trim().toLowerCase();
-  return all.filter((name) => {
-    const record = sectionChannels!.byName(name);
-    if (!record) return false;
-    if (record.ownerPrincipalId.trim().toLowerCase() === me) return true;
-    return record.members.length > 0 && sectionRole(viewer, { ...record }) !== null;
-  });
+  const visible = new Set<string>();
+  for (const record of sectionChannels.list()) {
+    if (record.ownerPrincipalId.trim().toLowerCase() === me) visible.add(record.name);
+    else if (record.members.length > 0 && sectionRole(viewer, { ...record }) !== null) visible.add(record.name);
+  }
+  const ordered = all.filter((name) => visible.has(name));
+  for (const name of visible) if (!ordered.includes(name)) ordered.push(name);
+  return ordered;
 }
 if (sectionChannels) {
   // First organization boot of slice 4: every existing section becomes a
@@ -38600,8 +38603,9 @@ if (sectionChannels) {
       const result = store.setBotsSection([], name);
       return result.ok ? undefined : "the section could not be created";
     },
-    renameSection: (name, nextName) => store.renameSection(name, nextName, teamComputers),
-    deleteSection: (name) => (teamComputers.forSection(name) ? "Unassign this section's computer before deleting it" : store.deleteSection(name)),
+    // #2045: rename/delete only the owner's bots for that team name.
+    renameSection: (record, nextName) => store.renameSectionForOwner(record.name, nextName, record.ownerPrincipalId, teamComputers),
+    deleteSection: (record) => (teamComputers.forSection(record.name) ? "Unassign this section's computer before deleting it" : store.deleteSectionForOwner(record.name, record.ownerPrincipalId)),
     onChanged: () => {
       broadcast({ kind: "sections", sections: store.sections });
       audienceChanged();
@@ -44193,13 +44197,31 @@ ROUTES.push(createSidebarSectionsRoutes({
   bot: (id) => store.bot(id) ?? undefined,
   assertTeamComputerChangeIdle,
   teamComputerForSection: (section) => teamComputers.forSection(section),
-  deleteSection: (section) => store.deleteSection(section) ?? null,
-  renameSection: (section, nextName) => store.renameSection(section, nextName, teamComputers) ?? null,
+  deleteSection: (section, auth) => {
+    if (sectionChannels) {
+      const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
+      return store.deleteSectionForOwner(section, owner) ?? null;
+    }
+    return store.deleteSection(section) ?? null;
+  },
+  renameSection: (section, nextName, auth) => {
+    if (sectionChannels) {
+      const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
+      return store.renameSectionForOwner(section, nextName, owner, teamComputers) ?? null;
+    }
+    return store.renameSection(section, nextName, teamComputers) ?? null;
+  },
   updateTeamMembers: (section, addBotIds, removeBotIds) => store.updateTeamMembers(section, [...addBotIds], [...removeBotIds]),
   setBotsSection: (botIds, name) => store.setBotsSection([...botIds], name),
   wireBot,
-  onSectionRemoved: (section) => sectionChannels?.removeByName(section),
-  onSectionRenamed: (from, to) => sectionChannels?.rename(from, to)
+  onSectionRemoved: (section, auth) => {
+    const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
+    sectionChannels?.removeByName(section, owner);
+  },
+  onSectionRenamed: (from, to, auth) => {
+    const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
+    sectionChannels?.rename(from, to, owner);
+  },
 }));
 ROUTES.push(createTeamMemoryHttpRoutes({
   list: (section) => teamMemory.list(section),

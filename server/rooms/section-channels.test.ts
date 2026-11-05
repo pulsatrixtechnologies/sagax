@@ -77,14 +77,19 @@ function harness() {
     teamsOf: (id) => teams[id] ?? [],
     sections: () => [...sections],
     createSection: (name) => { sections.add(name); return undefined; },
-    renameSection: (name, next) => {
-      sections.delete(name); sections.add(next);
-      for (const bot of Object.values(bots)) if (bot.section === name) bot.section = next;
+    renameSection: (record, next) => {
+      const owner = record.ownerPrincipalId;
+      const stillUsed = Object.values(bots).some((bot) => bot.section === record.name && bot.owner !== owner);
+      if (!stillUsed) sections.delete(record.name);
+      sections.add(next);
+      for (const bot of Object.values(bots)) if (bot.section === record.name && bot.owner === owner) bot.section = next;
       return undefined;
     },
-    deleteSection: (name) => {
-      sections.delete(name);
-      for (const bot of Object.values(bots)) if (bot.section === name) delete bot.section;
+    deleteSection: (record) => {
+      const owner = record.ownerPrincipalId;
+      for (const bot of Object.values(bots)) if (bot.section === record.name && bot.owner === owner) delete bot.section;
+      const stillUsed = Object.values(bots).some((bot) => bot.section === record.name);
+      if (!stillUsed) sections.delete(record.name);
       return undefined;
     },
     onChanged: () => { changed += 1; },
@@ -199,6 +204,35 @@ describe("section routes", () => {
     expect(admin).not.toContain("Equipe B");
   });
 
+  it("#2045: two people may each own a team named Ops; a 409 never reveals the other", async () => {
+    const h = harness();
+    expect((await h.call(ALICE, "POST", "/api/org/sections", { name: "Ops" })).status).toBe(201);
+    const bob = await h.call(BOB, "POST", "/api/org/sections", { name: "Ops" });
+    expect(bob.status).toBe(201);
+    expect(bob.body.section).toMatchObject({ name: "Ops", ownerPrincipalId: BOB });
+    expect(h.channels.byNameForOwner("Ops", ALICE)?.ownerPrincipalId).toBe(ALICE);
+    expect(h.channels.byNameForOwner("Ops", BOB)?.ownerPrincipalId).toBe(BOB);
+    expect(h.channels.byNameForOwner("Ops", ALICE)?.id).not.toBe(h.channels.byNameForOwner("Ops", BOB)?.id);
+    // Alice's own duplicate is a 409; Bob's existing Ops is invisible to that check.
+    expect((await h.call(ALICE, "POST", "/api/org/sections", { name: "Ops" })).status).toBe(409);
+    const aliceNames = ((await h.call(ALICE, "GET", "/api/org/sections")).body.sections as { name: string; ownerPrincipalId: string }[])
+      .filter((row) => row.name === "Ops");
+    expect(aliceNames).toEqual([expect.objectContaining({ ownerPrincipalId: ALICE })]);
+  });
+
+  it("#2045: only the owner renames or deletes their team; an admin cannot", async () => {
+    const h = harness();
+    const id = (await h.call(ALICE, "POST", "/api/org/sections", { name: "Ventes" })).body.section.id as string;
+    h.channels.setMembers(id, [{ target: `user:${BOB}`, role: "moderator" }], "use");
+    expect((await h.call(BOB, "PATCH", `/api/org/sections/${id}`, { name: "Ventes QC" })).status).toBe(403);
+    expect((await h.call(ADMIN, "PATCH", `/api/org/sections/${id}`, { name: "Nope" })).status).toBe(403);
+    expect((await h.call(ADMIN, "DELETE", `/api/org/sections/${id}`)).status).toBe(403);
+    expect((await h.call(ALICE, "PATCH", `/api/org/sections/${id}`, { name: "Ventes QC" })).status).toBe(200);
+    expect(h.channels.byId(id)).toMatchObject({ name: "Ventes QC", ownerPrincipalId: ALICE });
+    expect((await h.call(ALICE, "DELETE", `/api/org/sections/${id}`)).status).toBe(200);
+    expect(h.channels.byId(id)).toBeNull();
+  });
+
   it("members and bot placement are gone: 410 sections_are_personal, nothing changes", async () => {
     const h = harness();
     const id = (await h.call(ALICE, "POST", "/api/org/sections", { name: "Ventes" })).body.section.id;
@@ -223,15 +257,14 @@ describe("section routes", () => {
     expect(h.channels.byName("Support")).not.toBeNull();
   });
 
-  it("rename and delete need channel.moderate and keep the record in step", async () => {
+  it("rename and delete keep the record in step for the owner only", async () => {
     const h = harness();
     const id = (await h.call(ALICE, "POST", "/api/org/sections", { name: "Ventes" })).body.section.id;
-    h.channels.setMembers(id, [{ target: `user:${BOB}`, role: "moderator" }], "use");
-    expect((await h.call(BOB, "PATCH", `/api/org/sections/${id}`, { name: "Ventes QC" })).status).toBe(200);
-    expect(h.channels.byId(id)).toMatchObject({ name: "Ventes QC", members: [{ target: `user:${BOB}` }] });
+    expect((await h.call(ALICE, "PATCH", `/api/org/sections/${id}`, { name: "Ventes QC" })).status).toBe(200);
+    expect(h.channels.byId(id)).toMatchObject({ name: "Ventes QC" });
     expect(h.sections.has("Ventes QC")).toBe(true);
     expect((await h.call(DAVE, "DELETE", `/api/org/sections/${id}`)).status).toBe(403);
-    expect((await h.call(ADMIN, "DELETE", `/api/org/sections/${id}`)).status).toBe(200);
+    expect((await h.call(ALICE, "DELETE", `/api/org/sections/${id}`)).status).toBe(200);
     expect(h.channels.byId(id)).toBeNull();
     expect(h.sections.has("Ventes QC")).toBe(false);
   });

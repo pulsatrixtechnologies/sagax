@@ -25,8 +25,8 @@ export interface SidebarSectionsRouteDeps {
   /** Throws Error & { status: 409 } when a team computer change is unsafe. */
   assertTeamComputerChangeIdle(before: BotRecord, after: BotRecord): void;
   teamComputerForSection(section: string): unknown;
-  deleteSection(section: string): string | null;
-  renameSection(section: string, nextName: string): string | null;
+  deleteSection(section: string, auth: RequestAuth): string | null;
+  renameSection(section: string, nextName: string, auth: RequestAuth): string | null;
   updateTeamMembers(
     section: string,
     addBotIds: string[],
@@ -37,8 +37,9 @@ export interface SidebarSectionsRouteDeps {
     name: string,
   ): { ok: true; bots: BotRecord[] } | { ok: false };
   wireBot(bot: BotRecord): unknown;
-  onSectionRemoved?(section: string): void;
-  onSectionRenamed?(from: string, to: string): void;
+  /** #2045: optional owner so another person's same-named team stays. */
+  onSectionRemoved?(section: string, auth: RequestAuth): void;
+  onSectionRenamed?(from: string, to: string, auth: RequestAuth): void;
 }
 
 export function createSidebarSectionsRoutes(deps: SidebarSectionsRouteDeps): RouteHandler {
@@ -65,15 +66,17 @@ export function createSidebarSectionsRoutes(deps: SidebarSectionsRouteDeps): Rou
         const parsed = z.object({ name: z.string().trim().min(1).max(60) }).strict().safeParse(await readBody(req));
         if (!parsed.success) return json(res, 400, { error: "Team name must be 1 to 60 characters" });
         nextName = parsed.data.name;
-        if (nextName !== section && deps.sections().includes(nextName)) return json(res, 409, { error: "A team with that name already exists" });
+        // #2045: conflict only against this person's teams. Another person's
+        // same name must never surface as "name taken".
+        if (nextName !== section && listed().includes(nextName)) return json(res, 409, { error: "A team with that name already exists" });
       }
       const error = nextName === null
-        ? deps.deleteSection(section)
-        : deps.renameSection(section, nextName);
+        ? deps.deleteSection(section, auth)
+        : deps.renameSection(section, nextName, auth);
       if (error) return json(res, error === "No such team" ? 404 : 409, { error });
       // Slice 4: the section's channel record follows its name.
-      if (nextName === null) deps.onSectionRemoved?.(section);
-      else deps.onSectionRenamed?.(section, nextName);
+      if (nextName === null) deps.onSectionRemoved?.(section, auth);
+      else deps.onSectionRenamed?.(section, nextName, auth);
       return json(res, 200, { sections: listed() });
     }
     if (method === "PUT" && path === "/api/sidebar-sections") {
@@ -111,9 +114,10 @@ export function createSidebarSectionsRoutes(deps: SidebarSectionsRouteDeps): Rou
       const botIds = [...new Set(parsed.data.botIds)];
       if (!name && !botIds.length) return json(res, 400, { error: "Team name is required" });
       if (unfileable(botIds)) return json(res, 403, { error: "Only your own bots go in your teams" });
-      // Someone else's team keeps its name: it is not joined by guessing it.
-      const created = Boolean(name) && !deps.sections().includes(name);
-      if (name && !created && !mine(name)) return json(res, 409, { error: "A team with that name already exists" });
+      // #2045: joining your own team is fine; creating the same display name
+      // as someone else is fine. Only your own duplicate name is a 409.
+      const own = Boolean(name) && mine(name);
+      const created = Boolean(name) && !own;
       for (const botId of botIds) {
         const bot = deps.bot(botId);
         if (bot) deps.assertTeamComputerChangeIdle(bot, { ...bot, section: name || undefined });

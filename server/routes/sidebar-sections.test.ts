@@ -14,8 +14,8 @@ function deps(over: Partial<SidebarSectionsRouteDeps> = {}): SidebarSectionsRout
     bot: (id) => (id === "b1" ? bot : undefined),
     assertTeamComputerChangeIdle: () => undefined,
     teamComputerForSection: () => undefined,
-    deleteSection: () => null,
-    renameSection: () => null,
+    deleteSection: (_section, _auth) => null,
+    renameSection: (_section, _next, _auth) => null,
     updateTeamMembers: () => ({ ok: true, bots: [bot] }),
     setBotsSection: () => ({ ok: true, bots: [bot] }),
     wireBot: (row) => ({ id: row.id, wired: true }),
@@ -66,9 +66,23 @@ describe("createSidebarSectionsRoutes", () => {
     const route = createSidebarSectionsRoutes(deps({ renameSection, onSectionRenamed }));
     const call = ctx("/api/sidebar-sections", "PATCH", { name: "Studio" }, "?section=Ops");
     await route(call.context);
-    expect(renameSection).toHaveBeenCalledWith("Ops", "Studio");
-    expect(onSectionRenamed).toHaveBeenCalledWith("Ops", "Studio");
+    expect(renameSection).toHaveBeenCalledWith("Ops", "Studio", auth);
+    expect(onSectionRenamed).toHaveBeenCalledWith("Ops", "Studio", auth);
     expect(call.sent[0]?.status).toBe(200);
+  });
+
+  it("#2045: another person's same team name is not a 409 on create", async () => {
+    const onSectionCreated = vi.fn();
+    const route = createSidebarSectionsRoutes(deps({
+      sections: () => ["Ops"],
+      sectionsFor: () => [],
+      onSectionCreated,
+      setBotsSection: () => ({ ok: true, bots: [bot] }),
+    }));
+    const call = ctx("/api/sidebar-sections", "POST", { name: "Ops", botIds: ["b1"] });
+    await route(call.context);
+    expect(call.sent[0]?.status).toBe(200);
+    expect(onSectionCreated).toHaveBeenCalled();
   });
 
   it("updates membership and wires bots", async () => {

@@ -97,9 +97,9 @@ struct CodingTerminalView: View {
 
     private func testLabel(_ tests: TestSummary) -> String {
         var parts: [String] = []
-        if tests.passed > 0 { parts.append("\(tests.passed) passed") }
-        if tests.failed > 0 { parts.append("\(tests.failed) failed") }
-        if tests.skipped > 0 { parts.append("\(tests.skipped) skipped") }
+        if tests.passed > 0 { parts.append(CodingChatRules.testsPassedLabel(tests.passed)) }
+        if tests.failed > 0 { parts.append(CodingChatRules.testsFailedLabel(tests.failed)) }
+        if tests.skipped > 0 { parts.append(CodingChatRules.testsSkippedLabel(tests.skipped)) }
         return parts.joined(separator: " · ")
     }
 

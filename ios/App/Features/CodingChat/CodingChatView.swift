@@ -220,7 +220,9 @@ struct CodingChatView: View {
                         }
                     }
                     if let tests = snapshot.tests {
-                        Text(verbatim: "· \(tests.passed) passed\(tests.failed > 0 ? ", \(tests.failed) failed" : "")")
+                        let passed = CodingChatRules.testsPassedLabel(tests.passed)
+                        let failed = tests.failed > 0 ? ", \(CodingChatRules.testsFailedLabel(tests.failed))" : ""
+                        Text(verbatim: "· \(passed)\(failed)")
                             .font(Theme.Font.label)
                             .foregroundStyle(tests.failed > 0 ? Theme.danger : Theme.textSecondary)
                     }
@@ -328,7 +330,7 @@ struct CodingChatView: View {
                     .accessibilityIdentifier("coding-chat-continue")
                 }
                 if composing {
-                    Button("Cancel") {
+                    Button(CodingChatRules.cancelLabel) {
                         composing = false
                         draft = ""
                         sendFailed = false

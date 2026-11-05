@@ -48,13 +48,13 @@ struct CodingDiffView: View {
 
             if expanded {
                 if file.binary == true {
-                    Text("Binary file")
+                    Text(verbatim: CodingChatRules.binaryFile)
                         .font(Theme.Font.label)
                         .foregroundStyle(Theme.textSecondary)
                         .padding(.horizontal, 10)
                         .padding(.bottom, 10)
                 } else if file.hunks.isEmpty {
-                    Text("No line changes shown.")
+                    Text(verbatim: CodingChatRules.noLineChanges)
                         .font(Theme.Font.label)
                         .foregroundStyle(Theme.textTertiary)
                         .padding(.horizontal, 10)
@@ -67,7 +67,7 @@ struct CodingDiffView: View {
                                 case let .line(line):
                                     diffLine(line)
                                 case let .skip(count):
-                                    Text(verbatim: "… \(count) unchanged lines")
+                                    Text(verbatim: CodingChatRules.unchangedLines(count))
                                         .font(Theme.Font.label)
                                         .foregroundStyle(Theme.textTertiary)
                                         .padding(.horizontal, 10)

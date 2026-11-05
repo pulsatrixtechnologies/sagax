@@ -1,14 +1,15 @@
 /** Isolated gallery for Playwright screenshots of the composer's controls
  * after the reference design's prompt bar. Not shipped in the app.
  * ?skin=<id>&lang=<code>&color=<bot color>&name=<bot name>
- * &state=rest|typed|dictation|menu&mode=after|before&lines=1|3&dot=1
+ * &state=rest|typed|dictation|menu|busy&mode=after|before&lines=1|3&dot=1
  * `before` draws the row as origin/main had it (paperclip, approval hand,
- * workspace globe, ringed mic, ink call button), for the side-by-side. */
+ * workspace globe, ringed mic, ink call button), for the side-by-side.
+ * `busy` shows Stop beside the mic while a turn runs (#2042). */
 import { StrictMode, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { AudioLines, ChevronDown, Globe, Hand, Mic, Paperclip } from "lucide-react";
+import { AudioLines, ChevronDown, Globe, Hand, Mic, Paperclip, Square } from "lucide-react";
 import { MentionTextarea } from "../components/MentionTextarea";
-import { ATTACH_ICON, ComposerCtaSeat, ComposerMicButton, ComposerPlusMenu, ComposerSendButton, DictationChip, RecordMark } from "../components/ComposerControls";
+import { ATTACH_ICON, ComposerCtaSeat, ComposerMicButton, ComposerPlusMenu, ComposerSendButton, DictationChip, RecordMark, SECONDARY_CIRCLE } from "../components/ComposerControls";
 import { cn } from "../lib/cn";
 import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
@@ -26,6 +27,7 @@ const name = params.get("name") ?? "Harrie";
 const lines = Number(params.get("lines") ?? "1");
 // the warning dot of a Voice button whose voice is not set up yet
 const dot = params.get("dot") === "1";
+const busy = state === "busy";
 const typedText = lines > 1
   ? Array.from({ length: lines }, (_, i) => `Ligne ${i + 1} du message`).join("\n")
   : state === "typed" ? "Peux-tu vérifier la sauvegarde de ce soir ?" : state === "dictation" ? "Rappelle-moi d'appeler" : "";
@@ -92,6 +94,17 @@ function After() {
         </div>
         <RealField value={typedText} />
         <div data-composer-actions className="composer-band flex items-center gap-1 @max-[30rem]/composer:ml-auto">
+          {busy && !dictating && (
+            <button
+              type="button"
+              aria-label={t("chat.stopTurn")}
+              title={t("chat.stop")}
+              data-composer-stop=""
+              className={SECONDARY_CIRCLE}
+            >
+              <Square size={14} className="fill-current" aria-hidden="true" />
+            </button>
+          )}
           <ComposerMicButton onClick={() => {}} hidden={dictating} shortcut="⌘D" />
           {dictating ? (
             <DictationChip seconds={seconds} levels={[0.25, 0.6, 0.95, 0.5, 0.35]} processing={false} onStop={() => {}} onCancel={() => {}} onSend={() => {}} sendTone={tone} />

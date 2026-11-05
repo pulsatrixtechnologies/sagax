@@ -1,5 +1,5 @@
 import type { RefObject } from "react";
-import { ArrowUp, Clock } from "lucide-react";
+import { ArrowUp, Clock, Square } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { sendBlockLocks, sendBlockStops, type SendBlock } from "@/lib/send-state";
 import type { Bot, Group } from "@/state/store";
@@ -12,6 +12,7 @@ import {
   ComposerMicButton,
   ComposerSendButton,
   DictationChip,
+  SECONDARY_CIRCLE,
   VoiceNoteChip,
 } from "../ComposerControls";
 import type { botCtaColors } from "@/lib/voice-cta";
@@ -47,6 +48,7 @@ export function ComposerActionBar({
   sendBlock,
   busy,
   canSteer,
+  interruptTurn,
   sendLabelFor,
   sendTitleFor,
   nudgePeer,
@@ -91,6 +93,8 @@ export function ComposerActionBar({
   sendBlock: unknown;
   busy: boolean;
   canSteer: boolean;
+  /** Stops this conversation's running turn (same path as Escape / typed stop). */
+  interruptTurn: () => void;
   sendLabelFor: () => string;
   sendTitleFor: () => string;
   nudgePeer?: { id: string; name: string; threadId?: string } | null;
@@ -104,8 +108,20 @@ export function ComposerActionBar({
         menuControl={modelMenu}
         fallbackAnchor={() => composerRowRef.current?.querySelector<HTMLElement>("[data-composer-plus]") ?? null} />
     )}
-    {/* No Stop button: Escape in the empty field, or a message that
-        only says "stop", ends the running turn. */}
+    {/* Stop while the turn runs. Escape in an empty field, or a message that
+        only says "stop" / "arrête", still ends it the same way (#2042). */}
+    {busy && !locked && !dictating && !voiceNoting && (
+      <button
+        type="button"
+        onClick={interruptTurn}
+        aria-label={t("chat.stopTurn")}
+        title={t("chat.stop")}
+        data-composer-stop=""
+        className={SECONDARY_CIRCLE}
+      >
+        <Square size={14} className="fill-current" aria-hidden="true" />
+      </button>
+    )}
   {!locked && (
     <ComposerMicButton
       onClick={clickMic}

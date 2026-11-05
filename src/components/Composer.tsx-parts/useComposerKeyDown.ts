@@ -130,8 +130,8 @@ export function useComposerKeyDown({
       onClearReply();
       return;
     }
-    // Escape in an empty composer stops the running turn (there is no
-    // Stop button: typing "stop" works too)
+    // Escape in an empty composer stops the running turn (same path as the
+    // Stop button and a message that only says "stop")
     if (e.key === "Escape" && busy && !locked && !recording && !hasContent) {
       e.preventDefault();
       interruptTurn();

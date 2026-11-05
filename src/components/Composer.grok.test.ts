@@ -151,11 +151,16 @@ describe("composer controls (Grok Bot's prompt bar)", () => {
     expect($("[data-composer-emoji]")).toBeNull();
   });
 
-  it("has no Stop button; a message that only says stop, or Escape in the empty field, stops the turn", () => {
+  it("shows Stop while the turn runs; Escape in the empty field still stops it (#2042)", () => {
     const busy: Bot = { ...bot("teal"), busy: true, tasks: [{ ...bot("teal").tasks![0]!, busy: true, activity: "working" }] };
     render(createElement(Composer, { bot: busy }));
-    expect($('[aria-label="Stop this turn"]')).toBeNull();
-    expect(host.querySelector(".lucide-square")).toBeNull();
+    const stop = $('[aria-label="Stop this turn"]')!;
+    expect(stop).not.toBeNull();
+    expect(stop.getAttribute("data-composer-stop")).toBe("");
+    expect(host.querySelector(".lucide-square")).not.toBeNull();
+    click(stop);
+    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "interrupt", botId: "bot", threadId: "selected" });
+    fixture.dispatch.mockClear();
     // #1481: in the bot's own conversation the stop word is sent as is; the
     // server stops the turn at once, keeps the words and answers "Stopped".
     type("Arrête !");
@@ -167,6 +172,12 @@ describe("composer controls (Grok Bot's prompt bar)", () => {
     fixture.dispatch.mockClear();
     flushSync(() => textarea().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
     expect(fixture.dispatch).toHaveBeenCalledWith({ type: "interrupt", botId: "bot", threadId: "selected" });
+  });
+
+  it("hides Stop when the conversation is idle", () => {
+    render(createElement(Composer, { bot: bot("teal") }));
+    expect($('[aria-label="Stop this turn"]')).toBeNull();
+    expect($("[data-composer-stop]")).toBeNull();
   });
 
   it("leaves Teach a task out when the bot cannot draft a skill", () => {

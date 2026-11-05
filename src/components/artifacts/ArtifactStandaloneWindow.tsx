@@ -7,14 +7,14 @@
 // and has its own store, like any other tab of the app. Closing the window
 // docks the artifact; Close window does the same.
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { LoaderCircle, RefreshCw, X } from "lucide-react";
+import { LoaderCircle, Maximize2, RefreshCw, X } from "lucide-react";
 
 import { StoreProvider, useStore } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { effectiveLanguage, useLanguageChoice } from "@/lib/language-preference";
 import { setLocale, t } from "@/lib/i18n";
 import { refreshArtifact, useArtifact, useArtifactWatch } from "@/lib/artifacts";
-import { ArtifactFrame, ArtifactFullscreenHost } from "./ArtifactFrame";
+import { ArtifactFrame, ArtifactFullscreenHost, enterArtifactFullscreen } from "./ArtifactFrame";
 import { PageSurface } from "../PageViewer";
 import { pageIdOfWindow } from "@/lib/page-windows";
 import { ArtifactStatusLine } from "./ArtifactsSection";
@@ -30,7 +30,9 @@ export function ArtifactWindowBody({ data }: { data: ArtifactWindowData }) {
   const [refreshing, setRefreshing] = useState(false);
   return (
     <div className="flex size-full flex-col" data-artifact-window={data.artifactId}>
-      <div className="flex shrink-0 items-center gap-1 border-b border-hairline/30 px-2 py-1">
+      {/* Full screen lives in the chrome (#2043): never over the page content.
+          The click also asks the OS for full screen while the gesture is live. */}
+      <div data-artifact-window-chrome className="flex shrink-0 items-center gap-1 border-b border-hairline/30 px-2 py-1">
         <span className="min-w-0 flex-1">{artifact && <ArtifactStatusLine artifact={{ ...artifact, ...(artifact.data ? { dataAt: artifact.data.at } : {}) }} />}</span>
         {artifact?.source && (
           <button
@@ -45,6 +47,18 @@ export function ArtifactWindowBody({ data }: { data: ArtifactWindowData }) {
             }}
           >
             <RefreshCw size={13} aria-hidden="true" className={cn(refreshing && "animate-spin motion-reduce:animate-none")} />
+          </button>
+        )}
+        {artifact && (
+          <button
+            type="button"
+            className={TOOL}
+            data-artifact-fullscreen
+            aria-label={t("artifact.fullscreen")}
+            title={t("artifact.fullscreen")}
+            onClick={() => enterArtifactFullscreen(artifact)}
+          >
+            <Maximize2 size={13} aria-hidden="true" />
           </button>
         )}
         <button
@@ -69,13 +83,12 @@ export function ArtifactWindowBody({ data }: { data: ArtifactWindowData }) {
           </span>
         )}
       </div>
-      {/* the frame's Full screen button draws here: an own window has no
-          ArtifactsHost, and the window itself goes full screen (#1495) */}
+      {/* Own window has no ArtifactsHost; this host draws the layer and the
+          window itself goes full screen (#1495, #2043). */}
       <ArtifactFullscreenHost windowFullscreen />
     </div>
   );
 }
-
 const ID = /^[a-zA-Z0-9:_-]{1,128}$/;
 
 function subscribeHash(listener: () => void) {

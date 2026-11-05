@@ -46,25 +46,38 @@ function subscribeFullscreen(listener: () => void): () => void {
 }
 const currentFullscreen = () => fullscreenArtifact;
 
-/** In an artifact's own window the layer also takes the screen (#1495): the
- * window asks the system for full screen, and leaving it (Escape, the window's
- * own control) closes the layer. Where the system refuses, the layer still
- * fills the window. */
+// Own-window hosts ask the OS for full screen on enter (#1495, #2043). The
+// flag is set when ArtifactFullscreenHost mounts with windowFullscreen.
+let osFullscreenOnEnter = false;
+
+/** Open the full-screen layer. When the host is an artifact's own window,
+ * ask the OS for full screen in the same click (user gesture): a request from
+ * a later effect is refused, and only the in-window overlay would remain
+ * (#2043). Where the system refuses, the layer still fills the window. */
+export function enterArtifactFullscreen(artifact: FullscreenArtifact): void {
+  if (osFullscreenOnEnter && typeof document !== "undefined" && !document.fullscreenElement) {
+    const root = document.documentElement;
+    if (typeof root.requestFullscreen === "function") {
+      void Promise.resolve(root.requestFullscreen()).catch(() => {});
+    }
+  }
+  setFullscreenArtifact(artifact);
+}
+
+/** In an artifact's own window the layer tracks the OS full screen (#1495):
+ * leaving it (Escape, the window's own control) closes the layer. The enter
+ * request itself is made from the click (enterArtifactFullscreen, #2043). */
 function useWindowFullscreen(enabled: boolean, onClose: () => void): void {
   const close = useRef(onClose);
   close.current = onClose;
   useEffect(() => {
     if (!enabled || typeof document === "undefined") return;
-    const root = document.documentElement;
-    let entered = false;
+    let entered = Boolean(document.fullscreenElement);
     const onChange = () => {
       if (document.fullscreenElement) entered = true;
       else if (entered) close.current();
     };
     document.addEventListener("fullscreenchange", onChange);
-    if (!document.fullscreenElement && typeof root.requestFullscreen === "function") {
-      void Promise.resolve(root.requestFullscreen()).catch(() => {});
-    }
     return () => {
       document.removeEventListener("fullscreenchange", onChange);
       if (document.fullscreenElement && typeof document.exitFullscreen === "function") {
@@ -73,7 +86,6 @@ function useWindowFullscreen(enabled: boolean, onClose: () => void): void {
     };
   }, [enabled]);
 }
-
 /** The full-screen layer is a modal dialog: Escape and Tab are handled by useModalDialog. */
 function FullscreenLayer({ artifact, onClose, windowFullscreen = false }: { artifact: FullscreenArtifact; onClose: () => void; windowFullscreen?: boolean }) {
   const layer = useRef<HTMLDivElement>(null);
@@ -97,17 +109,19 @@ function FullscreenLayer({ artifact, onClose, windowFullscreen = false }: { arti
  * opened it. `windowFullscreen`: the page is the artifact's own window, so the
  * window itself goes full screen too. */
 export function ArtifactFullscreenHost({ windowFullscreen = false }: { windowFullscreen?: boolean } = {}) {
+  // Sync so a click in the same tick as mount still sees the flag (#2043).
+  osFullscreenOnEnter = windowFullscreen;
+  useEffect(() => () => { osFullscreenOnEnter = false; }, [windowFullscreen]);
   const artifact = useSyncExternalStore(subscribeFullscreen, currentFullscreen, currentFullscreen);
   if (!artifact || typeof document === "undefined") return null;
   return createPortal(<FullscreenLayer artifact={artifact} windowFullscreen={windowFullscreen} onClose={() => setFullscreenArtifact(null)} />, document.body);
 }
-
 export function ArtifactFrame({ artifact, fill = false, className, bare = false }: {
   artifact: Pick<Artifact, "id" | "title" | "html" | "data" | "rev">;
   /** Take the whole box (a window, a dialog); otherwise grow with the widget. */
   fill?: boolean;
   className?: string;
-  /** Inside the full-screen layer: no second full-screen button. */
+  /** Inside the full-screen layer: skip the open-slot rev sync (the layer owns it). */
   bare?: boolean;
 }) {
   const holder = useRef<HTMLDivElement>(null);
@@ -176,16 +190,6 @@ export function ArtifactFrame({ artifact, fill = false, className, bare = false 
     <div ref={holder} dir="ltr" data-artifact-frame={artifact.id} className={cn("relative min-w-0", fill && "size-full", className)}>
       {notice && (
         <p role="alert" data-artifact-problem={problem} className="px-2 py-1.5 text-[12px] text-warning">{notice}</p>
-      )}
-      {!bare && !blocked && (
-        <button
-          type="button"
-          data-artifact-fullscreen
-          onClick={() => setFullscreenArtifact(artifact)}
-          className="absolute end-1 top-1 z-10 rounded-md bg-panel/90 px-2 py-0.5 text-[11px] text-ink-secondary hover:text-ink"
-        >
-          {t("artifact.fullscreen")}
-        </button>
       )}
       {blocked ? (
         <p role="alert" className="py-2 text-[12px] text-warning">{t("rich.widget.blocked")}</p>

@@ -68,6 +68,22 @@ export function toolFailurePreview(value: unknown): string | undefined {
   return (words ? toolDetailPreview(words) : undefined) ?? toolDetailPreview(value);
 }
 
+/**
+ * The failure payload whose own words win. Later candidates stand in when an
+ * earlier one is null, empty, or only a code with no sentence (2026-11-05,
+ * #1988: Codex mcpToolCall with `error: ""` / `{}` hid `result.content` /
+ * `structuredContent`, so the step card read "returned no error message").
+ */
+export function toolFailureSource(...candidates: unknown[]): unknown {
+  for (const candidate of candidates) {
+    if (toolFailureText(candidate)) return candidate;
+  }
+  for (const candidate of candidates) {
+    if (candidate !== undefined && candidate !== null && candidate !== "") return candidate;
+  }
+  return undefined;
+}
+
 /** The whole result of a ConnectWise call, for its in-chat widget (the
  * preview above is cut at 6,000 characters). Server-private: index.ts reads
  * it when the call completes and drops it before any broadcast or log. */

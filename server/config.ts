@@ -2183,6 +2183,13 @@ function injectedEnvironment(cfg: AppConfig, instanceId: string, driver: string)
   // organization server it is the organization's key for Grok Build, after
   // each person's own sign-in and key (server/engines/engine-credentials.ts).
   if (driver === "grokAgent" && cfg.xai?.key && process.env.SAGAX_IDENTITY?.trim().toLowerCase() === "perspicax") environment.set("XAI_API_KEY", cfg.xai.key);
+  // #2024: pi on an organization server, as Grok Build: the workspace keys
+  // are the organization's, under the names pi reads, after each person's
+  // own key (server/engines/engine-credentials.ts). A turn on a person's own
+  // key never sees them (drivers/pi.ts piEnvironment strips them).
+  if (driver === "piAgent" && process.env.SAGAX_IDENTITY?.trim().toLowerCase() === "perspicax") {
+    for (const [name, key] of Object.entries(piOrgKeys(cfg))) environment.set(name, key);
+  }
   // A provider key belongs only to its API instance. The retired global
   // switch is read once by the saved-selection migration, never at dispatch.
   const explicitApi = cfg.instances?.[instanceId];
@@ -2226,8 +2233,23 @@ export function isCompatServerId(instanceId: string): boolean {
   return instanceId.startsWith(COMPAT_SERVER_PREFIX) && instanceId.length > COMPAT_SERVER_PREFIX.length;
 }
 
+/** #2024: the workspace keys pi reads natively, by pi's variable names. */
+export const PI_ORG_KEY_VARIABLES = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "XAI_API_KEY", "MISTRAL_API_KEY", "CEREBRAS_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY"] as const;
+function piOrgKeys(cfg: AppConfig): Partial<Record<(typeof PI_ORG_KEY_VARIABLES)[number], string>> {
+  const keys: Partial<Record<(typeof PI_ORG_KEY_VARIABLES)[number], string>> = {};
+  if (cfg.anthropic?.key) keys.ANTHROPIC_API_KEY = cfg.anthropic.key;
+  if (cfg.openai?.key) keys.OPENAI_API_KEY = cfg.openai.key;
+  if (cfg.xai?.key) keys.XAI_API_KEY = cfg.xai.key;
+  if (cfg.mistral?.key) keys.MISTRAL_API_KEY = cfg.mistral.key;
+  if (cfg.cerebras?.key) keys.CEREBRAS_API_KEY = cfg.cerebras.key;
+  if (cfg.groq?.key) keys.GROQ_API_KEY = cfg.groq.key;
+  if (cfg.openrouter?.key) keys.OPENROUTER_API_KEY = cfg.openrouter.key;
+  return keys;
+}
+
 /** The credential variables each key-backed driver reads. */
 const DRIVER_CREDENTIAL_VARIABLES: Record<string, readonly string[]> = {
+  piAgent: PI_ORG_KEY_VARIABLES,
   claudeAgent: ["ANTHROPIC_API_KEY"],
   mistral: ["MISTRAL_API_KEY"],
   grok: ["XAI_API_KEY"],

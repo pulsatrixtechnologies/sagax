@@ -2060,7 +2060,8 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     await recorder.until((e) => e.type === "turn.completed");
     const seen = JSON.parse(readFileSync(dump, "utf8"));
     expect(seen.mcpConfig.mcpServers.agents.env.SAGAX_DEFER_KNOWN_USE).toBeUndefined();
-    expect(seen.mcpConfig.mcpServers.agents.env.SAGAX_DEFER_RARE_TOOLS).toBeUndefined();
+    // a compact turn defers its rare tools to ToolSearch by name (#2041); known-use pins stay out
+    expect(seen.mcpConfig.mcpServers.agents.env.SAGAX_DEFER_RARE_TOOLS).toBe("1");
     expect(JSON.parse(seen.mcpConfig.mcpServers.agents.env.SAGAX_COMPACT_TOOLS)).toEqual({ core: "used", pinned: ["ask_bot"] });
   });
 

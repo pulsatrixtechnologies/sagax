@@ -57,6 +57,8 @@ export type BotPatch = Partial<
   >
 > & {
   computer?: Bot["computer"] | null;
+  /** #2048: null clears the remembered publish target. */
+  pageTargetDefault?: string | null;
   acknowledgeLocalAuto?: boolean;
   confirmFullAccess?: boolean;
   acknowledgePeerScope?: boolean;

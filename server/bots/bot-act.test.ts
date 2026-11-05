@@ -8,7 +8,7 @@ function facts(patch: Partial<TurnFacts> = {}): TurnFacts {
   return { automation: false, guest: false, requestUsable: true, senderUnproven: false, provenPerson: person, sharedServer: false, ...patch };
 }
 
-function harness(options: { mode?: "ask" | "edits" | "auto" | "full" | "custom"; session?: { id: string; scopes: Array<"admin" | "client"> } | null; routeStatus?: (path: string) => number; parked?: (target: { botId?: string; groupId?: string; threadId?: string }) => boolean } = {}) {
+function harness(options: { mode?: "ask" | "edits" | "auto" | "full" | "custom"; session?: { id: string; scopes: Array<"admin" | "client"> } | null; routeStatus?: (path: string) => number; markActSend?: (sendId: string) => void; onRoute?: (body: unknown) => void } = {}) {
   const performed: Array<{ actor: PerformActor; method?: string; path?: string }> = [];
   const broadcasts: Array<{ audience: string; command: string; input: Record<string, unknown> }> = [];
   const cards: Array<{ requestId: string; summary: string; rule?: unknown; answered?: "allow" | "deny"; expired?: true }> = [];
@@ -20,11 +20,12 @@ function harness(options: { mode?: "ask" | "edits" | "auto" | "full" | "custom";
     now: () => now,
     newId: () => `req-${++seq}`,
     neededScope: (_method, path) => path.startsWith("/api/admin") ? "admin" : "client",
-    ...(options.parked ? { awaitsPersonAnswer: options.parked } : {}),
+    ...(options.markActSend ? { markActSend: options.markActSend } : {}),
     operatorAudience: () => "operator",
     sessionForPerson: () => options.session === undefined ? { id: "wide", scopes: ["client"] } : options.session,
     async performRoute(actor, target) {
       performed.push({ actor, method: target.method, path: target.path });
+      options.onRoute?.(target.body);
       if (holdPerform) return new Promise((resolve) => { holdPerform = { resolve }; });
       const status = options.routeStatus?.(target.path) ?? 200;
       return { status, text: status < 400 ? "ok" : "This bot is not yours." };
@@ -228,40 +229,37 @@ describe("bot act", () => {
   });
 });
 
-describe("a parked question is the person's to answer (0.8.46)", () => {
-  // GOX 2026-11-04: another bot's act sent a line, as the person, into work
+describe("a bot's act line is never the person's answer (0.8.46)", () => {
+  // 2026-11-04: another bot's act sent a line, as the person, into work
   // parked on the person's question; the runtime took it as their answer.
-  const parked = (target: { botId?: string; threadId?: string }) => target.botId === "waiting-bot" && (target.threadId ?? "main") === "work-1";
+  // The send still goes through, unchanged but for a send id the runtime
+  // knows is the bot's (no refusal, no pre-check).
   const base = { facts: facts(), threadId: "t", botId: "b", botName: "Ada", botColor: "green", mode: "full" as const };
-  it.each([
-    { ui: "send", input: { botId: "waiting-bot", threadId: "work-1", text: "Bascule-la sur un autre moteur." } },
-    { ui: "editMessage", input: { botId: "waiting-bot", threadId: "work-1", messageId: "m1", text: "Oui." } },
-    { method: "POST", path: "/api/bots/waiting-bot/messages", body: { threadId: "work-1", text: "Oui." } },
-  ])("refuses a line into the waiting conversation, at every level: %j", async (raw) => {
-    const { service, performed, broadcasts, cards } = harness({ parked });
-    const refused = await service.handle({ ...base, raw });
-    expect(refused.status).toBe(409);
-    expect(String(refused.body.error)).toContain("person's own answer");
-    expect(performed).toEqual([]);
-    expect(broadcasts).toEqual([]);
-    expect(cards).toEqual([]);
-  });
-  it("still sends into a conversation that waits on nobody", async () => {
-    const { service, broadcasts } = harness({ parked });
-    const sent = await service.handle({ ...base, raw: { ui: "send", input: { botId: "waiting-bot", threadId: "other", text: "Salut." } } });
+  it("tags a screen send with a known send id and still sends it", async () => {
+    const marked: string[] = [];
+    const { service, broadcasts } = harness({ markActSend: (id) => marked.push(id) });
+    const sent = await service.handle({ ...base, raw: { ui: "send", input: { botId: "waiting-bot", threadId: "work-1", text: "Oui." } } });
     expect(sent.status).toBe(200);
-    expect(broadcasts.map((row) => row.command)).toEqual(["send"]);
+    expect(broadcasts).toHaveLength(1);
+    expect(broadcasts[0]!.command).toBe("send");
+    expect(broadcasts[0]!.input).toMatchObject({ botId: "waiting-bot", threadId: "work-1", text: "Oui.", sendId: marked[0] });
+    expect(marked[0]).toMatch(/^[A-Za-z0-9_-]{16,80}$/);
   });
-  it("refuses a held send the person allows after the work parked, and expires its card", async () => {
-    let waiting = false;
-    const { service, performed, broadcasts, cards, answerer } = harness({ parked: (target) => waiting && parked(target) });
-    const held = await service.handle({ ...base, mode: "ask", raw: { ui: "send", input: { botId: "waiting-bot", threadId: "work-1", text: "Oui." } } });
-    expect(held.body.held).toBe(true);
-    waiting = true;
-    const answer = await service.confirm({ threadId: "t", requestId: cards[0]!.requestId, behavior: "allow", answerer: answerer(), sharedServer: false });
-    expect(answer).toMatchObject({ handled: true, status: 409 });
-    expect(cards[0]?.expired).toBe(true);
-    expect(performed).toEqual([]);
-    expect(broadcasts).toEqual([]);
+  it("keeps the bot's own send id and marks it", async () => {
+    const marked: string[] = [];
+    const { service, broadcasts } = harness({ markActSend: (id) => marked.push(id) });
+    await service.handle({ ...base, raw: { ui: "send", input: { botId: "waiting-bot", text: "Oui.", sendId: "bot-chosen-send-id-01" } } });
+    expect(marked).toEqual(["bot-chosen-send-id-01"]);
+    expect(broadcasts[0]!.input.sendId).toBe("bot-chosen-send-id-01");
+  });
+  it("tags a message route send and leaves other acts alone", async () => {
+    const marked: string[] = [];
+    const bodies: unknown[] = [];
+    const { service } = harness({ markActSend: (id) => marked.push(id), onRoute: (body) => bodies.push(body) });
+    await service.handle({ ...base, raw: { method: "POST", path: "/api/bots/waiting-bot/messages", body: { threadId: "work-1", text: "Oui." } } });
+    await service.handle({ ...base, raw: { method: "POST", path: "/api/bots", body: { name: "Bea" } } });
+    expect(marked).toHaveLength(1);
+    expect(bodies[0]).toMatchObject({ threadId: "work-1", text: "Oui.", sendId: marked[0] });
+    expect(bodies[1]).toEqual({ name: "Bea" });
   });
 });

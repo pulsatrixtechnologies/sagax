@@ -374,6 +374,7 @@ export type StartTurnHost = {
   settleDirectCoordination: any,
   settleDirectFollowup: any,
   settleInputRequests: any,
+  isBotActSend: any,
   settleTrackedRequest: any,
   settlingResourceOwners: any,
   setupModeActive: any,

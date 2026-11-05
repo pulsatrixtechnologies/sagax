@@ -13082,6 +13082,19 @@ const originApprovals = createOriginApprovals({
   },
   withdraw: (threadId, requestId) => withdrawApprovalNotice(threadId, requestId)
 });
+/** 0.8.46: send ids of lines a bot's act wrote as the person (bot-act.ts
+ * tagActSend). Such a line is delivered as before but never answers a
+ * question the runtime parked on the person. In memory, ten minutes. */
+const botActSendIds = new Map<string, number>();
+function markBotActSend(sendId: string): void {
+  const now = Date.now();
+  for (const [id, at] of botActSendIds) if (now - at > 10 * 60_000) botActSendIds.delete(id); else break;
+  botActSendIds.set(sendId, now);
+  if (botActSendIds.size > 5_000) botActSendIds.delete(botActSendIds.keys().next().value!);
+}
+function isBotActSend(sendId: string | undefined): boolean {
+  return Boolean(sendId && botActSendIds.has(sendId));
+}
 /** The input-request cards still open per waiting work thread, so the answer
  * marks them answered (in memory: a restart parks again and re-posts). */
 const openInputRequests = new Map<string, Array<{ threadId: string; messageId: string }>>();
@@ -34762,14 +34775,9 @@ let botActService: BotActService | null = null;
 function botActs(): BotActService {
   botActService ??= createBotActService({
     now: () => Date.now(),
-    // 0.8.46: a line a bot sends as the person into work parked on the
-    // person's question would answer it for them (an act runs as the person).
-    awaitsPersonAnswer: ({ botId, groupId, threadId }) => {
-      const thread = threadId
-        ?? (botId ? botMainThread(botId) ?? store.bot(botId)?.threadId : undefined)
-        ?? (groupId ? store.group(groupId)?.threadId : undefined);
-      return Boolean(thread && coordinator.awaitingAnswer(thread));
-    },
+    // 0.8.46: a line a bot's act writes as the person is never taken as the
+    // person's own answer to a parked question (start-turn-prepare-admit.ts).
+    markActSend: (sendId) => markBotActSend(sendId),
     newId: () => randomUUID(),
     neededScope: (method, path) => requiredScope(method, path, {
       sharedComputers: sharedComputersEnabled(cfg),
@@ -46730,6 +46738,7 @@ const startTurnRunner = createStartTurn({
   settleDirectCoordination,
   settleDirectFollowup,
   settleInputRequests,
+  isBotActSend,
   settleTrackedRequest,
   settlingResourceOwners,
   setupModeActive,

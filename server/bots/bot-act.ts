@@ -99,10 +99,10 @@ export type BotActDeps = {
   now: () => number;
   newId: () => string;
   neededScope: (method: string, path: string) => "admin" | "client";
-  /** 0.8.46: a conversation whose work is parked on the person's answer.
-   * A bot's act never writes a line there: that line would answer the
-   * person's question for them. */
-  awaitsPersonAnswer?: (target: { botId?: string; groupId?: string; threadId?: string }) => boolean;
+  /** 0.8.46: the send id of a line a bot's act writes as the person. The
+   * line goes through as before; the runtime only never takes it as the
+   * person's own answer to a parked question. */
+  markActSend?: (sendId: string) => void;
   operatorAudience: () => string;
   sessionForPerson: (personKey: string) => LiveSession | null;
   /** `confirmed`: this replay follows that person's own Allow on a planned
@@ -170,9 +170,6 @@ export type BotActService = {
     maxChars?: number;
   }): Promise<BotActResult>;
 };
-
-/** 0.8.46: a parked question is answered by the person only. */
-export const PERSON_ANSWER_ONLY = "This conversation waits for the person's own answer to a question: a bot never answers it, and never writes there while it waits. Tell the person in your reply; they answer the question card themselves.";
 
 export function createBotActService(deps: BotActDeps): BotActService {
   const pending = new Map<string, Pending>();
@@ -257,8 +254,6 @@ export function createBotActService(deps: BotActDeps): BotActService {
       }
       const decision = decideBotAct({ raw: input.raw, mode: input.mode, scopes, neededScope: deps.neededScope });
       if (!decision.ok) return refuse(decision.status, decision.error);
-      const writesInto = actMessageTarget(decision.target);
-      if (writesInto && deps.awaitsPersonAnswer?.(writesInto)) return refuse(409, PERSON_ANSWER_ONLY);
       if (decision.effect === "run") return run(performActor, decision.target);
       const classes = actClassesOf(decision.target);
       const candidate = actRuleCandidate(decision.target, classes, describeOf);
@@ -303,12 +298,6 @@ export function createBotActService(deps: BotActDeps): BotActService {
         if (!item.rule || !deps.saveActRule) return { handled: true, status: 409, body: { error: "This approval cannot be remembered as a rule." } };
         const refused = deps.saveActRule({ person: replay.kind === "person" ? replay.personKey : null, botId: item.botId, candidate: item.rule });
         if (refused) return { handled: true, status: refused.status, body: { error: refused.error } };
-      }
-      const heldInto = actMessageTarget(item.target);
-      if (heldInto && deps.awaitsPersonAnswer?.(heldInto)) {
-        pending.delete(item.requestId);
-        deps.patchCard(item.threadId, item.messageId, { expired: true });
-        return { handled: true, status: 409, body: { error: PERSON_ANSWER_ONLY } };
       }
       item.running = true;
       try {
@@ -385,6 +374,7 @@ export function createBotActService(deps: BotActDeps): BotActService {
   }
 
   async function run(actor: PerformActor, target: ActTarget, audience?: string, confirmed?: { personKey: string | null; classes: readonly string[]; primary?: { botId: string; botName: string; messageId: string } }, maxChars = 8000): Promise<BotActResult> {
+    target = tagActSend(target);
     if (target.kind === "ui") {
       deps.broadcastUi(audience ?? (actor.kind === "person" ? actor.personKey : deps.operatorAudience()), target.command, target.input);
       return { status: 200, body: { text: "Done.", status: 200 } };
@@ -397,6 +387,19 @@ export function createBotActService(deps: BotActDeps): BotActService {
     } catch {
       return { status: 502, body: { error: "The action could not be completed." } };
     }
+  }
+
+  /** A line the act writes carries a send id the runtime knows is the bot's,
+   * never the person's answer (0.8.46). The send itself is unchanged. */
+  function tagActSend(target: ActTarget): ActTarget {
+    if (!deps.markActSend || !actMessageTarget(target)) return target;
+    const given = target.kind === "ui" ? target.input.sendId
+      : target.body && typeof target.body === "object" && !Array.isArray(target.body) ? (target.body as Record<string, unknown>).sendId : undefined;
+    const sendId = typeof given === "string" && given ? given : `act-${deps.newId().replace(/[^A-Za-z0-9_-]/g, "")}`.slice(0, 80).padEnd(16, "0");
+    deps.markActSend(sendId);
+    if (target.kind === "ui") return { ...target, input: { ...target.input, sendId }, action: { ...target.action, sendId } };
+    const body = target.body && typeof target.body === "object" && !Array.isArray(target.body) ? target.body as Record<string, unknown> : {};
+    return { ...target, body: { ...body, sendId } };
   }
 }
 

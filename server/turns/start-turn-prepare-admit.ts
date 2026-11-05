@@ -63,6 +63,7 @@ export function createPrepareAdmitStartTurn(
     routineLineage,
     sandboxPrincipalForTurn,
     settleInputRequests,
+    isBotActSend,
     spokenLineFields,
     store,
     supportsWorkspaceFiles,
@@ -229,8 +230,7 @@ export function createPrepareAdmitStartTurn(
   // in its receipt, and a drained queue holds its receipt until
   // onTurnSettled; a turn that never started publishes no completion, so
   // the drain is nudged as its own error path does (M2 in drainQueuedSends).
-  state.personLine = !state.opts?.coordination && !state.opts?.cardContinuation && !state.opts?.automationSource && !state.opts?.compactOnly
-    && !state.opts?.computerSelectionContinuation && !state.opts?.editedMessageId && !state.warmOnly && !state.commsDepth && !state.opts?.peerAsk && !state.userMessage.peerAsk;
+  state.personLine = isPersonOwnLine(state, isBotActSend);
   if (state.personLine && coordinator.answer(state.threadId, state.text)) {
     store.appendMessage(state.threadId, { role: "bot", kind: "activity", tool: { name: "Answer passed to the waiting work", ok: true } });
     settleInputRequests(state.threadId);
@@ -392,4 +392,14 @@ export function createPrepareAdmitStartTurn(
   }
   return claim(state);
   };
+}
+
+/** The person's own line: not a continuation, a wake, a routine, a peer hop,
+ * an edit, nor (0.8.46) a line a bot's act wrote as the person, which must
+ * never answer a question parked on the person (2026-11-04). */
+export function isPersonOwnLine(state: { opts?: { coordination?: unknown; cardContinuation?: unknown; automationSource?: unknown; compactOnly?: unknown; computerSelectionContinuation?: unknown; editedMessageId?: unknown; peerAsk?: unknown; sendId?: string }; warmOnly?: unknown; commsDepth?: unknown; userMessage: { peerAsk?: unknown } },
+  isBotActSend: (sendId: string | undefined) => boolean): boolean {
+  return !state.opts?.coordination && !state.opts?.cardContinuation && !state.opts?.automationSource && !state.opts?.compactOnly
+    && !state.opts?.computerSelectionContinuation && !state.opts?.editedMessageId && !state.warmOnly && !state.commsDepth && !state.opts?.peerAsk && !state.userMessage.peerAsk
+    && !isBotActSend(state.opts?.sendId);
 }

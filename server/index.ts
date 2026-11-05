@@ -25026,6 +25026,7 @@ routines = new RoutineManager({
   interruptGoal: interruptRoutineGroupGoal,
   onRunChanged: (run) => {
     syncRoutineRunToSource(run);
+    if (run.proactive && run.status === "completed") proactiveWaker.noteWakeSucceeded(run.botId);
     if (run.webhookId === REACH_TEAMS_WEBHOOK) void reachMeTeams?.runChanged(run);
   },
   onRunRequeued: (run) => {
@@ -25036,6 +25037,10 @@ routines = new RoutineManager({
     if (!run.groupId) coordinator.stopAwaitingDirect(run.threadId, "The routine run starts again");
   },
   onRunFailed: (run, alert) => {
+    // 2026-11-05 (perspicax#880): a failed wake backs the bot's next wake
+    // off, and only the first failure of a streak reaches the person (one
+    // notification, one incident), whatever each error says.
+    if (run.proactive && run.status === "failed" && run.error !== ROUTINE_RESTARTED && !proactiveWaker.noteWakeFailed(run.botId)) alert = null;
     if (run.threadId) {
       pendingDelegationWakes.delete(run.threadId);
       // A run a restart failed takes its teammates' work with it, before any

@@ -2021,6 +2021,9 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     const seen = JSON.parse(readFileSync(dump, "utf8"));
     expect(seen.env.ENABLE_TOOL_SEARCH).toBe("true");
     expect(seen.mcpConfig.mcpServers.agents.env.SAGAX_MERGED_TOOLS).toBeUndefined();
+    // #2037: the tools outside the core and the pins wait for that ToolSearch
+    expect(seen.mcpConfig.mcpServers.agents.env.SAGAX_DEFER_RARE_TOOLS).toBe("1");
+    expect(JSON.parse(seen.mcpConfig.mcpServers.agents.env.SAGAX_COMPACT_TOOLS)).toEqual({ core: "default", pinned: [] });
   });
 
   it("#1935: on a compact prompt the Perspicax account bridge lists its core tools whole", async () => {

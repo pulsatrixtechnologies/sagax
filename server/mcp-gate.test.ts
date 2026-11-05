@@ -77,6 +77,9 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 });
 `;
 
+/** The handle a shaped result names in its query_result call. */
+const heldHandle = (shaped: string): string => /"result":"([^"]+)"/.exec(shaped)![1];
+
 describe("mcp-gate", () => {
   let scratch: string;
   let gate: ChildProcessWithoutNullStreams | undefined;
@@ -518,11 +521,14 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       start({ text: full }, {}, SCOPED_UPSTREAM);
       const shaped: string = (await call("read")).result.content[0].text;
       expect(shaped.startsWith("⚠️ SHAPED by Sagax:")).toBe(true);
-      expect(shaped).toContain('query_result {"result":"r1","query":');
+      const handle = heldHandle(shaped);
+      // the handle names the server whose query_result holds it
+      expect(handle).toMatch(/^shop:r1\.[a-z0-9]+$/);
+      expect(shaped).toContain(`query_result {"result":"${handle}","query":`);
       expect(shaped).toContain("products: 300 items{id, name, price, blurb}");
       expect(shaped.length).toBeLessThan(8_200);
 
-      const answer = await query({ result: "r1", query: "products[?price > `397`].{name: name, price: price}" }, 2);
+      const answer = await query({ result: handle, query: "products[?price > `397`].{name: name, price: price}" }, 2);
       expect(answer.result.isError).toBeUndefined();
       expect(JSON.parse(answer.result.content[0].text)).toEqual([{ name: "Bar 298", price: 398 }, { name: "Bar 299", price: 399 }]);
       // the upstream saw the original call and nothing else
@@ -531,15 +537,15 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 
     it("cuts a query answer to the same budget, so the whole thing never comes back", async () => {
       start({ text: full }, { SAGAX_GATE_BUDGET: "2000" }, SCOPED_UPSTREAM);
-      await call("read");
-      const answer = await query({ result: "r1", query: "@" }, 2);
+      const handle = heldHandle((await call("read")).result.content[0].text);
+      const answer = await query({ result: handle, query: "@" }, 2);
       expect(answer.result.content[0].text.length).toBeLessThan(2_400);
       expect(answer.result.content[0].text).toContain("Narrow the query");
     });
 
     it("answers a bad handle or query as a tool error without touching upstream", async () => {
       start({ text: full }, {}, SCOPED_UPSTREAM);
-      expect((await query({ result: "r9", query: "@" }, 1)).result).toMatchObject({ isError: true });
+      expect((await query({ result: "shop:r9.zzzz", query: "@" }, 1)).result).toMatchObject({ isError: true });
       expect((await query({ query: "@" }, 2)).result).toMatchObject({ isError: true });
       expect(existsSync(join(scratch, "reply.json.calls"))).toBe(false);
     });
@@ -547,7 +553,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     it("answers without an approval card, which the server's own tools still need", async () => {
       // an approval socket that does not exist: any call that asks it fails
       start({ text: full }, { SAGAX_GATE_APPROVAL_SOCKET: join(scratch, "no-such.sock"), SAGAX_GATE_APPROVAL_TOKEN: "t" }, SCOPED_UPSTREAM);
-      expect((await query({ result: "r1", query: "@" }, 1)).result).toMatchObject({ isError: true, content: [{ text: expect.stringContaining("no longer held") }] });
+      expect((await query({ result: "shop:r1.zzzz", query: "@" }, 1)).result).toMatchObject({ isError: true, content: [{ text: expect.stringContaining("no longer held") }] });
       expect(existsSync(join(scratch, "reply.json.calls"))).toBe(false);
     });
 
@@ -555,16 +561,16 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       start({ text: full }, { SAGAX_GATE_TOOL_SCOPE: JSON.stringify({ allow: ["mcp:shop:read"] }) }, SCOPED_UPSTREAM);
       send({ jsonrpc: "2.0", id: 1, method: "tools/list", params: { cursor: "second" } });
       expect(JSON.parse(await nextLine()).result.tools.map((tool: { name: string }) => tool.name)).toEqual(["query_result"]);
-      await call("read", 2);
-      const answer = await query({ result: "r1", query: "length(products)" }, 3);
+      const handle = heldHandle((await call("read", 2)).result.content[0].text);
+      const answer = await query({ result: handle, query: "length(products)" }, 3);
       expect(answer.result.content[0].text).toBe("300");
     });
 
     it("never hands one connection's result to another: a new gate holds nothing", async () => {
       // the first conversation's gate holds r1
       start({ text: full }, {}, SCOPED_UPSTREAM);
-      await call("read");
-      expect((await query({ result: "r1", query: "length(products)" }, 2)).result.content[0].text).toBe("300");
+      const handle = heldHandle((await call("read")).result.content[0].text);
+      expect((await query({ result: handle, query: "length(products)" }, 2)).result.content[0].text).toBe("300");
       const first = gate!;
       const closed = once(first, "close");
       first.kill();
@@ -573,7 +579,21 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       lines = [];
       waiting = [];
       start({ text: "{}" }, {}, SCOPED_UPSTREAM);
-      expect((await query({ result: "r1", query: "length(products)" }, 1)).result).toMatchObject({ isError: true });
+      expect((await query({ result: handle, query: "length(products)" }, 1)).result).toMatchObject({ isError: true });
+    });
+
+    it("sends a handle another server holds back to that server's query_result", async () => {
+      // a bot runs one gate per MCP server: another server's handle must not be read here
+      start({ text: full }, {}, SCOPED_UPSTREAM);
+      await call("read");
+      const foreign = (await query({ result: "files:r1.ab12", query: "@" }, 2)).result;
+      expect(foreign).toMatchObject({ isError: true });
+      expect(foreign.content[0].text).toContain('held by the "files" server');
+      // a bare handle, as models wrote before handles named their server, is never another result's r1
+      const bare = (await query({ result: "r1", query: "length(products)" }, 3)).result;
+      expect(bare).toMatchObject({ isError: true });
+      expect(bare.content[0].text).toContain("not a handle of this server");
+      expect(existsSync(join(scratch, "reply.json.calls"))).toBe(true);
     });
   });
 

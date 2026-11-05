@@ -27,7 +27,7 @@ export const QUERY_TOOL = {
   name: QUERY_TOOL_NAME,
   description:
     "Fetch exactly the part you need of a tool result that was too big to show in full. "
-    + "The shaped result names its handle (\"r3\") and its shape; pass that handle and a JMESPath query that selects only "
+    + "The shaped result names its handle (\"files:r3.k2x9\": the server that holds it, then the result) and its shape; pass that whole handle, to the query_result tool of that same server, and a JMESPath query that selects only "
     + "the fields and rows you need, e.g. items[?price < `200`].{name: name, price: price} | [0:30], length(items), "
     + "sort_by(items, &price)[0:5].name, or items[?contains(name, `pizza`)].id. Big answers are cut too, so narrow "
     + "the query rather than asking for everything. A query that selects one long string (a document's text) comes back "
@@ -35,7 +35,7 @@ export const QUERY_TOOL = {
   inputSchema: {
     type: "object",
     properties: {
-      result: { type: "string", description: "The handle named in the shaped result, such as \"r3\"." },
+      result: { type: "string", description: "The whole handle named in the shaped result, such as \"files:r3.k2x9\"." },
       query: { type: "string", description: "A JMESPath expression over the whole held result." },
       from: { type: "integer", minimum: 0, description: "When the query selects one string: the character offset to start the window at (the previous window names it). Default 0." },
     },
@@ -95,18 +95,50 @@ export function exampleQuery(value: unknown): string {
 
 interface Held { tool: string; value: unknown; bytes: number }
 
+/** A handle a named store hands out: `<server>:r<n>.<tag>`. The server
+ * name says whose query_result holds it (a bot has one gate per MCP server,
+ * each counting from r1: a bare "r2" sent to the wrong server's tool was
+ * refused or, worse, answered with that server's own r2); the tag tells a
+ * restarted gate's old handle from a live one. */
+const NAMED_HANDLE = /^([A-Za-z0-9_.-]{1,64}):r(\d+)\.([a-z0-9]{1,16})$/;
+
 export class ResultStore {
   readonly #entries = new Map<string, Held>();
   readonly #maxBytes: number;
+  readonly #server: string | undefined;
+  readonly #tag: string;
   #next = 1;
   #bytes = 0;
 
-  constructor(options: { maxBytes?: number } = {}) {
+  /** server: the MCP server this store answers for; its handles then name
+   * it. Without one, handles stay the bare `r<n>` of a single server. */
+  constructor(options: { maxBytes?: number; server?: string; tag?: string } = {}) {
     this.#maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
+    const server = options.server?.replace(/[^A-Za-z0-9_.-]/g, "-").slice(0, 64);
+    this.#server = server || undefined;
+    this.#tag = options.tag ?? Math.random().toString(36).slice(2, 6).padEnd(4, "0");
+  }
+
+  /** The server whose query_result this store answers, when named. */
+  get server(): string | undefined {
+    return this.#server;
+  }
+
+  /** Why a handle is not here, in words the model can act on. */
+  missing(handle: string): string {
+    const named = NAMED_HANDLE.exec(handle);
+    if (this.#server && named && named[1] !== this.#server) {
+      return `Result "${handle}" is held by the "${named[1]}" server, not this one ("${this.#server}"): call the ${QUERY_TOOL_NAME} tool of the "${named[1]}" server with it.`;
+    }
+    if (this.#server && !named) {
+      return `"${handle}" is not a handle of this server ("${this.#server}"): its handles look like "${this.#server}:r1.${this.#tag}". Pass the whole handle the shaped result named, to the ${QUERY_TOOL_NAME} tool of the server that returned it.`;
+    }
+    return `Result "${handle}" is no longer held; call the original tool again and query the new handle it gives you.`;
   }
 
   put(tool: string, value: unknown, bytes?: number): string {
-    const handle = `r${this.#next++}`;
+    const n = this.#next++;
+    const handle = this.#server ? `${this.#server}:r${n}.${this.#tag}` : `r${n}`;
     const size = bytes ?? (JSON.stringify(value)?.length ?? 0);
     this.#entries.set(handle, { tool, value, bytes: size });
     this.#bytes += size;
@@ -132,9 +164,7 @@ export function answerQuery(store: ResultStore, args: unknown, budget: number): 
     return text(`${QUERY_TOOL_NAME} needs {"result": "<handle from the shaped result>", "query": "<JMESPath>"}.`, true);
   }
   const held = store.get(args.result);
-  if (!held) {
-    return text(`Result "${args.result}" is no longer held; call the original tool again and query the new handle it gives you.`, true);
-  }
+  if (!held) return text(store.missing(args.result), true);
   const shape = describeShape(held.value);
   const example = exampleQuery(held.value);
   let selected: unknown;

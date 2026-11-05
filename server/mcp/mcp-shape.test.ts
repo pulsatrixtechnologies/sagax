@@ -32,6 +32,14 @@ describe("ResultStore", () => {
     expect(store.get("r9")).toBeUndefined();
   });
 
+  it("names its server in each handle when it answers for one", () => {
+    const store = new ResultStore({ server: "files", tag: "ab12" });
+    expect(store.put("list", { a: 1 })).toBe("files:r1.ab12");
+    expect(store.put("list", { a: 2 })).toBe("files:r2.ab12");
+    expect(store.get("files:r1.ab12")).toEqual({ tool: "list", value: { a: 1 } });
+    expect(store.get("r1")).toBeUndefined();
+  });
+
   it("drops the oldest result once the held bytes pass its capacity", () => {
     const store = new ResultStore({ maxBytes: 2_000 });
     const first = store.put("a", { blurb: "x".repeat(900) });
@@ -194,6 +202,28 @@ describe("query_result reads only the held result", () => {
     expect(answerQuery(theirs, { result: "r2", query: "@" }, 8_000)).toMatchObject({ isError: true });
     // and the query can name nothing outside the held value
     expect(answerQuery(mine, { result: myHandle, query: "@.items" }, 8_000).content[0]!.text).toBe("[1,2,3]");
+  });
+
+  it("sends a handle to the server that holds it: one bot runs a gate per MCP server", () => {
+    // a routine's model called the wrong server's query_result with "r2": the bare
+    // handle was refused there, or worse, was that server's own r2
+    const files = new ResultStore({ server: "files", tag: "ab12" });
+    const tickets = new ResultStore({ server: "tickets", tag: "cd34" });
+    const fileHandle = files.put("list", { owner: "files" });
+    const ticketHandle = tickets.put("search", { owner: "tickets" });
+    expect(fileHandle).not.toBe(ticketHandle);
+    const wrong = answerQuery(tickets, { result: fileHandle, query: "owner" }, 8_000);
+    expect(wrong.isError).toBe(true);
+    expect(wrong.content[0]!.text).toContain('held by the "files" server');
+    expect(wrong.content[0]!.text).toContain(`${QUERY_TOOL_NAME} tool of the "files" server`);
+    const bare = answerQuery(tickets, { result: "r1", query: "owner" }, 8_000);
+    expect(bare.isError).toBe(true);
+    expect(bare.content[0]!.text).toContain("not a handle of this server");
+    expect(answerQuery(files, { result: fileHandle, query: "owner" }, 8_000).content[0]!.text).toBe("\"files\"");
+    // a restarted gate counts from r1 again under a new tag: the old handle is gone, not another result
+    const restarted = new ResultStore({ server: "files", tag: "ef56" });
+    restarted.put("list", { owner: "after restart" });
+    expect(answerQuery(restarted, { result: fileHandle, query: "owner" }, 8_000).content[0]!.text).toContain("no longer held");
   });
 
   it("returns at most the budget, so no query hands back the whole payload", () => {

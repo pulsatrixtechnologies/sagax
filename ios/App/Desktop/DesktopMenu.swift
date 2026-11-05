@@ -31,6 +31,8 @@ struct DesktopMenuEntry: Identifiable {
     var disabled = false
     /// A keycap hint at the trailing edge ("⌘ /").
     var shortcut: String?
+    /// `data-tour` id so the guided tour can point at this row.
+    var tourAnchor: String?
     var kind: Kind
 
     static func divider(_ id: String) -> DesktopMenuEntry { DesktopMenuEntry(id: "divider.\(id)", kind: .divider) }
@@ -56,6 +58,8 @@ struct DesktopMenuRequest: Equatable {
     /// the pointer), or its bottom-left when `opensUp`.
     var anchor: CGPoint
     var opensUp = false
+    /// A submenu id to open at once (the guided tour's Tools step).
+    var expandSubmenu: String? = nil
 }
 
 /// The desktop popover's metrics, by menu (the DOM dumps 08, 10 and 11).
@@ -102,7 +106,10 @@ struct DesktopMenuPanel: View {
     @Environment(\.desktopTheme) private var theme
     let entries: [DesktopMenuEntry]
     let style: DesktopMenuStyle
+    /// A submenu to open at once (guided tour: Tools).
+    var expandSubmenu: String? = nil
     let dismiss: () -> Void
+    @State private var openSubmenuId: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -122,6 +129,10 @@ struct DesktopMenuPanel: View {
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
         .accessibilityIdentifier("desktop-menu")
+        .onAppear {
+            if openSubmenuId == nil { openSubmenuId = expandSubmenu }
+        }
+        .onValueChange(of: expandSubmenu) { openSubmenuId = $0 }
     }
 
     @ViewBuilder
@@ -144,15 +155,66 @@ struct DesktopMenuPanel: View {
             .buttonStyle(DesktopMenuRowStyle(radius: 6))
             .disabled(entry.disabled)
             .accessibilityIdentifier("desktop-menu.\(entry.id)")
+            .modifier(DesktopMenuTourAnchor(entry.tourAnchor))
         case let .submenu(children):
-            Menu {
-                DesktopMenuItems(entries: children, after: dismiss)
+            // A custom flyout keeps `data-tour` anchors in the tree (the
+            // guided tour's Automations row). System Menu would hide them.
+            Button {
+                openSubmenuId = openSubmenuId == entry.id ? nil : entry.id
             } label: {
                 label(entry, chevron: true)
             }
             .buttonStyle(DesktopMenuRowStyle(radius: 6))
             .disabled(entry.disabled || children.isEmpty)
             .accessibilityIdentifier("desktop-menu.\(entry.id)")
+            .modifier(DesktopMenuTourAnchor(entry.tourAnchor))
+            .overlay(alignment: .topLeading) {
+                if openSubmenuId == entry.id {
+                    submenuFlyout(children)
+                        .offset(x: style.width - 7, y: -7)
+                }
+            }
+            .zIndex(openSubmenuId == entry.id ? 1 : 0)
+        }
+    }
+
+    private func submenuFlyout(_ children: [DesktopMenuEntry]) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(children) { child in
+                if case let .action(perform) = child.kind {
+                    Button {
+                        dismiss()
+                        perform()
+                    } label: {
+                        label(child, chevron: false)
+                    }
+                    .buttonStyle(DesktopMenuRowStyle(radius: 6))
+                    .disabled(child.disabled)
+                    .accessibilityIdentifier("desktop-menu.\(child.id)")
+                    .modifier(DesktopMenuTourAnchor(child.tourAnchor))
+                }
+            }
+        }
+        .padding(7)
+        .frame(width: style.width, alignment: .leading)
+        .background(theme.elevated, in: RoundedRectangle(cornerRadius: max(theme.radiusXl, 0), style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: max(theme.radiusXl, 0), style: .continuous)
+                .strokeBorder(theme.border, lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(theme.dark ? 0.45 : 0.16), radius: 12, y: 6)
+    }
+
+    private struct DesktopMenuTourAnchor: ViewModifier {
+        let id: String?
+        init(_ id: String?) { self.id = id }
+        @ViewBuilder
+        func body(content: Content) -> some View {
+            if let id {
+                content.desktopTourAnchor(id)
+            } else {
+                content
+            }
         }
     }
 
@@ -265,7 +327,7 @@ struct DesktopMenuLayer: View {
                             .contentShape(Rectangle())
                             .onTapGesture { model.menu = nil }
                             .accessibilityHidden(true)
-                        DesktopMenuPanel(entries: entries, style: style) { model.menu = nil }
+                        DesktopMenuPanel(entries: entries, style: style, expandSubmenu: request.expandSubmenu) { model.menu = nil }
                             .offset(x: origin.x, y: origin.y)
                         // Esc closes it, as on the desktop
                         Button("") { model.menu = nil }
@@ -635,7 +697,7 @@ struct DesktopSidebarMenus {
         var tools: [DesktopMenuEntry] = []
         let shortcuts = NavigationMenus.accountShortcuts(gate: gate, connected: session.connection != nil)
         if shortcuts.contains(.automations) {
-            tools.append(DesktopMenuEntry(id: "automations", title: String(localized: "Automations"), icon: .calendarDays, kind: .action {
+            tools.append(DesktopMenuEntry(id: "automations", title: String(localized: "Automations"), icon: .calendarDays, tourAnchor: "nav-automations", kind: .action {
                 model.show(.automations)
             }))
         }

@@ -169,7 +169,7 @@ describe("PerspicaxMcp.heldRolesFor", () => {
     const answer = await f.mcp.relay({ threadId: "t1", generation: "g1", botId: "nova", frame: { jsonrpc: "2.0", id: "c", method: "tools/call", params: { name: "cw_psa_find_tickets", arguments: {} } } });
     expect(JSON.stringify(answer.body)).toContain('"as":"me"');
     expect(f.calls.some((call) => call.name === "identity_switch" && call.args?.profile === "full-access")).toBe(false);
-    // and the pick is gone: Alex's next turn starts as Moi
-    expect(f.journal.takePick("t1", "alex")).toBeUndefined();
+    // and the pick stays Alex's: their next turn still uses it
+    expect(f.journal.takePick("t1", "alex")).toBe("full-access");
   });
 });

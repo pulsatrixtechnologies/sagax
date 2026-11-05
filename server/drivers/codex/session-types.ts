@@ -1,11 +1,51 @@
 /** Mutable Codex app-server session bag shared across launch phases. */
-import type { RuntimeEvent, SendTurnInput, SteerOutcome } from "../../contracts.ts";
+import type { ChildProcess } from "node:child_process";
+import type { RuntimeEvent, SendTurnInput, SteerOutcome, StdioMcpSpec } from "../../contracts.ts";
 import type { ApprovalMode } from "../../../shared/approval-mode.ts";
 import type { RenewalStep } from "../../context/context-renewal.ts";
 import type { CodexRoute } from "../codex-errors.ts";
 import type { CodexConfig } from "./config.ts";
-import type { PreparedCodexLaunch } from "./turn-types.ts";
-import type { CodexSessions } from "./sessions.ts";
+import type { McpApprovalMode } from "./mcp-mount.ts";
+import type { WarmResourceLease } from "../../resources/warm-resources.ts";
+
+/** One retained app-server process for a thread (#1969). Lives with CodexSession
+ * so sessions.ts and turn-types.ts stay leaves of this module (#1381). */
+export type CodexProcess = {
+  key: string;
+  identity: string;
+  initialized: boolean;
+  closing?: boolean;
+  session?: CodexSession;
+  idle?: ReturnType<typeof setTimeout>;
+  unwatch?: () => void;
+  budget?: WarmResourceLease;
+};
+
+/** Session registry methods a live CodexSession calls (park / forget / put). */
+export type CodexSessionsHandle = {
+  put(threadId: string, process: CodexProcess): void;
+  forget(s: CodexSession, treeStopped?: boolean): void;
+  park(s: CodexSession): void;
+};
+
+export type PreparedCodexLaunch = {
+  env: Record<string, string | undefined>;
+  launchedLogin: string | null;
+  appServerArgs: string[];
+  privateEnv: string[];
+  provenPrivateEnv: boolean;
+  selectedMcp: Map<string, StdioMcpSpec>;
+  selectedApprovals: Map<string, McpApprovalMode>;
+  /** A selected mount's own `env` table (the person's environment proxy). */
+  selectedLiterals: Map<string, Record<string, string>>;
+  directoryMounts: Set<string>;
+  selectionConfig: { config?: Record<string, unknown> };
+  commandCwd: string;
+  releaseSlot: () => void;
+  child: ChildProcess;
+  process: CodexProcess;
+  previous?: CodexSession;
+};
 
 export type CodexSession = PreparedCodexLaunch & {
   input: SendTurnInput;
@@ -88,7 +128,7 @@ export type CodexSession = PreparedCodexLaunch & {
   stderr: string;
   stderrSinceOutput: string;
   runLaunchAttempt: (attempt: number) => Promise<void>;
-  sessions: CodexSessions;
+  sessions: CodexSessionsHandle;
   detachStream: () => void;
   lastUsage?: { input: number; output: number; cachedInput: number };
   recoverCrash: (nativeThreadId: string | null, acknowledged: boolean) => boolean;

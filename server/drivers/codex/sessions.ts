@@ -4,9 +4,11 @@ import { readFileSync, watchFile, unwatchFile } from "node:fs";
 import { join } from "node:path";
 import { codexHome } from "../codex-identity.ts";
 import { sessionIdlePolicy } from "../session-idle.ts";
-import type { CodexSession } from "./session-types.ts";
-import { MiB, warmResourcePerson, warmResources, type WarmResourceLease } from "../../resources/warm-resources.ts";
+import type { CodexProcess, CodexSession } from "./session-types.ts";
+import { MiB, warmResourcePerson, warmResources } from "../../resources/warm-resources.ts";
 import { retireClosedWarmProcess } from "../../resources/warm-process.ts";
+
+export type { CodexProcess } from "./session-types.ts";
 
 /** Canonicalize records so insertion order cannot cause a cold start. Never logged. */
 export function codexContractKey(value: unknown): string {
@@ -25,17 +27,6 @@ export function codexFileContract(paths: string[]): string {
     try { return [path, readFileSync(path, "utf8")]; } catch { return [path, null]; }
   }));
 }
-
-export type CodexProcess = {
-  key: string;
-  identity: string;
-  initialized: boolean;
-  closing?: boolean;
-  session?: CodexSession;
-  idle?: ReturnType<typeof setTimeout>;
-  unwatch?: () => void;
-  budget?: WarmResourceLease;
-};
 
 export class CodexSessions {
   private readonly sessions = new Map<string, CodexProcess>();

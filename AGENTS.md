@@ -218,12 +218,13 @@ Tests: `routine-readiness.test.ts`, `routine-reliability.test.ts`,
 Real turns project the scoped inventory into their private task folder's
 native skill directories (`server/skills/turn-skill-links.ts`), including
 organization Flow, personal and bot plugins on a limit backup. Claude keeps
-its native plugin loader; other file engines retain the same prompt paths
-alongside native discovery. Organization turns await the selected plugin
-copies in the person's environment before dispatch, on every engine.
-Readiness resolves the thread override and Auto choice for both the engine
-and skill probes (`server/routines/routine-readiness-target.ts`). Previews
-and receipts remain reads. Regressions: `turn-skill-links.test.ts` and
+its native plugin loader; other file engines project the same selected
+plugin files even when rows were marked native under a Claude primary.
+Organization turns await the selected plugin copies in the person's
+environment before dispatch, on every engine. Readiness resolves the thread
+override and Auto choice for both the engine and skill probes
+(`server/routines/routine-readiness-target.ts`). Previews and receipts
+remain reads. Regressions: `turn-skill-links.test.ts` and
 `start-turn-computer-workspace.test.ts` (temporary files and fake dispatch).
 
 ## Native Claude artifact tools (#1990, 2026-11-04)

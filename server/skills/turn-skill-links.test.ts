@@ -62,7 +62,8 @@ describe("turn skill materialization", () => {
         })!;
         expect(target.modelSelection).toEqual(backup);
         const instance = target.modelSelection.instanceId === "backup" ? driverKind : "claudeAgent";
-        prepareTurnSkillLinks({ ...f, driverKind: instance, skills: [] });
+        // Rows marked native under Claude must still project onto the backup.
+        prepareTurnSkillLinks({ ...f, driverKind: instance, skills: [], rows: f.rows.map((row) => ({ ...row, native: true })) });
         for (const [name, text] of f.texts) {
           const native = join(f.workspace, instance === "codex" ? ".agents/skills" : ".grok/skills", name);
           expect(readFileSync(join(native, "SKILL.md"), "utf8")).toBe(text);
@@ -79,6 +80,16 @@ describe("turn skill materialization", () => {
       expect(ran).toBe(true);
       expect(bot.modelSelection).toEqual(primary);
     } finally { failover.stop(); }
+  });
+
+  it("leaves Claude native plugin rows to Claude's loader (#1987)", () => {
+    const f = fixture();
+    prepareTurnSkillLinks({ ...f, driverKind: "claudeAgent", skills: [], rows: f.rows.map((row) => ({ ...row, native: true })) });
+    for (const name of f.texts.keys()) {
+      expect(existsSync(join(f.workspace, ".claude/skills", name))).toBe(false);
+      expect(existsSync(join(f.workspace, ".agents/skills", name))).toBe(false);
+      expect(existsSync(join(f.workspace, ".grok/skills", name))).toBe(false);
+    }
   });
 
   it("keeps scope precedence and removes revoked links without replacing user files", () => {

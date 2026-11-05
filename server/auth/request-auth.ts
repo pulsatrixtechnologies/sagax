@@ -578,6 +578,11 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // 2026-10-30: a person's answer to a proactive proposal in their own
   // conversation (the handler checks they may write there)
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/proactive\/[\w-]+$/ },
+  // 2026-11-05 (visible roles, server/routes/perspicax-roles.ts): an "Agit
+  // comme" card answered in the person's own thread, and the bot owner's
+  // "Toujours ainsi" rules; the handlers check the thread and the owner
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/cards\/[\w-]+\/role-transition$/ },
+  { methods: ["GET", "DELETE"], path: /^\/api\/bots\/[\w-]+\/roles\/rules$/ },
   // pre-warm the engine of a conversation the person opened (server/threads/thread-prewarm.ts)
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/warm$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/active-branch$/ },

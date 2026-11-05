@@ -743,6 +743,9 @@ import {
 } from "../shared/custom-rules.ts";
 import { createCustomRuleRoutes } from "./routes/custom-rules.ts";
 import { createAutoApprovalNotes, type ToolAutoApproval } from "./approvals/tool-auto-approval.ts";
+import { RoleJournal } from "./perspicax/role-journal.ts";
+import { createRoleEvents, meWriteSummary } from "./perspicax/role-events.ts";
+import { createPerspicaxRoleRoutes } from "./routes/perspicax-roles.ts";
 import { createEmailDraftRoutes } from "./routes/email-drafts.ts";
 import { createThreadWarmRoutes, warmBotAccessRefusal } from "./routes/thread-warm.ts";
 import { createEmailSendPasses, emailSendCard, sendWithMailer } from "./mail/email-draft-send.ts";
@@ -16007,6 +16010,19 @@ function stoppedRowSinceLastPerson(threadId: string, turnId: string | undefined)
 /** 2026-10-28: what answered a call's ask with no card, kept until the
  * call's own row exists (server/approvals/tool-auto-approval.ts). */
 const autoApprovals = createAutoApprovalNotes();
+/** 2026-11-05 (visible roles): the Perspicax role of each tool step, the
+ * transitions, the refusals and the owner's rules (server/perspicax/role-journal.ts). */
+const roleJournal = new RoleJournal(process.env.VITEST ? null : join(DATA_DIR, "perspicax-roles.json"));
+const roleEvents = createRoleEvents({
+  journal: roleJournal,
+  messagesFor: (threadId) => store.messagesFor(threadId),
+  patchTool: (threadId, messageId, tool) => { store.patchMessage(threadId, messageId, { tool: tool as NonNullable<Message["tool"]> }); },
+  appendRow: (threadId, row) => { store.appendMessage(threadId, { role: "bot", ...row } as Omit<Message, "id" | "at">); },
+  personName: (principalId) => (isPrincipalId(principalId) ? personDisplayName(principals.byId(principalId)) : "") || "",
+  botName: (botId) => store.bot(botId)?.name ?? "",
+  ownerOf: (botId) => { const bot = store.bot(botId); return bot ? effectiveBotOwner(bot) || undefined : undefined; },
+  language: (principalId) => languageOfPerson(principalId),
+});
 /** Put what answered an ask with no card on the call's own row: the newest
  * row of this tool in the conversation that has none yet (Claude writes the
  * row before it asks), else on the row the engine writes next. */
@@ -19325,6 +19341,7 @@ bus.subscribe((event: RuntimeEvent) => {
         // chip aloud without re-deriving it — and so the phrase a user
         // hears and the chip they see can never drift apart
         const approved = autoApprovals.takePending(event.threadId, name);
+        const actedAs = roleEvents.takePending(event.threadId, name);
         const product = declaredToolProduct(bot?.id, name, event.input);
         // 2026-10-29: the step the working line names, the same for every
         // engine (shared/working-step.ts); older clients ignore the field
@@ -19334,6 +19351,7 @@ bus.subscribe((event: RuntimeEvent) => {
           kind: "activity",
           tool: { name, spoken: narrateTool(name) ?? undefined, summary: event.summary, input: event.input, itemId: event.itemId ?? event.eventId, ...(event.files?.length ? { files: event.files } : {}),
             ...(approved ? { autoApproval: approved.approval, ...(approved.notice ? { ruleNotice: approved.notice } : {}) } : {}),
+            ...(actedAs ? { role: actedAs } : {}),
             ...product,
             ...(step ? { step } : {}),
             ...(event.parentItemId ? { parentItemId: event.parentItemId } : {}) },
@@ -20522,6 +20540,7 @@ bus.subscribe((event: RuntimeEvent) => {
       safePoints.clear(event.threadId);
       turnReplyRepeats.settle(event.threadId, event.turnId);
       autoApprovals.clear(event.threadId);
+      roleJournal.endTurn(event.threadId);
       appPiecesByThread.delete(event.threadId);
       settleWaitingOnPersonChips(event.threadId);
       // A peer-started turn settles as coordination, not as news. What keeps
@@ -21499,6 +21518,19 @@ const personAttentionDeps: AttentionRelayDeps<BotRecord> = {
   ticketUrl: attentionTicketUrl,
   notify: (bot, threadId, title, body) => notify(deliverableNotification("needs-you", bot, threadId, body, { avatarUrl: bot.avatarUrl, title })),
 };
+/** 2026-11-05 (visible roles): the role a Perspicax turn starts under. The
+ * person's composer pick for this thread's next turn (theirs only), else a
+ * routine run's "Au nom de" role. Undefined: the default surface ("Moi"). */
+function perspicaxTurnRole(turn: { threadId: string; botId: string; principalId: string; routine: boolean }): { slug: string; reason: "person" | "routine" } | undefined {
+  const picked = roleJournal.takePick(turn.threadId, turn.principalId);
+  if (picked !== undefined) return { slug: picked, reason: "person" };
+  if (!turn.routine) return undefined;
+  const run = activeRoutineRunForThread(turn.threadId);
+  const routine = run ? routines?.getRoutine(run.routineId) : null;
+  const actAs = routine && typeof (routine as { actAs?: unknown }).actAs === "string" ? (routine as { actAs?: string }).actAs : undefined;
+  return actAs !== undefined && routine?.botId === turn.botId ? { slug: actAs, reason: "routine" } : undefined;
+}
+
 function activeRoutineRunForThread(threadId: string): RoutineRun | null {
   const run = routines?.runForThread(threadId);
   return run && ["running", "waiting"].includes(run.status) ? run : null;
@@ -25768,6 +25800,35 @@ function startProactiveWake(batch: ProactiveWakeBatch, accepted = false, runAs?:
   });
 }
 
+/** 2026-11-05 (visible roles): the person's answer to an "Agit comme" card.
+ * continue keeps going; stay puts the thread back in the previous role with
+ * no further fallback from it; always (the bot's owner only) saves a plain
+ * rule on the bot's Permissions page and continues. */
+function answerRoleTransition(input: { botId: string; threadId: string; messageId: string; choice: "continue" | "stay" | "always"; actor: string }): { status: number; body: Record<string, unknown> } {
+  const bot = store.bot(input.botId);
+  if (!bot) return { status: 404, body: { error: "no such card" } };
+  let threadId: string;
+  try { threadId = routeThreadId(bot, input.threadId); } catch { return { status: 404, body: { error: "no such card" } }; }
+  const message = store.messagesFor(threadId).find((row) => row.id === input.messageId);
+  const card = message?.card;
+  const transition = card?.roleTransition;
+  if (!message || !card || !transition || transition.botId !== bot.id) return { status: 404, body: { error: "no such card" } };
+  if (card.answered) return { status: 409, body: { error: "this card was already answered" } };
+  if (input.choice === "always") {
+    const owner = effectiveBotOwner(bot);
+    if (!owner || owner !== input.actor) return { status: 403, body: { error: "Only the bot's owner can save a rule for this bot." } };
+    roleJournal.addRule(bot.id, { from: transition.from, to: transition.to, path: transition.reason === "fallback" ? transition.path ?? "" : "", ownerId: owner });
+  }
+  if (input.choice === "stay") {
+    roleJournal.stay(threadId, transition.from.slug);
+    perspicaxMcp?.stayInRole(threadId, transition.from.slug);
+  }
+  const index = input.choice === "continue" ? 0 : input.choice === "stay" ? 1 : 2;
+  const picked = card.options[index] ?? input.choice;
+  store.patchMessage(threadId, message.id, { card: { ...card, answered: picked, answeredText: picked, roleTransition: { ...transition, choice: input.choice } } });
+  return { status: 200, body: { ok: true, choice: input.choice } };
+}
+
 /** Legacy proposal cards (propose mode, retired 2026-11-01) remain answerable:
  * accept runs the wake at the bot's level; decline closes the card. */
 function answerProactiveProposal(botId: string, proposalId: string, accept: boolean): { status: number; body: Record<string, unknown> } {
@@ -25801,6 +25862,20 @@ function answerProactiveProposal(botId: string, proposalId: string, accept: bool
 }
 
 ROUTES.push(createProactiveProposalRoutes({ answer: answerProactiveProposal }));
+ROUTES.push(createPerspicaxRoleRoutes({
+  actor: (auth) => channelViewerId(auth) ?? localPrincipalId(),
+  mayUseBot: (auth, botId) => {
+    const bot = store.bot(botId);
+    if (!bot) return false;
+    const viewerId = channelFilterViewerId(auth);
+    if (!viewerId) return true;
+    const viewer = authzViewerFromId(viewerId);
+    return Boolean(viewer && canOnBot(viewer, "bot.use", botFacts(bot)));
+  },
+  answerTransition: (input) => answerRoleTransition(input),
+  rules: ({ botId, actor }) => ({ status: 200, body: { rules: roleJournal.rulesFor(botId, actor) } }),
+  removeRule: ({ botId, actor, id }) => roleJournal.removeRule(botId, actor, id) ? { status: 200, body: { ok: true } } : { status: 404, body: { error: "no such rule" } },
+}));
 
 // Whether an oldest thread is someone else's (frozenResultsThread) is known
 // only now: an earlier key of the owner's is theirs once settled.
@@ -40726,6 +40801,18 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
     onIdentityWarning: ({ threadId, principalId, reason }) => {
       store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: identityWarning(reason, personLanguageOf(principalId, (id) => userPreferenceStore.get(id).preferences, cfg.language)), ok: false } });
     },
+    // 2026-11-05 (visible roles): each step's role, transitions, refusals
+    onRole: (event) => roleEvents.onRole(event),
+    turnRole: (turn) => perspicaxTurnRole(turn),
+    roleFallback: ({ threadId, botId, principalId, from, path }) => {
+      const bot = store.bot(botId);
+      return roleJournal.fallbackFor({ threadId, botId, principalId, ...(bot ? { ownerId: effectiveBotOwner(bot) } : {}), from, path });
+    },
+    askMeWrite: ({ threadId, botId, principalId, role, tool, permission }) => confirmHeldCard({
+      threadId, botId, tool: "perspicax-role",
+      summary: meWriteSummary(languageOfPerson(principalId), { person: (isPrincipalId(principalId) ? personDisplayName(principals.byId(principalId)) : "") || "", role: role.name || role.slug, tool, permission }),
+      fingerprint: `role-me-write:${role.slug}:${tool}`,
+    }),
     // Routine runs and teammate turns: the same write twice at once is one.
     writeOnceScope: ({ threadId }) => activeRoutineRunForThread(threadId) || internalTurnThreads.has(threadId) ? "unattended" : null,
     // a live call keeps its Perspicax tools mounted from turn to turn

@@ -69,6 +69,38 @@ import type { BotTasksFrame } from "./bot-task-list.ts";
 import type { WaitCardField, WaitLineField } from "./wait-request.ts";
 import { EFFORT_LEVELS, isEffortLevel, type EffortLevel, type ModelSelection } from "./model-selection.ts";
 
+import type { CwPermission, ToolRole } from "./perspicax-roles.ts";
+
+/** A role fact as a banner row (visible roles, 2026-11-05). */
+export interface RoleNotice {
+  kind: "lapsed" | "write_refused" | "read_refused";
+  role: { slug: string; name: string };
+  tool: string;
+  permission?: CwPermission;
+  /** the person the bot acts for (the "Moi" of this thread) */
+  person?: string;
+  /** cw_member:<identifier> behind the role */
+  target?: string;
+}
+
+/** An "Agit comme" card (visible roles, 2026-11-05). */
+export interface RoleTransitionCard {
+  botId: string;
+  botName: string;
+  /** the person the bot acts for: "au nom de <person>" */
+  person: string;
+  from: { slug: string; name: string };
+  to: { slug: string; name: string };
+  reason: ToolRole["reason"];
+  refusedTool?: string;
+  /** CW path of the refused read ("" for a switch) */
+  path?: string;
+  /** whether the reader may save "Toujours ainsi" (the bot's owner) */
+  canAlways?: boolean;
+  /** continue | stay | always, once answered */
+  choice?: "continue" | "stay" | "always";
+}
+
 export { EFFORT_LEVELS, isEffortLevel, type EffortLevel, type ModelSelection };
 
 /** Which cloud computer backs computer: "cloud"; absent means Boat. */
@@ -846,6 +878,14 @@ export interface WireMessage extends WaitLineField {
      * what answered it, shown only in the row's details, never on the line.
      * `source` is the decision log's source (auto-approve.ts). */
     autoApproval?: { source: string; rule?: string };
+    /** 2026-11-05 (visible roles): the Perspicax role this call ran under
+     * (shared/perspicax-roles.ts); "" slug is "Moi". Absent: not a
+     * Perspicax call, or one from before roles were shown. */
+    role?: ToolRole;
+    /** 2026-11-05: a role fact shown as a banner row: a lapsed role that
+     * stopped a call, a refused write (stop) or a read refused with no
+     * fallback, with the CW permission it needs. */
+    roleNotice?: RoleNotice;
     /** 2026-10-18: the bot left an engine the organization no longer
      * offers and now runs on Auto (shared/offered-engines.ts). */
     engineMove?: OrgEngineMove;
@@ -1069,6 +1109,9 @@ export interface OptionCardData extends WaitCardField {
    * on cards from older computers. */
   outboundRequest?: { tool: string; app: string | null; calls?: Array<{ app: string | null; label: string }> };
   teamMemoryRequest?: { section: string; entryId: string; kind: string };
+  /** 2026-11-05 (visible roles): an "Agit comme" card at a role transition,
+   * answered through POST /api/threads/:id/role-transition (never typed). */
+  roleTransition?: RoleTransitionCard;
   /** 2026-10-30: a proactive proposal (server/proactive/proactive-wake.ts): the bot
    * offers to handle an event; the person's click answers it through
    * POST /api/bots/:id/proactive/:id (options[0] accepts, options[1]

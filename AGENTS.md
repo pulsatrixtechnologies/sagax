@@ -1,3 +1,20 @@
+## Visible roles (#2016, 2026-11-05)
+
+Every engine `tools/call` on the account's Perspicax connection reports its
+role (`PerspicaxMcp` options `onRole`, `turnRole`, `roleFallback`,
+`askMeWrite`; `shared/perspicax-roles.ts`). Chat starts on the default
+surface ("Moi"); a composer pick fixes the role for the turn; a routine
+starts under its "Au nom de" role. A read 403 under a role is read once more
+as "Moi" by the relay and the role is put back; a write 403 stops the turn's
+role switches and shows the permission; a lapsed role stops the call; a
+routine writing as "Moi" asks the person. `server/perspicax/role-journal.ts`
+keeps steps (`tool.role`), transitions, refusals, owner rules and picks,
+always per principal; `role-events.ts` draws chips, "Agit comme" cards
+(`card.roleTransition`, POST /api/bots/:id/cards/:messageId/role-transition)
+and banners (`tool.roleNotice`). Tests: `perspicax-roles-relay.test.ts`,
+`role-journal.test.ts`, `shared/perspicax-roles.test.ts`,
+`src/components/RoleChip.test.ts`; gallery `src/gallery/visible-roles.html`.
+
 ## Prompt index and on-demand references (#1997, 2026-11-04)
 
 `server/context/prompt-references.ts` replaces exact shipped guidance with

@@ -427,7 +427,7 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
       key: "mcp:account:perspicax",
       form: "mcp",
       name: "Perspicax",
-      description: "Your account connection. Use identity_switch when a routine needs one of your held roles.",
+      description: "Your account connection. Sagax starts each turn under its role and shows it on every step; switch with identity_switch once, only when the work needs another held role.",
       source: { kind: "perspicax", label: inputs.organizationName ?? "Perspicax" },
       scope: "account",
       state: engine.customMcp ? "on" : "not_served",

@@ -11,6 +11,7 @@ import { computerSelectTarget, toolExecutionTarget } from "../../shared/executio
 import { PlaceIcon } from "./PlaceIcon";
 import { StepRow } from "./StepRow";
 import { CustomRuleNoticeLine } from "./CustomRuleNotice";
+import { RoleChip, roleLabel, roleWhy } from "./RoleChip";
 import { autoApprovalReason, type AutoApprovalReason } from "../../shared/auto-approval-reason";
 import { toolFailureText } from "../../shared/tool-failure-text";
 import type { LocaleKey } from "@/locales";
@@ -70,13 +71,21 @@ export function ToolActivity({ tool, place = null, nameOf, defaultOpen = false }
       {() => <ToolStepDetail tool={tool} status={status} nameOf={nameOf} place={place} />}
     </StepRow>
   );
+  // 2026-11-05 (visible roles): the Perspicax role this step ran under, a
+  // chip beside the row (never inside its button), "why" on click.
+  const line = tool.role ? (
+    <div className="flex min-w-0 max-w-full flex-wrap items-start gap-x-1.5 gap-y-0.5" data-tool-role-line="">
+      {row}
+      <RoleChip role={tool.role} className="pt-[3px]" />
+    </div>
+  ) : row;
   // 2026-10-16: the person's custom rule that answered this with no card.
   // 2026-10-28: an approval stays in the details, never on the line; a rule
   // that refused or held the call keeps its line.
-  if (!tool.ruleNotice || tool.ruleNotice.outcome === "approved") return row;
+  if (!tool.ruleNotice || tool.ruleNotice.outcome === "approved") return line;
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
-      {row}
+      {line}
       <CustomRuleNoticeLine notice={tool.ruleNotice} compact />
     </div>
   );
@@ -130,6 +139,12 @@ export function ToolStepDetail({ tool, status, nameOf, place = null }: { tool: T
           {status}{duration && phase !== "running" ? ` · ${duration}` : ""}
         </span>
       </div>
+      {tool.role && (
+        <div data-testid="tool-step-role">
+          <div className={cn(KEY, "mb-0.5")}>{t("roles.detail.actsAs")}</div>
+          <p className="text-[12px] text-ink">{roleLabel(tool.role)} · {roleWhy(tool.role)}</p>
+        </div>
+      )}
       {(tool.autoApproval || tool.ruleNotice?.outcome === "approved") && (
         <div data-testid="tool-auto-approval" data-source={tool.autoApproval?.source}>
           <div className={cn(KEY, "mb-0.5")}>{t("step.detail.approval")}</div>

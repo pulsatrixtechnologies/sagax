@@ -233,7 +233,6 @@ export function ComposerShell({
           channelMode={channelMode}
           config={config}
           composerAria={composerAria}
-          threadId={threadId}
         >
           <ComposerActionBar
             bot={bot}

@@ -241,9 +241,13 @@ import {
   cwActionCard,
   cwActionLanguage,
   cwToolRowWidget,
-  createCwActionPasses
+  createCwActionPasses,
+  cwSiteFromEnv
 } from "./widgets/cw-widget-actions.ts";
 import { cwActionInstruction, parseCwAction } from "../shared/cw-widgets/actions.ts";
+import { cwRecordLink, cwSite } from "../shared/cw-widgets/links.ts";
+import { attentionCard, mirrorLateRunReply, relayPersonAttention, type AttentionRelayDeps } from "./turns/person-attention-relay.ts";
+import { personAttention } from "../shared/person-attention.ts";
 import { createApprovalModeSupport } from "./capabilities/harness-capabilities.ts";
 import { escapeAttribute } from "../src/lib/composer-attachments.ts";
 import { threadRefUrl } from "../src/lib/thread-refs.ts";
@@ -20809,6 +20813,17 @@ bus.subscribe((event: RuntimeEvent) => {
             notify(deliverableNotification("done", bot, incidentsReport!, reply, { avatarUrl: bot.avatarUrl }));
           }
         }
+        // 2026-11-05: a result that needs the person reaches the person,
+        // whatever thread it came from (server/turns/person-attention-relay.ts):
+        // a hand-off, a thread another bot opened, a routine run's task the
+        // run no longer reports from. Never from the person's own conversation.
+        try {
+          const attentionInput = { bot, threadId: event.threadId, turnId: completedTurnId, ok: event.ok, stopped, runTurn: Boolean(routineRun) };
+          const relayed = relayPersonAttention(attentionInput, personAttentionDeps);
+          if (!relayed.posted) mirrorLateRunReply(attentionInput, personAttentionDeps);
+        } catch (error) {
+          console.error(`[attention] not relayed: ${error instanceof Error ? error.message.slice(0, 160) : "error"}`);
+        }
         const routineReportThread = routineRun ? routineSourceThread(routineRun) : null;
         // A routine's result belongs to its reporting thread's unread state.
         // Its internal execution should not light up the sidebar as well.
@@ -20827,7 +20842,9 @@ bus.subscribe((event: RuntimeEvent) => {
         // post results to the conversation, rings nothing (2026-10-22).
         // A Team incidents report rang once above, on the conversation it was
         // copied to: one piece of news, one push.
-        if ((!routineRun || (routineRun.status === "completed" && !routineRun.quiet && routineEffectivePostResults(routineRun))) && !internal && !incidentsCopied && !computerSelectionTurns.get(event.threadId)?.selected) {
+        // A report with items for the person rang "needs you" from its card
+        // (syncRoutineRunToSource): one piece of news, one push.
+        if ((!routineRun || (routineRun.status === "completed" && !routineRun.quiet && routineEffectivePostResults(routineRun) && !personAttention(routineRun.output))) && !internal && !incidentsCopied && !computerSelectionTurns.get(event.threadId)?.selected) {
           // the frame carries the bot's avatar so every desktop client can
           // show the notification under that bot's own face
           const completionDetail = routineRun
@@ -21422,6 +21439,46 @@ function roomRoutineSpeaker(threadId: string): TurnSpeaker | null {
   return run && run.target === "room-goal" ? routineRunSpeaker(run) : null;
 }
 
+/** The person whose conversation a bot's result is carried to: the thread's
+ * own person, the run's, the one who opened the work, else the bot's owner. */
+function attentionPerson(bot: BotRecord, threadId: string): string | undefined {
+  if (!privateThreads()) return undefined;
+  const task = store.taskByThread(bot.id, threadId);
+  return task?.ownerPrincipalId || routines?.runForThread(threadId)?.runAs || threadPersonKey(threadId) || effectiveBotOwner(bot) || undefined;
+}
+const CW_OPEN_RECORD = /https:\/\/([a-z0-9.-]+)\/v4_6_release\/services\/system_io\/router\/openrecord\.rails\?[^"\s]*?companyName=([A-Za-z0-9_.-]+)/i;
+/** A ConnectWise ticket's deep link: the site the server is told
+ * (SAGAX_CW_SITE), else the one the thread's own ConnectWise cards link to. */
+function attentionTicketUrl(threadId: string, ticketId: number): string | undefined {
+  let site = cwSiteFromEnv();
+  if (!site) {
+    for (const message of store.messagesFor(threadId).slice(-400).reverse()) {
+      if (!message.tool?.widget) continue;
+      const found = CW_OPEN_RECORD.exec(JSON.stringify(message.tool.widget));
+      if (found) { site = cwSite(found[1], found[2]); if (site) break; }
+    }
+  }
+  return cwRecordLink(site, "ServiceFv", ticketId);
+}
+const personAttentionDeps: AttentionRelayDeps<BotRecord> = {
+  task: (botId, threadId) => store.taskByThread(botId, threadId) ?? undefined,
+  messages: (threadId) => store.activePath(threadId),
+  append: (threadId, message) => store.appendMessage(threadId, message),
+  markUnread: (botId, threadId) => store.patchTask(botId, threadId, { unread: true }),
+  conversation: (bot, threadId) => conversationOrStart(bot, attentionPerson(bot, threadId)),
+  // an outside agent's conversation, or an AI client's hidden one (#291):
+  // the client reads it. A peer's hidden work thread is not one.
+  agentConversation: (botId, threadId) => {
+    const task = store.taskByThread(botId, threadId);
+    return isAgentConversation(task) || (task?.hidden === true && !task.routineRunId && !task.openedBy?.botId);
+  },
+  routineRun: (threadId) => {
+    const run = routines?.runForThread(threadId);
+    return run && run.target === "bot" ? { id: run.id, routineName: run.routineName, status: run.status } : null;
+  },
+  ticketUrl: attentionTicketUrl,
+  notify: (bot, threadId, title, body) => notify(deliverableNotification("needs-you", bot, threadId, body, { avatarUrl: bot.avatarUrl, title })),
+};
 function activeRoutineRunForThread(threadId: string): RoutineRun | null {
   const run = routines?.runForThread(threadId);
   return run && ["running", "waiting"].includes(run.status) ? run : null;
@@ -24337,7 +24394,10 @@ function routineEffectivePostResults(run: Pick<RoutineRun, "routineId" | "proact
  * turns unread. Replaying a transition never adds another message. */
 function syncRoutineRunToSource(run: RoutineRun): string | null {
   const known = routineSourceOwner(run);
-  const reportable = routineRunReportable({ ...run, needsPerson: run.status === "waiting" && routineRunNeedsPerson(run), postResults: routineEffectivePostResults(run) });
+  // 2026-11-05: a completed report with items only the person can do
+  // ([HUMAIN], needs_human, a question) always posts, as a card with them.
+  const attentionFound = run.status === "completed" && !run.quiet ? personAttention(routineFullReport(run) ?? run.output) : undefined;
+  const reportable = routineRunReportable({ ...run, needsPerson: run.status === "waiting" && routineRunNeedsPerson(run), postResults: routineEffectivePostResults(run), attention: Boolean(attentionFound) });
   // A bot run's task stays hidden (Automations, Open run) from its start.
   // 2026-10-28: a webhook's run too (it used to take the bot's live chat;
   // now it runs in its own task and reports into the one conversation).
@@ -24378,14 +24438,21 @@ function syncRoutineRunToSource(run: RoutineRun): string | null {
   const card = routineRunCard(run, sourceThreadId, routineFullReport(run));
   const text = routineRunFallbackText(card);
   const statusChanged = existing?.routineRun?.status !== run.status;
+  const runBotRecord = store.bot(run.botId);
+  const attention = attentionFound && runBotRecord && run.threadId
+    ? attentionCard(runBotRecord, run.threadId, store.taskByThread(run.botId, run.threadId) ?? undefined,
+      `run:${run.id}`, attentionFound, { id: run.id, routineName: run.routineName }, { ticketUrl: attentionTicketUrl })
+    : undefined;
+  const attentionNew = Boolean(attention && !existing?.attention);
   if (existing) {
-    store.patchMessage(sourceThreadId, existing.id, { text, routineRun: card });
+    store.patchMessage(sourceThreadId, existing.id, { text, routineRun: card, ...(attention ? { attention } : {}) });
   } else {
     const message: Omit<Message, "id" | "at"> = {
       role: "bot",
       kind: "routine.run",
       text,
-      routineRun: card
+      routineRun: card,
+      ...(attention ? { attention } : {})
     };
     if (source.group) {
       message.from = { botId: source.bot.id, name: source.bot.name, color: source.bot.color };
@@ -24393,9 +24460,15 @@ function syncRoutineRunToSource(run: RoutineRun): string | null {
     store.appendMessage(sourceThreadId, message);
   }
   // Something for the person turns the conversation unread, once per state.
-  if (reportable && statusChanged) {
+  if (reportable && (statusChanged || attentionNew)) {
     if (source.group) store.patchGroup(source.group.id, { unread: true });
     else store.patchTask(source.bot.id, sourceThreadId, { unread: true });
+  }
+  // Items only the person can do ring once, whatever postResults says.
+  if (attention && attentionNew && runBotRecord) {
+    notify(deliverableNotification("needs-you", runBotRecord, sourceThreadId,
+      attention.items.map((entry) => entry.text.replace(/\*\*|__|`/g, "").replace(/\s+/g, " ")).join("\n"),
+      { avatarUrl: runBotRecord.avatarUrl, routineRunId: run.id, routineName: run.routineName }));
   }
   return sourceThreadId;
 }

@@ -37,7 +37,11 @@ export type NotifyKind =
   | "page-comment"
   /** A wait_until condition fired: the person asked to be told when
    * something happened, and it did (server/waits/waits.ts). */
-  | "wait";
+  | "wait"
+  /** 2026-11-05: a bot's turn elsewhere (a hand-off, a routine run, a
+   * thread another bot opened) ended with items only the person can do; the
+   * card is in their conversation with that bot (shared/person-attention.ts). */
+  | "needs-you";
 
 export interface Notification {
   kind: NotifyKind;

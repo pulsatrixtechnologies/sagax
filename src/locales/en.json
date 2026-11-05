@@ -13132,5 +13132,17 @@
   "limitFailover.ownerExhaustedNoTime": "This bot's owner hit usage limits on {tried}: no other engine could answer. Pick another model, add credit, or try again later.",
   "routineReadiness.flow_plan": "The Flow shadow check failed at {step}: {error}",
   "routineReadiness.ready.flow": "The Flow shadow plan has no known blocker. Run the routine when ready.",
-  "routineReadiness.flow_live": "A Flow run is live, plan not checked."
+  "routineReadiness.flow_live": "A Flow run is live, plan not checked.",
+  "needsYou.title": "{bot} needs you",
+  "needsYou.titleQuestion": "{bot} has a question for you",
+  "needsYou.titleFailure": "{bot} needs a decision",
+  "needsYou.countOne": "1 item",
+  "needsYou.countMany": "{count} items",
+  "needsYou.fromRoutine": "From the routine {name}",
+  "needsYou.fromHandoff": "From work {name} handed over",
+  "needsYou.fromThread": "From {name}",
+  "needsYou.openThread": "Open thread",
+  "needsYou.openRun": "Open run",
+  "needsYou.openTicket": "Open ticket {id}",
+  "needsYou.openTicketFor": "Open ticket {id} in ConnectWise"
 }

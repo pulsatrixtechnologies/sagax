@@ -13132,5 +13132,17 @@
   "limitFailover.ownerExhaustedNoTime": "Le propriétaire de ce bot a atteint ses limites sur {tried} : aucun autre moteur n'a pu répondre. Choisissez un autre modèle, ajoutez du crédit, ou réessayez plus tard.",
   "routineReadiness.flow_plan": "La vérification Flow en shadow a échoué à {step} : {error}",
   "routineReadiness.ready.flow": "Le plan Flow en shadow n’a aucun blocage connu. Lance la routine quand tu es prêt.",
-  "routineReadiness.flow_live": "Un run Flow est actif, le plan n’a pas été vérifié."
+  "routineReadiness.flow_live": "Un run Flow est actif, le plan n’a pas été vérifié.",
+  "needsYou.title": "{bot} a besoin de toi",
+  "needsYou.titleQuestion": "{bot} a une question pour toi",
+  "needsYou.titleFailure": "{bot} a besoin d'une décision",
+  "needsYou.countOne": "1 élément",
+  "needsYou.countMany": "{count} éléments",
+  "needsYou.fromRoutine": "De la routine {name}",
+  "needsYou.fromHandoff": "Du travail confié par {name}",
+  "needsYou.fromThread": "De {name}",
+  "needsYou.openThread": "Ouvrir le fil",
+  "needsYou.openRun": "Ouvrir l'exécution",
+  "needsYou.openTicket": "Ouvrir le billet {id}",
+  "needsYou.openTicketFor": "Ouvrir le billet {id} dans ConnectWise"
 }

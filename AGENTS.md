@@ -29,6 +29,36 @@ full-detail auth level. Defaults: 64 resources / 2 GiB globally, 12 / 1 GiB
 per person. Four `SAGAX_WARM_*` overrides, estimates, process-tree RSS sampling,
 load evidence and limits: `docs/verification/warm-resource-budget.md`.
 
+## A result that needs the person reaches the person (2026-11-05, #2014)
+
+A bot's turn that ends outside the person's own conversation with it (a
+hand-off, a thread another bot opened, a one-way notice, a routine run's
+task after its run ended) and carries a structured signal for the person
+(`shared/person-attention.ts`: a `[HUMAIN]`/`[HUMAN]`/`[NEEDS_HUMAN]` item
+line, a `needs_human` array in a JSON block, `NEEDS INPUT:`, `RUN_STATUS:
+failed|partial`) posts ONE card into the person's conversation with that bot
+(`server/turns/person-attention-relay.ts`, called from index.ts
+turn.completed): `WireMessage.attention` on a text row, its items with
+`Open ticket` (ConnectWise link from `SAGAX_CW_SITE` or the thread's own
+CW cards), `Open thread`, `Open run`; the conversation turns unread and a
+`needs-you` notification rings (desktop and phone). Never guessed from
+words, never in the person's own conversation, once per source message.
+A routine run that is still active reports through its own card instead:
+`routineReportOutcome` is never quiet with such items, `routineRunReportable`
+posts them whatever `postResults` says, and the routine.run row carries
+`attention` (RoutineRunCard draws the items). A routine run's task resumed
+after the run ended mirrors the bot's answer into the conversation
+(`mirrorLateRunReply`, `Message.lateRunReplyOf`). Desktop
+`src/components/AttentionCard.tsx`, iOS `AttentionCardView.swift`.
+A failed tool call always carries words: the Claude driver reads
+`tool_use_result` when the content block is empty, else `emptyFailureNote`;
+the Perspicax relay fills an empty `isError` result from `structuredContent`
+or a sentence (`withFailureWords`). Tests: `shared/person-attention.test.ts`,
+`server/turns/person-attention-relay.test.ts`,
+`server/person-attention.e2e.test.ts`,
+`server/drivers/claude/stream-content.test.ts`. Captures
+`node scripts/capture/needs-you-card.mjs`.
+
 # Sagax agent notes
 
 ## MCP after a cold cloud start (2026-11-04)

@@ -265,6 +265,14 @@ struct MessageRow: View {
         } else if let outbound = message.outbound, outbound.isDrawable, message.role == .bot {
             // a phone call or a purchase on its card (OutboundCard.tsx)
             OutboundCardView(card: outbound, accent: Theme.readable(MausPalette.color(chat.color)))
+        } else if let attention = message.attention, message.role == .bot, message.kind == .text {
+            // 2026-11-05: what a bot's turn elsewhere left for you (AttentionCard.tsx)
+            AttentionCardView(
+                card: attention,
+                tint: MausPalette.color(chat.color),
+                openThread: openThread,
+                openRun: attention.routineRunId.map { runId in attentionRunOpener(runId) }
+            )
         } else {
             kindContent
         }
@@ -388,6 +396,10 @@ struct MessageRow: View {
                     },
                     openThread: openThread
                 )
+                // 2026-11-05: items only the person can do, each with its ticket
+                if let attention = message.attention, !attention.items.isEmpty, card.knownStatus == .completed {
+                    AttentionItemsView(items: attention.items)
+                }
             } else if let text = message.text, !text.isEmpty {
                 // A computer that sent the kind without its card: the text
                 // is written for exactly this reader.
@@ -456,6 +468,18 @@ struct MessageRow: View {
     /// View run opens the run's detail (a run of a deleted routine too, to
     /// read). A run the computer no longer lists falls back to its
     /// execution conversation when this phone has a route to it.
+    /// A card's run, opened by its id (the card carries no RoutineRunCard).
+    private func attentionRunOpener(_ runId: String) -> () -> Void {
+        {
+            Task {
+                let listing = await session.loadRoutines()
+                if let run = listing.runs.first(where: { $0.id == runId }) {
+                    openedRun = OpenedRoutineRun(run: run, routine: listing.routines.first { $0.id == run.routineId })
+                }
+            }
+        }
+    }
+
     private func routineRunOpener(_ card: RoutineRunCard) -> (() -> Void)? {
         let fallback = session.state.routineExecutionRef(for: card)
         let openThread = openThread

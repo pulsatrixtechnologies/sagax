@@ -111080,6 +111080,66 @@
           }
         }
       }
+    },
+    "%@ has a question for you": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ a une question pour toi"
+          }
+        }
+      }
+    },
+    "%@ needs a decision": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ a besoin d'une décision"
+          }
+        }
+      }
+    },
+    "%@ needs you": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ a besoin de toi"
+          }
+        }
+      }
+    },
+    "From the routine %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "De la routine %@"
+          }
+        }
+      }
+    },
+    "From work %@ handed over": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du travail confié par %@"
+          }
+        }
+      }
+    },
+    "Open ticket %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir le billet %@"
+          }
+        }
+      }
     }
   }
 }

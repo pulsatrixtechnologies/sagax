@@ -541,6 +541,21 @@ describe("PerspicaxDirectory: roles and account MCP token exchange", () => {
   }
   const ok = { status: 200, body: { access_token: "pxlo1.BOB.exchanged-secret", issued_token_type: "urn:ietf:params:oauth:token-type:access_token", token_type: "Bearer", expires_in: 900, scope: "mcp" } };
 
+  it("#2024: resolves a person's model servers, caches them 60 s, an older Perspicax answers none", async () => {
+    const served = { status: 200, body: { servers: [{ instanceId: "acme-models", name: "Acme", url: "https://models.example.com/v1", protocol: "openai", scope: "org", apiKey: "test-server-key", models: [{ id: "example-27b" }] }] } };
+    const h = exchangeHarness([served, { status: 404 }, { status: 500 }]);
+    const first = await h.sync.resolveModelServers("BOB");
+    expect(first).toMatchObject({ ok: true, servers: [{ instanceId: "acme-models", apiKey: "test-server-key" }] });
+    const resolveCalls = () => h.calls.filter((call) => call.url.endsWith("/api/v1/pulsabot/model-servers/resolve"));
+    expect(resolveCalls()).toHaveLength(1);
+    expect(JSON.parse(resolveCalls()[0]!.body)).toMatchObject({ user: "BOB" });
+    expect(await h.sync.resolveModelServers("BOB")).toEqual(first);
+    expect(resolveCalls()).toHaveLength(1);
+    expect(await h.sync.resolveModelServers("CAROL")).toEqual({ ok: true, servers: [] });
+    expect(await h.sync.resolveModelServers("DAVE")).toEqual({ ok: false, error: "unreachable" });
+    expect(h.logs.join("\n")).not.toContain("test-server-key");
+  });
+
   it("an old directory without profiles still parses; the new fields are read and sorted", async () => {
     const h = harness(directoryOf([person("BOB")]));
     expect(await h.sync.refresh()).toMatchObject({ state: "ok" });

@@ -21,6 +21,7 @@ import { z } from "zod";
 
 import { normalizePermissions, type PermissionKey } from "../../shared/permissions.ts";
 import type { Principal } from "../auth/principals.ts";
+import { parseModelServers, type ModelServer } from "../drivers/pi-model-servers.ts";
 
 export const LINK_FILE_MAX_BYTES = 4 * 1024;
 export const DIRECTORY_MAX_BYTES = 4 * 1024 * 1024;
@@ -288,6 +289,15 @@ export interface DirectoryTeamNames {
 }
 
 export const PROVIDER_KEY_RESOLVE_PATH = "/api/v1/pulsabot/provider-keys/resolve";
+/** #2024: the model servers one person reaches (their organization's and
+ * their own), keys included (server/drivers/pi-model-servers.ts). */
+export const MODEL_SERVERS_RESOLVE_PATH = "/api/v1/pulsabot/model-servers/resolve";
+export const MODEL_SERVERS_TIMEOUT_MS = 5_000;
+export const MODEL_SERVERS_MAX_BYTES = 256 * 1024;
+export const MODEL_SERVERS_CACHE_MS = 60_000;
+export type ModelServersResult =
+  | { ok: true; servers: ModelServer[] }
+  | { ok: false; error: "link" | "unreachable" };
 /** A person's avatar through the link (the directory's `avatar` names its
  * version): `GET <base>/api/v1/pulsabot/people/<sub>/avatar`, a PNG or a
  * JPEG of at most AVATAR_MAX_BYTES, 404 when there is none. */
@@ -372,9 +382,13 @@ export const PROVIDER_KEY_CACHE_MS = 60_000;
  * voice mode, server/voice/voice-mode.ts), google (Gemini CLI, pi) and moonshot
  * (Kimi Code, pi). Perspicax 1.8 lists the first three; google and moonshot
  * are read as soon as its directory lists them (server/engines/engine-credentials.ts). */
-export type ModelProvider = "anthropic" | "openai" | "xai" | "google" | "moonshot" | "openrouter" | "mistral" | "cerebras" | "opencode" | "cursor" | "factory" | "minimax" | "glm" | "zai" | "groq" | `compat:${string}`;
-export const MODEL_PROVIDERS: readonly ModelProvider[] = ["anthropic", "openai", "xai", "google", "moonshot", "openrouter", "mistral", "cerebras", "opencode", "cursor", "factory", "minimax", "glm", "zai", "groq"];
-export const KEY_PROVIDERS = ["anthropic", "openai", "xai", "google", "moonshot", "elevenlabs", "fish", "openrouter", "mistral", "cerebras", "opencode", "cursor", "factory", "minimax", "glm", "zai", "groq"] as const;
+export type ModelProvider = "anthropic" | "openai" | "xai" | "google" | "moonshot" | "openrouter" | "mistral" | "cerebras" | "opencode" | "cursor" | "factory" | "minimax" | "glm" | "zai" | "groq" | PiNativeProvider | `compat:${string}`;
+/** #2024: further providers pi serves natively from a key alone (pi docs,
+ * providers.md), kept in Perspicax like any other model key. */
+export const PI_NATIVE_PROVIDERS = ["deepseek", "fireworks", "together", "huggingface", "nvidia", "kimi"] as const;
+export type PiNativeProvider = (typeof PI_NATIVE_PROVIDERS)[number];
+export const MODEL_PROVIDERS: readonly ModelProvider[] = ["anthropic", "openai", "xai", "google", "moonshot", "openrouter", "mistral", "cerebras", "opencode", "cursor", "factory", "minimax", "glm", "zai", "groq", ...PI_NATIVE_PROVIDERS];
+export const KEY_PROVIDERS = ["anthropic", "openai", "xai", "google", "moonshot", "elevenlabs", "fish", "openrouter", "mistral", "cerebras", "opencode", "cursor", "factory", "minimax", "glm", "zai", "groq", ...PI_NATIVE_PROVIDERS] as const;
 export type KeyProvider = (typeof KEY_PROVIDERS)[number] | `compat:${string}`;
 export function isKeyProvider(value: string): value is KeyProvider {
   return (KEY_PROVIDERS as readonly string[]).includes(value) || /^compat:[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(value);
@@ -561,6 +575,9 @@ export class PerspicaxDirectory {
   private absentSince = new Map<string, number>();
   /** Slice 4: owner keys read through the link, in memory only. */
   private readonly keyCache = new Map<string, { key: string; fingerprint: string; until: number }>();
+  /** #2024: each person's model servers, 60 s at most, never logged. */
+  private readonly modelServerCache = new Map<string, { servers: ModelServer[]; until: number }>();
+  private readonly modelServerFlights = new Map<string, Promise<ModelServersResult>>();
   /** Avatars read through the link, by subject and version, in memory only. */
   private readonly avatarCache = new Map<string, AvatarImage>();
   /** Unknown permission keys already logged (one line each). */
@@ -950,6 +967,33 @@ export class PerspicaxDirectory {
   forgetSubject(sub: string): void {
     const prefix = `${sub}\u0000`;
     for (const cacheKey of this.keyCache.keys()) if (cacheKey.startsWith(prefix)) this.keyCache.delete(cacheKey);
+    this.modelServerCache.delete(sub);
+  }
+
+  /** #2024: the model servers a person reaches through Perspicax, keys
+   * included, cached in memory for 60 s at most and never logged or
+   * written. A Perspicax without the route (404, 405) serves none, so
+   * nothing changes; an unreachable one is an error the caller treats as
+   * no servers for this turn. */
+  resolveModelServers(sub: string): Promise<ModelServersResult> {
+    const cached = this.modelServerCache.get(sub);
+    if (cached && cached.until > this.now()) return Promise.resolve({ ok: true, servers: cached.servers });
+    const flight = this.modelServerFlights.get(sub);
+    if (flight) return flight;
+    const next = this.fetchModelServers(sub).finally(() => this.modelServerFlights.delete(sub));
+    this.modelServerFlights.set(sub, next);
+    return next;
+  }
+
+  private async fetchModelServers(sub: string): Promise<ModelServersResult> {
+    // `sub` as provider-keys/resolve takes it, `user` as the contract names it
+    const result = await this.linkPostJson(MODEL_SERVERS_RESOLVE_PATH, { sub, user: sub }, { timeoutMs: MODEL_SERVERS_TIMEOUT_MS, maxBytes: MODEL_SERVERS_MAX_BYTES, subject: sub });
+    let servers: ModelServer[];
+    if (result.ok) servers = parseModelServers(result.body);
+    else if (result.error === "refused" && (result.status === 404 || result.status === 405)) servers = [];
+    else return { ok: false, error: result.error === "link" ? "link" : "unreachable" };
+    this.modelServerCache.set(sub, { servers, until: this.now() + MODEL_SERVERS_CACHE_MS });
+    return { ok: true, servers };
   }
 
   /** An owner's model key, read through the link (slice 4, contract 3):

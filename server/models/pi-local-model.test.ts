@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { isPiLocalModel, piLocalKeyRefusalLifted } from "./pi-local-model.ts";
+import { isPiLocalModel, isPiModelServerModel, isPiServedModel, piLocalKeyRefusalLifted } from "./pi-local-model.ts";
 
 describe("isPiLocalModel (#1422)", () => {
   it("is a pi model on a local host", () => {
@@ -47,5 +47,17 @@ describe("piLocalKeyRefusalLifted (#1422): the selection judged, never the bot's
     // each exemption takes the judged model as a parameter
     expect(source).toMatch(/function orgEngineRefusal\([^)]*model: string \| null \| undefined\)/);
     expect(source).toMatch(/async function orgTurnAccess\([^)]*model: string \| null \| undefined\)/);
+  });
+});
+
+describe("isPiServedModel (#2024)", () => {
+  it("is a local host or a Perspicax model server on pi", () => {
+    expect(isPiModelServerModel("piAgent", "px-org-acme-models/example-27b")).toBe(true);
+    expect(isPiModelServerModel("piAgent", "px-own-acme/m")).toBe(true);
+    expect(isPiModelServerModel("piAgent", "px-other/m")).toBe(false);
+    expect(isPiModelServerModel("codex", "px-org-acme/m")).toBe(false);
+    expect(isPiServedModel("piAgent", "omlx/Some-Model")).toBe(true);
+    expect(isPiServedModel("piAgent", "px-org-acme/m")).toBe(true);
+    expect(isPiServedModel("piAgent", "openai/gpt-5")).toBe(false);
   });
 });

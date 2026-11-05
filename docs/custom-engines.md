@@ -147,6 +147,68 @@ it again. An instance with its own `config.cli` is still probed as before.
 To move an engine to a new release, change its version (and hashes) in the
 lock only.
 
+## pi: model servers from Perspicax
+
+On a server linked to Perspicax, every pi turn (and the model picker) asks
+Perspicax which model servers serve the person
+(`POST /api/v1/pulsabot/model-servers/resolve`, cached 60 s per person): the
+organization's servers and the person's own. Each server becomes one pi
+provider in that person's pi home (`PI_CODING_AGENT_DIR/models.json`):
+`px-org-<instanceId>` or `px-own-<instanceId>`, `api` `openai-completions` or
+`anthropic-messages`, the server's `baseUrl`, and each model with its context
+window, output limit, input kinds and thinking level map. Other providers in
+that file (a local host, your own) are kept.
+
+```jsonc
+{
+  "providers": {
+    "px-org-acme-models": {
+      "api": "openai-completions",
+      "baseUrl": "https://models.example.com/v1",
+      "apiKey": "$SAGAX_PI_KEY_ORG_ACME_MODELS",
+      "compat": { "supportsDeveloperRole": false },
+      "models": [{ "id": "example-27b", "contextWindow": 262144, "maxTokens": 32768 }]
+    }
+  }
+}
+```
+
+The key never lands on disk: `models.json` names an environment variable and
+the value is in that turn's pi process only. A server with no link, or one
+Perspicax cannot reach, leaves `models.json` as it was. The keyed providers pi
+knows natively (xAI, Gemini, Moonshot, Mistral, Cerebras, Groq, OpenRouter,
+Z.ai, MiniMax and more) come through the organization or personal key path
+like the other engines.
+
+## pi: a kit on the server
+
+`SAGAX_PI_KIT_DIR` names a read-only folder an operator mounts into the
+service. Every pi turn copies it into the person's pi home:
+
+| Kit file | What a turn does with it |
+|---|---|
+| `extensions/*.ts` (`.js`, `.mjs`) | copied, each loaded with an explicit `-e`, also under the organization's `--no-extensions` |
+| `settings.json` | merged into the home's `settings.json` (the kit wins key by key) |
+| `APPEND_SYSTEM.md` | a template: `{{USER_NAME}} {{CW_MEMBER}} {{TIMEZONE}} {{LANG_NAME}} {{USER_ORG}} {{MAX_PARALLEL}}` filled from the person; a line naming a variable with no value is dropped |
+| `tools/` | copied as is, for the extensions that read it |
+| `packages.txt` | one pi package source a line (`#` starts a comment), each loaded with `-e` |
+
+Values: `USER_NAME` the person's display name, `TIMEZONE` their time zone,
+`LANG_NAME` their language in English, `USER_ORG` from `SAGAX_ORG_NAME`,
+`MAX_PARALLEL` from `SAGAX_PI_MAX_PARALLEL`, `CW_MEMBER` from
+`SAGAX_PI_CW_MEMBER` on a single-person server only. Host tools stay withheld
+from organization turns as they are without a kit.
+
+The image removes npm, so the kit's packages are installed at build time:
+
+```sh
+docker build --build-arg PI_KIT_PACKAGES="npm:example-pi-package@1.2.3" -t sagax .
+```
+
+They land under `SAGAX_PI_PACKAGES_DIR` (`/opt/sagax-pi-packages/node_modules`)
+and a turn loads them from there. A source not preinstalled is passed to pi as
+written.
+
 ## Notes
 
 - `config.json` is written with mode 0600; values in `environment` are stored

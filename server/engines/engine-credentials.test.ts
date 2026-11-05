@@ -156,7 +156,11 @@ describe("the bot's routines run on the owner's credentials", () => {
     expect(providerOfDriver("grokAgent")).toBe("xai");
     expect(providerOfDriver("geminiAgent")).toBe("google");
     expect(providerOfDriver("kimiAgent")).toBe("moonshot");
-    expect(providersOfDriver("piAgent")).toEqual(["anthropic", "openai", "xai", "google", "moonshot"]);
+    // #2024: every provider pi knows natively that Perspicax keeps a key for
+    expect(providersOfDriver("piAgent")).toEqual([
+      "anthropic", "openai", "xai", "google", "moonshot", "openrouter", "mistral", "cerebras", "groq",
+      "zai", "minimax", "opencode", "deepseek", "fireworks", "together", "huggingface", "nvidia", "kimi",
+    ]);
     expect(providerOfDriver("cursorAgent")).toBe("cursor");
     expect(["claudeAgent", "codex", "grokAgent", "kimiAgent", "geminiAgent", "piAgent"].filter(subscriptionDriver)).toEqual(["claudeAgent", "codex", "grokAgent", "kimiAgent"]);
   });

@@ -72,6 +72,7 @@
 //
 // Spec: docs/superpowers/specs/2026-09-29-perspicax-multiuser-design.md,
 // section 4 bis.
+import type { PiModelServer } from "../drivers/pi-model-servers.ts";
 import { join } from "node:path";
 
 import { routineLineage, speakerPrincipal, type EngineAccessRefusal, type TurnSpeaker } from "./engine-access.ts";
@@ -121,6 +122,8 @@ export interface TurnAccess {
    * engine (their device sign-in, or an empty one for a key), so the
    * server's own login never serves the turn (engineHomeEnv). */
   engineHome?: string;
+  /** #2024, pi: the Perspicax model servers of the person served (no keys). */
+  piModelServers?: PiModelServer[];
 }
 
 const DRIVER_PROVIDERS: Readonly<Record<string, readonly ModelProvider[]>> = {
@@ -140,7 +143,8 @@ const DRIVER_PROVIDERS: Readonly<Record<string, readonly ModelProvider[]>> = {
   hermesAgent: ["openrouter", "glm", "zai"],
   // pi is BYOK across providers: any key the person keeps serves it, and the
   // model they pick decides which one a turn uses.
-  piAgent: ["anthropic", "openai", "xai", "google", "moonshot"],
+  // #2024: every provider pi serves natively from a key.
+  piAgent: ["anthropic", "openai", "xai", "google", "moonshot", "openrouter", "mistral", "cerebras", "groq", "zai", "minimax", "opencode", "deepseek", "fireworks", "together", "huggingface", "nvidia", "kimi"],
 };
 
 /** The model providers whose key can serve a driver, in preference order. */
@@ -177,9 +181,25 @@ export const PROVIDER_KEY_ENV: Readonly<Record<Exclude<ModelProvider, `compat:${
   glm: "GLM_API_KEY",
   zai: "ZAI_API_KEY",
   groq: "SAGAX_GROQ_API_KEY",
+  deepseek: "DEEPSEEK_API_KEY",
+  fireworks: "FIREWORKS_API_KEY",
+  together: "TOGETHER_API_KEY",
+  huggingface: "HF_TOKEN",
+  nvidia: "NVIDIA_API_KEY",
+  kimi: "KIMI_API_KEY",
 };
 
-function keyEnvironment(provider: ModelProvider): string {
+/** #2024: where pi reads a provider's key when it is not PROVIDER_KEY_ENV's
+ * name (pi docs, providers.md). */
+const PI_KEY_ENV: Readonly<Partial<Record<Exclude<ModelProvider, `compat:${string}`>, string>>> = {
+  groq: "GROQ_API_KEY",
+};
+
+function keyEnvironment(provider: ModelProvider, driver = ""): string {
+  if (driver === "piAgent") {
+    const own = PI_KEY_ENV[provider as Exclude<ModelProvider, `compat:${string}`>];
+    if (own) return own;
+  }
   return provider.startsWith("compat:") ? "SAGAX_COMPAT_SERVER_API_KEY" : PROVIDER_KEY_ENV[provider as Exclude<ModelProvider, `compat:${string}`>];
 }
 
@@ -364,7 +384,7 @@ export async function materializeEngineAccess(input: EngineCredentialInput, plan
     if (result.ok && homeDriver(driver)) {
       // An empty home of the payer's for the engine: their key, never the
       // server's own login (a Grok cached token outranks a key).
-      const environment: Record<string, string> = { [keyEnvironment(plan.provider)]: result.key };
+      const environment: Record<string, string> = { [keyEnvironment(plan.provider, driver)]: result.key };
       const fingerprints = [result.fingerprint || "key"];
       if (driver === "piAgent") {
         // pi reaches every provider the payer keeps a key for; the picked
@@ -373,7 +393,7 @@ export async function materializeEngineAccess(input: EngineCredentialInput, plan
           if (other === plan.provider || !input.hasKey(sub, other)) continue;
           const more = await deps.resolveKey(sub, other);
           if (!more.ok) continue;
-          environment[keyEnvironment(other)] = more.key;
+          environment[keyEnvironment(other, driver)] = more.key;
           fingerprints.push(more.fingerprint || "key");
         }
       }

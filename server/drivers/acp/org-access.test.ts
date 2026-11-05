@@ -94,6 +94,34 @@ describe("pi", () => {
     expect(piAccessEnvironment({ HOME: "/data" }, undefined)).toEqual({ HOME: "/data" });
   });
 
+  it("#2024: pi's native providers, the organization's keys and the model servers", () => {
+    const dir = home();
+    const env = piAccessEnvironment(
+      { HOME: "/data" },
+      { via: "speaker-key", identity: "speaker-key:p:f", environment: { MISTRAL_API_KEY: "m-bob", GROQ_API_KEY: "g-bob", SAGAX_PI_KEY_ORG_ACME: "srv" }, engineHome: dir },
+    );
+    expect(env).toEqual({ HOME: "/data", PI_CODING_AGENT_DIR: dir, MISTRAL_API_KEY: "m-bob", GROQ_API_KEY: "g-bob", SAGAX_PI_KEY_ORG_ACME: "srv" });
+    expect(PI_ACCESS_KEY_ENV).toEqual(expect.arrayContaining(["MISTRAL_API_KEY", "CEREBRAS_API_KEY", "OPENROUTER_API_KEY", "ZAI_API_KEY", "MINIMAX_API_KEY"]));
+
+    const orgDir = home();
+    const org = piAccessEnvironment({ HOME: "/data" }, { via: "org-key", identity: "org-key", engineHome: orgDir }, { OPENAI_API_KEY: "sk-org", BOX_TOKEN: "nope" });
+    expect(org).toEqual({ HOME: "/data", PI_CODING_AGENT_DIR: orgDir, OPENAI_API_KEY: "sk-org" });
+    // a speaker's turn never takes the organization's keys
+    expect(piAccessEnvironment({ HOME: "/data" }, { via: "speaker-key", identity: "s", engineHome: home() }, { OPENAI_API_KEY: "sk-org" }).OPENAI_API_KEY).toBeUndefined();
+
+    const served = home();
+    piAccessEnvironment({ HOME: "/data" }, {
+      via: "server",
+      identity: "server",
+      engineHome: served,
+      environment: { SAGAX_PI_KEY_ORG_ACME: "srv" },
+      piModelServers: [{ instanceId: "acme", name: "Acme", url: "https://models.example.com/v1", protocol: "openai", scope: "org", provider: "px-org-acme", keyEnv: "SAGAX_PI_KEY_ORG_ACME", models: [{ id: "m", label: "M", contextWindow: 1000, maxTokens: 100, reasoning: true, input: ["text"] }] }],
+    });
+    const text = readFileSync(join(served, "models.json"), "utf8");
+    expect(JSON.parse(text).providers["px-org-acme"].apiKey).toBe("$SAGAX_PI_KEY_ORG_ACME");
+    expect(text).not.toContain("srv\"");
+  });
+
   it("an organization server lists every key provider's models from a home of its own", () => {
     expect(piCatalogEnvironment({ HOME: "/data" }, false)).toEqual({ HOME: "/data" });
     const env = piCatalogEnvironment({ HOME: "/data" }, true);

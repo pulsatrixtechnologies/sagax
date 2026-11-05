@@ -33,6 +33,7 @@ import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
 import { freePortBlock } from "../testing/ports.ts";
 import { waitForServerReady } from "../testing/server-ready.ts";
+import { releaseVersion } from "../environment.ts";
 
 // This file lives in server/org/; the paths below are relative to server/.
 const SERVER_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -229,7 +230,7 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     expect(Array.isArray((await api("GET", "/api/health", bob)).body.engines)).toBe(true);
     const bare = await api("GET", "/api/health");
     expect(bare.status).toBe(200);
-    expect(bare.body).toEqual({ app: "openmausbot", product: "sagax", version: "0.8.45" });
+    expect(bare.body).toEqual({ app: "openmausbot", product: "sagax", version: releaseVersion() });
   });
 
   it("S3-4 (B): shared with bob, answered with the org key; dave sees none of it", async () => {

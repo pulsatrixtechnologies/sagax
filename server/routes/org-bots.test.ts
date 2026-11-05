@@ -62,6 +62,6 @@ describe("createOrgBotsRoutes", () => {
     const call = ctx("/api/org/bots", "GET");
     await route(call.context);
     expect(call.sent[0]?.status).toBe(200);
-    expect((call.sent[0]?.body as { bots: unknown[] }).bots).toHaveLength(1);
+    expect((call.sent[0]?.body as { bots: unknown[] } | undefined)?.bots).toHaveLength(1);
   });
 });

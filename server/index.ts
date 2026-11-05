@@ -4942,9 +4942,12 @@ utilityParentPort?.on("message", (event) => {
       ownerIdentity?.set(owner.identity);
       return;
     }
-    if (handleDesktopTrustedApprovalMessage(message)) return;
     if (browserCleanup.receive(message)) return;
-    phoneSecrets.receive(message);
+    // Phone and cleanup messages first: Electron sends the phone identity at
+    // startup, before the trusted approval handler below is initialized (#1388
+    // moved it to a const further down this module).
+    if (phoneSecrets.receive(message)) return;
+    handleDesktopTrustedApprovalMessage(message);
   } catch (error) {
     console.error(`[desktop-sync] rejected private parent message: ${error instanceof Error ? error.message : String(error)}`);
   }

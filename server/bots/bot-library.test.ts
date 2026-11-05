@@ -1,7 +1,50 @@
 import { describe, expect, it } from "vitest";
 
-import { cleanUrl, collectBotLinks, fileKind, linksInText, mergeBotFiles, pageOf, readPageQuery } from "./bot-library.ts";
+import {
+  cleanUrl,
+  collectBotLinks,
+  fileKind,
+  isSharedLibraryFilePath,
+  libraryThreadsOfSharedBot,
+  linksInText,
+  mergeBotFiles,
+  pageOf,
+  readPageQuery,
+  sharedLibraryFileAllowed,
+} from "./bot-library.ts";
 import type { ThreadFile } from "../threads/thread-files.ts";
+
+describe("shared bot library (#2019)", () => {
+  const tasks = [
+    { threadId: "owner-t", confidential: false },
+    { threadId: "sharee-t", confidential: undefined },
+    { threadId: "secret-t", confidential: true },
+  ];
+
+  it("a shared viewer covers the bot's whole non-confidential library", () => {
+    expect(libraryThreadsOfSharedBot(tasks, true)).toEqual(["owner-t", "sharee-t"]);
+  });
+
+  it("a person without bot.use sees none", () => {
+    expect(libraryThreadsOfSharedBot(tasks, false)).toEqual([]);
+  });
+
+  it("confidential threads stay excluded", () => {
+    expect(libraryThreadsOfSharedBot(tasks, true)).not.toContain("secret-t");
+    expect(sharedLibraryFileAllowed({ mayUseBot: true, confidential: true })).toBe(false);
+  });
+
+  it("file URLs open for a shared viewer on non-confidential threads only", () => {
+    const fileId = "a".repeat(24);
+    // path is the pathname (preview/thumb are query params on the same route)
+    expect(isSharedLibraryFilePath("GET", `/api/threads/owner-t/files/${fileId}`)).toBe(true);
+    expect(isSharedLibraryFilePath("GET", `/api/threads/owner-t/files`)).toBe(false);
+    expect(isSharedLibraryFilePath("GET", `/api/threads/owner-t/messages`)).toBe(false);
+    expect(isSharedLibraryFilePath("POST", `/api/threads/owner-t/files/${fileId}`)).toBe(false);
+    expect(sharedLibraryFileAllowed({ mayUseBot: true, confidential: false })).toBe(true);
+    expect(sharedLibraryFileAllowed({ mayUseBot: false, confidential: false })).toBe(false);
+  });
+});
 
 describe("bot links", () => {
   it("finds bare and Markdown links, trimming sentence punctuation", () => {

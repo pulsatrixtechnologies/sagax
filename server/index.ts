@@ -2005,6 +2005,7 @@ import {
 import { MEMORY_INDEX, memoryOverview, readMemoryDoc } from "./memory/memory-store.ts";
 import { isExpired as memoryEntryExpired, parseMemoryEntries } from "./memory/memory-entries.ts";
 import { createBotLibraryRoutes } from "./routes/bot-library.ts";
+import { isSharedLibraryFilePath, libraryThreadsOfSharedBot, sharedLibraryFileAllowed } from "./bots/bot-library.ts";
 import { createBotSettingsRoutes } from "./routes/bot-settings.ts";
 import { createAutoReviewRuleRoutes } from "./routes/auto-review-rules.ts";
 import { createOwnerApprovalRoutes } from "./routes/owner-approvals.ts";
@@ -33242,14 +33243,18 @@ ROUTES.push(createUndoRoutes({
   undo: (auth, res, threadId, requestId) => withDecisionActor(decisionActorFor(auth), () => undoAppliedChange(res, threadId, requestId))
 }));
 // The bot profile's Links, Media and Files tabs and Share as Template
-// (server/routes/bot-library.ts, iOS parity).
+// (server/routes/bot-library.ts, iOS parity). When the bot is shared, the
+// library covers every non-confidential thread of the share (#2019).
 ROUTES.push(createBotLibraryRoutes<BotRecord>({
   bot: (id) => store.bot(id) ?? undefined,
   threadsFor: (bot) => {
-    // On an organization server a person reads only their own threads.
     const viewer = scopedThreadViewer();
-    const shown = threadsShownTo(bot, store.tasks(bot.id), viewer).map((task) => task.threadId);
-    return viewer ? shown : [bot.threadId, ...shown];
+    if (!viewer || !privateThreads()) {
+      const shown = threadsShownTo(bot, store.tasks(bot.id), viewer).map((task) => task.threadId);
+      return viewer ? shown : [bot.threadId, ...shown];
+    }
+    const mayUse = Boolean(canOnBot(authzViewerFromId(viewer), "bot.use", botFacts(bot)));
+    return libraryThreadsOfSharedBot(store.tasks(bot.id), mayUse);
   },
   messages: (threadId) => activePath(store.messagesFor(threadId), store.activeLeaf(threadId)),
   files: (threadId) => listThreadFiles(threadFileRefsFor(threadId), (ref) => statMessageFile(ref.path, threadFileRoots(threadId, ref))),
@@ -46125,10 +46130,20 @@ async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL,
     // The one exception the spec writes down (slice 3, D15): an
     // organization admin answers a card that waits for an admin, without
     // reading the thread (POST .../respond only).
+    // Shared bot library (#2019): a person with bot.use may GET one file
+    // (download / preview / thumb) from a non-confidential thread of that
+    // bot, so Links / Media / Files URLs open for a shared viewer.
     if (named && owner && !adminAnswersPendingApproval(method, path, auth) &&
       !botThreadReadable(owner, named, scopedViewerId, method === "GET" ? "thread.read" : "thread.post")) {
-      json(res, 404, { error: "no such conversation" });
-      return null;
+      const task = store.taskByThread(owner.id, named);
+      const libraryFile = Boolean(task) && isSharedLibraryFilePath(method, path) && sharedLibraryFileAllowed({
+        mayUseBot: Boolean(canOnBot(authzViewerFromId(scopedViewerId), "bot.use", botFacts(owner))),
+        confidential: task!.confidential === true,
+      });
+      if (!libraryFile) {
+        json(res, 404, { error: "no such conversation" });
+        return null;
+      }
     }
     onJsonBody(res, (body) => bodyForThreadViewer(body, scopedViewerId));
   }

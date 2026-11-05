@@ -159,9 +159,9 @@ const label = (key: string, en: Locale, fr: Locale) => {
 
 export interface SettingsSectionRow { id: string; group: string; labelKey: string; keywords: string[] }
 
-/** The pages of Settings (src/components/SettingsModal.tsx SECTIONS). */
+/** The pages of Settings (src/components/settings/settings-nav.ts SECTIONS). */
 export function settingsSectionRows(root: string): SettingsSectionRow[] {
-  const source = read(root, "src/components/SettingsModal.tsx");
+  const source = read(root, "src/components/settings/settings-nav.ts");
   const block = source.slice(source.indexOf("export const SECTIONS"), source.indexOf("\n];", source.indexOf("export const SECTIONS")));
   const rows: SettingsSectionRow[] = [];
   for (const match of block.matchAll(/\{ id: "(\w+)", group: "(\w+)", labelKey: "([\w.]+)",[^\n]*?keywords: \[([^\]]*)\]/g)) {
@@ -197,7 +197,7 @@ function settingsSections(root: string): KnowledgeSection[] {
       ...(note?.access ? { access: note.access } : {}),
       keywords: row.keywords.join(" "),
       text: `${note?.text ? `${note.text} ` : ""}Holds: ${row.keywords.slice(0, 40).join(", ")}.`,
-      source: "src/components/SettingsModal.tsx",
+      source: "src/components/settings/settings-nav.ts",
     });
   }
   // Cards: every settings card with an id and a title, under its page.

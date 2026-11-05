@@ -42,6 +42,7 @@ import { roomActivityVisible } from "@/lib/room-activity";
 import { viewerActorId, viewerCan } from "@/lib/viewer";
 import { permissionMissingText } from "@/lib/permissions";
 import { viewerIsOrgAdmin, viewerOwnsGroup } from "@/lib/group-owner";
+import { viewerOwnsBot } from "@/lib/bot-capabilities";
 import { PersonAvatar, RoomPersonLabel } from "./MessageAuthor";
 import { peopleDmPeer } from "@/lib/people-dm";
 import { PersonLabelTag } from "./LabelTag";
@@ -856,7 +857,15 @@ export const Transcript = memo(function Transcript({
           // Someone who is not the owner sees the wait, not an approval.
           m.state === "waiting-on-owner" ? (
             <div className="flex justify-start">
-              <OwnerWait ownerName={m.ownerName ?? ""} />
+              {(() => {
+                // #2042: only the person whose bot started this wait can
+                // Cancel; Allow/Deny stay on the admin's card.
+                const speaker = memberOf(m.from?.botId) ?? memberOf(group.busyBotId ?? undefined);
+                const onCancel = speaker && viewerOwnsBot(state.config, speaker)
+                  ? () => dispatch({ type: "interruptGroup", groupId: group.id, threadId: group.threadId })
+                  : undefined;
+                return <OwnerWait ownerName={m.ownerName ?? ""} onCancel={onCancel} />;
+              })()}
             </div>
           ) : m.state === "owner-settled" ? (
             <div className="flex justify-start">

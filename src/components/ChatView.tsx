@@ -1476,7 +1476,16 @@ const MessagesList = memo(function MessagesList({
               />
             );
           }
-          if (m.state === "waiting-on-owner") return <OwnerWait ownerName={m.ownerName ?? ""} />;
+          if (m.state === "waiting-on-owner") {
+            // #2042: the member who started this turn can Cancel while an
+            // admin still holds the card. Same interrupt path as Stop.
+            return (
+              <OwnerWait
+                ownerName={m.ownerName ?? ""}
+                onCancel={() => dispatch({ type: "interrupt", botId, threadId })}
+              />
+            );
+          }
           if (m.state === "owner-settled") return <OwnerSettled message={m} />;
           // a bot's page proposal: its approval card (src/components/PublishedPages.tsx)
           if (m.pagePublish && m.role === "bot") {

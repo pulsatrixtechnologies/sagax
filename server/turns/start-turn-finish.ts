@@ -43,6 +43,7 @@ export function createFinishStartTurn(host: StartTurnHost) {
     failedTurnTool,
     handoffs,
     hasQueuedSteeredMessages,
+    holdSignInRefusal,
     hostedModels,
     isModelRefusal,
     limitBackupRefusedInThread,
@@ -229,10 +230,32 @@ let e: any = cause;
       state.backupRefused = e instanceof EngineAccessLost ? limitBackupRefusedInThread(state.bot.id, state.threadId, state.speaker) : null;
       // #1533: Claude refused the person's own sign-in before the turn began
       const startExpired = e instanceof TurnAuthenticationRefusedError ? subscriptionExpiredCard(state.bot, state.instance, turnAccessByThread.get(state.threadId), e.message) : null;
-      if (startExpired) {
-        store.appendMessage(state.threadId, { role: "bot", kind: "access", access: startExpired });
-        notifyAccess(deliverableNotification("turn-failed", state.bot, state.threadId, engineAccessNotice("no_access", startExpired.engine, startExpired), { avatarUrl: state.bot.avatarUrl }), startExpired);
-      }
+      const personTurn = state.opts?.automationSource === undefined && !state.opts?.commsDepth && !state.opts?.cardContinuation;
+      // #2057: a turn the person sent waits on the renew: renewed means the
+      // same message goes again once and no card; failed means the card,
+      // its notice and the incident, as before.
+      const startHeld = startExpired ? holdSignInRefusal(state.bot, state.instance, startExpired, state.threadId,
+        Boolean(personTurn && state.userMessage && !turnAccessByThread.get(state.threadId)?.routine), {
+          show: (afterHold: boolean) => {
+            store.appendMessage(state.threadId, { role: "bot", kind: "access", access: startExpired });
+            notifyAccess(deliverableNotification("turn-failed", state.bot, state.threadId, engineAccessNotice("no_access", startExpired.engine, startExpired), { avatarUrl: state.bot.avatarUrl }), startExpired);
+            if (afterHold) {
+              notify(deliverableNotification("turn-failed", state.bot, state.threadId, redactSecretsInText(e.message), { avatarUrl: state.bot.avatarUrl }));
+              reportIncident({ kind: "could-not-start", bot: state.bot, threadId: state.threadId, detail: e.message });
+            }
+          },
+          resend: () => {
+            void state.startTurn(state.bot.id, state.text, { ...state.opts, threadId: state.threadId, userMessage: state.userMessage, editedMessageId: undefined })
+              .catch((failure: unknown) => {
+                if ((failure as { code?: string }).code !== "answered") console.warn(`[sign-in-retry] ${state.threadId}: ${failure instanceof Error ? failure.message : String(failure)}`);
+              });
+            return true;
+          },
+          fail: () => {
+            store.appendMessage(state.threadId, { role: "bot", kind: "activity", turnSucceeded: false, tool: failedTurnTool(e.message, {}) });
+            reportIncident({ kind: "could-not-start", bot: state.bot, threadId: state.threadId, detail: e.message });
+          }
+        }) : false;
       if (state.backupRefused) message = state.backupRefused;
       else if (e instanceof EngineAccessLost) {
         // The owner key went away between admission and dispatch: the same
@@ -262,7 +285,7 @@ let e: any = cause;
       // raises routine-failed; buzzing here too would ring twice for one
       // failure. A delegated sub-turn is reported to the bot that asked
       // for it, in its own thread, so it does not need a second channel.
-      if (state.opts?.automationSource === undefined && !state.opts?.commsDepth && !state.opts?.cardContinuation) {
+      if (personTurn && !startHeld) {
         notify(
           deliverableNotification("turn-failed", state.bot, state.threadId, redactSecretsInText(message), { avatarUrl: state.bot.avatarUrl }),
         );

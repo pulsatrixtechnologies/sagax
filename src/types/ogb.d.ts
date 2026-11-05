@@ -411,6 +411,13 @@ const __BASE_VERSION__: string;
         state(): Promise<{ maximized: boolean }>;
         onMaximizedChanged(cb: (maximized: boolean) => void): () => void;
       };
+      /** OS fullscreen of this BrowserWindow (setFullScreen). Present on the
+       * main window and on artifact/page windows (#2043). Absent in a browser. */
+      windowFullscreen?: {
+        set(on: boolean): Promise<boolean>;
+        state(): Promise<{ fullscreen: boolean }>;
+        onChanged(cb: (fullscreen: boolean) => void): () => void;
+      };
       /** Receives a GitHub package URL opened through sagax://install. */
       onPackageInstall?(cb: (url: string) => void): () => void;
       /** Receives a chat link (sagax://thread/… or sagax://bot/…)

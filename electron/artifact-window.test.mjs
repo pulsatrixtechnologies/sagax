@@ -57,7 +57,8 @@ function fakeElectron() {
     isAlwaysOnTop() { return this.onTop === true; }
     isMinimized() { return false; }
     isMaximized() { return false; }
-    isFullScreen() { return false; }
+    isFullScreen() { return this.fullscreen === true; }
+    setFullScreen(on) { this.fullscreen = on === true; this.calls.push(["setFullScreen", on === true]); }
     maximize() { this.calls.push(["maximize"]); }
     getNormalBounds() { return { ...this.bounds }; }
     setBounds(bounds) { this.bounds = { ...bounds }; this.fire("move"); }
@@ -176,6 +177,8 @@ describe("artifact windows", () => {
       minHeight: ARTIFACT_WINDOW_MIN.height,
       webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: "/app/electron/artifact-window-preload.cjs" },
     });
+    expect(win.events.has("enter-full-screen")).toBe(true);
+    expect(win.events.has("leave-full-screen")).toBe(true);
     expect(win.loadURL).toHaveBeenCalledWith(`${ORIGIN}/artifact-window#bot=bot-a&artifact=art_1`);
     expect(controller.entries()).toEqual([{ artifactId: "art_1", title: "Live table" }]);
     expect(onChange).toHaveBeenCalled();

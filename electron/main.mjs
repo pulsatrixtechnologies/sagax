@@ -44,6 +44,7 @@ import { createOrgJoin, forgetDetail } from "./org-join.mjs";
 import { createOwnerIdentitySync, organizationOrigins } from "./owner-identity.mjs";
 import { createMachineWorker, readMachineIdentity } from "./machine-worker.mjs";
 import { trafficLightsForSkin, windowChromeOptions } from "./window-chrome.mjs";
+import { attachFullscreenPush, setWindowFullScreen, windowFullScreenState } from "./window-fullscreen.mjs";
 import { createWindowNudger } from "./window-nudge.mjs";
 import { createDesktopAttention } from "./desktop-attention.mjs";
 import { createAllWindowsClosedQuit } from "./window-all-closed.mjs";
@@ -324,6 +325,11 @@ function installWindowStatePersistence(win) {
   win.on("unmaximize", pushMaximized);
   win.on("maximize", schedule);
   win.on("unmaximize", schedule);
+  // OS fullscreen label (#2043): every account page of this window hears it.
+  attachFullscreenPush(win, () => {
+    const pages = win === mainWindow && pageContexts ? pageContexts.openOrigins().map((origin) => pageContexts.contentsFor(origin)) : [];
+    return [...new Set([win.webContents, ...pages])];
+  });
   win.on("close", flush);
 }
 
@@ -4578,7 +4584,7 @@ const artifactWindows = createArtifactWindows({
   // the page on screen drives it (each account has its page)
   getMainWindow: () => pageHandle(mainPage()),
   isTrustedMain: (event) => isDesktopUiSender(event),
-  // narrow preload: always-on-top for the page/artifact window itself (#2046)
+  // narrow preload: always-on-top (#2046) and OS fullscreen (#2043)
   preload: path.join(__dirname, "artifact-window-preload.cjs"),
   openExternal: (url) => {
     try {
@@ -4770,6 +4776,16 @@ for (const [channel, act] of [
 ipcMain.handle("window:state", (event) => {
   const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
   return { maximized: Boolean(win && !win.isDestroyed() && win.isMaximized()) };
+});
+// OS fullscreen of the sender's own window (#2043): page and artifact
+// windows call these; the label follows enter/leave-full-screen.
+ipcMain.handle("window:set-fullscreen", (event, on) => {
+  const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+  return setWindowFullScreen(win, on === true);
+});
+ipcMain.handle("window:fullscreen-state", (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+  return windowFullScreenState(win);
 });
 
 ipcMain.handle("desktop:open-external", desktopUiOnly("desktop:open-external", async (_event, rawUrl) => {

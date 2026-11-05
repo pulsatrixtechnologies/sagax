@@ -148,3 +148,97 @@ describe("the open page", () => {
     delete (window as unknown as { artifactWindowSelf?: unknown }).artifactWindowSelf;
   });
 });
+
+describe("page Full screen (#2043)", () => {
+  let requestFullscreen: ReturnType<typeof vi.fn>;
+  let exitFullscreen: ReturnType<typeof vi.fn>;
+  let fullscreenElement: Element | null = null;
+
+  beforeEach(() => {
+    fullscreenElement = null;
+    requestFullscreen = vi.fn(async function (this: Element) {
+      fullscreenElement = document.documentElement;
+      document.dispatchEvent(new Event("fullscreenchange"));
+    });
+    exitFullscreen = vi.fn(async () => {
+      fullscreenElement = null;
+      document.dispatchEvent(new Event("fullscreenchange"));
+    });
+    Object.defineProperty(document.documentElement, "requestFullscreen", { configurable: true, value: requestFullscreen });
+    Object.defineProperty(document, "exitFullscreen", { configurable: true, value: exitFullscreen });
+    Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => fullscreenElement });
+    delete (window as { ogb?: unknown }).ogb;
+  });
+
+  afterEach(() => {
+    delete (window as { ogb?: unknown }).ogb;
+  });
+
+  it("keeps Full screen in the page toolbar next to Share", async () => {
+    render({});
+    await flush();
+    const button = host.querySelector<HTMLButtonElement>("[data-page-fullscreen]");
+    const share = host.querySelector("[data-page-share]");
+    const frame = host.querySelector("[data-page-viewer-frame]");
+    expect(button).not.toBeNull();
+    expect(share).not.toBeNull();
+    expect(button!.parentElement).toBe(share!.parentElement);
+    expect(frame?.contains(button) ?? false).toBe(false);
+  });
+
+  it("asks the OS for full screen during the click and toggles the label", async () => {
+    render({});
+    await flush();
+    const button = () => host.querySelector<HTMLButtonElement>("[data-page-fullscreen]")!;
+    expect(button().getAttribute("aria-pressed")).toBe("false");
+    let duringClick = false;
+    let requestedDuringClick = false;
+    requestFullscreen.mockImplementation(async function (this: Element) {
+      if (duringClick) requestedDuringClick = true;
+      fullscreenElement = document.documentElement;
+      document.dispatchEvent(new Event("fullscreenchange"));
+    });
+    await act(async () => {
+      duringClick = true;
+      button().click();
+      duringClick = false;
+    });
+    expect(requestedDuringClick).toBe(true);
+    expect(button().getAttribute("aria-pressed")).toBe("true");
+    await act(async () => { button().click(); });
+    expect(exitFullscreen).toHaveBeenCalled();
+  });
+
+  it("uses Electron setFullScreen when the preload bridge is present", async () => {
+    const set = vi.fn(async () => true);
+    const listeners = new Set<(fullscreen: boolean) => void>();
+    window.ogb = {
+      windowFullscreen: {
+        set,
+        state: async () => ({ fullscreen: false }),
+        onChanged: (cb: (fullscreen: boolean) => void) => {
+          listeners.add(cb);
+          return () => { listeners.delete(cb); };
+        },
+      },
+    } as unknown as Window["ogb"];
+    render({});
+    await flush();
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-page-fullscreen]")!.click(); });
+    expect(set).toHaveBeenCalledWith(true);
+    expect(requestFullscreen).not.toHaveBeenCalled();
+    await act(async () => { for (const listener of listeners) listener(true); });
+    expect(host.querySelector<HTMLButtonElement>("[data-page-fullscreen]")!.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("Escape does not close the page while OS full screen is on", async () => {
+    const onClose = vi.fn();
+    render({ onClose });
+    await flush();
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-page-fullscreen]")!.click(); });
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+});

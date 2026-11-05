@@ -3,18 +3,19 @@
 // drawn by the desktop app in a separate BrowserWindow
 // (electron/artifact-window.mjs) that can sit outside the app's frame, beside
 // the work or on another monitor, or opened in a browser tab where there is no
-// desktop app. It shows the widget, its status, Refresh now and Close window,
-// and has its own store, like any other tab of the app. Closing the window
-// docks the artifact; Close window does the same.
+// desktop app. It shows the widget, its status, Refresh now, Full screen and
+// Close window, and has its own store, like any other tab of the app. Closing
+// the window docks the artifact; Close window does the same.
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { LoaderCircle, Maximize2, RefreshCw, X } from "lucide-react";
+import { LoaderCircle, Maximize2, Minimize2, RefreshCw, X } from "lucide-react";
 
 import { StoreProvider, useStore } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { effectiveLanguage, useLanguageChoice } from "@/lib/language-preference";
 import { setLocale, t } from "@/lib/i18n";
 import { refreshArtifact, useArtifact, useArtifactWatch } from "@/lib/artifacts";
-import { ArtifactFrame, ArtifactFullscreenHost, enterArtifactFullscreen } from "./ArtifactFrame";
+import { useOsFullscreen } from "@/hooks/use-os-fullscreen";
+import { ArtifactFrame } from "./ArtifactFrame";
 import { PageSurface } from "../PageViewer";
 import { pageIdOfWindow } from "@/lib/page-windows";
 import { ArtifactStatusLine } from "./ArtifactsSection";
@@ -22,16 +23,18 @@ import { dockArtifactWindow, type ArtifactWindowData } from "./artifact-windows"
 
 const TOOL = "flex size-7 items-center justify-center rounded-md text-ink-secondary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-40";
 
-/** One artifact's window body: its widget, its state, Refresh now and Close
- * window. Mounted means visible, so it holds a watch lease. */
+/** One artifact's window body: its widget, its state, Refresh now, Full screen
+ * and Close window. Mounted means visible, so it holds a watch lease. */
 export function ArtifactWindowBody({ data }: { data: ArtifactWindowData }) {
   const { artifact, error } = useArtifact(data.botId, data.artifactId);
   useArtifactWatch(data.artifactId);
   const [refreshing, setRefreshing] = useState(false);
+  const { fullscreen, toggle } = useOsFullscreen();
+  const fullscreenLabel = fullscreen ? t("artifact.exitFullscreen") : t("artifact.fullscreen");
   return (
     <div className="flex size-full flex-col" data-artifact-window={data.artifactId}>
       {/* Full screen lives in the chrome (#2043): never over the page content.
-          The click also asks the OS for full screen while the gesture is live. */}
+          The click asks the OS for full screen (setFullScreen / Fullscreen API). */}
       <div data-artifact-window-chrome className="flex shrink-0 items-center gap-1 border-b border-hairline/30 px-2 py-1">
         <span className="min-w-0 flex-1">{artifact && <ArtifactStatusLine artifact={{ ...artifact, ...(artifact.data ? { dataAt: artifact.data.at } : {}) }} />}</span>
         {artifact?.source && (
@@ -54,11 +57,14 @@ export function ArtifactWindowBody({ data }: { data: ArtifactWindowData }) {
             type="button"
             className={TOOL}
             data-artifact-fullscreen
-            aria-label={t("artifact.fullscreen")}
-            title={t("artifact.fullscreen")}
-            onClick={() => enterArtifactFullscreen(artifact)}
+            aria-pressed={fullscreen}
+            aria-label={fullscreenLabel}
+            title={fullscreenLabel}
+            onClick={() => toggle()}
           >
-            <Maximize2 size={13} aria-hidden="true" />
+            {fullscreen
+              ? <Minimize2 size={13} aria-hidden="true" />
+              : <Maximize2 size={13} aria-hidden="true" />}
           </button>
         )}
         <button
@@ -74,7 +80,7 @@ export function ArtifactWindowBody({ data }: { data: ArtifactWindowData }) {
       </div>
       <div className="min-h-0 flex-1 p-2">
         {artifact ? (
-          <ArtifactFrame artifact={artifact} fill />
+          <ArtifactFrame artifact={artifact} fill bare />
         ) : error ? (
           <p role="alert" className="p-2 text-[12.5px] text-danger">{t("artifacts.error")}</p>
         ) : (
@@ -83,12 +89,10 @@ export function ArtifactWindowBody({ data }: { data: ArtifactWindowData }) {
           </span>
         )}
       </div>
-      {/* Own window has no ArtifactsHost; this host draws the layer and the
-          window itself goes full screen (#1495, #2043). */}
-      <ArtifactFullscreenHost windowFullscreen />
     </div>
   );
 }
+
 const ID = /^[a-zA-Z0-9:_-]{1,128}$/;
 
 function subscribeHash(listener: () => void) {

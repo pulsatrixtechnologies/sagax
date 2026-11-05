@@ -10648,6 +10648,8 @@
   "pages.rename": "Rename the page",
   "pages.versionPick": "Version shown",
   "pages.present": "Present",
+  "pages.fullscreen": "Full screen",
+  "pages.exitFullscreen": "Exit full screen",
   "pages.edit": "Edit",
   "pages.share": "Share",
   "pages.copyPublicLink": "Copy the public link",

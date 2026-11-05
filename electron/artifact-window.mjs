@@ -15,12 +15,13 @@
  * The window draws the app's own page (same origin, build and Content Security
  * Policy as the main window) on its `/artifact-window` route, in the default
  * session so the person's sign-in applies as it does in the main window. It
- * gets a narrow preload (`artifact-window-preload.cjs`) that only exposes
- * always-on-top for this window (`window.artifactWindowSelf`, #2046): no
- * `window.ogb`, no file, no network, no other window. contextIsolation, a
- * sandbox and no Node stay on. It may only navigate within its own route; any
- * other link goes to the system browser. Only the main window's own page may
- * ask for one (open/close); the window itself may toggle always-on-top.
+ * gets a narrow preload (`artifact-window-preload.cjs`) that exposes
+ * always-on-top (`window.artifactWindowSelf`, #2046) and OS fullscreen
+ * (`window.ogb.windowFullscreen`, #2043): no file, no network, no other
+ * window. contextIsolation, a sandbox and no Node stay on. It may only
+ * navigate within its own route; any other link goes to the system browser.
+ * Only the main window's own page may ask for one (open/close); the window
+ * itself may toggle always-on-top and OS fullscreen.
  *
  * Each artifact's window keeps its place: its bounds (whether it was
  * maximized, and whether always-on-top was on) are saved per artifact id
@@ -32,9 +33,15 @@
  * menu names them.
  */
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+
+import { attachFullscreenPush } from "./window-fullscreen.mjs";
 
 const require = createRequire(import.meta.url);
 const { resolveWindowState } = require("./window-state.cjs");
+
+/** Narrow preload: always-on-top (#2046) and OS fullscreen (#2043). Overridable in tests. */
+export const ARTIFACT_WINDOW_PRELOAD = fileURLToPath(new URL("./artifact-window-preload.cjs", import.meta.url));
 
 export const ARTIFACT_WINDOW_PATH = "/artifact-window";
 export const ARTIFACT_WINDOW_SIZE = Object.freeze({ width: 960, height: 720 });
@@ -255,10 +262,11 @@ function pageOrigin(event) {
  * @param {{ read(): unknown, write(value: unknown): void }} [deps.boundsStore] where each artifact's place is kept
  * @param {() => void} [deps.onChange] the open windows or their titles changed (the Window menu)
  * @param {Pick<typeof import("electron").session, "fromPartition">} [deps.session] the claude.ai window's persistent session
- * @param {string} [deps.preload] absolute path of artifact-window-preload.cjs (#2046)
+ * @param {string} [deps.preload] absolute path of artifact-window-preload.cjs (#2046, #2043)
  */
 export function createArtifactWindows(deps) {
   const { BrowserWindow, ipcMain, getMainWindow, isTrustedMain } = deps;
+  const preload = typeof deps.preload === "string" && deps.preload ? deps.preload : ARTIFACT_WINDOW_PRELOAD;
   const log = deps.log ?? (() => {});
   const changed = () => {
     try {
@@ -419,8 +427,8 @@ export function createArtifactWindows(deps) {
       backgroundColor: "#070707",
       autoHideMenuBar: true,
       webPreferences: {
-        // Narrow preload: always-on-top for this window only (#2046).
-        ...(deps.preload ? { preload: deps.preload } : {}),
+        // Narrow preload: always-on-top (#2046) and OS fullscreen (#2043).
+        preload,
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
@@ -430,6 +438,7 @@ export function createArtifactWindows(deps) {
     windows.set(request.artifactId, entry);
     if (onTop) applyArtifactWindowOnTop(win, true);
     if (placed.maximized) win.maximize?.();
+    attachFullscreenPush(win);
 
     win.once("ready-to-show", () => {
       if (win.isDestroyed()) return;

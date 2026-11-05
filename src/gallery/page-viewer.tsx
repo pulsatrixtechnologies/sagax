@@ -42,6 +42,7 @@ window.__writes = [];
 window.__alwaysOnTop = onTop;
 if (ownWindow) {
   window.artifactWindowSelf = {
+    fitContent: async () => null,
     isAlwaysOnTop: async () => onTop,
     setAlwaysOnTop: async (on) => {
       onTop = on === true;

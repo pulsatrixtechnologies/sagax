@@ -1961,7 +1961,7 @@
               "run",
               "check"
             ],
-            "description": "check reads readiness without creating a run. Omit to run."
+            "description": "check reads readiness without creating a run; its warnings list the paths the instructions cite that cannot be found (a warning never blocks a run). Omit to run."
           }
         },
         "required": [
@@ -2168,6 +2168,10 @@
             ],
             "maxLength": 120,
             "description": "Only if asked: the Perspicax role slug its runs act as (\"Au nom de\"), one the run-as person holds; \"\" is their own access; null resets."
+          },
+          "requires_computer": {
+            "type": "boolean",
+            "description": "Only if asked: true makes the pre-run check wait for this bot's computer to be online (Automations > Requirements). false removes that need. Skills and MCP requirements stay as they are."
           },
           "delete_when_finished": {
             "type": "boolean",
@@ -2434,6 +2438,10 @@
                 ],
                 "maxLength": 120,
                 "description": "Only if asked: the Perspicax role slug its runs act as (\"Au nom de\"), one the run-as person holds; \"\" is their own access; null resets."
+              },
+              "requires_computer": {
+                "type": "boolean",
+                "description": "Only if asked: true makes the pre-run check wait for this bot's computer to be online (Automations > Requirements). false removes that need. Skills and MCP requirements stay as they are."
               },
               "delete_when_finished": {
                 "type": "boolean",

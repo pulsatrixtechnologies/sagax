@@ -186,6 +186,10 @@ export const ROUTINE_FIELDS_SCHEMA = {
     maxLength: 120,
     description: "Only if asked: the Perspicax role slug its runs act as (\"Au nom de\"), one the run-as person holds; \"\" is their own access; null resets.",
   },
+  requires_computer: {
+    type: "boolean",
+    description: "Only if asked: true makes the pre-run check wait for this bot's computer to be online (Automations > Requirements). false removes that need. Skills and MCP requirements stay as they are.",
+  },
   delete_when_finished: {
     type: "boolean",
     description: "Delete this routine automatically once its schedule has no more runs and the last run has settled (completed, failed, cancelled or missed). Only for a one-time routine or an interval with an end date. Defaults to false. Past runs stay in the calendar and the run log. Set false in an update to keep it listed after it ends.",
@@ -550,6 +554,12 @@ export function routineFields(args: Json): { fields: Json; error?: string } {
   if (args.model !== undefined) {
     if (args.model !== null && typeof args.model !== "string") return { fields, error: "model must be a model id, or null for the bot's model." };
     fields.model = args.model;
+  }
+  // #1996: the "needs its computer" requirement (Routine.requires.computer).
+  const requiresComputer = args.requires_computer ?? args.requiresComputer;
+  if (requiresComputer !== undefined) {
+    if (typeof requiresComputer !== "boolean") return { fields, error: "requires_computer must be true or false." };
+    fields.requiresComputer = requiresComputer;
   }
   // 2026-11-05: the routine's "Au nom de" role (shared/routine-act-as.ts).
   if (args.act_as !== undefined) {

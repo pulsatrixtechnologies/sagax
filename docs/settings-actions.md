@@ -241,6 +241,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Delete once finished | Automations > routine > Advanced | `sagax_settings` get, set `routine.deleteWhenFinished` | simple |
 | Pause after this many failures in a row (0 never, null the default 5) | Automations > routine > Advanced | `sagax_settings` get, set `routine.autoPauseAfter` | simple |
 | Folder in the bot's Routines list (null: no folder) | Bot panel > Details > Routines > row menu > Move to folder | `sagax_settings` get, set `routine.folder` | simple |
+| Needs its computer: the pre-run check waits for the bot's computer to be online (true), or not (false); skills and MCP requirements stay | Automations > routine > Requirements | `sagax_settings` get, set `routine.requiresComputer` | simple |
 | Runs as (a person) | Automations > routine > Runs as | `sagax_settings` get, set `routine.runAs` | autrui |
 | Run only when something changes ({kind: watch, source: {type: files, path} / {type: command, command} / {type: tool, tool, args}, condition?, wakeOn?, track?, firstRun?, whenAsleep?}; null: every due time) | Automations > routine > Only when something changes | `sagax_settings` get, set `routine.precheck` | simple |
 | New routine ({name, prompt, botId, schedule, ...}) | Automations > New routine | `sagax_settings` set `routine.create` | simple |

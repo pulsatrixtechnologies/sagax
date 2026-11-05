@@ -141,6 +141,9 @@ export interface OrgMemberRouteDeps {
   /** The live state of a thread the person already reached through
    * `perform`: busy, waiting on a card, or idle. Null when gone. */
   threadStatus(threadId: string): ThreadStatus | null;
+  /** #1996: an open proposal card (a routine, profile, model, rule, team or
+   * meeting request) the thread holds while its status is idle. */
+  openProposal?(threadId: string): boolean;
   /** A principal id from a principal id or a Perspicax user id. */
   resolvePerson(ref: string): string | null;
   /** The words the bot is writing in this thread right now, or null
@@ -1026,7 +1029,9 @@ function memberRoutes(deps: OrgMemberRouteDeps): MemberRoute[] {
     let read = 0;
     for (const [threadId, about] of threads) {
       // A confidential thread is answered in Sagax only (#683): never listed.
-      if (deps.confidential?.(threadId) || deps.threadStatus(threadId) !== "waiting") continue;
+      if (deps.confidential?.(threadId)) continue;
+      // #1996: a proposal card (manage_routine) leaves the thread idle: still listed
+      if (deps.threadStatus(threadId) !== "waiting" && deps.openProposal?.(threadId) !== true) continue;
       if (read >= PENDING_THREADS_MAX) break;
       read += 1;
       // The person's own read: a thread they cannot see stays out.

@@ -501,6 +501,22 @@ describe("RoutineRequestService", () => {
     await expect(service.propose({ botId: "bot-a", threadId: "thread-a", proposal: createProposal({ actAs: "has space" }) })).rejects.toThrow(RoutineRequestError);
   });
 
+  it("a proposal sets and clears \"Needs its computer\", keeping the skills and MCP needs (#1996)", async () => {
+    const { service, routines } = harness();
+    const created = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: createProposal({ requiresComputer: true }) });
+    expect(created.detail).toContain("Needs its computer: yes");
+    service.resolve({ botId: "bot-a", threadId: "thread-a", requestId: created.requestId, behavior: "allow" });
+    const routine = routines.listRoutines()[0];
+    expect(routine.requires).toEqual({ computer: true });
+    routines.update(routine.id, { requires: { skills: ["osprey-digest"], mcpServers: ["wren"], computer: true } });
+    const off = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: { action: "update", routineId: routine.id, changes: { requiresComputer: false } } });
+    service.resolve({ botId: "bot-a", threadId: "thread-a", requestId: off.requestId, behavior: "allow" });
+    expect(routines.listRoutines()[0].requires).toEqual({ skills: ["osprey-digest"], mcpServers: ["wren"] });
+    const on = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: { action: "update", routineId: routine.id, changes: { requiresComputer: true } } });
+    service.resolve({ botId: "bot-a", threadId: "thread-a", requestId: on.requestId, behavior: "allow" });
+    expect(routines.listRoutines()[0].requires).toEqual({ skills: ["osprey-digest"], mcpServers: ["wren"], computer: true });
+  });
+
   it("canonicalizes receipt fingerprints and binds them to the card's conversation", async () => {
     const { service, store } = harness();
     await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: createProposal() });

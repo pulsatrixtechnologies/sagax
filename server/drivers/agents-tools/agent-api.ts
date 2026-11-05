@@ -148,7 +148,7 @@ export const AGENT_API_TOOLS = [
   },
   {
     name: "update_routine",
-    description: "Enable, disable or edit a routine you may change (name, instructions, schedule). Same as the Automations editor / member PATCH: your own routines, without a proposal card. Pass routine_id from sagax_routines or list_routines.",
+    description: "Enable, disable or edit a routine you may change (name, instructions, schedule, needs its computer). Same as the Automations editor / member PATCH: your own routines, without a proposal card. Pass routine_id from sagax_routines or list_routines.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -158,6 +158,7 @@ export const AGENT_API_TOOLS = [
         name: { type: "string", minLength: 1, maxLength: 120 },
         instructions: { type: "string", minLength: 1, maxLength: 32000 },
         schedule: { type: "object", description: "cron, daily, interval, once, webhook or event schedule object." },
+        requires_computer: { type: "boolean", description: "true makes the pre-run check wait for the bot's computer to be online (Automations > Requirements); false removes that need. Skills and MCP requirements stay." },
       },
       required: ["routine_id"],
     },

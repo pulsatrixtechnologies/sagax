@@ -435,6 +435,7 @@ struct DesktopNotificationsSettings: View {
     @AppStorage(AttentionPrefs.nudgeSoundKey) private var nudgeSound = true
     @AppStorage(AttentionPrefs.nudgeHapticKey) private var nudgeHaptic = true
     @AppStorage(AttentionPrefs.approvalChimeKey) private var approvalChime = true
+    @AppStorage(ConnectionNoticePrefs.key) private var connectionNotices = ConnectionNoticePrefs.defaultValue
     @AppStorage(NotificationSounds.choiceKey) private var soundChoice = NotificationSoundChoice.system.rawValue
     @State private var authorized: Bool?
     /// "Keep notifications on screen": iPadOS keeps a banner up when its
@@ -501,6 +502,13 @@ struct DesktopNotificationsSettings: View {
                 DesktopSwitch(isOn: approvalChime, label: Text("Chime when an approval arrives"), identifier: "desktop-settings.notifications.chime") {
                     approvalChime.toggle()
                     Task { await PushRegistrar.shared.sync() }
+                }
+            }
+            // #2013: kept on this device, like the switches above
+            DesktopDescribedRow(Text("Connection notices"), description: Text("A line at the top of the chat while the server updates or can't be reached."), identifier: "connectionNotices") {
+                DesktopSwitch(isOn: connectionNotices, label: Text("Connection notices"), identifier: "desktop-settings.notifications.connection-notices") {
+                    connectionNotices.toggle()
+                    ConnectionNoticeCenter.shared.setEnabled(connectionNotices)
                 }
             }
         }

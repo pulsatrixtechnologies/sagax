@@ -102,6 +102,23 @@ Set `replicas` in values when the data volume and architecture allow more
 than one server process. This chart never applies itself; operators apply
 a rendered manifest.
 
+### What the person sees (#2013)
+
+The drain tells every live client first: one `server.restarting` frame,
+without an SSE id, just before the streams close. The app then shows
+"Server update in progress, back in a moment" instead of "can't reach the
+server", and "Reconnected" once the new process answers. A drop under
+2.5 s shows nothing. While the process drains, `/healthz` and `/api/health`
+answer 503 with `shuttingDown: true`; past `lb_try_duration`, the Caddyfile's
+`handle_errors` answers 503 with `x-sagax-maintenance`. Both read as an
+update (`src/lib/connection-notice.ts`). A roll that recreates the container
+(`docker compose up -d`) goes through the same SIGTERM drain, so it needs no
+extra step. On an organization server, the Perspicax connector's reach is
+tracked from its traffic and a light `/healthz` probe
+(`server/perspicax/perspicax-reachability.ts`, `GET /api/connector-status`,
+`connector.status` frame). Settings > Notifications > Connection notices
+turns these notices off.
+
 ### What not to do
 
 - Do not run deploy scripts against live hosts from an agent session

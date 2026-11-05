@@ -44,3 +44,21 @@ describe("sendBlockFor", () => {
     expect(sendBlockFor({ ...base, limited: null })).toBeNull();
   });
 });
+
+describe("sendBlockFor: pre-send refusals (#2013)", () => {
+  it("words a configuration conflict as advisory, with the Fix when Sagax can repair it", () => {
+    const block = sendBlockFor({ ...base, refused: { kind: "config_conflict", cause: "outside the selected configuration", fix: "codex_native_mcp" } });
+    expect(block).toMatchObject({ reason: "engine_refused", advisory: true, action: { kind: "fix", fix: "codex_native_mcp" }, refusal: { kind: "config_conflict" } });
+    expect(block!.message).toMatch(/Nothing was sent/);
+  });
+
+  it("offers a resend for an engine that was not ready, and a sign-in for an expired one", () => {
+    expect(sendBlockFor({ ...base, refused: { kind: "engine_not_ready", cause: "x" } })).toMatchObject({ reason: "engine_refused", advisory: true, action: { kind: "resend" } });
+    expect(sendBlockFor({ ...base, refused: { kind: "signed_out", cause: "x" } })).toMatchObject({ reason: "engine_signed_out", advisory: true, action: { kind: "connect", instanceId: "claude" } });
+  });
+
+  it("lets a certain block win over a refusal", () => {
+    expect(sendBlockFor({ ...base, accessRefused: true, refused: { kind: "engine_not_ready", cause: "x" } })?.reason).toBe("engine_not_connected");
+    expect(sendBlockFor({ ...base, limited: { cause: "credits" }, refused: { kind: "engine_not_ready", cause: "x" } })?.reason).toBe("engine_limit");
+  });
+});

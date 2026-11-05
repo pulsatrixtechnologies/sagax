@@ -768,6 +768,22 @@
         }
       }
     },
+    "%@ could not start this turn. Nothing was sent.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ could not start this turn. Nothing was sent."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ n'a pas pu démarrer ce tour. Rien n'a été envoyé."
+          }
+        }
+      }
+    },
     "%@ created %@": {
       "localizations": {
         "en": {
@@ -980,6 +996,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ tem uma pergunta"
+          }
+        }
+      }
+    },
+    "%@ has its own settings that conflict with this bot's tools. Nothing was sent.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ has its own settings that conflict with this bot's tools. Nothing was sent."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ a ses propres réglages qui entrent en conflit avec les outils de ce bot. Rien n'a été envoyé."
           }
         }
       }
@@ -1458,6 +1490,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$@ precisa da permissão %2$@. Peça a um administrador para adicioná-la no Perspicax."
+          }
+        }
+      }
+    },
+    "%@ needs you to sign in again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ needs you to sign in again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ vous demande de vous reconnecter."
           }
         }
       }
@@ -5910,6 +5958,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Um tema claro e um tema escuro, que acompanham o telefone."
+          }
+        }
+      }
+    },
+    "A line at the top of the chat while the server updates or can't be reached.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A line at the top of the chat while the server updates or can't be reached."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une ligne en haut de la conversation pendant que le serveur se met à jour ou est injoignable."
           }
         }
       }
@@ -20704,6 +20768,118 @@
           "stringUnit": {
             "state": "translated",
             "value": "Limite de %1$@ atteinte, de retour à %2$@"
+          }
+        }
+      }
+    },
+    "Connection notices": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection notices"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avis de connexion"
+          }
+        }
+      }
+    },
+    "Fix": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fix"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Corriger"
+          }
+        }
+      }
+    },
+    "Perspicax is unreachable, retrying…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perspicax is unreachable, retrying…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perspicax est injoignable, nouvel essai…"
+          }
+        }
+      }
+    },
+    "Reconnected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnected"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnecté"
+          }
+        }
+      }
+    },
+    "Sagax can't reach the server, retrying…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sagax can't reach the server, retrying…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sagax ne joint pas le serveur, nouvel essai…"
+          }
+        }
+      }
+    },
+    "Sagax could not fix it. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sagax could not fix it. Try again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sagax n'a pas pu corriger le problème. Réessayez."
+          }
+        }
+      }
+    },
+    "Server update in progress, back in a moment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server update in progress, back in a moment"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mise à jour du serveur en cours, de retour dans un instant"
           }
         }
       }
@@ -80398,6 +80574,70 @@
           "stringUnit": {
             "state": "translated",
             "value": "As contas de motores desta instalação e os conectores que cada uma traz para os bots. Os conectores de um provedor agem como essa conta."
+          }
+        }
+      }
+    },
+    "The engine could not start this turn. Nothing was sent.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The engine could not start this turn. Nothing was sent."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le moteur n'a pas pu démarrer ce tour. Rien n'a été envoyé."
+          }
+        }
+      }
+    },
+    "The engine is at its limit. Nothing was sent.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The engine is at its limit. Nothing was sent."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le moteur a atteint sa limite. Rien n'a été envoyé."
+          }
+        }
+      }
+    },
+    "The engine needs a new sign-in. Nothing was sent.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The engine needs a new sign-in. Nothing was sent."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le moteur demande une nouvelle connexion. Rien n'a été envoyé."
+          }
+        }
+      }
+    },
+    "The engine's own settings conflict with this bot's tools. Nothing was sent.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The engine's own settings conflict with this bot's tools. Nothing was sent."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les réglages propres du moteur entrent en conflit avec les outils de ce bot. Rien n'a été envoyé."
           }
         }
       }

@@ -12,7 +12,13 @@ export type SendBlockReason = "engine_not_connected" | "computer_offline" | "loc
    * 5-hour or weekly window) or its credit (a 402, out of credits). The maintainer,
    * 2026-11-04: no message goes out and nothing can be done in the chat
    * until it resets or the bot moves to another engine or account. */
-  | "engine_limit";
+  | "engine_limit"
+  /** #2013: the engine refused this conversation's last turn before any
+   * prompt went out (not ready, or its own configuration conflicts with
+   * the bot's). Advisory: the line says it, the next message still sends. */
+  | "engine_refused"
+  /** #2013: the engine's sign-in expired or was refused on the last turn. */
+  | "engine_signed_out";
 
 export type SendBlockAction =
   /** Connect this engine (Settings > Engines). */
@@ -20,7 +26,17 @@ export type SendBlockAction =
   /** Nothing to change here: try again once the computer or server is back. */
   | { kind: "retry" }
   /** Move the bot to another engine or account (the model window). */
-  | { kind: "switch_engine" };
+  | { kind: "switch_engine" }
+  /** Send the conversation's last message again. */
+  | { kind: "resend" }
+  /** Sagax repairs the cause itself, then sends the last message again
+   * (POST /api/bots/<id>/send-state/fix). */
+  | { kind: "fix"; fix: SendBlockFix };
+
+/** What a Fix action repairs. */
+export type SendBlockFix =
+  /** Turn the Codex account's own native MCP entries off (its config.toml). */
+  | "codex_native_mcp";
 
 export interface SendBlock {
   reason: SendBlockReason;
@@ -32,6 +48,12 @@ export interface SendBlock {
   /** engine_limit: what refused, and the epoch ms of its reset when the
    * provider said. The client words the reset in the reader's own clock. */
   limit?: { cause: "usage_limit" | "credits"; resetsAt?: number };
+  /** True: the line informs, the composer still sends (engine_refused,
+   * engine_signed_out). Absent: the message does not go out. */
+  advisory?: true;
+  /** engine_refused / engine_signed_out: what kind of refusal, and the
+   * engine's own words for a Details disclosure. */
+  refusal?: { kind: "config_conflict" | "engine_not_ready" | "signed_out"; cause: string };
 }
 
 /** How the computer-shared model behind a bot is doing, as the server last
@@ -52,6 +74,9 @@ export interface SendStateInput {
    * refusal now (server/engines/engine-refusals.ts), with no backup engine
    * to take the message. */
   limited?: { cause: "usage_limit" | "credits"; resetsAt?: number } | null;
+  /** #2013: the engine refused this conversation's last turn before any
+   * prompt went out; `fix` when Sagax can repair it in one click. */
+  refused?: { kind: "config_conflict" | "engine_not_ready" | "signed_out"; cause: string; fix?: SendBlockFix } | null;
 }
 
 export function sendBlockFor(input: SendStateInput): SendBlock | null {
@@ -97,6 +122,25 @@ export function sendBlockFor(input: SendStateInput): SendBlock | null {
       reason: "engine_not_connected", name,
       message: `${name} is not connected for you. Connect ${name} to talk to this bot.`,
       action: { kind: "connect", instanceId, engine: name },
+    };
+  }
+  if (input.refused) {
+    const { instanceId, name } = input.engine;
+    const { kind, cause, fix } = input.refused;
+    const refusal = { kind, cause };
+    if (kind === "signed_out") {
+      return {
+        reason: "engine_signed_out", name, advisory: true, refusal,
+        message: `${name} needs you to sign in again. Reconnect it, then send your message again.`,
+        action: { kind: "connect", instanceId, engine: name },
+      };
+    }
+    return {
+      reason: "engine_refused", name, advisory: true, refusal,
+      message: kind === "config_conflict"
+        ? `${name} has its own settings that conflict with this bot's tools. Nothing was sent.`
+        : `${name} could not start this turn. Nothing was sent.`,
+      action: fix ? { kind: "fix", fix } : { kind: "resend" },
     };
   }
   return null;

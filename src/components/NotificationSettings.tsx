@@ -10,6 +10,7 @@ import {
   dockBadge,
   nudgeShake,
   approvalChime,
+  connectionNotices,
   persistentNotifications,
   setNotificationSounds,
   setNudgeSound,
@@ -36,6 +37,7 @@ export function NotificationSettings({ privacy = false }: { privacy?: boolean })
   const nudgeSound = useNudgeSound();
   const shake = useLocalSwitch(nudgeShake);
   const chime = useLocalSwitch(approvalChime);
+  const connection = useLocalSwitch(connectionNotices);
   const soundChoice = notificationSoundChoice.use();
   // App Store 1.2: an admin (a solo server's owner) reads the reports here.
   const admin = useStoreSelector((current) => viewerIsOrgAdmin(current.config));
@@ -71,6 +73,10 @@ export function NotificationSettings({ privacy = false }: { privacy?: boolean })
         <CompactRow label={t("settings.approvalChime.title")} rowId="approvalChime">
           <Switch checked={chime} aria-label={t("settings.approvalChime.title")} onClick={() => approvalChime.set(!chime)} />
         </CompactRow>
+        {/* #2013: the calm notice while the server updates or cannot be reached */}
+        <DescribedRow label={t("settings.connectionNotices.title")} description={t("settings.connectionNotices.description")} rowId="connectionNotices">
+          <Switch checked={connection} aria-label={t("settings.connectionNotices.title")} onClick={() => connectionNotices.set(!connection)} />
+        </DescribedRow>
       </SettingsGroup>
       <SettingsGroup title={t("settings.group.nudges")} groupId="nudges" accessory={<ThisComputer />}>
         <CompactRow label={t("settings.nudgeSound.title")} rowId="nudgeSound">

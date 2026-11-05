@@ -1,5 +1,5 @@
 import { t } from "@/lib/i18n";
-import { sendBlockLocks } from "@/lib/send-state";
+import { fixSendBlock, sendBlockLocks } from "@/lib/send-state";
 import { openModelWindow } from "@/lib/model-window";
 import { effectivePlace } from "@/lib/place";
 import { changeDraftAttachmentPending } from "@/lib/drafts";
@@ -37,6 +37,7 @@ export function ComposerShell({
   onClearReply,
   members,
   aboutPage,
+  onRetryLast,
 }: {
   session: AnyProps;
   draft: AnyProps;
@@ -53,6 +54,7 @@ export function ComposerShell({
   onClearReply?: () => void;
   members?: Bot[];
   aboutPage?: string;
+  onRetryLast?: () => void;
 }) {
   const { bot, locked, dispatch, storeBots, config, remoteClient, threadId,
     sendState, sendBlock, busy, canSteer, composerTask, parallelQuestions,
@@ -175,6 +177,13 @@ export function ComposerShell({
             onConnect={() => dispatch({ type: "toggleAppSettings", open: true, section: "providers" })}
             onRetry={sendState.recheck}
             onSwitchEngine={bot ? () => openModelWindow(bot.id) : undefined}
+            onResend={onRetryLast ? () => { onRetryLast(); sendState.recheck(); } : sendState.recheck}
+            onFix={bot && sendBlock.action.kind === "fix" ? async () => {
+              const fix = sendBlock.action.kind === "fix" ? sendBlock.action.fix : "";
+              await fixSendBlock(bot.id, bot.threadId, fix);
+              onRetryLast?.();
+              sendState.recheck();
+            } : undefined}
           />
         )}
         <ComposerEditor

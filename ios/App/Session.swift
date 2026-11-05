@@ -1498,6 +1498,8 @@ final class Session: ObservableObject {
 
     private func run() async {
         let generation = streamGeneration
+        // the connection notice at the top of the chat (#2013)
+        ConnectionNoticeCenter.shared.attach(self)
         while !Task.isCancelled {
             guard let client else { return }
             status = .connecting
@@ -1543,6 +1545,7 @@ final class Session: ObservableObject {
                             state.resetCursor(cursor)
                         }
                         status = .live
+                        ConnectionNoticeCenter.shared.streamConnected()
                         resumeNativeAttachmentTransfers(using: client)
                         // this server pushes to the phone while the app is closed
                         Task { await PushRegistrar.shared.sync() }
@@ -1572,6 +1575,13 @@ final class Session: ObservableObject {
                     // a routine changed or ran: the account's routines badge
                     if case let .unknown(kind) = frame.frame, kind.hasPrefix("routine") {
                         Task { await AccountRowModel.shared.refresh(self) }
+                    }
+                    // #2013: a planned restart is coming; the Perspicax connector's reach
+                    if case .serverRestarting = frame.frame {
+                        ConnectionNoticeCenter.shared.restartAnnounced()
+                    }
+                    if case let .connectorStatus(connector) = frame.frame {
+                        ConnectionNoticeCenter.shared.connector(connector)
                     }
                     // a bot's task list changed: its Tasks card reads it again
                     if case let .botTasks(botId) = frame.frame {
@@ -1623,6 +1633,7 @@ final class Session: ObservableObject {
                 // the stream ended without an error — the harness went away
                 log.notice("stream ended without an error")
                 status = .offline("Lost the connection.")
+                ConnectionNoticeCenter.shared.streamDisconnected()
             } catch let error as APIError where error.isUnauthorized {
                 // A 401 is not a sign-out by itself (a server restart, a
                 // stale copy of the token): check again, try every copy of
@@ -1654,6 +1665,7 @@ final class Session: ObservableObject {
                 }
                 log.error("stream failed: \(error.localizedDescription, privacy: .public)")
                 status = .offline(failureMessage(for: error))
+                ConnectionNoticeCenter.shared.streamDisconnected()
             }
 
             if Task.isCancelled { return }

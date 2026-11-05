@@ -80,7 +80,7 @@ import { CODEX_USAGE_URL, codexUsageLimitReached } from "../../shared/codex-usag
 import { ClaudeUpdatePrompt } from "./ClaudeUpdatePrompt";
 import { MacCuaRecoveryActions } from "./MacCuaRecoveryActions";
 import { macCuaPermissionMessage, missingMacCuaPermissions } from "@/lib/mac-cua-permissions";
-import { failedTurnCause, isEngineLimitFailure, signedOutEngine } from "@/lib/failed-turn";
+import { failedTurnCause, isEngineLimitFailure, isPreSendRefusal, signedOutEngine } from "@/lib/failed-turn";
 import { localizedEngineCause } from "@/lib/engine-error-text";
 import { plainErrorLine, readableError } from "@/lib/plain-error";
 import { openPlaceAction, placeRowViewFor, usePlaceSeat, worksOnSimpleLabel } from "@/lib/place-view";
@@ -518,6 +518,21 @@ export function FailedTurnRow({ tool, engine, onRetry, botId, threadId }: {
       setupInstance={tool.setup && !pinnedUnavailable ? engine : undefined}
       claudeUpdateInstance={updateTarget}
     />
+  );
+}
+
+/** #2013: a room has no composer line for a bot's engine, so an engine
+ * that refused a turn before any prompt went out is said there quietly, in
+ * the reader's words, never as a red card. */
+export function PreSendRefusalLine({ tool }: { tool: NonNullable<Message["tool"]> }) {
+  const rawCause = failedTurnCause(tool.name) ?? tool.name;
+  const cause = localizedEngineCause(rawCause) ?? rawCause;
+  const line = plainErrorLine(rawCause) ?? cause;
+  return (
+    <div role="status" data-presend-refusal className="flex w-fit max-w-[min(42rem,78%)] items-start gap-2 rounded-xl border border-hairline/40 bg-panel px-3 py-2 text-[13px] text-ink-secondary">
+      <Info size={13} aria-hidden="true" className="mt-0.5 shrink-0" />
+      <span className="min-w-0 break-words">{line}</span>
+    </div>
   );
 }
 
@@ -1486,6 +1501,8 @@ const MessagesList = memo(function MessagesList({
               if (isTurnStoppedNotice(m)) return null;
               if (m.tool && failedTurnCause(m.tool.name) !== null) {
                 if (isEngineLimitFailure(m.tool)) return null;
+                // #2013: refused before any prompt went out: the composer says it
+                if (isPreSendRefusal(m.tool)) return null;
                 return (
                   <FailedTurnRow
                     tool={m.tool}
@@ -2765,6 +2782,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
         onEditLast={lastUserMessage && !lastUserMessageHasAttachments && !bot.busy && !lastUserMessage.id.startsWith("optimistic-")
           ? () => setEditingId(lastUserMessage.id)
           : undefined}
+        onRetryLast={regenerate}
       />
       )}
       {canWrite !== false && (

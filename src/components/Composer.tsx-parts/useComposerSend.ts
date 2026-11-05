@@ -1,3 +1,4 @@
+import { sendBlockStops } from "@/lib/send-state";
 import { useCallback, useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from "react";
 import { track } from "@/lib/analytics";
 import { currentOpenPage } from "@/lib/open-page";
@@ -209,7 +210,8 @@ export function useComposerSend({
     }
     if (locked || attachmentPending) return;
     // the bot cannot answer now: the draft stays, the line above says why
-    if (sendBlock) { sendState.recheck(); return; }
+    // an advisory line (#2013) informs only: sending again is the retry
+    if (sendBlockStops(sendBlock)) { sendState.recheck(); return; }
     // `/goal stop` typed whole runs the subcommand, never a goal named "stop"
     const typedLoop = parseLoopCommand(text);
     if (typedLoop && attachments.length === 0) {

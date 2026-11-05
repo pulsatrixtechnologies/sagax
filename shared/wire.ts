@@ -1572,6 +1572,11 @@ export type ServerFrame =
    * people only; with `audience`, that person's own real state (`hidden`
    * when others see them offline), to their streams only. */
   | { kind: "presence.changed"; audience?: string; people: Array<{ principalId: string; state: "online" | "away" | "offline"; lastSeenAt: number | null; hidden?: true }> }
+  /** #2013: the server is about to restart on purpose (an update, a
+   * restart): sent once, without an id, just before the live stream closes. */
+  | { kind: "server.restarting"; at: number }
+  /** #2013: this organization server's reach of its Perspicax connector changed. */
+  | { kind: "connector.status"; perspicax: { state: "ok" | "unreachable"; since: number } }
   | { kind: "live.call"; botId: string; threadId: string; call: LiveCallState | null }
   /** A short first sentence spoken ahead of the bot's own reply on a duplex
    * call (server/voice/voice-first-sentence.ts). The speaker's streams only. Not

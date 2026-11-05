@@ -16947,7 +16947,20 @@
       "sendBlock.engineLimitUntil": "8757e3bd1d2583e21d754c1938794e73689adeb79931f131075bcc06dc41a158",
       "sendBlock.engineLimit": "82cacd8c72a5467841d23ba1ca6b138d71cf1c260c7aff11da45495e44ffacde",
       "sendBlock.engineCredits": "3ecd3c27338d189238cb3effe5c12c9d2b71e023568c945cc18244a5d2769696",
-      "sendBlock.switchEngine": "920f86b3d430d8780a248547277514dc11384177d05be8edbff7ea4bfd07a7e4"
+      "sendBlock.switchEngine": "920f86b3d430d8780a248547277514dc11384177d05be8edbff7ea4bfd07a7e4",
+      "sendBlock.engineConfigConflict": "b16953f56c5178fe7d7ff88b826cd1b8f42426dc1b4c2bfe86ced3a89fd984ca",
+      "sendBlock.engineNotReady": "835aedd1ebc6e9a19d2c2de660f9a88bd767c3934ca639f7811eb46f43e9d0a7",
+      "sendBlock.engineSignedOut": "df60869b5b4ea6c03befc80c5f29760537f1b1d033c156916efaa188c07403eb",
+      "sendBlock.signIn": "bfd402b2f6f3812529b55596136d3a11c51616317e3b1cd999928e2d4eae7d3f",
+      "sendBlock.fix": "21f1595b614ffc31c2693545a5ccb27559edf20c53cdd21099bc83b743313fd8",
+      "sendBlock.fixFailed": "c0ed7d979d94baafc35ce1c7b524862a4386d1081d1d1789739f48b238240923",
+      "connectionNotice.updating": "2045bbcd0d6c2dcb01a9fd0311dee54dbd6ae45c78cecdb36e0ab1b6f08c46e8",
+      "connectionNotice.serverUnreachable": "149300b36df5fa791fad2c17007cb0e277c099735535fcaa9fe5a6c9cb76ecab",
+      "connectionNotice.perspicaxUnreachable": "100f9ca1f0c9a14dd421b8212f1dbfdb2f2e26f3dbd130fb247bbd2b85aec3fe",
+      "connectionNotice.reconnected": "20a447dbc60511a6987ae27f1c206ab67d849972faf33dcdc1c873f03d42ba19",
+      "connectionNotice.dismiss": "48845bff334a50a59aaecf499f28a7a24c3b4b891b8b18a9f1169ad8e8a6b261",
+      "settings.connectionNotices.title": "b5d411462c5ac7d22edacdde68931588c52ad963210dd50adc30347003e0dd8f",
+      "settings.connectionNotices.description": "7bd2a05deb5d8768259733bc39f6dd0397caf5047fc86f1b557204b637bd1235"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

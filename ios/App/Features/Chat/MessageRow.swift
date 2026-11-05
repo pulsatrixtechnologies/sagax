@@ -318,6 +318,12 @@ struct MessageRow: View {
                 FinishUntilRow(line: line)
             } else if let ref = message.parallelTask, ref.isCard {
                 ParallelTaskCardView(chat: chat, message: message, ref: ref, openThread: openThread)
+            } else if let refusal = PreSendRefusal.kind(of: message) {
+                // #2013: an engine refusal before any prompt went out. A 1:1
+                // chat never draws it (the composer says it); a room keeps a
+                // quiet line, never the red error row.
+                PreSendRefusalLine(kind: refusal)
+                    .accessibilityIdentifier("presend-refusal-\(message.id)")
             } else {
                 ActivityChip(
                     tool: message.tool, threadRef: message.threadRef?.live, openThread: openThread,
@@ -326,7 +332,7 @@ struct MessageRow: View {
             }
             // A failed turn on the conversation's last row: Retry sends the
             // last user line again (ChatView.tsx ErrorRow).
-            if retryable, case let .bot(bot) = chat {
+            if retryable, PreSendRefusal.kind(of: message) == nil, case let .bot(bot) = chat {
                 ErrorRetryButton { await session.regenerate(for: bot) }
                     .accessibilityIdentifier("error-retry-\(message.id)")
             }

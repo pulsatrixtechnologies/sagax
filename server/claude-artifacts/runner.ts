@@ -28,7 +28,7 @@ export const CLAUDE_ARTIFACT_MODEL = "haiku";
 export const CLAUDE_ARTIFACT_TIMEOUT_MS = 90_000;
 const STDOUT_CAP = 4_000_000;
 
-const SYSTEM_PROMPT = "Make exactly the one tool call the user message names, with exactly the input it gives, then stop. Load a deferred tool with ToolSearch first when needed. Reply with nothing else.";
+const SYSTEM_PROMPT = "Make exactly the tool calls the user message names, in that order, with exactly the inputs it gives, then stop. Load a deferred tool with ToolSearch first when needed. Reply with nothing else.";
 
 export interface ClaudeArtifactAccount {
   cli: string;
@@ -95,8 +95,21 @@ export function claudeArtifactEnv(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 }
 
 export function claudeArtifactPrompt(tool: ClaudeArtifactTool, input: Record<string, unknown>): string {
+  // claude.ai refuses to update an artifact this CLI process has not read, and
+  // every call is a fresh process: read it first, in the same process.
+  if (isUpdatePublish(tool, input)) {
+    return `Call the tool Artifact with ${JSON.stringify({ action: "read", url: input.url })} first, then call the tool Artifact exactly once with this input JSON, then stop:\n${JSON.stringify(input)}`;
+  }
   return `Call the tool ${tool} exactly once with this input JSON, then stop:\n${JSON.stringify(input)}`;
 }
+
+function isUpdatePublish(tool: ClaudeArtifactTool, input: Record<string, unknown>): boolean {
+  return tool === "Artifact" && (input.action === undefined || input.action === "publish") && typeof input.url === "string" && input.asset !== true;
+}
+
+/** In dontAsk mode with every artifact tool allowed, the only denial left is
+ * the tool's own ask: an artifact of another claude.ai account. */
+const DONT_ASK_DENIAL = /^Permission to use Artifact(Data|Comments)? has been denied because Claude Code is running in don't ask mode/;
 
 function blockText(content: unknown): string {
   if (typeof content === "string") return content;
@@ -108,7 +121,7 @@ function blockText(content: unknown): string {
 }
 
 /** The result of the one `tool` call in a stream-json transcript. */
-export function parseClaudeArtifactStream(stdout: string, tool: ClaudeArtifactTool, accountEmail?: string): ClaudeArtifactRunResult {
+export function parseClaudeArtifactStream(stdout: string, tool: ClaudeArtifactTool, accountEmail?: string, action?: string): ClaudeArtifactRunResult {
   let callId: string | undefined;
   let finalText = "";
   let finalError = false;
@@ -124,13 +137,14 @@ export function parseClaudeArtifactStream(stdout: string, tool: ClaudeArtifactTo
     const message = frame.message as { content?: unknown } | undefined;
     const content = Array.isArray(message?.content) ? message.content as Array<Record<string, unknown>> : [];
     if (frame.type === "assistant" && !callId) {
-      const use = content.find((block) => block?.type === "tool_use" && block.name === tool && typeof block.id === "string");
+      const use = content.find((block) => block?.type === "tool_use" && block.name === tool && typeof block.id === "string"
+        && (action === undefined || ((block.input as { action?: unknown } | undefined)?.action ?? "publish") === action));
       if (use) callId = use.id as string;
     } else if (frame.type === "user" && callId) {
       const result = content.find((block) => block?.type === "tool_result" && block.tool_use_id === callId);
       if (!result) continue;
       const text = blockText(result.content);
-      if (isArtifactConsentRefusal(text)) return { ok: false, blocked: "other_account", ...(accountEmail ? { account: accountEmail } : {}) };
+      if (isArtifactConsentRefusal(text) || DONT_ASK_DENIAL.test(text.trim())) return { ok: false, blocked: "other_account", ...(accountEmail ? { account: accountEmail } : {}) };
       if (result.is_error === true) return { ok: false, error: text.trim().slice(0, 2_000) || `${tool} failed` };
       const structured = frame.tool_use_result ?? frame.toolUseResult;
       return { ok: true, result: structured === undefined ? text : structured, text };
@@ -206,7 +220,7 @@ export async function runClaudeArtifact(options: RunClaudeArtifactOptions): Prom
       child.stdin.on("error", () => {});
       child.stdin.end(claudeArtifactPrompt(options.tool, input));
     });
-    const parsed = parseClaudeArtifactStream(stdout.out, options.tool, email);
+    const parsed = parseClaudeArtifactStream(stdout.out, options.tool, email, isUpdatePublish(options.tool, input) ? "publish" : undefined);
     if (stdout.error && !parsed.ok && "error" in parsed) return { ok: false, error: stdout.error };
     return parsed;
   } catch (error) {

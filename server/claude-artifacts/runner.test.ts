@@ -94,6 +94,26 @@ describe("parseClaudeArtifactStream", () => {
     expect(parsed).toEqual({ ok: false, blocked: "other_account", account: "person@example.com" });
   });
 
+  it("treats a dontAsk denial of an artifact tool as another account's artifact", () => {
+    const text = "Permission to use ArtifactData has been denied because Claude Code is running in don't ask mode. IMPORTANT: ...";
+    expect(parseClaudeArtifactStream(transcript("ArtifactData", { text, isError: true }), "ArtifactData", "person@example.com"))
+      .toEqual({ ok: false, blocked: "other_account", account: "person@example.com" });
+  });
+
+  it("reads before an update publish and keeps the publish call's result", () => {
+    const url = "https://claude.ai/artifact/abc";
+    const prompt = claudeArtifactPrompt("Artifact", { action: "publish", url, file_path: "/s/page.html" });
+    expect(prompt.indexOf(`{"action":"read","url":"${url}"}`)).toBeLessThan(prompt.indexOf('"action":"publish"'));
+    expect(claudeArtifactPrompt("Artifact", { action: "publish", file_path: "/s/page.html" })).not.toContain('"action":"read"');
+    const frames = [
+      line({ type: "assistant", message: { content: [{ type: "tool_use", id: "r1", name: "Artifact", input: { action: "read", url } }] } }),
+      line({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "r1", content: "page html" }] } }),
+      line({ type: "assistant", message: { content: [{ type: "tool_use", id: "p1", name: "Artifact", input: { action: "publish", url } }] } }),
+      line({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "p1", content: "published" }] }, tool_use_result: { url, updated: true } }),
+    ].join("");
+    expect(parseClaudeArtifactStream(frames, "Artifact", undefined, "publish")).toEqual({ ok: true, result: { url, updated: true }, text: "published" });
+  });
+
   it("reports a tool error and a missing call", () => {
     expect(parseClaudeArtifactStream(transcript("Artifact", { text: "not found", isError: true }), "Artifact")).toEqual({ ok: false, error: "not found" });
     expect(parseClaudeArtifactStream(line({ type: "result", result: "I cannot do that" }), "Artifact")).toEqual({ ok: false, error: "Artifact was not called: I cannot do that" });

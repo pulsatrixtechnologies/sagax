@@ -162,11 +162,12 @@ function ProviderLine({ row, open, onToggle, nameOf, detail, issuer }: {
           <span className="block truncate text-[12px] leading-4 text-ink-secondary" title={line}>{line}</span>
         </span>
         {managed ? <span data-provider-state="managed" className="shrink-0 text-[12px] font-medium text-ink-secondary">{t("providers.state.managed")}</span> : <StatePill state={row.state} />}
-        <span data-provider-action={action} className="hidden shrink-0 text-[12px] text-accent-text sm:inline">{t(ACTION_KEY[action])}</span>
+        {/* one action per row: a managed row's action is the Open link beside it */}
+        {!managed && <span data-provider-action={action} className="hidden shrink-0 text-[12px] text-accent-text sm:inline">{t(ACTION_KEY[action])}</span>}
         <ChevronDown size={13} aria-hidden="true" className={cn("shrink-0 text-ink-secondary transition-transform motion-reduce:transition-none", open && "rotate-180")} />
       </button>
       {managed && issuer && (
-        <a href={perspicaxProvidersUrl(issuer)} target="_blank" rel="noreferrer noopener" data-provider-open-perspicax={row.id} aria-label={`${row.name}: ${t("providers.action.open")}`}
+        <a href={perspicaxProvidersUrl(issuer)} target="_blank" rel="noreferrer noopener" data-provider-open-perspicax={row.id} data-provider-action={action} aria-label={`${row.name}: ${t("providers.action.open")}`}
           className="mr-1.5 inline-flex min-h-[44px] shrink-0 items-center gap-1 px-2 text-[12px] text-accent-text hover:underline">
           {t("providers.action.open")}
           <ExternalLink size={12} aria-hidden="true" />

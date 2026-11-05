@@ -12631,7 +12631,7 @@
   "providers.where.session": "Session ouverte",
   "providers.where.none": "Aucune clé",
   "providers.state.connected": "Connecté",
-  "providers.state.reconnect": "À reconnecter",
+  "providers.state.reconnect": "Session expirée",
   "providers.state.keyMissing": "Clé manquante",
   "providers.state.adminOff": "Désactivé par l'admin",
   "providers.state.offline": "Hors ligne",

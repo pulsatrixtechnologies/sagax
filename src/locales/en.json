@@ -12631,7 +12631,7 @@
   "providers.where.session": "Signed-in session",
   "providers.where.none": "No key",
   "providers.state.connected": "Connected",
-  "providers.state.reconnect": "Reconnect",
+  "providers.state.reconnect": "Session expired",
   "providers.state.keyMissing": "Key missing",
   "providers.state.adminOff": "Turned off by the admin",
   "providers.state.offline": "Offline",

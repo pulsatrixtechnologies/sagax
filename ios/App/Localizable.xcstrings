@@ -20708,6 +20708,70 @@
         }
       }
     },
+    "Nothing to report": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing to report"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien à signaler"
+          }
+        }
+      }
+    },
+    "Open %@'s thread": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open %@'s thread"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir le fil de %@"
+          }
+        }
+      }
+    },
+    "Sent work to %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sent work to %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Travail envoyé à %@"
+          }
+        }
+      }
+    },
+    "Show report": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show report"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher le rapport"
+          }
+        }
+      }
+    },
     "Switch engine": {
       "localizations": {
         "en": {
@@ -96280,6 +96344,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "um visual surpresa"
+          }
+        }
+      }
+    },
+    "a teammate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a teammate"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "un coéquipier"
           }
         }
       }

@@ -364,6 +364,10 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   "phone_tool",
   // A post into a room from a 1:1 chat: rare.
   "list_rooms", "post_to_room",
+  // #1997: long or occasional in a chat turn (about 7 KB of schema loaded on
+  // every Claude call): a video, an HTML page, a wait on an event, a
+  // connector sign-in card. Each one is still one ToolSearch step away.
+  "make_video", "show_html", "update_html", "wait_until", "list_waits", "cancel_wait", "open_connector_setup",
 ]);
 
 /** #1276: the tools at the heart of a chat turn, listed whole in a compact

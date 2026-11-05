@@ -171,7 +171,8 @@ async function main() {
     const set = await api("PATCH", `/api/bots/${botId}`, { modelSelection: { instanceId: "claude", model: MODEL } });
     if (set.status !== 200) throw new Error(`model: ${set.text}`);
     const profiles = await api("PUT", `/api/bots/${botId}/perspicax`, { profiles: [PROFILE.id] });
-    if (profiles.status !== 200) throw new Error(`profiles: ${profiles.text}`);
+    // 0.8.44: one Perspicax connection per account, no per-bot profile list.
+    if (profiles.status !== 200 && profiles.status !== 404) throw new Error(`profiles: ${profiles.text}`);
     const firsts: string[] = [];
     for (let index = 0; index < TURNS; index++) {
       const before = capture.bodies().length;

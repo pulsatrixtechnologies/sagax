@@ -181,6 +181,11 @@ export const ROUTINE_FIELDS_SCHEMA = {
     maxLength: 200,
     description: "Only if asked: a model id of this bot's engine for its runs and sub-agents; chat keeps the bot's. null resets.",
   },
+  subagent_model: {
+    type: ["string", "null"],
+    maxLength: 200,
+    description: "Only if asked: a model id of this bot's engine for the sub-agents of its runs (Claude), overriding model for them. null resets.",
+  },
   act_as: {
     type: ["string", "null"],
     maxLength: 120,
@@ -550,6 +555,11 @@ export function routineFields(args: Json): { fields: Json; error?: string } {
   if (args.model !== undefined) {
     if (args.model !== null && typeof args.model !== "string") return { fields, error: "model must be a model id, or null for the bot's model." };
     fields.model = args.model;
+  }
+  // #2038: the routine's sub-agent model (Claude), checked by the service.
+  if (args.subagent_model !== undefined) {
+    if (args.subagent_model !== null && typeof args.subagent_model !== "string") return { fields, error: "subagent_model must be a model id, or null." };
+    fields.subagentModel = args.subagent_model;
   }
   // 2026-11-05: the routine's "Au nom de" role (shared/routine-act-as.ts).
   if (args.act_as !== undefined) {

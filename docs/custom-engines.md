@@ -107,7 +107,7 @@ that kind. Each installed CLI must answer `--version` or the build fails.
 
 | Engine | Driver | Installed as | Pinned | Licence |
 |---|---|---|---|---|
-| Claude Code | `claudeAgent` | npm `@anthropic-ai/claude-code` | 2.1.288 | Anthropic Commercial Terms |
+| Claude Code | `claudeAgent` | npm `@anthropic-ai/claude-code` | 2.1.318 | Anthropic Commercial Terms |
 | Codex (and the ChatGPT plan instance) | `codex` | npm `@openai/codex` | 0.160.0 | Apache-2.0 |
 | pi | `piAgent` | npm `@earendil-works/pi-coding-agent` | 1.0.1 | MIT |
 | Gemini CLI | `geminiAgent` | npm `@google/gemini-cli` | 0.62.0 | Apache-2.0 |
@@ -139,7 +139,7 @@ production image (`ENGINE_SET=all`, the default). The image with none of
 them is the explicit opt-out `ENGINE_SET=none` and
 `SAGAX_REQUIRE_ENGINES=0`. At startup the server runs each baked CLI's
 `--version` once, logs
-it (`[engines] claude: 2.1.288 (Claude Code) (pinned 2.1.288, ...)`), and a
+it (`[engines] claude: 2.1.318 (Claude Code) (pinned 2.1.318, ...)`), and a
 short set or a CLI that did not start also logs `[engines] engine_missing ...`.
 It
 uses that result as the engine's installed state, so no page or turn probes

@@ -17,8 +17,6 @@ import type { LocaleKey } from "@/locales";
 import { copyText } from "@/lib/copy-text";
 import { useOfferedInstances } from "@/lib/offered-instances";
 import { perspicaxKeysUrl, useMyEngines } from "@/lib/perspicax-org";
-import { viewerIsOrgAdmin } from "@/lib/group-owner";
-import { setViewAsMember, useViewAsMember } from "@/lib/view-as-member";
 import type { LocalModelSettings } from "@/lib/desktop-local-models";
 import {
   filterProviderRows,
@@ -50,7 +48,12 @@ import {
 } from "./ProviderKeys";
 import { ServerForm } from "./OpenAiCompatServers";
 import { CloudAgentProvidersSettings, useCloudAgentProviders } from "./CloudAgentProvidersSettings";
-import { DescribedRow, FoldRow, HelpTip, PILL, SettingsGroup, Switch, requestSettingsCard } from "../SettingsPrimitives";
+import { modelSwitches } from "@/lib/offered-instances";
+import { modelOn } from "../../../shared/offered-models";
+import { perspicaxConsoleUrl } from "../PerspicaxOrgSettings";
+import { ImageGenerationSettings, imageProviderLabel } from "./ImageGenerationSettings";
+import { WebSearchSettings } from "./WebSearchSettings";
+import { DescribedRow, FoldRow, HelpTip, LinkRow, PILL, SettingsGroup, SettingsIntro, Switch, requestSettingsCard } from "../SettingsPrimitives";
 
 const PAYER_KEY = { me: "providers.payer.me", org: "providers.payer.org", computer: "providers.payer.computer" } as const satisfies Record<ProviderRow["payer"], LocaleKey>;
 const WHERE_KEY = {
@@ -67,6 +70,18 @@ const STATE_KEY = {
   offline: "providers.state.offline",
   available: "providers.state.available",
 } as const satisfies Record<ProviderRow["state"], LocaleKey>;
+type ProviderAction = "manage" | "enterKey" | "reconnect" | "start" | "open";
+const ACTION_KEY = { manage: "providers.action.manage", enterKey: "providers.action.enterKey", reconnect: "providers.action.reconnect", start: "providers.action.start", open: "providers.action.open" } as const satisfies Record<ProviderAction, LocaleKey>;
+
+/** The one action a row offers at its right (2026-11-05). */
+export function providerAction(row: Pick<ProviderRow, "state" | "kind">, managed: boolean): ProviderAction {
+  if (managed) return "open";
+  if (row.state === "keyMissing") return "enterKey";
+  if (row.state === "reconnect") return "reconnect";
+  if (row.kind === "local" && (row.state === "offline" || row.state === "available")) return "start";
+  return "manage";
+}
+
 const FILTER_KEY = { all: "providers.filter.all", mine: "providers.filter.mine", org: "providers.filter.org", computer: "providers.filter.computer" } as const satisfies Record<ProviderFilter, LocaleKey>;
 
 /** What a row brings, in words: its engines, voice, images, a server's models. */
@@ -117,12 +132,14 @@ function CopyId({ id }: { id: string }) {
 }
 
 /** One provider: its line, and its detail in place once opened. */
-function ProviderLine({ row, open, onToggle, nameOf, detail }: {
+function ProviderLine({ row, open, onToggle, nameOf, detail, issuer }: {
   row: ProviderRow;
   open: boolean;
   onToggle: () => void;
   nameOf: (instanceId: string) => string;
   detail: ReactNode;
+  /** The organization's console: its providers open there (2026-11-05). */
+  issuer?: string;
 }) {
   const { state } = useStore();
   // Keep a visited detail alive: signing in and editing can outlast the
@@ -131,41 +148,68 @@ function ProviderLine({ row, open, onToggle, nameOf, detail }: {
   useEffect(() => { if (open) setVisited(true); }, [open]);
   const instance = row.instanceIds.length ? state.instances.find((entry) => entry.instanceId === row.instanceIds[0]) : undefined;
   const line = providerLine(row, nameOf);
+  // The organization's provider: its key and who pays live in Perspicax.
+  const managed = Boolean(issuer) && row.payer === "org" && row.state !== "adminOff";
+  const action = providerAction(row, managed);
   return (
     <li data-provider-row={row.id} data-provider-kind={row.kind} data-provider-payer={row.payer} data-open={open ? "true" : "false"} className="min-w-0">
+      <div className="flex min-w-0 items-center">
       <button type="button" onClick={onToggle} aria-expanded={open}
-        className="mx-1.5 flex min-h-[44px] w-[calc(100%-12px)] items-center gap-3 rounded-lg px-2 py-1.5 text-left outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent/70 motion-reduce:transition-none">
+        className="mx-1.5 flex min-h-[44px] min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-1.5 text-left outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent/70 motion-reduce:transition-none">
         <RowIcon row={row} instance={instance} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] leading-[18px] text-ink">{row.name}</span>
           <span className="block truncate text-[12px] leading-4 text-ink-secondary" title={line}>{line}</span>
         </span>
-        <StatePill state={row.state} />
+        {managed ? <span data-provider-state="managed" className="shrink-0 text-[12px] font-medium text-ink-secondary">{t("providers.state.managed")}</span> : <StatePill state={row.state} />}
+        <span data-provider-action={action} className="hidden shrink-0 text-[12px] text-accent-text sm:inline">{t(ACTION_KEY[action])}</span>
         <ChevronDown size={13} aria-hidden="true" className={cn("shrink-0 text-ink-secondary transition-transform motion-reduce:transition-none", open && "rotate-180")} />
       </button>
+      {managed && issuer && (
+        <a href={perspicaxProvidersUrl(issuer)} target="_blank" rel="noreferrer noopener" data-provider-open-perspicax={row.id} aria-label={`${row.name}: ${t("providers.action.open")}`}
+          className="mr-1.5 inline-flex min-h-[44px] shrink-0 items-center gap-1 px-2 text-[12px] text-accent-text hover:underline">
+          {t("providers.action.open")}
+          <ExternalLink size={12} aria-hidden="true" />
+        </a>
+      )}
+      </div>
       {(open || visited) && <div data-provider-detail={row.id} hidden={!open} className={cn("min-w-0 flex-col gap-3 px-3.5 pb-3 pt-2 sm:pl-[52px]", open ? "flex" : "hidden")}>{detail}</div>}
     </li>
   );
 }
 
-/** The detail of one row: where each part is managed, as before. */
+/** The detail of one row (2026-11-05): the account (signed in as, sign
+ * out), who pays, how many of its models are active, and the technical
+ * block behind an Advanced fold. On an organization server the
+ * organization's choices read as they stand, changed in Perspicax. */
 function ProviderDetail({ row, member, issuer, showKey }: { row: ProviderRow; member: boolean; issuer?: string; showKey: boolean }) {
   const { state, dispatch } = useStore();
   const mineAll = useMyEngines();
   const [editing, setEditing] = useState(false);
   const instances = row.instanceIds.map((id) => state.instances.find((entry) => entry.instanceId === id)).filter((entry): entry is InstanceInfo => Boolean(entry));
   const server = row.compatServerId ? state.config?.openaiCompatServers?.find((entry) => entry.instanceId === row.compatServerId) : undefined;
+  const organization = Boolean(issuer);
+  const managed = organization && row.payer === "org";
+  const switches = modelSwitches(state.config);
+  const total = instances.reduce((sum, instance) => sum + instance.models.options.length, 0);
+  const active = instances.reduce((sum, instance) => sum + instance.models.options.filter((model) => modelOn(switches, instance.instanceId, model.id)).length, 0);
+  const copyId = <CopyId id={row.instanceIds[0] ?? row.compatServerId ?? row.localEndpointId ?? row.keyRow ?? row.voiceKey ?? row.id} />;
+  const explain = (
+    <p className="text-[12px] leading-relaxed text-ink-secondary">{t(`providers.explain.${row.payer}` as LocaleKey)} {t(`providers.explainWhere.${row.keyWhere}` as LocaleKey)}</p>
+  );
+  // An engine of the person's (solo) draws its own Advanced fold (CLI,
+  // version, update, reset); every other row gets one of its own here.
+  const engineFolds = !row.accountServer && instances.some((instance) => !(member && mineAll?.some((engine) => engine.instanceId === instance.instanceId)) && !instance.readOnly);
   return (
     <>
-      <p className="text-[12px] leading-relaxed text-ink-secondary">{t(`providers.explain.${row.payer}` as LocaleKey)} {t(`providers.explainWhere.${row.keyWhere}` as LocaleKey)}</p>
       {row.state === "adminOff" && <p className="text-[12px] leading-relaxed text-ink-secondary">{t("providers.adminOffHint")}</p>}
       {instances.map((instance) => instance.models.issue && (
         <p key={instance.instanceId} data-model-list-issue={instance.models.issue} className="text-[12.5px] leading-relaxed text-ink">
           {t(`model.listIssue.${instance.models.issue}`)}
         </p>
       ))}
-      {/* the organization's or the server's key: its dialog */}
-      {row.keyRow && row.manage && !row.voiceKey && !row.accountProvider && (
+      {/* the server's key (solo): its dialog. The organization's key lives in Perspicax. */}
+      {!managed && row.keyRow && row.manage && !row.voiceKey && !row.accountProvider && (
         showKey
           ? <ProviderKeyEditor id={row.keyRow} onClose={() => openProviderKeyDialog(null)} />
           : (
@@ -211,16 +255,41 @@ function ProviderDetail({ row, member, issuer, showKey }: { row: ProviderRow; me
           {t("providers.manageLocal")}
         </button>
       )}
-      {/* each engine this row serves, managed as on the former Engines group */}
+      {/* who pays (the organization chose it in Perspicax) and this provider's active models */}
+      <div className="-mx-3.5 border-t border-hairline/40">
+        <DescribedRow label={t("providers.whoPays")} description={t(PAYER_KEY[row.payer])} rowId={`providers.whoPays.${row.id}`}>
+          {organization && (
+            <span data-provider-who-pays="perspicax" className="flex items-center gap-2 text-[12px] text-ink-secondary">
+              {t("providers.chosenInPerspicax")}
+              {issuer && (
+                <a href={perspicaxProvidersUrl(issuer)} target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1 text-accent-text hover:underline">
+                  {t("providers.change")}
+                  <ExternalLink size={12} aria-hidden="true" />
+                </a>
+              )}
+            </span>
+          )}
+        </DescribedRow>
+        {total > 0 && (
+          <LinkRow rowId={`providers.models.${row.id}`} label={t("providers.models.active", { active, total })}
+            onClick={() => { requestSettingsCard("models.advanced"); dispatch({ type: "toggleAppSettings", open: true, section: "engines" }); }} />
+        )}
+      </div>
+      {/* each engine this row serves: signed in as, sign out, its Advanced fold */}
       {!row.accountServer && instances.map((instance) => (
         <div key={instance.instanceId} className="flex min-w-0 flex-col gap-1">
           {instances.length > 1 && <span className="text-[12px] font-medium text-ink">{instance.displayName}</span>}
-          <EngineRow instance={instance} mine={issuer ? mineAll?.find((engine) => engine.instanceId === instance.instanceId) : undefined} member={member} issuer={issuer} bare keysManaged />
+          <EngineRow instance={instance} mine={issuer ? mineAll?.find((engine) => engine.instanceId === instance.instanceId) : undefined} member={member} issuer={issuer} bare keysManaged
+            advancedFold advancedExtra={<>{explain}{copyId}</>} />
         </div>
       ))}
-      {/* the claude.ai connectors of the person's own Claude account (were under Auto) */}
-      {row.claude && row.state === "connected" && <div className="empty:hidden"><HarnessConnectorsSection placement="settings" /></div>}
-      <CopyId id={row.instanceIds[0] ?? row.compatServerId ?? row.localEndpointId ?? row.keyRow ?? row.voiceKey ?? row.id} />
+      {!engineFolds && (
+        <div className="-mx-3.5 border-t border-hairline/40">
+          <FoldRow cardId={`providers.advanced.${row.id}`} label={t("engines.library.advanced")}>
+            <div data-provider-advanced={row.id} className="flex flex-col gap-2">{explain}{copyId}</div>
+          </FoldRow>
+        </div>
+      )}
     </>
   );
 }
@@ -356,10 +425,8 @@ function useLocalModels(): LocalModelSettings | null {
 
 export function ProvidersSettings() {
   const { state } = useStore();
-  const { member, org, keys } = useModelsVoiceAccess();
+  const { member, org, keys, installation } = useModelsVoiceAccess();
   const organization = org !== null;
-  const asMember = useViewAsMember();
-  const admin = organization && viewerIsOrgAdmin(state.config);
   const offered = useOfferedInstances("settings");
   const mine = useMyEngines();
   const accounts = useProviderAccounts();
@@ -418,7 +485,7 @@ export function ProvidersSettings() {
   }, [rowRequest, rows]);
 
   const line = (row: ProviderRow) => (
-    <ProviderLine key={row.id} row={row} open={openRow === row.id} onToggle={() => setOpenRow(openRow === row.id ? null : row.id)} nameOf={nameOf}
+    <ProviderLine key={row.id} row={row} open={openRow === row.id} onToggle={() => setOpenRow(openRow === row.id ? null : row.id)} nameOf={nameOf} issuer={issuer}
       detail={<ProviderDetail row={row} member={member} issuer={issuer} showKey={keyInline(row)} />} />
   );
   const pick = (rowId: string) => {
@@ -430,24 +497,24 @@ export function ProvidersSettings() {
     });
   };
 
+  const imageGen = state.config?.imageGen;
+
   return (
     <div className="flex min-w-0 flex-col gap-6 pb-2" data-providers-page="">
+      <SettingsIntro>{t("providers.intro")}</SettingsIntro>
+      {/* the organization (2026-11-05): same page for everyone, its choices change in Perspicax */}
       {organization && (
         <div data-settings-card="providers.organization" data-providers-org-band="">
           <SettingsGroup title={t("providers.org.title")} groupId="providers-org">
             <DescribedRow label={org.org.name} description={t("providers.org.body")} rowId="providers.org">
-              {admin && issuer && (
-                <a href={perspicaxProvidersUrl(issuer)} target="_blank" rel="noreferrer noopener" className={cn(PILL, "inline-flex items-center gap-1.5")}>
-                  {t("providers.org.console")}
+              {issuer && (
+                <a href={perspicaxProvidersUrl(issuer)} target="_blank" rel="noreferrer noopener" data-providers-org-console="" className={cn(PILL, "inline-flex items-center gap-1.5")}>
+                  {t("providers.org.manage")}
                   <ExternalLink size={12} aria-hidden="true" />
                 </a>
               )}
             </DescribedRow>
-            {admin && (
-              <DescribedRow label={t("providers.viewAsMember")} description={t("providers.viewAsMemberHint")} rowId="providers.viewAsMember">
-                <Switch checked={asMember} data-view-as-member="" aria-label={t("providers.viewAsMember")} onClick={() => setViewAsMember(!asMember)} />
-              </DescribedRow>
-            )}
+            <p data-providers-same-page="" className="px-3.5 pb-2.5 text-[12px] leading-relaxed text-ink-secondary">{t("providers.org.samePage")}</p>
           </SettingsGroup>
         </div>
       )}
@@ -487,13 +554,40 @@ export function ProvidersSettings() {
               <ul className="-mx-3.5 flex flex-col" data-providers-to-connect="">{toConnect.map(line)}</ul>
             </FoldRow>
           )}
-          {/* the cloud coding agents' keys (Cursor, Claude Code, Codex), as on the former Keys group */}
-          {keys && <CloudAgentKeys />}
           {off.length > 0 && (
             <FoldRow cardId="providers.adminOff" label={t("providers.state.adminOff")} count={off.length}>
-              <ul className="-mx-3.5 flex flex-col" data-providers-off="">{off.map(line)}</ul>
+              <ul className="-mx-3.5 flex flex-col opacity-80" data-providers-off="">{off.map(line)}</ul>
             </FoldRow>
           )}
+        </SettingsGroup>
+      </div>
+      {/* Other services (from Models, 2026-11-05): web search (the person's own key) and image generation */}
+      <div data-settings-card="providers.services">
+        <SettingsGroup title={t("providers.services.title")} groupId="providers-services">
+          <WebSearchSettings bare />
+          {installation
+            ? <div data-settings-card="connections.image"><ImageGenerationSettings keysLink={keys} /></div>
+            : (
+              <DescribedRow label={t("imageGen.title")} description={imageProviderLabel(imageGen?.provider)} rowId="providers.imageGen">
+                {organization && issuer && (
+                  <a href={perspicaxConsoleUrl(issuer)} target="_blank" rel="noreferrer noopener" data-perspicax-link="imageGen" className="inline-flex items-center gap-1.5 text-[12px] font-medium text-accent-text hover:underline">
+                    {t("providers.setInPerspicax")}
+                    <ExternalLink size={12} aria-hidden="true" />
+                  </a>
+                )}
+              </DescribedRow>
+            )}
+        </SettingsGroup>
+      </div>
+      {/* Advanced: the person's cloud agent keys and their claude.ai connectors */}
+      <div data-settings-card="providers.advanced">
+        <SettingsGroup title={t("providers.advanced.title")} groupId="providers-advanced">
+          <FoldRow cardId="providers.advanced" label={t("providers.advanced.title")} description={t("providers.advanced.help")}>
+            <div className="-mx-3.5 flex flex-col gap-3">
+              {keys && <CloudAgentKeys />}
+              <div className="px-3.5 empty:hidden"><HarnessConnectorsSection placement="settings" /></div>
+            </div>
+          </FoldRow>
         </SettingsGroup>
       </div>
       <ProviderKeyDialog hidden={rows.some((row) => keyInline(row))} />

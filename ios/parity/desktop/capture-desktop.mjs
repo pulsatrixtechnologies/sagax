@@ -286,15 +286,18 @@ function context(page, viewport, fixture) {
       await mouse("mouseMoved", c.x + 1, c.y, { button: "none" });
       await sleep(250);
     },
-    /** keepPointer: one more move to the resting point, so an element
-     * re-rendered under it since (the sidebar after the engines arrive)
-     * takes :hover again; headless Chrome does not refresh it on its own. */
+    /** keepPointer: leave then re-enter the resting point so a row that
+     * remounted during settle (engines arrival) takes :hover and
+     * pointerenter again; a 1 px nudge alone stays inside the old hit box. */
     async restPointer() {
       const c = ctx.lastPointer;
       if (!c) return;
-      await mouse("mouseMoved", c.x + 1, c.y, { button: "none" });
+      await mouse("mouseMoved", Math.round(viewport.width * 0.42), 6, { button: "none" });
+      await sleep(80);
       await mouse("mouseMoved", c.x, c.y, { button: "none" });
-      await sleep(200);
+      await sleep(120);
+      await mouse("mouseMoved", c.x + 1, c.y, { button: "none" });
+      await sleep(250);
     },
     async moveAway() {
       // the header's empty left end: no row, no button, no hover state
@@ -459,7 +462,8 @@ async function main() {
           "omb-skin": item.skin,
           "openmausbot.sidebarDensity": item.surface.density ?? "comfortable",
           "omb-language": item.surface.language ?? languageArg ?? "en",
-          ...(advancedMode ? { "sagax.interfaceMode.v1": "advanced" } : {}),
+          // --advanced, or a surface Simple would hide (Settings > Voice, …).
+          ...((advancedMode || item.surface.advanced) ? { "sagax.interfaceMode.v1": "advanced" } : {}),
           // "What's new" for the running version counts as seen: it would cover the surface.
           "sagax.releaseNotes.seen.v1": JSON.stringify({ version: RELEASE_VERSION }),
           ...item.surface.localStorage,
@@ -488,9 +492,10 @@ async function main() {
           break;
         }
         if (!item.surface.keepPointer) await ctx.moveAway();
-        // before settle: the hover's own transitions then finish with the rest
-        if (item.surface.keepPointer) await ctx.restPointer();
         await settle(page, item.surface.settleMs ?? 0);
+        // After settle: engines / layout can remount the hovered row. Re-enter
+        // so :hover and pointerenter are on for the shot (07 / 21).
+        if (item.surface.keepPointer) await ctx.restPointer();
         // a remount between the surface and the shot draws a blank page: retry
         if (!item.surface.noShell && !(await page.eval(`Boolean(document.querySelector("[data-app-shell]") && document.body.innerText.trim().length > 0)`))) {
           throw new Error("blank page at capture time");

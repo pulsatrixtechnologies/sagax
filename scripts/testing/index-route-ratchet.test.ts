@@ -45,7 +45,10 @@ const EXACT: Record<string, number> = {
   // 54: wave 3 T1 moved post-gate /api/events (#1388).
   // 34: wave 4 pre-auth moved healthz/environment/mcp-oauth/email/pair/session/
   // logout/pairing/custom-domain/shared-computers (#1388).
-  'path === "/': 34,
+  // 23: leftover me/engines, org/bots, people avatar, routine-delegation stub,
+  // adminAuditPlan and externalRuntimeMayCall moved out of index (#1388).
+  // 18: originGates (hosted health, join, pair) moved to request-pipeline (#1388).
+  'path === "/': 18,
   // 90: the package preview path moved with the organization library routes.
   // 91: the thread file pin and the bot history routes moved to server/routes (#1099), after the
   // library pin (#1112) and the history owner rule (#1107) had taken it over 93.
@@ -71,16 +74,22 @@ const EXACT: Record<string, number> = {
   // 12: wave 4 moved shared-computers path.startsWith (#1388).
   // 13: live count on origin/main 0.8.27 (c4c248539); pin matched after #1909.
   // 12: #1911 moved the backup exclusion into isWorkspaceBackupRoute.
-  "path.startsWith(": 12,
+  // 9: me-engines path.startsWith and adminAuditPlan internal/testing startsWith (#1388).
+  // 8: originGates hosted/static startsWith moved (#1388).
+  "path.startsWith(": 8,
   // 14: wave 2 P5 moved instances/mcp .exec(path) guards (#1388).
   // 13: wave 3 B2 moved the bot-skills gate .exec(path) (#1388).
   // 12: wave 3 B3 moved bot browser live/action .exec(path) (#1388).
   // 10: wave 4 moved domain-check and shared-computers .exec(path) (#1388).
   // Fleet proxy moved to server/routes/fleet.ts (#1388).
-  ".exec(path)": 9,
-  ".test(path)": 8,
+  // 1: me-engines login .exec and adminAuditPlan .exec moved (#1388).
+  ".exec(path)": 1,
+  // 7: externalRuntimeMayCall .test moved (#1388).
+  // 5: originGates PUBLIC_INVITE_PATH.test moved with the module (#1388).
+  ".test(path)": 5,
   // 3: wave 4 moved ENVIRONMENT_PATHS.includes(path) (#1388).
-  ".includes(path)": 3,
+  // 1: originGates auth-path includes moved (#1388).
+  ".includes(path)": 1,
 };
 
 const count = (needle: string) => INDEX.split(needle).length - 1;

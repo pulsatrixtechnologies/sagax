@@ -16,13 +16,16 @@
 // and split into media (images and videos) and other files.
 import type { ThreadFile } from "../threads/thread-files.ts";
 
-/** Threads the Links / Media / Files tabs cover for a shared bot (#2019). */
+/** Threads the Links / Media / Files tabs cover for a shared bot (#2019): the non-confidential tasks plus the main thread. */
 export function libraryThreadsOfSharedBot<T extends { threadId: string; confidential?: unknown }>(
   tasks: readonly T[],
   mayUseBot: boolean,
+  mainThreadId?: string,
 ): string[] {
   if (!mayUseBot) return [];
-  return tasks.filter((task) => task.confidential !== true).map((task) => task.threadId);
+  const threads = tasks.filter((task) => task.confidential !== true).map((task) => task.threadId);
+  // The bot's own main thread is part of the library too (files and links only; the person still reads no messages).
+  return mainThreadId && !threads.includes(mainThreadId) ? [mainThreadId, ...threads] : threads;
 }
 
 /** GET /api/threads/:id/files/:fileId (download, preview or thumb query). */
@@ -34,6 +37,20 @@ export function isSharedLibraryFilePath(method: string, path: string): boolean {
  * non-confidential thread on a bot they may use (#2019). */
 export function sharedLibraryFileAllowed(input: { mayUseBot: boolean; confidential: boolean }): boolean {
   return input.mayUseBot && !input.confidential;
+}
+
+/** The whole gate of the authenticate exception: a GET of one file of the
+ * bot's main thread or of one of its non-confidential tasks, for a person with bot.use. */
+export function sharedLibraryGetAllowed(input: {
+  method: string;
+  path: string;
+  mayUseBot: boolean;
+  mainThread: boolean;
+  task: { confidential?: unknown } | null | undefined;
+}): boolean {
+  if (!isSharedLibraryFilePath(input.method, input.path)) return false;
+  if (!input.mainThread && !input.task) return false;
+  return sharedLibraryFileAllowed({ mayUseBot: input.mayUseBot, confidential: !input.mainThread && input.task?.confidential === true });
 }
 
 export interface BotLink {

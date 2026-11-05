@@ -6,6 +6,7 @@ import {
   fileKind,
   isSharedLibraryFilePath,
   libraryThreadsOfSharedBot,
+  sharedLibraryGetAllowed,
   linksInText,
   mergeBotFiles,
   pageOf,
@@ -23,6 +24,23 @@ describe("shared bot library (#2019)", () => {
 
   it("a shared viewer covers the bot's whole non-confidential library", () => {
     expect(libraryThreadsOfSharedBot(tasks, true)).toEqual(["owner-t", "sharee-t"]);
+  });
+
+  it("the main thread is part of the shared library, once, for bot.use only", () => {
+    expect(libraryThreadsOfSharedBot(tasks, true, "main-t")).toEqual(["main-t", "owner-t", "sharee-t"]);
+    expect(libraryThreadsOfSharedBot([{ threadId: "main-t" }, ...tasks], true, "main-t")).toEqual(["main-t", "owner-t", "sharee-t"]);
+    expect(libraryThreadsOfSharedBot(tasks, false, "main-t")).toEqual([]);
+  });
+
+  it("GET of a main thread file is allowed with bot.use, not without; messages routes stay closed", () => {
+    const get = `/api/threads/main-t/files/${"a".repeat(24)}`;
+    expect(sharedLibraryGetAllowed({ method: "GET", path: get, mayUseBot: true, mainThread: true, task: null })).toBe(true);
+    expect(sharedLibraryGetAllowed({ method: "GET", path: get, mayUseBot: false, mainThread: true, task: null })).toBe(false);
+    expect(sharedLibraryGetAllowed({ method: "GET", path: "/api/threads/main-t/messages", mayUseBot: true, mainThread: true, task: null })).toBe(false);
+    expect(sharedLibraryGetAllowed({ method: "POST", path: get, mayUseBot: true, mainThread: true, task: null })).toBe(false);
+    expect(sharedLibraryGetAllowed({ method: "GET", path: get, mayUseBot: true, mainThread: false, task: { confidential: true } })).toBe(false);
+    expect(sharedLibraryGetAllowed({ method: "GET", path: get, mayUseBot: true, mainThread: false, task: {} })).toBe(true);
+    expect(sharedLibraryGetAllowed({ method: "GET", path: get, mayUseBot: true, mainThread: false, task: null })).toBe(false);
   });
 
   it("a person without bot.use sees none", () => {

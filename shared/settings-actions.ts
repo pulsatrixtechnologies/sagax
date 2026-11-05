@@ -550,6 +550,15 @@ routineField("routine.deleteWhenFinished", "deleteWhenFinished", "boolean", "Del
 routineField("routine.autoPauseAfter", "autoPauseAfter", "number?", "Pause after this many failures in a row (0 never, null the default 5)", "Automations > routine > Advanced");
 // 2026-10-28 the folder of its bot's Routines list (shared/routine-folders.ts).
 routineField("routine.folder", "folder", "string?", "Folder in the bot's Routines list (null: no folder)", "Bot panel > Details > Routines > row menu > Move to folder");
+// #1996: the Requirements "Needs its computer" box; the handler keeps the
+// routine's skills and MCP needs (server/settings-actions.ts)
+add({
+  key: "routine.requiresComputer", family: "routine", target: "routine", value: "boolean",
+  label: "Needs its computer: the pre-run check waits for the bot's computer to be online (true), or not (false); skills and MCP requirements stay",
+  where: "Automations > routine > Requirements",
+  read: () => ({ path: "/api/routines", list: "routines", match: "id", field: "requires" }),
+  write: (ids) => ({ method: "PATCH", path: `/api/routines/${enc(ids.target!)}`, body: { requires: null } }),
+});
 routineField("routine.runAs", "runAs", "string", "Runs as (a person)", "Automations > routine > Runs as", always("others"));
 // 2026-10-26 run only when something changes (shared/routine-watch.ts). A
 // watch command runs on each check with no card: what runs without asking

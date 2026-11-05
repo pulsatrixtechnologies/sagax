@@ -973,6 +973,18 @@ describe("sagax_settings: plugins, MCP servers and a routine's webhook (2026-10-
     expect(JSON.parse(String(enabled.body.text))).toEqual({ key: "connections.mcpServerEnabled", value: servers });
   });
 
+  it("routine.requiresComputer turns the need on and off and keeps the skills and MCP needs (#1996)", async () => {
+    const answer = { routines: [{ id: "r1", botId: "bot-a", requires: { skills: ["osprey-digest"], mcpServers: ["wren"] } }] };
+    const h = harness({ mode: "full", answer });
+    const on = await h.call({ action: "set", key: "routine.requiresComputer", target: "r1", value: true });
+    expect(on.status, JSON.stringify(on.body)).toBe(200);
+    expect(h.planned.at(-1)).toMatchObject({ method: "PATCH", path: "/api/routines/r1", body: { requires: { skills: ["osprey-digest"], mcpServers: ["wren"], computer: true } } });
+    const bare = harness({ mode: "full", answer: { routines: [{ id: "r1", botId: "bot-a", requires: { computer: true } }] } });
+    await bare.call({ action: "set", key: "routine.requiresComputer", target: "r1", value: false });
+    expect(bare.planned.at(-1)).toMatchObject({ method: "PATCH", path: "/api/routines/r1", body: { requires: null } });
+    expect((await h.call({ action: "set", key: "routine.requiresComputer", target: "r1", value: "yes" })).status).toBe(400);
+  });
+
   it("reads a webhook routine's address, never a key, and rotates its key for the person to copy", async () => {
     const answer = { webhooks: [{ id: "wh1", routineId: "r1", endpointId: "wh_abc", enabled: true, tokenLast4: "9xQz", tokenPending: false }], ingress: { baseUrl: "https://hooks.example.test/" } };
     const h = harness({ mode: "full", answer });

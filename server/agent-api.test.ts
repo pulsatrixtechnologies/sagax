@@ -244,6 +244,7 @@ function world(options: { replyAfterPolls?: number; reply?: (prompt: string) => 
       if (patch.enabled !== undefined) routine.enabled = patch.enabled;
       if (patch.name !== undefined) routine.name = patch.name;
       if (patch.instructions !== undefined) routine.instructions = patch.instructions;
+      if (patch.requiresComputer !== undefined) (routine as Record<string, unknown>).requiresComputer = patch.requiresComputer;
       return { routine: { ...routine } };
     },
     async deleteAgent(caller, agentId) {
@@ -1333,6 +1334,16 @@ describe("fleet tools (#1944)", () => {
     expect((await w.api.call(person("pr_1"), "update_routine", {
       routine_id: "r-other", enabled: false,
     })).status).toBe(404);
+  });
+
+  it("update_routine sets and clears \"Needs its computer\" (#1996)", async () => {
+    const w = world();
+    const on = await w.api.call(person("pr_1"), "update_routine", { routine_id: "r-own", requires_computer: true });
+    expect(on.status).toBe(200);
+    expect(on.body.routine).toMatchObject({ requiresComputer: true });
+    const off = await w.api.call(person("pr_1"), "update_routine", { routine_id: "r-own", requires_computer: false });
+    expect(off.body.routine).toMatchObject({ requiresComputer: false });
+    expect((await w.api.call(person("pr_1"), "update_routine", { routine_id: "r-own", requires_computer: "yes" })).status).toBe(400);
   });
 
   it("fleet writes need agents.send; list_agent_models needs agents.read", async () => {

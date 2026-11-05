@@ -289,6 +289,8 @@ export interface AgentRoutinePatch {
   name?: string;
   instructions?: string;
   schedule?: Record<string, unknown>;
+  /** true: the pre-run check waits for the bot's computer; false clears that need. Skills and MCP needs stay. */
+  requiresComputer?: boolean;
 }
 
 export interface TranscriptThread {
@@ -1439,7 +1441,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
     },
 
     async update_routine(caller, args) {
-      const bad = onlyKeys(args, ["routine_id", "enabled", "name", "instructions", "schedule"]);
+      const bad = onlyKeys(args, ["routine_id", "enabled", "name", "instructions", "schedule", "requires_computer"]);
       if (bad) return bad;
       const routineId = typeof args.routine_id === "string" ? args.routine_id.trim() : "";
       if (!routineId || !ID.test(routineId)) {
@@ -1471,8 +1473,12 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         }
         patch.schedule = args.schedule as Record<string, unknown>;
       }
+      if (Object.hasOwn(args, "requires_computer")) {
+        if (typeof args.requires_computer !== "boolean") return refuse(400, "bad_request", "requires_computer is true or false.");
+        patch.requiresComputer = args.requires_computer;
+      }
       if (!Object.keys(patch).length) {
-        return refuse(400, "bad_request", "Pass at least one of enabled, name, instructions, schedule.");
+        return refuse(400, "bad_request", "Pass at least one of enabled, name, instructions, schedule, requires_computer.");
       }
       const updated = await deps.updateRoutine(caller, routineId, patch);
       if (isRefusal(updated)) return updated;

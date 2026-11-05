@@ -763,6 +763,32 @@ describe("the AI-client approval loop (2026-10-17)", () => {
     expect(performed.map((p) => p.request.path)).toEqual(["/api/bots"]);
   });
 
+  it("lists an open routine proposal card (manage_routine) on an idle thread (#1996)", async () => {
+    status = () => "idle";
+    hiddenThread = () => null;
+    const proposal = { requestId: "req_rt", title: "Create the routine Osprey digest?", tool: "manage_routine", options: ["Approve", "Decline"], routineRequest: { operation: "create" } };
+    cards.set("t1/req_rt", { open: true, ownerPrincipalId: "pr_bob", ownerName: "Bob", adminOnly: false });
+    deps.openProposal = (threadId) => threadId === "t1";
+    respond = (request) => {
+      if (request.path === "/api/bots") return { status: 200, body: { bots: [
+        { id: "b1", name: "Wren", threadId: "t1", tasks: [] },
+        { id: "b2", name: "Atlas", threadId: "t3", tasks: [] },
+      ] } };
+      const thread = /\/api\/threads\/([\w-]+)\/messages/.exec(request.path)?.[1] ?? "";
+      return { status: 200, body: { messages: thread === "t1" ? [{ id: "m1", role: "bot", kind: "options", at: 70, card: proposal }] : [] } };
+    };
+    try {
+      const got = await call("GET", "approvals", token("bob"));
+      expect(got.status, JSON.stringify(got.body)).toBe(200);
+      expect(got.body.approvals.map((a: { id: string }) => a.id)).toEqual(["req_rt"]);
+      expect(got.body.approvals[0]).toMatchObject({ threadId: "t1", botId: "b1", tool: "manage_routine", canAnswer: true });
+      // the idle thread without a proposal is never read
+      expect(performed.some((p) => p.request.path.includes("/t3/"))).toBe(false);
+    } finally {
+      deps.openProposal = undefined;
+    }
+  });
+
   it("send_prompt and await_turn that stop on a card carry it in line, with what to call next", async () => {
     agentReply = (tool) => ({ status: 200, body: { handle: "turn_x", agent_id: "b1", thread_id: "t1", finished: false, status: "waiting_for_approval", reply: "", next: "old", tool } });
     serveCards([deliveryCard()]);

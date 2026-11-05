@@ -16,6 +16,7 @@ import { decideSettingEffect, HOLD_TEXT, type SettingClass } from "../shared/set
 import { decodePreference, isAppearancePreference, isSyncedPreference, pickValue, SETTING_FAMILIES, SETTINGS, settingSpec, valueFits, type SettingIds, type SettingSpec } from "../shared/settings-actions.ts";
 import { DEVICE_APPLY_PATH } from "../shared/device-settings.ts";
 import { BULK_TARGETS_MAX, splitBulkTargets } from "../shared/bulk-bot-edit.ts";
+import { withRequiredComputer, type RoutineRequirements } from "../shared/routine-readiness.ts";
 import { STEP_UP_CLASSES, botActClasses, type StepUpClass } from "../shared/step-up.ts";
 import { valueDigest, type ActRuleCandidate, type BotActResult, type BotActService } from "./bots/bot-act.ts";
 
@@ -570,6 +571,17 @@ export function createSettingsActions(deps: SettingsActionDeps) {
       const list = (current as unknown[]).filter((one): one is string => typeof one === "string");
       if (asked.attached === list.includes(name)) return text(200, `${name} is already ${asked.attached ? "attached" : "detached"}. Continue the task.`);
       built = { ...built, body: { mcpServers: asked.attached ? [...list, name] : list.filter((one) => one !== name) } };
+    }
+    if (spec.key === "routine.requiresComputer" && "method" in built) {
+      // #1996: PATCH replaces requires wholesale: keep skills and MCP needs
+      let current: unknown;
+      try {
+        current = await readValue(facts, input, "/api/routines", undefined, "routines", ids.target!, "requires");
+      } catch (error) {
+        const status = (error as { status?: number }).status ?? 502;
+        return text(status, error instanceof Error ? error.message : "This routine's requirements could not be read.");
+      }
+      built = { ...built, body: { requires: withRequiredComputer(current && typeof current === "object" ? current as RoutineRequirements : null, value === true) } };
     }
     if (spec.key === "routine.webhook" && "method" in built) {
       // 2026-10-29: the routine's own webhook, read with the person's rights

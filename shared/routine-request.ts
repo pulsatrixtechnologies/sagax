@@ -77,6 +77,8 @@ export interface RoutineRequestDefinition {
   model?: string;
   /** 2026-11-05 (shared/routine-act-as.ts): the role its runs act as ("" = Moi). */
   actAs?: string;
+  /** #1996: the routine needs its bot's computer online (Routine.requires.computer). */
+  requiresComputer?: boolean;
 }
 
 export type RoutineRequestChanges =

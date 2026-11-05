@@ -8,6 +8,8 @@ import { preSendRefusalKind, isCodexAmbientMcpRefusal } from "../shared/presend-
 import { ambientRefusalFor, clearAmbientRefusal, fixAmbientMcp } from "./drivers/codex/ambient-mcp.ts";
 import { classifyRoutineFailure as readinessFailureClass } from "./routines/routine-recovery.ts";
 import { canUseMcpServer } from "../shared/tool-scope.ts";
+import { withRequiredComputer } from "../shared/routine-readiness.ts";
+import { missingCitedPaths } from "./routines/routine-cited-paths.ts";
 import { createBotAvatarGenerateRoutes } from "./routes/bot-avatar-generate.ts";
 import { createBotObservabilityRoutes } from "./routes/bot-observability.ts";
 import { createFleetRoutes } from "./routes/fleet.ts";
@@ -32011,6 +32013,14 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     speaker: (threadId) => safetyPrincipal(threadId).principalId,
     mayRunNow: speakerMayRunRoutineNow,
     check: (routine) => routines!.checkReadiness(routine),
+    // #1996: cited paths are checked here only for a run on this machine;
+    // a cloud run or a bot on another computer sees another disk.
+    missingPaths: (routine) => {
+      if (routine.runOn === "cloud") return [];
+      const bot = store.bot(routine.botId);
+      if (!bot || approvalHostOf(bot).kind === "machine") return [];
+      return missingCitedPaths(routine.prompt);
+    },
     inFlight: routineRunInFlight,
     inFlightRun: routineInFlightRun,
     runNow: (routineId, startedBy) => routines?.runNow(routineId, undefined, startedBy),
@@ -43514,6 +43524,11 @@ const agentApi = createAgentApi({
     if (patch.name !== undefined) body.name = patch.name;
     if (patch.instructions !== undefined) body.prompt = patch.instructions;
     if (patch.schedule !== undefined) body.schedule = patch.schedule;
+    if (patch.requiresComputer !== undefined) {
+      // PATCH replaces requires wholesale: keep the routine's skills and MCP needs.
+      const current = routines?.listRoutines().find((candidate) => candidate.id === routineId);
+      body.requires = withRequiredComputer(current?.requires, patch.requiresComputer);
+    }
     const patched = await performAsMember(memberForAgentCaller(caller), {
       method: "PATCH",
       path: `/api/routines/${encodeURIComponent(routineId)}`,
@@ -43756,6 +43771,14 @@ const orgMember = createOrgMemberRoutes({
     // 2026-11-03: a question card that outlived its turn (a routine run's
     // ask_choice) still waits on the person: list_pending_approvals lists it.
     return openQuestionCard(threadId) ? "waiting" : "idle";
+  },
+  openProposal: (threadId) => {
+    const messages = store.messagesFor(threadId);
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const card = messages[i]!.kind === "options" ? messages[i]!.card : undefined;
+      if (liveProposal(card) && liveCardKind(card)) return true;
+    }
+    return false;
   },
   resolvePerson: (ref) => {
     const id = ref.trim().toLowerCase();

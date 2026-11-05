@@ -357,7 +357,7 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
     // clone Atlas for Bob: model and settings, no grants, no routines, no threads
     const cloned = await admin("POST", `bots/${bots.atlas!.id}/clone`, ALICE, { ownerSub: BOB.sub, name: "Atlas for Bob" });
     expect(cloned.status, cloned.text).toBe(201);
-    expect(cloned.body.bot).toMatchObject({ name: "Atlas for Bob", owner: { principalId: ids.bob }, engine: { instanceId: "claude" }, model: "fake-model", grants: [], routines: 0, threads: 1, status: "active" });
+    expect(cloned.body.bot).toMatchObject({ name: "Atlas for Bob", owner: { principalId: ids.bob }, engine: { instanceId: "claude", name: "Claude" }, model: "fake-model", grants: [], routines: 0, threads: 1, status: "active" });
     const copyId = cloned.body.bot.id as string;
     expect(((await api("GET", "/api/bots", bob)).body.bots as Array<{ id: string }>).map((bot) => bot.id)).toContain(copyId);
     // a manager clones in reach only (Bob's Beacon, for herself)

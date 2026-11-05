@@ -14,7 +14,7 @@ function setup() {
   const add = (id: string, owner: string, extra: Partial<AdminBot> = {}) => {
     bots.set(id, {
       id, name: id.toUpperCase(), owner: { principalId: owner, sub: null, name: owner }, ownerRole: "member",
-      engine: { instanceId: "claude", driverKind: "claudeAgent", installed: true }, model: "m1", access: "org-key",
+      engine: { instanceId: "claude", driverKind: "claudeAgent", installed: true, name: "Claude" }, model: "m1", access: "org-key",
       mcpProfiles: [], grants: [], sections: [], routines: 0, createdAt: 1, lastActivityAt: null, status: "active", label: null, threads: 1,
       look: botLook({ name: id, color: "green" }, () => false), persona: botPersona({ name: id }), approvalMode: "ask", ...extra,
     });
@@ -24,7 +24,7 @@ function setup() {
   add("b", "pr_bob");
   add("p", "pr_bob", { name: "PRIMARY" });
   add("busy", "pr_bob");
-  add("plain", "pr_bob", { engine: { instanceId: "plain", driverKind: "plain", installed: true } });
+  add("plain", "pr_bob", { engine: { instanceId: "plain", driverKind: "plain", installed: true, name: "plain" } });
   const calls: string[] = [];
   const deps: BotsDeps = {
     bots: () => [...bots.values()].map((bot) => ({ bot, reach: reach.get(bot.id)! })),

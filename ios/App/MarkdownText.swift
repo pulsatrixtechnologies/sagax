@@ -183,8 +183,11 @@ struct MarkdownText: View {
         case let .paragraph(text):
             // inert (a widget's Markdown): a YouTube link stays a link
             let youtubeIds = inert ? [] : YouTubeLinks.ids(in: text)
+            let artifactUrls = inert ? [] : ClaudeArtifacts.urls(in: text)
             if youtubeIds.count == 1, YouTubeLinks.isStandaloneParagraph(text, videoId: youtubeIds[0]) {
                 YouTubeMiniPlayerView(videoId: youtubeIds[0], identifier: identifier.map { "\($0)-yt" })
+            } else if artifactUrls.count == 1, ClaudeArtifacts.isStandaloneParagraph(text, url: artifactUrls[0]) {
+                ClaudeArtifactCardView(url: artifactUrls[0], identifier: identifier.map { "\($0)-ca" })
             } else {
                 VStack(alignment: .leading, spacing: desktop == nil ? Theme.Chat.paragraphSpacing : DesktopChatMetrics.paragraphGap) {
                     if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -197,6 +200,9 @@ struct MarkdownText: View {
                     }
                     ForEach(youtubeIds, id: \.self) { videoId in
                         YouTubeMiniPlayerView(videoId: videoId, identifier: identifier.map { "\($0)-yt-\(videoId)" })
+                    }
+                    ForEach(artifactUrls, id: \.self) { artifactUrl in
+                        ClaudeArtifactCardView(url: artifactUrl, identifier: identifier.map { "\($0)-ca-\(artifactUrl.suffix(8))" })
                     }
                 }
             }
@@ -281,11 +287,15 @@ struct MarkdownText: View {
             MermaidBlockView(code: code, pending: pending, identifier: identifier)
         } else if let email {
             EmailCardView(draft: email, pending: pending, identifier: identifier)
+        } else if kind == .widget, let consent = ClaudeArtifacts.parseConsent(code) {
+            ClaudeArtifactCardView(url: consent.url, consent: consent, identifier: identifier)
         } else if kind == .widget {
             if let page = RichBlocks.parseArtifactPage(code) {
                 // a YouTube page is the video itself: the player, not a page card
                 if !pending, let videoId = page.url.flatMap({ YouTubeLinks.videoId(from: $0) }) {
                     YouTubeMiniPlayerView(videoId: videoId, identifier: identifier.map { "\($0)-yt" })
+                } else if let claudeUrl = ClaudeArtifacts.canonicalUrl(page.url) {
+                    ClaudeArtifactCardView(url: claudeUrl, page: page, identifier: identifier)
                 } else {
                     ArtifactCardView(page: page, pending: pending, identifier: identifier)
                 }

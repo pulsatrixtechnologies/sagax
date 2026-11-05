@@ -1,7 +1,13 @@
 // A bot's links and files across all its conversations, for the profile's
 // Links, Media and Files tabs (iOS parity, screens 08 to 10). Pure: the routes
-// (server/routes/bot-library.ts) hand in the threads the viewer may read and
-// their messages or file listings; nothing here reads the store or the disk.
+// (server/routes/bot-library.ts) hand in the threads and their messages or file
+// listings; nothing here reads the store or the disk.
+//
+// When a bot is shared (bot.use), those tabs cover the bot's whole library:
+// every non-confidential thread of the owner and of every person in the share
+// (#2019). Confidential threads stay out. A person without bot.use sees none.
+// Per-thread file and preview URLs open for that shared viewer on those same
+// non-confidential threads only (isSharedLibraryFilePath + sharedLibraryFileAllowed).
 //
 // Links come from the words of text messages, both sides of the
 // conversation: a bare http(s) URL or a Markdown link (whose text becomes the
@@ -9,6 +15,43 @@
 // existing per-thread listing (server/threads/thread-files.ts), merged newest first
 // and split into media (images and videos) and other files.
 import type { ThreadFile } from "../threads/thread-files.ts";
+
+/** Threads the Links / Media / Files tabs cover for a shared bot (#2019): the non-confidential tasks plus the main thread. */
+export function libraryThreadsOfSharedBot<T extends { threadId: string; confidential?: unknown }>(
+  tasks: readonly T[],
+  mayUseBot: boolean,
+  mainThreadId?: string,
+): string[] {
+  if (!mayUseBot) return [];
+  const threads = tasks.filter((task) => task.confidential !== true).map((task) => task.threadId);
+  // The bot's own main thread is part of the library too (files and links only; the person still reads no messages).
+  return mainThreadId && !threads.includes(mainThreadId) ? [mainThreadId, ...threads] : threads;
+}
+
+/** GET /api/threads/:id/files/:fileId (download, preview or thumb query). */
+export function isSharedLibraryFilePath(method: string, path: string): boolean {
+  return method === "GET" && /^\/api\/threads\/[\w-]+\/files\/[a-f0-9]{24}$/.test(path);
+}
+
+/** Whether a shared viewer may open one library file URL of a
+ * non-confidential thread on a bot they may use (#2019). */
+export function sharedLibraryFileAllowed(input: { mayUseBot: boolean; confidential: boolean }): boolean {
+  return input.mayUseBot && !input.confidential;
+}
+
+/** The whole gate of the authenticate exception: a GET of one file of the
+ * bot's main thread or of one of its non-confidential tasks, for a person with bot.use. */
+export function sharedLibraryGetAllowed(input: {
+  method: string;
+  path: string;
+  mayUseBot: boolean;
+  mainThread: boolean;
+  task: { confidential?: unknown } | null | undefined;
+}): boolean {
+  if (!isSharedLibraryFilePath(input.method, input.path)) return false;
+  if (!input.mainThread && !input.task) return false;
+  return sharedLibraryFileAllowed({ mayUseBot: input.mayUseBot, confidential: !input.mainThread && input.task?.confidential === true });
+}
 
 export interface BotLink {
   url: string;

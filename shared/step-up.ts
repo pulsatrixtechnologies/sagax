@@ -11,6 +11,7 @@
 // Pure: no clock, no disk, no node built-ins. The server gives the risks it
 // read from the call (shared/custom-rules.ts callFacts).
 
+import { routineExecutionSettingsOnly } from "./routine-model.ts";
 import { canonicalJson } from "./canonical-json.ts";
 import { readShell, type RiskClass } from "./custom-rules.ts";
 import type { OptionCardData } from "./wire.ts";
@@ -119,6 +120,8 @@ export interface BotActTargetLike {
   write?: boolean;
   /** A screen command's name (createRoutine, deleteRoutine...). */
   command?: string;
+  body?: unknown;
+  input?: { patch?: unknown };
 }
 
 const ROUTINE_PATH = /^\/api\/routines(?:\/|$)/;
@@ -136,9 +139,12 @@ export function botActClasses(target: BotActTargetLike | undefined): StepUpClass
   const write = target.kind === "route" ? method !== "GET" && method !== "HEAD" : target.write !== false;
   if (!write) return [];
   if (method === "DELETE") out.add("destructive");
-  // a routine runs later without asking: a standing grant; removing one is a delete
-  if (target.kind === "route" && target.path && ROUTINE_PATH.test(target.path)) out.add(method === "DELETE" ? "destructive" : "always-grant");
-  if (target.kind === "ui" && target.command && ROUTINE_GRANT_COMMANDS.has(target.command)) out.add("always-grant");
+  const executionSettings = target.kind === "route"
+    ? method === "PATCH" && routineExecutionSettingsOnly(target.body)
+    : target.command === "updateRoutine" && routineExecutionSettingsOnly(target.input?.patch);
+  // Model and effort updates do not create a standing grant.
+  if (target.kind === "route" && target.path && ROUTINE_PATH.test(target.path) && !executionSettings) out.add(method === "DELETE" ? "destructive" : "always-grant");
+  if (target.kind === "ui" && target.command && ROUTINE_GRANT_COMMANDS.has(target.command) && !executionSettings) out.add("always-grant");
   if (target.kind === "ui" && target.command === "deleteRoutine") out.add("destructive");
   if (target.path && SEND_PATH.test(target.path)) out.add("external-send");
   if (target.path && PUBLISH_TOOL.test(target.path.replace(/\//g, "_"))) out.add("publish-page");
@@ -318,7 +324,8 @@ export function stepUpClassesForCard(
   if (card.outboundRequest || card.emailSendRequest) out.add("external-send");
   if (card.routineRequest?.operation?.action === "delete") out.add("destructive");
   // a routine runs later without asking: a standing grant
-  if (card.routineRequest && ["create", "update", "resume", "run_now"].includes(card.routineRequest.operation?.action)) out.add("always-grant");
+  if (card.routineRequest && ["create", "update", "resume", "run_now"].includes(card.routineRequest.operation?.action)
+    && !(card.routineRequest.operation.action === "update" && routineExecutionSettingsOnly(card.routineRequest.operation.changes))) out.add("always-grant");
   if (card.teamSetupRequest?.deletion) out.add("destructive");
   // an interactive shell can do anything a command can
   if (card.terminalRequest) {

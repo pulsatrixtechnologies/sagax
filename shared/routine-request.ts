@@ -1,3 +1,4 @@
+import type { EffortLevel } from "./model-selection.ts";
 /**
  * Durable payload carried by a chat routine confirmation card.
  *
@@ -77,10 +78,14 @@ export interface RoutineRequestDefinition {
   model?: string;
   /** 2026-11-05 (shared/routine-act-as.ts): the role its runs act as ("" = Moi). */
   actAs?: string;
+  /** #1996: the routine needs its bot's computer online (Routine.requires.computer). */
+  requiresComputer?: boolean;
+  /** Reasoning effort for runs only; absent follows the bot. */
+  effort?: EffortLevel;
 }
 
 export type RoutineRequestChanges =
-  & Omit<Partial<RoutineRequestDefinition>, "schedule" | "timeoutMinutes" | "watch" | "folder" | "model" | "actAs">
+  & Omit<Partial<RoutineRequestDefinition>, "schedule" | "timeoutMinutes" | "watch" | "folder" | "model" | "actAs" | "effort">
   & {
     schedule?: RoutineRequestScheduleChanges;
     /** `null` removes an existing safety cap. */
@@ -93,6 +98,8 @@ export type RoutineRequestChanges =
     model?: string | null;
     /** `null` clears the "Au nom de" choice; "" is "Moi". */
     actAs?: string | null;
+    /** null resets to the bot; omission preserves it on updates. */
+    effort?: EffortLevel | null;
   };
 
 /** Another bot in the proposer's section that this proposal targets: a

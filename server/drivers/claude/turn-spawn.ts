@@ -202,6 +202,7 @@ const session: ClaudeSession = {
   nativePermissionMode: null,
   replaysUserMessages,
   toolNames: new Map(),
+  configDir: (() => { try { return resolveClaudeConfigDir(undefined, env); } catch { return null; } })(),
   // A warm has no turn from the start, so a fast init cannot emit
   // under a phantom turn id.
   turn: turn.warmOnly === true ? null : { turnId, input: turn, retryAbort, settled: false, sawStreamDelta: false, pendingSteers: new Set(), deferred: null, continuationGrace: null, continuationSilence: null },

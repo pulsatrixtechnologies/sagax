@@ -115,6 +115,9 @@ export interface Capability {
   connect?: { reason: "sign_in" | "token" | "github" | "environment" | "account" | "key" };
   /** readable name, never an id */
   installedBy?: string;
+  /** added (#2029): the installer's principal id, for a tooltip or a Copy
+   * action only. Never shown as text. */
+  installedById?: string;
   /** added (lot 1a): why it is off, to connect or not served */
   reason?: CapabilityReason;
   /** added (lot 1a): the MCP server names it puts on a turn of this bot
@@ -131,6 +134,10 @@ export interface BotCapabilities {
   items: Capability[];
   /** the skills index of the prompt (#1748): bytes and count, caps, omitted */
   promptIndex?: CapabilityPromptIndex;
+  /** added (#2029): the person this list is resolved for (the bot's owner on
+   * the Perspicax console). `name` is readable, never an id; `principalId`
+   * is for a tooltip only. Absent when the list is the viewer's own. */
+  computedFor?: { principalId: string; name: string };
 }
 
 export const CAPABILITIES_PATH = (botId: string) => `/api/bots/${encodeURIComponent(botId)}/capabilities`;

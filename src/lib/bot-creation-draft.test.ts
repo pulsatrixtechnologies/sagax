@@ -34,6 +34,18 @@ describe("isolated creation draft", () => {
     expect(network).not.toHaveBeenCalled();
   });
 
+  it("keeps and clears a routine's effort in the creation draft", async () => {
+    const draft = new BotCreationDraft(EMPTY_BOT_DEFAULTS, vi.fn());
+    await draft.request("/api/routines", { method: "POST", body: JSON.stringify({ botId: draft.id,
+      name: "Check", prompt: "Check status", effort: "low", schedule: { type: "daily", time: "09:00", weekdays: [1] } }) });
+    const id = draft.routines[0]!.id;
+    expect(draft.routines[0]?.effort).toBe("low");
+    await draft.request(`/api/routines/${id}`, { method: "PATCH", body: JSON.stringify({ ...draft.routines[0], name: "Renamed", effort: undefined }) });
+    expect(draft.routines[0]?.effort).toBe("low");
+    await draft.request(`/api/routines/${id}`, { method: "PATCH", body: JSON.stringify({ ...draft.routines[0], effort: null }) });
+    expect(draft.routines[0]?.effort).toBeUndefined();
+  });
+
   it("makes independent copies and new routine identities for every draft", () => {
     const defaults = { ...EMPTY_BOT_DEFAULTS, profile: { name: "Default" }, routines: [{
       name: "Status", prompt: "Check status", enabled: false, schedule: { type: "once" as const, at: 123456789 },

@@ -63,6 +63,11 @@ describe("guided tour", () => {
     expect(step("tour.automations-page").onExit).toBe("backToChat");
   });
 
+  it("skips the Computer step when its header control is absent (Refs #2000)", () => {
+    expect(step("tour.computer").anchor).toBe("computer");
+    expect(step("tour.computer").skipIfMissing).toBe(true);
+  });
+
   it("knows which effects the control's own click performs", () => {
     for (const s of TOUR_STEPS) {
       if (s.onExit && ANCHOR_EFFECTS.has(s.onExit)) expect(s.anchor).not.toBeNull();

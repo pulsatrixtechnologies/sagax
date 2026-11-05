@@ -3,9 +3,14 @@
 import { describe, expect, it } from "vitest";
 
 import { driverKeyBacked, instanceConfigs, type AppConfig } from "./config.ts";
-import { addCompatServer, compatServers, editCompatServer, editCompatServerSchema, newCompatServerSchema, removeCompatServer } from "./openai-compat-servers.ts";
+import { addCompatServer, compatServers, editCompatServer, editCompatServerSchema, newCompatServerSchema, removeCompatServer, strippedUrl } from "./openai-compat-servers.ts";
 
 describe("named OpenAI-compatible servers", () => {
+  it("keeps a pasted endpoint as its base address", () => {
+    expect(strippedUrl("https://provider.example/v1/chat/completions/")).toBe("https://provider.example/v1");
+    expect(strippedUrl("https://provider.example/compatibility/v1")).toBe("https://provider.example/compatibility/v1");
+  });
+
   it("adds a server as an engine of its own, its key apart from the instance", () => {
     const added = addCompatServer({}, undefined, { displayName: " Azure AI Foundry ", url: "https://res.openai.azure.com/openai/v1/", key: "k-azure" }, () => "abc");
     expect(added.instanceId).toBe("compat-abc");

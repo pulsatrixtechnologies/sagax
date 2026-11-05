@@ -8,6 +8,8 @@ import { preSendRefusalKind, isCodexAmbientMcpRefusal } from "../shared/presend-
 import { ambientRefusalFor, clearAmbientRefusal, fixAmbientMcp } from "./drivers/codex/ambient-mcp.ts";
 import { classifyRoutineFailure as readinessFailureClass } from "./routines/routine-recovery.ts";
 import { canUseMcpServer } from "../shared/tool-scope.ts";
+import { withRequiredComputer } from "../shared/routine-readiness.ts";
+import { missingCitedPaths } from "./routines/routine-cited-paths.ts";
 import { createBotAvatarGenerateRoutes } from "./routes/bot-avatar-generate.ts";
 import { createBotObservabilityRoutes } from "./routes/bot-observability.ts";
 import { createFleetRoutes } from "./routes/fleet.ts";
@@ -99,6 +101,7 @@ import { ToolResults } from "./tools/tool-results.ts";
 import {
   basename,
   dirname,
+  isAbsolute,
   join,
   relative,
   sep
@@ -1266,6 +1269,7 @@ import type { RoutineScopeCaller, RoutineScopeDeps, RoutineScopeFacts } from "./
 import { recordRoutineChange, recordRoutineToggle, routineToggleForViewer } from "./routines/routine-chat-events.ts";
 import { botReplyQuoteId } from "./turns/reply-to-turn.ts";
 import { isTriggerSchedule } from "../shared/routines.ts";
+import { routineTurnEffort } from "../shared/routine-effort.ts";
 import { routineTurnModel } from "../shared/routine-model.ts";
 import {
   nextOccurrence,
@@ -2005,6 +2009,7 @@ import {
 import { MEMORY_INDEX, memoryOverview, readMemoryDoc } from "./memory/memory-store.ts";
 import { isExpired as memoryEntryExpired, parseMemoryEntries } from "./memory/memory-entries.ts";
 import { createBotLibraryRoutes } from "./routes/bot-library.ts";
+import { libraryThreadsOfSharedBot, sharedLibraryGetAllowed } from "./bots/bot-library.ts";
 import { createBotSettingsRoutes } from "./routes/bot-settings.ts";
 import { createAutoReviewRuleRoutes } from "./routes/auto-review-rules.ts";
 import { createOwnerApprovalRoutes } from "./routes/owner-approvals.ts";
@@ -2096,6 +2101,7 @@ import {
   type InstallationServerInput,
   type OrgDeclarationInput
 } from "./capabilities/capabilities.ts";
+import { consoleBotCapabilities as resolveConsoleBotCapabilities } from "./capabilities/console-bot-capabilities.ts";
 import { createBotCapabilitiesRoutes, type BotCapabilitiesAnswer } from "./routes/bot-capabilities.ts";
 import { engineWorksInFiles, type BotCapabilities } from "../shared/capabilities.ts";
 import { reservedMcpName } from "../shared/mcp-reserved-names.ts";
@@ -2313,6 +2319,12 @@ import type { Artifact } from "../shared/artifacts.ts";
 import { createPreferenceStore } from "./people/preference-import.ts";
 import { createPreferenceImportRoutes } from "./routes/preference-import.ts";
 import { createArtifactInternalRoutes, createArtifactRoutes } from "./routes/artifacts.ts";
+import { createClaudeArtifactInternalRoutes, createClaudeArtifactRoutes } from "./routes/claude-artifacts.ts";
+import { onArtifactPublished } from "./claude-artifacts/events.ts";
+import { runClaudeArtifact } from "./claude-artifacts/runner.ts";
+import { ArtifactSummaryCache, listClaudeArtifactComments, threadWantsClaude, type PersonArtifactResult } from "./claude-artifacts/service.ts";
+import { TrackedArtifactStore } from "./claude-artifacts/tracked.ts";
+import { CLAUDE_ARTIFACT_COMMENTS_ROUTINE, claudeArtifactCommentsNote } from "./claude-artifacts/comments-routine.ts";
 import { createBotTaskInternalRoutes, createBotTaskRoutes } from "./routes/bot-task-list.ts";
 import { createBotTaskStore } from "./bots/bot-task-list.ts";
 import { botTasksFrameAllowed, sameBotTaskOwner } from "../shared/bot-task-list.ts";
@@ -10363,27 +10375,31 @@ function botCapabilitiesFor(auth: RequestAuth, botId: string, engineId: string |
     : level === "owner" || level === "manage" || orgAdminCaller(auth);
   return botCapabilitiesAs(bot, engineId, { ...(principal ? { principal } : {}), mayChange, marketplace: marketplaceViewer(auth) });
 }
-/** The Perspicax console's `GET bots/{id}/capabilities` (lot 1d): the same
- * list for the console person, whose reach the admin router checked. Read
- * only: the console never switches anything, so `canToggle` says what that
- * person could change in Sagax. */
+/** The Perspicax console's `GET bots/{id}/capabilities` (lot 1d): what the
+ * bot receives, resolved for its owner (#2029: their servers, Roles, "Me"
+ * plugins and the organization's Flow as a routine of the bot runs them),
+ * never for the console person looking. The console person's reach was
+ * checked by the admin router; read only: the console never switches
+ * anything, so `canToggle` says what that person could change in Sagax. */
 function consoleBotCapabilities(botId: string, viewer: { principalId: string; orgAdmin: boolean }): BotCapabilities | null {
-  const bot = store.bot(botId);
-  if (!bot) return null;
-  const principal = viewer.principalId.trim().toLowerCase();
-  const person = authzViewerFromId(principal);
-  const level = person ? botLevel({ viewer: { ...person, orgAdmin: person.orgAdmin || viewer.orgAdmin }, ...botFacts(bot) }) : null;
-  const answer = botCapabilitiesAs(bot, undefined, {
-    principal,
-    mayChange: viewer.orgAdmin || level === "owner" || level === "manage",
-    marketplace: { principal }
-  });
-  return answer.ok ? answer.capabilities : null;
+  return resolveConsoleBotCapabilities({
+    bot: (id) => store.bot(id) ?? undefined,
+    owner: (bot) => effectiveBotOwner(bot),
+    level: (looking, orgAdmin, bot) => {
+      const person = authzViewerFromId(looking);
+      return person ? botLevel({ viewer: { ...person, orgAdmin: person.orgAdmin || orgAdmin }, ...botFacts(bot) }) : null;
+    },
+    name: (id) => pageThreadName(id),
+    resolve: (bot, as) => {
+      const answer = botCapabilitiesAs(bot, undefined, { principal: as.principal, mayChange: as.mayChange, marketplace: { principal: as.principal }, ...(as.computedFor ? { computedFor: as.computedFor } : {}) });
+      return answer.ok ? answer.capabilities : null;
+    }
+  }, botId, viewer);
 }
 function botCapabilitiesAs(
   bot: NonNullable<ReturnType<typeof store.bot>>,
   engineId: string | undefined,
-  viewer: { principal?: string; mayChange: boolean; marketplace: MarketplaceViewer },
+  viewer: { principal?: string; mayChange: boolean; marketplace: MarketplaceViewer; computedFor?: { principalId: string; name: string } },
 ): BotCapabilitiesAnswer {
   const instance = registry.get(engineId ?? bot.modelSelection.instanceId);
   if (!instance) return { ok: false, status: engineId ? 400 : 404, error: "Unknown engine.", code: "unknown_engine" };
@@ -10442,13 +10458,12 @@ function botCapabilitiesAs(
       const folder = botPlugins.installedFolder(bot.id, plugin);
       let contents: PluginContents = { skills: [], commands: [], agents: [] };
       try { if (folder.present) contents = readPluginContents(folder.dir); } catch { /* listed without its contents */ }
-      const by = plugin.installedBy ? pageThreadName(plugin.installedBy) : "";
       return {
         key: plugin.key, name: plugin.name, marketplace: plugin.marketplace, enabled: plugin.enabled, declaredMcpServers: plugin.declaredMcpServers,
         dir: folder.dir, present: folder.present, contents,
         ...(plugin.description ? { description: plugin.description } : {}),
         ...(plugin.version ? { version: plugin.version } : {}),
-        ...(by ? { installedBy: by } : {}),
+        ...readableInstaller(plugin.installedBy),
         ...(offered.get(plugin.key) ? { updateAvailable: true } : {})
       };
     }),
@@ -10458,7 +10473,9 @@ function botCapabilitiesAs(
       const folder = personalPlugins.installedFolder(principal ?? localPrincipalId(), plugin);
       let contents: PluginContents = { skills: [], commands: [], agents: [] };
       try { if (folder.present) contents = readPluginContents(folder.dir); } catch { /* listed without its contents */ }
-      return { ...plugin, dir: folder.dir, present: folder.present, contents };
+      // the stored installer is a principal id: a readable name, or nothing (#2029)
+      const { installedBy: _storedInstaller, ...rest } = plugin;
+      return { ...rest, ...readableInstaller(plugin.installedBy), dir: folder.dir, present: folder.present, contents };
     }),
     pluginMcp: principal || !organization ? scopedPluginMcp(bot, principal ?? localPrincipalId()) : [],
     pluginEnvironment: Boolean(userSandbox),
@@ -10507,7 +10524,15 @@ function botCapabilitiesAs(
     })() } : { rides: false },
     grokCloud: grokCloudOnTurn(account, instance, bot)
   };
-  return { ok: true, capabilities: resolveBotCapabilities(inputs, { ...(principal ? { principalId: principal } : {}), mayChange }) };
+  return { ok: true, capabilities: resolveBotCapabilities(inputs, { ...(principal ? { principalId: principal } : {}), mayChange, ...(viewer.computedFor ? { computedFor: viewer.computedFor } : {}) }) };
+}
+/** Who installed a plugin, as a capability shows it (#2029): a readable
+ * name, with the id kept for a tooltip only; nothing when no name is known
+ * (an id is never shown as text). */
+function readableInstaller(id: string | undefined): { installedBy?: string; installedById?: string } {
+  if (!id) return {};
+  const name = pageThreadName(id);
+  return name && name !== id ? { installedBy: name, installedById: id } : {};
 }
 ROUTES.push(createBotCapabilitiesRoutes({ resolve: botCapabilitiesFor }));
 // "Create a Team Bot from this conversation" (routes/team-bot-from-thread.ts):
@@ -21622,6 +21647,32 @@ function routineModelForTurn(botId: string, threadId: string, instance: { instan
   return decided;
 }
 
+const routineEffortNoticed = new Set<string>();
+
+/** Resolve against the model selected for this turn, without changing chat. */
+function routineEffortForTurn(botId: string, threadId: string, instance: ProviderInstance, model: string): { effort: EffortLevel } | null {
+  const run = activeRoutineRunForThread(threadId);
+  const bot = store.bot(botId);
+  if (!run?.effort || run.botId !== botId || !bot) return null;
+  const decided = routineTurnEffort({
+    effort: run.effort,
+    botInstanceId: bot.modelSelection.instanceId,
+    turnInstanceId: instance.instanceId,
+    takenOver: Boolean(limitFailoverStore.failover(botId, threadId)),
+    option: instance.models.options.find(option => option.id === model),
+    levels: instance.adapter.capabilities.effortLevels,
+  });
+  if (decided && "ignored" in decided) {
+    if (!routineEffortNoticed.has(run.id)) {
+      routineEffortNoticed.add(run.id);
+      if (routineEffortNoticed.size > 500) routineEffortNoticed.delete(routineEffortNoticed.values().next().value!);
+      store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: `notice: ${decided.ignored}`, ok: true } });
+    }
+    return null;
+  }
+  return decided;
+}
+
 function routineDelegationCanResume(threadId: string, routineRunId?: string): boolean {
   return !routineRunId || activeRoutineRunForThread(threadId)?.id === routineRunId;
 }
@@ -22229,6 +22280,12 @@ async function joinPrewarm(threadId: string): Promise<void> {
 function prewarmThread(botId: string, threadId: string, person: string, opts: PrewarmTurnOpts, windowMs?: number): PrewarmOutcome {
   if (threadPrewarm.has(threadId)) return threadPrewarm.begin(threadId, person, async () => {}, windowMs);
   if (prewarmRefusal(botId, threadId)) return "skipped";
+  // Composer open / typing (#1975): a person looks at one conversation; drop
+  // their other waiting warms so a thread switch does not keep mounting.
+  // Routine and teammate warms keep the shared waiting pool.
+  if (!opts.automationSource && !opts.runOn && !opts.warmCoordination) {
+    threadPrewarm.cancelOthers(person, threadId);
+  }
   return threadPrewarm.begin(threadId, person, (signal) => new Promise<void>((resolve) => {
     signal.addEventListener("abort", () => {
       // the driver closed its idle process (a turn's process stays)
@@ -25089,9 +25146,20 @@ routines = new RoutineManager({
   },
   engineForRun: (run) => routineReadinessEngine({ botId: run.botId, prompt: run.prompt ?? "" }, run),
   checkModel: (botId, model) => routineModelRefusal(botId, model),
+  checkEffort: (botId, effort, model) => {
+    const bot = store.bot(botId);
+    const instance = bot && registry.get(bot.modelSelection.instanceId);
+    if (!instance || !bot) return null;
+    const decided = routineTurnEffort({ effort, botInstanceId: instance.instanceId, turnInstanceId: instance.instanceId,
+      takenOver: false, levels: instance.adapter.capabilities.effortLevels,
+      option: instance.models.options.find(option => option.id === (model ?? bot.modelSelection.model)) });
+    return decided && "ignored" in decided ? `Effort "${effort}" is not offered by this bot's engine for this model.` : null;
+  },
   botName: (botId) => store.bot(botId)?.name,
   evaluateWatch: (routine, watch) => routineWatchEvaluator(routine, watch),
   forgetWatch: (routineId) => routineWatchStates.forget(routineId),
+  // #2018: "Commentaires des artefacts" (server/claude-artifacts/comments-routine.ts)
+  evaluateCode: (routine) => claudeArtifactCommentsCheck(routine),
   languageFor: (routine) => {
     const person = IDENTITY.kind === "perspicax" && routine.botId
       ? effectiveRunAs({ botId: routine.botId, ...(routine.runAs ? { runAs: routine.runAs } : {}) })
@@ -32069,6 +32137,14 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     speaker: (threadId) => safetyPrincipal(threadId).principalId,
     mayRunNow: speakerMayRunRoutineNow,
     check: (routine) => routines!.checkReadiness(routine),
+    // #1996: cited paths are checked here only for a run on this machine;
+    // a cloud run or a bot on another computer sees another disk.
+    missingPaths: (routine) => {
+      if (routine.runOn === "cloud") return [];
+      const bot = store.bot(routine.botId);
+      if (!bot || approvalHostOf(bot).kind === "machine") return [];
+      return missingCitedPaths(routine.prompt);
+    },
     inFlight: routineRunInFlight,
     inFlightRun: routineInFlightRun,
     runNow: (routineId, startedBy) => routines?.runNow(routineId, undefined, startedBy),
@@ -32116,6 +32192,13 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       return { engine: name };
     }
   }),
+  // claude_artifact: claude.ai artifacts through the speaker's own account (#2018)
+  createClaudeArtifactInternalRoutes({
+    call: (principalId, tool, input, page) => personClaudeArtifactCall(principalId, tool, input, page),
+    ownsThread: (botId, threadId) => Boolean(connectorThread(botId, threadId)),
+    speaker: (threadId) => safetyPrincipal(threadId).principalId ?? (IDENTITY.kind === "solo" ? localPrincipalId() : undefined),
+    workspaceFile: (botId, file) => claudeArtifactWorkspaceFile(botId, file)
+  }),
   // save_artifact, update_artifact, list_artifacts, delete_artifact (server/routes/artifacts.ts)
   createArtifactInternalRoutes({
     artifacts: () => artifactStore,
@@ -32156,7 +32239,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
   // (first path of each slice). Each worker replaces only its own line with
   // createXRoutes({...}).
   createInternalMemoryRoutes({
-    bot: (id) => store.bot(id),
+    bot: (id) => store.bot(id) ?? undefined,
     botByThread: (threadId) => store.botByThread(threadId),
     groupByThread: (threadId) => store.groupByThread(threadId),
     taskByThread: (botId, threadId) => store.taskByThread(botId, threadId),
@@ -32233,7 +32316,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     notify
   }),
   createInternalEnvironmentsRoutes({
-    bot: (id) => store.bot(id),
+    bot: (id) => store.bot(id) ?? undefined,
     projectBotForTask: (botId, threadId) => store.projectBotForTask(botId, threadId),
     isConfidentialThread: (threadId) => store.isConfidentialThread(threadId),
     requireActive: (capability) => {
@@ -32639,7 +32722,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     }
   }),
   createInternalIntegrationsRoutes({
-    bot: (id) => store.bot(id),
+    bot: (id) => store.bot(id) ?? undefined,
     isPerspicax: () => IDENTITY.kind === "perspicax",
     ownsThread: (botId, threadId) => {
       const owner = connectorThread(botId, threadId);
@@ -33316,14 +33399,18 @@ ROUTES.push(createUndoRoutes({
   undo: (auth, res, threadId, requestId) => withDecisionActor(decisionActorFor(auth), () => undoAppliedChange(res, threadId, requestId))
 }));
 // The bot profile's Links, Media and Files tabs and Share as Template
-// (server/routes/bot-library.ts, iOS parity).
+// (server/routes/bot-library.ts, iOS parity). When the bot is shared, the
+// library covers every non-confidential thread of the share (#2019).
 ROUTES.push(createBotLibraryRoutes<BotRecord>({
   bot: (id) => store.bot(id) ?? undefined,
   threadsFor: (bot) => {
-    // On an organization server a person reads only their own threads.
     const viewer = scopedThreadViewer();
-    const shown = threadsShownTo(bot, store.tasks(bot.id), viewer).map((task) => task.threadId);
-    return viewer ? shown : [bot.threadId, ...shown];
+    if (!viewer || !privateThreads()) {
+      const shown = threadsShownTo(bot, store.tasks(bot.id), viewer).map((task) => task.threadId);
+      return viewer ? shown : [bot.threadId, ...shown];
+    }
+    const mayUse = Boolean(canOnBot(authzViewerFromId(viewer), "bot.use", botFacts(bot)));
+    return libraryThreadsOfSharedBot(store.tasks(bot.id), mayUse, bot.threadId);
   },
   messages: (threadId) => activePath(store.messagesFor(threadId), store.activeLeaf(threadId)),
   files: (threadId) => listThreadFiles(threadFileRefsFor(threadId), (ref) => statMessageFile(ref.path, threadFileRoots(threadId, ref))),
@@ -40582,6 +40669,130 @@ function claudeAccountForPrincipal(principalId: string): { cli: string; env: Nod
   return { cli, env, key: `instance:${instanceId}` };
 }
 
+// claude.ai artifacts (#2018): every call runs through the person's OWN
+// Claude account (claudeAccountForPrincipal), never another person's.
+async function personClaudeArtifactCall(
+  principalId: string,
+  tool: "Artifact" | "ArtifactData" | "ArtifactComments",
+  input: Record<string, unknown>,
+  page?: { html?: string; file?: string },
+): Promise<PersonArtifactResult> {
+  // Solo: the one local person only.
+  if (IDENTITY.kind === "solo" && principalId.trim().toLowerCase() !== localPrincipalId().trim().toLowerCase()) {
+    return { ok: false, unavailable: "not_signed_in" };
+  }
+  const account = claudeAccountForPrincipal(principalId);
+  if ("unavailable" in account) return { ok: false, unavailable: account.unavailable };
+  return runClaudeArtifact({ account: { cli: account.cli, env: account.env }, tool, input, ...page });
+}
+let claudeArtifactSummaries: ArtifactSummaryCache | undefined;
+function claudeArtifactSummaryCache(): ArtifactSummaryCache {
+  return claudeArtifactSummaries ??= new ArtifactSummaryCache();
+}
+let claudeArtifactTrackedStore: TrackedArtifactStore | undefined;
+function claudeArtifactTracked(): TrackedArtifactStore {
+  return claudeArtifactTrackedStore ??= new TrackedArtifactStore(join(DATA_DIR, "claude-artifacts.json"));
+}
+/** A file the bot names for claude_artifact: inside its workspace, or null. */
+function claudeArtifactWorkspaceFile(botId: string, file: string): string | null {
+  try {
+    const root = realpathSync(workspaceDir(botId));
+    const resolved = realpathSync(isAbsolute(file) ? file : join(root, file));
+    if (resolved !== root && !resolved.startsWith(`${root}${sep}`)) return null;
+    return statSync(resolved).isFile() ? resolved : null;
+  } catch {
+    return null;
+  }
+}
+/** The person's "Commentaires des artefacts" routine, made once, turned on. */
+function ensureClaudeArtifactCommentsRoutine(principalId: string, botId: string): void {
+  if (!routines || !store.bot(botId)) return;
+  const tracked = claudeArtifactTracked();
+  const all = routines.listRoutines();
+  const key = principalId.trim().toLowerCase();
+  const known = tracked.routineFor(key);
+  if (known && all.some((routine) => routine.id === known)) return;
+  const existing = all.find((routine) => routine.precheck?.kind === "code"
+    && (routine.precheck as { check?: string }).check === CLAUDE_ARTIFACT_COMMENTS_ROUTINE.check
+    && (routine.runAs ?? "").trim().toLowerCase() === key);
+  if (existing) { tracked.setRoutine(key, existing.id); return; }
+  try {
+    const created = routines.create({
+      name: CLAUDE_ARTIFACT_COMMENTS_ROUTINE.name,
+      prompt: CLAUDE_ARTIFACT_COMMENTS_ROUTINE.prompt,
+      botId,
+      schedule: { type: "interval", everyMinutes: CLAUDE_ARTIFACT_COMMENTS_ROUTINE.everyMinutes, anchorAt: Date.now() },
+      precheck: { kind: "code", check: CLAUDE_ARTIFACT_COMMENTS_ROUTINE.check },
+      overlap: "skip",
+    }, undefined, { runAs: key });
+    routines.update(created.id, { enabled: true });
+    tracked.setRoutine(key, created.id);
+  } catch (error) {
+    console.warn(`claude artifacts: the comments routine could not be made (${error instanceof Error ? error.message : String(error)})`);
+  }
+}
+/** The routine's code check: wake only on threads sent to Claude. */
+async function claudeArtifactCommentsCheck(routine: Routine): Promise<{ wake: true; note: string } | { wake: false; reason: string }> {
+  const principalId = routine.runAs ?? (IDENTITY.kind === "solo" ? localPrincipalId() : undefined);
+  if (!principalId) return { wake: false, reason: "no person for this routine" };
+  const artifacts = claudeArtifactTracked().forPrincipal(principalId);
+  if (!artifacts.length) return { wake: false, reason: "no artifact to watch" };
+  const waiting: Parameters<typeof claudeArtifactCommentsNote>[0] = [];
+  for (const artifact of artifacts) {
+    try {
+      const threads = (await listClaudeArtifactComments(personClaudeArtifactCall, principalId, artifact.url)).filter(threadWantsClaude);
+      if (threads.length) waiting.push({ url: artifact.url, title: artifact.title, threads });
+    } catch {
+      // one artifact that cannot be read never hides the others
+    }
+  }
+  if (!waiting.length) return { wake: false, reason: "no comment waits for Claude" };
+  return { wake: true, note: claudeArtifactCommentsNote(waiting) };
+}
+onArtifactPublished((event) => {
+  claudeArtifactSummaries?.invalidate(event.url);
+  if (event.owned === false || !event.botId) return;
+  const principalId = event.principalId
+    ?? (event.threadId ? safetyPrincipal(event.threadId).principalId : undefined)
+    ?? (IDENTITY.kind === "solo" ? localPrincipalId() : undefined);
+  if (!principalId) return;
+  claudeArtifactTracked().track({ principalId, botId: event.botId, url: event.url, title: event.title ?? "" });
+  ensureClaudeArtifactCommentsRoutine(principalId, event.botId);
+});
+function claudeArtifactPrincipal(auth: RequestAuth): string | undefined {
+  if (auth.kind === "loopback" && auth.trust === "service") return undefined;
+  return actorPrincipalId(auth) || (IDENTITY.kind === "solo" ? localPrincipalId() : undefined);
+}
+ROUTES.push(createClaudeArtifactRoutes({
+  principalId: claudeArtifactPrincipal,
+  call: personClaudeArtifactCall,
+  cache: claudeArtifactSummaryCache(),
+  copy: async (auth, botId, threadId, url) => {
+    const bot = store.bot(botId);
+    if (!bot) return { status: 404, error: "unknown bot" };
+    const viewerId = channelFilterViewerId(auth);
+    const viewer = viewerId ? authzViewerFromId(viewerId) : undefined;
+    if (viewerId && !(viewer && canOnBot(viewer, "bot.use", botFacts(bot)))) return { status: 403, error: "not your bot" };
+    const thread = threadId ?? botMainThread(botId);
+    if (!thread) return { status: 404, error: "no conversation" };
+    try {
+      await acceptDirectSend({
+        botId, threadId: thread,
+        text: `Publie une copie de ${url} depuis ton compte avec claude_artifact.`,
+        sendId: randomUUID().replaceAll("-", ""),
+        sender: messageSender(auth),
+        trigger: usageTriggerFor(auth),
+        speaker: speakerFor(auth),
+        personPresent: true
+      });
+      return { ok: true };
+    } catch (error) {
+      if (error instanceof DirectSendRefused) return { status: error.status, error: error.message };
+      throw error;
+    }
+  }
+}));
+
 // "Connect Microsoft Teams" cards (server/routes/connector-setup.ts): the
 // person who asked checks theirs; Claude's inventory is read again.
 ROUTES.push(createConnectorSetupRoutes({
@@ -43437,6 +43648,13 @@ const agentApi = createAgentApi({
     if (patch.name !== undefined) body.name = patch.name;
     if (patch.instructions !== undefined) body.prompt = patch.instructions;
     if (patch.schedule !== undefined) body.schedule = patch.schedule;
+    if (patch.requiresComputer !== undefined) {
+      // PATCH replaces requires wholesale: keep the routine's skills and MCP needs.
+      const current = routines?.listRoutines().find((candidate) => candidate.id === routineId);
+      body.requires = withRequiredComputer(current?.requires, patch.requiresComputer);
+    }
+    if (patch.model !== undefined) body.model = patch.model;
+    if (patch.effort !== undefined) body.effort = patch.effort;
     const patched = await performAsMember(memberForAgentCaller(caller), {
       method: "PATCH",
       path: `/api/routines/${encodeURIComponent(routineId)}`,
@@ -43679,6 +43897,14 @@ const orgMember = createOrgMemberRoutes({
     // 2026-11-03: a question card that outlived its turn (a routine run's
     // ask_choice) still waits on the person: list_pending_approvals lists it.
     return openQuestionCard(threadId) ? "waiting" : "idle";
+  },
+  openProposal: (threadId) => {
+    const messages = store.messagesFor(threadId);
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const card = messages[i]!.kind === "options" ? messages[i]!.card : undefined;
+      if (liveProposal(card) && liveCardKind(card)) return true;
+    }
+    return false;
   },
   resolvePerson: (ref) => {
     const id = ref.trim().toLowerCase();
@@ -46199,10 +46425,22 @@ async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL,
     // The one exception the spec writes down (slice 3, D15): an
     // organization admin answers a card that waits for an admin, without
     // reading the thread (POST .../respond only).
+    // Shared bot library (#2019): a person with bot.use may GET one file
+    // (download / preview / thumb) from a non-confidential thread of that
+    // bot, so Links / Media / Files URLs open for a shared viewer.
     if (named && owner && !adminAnswersPendingApproval(method, path, auth) &&
       !botThreadReadable(owner, named, scopedViewerId, method === "GET" ? "thread.read" : "thread.post")) {
-      json(res, 404, { error: "no such conversation" });
-      return null;
+      // The bot's main thread (bot.threadId) is in the library too (not a task).
+      const task = named === owner.threadId ? null : store.taskByThread(owner.id, named);
+      const libraryFile = sharedLibraryGetAllowed({
+        method, path, task,
+        mainThread: named === owner.threadId,
+        mayUseBot: Boolean(canOnBot(authzViewerFromId(scopedViewerId), "bot.use", botFacts(owner))),
+      });
+      if (!libraryFile) {
+        json(res, 404, { error: "no such conversation" });
+        return null;
+      }
     }
     onJsonBody(res, (body) => bodyForThreadViewer(body, scopedViewerId));
   }
@@ -47416,6 +47654,7 @@ const startTurnRunner = createStartTurn({
   turnHolder,
   turnModelRequested,
   routineModelForTurn,
+  routineEffortForTurn,
   turnModelSwitches,
   turnNetworkProxy,
   turnOrigin,

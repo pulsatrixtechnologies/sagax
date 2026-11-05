@@ -37,6 +37,11 @@ export interface CapabilityViewer {
   /** May switch the bot's own capabilities (its owner, a manager, an
    * organization admin). */
   mayChange: boolean;
+  /** #2029: the list is resolved for another person (the bot's owner, on
+   * the Perspicax console), not for the one looking. Their own "Me"
+   * switches are then not the viewer's to change, and the answer says
+   * whose list it is. */
+  computedFor?: { principalId: string; name: string };
 }
 
 export interface BotPluginInput {
@@ -48,6 +53,8 @@ export interface BotPluginInput {
   enabled: boolean;
   /** readable, never an id */
   installedBy?: string;
+  /** the installer's principal id, for a tooltip only (#2029) */
+  installedById?: string;
   declaredMcpServers: string[];
   /** the folder a turn would load (BotPlugins.pluginDir) */
   dir: string;
@@ -211,6 +218,8 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
   const kind = engine.kind;
   const receipt = (form: Capability["form"], parts: Omit<EngineParts, "customMcp">) => engineReceipt(kind, form, { customMcp: engine.customMcp, skillDiscovery: engine.agentsMcp === true, ...parts });
   const items: Capability[] = [];
+  // the "Me" switches belong to the person the list is resolved for
+  const ownSwitches = !viewer.computedFor;
   const push = (item: Capability) => {
     const index = inputs.capabilityPromptIndex?.[item.key];
     if (index) {
@@ -264,13 +273,14 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
       scope,
       state,
       enabled: plugin.enabled,
-      canToggle: scope === "me" || viewer.mayChange,
+      canToggle: scope === "me" ? ownSwitches : viewer.mayChange,
       ...(plugin.updateAvailable ? { updateAvailable: true } : {}),
       ...(supersededBy ? { supersededBy } : {}),
       brings: { skills: plugin.contents.skills, commands: plugin.contents.commands, agents: plugin.contents.agents, mcpServers: plugin.declaredMcpServers },
       // MCP receipts are completed below using the actual selected mounts.
       engine: receipt("plugin", { skills: has(plugin.contents.skills), commands: has(plugin.contents.commands), agents: has(plugin.contents.agents) }),
       ...(plugin.installedBy ? { installedBy: plugin.installedBy } : {}),
+      ...(plugin.installedBy && plugin.installedById ? { installedById: plugin.installedById } : {}),
       ...(plugin.enabled && !plugin.present ? { reason: "not_installed" as const }
         : plugin.enabled && !folders.some((folder) => folder.dir === plugin.dir) ? { reason: "name_taken" as const } : {}),
     });
@@ -329,7 +339,7 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
       enabled: decl.active,
       // Offered: the person's own switch (their Me state, all their bots).
       // Imposed: a member cannot turn it off.
-      canToggle: decl.mode === "offered" && decl.enabled && decl.member,
+      canToggle: ownSwitches && decl.mode === "offered" && decl.enabled && decl.member,
       orgDeclaration: decl.id,
       brings: { skills: contents.skills, commands: contents.commands, agents: contents.agents, mcpServers: decl.mcpServers },
       // MCP receipts are completed below from the actual mounts.
@@ -531,7 +541,7 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
       description: skill.description, source: { kind: "file", label: "Me" },
       scope: "me", state: skill.enabled && !skill.shadowed ? "on" : "off", enabled: skill.enabled,
       ...(skill.shadowed ? { reason: "name_taken" as const } : {}),
-      canToggle: true, engine: receipt("skill", { skills: true, indexOnly: true }),
+      canToggle: ownSwitches, engine: receipt("skill", { skills: true, indexOnly: true }),
     });
   }
   const assigned = new Set(inputs.bot.assignedSkills ?? []);
@@ -617,6 +627,7 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
     engine: { kind, label: engine.label },
     items,
     ...(inputs.promptIndex ? { promptIndex: inputs.promptIndex } : {}),
+    ...(viewer.computedFor ? { computedFor: { principalId: viewer.computedFor.principalId, name: viewer.computedFor.name } } : {}),
   };
 }
 

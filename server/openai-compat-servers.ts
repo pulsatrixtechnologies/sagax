@@ -62,8 +62,12 @@ export function compatServers(cfg: Pick<AppConfig, "instances" | "openaiCompatSe
     }));
 }
 
-function strippedUrl(url: string): string {
-  return url.trim().replace(/\/+$/, "");
+// A pasted endpoint (".../v1/chat/completions") is kept as its base: the
+// driver appends /chat/completions and /models itself.
+const ENDPOINT_SUFFIX = /\/(?:chat\/completions|completions|responses|models)\/*$/i;
+
+export function strippedUrl(url: string): string {
+  return url.trim().replace(/\/+$/, "").replace(ENDPOINT_SUFFIX, "").replace(/\/+$/, "");
 }
 
 /** A new named server: its instance and its key record. */

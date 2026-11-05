@@ -142,6 +142,14 @@ describe("routine setup", () => {
     expect(html).toContain("data-routine-run-on");
     expect(html).toContain('aria-label="Runs on"');
   });
+  it("offers routine Effort beside Model with the bot default", () => {
+    fixture.state = { ...fixture.state!, instances: [{ instanceId: "test", capabilities: { effortLevels: ["low", "high"] }, models: { default: "test", options: [{ id: "test", label: "Test" }] } }] as unknown as AppState["instances"] };
+    const html = editorMarkup();
+    expect(html).toContain("data-routine-effort");
+    expect(html).toContain('aria-label="Effort"');
+    expect(html).toContain("Bot&#x27;s effort");
+  });
+
   it("offers a Model choice that starts on the bot's model (2026-11-04)", () => {
     fixture.state = { ...fixture.state!, instances: [{ instanceId: "test", models: { default: "test", options: [{ id: "test", label: "Test" }, { id: "fast", label: "Fast" }] } }] as unknown as AppState["instances"] };
     const html = editorMarkup();

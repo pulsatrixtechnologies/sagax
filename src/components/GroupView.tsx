@@ -60,7 +60,7 @@ import { defaultResponderName, effectiveDefaultResponder, groupResponseHint, jev
 import { groupLeadBotId, leadResponder } from "@/lib/group-panel";
 import { openSettings } from "@/lib/settings-link";
 import { ChatMarkdown } from "./ChatMarkdown";
-import { CHAT_COLUMN_CLASS } from "@/lib/chat-bubble-width";
+import { useChatColumnClass } from "@/lib/chat-bubble-width";
 import { VideoPlayerWidget } from "./video/VideoPlayerWidget";
 import { FailedTurnRow, MessageBoundary, PreSendRefusalLine, type SideChat } from "./ChatView";
 import { StepBoundary, stepFallbackText } from "./MessageBoundary";
@@ -1190,6 +1190,7 @@ async function loadRemoteActor(): Promise<{ id: string; role: "owner" | "admin" 
  * ⌘F, the app's banners, the group panel), which stay with the main chat. */
 export function GroupView({ group: stored, pane }: { group: Group; pane?: SideChat }) {
   "use memo";
+  const chatColumnClassName = useChatColumnClass();
   const roomShowThreads = useShowThreads();
   // A direct conversation between two people (server/people/people-dms.ts) runs on
   // the single-thread path of a bot-to-bot channel: no panel, no tasks. It
@@ -1702,9 +1703,9 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
       >
         <div
           ref={transcriptRef}
-          // Same 960px column as a bot chat and the composer, so the
+          // Same chat column as a bot chat and the composer, so the
           // thread lines up with the field.
-          className={CHAT_COLUMN_CLASS}
+          className={chatColumnClassName}
           style={{ paddingBottom: composerDock.pad }}
           role="log"
           // off, as in ChatView: TranscriptAnnouncer speaks once per reply

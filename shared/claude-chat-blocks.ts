@@ -8,11 +8,75 @@
  */
 
 export const ARTIFACT_TOOL = "Artifact";
+/** The native artifact family (Claude Code 2.1.288+, CLAUDE_CODE_ARTIFACT). */
+export const ARTIFACT_TOOLS: readonly string[] = ["Artifact", "ArtifactData", "ArtifactComments"];
+/** The calls of the family that only read: Approve for me runs them unasked. */
+export const ARTIFACT_READ_ACTIONS: ReadonlySet<string> = new Set(["list", "read", "get", "query"]);
 export const ARTIFACT_HTML_MAX = 200_000;
 export const ARTIFACT_TITLE_MAX = 200;
 
 export function isArtifactTool(name: string | undefined): boolean {
   return (name ?? "").trim() === ARTIFACT_TOOL;
+}
+
+/** Any tool of the native artifact family. */
+export function isArtifactFamilyTool(name: string | undefined): boolean {
+  return ARTIFACT_TOOLS.includes((name ?? "").trim());
+}
+
+/** A claude.ai artifact link (claude.ai/artifact/<id> or
+ * claude.ai/code/artifact/<uuid>): its canonical https URL, or null. */
+export function claudeArtifactUrl(value: string | undefined): string | null {
+  if (!value) return null;
+  let url: URL;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" || url.username || url.password) return null;
+  if (url.hostname !== "claude.ai" && url.hostname !== "www.claude.ai") return null;
+  const match = /^\/(code\/)?artifact\/([A-Za-z0-9-]{8,64})\/?$/.exec(url.pathname);
+  if (!match) return null;
+  return `https://claude.ai/${match[1] ?? ""}artifact/${match[2]}`;
+}
+
+/** The CLI's words when an artifact belongs to another claude.ai account:
+ * its "who made this" consent question, which a print session never
+ * forwards to the permission tool (2.1.288 to 2.1.318). */
+const CONSENT_REFUSAL = /couldn['\u2019]t check who made this artifact|let claude read it\?|localDisplayOnly/i;
+
+export function isArtifactConsentRefusal(text: string | undefined): boolean {
+  return Boolean(text && CONSENT_REFUSAL.test(text));
+}
+
+/** A wrong-account card: the artifact the engine could not open, and the
+ * claude.ai account the engine is signed in to (when known). */
+export interface ArtifactConsentBlock {
+  url: string;
+  account?: string;
+}
+
+export function formatArtifactConsentFence(block: ArtifactConsentBlock): string {
+  const body: Record<string, string> = { blocked: "other_account", url: block.url };
+  if (block.account) body.account = block.account;
+  return ["```artifact", JSON.stringify(body), "```"].join("\n");
+}
+
+export function parseArtifactConsent(code: string): ArtifactConsentBlock | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(code.trim());
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const record = parsed as Record<string, unknown>;
+  if (record.blocked !== "other_account") return null;
+  const url = claudeArtifactUrl(typeof record.url === "string" ? record.url : undefined);
+  if (!url) return null;
+  const account = typeof record.account === "string" && /^[^\s@]{1,64}@[^\s@]{1,190}$/.test(record.account.trim()) ? record.account.trim() : undefined;
+  return { url, ...(account ? { account } : {}) };
 }
 
 /** A published page the person can open. `path` is the local file the
@@ -24,6 +88,8 @@ export interface ArtifactPage {
   icon?: string;
   path?: string;
   html?: string;
+  /** the engine's account owns it (false: shared with it by someone else) */
+  owned?: boolean;
 }
 
 const CHART_TYPES = new Set(["bar", "line", "area", "pie", "scatter"]);
@@ -66,13 +132,18 @@ function toolResultText(content: unknown): string {
 /** The published page from an Artifact tool_result, or null for a list
  * action, a failed publish, or a payload without a real URL. */
 export function parseArtifactPublish(content: unknown): ArtifactPage | null {
-  const text = toolResultText(content).trim();
-  if (!text.startsWith("{")) return null;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    return null;
+  // Claude Code's structured result (the message's `tool_use_result`) is an
+  // object; the tool_result block itself is prose ("Published … at <url>").
+  let parsed: unknown = content && typeof content === "object" && !Array.isArray(content) && typeof (content as { text?: unknown }).text !== "string"
+    ? content : undefined;
+  if (parsed === undefined) {
+    const text = toolResultText(content).trim();
+    if (!text.startsWith("{")) return null;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return null;
+    }
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
   const record = parsed as Record<string, unknown>;
@@ -87,6 +158,7 @@ export function parseArtifactPublish(content: unknown): ArtifactPage | null {
     url,
     ...(icon ? { icon } : {}),
     ...(path ? { path } : {}),
+    ...(typeof record.owned === "boolean" ? { owned: record.owned } : {}),
   };
 }
 
@@ -107,17 +179,22 @@ export function parseArtifactPage(code: string): ArtifactPage | null {
   if (typeof record.type === "string" && CHART_TYPES.has(record.type)) return null;
   if (Array.isArray(record.labels) && Array.isArray(record.series)) return null;
   if (Array.isArray(record.artifacts)) return null;
+  if (record.blocked !== undefined) return null;
   const title = typeof record.title === "string" ? record.title.trim().slice(0, ARTIFACT_TITLE_MAX) : "";
   const url = typeof record.url === "string" && isSafeHttpUrl(record.url.trim()) ? record.url.trim() : undefined;
   const icon = typeof record.icon === "string" ? record.icon.trim().slice(0, 32) : undefined;
   if (!title && !url) return null;
-  return { title: title || "Page", ...(url ? { url } : {}), ...(icon ? { icon } : {}) };
+  return {
+    title: title || "Page", ...(url ? { url } : {}), ...(icon ? { icon } : {}),
+    ...(typeof record.owned === "boolean" ? { owned: record.owned } : {}),
+  };
 }
 
 /** The markdown the driver inserts when Artifact publishes. Host paths stay
  * out of the transcript; optional HTML rides a sibling ```widget fence. */
 export function formatArtifactFence(page: ArtifactPage): string {
-  const body: Record<string, string> = { title: page.title };
+  const body: Record<string, string | boolean> = { title: page.title };
+  if (typeof page.owned === "boolean") body.owned = page.owned;
   if (page.url) body.url = page.url;
   if (page.icon) body.icon = page.icon;
   const lines = ["```artifact", JSON.stringify(body), "```"];

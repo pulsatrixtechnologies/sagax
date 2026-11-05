@@ -33,7 +33,7 @@ export const DEF_RUN_ROUTINE = {
     inputSchema: {
       type: "object",
       additionalProperties: false,
-      properties: { routine_id: { type: "string", minLength: 1, description: "Routine id from list_routines." }, action: { type: "string", enum: ["run", "check"], description: "check reads readiness without creating a run. Omit to run." } },
+      properties: { routine_id: { type: "string", minLength: 1, description: "Routine id from list_routines." }, action: { type: "string", enum: ["run", "check"], description: "check reads readiness without creating a run; its warnings list the paths the instructions cite that cannot be found (a warning never blocks a run). Omit to run." } },
       required: ["routine_id"],
     },
   };

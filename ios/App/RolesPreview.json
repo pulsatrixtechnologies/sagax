@@ -1,0 +1,210 @@
+[
+  {
+    "id": "roles-user",
+    "role": "user",
+    "kind": "text",
+    "at": 1787028700000,
+    "text": "Trouve les billets ouverts de la semaine et ferme celui du serveur."
+  },
+  {
+    "id": "roles-step-1",
+    "role": "bot",
+    "kind": "activity",
+    "at": 1787028701000,
+    "from": {
+      "botId": "preview-scout",
+      "name": "Scout",
+      "color": "cyan"
+    },
+    "tool": {
+      "name": "cw_psa_find_tickets",
+      "ok": true,
+      "input": "{\"conditions\": \"closedFlag=false\"}",
+      "durationMs": 640,
+      "product": "ConnectWise PSA",
+      "role": {
+        "slug": "",
+        "name": "",
+        "reason": "default",
+        "person": "Alex Martin"
+      },
+      "output": "12 billets"
+    }
+  },
+  {
+    "id": "roles-card-switch",
+    "role": "bot",
+    "kind": "options",
+    "at": 1787028702000,
+    "card": {
+      "title": "Agit comme Service Desk",
+      "subtitle": "",
+      "options": [
+        "Continuer",
+        "Rester en Moi",
+        "Toujours ainsi pour ce bot"
+      ],
+      "roleTransition": {
+        "botId": "preview-scout",
+        "botName": "Scout",
+        "person": "Alex Martin",
+        "from": {
+          "slug": "",
+          "name": ""
+        },
+        "to": {
+          "slug": "service-desk",
+          "name": "Service Desk"
+        },
+        "reason": "switch",
+        "canAlways": true
+      }
+    }
+  },
+  {
+    "id": "roles-step-2",
+    "role": "bot",
+    "kind": "activity",
+    "at": 1787028703000,
+    "from": {
+      "botId": "preview-scout",
+      "name": "Scout",
+      "color": "cyan"
+    },
+    "tool": {
+      "name": "cw_psa_get_ticket",
+      "ok": true,
+      "input": "{\"id\": 4812}",
+      "durationMs": 640,
+      "product": "ConnectWise PSA",
+      "role": {
+        "slug": "service-desk",
+        "name": "Service Desk",
+        "reason": "switch",
+        "previous": {
+          "slug": "",
+          "name": ""
+        }
+      },
+      "output": "Billet 4812"
+    }
+  },
+  {
+    "id": "roles-card-fallback",
+    "role": "bot",
+    "kind": "options",
+    "at": 1787028704000,
+    "card": {
+      "title": "Agit comme Moi",
+      "subtitle": "",
+      "options": [
+        "Continuer",
+        "Rester en Service Desk"
+      ],
+      "answered": "Continuer",
+      "answeredText": "Continuer",
+      "roleTransition": {
+        "botId": "preview-scout",
+        "botName": "Scout",
+        "person": "Alex Martin",
+        "from": {
+          "slug": "service-desk",
+          "name": "Service Desk"
+        },
+        "to": {
+          "slug": "",
+          "name": ""
+        },
+        "reason": "fallback",
+        "refusedTool": "cw_psa_find_time_entries",
+        "path": "time/entries",
+        "canAlways": false,
+        "choice": "continue"
+      }
+    }
+  },
+  {
+    "id": "roles-step-3",
+    "role": "bot",
+    "kind": "activity",
+    "at": 1787028705000,
+    "from": {
+      "botId": "preview-scout",
+      "name": "Scout",
+      "color": "cyan"
+    },
+    "tool": {
+      "name": "cw_psa_find_time_entries",
+      "ok": true,
+      "input": "{\"ticketId\": 4812}",
+      "durationMs": 640,
+      "product": "ConnectWise PSA",
+      "role": {
+        "slug": "",
+        "name": "",
+        "reason": "fallback",
+        "refusedTool": "cw_psa_find_time_entries",
+        "previous": {
+          "slug": "service-desk",
+          "name": "Service Desk"
+        },
+        "person": "Alex Martin"
+      },
+      "output": "3 entrées"
+    }
+  },
+  {
+    "id": "roles-notice-write",
+    "role": "bot",
+    "kind": "activity",
+    "at": 1787028706000,
+    "from": {
+      "botId": "preview-scout",
+      "name": "Scout",
+      "color": "cyan"
+    },
+    "tool": {
+      "name": "Write refused as Service Desk",
+      "ok": false,
+      "roleNotice": {
+        "kind": "write_refused",
+        "role": {
+          "slug": "service-desk",
+          "name": "Service Desk"
+        },
+        "tool": "cw_psa_update_ticket",
+        "permission": {
+          "path": "service/tickets",
+          "module": "Service Desk",
+          "func": "Service Tickets",
+          "operation": "Edit"
+        },
+        "person": "Alex Martin",
+        "target": "cw_member:amartin"
+      }
+    }
+  },
+  {
+    "id": "roles-notice-lapsed",
+    "role": "bot",
+    "kind": "activity",
+    "at": 1787028707000,
+    "from": {
+      "botId": "preview-scout",
+      "name": "Scout",
+      "color": "cyan"
+    },
+    "tool": {
+      "name": "The role Full Access lapsed",
+      "ok": false,
+      "roleNotice": {
+        "kind": "lapsed",
+        "role": {
+          "slug": "full-access",
+          "name": "Full Access"
+        },
+        "tool": "cw_psa_query"
+      }
+    }
+  }
+]

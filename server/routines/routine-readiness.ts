@@ -150,7 +150,12 @@ export async function checkRoutineReadiness(routine: ReadinessRoutine, run: Read
             (runs.accessVia !== "subscription" && runs.keyBacked === true);
           if (artifactTool && cannotOfferArtifacts) checks.push({ kind, ok: false, code: "engine_artifacts", params: { engine: runs.name, tool: artifactTool },
             line: `This routine needs ${artifactTool}, which ${runs.name} cannot offer with this account. Choose Claude with a claude.ai subscription sign-in for this bot; API keys and other engines do not provide claude.ai artifact tools.` });
-          if (onBackup) { if (checks.length === start) checks.push(ready(kind)); continue; }
+          if (onBackup) {
+            if (checks.length === start) {
+              checks.push(ready(kind, `${engine.name} cannot run this turn; ${candidate!.name} is ready and will run it.`));
+            }
+            continue;
+          }
           if (refusal?.cause === "signed_out") {
             checks.push({ kind, ok: false, code: "engine_signed_out", params: { engine: engine.name }, line: `${engine.name} is signed out for this bot. Reconnect it in Settings > Model providers.`, ...(engine.detail ? { detail: clean(engine.detail) } : {}) });
           } else if (refusal) {

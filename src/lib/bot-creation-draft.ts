@@ -120,6 +120,7 @@ export class BotCreationDraft {
       mailAlias: input.mailAlias || undefined,
       model: input.model === undefined ? previous?.model : input.model || undefined,
       actAs: input.actAs === undefined ? previous?.actAs : input.actAs ?? undefined,
+      effort: input.effort === undefined ? previous?.effort : input.effort ?? undefined,
       autoPauseAfter: input.autoPauseAfter ?? undefined,
       folder: input.folder === undefined ? previous?.folder : input.folder ?? undefined,
       durationMinutes: input.durationMinutes ?? previous?.durationMinutes ?? 30,

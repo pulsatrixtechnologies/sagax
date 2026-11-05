@@ -15,10 +15,28 @@ import type { EffortLevel } from "../../../shared/wire";
 import { MENU_WIDTH } from "./helpers";
 import { AnchoredPopover, enclosingWindowBounds } from "../AnchoredPopover";
 
+function menuViewportHeight(fallback = 800): number {
+  if (typeof window === "undefined") return fallback;
+  return Number(window.innerHeight) || fallback;
+}
+
 /** The height a menu anchored by its bottom edge can take: up to 560px, never
  * past the window's top (8px margin). */
-export function menuRoomAbove(bottom: number, viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight): number {
+export function menuRoomAbove(bottom: number, viewportHeight = menuViewportHeight()): number {
   return Math.max(120, Math.min(560, viewportHeight - bottom - 8));
+}
+
+/** The height a menu anchored by its top edge can take: up to 560px, never
+ * past the window's bottom (8px margin). */
+export function menuRoomBelow(top: number, viewportHeight = menuViewportHeight()): number {
+  return Math.max(120, Math.min(560, viewportHeight - top - 8));
+}
+
+/** Where the model window (`windowOnly`) pins its menu: top-left inside the
+ * viewport. CSS `bottom: innerHeight - 96` put the bottom edge near the top
+ * and drew the rest above the window (Refs #1979). */
+export function windowOnlyMenuPlace(): { left: number; top: number } {
+  return { left: 24, top: 96 };
 }
 
 export function ModelPickerMenu({
@@ -44,7 +62,7 @@ export function ModelPickerMenu({
   anchorRef,
 }: {
   menuRef: RefObject<HTMLDivElement | null>;
-  menuAt: { left?: number; right?: number; bottom: number } | null;
+  menuAt: { left?: number; right?: number; top?: number; bottom?: number } | null;
   menuMotion: MenuMotion;
   headless: boolean;
   closeMenu: (refocus?: boolean) => void;
@@ -151,19 +169,26 @@ export function ModelPickerMenu({
     </AnchoredPopover>
   );
 
+  const menuMaxHeight = menuAt
+    ? menuAt.top != null
+      ? menuRoomBelow(menuAt.top)
+      : menuAt.bottom != null
+        ? menuRoomAbove(menuAt.bottom)
+        : 560
+    : undefined;
   const menuPanel = (
     <div
       ref={menuRef}
       data-model-menu
       role="dialog"
       aria-label={t("model.menu")}
-      // The menu opens upward from its bottom edge: it may only be as tall as
-      // the room above that edge, or its top leaves the window (2026-11-03).
-      style={menuAt ? { left: menuAt.left, right: menuAt.right, bottom: menuAt.bottom, width: MENU_WIDTH, maxHeight: menuRoomAbove(menuAt.bottom) } : { width: MENU_WIDTH }}
+      // Bottom-anchored menus open upward (2026-11-03); the model window
+      // pins by its top so the list stays inside the viewport (Refs #1979).
+      style={menuAt ? { left: menuAt.left, right: menuAt.right, top: menuAt.top, bottom: menuAt.bottom, width: MENU_WIDTH, maxHeight: menuMaxHeight } : { width: MENU_WIDTH }}
       onKeyDown={onKeyDown}
       {...menuMotion.exitProps}
       className={cn(
-        "z-50 flex max-h-[min(560px,calc(100dvh-96px))] max-w-[calc(100vw-16px)] flex-col rounded-xl border border-popover-hairline popover-surface bg-popover py-1 text-popover-ink shadow-2xl shadow-black/50",
+        "z-50 flex max-h-[min(560px,calc(100dvh-96px))] max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-xl border border-popover-hairline popover-surface bg-popover py-1 text-popover-ink shadow-2xl shadow-black/50",
         menuAt ? "fixed" : "absolute bottom-full right-0 mb-1.5",
         menuMotion.className,
       )}

@@ -55,7 +55,8 @@ export const TOUR_STEPS: TourStep[] = [
   { id: "tour.composer", anchor: "composer", placement: "above" },
   // the model lives in the composer's + menu (2026-10-18)
   { id: "tour.model", anchor: "composer-plus", placement: "above" },
-  { id: "tour.computer", anchor: "computer", placement: "below", onExit: "openComputer" },
+  // Simple mode has no Computer header control; skip rather than stall (Refs #2000).
+  { id: "tour.computer", anchor: "computer", skipIfMissing: true, placement: "below", onExit: "openComputer" },
   // every step that lives inside something the previous step opened also
   // opens it on enter, so a reload mid-tour rebuilds the scene
   { id: "tour.computer-browser", anchor: "computer-browser", fallbackAnchor: "computer-tabs", skipIfMissing: true, placement: "below", onEnter: "openComputer", onExit: "closeComputer" },

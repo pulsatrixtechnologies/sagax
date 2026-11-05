@@ -78,7 +78,7 @@ public struct StepGroupWords: Hashable, Sendable {
 public enum StepGroup {
     /// A tool step inside a run (the rest is narration).
     public static func isStep(_ message: Message) -> Bool {
-        message.kind == .activity && message.tool != nil
+        message.kind == .activity && message.tool != nil && message.tool?.roleNotice == nil
     }
 
     /// The steps in order, consecutive identical steps (same words, same
@@ -93,7 +93,9 @@ public enum StepGroup {
             let reading = StepLabel.read(tool, words: words, nameOf: nameOf)
             let phase = StepPhase.of(tool)
             if case let .steps(id, merged, label, target, lastPhase, duration)? = entries.last,
-               label == reading.label, lastPhase == phase, phase != .running {
+               label == reading.label, lastPhase == phase, phase != .running,
+               // a step under another role keeps its own row (and chip)
+               merged.last?.tool?.role == tool.role {
                 let total: Double? = duration.flatMap { sum in tool.durationMs.map { sum + $0 } }
                 entries[entries.count - 1] = .steps(
                     id: id, messages: merged + [message], label: label,

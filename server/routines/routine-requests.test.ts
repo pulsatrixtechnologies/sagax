@@ -117,6 +117,28 @@ function cardFingerprint(card: RoutineRequestOptionCard, messageId: string): str
   return routineRequestFingerprint(card.routineRequest, messageId);
 }
 
+describe("routine compute settings", () => {
+  it("accepts effort, applies model and effort without an access card, and Undo restores both", async () => {
+    const { service, routines, store } = harness(undefined, undefined, undefined, () => "self");
+    const created = await service.submit({ botId: "bot-a", threadId: "thread", proposal: createProposal({ model: "fast", effort: "low" }) });
+    expect(created.state).toBe("applied");
+    const id = routines.listRoutines()[0]!.id;
+    expect(routines.listRoutines()[0]).toMatchObject({ model: "fast", effort: "low" });
+    const changed = await service.submit({ botId: "bot-a", threadId: "thread", proposal: { action: "update", routineId: id, changes: { model: null, effort: null } } });
+    expect(changed.state).toBe("applied");
+    expect(routines.listRoutines()[0]?.effort).toBeUndefined();
+    expect(routines.listRoutines()[0]?.model).toBeUndefined();
+    expect(store.messagesFor("thread").every(message => message.card?.dismissed)).toBe(true);
+    expect(service.undo({ botId: "bot-a", threadId: "thread", requestId: changed.requestId })).toMatchObject({ state: "undone" });
+    expect(routines.listRoutines()[0]).toMatchObject({ model: "fast", effort: "low" });
+  });
+
+  it("refuses effort values outside the bot effort contract", async () => {
+    const { service } = harness();
+    await expect(service.submit({ botId: "bot-a", threadId: "thread", proposal: malformedProposal({ action: "create", routine: { name: "Check", instructions: "Do the task", schedule: { type: "interval", everyMinutes: 60 }, effort: "invalid" } }) })).rejects.toThrow();
+  });
+});
+
 describe("RoutineRequestService", () => {
   describe("duplicate creation", () => {
     const existingInput: RoutineInput = {
@@ -499,6 +521,22 @@ describe("RoutineRequestService", () => {
     service.resolve({ botId: "bot-a", threadId: "thread-a", requestId: cleared.requestId, behavior: "allow" });
     expect(routines.listRoutines()[0].actAs).toBeUndefined();
     await expect(service.propose({ botId: "bot-a", threadId: "thread-a", proposal: createProposal({ actAs: "has space" }) })).rejects.toThrow(RoutineRequestError);
+  });
+
+  it("a proposal sets and clears \"Needs its computer\", keeping the skills and MCP needs (#1996)", async () => {
+    const { service, routines } = harness();
+    const created = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: createProposal({ requiresComputer: true }) });
+    expect(created.detail).toContain("Needs its computer: yes");
+    service.resolve({ botId: "bot-a", threadId: "thread-a", requestId: created.requestId, behavior: "allow" });
+    const routine = routines.listRoutines()[0];
+    expect(routine.requires).toEqual({ computer: true });
+    routines.update(routine.id, { requires: { skills: ["osprey-digest"], mcpServers: ["wren"], computer: true } });
+    const off = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: { action: "update", routineId: routine.id, changes: { requiresComputer: false } } });
+    service.resolve({ botId: "bot-a", threadId: "thread-a", requestId: off.requestId, behavior: "allow" });
+    expect(routines.listRoutines()[0].requires).toEqual({ skills: ["osprey-digest"], mcpServers: ["wren"] });
+    const on = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: { action: "update", routineId: routine.id, changes: { requiresComputer: true } } });
+    service.resolve({ botId: "bot-a", threadId: "thread-a", requestId: on.requestId, behavior: "allow" });
+    expect(routines.listRoutines()[0].requires).toEqual({ skills: ["osprey-digest"], mcpServers: ["wren"], computer: true });
   });
 
   it("canonicalizes receipt fingerprints and binds them to the card's conversation", async () => {

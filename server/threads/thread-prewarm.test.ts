@@ -66,6 +66,22 @@ describe("ThreadPrewarm", () => {
     for (const id of ["b", "c"]) warm.cancel(id);
   });
 
+  it("cancelOthers aborts that person's waiting warms except the open thread (#1975)", () => {
+    const warm = new ThreadPrewarm({ windowMs: 60_000, maxWaiting: 8 });
+    const signals: Record<string, AbortSignal> = {};
+    warm.begin("a", "osprey", async (s) => { signals.a = s; });
+    warm.begin("b", "osprey", async (s) => { signals.b = s; });
+    warm.begin("c", "wren", async (s) => { signals.c = s; });
+    expect(warm.cancelOthers("osprey", "b")).toBe(1);
+    expect(signals.a!.aborted).toBe(true);
+    expect(signals.b!.aborted).toBe(false);
+    expect(signals.c!.aborted).toBe(false);
+    expect(warm.has("b")).toBe(true);
+    expect(warm.has("c")).toBe(true);
+    warm.cancel("b");
+    warm.cancel("c");
+  });
+
   it("join waits for the setup of the warm in flight", async () => {
     const warm = new ThreadPrewarm({ windowMs: 60_000 });
     let release!: () => void;

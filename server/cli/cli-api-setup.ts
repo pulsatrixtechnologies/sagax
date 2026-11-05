@@ -19,7 +19,7 @@ export function normalizeApiUrl(value: string): string {
     input.slice(input.indexOf("://") + 3).split("/")[0]?.includes("@") ||
     (url.protocol !== "https:" && !(url.protocol === "http:" && local))
   ) throw invalid();
-  return url.href.replace(/\/+$/u, "");
+  return url.href.replace(/\/+$/u, "").replace(/\/(?:chat\/completions|completions|responses|models)\/*$/iu, "");
 }
 
 class SetupApiError extends Error {}

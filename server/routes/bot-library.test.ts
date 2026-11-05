@@ -81,4 +81,39 @@ describe("bot library routes", () => {
     expect(refused.status).toBe(400);
     expect(await refused.json()).toEqual({ error: "Too large" });
   });
+
+  it("shared viewer sees the owner's links and files; a non-shared person sees none (#2019)", async () => {
+    const ownerThread = "owner-t";
+    const shareeThread = "wren-t";
+    const sharedDeps: Partial<BotLibraryRouteDeps<Bot>> = {
+      threadsFor: (_bot, auth) => {
+        const who = auth.kind === "session" ? auth.session.id : "";
+        if (who === "ada" || who === "wren") return [ownerThread, shareeThread];
+        return [];
+      },
+      messages: (threadId) => threadId === ownerThread
+        ? [{ id: "m-owner", kind: "text", text: "https://osprey.test/plan", at: 5 }]
+        : [{ id: "m-wren", kind: "text", text: "https://wren.test/note", at: 6 }],
+      files: async (threadId): Promise<ThreadFile[]> => [{
+        id: (threadId === ownerThread ? "o" : "w").repeat(24), messageId: "m", source: "attachment", path: "/x",
+        at: threadId === ownerThread ? 5 : 6,
+        name: threadId === ownerThread ? "plan.pdf" : "note.png",
+        mime: threadId === ownerThread ? "application/pdf" : "image/png", size: 1, available: true,
+      }],
+    };
+    const wren = await (await fetch(`${await serve(member("wren"), sharedDeps)}/api/bots/scout/links`)).json() as { links: Array<{ url: string; threadId: string }> };
+    expect(wren.links.map((link) => link.url).sort()).toEqual(["https://osprey.test/plan", "https://wren.test/note"]);
+    const wrenFiles = await (await fetch(`${await serve(member("wren"), sharedDeps)}/api/bots/scout/files`)).json() as { files: Array<{ name: string; url: string }> };
+    expect(wrenFiles.files.map((file) => file.name).sort()).toEqual(["note.png", "plan.pdf"]);
+    expect(wrenFiles.files.find((file) => file.name === "plan.pdf")!.url).toBe(`/api/threads/${ownerThread}/files/${"o".repeat(24)}`);
+
+    const stranger = await (await fetch(`${await serve(member("gus"), sharedDeps)}/api/bots/scout/links`)).json() as { links: unknown[]; total: number };
+    expect(stranger).toMatchObject({ links: [], total: 0 });
+    const strangerFiles = await (await fetch(`${await serve(member("gus"), sharedDeps)}/api/bots/scout/files`)).json() as { files: unknown[]; total: number };
+    expect(strangerFiles).toMatchObject({ files: [], total: 0 });
+  });
+
+  it("export stays owner-only even when the shared viewer can read the library", async () => {
+    expect((await fetch(`${await serve(member("wren"), { threadsFor: () => ["owner-t", "wren-t"] })}/api/bots/scout/export`, { method: "POST" })).status).toBe(403);
+  });
 });

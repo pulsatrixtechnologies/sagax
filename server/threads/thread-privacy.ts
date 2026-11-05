@@ -22,6 +22,12 @@
 // reads a private Direct without a right; Decision: a manager never reads a Direct
 // unasked); they see audit metadata only.
 //
+// One deliberate exception (#2019): the bot profile's Links / Media / Files
+// tabs (server/bots/bot-library.ts) aggregate the bot's non-confidential
+// library for every person who holds bot.use, and the matching per-file
+// GET URLs open for that shared viewer. Transcripts, listings and every
+// other thread route stay private.
+//
 // Group chats (rooms: their people and their bots) are the only
 // conversations several people share: room threads are judged by the room
 // (server/auth/authz.ts canInChannel), never here.

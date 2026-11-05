@@ -476,6 +476,33 @@ final class Session: ObservableObject {
                     }
                 }
             }
+            if arguments.contains("-roles-preview"),
+               let url = Bundle.main.url(forResource: "RolesPreview", withExtension: "json"),
+               let data = try? Data(contentsOf: url),
+               let rows = try? JSONDecoder().decode([Message].self, from: data) {
+                // 2026-11-05 (visible roles): role chips, "Agit comme" cards
+                // and role banners in every preview chat (whichever opens
+                // first), chained as stored and said by that chat's bot.
+                for index in state.bots.indices {
+                    let bot = state.bots[index]
+                    var chained = rows.map { row -> Message in
+                        var row = row
+                        row.from?.botId = bot.id
+                        row.from?.name = bot.name
+                        row.from?.color = bot.color
+                        if row.card?.roleTransition != nil {
+                            row.card?.roleTransition?.botId = bot.id
+                            row.card?.roleTransition?.botName = bot.name
+                        }
+                        return row
+                    }
+                    for position in chained.indices.dropFirst() { chained[position].parentId = chained[position - 1].id }
+                    state.messages[bot.threadId] = chained
+                    state.bots[index].activeLeafId = chained.last?.id
+                    state.bots[index].busy = false
+                }
+                if arguments.contains("-roles-top") { focusedMessageId = "roles-user" }
+            }
             if arguments.contains("-cards-top") {
                 // The cards chat from its first cards (the theme captures).
                 focusedMessageId = "c-tool"
@@ -2848,6 +2875,27 @@ final class Session: ObservableObject {
         guard let base = client?.connection.baseURL else { return nil }
         let normalized = path.hasPrefix("/") ? path : "/\(path)"
         return URL(string: normalized, relativeTo: base)?.absoluteURL
+    }
+
+    // claude.ai artifact cards (#2018): the person's own session, never another account.
+    func claudeArtifactSummary(url: String) async throws -> ClaudeArtifactSummary {
+        guard let client else { throw APIError.transport("This computer is offline.") }
+        return try await client.claudeArtifactSummary(url: url)
+    }
+
+    func claudeArtifactComments(url: String) async throws -> [ClaudeArtifactThread] {
+        guard let client else { throw APIError.transport("This computer is offline.") }
+        return try await client.claudeArtifactComments(url: url)
+    }
+
+    func claudeArtifactReply(url: String, threadId: String, text: String) async throws {
+        guard let client else { throw APIError.transport("This computer is offline.") }
+        try await client.claudeArtifactReply(url: url, threadId: threadId, text: text)
+    }
+
+    func claudeArtifactResolve(url: String, threadId: String) async throws {
+        guard let client else { throw APIError.transport("This computer is offline.") }
+        try await client.claudeArtifactResolve(url: url, threadId: threadId)
     }
 
     func youtubeTranscript(videoId: String) async throws -> YouTubeTranscriptResponse {

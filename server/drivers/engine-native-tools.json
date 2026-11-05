@@ -7,8 +7,8 @@
   ],
   "engines": {
     "claude": {
-      "version": "2.1.288",
-      "captured": "2026-10-27",
+      "version": "2.1.318",
+      "captured": "2026-11-05",
       "how": "init event of `claude -p` with an MCP server and the permission prompt tool, tool search on; org: the driver's --tools and --disallowedTools",
       "solo": [
         "AskUserQuestion",

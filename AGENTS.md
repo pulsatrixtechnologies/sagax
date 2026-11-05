@@ -141,6 +141,19 @@ withdraws its notice and removes the source backlink. A late model review
 re-reads the live address and falls back to the original execution thread.
 Verification: `docs/verification/peer-approvals.md`.
 
+## Routine reasoning effort (#1999, 2026-11-04)
+
+`Routine.effort` and `RoutineRun.effort` follow the model override, using
+`EffortLevel` and `shared/routine-effort.ts`. Omitted follows the bot; null
+on update clears it. Admission applies it per turn, never to chat or the
+thread. A limit takeover wins. An unsupported engine/model level gets one
+notice per run and falls back to the bot's effort. Claude receives
+`subagentEffort` through its spawn contract and inherited
+`CLAUDE_CODE_EFFORT_LEVEL`. The routine editor, HTTP API, routine tools and
+settings registry carry it. Model/effort-only changes are compute settings,
+not standing grants (`shared/step-up.ts`). Regression coverage includes
+`routine-effort.test.ts` and `start-turn-prepare-admit.test.ts`.
+
 ## Routine model override (2026-11-04)
 
 `Routine.model` (`shared/routine-model.ts`) is the model its runs use on the
@@ -204,10 +217,12 @@ per-input cache. Tests: `perspicax-flow-readiness.test.ts`,
 
 Routine pre-flight uses `limitFailover.backupFor` to check the same backup
 order and access rules as dispatch. Account refusals stay live outside the
-probe cache. `RoutineManager.prepareTurn` applies the failover before
-capturing the run's engine account, so a backup's success never clears the
-primary's refusal. Credits keep the 30-minute refusal TTL, including in the
-failover store; a thread returns through the existing reset path.
+probe cache. When a backup is ready, the engine check passes with a clear
+note naming the refused primary and the backup that will run. `RoutineManager.prepareTurn`
+applies the failover before capturing the run's engine account, so a
+backup's success never clears the primary's refusal. Credits keep the
+30-minute refusal TTL, including in the failover store; a thread returns
+through the existing reset path.
 Tests: `routine-readiness.test.ts`, `routine-reliability.test.ts`,
 `limit-failover-host.test.ts`.
 
@@ -216,12 +231,13 @@ Tests: `routine-readiness.test.ts`, `routine-reliability.test.ts`,
 Real turns project the scoped inventory into their private task folder's
 native skill directories (`server/skills/turn-skill-links.ts`), including
 organization Flow, personal and bot plugins on a limit backup. Claude keeps
-its native plugin loader; other file engines retain the same prompt paths
-alongside native discovery. Organization turns await the selected plugin
-copies in the person's environment before dispatch, on every engine.
-Readiness resolves the thread override and Auto choice for both the engine
-and skill probes (`server/routines/routine-readiness-target.ts`). Previews
-and receipts remain reads. Regressions: `turn-skill-links.test.ts` and
+its native plugin loader; other file engines project the same selected
+plugin files even when rows were marked native under a Claude primary.
+Organization turns await the selected plugin copies in the person's
+environment before dispatch, on every engine. Readiness resolves the thread
+override and Auto choice for both the engine and skill probes
+(`server/routines/routine-readiness-target.ts`). Previews and receipts
+remain reads. Regressions: `turn-skill-links.test.ts` and
 `start-turn-computer-workspace.test.ts` (temporary files and fake dispatch).
 
 ## Native Claude artifact tools (#1990, 2026-11-04)
@@ -10558,6 +10574,35 @@ A bot saves a widget as an artifact (`save_artifact`, `update_artifact`,
   on the bot's own Local VM in Full access. Anything else is `blocked`,
   makes no call and counts no failure. Never widen this list without the
   same review as `PERSPICAX_READ_ONLY_TOOLS`.
+
+## claude.ai artifacts through the person's own Claude account (#2018, 2026-11-05)
+
+`claude_artifact` (server/drivers/agents-artifact-tools.ts, call
+server/drivers/agents-call-claude-artifact.ts) is one call to Claude's
+`Artifact`, `ArtifactData` or `ArtifactComments` tool: `{tool, input, html?,
+file?}`. The internal route `/api/internal/claude-artifact`
+(server/routes/claude-artifacts.ts) runs it as a short `claude -p`
+(server/claude-artifacts/runner.ts) in the config dir of the person who speaks
+in the conversation (`claudeAccountForPrincipal`). Rules:
+
+- Only that person's own account, never another person's: no account picked
+  by the runner, no fallback. No Claude login is a 409 `claude_not_signed_in`.
+  A page of another claude.ai account answers `blocked: other_account`; the
+  bot offers to publish a copy from this account.
+- The page goes in as `html` or `file` (a regular file inside the bot's
+  workspace, realpath checked); `file_path` and the other local-path keys in
+  `input` are refused. The runner stages it in a private temp folder and the
+  CLI reads only that folder. Every result is untrusted data, fenced.
+- The person's routes (`/api/claude-artifacts/summary|comments`, `comments/
+  reply|resolve`, `copy`) use the session person only. The summary is plain
+  text (tags dropped), cached 60 s per (person, url); a publish drops it.
+- A published owned page is tracked per person (`DATA_DIR/claude-artifacts.json`)
+  and creates, once and lazily, the person's ACTIVE routine "Commentaires des
+  artefacts" (every 15 min, runAs that person). Its pre-check is code
+  (`{kind: "code", check: "claude_artifact_comments"}`,
+  server/routines/routine-precheck.ts): it reads the comment threads and wakes
+  the bot only on `sent_to_claude` or `awaiting_reply` threads, with their
+  text in the untrusted watch fence.
 
 ## Bot reactions to the person's message (2026-10-18)
 

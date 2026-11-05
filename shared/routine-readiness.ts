@@ -12,3 +12,15 @@ export interface RoutineReadinessCheck {
 export interface RoutineReadinessResult { ok: boolean; checks: RoutineReadinessCheck[] }
 export interface RoutineReadinessAnswer extends RoutineReadinessResult { checkedAt: number }
 export interface RoutineRequirements { skills?: string[]; mcpServers?: string[]; computer?: boolean }
+
+/** #1996: the requirements with the "needs its computer" switch set to
+ * `computer`, skills and MCP servers kept as they are; null when nothing is
+ * left (a PATCH then clears them). */
+export function withRequiredComputer(current: RoutineRequirements | null | undefined, computer: boolean): RoutineRequirements | null {
+  const next: RoutineRequirements = {
+    ...(current?.skills?.length ? { skills: [...current.skills] } : {}),
+    ...(current?.mcpServers?.length ? { mcpServers: [...current.mcpServers] } : {}),
+    ...(computer ? { computer: true } : {}),
+  };
+  return Object.keys(next).length ? next : null;
+}

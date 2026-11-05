@@ -1,6 +1,6 @@
 /** Shared Claude driver leaf helpers (#1383 wave 5). */
 import { readFileSync, rmSync } from "node:fs";
-import { dirname, isAbsolute } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { SPAWNED_PROXIES } from "../../proxy-paths.ts";
 import { ARTIFACT_HTML_MAX } from "../../../shared/claude-chat-blocks.ts";
 
@@ -49,4 +49,19 @@ export function readArtifactHtml(filePath: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** The claude.ai account a CLI config folder is signed in to, from the
+ * CLI's own state file (`.claude.json`: oauthAccount.emailAddress), or
+ * undefined. Only the address is read; tokens live elsewhere. */
+export function claudeAccountEmail(configDir: string | null | undefined): string | undefined {
+  if (!configDir) return undefined;
+  for (const file of [join(configDir, ".claude.json"), join(dirname(configDir), ".claude.json")]) {
+    try {
+      const parsed = JSON.parse(readFileSync(file, "utf8")) as { oauthAccount?: { emailAddress?: unknown } };
+      const email = parsed?.oauthAccount?.emailAddress;
+      if (typeof email === "string" && /^[^\s@]{1,64}@[^\s@]{1,190}$/.test(email)) return email;
+    } catch { /* absent or unreadable */ }
+  }
+  return undefined;
 }

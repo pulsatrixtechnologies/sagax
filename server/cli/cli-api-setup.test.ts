@@ -25,6 +25,8 @@ describe("API setup endpoint validation", () => {
   it("normalizes HTTPS prefixes and permits only loopback HTTP", () => {
     expect(normalizeApiUrl("  https://PROVIDER.example:443/v1///  ")).toBe(base);
     expect(normalizeApiUrl("https://provider.example")).toBe("https://provider.example");
+    expect(normalizeApiUrl("https://provider.example/v1/chat/completions")).toBe("https://provider.example/v1");
+    expect(normalizeApiUrl("https://provider.example/compatibility/v1/models/")).toBe("https://provider.example/compatibility/v1");
     for (const host of ["localhost", "127.0.0.1", "[::1]"]) expect(normalizeApiUrl(`http://${host}:1234/v1/`)).toBe(`http://${host}:1234/v1`);
   });
 

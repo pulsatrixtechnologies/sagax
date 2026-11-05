@@ -445,6 +445,7 @@ public enum OptionCardRules {
     public static func isOnboardingCard(_ message: Message) -> Bool {
         // a proactive proposal stays until answered, like a live ask
         message.kind == .options && message.card != nil && message.card?.requestId == nil && message.card?.proactiveProposal == nil
+            && message.card?.roleTransition == nil
     }
 
     /// Hidden once picked, dismissed, or talked past (a later user text).

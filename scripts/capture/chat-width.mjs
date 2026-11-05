@@ -3,6 +3,9 @@
  * Headless screenshots of chat width (#2004): Reading vs Full on a wide
  * viewport (src/gallery/chat-width.html). Headless Chromium only: no window
  * opens. Usage: node scripts/capture/chat-width.mjs [--out DIR] [--port N]
+ *
+ * Reference set: docs/screenshots/chat-width (cited here so the #1386
+ * docs-media guard keeps the PNGs on the product branch).
  */
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
@@ -11,7 +14,7 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const arg = (name) => { const index = process.argv.indexOf(name); return index >= 0 ? process.argv[index + 1] : undefined; };
-const outDir = resolve(arg("--out") ?? join(root, "docs", "screenshots", "chat-width"));
+const outDir = resolve(arg("--out") ?? join(root, "docs/screenshots/chat-width"));
 const port = Number(arg("--port") ?? 5176);
 
 async function waitForServer(url, ms = 120_000) {

@@ -1282,8 +1282,6 @@
   "botPanel.model.reasoning": "Denken",
   "botPanel.model.effort": "Einsatz",
   "botPanel.model.reasoningStart": "Startvariante für das Denken des neuen Bots.",
-  "botPanel.model.backups": "Ersatzmodelle für diesen Bot",
-  "botPanel.model.backupsHelp": "Wenn die automatische Wiederherstellung in den Einstellungen an ist, werden diese Modelle der Reihe nach nur versucht, wenn der Anbieter nachweist, dass die Anfrage nie begonnen hat. Arbeit, die schon gelaufen sein könnte, wird nicht wiederholt. Nur diese Unterhaltung wechselt. Die Vorgaben des Bots und die anderen Unterhaltungen bleiben. Der Ersatzanbieter kann Kosten berechnen.",
   "botPanel.model.recoveryOff": "Die automatische Wiederherstellung ist aus. Diese Liste bleibt inaktiv, bis du sie in den Einstellungen einschaltest.",
   "botPanel.model.removeFallback": "{name} aus der Ersatzliste entfernen",
   "botPanel.model.addFallback": "Eine Ersatz-Engine hinzufügen",

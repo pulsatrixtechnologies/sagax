@@ -10,6 +10,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
+import { stripOpenAiEndpointSuffix } from "../shared/openai-compat-url.ts";
 import { COMPAT_SERVER_KEY_ENV, COMPAT_SERVER_PREFIX, isCompatServerId, type AppConfig } from "./config.ts";
 
 type Instances = NonNullable<AppConfig["instances"]>;
@@ -62,12 +63,10 @@ export function compatServers(cfg: Pick<AppConfig, "instances" | "openaiCompatSe
     }));
 }
 
-// A pasted endpoint (".../v1/chat/completions") is kept as its base: the
-// driver appends /chat/completions and /models itself.
-const ENDPOINT_SUFFIX = /\/(?:chat\/completions|completions|responses|models)\/*$/i;
-
+/** A pasted endpoint (".../v1/chat/completions") is kept as its base: the
+ * driver appends /chat/completions and /models itself (shared helper). */
 export function strippedUrl(url: string): string {
-  return url.trim().replace(/\/+$/, "").replace(ENDPOINT_SUFFIX, "").replace(/\/+$/, "");
+  return stripOpenAiEndpointSuffix(url);
 }
 
 /** A new named server: its instance and its key record. */

@@ -39,6 +39,7 @@ import {
   X,
   AppWindow,
   MessageSquare,
+  Monitor,
   PanelLeftClose,
 } from "lucide-react";
 import { WorkingDots } from "@/components/WorkingIndicator";
@@ -117,7 +118,6 @@ import { askText, runSkill, runSteps, runSummary, showRun, skillPrompt } from "@
 import { useShowRunCard } from "@/lib/run-card-preferences";
 import { sendsMessage, useSendKey } from "@/lib/send-key";
 import { ToolActivity, botNames } from "./ToolActivity";
-import { RoleNoticeRow } from "./RoleNoticeRow";
 import { StepRow } from "./StepRow";
 import { stepLabel } from "@/lib/step-label";
 import { DataResultChip } from "./DataResultChip";
@@ -1006,7 +1006,7 @@ function PeerLabel({ peer, autoModel }: { peer: PeerLine; autoModel?: Message["a
 /** A tool run as a quiet step row (StepRow), or a receipt that opens a conversation. */
 const ActivityChip = memo(function ActivityChip({ message, place = "auto" }: { message: Message; place?: EffectivePlace }) {
   "use memo";
-  const { bots, dispatch, botDmIds, botName } = useChatRows();
+  const { bots, dispatch, botDmIds } = useChatRows();
   const tool = message.tool;
   if (!tool) return null;
   if (message.inputRequest) return <InputRequestCard message={message} />;
@@ -1032,8 +1032,8 @@ const ActivityChip = memo(function ActivityChip({ message, place = "auto" }: { m
       </div>
     );
   }
-  // 2026-11-05 (visible roles): a lapsed role, a refused write or read
-  if (tool.roleNotice) return <RoleNoticeRow notice={tool.roleNotice} botName={bots.find((b) => b.id === message.from?.botId)?.name ?? botName} />;
+  // 2026-11-05: no role notice in the chat (rows saved before stay hidden)
+  if (tool.roleNotice) return null;
   return <ToolActivity tool={tool} place={toolPlace(tool.name, place)} nameOf={botNames(bots)} />;
 });
 
@@ -2552,6 +2552,27 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
           // buttons clear the 26px overlay while the rest of the layout stays.
           style={controlsShiftStyle}
         >
+          {/* Advanced (and a remote client's Simple header) keeps Computer
+              here so the guided tour can point at it (Refs #2000). Simple
+              mode otherwise opens Computer from the bot panel. */}
+          {(advanced || remoteClient) && (
+            <button
+              type="button"
+              data-tour="computer"
+              onClick={() => dispatch({ type: "toggleComputer" })}
+              className={cn(
+                "relative rounded-md p-1.5 hover:bg-raised",
+                state.computerOpen ? "text-accent" : "text-ink-secondary hover:text-ink",
+              )}
+              title={t("chat.computer")}
+              aria-label={t("chat.computer")}
+            >
+              <Monitor size={18} />
+              {busy && place === "browser" && (
+                <span aria-hidden="true" className="absolute right-1 top-1 size-1.5 animate-pulse rounded-full bg-success" data-testid="computer-button-live" />
+              )}
+            </button>
+          )}
           {/* One "..." for the conversation: share and export, then the
               Inspector (Advanced) and Data (Experimental). The pill opens
               the bot's panel; while the panel is open its top bar carries

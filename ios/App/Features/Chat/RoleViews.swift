@@ -117,17 +117,8 @@ struct RoleStepLine<Line: View>: View {
     }
 
     var body: some View {
-        if let role {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .center, spacing: 6) {
-                    line()
-                    PerspicaxRoleChip(role: role, words: words, open: $open)
-                }
-                if open { RoleWhyNote(role: role, words: words).transition(.opacity) }
-            }
-        } else {
-            line()
-        }
+        // 2026-11-05 (JC): no role in the chat, the role lives on Flow routines only
+        line()
     }
 }
 

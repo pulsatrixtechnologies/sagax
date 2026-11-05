@@ -31,99 +31,93 @@ export const ROUTINE_SCHEDULE_SCHEMA = {
   type: "object",
   additionalProperties: false,
   description:
-    'Use {"type":"cron","expression":"0 9 1 * *","timeZone":"Asia/Kolkata"} for 09:00 on the first of each month, once with at for one future run, weekly with time + weekdays, daily with time, interval with every_minutes for elapsed-time repetition, or limit_reset to run when an AI usage limit resets ("run this when my limit resets", or to finish work your own limit stopped). Intervals can optionally be limited with weekdays, window_start + window_end, and ends_at.',
+    'cron (expression+timeZone), once (at), weekly (time+weekdays), daily (time), interval (every_minutes; optional weekdays/window/ends_at), or limit_reset (when an AI usage limit resets).',
   properties: {
     type: {
       type: "string",
       enum: ["once", "weekly", "daily", "interval", "cron", "limit_reset"],
-      description: "once = a single future run; weekly = chosen weekdays; daily = every day; interval = every N elapsed minutes; cron = a calendar rule in an explicit timezone; limit_reset = when an AI engine's usage limit resets.",
+      description: "once | weekly | daily | interval | cron | limit_reset.",
     },
     expression: {
       type: "string",
       maxLength: 256,
-      description: "Only for cron: five fields, minute hour day-of-month month weekday. Examples: 0 9 1 * * = monthly on day 1 at 09:00; 0 9 L * * = last day of each month; 0 9 * * MON#2 = second Monday of each month. Lists, ranges and steps are supported. No seconds, year, or @ macros. Never substitute daily AI date checks for a calendar rule.",
+      description: "Cron only: five fields (min hour dom month dow). Examples: 0 9 1 * *, 0 9 L * *, 0 9 * * MON#2. No seconds/year/@macros.",
     },
     timeZone: {
       type: "string",
       maxLength: 128,
-      description: "Required for cron: explicit IANA timezone, for example Asia/Kolkata, America/New_York, or UTC. Use the user's requested zone; resolve ambiguity before proposing. Do not send a numeric offset or local-time abbreviation.",
+      description: "Cron only: IANA timezone (e.g. Asia/Kolkata, UTC). No numeric offset.",
     },
     at: {
       type: "string",
-      description:
-        "Only for type once: future RFC3339 date-time with an explicit timezone offset, for example 2026-09-01T09:00:00+05:30 or 2026-09-01T03:30:00Z.",
+      description: "once only: future RFC3339 with explicit offset.",
     },
     engine: {
       type: "string",
-      description: "Only for type limit_reset: the engine id whose limit to wait for, for example claude or codex. Omit for your own engine.",
+      description: "limit_reset only: engine id (claude, codex). Omit for your own.",
     },
     repeat: {
       type: "string",
       enum: ["once", "every_reset"],
-      description: "Only for type limit_reset: once (default) or every_reset.",
+      description: "limit_reset only: once (default) or every_reset.",
     },
     time: {
       type: "string",
-      description: "For type weekly or daily: local computer time in 24-hour HH:MM format, for example 09:00.",
+      description: "weekly/daily: local HH:MM.",
     },
     weekdays: {
       type: "array",
       items: { type: "string", enum: WEEKDAYS },
-      description:
-        "For type weekly: required run days. For type interval: optional allowed days. Values use the computer's local timezone.",
+      description: "weekly: required days. interval: optional filter. Local timezone.",
     },
     every_minutes: {
       type: "integer",
       minimum: 5,
       maximum: 1_440,
-      description: "Only for type interval: whole minutes between runs, from 5 to 1440.",
+      description: "interval only: minutes between runs (5-1440).",
     },
     starts_at: {
       type: "string",
-      description:
-        "Optional for type interval: RFC3339 date-time with an explicit timezone offset that anchors the cadence. Omit to start one interval after the routine is applied.",
+      description: "interval: optional RFC3339 cadence anchor. Omit to start one interval after apply.",
     },
     window_start: {
       type: "string",
-      description:
-        "Optional for type interval, together with window_end: local 24-hour HH:MM when runs may begin, inclusive.",
+      description: "interval: local HH:MM window start (inclusive), with window_end.",
     },
     window_end: {
       type: "string",
-      description:
-        "Optional for type interval, together with window_start: local 24-hour HH:MM when the allowed window ends, exclusive. It must be later on the same day.",
+      description: "interval: local HH:MM window end (exclusive), same day as window_start.",
     },
     ends_at: {
       type: "string",
-      description:
-        "Optional for type interval: inclusive RFC3339 date-time cutoff with an explicit timezone offset.",
+      description: "interval: inclusive RFC3339 cutoff.",
     },
     every_day: {
       type: "boolean",
-      description: "Only for an interval update: true removes an existing weekday restriction.",
+      description: "interval update: true clears weekday filter.",
     },
     all_day: {
       type: "boolean",
-      description: "Only for an interval update: true removes an existing time-window restriction.",
+      description: "interval update: true clears time window.",
     },
     never_ends: {
       type: "boolean",
-      description: "Only for an interval update: true removes an existing end cutoff.",
+      description: "interval update: true clears ends_at.",
     },
     timing: {
       type: "string",
       enum: ["exact", "flexible"],
-      description: "Optional. exact starts on time. flexible starts inside the early and late windows. Omit for exact.",
+      description: "exact (default) or flexible (early/late windows).",
     },
     window_early_minutes: {
       type: "integer",
       minimum: 0,
-      description: "Flexible only: minutes before the scheduled time. Default 15. Capped with the late window at half the gap between runs.",
+      description: "flexible: minutes early (default 15; capped with late at half the gap).",
     },
     window_late_minutes: {
       type: "integer",
       minimum: 0,
-      description: "Flexible only: minutes after the scheduled time. Default 15. 0 means the run is ready by the scheduled time.",
+      description: "flexible: minutes late (default 15; 0 = ready by scheduled time).",
     },
   },
   required: ["type"],
@@ -140,66 +134,65 @@ export const ROUTINE_FIELDS_SCHEMA = {
     type: "string",
     minLength: 1,
     maxLength: 20_000,
-    description: "The complete instructions the bot should follow each time the routine runs.",
+    description: "Full instructions for each run.",
   },
   schedule: ROUTINE_SCHEDULE_SCHEMA,
   run_on: {
     type: "string",
     // "box" is Boat's historical run_on destination id (agents wire contract).
     enum: ["maus", "box"],
-    description: "Default maus keeps the bot's selected model and configured computer, INCLUDING a self-hosted VPS. Omit this field for normal schedules. box runs on the bot's cloud computer, same model; it needs cloud computers set up and is not the generic cloud/VPS option. Legacy cloud values from list_routines mean box, not VPS.",
+    description: "maus (default): bot model+computer (incl. VPS). box: bot cloud computer. Legacy cloud=box.",
   },
   timeout_minutes: {
     type: "integer",
     minimum: 5,
     maximum: 240,
-    description:
-      "Optional safety limit for active work, from 5 to 240 minutes. Omit for no limit.",
+    description: "Optional active-work limit (5-240 min). Omit for none.",
   },
   clear_timeout: {
     type: "boolean",
-    description: "Only for updates: set true to remove an existing safety limit. Do not combine with timeout_minutes.",
+    description: "Update only: true clears timeout_minutes.",
   },
   continuity: {
     type: "boolean",
-    description: "Opt in to using the latest completed run's bounded report as historical context. Use it for recurring work that builds on last time, such as QA passes, monitoring or follow-ups. Defaults to false; set false in an update to start fresh again. Included in the applied result or pending confirmation.",
+    description: "true: feed latest completed run report into the next run. false starts fresh.",
   },
   overlap: {
     type: "string",
     enum: ["skip", "queue"],
-    description: "While this routine is still working, skip scheduled occurrences (default) or queue at most one run. Queue skips further occurrences until the pending run starts; it never builds an unlimited backlog. Manual and webhook requests are separate.",
+    description: "skip (default) or queue one while a run is still working. Manual/webhook stay separate.",
   },
   watch: {
     type: ["object", "null"],
-    description: "Run only when something changes: on each due time Sagax checks, with no model turn, and starts the run only on a change (or when condition holds). The run gets a note of what is new, changed or gone. {kind:\"watch\", source:{type:\"files\",path,recursive?} | {type:\"command\",command} (run where you work) | {type:\"tool\",tool:\"server__tool\",args} (read tools only), condition?:{test:\"json_path\",path,op:eq|ne|gt|gte|lt|lte|contains|exists,value} | {test:\"contains\",text,negate?} | {test:\"exit_code\",op:eq|ne,value}, wakeOn?:change|match, track?:{items,key,fields}, firstRun?:baseline|wake, whenAsleep?:skip|wake}. Needs a repeating schedule (checks at most every 5 min). null in an update removes it.",
+    description: "Wake only on change/match (no model turn until then). {kind:\"watch\", source: files|command|tool, condition?, wakeOn?, track?, firstRun?, whenAsleep?}. Repeating schedule; null clears.",
   },
   folder: {
     type: ["string", "null"],
     maxLength: 60,
-    description: "Folder of this bot's Routines list to file it in, such as Reports or Home. A new name makes the folder; reuse a name from list_routines to group with others. null in an update takes it out of its folder. Do not put the folder in the name as a [Prefix].",
+    description: "Routines list folder (new or existing). null removes. Do not put the folder in the name.",
   },
   model: {
     type: ["string", "null"],
     maxLength: 200,
-    description: "Only if asked: a model id of this bot's engine for its runs and sub-agents; chat keeps the bot's. null resets.",
+    description: "Model id for runs/sub-agents on this bot's engine; chat unchanged. null resets.",
   },
   act_as: {
     type: ["string", "null"],
     maxLength: 120,
-    description: "Only if asked: the Perspicax role slug its runs act as (\"Au nom de\"), one the run-as person holds; \"\" is their own access; null resets.",
+    description: "Perspicax role slug for runs (\"Au nom de\"); \"\" = own access; null resets.",
   },
   requires_computer: {
     type: "boolean",
-    description: "Only if asked: true makes the pre-run check wait for this bot's computer to be online (Automations > Requirements). false removes that need. Skills and MCP requirements stay as they are.",
+    description: "true: wait for the bot's computer online before run; false: drop that need. Skills/MCP stay.",
   },
   effort: {
     type: ["string", "null"],
     enum: [...EFFORT_LEVELS, null],
-    description: "Reasoning effort for routine runs and sub-agents on this bot's engine; chat keeps the bot's effort. null resets.",
+    description: "Routine-run effort on this bot's engine (chat unchanged). null resets.",
   },
   delete_when_finished: {
     type: "boolean",
-    description: "Delete this routine automatically once its schedule has no more runs and the last run has settled (completed, failed, cancelled or missed). Only for a one-time routine or an interval with an end date. Defaults to false. Past runs stay in the calendar and the run log. Set false in an update to keep it listed after it ends.",
+    description: "Auto-delete when the schedule ends and the last run settles (once/interval+end). false keeps it listed.",
   },
 } as const;
 

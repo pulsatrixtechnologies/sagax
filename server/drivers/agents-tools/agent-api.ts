@@ -157,7 +157,7 @@ export const AGENT_API_TOOLS = [
         name: { type: "string", minLength: 1, maxLength: 120 },
         instructions: { type: "string", minLength: 1, maxLength: 32000 },
         schedule: { type: "object", description: "cron, daily, interval, once, webhook or event schedule object." },
-        requires_computer: { type: "boolean", description: "true makes the pre-run check wait for the bot's computer to be online (Automations > Requirements); false removes that need. Skills and MCP requirements stay." },
+        requires_computer: ROUTINE_FIELDS_SCHEMA.requires_computer,
         model: ROUTINE_FIELDS_SCHEMA.model,
         effort: ROUTINE_FIELDS_SCHEMA.effort,
       },

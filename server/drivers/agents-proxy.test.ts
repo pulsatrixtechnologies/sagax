@@ -1922,7 +1922,7 @@ describe("agents-proxy MCP surface", () => {
     const list = await rpc("tools/list");
     const routine = list.result.tools.find((entry: { name: string }) => entry.name === "propose_routine");
     expect(routine.inputSchema.properties.run_on.enum).toEqual(["maus", "box"]);
-    expect(routine.inputSchema.properties.run_on.description).toContain("INCLUDING a self-hosted VPS");
+    expect(routine.inputSchema.properties.run_on.description).toContain("incl. VPS");
   });
 
   it("preserves execution settings copied from list_routines", async () => {

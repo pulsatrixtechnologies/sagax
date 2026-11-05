@@ -99,7 +99,10 @@ export async function checkRoutineReadiness(routine: ReadinessRoutine, run: Read
     if (!memo) { memo = new Map(); cache.set(deps, memo); }
     const context = JSON.stringify([routine.botId, run.runAs ?? routine.runAs, run.runOn ?? routine.runOn, routine.requires?.computer, deps.cacheKey?.(routine, run)]);
     const needsFlow = isFlowRoutine(run.prompt ?? routine.prompt) || routine.requires?.skills?.some(skill => isFlowRoutine(skill));
-    const works = [deps.engine, deps.skills, deps.mcp, deps.perspicax, deps.computers, needsFlow ? deps.flow : undefined] as const;
+    // A routine run never takes a Flow shadow probe first (2026-11-04, « Tout simplifier »): a routine called
+    // by name runs. The shadow check stays on the explicit « Check routine » button only.
+    const probeFlow = needsFlow && mode === "check";
+    const works = [deps.engine, deps.skills, deps.mcp, deps.perspicax, deps.computers, probeFlow ? deps.flow : undefined] as const;
     const pending = works.map((work, i) => {
       if (!work) return Promise.resolve({} as Probe);
       const key = `${context}:${kinds[i]}${kinds[i] === "flow" ? JSON.stringify([routine.id, run.prompt ?? routine.prompt, routine.requires]) : ""}`;
@@ -122,7 +125,7 @@ export async function checkRoutineReadiness(routine: ReadinessRoutine, run: Read
     const checks: RoutineReadinessCheck[] = [];
     for (let i = 0; i < kinds.length; i++) {
       const kind = kinds[i]!;
-      if (kind === "flow" && (!needsFlow || !deps.flow)) continue;
+      if (kind === "flow" && (!probeFlow || !deps.flow)) continue;
       const probe = probes[i]!;
       const pack = kind === "skills" && needsFlow ? deps.flowSkills?.(routine, run) : undefined;
       if (pack) {

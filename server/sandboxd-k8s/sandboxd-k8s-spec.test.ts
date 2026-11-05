@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
+  quantityToBytes,
   dedicatedFor,
   dedicatedFromEnv,
   defaultDenyNetworkPolicy,
@@ -25,7 +26,7 @@ import {
   storageClassEncrypts,
   type K8sSandboxConfig,
 } from "./sandboxd-k8s-spec.ts";
-import { DEFAULT_EGRESS_DENY, sandboxContainerSpec, sandboxKeyForPrincipal, sandboxdConfigFromEnv } from "../user-sandbox-spec.ts";
+import { DEFAULT_EGRESS_DENY, sandboxContainerSpec, sandboxKeyForPrincipal, sandboxdConfigFromEnv } from "../sandbox/user-sandbox-spec.ts";
 
 const DIGEST = "ab".repeat(32);
 const REGISTRY = "ghcr.io/pulsatrixtechnologies";
@@ -394,7 +395,7 @@ describe("image scripts and manifests", () => {
     expect(build).toContain("SANDBOX_IMAGE_PUSH");
     const scan = readFileSync(new URL("../../scripts/scan-sandbox-image.sh", import.meta.url), "utf8");
     expect(scan).toContain("not scanned");
-    const verify = readFileSync(new URL("../../scripts/verify-sandbox-image-signature.sh", import.meta.url), "utf8");
+    const verify = readFileSync(new URL("../../scripts/verify/release/verify-sandbox-image-signature.sh", import.meta.url), "utf8");
     expect(verify).toContain("did not verify a signature");
     const workflow = readFileSync(new URL("../../.github/workflows/sandbox-image.yml", import.meta.url), "utf8");
     expect(workflow).toContain("workflow_dispatch");
@@ -432,5 +433,16 @@ describe("image scripts and manifests", () => {
     expect(allow).toContain("6443");
     expect(allow).toContain("k8s-app: kube-dns");
     expect(allow).toMatch(/protocol: UDP\r?\n\s+port: 53/);
+  });
+});
+
+describe("quantityToBytes (2026-11-02)", () => {
+  it("reads the storage quantities a claim carries", () => {
+    expect(quantityToBytes("2Gi")).toBe(2 * 1024 ** 3);
+    expect(quantityToBytes("2048Mi")).toBe(2 * 1024 ** 3);
+    expect(quantityToBytes("20480Mi")).toBe(20 * 1024 ** 3);
+    expect(quantityToBytes("21474836480")).toBe(20 * 1024 ** 3);
+    expect(quantityToBytes("20G")).toBe(20e9);
+    expect(quantityToBytes("lots")).toBeNull();
   });
 });

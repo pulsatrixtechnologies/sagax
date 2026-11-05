@@ -1,3 +1,4 @@
+import type { EffortLevel } from "../../shared/model-selection.ts";
 // Internal harness routes for routine / profile / model / rule proposals,
 // team-setup and bot-deletion requests (#1388 I3). Behind the agents
 // capability checked in server/index.ts before dispatchInternalRoutes.
@@ -5,7 +6,7 @@ import { z } from "zod";
 import { resolveRoutineById } from "../../shared/routine-by-id.ts";
 import { pageRoutines } from "../../shared/routine-listing.ts";
 import { routineAutoPauseAfter } from "../../shared/routine-auto-pause.ts";
-import { RuleRequestError } from "../rule-requests.ts";
+import { RuleRequestError } from "../rules/rule-requests.ts";
 import { redactSecretsInText } from "../redact.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
@@ -54,6 +55,13 @@ export interface InternalRequestsRoutine {
   name: string;
   prompt: string;
   folder?: string;
+  /** 2026-11-04: the routine's model (shared/routine-model.ts). */
+  model?: string;
+  /** #2038: the model its runs' sub-agents use (Claude). */
+  subagentModel?: string;
+  /** 2026-11-05: the routine's "Au nom de" role (shared/routine-act-as.ts). */
+  actAs?: string;
+  effort?: EffortLevel;
   enabled: boolean;
   runOn: string;
   durationMinutes: number;
@@ -256,6 +264,10 @@ function agentRoutine(routine: InternalRequestsRoutine, latestRun?: InternalRequ
     id: routine.id,
     name: safeName,
     ...(routine.folder ? { folder: redactSecretsInText(routine.folder) } : {}),
+    ...(routine.model ? { model: routine.model } : {}),
+    ...(routine.subagentModel ? { subagentModel: routine.subagentModel } : {}),
+    ...(routine.actAs !== undefined ? { actAs: routine.actAs } : {}),
+    ...(routine.effort ? { effort: routine.effort } : {}),
     instructions: safeInstructions.slice(0, 2_000),
     instructionsTruncated: safeInstructions.length > 2_000,
     continuity: routine.continuity === true,

@@ -1,5 +1,9 @@
-// The chip at 5, 10 and 20 repeats shows whatever the setting. On by default: the guard acts on one shell command
-// failing the same way back to back. It steers one note at steerAt, then stops the turn at stopAt (10 when unset).
+// The chip at 5, 10 and 20 repeats shows whatever the setting, and only this guard writes it (index.ts wrote it too
+// until 2026-11-02, so every count showed twice). A call is its tool and its arguments: an MCP call counts by its
+// start, with its arguments, when it fails (its ask is not counted), a shell ask by its command and folder, and a call
+// an engine reports twice (a start titled with its command, then its ask) counts once. On by default: the guard acts
+// on one shell command failing the same way back to back. It steers one note at steerAt, then stops the turn at
+// stopAt (10 when unset).
 // A turn waiting on a person or a computer is never acted on. Workspace `loopGuard.enabled: false`, per-bot
 // `loopGuard: false`, or SAGAX_LOOP_GUARD=0 / OMB_LOOP_GUARD=0 turn it off.
 import { z } from "zod";
@@ -7,10 +11,10 @@ import { z } from "zod";
 import { failedTurnTool } from "../../shared/failed-turn.ts";
 import { nameIsCommand } from "../../shared/tool-name.ts";
 import type { RuntimeEvent, SteerOutcome } from "../contracts.ts";
-import { quoteInNote } from "../peer-provenance.ts";
-import { RepeatDetector, callKey, toolItemKey } from "../repeat-detector.ts";
-import { RepeatStreak, failureDigest } from "../repeat-streak.ts";
-import { COMMAND_SUMMARY_MAX, previewIsPartial } from "../tool-summary.ts";
+import { quoteInNote } from "../peers/peer-provenance.ts";
+import { RepeatDetector, callKey, toolItemKey } from "../safety/repeat-detector.ts";
+import { RepeatStreak, failureDigest } from "../safety/repeat-streak.ts";
+import { COMMAND_SUMMARY_MAX, previewIsPartial } from "../tools/tool-summary.ts";
 
 const COUNT_MIN = 2;
 const COUNT_MAX = 1000;
@@ -111,6 +115,8 @@ export interface LoopGuard {
 
 const NOTICE_AT = [5, 10, 20] as const;
 const MAX_CALLS_PER_TURN = 256;
+/** Counted starts (or asks) kept per thread for the other to match: an ask follows its start within a few events. */
+const MAX_UNMATCHED = 64;
 const CALL_QUOTE_MAX = 160;
 
 interface CountedCall {
@@ -122,38 +128,67 @@ interface CountedCall {
   onFailure?: true;
 }
 
-const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
-
-function shown(key: string | null): CountedCall | null {
-  if (!key) return null;
-  const [tool, ...rest] = key.split(":");
-  return { key, tool: tool!, args: rest.join(":") };
+/** A call the chip counts, with the texts that name it (a title, a command, its arguments): a tool start and a
+ * permission ask that share one are the same call. */
+interface SeenCall extends CountedCall {
+  texts: string[];
 }
 
+const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
+
 type ToolStart = Extract<RuntimeEvent, { type: "item.started" }>;
+type Ask = Extract<RuntimeEvent, { type: "request.opened" }>;
 
 /** An MCP tool id as engines title a call (`server__tool`, `mcp__server__tool`). */
 const MCP_TOOL_ID = /^(?:mcp__)?[a-z][\w-]{0,63}__[a-z][\w-]{0,127}$/i;
+/** Codex asks 'Allow the <server> MCP server to run tool "<tool>"?' (server/drivers/codex/tools.ts): the tool again. */
+const CODEX_MCP_ASK = /^Allow the .+ MCP server to run tool ".*"\?$/;
+/** Previews are cut (an ask's summary at 200 characters, an ACP title at 80): texts that agree this far name the same
+ * call. */
+const SAME_TEXT_CHARS = 120;
 
-function countedCall(event: RuntimeEvent): CountedCall | null {
-  if (event.type === "request.opened" && event.requestType === "permission") {
-    // 2026-11-02: an MCP ask (Grok's use_tool, kind "other") is titled with the
-    // bare tool id and carries no arguments: five different calls of one tool
-    // read as "the same call" (prod: cw_psa_query, 8 distinct calls, one 404).
-    // The call's own start counts it, with its arguments.
-    const summary = event.summary?.trim() ?? "";
-    if (event.mcpTool || MCP_TOOL_ID.test(summary)) return null;
-    return shown(callKey(event.tool, event.summary));
-  }
+/** An ask for an MCP tool: the engine named the tool (`mcpTool`), titled the ask with its id (Claude's
+ * `mcp__server__tool`), or summed it up with that id alone or with Codex's sentence about it. */
+function asksForMcpTool(event: Ask, summary: string): boolean {
+  return Boolean(event.mcpTool) || MCP_TOOL_ID.test(event.tool) || MCP_TOOL_ID.test(summary) || CODEX_MCP_ASK.test(summary);
+}
+
+/** A permission ask, by its tool and its arguments, whitespace aside. A shell ask is its whole command and the folder
+ * it runs in, never the summary or the description Claude writes anew for each call; any other ask is its summary and
+ * its arguments. An MCP ask is never counted (2026-11-02): an ACP agent's (kind "other") or Grok's names the tool
+ * alone, so different calls of one tool read as one (prod: « other: sagax-environment__run_command », cw_psa_query
+ * with 8 distinct arguments), and Claude's would count beside its own start. Every MCP call is counted by its start,
+ * with its arguments, when it fails. */
+function askedCall(event: Ask): SeenCall | null {
+  const summary = oneLine(event.summary ?? "");
+  if (asksForMcpTool(event, summary)) return null;
+  const input = oneLine(event.input ?? "");
+  const command = event.command ? oneLine(event.command.command) : "";
+  const key = command
+    ? callKey(event.tool, JSON.stringify([command, oneLine(event.command!.cwd)]))
+    : callKey(event.tool, input && input !== summary ? JSON.stringify([summary, input]) : summary);
+  if (!key) return null;
+  const named = summary === event.tool ? "" : summary;
+  return { key, tool: event.tool, args: named || command || input, texts: [named, command, input].filter(Boolean) };
+}
+
+function countedCall(event: RuntimeEvent): SeenCall | null {
+  if (event.type === "request.opened" && event.requestType === "permission") return askedCall(event);
   if (event.type !== "item.started" || event.itemType !== "tool") return null;
-  const title = (event.title ?? "").trim();
+  const title = oneLine(event.title ?? "");
+  const texts = [title, oneLine(event.summary ?? ""), oneLine(event.input ?? "")].filter(Boolean);
   // An MCP call is the tool with its arguments; with none, it names no call.
   if (MCP_TOOL_ID.test(title)) {
-    return event.input?.trim() ? { key: `tool:${JSON.stringify([title, event.input.trim()])}`, tool: "tool", args: title, onFailure: true } : null;
+    const input = oneLine(event.input ?? "");
+    return input ? { key: `tool:${JSON.stringify([title, input])}`, tool: "tool", args: title, onFailure: true, texts } : null;
   }
   const key = toolItemKey(event.title, event.input);
   // The chip quotes the title only, never the input the key counts on.
-  return key ? { key, tool: "tool", args: title } : null;
+  return key ? { key, tool: "tool", args: title, texts } : null;
+}
+
+function sameCall(a: readonly string[], b: readonly string[]): boolean {
+  return a.some((text) => b.some((other) => text.slice(0, SAME_TEXT_CHARS) === other.slice(0, SAME_TEXT_CHARS)));
 }
 
 const CHIP_ERROR_MAX = 300;
@@ -207,6 +242,22 @@ export function createLoopGuard(deps: LoopGuardDeps): LoopGuard {
   const log = (what: string, threadId: string, streak: number) =>
     (deps.log ?? console.info)(`[loop-guard] ${what}: thread=${threadId} failures-in-a-row=${streak}`);
 
+  // An engine that titles a call with its command and also asks for it (ACP, Codex) reports one call twice: the
+  // counted starts and asks the other has not matched yet, per thread, so each call counts once whichever comes first.
+  const unmatched = new Map<string, { starts: SeenCall[]; asks: SeenCall[] }>();
+  /** The start or ask this call was already counted as, else undefined: it is the call's first sighting. */
+  const countedAs = (threadId: string, call: SeenCall, start: boolean): SeenCall | undefined => {
+    let seen = unmatched.get(threadId);
+    if (!seen) unmatched.set(threadId, (seen = { starts: [], asks: [] }));
+    const other = start ? seen.asks : seen.starts;
+    const match = other.findIndex((earlier) => sameCall(earlier.texts, call.texts));
+    if (match >= 0) return other.splice(match, 1)[0];
+    const mine = start ? seen.starts : seen.asks;
+    mine.push(call);
+    if (mine.length > MAX_UNMATCHED) mine.shift();
+    return undefined;
+  };
+
   const startOver = (threadId: string) => {
     streaks.settle(threadId);
     acted.delete(threadId);
@@ -214,6 +265,7 @@ export function createLoopGuard(deps: LoopGuardDeps): LoopGuard {
 
   const settle = (threadId: string) => {
     repeats.settle(threadId);
+    unmatched.delete(threadId);
     startOver(threadId);
     turnOf.delete(threadId);
     callOfItem.delete(threadId);
@@ -268,6 +320,7 @@ export function createLoopGuard(deps: LoopGuardDeps): LoopGuard {
     if (event.type === "turn.completed" || event.type === "session.exited") return settle(threadId);
     // A turn's end does not always reach this fold, so a turn's start is a fence too.
     if (event.type === "turn.started") {
+      unmatched.delete(threadId);
       startOver(threadId);
       if (event.turnId === undefined) turnOf.delete(threadId);
       else turnOf.set(threadId, event.turnId);
@@ -286,13 +339,17 @@ export function createLoopGuard(deps: LoopGuardDeps): LoopGuard {
     };
     const counted = countedCall(event);
     if (counted) {
+      // A call charged where it is reported counts once, under the key it was first counted by (its start, or its
+      // ask); an MCP call counts when it fails, by its start alone.
+      const earlier = counted.onFailure ? undefined : countedAs(threadId, counted, event.type === "item.started");
       if (event.type === "item.started" && event.itemId) {
         let items = callOfItem.get(threadId);
         if (!items) callOfItem.set(threadId, (items = new Map()));
         if (items.size >= MAX_CALLS_PER_TURN) items.delete(items.keys().next().value!);
-        items.set(event.itemId, counted);
+        // its errors go to the key it counts under
+        items.set(event.itemId, earlier ?? counted);
       }
-      if (!counted.onFailure) chip(counted);
+      if (!earlier && !counted.onFailure) chip(counted);
     }
     if (event.type === "item.completed" && event.itemType === "tool" && event.itemId) {
       const call = callOfItem.get(threadId)?.get(event.itemId);

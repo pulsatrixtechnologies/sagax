@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { accountChoices, businessAccount, CURRENT_ACCOUNT_ID, PERSONAL_ID, SAGAX_MOBILE_URL, serverDisplayName, switchAccount, switchTargets, usageLines, usagePercent } from "./account-menu";
+import { accountChoices, businessAccount, CURRENT_ACCOUNT_ID, PERSONAL_ID, SAGAX_MOBILE_URL, serverDisplayName, switchAccount, switchTargets, usageLines, usagePercent, usageSummary } from "./account-menu";
 import type { PlanRow, PlanWindow } from "./plan-usage";
 
 const closed: PlanWindow = { available: false, remainingPercent: null, usedPercent: null, resetsAt: null };
@@ -26,9 +26,31 @@ describe("the avatar menu's Usage", () => {
     const now = Date.parse("2026-10-16T00:00:00Z");
     const lines = usageLines([row({ weekly: open(42, "2026-10-18T03:00:00Z"), fiveHour: open(5) })], labels, now);
     expect(lines).toEqual([
-      { key: "claude:weekly", label: "Claude Max · Weekly", subtitle: "resets in 2d 3h", value: "42% used" },
-      { key: "claude:five-hour", label: "Claude Max · 5-hour", subtitle: undefined, value: "5% used" },
+      { key: "claude:weekly", planId: "claude", planName: "Claude Max", label: "Claude Max · Weekly", subtitle: "resets in 2d 3h", value: "42% used" },
+      { key: "claude:five-hour", planId: "claude", planName: "Claude Max", label: "Claude Max · 5-hour", subtitle: undefined, value: "5% used" },
     ]);
+  });
+});
+
+describe("the avatar menu's starred subscription (2026-11-03)", () => {
+  const grok = row({ id: "grok", name: "Grok", plan: "SuperGrok Heavy", weekly: open(87) });
+  const codex = row({ id: "codex", name: "Codex", plan: "Business", fiveHour: open(100) });
+
+  it("shows the starred plan's own percent and its short name, not the highest", () => {
+    expect(usageSummary([codex, grok], "grok")).toEqual({ percent: 87, name: "Grok" });
+    expect(usageSummary([codex, grok], "codex")).toEqual({ percent: 100, name: "Codex" });
+  });
+
+  it("keeps the highest plan, unnamed, with no favorite", () => {
+    expect(usageSummary([grok, codex], null)).toEqual({ percent: 100, name: null });
+    expect(usageSummary([], null)).toEqual({ percent: null, name: null });
+  });
+
+  it("falls back to the highest once the favorite is gone or reports no window", () => {
+    // signed out: connectedPlanRows leaves the row out
+    expect(usageSummary([codex], "grok")).toEqual({ percent: 100, name: null });
+    expect(usageSummary([codex, row({ id: "grok", name: "Grok", state: "no-windows" })], "grok")).toEqual({ percent: 100, name: null });
+    expect(usageSummary([codex, row({ id: "grok", name: "Grok" })], "grok")).toEqual({ percent: 100, name: null });
   });
 });
 

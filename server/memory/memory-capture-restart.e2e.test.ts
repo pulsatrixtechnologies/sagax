@@ -15,7 +15,7 @@ import type { WireBot } from "../../shared/wire.ts";
 import { CAPTURE_MARKER } from "./memory-capture.ts";
 import { waitForExit } from "../testing/cleanup.ts";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 it.skipIf(process.platform === "win32")("captures a turn that was still waiting when the server stopped, after the next start", async () => {
   const scratch = mkdtempSync(join(tmpdir(), "omb-capture-restart-"));

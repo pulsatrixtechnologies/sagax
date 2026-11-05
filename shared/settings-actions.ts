@@ -4,7 +4,7 @@
 // One entry per setting of the app: where it is on screen, the route the
 // screen calls and how its value is read back. A change is the same route
 // the screen calls, replayed with the person's own session by the act engine
-// (server/bot-act.ts), so the person's rights and every route check apply
+// (server/bots/bot-act.ts), so the person's rights and every route check apply
 // as they do by hand. shared/settings-actions-policy.ts decides whether it
 // runs now or waits on a card; server/settings-actions.ts ties both.
 //
@@ -160,7 +160,7 @@ function nest(path: string, value: unknown): Record<string, unknown> {
 }
 
 /** A GitHub skill source from {repo, path?, ref?} or a link, as Persona >
- * Skills takes it (server/skill-fetch.ts parseSkillSource). */
+ * Skills takes it (server/skills/skill-fetch.ts parseSkillSource). */
 export function skillSourceOf(value: unknown): string | undefined {
   if (typeof value === "string") return value.trim() || undefined;
   const r = value && typeof value === "object" ? value as { repo?: unknown; path?: unknown; ref?: unknown; source?: unknown } : {};
@@ -258,7 +258,7 @@ add({
   approvalTo: (v) => String(v),
 });
 // 2026-10-30: how the bot acts on emails, calendar entries, failed runs,
-// bots' posts and webhooks on its own (server/proactive-wake.ts). Absent
+// bots' posts and webhooks on its own (server/proactive/proactive-wake.ts). Absent
 // reads as proactive; off stays off.
 botField("bot.proactiveMode", "proactiveMode", "enum:off|proactive",
   "Proactive on/off (off = no wakes; proactive = wakes on email, calendar, failed run, bot mention or webhook and acts at its approval level and rules, with a dry run recorded before writes; absent = proactive)",
@@ -323,11 +323,6 @@ add({
   write: (ids, v) => typeof v === "string" && /^[\w-]+$/.test(v) ? { method: "POST", path: `/api/bots/${enc(ids.target!)}/memory/journal/${enc(v)}/revert`, body: {} } : "value is a change's id (get bot.memoryUndo).",
 });
 add({
-  key: "bot.perspicaxProfiles", family: "bot", target: "bot", value: "array", label: "Perspicax tools (profiles)", where: "Bot editor > Perspicax", classes: selfReach,
-  read: (ids) => ({ path: `/api/bots/${enc(ids.target!)}/perspicax` }),
-  write: (ids, v) => ({ method: "PUT", path: `/api/bots/${enc(ids.target!)}/perspicax`, body: { profiles: v } }),
-});
-add({
   key: "bot.skill", family: "bot", target: "bot", value: "object", label: "A skill on or off ({name, enabled})", where: "Bot editor > Skills",
   read: (ids) => ({ path: `/api/bots/${enc(ids.target!)}/skills` }),
   write: (ids, v) => {
@@ -348,8 +343,9 @@ add({
   },
 });
 // 2026-10-30 (Capabilities, lot 1a): the one resolved list of what a bot
-// receives (server/capabilities.ts), read only; the actions that change it
-// are bot.plugin, bot.skill, bot.mcpServers and bot.perspicaxProfiles
+// receives (server/capabilities/capabilities.ts), read only; the actions that change it
+// are bot.plugin, bot.skill and bot.mcpServers. Perspicax belongs to the
+// signed-in account and is mounted automatically.
 add({
   key: "bot.capabilities", family: "bot", target: "bot", value: "object",
   label: "What the bot receives on top of its engine, read only: one list of its plugins, skills, MCP servers, account connectors, Perspicax Roles and Flow, each with its scope (bot, me, organization, installation, account), its state and what its engine receives",
@@ -370,7 +366,7 @@ add({
       ...(r.promptIndex ? { promptIndex: r.promptIndex } : {}),
     };
   } }),
-  write: () => "bot.capabilities is read only: bot.plugin, bot.skill, bot.mcpServers and bot.perspicaxProfiles change what it lists.",
+  write: () => "bot.capabilities is read only: bot.plugin, bot.skill and bot.mcpServers change what it lists.",
 });
 // 2026-10-29: plugins of a configured marketplace, as Capabilities installs
 // them: For <bot> (/api/bots/:id/plugins) or Everyone (/api/marketplaces)
@@ -543,6 +539,8 @@ function routineField(key: string, field: string, value: SettingValue, label: st
 routineField("routine.name", "name", "string", "Name", "Automations > routine");
 routineField("routine.prompt", "prompt", "text", "Instructions", "Automations > routine");
 routineField("routine.schedule", "schedule", "object", "Schedule ({type: once|daily|cron|interval, ...})", "Automations > routine > Schedule");
+routineField("routine.model", "model", "string?", "Model for routine runs (null follows the bot)", "Automations > routine > Model");
+routineField("routine.effort", "effort", "string?", "Reasoning effort for routine runs (null follows the bot)", "Automations > routine > Effort");
 routineField("routine.enabled", "enabled", "boolean", "On or off", "Bot panel > Details > Routines; Automations");
 routineField("routine.engine", "runOn", "enum:maus|cloud", "Where it runs", "Automations > routine > Runs on");
 routineField("routine.bot", "botId", "string", "Bot that runs it", "Automations > routine > Bot");
@@ -554,6 +552,15 @@ routineField("routine.deleteWhenFinished", "deleteWhenFinished", "boolean", "Del
 routineField("routine.autoPauseAfter", "autoPauseAfter", "number?", "Pause after this many failures in a row (0 never, null the default 5)", "Automations > routine > Advanced");
 // 2026-10-28 the folder of its bot's Routines list (shared/routine-folders.ts).
 routineField("routine.folder", "folder", "string?", "Folder in the bot's Routines list (null: no folder)", "Bot panel > Details > Routines > row menu > Move to folder");
+// #1996: the Requirements "Needs its computer" box; the handler keeps the
+// routine's skills and MCP needs (server/settings-actions.ts)
+add({
+  key: "routine.requiresComputer", family: "routine", target: "routine", value: "boolean",
+  label: "Needs its computer: the pre-run check waits for the bot's computer to be online (true), or not (false); skills and MCP requirements stay",
+  where: "Automations > routine > Requirements",
+  read: () => ({ path: "/api/routines", list: "routines", match: "id", field: "requires" }),
+  write: (ids) => ({ method: "PATCH", path: `/api/routines/${enc(ids.target!)}`, body: { requires: null } }),
+});
 routineField("routine.runAs", "runAs", "string", "Runs as (a person)", "Automations > routine > Runs as", always("others"));
 // 2026-10-26 run only when something changes (shared/routine-watch.ts). A
 // watch command runs on each check with no card: what runs without asking
@@ -847,6 +854,7 @@ pref("appearance.botAccent", "appearance", "sagax.botAccent.v1", "enum:1|0", "Th
 pref("appearance.sidebarHidden", "appearance", "sagax.sidebarHidden.v1", "object", "Rows hidden from the sidebar ({items: [{kind, id, at}], unhideOnMessage: {people, bots}})", "Settings > Appearance > Hidden from the sidebar");
 pref("appearance.busySend", "appearance", "sagax.busySend.v1", "string", "Sending to a busy bot", "Settings > Appearance");
 pref("appearance.streamReplies", "appearance", "sagax.streamReplies.v1", "enum:on|off", "Show replies as they are written (on, the default; off shows each reply once it is finished)", "Settings > Appearance > Conversation");
+pref("appearance.chatWidth", "appearance", "sagax.chatWidth.v1", "enum:reading|wide|full", "Chat width (reading 960px, the default; wide ~1280px; full fills the pane)", "Settings > Appearance > Conversation");
 pref("notifications.sounds", "notifications", "omb-notification-sounds", "boolean", "Notification sounds", "Settings > Notifications");
 pref("notifications.soundChoice", "notifications", "sagax.notificationSound.v1", "enum:system|tick|double-tick|chime-a|chime-b|blip", "Notification sound (the system's, Tick, Double tick, Chime A, Chime B, Blip)", "Settings > Notifications");
 pref("notifications.persistent", "notifications", "omb-notification-persistent", "boolean", "Persistent notifications", "Settings > Notifications");
@@ -863,7 +871,7 @@ pref("models.voiceMode", "models", "omb.voiceMode.v1", "object", "Voice mode (vo
 // #1545: read back as {place, routines, network}, the default filled in
 pref("computer.botWorkplace", "computer", "sagax.botWorkplace.v1", "object", "Where bots work for you ({place: computer|server, routines: boolean, network: all|lan}; organization server)", "Settings > Computer > Bot workplace", always("rule-change"),
   (value) => parseBotWorkplace(value === undefined || value === null ? null : typeof value === "string" ? value : JSON.stringify(value)));
-// the person's other computers (organization server; server/desktop-bridge.ts):
+// the person's other computers (organization server; server/desktop/desktop-bridge.ts):
 // named by the computer's name or id, never offline-only for a rename
 add({
   key: "computer.rename", family: "computer", target: "none", value: "object", label: "Rename one of your other computers ({computer: its name, name: the new name})", where: "Settings > Computer > Other computers",
@@ -1093,6 +1101,7 @@ org("org.memberEnvironmentAutonomy", "memberEnvironmentAutonomy", "any", "Member
 org("org.confidentialByDefault", "confidentialThreadsByDefault", "boolean", "New conversations confidential", "Settings > Organization > Privacy");
 org("org.allowVaultExport", "allowVaultExport", "boolean", "Allow vault export", "Settings > Organization > Credentials");
 org("org.interimAttachDays", "interimAttachDays", "number", "People from before: days", "Settings > Organization > People");
+org("org.pendingApprovalExpireDays", "pendingApprovalExpireDays", "number", "Pending approvals expire after (days)", "Settings > Organization > Approvals");
 org("org.pluginMarketplaces", "pluginMarketplaces", "any", "Plugin marketplaces", "Capabilities > Sources > Organization sources and access");
 // published pages (lot R8): the admins' switch for public links, a card at every level
 add({
@@ -1110,13 +1119,15 @@ add({
 
 // ── connections (the person's own) ─────────────────────────────────────
 add({
+  // #1992: list lives on GET /api/me/capabilities (servers field). POST
+  // /api/me/mcp/servers only adds a server, so a get there answered "POST only".
   key: "connections.mcpServer", family: "connections", target: "none", value: "object", label: "Add your MCP server ({name, url|command, auth, ...})", where: "Capabilities > Providers",
-  read: () => ({ path: "/api/me/mcp/servers" }),
+  read: () => ({ path: "/api/me/capabilities", field: "servers" }),
   write: (_ids, v) => ({ method: "POST", path: "/api/me/mcp/servers", body: v }), classes: always("secret"),
 });
 add({
   key: "connections.mcpServerEnabled", family: "connections", target: "none", value: "object", label: "Your MCP server on or off ({name, enabled})", where: "Capabilities > Providers",
-  read: () => ({ path: "/api/me/mcp/servers" }),
+  read: () => ({ path: "/api/me/capabilities", field: "servers" }),
   write: (_ids, v) => {
     const s = v as { name?: unknown; enabled?: unknown } | null;
     if (!s || typeof s.name !== "string" || typeof s.enabled !== "boolean") return "value is {name, enabled}.";

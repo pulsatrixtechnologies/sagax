@@ -79,10 +79,11 @@ posixOnly("conversation branching e2e (fake ACP fleet)", () => {
       join(home, ".sagax", "config.json"),
       JSON.stringify({
         instances: {
-          happy: { driver: "grokAgent", config: { cli: FAKE_CLI, fullAuto: true } },
+          // 062d7c42e continues tool-only endings; these turns finish with a reply.
+          happy: { driver: "grokAgent", environment: { FAKE_ACP_TEXT_REPLY: "hello from fake acp" }, config: { cli: FAKE_CLI, fullAuto: true } },
           // a second engine for the mid-thread model switch: same fake, its
           // own instance, so it starts with no session cursor for the thread
-          second: { driver: "grokAgent", config: { cli: FAKE_CLI, fullAuto: true } },
+          second: { driver: "grokAgent", environment: { FAKE_ACP_TEXT_REPLY: "hello from fake acp" }, config: { cli: FAKE_CLI, fullAuto: true } },
           hang: {
             driver: "grokAgent",
             environment: { FAKE_ACP_MODE: "hang" },

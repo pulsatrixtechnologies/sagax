@@ -10,7 +10,7 @@ import { activityStatusActive, activityStatusLabel, formatActivityDuration, type
 import { BotAvatar, type BotAvatarProps } from "../Avatar";
 import { ActivityStatusIcon } from "../bot-settings/ActivityCard";
 
-const RANK: Record<BotActivityItem["status"], number> = { waiting: 0, running: 1, queued: 2, failed: 3, finished: 4, stopped: 5 };
+const RANK: Record<BotActivityItem["status"], number> = { waiting: 0, running: 1, queued: 2, failed: 3, blocked: 3, finished: 4, stopped: 5 };
 
 /** Waiting first, then running, then the settled ones, newest first. */
 export function sortSubagents(items: readonly BotActivityItem[]): BotActivityItem[] {

@@ -32,8 +32,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
 import { freePortBlock } from "../testing/ports.ts";
+import { waitForServerReady } from "../testing/server-ready.ts";
+import { releaseVersion } from "../environment.ts";
 
-const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
+// This file lives in server/org/; the paths below are relative to server/.
+const SERVER_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
 const FAKE_ACP = join(SERVER_DIR, "testing", "fake-acp-cli.ts");
 const posixOnly = describe.skipIf(process.platform === "win32");
@@ -141,16 +144,7 @@ async function start() {
   });
   child.stdout!.on("data", (c) => (log += c));
   child.stderr!.on("data", (c) => (log += c));
-  const deadline = Date.now() + 20_000;
-  for (;;) {
-    try {
-      if ((await fetch(`${BASE}/api/health`)).ok) return;
-    } catch {
-      /* not up yet */
-    }
-    if (Date.now() > deadline) throw new Error(`server never came up:\n${log}`);
-    await sleep(150);
-  }
+  await waitForServerReady(child, BASE, () => log);
 }
 
 posixOnly("Perspicax organization, slice 3: directory, sharing with a user, access cards", () => {
@@ -178,18 +172,20 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     prompts = join(home, "claude-prompts.jsonl");
     writeFileSync(join(data, "config.json"), JSON.stringify({
       instances: {
-        claude: { driver: "claudeAgent", environment: { FAKE_CLAUDE_DUMP: dump, FAKE_CLAUDE_PROMPTS: prompts }, config: { cli: FAKE_CLAUDE, fullAuto: true } },
+        // fcce56775 (#1812) separated subscription instances from API-key
+        // instances. These cases exercise the org key, not a subscription.
+        claude: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_DUMP: dump, FAKE_CLAUDE_PROMPTS: prompts }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
         // a turn that never ends on its own: how a bot is held busy
         stuck: { driver: "claudeAgent", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_PROMPTS: prompts }, config: { cli: FAKE_CLAUDE, fullAuto: true } },
-        ghost: { driver: "claudeAgent", config: { cli: "/nonexistent/claude", fullAuto: true } },
+        ghost: { driver: "claudeAgent", access: "api", config: { cli: "/nonexistent/claude", fullAuto: true, requireApiKey: true } },
         // held open with its permission broker reachable: how cards are raised
-        hold: { driver: "claudeAgent", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_DUMP: join(home, "hold-dump.json") }, config: { cli: FAKE_CLAUDE, fullAuto: true } },
+        hold: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_DUMP: join(home, "hold-dump.json") }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
         grok: { driver: "grokAgent", config: { cli: FAKE_ACP, fullAuto: false } },
       },
     }));
     await start();
     alice = await signIn(ALICE);
-  }, 40_000);
+  }, 90_000);
 
   afterAll(async () => {
     child?.kill("SIGTERM");
@@ -229,12 +225,12 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     expect(engines.find((e) => e.instanceId === "ghost")).toMatchObject({ driver: "claudeAgent", installed: false });
     expect(engines.find((e) => e.instanceId === "grok")).toMatchObject({ installed: true });
     // a member signed in reads it too; a session-less local caller (any bot's
-    // shell on this shared server) learns the app name only
+    // shell on this shared server) learns the app name and Sagax version (#1996)
     const bob = await signIn(BOB);
     expect(Array.isArray((await api("GET", "/api/health", bob)).body.engines)).toBe(true);
     const bare = await api("GET", "/api/health");
     expect(bare.status).toBe(200);
-    expect(bare.body).toEqual({ app: "openmausbot", product: "sagax" });
+    expect(bare.body).toEqual({ app: "openmausbot", product: "sagax", version: releaseVersion() });
   });
 
   it("S3-4 (B): shared with bob, answered with the org key; dave sees none of it", async () => {
@@ -243,8 +239,10 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     // the interim attach window (none here). The org's GitHub OAuth App
     // (none) and the plugin marketplace policy (any, the default).
     expect((await api("GET", "/api/org", alice)).body.settings).toEqual({
-      orgKeyConfigured: true, allowFullAccess: true, allowVaultExport: true, memberEnvironmentAutonomy: true, confidentialThreadsByDefault: false, memberAutoApproval: true, interimAttach: { until: null, people: 0 },
+      orgKeyConfigured: true, allowFullAccess: true, allowVaultExport: true, memberEnvironmentAutonomy: true, confidentialThreadsByDefault: false, memberAutoApproval: true, pendingApprovalExpireDays: 7, interimAttach: { until: null, people: 0 },
       github: { clientId: null, fromEnvironment: false }, pluginMarketplaces: { mode: "any" },
+      // 84841aeed (capabilities lot 4): this older directory keeps local policy.
+      pluginMarketplacesOwner: "local",
       // Pulsatrix Flow for members (#1091)
       flowPlugins: expect.anything(),
     });
@@ -321,7 +319,9 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     const mine = (await api("GET", "/api/me/engines", bob)).body.engines as Array<{ instanceId: string; orgKey: boolean; orgKeyNotGiven?: boolean; myTurns: string }>;
     expect(mine.find((engine) => engine.instanceId === "claude")).toMatchObject({ orgKey: false, orgKeyNotGiven: true, myTurns: "none" });
     setBob(undefined);
-    await signIn(BOB);
+    const restored = await signIn(BOB);
+    // The directory poll restores the grant asynchronously after this login.
+    await waitFor(async () => ((await api("GET", "/api/me/engines", restored)).body.engines as Array<{ instanceId: string; orgKey: boolean }>).find((engine) => engine.instanceId === "claude")?.orgKey === true);
   }, 60_000);
 
   it("S3-5 (C): removing bob's grant ends his stream and the bot is gone for him at once", async () => {
@@ -344,16 +344,26 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     await waitFor(async () => (await api("GET", "/api/org", alice)).body.settings?.orgKeyConfigured === false);
     expect((await api("POST", `/api/bots/${shared.id}/direct-grants`, alice, { userId: bobId })).status).toBe(200);
     const bob = await signIn(BOB);
+    await waitFor(async () => {
+      const engine = (await api("GET", "/api/me/engines", bob)).body.engines.find((entry: { instanceId: string }) => entry.instanceId === "claude");
+      return engine?.orgKey === false && engine.orgKeyNotGiven !== true && engine.myTurns === "none";
+    });
+    // Access failures are deduplicated in a conversation. Keep this missing-
+    // credential case separate from the earlier engine-policy refusals.
+    const conversation = await api("POST", `/api/bots/${shared.id}/tasks`, bob, { title: "Missing organization credential" });
+    expect(conversation.status, conversation.text).toBe(201);
+    const threadId = conversation.body.task.threadId as string;
     const aliceStream = await openStream(alice);
     const bobStream = await openStream(bob);
     const before = readFileSync(dump, "utf8");
-    const sent = await api("POST", `/api/bots/${shared.id}/messages`, bob, { text: "no key now" });
+    const sent = await api("POST", `/api/bots/${shared.id}/messages`, bob, { threadId, text: "no key now" });
     expect(sent.status, sent.text).toBe(202);
     const card = await waitFor(async () => {
-      const bot = (await botsOf(bob)).find((b) => b.id === shared.id);
-      return bot?.messages.find((m) => m.kind === "access") ?? null;
+      const messages = (await api("GET", `/api/threads/${threadId}/messages`, bob)).body.messages as Array<{ kind: string; access?: unknown }>;
+      return messages.find((message) => message.kind === "access") ?? null;
     });
-    // bob spoke: the card is his to act on (his subscription, his key)
+    // Bob's server-engine grant was restored above. The missing credential,
+    // rather than a policy refusal, is his to fix (his subscription, his key).
     expect(card.access).toMatchObject({ reason: "no_access", engine: "Claude", botId: shared.id, payer: "speaker", payerPrincipalId: bobId, cause: "no_credentials", subscriptionSignIn: true, keysUrl: `${idp.issuer}/console/credentials?kind=model` });
     expect(readFileSync(dump, "utf8")).toBe(before);
     // private threads: bob hears his own thread's failure; alice, the bot's
@@ -471,7 +481,7 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     const cardsBefore = await accessCards(bob, shared.id);
     const editRefusals = () => log.split(`bot=${shared.id} refused: no_access`).length;
     const refusedBeforeEdit = editRefusals();
-    const edited = await api("POST", `/api/bots/${shared.id}/messages/${mine!.id}/edit`, bob, { text: "edited by bob" });
+    const edited = await api("POST", `/api/bots/${shared.id}/messages/${mine!.id}/edit`, bob, { threadId: xavier.threadId, text: "edited by bob" });
     expect(edited.status, edited.text).toBe(202);
     // The same missing sign-in was already shown on this thread, so the edit
     // is refused without a second copy of that card (shared/failure-dedup.ts).
@@ -579,6 +589,61 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     expect(own.status, own.text).toBe(200);
     await sleep(300);
     expect(promptsNow()).not.toContain("work from dot");
+  }, 60_000);
+
+  it("S3-13: a peer receipt never names a bot its owner unshared and renamed while the asker's card was open", async () => {
+    // Isolation between people: alice shares a writer bot with bob, a bot of
+    // bob's asks it and bob's card is open; alice takes the share back and
+    // renames the writer. Bob allows, and the answer his bot reads names the
+    // writer by the id it sent, never by alice's new private name; the
+    // writer gets nothing.
+    const PRIVATE = "Writer private codename";
+    const bob = await signIn(BOB);
+    const writer = await createBot(alice, "Shared writer", "claude");
+    expect((await api("POST", `/api/bots/${writer.id}/direct-grants`, alice, { userId: bobId })).status).toBe(200);
+    // a bot of bob's own, so this case needs nothing an earlier case made
+    const asker = await createBot(bob, "Asking bot", "claude");
+    const reviewed = await api("PATCH", `/api/bots/${asker.id}`, bob, { approvePeerComms: true });
+    expect(reviewed.status, reviewed.text).toBe(200);
+    const minted = await fetch(`${BASE}/api/testing/internal-capability`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-openmausbot-test-capability": TEST_CAPABILITY_KEY },
+      body: JSON.stringify({ botId: asker.id, threadId: asker.threadId, kind: "agents" }),
+    });
+    expect(minted.status).toBe(201);
+    const token = ((await minted.json()) as { token: string }).token;
+    const promptsNow = () => (existsSync(prompts) ? readFileSync(prompts, "utf8") : "");
+    try {
+      const asked = fetch(`${BASE}/api/internal/ask-bot`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ toBotId: writer.id, message: "hop to the writer once private" }),
+      });
+      void asked.catch(() => {});
+      const card = await waitFor(async () => {
+        const got = await api("GET", `/api/threads/${asker.threadId}/messages`, bob);
+        return (got.body.messages as Array<{ card?: { requestId?: string; answered?: string; dismissed?: boolean; title?: string } }> | undefined)
+          ?.find((m) => m.card?.requestId && !m.card.answered && !m.card.dismissed) ?? null;
+      });
+      expect(card.card?.title).toContain("@Shared writer");
+      expect((await api("DELETE", `/api/bots/${writer.id}/direct-grants/${bobId}`, alice)).status).toBe(200);
+      expect((await api("PATCH", `/api/bots/${writer.id}`, alice, { name: PRIVATE })).status).toBe(200);
+      const answered = await api("POST", `/api/threads/${asker.threadId}/respond`, bob, { requestId: card.card!.requestId, behavior: "allow" });
+      expect(answered.status, answered.text).toBeLessThan(300);
+      const response = await asked;
+      const text = await response.text();
+      expect(response.status, text).toBe(200);
+      const result = JSON.parse(text) as { error?: string; receipt?: Record<string, unknown> };
+      expect(result.receipt).not.toHaveProperty("botName");
+      expect(text).not.toContain(PRIVATE);
+      expect(result).toMatchObject({ error: "that bot is no longer available to this bot", receipt: { botId: writer.id, outcome: "failed" } });
+      // nothing in bob's conversation names it, and the writer got no turn
+      expect((await api("GET", `/api/threads/${asker.threadId}/messages`, bob)).text).not.toContain(PRIVATE);
+      await sleep(300);
+      expect(promptsNow()).not.toContain("hop to the writer once private");
+    } finally {
+      await api("PATCH", `/api/bots/${asker.id}`, bob, { approvePeerComms: false });
+    }
   }, 60_000);
 
   it("S3-7: Full access on a member's bot is its owner's choice, confirmed once; Custom never", async () => {
@@ -781,13 +846,13 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     };
     const respond = (auth: Auth, requestId: string, extra: Record<string, unknown> = {}) =>
       api("POST", `/api/threads/${cora.threadId}/respond`, auth, { requestId, behavior: "allow", ...extra });
-    const CW = "mcp__perspicax_quasar__cw_psa__write";
+    const CW = "mcp__perspicax_quasar__cw_psa_write";
     try {
       // a ConnectWise write through Perspicax (the owner's own tokens): the owner's card
       const first = await ask(CW, { resource: "service/tickets/41", operation: "update", body: { status: "In progress" } });
       expect(first.card, "a card for the owner").toBeTruthy();
       expect(first.card.adminApproval).toBeUndefined();
-      expect(first.card.ownerRule).toMatchObject({ tool: "perspicax_quasar__cw_psa__write", scope: { resource: "service/tickets", operation: "update" } });
+      expect(first.card.ownerRule).toMatchObject({ tool: "perspicax_quasar__cw_psa_write", scope: { resource: "service/tickets", operation: "update" } });
       // never in an admin's queue
       expect(((await api("GET", "/api/org/approvals", alice)).body.approvals as Array<{ requestId: string }>).some((row) => row.requestId === first.id)).toBe(false);
       // an admin cannot answer, or save a rule on, someone else's owner card

@@ -8,7 +8,7 @@ import { STABLE_ACK, STABLE_CWD_NOTE, STABLE_END_MARKER, splitStableMessages, st
 import { startFakeHttpMcp } from "../testing/fake-http-mcp-server.ts";
 import { whopLikeCatalog } from "../testing/whop-like-catalog.ts";
 import { buildMcpServers } from "./pi.ts";
-import { mcpStdioServer } from "../mcp-gate-config.ts";
+import { mcpStdioServer } from "../mcp/mcp-gate-config.ts";
 
 import extension, {
   allocateToolName,
@@ -279,6 +279,74 @@ describe("Pi MCP startup budgets", () => {
 });
 
 describe("Pi MCP extension registration", () => {
+  it("refreshes a switched role before the next call and resets warm declarations on the next turn", async () => {
+    const dir = tempDir();
+    const rolePath = join(dir, "role");
+    writeFileSync(rolePath, "default");
+    const script = fakeMcpScript(`
+      import { readFileSync, writeFileSync } from "node:fs";
+      import { createInterface } from "node:readline";
+      const send = (value) => process.stdout.write(JSON.stringify(value) + "\\n");
+      let failNextList = false;
+      createInterface({ input: process.stdin }).on("line", (line) => {
+        const msg = JSON.parse(line);
+        if (msg.method === "initialize") send({ jsonrpc: "2.0", id: msg.id, result: { capabilities: { tools: { listChanged: true } } } });
+        else if (msg.method === "tools/list" && failNextList) {
+          failNextList = false;
+          send({ jsonrpc: "2.0", id: msg.id, error: { code: -32000, message: "Discovery unavailable" } });
+        } else if (msg.method === "tools/list") send({ jsonrpc: "2.0", id: msg.id, result: { tools: [
+          { name: "identity_switch", inputSchema: { type: "object", properties: { profile: { type: "string" } } } },
+          { name: readFileSync(process.env.ROLE_PATH, "utf8") === "billing" ? "write_bill" : "read_ticket", inputSchema: { type: "object", properties: {} } },
+        ] } });
+        else if (msg.method === "tools/call") {
+          if (msg.params.name === "identity_switch") {
+            writeFileSync(process.env.ROLE_PATH, msg.params.arguments.profile);
+            send({ jsonrpc: "2.0", method: "notifications/tools/list_changed" });
+          }
+          if (msg.params.name === "write_bill") {
+            failNextList = true;
+            send({ jsonrpc: "2.0", method: "notifications/tools/list_changed" });
+          }
+          send({ jsonrpc: "2.0", id: msg.id, result: { content: [{ type: "text", text: msg.params.name }] } });
+        }
+      });
+    `);
+    process.env.SAGAX_MCP_CONFIG = join(dir, "mcp.json");
+    writeFileSync(process.env.SAGAX_MCP_CONFIG, JSON.stringify({ mcpServers: {
+      perspicax: { command: process.execPath, args: [script], env: { ROLE_PATH: rolePath }, scope: "custom" },
+    } }));
+    const tools = new Map<string, RegisteredTool>();
+    const registrations = new Map<string, number>();
+    const handlers = new Map<string, ShutdownHandler>();
+    let active = ["native_read"];
+    await extension({
+      registerTool(tool) {
+        tools.set(tool.name, tool);
+        registrations.set(tool.name, (registrations.get(tool.name) ?? 0) + 1);
+        active = [...new Set([...active, tool.name])];
+      },
+      on(event, handler) { handlers.set(event, handler); },
+      getActiveTools: () => active,
+      setActiveTools: (names) => { active = names; },
+    });
+    const confirm = vi.fn(async () => true);
+    const run = (name: string, args = {}) => tools.get(name)!.execute("call", args, undefined, undefined, { ui: { confirm } });
+    try {
+      expect(active).toEqual(["native_read", "perspicax_identity_switch", "perspicax_read_ticket"]);
+      await expect(run("perspicax_identity_switch", { profile: "billing" })).resolves.toMatchObject({ content: [{ text: "identity_switch" }] });
+      expect(active).toEqual(["native_read", "perspicax_identity_switch", "perspicax_write_bill"]);
+      await expect(run("perspicax_write_bill")).resolves.toMatchObject({ content: [{ text: "write_bill" }, { text: expect.stringContaining("Its result still applies") }] });
+      expect(confirm).toHaveBeenCalledTimes(2);
+      expect(confirm).toHaveBeenLastCalledWith("Allow perspicax:write_bill?", "Run perspicax:write_bill");
+      // Sagax ends the role at the generation boundary while Pi stays warm.
+      writeFileSync(rolePath, "default");
+      await handlers.get("before_agent_start")?.({});
+      expect(active).toEqual(["native_read", "perspicax_identity_switch", "perspicax_read_ticket"]);
+      expect([...tools.keys()]).toEqual(["perspicax_identity_switch", "perspicax_read_ticket", "perspicax_write_bill"]);
+      expect([...registrations.values()]).toEqual([1, 1, 1]);
+    } finally { await handlers.get("session_shutdown")?.(); }
+  });
+
   const scopedApi = (initial: string[]) => {
     let active = initial;
     const tools: RegisteredTool[] = [];
@@ -385,7 +453,10 @@ describe("Pi MCP extension registration", () => {
       expect(await f.handlers.get("tool_call")?.({ toolName: "mail_read_notes_2" })).toMatchObject({ block: true });
     } finally { await f.handlers.get("session_shutdown")?.(); }
   });
-  it.each([["ask", 1], ["auto", 1], ["edits", 1], ["full", 0]] as const)("asks before Sagax's own Browser and Data tools at %s, as on Claude (engine parity)", async (approvalMode, cards) => {
+  // #1982: Full also confirms so Sagax's gate sees the call (reads/writes
+  // follow the level in index.ts). confirm(false) declines; confirm(true)
+  // stands for the harness Full-approving.
+  it.each([["ask"], ["auto"], ["edits"], ["full"]] as const)("asks before Sagax's own Browser and Data tools at %s, as on Claude (engine parity)", async (approvalMode) => {
     const receipt = join(tempDir(), "data-call.txt");
     const script = fakeMcpScript(`
       import { createInterface } from "node:readline";
@@ -408,12 +479,16 @@ describe("Pi MCP extension registration", () => {
       const asked: string[] = [];
       const ui = { confirm: async (title: string) => { asked.push(title); return false; } };
       await tools[0].execute("call", { sql: "select 1" }, undefined, undefined, { ui });
-      expect(asked).toEqual(cards ? ["Allow data:data_sql?"] : []);
-      expect(existsSync(receipt)).toBe(cards === 0);
+      expect(asked).toEqual(["Allow data:data_sql?"]);
+      expect(existsSync(receipt)).toBe(false);
+      asked.length = 0;
+      await tools[0].execute("call", { sql: "select 1" }, undefined, undefined, { ui: { confirm: async (title: string) => { asked.push(title); return true; } } });
+      expect(asked).toEqual(["Allow data:data_sql?"]);
+      expect(readFileSync(receipt, "utf8")).toBe("data_sql");
     } finally { await handlers.get("session_shutdown")?.(); }
   });
 
-  it.each([["ask", 1], ["auto", 1], ["edits", 1], ["full", 0]] as const)("asks before each tool on the person's own computer at %s, and not under her Full access", async (approvalMode, cards) => {
+  it.each([["ask"], ["auto"], ["edits"], ["full"]] as const)("asks before each tool on the person's own computer at %s (#1982 Full reaches Sagax)", async (approvalMode) => {
     const receipt = join(tempDir(), "computer-call.txt");
     const script = fakeMcpScript(`
       import { createInterface } from "node:readline";
@@ -436,8 +511,12 @@ describe("Pi MCP extension registration", () => {
       const asked: string[] = [];
       const ui = { confirm: async (title: string) => { asked.push(title); return false; } };
       await tools[0].execute("call", { x: 1 }, undefined, undefined, { ui });
-      expect(asked).toEqual(cards ? ["Allow click on your computer?"] : []);
-      expect(existsSync(receipt)).toBe(cards === 0);
+      expect(asked).toEqual(["Allow click on your computer?"]);
+      expect(existsSync(receipt)).toBe(false);
+      asked.length = 0;
+      await tools[0].execute("call", { x: 1 }, undefined, undefined, { ui: { confirm: async (title: string) => { asked.push(title); return true; } } });
+      expect(asked).toEqual(["Allow click on your computer?"]);
+      expect(readFileSync(receipt, "utf8")).toBe("click");
     } finally { await handlers.get("session_shutdown")?.(); }
   });
 

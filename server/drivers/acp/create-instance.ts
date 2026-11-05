@@ -1,6 +1,6 @@
 /** ACP ProviderInstance factory. */
 import { PROVIDER_CREDENTIAL_ENV, stripControlPlaneEnv, WORKSPACE_CREDENTIAL_ENV } from "../../config.ts";
-import { openStartupModelCatalog, writeStartupModelCache } from "../../startup-model-catalog.ts";
+import { openStartupModelCatalog, writeStartupModelCache } from "../../models/startup-model-catalog.ts";
 import { DeviceAuthController } from "../device-auth.ts";
 import { LinkSignInController } from "../link-sign-in.ts";
 import { killCliTree, spawnCli } from "../../procs.ts";
@@ -101,7 +101,7 @@ export async function createAcpInstance(
   const listeners = new Set<RuntimeEventListener>();
   /** Threads whose native session ran out of context room: the next turn
    * (Retry) starts a fresh session from the chat's rebuild instead of
-   * reopening the already-full one (server/context-renewal.ts). */
+   * reopening the already-full one (server/context/context-renewal.ts). */
   const freshNextTurn = new Set<string>();
   let disposing = false;
   const requireRunning = () => {
@@ -145,7 +145,9 @@ export async function createAcpInstance(
   const closeSession = (threadId: string, why: string) => {
     const session = sessions.get(threadId);
     if (!session || session.closing) return;
+    if (process.env.SAGAX_ACP_REUSE_DIAG === "1") console.error(`[acp-reuse-diag] closeSession thread=${threadId.slice(0, 8)} why=${why}`);
     session.closing = true;
+    session.budget?.retiring();
     if (session.idleTimer) clearTimeout(session.idleTimer);
     appendNative(threadId, { dir: "out", source: SOURCE, msg: { close: why } });
     // a new turn must never adopt a closing session
@@ -170,6 +172,7 @@ export async function createAcpInstance(
     if (session.idleTimer) clearTimeout(session.idleTimer);
     session.idleTimer = setTimeout(() => closeSession(threadId, "idle"), SESSION_IDLE_MS);
     session.idleTimer.unref?.();
+    session.budget?.idle();
   };
   // "Always allow this session", remembered by the driver when the agent
   // offered no `allow_always` of its own: the exact operations (kind,

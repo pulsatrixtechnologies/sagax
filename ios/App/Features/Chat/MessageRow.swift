@@ -76,7 +76,10 @@ struct MessageRow: View {
                 .environment(\.desktopMessageActions, desktop == nil || isPendingEdit ? nil : DesktopMessageActions(
                     copyText: message.webhookContent?.task ?? Citations.split(attachedContent.text).display,
                     actions: actionSet,
-                    at: message.date
+                    at: message.date,
+                    react: { emoji in Task { await session.react(to: message, in: chat.threadId, emoji: emoji) } },
+                    mine: Set(ReactionRules.chips(message.reactions ?? [], selfIds: ReactionChipsRow.selfIds(session, threadId: chat.threadId)).filter(\.mine).map(\.emoji)),
+                    moreReactions: { addingReaction = true }
                 ))
             }
 
@@ -262,6 +265,14 @@ struct MessageRow: View {
         } else if let outbound = message.outbound, outbound.isDrawable, message.role == .bot {
             // a phone call or a purchase on its card (OutboundCard.tsx)
             OutboundCardView(card: outbound, accent: Theme.readable(MausPalette.color(chat.color)))
+        } else if let attention = message.attention, message.role == .bot, message.kind == .text {
+            // 2026-11-05: what a bot's turn elsewhere left for you (AttentionCard.tsx)
+            AttentionCardView(
+                card: attention,
+                tint: MausPalette.color(chat.color),
+                openThread: openThread,
+                openRun: attention.routineRunId.map { runId in attentionRunOpener(runId) }
+            )
         } else {
             kindContent
         }
@@ -278,7 +289,10 @@ struct MessageRow: View {
         case .options:
             // A structured ask draws its own card: its answers are the
             // model's questions, not an allow/deny a tap could stand for.
-            if message.card?.phoneCallConsent != nil {
+            if message.card?.roleTransition != nil {
+                // 2026-11-05 (JC): no "Agit comme" card in the chat
+                EmptyView()
+            } else if message.card?.phoneCallConsent != nil {
                 // one-time phone-call consent (PhoneCallConsentCard.tsx)
                 PhoneCallConsentCardView(
                     chat: chat,
@@ -306,7 +320,10 @@ struct MessageRow: View {
                 TextBubble(message: message, chat: chat, tailed: endsRun, openLink: openLink, cwAsk: askCw)
             }
         case .activity:
-            if let widget = message.tool?.widget, widget.isKnown, CwWidgets.isViewTool(message.tool?.name) {
+            if message.tool?.roleNotice != nil {
+                // 2026-11-05 (JC): no role notice in the chat
+                EmptyView()
+            } else if let widget = message.tool?.widget, widget.isKnown, CwWidgets.isViewTool(message.tool?.name) {
                 CwWidgetCard(widget: widget, threadId: chat.threadId, botId: message.from?.botId, brand: message.tool?.product) { action in
                     Task { await session.requestCwAction(action, threadId: chat.threadId, botId: message.from?.botId) }
                 }
@@ -315,6 +332,12 @@ struct MessageRow: View {
                 FinishUntilRow(line: line)
             } else if let ref = message.parallelTask, ref.isCard {
                 ParallelTaskCardView(chat: chat, message: message, ref: ref, openThread: openThread)
+            } else if let refusal = PreSendRefusal.kind(of: message) {
+                // #2013: an engine refusal before any prompt went out. A 1:1
+                // chat never draws it (the composer says it); a room keeps a
+                // quiet line, never the red error row.
+                PreSendRefusalLine(kind: refusal)
+                    .accessibilityIdentifier("presend-refusal-\(message.id)")
             } else {
                 ActivityChip(
                     tool: message.tool, threadRef: message.threadRef?.live, openThread: openThread,
@@ -323,7 +346,7 @@ struct MessageRow: View {
             }
             // A failed turn on the conversation's last row: Retry sends the
             // last user line again (ChatView.tsx ErrorRow).
-            if retryable, case let .bot(bot) = chat {
+            if retryable, PreSendRefusal.kind(of: message) == nil, case let .bot(bot) = chat {
                 ErrorRetryButton { await session.regenerate(for: bot) }
                     .accessibilityIdentifier("error-retry-\(message.id)")
             }
@@ -372,18 +395,31 @@ struct MessageRow: View {
             }
         case .routineRun:
             if let card = message.routineRun {
+                // 2026-11-05 (#2008): the bot that ran it leads the card; a
+                // room card falls back to the message's sender when listed.
+                let runBot: Bot? = {
+                    if case let .bot(bot) = chat { return session.state.bot(bot.id) ?? bot }
+                    if let id = message.from?.botId { return session.state.bot(id) }
+                    return nil
+                }()
                 RoutineRunCardView(
                     card: card,
                     at: message.date,
                     tint: MausPalette.color(chat.color),
+                    bot: runBot,
                     openRun: routineRunOpener(card),
                     resume: card.autoPausedAfter == nil ? nil : {
                         // 2026-10-26: back on, the failure count from zero
                         Task {
                             if await session.resumeRoutine(id: card.routineId) != nil { afterResume?() }
                         }
-                    }
+                    },
+                    openThread: openThread
                 )
+                // 2026-11-05: items only the person can do, each with its ticket
+                if let attention = message.attention, !attention.items.isEmpty, card.knownStatus == .completed {
+                    AttentionItemsView(items: attention.items)
+                }
             } else if let text = message.text, !text.isEmpty {
                 // A computer that sent the kind without its card: the text
                 // is written for exactly this reader.
@@ -452,6 +488,25 @@ struct MessageRow: View {
     /// View run opens the run's detail (a run of a deleted routine too, to
     /// read). A run the computer no longer lists falls back to its
     /// execution conversation when this phone has a route to it.
+    /// A card's run, opened by its id (the card carries no RoutineRunCard).
+    private func attentionRunOpener(_ runId: String) -> () -> Void {
+        {
+            Task {
+                let listing = await session.loadRoutines()
+                if let run = listing.runs.first(where: { $0.id == runId }) {
+                    openedRun = OpenedRoutineRun(run: run, routine: listing.routines.first { $0.id == run.routineId })
+                }
+            }
+        }
+    }
+
+    /// The bot a role banner names ("Nova s'est arrêté").
+    private var roleNoticeBotName: String? {
+        if let id = message.from?.botId, let bot = session.state.bot(id) { return bot.name }
+        if case let .bot(bot) = chat { return bot.name }
+        return nil
+    }
+
     private func routineRunOpener(_ card: RoutineRunCard) -> (() -> Void)? {
         let fallback = session.state.routineExecutionRef(for: card)
         let openThread = openThread

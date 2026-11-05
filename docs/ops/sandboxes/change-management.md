@@ -8,7 +8,7 @@ and this change does not deploy.
 
 1. The pull request links the manifests and the runbook section it
    changes. Review is by someone other than the author. CI on the
-   branch is green, including `server/sandbox-backend.test.ts`.
+   branch is green, including `server/sandbox/sandbox-backend.test.ts`.
 2. The image is the digest that CI built, not a moving tag. The record
    stores the digest.
 3. `kubectl diff` (or the Helm diff for the autoscaler values) is pasted

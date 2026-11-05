@@ -10,13 +10,13 @@ des choses ; là, TOUT ce qu'un bot fait spamme un admin d'approbations. »
 ## 1. État d'avant (cause du spam admin)
 
 - Les cartes d'approbation vont déjà au **propriétaire** du bot
-  (`server/approval-audience.ts` : `approvalAudience` = `ownerUserId`).
+  (`server/approvals/approval-audience.ts` : `approvalAudience` = `ownerUserId`).
 - Mais sur un serveur d'organisation, un bot dont le propriétaire n'est pas
   admin (`memberOwnedBot`) passe chaque carte par
-  `memberBotAdminApproval` (`server/engine-access.ts`). Cette fonction
+  `memberBotAdminApproval` (`server/engines/engine-access.ts`). Cette fonction
   marquait `adminApproval: true` **tout** sauf deux cas : un outil de
   fichier qui reste dans l'espace de travail du bot, et un outil `agents`
-  de la liste revue (`server/member-tool-scope.ts`). Donc chaque outil MCP
+  de la liste revue (`server/people/member-tool-scope.ts`). Donc chaque outil MCP
   (ConnectWise par Perspicax, BookStack, le serveur MCP distant du
   propriétaire), chaque recherche web, etc. devenait une carte d'admin.
 - Une carte `adminApproval` :
@@ -135,7 +135,7 @@ interface OwnerRule {
   id: string;
   ownerId: string;          // la personne qui l'a créée (le propriétaire)
   botId: string | null;     // null = tous mes bots
-  tool: string;             // outil normalisé : "perspicax__cw_psa__write", "WebSearch"
+  tool: string;             // outil normalisé : "perspicax__cw_psa_write", "WebSearch"
   scope: Record<string, string>; // portée : cible tirée des arguments
   destructive?: "delete" | "bulk" | "external-message";
   behavior: "allow" | "ask" | "deny";
@@ -233,7 +233,7 @@ possible (hors de ce chantier) : un approbateur `bot_owner` dans
 
 ## 10. Tests
 
-`server/owner-approval.test.ts` (pur) et `server/engine-access.test.ts` :
+`server/approvals/owner-approval.test.ts` (pur) et `server/engines/engine-access.test.ts` :
 Toujours / Une fois / Refuser, retenu par personne, pas partagé entre
 personnes, destructif exige une règle explicite, mode auto, mode bypass
 journalisé, rien ne contourne la route admin ni les holds, admin sollicité
@@ -243,7 +243,7 @@ propriétaire.
 ## 11. Recouvrement avec la PR #508 (registre MCP `resource:verb`)
 
 La PR #508 (`feat/mcp-permissions-coverage`, ouverte le 2026-10-14, mode
-shadow) ajoute `server/mcp-permissions.ts` : une permission par outil
+shadow) ajoute `server/mcp/mcp-permissions.ts` : une permission par outil
 Sagax (`memory:save`, `api:write`), des rôles (viewer, member, operator,
 admin, service), des portées self/team/org, une liste de refus
 `SAGAX_MCP_DENY` par clé de ressource (`cw:ticket.*`) et un audit par appel.

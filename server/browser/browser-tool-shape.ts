@@ -9,7 +9,7 @@
 // in history: a product-page snapshot cost 10-17k tokens instead of 2-4k, and
 // every later model call in the thread re-read it. This module fixes both at
 // the boundary so the saving applies to every engine.
-import { trimResultText } from "../mcp-trim.ts";
+import { trimResultText } from "../mcp/mcp-trim.ts";
 
 /** Launch, session and network settings Sagax owns through the
  * environment (see browser-engine.ts). A model has no business setting them

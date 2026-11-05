@@ -5,7 +5,8 @@
 // nothing the window can show (conversationHasData): it appears with the
 // first result or loaded table, live, and goes with a conversation without.
 import { useEffect, useMemo, useRef } from "react";
-import { api, useStore, type Bot, type ConfigStatus } from "@/state/store";
+import { useStoreDispatch, useStoreSelector } from "@/state/store-selector";
+import { api, type Bot, type ConfigStatus } from "@/state/store";
 import { dataWindowEnabled } from "@/lib/feature-flags";
 import { conversationHasData, openDataWindow, subscribeDataWindowMessages } from "@/lib/data-window";
 import { t } from "@/lib/i18n";
@@ -14,10 +15,11 @@ import { t } from "@/lib/i18n";
  * A blocked pop-up or a refused window says so in the chat's error banner
  * (the menu is gone by then). */
 export function useDataWindowItem(bot: Pick<Bot, "id" | "name" | "messages">): { label: string; onOpen: () => void } | null {
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const config = useStoreSelector((current) => current.config);
   // One pass over the transcript the page already holds, again only when it changes.
   const hasData = useMemo(() => conversationHasData(bot.messages), [bot.messages]);
-  if (!dataWindowEnabled(state.config) || window.ogb?.remoteClient?.active === true || !hasData) return null;
+  if (!dataWindowEnabled(config) || window.ogb?.remoteClient?.active === true || !hasData) return null;
   return {
     label: t("dataWindow.open"),
     onOpen: () => {
@@ -43,9 +45,10 @@ export function useDataWindowItem(bot: Pick<Bot, "id" | "name" | "messages">): {
  * kept here, so the composer sends it with the next message to that bot
  * (shared/data-context.ts). A window that goes clears only its own bot's. */
 export function DataWindowViewSync() {
-  const { state, dispatch } = useStore();
-  const current = useRef(state.dataView);
-  current.current = state.dataView;
+  const dispatch = useStoreDispatch();
+  const dataView = useStoreSelector((current) => current.dataView);
+  const current = useRef(dataView);
+  current.current = dataView;
   useEffect(() => subscribeDataWindowMessages((message) => {
     if (message.type !== "view") return;
     if (message.view) dispatch({ type: "dataView", view: message.view });

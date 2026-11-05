@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { EMPTY_ONBOARDING } from "./onboarding";
 import { ANCHOR_EFFECTS, currentStep, stepNumber, TOUR_STEPS, tourInProgress, withTourFinished, withTourReset } from "./guided-tour";
@@ -61,6 +63,40 @@ describe("guided tour", () => {
     expect(step("tour.computer-browser").onExit).toBe("closeComputer");
     expect(step("tour.apps-panel").onExit).toBe("closeApps");
     expect(step("tour.automations-page").onExit).toBe("backToChat");
+  });
+
+  it("skips the Computer step when its header control is absent (Refs #2000)", () => {
+    expect(step("tour.computer").anchor).toBe("computer");
+    expect(step("tour.computer").skipIfMissing).toBe(true);
+  });
+
+  it("resolves every tour anchor in desktop source (Refs #2000)", () => {
+    const root = join(import.meta.dirname, "..");
+    const blobs: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        if (name === "locales" || name === "gallery") continue;
+        const path = join(dir, name);
+        const st = statSync(path);
+        if (st.isDirectory()) walk(path);
+        else if (/\.(tsx?)$/.test(name) && !/\.test\.tsx?$/.test(name)) blobs.push(readFileSync(path, "utf8"));
+      }
+    };
+    walk(root);
+    const src = blobs.join("\n");
+    const ids = new Set<string>();
+    for (const s of TOUR_STEPS) {
+      if (s.anchor) ids.add(s.anchor);
+      if (s.fallbackAnchor) ids.add(s.fallbackAnchor);
+    }
+    // computer must be present (Advanced / remote Simple header). Other
+    // skipIfMissing anchors may still be absent until their panels open.
+    expect(src).toContain('data-tour="computer"');
+    for (const id of ids) {
+      const step = TOUR_STEPS.find((s) => s.anchor === id || s.fallbackAnchor === id)!;
+      const present = src.includes(`data-tour="${id}"`) || src.includes(`tourId: "${id}"`) || src.includes(`"data-tour": "${id}"`);
+      if (!step.skipIfMissing || id === "computer") expect(present, id).toBe(true);
+    }
   });
 
   it("knows which effects the control's own click performs", () => {

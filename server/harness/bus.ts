@@ -8,16 +8,17 @@
 // Streamed text is merged here, once, for every engine on every kind of
 // install: a provider sends a reply as hundreds of small text deltas, and
 // each would otherwise be its own log line, listener call and SSE frame. The
-// bus holds a thread's text for at most DELTA_MERGE_MS and publishes it as
-// one delta, sooner when anything else happens on that thread, so the order
+// bus publishes the first text of a stream at once, then holds a thread's
+// text for at most DELTA_MERGE_MS and publishes it as one delta, sooner when
+// anything else happens on that thread, so the order
 // of events never changes.
 import { basename, join } from "node:path";
 
 import { EVENTS_DIR } from "../config.ts";
-import { appendLog, logAppended, registerSealedLog, sealLogLines } from "../content-at-rest.ts";
-import { threadLogsForgotten } from "../forgotten-threads.ts";
+import { appendLog, logAppended, registerSealedLog, sealLogLines } from "../encryption/content-at-rest.ts";
+import { threadLogsForgotten } from "../threads/forgotten-threads.ts";
 import { redactSecrets } from "../redact.ts";
-import { capThreadLog, currentThreadLogCap } from "../thread-log-rotation.ts";
+import { capThreadLog, currentThreadLogCap } from "../threads/thread-log-rotation.ts";
 import { newId, type ProviderInstance, type RuntimeEvent, type RuntimeEventListener } from "../contracts.ts";
 
 const INCOMPLETE_LOG_MESSAGE =
@@ -63,6 +64,11 @@ type QueuedLog = { event: RuntimeEvent; line: string; bytes: number };
  * shaped content is scrubbed as the native tee does, and a widget's whole
  * ConnectWise result never reaches it. */
 function logLine(event: RuntimeEvent): string {
+  // content.delta is the hot path under a streaming turn: only the delta
+  // text can carry a secret shape, so skip the deep object walk.
+  if (event.type === "content.delta") {
+    return JSON.stringify({ ...event, delta: typeof event.delta === "string" ? redactSecrets(event.delta) : event.delta });
+  }
   return JSON.stringify(redactSecrets(withoutPrivateFields(event)));
 }
 
@@ -103,6 +109,10 @@ export class EventBus {
   private pendingLogWarnings = new Map<string, RuntimeEvent>();
   /** Per thread: the streamed text not yet published, and when it goes. */
   private pendingText = new Map<string, { event: TextDelta; timer: ReturnType<typeof setTimeout> }>();
+  /** Per thread: the stream whose text last went out (identity only, no
+   * words), so the first delta of a new stream is published at once.
+   * Forgotten on the thread's next non-text event. */
+  private lastStreamed = new Map<string, TextDelta>();
   private readonly appendLog: EventLogAppend;
   /** Accepted events not yet handed to the append, in publish order. */
   private queued: QueuedLog[] = [];
@@ -189,12 +199,23 @@ export class EventBus {
         return;
       }
       if (pending) this.flushThread(event.threadId);
+      // The first text of a stream (a reply's first word, or the words that
+      // resume after a tool line) goes out at once: the person sees the
+      // reply start the moment the engine does, instead of DELTA_MERGE_MS
+      // later (#1952). What follows is merged as before.
+      const last = this.lastStreamed.get(event.threadId);
+      if (!last || !sameStream(last, event)) {
+        this.lastStreamed.set(event.threadId, { ...event, delta: "" });
+        this.write(event);
+        return;
+      }
       const timer = setTimeout(() => this.flushThread(event.threadId), DELTA_MERGE_MS);
       timer.unref?.();
       this.pendingText.set(event.threadId, { event, timer });
       return;
     }
     if (pending) this.flushThread(event.threadId);
+    this.lastStreamed.delete(event.threadId);
     this.write(event);
   }
 
@@ -330,13 +351,13 @@ export class EventBus {
     const plain = items.map((item) => item.line);
     const records = items.map((item) => item.event as unknown as Record<string, unknown>);
     if (warning) { plain.unshift(JSON.stringify(warning)); records.unshift(warning as unknown as Record<string, unknown>); }
-    // sealed at rest under the thread's key (server/content-at-rest.ts): the
+    // sealed at rest under the thread's key (server/encryption/content-at-rest.ts): the
     // batch is one block, on disk when the append returns, as before
     const lines = sealLogLines(file, records, plain);
     try {
       const data = lines.join("\n") + "\n";
       await this.appendLog(file, data, { mode: 0o600 });
-      // a view of this log reads what was just written from memory (server/content-at-rest.ts)
+      // a view of this log reads what was just written from memory (server/encryption/content-at-rest.ts)
       logAppended(file, plain, data);
       if (warning) this.pendingLogWarnings.delete(threadId);
       // Best-effort size cap (#1280): an open thread's canonical log

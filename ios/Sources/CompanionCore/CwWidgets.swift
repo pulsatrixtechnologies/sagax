@@ -203,7 +203,7 @@ public struct CwActionReceipt: Decodable, Sendable {
 }
 
 public enum CwWidgets {
-    /// A Perspicax view tool (`cw_psa__show_<view>`), the one ConnectWise call
+    /// A Perspicax view tool (`cw_psa_show_<view>`), the one ConnectWise call
     /// whose tool row draws its widget (shared/cw-widgets/tool-call.ts
     /// `isCwViewTool`). Rows stored before 2026-10-20 carry a widget on every
     /// read; they stay ordinary rows.

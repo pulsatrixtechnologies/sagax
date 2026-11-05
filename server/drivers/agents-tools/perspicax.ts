@@ -1,9 +1,9 @@
 // Agents tool family: Perspicax gateway tools and claims.
 // Never import server/index.ts.
 
-import { agentToolAnnotations } from "../../agent-tool-policy.ts";
-import { CLAIM_TOOL_NAMES } from "../../perspicax-claims.ts";
-import { isClaimTool } from "../../perspicax-claims.ts";
+import { agentToolAnnotations } from "../../tools/agent-tool-policy.ts";
+import { CLAIM_TOOL_NAMES } from "../../perspicax/perspicax-claims.ts";
+import { isClaimTool } from "../../perspicax/perspicax-claims.ts";
 import { handleRemoteSupportCall } from "../../remote-support/remote-support-local.ts";
 import type { ToolCallContext, ToolCallResult } from "../agents-call-types.ts";
 import type { Json } from "../agents-client.ts";
@@ -15,7 +15,7 @@ import type { Json } from "../agents-client.ts";
 // mounted in the turn, in the speaker's name; Perspicax applies that person's
 // grants and answers an unknown tool itself (review_write without a write
 // approval policy, flow without a pack). The per-profile tools
-// (`<profile>__query`, `__write`, `__action`) are not here: they depend on the
+// (`<profile>_query`, `__write`, `__action`) are not here: they depend on the
 // profile and stay on the Perspicax bridge.
 const pxTool = (name: string, description: string, properties: Record<string, unknown> = {}, required: string[] = []) => ({
   name,
@@ -61,7 +61,7 @@ export const PERSPICAX_TOOLS = [
 export const PERSPICAX_TOOL_NAMES: ReadonlySet<string> = new Set(PERSPICAX_TOOLS.map((tool) => tool.name));
 
 
-// Claims (server/perspicax-claims.ts): named leases kept by Perspicax so two
+// Claims (server/perspicax/perspicax-claims.ts): named leases kept by Perspicax so two
 // agents, of any harness, do not run the same job at once. The holder is the
 // person speaking and this bot; no argument names it.
 const CLAIM_NAME = {
@@ -98,6 +98,20 @@ export const CLAIM_TOOLS = [
 });
 if (CLAIM_TOOLS.map((tool) => tool.name).join() !== CLAIM_TOOL_NAMES.join()) throw new Error("CLAIM_TOOLS and CLAIM_TOOL_NAMES disagree");
 
+
+/** #1935: the answer for a tool the agents server does not have, when this
+ * turn's Perspicax account server runs it (a name api_search gave): where to
+ * call it instead of "No tool named ...". Null when no connection is mounted or
+ * the harness cannot say. */
+export async function perspicaxToolElsewhere(name: string, context: ToolCallContext): Promise<string | null> {
+  if (context.externalRuntime || !name || PERSPICAX_TOOL_NAMES.has(name) || isClaimTool(name)) return null;
+  try {
+    const { ok, body } = await context.client.apiResponse("/api/internal/perspicax/tool", { method: "POST", body: JSON.stringify({ locate: name }) });
+    return ok && typeof body.server === "string" && typeof body.text === "string" ? body.text : null;
+  } catch {
+    return null;
+  }
+}
 
 export async function callPerspicaxTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult | null> {
   const { externalRuntime: EXTERNAL_RUNTIME } = context;

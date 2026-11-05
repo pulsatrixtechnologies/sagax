@@ -13,6 +13,7 @@
 // and a future iPad shell host the same view.
 import CompanionCore
 import SwiftUI
+import UIKit
 
 /// The iPad desktop shell's Automations page draws the desktop's week
 /// (`days` 7, RoutineCalendarPage.tsx CalendarGrid); the phone keeps its day.
@@ -21,6 +22,17 @@ extension EnvironmentValues {
     var automationsGridDays: Int {
         get { self[AutomationsGridDaysKey.self] }
         set { self[AutomationsGridDaysKey.self] = newValue }
+    }
+}
+
+/// The iPad desktop shell (lot 4): the page draws the desktop's own header
+/// (RoutineCalendarPage.tsx `PageHeader`) and right column instead of the
+/// phone's pickers and its navigation bar.
+private struct AutomationsDesktopKey: EnvironmentKey { static let defaultValue = false }
+extension EnvironmentValues {
+    var automationsDesktop: Bool {
+        get { self[AutomationsDesktopKey.self] }
+        set { self[AutomationsDesktopKey.self] = newValue }
     }
 }
 
@@ -40,6 +52,8 @@ struct AutomationsCalendarView<Header: View>: View {
     var loading = false
     /// The page's pickers above the day.
     @ViewBuilder var header: () -> Header
+    /// The desktop header's right end (Filters, the menu, New).
+    var trailing: () -> AnyView = { AnyView(EmptyView()) }
     /// A tap on an empty slot: create a routine there.
     let onCreate: (Date) -> Void
     let onAction: (AutomationsEventAction, RoutineCalendarItem) -> Void
@@ -58,7 +72,7 @@ struct AutomationsCalendarView<Header: View>: View {
         if gridDays > 1 {
             AnyView(AutomationsWeekView(
                 day: $day, routines: routines, runs: runs, bots: bots, botId: botId, loading: loading,
-                header: { AnyView(header()) }, onCreate: onCreate, onAction: onAction
+                header: { AnyView(header()) }, trailing: trailing, onCreate: onCreate, onAction: onAction
             ))
         } else {
             AnyView(dayBody)
@@ -295,8 +309,55 @@ struct AutomationsEventCard: View {
     let item: RoutineCalendarItem
     let bot: Bot?
     var rooms: [Room] = []
+    /// The desktop's week (`compact`, days 7): the name only, on one line,
+    /// a 16 pt mascot from 30 minutes, the bot's colour as a gradient.
+    var compact = false
 
     var body: some View {
+        if compact { compactBody } else { fullBody }
+    }
+
+    private var compactBody: some View {
+        let color = bot.map { MausPalette.ink($0.color) } ?? Theme.textSecondary
+        let status = item.run?.status
+        return HStack(alignment: .top, spacing: 6) {
+            if let bot, item.durationMinutes >= 30 {
+                BotMascotView(bot: bot, size: 16, state: Self.state(status), animated: false)
+                    .frame(width: 16, height: 16)
+            }
+            Text(verbatim: item.name)
+                .font(Theme.font(11, .semibold))
+                .foregroundStyle(Color.white)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, item.durationMinutes < 30 ? 6 : 8)
+        .padding(.vertical, item.durationMinutes < 30 ? 0 : 6)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            // linear-gradient(110deg, color 58 % into #242424, color 28 % into #181818)
+            LinearGradient(colors: [Self.mix(color, 0.58, 0x24), Self.mix(color, 0.28, 0x18)],
+                           startPoint: UnitPoint(x: 0.16, y: 0.0), endPoint: UnitPoint(x: 0.84, y: 1.0)),
+            in: RoundedRectangle(cornerRadius: 6)
+        )
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(status == "failed" || status == "missed" ? Theme.danger.opacity(0.6) : color.opacity(0.7), lineWidth: 1))
+        .opacity(status == "cancelled" ? 0.55 : 1)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("automations-event.\(item.name)")
+    }
+
+    /// `color-mix(in srgb, color p, #gggggg)`.
+    static func mix(_ color: Color, _ p: CGFloat, _ grey: Int) -> Color {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        UIColor(color).getRed(&r, green: &g, blue: &b, alpha: &a)
+        let q = CGFloat(grey) / 255
+        return Color(red: r * p + q * (1 - p), green: g * p + q * (1 - p), blue: b * p + q * (1 - p))
+    }
+
+    @ViewBuilder
+    private var fullBody: some View {
         let color = bot.map { MausPalette.ink($0.color) } ?? Theme.textSecondary
         let status = item.run?.status
         HStack(alignment: .top, spacing: 6) {

@@ -44,6 +44,24 @@ export function cleanDisabledModels(value: unknown): string[] {
   return [...seen];
 }
 
+/** #2050: at most this many favorite models per person (a star list, not
+ * a catalog). */
+export const MAX_FAVORITE_MODELS = 40;
+
+/** A clean favorites list: `<engine>/<model>` strings, once each, in the
+ * order given; the last entries win when there are too many. */
+export function cleanFavoriteModels(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (typeof entry !== "string") continue;
+    const id = entry.trim();
+    if (id.length > 300 || !parseModelKey(id) || seen.has(id)) continue;
+    seen.add(id);
+  }
+  return [...seen].slice(-MAX_FAVORITE_MODELS);
+}
+
 export interface ModelSwitches {
   /** Turned off by the organization (null or absent: none). */
   org?: readonly string[] | null;

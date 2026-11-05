@@ -392,7 +392,7 @@ export function createComputerMountStartTurn(host: StartTurnHost) {
     // pre-id window: wait for the old handshake to settle or for its bounded
     // quarantine to expire, then revalidate this exact claim before launch.
     // An embedding endpoint the person runs reads this turn's recall query
-    // first (bounded, server/semantic-recall.ts), before the claim below
+    // first (bounded, server/recall/semantic-recall.ts), before the claim below
     // is revalidated. Without one nothing is awaited.
     if (state.bot.memoryEnabled !== false && autoRecallEnabled(cfg) && semanticEmbeddingEndpoint(cfg)) await prepareSemanticRecall(state.bot.id, recallQuery(state.resolvedImages.text));
     await pendingCancelledProviderHandshakes.waitForClear(state.threadId);

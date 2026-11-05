@@ -6,7 +6,7 @@ import {
   sectionContextKey,
   sectionContextLabel,
   type SectionContextRecord,
-} from "../section-context.ts";
+} from "../rooms/section-context.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface SectionContextRouteDeps {

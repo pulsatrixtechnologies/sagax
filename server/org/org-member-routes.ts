@@ -48,6 +48,7 @@
 // audited. A routine or a bot file is answered only when the catalogue
 // says the person owns it; anyone else's is 404, an admin's included.
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { readableRoutineProblems } from "../../shared/routine-problems.ts";
 
 import { formatQuestionAnswers, MAX_CUSTOM_ANSWER, MAX_OPTIONS, parseAskQuestions, parseChoices, type AskQuestion } from "../../shared/ask-question.ts";
 import { meetingRequestBehavior } from "../../shared/meeting-request.ts";
@@ -56,7 +57,7 @@ import { mask, redactSecretsInText } from "../../shared/redact.ts";
 import { skillRequestBehavior } from "../../shared/skill-request.ts";
 import { terminalRequestBehavior } from "../../shared/terminal-request.ts";
 import { parseMemoryPath } from "../memory/memory-store.ts";
-import type { ConsoleAssertion } from "../oidc-rp.ts";
+import type { ConsoleAssertion } from "../auth/oidc-rp.ts";
 import { AssertionReplayCache } from "./org-admin-routes.ts";
 import { compileRoutes, matchRoutes } from "./org-admin-console.ts";
 
@@ -64,7 +65,7 @@ export const ORG_MEMBER_PREFIX = "/api/org/member/";
 /** The `act.sub` values the member API accepts: never `perspicax-mail` nor
  * `perspicax-voice` (those actors are the inbound mail route's and the
  * inbound telephony route's alone, server/mail/bot-inbound-mail.ts and
- * server/bot-inbound-telephony.ts). */
+ * server/bots/bot-inbound-telephony.ts). */
 export const ORG_MEMBER_ASSERTION_ACTORS: readonly ConsoleAssertion["actor"][] = ["console", "perspicax-mcp"];
 /** The version `GET capabilities` reports. */
 export const ORG_MEMBER_API_VERSION = 1;
@@ -110,7 +111,7 @@ export interface MemberPerson {
 
 /** One Sagax route performed as the person. */
 export interface MemberRequest {
-  method: "GET" | "POST" | "PATCH";
+  method: "GET" | "POST" | "PATCH" | "DELETE";
   path: string;
   query?: Record<string, string>;
   body?: unknown;
@@ -140,10 +141,13 @@ export interface OrgMemberRouteDeps {
   /** The live state of a thread the person already reached through
    * `perform`: busy, waiting on a card, or idle. Null when gone. */
   threadStatus(threadId: string): ThreadStatus | null;
+  /** #1996: an open proposal card (a routine, profile, model, rule, team or
+   * meeting request) the thread holds while its status is idle. */
+  openProposal?(threadId: string): boolean;
   /** A principal id from a principal id or a Perspicax user id. */
   resolvePerson(ref: string): string | null;
   /** The words the bot is writing in this thread right now, or null
-   * (server/member-live-text.ts). */
+   * (server/people/member-live-text.ts). */
   liveText?(threadId: string): string | null;
   /** The link that opens the thread in Sagax, or null. */
   threadLink?(threadId: string, botId: string | null): string | null;
@@ -155,7 +159,7 @@ export interface OrgMemberRouteDeps {
   approvalAnswerer?(threadId: string, requestId: string): ApprovalAnswerer | null;
   /** The bot whose thread this is, or null (a room, or gone). */
   botOfThread?(threadId: string): string | null;
-  /** A confidential thread (server/confidential-threads.ts): an AI client
+  /** A confidential thread (server/threads/confidential-threads.ts): an AI client
    * never reads, streams, writes or answers a card in one; it reads as
    * missing. */
   confidential?(threadId: string): boolean;
@@ -184,6 +188,10 @@ export interface OrgMemberRouteDeps {
   version?(): string;
   now?(): number;
   sleep?(ms: number): Promise<void>;
+  /** #1940: expire due pending approvals in this thread (lazy on read). */
+  expireDueApprovals?(threadId: string): void;
+  /** #1940: effective pending-approval expire days for this person (0 = never). */
+  pendingApprovalExpireDays?(person: MemberPerson): number;
 }
 
 interface Answer {
@@ -317,7 +325,7 @@ function lastRunOf(runs: readonly Record<string, unknown>[], routineId: string) 
     status: str(run.status),
     startedAt: typeof run.startedAt === "number" ? run.startedAt : null,
     endedAt: typeof run.finishedAt === "number" ? run.finishedAt : typeof run.endedAt === "number" ? run.endedAt : null,
-    ...(typeof run.problems === "string" && run.problems ? { problems: scrubText(run.problems).slice(0, 1_000) } : {}),
+    ...(typeof run.problems === "string" && run.problems ? { problems: readableRoutineProblems(scrubText(run.problems)).slice(0, 1_000) } : {}),
   };
 }
 
@@ -455,13 +463,25 @@ function cardQuestions(card: Record<string, unknown>): AskQuestion[] | null {
 
 /** A card as an AI client reads it. Not shared/approval-describe's tool-card
  * wording: this builds the MemberApproval shape for the member API. */
-export function describeMemberApproval(threadId: string, message: Record<string, unknown>, card: Record<string, unknown>): MemberApproval {
+export function describeMemberApproval(
+  threadId: string,
+  message: Record<string, unknown>,
+  card: Record<string, unknown>,
+  /** #1940: when the card has no expiresAt, fill from createdAt + policy days. */
+  expireDays?: number,
+): MemberApproval {
   const kind = approvalKind(card);
   const labels = parseChoices(card.options, MAX_OPTIONS) ?? [];
   const questions = kind === "question" ? cardQuestions(card) : null;
   const several = questions && questions.length > 1 ? questions : null;
   const single = questions && questions.length === 1 ? questions[0]! : null;
   const choices = kind === "permission" ? [] : several ? [] : choicesOf(single ? single.options.map((o) => o.label) : labels);
+  const createdAt = typeof message.at === "number" ? message.at : null;
+  const cardExpires = typeof card.expiresAt === "number" ? card.expiresAt : null;
+  let expiresAt: number | null = cardExpires;
+  if (expiresAt === null && createdAt !== null && typeof expireDays === "number" && expireDays > 0) {
+    expiresAt = createdAt + expireDays * 86_400_000;
+  }
   return {
     id: str(card.requestId) ?? "",
     threadId,
@@ -474,8 +494,8 @@ export function describeMemberApproval(threadId: string, message: Record<string,
     choices,
     ...(several ? { questions: several.map((q) => ({ question: q.question, multiSelect: q.multiSelect === true, options: choicesOf(q.options.map((o) => o.label)) })) } : {}),
     freeText: kind === "question" && (questions ? questions.every((q) => q.custom !== false) : true),
-    createdAt: typeof message.at === "number" ? message.at : null,
-    expiresAt: typeof card.expiresAt === "number" ? card.expiresAt : null,
+    createdAt,
+    expiresAt,
   };
 }
 
@@ -635,7 +655,7 @@ interface ThreadRead {
 }
 
 /** Reads a Sagax message page (as the person saw it) after a cursor. */
-export function readThreadPage(threadId: string, raw: unknown, since: string | null): ThreadRead {
+export function readThreadPage(threadId: string, raw: unknown, since: string | null, expireDays?: number): ThreadRead {
   const list = Array.isArray(objectOf(raw)?.messages) ? (objectOf(raw)!.messages as unknown[]) : [];
   const all = list.map(objectOf).filter((m): m is Record<string, unknown> => Boolean(m) && typeof m!.id === "string");
   const index = since ? all.findIndex((m) => m.id === since) : -1;
@@ -664,7 +684,7 @@ export function readThreadPage(threadId: string, raw: unknown, since: string | n
     const card = objectOf(m.card);
     const requestId = str(card?.requestId);
     if (!card || !requestId || card.answered !== undefined || card.dismissed === true || card.expired === true) continue;
-    approvals.push(describeMemberApproval(threadId, m, card));
+    approvals.push(describeMemberApproval(threadId, m, card, expireDays));
   }
   const last = all.at(-1);
   return {
@@ -799,10 +819,14 @@ function memberRoutes(deps: OrgMemberRouteDeps): MemberRoute[] {
   const now = deps.now ?? Date.now;
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
 
+  const expireDaysFor = (person: MemberPerson): number | undefined => deps.pendingApprovalExpireDays?.(person);
+
   const readThread = async (person: MemberPerson, threadId: string, since: string | null, limit: number): Promise<ThreadRead | Answer> => {
+    // #1940: expire due cards before the person (or list_pending_approvals) reads them.
+    deps.expireDueApprovals?.(threadId);
     const reply = await deps.perform(person, { method: "GET", path: `/api/threads/${encodeURIComponent(threadId)}/messages`, query: { limit: String(limit) } });
     if (!okStatus(reply)) return passThrough(reply, "This conversation cannot be read.");
-    return readThreadPage(threadId, reply.body, since);
+    return readThreadPage(threadId, reply.body, since, expireDaysFor(person));
   };
   const isRead = (value: ThreadRead | Answer): value is ThreadRead => "messages" in value;
 
@@ -906,7 +930,7 @@ function memberRoutes(deps: OrgMemberRouteDeps): MemberRoute[] {
     status = deps.threadStatus(threadId) ?? "idle";
     const page = await rawPage(person, threadId);
     if (!("raw" in page)) return { botId, threadId, messageId: input.anchor, status, pending: true, reply: null, approvals: [], cursor: null, summary: null };
-    const read = readThreadPage(threadId, page.raw, null);
+    const read = readThreadPage(threadId, page.raw, null, expireDaysFor(person));
     const anchor = anchorOf(read);
     const reply = status === "idle" ? replyAfter(read.messages, anchor) : null;
     // Idle after a wait is done even without words (a failed turn says why
@@ -949,8 +973,9 @@ function memberRoutes(deps: OrgMemberRouteDeps): MemberRoute[] {
   const answerCard = async (person: MemberPerson, threadId: string, requestId: string, input: AnswerInput): Promise<Answer> => {
     const page = await rawPage(person, threadId);
     if (!("raw" in page)) return page;
+    deps.expireDueApprovals?.(threadId);
     const found = cardIn(page.raw, requestId);
-    const approval = found ? describeMemberApproval(threadId, found.message, found.card) : null;
+    const approval = found ? describeMemberApproval(threadId, found.message, found.card, expireDaysFor(person)) : null;
     // A card older than the page read: answered by decision, as before.
     const plan = approval && found ? planAnswer(approval, found.card, input)
       : input.decision ? { ok: true as const, decision: input.decision, picked: null, via: "decision" as const, body: { behavior: input.decision } }
@@ -1004,7 +1029,9 @@ function memberRoutes(deps: OrgMemberRouteDeps): MemberRoute[] {
     let read = 0;
     for (const [threadId, about] of threads) {
       // A confidential thread is answered in Sagax only (#683): never listed.
-      if (deps.confidential?.(threadId) || deps.threadStatus(threadId) !== "waiting") continue;
+      if (deps.confidential?.(threadId)) continue;
+      // #1996: a proposal card (manage_routine) leaves the thread idle: still listed
+      if (deps.threadStatus(threadId) !== "waiting" && deps.openProposal?.(threadId) !== true) continue;
       if (read >= PENDING_THREADS_MAX) break;
       read += 1;
       // The person's own read: a thread they cannot see stays out.
@@ -1552,7 +1579,7 @@ function wireRun(run: Record<string, unknown> | null | undefined, detail = false
     startedAt: typeof run.startedAt === "number" ? run.startedAt : null,
     endedAt: typeof run.finishedAt === "number" ? run.finishedAt : null,
     // 2026-11-01: completed, but not all of it went right: never a plain success.
-    ...(typeof run.problems === "string" && run.problems ? { problems: scrubText(run.problems).slice(0, 1_000) } : {}),
+    ...(typeof run.problems === "string" && run.problems ? { problems: readableRoutineProblems(scrubText(run.problems)).slice(0, 1_000) } : {}),
     ...(detail ? { attention: cut(run.attention, 500), error: cut(run.error, 500), output: cut(run.output, MEMBER_REPLY_MAX) } : {}),
   };
 }

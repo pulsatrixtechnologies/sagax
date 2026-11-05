@@ -4,7 +4,7 @@
 
 **Goal:** Turn memory from a file the bot silently overwrites into a reviewed change: the bot proposes a typed diff, the person sees what changed and why, and approve/reject/edit is one click — with every accepted change recorded in the profile version log and reversible.
 
-**Architecture:** The bot stops writing `MEMORY.md` directly and instead calls a `propose_memory` tool on the existing agents MCP proxy. The proposal becomes a card in the transcript using the same mechanism `server/peer-approval.ts` already uses — appending straight to the store rather than crossing the runtime bus. An accepted proposal is applied by `writeMemoryFile` and appended to the P2 version log, which is what makes rollback free.
+**Architecture:** The bot stops writing `MEMORY.md` directly and instead calls a `propose_memory` tool on the existing agents MCP proxy. The proposal becomes a card in the transcript using the same mechanism `server/peers/peer-approval.ts` already uses — appending straight to the store rather than crossing the runtime bus. An accepted proposal is applied by `writeMemoryFile` and appended to the P2 version log, which is what makes rollback free.
 
 **Tech Stack:** TypeScript, Node 24, Vitest, React.
 
@@ -23,7 +23,7 @@ See [the roadmap](2026-08-31-00-control-plane-roadmap.md#global-constraints). Lo
 
 ## Background
 
-`server/workspace.ts` gives every bot a `MEMORY.md` and a `memory/` directory, budgeted
+`server/workspace/workspace.ts` gives every bot a `MEMORY.md` and a `memory/` directory, budgeted
 into the system prompt at 200 lines / 24_000 bytes and readable by the agent's own file
 tools. It is genuinely engine-independent — the community's "learning survives an engine
 switch" ask is already satisfied.
@@ -38,8 +38,8 @@ writes down something wrong on Tuesday is still acting on it in March.
 
 - Create `server/memory-proposals.ts`: the proposal store, diff computation, and apply/reject.
 - Create `server/memory-proposals.test.ts`.
-- Modify `server/workspace.ts`: typed entry parsing and a structured write path.
-- Modify `server/workspace.test.ts`.
+- Modify `server/workspace/workspace.ts`: typed entry parsing and a structured write path.
+- Modify `server/workspace/workspace.test.ts`.
 - Modify `server/drivers/agents-proxy.ts`: the `propose_memory` tool.
 - Modify `server/drivers/agents-proxy.test.ts`.
 - Modify `server/index.ts`: proposal endpoints and card wiring.
@@ -51,7 +51,7 @@ writes down something wrong on Tuesday is still acting on it in March.
 ### Task 1: Typed memory entries
 
 **Files:**
-- Modify: `server/workspace.ts`, `server/workspace.test.ts`
+- Modify: `server/workspace/workspace.ts`, `server/workspace/workspace.test.ts`
 
 **Interfaces:**
 - Produces:
@@ -68,7 +68,7 @@ writes down something wrong on Tuesday is still acting on it in March.
 - [ ] Write failing round-trip tests: `renderMemoryEntries(parseMemoryEntries(md))` is stable for a document with all four sections, and stable for a document with only one.
 - [ ] Write a failing test that free-form Markdown with no recognized headings parses as a list of `fact` entries rather than throwing — every existing `MEMORY.md` in the wild predates this format and must keep working.
 - [ ] Write a failing test that an unknown heading's content is preserved verbatim through a round trip. Losing a person's hand-written section because it did not match a heading is unacceptable.
-- [ ] Run `pnpm vitest run server/workspace.test.ts`; expect FAIL.
+- [ ] Run `pnpm vitest run server/workspace/workspace.test.ts`; expect FAIL.
 - [ ] Implement. Leave `loadMemory`, `readMemoryFile`, `writeMemoryFile`, and `memorySystemPrompt` untouched — they operate on the raw text and must keep doing so.
 - [ ] Run; expect PASS.
 - [ ] Commit `feat(memory): typed entry parsing over the existing markdown`.
@@ -118,7 +118,7 @@ writes down something wrong on Tuesday is still acting on it in March.
 - [ ] Write a failing test that the tool's result tells the model the proposal is **pending a person** and that it must not assume the memory is written. A tool that returns "ok" teaches the model to act on memory it does not have.
 - [ ] Write a failing API test that `/api/internal/propose-memory` rejects a `botId` that does not match the calling bridge's bot — the internal routes are loopback but not unauthenticated by convention, and a bot proposing into a peer's memory is a real hazard.
 - [ ] Run; expect FAIL.
-- [ ] Implement. Extend the system-prompt guidance in `memorySystemPrompt` (`server/workspace.ts:155`) to tell the bot to propose rather than write directly when the tool is available, and to keep writing directly when it is not — engines without the agents MCP must not lose memory entirely.
+- [ ] Implement. Extend the system-prompt guidance in `memorySystemPrompt` (`server/workspace/workspace.ts:155`) to tell the bot to propose rather than write directly when the tool is available, and to keep writing directly when it is not — engines without the agents MCP must not lose memory entirely.
 - [ ] Run; expect PASS.
 - [ ] Commit `feat(memory): propose_memory tool on the agents proxy`.
 
@@ -134,7 +134,7 @@ writes down something wrong on Tuesday is still acting on it in March.
 - [ ] Write a failing test for the pure diff renderer: additions render with a `+` and their kind label, removals with a `−`, and an entry that appears in both lists renders once as a **change** rather than twice. A rewritten line shown as an unrelated add and remove is unreadable.
 - [ ] Run; expect FAIL.
 - [ ] Implement the card: the reason the bot gave, the diff, and Approve / Edit / Reject. Edit opens the proposed text inline and Approve then applies the edited version.
-- [ ] Append the card to the thread the same way `server/peer-approval.ts` does — straight to the store, not across the runtime bus. Its module comment explains why, and `server/decision-log.ts:19` records the consequence: cards appended this way do not reach the decision log. Accept that here too; the profile version log from Task 2 is this feature's audit trail.
+- [ ] Append the card to the thread the same way `server/peers/peer-approval.ts` does — straight to the store, not across the runtime bus. Its module comment explains why, and `server/decision-log.ts:19` records the consequence: cards appended this way do not reach the decision log. Accept that here too; the profile version log from Task 2 is this feature's audit trail.
 - [ ] Add a Memory tab to the bot's settings showing current entries by kind and the proposal history, with restore wired to P2's rollback.
 - [ ] Run the focused test, `pnpm typecheck`, `pnpm check:contrast`.
 - [ ] Commit `feat(memory): review card with approve, edit, and reject`.
@@ -144,13 +144,13 @@ writes down something wrong on Tuesday is still acting on it in March.
 ### Task 5: Sharing a skill across bots
 
 **Files:**
-- Modify: `server/skills.ts`, `server/skills.test.ts`
+- Modify: `server/skills/skills.ts`, `server/skills/skills.test.ts`
 - Modify: `server/index.ts`
 
 - [ ] Write a failing test that `copySkill(fromBotId, toBotId, name)` installs the skill on the target with its provenance (`source`, `sha256`) intact and **disabled**, matching the import policy.
 - [ ] Write a failing test that copying to a bot that already has a skill of that name with a different hash is refused with both hashes named, rather than silently overwriting.
 - [ ] Run; expect FAIL.
-- [ ] Implement `copySkill` and a `POST /api/bots/:id/skills/copy-from` route. This is the community's "share selected skills across bots or entire teams" — deliberately scoped to skills, not memory. Memory is private per bot by design (`server/section-context.ts:3` draws the same line), and sharing it across bots is a different feature with a different consent story.
+- [ ] Implement `copySkill` and a `POST /api/bots/:id/skills/copy-from` route. This is the community's "share selected skills across bots or entire teams" — deliberately scoped to skills, not memory. Memory is private per bot by design (`server/rooms/section-context.ts:3` draws the same line), and sharing it across bots is a different feature with a different consent story.
 - [ ] Run; expect PASS.
 - [ ] Commit `feat(skills): copy a skill to another bot, disabled with provenance intact`.
 

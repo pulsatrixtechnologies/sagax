@@ -101,7 +101,7 @@ posixOnly("organization server: a member's own act, hidden files and Full access
       organization: { memberBotsUseOrgKey: true },
       instances: {
         // A turn that waits, so the test speaks to its permission broker.
-        hold: { driver: "claudeAgent", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_DUMP: join(home, "hold-dump.json") }, config: { cli: FAKE_CLAUDE, fullAuto: true } },
+        hold: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_DUMP: join(home, "hold-dump.json") }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
       },
     }));
     child = spawn(process.execPath, [join(SERVER_DIR, "index.ts")], {
@@ -175,7 +175,15 @@ posixOnly("organization server: a member's own act, hidden files and Full access
       await api("POST", `/api/bots/${bot.id}/interrupt`, auth, { threadId: bot.threadId });
       await waitFor(async () => !((await api("GET", "/api/bots", auth)).body.bots as Array<{ id: string; busy?: boolean }>).find((b) => b.id === bot.id)?.busy);
     };
-    return { ask, cardOf, noAdminCard, respond, end };
+    const act = async (method: string, path: string) => {
+      const response = await fetch(`${BASE}/api/internal/act`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${mcp.agents.env.SAGAX_COMMS_TOKEN}` },
+        body: JSON.stringify({ method, path }),
+      });
+      return { status: response.status, body: await response.json() as Record<string, unknown> };
+    };
+    return { ask, cardOf, noAdminCard, respond, end, act };
   }
 
   /** A bot of `auth` on the held engine, at Ask so every call shows a card. */
@@ -188,6 +196,33 @@ posixOnly("organization server: a member's own act, hidden files and Full access
     expect(level.status, level.text).toBe(200);
     return bot;
   }
+
+  it("#1993: act never forwards a Sagax session as a console assertion; local reads still run as the person", async () => {
+    for (const auth of [alice, bob]) {
+      const bot = await botOf(auth, "Wren");
+      const turn = await heldTurn(auth, bot, "Read my routines.");
+      try {
+        for (const path of ["/api/org/admin/routines", "/api/org/admin/routines/example/runs", "/api/org/member/bots"]) {
+          const result = await turn.act("GET", path);
+          expect(result.status).toBe(400);
+          expect(result.body.error).toContain("Connect a Perspicax profile to this bot");
+          expect(result.body.error).toContain("/api/routines");
+          expect(result.body.error).not.toContain("not a compact JWS");
+        }
+        const local = await turn.act("GET", "/api/bots");
+        expect(local.status).toBe(200);
+        const bots = JSON.parse(String(local.body.text)).bots as Array<{ id: string }>;
+        expect(bots.some((item) => item.id === bot.id)).toBe(true);
+        if (auth === bob) {
+          // A member's replay remains scoped to that member.
+          const all = (await api("GET", "/api/bots", alice)).body.bots as Array<{ id: string }>;
+          expect(all.some((item) => !bots.some((own) => own.id === item.id))).toBe(true);
+        }
+      } finally {
+        await turn.end();
+      }
+    }
+  }, 60_000);
 
   it("OA-1: act writing on his own bot and routes is his, never an admin's; another's bot or the organization stays an admin's, and Uma answers none of it", async () => {
     const mine = await botOf(bob, "Bob Builder");

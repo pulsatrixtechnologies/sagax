@@ -7,7 +7,7 @@
 // one result, one source wake, and a terminal or explicit waiting state.
 // No provider is called and no user data is read.
 import { spawn, type ChildProcess } from "node:child_process";
-import { closeSync, existsSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
@@ -15,6 +15,7 @@ import { expect, it } from "vitest";
 import { launchVerificationServer, runControlOmb, verificationServerEnvironment, type VerificationServer } from "../scripts/control-omb.ts";
 import { request } from "../scripts/mcp-server.ts";
 import { waitForExit } from "./testing/cleanup.ts";
+import { waitForServerReady } from "./testing/server-ready.ts";
 import { readHandoffs } from "./testing/handoff-rows.ts";
 import { openSse } from "./testing/sse.ts";
 import { checkInvariants } from "./runtime/invariants.ts";
@@ -47,13 +48,11 @@ async function withFixture(test: (f: Fixture) => Promise<void>, options: { backu
     const log = openSync(logPath, "a", 0o600);
     server = spawn(process.execPath, ["--experimental-strip-types", fileURLToPath(new URL("./index.ts", import.meta.url))], {
       cwd: fileURLToPath(new URL("..", import.meta.url)),
-      env: { ...verificationServerEnvironment({}, dataDir, Number(new URL(url).port)), ...extra },
+      env: { ...verificationServerEnvironment({ SAGAX_LOCAL_VM_TEST_NAMESPACE: process.env.SAGAX_LOCAL_VM_TEST_NAMESPACE }, dataDir, Number(new URL(url).port)), ...extra },
       stdio: ["ignore", log, log],
     });
     closeSync(log);
-    await expect.poll(async () => {
-      try { return (await fetch(url + "/api/health", { signal: AbortSignal.timeout(1_000) })).ok; } catch { return false; }
-    }, { timeout: 30_000, interval: 200 }).toBe(true);
+    await waitForServerReady(server, url, () => readFileSync(logPath, "utf8"));
   };
   const stop = async () => { await waitForExit(server, { signal: "SIGTERM" }); server = undefined; };
   try {
@@ -82,6 +81,14 @@ async function withFixture(test: (f: Fixture) => Promise<void>, options: { backu
       restart: async (env = options.env ?? {}) => { await stop(); await start(env); },
       stop,
     });
+  } catch (error) {
+    const evidencePath = `${logPath}.runtime-failure.json`;
+    const runs = await fetch(`${url}/api/routines`, { signal: AbortSignal.timeout(2_000) }).then(response => response.json()).catch(() => null);
+    try {
+      writeFileSync(evidencePath, JSON.stringify({ runs, nodes: readHandoffs(dataDir),
+        evidence: existsSync(`${planPath}.evidence.jsonl`) ? readFileSync(`${planPath}.evidence.jsonl`, "utf8") : "" }, null, 2));
+    } catch { /* diagnostics must never prevent owned-process cleanup */ }
+    throw new Error(`${error instanceof Error ? error.message : error}\nRuntime evidence: ${evidencePath}`, { cause: error });
   } finally {
     await waitForExit(server, { signal: "SIGTERM" });
     await session.close();
@@ -862,3 +869,173 @@ it("an external runtime's delegate_bot that needs the person's review is not hel
   expect(f.evidence().filter((turn) => turn.botId === gateway.id)).toHaveLength(0);
   expect(runtimeInvariants(f)).toEqual([]);
 }), 150_000);
+
+it("peer inbox (2026-11-02): teammates' one-way notices wake each proactive receiver once, batched, Primary Bot and team bot alike; nothing resumes the sender", () => withFixture(async (f) => {
+  const sender = (await f.cli("new-bot", "--name", "Osprey")).bot;
+  const primary = (await f.cli("new-bot", "--name", "Wren")).bot;
+  const teammate = (await f.cli("new-bot", "--name", "Harrie")).bot;
+  await f.api(`/api/bots/${primary.id}`, { chiefOfStaff: true, acknowledgePeerScope: true }, "PATCH");
+  f.plan[sender.id] = {
+    steps: [
+      { tool: "send_to_bot", arguments: { bot_id: primary.id, title: "Northwind write 1", message: "Dry run done for Northwind write 1; GO needed" } },
+      { tool: "send_to_bot", arguments: { bot_id: primary.id, title: "Northwind write 2", message: "Dry run done for Northwind write 2; GO needed" } },
+      { tool: "send_to_bot", arguments: { bot_id: teammate.id, title: "Bank threshold", message: "FYI: the support bank is under its threshold" } },
+    ],
+    reply: "Sent the three notices",
+  };
+  const receiverPlan = (report: string) => ({ byPrompt: [{ promptIncludes: "Proactive wake", plan: { reply: report } }], reply: "Looked at the notice" });
+  f.plan[primary.id] = receiverPlan("PRIMARY_WAKE_REPORT: two Northwind writes wait on your GO");
+  f.plan[teammate.id] = receiverPlan("TEAMMATE_WAKE_REPORT: the support bank is under its threshold");
+  f.save();
+  await f.api(`/api/bots/${sender.id}/messages`, { text: "Tell Wren and Harrie what you found.", threadId: sender.activeTaskId });
+  const wakes = async (botId: string) => ((await f.api("/api/routines", undefined, "GET")).runs as any[]).filter((run) => run.botId === botId && run.proactive);
+  for (const bot of [primary, teammate]) {
+    await expect.poll(async () => (await wakes(bot.id)).map((run) => run.status), { timeout: 60_000, interval: 250 }).toEqual(["completed"]);
+  }
+  await settledBots(f, [sender.id, primary.id, teammate.id]);
+  // a late second wake would show up here
+  await new Promise((resolve) => setTimeout(resolve, 4_000));
+  const isWake = (turn: any) => JSON.stringify(turn.prompt).includes("Proactive wake");
+  const turnsOf = (botId: string) => f.evidence().filter((turn) => turn.botId === botId);
+  // each notice ran once in its own thread, then ONE wake per receiver
+  expect(turnsOf(primary.id).filter((turn) => !isWake(turn))).toHaveLength(2);
+  expect(turnsOf(primary.id).filter(isWake)).toHaveLength(1);
+  expect(turnsOf(teammate.id).filter((turn) => !isWake(turn))).toHaveLength(1);
+  expect(turnsOf(teammate.id).filter(isWake)).toHaveLength(1);
+  const primaryWake = (await wakes(primary.id))[0];
+  expect(primaryWake.proactive).toMatchObject({ mode: "proactive", hops: 1, sources: ["peer"] });
+  expect(primaryWake.routineName).toBe("Proactive: teammate message");
+  // the one wake read both messages and their outcomes inside the fence
+  const wakePrompt = JSON.stringify(turnsOf(primary.id).find(isWake)!.prompt);
+  expect(wakePrompt).toContain("Dry run done for Northwind write 1; GO needed");
+  expect(wakePrompt).toContain("Dry run done for Northwind write 2; GO needed");
+  expect(wakePrompt).toContain("ONE card for all of these messages");
+  expect((await wakes(teammate.id))[0].proactive).toMatchObject({ hops: 1, sources: ["peer"] });
+  // the person reads it in each receiver's own conversation
+  const bots = (await f.api("/api/bots?messages=0", undefined, "GET")).bots as any[];
+  const mainOf = (id: string) => bots.find((bot) => bot.id === id).threadId as string;
+  await expect.poll(async () => (await f.messages(mainOf(primary.id))).some((message) => String(message.text ?? "").includes("PRIMARY_WAKE_REPORT")), { timeout: 20_000 }).toBe(true);
+  await expect.poll(async () => (await f.messages(mainOf(teammate.id))).some((message) => String(message.text ?? "").includes("TEAMMATE_WAKE_REPORT")), { timeout: 20_000 }).toBe(true);
+  // one-way stays one-way: the sender is never resumed nor woken by its own notices
+  expect(turnsOf(sender.id).map((turn) => turn.resumed)).toEqual([false]);
+  expect(await wakes(sender.id)).toEqual([]);
+  expect(runtimeInvariants(f)).toEqual([]);
+}, { env: { SAGAX_PROACTIVE_GATHER_MS: "3000" } }), 150_000);
+
+it("peer inbox (2026-11-02): a one-way notice's question reaches its receiver's own conversation as a card", () => withFixture(async (f) => {
+  const sender = (await f.cli("new-bot", "--name", "Osprey")).bot;
+  const teammate = (await f.cli("new-bot", "--name", "Harrie")).bot;
+  await f.api(`/api/bots/${teammate.id}`, { proactiveMode: "off" }, "PATCH");
+  f.plan[sender.id] = {
+    steps: [{ tool: "send_to_bot", arguments: { bot_id: teammate.id, title: "Northwind writes", message: "Seven Northwind writes are ready after the dry run" } }],
+    reply: "Sent",
+  };
+  f.plan[teammate.id] = { reply: "Ready to write.\n\nNEEDS INPUT: GO for the seven Northwind writes?" };
+  f.save();
+  await f.api(`/api/bots/${sender.id}/messages`, { text: "Tell Harrie about the Northwind writes.", threadId: sender.activeTaskId });
+  const bots = (await f.api("/api/bots?messages=0", undefined, "GET")).bots as any[];
+  const main = bots.find((bot) => bot.id === teammate.id).threadId as string;
+  await expect.poll(async () => (await f.messages(main)).filter((message) => message.inputRequest?.botId === teammate.id)
+    .map((message) => message.inputRequest.question), { timeout: 60_000, interval: 250 }).toEqual(["GO for the seven Northwind writes?"]);
+}), 150_000);
+
+// 2026-11-02 (peer inbox, second pass, production): the wakes ran, but five
+// of six ended NOTHING_TO_REPORT ("Already told you at 1:32 p.m. ET"): the bot
+// took the reply of the notice's own thread, which its person never sees, for
+// one they had read, so nothing of Osprey's or Harrie's messages reached
+// the person. A wake on teammates' messages now always reports.
+it("peer inbox (second pass): a wake on a teammate's notice that ends NOTHING_TO_REPORT still reports to the person, with the bot's words or the digest", () => withFixture(async (f) => {
+  const sender = (await f.cli("new-bot", "--name", "Osprey")).bot;
+  const primary = (await f.cli("new-bot", "--name", "Wren")).bot;
+  const solo = (await f.cli("new-bot", "--name", "Harrie")).bot;
+  await f.api(`/api/bots/${primary.id}`, { chiefOfStaff: true, acknowledgePeerScope: true }, "PATCH");
+  f.plan[sender.id] = {
+    steps: [
+      { tool: "send_to_bot", arguments: { bot_id: primary.id, title: "Urgent Northwind 100200 client reply", message: "Sam answered on 100200; Alex has the box" } },
+      { tool: "send_to_bot", arguments: { bot_id: solo.id, title: "Claude Team invite action JC", message: "JC must accept the Claude Team invite" } },
+    ],
+    reply: "Sent",
+  };
+  // In production: the bot writes why it thinks the person knows, then the marker
+  f.plan[primary.id] = { byPrompt: [{ promptIncludes: "Proactive wake", plan: { reply: "Already told you at 1:32 p.m. ET: Alex has the box.\n\nNOTHING_TO_REPORT" } }], reply: "Noted in this thread" };
+  // the marker alone: the digest names who wrote and about what
+  f.plan[solo.id] = { byPrompt: [{ promptIncludes: "Proactive wake", plan: { reply: "NOTHING_TO_REPORT" } }], reply: "Noted" };
+  f.save();
+  await f.api(`/api/bots/${sender.id}/messages`, { text: "Tell Wren and Harrie.", threadId: sender.activeTaskId });
+  const wakes = async (botId: string) => ((await f.api("/api/routines", undefined, "GET")).runs as any[]).filter((run) => run.botId === botId && run.proactive);
+  for (const bot of [primary, solo]) {
+    await expect.poll(async () => (await wakes(bot.id)).map((run) => run.status), { timeout: 60_000, interval: 250 }).toEqual(["completed"]);
+  }
+  const primaryWake = (await wakes(primary.id))[0];
+  expect(primaryWake.quiet).toBeUndefined();
+  expect(primaryWake.output).toBe("Already told you at 1:32 p.m. ET: Alex has the box.");
+  const soloWake = (await wakes(solo.id))[0];
+  expect(soloWake.quiet).toBeUndefined();
+  expect(soloWake.output).toContain("Osprey: Claude Team invite action JC");
+  // the wake was told the person never sees the notice threads
+  const wakePrompt = JSON.stringify(f.evidence().find((turn) => turn.botId === primary.id && JSON.stringify(turn.prompt).includes("Proactive wake"))!.prompt);
+  expect(wakePrompt).toContain("The person never sees those threads");
+  const bots = (await f.api("/api/bots?messages=0", undefined, "GET")).bots as any[];
+  const mainOf = (id: string) => bots.find((bot) => bot.id === id).threadId as string;
+  const runCard = async (botId: string) => (await f.messages(mainOf(botId))).filter((message) => message.kind === "routine.run").map((message) => String(message.text ?? ""));
+  await expect.poll(async () => (await runCard(primary.id)).some((text) => text.includes("Alex has the box")), { timeout: 20_000 }).toBe(true);
+  await expect.poll(async () => (await runCard(solo.id)).some((text) => text.includes("Claude Team invite action JC")), { timeout: 20_000 }).toBe(true);
+  expect(runtimeInvariants(f)).toEqual([]);
+}, { env: { SAGAX_PROACTIVE_GATHER_MS: "2000" } }), 150_000);
+
+it("peer inbox (second pass): a notice no wake runs for (proactive off) is shown in the receiver's own conversation, once, unread", () => withFixture(async (f) => {
+  const sender = (await f.cli("new-bot", "--name", "Osprey")).bot;
+  const teammate = (await f.cli("new-bot", "--name", "Harrie")).bot;
+  await f.api(`/api/bots/${teammate.id}`, { proactiveMode: "off" }, "PATCH");
+  f.plan[sender.id] = {
+    steps: [{ tool: "send_to_bot", arguments: { bot_id: teammate.id, title: "Bank threshold", message: "The support bank is under its threshold" } }],
+    reply: "Sent",
+  };
+  f.plan[teammate.id] = { reply: "Looked at the bank" };
+  f.save();
+  await f.api(`/api/bots/${sender.id}/messages`, { text: "Tell Harrie about the bank.", threadId: sender.activeTaskId });
+  const bots = (await f.api("/api/bots?messages=0", undefined, "GET")).bots as any[];
+  const main = bots.find((bot) => bot.id === teammate.id).threadId as string;
+  const lines = async () => (await f.messages(main)).filter((message) => String(message.tool?.name ?? "").startsWith("Message from Osprey"));
+  await expect.poll(async () => (await lines()).map((message) => message.tool.name), { timeout: 60_000, interval: 250 }).toEqual(["Message from Osprey: #Bank threshold"]);
+  const [line] = await lines();
+  expect(line.threadRef).toMatchObject({ botId: teammate.id });
+  expect(line.threadRef.threadId).not.toBe(main);
+  const after = (await f.api("/api/bots?messages=0", undefined, "GET")).bots.find((bot: any) => bot.id === teammate.id);
+  expect(after.tasks.find((task: any) => task.threadId === main)?.unread).toBe(true);
+  // no wake ran for it
+  expect(((await f.api("/api/routines", undefined, "GET")).runs as any[]).filter((run) => run.botId === teammate.id && run.proactive)).toEqual([]);
+  expect(runtimeInvariants(f)).toEqual([]);
+}), 150_000);
+
+it("peer inbox (second pass): a teammate's notice gathered before a restart (a pulsabot roll) wakes its receiver after it, with only ids on disk", () => withFixture(async (f) => {
+  const sender = (await f.cli("new-bot", "--name", "Osprey")).bot;
+  const receiver = (await f.cli("new-bot", "--name", "Wren")).bot;
+  f.plan[sender.id] = {
+    steps: [{ tool: "send_to_bot", arguments: { bot_id: receiver.id, title: "Urgent Northwind 100200 client reply", message: "ROLL_SECRET_WORDS Sam answered on 100200" } }],
+    reply: "Sent",
+  };
+  f.plan[receiver.id] = { byPrompt: [{ promptIncludes: "Proactive wake", plan: { reply: "AFTER_ROLL_REPORT: Sam answered on 100200" } }], reply: "Noted in the notice thread" };
+  f.save();
+  await f.api(`/api/bots/${sender.id}/messages`, { text: "Tell Wren.", threadId: sender.activeTaskId });
+  // the gather window outlasts the roll: the notice waits on disk
+  const pendingFile = join(f.dataDir, "proactive-pending.json");
+  await expect.poll(() => existsSync(pendingFile) ? Object.keys(JSON.parse(readFileSync(pendingFile, "utf8")).pending) : [], { timeout: 60_000, interval: 250 }).toEqual([receiver.id]);
+  const onDisk = readFileSync(pendingFile, "utf8");
+  expect(onDisk).not.toContain("ROLL_SECRET_WORDS");
+  expect(onDisk).not.toContain("Northwind");
+  expect(JSON.parse(onDisk).pending[receiver.id]).toEqual([{ key: expect.stringMatching(/^peer-notice:/), ref: { kind: "peer", noticeId: expect.any(String) } }]);
+  expect(statSync(pendingFile).mode & 0o777).toBe(0o600);
+  await f.restart({ SAGAX_PROACTIVE_GATHER_MS: "1000", SAGAX_PROACTIVE_REPLAY_MS: "0" });
+  const wakes = async () => ((await f.api("/api/routines", undefined, "GET")).runs as any[]).filter((run) => run.botId === receiver.id && run.proactive);
+  await expect.poll(async () => (await wakes()).map((run) => run.status), { timeout: 60_000, interval: 250 }).toEqual(["completed"]);
+  expect((await wakes())[0].proactive).toMatchObject({ sources: ["peer"], alwaysReport: true });
+  const wakePrompt = JSON.stringify(f.evidence().find((turn) => turn.botId === receiver.id && JSON.stringify(turn.prompt).includes("Proactive wake"))!.prompt);
+  expect(wakePrompt).toContain("ROLL_SECRET_WORDS Sam answered on 100200");
+  const bots = (await f.api("/api/bots?messages=0", undefined, "GET")).bots as any[];
+  const main = bots.find((bot) => bot.id === receiver.id).threadId as string;
+  await expect.poll(async () => (await f.messages(main)).some((message) => message.kind === "routine.run" && String(message.text ?? "").includes("AFTER_ROLL_REPORT")), { timeout: 20_000 }).toBe(true);
+  // replayed once: the file is empty again
+  await expect.poll(() => JSON.parse(readFileSync(pendingFile, "utf8")).pending, { timeout: 10_000 }).toEqual({});
+}, { env: { SAGAX_PROACTIVE_GATHER_MS: "600000" } }), 150_000);
+

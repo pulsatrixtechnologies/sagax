@@ -80,7 +80,7 @@ spec:
             - name: SAGAX_SANDBOX_TMP_MB
               value: "512"
             - name: SAGAX_SANDBOX_DISK_MB
-              value: "2048"
+              value: "32768"
             - name: SAGAX_SANDBOX_MAX_RUNNING
               value: "64"
             - name: SAGAX_SANDBOX_IDLE_MINUTES
@@ -152,7 +152,7 @@ spec:
       app.kubernetes.io/name: sagax-sandboxd
 ---
 # What the driver must create for one person. The Docker spec's isolation
-# rules are the source (server/user-sandbox-spec.ts); this is the same
+# rules are the source (server/sandbox/user-sandbox-spec.ts); this is the same
 # shape on the Kubernetes API. pids 512 is the driver's limit, not a
 # node-wide kubelet limit.
 apiVersion: v1

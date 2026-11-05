@@ -41,12 +41,12 @@ final class PhoneBotPanelTests: XCTestCase {
         XCTAssertEqual(DesktopPanelSection.visible(gate: SurfaceGate(scope: .serverClient), slack: true), [.slack, .voice, .usage])
     }
 
-    func testOrganizationAdminListsSlackSharingAndPerspicax() {
+    func testOrganizationAdminListsSharingWithoutProfileConfiguration() {
         let sections = DesktopPanelSection.visible(gate: SurfaceGate(scope: .serverAdmin, organization: true), slack: true)
         XCTAssertEqual(sections.first, .overview)
         XCTAssertEqual(Array(sections.prefix(2)), [.overview, .slack])
         XCTAssertTrue(sections.contains(.sharing))
-        XCTAssertTrue(sections.contains(.perspicax))
+        XCTAssertFalse(sections.contains { $0.rawValue == "perspicax" })
         XCTAssertTrue(sections.contains(.worksOn))
         XCTAssertFalse(sections.contains(.visibility))
     }

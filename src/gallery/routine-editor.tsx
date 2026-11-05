@@ -2,7 +2,10 @@
  * the editor on a clock routine or a webhook routine, the routine page's
  * Configuration with its webhook, and Edit bot's webhook list. Mocked API;
  * no server. Not shipped in the app.
- * ?lang=<code>&skin=<id>&view=editor|page|bot&trigger=clock|webhook */
+ * ?lang=<code>&skin=<id>&view=editor|panel-editor|page|bot&trigger=clock|webhook&mode=view|edit&advanced=1
+ * panel-editor: the routine panel in the side panel (400 px), as JC sees it;
+ * mode=edit opens it editable (2026-11-03: view mode first), advanced=1 opens
+ * Advanced. */
 import { StrictMode, useEffect, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { RoutineEditor } from "../components/RoutineCalendarPage";
@@ -23,6 +26,8 @@ applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? ski
 await loadLocale(params.get("lang") ?? "fr");
 const view = params.get("view") ?? "editor";
 const trigger = params.get("trigger") ?? "clock";
+const mode = params.get("mode") === "edit" ? "edit" : "view";
+try { localStorage.setItem("sagax.routineEditorMore.v1", params.get("advanced") === "1" ? "1" : "0"); } catch { /* private window */ }
 
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
@@ -31,18 +36,25 @@ window.fetch = async (input, init) => {
   return realFetch(input, init);
 };
 
-const bot = { id: "bot-ember", name: "Ember", color: "violet", tasks: [], threadId: "thread-ember" } as unknown as Bot;
+const bot = { id: "bot-ember", name: "Ember", color: "violet", tasks: [], threadId: "thread-ember", modelSelection: { instanceId: "claude-1", model: "opus", auto: false } } as unknown as Bot;
+// #2049: a Claude engine, so the editor offers Model and Sub-agent model.
+const claudeInstance = { instanceId: "claude-1", driverKind: "claudeAgent", models: { default: "opus", options: [{ id: "opus", label: "Opus" }, { id: "sonnet", label: "Sonnet" }, { id: "haiku", label: "Haiku" }] } };
 const prompt = [
   "Passe en revue les billets ouverts et résume ce qui a changé depuis la dernière exécution.",
   "",
   "- Regroupe par client.",
   "- Signale les billets en attente depuis plus de 2 jours.",
   "- Termine par **trois actions** à faire en priorité.",
+  "",
+  "Consulte [le tableau des billets](https://example.test/board) et la [liste des clients](https://example.test/clients).",
 ].join("\n");
+// long=1: an instruction of several screens (Show more in view mode).
+const longPrompt = Array.from({ length: 14 }, (_, index) => `## Étape ${index + 1}\n\n${prompt}`).join("\n\n");
 const routine = {
-  id: "routine-1", name: trigger === "webhook" ? "Nouvelle commande" : "Suivi des billets", prompt,
+  id: "routine-1", name: trigger === "webhook" ? "Nouvelle commande" : "Suivi des billets", prompt: params.get("long") === "1" ? longPrompt : prompt,
   target: "bot", botId: bot.id, runOn: "maus", enabled: true, overlap: "skip",
   schedule: trigger === "webhook" ? { type: "webhook" } : { type: "cron", expression: params.get("cron") ?? "30 8,12,16 * * 1-5", timeZone: "America/Toronto" },
+  postResults: true, attachments: trigger === "webhook" ? [] : [{ id: "a1", kind: "file", name: "clients.md", path: "/tmp/clients.md", size: 1200 }],
   durationMinutes: 30, timeoutMinutes: 30, nextRunAt: Date.now() + 3_600_000, createdAt: Date.now(), updatedAt: Date.now(),
 } as unknown as Routine;
 const webhooks = [
@@ -62,6 +74,7 @@ function Seed({ children }: { children: ReactNode }) {
   const { state, dispatch } = useStore();
   useEffect(() => {
     dispatch({ type: "hydrate", bots: [bot], groups: [], sections: [], computerControl: {} } as never);
+    dispatch({ type: "instances", instances: [claudeInstance] } as never);
     dispatch({ type: "webhooksHydrated", webhooks, attempts: [], ingress: { available: true, baseUrl: "https://hooks.example.test" } } as never);
     dispatch({ type: "routinesHydrated", routines: [routine], runs } as never);
     if (view === "panel") dispatch({ type: "openRoutine", botId: bot.id, routineId: routine.id } as never);
@@ -73,7 +86,9 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <StoreProvider>
       <Seed>
-        {view === "panel"
+        {view === "panel-editor"
+          ? <aside data-gallery-card style={{ width: 400 }} className="relative h-[880px] overflow-hidden border border-hairline/40 bg-panel text-ink"><RoutineEditor routine={routine} mode={mode} bots={[bot]} lockedBotId={bot.id} presentation="panel" onClose={() => {}} onDismiss={() => {}} /></aside>
+          : view === "panel"
           ? <aside data-gallery-card style={{ width: 400 }} className="relative h-[820px] border border-hairline/40 bg-panel text-ink"><RoutinesSection bot={bot} routines={[routine]} runs={runs} grouped /></aside>
           : view === "page"
           ? <div style={{ maxWidth: 720, padding: 16 }} data-gallery-card className="bg-canvas"><RoutineConfiguration routine={routine} bots={[bot]} /></div>

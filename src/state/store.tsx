@@ -12,13 +12,14 @@ import { selectionListed } from "@/lib/selection-fallback";
 import { hiddenKeySet, readSidebarHidden, useSidebarHidden } from "@/lib/sidebar-hidden";
 import { readLastBotSection, rememberBotSection } from "@/lib/last-bot-section";
 import { useShowThreads } from "@/lib/thread-preferences";
-import { noteBackAtBot, noteLeftBot, setOnScreenBot } from "@/lib/fresh-topic";
+import { noteBackAtBot, noteLeftBot, readNewChats, setOnScreenBot, writeNewChats } from "@/lib/fresh-topic";
+import { isEarlierSegment } from "@/lib/single-stream";
 import { t, activeLocale } from "@/lib/i18n";
 import { stepUpApprovals } from "@/lib/step-up-client";
 import { createBotPatchQueue } from "./bot-patch-queue";
 import { useChatErrorClear } from "./chat-error";
 import { migrateInstalledVoiceSettings } from "@/lib/voice-mode/settings";
-import { StoreSourceContext, usePublishedStoreSource } from "./store-source";
+import { StoreCommandsContext, StoreSourceContext, usePublishedStoreSource } from "./store-source";
 import { ThreadPrefetchContext } from "./thread-prefetch";
 import { createThreadPrefetcher, ThreadPageCache } from "@/lib/thread-page-cache";
 import { PERSON_THREADS_HEADER, currentTaskBot, visibleMessages, configStatusFromFrame, pinBotThreadAction, openRoutineRun, continueRoutineRunInConversation, routineRunOfThread, visibleNotificationThread, openNotificationTarget, opensBesideStream, sendsToFreshTopic, freshTopicCovers, botOpensTo, awayFromMainThread, openBot, landOnBot, startNewTopic, openBotThread, openThread, threadsReadOnScreen, folderOwnerPath, personThreadKept, peopleDmReadTarget, panelFollowsSelection, openBotCatalog, closeBotCatalog, dataTablesFromResponse, dataSheetFromResponse, initialState, liveCallFromFrame, nextLiveCallLookup, ApiError, taskPatchFields, type OptionCardData, type SecretRequestCardData, type Message, type GroupDefaultResponder, type Group, type GroupTask, type ModelSelection, type Task, type ThreadOpener, type ThreadCloser, type TaskUsage, type Bot, type BotProject, type ProjectUpdatePatch, type FolderOwnerKind, type GroupTaskUpdatePatch, type TaskUpdatePatch, type ConfigStatus, type ConfigViewer, type ManagedPolicySummary, type BrowserEngineSummary, type BrowserProfile, type ConfigStatusFrame, type EngineInstall, type InstanceInfo, type AchievementsCategory, type ModelVariantSession, type AppState, type BotAnnouncement, type Action, type ThreadTarget, type BotCatalogTarget, type PanelOwner } from "./store/model";
@@ -127,9 +128,21 @@ interface StreamState {
   reasoning: Record<string, string>;
 }
 const EMPTY_STREAM: StreamState = { streaming: {}, reasoning: {} };
+/** How long a newer topic must hold before the chat on screen follows it
+ * (the follow effect in StoreProvider). */
+export const FOLLOW_SETTLE_MS = 600;
 const StreamContext = createContext<StreamState>(EMPTY_STREAM);
 
 type PendingDelta = { text: string; reasoning: string };
+
+/** Stream APIs the SSE fold calls. Owned by StreamRoot so a delta's setState
+ * re-renders only StreamContext consumers, not StoreProvider's tree. */
+type StreamApi = {
+  clearStream: (threadId: string) => void;
+  flushDeltas: () => void;
+  resetStreams: () => void;
+  deltaBuffer: ReturnType<typeof createStreamDeltaBuffer>;
+};
 
 /** Paint once per frame, but keep draining when a hidden tab pauses rAF.
  * Flush pending chunks at 64 Ki UTF-16 characters or a 100ms fallback timer.
@@ -212,7 +225,12 @@ const StoreContext = createContext<{
  * "overview"/false and the reducer never touches localStorage. */
 function restoreBotSettingsSection(state: AppState): AppState {
   const section = readLastBotSection();
-  const withHidden = { ...state, sidebarHiddenKeys: hiddenKeySet(readSidebarHidden()) };
+  // An asked-for New chat outlives a reload (src/lib/fresh-topic.ts).
+  const newChats = readNewChats();
+  const freshTopic = Object.keys(newChats).length > 0
+    ? { ...state.freshTopic, ...Object.fromEntries(Object.entries(newChats).map(([botId, threadId]) => [botId, { threadId, auto: false }])) }
+    : state.freshTopic;
+  const withHidden = { ...state, freshTopic, sidebarHiddenKeys: hiddenKeySet(readSidebarHidden()) };
   return section ? { ...withHidden, botSettingsSection: section, botSettingsSectionStored: true } : withHidden;
 }
 
@@ -231,44 +249,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const showThreads = useShowThreads();
   const showThreadsRef = useRef(showThreads);
   showThreadsRef.current = showThreads;
-  // per-frame stream-delta batching (see the "runtime" SSE case); stream
-  // state is intentionally OUTSIDE the reducer so token frames re-render
-  // only StreamContext consumers
-  const [stream, setStream] = useState<StreamState>(EMPTY_STREAM);
-  const deltaBuffer = useMemo(() => createStreamDeltaBuffer((entries) => {
-    setStream((prev) => {
-      const streaming = { ...prev.streaming };
-      const reasoning = { ...prev.reasoning };
-      for (const [threadId, d] of entries) {
-        if (d.text) streaming[threadId] = (streaming[threadId] ?? "") + d.text;
-        if (d.reasoning) reasoning[threadId] = (reasoning[threadId] ?? "") + d.reasoning;
-      }
-      return { streaming, reasoning };
-    });
+  // Stream state lives in StreamRoot (below): a delta's setState must not
+  // re-render StoreProvider, or ChatView / the sidebar / the composer run
+  // again on every token even though they do not read the stream.
+  const streamApiRef = useRef<StreamApi | null>(null);
+  const clearStream = useCallback((threadId: string) => {
+    streamApiRef.current?.clearStream(threadId);
+  }, []);
+  const flushDeltas = useCallback(() => {
+    streamApiRef.current?.flushDeltas();
+  }, []);
+  const resetStreams = useCallback(() => {
+    streamApiRef.current?.resetStreams();
+  }, []);
+  const deltaBuffer = useMemo(() => ({
+    push: (threadId: string, kind: string, delta: string) => {
+      streamApiRef.current?.deltaBuffer.push(threadId, kind, delta);
+    },
+    dispose: () => {
+      streamApiRef.current?.deltaBuffer.dispose();
+    },
   }), []);
-  const flushDeltas = deltaBuffer.flush;
-  const clearStream = (threadId: string) => {
-    // Drop the thread's un-flushed deltas too: the settled message that
-    // triggered this clear already contains them. Without this, the pending
-    // rAF re-creates a "ghost" stream holding the tail fragment, and the
-    // next block's deltas append onto the duplicated tail instead of
-    // starting fresh.
-    deltaBuffer.clear(threadId);
-    setStream((prev) => {
-      if (!(threadId in prev.streaming) && !(threadId in prev.reasoning)) return prev;
-      const { [threadId]: _s, ...streaming } = prev.streaming;
-      const { [threadId]: _r, ...reasoning } = prev.reasoning;
-      return { streaming, reasoning };
-    });
-  };
-  // A non-resumable hello hydrates from REST and never replays the missed
-  // turn.completed / final message frames, so any half-written live text must
-  // go: otherwise LiveReply keeps the truncated bubble under the settled
-  // transcript and the next turn's deltas prepend onto it (#1749).
-  const resetStreams = () => {
-    deltaBuffer.reset();
-    setStream(EMPTY_STREAM);
-  };
   const clearChatError = useCallback(() => {
     rawDispatch({ type: "error", message: null });
   }, []);
@@ -362,23 +363,74 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // that thread theirs and leave their own conversation behind. Once, at the
   // first snapshot. With threads shown the bot stays where it was.
   const launched = useRef(false);
+  // A follow waits until the newer topic has held for FOLLOW_SETTLE_MS
+  // (2026-11-03): a thread that is the newest plain one for a frame or two
+  // (a routine run's task before its tag, a frame racing a switch) made the
+  // chat switch to it and back, a flicker on every run.
+  const follow = useRef<{ key: string; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const cancelFollow = () => {
+    if (follow.current) clearTimeout(follow.current.timer);
+    follow.current = null;
+  };
+  useEffect(() => cancelFollow, []);
   useEffect(() => {
     if (!state.hydrated) return;
     const bot = state.bots.find((candidate) => candidate.id === state.selectedId);
     const first = !launched.current;
     launched.current = true;
-    if (!bot || state.activeView !== "chat") return;
+    if (!bot || state.activeView !== "chat") {
+      cancelFollow();
+      return;
+    }
     // With one conversation the thread on screen is always the conversation
     // (shared/single-stream.ts): at launch, after a reconnect that adopted
     // the server's selection, and when another device or a routine started
     // a newer topic, the window follows it (the reference design: one
     // transcript per bot, on every device). Never while a switch is under
     // way. With threads shown the bot stays where it was, once checked.
-    if ((first || !showThreads) && !bot.switchingTo && botOpensTo(bot, showThreads) !== bot.threadId) openBot(dispatch, bot, showThreads, first ? {} : { landing: false });
-    // Launching the app is a return too: after the threshold (since the
-    // conversation went quiet, or since the app closed) a fresh topic.
-    else if (first && !showThreads) landOnBot(dispatch, bot, bot.threadId, { force: true });
+    const target = botOpensTo(bot, showThreads);
+    if (first) {
+      cancelFollow();
+      if (!bot.switchingTo && target !== bot.threadId) openBot(dispatch, bot, showThreads);
+      // Launching the app is a return too: after the threshold (since the
+      // conversation went quiet, or since the app closed) a fresh topic.
+      else if (!showThreads) landOnBot(dispatch, bot, bot.threadId, { force: true });
+      return;
+    }
+    if (showThreads || bot.switchingTo || target === bot.threadId) {
+      cancelFollow();
+      return;
+    }
+    const key = `${bot.id}\u0000${bot.threadId}\u0000${target}`;
+    if (follow.current?.key === key) return;
+    cancelFollow();
+    follow.current = {
+      key,
+      timer: setTimeout(() => {
+        follow.current = null;
+        const now = stateRef.current;
+        const live = now.bots.find((candidate) => candidate.id === bot.id);
+        if (!live || now.selectedId !== bot.id || now.activeView !== "chat" || live.switchingTo || showThreadsRef.current) return;
+        if (botOpensTo(live, false) === target && target !== live.threadId) openBot(dispatch, live, false, { landing: false });
+      }, FOLLOW_SETTLE_MS),
+    };
   }, [state.hydrated, state.bots, state.selectedId, state.activeView, showThreads, dispatch]);
+
+  // An asked-for New chat is kept on this device (src/lib/fresh-topic.ts)
+  // while it still covers the bot's conversation: a newer topic made
+  // elsewhere, or a bot gone, lets it go.
+  useEffect(() => {
+    if (!state.hydrated) return;
+    const kept: Record<string, string> = {};
+    for (const [botId, draft] of Object.entries(state.freshTopic)) {
+      if (draft.auto) continue;
+      const bot = state.bots.find((candidate) => candidate.id === botId);
+      if (!bot || !bot.tasks?.some((task) => task.threadId === draft.threadId)) continue;
+      if (isEarlierSegment(bot.tasks, draft.threadId, bot.threadId)) continue;
+      kept[botId] = draft.threadId;
+    }
+    writeNewChats(kept);
+  }, [state.hydrated, state.freshTopic, state.bots]);
 
   // Fresh topic on return (src/lib/fresh-topic.ts): which bot is on screen,
   // when the person left it (another bot or view, the window hidden, the app
@@ -512,15 +564,70 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Selector reads (store-selector.ts): the same state, for components that
   // render only when the slice they read changes.
   const source = usePublishedStoreSource(state, dispatch);
+  const commands = useMemo(() => ({ flushBotPatches, refreshInstances, refreshModels }), [flushBotPatches, refreshInstances, refreshModels]);
   return (
     <StoreSourceContext.Provider value={source}>
-      <StoreContext.Provider value={value}>
-        <ThreadPrefetchContext.Provider value={threadPrefetch}>
-          <StreamContext.Provider value={stream}>{children}</StreamContext.Provider>
-        </ThreadPrefetchContext.Provider>
-      </StoreContext.Provider>
+      <StoreCommandsContext.Provider value={commands}>
+        <StoreContext.Provider value={value}>
+          <ThreadPrefetchContext.Provider value={threadPrefetch}>
+            <StreamRoot apiRef={streamApiRef}>{children}</StreamRoot>
+          </ThreadPrefetchContext.Provider>
+        </StoreContext.Provider>
+      </StoreCommandsContext.Provider>
     </StoreSourceContext.Provider>
   );
+}
+
+/** Owns the in-flight stream map and the per-frame delta buffer. Keeping
+ * setState here (not in StoreProvider) means a content.delta only re-renders
+ * useStreaming consumers — LiveReply, TurnPresence, a floating bot — while
+ * ChatView and the rest of the tree keep their last commit. children is the
+ * element App passed in; when only this root updates, React reuses that
+ * element and skips the non-consumers. */
+function StreamRoot({
+  apiRef,
+  children,
+}: {
+  apiRef: { current: StreamApi | null };
+  children: ReactNode;
+}) {
+  const [stream, setStream] = useState<StreamState>(EMPTY_STREAM);
+  const deltaBuffer = useMemo(() => createStreamDeltaBuffer((entries) => {
+    setStream((prev) => {
+      const streaming = { ...prev.streaming };
+      const reasoning = { ...prev.reasoning };
+      for (const [threadId, d] of entries) {
+        if (d.text) streaming[threadId] = (streaming[threadId] ?? "") + d.text;
+        if (d.reasoning) reasoning[threadId] = (reasoning[threadId] ?? "") + d.reasoning;
+      }
+      return { streaming, reasoning };
+    });
+  }), []);
+  const flushDeltas = deltaBuffer.flush;
+  const clearStream = (threadId: string) => {
+    // Drop the thread's un-flushed deltas too: the settled message that
+    // triggered this clear already contains them. Without this, the pending
+    // rAF re-creates a "ghost" stream holding the tail fragment, and the
+    // next block's deltas append onto the duplicated tail instead of
+    // starting fresh.
+    deltaBuffer.clear(threadId);
+    setStream((prev) => {
+      if (!(threadId in prev.streaming) && !(threadId in prev.reasoning)) return prev;
+      const { [threadId]: _s, ...streaming } = prev.streaming;
+      const { [threadId]: _r, ...reasoning } = prev.reasoning;
+      return { streaming, reasoning };
+    });
+  };
+  // A non-resumable hello hydrates from REST and never replays the missed
+  // turn.completed / final message frames, so any half-written live text must
+  // go: otherwise LiveReply keeps the truncated bubble under the settled
+  // transcript and the next turn's deltas prepend onto it (#1749).
+  const resetStreams = () => {
+    deltaBuffer.reset();
+    setStream(EMPTY_STREAM);
+  };
+  apiRef.current = { clearStream, flushDeltas, resetStreams, deltaBuffer };
+  return <StreamContext.Provider value={stream}>{children}</StreamContext.Provider>;
 }
 
 /** The store when there is one; null outside a provider (static renders, tests). */
@@ -538,9 +645,13 @@ export function useStore() {
 export function BotEditorStore({ value, children }: { value: ReturnType<typeof useStore>; children: ReactNode }) {
   // Selector reads inside the editor see its scoped state, not the workspace's.
   const source = usePublishedStoreSource(value.state, value.dispatch);
+  const { flushBotPatches, refreshInstances, refreshModels } = value;
+  const commands = useMemo(() => ({ flushBotPatches, refreshInstances, refreshModels }), [flushBotPatches, refreshInstances, refreshModels]);
   return (
     <StoreSourceContext.Provider value={source}>
-      <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
+      <StoreCommandsContext.Provider value={commands}>
+        <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
+      </StoreCommandsContext.Provider>
     </StoreSourceContext.Provider>
   );
 }

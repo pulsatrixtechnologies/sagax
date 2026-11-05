@@ -2,7 +2,7 @@
 // ./background-text.ts), against the fake ACP CLI: a fresh tool-free session
 // on the engine's own CLI, refusing any tool or permission, and the usage
 // it reports. Main had no such call, so these engines never learned.
-import { chmodSync, existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,7 +19,7 @@ import { GrokAgentDriver } from "./grok.ts";
 import { QwenAgentDriver } from "./qwen.ts";
 
 const FAKE_CLI = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "testing", "fake-acp-cli.ts");
-const ENV_KEYS = ["FAKE_ACP_MODE", "FAKE_ACP_DUMP", "FAKE_ACP_TEXT_REPLY"];
+const ENV_KEYS = ["FAKE_ACP_MODE", "FAKE_ACP_DUMP", "FAKE_ACP_TEXT_REPLY", "FAKE_ACP_LAUNCH_COUNT_FILE"];
 
 describe("ACP memory one-shot (generateMemoryText)", () => {
   let instance: ProviderInstance | undefined;
@@ -70,6 +70,19 @@ describe("ACP memory one-shot (generateMemoryText)", () => {
     await (await create(GrokAgentDriver)).generateMemoryText!("prompt");
     const { argv } = JSON.parse(readFileSync(process.env.FAKE_ACP_DUMP, "utf8"));
     expect(argv.slice(0, 2)).toEqual(["--permission-mode", "default"]);
+  });
+
+  it("does not inflate FAKE_ACP_LAUNCH_COUNT_FILE (#1970)", async () => {
+    process.env.FAKE_ACP_TEXT_REPLY = "[]";
+    const countFile = join(scratch, "launches.txt");
+    writeFileSync(countFile, "0");
+    process.env.FAKE_ACP_LAUNCH_COUNT_FILE = countFile;
+    process.env.FAKE_ACP_DUMP = join(scratch, "dump.json");
+    await (await create(GrokAgentDriver)).generateMemoryText!("prompt");
+    expect(Number(readFileSync(countFile, "utf8").trim())).toBe(0);
+    // Still a real one-shot process: dump was written, marked as background.
+    const dump = JSON.parse(readFileSync(process.env.FAKE_ACP_DUMP, "utf8"));
+    expect(dump.env.SAGAX_ACP_BACKGROUND_TEXT).toBe("1");
   });
 
   it("fails closed when the agent reaches for a tool", async () => {

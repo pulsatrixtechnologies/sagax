@@ -3,8 +3,8 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
-import type { RequestAuth } from "../request-auth.ts";
-import type { WorkingBot } from "../computer-working-bots.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import type { WorkingBot } from "../computer/computer-working-bots.ts";
 import { createComputerWorkingBotsRoutes, type ComputerWorkingBotsRouteDeps } from "./computer-working-bots.ts";
 import { dispatchRoutes } from "./table.ts";
 
@@ -35,7 +35,7 @@ async function serve(deps: Partial<ComputerWorkingBotsRouteDeps>, auth: RequestA
 describe("GET /api/computer/working-bots", () => {
   it("answers the working bots with human names and the ids the stop needs", async () => {
     const bots: WorkingBot[] = [
-      { id: "b1", name: "Katarina", threadId: "t1" },
+      { id: "b1", name: "Osprey", threadId: "t1" },
       { id: "b2", name: "Ember", threadId: "t2" },
     ];
     const { base } = await serve({ list: async () => bots });

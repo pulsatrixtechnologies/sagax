@@ -2,7 +2,7 @@
   "_comment": [
     "The one place the engine CLIs baked into the Sagax server image are pinned.",
     "Read by scripts/install-engines.mjs (the Dockerfile's engines step), by the",
-    "server's startup self-check (server/engines-self-check.ts, through the",
+    "server's startup self-check (server/engines/engines-self-check.ts, through the",
     "manifest the install step writes) and by Perspicax's infra/scripts/build-push.sh.",
     "Bump a version and its hashes together; docs/custom-engines.md lists the set.",
     "redistributable false: the vendor's licence is not an open-source one, so the",
@@ -17,8 +17,8 @@
       "drivers": ["claudeAgent"],
       "kind": "npm",
       "package": "@anthropic-ai/claude-code",
-      "version": "2.1.288",
-      "integrity": "sha512-tnc8XuK5xQkyE6oowhhSPIjLuNc0S3MkjIHqycDsKP6yJlLtIjMt6v1TOkYLUiumcZ9jOgJZ6h9Vn3/f0murdQ==",
+      "version": "2.1.318",
+      "integrity": "sha512-OTJgLxcvWefv8IdTsq5n90Z2IxEhLwKqHUBhwZYE4odXzKA/Tb6p2Zb5Iy9Vq7JIVcNZzn9cPxW5sb42wLF95Q==",
       "installScripts": true,
       "bin": "claude",
       "license": "Anthropic Commercial Terms",
@@ -182,7 +182,7 @@
       "id": "cline",
       "name": "Cline",
       "drivers": ["clineAgent"],
-      "reason": "Added upstream in 0.1.107+ (native ACP); it is not verified to withhold its own shell and file tools (scripts/verify-org-host-tools.ts), so organization turns are refused (409 host_tools) and the server image does not carry it yet."
+      "reason": "Added upstream in 0.1.107+ (native ACP); it is not verified to withhold its own shell and file tools (scripts/verify/dev/verify-org-host-tools.ts), so organization turns are refused (409 host_tools) and the server image does not carry it yet."
     },
     {
       "id": "antigravity",

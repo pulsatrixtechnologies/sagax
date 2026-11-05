@@ -11,13 +11,14 @@ import { whopLikeCatalog } from "../testing/whop-like-catalog.ts";
 
 // Port de OpenMausBot #3150 : the real kill always runs (cleanup); the probe
 // can only force its verdict and records the budget it was given.
-const killProbe = vi.hoisted(() => ({ override: false, stopped: false, budgets: [] as number[] }));
+const killProbe = vi.hoisted(() => ({ override: false, deferOnce: false, stopped: false, budgets: [] as number[] }));
 vi.mock("../procs.ts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../procs.ts")>();
   return {
     ...actual,
     killCliTree: (child: Parameters<typeof actual.killCliTree>[0], budget = 5_000) => {
       killProbe.budgets.push(budget);
+      if (killProbe.deferOnce) { killProbe.deferOnce = false; return Promise.resolve(false); }
       const run = actual.killCliTree(child, budget);
       return killProbe.override ? run.then(() => killProbe.stopped) : run;
     },
@@ -35,7 +36,7 @@ function fixture(body = "", toolSchema: Record<string, unknown> = schema, toolNa
   const script = join(dir, "fake-mcp.mjs");
   const receipt = join(dir, "receipt.json");
   writeFileSync(script, `#!/usr/bin/env node
-    import { writeFileSync } from "node:fs";
+    import { readFileSync, writeFileSync } from "node:fs";
     import { spawn } from "node:child_process";
     const receipt = process.env.RECEIPT;
     const schema = ${JSON.stringify(toolSchema)};
@@ -74,6 +75,31 @@ function fixture(body = "", toolSchema: Record<string, unknown> = schema, toolNa
   };
 }
 
+/** One account surface changes tools and schemas after a held role choice. */
+function roleFixture() {
+  return fixture(`
+    if (message.method === "tools/list") {
+      const role = process.env.ROLE_FILE ? readFileSync(process.env.ROLE_FILE, "utf8") : globalThis.role;
+      const finance = role === "finance";
+      reply(message, {tools:[
+        {name:"identity_switch", inputSchema:schema},
+        {name:"write", description:"Current role write", inputSchema:finance
+          ? {type:"object", properties:{amount:{type:"number"}}, required:["amount"], additionalProperties:false} : schema},
+        ...(finance ? [
+          {name:"finance_only", inputSchema:schema},
+          ...Array.from({length:5}, (_,i) => ({name:"extra"+i, inputSchema:schema}))
+        ] : [{name:"desk_only", inputSchema:schema}])
+      ]}); return;
+    }
+    if (message.method === "tools/call" && message.params.name === "identity_switch") {
+      globalThis.role = message.params.arguments.value;
+      if (process.env.ROLE_FILE) writeFileSync(process.env.ROLE_FILE, globalThis.role);
+      send({jsonrpc:"2.0", method:"notifications/tools/list_changed"});
+      reply(message, {content:[{type:"text",text:"role selected"}]}); return;
+    }
+  `);
+}
+
 /** A configured server that cannot mount is left out of the turn, closed,
  * and reported, rather than failing every other server with it. */
 async function expectSkipped(f: ReturnType<typeof fixture>, reason: RegExp) {
@@ -98,6 +124,128 @@ afterEach(async () => {
 });
 
 describe("Chat MCP session", () => {
+  it("refreshes tools, schemas and provider deferral after a role switch without reinitializing", async () => {
+    const f = roleFixture();
+    const other = fixture();
+    const session = await mountChatTools({ custom: { perspicax: f.server, audit: other.server } }, f.controller.signal,
+      false, undefined, undefined, 4);
+    sessions.push(session);
+    const definitions = session.definitions;
+    session.definitions.push({ type:"function", function:{ name:"ask_user", description:"Native question", parameters:{type:"object"} } });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect(session.definitions.some(tool => tool.function.name === "perspicax_desk_only")).toBe(true);
+      await session.execute("perspicax_identity_switch", {value:"finance"}, f.controller.signal);
+      expect(session.definitions).toBe(definitions);
+      expect(session.definitions).toHaveLength(5); // four MCP definitions plus the caller's native question
+      expect(session.definitions.some(tool => tool.function.name === "ask_user")).toBe(true);
+      expect(session.definitions.some(tool => tool.function.name === "perspicax_desk_only")).toBe(false);
+      expect(() => session.validate("perspicax_desk_only", {value:"old role"})).toThrow("not advertised");
+      expect(() => session.validate("perspicax_write", {value:"old schema"})).toThrow("input schema");
+      await expect(session.execute("perspicax_write", {amount:42}, f.controller.signal)).resolves.toMatchObject({ok:true});
+      await expect(session.execute("tool_search", {query:"finance_only"}, f.controller.signal)).resolves.toMatchObject({text:expect.stringContaining("perspicax_finance_only")});
+      await expect(session.execute("tool_call", {name:"perspicax_finance_only",arguments:{value:"new role"}}, f.controller.signal)).resolves.toMatchObject({ok:true});
+      await expect(session.execute("audit_write", {value:"other server"}, other.controller.signal)).resolves.toMatchObject({ok:true});
+      expect(f.read().calls.filter(call => call.method === "initialize")).toHaveLength(1);
+      expect(f.read().calls.filter(call => call.method === "tools/list")).toHaveLength(2);
+      expect(other.read().calls.filter(call => call.method === "tools/list")).toHaveLength(1);
+    } finally { warn.mockRestore(); }
+  });
+
+  it("keeps the person's tool selection while discovering a newly selected role", async () => {
+    const f = roleFixture();
+    const session = await mountChatTools({custom:{perspicax:f.server}}, f.controller.signal, false,
+      {allow:["mcp:perspicax:identity_switch", "mcp:perspicax:finance_only"]});
+    sessions.push(session);
+    expect(session.definitions.map(tool => tool.function.name)).toEqual(["perspicax_identity_switch"]);
+    await session.execute("perspicax_identity_switch", {value:"finance"}, f.controller.signal);
+    expect(session.definitions.map(tool => tool.function.name)).toEqual(["perspicax_identity_switch","perspicax_finance_only"]);
+    expect(() => session.validate("perspicax_extra0", {value:"excluded"})).toThrow("not advertised");
+    await expect(session.execute("perspicax_finance_only", {value:"selected"}, f.controller.signal)).resolves.toMatchObject({ok:true});
+  });
+
+  it("refreshes a warm account catalog after the generation resets its role without a notification", async () => {
+    const f = roleFixture();
+    const roleFile = join(f.dir, "role.txt");
+    writeFileSync(roleFile, "desk");
+    f.server.env.ROLE_FILE = roleFile;
+    const session = await mountChatTools({custom:{perspicax:f.server}}, f.controller.signal);
+    sessions.push(session);
+    await session.execute("perspicax_identity_switch", {value:"finance"}, f.controller.signal);
+    expect(session.definitions.some(tool => tool.function.name === "perspicax_finance_only")).toBe(true);
+    writeFileSync(roleFile, "desk"); // the harness closed the prior generation's remote MCP session
+    await session.refresh!(f.controller.signal);
+    expect(session.definitions.some(tool => tool.function.name === "perspicax_finance_only")).toBe(false);
+    expect(session.definitions.some(tool => tool.function.name === "perspicax_desk_only")).toBe(true);
+    expect(() => session.validate("perspicax_write", {amount:42})).toThrow("input schema");
+    expect(() => session.validate("perspicax_write", {value:"default role"})).not.toThrow();
+    expect(f.read().calls.filter(call => call.method === "initialize")).toHaveLength(1);
+    expect(f.read().calls.filter(call => call.method === "tools/list")).toHaveLength(3);
+  });
+
+  it("retains a successful write result when the following catalog refresh fails", async () => {
+    const f = fixture(`
+      if (message.method === "tools/list" && globalThis.wrote) {
+        reply(message, {tools:[{name:"write",inputSchema:{type:"string"}}]}); return;
+      }
+      if (message.method === "tools/call") {
+        globalThis.wrote = true;
+        send({jsonrpc:"2.0",method:"notifications/tools/list_changed"});
+        reply(message, {content:[{type:"text",text:"write committed: receipt 42"}]}); return;
+      }
+    `);
+    const session = await f.mount();
+    const result = await session.execute("audit_write", {value:"once"}, f.controller.signal);
+    expect(result).toMatchObject({ok:true, text:expect.stringContaining("write committed: receipt 42")});
+    expect(result.text).toContain("do not repeat");
+    expect(session.definitions).toEqual([]);
+    await expect(session.execute("audit_write", {value:"again"}, f.controller.signal)).rejects.toThrow("closed");
+    expect(f.read().calls.filter(call => call.method === "tools/call")).toHaveLength(1);
+  });
+
+  it("keeps an advertised alias attached to its server when a role introduces a colliding tool", async () => {
+    const alpha = fixture(`
+      if (message.method === "tools/list") {
+        reply(message, {tools:[{name:"identity_switch",inputSchema:schema},
+          ...(globalThis.selected ? [{name:"beta_write",inputSchema:schema}] : [])]}); return;
+      }
+      if (message.method === "tools/call" && message.params.name === "identity_switch") {
+        globalThis.selected = true;
+        send({jsonrpc:"2.0",method:"notifications/tools/list_changed"});
+        reply(message, {content:[{type:"text",text:"selected"}]}); return;
+      }
+    `);
+    const beta = fixture();
+    const session = await mountChatTools({custom:{alpha:alpha.server,alpha_beta:beta.server}}, alpha.controller.signal);
+    sessions.push(session);
+    expect(session.definitions.some(tool => tool.function.name === "alpha_beta_write")).toBe(true);
+    await session.execute("alpha_identity_switch", {value:"new role"}, alpha.controller.signal);
+    await session.execute("alpha_beta_write", {value:"existing address"}, beta.controller.signal);
+    expect(beta.read().calls.at(-1)).toMatchObject({method:"tools/call",params:{name:"write",arguments:{value:"existing address"}}});
+    expect(alpha.read().calls.filter(call => call.method === "tools/call")).toHaveLength(1);
+    await session.execute("alpha_beta_write_2", {value:"new address"}, alpha.controller.signal);
+    expect(alpha.read().calls.at(-1)).toMatchObject({method:"tools/call",params:{name:"beta_write",arguments:{value:"new address"}}});
+  });
+
+  it("never recycles the alias of a removed tool for a normalized-name collision", async () => {
+    const f = fixture(`
+      if (message.method === "tools/list") {
+        reply(message, {tools:[{name:"identity_switch",inputSchema:schema},
+          {name:globalThis.selected ? "write_note" : "write-note",inputSchema:schema}]}); return;
+      }
+      if (message.method === "tools/call" && message.params.name === "identity_switch") {
+        globalThis.selected = true;
+        send({jsonrpc:"2.0",method:"notifications/tools/list_changed"});
+        reply(message, {content:[{type:"text",text:"selected"}]}); return;
+      }
+    `);
+    const session = await f.mount();
+    await session.execute("audit_identity_switch", {value:"new role"}, f.controller.signal);
+    expect(() => session.validate("audit_write_note", {value:"old address"})).toThrow("not advertised");
+    await session.execute("audit_write_note_2", {value:"new address"}, f.controller.signal);
+    expect(f.read().calls.at(-1)).toMatchObject({method:"tools/call",params:{name:"write_note"}});
+  });
+
   it("starts no server when the owner selected no MCP tools", async () => {
     const f = fixture();
     const session = await f.mount(false, false, { allow: ["native:ask_user"] });
@@ -422,6 +570,17 @@ describe("Chat MCP shutdown verdict (port de OpenMausBot #3150)", () => {
       await expect(session.close()).resolves.toBeUndefined();
       expect(warn).toHaveBeenCalledWith(expect.stringContaining("no call was in flight"));
     } finally { warn.mockRestore(); }
+  });
+
+  it("retries process teardown after an unconfirmed idle close", async () => {
+    const f = fixture(); const session = await f.mount(); const pid = f.read().pid;
+    killProbe.deferOnce = true;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await session.close(); expect(alive(pid)).toBe(true);
+      killProbe.override = false;
+      await session.close(); expect(alive(pid)).toBe(false);
+    } finally { killProbe.override = false; warn.mockRestore(); }
   });
 
   it("an unconfirmed shutdown still fails when a call was in flight", async () => {

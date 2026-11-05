@@ -1,61 +1,28 @@
-// Call mode — the bot on the line.
-//
-// The loop is deliberately HALF-DUPLEX: the microphone is live only when
-// the bot is not speaking. The dictation helper is Apple's SFSpeechRecognizer
-// running on raw AVAudioEngine input with no acoustic echo cancellation, so
-// a mic left open through playback transcribes the bot's own voice back into
-// the conversation and the two of them talk forever. Interrupting is a tap
-// or Escape instead, which is honest and cannot feed back. (Full-duplex
-// barge-in needs AEC on the capture path — a follow-up, not a footnote.)
-//
-// Turn-taking uses a small silence endpointer in the native helper. Apple's
-// buffer-backed recognizer does not finalize on silence by itself: the helper
-// has to end the audio stream, which then produces the final transcript.
-//
-// The other half of making a call bearable is narration. An agent turn is
-// 5-60 seconds of tool calls; silence that long reads as a dropped call. So
-// while the bot works in silence the call says a short line of its own,
-// built from this turn's real tool events and rate-limited
-// (src/lib/voice-mode/progress.ts, the Live call's rules): never the
-// server's English chip narration, never a tool name or an identifier.
-import { useCallback, useEffect, useId, useRef, useState, type CSSProperties } from "react";
-import { AudioLines, Loader2, PhoneOff, X } from "lucide-react";
+// The call button and the call dock. A call is a realtime voice session
+// (the maintainer, 2026-11-02: never text to speech): voice-mode/RealtimeCall.tsx runs
+// it on the configured realtime voice (server/voice/realtime-call.ts). Without
+// one, the button says so and opens the voice settings; the older macOS
+// dictation plus text to speech call is gone.
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import { AudioLines, PhoneOff } from "lucide-react";
 import { CTA_CIRCLE, CTA_DEFAULT, CTA_TONED, ctaStyle, type BotCtaColors } from "@/lib/voice-cta";
 
 import { useShowThreads } from "@/lib/thread-preferences";
-import { openBot, useStore, visibleMessages, type Bot } from "@/state/store";
+import { openBot, useStore, type Bot } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { useMenuMotion } from "./MenuMotion";
-import { currentCall, deferCallCleanup, endCall, startCall, useOnCall } from "@/lib/call";
-import { speaker } from "@/lib/tts";
+import { endCall, startCall, useOnCall } from "@/lib/call";
 import { localSystemVoiceActive } from "@/lib/local-voice";
-import { useSpeech } from "@/lib/tts/useSpeech";
-import { usePushToTalk } from "@/lib/push-to-talk";
-import { BotAvatar } from "./Avatar";
-import { isRoutineApproval, isSkillApproval, pendingApprovals, spokenApprovalPrompt } from "./PendingApproval";
 import { track } from "@/lib/analytics";
 import { useDesktopCapabilities } from "./DesktopCapabilities";
 import { callCapabilityHelp } from "@/lib/call-capability";
-import { useVoiceModeCheck, useVoiceModeStatus } from "@/lib/voice-mode/api";
+import { realtimeCallReady, useVoiceModeCheck, useVoiceModeStatus } from "@/lib/voice-mode/api";
+import { RealtimeCallEngine } from "./voice-mode/RealtimeCall";
 import { managedProfile } from "@/lib/profile-management";
 import { VoiceModeCallButton } from "./voice-mode/VoiceModeCallButton";
-import { nativeSpeechEngine, type SpeechEngine } from "@/lib/voice-mode/engine";
-import { activeLocale, t, tIn } from "@/lib/i18n";
-import { CallProgress, progressLocale, progressText, turnTools } from "@/lib/voice-mode/progress";
-import { CallFailure, callFailureKey } from "@/lib/voice-mode/failure";
-import { looksFrench } from "@/lib/voice-mode/turns";
+import { t } from "@/lib/i18n";
 import type { VoiceModeStatus } from "../../shared/voice-mode";
-import { LiveCall, LiveCallEngine } from "./voice-mode/LiveCall";
-
-import { spokenDecision } from "@/lib/voice-mode/answers";
-import { useVoiceCallMark } from "@/lib/voice-mode/call-mark";
-import { decideBotHangup, VOICE_CALL_ENDED_EVENT, type VoiceCallEndedDetail } from "@/lib/voice-mode/call-end";
-import { spokenReply } from "@/lib/voice-mode/answer-budget";
-
-type Phase = "listening" | "sending" | "working" | "speaking";
-const CALL_ENDPOINT_MS = 850;
-/** How often the call asks whether a progress line is due. */
-const PROGRESS_TICK_MS = 500;
+import { LiveCall } from "./voice-mode/LiveCall";
 
 /** An organization server: the server says so in voice mode's status, and
  * the session's viewer is managed by Perspicax. There, voice mode is the
@@ -112,7 +79,7 @@ export function CallTargetButton({
   setupBotId?: string;
   /** Rooms cannot rely on one workspace fallback for multiple speakers. */
   requireExplicitVoices: boolean;
-  /** Voice mode with xAI (server/voice-mode.ts): when available it carries
+  /** Voice mode with xAI (server/voice/voice-mode.ts): when available it carries
    * the call on any desktop (macOS, Windows) or browser, without the macOS
    * dictation helper. */
   voiceMode?: VoiceModeStatus | null;
@@ -124,17 +91,22 @@ export function CallTargetButton({
   const showThreads = useShowThreads();
   const { capabilities, ready: capabilitiesReady } = useDesktopCapabilities();
   const active = useOnCall() === targetId;
-  const xaiVoice = voiceMode?.available === true;
+  // 2026-11-02 (the maintainer): a call is a realtime voice session, never text to
+  // speech: without the realtime voice the button says so and opens the
+  // voice settings; the dictation plus text to speech call is not offered.
+  const xaiVoice = realtimeCallReady(voiceMode);
+  const realtimeOnly = !requireExplicitVoices;
   const nativeHelp = capabilitiesReady
     ? callCapabilityHelp(capabilities, Boolean(window.ogb?.speechStart))
     : null;
-  // No key for voice mode and no dictation here either: say what voice mode needs.
   const capabilityHelp = xaiVoice
     ? null
-    : nativeHelp && voiceMode && !voiceMode.available
-      ? { label: t("voiceMode.needsXaiKeyLabel"), reason: t("voiceMode.needsXaiKeyReason") }
-      : nativeHelp;
-  const supported = xaiVoice || (capabilitiesReady && !capabilityHelp);
+    : realtimeOnly
+      ? { label: t("voiceMode.realtimeNeededLabel"), reason: t("voiceMode.realtimeNeededReason") }
+      : nativeHelp && voiceMode && !voiceMode.available
+        ? { label: t("voiceMode.needsXaiKeyLabel"), reason: t("voiceMode.needsXaiKeyReason") }
+        : nativeHelp;
+  const supported = xaiVoice || (!realtimeOnly && capabilitiesReady && !capabilityHelp);
   const localVoice = localSystemVoiceActive();
   const configured = xaiVoice || localVoice || Boolean(state.config?.tts?.configured);
   const everyTargetHasVoice = voices.length > 0 && voices.every((voice) => Boolean(voice));
@@ -142,8 +114,8 @@ export function CallTargetButton({
     xaiVoice ||
     localVoice ||
     (configured && (requireExplicitVoices ? everyTargetHasVoice : Boolean(state.config?.tts?.ready || everyTargetHasVoice)));
-  const unavailable = !active && ((!capabilitiesReady && !xaiVoice) || !supported || !voiceReady);
-  const voiceSetupRequired = capabilitiesReady && supported && !voiceReady;
+  const unavailable = !active && (realtimeOnly ? !xaiVoice : (!capabilitiesReady && !xaiVoice) || !supported || !voiceReady);
+  const voiceSetupRequired = realtimeOnly ? !xaiVoice : capabilitiesReady && supported && !voiceReady;
   const [helpOpen, setHelpOpen] = useState(false);
   const helpMotion = useMenuMotion(Boolean(unavailable && helpOpen));
   const rootRef = useRef<HTMLDivElement>(null);
@@ -153,6 +125,8 @@ export function CallTargetButton({
     ? t("callView.hangUpOn", { name: targetName })
     : xaiVoice
       ? t("voiceMode.start", { name: targetName })
+      : realtimeOnly && capabilityHelp
+      ? capabilityHelp.label
       : !capabilitiesReady
       ? t("callView.checkingAvailability")
       : !supported
@@ -165,6 +139,8 @@ export function CallTargetButton({
 
   const reason = xaiVoice
     ? ""
+    : realtimeOnly && capabilityHelp
+    ? capabilityHelp.reason
     : !capabilitiesReady
     ? t("callView.checkingReason")
     : capabilityHelp
@@ -273,16 +249,17 @@ export function CallEngineHost() {
   const bot = id ? state.bots.find((candidate) => candidate.id === id) : undefined;
   const voiceMode = useVoiceModeStatus(bot?.id ?? "");
   if (!bot || voiceMode?.available !== true) return null;
-  return <LiveCallEngine key={bot.id} bot={bot} />;
+  // a call is a realtime voice session (the maintainer, 2026-11-02): never text to speech
+  if (!realtimeCallReady(voiceMode)) return null;
+  return <RealtimeCallEngine key={bot.id} bot={bot} />;
 }
 
 /** The older call's full overlay. Voice mode docks its bar at the top of
  * the chat column instead (VoiceCallDock). */
-export function CallOverlay({ bot }: { bot: Bot }) {
-  const active = useOnCall() === bot.id;
-  const voiceMode = useVoiceModeStatus(bot.id);
-  if (!active || voiceMode?.available === true) return null;
-  return <Call bot={bot} />;
+export function CallOverlay(_props: { bot: Bot }) {
+  // the dictation plus text to speech call is never a call any more (the maintainer,
+  //  2026-11-02): the call button says to set up the realtime voice instead
+  return null;
 }
 
 /** Same length as `--animate-call-dock-out` in styles.css. */
@@ -328,532 +305,5 @@ export function VoiceCallDock({ bot }: { bot: Bot }) {
       className="animate-call-dock-out pointer-events-none mx-auto mb-2 w-[min(420px,calc(100%-24px))] overflow-hidden rounded-full border border-hairline-weak bg-elevated"
       style={{ "--call-dock-h": `${height.current}px`, animationDuration: `${CALL_DOCK_EXIT_MS}ms` } as CSSProperties}
     />
-  );
-}
-
-/** The older call: the macOS dictation helper, half duplex. */
-function Call({ bot }: { bot: Bot }) {
-  const { dispatch } = useStore();
-  const speech = useSpeech();
-  const initialPhase: Phase = bot.busy ? "working" : "listening";
-  const [phase, setPhase] = useState<Phase>(initialPhase);
-  const [heard, setHeard] = useState("");
-  /** the words the person is saying now: a failure line never cuts them */
-  const heardRef = useRef("");
-  heardRef.current = heard;
-  const [note, setNote] = useState<string | null>(null);
-  const engine: SpeechEngine = nativeSpeechEngine;
-  // Every turn said on this call is a call turn (Message.voiceCall), like the
-  // live call's: the server adds the phone-call section (voice output rules)
-  // and offers end_call (src/lib/voice-mode/call-mark.ts).
-  const callId = useVoiceCallMark(bot.id, bot.threadId);
-  /** the call is ending (the bot said goodbye): the mic never reopens */
-  const ending = useRef(false);
-  const pushToTalk = usePushToTalk(bot.id, phase === "listening", () => {
-    setNote(t("callView.note.pushToTalk"));
-  });
-
-  const messages = visibleMessages(bot);
-  const approval = pendingApprovals(messages)[0];
-  const question = messages.find(
-    (message) =>
-      message.kind === "options" &&
-      message.card?.requestId &&
-      !message.card.tool &&
-      !message.card.answered &&
-      !message.card.dismissed,
-  );
-
-  // Everything already on screen when the call starts has been read or
-  // ignored — a call must not open by reciting the backlog.
-  const spokenIds = useRef<Set<string>>(new Set());
-  /** A failed turn: one sentence with what to do, then silence (failure.ts). */
-  const failure = useRef<CallFailure | null>(null);
-  const started = useRef(false);
-  if (!started.current) {
-    started.current = true;
-    for (const m of messages) spokenIds.current.add(m.id);
-    failure.current = new CallFailure(messages);
-  }
-
-  // the approval we last asked about aloud, so a card that stays open
-  // while the user thinks is not re-read every render
-  const askedApproval = useRef<{
-    requestId: string;
-    routine: boolean;
-    skill: boolean;
-    submitted: boolean;
-  } | null>(null);
-  const askedQuestion = useRef<{ requestId: string; messageId: string } | null>(null);
-  const phaseRef = useRef<Phase>(initialPhase);
-  const alive = useRef(true);
-  const sayGeneration = useRef(0);
-  /** Short progress lines from this turn's real tool events (progress.ts). */
-  const progress = useRef(new CallProgress());
-  const messagesRef = useRef(messages);
-  messagesRef.current = messages;
-  const busyRef = useRef(Boolean(bot.busy));
-  busyRef.current = Boolean(bot.busy);
-
-  /** Change the rendered phase and the synchronous phase used by native
-   * callbacks together. React state alone is too late: the helper can exit
-   * in the same tick as a final transcript or an intentional mute. */
-  const move = useCallback((next: Phase) => {
-    phaseRef.current = next;
-    if (alive.current) setPhase(next);
-  }, []);
-
-  const hush = useCallback(() => {
-    void engine.stop();
-  }, [engine]);
-
-  const listen = useCallback(() => {
-    if (!alive.current || currentCall() !== bot.id || ending.current) return;
-    move("listening");
-    setHeard("");
-    setNote(null);
-    void engine.start({ endpointMs: CALL_ENDPOINT_MS }).catch(() => {
-      if (alive.current && currentCall() === bot.id) {
-        setNote(t("callView.note.micStart"));
-      }
-    });
-  }, [bot.id, engine, move]);
-
-  /** Speak, with the microphone closed for the duration (see the header
-   * comment — an open mic during playback is a feedback loop). */
-  const say = useCallback(
-    async (text: string) => {
-      if (!alive.current || currentCall() !== bot.id) return false;
-      const mine = ++sayGeneration.current;
-      // Move first. stopSpeech() finishes asynchronously, and its close must
-      // never observe an old "listening" phase and reopen the mic.
-      move("speaking");
-      hush();
-      await speaker.speak(text, {
-        botId: bot.id,
-        voiceId: bot.voice,
-      });
-      return alive.current && currentCall() === bot.id && sayGeneration.current === mine;
-    },
-    [bot.id, bot.voice, hush, move],
-  );
-
-  const sayThenListen = useCallback(
-    async (text: string) => {
-      const stillMine = await say(text);
-      if (stillMine && phaseRef.current === "speaking") listen();
-    },
-    [listen, say],
-  );
-
-  // Navigating away from this bot hangs up. Without ownership checking, the
-  // overlay disappeared but `currentCall()` remained set and auto-speak was
-  // permanently disabled for a call nobody could see.
-  useEffect(() => {
-    alive.current = true;
-    return () => {
-      alive.current = false;
-      sayGeneration.current += 1;
-      // StrictMode immediately remounts effects once in development. A
-      // microtask distinguishes that probe from real navigation: the probe
-      // has set alive=true again before this runs; a genuine unmount has not.
-      deferCallCleanup(bot.id, () => alive.current);
-    };
-  }, [bot.id]);
-
-  // ── the microphone ───────────────────────────────────────────────────
-  useEffect(() => {
-    if (!window.ogb) return;
-    const offTranscript = engine.onTranscript((line) => {
-      if (!alive.current || currentCall() !== bot.id || phaseRef.current !== "listening") return;
-      if (line.error) {
-        setNote(t("callView.note.dictationStopped"));
-        return;
-      }
-      if (typeof line.text !== "string") return;
-      setHeard(line.text);
-      if (line.partial !== false) return;
-      // final result — Apple's recognizer decided the turn ended
-      const said = line.text.trim();
-      if (!said) return listen();
-
-      const open = askedApproval.current;
-      if (open) {
-        if (open.submitted) {
-          move("working");
-          hush();
-          return;
-        }
-        const decision = spokenDecision(said);
-        if (decision) {
-          const allow = decision === "allow";
-          if (allow && open.skill) {
-            setHeard("");
-            void sayThenListen("Open this chat to review the complete skill before enabling it. You can say no now to deny it.");
-            return;
-          }
-          // Keep this request claimed until the server's durable card patch
-          // arrives. Clearing it here lets a render in that network gap read
-          // and submit the same approval again.
-          open.submitted = true;
-          move("working");
-          hush();
-          setHeard("");
-          dispatch({
-            type: "decideRequest",
-            threadId: bot.threadId,
-            requestId: open.requestId,
-            behavior: allow ? "allow" : "deny",
-            message: allow ? undefined : "Denied by the user, on a call.",
-            onError: (error: string) => {
-              const pending = askedApproval.current;
-              if (
-                !alive.current ||
-                currentCall() !== bot.id ||
-                pending?.requestId !== open.requestId ||
-                !pending.submitted
-              ) return;
-              pending.submitted = false;
-              const detail = error.trim().slice(0, 240);
-              const decision = open.routine ? "routine decision" : "approval";
-              void sayThenListen(
-                `I couldn't save that ${decision}${detail ? `: ${detail}` : "."} Please try again.`,
-              );
-            },
-          });
-          return;
-        }
-        // not a decision — leave the card up and say so rather than
-        // guessing consent from an ambiguous sentence
-        void sayThenListen(t("voiceMode.allowOnceOrDeny"));
-        return;
-      }
-
-      const openQuestion = askedQuestion.current;
-      if (openQuestion) {
-        askedQuestion.current = null;
-        dispatch({ type: "answerCard", botId: bot.id, threadId: bot.threadId, messageId: openQuestion.messageId, answer: said });
-        move("working");
-        return;
-      }
-
-      move("sending");
-      progress.current.turnSent(Date.now());
-      dispatch({ type: "send", botId: bot.id, text: said, threadId: bot.threadId, voiceCall: { callId } });
-    });
-    const offEnd = engine.onEnd(({ code, reason }) => {
-      if (!alive.current || currentCall() !== bot.id) return;
-      if (code === 2) {
-        setNote(t("callView.note.needsDictation"));
-        return;
-      }
-      if (code === 1) {
-        setNote(
-          reason === "helper-build-failed"
-            ? t("callView.note.helperBuild")
-            : reason === "dictation-disabled"
-              ? t("callView.note.dictationDisabled")
-              : reason === "speech-not-authorized"
-                ? t("callView.note.speechNotAuthorized")
-                : t("callView.note.dictationStart"),
-        );
-        return;
-      }
-      // the helper exits after every final result; if we are still meant
-      // to be listening, that means the user's turn ended — start the next
-      if (phaseRef.current === "listening") listen();
-    });
-    if (bot.busy && !approval && !question) move("working");
-    else listen();
-    return () => {
-      offTranscript();
-      offEnd();
-      void engine.stop();
-    };
-    // busy/approval are intentionally initial snapshots. Their live changes
-    // are handled below without tearing down native event listeners.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bot.id, bot.threadId, callId, dispatch, engine, hush, listen, move, sayThenListen]);
-
-  // ── narrate the work, speak the answer, read the approvals ───────────
-  useEffect(() => {
-    // The request may be resolved from the normal approval UI or by another
-    // client while this call is open. Do not keep treating future speech as
-    // an answer to a card that no longer exists.
-    let resumeAfterRoutine = false;
-    if (askedApproval.current && approval?.requestId !== askedApproval.current.requestId) {
-      resumeAfterRoutine = askedApproval.current.routine && askedApproval.current.submitted;
-      askedApproval.current = null;
-    }
-    if (askedQuestion.current && question?.card?.requestId !== askedQuestion.current.requestId) {
-      askedQuestion.current = null;
-    }
-    if (!approval && !question && bot.busy && phaseRef.current === "listening") {
-      move("working");
-      hush();
-    }
-    if (resumeAfterRoutine && !approval && !question && !bot.busy) {
-      listen();
-      return;
-    }
-    // Nothing may reopen capture or narrate new work while the server is
-    // durably settling this exact decision.
-    if (askedApproval.current?.submitted) return;
-    if (approval && askedApproval.current?.requestId !== approval.requestId && phase !== "speaking") {
-      askedApproval.current = {
-        requestId: approval.requestId,
-        routine: isRoutineApproval(approval),
-        skill: isSkillApproval(approval),
-        submitted: false,
-      };
-      spokenIds.current.add(approval.message.id);
-      const skillPrompt = approval.message.card?.skillRequest?.action === "update"
-        ? `${bot.name} wants to update a learned skill. Open this chat to review the complete skill before replacing the current version. You can say no to deny it.`
-        : `${bot.name} wants to enable a new learned skill. Open this chat to review the complete skill before enabling it. You can say no to deny it.`;
-      void sayThenListen(isSkillApproval(approval) ? skillPrompt : spokenApprovalPrompt(approval, bot.name));
-      return;
-    }
-    if (
-      question?.card?.requestId &&
-      askedQuestion.current?.requestId !== question.card.requestId &&
-      phase !== "speaking"
-    ) {
-      askedQuestion.current = { requestId: question.card.requestId, messageId: question.id };
-      spokenIds.current.add(question.id);
-      const detail = question.card.subtitle.trim();
-      const choices = question.card.options.length
-        ? ` The options are ${question.card.options.join(", ")}.`
-        : "";
-      void sayThenListen(`${bot.name} asks: ${detail}${/[.!?]$/.test(detail) ? "" : "."}${choices}`);
-      return;
-    }
-    const fresh = messages.filter((m) => !spokenIds.current.has(m.id));
-    if (!fresh.length) return;
-    // only the newest of each kind matters: a burst of tool chips should
-    // not queue thirty seconds of narration behind the actual answer
-    const reply = [...fresh].reverse().find((m) => m.role === "bot" && m.kind === "text" && m.text?.trim());
-    for (const m of fresh) spokenIds.current.add(m.id);
-
-    // a written follow-up below a --- line is for the chat, never said; at
-    // most four sentences, up to a question (answer-budget.ts)
-    const lastUserText = [...messages].reverse().find((m) => m.role === "user" && !m.parallelTask)?.text;
-    const locale = progressLocale({ lastUserText, pageLocale: activeLocale(), looksFrench });
-    const spoken = reply?.text ? spokenReply(reply.text, tIn(locale, "voiceMode.restInChat")) : "";
-    if (spoken) {
-      progress.current.heard(Date.now());
-      void sayThenListen(spoken);
-    }
-    // No tool-chip narration (the chip's `spoken` text is the server's
-    // English and can name a tool): the progress tick below says the lines.
-  }, [messages, approval, question, phase, bot.busy, bot.name, hush, listen, move, say, sayThenListen]);
-
-  // ── progress while the bot works in silence (progress.ts) ─────────────
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (!alive.current || currentCall() !== bot.id || ending.current) return;
-      // a failed turn is said once, in one sentence, never its cause
-      const failed = failure.current?.next({
-        now: Date.now(),
-        messages: messagesRef.current,
-        botBusy: busyRef.current,
-        // the bot talking, or the person (words coming in, or being sent)
-        botSpeaking: phaseRef.current === "speaking" || phaseRef.current === "sending" || Boolean(heardRef.current) || speaker.isSpeaking(),
-        awaitingAnswer: Boolean(askedApproval.current || askedQuestion.current),
-      });
-      if (failed) {
-        const lastUserText = [...messagesRef.current].reverse().find((m) => m.role === "user" && !m.parallelTask)?.text;
-        const locale = progressLocale({ lastUserText, pageLocale: activeLocale(), looksFrench });
-        void say(tIn(locale, callFailureKey(failed)) ?? t(callFailureKey(failed))).then((stillMine) => {
-          // then silence: the microphone is open for what they say next
-          if (stillMine && phaseRef.current === "speaking") listen();
-        });
-        return;
-      }
-      const planner = progress.current;
-      if (!planner.active) return;
-      const line = planner.next({
-        now: Date.now(),
-        thinking: phaseRef.current === "working",
-        botBusy: busyRef.current,
-        botSpeaking: phaseRef.current === "speaking" || speaker.isSpeaking(),
-        // an approval being settled keeps the call quiet too (see above)
-        awaitingAnswer: Boolean(askedApproval.current || askedQuestion.current),
-        queued: false,
-        tools: turnTools(messagesRef.current),
-      });
-      if (!line) return;
-      // this call has no language of its own: the person's last words
-      // (French or not) on an English or French page, else the page's
-      const lastUserText = [...messagesRef.current].reverse().find((m) => m.role === "user" && !m.parallelTask)?.text;
-      const locale = progressLocale({ lastUserText, pageLocale: activeLocale(), looksFrench });
-      const text = progressText(line, (key, params) => tIn(locale, key, params));
-      if (!text) return;
-      void say(text).then((stillMine) => {
-        if (!stillMine || phaseRef.current !== "speaking") return;
-        // the turn ended under the line with nothing to say: listen again
-        if (!busyRef.current && !askedApproval.current && !askedQuestion.current) listen();
-        else move("working");
-      });
-    }, PROGRESS_TICK_MS);
-    return () => clearInterval(timer);
-  }, [bot.id, listen, move, say]);
-
-  // busy is the harness's word for "a turn is running"
-  useEffect(() => {
-    if (bot.busy) {
-      // An open approval deliberately keeps the mic live for yes/no. Every
-      // other busy phase is half-duplex and must close capture.
-      if (phaseRef.current !== "speaking" && !askedApproval.current && !askedQuestion.current) {
-        move("working");
-        hush();
-      }
-    } else if (
-      phaseRef.current === "working" &&
-      !askedApproval.current &&
-      !askedQuestion.current &&
-      !speaker.isSpeaking()
-    ) {
-      // A failed/cancelled turn may have no reply to trigger the normal
-      // speak-then-listen path. Recover the call instead of staying stuck.
-      listen();
-    }
-  }, [bot.busy, hush, listen, move]);
-
-  // The server said this call ended (the bot's end_call, or the person on
-  // another device): close the mic, let a goodbye finish, then hang up.
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let stopped = false;
-    const onEnded = (event: Event) => {
-      const detail = (event as CustomEvent<VoiceCallEndedDetail>).detail;
-      if (!detail || detail.callId !== callId || detail.threadId !== bot.threadId) return;
-      if (detail.by !== "bot" && detail.by !== "person") return;
-      if (timer) clearTimeout(timer);
-      ending.current = true;
-      hush();
-      const started = Date.now();
-      let heardSpeech = false;
-      const tick = () => {
-        if (stopped) return;
-        const speaking = speaker.isSpeaking();
-        if (speaking) heardSpeech = true;
-        if (decideBotHangup({ speaking, heardSpeech, elapsedMs: Date.now() - started }) === "wait") {
-          timer = setTimeout(tick, 80);
-          return;
-        }
-        endCall(bot.id);
-      };
-      tick();
-    };
-    window.addEventListener(VOICE_CALL_ENDED_EVENT, onEnded);
-    return () => {
-      stopped = true;
-      if (timer) clearTimeout(timer);
-      window.removeEventListener(VOICE_CALL_ENDED_EVENT, onEnded);
-    };
-  }, [bot.id, bot.threadId, callId, hush]);
-
-  // Escape hangs up; space interrupts whatever is being said
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        endCall(bot.id);
-      } else if (e.code === "Space" && speaker.isSpeaking()) {
-        e.preventDefault();
-        sayGeneration.current += 1;
-        progress.current.stop();
-        speaker.stop();
-        listen();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [bot.id, listen]);
-
-  const mascotState =
-    phase === "listening" ? "listening" : phase === "speaking" ? "sending" : phase === "sending" ? "thinking" : "working";
-  const status =
-    phase === "listening"
-      ? pushToTalk
-        ? t("voiceMode.call.push")
-        : t("voiceMode.listening")
-      : phase === "sending"
-        ? t("voiceMode.oneMoment")
-        : phase === "speaking"
-          ? bot.name
-          : t("voiceMode.working");
-
-  return (
-    <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-6 bg-app/95 backdrop-blur-sm">
-      <button
-        onClick={() => endCall(bot.id)}
-        aria-label={t("call.live.hangUp")}
-        className="absolute right-5 top-5 rounded-md p-2 text-ink-secondary hover:bg-raised hover:text-ink"
-      >
-        <X size={18} />
-      </button>
-
-      <BotAvatar bot={bot} state={mascotState} size={220} animated trackPointer />
-
-      <div className="flex flex-col items-center gap-1.5 text-center">
-        <div className="text-[20px] font-medium text-ink">{bot.name}</div>
-        <div className="flex items-center gap-2 text-[13.5px] text-ink-secondary">
-          {(phase === "working" || phase === "sending") && <Loader2 size={13} className="animate-spin" />}
-          {status}
-        </div>
-      </div>
-
-      {/* one line, whichever is current: what you're saying, or what it is */}
-      <div className="min-h-[3.5rem] max-w-[560px] px-6 text-center text-[15px] leading-relaxed text-ink">
-        {phase === "listening" ? (
-          heard || (
-            <span className="text-ink-secondary">
-              {pushToTalk ? t("callView.releaseToSend") : t("callView.saySomething")}
-            </span>
-          )
-        ) : (
-          speech.caption
-        )}
-      </div>
-
-      {note && (
-        <div className="flex max-w-[460px] flex-col items-center gap-2 text-center text-[12.5px] text-warning">
-          <span>{note}</span>
-          <button
-            onClick={listen}
-            className="rounded-full border border-warning/40 px-3 py-1.5 text-[12px] hover:bg-warning/10"
-          >
-            {t("callView.tryMic")}
-          </button>
-        </div>
-      )}
-      {speech.error && <div className="max-w-[420px] text-center text-[12.5px] text-danger">{speech.error}</div>}
-
-      <div className="flex items-center gap-3">
-        {speaker.isSpeaking() && (
-          <button
-            onClick={() => {
-              sayGeneration.current += 1;
-              speaker.stop();
-              listen();
-            }}
-            className="rounded-full border border-hairline/50 px-4 py-2 text-[13.5px] text-ink hover:bg-raised"
-          >
-            {t("voiceMode.interrupt")}
-          </button>
-        )}
-        <button
-          onClick={() => endCall(bot.id)}
-          className="flex items-center gap-2 rounded-full bg-danger px-5 py-2.5 text-[14px] font-medium text-white hover:brightness-110"
-        >
-          <PhoneOff size={16} /> {t("call.live.hangUp")}
-        </button>
-      </div>
-
-      <div className="text-[11.5px] text-ink-tertiary">
-        {t("callView.shortcuts")}
-      </div>
-    </div>
   );
 }

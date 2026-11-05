@@ -22,13 +22,13 @@ export type NotifyKind =
    * Sent to admins only, at most once per month for each. */
   | "spend"
   /** A person wrote to another in a direct conversation between people
-   * (server/people-dms.ts). Sent to the recipient only (`audience`); `botId` is empty. */
+   * (server/people/people-dms.ts). Sent to the recipient only (`audience`); `botId` is empty. */
   | "message"
   /** An organization admin force-stopped or force-deleted a bot
    * (server/org/org-bot-force.ts). Sent to the bot's owner only (`audience`). */
   | "admin-action"
   /** Someone reported a message another person wrote (App Store 1.2,
-   * server/moderation.ts). Sent to the organization's admins, or a solo
+   * server/safety/moderation.ts). Sent to the organization's admins, or a solo
    * server's owner, only (`audience`); `botId` and `threadId` are empty. */
   | "report"
   /** Someone commented on, or replied on, a published page (2026-10-28,
@@ -36,8 +36,12 @@ export type NotifyKind =
    * own comment; opens the conversation the page came from. */
   | "page-comment"
   /** A wait_until condition fired: the person asked to be told when
-   * something happened, and it did (server/waits.ts). */
-  | "wait";
+   * something happened, and it did (server/waits/waits.ts). */
+  | "wait"
+  /** 2026-11-05: a bot's turn elsewhere (a hand-off, a routine run, a
+   * thread another bot opened) ended with items only the person can do; the
+   * card is in their conversation with that bot (shared/person-attention.ts). */
+  | "needs-you";
 
 export interface Notification {
   kind: NotifyKind;

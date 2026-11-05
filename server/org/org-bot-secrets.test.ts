@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { OrgBotSecrets, parseOrgBotSecretChange } from "./org-bot-secrets.ts";
-import type { VaultKeySource } from "../mcp-oauth.ts";
+import type { VaultKeySource } from "../mcp/mcp-oauth.ts";
 
 const KEY: VaultKeySource = { kind: "key", key: Buffer.alloc(32, 3) };
 const SECRET = "fake-team-secret-value-0001";

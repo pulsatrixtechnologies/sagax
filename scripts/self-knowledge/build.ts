@@ -15,9 +15,9 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { availableTools, PERSPICAX_TOOLS, type CatalogProfile } from "../../server/drivers/agents-catalog.ts";
-import { MCP_PERMISSIONS } from "../../server/mcp-permissions.ts";
-import { HOST_LEVEL_AGENT_TOOLS, MEMBER_OWN_SCOPE_AGENT_TOOLS } from "../../server/member-tool-scope.ts";
-import { READ_ONLY_AGENT_TOOL_NAMES } from "../../server/agent-tool-policy.ts";
+import { MCP_PERMISSIONS } from "../../server/mcp/mcp-permissions.ts";
+import { HOST_LEVEL_AGENT_TOOLS, MEMBER_OWN_SCOPE_AGENT_TOOLS } from "../../server/people/member-tool-scope.ts";
+import { READ_ONLY_AGENT_TOOL_NAMES } from "../../server/tools/agent-tool-policy.ts";
 import { TOOL_POLICY_ROWS } from "../../server/tool-policy.generated.ts";
 import type { KnowledgeBase, KnowledgeSection, PerspicaxSnapshot } from "../../server/self-knowledge-types.ts";
 import { clip, CUSTOMER_TAG_LEFT, docSections, plainText, scrub, slug } from "./markdown.ts";
@@ -364,6 +364,9 @@ const DOCS_LEFT_OUT = new Set([
   "docs/media-proxy.md", "docs/no-phone-home.md", "docs/grok-latency.md",
 ]);
 
+/** First line of a docs/ page generated from apps/docs/content (scripts/docs-copies.mjs). */
+const GENERATED_COPY = "<!-- Generated from apps/docs/content/";
+
 /** AGENTS.md sections left out: the misuse policy's internals (the bots
  * already get the policy itself), whose older text names a product the
  * public repository's term scan refuses in a new file. */
@@ -400,7 +403,10 @@ function docsSections(root: string): KnowledgeSection[] {
   }
   for (const path of walk(root, "docs", (file) => /^docs\/[^/]+\.md$/.test(file) || /^docs\/(mcp|ios)\/[^/]+\.md$/.test(file))) {
     if (DOCS_LEFT_OUT.has(path)) continue;
-    out.push(...docSections({ path, markdown: read(root, path), kind: "doc", fallbackTitle: path.replace(/^docs\//, "").replace(/\.md$/, ""), maxLevel: 2 }));
+    const markdown = read(root, path);
+    // A generated copy of a docs site page (scripts/docs-copies.mjs): its source is indexed above.
+    if (markdown.startsWith(GENERATED_COPY)) continue;
+    out.push(...docSections({ path, markdown, kind: "doc", fallbackTitle: path.replace(/^docs\//, "").replace(/\.md$/, ""), maxLevel: 2 }));
   }
   out.push(...docSections({ path: "AGENTS.md", markdown: read(root, "AGENTS.md"), kind: "notes", fallbackTitle: "Sagax", maxLevel: 2 })
     .filter((section) => !NOTES_LEFT_OUT.has(section.id)));
@@ -439,7 +445,8 @@ const ALLOWED_EMAIL = /@(example\.(?:com|org|test|net)|[\w-]+\.example(?:\.\w+)?
 export function auditKnowledgeText(text: string): string[] {
   const problems: string[] = [];
   for (const pattern of SECRET_PATTERNS) if (pattern.test(text)) problems.push(`secret-like text ${pattern}`);
-  for (const match of text.matchAll(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g)) {
+  for (const match of text.matchAll(/[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}\b/gi)) {
+    // a letter TLD: an npm spec (name@1.2.3) is not an address
     const email = match[0].toLowerCase();
     if (!ALLOWED_EMAIL.test(email) && !/^(git@|noreply@|no-reply@)/.test(email)) problems.push(`email address ${email}`);
   }

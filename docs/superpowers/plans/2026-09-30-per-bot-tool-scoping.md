@@ -37,7 +37,7 @@
 - `shared/tool-scope.ts`: dependency-free parser, original identities, matcher and server eligibility.
 - `shared/wire.ts`, `server/contracts.ts`: optional `toolScope: ToolScope` on bots and turns.
 - `server/store.ts`, `server/index.ts`, defaults/backup modules: persistence, authenticated settings and dispatch.
-- `server/mcp-gate.ts`, `server/mcp-gate-config.ts`: scoped stdio discovery and execution.
+- `server/mcp-gate.ts`, `server/mcp/mcp-gate-config.ts`: scoped stdio discovery and execution.
 - `server/mcp-remote-proxy.ts`, `server/proxy-paths.ts`, `scripts/bundle-server.mjs`: existing HTTP/SSE client exposed through the scoped stdio boundary.
 - `server/drivers/chat-mcp-tools.ts`, `server/drivers/openai-chat.ts`: API definitions and execution.
 - `server/drivers/pi.ts`, `server/drivers/pi-mcp-extension.ts`: native/package filtering and custom MCP registration.
@@ -64,7 +64,7 @@
 
 ### Task 2: MCP list and call boundary
 
-**Files:** Modify `server/mcp-gate.ts`, `server/mcp-gate.test.ts`, `server/mcp-gate-config.ts`; create `server/mcp-gate-config.test.ts`.
+**Files:** Modify `server/mcp-gate.ts`, `server/mcp-gate.test.ts`, `server/mcp/mcp-gate-config.ts`; create `server/mcp/mcp-gate-config.test.ts`.
 
 **Consumes:** Task 1 parser/matcher. **Produces:** `gateServer` accepts optional scope; private `SAGAX_GATE_TOOL_SCOPE` config enforces lists and calls even at budget zero.
 
@@ -88,7 +88,7 @@
 
 ### Task 4: Persist scope and dispatch it everywhere
 
-**Files:** Modify `shared/wire.ts`, `server/contracts.ts`, `server/store.ts`, `server/index.ts`, `shared/new-bot-defaults.ts`, `server/new-bot-defaults.ts`, `shared/team-backup.ts`, `server/team-backup.ts`; add `server/tool-scope.e2e.test.ts` and extend existing persistence/defaults tests.
+**Files:** Modify `shared/wire.ts`, `server/contracts.ts`, `server/store.ts`, `server/index.ts`, `shared/new-bot-defaults.ts`, `server/bots/new-bot-defaults.ts`, `shared/team-backup.ts`, `server/backup/team-backup.ts`; add `server/tool-scope.e2e.test.ts` and extend existing persistence/defaults tests.
 
 **Consumes:** Task 1 `ToolScope` and parser. **Produces:** owner-only PATCH field and validated scope on direct/group/queued/resumed turns.
 
@@ -124,7 +124,7 @@
 
 ### Task 7: Grok and engine coverage
 
-**Files:** Modify `server/drivers/acp/core.ts`, `server/drivers/acp/grok.ts` and ACP tests; extend Claude/Codex/other adapter paths; add `scripts/verify-tool-scope.ts` and driver coverage tests.
+**Files:** Modify `server/drivers/acp/core.ts`, `server/drivers/acp/grok.ts` and ACP tests; extend Claude/Codex/other adapter paths; add `scripts/verify/dev/verify-tool-scope.ts` and driver coverage tests.
 
 **Consumes:** Scoped turn input, descriptor gate and native identity matcher. **Produces:** engine capability matrix and strict native control contracts.
 

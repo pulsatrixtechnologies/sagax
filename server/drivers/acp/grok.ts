@@ -3,6 +3,7 @@
 // (~/.grok/auth.json), NOT the xAI API key (that driver is drivers/grok.ts).
 // The generic protocol runtime lives in acp/core.ts; this file is only the
 // per-harness quirks. Verified against grok 1.0.0.
+import { GROK_PROMPT_BYTE_LIMIT } from "./prompt-fit.ts";
 import { spawn } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -12,7 +13,7 @@ import { parse as parseYaml } from "yaml";
 import type { ModelCatalog, ProviderErrorCode, TurnAccessInput } from "../../contracts.ts";
 import { harnessHome, splitCliString } from "../../env-path.ts";
 import { resolveCli } from "../../procs.ts";
-import { engineStartGate } from "../../engine-start-gate.ts";
+import { engineStartGate } from "../../engines/engine-start-gate.ts";
 import type { DeviceSignIn } from "../device-auth.ts";
 import { decodeInjectId, hostApiKey, localHost, mergeLocalInject } from "../local-inject.ts";
 import { createAcpDriver, type AccountErrorCode, type AcpSupport } from "./core.ts";
@@ -22,11 +23,11 @@ import { grokHostToolArgs, grokOrgAgentProfile } from "../host-tools.ts";
 import { grokReadOnlyAllowRules } from "./grok-read-only-tools.ts";
 import { gateReadOnlyTools, grokApprovalGateEnabled } from "./grok-approval-gate.ts";
 import { knownGrokTools, knownGrokToolsSection, recordGrokToolUse, useToolName } from "./grok-tool-usage.ts";
-import { grokCatalogFor, grokCatalogSection, noteGrokAccountReach, rememberGrokCatalog } from "./grok-tool-catalog.ts";
+import { grokCatalogFor, grokCatalogSection, grokMcpAlreadySettled, noteGrokAccountReach, rememberGrokCatalog, rememberGrokMcpSettled, forgetGrokMcpSettled } from "./grok-tool-catalog.ts";
 import { GROK_CLOUD_CONNECTORS } from "../../../shared/grok-cloud-connectors.ts";
-import { turnReachFor } from "../../turn-reach.ts";
+import { turnReachFor } from "../../turns/turn-reach.ts";
 import { allowsTool, canUseMcpServer, narrowsNativeTools, parseToolScope } from "../../../shared/tool-scope.ts";
-import { grokAliasBase, grokToolNameProblem } from "../../mcp-tool-names.ts";
+import { grokAliasBase, grokToolNameProblem } from "../../mcp/mcp-tool-names.ts";
 
 /** Fallback only, for when the engine cannot be asked (not installed, or no
  * answer). Grok 1.0.46 and 1.0.50 signed in to grok.com offer exactly these
@@ -99,10 +100,23 @@ export function grokRoundContextUsage(msg: any): number | undefined {
   return input + cached > 0 ? input + cached : undefined;
 }
 
+/** Prod 2026-11-02 (routine "Overdue invoices report"): Grok's use_tool also
+ * takes `file` and `tool_input_file`, read from the disk of the Grok process
+ * on the Sagax server. A bot's files live in its own environment
+ * (sagax-environment write_file / run_command, /workspace), which that
+ * process cannot see, so every file form failed "Cannot read complete MCP
+ * source file: ... No such file or directory" before any MCP call was sent.
+ * Only the inline form can work here. */
+const GROK_INLINE_ARGUMENTS_HINT_TEXT =
+  " Always call use_tool with tool_name and inline tool_input, even for large arguments." +
+  " Never use its file or tool_input_file forms: they read the Sagax server's disk, not your environment," +
+  " so a file you wrote with write_file or a command is never found there.";
+
 export const GROK_TOOL_REUSE_HINT =
   "\n\nTool calls: each search_tool call costs a full extra round trip. When search_tool already showed you a tool earlier in this conversation," +
   " call it again directly with use_tool (same tool_name, arguments per the schema you saw) instead of searching again. Use search_tool only for a tool you have not seen yet," +
-  " and when one search returns several tools you need, call them without searching again.";
+  " and when one search returns several tools you need, call them without searching again." +
+  GROK_INLINE_ARGUMENTS_HINT_TEXT;
 
 const SLUG = /^[a-z0-9][a-z0-9._-]*$/i;
 
@@ -171,8 +185,9 @@ export function grokLoadsAccountConnectors(turn: { grokCloudConnectors?: boolean
 
 /** Grok's `--permission-mode` for a turn.
  *
- * Without the account's connectors: Full access (`fullAuto`) bypasses, a
- * gated Auto turn runs in `default` (grok-approval-gate.ts), Auto runs Grok's
+ * Without the account's connectors: a gated Auto or Full turn runs in
+ * `default` (grok-approval-gate.ts, #1982) so every Sagax MCP ask reaches
+ * request.opened; ungated Full (`fullAuto`) bypasses; Auto runs Grok's
  * own `auto`, Edits `acceptEdits`, Ask `default`.
  *
  * With them (2026-10-30, the operator: "Oui, avec carte, si le allow always
@@ -187,8 +202,10 @@ export function grokLoadsAccountConnectors(turn: { grokCloudConnectors?: boolean
  * level (an embedder's) keeps the legacy instance flag. */
 export function grokPermissionMode(input: { fullAuto: boolean; gated: boolean; approvalMode?: string; accountConnectors: boolean }): string {
   if (input.accountConnectors && input.approvalMode !== undefined) return input.approvalMode === "edits" ? "acceptEdits" : "default";
-  if (input.fullAuto) return "bypassPermissions";
+  // #1982: gated before fullAuto — Full under the gate stays in default so
+  // MCP asks reach Sagax (reads pass; writes follow the level with a card).
   if (input.gated) return "default";
+  if (input.fullAuto) return "bypassPermissions";
   return input.approvalMode === "auto" ? "auto" : input.approvalMode === "edits" ? "acceptEdits" : "default";
 }
 
@@ -694,13 +711,13 @@ export function ensureGrokInjectSlug(
 }
 
 /** Grok 1.0.25 and later 1.x consume native image blocks but advertise image:false.
- * Verified with the real CLI and a loopback model: scripts/verify-grok-images.ts.
+ * Verified with the real CLI and a loopback model: scripts/verify/dev/verify-grok-images.ts.
  * Keep unknown/older runtimes on the normal capability negotiation path. */
 export function grokAcceptsUnadvertisedImages(init: unknown): boolean {
   const meta = (init as { _meta?: { grokShell?: unknown; agentVersion?: unknown } } | null)?._meta;
   if (meta?.grokShell !== true || typeof meta.agentVersion !== "string") return false;
   // Any 1.x release from 1.0.25 on (grok 1.0.62 on 2026-10-19). A 2.x stays
-  // unknown until scripts/verify-grok-images.ts checks it; so does a
+  // unknown until scripts/verify/dev/verify-grok-images.ts checks it; so does a
   // pre-release suffix.
   const version = /^(\d+)\.(\d+)\.(\d+)$/.exec(meta.agentVersion);
   if (!version) return false;
@@ -830,7 +847,7 @@ export function grokInheritedProfile(cli: string, env: Record<string, string | u
 
 /** Whether a tool Grok registered is one the selection allows. The gate
  * filters by the connector's own names and then registers a name Grok cannot
- * qualify (`cw_psa__query`) under its alias (mcp-tool-names.ts), so an alias
+ * qualify (`cw_psa_query`) under its alias (mcp-tool-names.ts), so an alias
  * of an allowed name is allowed. Deny selectors were applied in the gate. */
 export function allowsRegisteredTool(scope: unknown, server: string, name: string): boolean {
   if (allowsTool(scope, { kind: "mcp", server, name })) return true;
@@ -980,16 +997,17 @@ const support: AcpSupport = {
   // residual requests still ask. Never replace it with bypassPermissions.
   // Verified: grok 1.0.3 --help and xai-org/grok-build@37949780,
   // crates/codegen/xai-grok-pager-bin/src/main.rs:1259-1273.
-  // Approval gate (grok-approval-gate.ts), on unless the bot opts out: an Auto turn runs
-  // Grok in `default` mode, with no per-call classifier wait, and Sagax
-  // holds every MCP call that is not reviewed read-only for a card.
+  // Approval gate (grok-approval-gate.ts), on unless the bot opts out: an
+  // Auto or Full turn (#1982) runs Grok in `default` mode, with no per-call
+  // classifier wait, and Sagax holds every MCP call that is not reviewed
+  // read-only for a card (Full-approves unless a rule holds).
   // Solo only: MCP servers the person declared in Grok's own config.toml are
   // not mounted by Sagax, so the gate cannot hold them, and in `default`
   // mode Grok may call them with no prompt. Such a turn keeps Grok's own
   // auto mode. An organization turn withholds host tools: Grok reaches any
   // MCP tool through use_tool only, and gated-mcp-ask.ts keeps every ask
   // that names a server Sagax did not mount as a card.
-  approvalGate: (config, turn, context) => !config.fullAuto && turn.approvalMode === "auto" && grokApprovalGateEnabled(turn.botId)
+  approvalGate: (_config, turn, context) => (turn.approvalMode === "auto" || turn.approvalMode === "full") && grokApprovalGateEnabled(turn.botId)
     && (turn.withholdHostTools === true || !grokConfigDeclaresMcp(context?.env ?? process.env, context?.cwd)),
   approvalReadOnly: (server, botId) => gateReadOnlyTools(server, botId),
   // a use_tool target the session's own catalog lists on a managed gateway
@@ -998,7 +1016,8 @@ const support: AcpSupport = {
 
   spawnArgs: (config, turn, launch) => {
     const withhold = turn.withholdHostTools === true;
-    const gated = launch?.approvalGate === true && !config.fullAuto;
+    // #1982: Full under the gate stays gated (do not drop it for fullAuto).
+    const gated = launch?.approvalGate === true;
     const accountConnectors = grokLoadsAccountConnectors(turn);
     const mode = grokPermissionMode({ fullAuto: config.fullAuto, gated, approvalMode: turn.approvalMode, accountConnectors });
     return [
@@ -1059,7 +1078,7 @@ const support: AcpSupport = {
 
   // -m on argv is necessary but not sufficient: session/new still starts on
   // [models].default. Pin the slug over the wire, same as Hermes/Droid.
-  async configureSession({ request, sessionId, turn, currentModelId, sessionModels, notice }) {
+  async configureSession({ request, sessionId, turn, currentModelId, sessionModels, notice, reused }) {
     if (turn.toolScope !== undefined) {
       const available = new Set([
         ...(turn.integrations?.agents ? ["agents"] : []),
@@ -1098,11 +1117,20 @@ const support: AcpSupport = {
       // What the person's own xAI account brought (its grok.com connectors),
       // kept by their sign-in folder: only on a turn that loads the gateway
       // (grokCloudConnectorEnv), where an empty gateway means none.
+      // A later turn on the same live session that already settled skips the
+      // poll. A session/new or session/load (reused false) forgets the flag
+      // so a reconnect still waits once.
       const reachHome = turn.grokCloudConnectors === true && turn.withholdHostTools === true ? turn.access?.engineHome : undefined;
-      await waitForGrokMcpSettled(request, sessionId, GROK_MCP_SETTLE_MS, (catalog) => {
-        rememberGrokCatalog(sessionId, catalog);
-        noteGrokAccountReach(reachHome, catalog);
-      });
+      if (reused !== true) forgetGrokMcpSettled(sessionId);
+      if (reused === true && grokMcpAlreadySettled(sessionId)) {
+        /* MCP mounts of this live session already settled on an earlier turn */
+      } else {
+        const settled = await waitForGrokMcpSettled(request, sessionId, GROK_MCP_SETTLE_MS, (catalog) => {
+          rememberGrokCatalog(sessionId, catalog);
+          noteGrokAccountReach(reachHome, catalog);
+        });
+        if (settled) rememberGrokMcpSettled(sessionId);
+      }
     }
     if (!turn.model) return;
     if (grokPinsModelInProfile(turn)) {
@@ -1186,6 +1214,8 @@ const support: AcpSupport = {
   // reach the agent-stdio system prompt (verified against 1.0.0), so the
   // persona is prepended codex-style.
   buildPromptText: (turn) => (turn.system ? `${turn.system}\n\n${turn.text}` : turn.text),
+  // Grok moves a prompt of about 100 KB to a file on the server (prompt-fit.ts)
+  promptByteLimit: GROK_PROMPT_BYTE_LIMIT,
 
   // Grok reaches every Sagax MCP tool through search_tool then use_tool, and
   // each of those is a full model round trip carrying the whole context.
@@ -1193,7 +1223,7 @@ const support: AcpSupport = {
   // rounds (search_tool, use_tool, answer), ~3.5 s each. A tool already found
   // in this conversation needs no second search.
   stableSystemHint: GROK_TOOL_REUSE_HINT,
-  // Grok skips `cw_psa__query` (second `__`) and other names it cannot
+  // Grok skips `cw_psa_query` (second `__`) and other names it cannot
   // qualify; the gate registers them under aliases (mcp-tool-names.ts).
   mcpToolNames: "grok",
 
@@ -1266,3 +1296,5 @@ export async function waitForGrokMcpSettled(
 }
 
 export const GrokAgentDriver = createAcpDriver(support);
+/** The size Grok's requests are kept under (prompt-fit.ts). */
+export const grokPromptByteLimit = (): number | undefined => support.promptByteLimit;

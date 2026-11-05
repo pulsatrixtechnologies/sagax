@@ -57,7 +57,7 @@ final class DesktopReleaseNotesUITests: XCTestCase {
         let app = launch(["-releaseNotesWhatsNew", "-releaseNotesSeen", "0.4.10"])
         let title = element("release-notes-title", in: app)
         XCTAssertTrue(title.waitForExistence(timeout: 15), "What's new after an update")
-        XCTAssertTrue(title.label.hasPrefix("What's new in "), title.label)
+        XCTAssertTrue(title.label.hasPrefix("What's new"), title.label)
         XCTAssertFalse(element("release-notes-version", in: app).exists, "What's new shows the running version only")
         element("release-notes-close", in: app).tap()
         XCTAssertFalse(title.waitForExistence(timeout: 2), "Close dismisses it")
@@ -74,8 +74,12 @@ final class DesktopReleaseNotesUITests: XCTestCase {
         if close.waitForExistence(timeout: 10) { close.tap() }
 
         app.buttons["desktop-sidebar-account"].tap()
-        let entry = app.buttons["desktop-menu.releaseNotes"]
-        XCTAssertTrue(entry.waitForExistence(timeout: 10), "Release notes in the account menu")
+        // Help › Release notes, as the desktop's account menu (2026-10-28)
+        let help = app.buttons["desktop-menu.help"]
+        XCTAssertTrue(help.waitForExistence(timeout: 10), "Help in the account menu")
+        help.tap()
+        let entry = app.buttons["Release notes"].firstMatch
+        XCTAssertTrue(entry.waitForExistence(timeout: 10), "Release notes under Help")
         entry.tap()
 
         let title = element("release-notes-title", in: app)

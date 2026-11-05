@@ -1,6 +1,6 @@
 // iPad I-sync: the bot panel's Library tab (`bot-settings/LibraryTab.tsx`):
 // the bot's files only, no Files | Skills sub-tabs (skills live on the
-// Personas page). Plugins open from a link under the files.
+// Personas page), no link under the files (sweep 2026-11-03).
 // On the web the bot's plugins moved to Connect apps, scope "For <bot>"
 // (`PluginsPanel.tsx`, `plugins/BotPluginCard.tsx`,
 // `plugins/MarketplacesSection.tsx`); the web Library is Files | Skills with
@@ -37,17 +37,9 @@ struct BotPanelLibrary: View {
     @State private var view: BotPanelLibraryView = .files
 
     /// panel-library-skills / -plugins: the reference opens that view.
-    private static var parityView: BotPanelLibraryView {
-        #if DEBUG
-        switch ParityLaunch.current?.iPadScreen {
-        case .panelLibrarySkills: return .skills
-        case .panelLibraryPlugins: return .plugins
-        default: return .files
-        }
-        #else
-        return .files
-        #endif
-    }
+    /// The files: the desktop's Library is the list alone (the Skills and
+    /// Plugins surfaces are retired, 2026-11-04).
+    private static var parityView: BotPanelLibraryView { .files }
 
     /// Files only; the tabs show only if a view is added back.
     private var views: [BotPanelLibraryView] { [.files] }
@@ -63,20 +55,10 @@ struct BotPanelLibrary: View {
             }
             AnyView(content)
                 .padding(.top, 4)
-            if session.surfaceGate.allows(.botPlugins) || BotCapabilityRules.reachable(gate: session.surfaceGate) {
-                Button { showingPlugins = true } label: {
-                    Label("Plugins", systemImage: "puzzlepiece.extension")
-                        .font(theme.font(12.5))
-                        .foregroundStyle(theme.inkSecondary)
-                        .padding(.horizontal, 8)
-                        .frame(height: 26)
-                }
-                .buttonStyle(.plain)
-                .hoverEffect(.highlight)
-                .padding(.leading, 17)
-                .padding(.bottom, 16)
-                .accessibilityIdentifier("desktop-panel-library.open-plugins")
-            }
+            // No Plugins row under the files: the desktop's Library is the
+            // list alone (LibraryTab.tsx); the bot's plugins are in
+            // Capabilities, in that bot's scope. The sheet stays for the
+            // panel-library-plugins surface.
         }
         .sheet(isPresented: $showingPlugins) {
             NavigationStack { ScrollView { BotPanelPlugins(bot: bot).padding(16) }.navigationTitle(Text("Plugins")) }

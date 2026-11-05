@@ -1,6 +1,6 @@
 /** ACP turn establish phase: handshake, session/load|new, model and approval. */
 import { recoveryPromptFor } from "../../resume-recovery.ts";
-import { contextRenewedNotice } from "../../context-renewal.ts";
+import { contextRenewedNotice } from "../../context/context-renewal.ts";
 import {
   INIT_TIMEOUT, LOAD_SESSION_TIMEOUT, NEW_SESSION_TIMEOUT, SESSION_CONFIG_TIMEOUT,
 } from "./constants.ts";
@@ -33,7 +33,7 @@ export async function establishAcpTurn(ctx: AcpTurnCtx): Promise<void> {
   let init = ctx.init;
   let selectedModel = ctx.selectedModel;
   let rebuiltFromReplay = ctx.rebuiltFromReplay;
-  void reused; void latency; void controlsHost; void settle; void active; void freshNextTurn;
+  void latency; void controlsHost; void settle; void active; void freshNextTurn;
   void startQuietWatch; void asks; void acknowledge; void rejectStartup; void startupAck; void started;
   void spawnEnv;
 
@@ -162,6 +162,9 @@ for (;;) {
     // the session is genuinely gone; the loop falls through to
     // session/new on the replacement child.
     session.current = null;
+    if (process.env.SAGAX_ACP_REUSE_DIAG === "1") {
+      console.error(`[acp-reuse-diag] thread=${threadId.slice(0, 8)} why=reestablish live=${liveSessionId} cursor=${cursor} sessionKeyChanged=${session.sessionKey !== sessionKey}`);
+    }
     closeSession(threadId, "reestablish");
     session = launchSession();
     sessionRef.current = session;
@@ -300,6 +303,7 @@ try {
       configOptions: Array.isArray(session.sessionConfigResult?.configOptions)
         ? session.sessionConfigResult.configOptions
         : [],
+      reused: reused === true,
       notice: (message) => {
         // once per conversation: a model switch opens a new
         // process (a new session record), so the live session

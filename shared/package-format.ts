@@ -208,7 +208,7 @@ const roomSchema = z.preprocess(knownRoomResponder, z.object({
     z.object({ kind: z.literal("everyone") }),
     z.object({ kind: z.literal("mentions") }),
     // Read, not written: exports spell an Auto room as its lead (see
-    // server/package-export.ts) so every older app can still open them.
+    // server/packages/package-export.ts) so every older app can still open them.
     z.object({ kind: z.literal("auto"), agent: key.optional() }),
   ]),
 }));

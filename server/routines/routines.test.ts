@@ -10,11 +10,16 @@ import {
   nextOccurrence,
   PREWAKE_LEAD_MS,
   PREWARM_ENGINE_LEAD_MS,
+  ROUTINE_UNREACHABLE_RETRIED,
+  ROUTINE_UNREACHABLE_RETRY_MS,
+  ROUTINE_UNREACHABLE_SKIPPED,
   RoutineManager,
   routineAskAction,
   routineWaitingLine,
+  troubleToolKey,
   RoutineScheduleError,
   RoutineInputError,
+  type RoutineAdmission,
   type RoutineManagerOptions,
   type RoutineRun,
   type RoutineSchedule,
@@ -314,7 +319,7 @@ describe("bounded scheduled overlap and run health", () => {
     expect(alerts).toEqual([undefined, null, undefined, undefined]);
   });
 
-  it("counts restart recovery only once and sanitizes obsolete or invalid health metadata", async () => {
+  it("excludes restart recovery and sanitizes obsolete or invalid health metadata", async () => {
     const h = harness(start);
     const routine = h.manager.create({ ...input(), enabled: false });
     h.manager.runNow(routine.id); await h.manager.tick();
@@ -326,7 +331,7 @@ describe("bounded scheduled overlap and run health", () => {
     expect(resumed.takeRestartResumes()).toEqual([expect.objectContaining({ status: "running", restartResumes: 1 })]);
     for (let i = 0; i < 2; i++) {
       const saved = new RoutineManager(h.options).listRoutines()[0];
-      expect(saved.failureStreak).toBe(1);
+      expect(saved.failureStreak).toBeUndefined();
       expect(saved.skippedRuns).toBeUndefined(); expect(saved.lastSkippedAt).toBeUndefined(); expect(saved.overlap).toBeUndefined();
     }
     expect(() => h.manager.update(routine.id, { overlap: "invalid" as "queue" })).toThrow("skip or queue");
@@ -3147,7 +3152,7 @@ describe("RoutineManager", () => {
     if (error) h.manager.handleRuntimeEvent({ ...base, eventId: "runtime-error", type: "runtime.error", message: error });
     h.manager.handleRuntimeEvent({ ...base, eventId: "turn-completed", type: "turn.completed", ok: false, stopReason });
 
-    expect(h.manager.listRuns()[0]).toMatchObject({ status: "failed", error: expected });
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: error?.includes("out of credits") ? "blocked" : "failed", error: expected });
     expect(h.failed).toMatchObject([{ error: expected }]);
   });
 
@@ -3895,7 +3900,7 @@ describe("slice 6: routines in their person's name", () => {
     const routine = h.manager.create(input, undefined, { actorPrincipalId: "pr_alice" });
     h.setNow(routine.nextRunAt!);
     await h.manager.tick();
-    expect(h.manager.listRuns()[0]).toMatchObject({ status: "failed", error: "Perspicax is unreachable; this run is skipped" });
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "blocked", error: "Perspicax is unreachable; this run is skipped" });
     expect(h.manager.listRoutines()[0].suspended).toBeUndefined();
     answer = { ok: true };
     h.setNow(routine.nextRunAt! + 60_000);
@@ -3924,11 +3929,42 @@ describe("slice 6: routines in their person's name", () => {
     h.setNow(due + 420_000);
     await h.manager.tick();
     expect(h.admitted).toHaveLength(4);
-    expect(h.manager.listRuns()[0]).toMatchObject({ status: "failed", error: "Perspicax is rate limiting this server; this run is skipped" });
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "blocked", error: "Perspicax is rate limiting this server; this run is skipped" });
     expect(h.suspended).toEqual([]);
     expect(h.manager.listRoutines()[0].suspended).toBeUndefined();
     // the fields survive a reload
     expect(new RoutineManager({ ...h.options, file: (h.manager as unknown as { options: { file: string } }).options.file }).listRuns()[0]).toMatchObject({ admitAttempts: 3 });
+  });
+
+  it("Perspicax unreachable at admission (a connector roll) waits and runs later in the same window, never skipped at once (2026-11-02)", async () => {
+    const hourly = { ...input, schedule: { type: "cron" as const, expression: "0 * * * *", timeZone: "UTC" } };
+    let answer: RoutineAdmission = { ok: false, error: ROUTINE_UNREACHABLE_RETRIED, retryAfterMs: ROUTINE_UNREACHABLE_RETRY_MS, skipped: ROUTINE_UNREACHABLE_SKIPPED };
+    const h = withAdmission(() => answer);
+    const routine = h.manager.create(hourly, undefined, { actorPrincipalId: "pr_alice" });
+    const due = routine.nextRunAt!;
+    h.setNow(due);
+    await h.manager.tick();
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "queued", admitAfter: due + 60_000, admitAttempts: 1 });
+    expect(h.started).toHaveLength(0);
+    // the connector is back a minute later: the run starts, in its window
+    answer = { ok: true };
+    h.setNow(due + 60_000);
+    await h.manager.tick();
+    expect(h.started).toHaveLength(1);
+    expect(h.suspended).toEqual([]);
+  });
+
+  it("Perspicax unreachable through every retry skips the run with its own words", async () => {
+    const hourly = { ...input, schedule: { type: "cron" as const, expression: "0 * * * *", timeZone: "UTC" } };
+    const h = withAdmission(() => ({ ok: false, error: ROUTINE_UNREACHABLE_RETRIED, retryAfterMs: ROUTINE_UNREACHABLE_RETRY_MS, skipped: ROUTINE_UNREACHABLE_SKIPPED }));
+    const routine = h.manager.create(hourly, undefined, { actorPrincipalId: "pr_alice" });
+    const due = routine.nextRunAt!;
+    for (const at of [due, due + 60_000, due + 180_000, due + 420_000]) {
+      h.setNow(at);
+      await h.manager.tick();
+    }
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "blocked", error: ROUTINE_UNREACHABLE_SKIPPED });
+    expect(h.manager.listRoutines()[0].suspended).toBeUndefined();
   });
 
   it("honors a Retry-After longer than the back-off and runs when a retry is admitted (fix 2)", async () => {
@@ -4414,6 +4450,58 @@ describe("routine watch: runs only when something changes (2026-10-26)", () => {
   });
 });
 
+describe("routine code pre-check: a named check run as code (#2018)", () => {
+  const start = Date.parse("2026-10-20T08:00:00Z");
+  const code = { kind: "code" as const, check: "claude_artifact_comments" as const };
+  const input = () => ({ name: "Commentaires des artefacts", prompt: "Answer the comments", botId: "maus-1",
+    schedule: { type: "interval" as const, everyMinutes: 15, anchorAt: start }, precheck: code });
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it("quiet when the check finds nothing: no turn", async () => {
+    const h = harness(start);
+    let calls = 0;
+    h.options.evaluateCode = async () => { calls += 1; return { wake: false, reason: "no comment waits for Claude" }; };
+    const routine = h.manager.create(input());
+    expect(routine.precheck).toEqual(code);
+    h.setNow(routine.nextRunAt!);
+    await h.manager.tick();
+    await settle(); await settle();
+    await h.manager.tick();
+    expect(calls).toBe(1);
+    expect(h.manager.listRuns()[0].status).toBe("nothing_to_report");
+    expect(h.started).toHaveLength(0);
+  });
+
+  it("wakes the bot with the thread text inside the untrusted data fence", async () => {
+    const h = harness(start);
+    h.options.evaluateCode = async () => ({ wake: true, note: "- thread_id th1 (sent_to_claude) : make it blue" });
+    const routine = h.manager.create(input());
+    h.setNow(routine.nextRunAt!);
+    await h.manager.tick();
+    await settle(); await settle();
+    await h.manager.tick();
+    expect(h.started).toHaveLength(1);
+    expect(h.started[0].prompt).toMatch(/\[UNTRUSTED ROUTINE WATCH DATA [0-9a-f]{32}\][\s\S]*make it blue/);
+  });
+
+  it("fails the run when the server has no such check", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.setNow(routine.nextRunAt!);
+    await h.manager.tick();
+    await settle(); await settle();
+    await h.manager.tick();
+    expect(h.manager.listRuns()[0].status).toBe("failed");
+    expect(h.started).toHaveLength(0);
+  });
+
+  it("refuses an unknown check and a one-time schedule", () => {
+    const h = harness(start);
+    expect(() => h.manager.create({ ...input(), precheck: { kind: "code", check: "anything" } as never })).toThrow();
+    expect(() => h.manager.create({ ...input(), schedule: { type: "once", at: start + 60_000 } as never })).toThrow();
+  });
+});
+
 describe("background runs: nothing to report (Owner 2026-10-22)", () => {
   const at = new Date(2026, 7, 17, 8, 1).getTime();
   const runOnce = async (output: string, prompt = "Check the invoices") => {
@@ -4531,6 +4619,108 @@ describe("postResults migration and per-routine choice (Owner 2026-10-22)", () =
     expect(() => h.manager.create({ name: "Bad", prompt: "Do it", botId: "maus-1", mailAlias: "a b",
       schedule: { type: "once", at: new Date(2026, 7, 18).getTime() } })).toThrow(/mail tag/i);
   });
+
+  it("stores a routine model, snapshots it on runs, keeps it when omitted, and clears it with null (2026-11-04)", async () => {
+    const h = harness();
+    const routine = h.manager.create({ name: "R", prompt: "Do it", botId: "maus-1", model: " fast-model ",
+      schedule: { type: "once", at: new Date(2026, 7, 18).getTime() } });
+    expect(routine.model).toBe("fast-model");
+    expect(h.manager.update(routine.id, { name: "R2" })?.model).toBe("fast-model");
+    h.manager.runNow(routine.id); await h.manager.tick();
+    expect(h.manager.listRuns().find((run) => run.routineId === routine.id)?.model).toBe("fast-model");
+    // survives a reload from disk
+    expect(new RoutineManager(h.options).listRoutines().find((row) => row.id === routine.id)?.model).toBe("fast-model");
+    expect(h.manager.update(routine.id, { model: null })?.model).toBeUndefined();
+    expect(h.manager.update(routine.id, { model: "other-model" })?.model).toBe("other-model");
+    expect(h.manager.update(routine.id, { model: "" })?.model).toBeUndefined();
+    expect(() => h.manager.create({ name: "Bad", prompt: "Do it", botId: "maus-1", model: "has space",
+      schedule: { type: "once", at: new Date(2026, 7, 18).getTime() } })).toThrow(RoutineInputError);
+  });
+
+  it("stores a routine sub-agent model, snapshots it on runs, keeps it when omitted, and clears it with null (#2038)", async () => {
+    const h = harness();
+    const at = new Date(2026, 7, 18).getTime();
+    const routine = h.manager.create({ name: "R", prompt: "Do it", botId: "maus-1", subagentModel: " small-model ", schedule: { type: "once", at } });
+    expect(routine.subagentModel).toBe("small-model");
+    expect(routine.model).toBeUndefined();
+    expect(h.manager.update(routine.id, { name: "R2" })?.subagentModel).toBe("small-model");
+    h.manager.runNow(routine.id); await h.manager.tick();
+    expect(h.manager.listRuns().find((run) => run.routineId === routine.id)?.subagentModel).toBe("small-model");
+    expect(new RoutineManager(h.options).listRoutines().find((row) => row.id === routine.id)?.subagentModel).toBe("small-model");
+    expect(h.manager.update(routine.id, { subagentModel: null })?.subagentModel).toBeUndefined();
+    expect(h.manager.update(routine.id, { subagentModel: "other-model" })?.subagentModel).toBe("other-model");
+    expect(h.manager.update(routine.id, { subagentModel: "" })?.subagentModel).toBeUndefined();
+    expect(() => h.manager.create({ name: "Bad", prompt: "Do it", botId: "maus-1", subagentModel: "has space", schedule: { type: "once", at } })).toThrow(RoutineInputError);
+  });
+
+  it("stores an \"Au nom de\" role, keeps \"\" as Moi, snapshots it on runs and clears it with null (2026-11-05)", async () => {
+    const h = harness();
+    const at = new Date(2026, 7, 18).getTime();
+    const routine = h.manager.create({ name: "R", prompt: "Do it", botId: "maus-1", actAs: " service-desk ", schedule: { type: "once", at } });
+    expect(routine.actAs).toBe("service-desk");
+    expect(h.manager.update(routine.id, { name: "R2" })?.actAs).toBe("service-desk");
+    h.manager.runNow(routine.id); await h.manager.tick();
+    expect(h.manager.listRuns().find((run) => run.routineId === routine.id)?.actAs).toBe("service-desk");
+    // survives a reload from disk
+    expect(new RoutineManager(h.options).listRoutines().find((row) => row.id === routine.id)?.actAs).toBe("service-desk");
+    // "" is an explicit "Moi", kept on reload; null clears the choice
+    expect(h.manager.update(routine.id, { actAs: "" })?.actAs).toBe("");
+    expect(new RoutineManager(h.options).listRoutines().find((row) => row.id === routine.id)?.actAs).toBe("");
+    expect(h.manager.update(routine.id, { actAs: null })?.actAs).toBeUndefined();
+    expect(Object.hasOwn(h.manager.listRoutines().find((row) => row.id === routine.id)!, "actAs")).toBe(false);
+    expect(() => h.manager.create({ name: "Bad", prompt: "Do it", botId: "maus-1", actAs: "has space", schedule: { type: "once", at } })).toThrow(RoutineInputError);
+  });
+
+  it("a run keeps the role it started with when the routine's role changes later (2026-11-05)", async () => {
+    const h = harness();
+    const routine = h.manager.create({ name: "R", prompt: "Do it", botId: "maus-1", actAs: "service-desk", schedule: { type: "once", at: new Date(2026, 7, 18).getTime() } });
+    h.manager.runNow(routine.id); await h.manager.tick();
+    h.manager.update(routine.id, { actAs: "full-access" });
+    expect(h.manager.listRuns().find((run) => run.routineId === routine.id)?.actAs).toBe("service-desk");
+    expect(h.manager.listRoutines().find((row) => row.id === routine.id)?.actAs).toBe("full-access");
+  });
+
+  it("persists routine effort, snapshots runs, preserves omissions and clears null", async () => {
+    const h = harness();
+    const routine = h.manager.create({ name: "R", prompt: "Do the task", botId: "maus-1", effort: "low",
+      schedule: { type: "once", at: new Date(2026, 7, 18).getTime() } });
+    expect(routine.effort).toBe("low");
+    expect(h.manager.update(routine.id, { name: "R2" })?.effort).toBe("low");
+    h.manager.runNow(routine.id); await h.manager.tick();
+    expect(h.manager.listRuns()[0]?.effort).toBe("low");
+    const reloaded = new RoutineManager(h.options);
+    expect(reloaded.listRoutines()[0]?.effort).toBe("low");
+    expect(reloaded.listRuns()[0]?.effort).toBe("low");
+    expect(h.manager.update(routine.id, { effort: null })?.effort).toBeUndefined();
+    expect(h.manager.listRuns()[0]?.effort).toBe("low");
+  });
+
+  it("checks effort when selected, while an unchanged old effort can still be edited", () => {
+    const h = harness();
+    const checkEffort = vi.fn((_botId: string, effort: string) => effort === "max" ? "Unsupported effort" : null);
+    const manager = new RoutineManager({ ...h.options, checkEffort });
+    const routine = manager.create({ name: "R", prompt: "Do the task", botId: "maus-1", effort: "low",
+      schedule: { type: "once", at: new Date(2026, 7, 18).getTime() } });
+    expect(checkEffort).toHaveBeenCalledWith("maus-1", "low", undefined);
+    expect(() => manager.update(routine.id, { effort: "max" })).toThrow("Unsupported effort");
+    expect(manager.update(routine.id, { name: "Renamed" })?.effort).toBe("low");
+    expect(checkEffort).toHaveBeenCalledTimes(2);
+  });
+
+  it("asks checkModel when a routine model is chosen and refuses what it refuses (2026-11-04)", () => {
+    const h = harness();
+    const asked: string[] = [];
+    const manager = new RoutineManager({ ...h.options, file: tempFile(),
+      checkModel: (botId, model) => { asked.push(`${botId}:${model}`); return model === "off-model" ? "That model is turned off." : null; } });
+    const at = new Date(2026, 7, 18).getTime();
+    const routine = manager.create({ name: "R", prompt: "Do it", botId: "maus-1", model: "fast-model", schedule: { type: "once", at } });
+    expect(asked).toEqual(["maus-1:fast-model"]);
+    // an edit that keeps the model does not ask again
+    manager.update(routine.id, { name: "R2" });
+    expect(asked).toHaveLength(1);
+    expect(() => manager.update(routine.id, { model: "off-model" })).toThrow(/turned off/);
+    expect(manager.listRoutines()[0]?.model).toBe("fast-model");
+  });
 });
 
 describe("auto-pause after failures in a row (2026-10-26)", () => {
@@ -4629,7 +4819,7 @@ describe("auto-pause after failures in a row (2026-10-26)", () => {
     expect(h.manager.getRoutine(routine.id)!.enabled).toBe(false);
   });
 
-  it("counts a failure at restart toward the pause", async () => {
+  it("excludes a failure at restart from the pause", async () => {
     const h = harness(start);
     const routine = h.manager.create({ ...input(), autoPauseAfter: 2 });
     await fail(h, routine.id);
@@ -4637,8 +4827,10 @@ describe("auto-pause after failures in a row (2026-10-26)", () => {
     // first restart resumes the cut run in place, the second cut fails it
     new RoutineManager(h.options);
     const after = new RoutineManager(h.options);
-    expect(after.getRoutine(routine.id)).toMatchObject({ enabled: false, autoPaused: { failures: 2 } });
-    expect(after.listRuns().at(-1)).toMatchObject({ status: "failed", autoPaused: { failures: 2 } });
+    expect(after.listRoutines()[0]).toMatchObject({ enabled: true, failureStreak: 1 });
+    expect(after.getRoutine(routine.id)?.autoPaused).toBeUndefined();
+    expect(after.listRuns().at(-1)).toMatchObject({ status: "failed", error: "Sagax restarted while this routine was running" });
+    expect(after.listRuns().at(-1)?.autoPaused).toBeUndefined();
   });
 
   it("never auto-pauses a webhook or email trigger (#1891 phone webhooks stay on)", async () => {
@@ -4765,6 +4957,55 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     expect(runOf(h).problems).toBeUndefined();
   });
 
+  it("a Grok call by the connector's own tool name, then by the gate's alias, is the same tool and a clean run (2026-11-02)", async () => {
+    // Grok cannot register `cw_psa__query`; the gate registers it as
+    // `cw_psa_query`. A call by the connector name comes back "Tool not
+    // found" from Grok itself; the alias that follows ran the tool.
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    const miss = "Tool not found: perspicax_profile__cw_psa__query";
+    tool(h, "thread-1", "a", "mcp__perspicax_profile__cw_psa__query", false, miss);
+    tool(h, "thread-1", "b", "mcp__perspicax_profile__cw_psa__query", false, miss);
+    tool(h, "thread-1", "c", "mcp__perspicax_profile__cw_psa__query", false, miss);
+    tool(h, "thread-1", "d", "perspicax_profile__cw_psa_query", true);
+    say(h, "thread-1", "Filed the email on the ticket.");
+    done(h, "thread-1");
+    expect(runOf(h).status).toBe("completed");
+    expect(runOf(h).problems).toBeUndefined();
+    expect(troubleToolKey("mcp__perspicax_profile__cw_psa__query")).toBe(troubleToolKey("perspicax_profile__cw_psa_query"));
+    expect(troubleToolKey("perspicax_profile__api_lookup")).not.toBe(troubleToolKey("perspicax_profile__api_search"));
+  });
+
+  it("a tool that kept failing under its alias still names the title it was first called by", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-1", "a", "mcp__perspicax_profile__cw_psa__query", false, "Tool not found: perspicax_profile__cw_psa__query");
+    tool(h, "thread-1", "b", "perspicax_profile__cw_psa_query", false, "upstream_error: 400");
+    done(h, "thread-1");
+    // 2026-11-03: the tool in words, as its card names it; no `__` id
+    expect(runOf(h).problems).toContain("Query failed 2 times");
+    expect(runOf(h).problems).not.toContain("__");
+    expect(runOf(h).problems).toContain("upstream_error: 400");
+  });
+
+  it("a problem line names a connector tool in words and keeps its error (2026-11-03)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    const graph = "Managed MCP gateway tool call failed: Microsoft Graph API error: 404 Not Found";
+    tool(h, "thread-1", "a", "mcp__outlook__get_message", false, graph);
+    tool(h, "thread-1", "b", "mcp__outlook__get_message", false, graph);
+    tool(h, "thread-1", "c", "user-Outlook-get_5fmail_5fmessage___12", false, graph);
+    tool(h, "thread-1", "d", "user-Outlook-get_5fmail_5fmessage___12", false, graph);
+    done(h, "thread-1");
+    const problems = runOf(h).problems ?? "";
+    expect(problems).toContain(`Get message failed 2 times and never succeeded after: ${graph}`);
+    expect(problems).toMatch(/Get mail message · Outlook[^\n]* failed 2 times/);
+    expect(problems).not.toMatch(/__|5f/);
+  });
+
   it("one failed call the bot moved past (a search with no match, say) is not a problem: only a tool that kept failing is", async () => {
     // Engines that title a call by its command (ACP) give each command its
     // own title, so one miss would otherwise mark nearly every run.
@@ -4869,6 +5110,59 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     say(h, "thread-1", "Summary sent.");
     done(h, "thread-1");
     expect(runOf(h).problems).toBe("Ledger's work was not finished: acknowledged without doing the work");
+  });
+
+  // production 2026-11-03 04:15 UTC (Monday billing pass): the bot read the
+  // Flow skill (a JSON read_file result naming previous_unclosed), handed the
+  // bank overage to a teammate and ended NOTHING_TO_REPORT; the run ended
+  // "Blocked" with the reason "{". It completes quietly and links the teammate.
+  it("a delegated run is not blocked by a document naming a refusal code, and links the teammate thread", async () => {
+    const h = harness(start);
+    h.options.handedOutOutcome = () => ({ root: { status: "completed", detail: "", result: "" }, pending: false, failed: [],
+      handed: [{ botId: "nova", threadId: "teammate-thread", name: "Nova", status: "completed" }] });
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    const skill = JSON.stringify({ path: "skills/running-px-flow/SKILL.md", content: `${"Flow. ".repeat(300)}\nrun init reports it as \`previous_unclosed\`` }, null, 2);
+    tool(h, "thread-1", "t1", "read_file", true, skill);
+    tool(h, "thread-1", "t2", "Sent work to a teammate", true, "{\n  \"ok\": true\n}");
+    say(h, "thread-1", "Sent the Northwind overage to Nova.\nNOTHING_TO_REPORT");
+    done(h, "thread-1");
+    const run = runOf(h);
+    expect(run.status).toBe("completed");
+    expect(run.error).toBeUndefined();
+    expect(run.handedTo).toEqual([{ botId: "nova", threadId: "teammate-thread", name: "Nova", status: "completed" }]);
+  });
+
+  it("a real Flow refusal blocks the run with a plain reason, never the output's first line", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-1", "t1", "px_flow.py run init", false, "{\n  \"ok\": false,\n  \"error\": \"run_exists\",\n  \"message\": \"one run per lease\"\n}");
+    say(h, "thread-1", "Flow refused.");
+    done(h, "thread-1");
+    const run = runOf(h);
+    expect(run.status).toBe("blocked");
+    expect(run.error).toMatch(/already holds a run/);
+    expect(run.error).not.toBe("{");
+  });
+
+  // production 2026-11-03 00:10 UTC: Robin's account quoted its last message as JSON,
+  // and the person read literal \n, ** and an open quote where the cut fell.
+  it("a teammate's quoted last message is kept as plain text, cut with an ellipsis", async () => {
+    const h = harness(start);
+    const said = `FAIL\n\nThe two-message archive plan is **not** confirmed. ${"Evidence line. ".repeat(80)}`;
+    h.options.handedOutOutcome = () => ({ root: { status: "completed", detail: "", result: "" }, pending: false,
+      failed: [{ name: "Robin", outcome: "failed", detail: `The turn did not complete (tool_error). Before it stopped it made 8 tool calls: read_file ×3 (1 failed).\nIts last message, quoted: ${JSON.stringify(said)}` }] });
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    say(h, "thread-1", "Summary sent.");
+    done(h, "thread-1");
+    const problems = runOf(h).problems!;
+    expect(problems.startsWith("Robin's work failed: The turn did not complete (tool_error).")).toBe(true);
+    expect(problems).toContain("Its last message:\nFAIL\n\nThe two-message archive plan is not confirmed.");
+    expect(problems).not.toMatch(/\\n|\*\*|quoted: "/);
+    expect(problems.length).toBeLessThanOrEqual(1_000);
+    expect(problems.endsWith("…")).toBe(true);
   });
 
   it("a run waiting on teammates settles when the runtime ended that work without a turn (relay, stall), instead of waiting forever", async () => {

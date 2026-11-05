@@ -14,11 +14,12 @@ import { createElement, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BotCatalogPane } from "./lazy-bot-catalog";
 
 const screens = await import("./lazy-screens");
 const { lazyScreen, preloadScreens } = screens;
 /** Every deferred screen's preload, stubbed so no test fetches a real chunk. */
-const stubPreloads = () => Object.values(screens)
+const stubPreloads = () => [...Object.values(screens), BotCatalogPane]
   .filter((value): value is ReturnType<typeof lazyScreen> => typeof value === "function" && "preload" in value)
   .map((screen) => vi.spyOn(screen, "preload").mockResolvedValue(() => null));
 
@@ -171,7 +172,9 @@ describe("preloadScreens", () => {
     });
     vi.stubGlobal("cancelIdleCallback", cancel);
     const preloads = stubPreloads();
-    expect(preloads.length).toBe(21);
+    // Measured 2026-11-03: 21 prior screens + MemoryManager, Plugins, BotWizard,
+    // PersonPanel, CommandPalette, OrgImport, StagedOrgImport, ArtifactsHost.
+    expect(preloads.length).toBe(29);
     const stop = preloadScreens();
     for (const preload of preloads) expect(preload).not.toHaveBeenCalled();
     idle!();
@@ -243,12 +246,21 @@ describe("launch bundle", () => {
     const reached = launchModules();
     expect(reached.has("App.tsx")).toBe(true);
     expect(reached.has("components/Sidebar.tsx")).toBe(true);
+    // Measured 2026-11-03 cold launch: MemoryManagerPanel, PluginsPanel,
+    // BotWizard, PersonPanel, CommandPalette, OrgImportDialog, ArtifactsHost
+    // and WorkspaceBackupSettings were still static from App.tsx and sat in
+    // the index chunk / modulepreload graph before first chat paint. DiffView
+    // left after foldContext moved to diff-fold.ts. Keep them off this path.
     const deferred = [
-      "ActivityPanel", "BotSettingsDialog", "BulkEditBotsDialog", "ComputerPanel", "InspectorPanel", "KeyboardShortcutsModal",
-      "LocalVmWorkspace", "NewBotDialog", "RemoteAgentSettingsPanel", "remote-desktop-panel", "RoutineCalendarPage",
-      "RoutinesPage", "SettingsModal", "TeamMapPage", "TriggersPanel",
+      "ActivityPanel", "artifacts/ArtifactsHost", "BotSettingsDialog", "bot-wizard/BotWizard", "BulkEditBotsDialog",
+      "CommandPalette", "ComputerPanel", "InspectorPanel", "KeyboardShortcutsModal",
+      "LocalVmWorkspace", "memory-manager/MemoryManagerPanel", "NewBotDialog", "OrgImportDialog", "PersonPanel", "PluginsPanel",
+      "RemoteAgentSettingsPanel", "remote-desktop-panel", "RoutineCalendarPage",
+      "RoutinesPage", "SettingsModal", "TeamMapPage", "TriggersPanel", "WorkspaceBackupSettings",
       "achievements/AchievementsScreen", "bot-catalog/BotCatalogModal", "code/CodePage", "code/RunView", "code/DiffView",
       "approvals/ApprovalsPage", "approvals/ApprovalDetail", "approvals/ApprovalsHistory",
+      "settings/AppearanceSettings", "settings/CredentialsSettings", "settings/ProvidersSettings",
+      "EnginesSettings",
     ].map((name) => `components/${name}.tsx`);
     expect(deferred.filter((file) => reached.has(file))).toEqual([]);
   });

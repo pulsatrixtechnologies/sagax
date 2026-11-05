@@ -1,5 +1,5 @@
 // "Plugin configuration" on a bot's plugin (2026-10-21, parity with the reference
-// design): the fields the plugin declares (server/plugin-config.ts), saved for
+// design): the fields the plugin declares (server/plugins/plugin-config.ts), saved for
 // this bot and written into its skills. A secret field has no input here:
 // it belongs in Settings > Credentials, never in the plugin's files.
 import { useEffect, useState } from "react";

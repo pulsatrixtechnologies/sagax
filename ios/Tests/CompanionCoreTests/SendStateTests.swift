@@ -17,6 +17,80 @@ final class SendStateTests: XCTestCase {
         XCTAssertEqual(block.message, "Claude is not connected for you.")
     }
 
+    /// The maintainer, 2026-11-04: an engine at its limit or out of credit locks the composer.
+    func testEngineLimitBlockParsed() throws {
+        let block = try XCTUnwrap(parse(#"""
+        {"block":{"reason":"engine_limit","name":"Claude","message":"Claude limit reached.","action":{"kind":"switch_engine"},"limit":{"cause":"usage_limit","resetsAt":1800000000000}}}
+        """#))
+        XCTAssertEqual(block.reason, .engineLimit)
+        XCTAssertEqual(block.action, .switchEngine)
+        XCTAssertTrue(block.locksComposer)
+        XCTAssertEqual(block.limitCause, "usage_limit")
+        XCTAssertEqual(block.resetsAt, Date(timeIntervalSince1970: 1_800_000_000))
+        let credits = try XCTUnwrap(parse(#"{"block":{"reason":"engine_limit","name":"Grok","message":"m","action":{"kind":"switch_engine"},"limit":{"cause":"credits"}}}"#))
+        XCTAssertEqual(credits.limitCause, "credits")
+        XCTAssertNil(credits.resetsAt)
+        let other = try XCTUnwrap(parse(#"{"block":{"reason":"computer_offline","message":"m","action":{"kind":"retry"}}}"#))
+        XCTAssertFalse(other.locksComposer)
+    }
+
+    /// #2013: an engine refusal before any prompt went out is advisory: the
+    /// line shows, the composer still sends; Fix and Try again read.
+    func testEngineRefusedAdvisoryWithFix() throws {
+        let block = try XCTUnwrap(parse(#"""
+        {"block":{"reason":"engine_refused","name":"Codex","advisory":true,"message":"Codex has its own settings that conflict with this bot's tools. Nothing was sent.","action":{"kind":"fix","fix":"codex_native_mcp"},"refusal":{"kind":"config_conflict","cause":"Codex has an MCP server outside the selected configuration."}}}
+        """#))
+        XCTAssertEqual(block.reason, .engineRefused)
+        XCTAssertEqual(block.action, .fix("codex_native_mcp"))
+        XCTAssertTrue(block.isAdvisory)
+        XCTAssertFalse(block.blocksSend)
+        XCTAssertFalse(block.locksComposer)
+        XCTAssertEqual(block.refusal, SendBlock.Refusal(kind: "config_conflict", cause: "Codex has an MCP server outside the selected configuration."))
+
+        let resend = try XCTUnwrap(parse(#"{"block":{"reason":"engine_refused","name":"Codex","advisory":true,"message":"m","action":{"kind":"resend"},"refusal":{"kind":"engine_not_ready","cause":"c"}}}"#))
+        XCTAssertEqual(resend.action, .resend)
+        XCTAssertEqual(resend.refusal?.kind, "engine_not_ready")
+
+        let signedOut = try XCTUnwrap(parse(#"{"block":{"reason":"engine_signed_out","name":"Codex","advisory":true,"message":"m","action":{"kind":"connect","instanceId":"codex-1","engine":"Codex"},"refusal":{"kind":"signed_out","cause":"401"}}}"#))
+        XCTAssertEqual(signedOut.reason, .engineSignedOut)
+        XCTAssertTrue(signedOut.isAdvisory)
+
+        // a fix without its id is not a block this build can act on
+        XCTAssertNil(parse(#"{"block":{"reason":"engine_refused","advisory":true,"message":"m","action":{"kind":"fix"}}}"#))
+    }
+
+    func testAdvisoryBlockLetsTheComposerSend() throws {
+        let advisory = try XCTUnwrap(parse(#"{"block":{"reason":"engine_refused","advisory":true,"message":"m","action":{"kind":"resend"}}}"#))
+        var state = SendBlockState()
+        let scope = SendBlockState.scope(botId: "ada", threadId: "t1", model: nil)
+        state.record(advisory, for: scope)
+        XCTAssertEqual(state.block(for: scope), advisory)
+        XCTAssertTrue(state.allowsSend(for: scope))
+        // a reason this build does not know, without advisory, still blocks
+        let unknown = try XCTUnwrap(parse(#"{"block":{"reason":"something_new","message":"m","action":{"kind":"retry"}}}"#))
+        XCTAssertNil(unknown.reason)
+        XCTAssertTrue(unknown.blocksSend)
+        state.record(unknown, for: scope)
+        XCTAssertFalse(state.allowsSend(for: scope))
+    }
+
+    func testFixAnswerParsedAndRequestShaped() throws {
+        let answer = try XCTUnwrap(SendStateFixResult.parse(Data(#"{"ok":true,"block":null}"#.utf8)))
+        XCTAssertTrue(answer.ok)
+        XCTAssertNil(answer.block)
+        let refused = try XCTUnwrap(SendStateFixResult.parse(Data(#"{"ok":false,"block":{"reason":"engine_refused","advisory":true,"message":"m","action":{"kind":"resend"}}}"#.utf8)))
+        XCTAssertFalse(refused.ok)
+        XCTAssertEqual(refused.block?.action, .resend)
+
+        let client = CompanionClient(connection: Connection(name: "Mac", host: "127.0.0.1", port: 8810), token: "t", session: .shared)
+        let request = try client.sendStateFixRequest(botId: "ada", threadId: "t1", fix: "codex_native_mcp")
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.url?.path, "/api/bots/ada/send-state/fix")
+        XCTAssertEqual(request.url?.query, "threadId=t1")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(request.httpBody)) as? [String: String])
+        XCTAssertEqual(body, ["fix": "codex_native_mcp"])
+    }
+
     func testRetryBlocksParsed() throws {
         for reason in ["computer_offline", "local_server_offline", "owner_computer_offline"] {
             let block = try XCTUnwrap(parse(#"{"block":{"reason":"\#(reason)","message":"m","action":{"kind":"retry"}}}"#), reason)

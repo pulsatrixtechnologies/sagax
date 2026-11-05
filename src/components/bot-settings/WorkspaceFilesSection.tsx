@@ -23,7 +23,7 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { classifyFile, type FileKind } from "@/lib/chat-files";
-import { fetchMemoryDoc, formatBytes, relativeTime, saveMemoryDoc, topicFileName } from "@/lib/memory";
+import { fetchMemoryDoc, formatMemoryBytes, relativeTime, saveMemoryDoc, topicFileName } from "@/lib/memory";
 import {
   countWorkspaceFiles,
   createWorkspaceFile,
@@ -115,13 +115,13 @@ function budgetText(entry: WorkspaceEntry): string | null {
   const budget = entry.budget;
   if (!budget) return null;
   return budget.maxLines
-    ? t("persona.files.budgetLines", { lines: budget.lines, maxLines: budget.maxLines, bytes: formatBytes(budget.bytes), maxBytes: formatBytes(budget.maxBytes) })
-    : t("persona.files.budgetBytes", { bytes: formatBytes(budget.bytes), maxBytes: formatBytes(budget.maxBytes) });
+    ? t("persona.files.budgetLines", { lines: budget.lines, maxLines: budget.maxLines, bytes: formatMemoryBytes(budget.bytes), maxBytes: formatMemoryBytes(budget.maxBytes) })
+    : t("persona.files.budgetBytes", { bytes: formatMemoryBytes(budget.bytes), maxBytes: formatMemoryBytes(budget.maxBytes) });
 }
 
 /** One row's details line (Advanced only): size or budget, dates, last use. */
 export function entryDetails(entry: WorkspaceEntry, now: number): string {
-  const parts = [budgetText(entry) ?? formatBytes(entry.bytes)];
+  const parts = [budgetText(entry) ?? formatMemoryBytes(entry.bytes)];
   if (entry.createdAt) parts.push(t("persona.files.created", { when: relativeTime(entry.createdAt, now) }));
   if (entry.modifiedAt) parts.push(t("persona.files.modified", { when: relativeTime(entry.modifiedAt, now) }));
   parts.push(entry.lastUsedAt ? t("persona.files.lastUsed", { when: relativeTime(entry.lastUsedAt, now) }) : t("persona.files.neverUsed"));
@@ -459,7 +459,7 @@ export function WorkspaceFilesSection({
     void run(async () => {
       for (const file of list) {
         if (file.size > maxUpload) {
-          setError(t("persona.files.tooLarge", { max: formatBytes(maxUpload) }));
+          setError(t("persona.files.tooLarge", { max: formatMemoryBytes(maxUpload) }));
           continue;
         }
         const name = safeFileName(file.name);

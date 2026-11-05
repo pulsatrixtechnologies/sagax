@@ -1,5 +1,5 @@
 // What a conversation's last turn could reach, by source, as the server
-// mounted it (server/turn-connectors.ts). The dev panel's Connectors card
+// mounted it (server/turns/turn-connectors.ts). The dev panel's Connectors card
 // reads it (src/components/dev-pods/pods/connectors.tsx): never a guess from
 // the app-wide server list. Names and states only, never an address, a
 // token or an account.
@@ -7,7 +7,7 @@
 /** Where a connector comes from.
  * - claude: a connector of the person's own Claude account (claude.ai)
  * - grok: the person's own grok.com connectors (a catalog managed there)
- * - perspicax: a Perspicax profile of the bot, as the person speaking
+ * - perspicax: the speaking person's Perspicax account connection
  * - personal: the person's own MCP server (Settings, My connections)
  * - server: an MCP server of this Sagax server (the organization's on an
  *   organization server, Capabilities > Installed on a personal one)

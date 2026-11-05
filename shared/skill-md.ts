@@ -1,6 +1,6 @@
 // SKILL.md reading shared by the server skill store, the package format and
 // the renderer. Pure text only: no filesystem, no Node globals, so the same
-// rules validate a skill wherever it is read (server/skills.ts re-exports
+// rules validate a skill wherever it is read (server/skills/skills.ts re-exports
 // these under their historical names).
 
 /** Spec rule: lowercase alphanumerics with single hyphens, 1-64 chars,

@@ -9,7 +9,7 @@
 //         serves Claude and the choice is theirs too
 //   MM-3  given nothing, no key: Claude reads "not given, nothing of yours"
 //         (the app's model menu then says to add a key or ask an admin)
-//   MM-4  an admin is unchanged: the organization's key, any model
+//   MM-4  an admin given the engine still chooses their own bot's model
 import { spawn, type ChildProcess } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -98,7 +98,7 @@ posixOnly("Perspicax organization: a member picks the model of their own bots", 
     chmodSync(FAKE_CLAUDE, 0o755);
     idp = await startFakeOidcProvider({ user: ADMIN });
     idp.directoryPeople = [
-      { ...idp.personOf(ADMIN) },
+      { ...idp.personOf(ADMIN), sagax_server_engines: ["claude"] },
       { ...idp.personOf(GIVEN), sagax_server_engines: ["claude"] },
       { ...idp.personOf(KEYED), sagax_server_engines: [] },
       { ...idp.personOf(NONE), sagax_server_engines: [] },
@@ -114,7 +114,8 @@ posixOnly("Perspicax organization: a member picks the model of their own bots", 
       version: 1, issuer: idp.issuer, client_id: "pulsa-bot", server_id: idp.serverId, origin: BASE, link_token: idp.linkToken,
     }), { mode: 0o640 });
     writeFileSync(join(data, "config.json"), JSON.stringify({
-      instances: { claude: { driver: "claudeAgent", config: { cli: FAKE_CLAUDE, fullAuto: true } } },
+      // fcce56775: this fixture exercises provider keys on an explicit API instance.
+      instances: { claude: { driver: "claudeAgent", access: "api", config: { cli: FAKE_CLAUDE, requireApiKey: true, fullAuto: true } } },
     }));
     child = spawn(process.execPath, ["--experimental-strip-types", join(SERVER_DIR, "index.ts")], {
       cwd: join(SERVER_DIR, ".."),
@@ -164,7 +165,7 @@ posixOnly("Perspicax organization: a member picks the model of their own bots", 
     expect(row).toMatchObject({ myTurns: "none", orgKeyNotGiven: true });
   }, 60_000);
 
-  it("MM-4: an admin is unchanged", async () => {
+  it("MM-4: an admin given the engine chooses their own bot's model", async () => {
     const { auth } = await claudeFor(ADMIN, (engine) => engine.myTurns === "org-key");
     expect(await chooseModel(auth, "Ada's bot")).toEqual({ instanceId: "claude", model: "claude-fake-opus" });
   }, 60_000);

@@ -1,5 +1,5 @@
-import { useCallback, useLayoutEffect, useState, type RefObject } from "react";
-import type { AppState } from "@/state/store";
+import type { SidebarState } from "./types";
+import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { offscreenUnread } from "@/lib/bot-unread";
 import { scrollMotion } from "@/lib/motion";
 
@@ -10,10 +10,11 @@ export function useSidebarUnreadPills({
   selecting,
 }: {
   listRef: RefObject<HTMLDivElement | null>;
-  state: AppState;
+  state: SidebarState;
   selecting: boolean;
 }) {
   const [moreUnread, setMoreUnread] = useState({ above: 0, below: 0 });
+  const measuredUnread = useRef(moreUnread);
   const measureUnread = useCallback(() => {
     const list = listRef.current;
     if (!list) return;
@@ -23,7 +24,9 @@ export function useSidebarUnreadPills({
       return { top: box.top, bottom: box.bottom, unread: row.hasAttribute("data-sidebar-unread") };
     });
     const { above, below } = offscreenUnread(rows, { top: view.top, bottom: view.bottom });
-    setMoreUnread((prev) => (prev.above === above && prev.below === below ? prev : { above, below }));
+    if (measuredUnread.current.above === above && measuredUnread.current.below === below) return;
+    measuredUnread.current = { above, below };
+    setMoreUnread(measuredUnread.current);
   }, [listRef]);
   const jumpToUnread = (direction: "above" | "below") => {
     const list = listRef.current;

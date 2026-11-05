@@ -18,7 +18,7 @@ import { CALL_MARK, ENDED_MARK, INTERRUPTED_MARK, voiceCallTurn } from "../testi
 import { DATA_DIR, ensureDirs, instanceConfigs, NATIVE_DIR } from "../config.ts";
 import { TurnAuthenticationRefusedError, type ProviderInstance } from "../contracts.ts";
 import { recordEvents, type EventRecorder } from "../testing/events.ts";
-import { contextFullMessage, contextRenewedNotice } from "../context-renewal.ts";
+import { contextFullMessage, contextRenewedNotice } from "../context/context-renewal.ts";
 import {
   autoCompactWindow,
   brokerSocketCandidates,
@@ -37,6 +37,7 @@ import {
   readClaudeAuthSettings,
   claudeCostSnapshot,
   restoredCostBase,
+  turnModelUsage,
   STEERED_CONTINUATION_GRACE_MS,
   sumNativeTurnResults,
   turnCostFromRunningTotal,
@@ -49,9 +50,10 @@ import { AUTO_ALLOWLIST_COPY, claudeLaunchLevel } from "../testing/claude-level.
 import { removeTempDir } from "../testing/cleanup.ts";
 import { rebuiltSessionNotice } from "../resume-recovery.ts";
 import { BASH_MAX_TIMEOUT_MS } from "../system-prompt.ts";
-import { ephemeralWorkspaceTokenPath } from "../workspace-backup-policy.ts";
+import { ephemeralWorkspaceTokenPath } from "../backup/workspace-backup-policy.ts";
 import * as procs from "../procs.ts";
 import * as localInject from "./local-inject.ts";
+import { SPAWNED_PROXIES } from "../proxy-paths.ts";
 
 const FAKE_CLI = join(dirname(fileURLToPath(import.meta.url)), "..", "testing", "fake-claude-cli.ts");
 /** The process that played the latest turn a FAKE_CLAUDE_DUMP recorded. */
@@ -189,6 +191,27 @@ describe("ClaudeDriver.decodeConfig", () => {
       .toEqual({ ok: false, stopReason: "end_turn", cost: 0.01, usage: first.usage });
     expect(sumNativeTurnResults({ ok: true, stopReason: null, cost: null }, { ok: true, stopReason: null, cost: null }))
       .toEqual({ ok: true, stopReason: null, cost: null });
+  });
+
+  it("splits a result's usage by model against the running state, and adds splits across native results", () => {
+    const base = claudeCostSnapshot(1, { "big-model": { inputTokens: 10, cacheReadInputTokens: 100, cacheCreationInputTokens: 5, outputTokens: 20, costUSD: 0.9 } })!;
+    const now = claudeCostSnapshot(1.3, {
+      "big-model": { inputTokens: 14, cacheReadInputTokens: 160, cacheCreationInputTokens: 5, outputTokens: 30, costUSD: 1.1 },
+      "small-model": { inputTokens: 7, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, outputTokens: 3, costUSD: 0.1 },
+    })!;
+    const split = turnModelUsage(base, now);
+    expect(split).toEqual([
+      { model: "big-model", inputTokens: 4, outputTokens: 10, cachedInputTokens: 60, costUsd: 0.2 },
+      { model: "small-model", inputTokens: 7, outputTokens: 3, costUsd: 0.1 },
+    ]);
+    // a model with nothing new is left out; a state that went back is taken whole
+    expect(turnModelUsage(now, now)).toEqual([]);
+    expect(turnModelUsage(now, base)[0]).toMatchObject({ model: "big-model", inputTokens: 10, costUsd: 0.9 });
+    const sum = (models: typeof split) => ({ ok: true, stopReason: null, cost: null, models });
+    expect(sumNativeTurnResults(sum(split), sum(split)).models).toEqual([
+      { model: "big-model", inputTokens: 8, outputTokens: 20, cachedInputTokens: 120, costUsd: 0.4 },
+      { model: "small-model", inputTokens: 14, outputTokens: 6, costUsd: 0.2 },
+    ]);
   });
 
   it("accepts the three known permission modes", () => {
@@ -852,6 +875,21 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     }
   });
 
+  it("a failed MCP call's completion carries its words, not the content envelope (2026-11-03)", async () => {
+    const refused = "Refusé : ce chemin ou ce fichier appartient au serveur Sagax, pas à votre environnement. Vos fichiers sont dans /workspace.";
+    process.env.FAKE_CLAUDE_TOOL_CALLS = JSON.stringify([
+      { name: "mcp__sagax-environment__read_file", input: { path: "../../notes/README.md" }, ok: false, output: [{ type: "text", text: refused }] },
+    ]);
+    try {
+      await create();
+      await instance.adapter.sendTurn({ threadId: "t-failed-mcp", text: "read it", model: "claude-sonnet-5" });
+      await recorder.until((e) => e.type === "turn.completed");
+      expect(recorder.events.find((e) => e.type === "item.completed" && e.itemType === "tool")).toMatchObject({ ok: false, output: refused });
+    } finally {
+      delete process.env.FAKE_CLAUDE_TOOL_CALLS;
+    }
+  });
+
   it("turns an Artifact publish into a visible page card, never leaking the host path", async () => {
     const htmlPath = join(scratch, "report.html");
     writeFileSync(htmlPath, "<p>Hi</p>");
@@ -1462,7 +1500,7 @@ describe("ClaudeDriver turns (fake CLI)", () => {
   });
 
   it("hands a hosted tenant's CLI the hosted model token but none of the operator's control-plane secrets", async () => {
-    // server/hosted-models.ts delivers the model token as the provider key.
+    // server/models/hosted-models.ts delivers the model token as the provider key.
     await create(undefined, { ANTHROPIC_API_KEY: "omb_workspace_fixture", ANTHROPIC_AUTH_TOKEN: "omb_workspace_fixture" });
     const dump = join(scratch, "dump-hosted.json");
     process.env.FAKE_CLAUDE_DUMP = dump;
@@ -1527,7 +1565,8 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     await create(undefined, {}, { permissionMode: "bypassPermissions" });
     const dump = join(scratch, "approval-transitions.json");
     process.env.FAKE_CLAUDE_DUMP = dump;
-    for (const [approvalMode, nativeMode] of [["full", "bypassPermissions"], ["auto", "acceptEdits"], ["edits", "acceptEdits"], ["ask", "default"]] as const) {
+    // #1982: Full keeps acceptEdits + the broker (no bypassPermissions).
+    for (const [approvalMode, nativeMode] of [["full", "acceptEdits"], ["auto", "acceptEdits"], ["edits", "acceptEdits"], ["ask", "default"]] as const) {
       const { turnId } = await instance.adapter.sendTurn({
         threadId: "t-mode-transitions",
         text: "hello",
@@ -1539,19 +1578,21 @@ describe("ClaudeDriver turns (fake CLI)", () => {
       const seen = JSON.parse(readFileSync(dump, "utf8"));
       expect(seen.argv[seen.argv.indexOf("--model") + 1]).toBe(model);
       expect(seen.argv[seen.argv.indexOf("--permission-mode") + 1]).toBe(nativeMode);
-      expect(seen.argv.includes("--permission-prompt-tool")).toBe(approvalMode !== "full");
+      expect(seen.argv.includes("--permission-prompt-tool")).toBe(true);
       expect(seen.argv).toContain("--resume");
     }
   });
 
-  it("maps Full to bypassPermissions on an organization server and still denies the host tools", async () => {
+  it("maps Full to acceptEdits + broker on an organization server and still denies the host tools (#1982)", async () => {
     await create();
     const dump = join(scratch, "org-full.json");
     process.env.FAKE_CLAUDE_DUMP = dump;
     const { turnId } = await instance.adapter.sendTurn({ threadId: "t-org-full", text: "hello", approvalMode: "full", withholdHostTools: true });
     await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
     const seen = JSON.parse(readFileSync(dump, "utf8"));
-    expect(seen.argv[seen.argv.indexOf("--permission-mode") + 1]).toBe("bypassPermissions");
+    expect(seen.argv[seen.argv.indexOf("--permission-mode") + 1]).toBe("acceptEdits");
+    expect(seen.argv).toContain("--permission-prompt-tool");
+    expect(seen.mcpConfig.mcpServers.ogb).toBeTruthy();
     const denied = String(seen.argv[seen.argv.indexOf("--disallowedTools") + 1]).split(",");
     for (const tool of ["Bash", "Read", "Write", "Edit", "WebFetch"]) expect(denied).toContain(tool);
     // and names its built-ins: the allowlist, nothing a newer CLI adds
@@ -1581,6 +1622,31 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     const seen = JSON.parse(readFileSync(dump, "utf8"));
     expect(seen.argv).not.toContain("--tools");
     expect(String(seen.argv[seen.argv.indexOf("--disallowedTools") + 1]).split(",")).not.toContain("Bash");
+  });
+
+  it.each([false, true])("keeps the native artifact family reachable on cloud turns (compact: %s, #1990)", async (compact) => {
+    await create();
+    const dump = join(scratch, "artifacts.json");
+    process.env.FAKE_CLAUDE_DUMP = dump;
+    const { turnId } = await instance.adapter.sendTurn({
+      threadId: "t-artifact-tools", text: "Use ArtifactData to read the saved state.",
+      withholdHostTools: true, approvalMode: "full",
+      ...(compact ? { compactPrompt: { agents: { core: "default", pinned: [] }, pinned: {} } } : {}),
+    });
+    await recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId);
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    const tools = seen.argv[seen.argv.indexOf("--tools") + 1].split(",");
+    const denied = seen.argv[seen.argv.indexOf("--disallowedTools") + 1].split(",");
+    for (const tool of ["Artifact", "ArtifactData", "ArtifactComments"]) {
+      expect(tools).toContain(tool);
+      expect(denied).not.toContain(tool);
+    }
+    expect(tools).toContain("ToolSearch");
+    expect(denied).toContain("Bash");
+    expect(seen.env.CLAUDE_CODE_ARTIFACT).toBe("1");
+    expect(seen.env.CLAUDE_CODE_ARTIFACT_TOOLSET).toBe("1");
+    expect(seen.env.ENABLE_TOOL_SEARCH).toBe("true");
+    expect(seen.argv).toContain("--permission-prompt-tool");
   });
 
   it("hands a stricter level to the running CLI so its next tool call asks (#1373)", async () => {
@@ -1964,7 +2030,7 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(seen.mcpConfig.mcpServers.agents.env.SAGAX_MERGED_TOOLS).toBe("1");
   });
 
-  it("keeps tool search off and the catalog unmerged on a compact prompt", async () => {
+  it("keeps native tool search on and the catalog unmerged on a compact prompt", async () => {
     await create(undefined, { FAKE_CLAUDE_VERSION: "2.1.284" });
     const dump = join(scratch, "compact-dump.json");
     process.env.FAKE_CLAUDE_DUMP = dump;
@@ -1975,8 +2041,32 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     } as Parameters<typeof instance.adapter.sendTurn>[0]);
     await recorder.until((e) => e.type === "turn.completed");
     const seen = JSON.parse(readFileSync(dump, "utf8"));
-    expect(seen.env.ENABLE_TOOL_SEARCH).toBe("false");
+    expect(seen.env.ENABLE_TOOL_SEARCH).toBe("true");
     expect(seen.mcpConfig.mcpServers.agents.env.SAGAX_MERGED_TOOLS).toBeUndefined();
+    // #2037: the tools outside the core and the pins wait for that ToolSearch
+    expect(seen.mcpConfig.mcpServers.agents.env.SAGAX_DEFER_RARE_TOOLS).toBe("1");
+    expect(JSON.parse(seen.mcpConfig.mcpServers.agents.env.SAGAX_COMPACT_TOOLS)).toEqual({ core: "default", pinned: [] });
+  });
+
+  it("#1935: on a compact prompt the Perspicax account bridge lists its core tools whole", async () => {
+    await create(undefined, { FAKE_CLAUDE_VERSION: "2.1.284" });
+    const dump = join(scratch, "compact-px-dump.json");
+    process.env.FAKE_CLAUDE_DUMP = dump;
+    await instance.adapter.sendTurn({
+      threadId: "t-compact-px", text: "hi",
+      compactPrompt: { agents: { core: "default", pinned: [] }, pinned: { perspicax: ["cw_psa_find_tickets"] } },
+      integrations: { custom: {
+        perspicax: { command: process.execPath, args: [SPAWNED_PROXIES.perspicax], env: { SAGAX_PERSPICAX_TOKEN: "synthetic-account-token", SAGAX_PERSPICAX_TOKEN_FILE: "/fake/px-main-token" } },
+        ops: { command: process.execPath, args: ["/fake/ops.js"], env: {} },
+      } },
+    } as Parameters<typeof instance.adapter.sendTurn>[0]);
+    await recorder.until((e) => e.type === "turn.completed");
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    const bridge = JSON.parse(seen.mcpConfig.mcpServers.perspicax.env.SAGAX_GATE_SEARCH);
+    expect(bridge.pinned).toEqual(["api_describe", "api_list", "api_result_query", "api_search", "cw_psa_find_tickets", "flow", "flow_action", "flow_run", "identity_switch", "memory_find", "memory_recall", "memory_search"]);
+    expect(bridge.pinnedSuffixes).toEqual(["_action", "_query", "_write"]);
+    // another server the bot owns keeps only its own most used tools
+    expect(JSON.parse(seen.mcpConfig.mcpServers.ops.env.SAGAX_GATE_SEARCH).pinnedSuffixes).toBeUndefined();
   });
 
   // The harness hands the same per-session bearer to every turn; rewriting
@@ -2910,6 +3000,19 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(seen.argv).not.toContain("--dangerously-skip-permissions");
   });
 
+  it("runs a routine turn's sub-agents on its model, and a chat turn never reuses that process (2026-11-04)", async () => {
+    const dump = join(scratch, "subagent-model.json");
+    await create(undefined, { FAKE_CLAUDE_DUMP: dump });
+    const routine = await instance.adapter.sendTurn({ threadId: "t-subagent-model", text: "hi", model: "fast-model", subagentModel: "fast-model" });
+    await recorder.until((e) => e.type === "turn.completed" && e.turnId === routine.turnId);
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.env.CLAUDE_CODE_SUBAGENT_MODEL).toBe("fast-model");
+    const chat = await instance.adapter.sendTurn({ threadId: "t-subagent-model", text: "again", model: "fast-model" });
+    expect(chat.reused).not.toBe(true);
+    await recorder.until((e) => e.type === "turn.completed" && e.turnId === chat.turnId);
+    expect(JSON.parse(readFileSync(dump, "utf8")).env.CLAUDE_CODE_SUBAGENT_MODEL).toBeUndefined();
+  });
+
   it("lets a Bash call ask for up to ten minutes, unless the person set their own cap", async () => {
     const dump = join(scratch, "bash-timeout.json");
     await create(undefined, { FAKE_CLAUDE_DUMP: dump });
@@ -2991,6 +3094,36 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(allowed.filter((name: string) => name.startsWith("mcp__notes"))).toEqual(["mcp__notes__query_result"]);
     // and its credential value stays out of argv
     expect(JSON.stringify(seen.argv)).not.toContain("tok-notes");
+  });
+
+  it("keeps the broker at Full and still routes custom MCP through it (#1982)", async () => {
+    await create();
+    const dump = join(scratch, "full-mcp-broker.json");
+    process.env.FAKE_CLAUDE_DUMP = dump;
+    await instance.adapter.sendTurn({
+      threadId: "t-full-mcp",
+      text: "hi",
+      approvalMode: "full",
+      integrations: {
+        custom: { notes: { command: "npx", args: ["-y", "@x/notes-mcp"], env: {} } },
+        agents: {
+          command: process.execPath,
+          args: ["/fake/agents-proxy.js"],
+          env: { SAGAX_HARNESS_URL: "http://127.0.0.1:1", SAGAX_BOT_ID: "b1", SAGAX_COMMS_TOKEN: "tok", SAGAX_TURN_DEPTH: "0" },
+        },
+      },
+    });
+    await recorder.until((e) => e.type === "turn.completed");
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.argv[seen.argv.indexOf("--permission-mode") + 1]).toBe("acceptEdits");
+    expect(seen.argv).toContain("--permission-prompt-tool");
+    expect(seen.mcpConfig.mcpServers.ogb).toBeTruthy();
+    const allowed = String(seen.argv[seen.argv.indexOf("--allowedTools") + 1]).split(",");
+    expect(allowed).toContain("mcp__agents");
+    expect(allowed).toContain("Bash");
+    expect(allowed).toContain("Write");
+    expect(allowed).not.toContain("mcp__notes");
+    expect(allowed).toContain("mcp__notes__query_result");
   });
 
   it("passes normalized available and denied built-in tool sets to Claude", async () => {
@@ -4154,10 +4287,10 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     // an ask is a plain card: no reviewer claim
     const conn = connect(permissionSocketPath("t-auto-allow"));
     await new Promise<void>((resolve, reject) => { conn.on("connect", resolve); conn.on("error", reject); });
-    conn.write(JSON.stringify({ t: "ask", id: "ask-cw", tool: "mcp__perspicax__cw_psa__write", input: { resource: "activities", op: "close" } }) + "\n");
+    conn.write(JSON.stringify({ t: "ask", id: "ask-cw", tool: "mcp__perspicax__cw_psa_write", input: { resource: "activities", op: "close" } }) + "\n");
     const opened = await recorder.until((e) => e.type === "request.opened" && e.requestId === "ask-cw");
     conn.destroy();
-    expect(opened).toMatchObject({ requestType: "permission", tool: "mcp__perspicax__cw_psa__write" });
+    expect(opened).toMatchObject({ requestType: "permission", tool: "mcp__perspicax__cw_psa_write" });
     expect((opened as { nativeReview?: unknown }).nativeReview).toBeUndefined();
   });
 
@@ -4562,6 +4695,21 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(seen.argv).toContain("--effort");
     expect(seen.argv[seen.argv.indexOf("--effort") + 1]).toBe("xhigh");
     expect(seen.argv.filter((a: string) => a === "--effort")).toHaveLength(1);
+  });
+
+  it("passes routine effort to native sub-agents without keeping it on chat", async () => {
+    await create();
+    const dump = join(scratch, "routine-effort.json");
+    process.env.FAKE_CLAUDE_DUMP = dump;
+    await instance.adapter.sendTurn({ threadId: "t-routine-effort", text: "Run", effort: "low", subagentEffort: "low" });
+    await recorder.until((event) => event.type === "turn.completed");
+    expect(JSON.parse(readFileSync(dump, "utf8")).env.CLAUDE_CODE_EFFORT_LEVEL).toBe("low");
+    const next = await instance.adapter.sendTurn({ threadId: "t-routine-effort", text: "Chat", effort: "low" });
+    expect(next.reused).not.toBe(true);
+    await recorder.until((event) => event.type === "turn.completed" && event.turnId === next.turnId);
+    const chat = JSON.parse(readFileSync(dump, "utf8"));
+    expect(chat.env.CLAUDE_CODE_EFFORT_LEVEL).toBeUndefined();
+    expect(chat.argv[chat.argv.indexOf("--effort") + 1]).toBe("low");
   });
 
   it("adds no effort flag when the turn has none", async () => {

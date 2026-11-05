@@ -70,7 +70,10 @@ export function createInstanceText(deps: InstanceTextDeps) {
         const turn = { threadId: `memory-text-${newId()}`, text: prompt, approvalMode: "ask", cwd } as SendTurnInput;
         support.applyTurnEnv?.(env, { fullAuto: false, cwd, threadId: turn.threadId, mcpServers: [] });
         const launch = support.resolveCommand ? await support.resolveCommand(env, turnConfig, instanceId) : { command: turnConfig.cli };
-        const spawnEnv = launch.env ?? env;
+        // Mark side one-shots so the fake CLI launch counter (and similar
+        // harness probes) never treat memory/review as a chat-session
+        // relaunch (#1970).
+        const spawnEnv = { ...(launch.env ?? env), SAGAX_ACP_BACKGROUND_TEXT: "1" };
         return await runAcpOneShot({
           displayName: support.displayName,
           spawn: spawnCli,

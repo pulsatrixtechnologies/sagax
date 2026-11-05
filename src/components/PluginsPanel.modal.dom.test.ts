@@ -4,10 +4,16 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { setLocale } from "@/lib/i18n";
+import { loadLocale, setLocale } from "@/lib/i18n";
+import { flowSupersededFixture, flowSupersededPluginsFixture } from "@/lib/flow-superseded.fixture";
+import type { BotCapabilities } from "@/lib/capabilities";
 import { CATEGORY_MODAL } from "./category-modal";
 
 let owner = true;
+let resolved: BotCapabilities | null = null;
+let canChange = true;
+let removeWait: Promise<void> | null = null;
+let removeError = false;
 vi.mock("@/lib/use-owner-or-admin", () => ({ useOwnerOrAdmin: () => owner }));
 vi.mock("@/lib/perspicax-org", () => ({
   usePerspicaxOrg: () => null,
@@ -47,13 +53,15 @@ vi.mock("@/lib/my-connections", async () => {
   const actual = await vi.importActual<typeof import("@/lib/my-connections")>("@/lib/my-connections");
   return {
     ...actual,
-    loadBotPlugins: async () => ({ marketplaces: [], plugins: [], policy: { mode: "any" }, engine: { loadsPlugins: true }, canChange: true }),
+    loadBotPlugins: async () => resolved
+      ? { ...flowSupersededPluginsFixture(resolved.items.some((item) => item.scope === "bot")), canChange }
+      : { marketplaces: [], plugins: [], policy: { mode: "any" }, engine: { loadsPlugins: true }, canChange },
   };
 });
 vi.mock("@/lib/bot-tailscale", () => ({ fetchBotTailscale: async () => null }));
 vi.mock("@/lib/capabilities", async () => {
   const actual = await vi.importActual<typeof import("@/lib/capabilities")>("@/lib/capabilities");
-  return { ...actual, useBotCapabilities: () => ({ data: null, error: null, reload: () => {} }) };
+  return { ...actual, useBotCapabilities: () => ({ data: resolved, error: null, reload: () => {} }) };
 });
 
 const API: Record<string, unknown> = {
@@ -79,17 +87,29 @@ vi.mock("@/state/store", async () => {
         pluginsOpen: true,
         activeView: "apps",
         connected: true,
-        config: { viewer: { principalId: "p-1", role: "owner" } },
-        bots: [],
+        config: { viewer: { principalId: "p-1", role: owner ? "owner" : "member" } },
+        selectedId: resolved ? "bot-a" : "",
+        pluginsBotId: resolved ? "bot-a" : null,
+        pluginsSurface: resolved ? "mcp" : "apps",
+        bots: resolved ? [{ id: "bot-a", name: "Wren", ownerUserId: "p-1", modelSelection: { instanceId: "codex", model: "default" }, messages: [], tasks: [] }] : [],
         instances: [],
       },
       dispatch: vi.fn(),
     }),
-    api: vi.fn(async (path: string) => API[path] ?? {}),
+    api: vi.fn(async (path: string, init?: { method?: string }) => {
+      if (path === "/api/bots/bot-a/plugins/pulsatrix-flow-osprey%40osprey" && init?.method === "DELETE") {
+        await removeWait;
+        if (removeError) throw new Error("Removal failed. Try again.");
+        resolved = { ...resolved!, items: resolved!.items.filter((item) => item.scope !== "bot") };
+        return { ...flowSupersededPluginsFixture(false), canChange };
+      }
+      return API[path] ?? {};
+    }),
   };
 });
 
 import { PluginsPanel } from "./PluginsPanel";
+import { api } from "@/state/store";
 
 describe("PluginsPanel modal", () => {
   let host: HTMLDivElement;
@@ -98,6 +118,11 @@ describe("PluginsPanel modal", () => {
   beforeEach(() => {
     setLocale("en");
     owner = true;
+    resolved = null;
+    canChange = true;
+    removeWait = null;
+    removeError = false;
+    vi.mocked(api).mockClear();
     host = document.createElement("div");
     document.body.append(host);
     root = createRoot(host);
@@ -121,5 +146,47 @@ describe("PluginsPanel modal", () => {
     expect(host.querySelector("[data-tour=\"apps-close\"]")).not.toBeNull();
     expect(host.querySelector("[data-apps-back]")).toBeNull();
     expect(host.textContent).toMatch(/Capabilities|Connect/);
+  });
+
+  it.each(["en", "fr"])("a member removes only the obsolete bot copy in one click (%s)", async (lang) => {
+    await loadLocale(lang);
+    owner = false;
+    resolved = flowSupersededFixture();
+    await act(async () => { root.render(createElement(PluginsPanel)); });
+    const note = host.querySelector("[data-capability-superseded]");
+    expect(note?.textContent).toBe(lang === "fr"
+      ? "Remplacé par le pack Flow de l'organisation (osprey 0.1.41)"
+      : "Superseded by the organization's Flow pack (osprey 0.1.41)");
+    const remove = host.querySelector<HTMLButtonElement>("[data-remove-superseded]")!;
+    expect(remove.textContent).toBe(lang === "fr" ? "Retirer" : "Remove");
+    let finish!: () => void;
+    removeWait = new Promise<void>((resolve) => { finish = resolve; });
+    await act(async () => { remove.click(); });
+    expect(remove.disabled).toBe(true);
+    await act(async () => { remove.click(); });
+    await act(async () => { finish(); });
+    expect(vi.mocked(api).mock.calls.filter(([, init]) => init?.method === "DELETE")).toEqual([
+      ["/api/bots/bot-a/plugins/pulsatrix-flow-osprey%40osprey", { method: "DELETE" }],
+    ]);
+    expect(host.querySelector("[data-capability-superseded]")).toBeNull();
+    expect(host.querySelector('[data-capability="flow"]')).not.toBeNull();
+    expect(host.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+  });
+
+  it("keeps the old copy and reports a failed removal, and offers no removal to a reader", async () => {
+    owner = false;
+    resolved = flowSupersededFixture();
+    removeError = true;
+    await act(async () => { root.render(createElement(PluginsPanel)); });
+    await act(async () => { host.querySelector<HTMLButtonElement>("[data-remove-superseded]")!.click(); });
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain("Removal failed");
+    expect(host.querySelector<HTMLButtonElement>("[data-remove-superseded]")!.disabled).toBe(false);
+    expect(host.querySelector("[data-capability-superseded]")).not.toBeNull();
+    canChange = false;
+    await act(async () => { root.unmount(); });
+    root = createRoot(host);
+    await act(async () => { root.render(createElement(PluginsPanel)); });
+    expect(host.querySelector("[data-capability-superseded]")).not.toBeNull();
+    expect(host.querySelector("[data-remove-superseded]")).toBeNull();
   });
 });

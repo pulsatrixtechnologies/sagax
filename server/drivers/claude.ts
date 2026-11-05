@@ -15,11 +15,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { DATA_DIR, stripWorkspaceCredentialEnv } from "../config.ts";
-import { claudeProtectedDenyRules } from "../engine-protected-paths.ts";
+import { claudeProtectedDenyRules } from "../engines/engine-protected-paths.ts";
 import { augmentedPath } from "../env-path.ts";
 import { brokerSocketPath, execCli } from "../procs.ts";
 import { rebuiltSessionNotice } from "../resume-recovery.ts";
-import { contextRenewedNotice } from "../context-renewal.ts";
+import { contextRenewedNotice } from "../context/context-renewal.ts";
 import { ClaudeLoginController } from "./claude-login-auth.ts";
 
 import type {
@@ -29,7 +29,7 @@ import type {
   ProviderSnapshot,
 } from "../contracts.ts";
 import { newId } from "../contracts.ts";
-import { askInputDetail, askInputSummary } from "../tool-summary.ts";
+import { askInputDetail, askInputSummary } from "../tools/tool-summary.ts";
 import { claudeAuthFailure } from "./claude-auth-recovery.ts";
 import { claudeSignInExpired } from "./claude-errors.ts";
 import { parseVersionTriple, versionAtLeast } from "./acp/core.ts";
@@ -41,7 +41,7 @@ import {
   resolveInjectId,
 } from "./local-inject.ts";
 import { permissionCommand, permissionPaths, withAbsolutePaths } from "./permission-command.ts";
-import { extractMcpImages } from "../mcp-tool-images.ts";
+import { extractMcpImages } from "../mcp/mcp-tool-images.ts";
 import { availableTools, catalogProfileFromEnv } from "./agents-catalog.ts";
 import {
   ASK_USER_QUESTION_TOOL,
@@ -77,6 +77,7 @@ export {
 export {
   claudeCostSnapshot,
   restoredCostBase,
+  turnModelUsage,
   turnCostFromRunningTotal,
   type ClaudeCostSnapshot,
 } from "./claude/cost.ts";
@@ -402,7 +403,7 @@ export const CLAUDE_FLAG_FLOORS = {
   // A guest's turn on a Cloud home (GUEST_CLAUDE_TOOLS): 2.1.248 takes
   // --restricted, 2.1.257 honours blockReadsOutsideWorkingDirectories.
   "--restricted": [2, 1, 257],
-  // A bot's Claude Code plugins (server/bot-plugins.ts).
+  // A bot's Claude Code plugins (server/bots/bot-plugins.ts).
   "--plugin-dir": [2, 0, 0],
   // A one-shot helper with no built-in tool (oneShotIsolationArgs). Placed
   // conservatively: an older CLI keeps the plain one-shot it always had.

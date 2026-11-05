@@ -3,8 +3,9 @@
 import type { BotActivityStatus } from "../shared/bot-activity.ts";
 import type { BotLaunchedAgentItem, BotLaunchedAgentPullRequest } from "../shared/bot-launched-agents.ts";
 import { BOT_LAUNCHED_AGENTS_LIMIT, BOT_LAUNCHED_AGENTS_WINDOW_MS } from "../shared/bot-launched-agents.ts";
-import { CodeWorkCollector, type RepositoryInfo } from "./activity-code-work.ts";
-import { addCodingSignal, isCodingWork, type CodingSignals } from "./activity-coding.ts";
+import { CodeWorkCollector, type RepositoryInfo } from "./activity/activity-code-work.ts";
+import { addCodingSignal, isCodingWork, type CodingSignals } from "./activity/activity-coding.ts";
+import { turnStartIndex } from "./routes/bot-activity.ts";
 
 export interface LaunchedAgentTask {
   threadId: string;
@@ -74,10 +75,15 @@ function displayTitle(task: LaunchedAgentTask, targetName: string): string {
   return body ? `${targetName}: ${body}` : targetName;
 }
 
-/** Coding work, read off the agent's own tool calls and folder. */
+/** Coding work, read off the agent's own tool calls and folder from its
+ * newest prompt on (turnStartIndex, as a thread entry reads its newest
+ * turn): a prompt sent on to the same conversation is its own run, never
+ * Coding for an earlier prompt's commit (2026-11-02). Its calls add up, so
+ * a run that changed code stays Coding while it reads; with no prompt in
+ * the page, the whole page is that run. */
 function codingRun(messages: readonly LaunchedAgentMessage[], repository: RepositoryInfo | undefined): boolean {
   const signals: CodingSignals = { edits: 0, codeFiles: 0, vcs: false };
-  for (const message of messages) if (message.tool) addCodingSignal(signals, message.tool);
+  for (const message of messages.slice(turnStartIndex(messages) + 1)) if (message.tool) addCodingSignal(signals, message.tool);
   return isCodingWork(signals, Boolean(repository));
 }
 

@@ -13,13 +13,13 @@ Sagax does not implement `flow` or `flow_action`. Perspicax serves them
 actions (`catalog`) and describes one (`describe`); `flow_action` runs one
 action through a bounded loop (reads, then one write batch behind
 `needs_confirmation`, `choice_needed` and `resume`), with `px_flow.py serve`
-as the pack's runner. They reach a bot through the Perspicax profile servers
-Sagax mounts for the person who speaks (`perspicax_<profile>`,
+as the pack's runner. They reach every bot through the speaking person's one
+Perspicax account connection (`perspicax`,
 `server/perspicax-mcp-bridge.ts`). Sagax only relays them: misuse
 classification marks a frame naming `flow_action` as surface `flow`
-(`server/index.ts`), and the existing profile authorization applies. Grok and Claude keep
-read-only treatment for the eight pure compute tools only on harness-owned
-Perspicax bridges (`server/drivers/acp/grok-read-only-tools.ts`).
+(`server/index.ts`), and Perspicax applies the current vendor permissions and
+organization rules. The active pack and the same Flow path serve every
+harness; no bot profile or harness mode selects it.
 
 ## Compute belongs to the signed Python pack
 
@@ -32,7 +32,7 @@ through `scripts/px_flow.py serve` (`compute.catalog`, `compute.call`).
 - Every organization fact is an argument: time zone, working hours,
   holidays, midnight split time and input records. Compute reads no tenant
   facts, business files or network, and writes nothing.
-- A selected profile linked to the active pack offers the tools. The caller
+- The active pack offers the tools on the account connection. The caller
   remains the turn's actual speaker, exactly as for other Perspicax tools.
 - Older packs offer no compute tools. Sagax does not manufacture support.
 - The tool answer preserves its fields and adds pack digest and versions.
@@ -166,7 +166,7 @@ Internal helpers with no command of their own (`parse_moment`, `utc_at`,
 
 Skills are written procedures: judgment, voice, decision tables. They are
 content, not logic, and Sagax already installs a plugin's skills and commands
-on a bot (Capabilities, `server/bot-plugins.ts`). None is copied into Sagax.
+on a bot (Capabilities, `server/bots/bot-plugins.ts`). None is copied into Sagax.
 
 | Skills | Status |
 |---|---|
@@ -200,7 +200,7 @@ their skills (depends on plugin).
 | Old | Status |
 |---|---|
 | `agents/px-flow-worker.md`, `agents/px-flow-aggregator.md` | depends on plugin: sub-agents of the plugin's engine. Sagax's own equivalents are bot-level (`start_thread`, `coordinate_bots`, parallel tasks) and are not a port |
-| `hooks/session-start` (injects `using-px-flow`) | not migrating: Sagax strips hooks from a plugin it installs on a bot (`server/bot-plugins.ts`); Claude loads the plugin with `--plugin-dir`, other engines get its skills and commands in the turn prompt |
+| `hooks/session-start` (injects `using-px-flow`) | not migrating: Sagax strips hooks from a plugin it installs on a bot (`server/bots/bot-plugins.ts`); Claude loads the plugin with `--plugin-dir`, other engines get its skills and commands in the turn prompt |
 | `hooks/pre-tool-use.py` (always-refused list, kill switch, read-only, human approvals) | not migrating: hooks are stripped in Sagax (above). Sagax's own controls apply instead: approval modes and cards, misuse guardrails and safety review, and Perspicax's server-side profiles and confirmation holds. Its lists name the organization's tool risks, which stay in the organization's configuration |
 
 ## Data completeness

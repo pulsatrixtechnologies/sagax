@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { OrgCapabilities, validSkillPath } from "./org-capabilities.ts";
-import type { OrgCapabilityDeclaration } from "../perspicax-link.ts";
+import type { OrgCapabilityDeclaration } from "../perspicax/perspicax-link.ts";
 
 const skill = (patch: Partial<OrgCapabilityDeclaration> = {}): OrgCapabilityDeclaration => ({
   id: "cap-skill", mount_name: "packing-rules", form: "skill", name: "Packing rules", description: "", source: { kind: "manual" },

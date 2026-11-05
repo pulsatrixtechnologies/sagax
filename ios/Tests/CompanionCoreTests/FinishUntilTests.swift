@@ -2,7 +2,7 @@
 import XCTest
 
 /// #1329: the "do not finish until" row and settings on the wire
-/// (shared/finish-until-line.ts, server/bot-profile.ts).
+/// (shared/finish-until-line.ts, server/bots/bot-profile.ts).
 final class FinishUntilTests: XCTestCase {
     func testDecodesTheConditionRowAndTheBotSetting() throws {
         let row = #"{"name":"Relaunch 1/5: not finished until the tests pass","ok":true,"finishUntil":{"status":"relaunch","condition":"the tests pass","round":1,"max":5}}"#

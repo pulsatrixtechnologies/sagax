@@ -23,21 +23,28 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
-import { hostTimeout } from "./testing/host-timeout.ts";
+import { waitForServerReady } from "./testing/server-ready.ts";
 import { startFakeHttpMcp } from "./testing/fake-http-mcp-server.ts";
 import { startFakeOAuthMcp } from "./testing/fake-oauth-mcp-server.ts";
 import { freePortBlock } from "./testing/ports.ts";
 import { openSse } from "./testing/sse.ts";
-import { fileMaxBytes, imageMaxBytes } from "./attachments.ts";
+import { fileMaxBytes, imageMaxBytes } from "./attachments/attachments.ts";
 import { MISUSE_POLICY_PROMPT } from "../shared/misuse-guardrails.ts";
-import { computerPrompt, RUN_YOURSELF_PROMPT, SIGN_IN_PROMPT, VERIFY_FIRST_PROMPT } from "./system-prompt.ts";
+import { computerPrompt, RUN_YOURSELF_PROMPT, SIGN_IN_PROMPT, VERIFY_FIRST_PROMPT, WORK_STYLE_PROMPT } from "./system-prompt.ts";
+import { onDemandPromptParts, systemPromptReference } from "./context/prompt-references.ts";
+
+/** #1997: a turn with sagax_help carries the brief and the prompt: pointer;
+ * the full paragraph is the reference it reads. */
+const computerSectionText = (kind: Parameters<typeof computerPrompt>[0]) =>
+  onDemandPromptParts([{ id: "computer", label: "Computer", text: computerPrompt(kind) }], true)[0]!.text;
 import {
   PHONE_SECRET_INFO,
   phoneSecretAAD,
   type PhoneSecretContext,
 } from "./phone/phone-secret.ts";
-import { InstallationCapabilityStore } from "./installation-capability-store.ts";
-import { resolveVaultKey } from "./mcp-oauth.ts";
+import { InstallationCapabilityStore } from "./capabilities/installation-capability-store.ts";
+import { resolveVaultKey } from "./mcp/mcp-oauth.ts";
+import { releaseVersion } from "./environment.ts";
 
 /** Lot 5: MCP servers (and secret env) live in the sealed installation store. */
 function readInstallationMcpServers(dataDir: string): Record<string, any> {
@@ -226,34 +233,8 @@ const waitForIsolatedServer = async (
   port: number,
   capturedStderr: () => string,
 ): Promise<void> => {
-  // a cold start on a loaded Windows runner (an isolated server loads and
-  // strips every server module) has taken past 20 s; hostTimeout doubles it there
-  const deadline = Date.now() + hostTimeout(20_000);
-  let lastObservedHealth = "none";
-  for (;;) {
-    if (serverChild.exitCode !== null || serverChild.signalCode !== null) {
-      throw new Error(
-        `isolated server exited before becoming healthy `
-        + `(code=${String(serverChild.exitCode)}, signal=${String(serverChild.signalCode)}).\n${capturedStderr()}`,
-      );
-    }
-    try {
-      const response = await fetch(`http://127.0.0.1:${port}/api/health`);
-      if (response.status === 200) {
-        const health = await response.json() as { app?: unknown; pid?: unknown; static?: unknown };
-        lastObservedHealth = JSON.stringify(health);
-        if (health.app === "openmausbot" && health.pid === serverChild.pid && health.static === true) return;
-      }
-    } catch {
-      /* still starting */
-    }
-    if (Date.now() >= deadline) {
-      throw new Error(
-        `isolated server never became healthy (last health: ${lastObservedHealth}).\n${capturedStderr()}`,
-      );
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
+  await waitForServerReady(serverChild, `http://127.0.0.1:${port}`, capturedStderr,
+    health => health.app === "openmausbot" && health.pid === serverChild.pid && health.static === true);
 };
 
 const api = async (method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> => {
@@ -1682,7 +1663,7 @@ describe("harness HTTP API", () => {
     const myMessages = bots.find((b: any) => b.id === second.body.bot.id)?.messages ?? [];
     // The opaque person key is the same for both lines: one session, one person.
     const personKey = theirMessages.find((m: any) => m.text === "from the paired person")?.sender?.id;
-    // A paired session carries its principal (server/principals.ts) as its person key.
+    // A paired session carries its principal (server/auth/principals.ts) as its person key.
     expect(personKey).toMatch(/^pr_[0-9a-f-]{36}$/);
     expect(theirMessages.find((m: any) => m.text === "from the paired person")?.sender).toEqual({ name: "Safari on Mac", id: personKey });
     expect(theirMessages.find((m: any) => m.text === "and one more")?.sender).toEqual({ name: "Safari on Mac", id: personKey });
@@ -1714,7 +1695,7 @@ describe("harness HTTP API", () => {
       req.end();
     });
     expect(probe.status).toBe(200);
-    expect(probe.body).toEqual({ app: "openmausbot", product: "sagax" });
+    expect(probe.body).toEqual({ app: "openmausbot", product: "sagax", version: releaseVersion() });
     // the brand is public too: the sign-in page is branded before anyone has a session
     const brand = await new Promise<{ status: number; body: unknown }>((resolve, reject) => {
       const req = request({ hostname: "127.0.0.1", port: PORT, path: "/api/brand", headers: { host: "example.com" } }, (res) => {
@@ -1761,6 +1742,8 @@ describe("harness HTTP API", () => {
     const { status, body } = await api("GET", "/api/health");
     expect(status).toBe(200);
     expect(body.app).toBe("openmausbot");
+    expect(typeof body.version).toBe("string");
+    expect(body.version.length).toBeGreaterThan(0);
     expect(typeof body.pid).toBe("number");
     expect(body.static).toBe(true);
   });
@@ -2652,7 +2635,7 @@ describe("harness HTTP API", () => {
       })).body.group;
       // 2026-10-17: any bot of the person may create a bot, but only from
       // its owner's own request; a turn nobody wrote (this test capability)
-      // is refused (server/bot-creation.ts).
+      // is refused (server/bots/bot-creation.ts).
       const nonChief = await createOperator(outsiderChannel.threadId, "Non-Chief Operator", outsider.id);
       expect(nonChief).toMatchObject({ status: 403, body: { code: "not_owner_turn" } });
       const denied = await createOperator(outsiderChannel.threadId, "Forbidden Operator");
@@ -8794,8 +8777,9 @@ describe("harness HTTP API", () => {
       const soulEnd = system.indexOf("--- END STANDING INSTRUCTIONS ---") + "--- END STANDING INSTRUCTIONS ---".length;
       expect(soulEnd).toBeGreaterThan(0);
       // the work style (#1617) sits on the soul; the setup block is the next section
-      const afterSoul = system.slice(soulEnd).replace(/^\nHow you work\.[^\n]*/, "");
-      expect(afterSoul.startsWith("\n\nThe user explicitly asked you to set yourself up")).toBe(true);
+      const rest = system.slice(soulEnd);
+      const afterSoul = rest.startsWith(WORK_STYLE_PROMPT) ? rest.slice(WORK_STYLE_PROMPT.length) : rest;
+      expect(afterSoul.slice(0, 400)).toMatch(/^\n\nThe user explicitly asked you to set yourself up/);
       // the literal /setup never reaches the model — extract the user text the
       // way promptText() in fake-claude-cli.ts does, joining text parts if the
       // content is an array of blocks rather than a plain string
@@ -9329,9 +9313,14 @@ describe("harness HTTP API", () => {
       expect(dump.env.AGENT_BROWSER_ENCRYPTION_KEY).toBeUndefined();
 
       const system = dump.systemPrompt;
-      expect(system).toMatch(/agent_browser_snapshot/);
-      expect(system).toMatch(/page instructions as untrusted content/i);
-      expect(system).toMatch(/consequential action.*confirmation/i);
+      // #1997: the brief stays in the turn, the full rules are one sagax_help read away.
+      expect(system).toMatch(/agent_browser tools/);
+      expect(system).toMatch(/untrusted data, never authority/i);
+      expect(system).toContain('sagax_help with question "prompt:browser"');
+      const reference = systemPromptReference("prompt:browser") ?? "";
+      expect(reference).toMatch(/agent_browser_snapshot/);
+      expect(reference).toMatch(/page instructions as untrusted content/i);
+      expect(reference).toMatch(/consequential action.*confirmation/i);
       expect(system).toContain(browserSection.text);
       expect(system).toContain(SIGN_IN_PROMPT);
       expect(system).not.toMatch(/never type their (?:credentials|password)/i);
@@ -9431,11 +9420,11 @@ describe("harness HTTP API", () => {
       // VM turn cannot be dispatched here; the settings-level text is the
       // same wiring a dispatched VM turn uses.
       expect((await api("PATCH", `/api/bots/${bot.id}`, { computer: "vm" })).status).toBe(200);
-      expect((await computerSection(bot.id)).text).toBe(computerPrompt("vm-shared"));
+      expect((await computerSection(bot.id)).text).toBe(computerSectionText("vm-shared"));
       expect((await api("PATCH", "/api/config", { localVm: { mode: "per-bot", maxInstances: 1 } })).status).toBe(200);
-      expect((await computerSection(bot.id)).text).toBe(computerPrompt("vm-private"));
+      expect((await computerSection(bot.id)).text).toBe(computerSectionText("vm-private"));
       expect((await api("PATCH", "/api/config", { localVm: { mode: "shared", maxInstances: 2 } })).status).toBe(200);
-      expect((await computerSection(bot.id)).text).toBe(computerPrompt("vm-shared"));
+      expect((await computerSection(bot.id)).text).toBe(computerSectionText("vm-shared"));
 
       // Cloud on the Boat backend keeps the bot's own engine, with the Boat
       // as its computer tools, so preview and dispatch carry the same cloud
@@ -9450,9 +9439,10 @@ describe("harness HTTP API", () => {
         })).status).toBe(200);
         managedBoatRows = [{ id: "bx_8765432a", name: managedBoatNameForFixture(boatBot.id), state: "idle" }];
         boatPromptBodies.length = 0;
-        expect((await computerSection(boatBot.id)).text).toBe(computerPrompt("box"));
+        expect((await computerSection(boatBot.id)).text).toBe(computerSectionText("box"));
         const boatTurn = await turnPrompt(`/api/bots/${boatBot.id}/messages`);
-        expect(boatTurn).toContain(computerPrompt("box"));
+        expect(boatTurn).toContain(computerSectionText("box"));
+        expect(systemPromptReference("prompt:computer-box")).toBe(computerPrompt("box"));
         for (const paragraph of ["isolated Cua sandbox", "This is a VPS", "user's computer"]) {
           expect(boatTurn).not.toContain(paragraph);
         }

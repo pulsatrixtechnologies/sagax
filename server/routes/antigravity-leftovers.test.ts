@@ -4,8 +4,8 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
-import { HOSTED_PROVIDER_SETTINGS_ERROR } from "../hosted-models.ts";
-import { requiredScope } from "../request-auth.ts";
+import { HOSTED_PROVIDER_SETTINGS_ERROR } from "../models/hosted-models.ts";
+import { requiredScope } from "../auth/request-auth.ts";
 import { BUSY_LEFTOVER_ERROR, createAntigravityLeftoverRoutes, type AntigravityLeftoverRouteDeps } from "./antigravity-leftovers.ts";
 import { dispatchRoutes } from "./table.ts";
 

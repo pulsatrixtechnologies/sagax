@@ -98,7 +98,7 @@ test("the loopback listener binds 127.0.0.1 only, at a random state path", async
     assert.ok(Number(url.port) >= 1024);
     assert.match(url.pathname, /^\/[A-Za-z0-9_-]{43}$/);
     assert.notEqual(first.returnTo, second.returnTo);
-    // the server accepts exactly this shape (server/oidc-login.ts validLoopbackReturn)
+    // the server accepts exactly this shape (server/auth/oidc-login.ts validLoopbackReturn)
     assert.match(first.returnTo, /^http:\/\/127\.0\.0\.1:[1-9][0-9]{3,4}\/[A-Za-z0-9_-]{32,128}$/);
     // nothing on the other interfaces: [::1] on the same port is not this listener
     await assert.rejects(fetch(`http://[::1]:${url.port}${url.pathname}`, { signal: AbortSignal.timeout(2_000) }).then((res) => {

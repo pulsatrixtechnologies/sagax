@@ -26,19 +26,19 @@ import { connect, type Socket } from "node:net";
 import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
-import { allowsTool, parseToolScope, type ToolScope } from "../shared/tool-scope.ts";
+import { allowsTool, MCP_SERVER_NAME, parseToolScope, type ToolScope } from "../shared/tool-scope.ts";
 
 import { resolveCliSpawn } from "./env-path.ts";
-import { DESCRIBE_TOOL, SEARCH_TOOL, ToolDirectory, directoryCallTarget, isDirectoryTool, type CatalogTool, type DirectoryContext } from "./mcp-directory.ts";
-import { lenientToolValidator, schemaProblems } from "./mcp-schema-validator.ts";
-import { parseGateSearch, searchedCatalog } from "./mcp-gate-search.ts";
-import { QUERY_TOOL, QUERY_TOOL_NAME, ResultStore, answerQuery, describeShape, exampleQuery } from "./mcp-shape.ts";
-import { DEFAULT_RESULT_BUDGET, type HeldResult, trimResultText, trimStructured } from "./mcp-trim.ts";
-import { ToolNameAliases } from "./mcp-tool-names.ts";
+import { DESCRIBE_TOOL, SEARCH_TOOL, ToolDirectory, directoryCallTarget, isDirectoryTool, type CatalogTool, type DirectoryContext } from "./mcp/mcp-directory.ts";
+import { lenientToolValidator, schemaProblems } from "./mcp/mcp-schema-validator.ts";
+import { parseGateSearch, pinnedToolNames, searchedCatalog } from "./mcp/mcp-gate-search.ts";
+import { QUERY_TOOL, QUERY_TOOL_NAME, ResultStore, answerQuery, describeShape, exampleQuery } from "./mcp/mcp-shape.ts";
+import { DEFAULT_RESULT_BUDGET, type HeldResult, trimResultText } from "./mcp/mcp-trim.ts";
+import { ToolNameAliases, mapJsonStrings } from "./mcp/mcp-tool-names.ts";
 import { killCliTree } from "./procs.ts";
 import { misuseGateBlockText } from "../shared/misuse-guardrails.ts";
 import { BRIDGE_FIND_TOOL, BRIDGE_SERVER, readBridgeCall } from "../shared/searched-tool-call.ts";
-import { gateArgsSummary, gateDeclinedText, type GateAnswer, type GateAsk } from "./mcp-gate-approval.ts";
+import { gateArgsSummary, gateDeclinedText, type GateAnswer, type GateAsk } from "./approvals/mcp-gate-approval.ts";
 
 type Json = Record<string, unknown>;
 
@@ -50,8 +50,11 @@ function gateEnvironment(): NodeJS.ProcessEnv {
     const key = process.argv[3];
     if (process.argv.length !== 4 || process.argv[2] !== "--config-env" || !key || !/^SAGAX_GATE_CONFIG_[a-f0-9]{64}$/.test(key)) throw new Error();
     const value = JSON.parse(process.env[key] ?? "");
+    const scoped = typeof value?.SAGAX_GATE_TOOL_SCOPE === "string" && value.SAGAX_GATE_TOOL_SCOPE.length > 0;
+    const searched = typeof value?.SAGAX_GATE_SEARCH === "string" && value.SAGAX_GATE_SEARCH.length > 0;
     if (!value || typeof value !== "object" || Array.isArray(value)
-      || !["SAGAX_GATE_NAME", "SAGAX_GATE_UPSTREAM", "SAGAX_GATE_TOOL_SCOPE"].every(name => typeof value[name] === "string")
+      || !["SAGAX_GATE_NAME", "SAGAX_GATE_UPSTREAM"].every(name => typeof value[name] === "string")
+      || (!scoped && !searched)
       || !Object.entries(value).every(([name, setting]) => GATE_ENV_KEYS.includes(name) && typeof setting === "string")) throw new Error();
     return value;
   } catch {
@@ -111,7 +114,7 @@ function toolScope(): ToolScope | undefined {
   try { value = JSON.parse(raw); } catch { fail("invalid tool selection JSON"); }
   const parsed = parseToolScope(value);
   if (!parsed.ok || parsed.scope === undefined) fail("invalid tool selection; check the bot's Access settings");
-  if (!/^[a-z][a-z0-9_-]{0,31}$/.test(NAME)) fail("invalid MCP server identity for tool selection");
+  if (!MCP_SERVER_NAME.test(NAME)) fail("invalid MCP server identity for tool selection");
   return parsed.scope;
 }
 
@@ -267,29 +270,6 @@ function spill(tool: string, text: string): string | undefined {
   }
 }
 
-/** Whether `text` is `value` serialized: the same data, object key order
- * aside (a server may build the two copies differently); array order counts. */
-function sameJson(text: string, value: unknown): boolean {
-  try {
-    return sameValue(JSON.parse(text), value, 0);
-  } catch {
-    return false;
-  }
-}
-
-function sameValue(a: unknown, b: unknown, depth: number): boolean {
-  if (a === b) return true;
-  if (depth > 200 || !a || !b || typeof a !== "object" || typeof b !== "object") return false;
-  if (Array.isArray(a) || Array.isArray(b)) {
-    return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item, i) => sameValue(item, b[i], depth + 1));
-  }
-  const left = a as Record<string, unknown>;
-  const right = b as Record<string, unknown>;
-  const keys = Object.keys(left);
-  return keys.length === Object.keys(right).length
-    && keys.every((key) => Object.hasOwn(right, key) && sameValue(left[key], right[key], depth + 1));
-}
-
 /** Rewrite one `tools/call` result in place. Returns true when anything was
  * actually trimmed, so the caller can report it on stderr. */
 function trimCallResult(result: Json, tool: string): boolean {
@@ -310,34 +290,39 @@ function trimCallResult(result: Json, tool: string): boolean {
   const share = Math.floor(BUDGET / textBlocks.length);
   const path = spill(tool, textBlocks.map((block) => block.text).join("\n"));
   const held = textBlocks.length === 1 ? hold(tool, textBlocks[0]!.text) : undefined;
-  // The usual shape: one text block that is structuredContent serialized.
-  const structuredIsText = textBlocks.length === 1 && Boolean(result.structuredContent) && typeof result.structuredContent === "object"
-    && sameJson(textBlocks[0]!.text, result.structuredContent);
   let trimmed = false;
-  let keptValue: unknown;
   for (const block of textBlocks) {
     const outcome = trimResultText({ text: block.text, budget: share, spillPath: path, spillHint: SPILL_HINT, toolName: tool, held });
     if (!outcome.trimmed) continue;
     block.text = outcome.text;
-    keptValue = outcome.value;
     trimmed = true;
   }
 
-  // A tool that also answers with structuredContent would otherwise hand the
-  // provider a second, full copy of everything just cut. When it is the same
-  // data as the text, it keeps exactly the records the text kept; otherwise
-  // it is trimmed the same way on its own, structurally only so it stays
-  // valid against the tool's output schema, and left untouched when it
-  // cannot be cut without mangling it.
-  if (trimmed && result.structuredContent && typeof result.structuredContent === "object") {
-    if (structuredIsText && keptValue && typeof keptValue === "object") {
-      result.structuredContent = keptValue as Json;
-    } else {
-      const structured = trimStructured(result.structuredContent, BUDGET);
-      if (structured) result.structuredContent = structured.value as Json;
-    }
-  }
+  // A tool that also answers with structuredContent is dropped to the text
+  // alone once that text was cut. Measured 2026-11-05 (Claude Code 2.1.288
+  // in production, 2.1.318 locally): when a result carries structuredContent
+  // the engine hands the model that value serialized INSTEAD of the text
+  // blocks, so a trimmed copy kept beside the text either put the whole
+  // payload back in context (a document, which has no array to cut) or hid
+  // the banner that says the result is incomplete. Every bot's flow_run read
+  // came back whole, 40 KB a call, with the gate "on". The text block is the
+  // one copy every engine shows, banner included, and the whole value stays
+  // held for query_result. A tool's outputSchema is stripped from the catalog
+  // (withoutOutputSchema) so no client refuses the result for lacking it.
+  if (trimmed && result.structuredContent !== undefined) delete result.structuredContent;
   return trimmed;
+}
+
+/** The catalog a trimming gate shows never declares an outputSchema: a
+ * trimmed result has no structuredContent (trimCallResult), and an MCP
+ * client that saw the schema would reject the result for lacking one. */
+function withoutOutputSchema(tools: Json[]): Json[] {
+  if (BUDGET === 0) return tools;
+  return tools.map((tool) => {
+    if (!isRecord(tool) || tool.outputSchema === undefined) return tool;
+    const { outputSchema: _dropped, ...rest } = tool;
+    return rest as Json;
+  });
 }
 
 /** The connector status the harness and Settings read: what the server
@@ -350,6 +335,7 @@ function reportToolNames(advertised: string[], outcome: ReturnType<ToolNameAlias
     process.stderr.write(`mcp-gate(${NAME}): ERROR tool "${entry.upstream}" cannot be registered for Grok (${entry.reason}); it is NOT available to the bot\n`);
   }
   for (const problem of outcome.parity) process.stderr.write(`mcp-gate(${NAME}): ERROR tool parity: ${problem}\n`);
+  for (const problem of outcome.predictionMismatches) process.stderr.write(`mcp-gate(${NAME}): WARNING tool name in the instructions: ${problem}\n`);
   if (!REPORT_DIR) return;
   try {
     mkdirSync(REPORT_DIR, { recursive: true, mode: 0o700 });
@@ -519,8 +505,8 @@ async function searchRoute(line: string, message: Json): Promise<void> {
       if (!id) return rejectRequest(message.id, -32600, "Tool listing needs a request ID");
       if (params?.cursor !== undefined) return rejectRequest(message.id, -32602, "Invalid cursor");
       const { directory, searched } = await loadSearch();
-      const tools: Json[] = searched ? [...directory.pinned(SEARCH!.pinned), ...directory.listed(searchContext)] : [...directory.tools];
-      return reply(message.id, { tools: BUDGET > 0 ? [...tools.filter((tool) => tool.name !== QUERY_TOOL_NAME), QUERY_TOOL] : tools });
+      const tools: Json[] = searched ? [...directory.pinned(pinnedToolNames(directory.tools, SEARCH!)), ...directory.listed(searchContext)] : [...directory.tools];
+      return reply(message.id, { tools: BUDGET > 0 ? [...withoutOutputSchema(tools.filter((tool) => tool.name !== QUERY_TOOL_NAME)), QUERY_TOOL] : tools });
     }
     const { directory, searched } = await loadSearch();
     const name = params?.name;
@@ -577,8 +563,10 @@ function routeLine(line: string): void {
   // An alias resolves through the map, before any check sees the name.
   if (ALIASES && message?.method === "tools/call" && params && typeof params.name === "string") {
     const upstream = ALIASES.upstream(params.name);
-    if (upstream !== params.name) {
+    const args = params.arguments === undefined ? undefined : ALIASES.argumentsToUpstream(params.arguments);
+    if (upstream !== params.name || args !== params.arguments) {
       params.name = upstream;
+      if (args !== undefined) params.arguments = args as Json;
       line = JSON.stringify(message);
     }
   }
@@ -621,7 +609,9 @@ function routeLine(line: string): void {
     if (!id || typeof params?.name !== "string") return rejectRequest(message.id, -32602, "Invalid tool call");
     const target = callTarget(params.name, params.arguments);
     // The directory answers a call naming no tool itself; nothing runs.
-    if (target !== undefined && !READ_ONLY.has(target)) {
+    // A reviewed name is listed with one `_` (cw_psa_query); an earlier
+    // Perspicax serves the same tool as cw_psa__query.
+    if (target !== undefined && !READ_ONLY.has(target) && !READ_ONLY.has(target.replace(/_{2,}/g, "_"))) {
       const callId = message.id;
       const held = askApproval(NAME, target, params.arguments)
         .then((decision) => {
@@ -651,7 +641,7 @@ function misuseGateRefusal(params: Json | undefined): string | null {
 }
 
 function forward(line: string, message: Json | undefined, id: string | undefined, params: Json | undefined): void {
-  if (SEARCH && id && message?.method === "initialize") initializeIds.add(id);
+  if ((SEARCH || ALIASES) && id && message?.method === "initialize") initializeIds.add(id);
   if (id && typeof message?.method === "string") {
     if (scope && pending.has(id)) fail("duplicate request ID on a restricted connection");
     if (message.method === "tools/call") {
@@ -707,6 +697,7 @@ createInterface({ input: child.stdout }).on("line", (line) => {
     const info = isRecord(result.serverInfo) ? result.serverInfo : {};
     const title = typeof info.title === "string" ? info.title : typeof info.name === "string" ? info.name : undefined;
     if (title) searchContext.title = title;
+    if (ALIASES && typeof result.instructions === "string") result.instructions = ALIASES.instructionsToAliases(result.instructions);
     if (typeof result.instructions === "string") searchContext.instructions = result.instructions;
   }
   if (scope && request?.kind === "list" && message.error === undefined) {
@@ -724,9 +715,22 @@ createInterface({ input: child.stdout }).on("line", (line) => {
     result.tools = outcome.tools;
     reportToolNames(tools.map((tool) => tool.name), outcome);
   }
-  // query_result rides the last page of the catalog, in place of any upstream tool of that name.
-  if (BUDGET > 0 && request?.kind === "list" && message.error === undefined && isRecord(result) && Array.isArray(result.tools) && result.nextCursor === undefined) {
-    result.tools = [...result.tools.filter((tool: unknown) => !isRecord(tool) || tool.name !== QUERY_TOOL_NAME), QUERY_TOOL];
+  // query_result rides the last page of the catalog, in place of any upstream
+  // tool of that name; no page keeps an outputSchema (see trimCallResult).
+  if (BUDGET > 0 && request?.kind === "list" && message.error === undefined && isRecord(result) && Array.isArray(result.tools)) {
+    const tools = withoutOutputSchema(result.tools.filter((tool: unknown) => !isRecord(tool) || tool.name !== QUERY_TOOL_NAME));
+    result.tools = result.nextCursor === undefined ? [...tools, QUERY_TOOL] : tools;
+  }
+  // 2026-11-02: a connector name Grok cannot call never reaches the bot:
+  // the gateway's own tools (api_search, api_describe, api_list, flow...,
+  // no `__` in their name) and every error name tools by the connector's
+  // name. Product tools' results are vendor data and stay as they came.
+  if (ALIASES && request?.kind === "call") {
+    if (isRecord(message.error) && typeof message.error.message === "string") message.error.message = ALIASES.toAliases(message.error.message);
+    if (isRecord(result) && (!request.tool.includes("__") || result.isError === true)) {
+      if (Array.isArray(result.content)) result.content = mapJsonStrings(result.content, (text) => ALIASES.toAliases(text)) as Json[];
+      if (result.structuredContent !== undefined) result.structuredContent = mapJsonStrings(result.structuredContent, (text) => ALIASES.toAliases(text)) as Json;
+    }
   }
   if (request?.kind === "call" && request.trim && isRecord(result)) {
     try {

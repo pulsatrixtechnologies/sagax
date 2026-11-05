@@ -116,7 +116,7 @@ final class SearchCatalogTests: XCTestCase {
         let bots = [bot("a", name: "Aurora")]
         XCTAssertEqual(
             DesktopComposeTo.rows(mode: .browse, bots: bots, canCreateBots: true, people: people),
-            [.createBot, .createGroup, .bot("a"), .person("pr_sam"), .person("pr_ali")]
+            [.createBot, .createBotWizard, .createGroup, .bot("a"), .person("pr_sam"), .person("pr_ali")]
         )
         XCTAssertEqual(DesktopComposeTo.rows(mode: .group, bots: bots, canCreateBots: true, people: people), [.createGroup, .bot("a")])
     }

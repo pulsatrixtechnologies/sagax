@@ -32,6 +32,23 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 });
 `;
 
+/** An upstream whose tools declare an outputSchema, listed over two pages. */
+const SCHEMA_UPSTREAM = `
+const { createInterface } = require("node:readline");
+const { readFileSync } = require("node:fs");
+const reply = JSON.parse(readFileSync(process.env.SCRIPT, "utf8"));
+const send = (id, result) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\\n");
+const tool = (name) => ({ name, inputSchema: { type: "object" }, outputSchema: { type: "object" } });
+createInterface({ input: process.stdin }).on("line", (line) => {
+  const msg = JSON.parse(line);
+  if (msg.method === "tools/list") {
+    return msg.params?.cursor === "second" ? send(msg.id, { tools: [tool("write")] }) : send(msg.id, { tools: [tool("read")], nextCursor: "second" });
+  }
+  if (msg.method === "tools/call") return send(msg.id, reply);
+  send(msg.id, {});
+});
+`;
+
 const SCOPED_UPSTREAM = `
 const { createInterface } = require("node:readline");
 const { appendFileSync, readFileSync, writeFileSync } = require("node:fs");
@@ -147,6 +164,25 @@ describe("mcp-gate", () => {
     });
   });
 
+  it("starts an unscoped searched gate from its private record", async () => {
+    const key = `SAGAX_GATE_CONFIG_${"a".repeat(64)}`;
+    const settings = {
+      SAGAX_GATE_NAME: "shop",
+      SAGAX_GATE_SPILL_DIR: join(scratch, "spill"),
+      SAGAX_GATE_BUDGET: "0",
+      SAGAX_GATE_UPSTREAM: JSON.stringify({
+        command: process.execPath,
+        args: [join(scratch, "upstream.cjs")],
+        env: { SCRIPT: join(scratch, "reply.json"), UPSTREAM_ONLY: "yes" },
+      }),
+      SAGAX_GATE_SEARCH: JSON.stringify({ pinned: ["read"], maxTools: 0 }),
+    };
+    start({}, { [key]: JSON.stringify(settings) }, SCOPED_UPSTREAM, ["--config-env", key]);
+    send({ jsonrpc: "2.0", id: 7, method: "tools/list" });
+    expect(JSON.parse(await nextLine()).result.tools.map((tool: { name: string }) => tool.name))
+      .toEqual(["read", "search_tools", "describe_tool", "call_tool"]);
+  });
+
   it("leaves a small tool result exactly as the server sent it", async () => {
     const result = { content: [{ type: "text", text: JSON.stringify({ cart: { total: 131 } }) }] };
     start(result);
@@ -177,7 +213,9 @@ describe("mcp-gate", () => {
     expect(kept.nextOffset).toBe("1");
   });
 
-  it("trims structuredContent alongside the text it duplicates", async () => {
+  it("drops structuredContent once the text was trimmed, so the engine shows the banner and not a full second copy", async () => {
+    // Claude Code hands the model structuredContent serialized instead of
+    // the text blocks whenever a result carries one (measured 2026-11-05).
     const products = Array.from({ length: 300 }, (_, i) => ({ id: `p${i}`, blurb: "x".repeat(300) }));
     start({
       content: [{ type: "text", text: JSON.stringify({ products }) }],
@@ -185,24 +223,55 @@ describe("mcp-gate", () => {
     });
 
     const answer = await call("search_products");
-    expect(answer.result.structuredContent.products.length).toBeLessThan(300);
-    expect(answer.result.structuredContent.products[0]).toEqual(products[0]);
+    expect(answer.result.structuredContent).toBeUndefined();
+    expect(answer.result.content[0].text.startsWith("⚠️ SHAPED by Sagax")).toBe(true);
   });
 
-  it("keeps structuredContent on exactly the records the text kept", async () => {
-    const products = Array.from({ length: 300 }, (_, i) => ({ id: `p${i}`, blurb: "x".repeat(300) }));
+  it("drops structuredContent on a document that has no array to cut", async () => {
+    const doc = { title: "Guide", body: "y".repeat(40_000) };
     start({
-      content: [{ type: "text", text: JSON.stringify({ products }) }],
-      structuredContent: { products },
-    }, { SAGAX_GATE_BUDGET: "20000" });
+      content: [{ type: "text", text: JSON.stringify(doc) }],
+      structuredContent: doc,
+    });
 
-    const answer = await call("search_products");
+    const answer = await call("read_doc");
+    expect(answer.result.structuredContent).toBeUndefined();
     const text = answer.result.content[0].text as string;
+    expect(text.length).toBeLessThan(9_000);
     expect(text.startsWith("⚠️ SHAPED by Sagax")).toBe(true);
-    expect(text.slice(text.lastIndexOf("\n\n") + 2).startsWith("⚠️ SHAPED by Sagax")).toBe(true);
-    const kept = JSON.parse(text.slice(text.indexOf("\n\n") + 2, text.lastIndexOf("\n\n⚠️")));
-    expect(kept.products.length).toBeLessThan(300);
-    expect(answer.result.structuredContent).toEqual(kept);
+  });
+
+  it("keeps structuredContent on a result it did not trim", async () => {
+    const result = { content: [{ type: "text", text: JSON.stringify({ cart: { total: 131 } }) }], structuredContent: { cart: { total: 131 } } };
+    start(result);
+    expect((await call("get_food_cart")).result).toEqual(result);
+  });
+
+  it("strips outputSchema from a relayed catalog, on every page, so no client demands structuredContent back", async () => {
+    start({}, {}, SCHEMA_UPSTREAM);
+    send({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    const first = JSON.parse(await nextLine()).result;
+    expect(first.tools.map((tool: { name: string }) => tool.name)).toEqual(["read"]);
+    expect(first.tools[0].outputSchema).toBeUndefined();
+    expect(first.tools[0].inputSchema).toEqual({ type: "object" });
+    send({ jsonrpc: "2.0", id: 2, method: "tools/list", params: { cursor: "second" } });
+    const second = JSON.parse(await nextLine()).result;
+    expect(second.tools.map((tool: { name: string }) => tool.name)).toEqual(["write", "query_result"]);
+    expect(second.tools.every((tool: { outputSchema?: unknown }) => tool.outputSchema === undefined)).toBe(true);
+  });
+
+  it("strips outputSchema from a searched catalog too", async () => {
+    start({}, { SAGAX_GATE_SEARCH: JSON.stringify({ pinned: ["read"], maxTools: 0 }) }, SCHEMA_UPSTREAM);
+    send({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    const tools = JSON.parse(await nextLine()).result.tools as Array<{ name: string; outputSchema?: unknown }>;
+    expect(tools.map((tool) => tool.name)).toEqual(["read", "search_tools", "describe_tool", "call_tool", "query_result"]);
+    expect(tools.every((tool) => tool.outputSchema === undefined)).toBe(true);
+  });
+
+  it("leaves outputSchema in place when the gate does not trim", async () => {
+    start({}, { SAGAX_GATE_BUDGET: "0" }, SCHEMA_UPSTREAM);
+    send({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    expect(JSON.parse(await nextLine()).result.tools[0].outputSchema).toEqual({ type: "object" });
   });
 
   it("honours a budget the harness sets", async () => {
@@ -364,6 +433,37 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     send({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } });
     return JSON.parse(await nextLine());
   };
+
+  // #1935: a Perspicax-like profile catalog, too big to list whole.
+  const PROFILE_UPSTREAM = `
+const { createInterface } = require("node:readline");
+const send = (id, result) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\\n");
+const names = ["api_search", "api_describe", "api_result_query", "api_list", "identity_switch", "memory_find", "flow_run", "cw_psa_query", "cw_psa_write", "cw_psa_action", "backup_query",
+  ...Array.from({ length: 14 }, (_, i) => "cw_psa_find_thing_" + i)];
+createInterface({ input: process.stdin }).on("line", (line) => {
+  const msg = JSON.parse(line);
+  if (msg.method === "tools/list") return send(msg.id, { tools: names.map((name) => ({ name, description: "Tool " + name, inputSchema: { type: "object" } })) });
+  if (msg.method === "tools/call") return send(msg.id, { content: [{ type: "text", text: "ran " + msg.params.name }] });
+  send(msg.id, {});
+});
+`;
+
+  it("#1935: a searched profile catalog still lists its query, write and action tools whole", async () => {
+    start({}, { SAGAX_GATE_SEARCH: JSON.stringify({ pinned: ["api_describe", "api_list", "api_result_query", "api_search", "flow_run", "identity_switch", "memory_find"], pinnedSuffixes: ["_action", "_query", "_write"] }) }, PROFILE_UPSTREAM);
+    send({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    const listed = JSON.parse(await nextLine()).result.tools.map((tool: { name: string }) => tool.name);
+    expect(listed).toEqual(expect.arrayContaining(["api_search", "api_describe", "api_list", "api_result_query", "identity_switch", "memory_find", "flow_run", "cw_psa_query", "cw_psa_write", "cw_psa_action", "backup_query", "search_tools", "describe_tool", "call_tool"]));
+    expect(listed).not.toContain("cw_psa_find_thing_0");
+    // a pinned tool runs by its own name; the rest stays behind call_tool
+    expect((await callWith("cw_psa_query", { resource: "service.tickets" }, 2)).result.content[0].text).toBe("ran cw_psa_query");
+    expect((await callWith("call_tool", { name: "cw_psa_find_thing_3", arguments: {} }, 3)).result.content[0].text).toBe("ran cw_psa_find_thing_3");
+  });
+
+  it("#1935: an unreadable pinned suffix stops the gate rather than widening", async () => {
+    start({}, { SAGAX_GATE_SEARCH: JSON.stringify({ pinned: [], pinnedSuffixes: ["*"] }) }, PROFILE_UPSTREAM);
+    const [code] = await once(gate!, "exit");
+    expect(code).not.toBe(0);
+  });
 
   it("checks call_tool against the tool it runs only when its upstream is the tool directory", async () => {
     const scope = { SAGAX_GATE_TOOL_SCOPE: JSON.stringify({ allow: ["mcp:shop:read"] }), SAGAX_GATE_BUDGET: "600" };

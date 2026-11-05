@@ -55,7 +55,7 @@ export function threadsOffOpenTarget(bot: HomeBot): string | undefined {
 type OpenAction =
   | { type: "select"; id: string }
   | { type: "switchTask"; botId: string; threadId: string }
-  | { type: "freshTopic"; botId: string; threadId: string | null; auto?: boolean };
+  | { type: "freshTopic"; botId: string; threadId: string | null; auto?: boolean; keepAsked?: boolean };
 
 /** The actions that open a bot's conversation the way its sidebar row does.
  * Threads on: the last selected thread. Threads off: the same, unless that
@@ -72,5 +72,5 @@ export function openBotConversationActions(bot: HomeBot & { id: string }, showTh
   const landing = freshTopicLanding(bot, target ?? bot.threadId, { now: Date.now() });
   return [...opened, landing.fresh
     ? { type: "freshTopic", botId: bot.id, threadId: target ?? bot.threadId, auto: true }
-    : { type: "freshTopic", botId: bot.id, threadId: null }];
+    : { type: "freshTopic", botId: bot.id, threadId: null, keepAsked: true }];
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteContext } from "./table.ts";
 import { createMemoryManagerRoutes, MEMORY_MANAGER_SOURCES } from "./memory-manager.ts";
 
@@ -28,7 +28,8 @@ function setup(deps: Parameters<typeof createMemoryManagerRoutes>[0]) {
 describe("GET /api/memory-manager/sources", () => {
   it("lists local bots and team sections, and marks Perspicax when available", async () => {
     const invoke = setup({
-      bots: () => [{ id: "atlas", name: "Atlas", mayWrite: true }],
+      bots: () => [{ id: "atlas", name: "Atlas", mayWrite: true }, { id: "perf", name: "perf-test-061", mayWrite: true, temporary: true }],
+      botReachable: () => true,
       teamSections: () => [{ section: "", label: "General", mayWrite: true, count: 2 }],
       perspicax: () => ({ available: true }),
     });
@@ -37,7 +38,9 @@ describe("GET /api/memory-manager/sources", () => {
     expect(out.body).toMatchObject({
       perspicax: { available: true },
       sources: [
-        { id: "bot:atlas", kind: "bot", name: "Atlas", botId: "atlas", mayWrite: true },
+        { id: "bot:atlas", kind: "bot", name: "Atlas", botId: "atlas", mayWrite: true, linked: true },
+        // a temporary agent's memory: no current bot is linked to it
+        { id: "bot:perf", kind: "bot", name: "perf-test-061", botId: "perf", linked: false },
         { id: "team:general", kind: "team", name: "General", section: "", mayWrite: true },
         { id: "perspicax", kind: "perspicax", name: "Perspicax", mayWrite: true },
       ],
@@ -47,6 +50,7 @@ describe("GET /api/memory-manager/sources", () => {
   it("omits Perspicax when the install is solo and passes other paths", async () => {
     const invoke = setup({
       bots: () => [],
+      botReachable: () => true,
       teamSections: () => [],
       perspicax: () => ({ available: false, reason: "solo" }),
     });
@@ -56,5 +60,24 @@ describe("GET /api/memory-manager/sources", () => {
     });
     expect((await invoke(loopback, { path: "/api/bots" })).passed).toBe(true);
     expect(await invoke(loopback, { method: "POST" })).toMatchObject({ status: 405 });
+  });
+
+  // 2026-11-02: an organization admin saw every bot on the Memory page and
+  // got "no such bot" on opening one the request gate hides from them.
+  it("lists only the bots whose memory routes answer the caller", async () => {
+    const asked: string[] = [];
+    const invoke = setup({
+      bots: () => [
+        { id: "atlas", name: "Atlas", mayWrite: true },
+        { id: "northwind", name: "Northwind", mayWrite: true },
+      ],
+      botReachable: (_auth, botId) => { asked.push(botId); return botId !== "northwind"; },
+      teamSections: () => [],
+      perspicax: () => ({ available: true }),
+    });
+    const out = await invoke();
+    expect(asked).toEqual(["atlas", "northwind"]);
+    const ids = (out.body as { sources: Array<{ id: string }> }).sources.map((source) => source.id);
+    expect(ids).toEqual(["bot:atlas", "perspicax"]);
   });
 });

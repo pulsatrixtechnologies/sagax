@@ -2,7 +2,7 @@
 // fence handed us: title, an Open button for a real https URL, nothing
 // invented. HTML previews ride a sibling ```widget fence, not this card.
 import { memo } from "react";
-import { AppWindow, SquareArrowOutUpRight } from "lucide-react";
+import { Globe, SquareArrowOutUpRight } from "lucide-react";
 
 import { t } from "@/lib/i18n";
 import type { ArtifactPage } from "@/lib/rich-blocks";
@@ -25,7 +25,7 @@ function ArtifactCardComponent({ page, pending = false }: { page: ArtifactPage; 
       className="my-2 min-w-0 overflow-hidden rounded-xl border border-hairline/40 bg-panel shadow-sm"
     >
       <header className="flex items-center gap-2 border-b border-hairline/30 bg-raised/30 px-3 py-2 text-[12px] text-ink-secondary">
-        <AppWindow size={14} aria-hidden="true" />
+        <Globe size={14} aria-hidden="true" />
         <span className="font-medium text-ink">{t("rich.artifact.title")}</span>
         {pending && <span className="ms-auto text-[11px]">{t("rich.pending")}</span>}
       </header>

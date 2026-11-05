@@ -2,7 +2,7 @@
 // the CLI with the tool profile that leaves it no shell, file or web tool of
 // its own on the Sagax server, in an empty folder Sagax owns, and a request
 // to run a command there is declined before any card or Full-access
-// auto-accept. The real CLIs are checked by scripts/verify-org-host-tools.ts
+// auto-accept. The real CLIs are checked by scripts/verify/dev/verify-org-host-tools.ts
 // (AGENTS.md "Engines on an organization server"); this pins the driver side
 // against the scripted ACP peer.
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";

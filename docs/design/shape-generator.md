@@ -26,7 +26,7 @@ comment tout fonctionne et comment en ajouter une.
 | Format portable (schéma v1, validation, compile, partage) | `shared/shape-avatar-def.ts` |
 | Presets d'objets (pad, cup, bulb, say, sprout, tin, tome, ship), SVG fixe | `shared/shape-avatar-presets.ts` |
 | Génération (mots-clés, prompt modèle, parse, repli) | `shared/shape-avatar-generate.ts` |
-| Module serveur (re-exporte la génération, définition d'outil) | `server/shape-avatar.ts` |
+| Module serveur (re-exporte la génération, définition d'outil) | `server/media/shape-avatar.ts` |
 | Route interne de génération | `/api/internal/shape-avatar/generate` |
 | Contour vivant à partir d'une définition | `shared/shape-avatar-outline.ts` |
 | Géométrie partagée (64 rayons par corps, ancres de visage, yeux, peaux) | `shared/mascot-geometry.json` |
@@ -35,13 +35,13 @@ comment tout fonctionne et comment en ajouter une.
 | Données iOS générées | `ios/Sources/CompanionCore/ShapeGeometryData.swift` |
 | Cuisson des objets en rayons | `scripts/bake-object-shapes.mjs` |
 | Script de génération pour développeur | `scripts/generate-shape.mjs` |
-| Captures et contrôles visuels | `scripts/capture-shapes.mjs`, `src/gallery/shape-set.html` |
+| Captures et contrôles visuels | `scripts/capture/shapes.mjs`, `src/gallery/shape-set.html` |
 
-`server/shape-avatar.ts` garde `GENERATE_SHAPE_AVATAR_TOOL` : c'est la
+`server/media/shape-avatar.ts` garde `GENERATE_SHAPE_AVATAR_TOOL` : c'est la
 définition d'outil, appelable par un script, mais elle n'est plus branchée au
 catalogue. Pour remettre l'outil dans les bots, recréer l'entrée dans
 `server/drivers/agents-catalog.ts`, la ligne `shapes:generate` de
-`server/mcp-permissions.ts`, la branche d'appel dans `agents-call.ts` (elle
+`server/mcp/mcp-permissions.ts`, la branche d'appel dans `agents-call.ts` (elle
 appelait `runGenerateShapeAvatarAsync`), puis regénérer la politique d'outils
 et les goldens (voir plus bas).
 
@@ -123,7 +123,7 @@ visage.
 
 ## Contrôles visuels (obligatoires)
 
-- `node scripts/capture-shapes.mjs` (headless, rien ne s'ouvre à l'écran) :
+- `node scripts/capture/shapes.mjs` (headless, rien ne s'ouvre à l'écran) :
   captures de chaque forme au repos, par peau, par humeur et à mi-mouvement,
   plus les contrôles sur la mise en page réelle du navigateur. Première fois
   pour une nouvelle forme : `--update` pour écrire ses références, puis

@@ -1,4 +1,4 @@
-// The live call's routes (server/voice-mode.ts) and the call turn's send,
+// The live call's routes (server/voice/voice-mode.ts) and the call turn's send,
 // the same requests the desktop's voice mode makes (src/lib/voice-mode/api.ts
 // and LiveCall's send with `voiceCall`). The xAI key stays on the server:
 // the phone gets a yes or no, voice labels, and audio.
@@ -11,7 +11,7 @@ public struct VoiceModeRefusal: Decodable, Equatable, Sendable {
     public var keysUrl: String?
 }
 
-/// A key as the server names it (server/voice-keys.ts, 2026-10-28): where
+/// A key as the server names it (server/voice/voice-keys.ts, 2026-10-28): where
 /// it comes from (`voice-key`: the person's own voice key saved in Sagax,
 /// `perspicax-key`: their xAI key in Perspicax, `org-key`: the
 /// organization's, `server`: a solo server's) and its last four
@@ -61,8 +61,16 @@ public struct VoiceModeStatus: Decodable, Equatable, Sendable {
     /// every key that may serve, in order, the refused ones last
     public var keys: [VoiceKeyState]?
     public var refusal: VoiceModeRefusal?
+    /// The call runs on the realtime voice (the desktop's `realtimeCallReady`,
+    /// 2026-11-02: a call is never text to speech). Nil from an older server.
+    public var realtime: Bool?
 
-    public init(provider: String = "xai", available: Bool, organization: Bool? = nil, via: String? = nil, key: VoiceKeyInfo? = nil, keys: [VoiceKeyState]? = nil, refusal: VoiceModeRefusal? = nil) {
+    /// `realtimeCallReady`: available and on the realtime voice. An older
+    /// server that names no `realtime` keeps its call.
+    public var realtimeCallReady: Bool { available && (realtime ?? true) }
+
+    public init(provider: String = "xai", available: Bool, organization: Bool? = nil, via: String? = nil, key: VoiceKeyInfo? = nil, keys: [VoiceKeyState]? = nil, refusal: VoiceModeRefusal? = nil, realtime: Bool? = nil) {
+        self.realtime = realtime
         self.provider = provider
         self.available = available
         self.organization = organization
@@ -73,7 +81,7 @@ public struct VoiceModeStatus: Decodable, Equatable, Sendable {
     }
 }
 
-/// A voice route said no (server/voice-mode.ts): a refusal (403
+/// A voice route said no (server/voice/voice-mode.ts): a refusal (403
 /// `voice_no_access`, no key serves this person), xAI failing the request
 /// (502 `voice_provider`, with its kind and the key it is about), this
 /// server's own rate limit (429) or spend limit (409 `spend_cap`). Thrown
@@ -236,7 +244,7 @@ public struct VoiceModeVoice: Decodable, Hashable, Identifiable, Sendable {
 }
 
 /// `Message.voiceCall` on a send: the turn was said on a live call, so the
-/// server adds its hidden phone-call instruction (server/voice-call-prompt.ts).
+/// server adds its hidden phone-call instruction (server/voice/voice-call-prompt.ts).
 public struct VoiceCallMeta: Codable, Hashable, Sendable {
     public var callId: String
     public var interrupted: Bool?

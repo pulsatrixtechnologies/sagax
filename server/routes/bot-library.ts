@@ -10,13 +10,16 @@
 //        { document, filename, redacted, skipped, summary }: one bot as a team
 //        package (format v2), without its chats or any secret; owner or admin.
 //
-// Reads cover only the threads this viewer may read (on an organization
-// server, their own); the file and preview URLs are the existing per-thread
-// file routes, so no host path ever travels. Member scope (request-auth.ts
-// CLIENT_ALLOW); the export checks the owner itself.
-import { collectBotLinks, mergeBotFiles, pageOf, readPageQuery, type BotFileKind, type LinkSourceMessage } from "../bot-library.ts";
-import type { RequestAuth } from "../request-auth.ts";
-import type { ThreadFile } from "../thread-files.ts";
+// When the bot is shared, Links / Media / Files cover the bot's whole library
+// (threads of the owner and of every person in the share), confidential
+// threads excluded (#2019). A person without a share still sees nothing of
+// anyone else's. The file and preview URLs are the existing per-thread file
+// routes (authorized for a shared viewer on those non-confidential threads
+// only), so no host path ever travels. Member scope (request-auth.ts
+// CLIENT_ALLOW); the export stays owner or admin.
+import { collectBotLinks, mergeBotFiles, pageOf, readPageQuery, type BotFileKind, type LinkSourceMessage } from "../bots/bot-library.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import type { ThreadFile } from "../threads/thread-files.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface BotLibraryBot {

@@ -65,7 +65,7 @@ then closes its owned browser profile, preview and server.
 
 ## UI and account checks
 
-`node --experimental-strip-types scripts/verify-engines-ui.ts` renders the
+`node --experimental-strip-types scripts/verify/dev/verify-engines-ui.ts` renders the
 real provider settings screen with a synthetic Cline card; installation and
 authentication requests are blocked. Capture desktop and narrow layouts.
 

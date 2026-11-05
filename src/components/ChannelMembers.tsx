@@ -14,7 +14,7 @@ export function channelRosterActions(input: {
   actorId: string;
   bots: { id: string; ownerUserId?: string }[];
   /** Organization server: false when someone else owns the group. Such a
-   * member still brings their own bots (server/group-ownership.ts). */
+   * member still brings their own bots (server/groups/group-ownership.ts). */
   ownsRoom?: boolean;
   /** Bots already in the room: one of yours there is not offered again. */
   memberIds?: readonly string[];
@@ -48,6 +48,10 @@ export function ChannelMembers(props: {
   onRemoveBot?: (id: string) => void;
   /** The add row's label: "Ajouter mon robot" for a member who does not own the room. */
   addBotLabel?: string;
+  /** 2026-11-03 (JC): the group's lead (who answers a plain message), shown
+   * on its row; with onSetLead, every other row offers "Make lead". */
+  leadBotId?: string;
+  onSetLead?: (id: string) => void;
   part?: "all" | "humans" | "bots";
 }) {
   const part = props.part ?? "all";
@@ -112,7 +116,7 @@ export function ChannelMembers(props: {
         {part === "all" && <h2 className="px-2 text-[12px] font-semibold text-ink-secondary">Bots</h2>}
         <ul className="overflow-hidden rounded-xl bg-card">
           {props.bots.map((bot) => (
-            <li key={bot.id} className="flex items-center gap-3 border-b border-hairline/30 px-3 py-2 last:border-b-0">
+            <li key={bot.id} data-roster-bot="" className="group/bot flex items-center gap-3 border-b border-hairline/30 px-3 py-2 last:border-b-0">
               <BotAvatar
                 bot={{ ...bot, color: (bot.color ?? "green") as MausColor }}
                 size={32}
@@ -123,6 +127,23 @@ export function ChannelMembers(props: {
                 <div className="truncate text-[14px] font-medium text-ink">{bot.name}</div>
                 {bot.title && <div className="truncate text-[12px] text-ink-secondary">{bot.title}</div>}
               </div>
+              {props.leadBotId === bot.id && (
+                <span data-lead-badge="" title={t("groupPanel.lead.badgeTitle", { name: bot.name })} className="shrink-0 rounded-full bg-accent/15 px-2 py-0.5 text-[11.5px] font-medium leading-4 text-accent-text">
+                  {t("groupPanel.lead.badge")}
+                </span>
+              )}
+              {props.onSetLead && props.leadBotId !== bot.id && (
+                <button
+                  type="button"
+                  data-make-lead=""
+                  aria-label={t("groupPanel.lead.makeAria", { name: bot.name })}
+                  title={t("groupPanel.lead.makeAria", { name: bot.name })}
+                  onClick={() => props.onSetLead?.(bot.id)}
+                  className="shrink-0 rounded-full px-2 py-0.5 text-[11.5px] font-medium leading-4 text-ink-secondary opacity-0 hover:bg-control hover:text-ink focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 group-hover/bot:opacity-100 touch:opacity-100"
+                >
+                  {t("groupPanel.lead.make")}
+                </button>
+              )}
               {props.onRemoveBot && bot.removable !== false && (
                 <button
                   type="button"

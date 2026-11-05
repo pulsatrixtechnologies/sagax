@@ -68,11 +68,11 @@ final class CardActionsTests: XCTestCase {
         XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "Glob", input: nil), .read)
         XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "Bash", input: "ls"), .execute)
         XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "Write", input: nil), .write)
-        XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "mcp__perspicax__cw_psa_schedule__query", input: "{}"), .read)
+        XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "mcp__perspicax__cw_psa_schedule_query", input: "{}"), .read)
         XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "mcp__perspicax__cw_psa_tickets_delete", input: nil), .destructive)
         // a generic verb reads the arguments
-        XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "mcp__perspicax__cw_psa__write", input: #"{"method":"GET"}"#), .read)
-        XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "mcp__perspicax__cw_psa__write", input: #"{"method":"DELETE"}"#), .destructive)
+        XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "mcp__perspicax__cw_psa_write", input: #"{"method":"GET"}"#), .read)
+        XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "mcp__perspicax__cw_psa_write", input: #"{"method":"DELETE"}"#), .destructive)
         // annotations win
         XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "mcp__x__do_thing", input: nil, hints: ToolHints(readOnly: true)), .read)
         XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "mcp__x__list_items", input: nil, hints: ToolHints(destructive: true)), .destructive)
@@ -563,6 +563,20 @@ final class CardClientTests: XCTestCase {
         XCTAssertEqual(try last().path, "/api/bots/b1/secret-cards/m2/dismiss")
     }
 
+    func testRoleTransitionAnswersOnItsOwnRoute() async throws {
+        try await client.answerRoleTransition(botId: "b1", messageId: "m3", threadId: "t1", choice: .stay)
+        let sent = try last()
+        XCTAssertEqual(sent.method, "POST")
+        XCTAssertEqual(sent.path, "/api/bots/b1/cards/m3/role-transition")
+        XCTAssertEqual(sent.body["threadId"] as? String, "t1")
+        XCTAssertEqual(sent.body["choice"] as? String, "stay")
+        do {
+            try await client.answerRoleTransition(botId: "b1", messageId: "../x", threadId: "t1", choice: .continue)
+            XCTFail("bad id")
+        } catch {}
+        XCTAssertEqual(CardRequestStub.requests.count, 1)
+    }
+
     func testParallelStopRefusesARouteIdThatIsNotOne() async throws {
         do {
             try await client.stopParallelTask(botId: "b1", threadId: "../x")
@@ -600,7 +614,7 @@ final class ApprovalPlainWordsTests: XCTestCase {
         XCTAssertNil(AllowRuleText.savedRule(try card("{\(base),\"answered\":\"allow\"}")))
         XCTAssertNil(AllowRuleText.savedRule(try card("{\(base),\"answered\":\"deny\",\"alwaysAllowed\":\"mcp:a__b\"}")))
         XCTAssertEqual(AllowRuleText.action(of: "mcp:sagax-environment__run_command"), .runCommand)
-        XCTAssertEqual(AllowRuleText.action(of: "mcp:perspicax__cw_psa__write"), .named("cw psa write"))
+        XCTAssertEqual(AllowRuleText.action(of: "mcp:perspicax__cw_psa_write"), .named("cw psa write"))
         XCTAssertNil(AllowRuleText.action(of: "ask_bot:b2"))
     }
 }

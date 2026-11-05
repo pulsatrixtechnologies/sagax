@@ -84,13 +84,19 @@ function Gallery() {
           <ComputerScreen source="server" state="off" caption={t("computer.screenOf", { name: "Assistant" })}
             message={t("computerScreen.serverOff")} controls={{ play: () => {} }} />
         </Section>
+        <Section title="Environnement serveur en marche">
+          {/* Pause / Stop given on purpose: a bot's computer never draws them. */}
+          <ComputerScreen source="server" state="running" caption={t("computer.screenOf", { name: "Wren" })} onOpen={() => {}} openAlwaysShown
+            live={<img alt="" className="h-full w-full object-cover" src={`data:image/png;base64,${fakeDesktop()}`} />}
+            controls={{ pause: () => {}, stop: () => {} }} />
+        </Section>
         <Section title="Navigateur en direct"><BrowserComputerScreen bot={live} /></Section>
         <Section title="Navigateur fermé"><BrowserComputerScreen bot={closed} /></Section>
       </div>
       {modal === "browser" && <SandboxDesktopModal kind="browser" title={t("computer.browserOf", { name: "Assistant" })} state="running" onClose={() => {}}
         screen={() => <img alt="" className="h-full w-full rounded-xl object-contain" src={`data:image/png;base64,${picture}`} />} />}
       {modal === "sandbox" && <SandboxDesktopModal title={t("computer.screenOf", { name: "Assistant" })} state="running"
-        controls={{ play: () => {}, pause: () => {}, stop: () => {} }} onClose={() => {}}
+        onClose={() => {}}
         screen={() => <img alt="" className="h-full w-full rounded-xl object-contain" src={`data:image/png;base64,${picture}`} />} />}
     </div>
   );

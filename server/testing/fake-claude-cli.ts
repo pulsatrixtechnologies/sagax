@@ -722,7 +722,7 @@ const readLaunchFiles = (): Record<string, unknown> => {
 };
 
 type FakeMcpServer = { command?: string; args?: string[]; env?: Record<string, string>; type?: string; url?: string; headers?: Record<string, string> };
-/** The harness's own HTTP servers (server/harness-mcp-http.ts), which the
+/** The harness's own HTTP servers (server/mcp/harness-mcp-http.ts), which the
  * real CLI connects to itself. Other URL servers stay unreached here. */
 function harnessHttpServer(server: FakeMcpServer | undefined): { url: string; headers?: Record<string, string> } | null {
   return server?.type === "http" && typeof server.url === "string" && /\/api\/internal\/(browser|computer|data)\/mcp-http$/.test(server.url)

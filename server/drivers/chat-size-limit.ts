@@ -1,6 +1,6 @@
-import { prefixBytes } from "../context-rebuild.ts";
+import { prefixBytes } from "../context/context-rebuild.ts";
 import type { ChatContentPart } from "./chat-images.ts";
-import type { OpenAIChatMessage } from "./openai-chat.ts";
+import type { OpenAIChatMessage } from "./openai-chat-message.ts";
 import { object } from "./openai-chat-protocol.ts";
 
 /** nginx's "413 Request Entity Too Large" page, Express's "request entity too large", "Payload Too Large", and

@@ -22,8 +22,26 @@ final class BottomFollow: ObservableObject {
     private weak var scrollView: UIScrollView?
     private var observations: [NSKeyValueObservation] = []
 
+    /// Set by `hold()`: the end does not re-arm the follow on its own, and
+    /// the transcript was moved by the app, not left by the reader, so no
+    /// Jump to latest (the desktop's follow only breaks on the reader's
+    /// wheel, drag or PageUp).
+    @Published private(set) var held = false
+
     /// The reader asked for the end (the jump button, a send, a new thread).
-    func resume() { if !following { following = true } }
+    func resume() {
+        if held { held = false }
+        if !following { following = true }
+    }
+
+    /// A programmatic scroll to an earlier row (the parity launch): stop
+    /// following, and do not take it back when the scroll still sits at the
+    /// end for a moment, or the content-size pin pulls it back down before
+    /// the scroll lands. A drag or `resume()` ends the hold.
+    func hold() {
+        held = true
+        pause()
+    }
 
     /// Something else scrolled the transcript away (a search hit, a reply
     /// quote, the pinned banner): stop following until the end is reached.
@@ -52,7 +70,7 @@ final class BottomFollow: ObservableObject {
 
     /// The at-end check of `onScroll`: reaching the end re-arms the follow.
     private func check(_ scroll: UIScrollView) {
-        if !following, distance(scroll) <= Self.threshold { following = true }
+        if !following, !held, distance(scroll) <= Self.threshold { following = true }
     }
 
     private func pinToBottomIfFollowing(_ scroll: UIScrollView) {
@@ -71,6 +89,7 @@ final class BottomFollow: ObservableObject {
     /// wheel or PageUp on the desktop.
     @objc private func dragged(_ pan: UIPanGestureRecognizer) {
         guard let scroll = pan.view as? UIScrollView, pan.state == .changed || pan.state == .ended else { return }
+        if held { held = false }
         if pan.translation(in: scroll).y > 0, distance(scroll) > Self.threshold { following = false }
     }
 }

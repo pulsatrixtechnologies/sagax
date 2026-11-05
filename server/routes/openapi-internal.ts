@@ -7,8 +7,8 @@ import { isIP } from "node:net";
 
 import { wrapUntrusted } from "../../shared/safety-review.ts";
 import { sendPinnedHttp } from "../vault/credential-http.ts";
-import { buildOpenApiRequest, type OpenApiRecord } from "../openapi-connector.ts";
-import { isOpenApiTool } from "../openapi-tools.ts";
+import { buildOpenApiRequest, type OpenApiRecord } from "../mcp/openapi-connector.ts";
+import { isOpenApiTool } from "../mcp/openapi-tools.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
 

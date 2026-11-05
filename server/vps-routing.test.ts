@@ -29,8 +29,8 @@ import {
   IMAGE_LAYER_LABEL,
   IMAGE_LAYER_VERSION,
   MANAGED_LABEL,
-} from "./container-computer.ts";
-import { VPS_CONTAINER_LABEL, VPS_IMAGE, VPS_MANAGED_LABEL, VPS_VIEWER_LABEL, vpsContainerName } from "./vps-computer.ts";
+} from "./computer/container-computer.ts";
+import { VPS_CONTAINER_LABEL, VPS_IMAGE, VPS_MANAGED_LABEL, VPS_VIEWER_LABEL, vpsContainerName } from "./computer/vps-computer.ts";
 import { CONTROL_BUSY, CONTROL_REFUSAL_PLAIN, controlRefusal, createControlClient } from "./control-client.ts";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { freePortBlock } from "./testing/ports.ts";
@@ -174,6 +174,7 @@ posixOnly("VPS turn routing e2e (fake ACP fleet + fake docker over SSH)", () => 
   let stderr = "";
   let gateFile: string;
   let acpDump: string;
+  let routineReplyFile: string;
   // A second engine with its own gate: a teammate that stays mid-turn
   // while the VPS bot answers it.
   let askerGate: string;
@@ -211,6 +212,7 @@ posixOnly("VPS turn routing e2e (fake ACP fleet + fake docker over SSH)", () => 
     mkdirSync(fakeBin, { recursive: true });
     gateFile = join(home, "turn.gate");
     acpDump = join(home, "acp.dump.json");
+    routineReplyFile = join(home, "routine.reply.txt");
     askerGate = join(home, "asker.gate");
     askerDump = join(home, "asker.dump.json");
     dockerLog = join(fakeBin, "docker.log");
@@ -242,7 +244,7 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
         instances: {
           vps: {
             driver: "grokAgent",
-            environment: { FAKE_ACP_MODE: "echo-gated", FAKE_ACP_GATE_FILE: gateFile, FAKE_ACP_DUMP: acpDump },
+            environment: { FAKE_ACP_MODE: "echo-gated", FAKE_ACP_GATE_FILE: gateFile, FAKE_ACP_DUMP: acpDump, FAKE_ACP_DUMP_PROMPT: "1", FAKE_ACP_ECHO_REPLY_FILE: routineReplyFile },
             config: { cli: FAKE_CLI, fullAuto: true },
           },
           asker: {
@@ -636,17 +638,34 @@ createServer(socket => socket.end()).listen(port, '127.0.0.1');
       expect(created.status, JSON.stringify(created.body)).toBe(201);
       expect(created.body.routine.runOn).toBe("maus");
       rmSync(`${acpDump}.mcp.json`, { force: true });
-      const started = await api("POST", `/api/routines/${created.body.routine.id}/run`);
-      expect(started.status, JSON.stringify(started.body)).toBe(201);
-      let completed: any;
-      await until(async () => {
-        completed = (await api("GET", "/api/routines")).body.runs.find((run: any) => run.id === started.body.run.id);
-        return completed?.status === "completed";
-      }, "the routine on the existing VPS");
-      const routineTools = mounts(`${acpDump}.mcp.json`);
-      expect(routineTools.find((tool: { name: string }) => tool.name === "computer")?.args).toContain("production-vps");
-      const routineMessages = (await api("GET", `/api/threads/${completed.threadId}/messages?limit=100`)).body.messages;
-      expect(routineMessages.some((message: any) => message.text?.includes("This is the user's own VPS"))).toBe(true);
+      rmSync(`${acpDump}.prompt.json`, { force: true });
+      // 8a849450a rejects a claimed card without a real card. Echoing the
+      // system's approval instructions is such a claim, so this run gives a
+      // finite report; its actual received prompt still proves VPS routing.
+      const routineReply = "Checked the existing VPS.";
+      writeFileSync(routineReplyFile, routineReply);
+      try {
+        const started = await api("POST", `/api/routines/${created.body.routine.id}/run`);
+        expect(started.status, JSON.stringify(started.body)).toBe(201);
+        let completed: any;
+        await until(async () => {
+          completed = (await api("GET", "/api/routines")).body.runs.find((run: any) => run.id === started.body.run.id);
+          return completed?.status === "completed";
+        }, "the routine on the existing VPS");
+        const routineTools = mounts(`${acpDump}.mcp.json`);
+        const routineComputerArgs = routineTools.find((tool: { name: string }) => tool.name === "computer")?.args ?? [];
+        expect(routineComputerArgs.some((arg) => arg.includes("vps-container-mcp"))).toBe(true);
+        expect(routineComputerArgs).toContain("production-vps");
+        expect(routineComputerArgs).toContain(CONTAINER_ID);
+        const routinePrompt = JSON.parse(readFileSync(`${acpDump}.prompt.json`, "utf8"))
+          .map((block: { text?: string }) => block.text ?? "").join("\n");
+        expect(routinePrompt).toContain("Check the existing VPS.");
+        expect(routinePrompt).toContain("This is the user's own VPS");
+        const routineMessages = (await api("GET", `/api/threads/${completed.threadId}/messages?limit=100`)).body.messages;
+        expect(routineMessages.some((message: any) => message.text === routineReply)).toBe(true);
+      } finally {
+        rmSync(routineReplyFile, { force: true });
+      }
 
       // The turn claim is gone, but its durable container remains on the old
       // host. Keep that resource visible until the user removes it.

@@ -19,7 +19,8 @@ export function InputRequestCard({ message }: { message: Message }) {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (!request) return null;
-  const done = sent || request.answered === true;
+  const expired = !sent && request.answered !== true && request.expired === true;
+  const done = sent || request.answered === true || expired;
   const send = async () => {
     const text = answer.trim();
     if (!text || sending) return;
@@ -45,7 +46,9 @@ export function InputRequestCard({ message }: { message: Message }) {
         </div>
         <div className="whitespace-pre-wrap break-words text-foreground" data-testid="input-request-question">{request.question}</div>
         {done ? (
-          <div className="mt-2 text-xs text-muted-foreground">{t("chat.inputRequest.answered")}</div>
+          <div className="mt-2 text-xs text-muted-foreground" data-testid="input-request-state">
+            {t(expired ? (request.defaulted ? "chat.inputRequest.defaulted" : "chat.inputRequest.expired") : "chat.inputRequest.answered")}
+          </div>
         ) : (
           <div className="mt-2 flex flex-col gap-2">
             <textarea

@@ -1757,18 +1757,22 @@ body {
     font-weight: 500;
     line-height: 1rem;
   }
-  /* Inline code inside prose. Sized off the surrounding text so it reads at
-     the same optical size in a 15px bubble or a 13px note. It stays an
-     inline box, not inline-flex, so a long path can still wrap mid-line;
+  /* Inline code inside prose (and table cells). Sized off the surrounding
+     text so it reads at the same optical size in a 15px bubble or a 13px
+     note. It stays an inline box, not inline-flex, so a long path can still
+     wrap mid-line at separators (zero-width spaces from code-wrap.ts);
      an inline background already centers on the glyphs, and `clone` keeps
-     the padding on every wrapped piece. */
+     the padding on every wrapped piece. Never break one glyph per line. */
   .ui-code-chip {
     padding: 0.125em 0.3em;
     border-radius: 0.25rem;
     background: var(--color-inset);
+    color: var(--color-ink);
     font-family: var(--font-mono);
     font-size: 0.92em;
-    line-height: 1;
+    line-height: 1.25;
+    word-break: normal;
+    overflow-wrap: break-word;
     -webkit-box-decoration-break: clone;
     box-decoration-break: clone;
   }
@@ -2028,7 +2032,10 @@ button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
 }
 .overlay-scrollbar-thumb {
   position: fixed;
-  z-index: 2147483646;
+  /* the scroller's own stacking level, set per paint by
+     src/lib/overlay-scrollbars.ts (scrollerLayer): menus, popovers and
+     dialogs above a scroller paint above its bar (2026-11-04) */
+  z-index: 1;
   box-sizing: border-box;
   width: 10px;
   height: 10px;
@@ -3819,4 +3826,14 @@ select optgroup {
     -webkit-background-clip: unset;
     background-clip: unset;
   }
+}
+
+/* #2013: the connection notice slides in from the top, once. */
+.connection-notice { animation: connection-notice-in 260ms cubic-bezier(0.2, 0.9, 0.25, 1) both; }
+@keyframes connection-notice-in {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .connection-notice { animation: none; }
 }

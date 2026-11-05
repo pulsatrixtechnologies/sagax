@@ -16,7 +16,7 @@ import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
 import { freePortBlock } from "../testing/ports.ts";
 
-const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
+const SERVER_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const posixOnly = describe.skipIf(process.platform === "win32");
 const OWNER: FakeOidcUser = { sub: "01J9S8AMARTIN00000000000OW", email: "amartin@example.test", name: "Alex Martin", preferred_username: "amartin", role: "admin" };
 // no display name: Perspicax's directory sends the login as the name

@@ -1,6 +1,6 @@
 // Threads in a conversation between two people, like a bot's (desktop #262,
 // AGENTS.md "Conversations with a person have threads like a bot",
-// server/people-dms.ts, src/state/store.tsx `personThreadKept` and
+// server/people/people-dms.ts, src/state/store.tsx `personThreadKept` and
 // `peopleDmReadTarget`). The pair shares the list, titles, pins, archive and
 // snooze; the open thread and unread are each person's own.
 //

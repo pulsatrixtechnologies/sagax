@@ -311,6 +311,9 @@ class CompanionClient(
 
     suspend fun config(): ConfigStatus = send(makeRequest("GET", "/api/config"))
 
+    /** `GET /api/auth/session`: who this phone is signed in as. */
+    suspend fun authSession(): AuthSession = send(makeRequest("GET", "/api/auth/session"))
+
     /**
      * The engine is a setting, not a secret, so it rides the ordinary config
      * write — the same one `VoiceSettings.tsx` sends from its Voice engine
@@ -381,6 +384,47 @@ class CompanionClient(
 
     suspend fun overview(botId: String): BotOverview =
         send(makeRequest("GET", "/api/bots/${segment(botId)}/overview"))
+
+    /** GET /api/bots/:id/activity optional ?filter= */
+    suspend fun botActivity(botId: String, filter: String? = null): BotActivityList {
+        val query = buildList {
+            filter?.let { add("filter" to it) }
+        }
+        return send(makeRequest("GET", "/api/bots/${segment(botId)}/activity", query))
+    }
+
+    /** GET /api/bots/:id/activity/item with threadId, runId or cloudId. */
+    suspend fun botActivityItem(
+        botId: String,
+        threadId: String? = null,
+        runId: String? = null,
+        cloudId: String? = null,
+    ): BotActivityDetail {
+        val query = buildList {
+            threadId?.let { add("threadId" to it) }
+            runId?.let { add("runId" to it) }
+            cloudId?.let { add("cloudId" to it) }
+        }
+        return send<BotActivityDetailResponse>(
+            makeRequest("GET", "/api/bots/${segment(botId)}/activity/item", query),
+        ).item
+    }
+
+    /** Detail by list id (`thread:X`, `run:X`, `cloud:X`). */
+    suspend fun botActivityItem(botId: String, itemId: String): BotActivityDetail {
+        val ids = codingChatItemIds(itemId)
+        return botActivityItem(botId, threadId = ids.threadId, runId = ids.runId, cloudId = ids.cloudId)
+    }
+
+    /** POST /api/bots/:id/parallel/:threadId/stop */
+    suspend fun stopParallelTask(botId: String, threadId: String) {
+        sendUnit(makeRequest("POST", "/api/bots/${segment(botId)}/parallel/${segment(threadId)}/stop"))
+    }
+
+    /** POST /api/bots/:id/cloud-agents/:cloudId/cancel */
+    suspend fun cancelCloudAgent(botId: String, cloudId: String) {
+        sendUnit(makeRequest("POST", "/api/bots/${segment(botId)}/cloud-agents/${segment(cloudId)}/cancel"))
+    }
 
     suspend fun createBot(): Bot = send<CreatedBot>(makeRequest("POST", "/api/bots")).bot
 
@@ -560,9 +604,87 @@ class CompanionClient(
         return send<CreatedRoom>(makeRequest("POST", "/api/groups", body = body)).group
     }
 
-    suspend fun sendToBot(botId: String, text: String, threadId: String? = null): SendReceipt =
+    /** `patchGroup`: the room as the computer kept it. */
+    suspend fun patchRoom(groupId: String, patch: RoomPatch): Room = send<RoomResponse>(
+        makeRequest("PATCH", "/api/groups/${segment(groupId)}", body = patch.toJsonObject()),
+    ).group
+
+    /** #1480: the signed-in person leaves the group. */
+    suspend fun leaveRoom(groupId: String) {
+        sendUnit(makeRequest("POST", "/api/groups/${segment(groupId)}/leave"))
+    }
+
+    /** `deleteGroup`: the room, its messages and threads; its bots stay. */
+    suspend fun deleteRoom(groupId: String) {
+        sendUnit(makeRequest("DELETE", "/api/groups/${segment(groupId)}"))
+    }
+
+    /** GET /api/groups/:id/memory. */
+    suspend fun groupMemory(groupId: String): GroupMemoryView = send(
+        makeRequest("GET", "/api/groups/${segment(groupId)}/memory"),
+    )
+
+    /** `GET /api/threads/:id/files`: newest first. */
+    suspend fun threadFiles(threadId: String): List<ThreadFile> = send<ThreadFilesResponse>(
+        makeRequest("GET", "/api/threads/${segment(threadId)}/files"),
+    ).files
+
+    /** `POST /api/threads/:id/files/:fileId/pin`: pin or unpin in the Library. */
+    suspend fun setThreadFilePin(threadId: String, fileId: String, pinned: Boolean) {
+        sendUnit(
+            makeRequest(
+                "POST",
+                "/api/threads/${segment(threadId)}/files/${segment(fileId)}/pin",
+                body = buildJsonObject { put("pinned", pinned) },
+            ),
+        )
+    }
+
+    /**
+     * The owner's edit (`{text, expectedHash}`), overwrite (`{text}`) or
+     * switch (`{enabled}`). A 409 is [GroupMemoryConflict].
+     */
+    suspend fun putGroupMemory(
+        groupId: String,
+        text: String? = null,
+        expectedHash: String? = null,
+        enabled: Boolean? = null,
+    ): GroupMemoryView {
+        val body = buildJsonObject {
+            text?.let { put("text", it) }
+            expectedHash?.let { put("expectedHash", it) }
+            enabled?.let { put("enabled", it) }
+        }
+        return try {
+            send(
+                makeRequest("PUT", "/api/groups/${segment(groupId)}/memory", body = body),
+            )
+        } catch (error: APIError.Status) {
+            if (error.code == 409) throw GroupMemoryConflict()
+            throw error
+        }
+    }
+
+    suspend fun sendToBot(
+        botId: String,
+        text: String,
+        threadId: String? = null,
+        busyMode: String? = null,
+    ): SendReceipt =
         sendForReceipt(
-            makeRequest("POST", "/api/bots/${segment(botId)}/messages", body = jsonBody("text" to text, "threadId" to threadId)),
+            makeRequest(
+                "POST",
+                "/api/bots/${segment(botId)}/messages",
+                body = buildJsonObject {
+                    put("text", text)
+                    threadId?.let { put("threadId", it) }
+                    when (busyMode) {
+                        null -> Unit
+                        "auto" -> put("routeWhileBusy", true)
+                        else -> put("busyMode", busyMode)
+                    }
+                },
+            ),
         )
 
     suspend fun sendToRoom(groupId: String, text: String, threadId: String? = null): SendReceipt =
@@ -605,7 +727,12 @@ class CompanionClient(
     }
 
     /** Retry-safe send: [threadId] is fixed at destination selection, never inferred on retry. */
-    suspend fun send(text: String, to: MessageDestination, sendId: String): SendReceipt {
+    suspend fun send(
+        text: String,
+        to: MessageDestination,
+        sendId: String,
+        busyMode: String? = null,
+    ): SendReceipt {
         val route = when (to) {
             is MessageDestination.Bot -> "/api/bots/${safeRouteId(to.id)}/messages"
             is MessageDestination.Room -> "/api/groups/${safeRouteId(to.id)}/messages"
@@ -618,6 +745,13 @@ class CompanionClient(
                 put("text", text)
                 put("threadId", to.threadId)
                 put("sendId", sendId)
+                if (to is MessageDestination.Bot) {
+                    when (busyMode) {
+                        null -> Unit
+                        "auto" -> put("routeWhileBusy", true)
+                        else -> put("busyMode", busyMode)
+                    }
+                }
             },
         ))
     }
@@ -1138,6 +1272,7 @@ class CompanionClient(
             put("botId", input.botId)
             put("runOn", input.runOn)
             input.enabled?.let { put("enabled", it) }
+            input.groupId?.takeIf { it.isNotBlank() }?.let { put("groupId", it) }
             put("schedule", buildJsonObject {
                 put("type", input.schedule.type.name.lowercase())
                 input.schedule.at?.let { put("at", it) }

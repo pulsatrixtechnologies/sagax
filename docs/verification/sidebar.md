@@ -1,6 +1,6 @@
 # Sidebar confirmations
 
-Launch `node --experimental-strip-types scripts/verify-sidebar.ts`. It creates
+Launch `node --experimental-strip-types scripts/verify/dev/verify-sidebar.ts`. It creates
 an isolated fake-engine server and two disposable bots, then prints a preview
 URL. Open that URL, never the user's live app. Ctrl-C closes both servers and
 removes only the fixture data.
@@ -31,7 +31,7 @@ read** (the reference design's lighter menu). The steps below stay for the read 
 (`src/lib/bot-read.test.ts`), which folders still use; the menu steps apply to
 0.5.6 and earlier.
 
-Run `node --experimental-strip-types scripts/verify-sidebar.ts --unread`.
+Run `node --experimental-strip-types scripts/verify/dev/verify-sidebar.ts --unread`.
 This opt-in fixture seeds Sidebar Atlas with twelve unread webhook-like
 conversations across a folder and unfiled history, plus a running fake-provider
 turn and a sibling report queued behind its capacity limit. The data directory contains `bulk-read-before.json`.

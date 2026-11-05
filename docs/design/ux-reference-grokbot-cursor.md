@@ -185,6 +185,10 @@ Détails sont des cartes groupées ; un compteur bleu à droite du titre de sect
 
 ### 2.4 Pages d'édition du bot
 
+- Décision de JC du 2026-11-04 : aucun réglage de profil Perspicax par bot,
+  sur bureau, iPhone ou iPad, ni dans le bulk edit. Le compte détient les rôles;
+  le MCP principal choisit celui requis par la tâche avec `identity_switch` live.
+  Les recettes Flow sont partagées, sans liaison de compte ni allowlist de profils.
 - Création rapide (référence iPhone) : une feuille avec × rond, titre centré, l'aperçu
   de la mascotte en très grand, un champ nom centré, la grille des formes, la rangée
   des couleurs (la choisie entourée d'un anneau), et un seul gros bouton Créer en bas,
@@ -341,6 +345,11 @@ dessous (« écran de » suivi du nom du bot).
   éteinte).
 - Installés : même rangée, sous-titre de contenu (« 1 connecteur · 27 skills »,
   « 4 comptes »).
+- Dans la portée d'un bot, une ancienne copie du plugin tenant que le pack Flow
+  signé fournit déjà dit « Remplacé par le pack Flow de l'organisation
+  (osprey 0.1.41) ». La version est celle du tenant installé. « Retirer » enlève
+  cette copie en un clic et garde le pack de l'organisation. Le bouton reste
+  désactivé pendant la suppression; un échec laisse la copie et affiche l'erreur.
 - Recherche : une seule, flottante en bas sur iPhone (« chercher dans les apps et les
   skills »), sous le titre sur le bureau ; elle couvre tous les onglets de Sagax
   (Découvrir, Bots, Installés, Fournisseurs, Pages, Sources).
@@ -564,7 +573,7 @@ voile), on l'étend aux pages.
   remplace les détails par l'éditeur dans le même panneau ; fermer l'éditeur revient
   aux détails. Supprimer garde sa confirmation (seule fenêtre).
 - Routines en pause : panneau de détail, chaque rangée garde Reprendre et Modifier.
-- Captures : `node scripts/capture-calendar-panels.mjs` (galerie
+- Captures : `node scripts/capture/calendar-panels.mjs` (galerie
   `src/gallery/routines-ux.html?view=calendar`).
 
 ### 2.18 Connecter Tailscale (ordinateur du bot sur le tailnet)
@@ -606,7 +615,7 @@ vigueur. Tag public : `tag:sagax`.
 **Téléphone.** Même flux en page poussée sur la pile Connect apps ; mêmes
 états et mêmes libellés (catalogues en + fr).
 
-**Captures.** `node scripts/capture-connect-apps-tailscale.mjs --out DIR`
+**Captures.** `node scripts/capture/connect-apps-tailscale.mjs --out DIR`
 (galerie `src/gallery/connect-apps.html?view=manage&tailscale=…`).
 
 ### 2.19 Appels téléphoniques dans la conversation
@@ -643,7 +652,7 @@ d'appel conversationnel et le consentement d'usage acceptable. Captures : galeri
 
 Composants : `src/components/OutboundCard.tsx`, `src/components/PhoneCallConsentCard.tsx`.
 Helpers purs : `shared/phone-call-live.ts`, `shared/phone-call-consent.ts`. Serveur :
-`server/outbound-calls.ts`, contrôles mid-call, `server/routes/phone-call-consent.ts`.
+`server/outbound/outbound-calls.ts`, contrôles mid-call, `server/routes/phone-call-consent.ts`.
 
 ### 2.20 Boutons de carte qui mènent quelque part, et fin de tour
 
@@ -661,7 +670,7 @@ sur l'app au prochain audit.
   (`deviceAction`), sans lancer de tour : le modèle le lit au tour suivant comme déjà
   fait et n'essaie jamais d'ouvrir une page qu'il ne peut pas atteindre.
 - Code : `shared/widget.ts` (`widgetAppAction`), `src/components/widget/widget-device.ts`,
-  `server/routes/bots-messages.ts`, `server/replies.ts` (`transcriptText`).
+  `server/routes/bots-messages.ts`, `server/messages/replies.ts` (`transcriptText`).
 
 **Fin de tour.**
 - Un tour pour la personne se termine toujours par une réponse. Un tour qui finit sur
@@ -671,7 +680,7 @@ sur l'app au prochain audit.
 - Jamais après une question à la personne, une carte ou un widget à répondre, un arrêt,
   un échec, une routine, un tour entre bots, un appel vocal, une boucle que le garde de
   boucle traite, ni sur le tour déjà repris. Inscrit au journal des étapes
-  (`sagax.unfinished_turn`). Code : `server/unfinished-turn.ts`.
+  (`sagax.unfinished_turn`). Code : `server/turns/unfinished-turn.ts`.
 
 ### 2.21 Mémoire (page principale)
 
@@ -690,6 +699,81 @@ droite ; c'est une page comme Automations et la carte d'équipe).
   Outils si besoin.
 - Code : `src/components/memory-manager/MemoryManagerPanel.tsx`,
   `MemoryMapCanvas.tsx`, `src/lib/memory-map.ts`.
+
+### 2.22 Messages d'un autre bot (boîte d'entrée du bot)
+
+Ajouté le 2026-11-02 (JC : « tu as reçu plein de messages de Osprey, pourquoi tu ne
+t'en occupes pas ? », et c'est pareil pour tous les bots). Comme Grok Bot : un bot traite
+les messages de ses coéquipiers à leur arrivée et ne montre à la personne que ce qui a
+besoin d'elle.
+
+- **À l'arrivée.** Un avis à sens unique (`send_to_bot`) roule une fois dans son propre fil
+  du bot qui le reçoit (inchangé). Quand ce tour finit, un bot en mode proactif est réveillé
+  dans sa conversation : il voit le message et ce que le tour en a fait.
+- **Regroupé.** Plusieurs messages dans une courte fenêtre (30 s, puis au plus un réveil
+  aux 2 minutes et 12 à l'heure) donnent un seul réveil, donc un seul rapport.
+- **Ce que la personne voit.** Une ligne de rapport dans la conversation du bot quand il y a
+  quelque chose ; tout ce qui demande une décision (GO d'une écriture, approbation) est
+  réuni dans **une seule carte**, jamais une carte par message. Une question posée dans le
+  fil de l'avis arrive aussi en carte dans la conversation du bot qui l'a reçu.
+- **Pas de ping-pong.** Une réponse au bot qui a écrit compte comme un saut ; la chaîne
+  s'arrête à 3 sauts. Un bot ne répond pas seulement pour accuser réception.
+- **Tous les bots.** Bot principal, bot d'équipe ou bot solo : même règle. Mode proactif
+  désactivé : rien ne se réveille.
+- **Les rangées « Aller à la conversation ».** Les pointeurs vers les fils d'avis se
+  regroupent visuellement ailleurs (travail séparé) ; ils ne remplacent pas le réveil.
+- Code : `server/proactive/proactive-wake.ts` (`peerNoticeEvent`, `PeerNoticeHops`,
+  `PEER_WAKE_RULES`), `server/index.ts` (`offerPeerNotice`, rapport d'un avis à sens unique,
+  `postInputRequest`).
+
+---
+
+### 2.23 Connexion Perspicax du compte
+
+Décision remplacée le 2026-11-04 par JC. Un bot n'a plus de profils Perspicax
+à configurer et l'éditeur n'affiche ni select « Agit comme », ni puce de rôle.
+Chaque harness reçoit le mount fixe `perspicax`, échangé pour le compte de la
+personne qui parle. Le compte peut détenir plusieurs rôles; `identity_switch`
+et `profile_use` permettent de choisir un rôle pendant le travail, selon les
+permissions réelles de Perspicax. La sélection et son catalogue d'outils sont
+réinitialisés à chaque frontière de génération, puis rafraîchis après un
+changement de rôle.
+
+Code : `server/perspicax/perspicax-mcp.ts`,
+`server/perspicax-mcp-bridge.ts` et les adapters de harness. Tests avec un
+transport synthétique, aucun compte réel.
+
+### 2.24 Chat de code (une tâche de code ouverte)
+
+Décision de JC (2026-11-03) : une tâche de la section Code du panneau du bot ne
+s'ouvre plus dans le panneau. Elle s'ouvre comme un chat, là où est le chat,
+de la même famille que l'exécution de routine (feuille sur la colonne du chat,
+pilule du bot en haut, rangée d'actions en bas avec Fermer le chat en dernier),
+mais pensée pour le développement, comme la vue d'agent d'un éditeur de code.
+
+- En-tête : pilule du bot, titre de la tâche (2 lignes au plus), puis une ligne
+  grise : nom du dossier (jamais le chemin), branche, état avec le temps écoulé,
+  et un carré rouge Arrêter tant qu'elle roule.
+- Fil : les mots en bulles comme le chat ; une commande est un bloc terminal
+  (`$ commande`, compte des tests, durée, coche ou code de sortie en rouge ;
+  la sortie se replie, ouverte pendant la course ou après un échec) ; une
+  modification est un diff unifié par fichier, coloré comme les blocs de code,
+  repliable, longues zones inchangées pliées ; les lectures d'affilée font une
+  ligne de puces de fichiers ; le reste garde la puce d'outil du chat.
+- Bande Changements au-dessus des actions : « N fichiers modifiés +A -R »
+  (déplie la liste ; un clic saute au diff du fichier), le dernier compte de
+  tests, la branche, le commit et la PR (ouvre le navigateur).
+- Actions : Continuer (ouvre un compositeur en ligne ; le suivi va dans le fil
+  de la tâche, rejoint le tour s'il roule), Arrêter tant qu'elle roule,
+  Fermer le chat. Échap ferme (ou replie le compositeur).
+- Chemins et identifiants : relatifs au dossier de la tâche, sinon les deux
+  derniers segments ; aucun UUID.
+
+Code : `src/components/coding/CodingChat.tsx`, `CodingDiff.tsx`,
+`CodingTerminal.tsx`, lecture pure dans `src/lib/coding-chat.ts`. Captures :
+`node scripts/capture/coding-chat.mjs` (galerie `src/gallery/coding-chat.html`).
+iOS et Android : la section Code liste les tâches en cours seulement ; le chat
+de code y reste à porter.
 
 ---
 

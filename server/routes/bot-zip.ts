@@ -1,4 +1,4 @@
-// A bot as one zip (server/bot-zip.ts, docs/bot-package.md).
+// A bot as one zip (server/bots/bot-zip.ts, docs/bot-package.md).
 //
 //   GET    /api/bots/:id/export.zip?conversations=1&sharing=1
 //          The whole bot, streamed. The owner, a person who manages the bot
@@ -36,11 +36,11 @@ import {
   stageBotZipUpload,
   writeBotZip,
   type BotZipHost,
-} from "../bot-zip.ts";
+} from "../bots/bot-zip.ts";
 import { GROK_EXPORT_PROMPT, GrokImportError, grokExportToPackage, parseGrokExport } from "../../shared/grok-import.ts";
 import { xaiMarketplaceToPackage, type XaiMarketplaceBot } from "../../shared/xai-marketplace.ts";
-import { XaiMarketplaceError } from "../xai-marketplace.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import { XaiMarketplaceError } from "../plugins/xai-marketplace.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const BOT_ZIP_STAGE_MS = 30 * 60 * 1000;
@@ -72,7 +72,7 @@ export interface BotZipRouteDeps {
   imported?(botId: string): void;
   /** The new bot as the client sees it, for the import's answer. */
   wireBot?(botId: string): unknown;
-  /** A bot of the xAI Bot Marketplace (server/xai-marketplace.ts), for the phone's import. */
+  /** A bot of the xAI Bot Marketplace (server/plugins/xai-marketplace.ts), for the phone's import. */
   xaiMarketplaceBot?(slug: string): Promise<XaiMarketplaceBot>;
   now?(): number;
 }

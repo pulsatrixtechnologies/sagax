@@ -15,7 +15,7 @@ const OTHER_ROW = "\u0000other";
 /** First-run quiz, not a live provider ask (those carry requestId). */
 export function isOnboardingCard(message: Message): boolean {
   // a proactive proposal (2026-10-30) stays until answered, like a live ask
-  return message.kind === "options" && !!message.card && !message.card.requestId && !message.card.proactiveProposal;
+  return message.kind === "options" && !!message.card && !message.card.requestId && !message.card.proactiveProposal && !message.card.roleTransition;
 }
 
 /** Hide the quiz once they have talked past it — picked an option, typed in
@@ -57,6 +57,8 @@ export function OptionCard({
   // Full thread, not the mounted window: a search-focus slice can omit the
   // later user message that means they already talked past this quiz.
   if (!card || shouldHideOnboardingCard(message, transcript) || (card.requestId && card.dismissed && card.answered)) return null;
+  // 2026-11-05 (JC): no "Agit comme" card in the chat (rows saved before stay hidden)
+  if (card.roleTransition) return null;
 
   const terminalPicked = card.terminalRequest && !card.answered
     ? (card.terminalRequest.destinations ?? []).find((choice) => terminalDestinationKey(choice) === (terminalPick || terminalDestinationKey(card.terminalRequest!)))

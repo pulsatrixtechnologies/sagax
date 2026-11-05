@@ -1,7 +1,7 @@
 // Where "is Claude signed in?" is answered. These tests inject the CLI
 // runner, so they never read or mutate the developer's real credentials.
 import { describe, expect, it } from "vitest";
-import { contextFullMessage } from "../context-renewal.ts";
+import { contextFullMessage } from "../context/context-renewal.ts";
 
 import { claudeApiErrorMessage, claudeAuthFailure, claudeLimitFields, claudeLimitMessage, claudeLimitRefusal, claudeResultError, claudeSignedIn, claudeUsageLimit, claudeVersionTooOld } from "./claude.ts";
 import { classifyError } from "./retry.ts";

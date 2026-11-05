@@ -95,7 +95,7 @@ interface McpListing {
   auth?: string;
   managedBy?: string;
   source?: string;
-  /** reads the person's GitHub account (server/github-mcp-token.ts) */
+  /** reads the person's GitHub account (server/github/github-mcp-token.ts) */
   github?: "connected" | "missing";
 }
 interface FeaturedListing {

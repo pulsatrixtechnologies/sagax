@@ -7,7 +7,7 @@
 // tells it, with the link token:
 //
 //   - POST /api/v1/memory/work: one row when a bot turn on an organization
-//     server starts with Perspicax profiles mounted (a vendor-touching task).
+//     server starts with the Perspicax account connection mounted (a vendor-touching task).
 //     Rows are batched (at most WORK_BATCH_MAX = 50, Perspicax's cap, and
 //     one person per batch) and sent a moment later, one batch in flight at
 //     a time.
@@ -29,7 +29,7 @@
 //     nothing; each call carries that person's own token next to the link
 //     token when there is one (`subject`, PerspicaxDirectory.linkPostJson);
 //   - no token, prompt or answer body is ever logged.
-import type { LinkPostLimits, LinkPostResult } from "../perspicax-link.ts";
+import type { LinkPostLimits, LinkPostResult } from "../perspicax/perspicax-link.ts";
 
 export const WORK_PATH = "/api/v1/memory/work";
 export const DUPLICATES_PATH = "/api/v1/memory/duplicates";

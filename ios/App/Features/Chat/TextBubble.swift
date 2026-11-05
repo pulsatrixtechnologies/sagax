@@ -21,6 +21,7 @@ struct TextBubble: View {
     @Environment(\.desktopChatText) private var desktop
     @Environment(\.desktopWideCap) private var wideCap
     @Environment(\.desktopMessageActions) private var hoverActions
+    @Environment(\.desktopFindHit) private var findHit
     @State private var hovering = false
     /// So a bubble repaints when the person flips the bot-colour switch.
     @ObservedObject private var bubblePrefs = SidebarPrefsModel.shared
@@ -105,10 +106,7 @@ struct TextBubble: View {
                     )
                 }
                 if desktop != nil {
-                    if !mine, !message.generatedImages.isEmpty || !message.fileAttachments.isEmpty {
-                        DesktopAttachmentGallery(images: message.generatedImages, files: message.fileAttachments,
-                                                 threadId: chat.threadId, messageId: message.id)
-                    }
+                    // the bot's attachments come under its words (below)
                 } else {
                     ForEach(message.generatedImages, id: \.path) { attachment in
                         TranscriptAttachmentView(
@@ -158,7 +156,7 @@ struct TextBubble: View {
                     }
                     if !cited.display.isEmpty {
                         let collapsible = MessageCollapse.isLong(cited.display)
-                        Text(MentionTint.attributed(cited.display, peers: context.mentionPeers, everyone: context.mentionEveryone))
+                        Text(findHighlighted(MentionTint.attributed(cited.display, peers: context.mentionPeers, everyone: context.mentionEveryone)))
                             .font(desktop?.font(DesktopChatMetrics.textSize) ?? Theme.Font.body)
                             .lineSpacing(desktop.map(DesktopChatMetrics.lineSpacing) ?? Theme.bodyLineSpacing)
                             .modifier(DesktopLineBox(theme: desktop))
@@ -217,6 +215,11 @@ struct TextBubble: View {
                         // line within 1.5 pt of the edge wraps there, not here
                         .padding(.trailing, desktop != nil && desktopFills(mine: false) ? 1.5 : 0)
                 }
+                if desktop != nil, !mine, !message.generatedImages.isEmpty || !message.fileAttachments.isEmpty {
+                    DesktopAttachmentGallery(images: message.generatedImages, files: message.fileAttachments,
+                                             threadId: chat.threadId, messageId: message.id)
+                        .padding(.top, 10)
+                }
             }
             .frame(maxWidth: desktopFills(mine: mine) ? .infinity : nil, alignment: .leading)
             .padding(.horizontal, customCard ? 0 : (desktop != nil ? DesktopChatMetrics.bubblePadding.leading : Theme.Chat.bubblePaddingH))
@@ -232,22 +235,60 @@ struct TextBubble: View {
                 }
             )
 
+            // the landed find hit: `ring-2 ring-accent/70 rounded-2xl`
+            // outside the bubble, and its words highlighted in the text
+            .overlay {
+                if let desktop, isFindHit {
+                    RoundedRectangle(cornerRadius: 16 + 2, style: .continuous)
+                        .strokeBorder(desktop.accent.opacity(0.7), lineWidth: 2)
+                        .padding(-2)
+                        .allowsHitTesting(false)
+                        .accessibilityIdentifier("desktop-find-hit")
+                    GeometryReader { geometry in
+                        DesktopFindProbe()
+                            .frame(width: 1, height: 1)
+                            .position(x: 1, y: geometry.size.height * DesktopFindProbe.fraction(of: findHit?.text ?? "", in: message.text ?? ""))
+                    }
+                    .allowsHitTesting(false)
+                }
+            }
+            .environment(\.desktopFindHighlight, isFindHit ? findHit?.text : nil)
+
             // the hover row beside the bubble, outside its layout: the cap
             // (100 % - 82) already leaves it room, as on the desktop
             .overlay(alignment: mine ? .bottomLeading : .bottomTrailing) {
                 if let hoverActions, desktop != nil {
+                    // a zero-wide frame on the bubble's edge, the bar hanging
+                    // out of it 6 pt away (MessageBar beside the bubble)
                     DesktopMessageHoverStrip(model: hoverActions, mine: mine, hovering: hovering || parityHover)
                         .fixedSize()
-                        .alignmentGuide(.leading) { d in d[.trailing] + 6 }
-                        .alignmentGuide(.trailing) { d in d[.leading] - 6 }
+                        .padding(mine ? .trailing : .leading, 6)
+                        .frame(width: 0, alignment: mine ? .trailing : .leading)
                 }
             }
             .modifier(DesktopBubbleCapModifier(cap: desktopCap(mine: mine), mine: mine))
+            // ChatView.tsx's row (`flex items-center`) also holds the message
+            // bar, which always takes its room (24 + 2 + 16 + 2 = 44 pt): a
+            // shorter bubble sits centred in that height
+            .frame(minHeight: desktop != nil && hoverActions != nil ? Self.desktopBarHeight : nil)
 
             if !mine { Spacer(minLength: desktop == nil ? Theme.Chat.bubbleTrailingGap : 0) }
         }
         .onHover { hovering = $0 }
     }
+
+    private func findHighlighted(_ text: AttributedString) -> AttributedString {
+        guard let desktop, isFindHit, let needle = findHit?.text else { return text }
+        var out = text
+        DesktopFindHighlight.apply(to: &out, needle: needle, theme: desktop)
+        return out
+    }
+
+    /// MessageBar.tsx: the row of 24 pt buttons, 2 apart from the 16 pt
+    /// time, and its 2 pt `pb-0.5`.
+    static let desktopBarHeight: CGFloat = 44
+
+    private var isFindHit: Bool { desktop != nil && findHit?.messageId == message.id }
 
     private var parityHover: Bool {
         #if DEBUG
@@ -294,9 +335,9 @@ struct TextBubble: View {
         guard let desktop else { return false }
         let text = mine ? Citations.split(attachedContent.text).display : (message.text ?? "")
         if let cap = desktopCap(mine: mine), DesktopChatMetrics.wraps(text, in: cap - 24, theme: desktop) { return true }
-        if mine { return !attachedContent.attachments.isEmpty }
-        return !message.generatedImages.isEmpty || !message.fileAttachments.isEmpty
-            || (wideCap != nil && DesktopChatMetrics.prefersWide(message.text ?? ""))
+        // attachments keep the bubble's own width (`w-fit`)
+        if mine { return false }
+        return wideCap != nil && DesktopChatMetrics.prefersWide(message.text ?? "")
     }
 }
 

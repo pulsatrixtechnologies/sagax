@@ -4,7 +4,10 @@ import { randomUUID } from "node:crypto";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState, PrepareResult } from "./start-turn-state.ts";
 
-export function createPrepareAdmitStartTurn(host: StartTurnHost) {
+export function createPrepareAdmitStartTurn(
+  host: StartTurnHost,
+  claim: (state: TurnState) => PrepareResult,
+) {
   const {
     IDENTITY,
     SMALL_TALK_TURN_NOTE,
@@ -56,9 +59,12 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
     remoteComputerForTurn,
     repeatsShownFailure,
     resolveTurnSpeaker,
+    routineModelForTurn,
+    routineEffortForTurn,
     routineLineage,
     sandboxPrincipalForTurn,
     settleInputRequests,
+    isBotActSend,
     spokenLineFields,
     store,
     supportsWorkspaceFiles,
@@ -104,7 +110,7 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
   // path-free prompt and bounded inputs instead of needing a Read tool;
   // path-reading drivers retain the attachment tag as their compatibility route.
   state.resolvedImages = extractTurnImages(state.text);
-  // Files sealed at rest go plain in place for the engine (server/content-at-rest.ts):
+  // Files sealed at rest go plain in place for the engine (server/encryption/content-at-rest.ts):
   // this message's attachments before anything reads them; the bot's memory
   // files in parallel with the rest of the setup, awaited before the engine
   // starts (below).
@@ -159,11 +165,22 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
   // wherever it works: a cloud computer is a tool it mounts, never a reason
   // to swap the engine (the provider_not_configured incident).
   state.model = state.bot.modelSelection.model;
-  const askedEffort = state.bot.modelSelection.effort;
-  state.variant = state.bot.modelSelection.variant;
+  // 2026-11-04: a routine run uses its routine's model on the bot's own
+  // engine (a limit takeover wins). Chat on the bot keeps the bot's model.
+  const routineModel = state.warmOnly ? null : routineModelForTurn?.(state.bot.id, state.threadId, state.instance);
+  if (routineModel?.model) {
+    state.model = routineModel.model;
+    state.routineModel = routineModel.model;
+  }
+  const routineEffort = state.warmOnly ? null : routineEffortForTurn?.(state.bot.id, state.threadId, state.instance, state.model);
+  state.routineEffort = routineEffort?.effort;
+  // #2038: the Claude sub-agents' model (routine, else the bot's fast model).
+  state.subagentModel = routineModel?.subagentModel;
+  const askedEffort = state.routineEffort ?? state.bot.modelSelection.effort;
+  state.variant = state.routineModel || state.routineEffort ? undefined : state.bot.modelSelection.variant;
   // What this turn runs on, kept for the bot text it writes (a quiet line
   // under the reply shows it). A warm-up writes no reply.
-  if (!state.warmOnly) turnRunByThread.set(state.threadId, turnRunFor(state.bot.modelSelection, turnModelRequested.get(state.threadId)));
+  if (!state.warmOnly) turnRunByThread.set(state.threadId, turnRunFor({ ...state.bot.modelSelection, model: state.model, effort: askedEffort, variant: state.variant }, turnModelRequested.get(state.threadId)));
   assertModelVariantSupported({ variant: state.variant, effort: askedEffort }, state.instance.adapter.capabilities);
   // A selection can be persisted while its engine is offline. Re-check when
   // the engine returns so an old or unsupported value never reaches a CLI.
@@ -175,7 +192,7 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
   }
   // The engine takes it but this model may not (shared/model-capabilities.ts):
   // then nothing is sent and the model runs at its own default.
-  state.effort = effortForModel(askedEffort, state.instance.models.options.find((option: any) => option.id === state.bot.modelSelection.model),
+  state.effort = effortForModel(askedEffort, state.instance.models.options.find((option: any) => option.id === state.model),
     state.instance.adapter.capabilities.effortLevels);
 
   // an edit hands us its already-branched user message; a plain send appends
@@ -218,8 +235,7 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
   // in its receipt, and a drained queue holds its receipt until
   // onTurnSettled; a turn that never started publishes no completion, so
   // the drain is nudged as its own error path does (M2 in drainQueuedSends).
-  state.personLine = !state.opts?.coordination && !state.opts?.cardContinuation && !state.opts?.automationSource && !state.opts?.compactOnly
-    && !state.opts?.computerSelectionContinuation && !state.opts?.editedMessageId && !state.warmOnly && !state.commsDepth && !state.opts?.peerAsk && !state.userMessage.peerAsk;
+  state.personLine = isPersonOwnLine(state, isBotActSend);
   if (state.personLine && coordinator.answer(state.threadId, state.text)) {
     store.appendMessage(state.threadId, { role: "bot", kind: "activity", tool: { name: "Answer passed to the waiting work", ok: true } });
     settleInputRequests(state.threadId);
@@ -245,7 +261,7 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
   // A voice call turn gets the hidden phone-call instruction; the first
   // written turn after a call is told the call ended. Only a person's own
   // turn: a continuation or a peer hop is not said on the phone.
-  // The thread is on a live call (server/voice-call-session.ts): the engine
+  // The thread is on a live call (server/voice/voice-call-session.ts): the engine
   // stays warm between turns and the turn's context stays short.
   state.onCall = Boolean(voiceCalls.active(state.threadId)) && !state.opts?.commsDepth && !state.userMessage.peerAsk;
   state.voiceCallText = state.opts?.cardContinuation || state.opts?.commsDepth || state.userMessage.peerAsk
@@ -256,7 +272,7 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
       state.userMessage.sender?.name ?? botUserName(state.bot),
     );
   // Organization server: where this turn's tools run, and for whom, decided
-  // once (server/desktop-bridge.ts); the speaker's own attachments are
+  // once (server/desktop/desktop-bridge.ts); the speaker's own attachments are
   // pointed there and small text ones given inline.
   const turnRemote = remoteComputerForTurn({
     organization: IDENTITY.kind === "perspicax",
@@ -275,7 +291,7 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
   // the person's computer when connected, else the cloud. A routine starts
   // in the cloud; routinesAllowed only permits an explicit computer_select
   // to this_computer. A thread opened with a workspace starts there when
-  // allowed (server/auto-computer.ts).
+  // allowed (server/computer/auto-computer.ts).
   const turnAutoWanted = turnWorks.auto ? autoWorkspaceWanted(state.bot, state.threadId) : null;
   const turnAutoStart = turnWorks.auto && IDENTITY.kind === "perspicax" && state.turnPrincipal ? autoStartTarget({
     wanted: turnAutoWanted,
@@ -312,9 +328,9 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
     state.turnImages.push(...office.images);
   }
   state.placedText = state.opts.cardContinuation ? { text: state.providerText, staging: null } : workplaceTurnText(state.providerText, state.turnPlace);
-  state.providerText = withWorkplaceNote(state.placedText.text, state.turnPlace, state.turnAuto);
+  state.providerText = withWorkplaceNote(state.placedText.text, state.turnPlace, state.turnAuto, state.bot.id);
   // The engine's container runs in UTC: tell it the time where its person is
-  // (server/turn-clock.ts), so times are said in their zone.
+  // (server/turns/turn-clock.ts), so times are said in their zone.
   const clockZone = state.opts.cardContinuation || !turnClockEnabled() ? null : turnZoneFor(state.bot, state.speaker);
   if (clockZone) state.providerText = withTurnClock(state.providerText, new Date(), clockZone);
   // A compaction summarizes with the bot's engine too, so it is gated like
@@ -322,7 +338,7 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
   // card continuations resume a turn already admitted.
   const freshHop = Boolean(state.opts.coordination && !state.opts.coordination.resumed);
   const accessRefusal = state.opts.cardContinuation && !state.opts.compactOnly && !freshHop ? null
-    : orgEngineRefusal(state.bot, state.instance, state.speaker, state.bot.modelSelection.model) ?? ownerModelOfflineRefusal(state.bot, state.instance, state.speaker, state.bot.modelSelection.model);
+    : orgEngineRefusal(state.bot, state.instance, state.speaker, state.routineModel ?? state.bot.modelSelection.model) ?? ownerModelOfflineRefusal(state.bot, state.instance, state.speaker, state.routineModel ?? state.bot.modelSelection.model);
   if (accessRefusal) {
     if (state.warmOnly) {
       console.error(`[voice-call] warm skipped: ${accessRefusal.reason}`);
@@ -379,6 +395,16 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
     state.line = { engine: state.connectorSwitch.engineLabel, connector: state.connectorSwitch.connector };
     store.appendMessage(state.threadId, { role: "bot", kind: "activity", tool: { name: `notice: ${connectorSwitchText(state.line)}`, ok: true, connectorSwitch: state.line } });
   }
-  return { kind: "continue" };
+  return claim(state);
   };
+}
+
+/** The person's own line: not a continuation, a wake, a routine, a peer hop,
+ * an edit, nor (0.8.46) a line a bot's act wrote as the person, which must
+ * never answer a question parked on the person (2026-11-04). */
+export function isPersonOwnLine(state: { opts?: { coordination?: unknown; cardContinuation?: unknown; automationSource?: unknown; compactOnly?: unknown; computerSelectionContinuation?: unknown; editedMessageId?: unknown; peerAsk?: unknown; sendId?: string }; warmOnly?: unknown; commsDepth?: unknown; userMessage: { peerAsk?: unknown } },
+  isBotActSend: (sendId: string | undefined) => boolean): boolean {
+  return !state.opts?.coordination && !state.opts?.cardContinuation && !state.opts?.automationSource && !state.opts?.compactOnly
+    && !state.opts?.computerSelectionContinuation && !state.opts?.editedMessageId && !state.warmOnly && !state.commsDepth && !state.opts?.peerAsk && !state.userMessage.peerAsk
+    && !isBotActSend(state.opts?.sendId);
 }

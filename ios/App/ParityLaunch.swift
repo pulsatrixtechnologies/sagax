@@ -180,6 +180,8 @@ enum IPadParityScreen: String, CaseIterable {
     case newBot = "new-bot"
     case pluginsMcp = "plugins-mcp"
     case keyboardShortcuts = "keyboard-shortcuts"
+    case aboutDialog = "about-dialog"
+    case releaseNotesDialog = "release-notes-dialog"
     case noticeThreadGone = "notice-thread-gone"
     case settingsGeneral = "settings-general"
     case settingsOrganization = "settings-organization"
@@ -198,10 +200,71 @@ enum IPadParityScreen: String, CaseIterable {
     case settingsBackups = "settings-backups"
     case settingsWorkspaces = "settings-workspaces"
     case settingsGeneralScrolled = "settings-general-scrolled"
-    // I-sync: appended after the I5 list (surfaces.mjs keeps the numbers)
-    case panelLibrarySkills = "panel-library-skills"
-    case panelLibraryPlugins = "panel-library-plugins"
     case settingsMyConnections = "settings-myConnections"
+    case personaOverview = "persona-overview"
+    case personaAppearance = "persona-appearance"
+    case personaSoul = "persona-soul"
+    case personaRules = "persona-rules"
+    case personaSkills = "persona-skills"
+    case personaMemory = "persona-memory"
+    case personaFiles = "persona-files"
+    case personaAccess = "persona-access"
+    case personaModel = "persona-model"
+    case personaPermissions = "persona-permissions"
+    case personaVoice = "persona-voice"
+    case personaPerspicax = "persona-perspicax"
+    case personaHistory = "persona-history"
+    case personaUsage = "persona-usage"
+    case orgPersonaOverview = "org-persona-overview"
+    case orgPersonaAppearance = "org-persona-appearance"
+    case orgPersonaSoul = "org-persona-soul"
+    case orgPersonaRules = "org-persona-rules"
+    case orgPersonaSkills = "org-persona-skills"
+    case orgPersonaMemory = "org-persona-memory"
+    case orgPersonaFiles = "org-persona-files"
+    case orgPersonaAccess = "org-persona-access"
+    case orgPersonaModel = "org-persona-model"
+    case orgPersonaPermissions = "org-persona-permissions"
+    case orgPersonaVoice = "org-persona-voice"
+    case orgPersonaPerspicax = "org-persona-perspicax"
+    case orgPersonaHistory = "org-persona-history"
+    case orgPersonaUsage = "org-persona-usage"
+    case settingsMemory = "settings-memory"
+    case settingsPrivacy = "settings-privacy"
+    case settingsNotifications = "settings-notifications"
+    case orgSettingsGeneral = "org-settings-general"
+    case orgSettingsMemory = "org-settings-memory"
+    case orgSettingsPrivacy = "org-settings-privacy"
+    case orgSettingsNotifications = "org-settings-notifications"
+    case orgSettingsOrganization = "org-settings-organization"
+    case orgSettingsAppearance = "org-settings-appearance"
+    case orgSettingsExperimental = "org-settings-experimental"
+    case orgSettingsConnections = "org-settings-connections"
+    case orgSettingsDecisionModel = "org-settings-decisionModel"
+    case orgSettingsEngines = "org-settings-engines"
+    case orgSettingsCompanion = "org-settings-companion"
+    case orgSettingsComputer = "org-settings-computer"
+    case orgSettingsUsage = "org-settings-usage"
+    case orgSettingsBackups = "org-settings-backups"
+    case orgSettingsMyConnections = "org-settings-myConnections"
+    case memoryPage = "memory-page"
+    case memoryMap = "memory-map"
+    case memoryTags = "memory-tags"
+    case memoryQuality = "memory-quality"
+    case memoryMapRadial = "memory-map-radial"
+    case memoryMapColumns = "memory-map-columns"
+    case capabilities = "capabilities"
+    case routineEdit = "routine-edit"
+    case settingsAccount = "settings-account"
+    case settingsVoice = "settings-voice"
+    case settingsUpdates = "settings-updates"
+    case settingsAbout = "settings-about"
+    case settingsProviders = "settings-providers"
+    case settingsSecurity = "settings-security"
+    case settingsCredentials = "settings-credentials"
+    case settingsImport = "settings-import"
+    case sidebarSelect = "sidebar-select"
+    case computerWindow = "computer-window"
 
     /// Accepts the id, or a capture file stem ("03-main", "desktop-1366x1024-03-main").
     init?(argument: String) {
@@ -223,7 +286,9 @@ enum IPadParityScreen: String, CaseIterable {
         // I2: the sidebar's densities, threads, hover and menus
         case .mainCompact, .mainCollapsed, .mainThreads, .sidebarRowHover, .sidebarBotMenu,
              .sidebarBotContextMenu, .sidebarSectionMenu, .sidebarProfileMenu, .sidebarNewMenu, .newGroup: true
-        default: isDesktopChat || opensBotPanel || isDesktopSettings || parityPage != nil || self == .keyboardShortcuts
+        default: isDesktopChat || opensBotPanel || isDesktopSettings || parityPage != nil || self == .keyboardShortcuts || self == .aboutDialog || self == .releaseNotesDialog
+            || self == .sidebarSelect || self == .computerWindow || self == .newBot || self == .noticeThreadGone || self == .groupPanel
+            || self == .onboardingWelcome || self == .onboardingTour
         }
     }
 
@@ -234,7 +299,7 @@ enum IPadParityScreen: String, CaseIterable {
     var panelTab: DesktopPanelTab? {
         switch self {
         case .panelDetails, .panelAvatarEditor: .details
-        case .panelLibrary, .panelLibrarySkills, .panelLibraryPlugins: .library
+        case .panelLibrary: .library
         case .panelComputer: .computer
         // the persona editor opens over Details, as on the desktop
         case .panelMore: .details

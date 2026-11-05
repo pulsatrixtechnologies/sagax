@@ -13,6 +13,13 @@
  * Programmatic scrolls (the chat following a stream) do not show the bar.
  * Hibou 98 keeps its classic 16px bars (src/styles/retro98.css); the
  * terminal draws its own; `data-native-scrollbar` opts an element out.
+ *
+ * Layering (2026-11-04): the thumb is a fixed part at the end of <body>, so
+ * it paints at the stacking level of the scroller it belongs to, never
+ * higher (scrollerLayer). A menu, popover or dialog above that scroller
+ * paints above its bar too. A thumb part that would still cross an open
+ * menu, listbox or popover the scroller is not part of hides while that
+ * overlay is open (OVERLAY_SELECTOR).
  */
 
 export const SCROLLING_CLASS = "is-scrolling";
@@ -27,6 +34,57 @@ const MIN_THUMB_PX = 32;
 const HIT_PX = 10;
 
 type Axis = "y" | "x";
+
+/** Lowest level of a thumb: over a scroller that sits in the page's own flow. */
+export const THUMB_BASE_LAYER = 1;
+/** Open overlays a scrollbar never paints over (menus, listboxes, popovers). */
+export const OVERLAY_SELECTOR = '[role="menu"], [role="listbox"], [role="dialog"]:not(dialog), [data-task-picker-menu], [popover]:popover-open';
+
+/** z-index of the stacking context `style` makes, or null when it makes none. */
+function contextLayer(style: CSSStyleDeclaration, parent: CSSStyleDeclaration | null): number | null {
+  const z = style.zIndex;
+  const placed = style.position !== "static" || Boolean(parent && /(flex|grid)$/.test(parent.display));
+  if (z && z !== "auto" && placed) return Number.parseInt(z, 10) || 0;
+  if (style.position === "fixed" || style.position === "sticky") return 0;
+  if ((style.opacity && Number(style.opacity) < 1) || (style.transform && style.transform !== "none")
+    || (style.filter && style.filter !== "none") || style.isolation === "isolate") return 0;
+  return null;
+}
+
+/** The stacking level `el` paints at under `host` (body or an open dialog):
+ * the z-index of its outermost stacking context below the host, at least
+ * THUMB_BASE_LAYER. A thumb at this level, appended last to the host, paints
+ * over its own scroller and under anything layered above it. */
+export function scrollerLayer(el: Element, host: Element, win: Window): number {
+  let layer: number | null = null;
+  let node: Element | null = el;
+  while (node && node !== host && node !== host.ownerDocument.documentElement) {
+    const parent: Element | null = node.parentElement;
+    const found = contextLayer(win.getComputedStyle(node), parent ? win.getComputedStyle(parent) : null);
+    if (found !== null) layer = found;
+    node = parent;
+  }
+  return Math.max(THUMB_BASE_LAYER, layer ?? 0);
+}
+
+interface Box { left: number; top: number; right: number; bottom: number }
+const crosses = (a: Box, b: Box) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+
+/** Whether an open overlay that `scroller` is not part of covers `box`. */
+export function overlayCovers(doc: Document, scroller: Element, box: Box): boolean {
+  let overlays: NodeListOf<Element>;
+  try {
+    overlays = doc.querySelectorAll(OVERLAY_SELECTOR);
+  } catch {
+    overlays = doc.querySelectorAll('[role="menu"], [role="listbox"], [role="dialog"]:not(dialog), [data-task-picker-menu]');
+  }
+  for (const overlay of overlays) {
+    if (overlay.contains(scroller)) continue;
+    const rect = overlay.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0 && crosses(rect, box)) return true;
+  }
+  return false;
+}
 
 export interface ThumbInput {
   /** scrollHeight or scrollWidth */
@@ -183,6 +241,7 @@ export function installOverlayScrollbars(doc: Document = document): () => void {
         continue;
       }
       if (node.parentElement !== target) target.appendChild(node);
+      node.style.zIndex = String(scrollerLayer(el, target, win!));
       if (ink) node.style.setProperty("--overlay-scrollbar-ink", ink);
       // The part is a HIT_PX strip; its ::before paints the pill against the
       // scroller's edge. left/top only, then one correction for a host that
@@ -210,7 +269,8 @@ export function installOverlayScrollbars(doc: Document = document): () => void {
         if (Math.abs(dx) > 0.5) node.style.left = `${left + dx}px`;
         if (Math.abs(dy) > 0.5) node.style.top = `${top + dy}px`;
       }
-      node.dataset.visible = "true";
+      // an open menu over this strip wins: the bar waits under it
+      node.dataset.visible = overlayCovers(doc, el, node.getBoundingClientRect()) ? "false" : "true";
     }
   }
 

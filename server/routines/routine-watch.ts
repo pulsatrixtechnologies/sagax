@@ -33,10 +33,10 @@ import {
   type RoutineWatchPrecheck,
 } from "../../shared/routine-watch.ts";
 import { writeFileAtomic } from "../atomic.ts";
-import { pcShell, scrubHookEnv } from "../lifecycle-hooks.ts";
+import { pcShell, scrubHookEnv } from "../hooks/lifecycle-hooks.ts";
 import type { RoutinePrecheckVerdict } from "./routine-precheck.ts";
 import { watchToolRefusal } from "./routine-watch-tools.ts";
-import { defang } from "../webhooks.ts";
+import { defang } from "../../shared/defang.ts";
 
 export { canonicalJson };
 

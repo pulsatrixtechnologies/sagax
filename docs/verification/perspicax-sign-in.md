@@ -1,5 +1,15 @@
 # Sign in with Pulsatrix (Perspicax OpenID Connect)
 
+Local bot `act` uses a delegated Sagax session, not a Perspicax assertion.
+Calls to `/api/org/admin/*` and `/api/org/member/*` therefore return an
+actionable 400 before replay: use the Perspicax account connection's console tools, or
+the local `/api/bots`, `/api/routines` and `/api/routines/runs` routes for
+the person's own environment. No assertion verification rules change.
+Regression #1993: `pnpm exec vitest run shared/bot-act.test.ts
+server/member-own-act.e2e.test.ts` starts an isolated organization with a
+fake OIDC provider, tests admin and member turns without a mounted profile,
+and confirms that ordinary local reads retain person isolation.
+
 An organization server (`SAGAX_IDENTITY=perspicax`, see
 [self-hosting](../self-hosting.md#sign-in-with-pulsatrix-organization-server))
 signs people in with Perspicax. Two levels of proof, both isolated: nothing
@@ -8,7 +18,7 @@ touches the user's app, `~/.sagax`, or a live Perspicax.
 ## Against a fake provider (automated)
 
 ```sh
-pnpm exec vitest run server/oidc-rp.test.ts server/oidc-login.test.ts server/oidc-login.e2e.test.ts
+pnpm exec vitest run server/auth/oidc-rp.test.ts server/auth/oidc-login.test.ts server/auth/oidc-login.e2e.test.ts
 node --test electron/oidc-system-sign-in.node-test.mjs
 ```
 
@@ -76,9 +86,9 @@ computer.
 ### Automated (fake provider)
 
 ```sh
-pnpm exec vitest run server/oidc-rp.test.ts server/oidc-login.test.ts server/idp-session.test.ts \
-  server/sessions.test.ts server/request-auth.test.ts server/principals.test.ts server/environment.test.ts \
-  server/oidc-login.e2e.test.ts server/oidc-session.e2e.test.ts src/pair
+pnpm exec vitest run server/auth/oidc-rp.test.ts server/auth/oidc-login.test.ts server/auth/idp-session.test.ts \
+  server/auth/sessions.test.ts server/auth/request-auth.test.ts server/auth/principals.test.ts server/environment.test.ts \
+  server/auth/oidc-login.e2e.test.ts server/oidc-session.e2e.test.ts src/pair
 node --test electron/oidc-system-sign-in.node-test.mjs electron/environments.node-test.mjs
 ```
 
@@ -87,14 +97,14 @@ The fake provider now rotates refresh tokens (the old one dies), checks the
 family, and signs back-channel logout tokens; `disable(sub)`,
 `setRole(sub, role)` and `failNextToken(status)` drive the refusals.
 
-- `server/oidc-rp.test.ts`: refresh (rotation, resource, a refreshed id_token
+- `server/auth/oidc-rp.test.ts`: refresh (rotation, resource, a refreshed id_token
   for another subject or carrying a nonce, no id_token, invalid_grant as
   rejected, 503, 429 and an unreachable provider as transient), revocation,
   and the logout token matrix (another key, `alg: none`, unknown kid,
   another typ, aud, iss, no or past `exp`, `iat` in the future, no or wrong
   events, a nonce, no `jti`, sid only); an id_token is never a logout token
   and the reverse.
-- `server/idp-session.test.ts`: the sealed vault (round trip, a file it
+- `server/auth/idp-session.test.ts`: the sealed vault (round trip, a file it
   cannot read is never overwritten, key from the environment, a key file or
   a 0600 default), refresh on use (not due, due, single flight), a rejected
   grant ending its sessions, a transient failure kept with a one minute
@@ -102,7 +112,7 @@ family, and signs back-channel logout tokens; `disable(sub)`,
   the new scopes, the person's other devices only narrow), release on
   logout and expiry, the sweep (unredeemed and orphan grants) and
   back-channel logout by subject and by principal.
-- `server/oidc-login.test.ts`: the routes in process: the `client`
+- `server/auth/oidc-login.test.ts`: the routes in process: the `client`
   parameter, the exact desktop and phone return links, the desktop loopback
   `return` (127.0.0.1 and [::1] with a port and a state accepted; localhost,
   other hosts, https, no port, privileged ports, a query, a fragment, extra
@@ -176,8 +186,8 @@ real preload on a second local server acting as the remote environment
 
 ```sh
 pnpm exec vite build
-node --experimental-strip-types scripts/verify-desktop-sign-in.ts               # PASS: signed in, back on /
-node --experimental-strip-types scripts/verify-desktop-sign-in.ts --old-target  # PASS: the 0.3.x delivery stays signed out
+node --experimental-strip-types scripts/verify/dev/verify-desktop-sign-in.ts               # PASS: signed in, back on /
+node --experimental-strip-types scripts/verify/dev/verify-desktop-sign-in.ts --old-target  # PASS: the 0.3.x delivery stays signed out
 ```
 
 Server mode's UI is checked the same way, with the second server serving a
@@ -192,8 +202,8 @@ the signed-in person), Open in the app, and the owl, shape and Trombi:
 
 ```sh
 pnpm exec vite build
-node --experimental-strip-types scripts/verify-server-mode.ts         # PASS (32/32), built bundle
-node --experimental-strip-types scripts/verify-server-mode.ts --dev   # the same, UI from Vite as in the dev app
+node --experimental-strip-types scripts/verify/dev/verify-server-mode.ts         # PASS (32/32), built bundle
+node --experimental-strip-types scripts/verify/dev/verify-server-mode.ts --dev   # the same, UI from Vite as in the dev app
 ```
 
 The window already shows `<origin>/pair` when the credential comes back, so
@@ -217,10 +227,10 @@ by hand.
 ### Automated (fake provider)
 
 ```sh
-pnpm exec vitest run server/perspicax-link.test.ts server/engine-access.test.ts server/direct-grants.test.ts \
-  server/principals.test.ts server/oidc-rp.test.ts server/oidc-login.test.ts server/idp-session.test.ts \
-  server/request-auth.test.ts server/channel-visibility.test.ts server/org/org-sharing.e2e.test.ts \
-  server/oidc-session.e2e.test.ts server/oidc-login.e2e.test.ts server/environment.test.ts server/wire.test.ts \
+pnpm exec vitest run server/perspicax/perspicax-link.test.ts server/engines/engine-access.test.ts server/auth/direct-grants.test.ts \
+  server/auth/principals.test.ts server/auth/oidc-rp.test.ts server/auth/oidc-login.test.ts server/auth/idp-session.test.ts \
+  server/auth/request-auth.test.ts server/rooms/channel-visibility.test.ts server/org/org-sharing.e2e.test.ts \
+  server/oidc-session.e2e.test.ts server/auth/oidc-login.e2e.test.ts server/environment.test.ts server/wire.test.ts \
   src/components/bot-settings
 ```
 
@@ -228,14 +238,14 @@ The fake provider now serves `GET /api/v1/pulsabot/directory` behind its
 link token (`linkToken`), with an ETag and 304, settable `directoryPeople`
 and `directoryTeams`, and `setDirectoryStatus(sub, status)`.
 
-- `server/perspicax-link.test.ts`: the link file (0644 refused, 0640 and
+- `server/perspicax/perspicax-link.test.ts`: the link file (0644 refused, 0640 and
   0600 accepted, another issuer, origin or client, extra keys, a bad token,
   more than 4 KiB, and the token never in a refusal) and the directory sync
   (principals created before any sign-in, attributes updated, `disabledAt`
   never cleared, a disabled or vanished person logged out once, a demotion
   narrowed, 304, a 401 followed by a rotated file, single flight, a timeout
   or a 5xx keeping the last data).
-- `server/engine-access.test.ts`: who a turn speaks for, the refusal
+- `server/engines/engine-access.test.ts`: who a turn speaks for, the refusal
   notices (the speaker's, a routine's, a disabled payer's), the
   key_refused card and who sees its detail, and who answers a server
   command of a member's bot.
@@ -286,13 +296,13 @@ backstop when the back-channel push cannot arrive, and the engines in
 ### Automated (fake provider)
 
 ```sh
-pnpm exec vitest run server/authz.test.ts server/bot-grants.test.ts server/engine-credentials.test.ts \
-  server/section-channels.test.ts server/principal-engine-logins.test.ts server/org/org-teams.test.ts \
-  server/principals.test.ts server/perspicax-link.test.ts server/oidc-rp.test.ts server/idp-session.test.ts \
-  server/engine-access.test.ts server/direct-grants.test.ts server/channel-visibility.test.ts \
-  server/request-auth.test.ts server/drivers/claude.test.ts server/drivers/codex.test.ts \
+pnpm exec vitest run server/auth/authz.test.ts server/bots/bot-grants.test.ts server/engines/engine-credentials.test.ts \
+  server/rooms/section-channels.test.ts server/engines/principal-engine-logins.test.ts server/org/org-teams.test.ts \
+  server/auth/principals.test.ts server/perspicax/perspicax-link.test.ts server/auth/oidc-rp.test.ts server/auth/idp-session.test.ts \
+  server/engines/engine-access.test.ts server/auth/direct-grants.test.ts server/rooms/channel-visibility.test.ts \
+  server/auth/request-auth.test.ts server/drivers/claude.test.ts server/drivers/codex.test.ts \
   server/org/org-rights.e2e.test.ts server/org/org-sharing.e2e.test.ts server/oidc-session.e2e.test.ts \
-  server/oidc-login.e2e.test.ts src/components/bot-settings
+  server/auth/oidc-login.e2e.test.ts src/components/bot-settings
 pnpm -s i18n:check
 ```
 
@@ -303,15 +313,15 @@ person's `provider_keys` in the directory, and answers
 (`providerKeys`: 200 with the key, 404 `no_key`, 409 `user_inactive` for a
 disabled person).
 
-- `server/authz.test.ts`: the level lattice (use, run, edit, manage, owner),
+- `server/auth/authz.test.ts`: the level lattice (use, run, edit, manage, owner),
   team grants (members only: a team's managers administer, they do not
   read), a disabled person, an admin with no grant (administers, cannot
   use), a manage holder (up to edit), the manager anchor (add up to the
   anchor, lower and remove always, never outside their teams), section
   default levels capped at run, rooms with `team:` entries, section roles.
-- `server/bot-grants.test.ts`: GET, PUT and DELETE `/api/bots/:id/grants`
+- `server/bots/bot-grants.test.ts`: GET, PUT and DELETE `/api/bots/:id/grants`
   with every answer code, and the new `CLIENT_ALLOW` rows.
-- `server/engine-credentials.test.ts` (revised 2026-10-01, the person who
+- `server/engines/engine-credentials.test.ts` (revised 2026-10-01, the person who
   speaks pays): the whole decision table (speaker owner or someone shared
   with, x subscription, key, org key or nothing, x Claude, Codex or another
   engine, disabled people, unknown people), the bot's routines on the
@@ -322,7 +332,7 @@ disabled person).
   owner key reaching the CLI, a subscription's `CLAUDE_CONFIG_DIR` /
   `CODEX_HOME`, no process reused under another identity, the
   `pulsa_owner` provider for Codex.
-- `server/section-channels.test.ts`: migration owner, private records,
+- `server/rooms/section-channels.test.ts`: migration owner, private records,
   rename and delete kept in step, General refused, sharing with a team,
   readonly, moving bots in and out, the manager anchor on members.
 - `server/org/org-rights.e2e.test.ts` (real server): S4-1 teams in the session
@@ -366,7 +376,7 @@ regressions.
 
 ## Health: who learns what
 
-`GET /api/health` answers by caller (`server/request-auth.ts`,
+`GET /api/health` answers by caller (`server/auth/request-auth.ts`,
 `healthDetail`):
 
 | Caller | Answer |
@@ -378,7 +388,7 @@ regressions.
 | session-less loopback on an organization server, or anyone remote without a session | `{"app":"openmausbot"}` only |
 
 ```sh
-pnpm exec vitest run server/request-auth.test.ts server/org/org-sharing.e2e.test.ts server/hosted-access.test.ts
+pnpm exec vitest run server/auth/request-auth.test.ts server/org/org-sharing.e2e.test.ts server/hosted-access.test.ts
 ```
 
 By hand on an isolated organization server (port 19092 below):
@@ -386,68 +396,66 @@ By hand on an isolated organization server (port 19092 below):
 the same with a signed-in cookie or `Authorization: Bearer omb_sess_...`
 lists `engines`.
 
-## Slice 5: Perspicax MCP per bot, as the person who speaks
+## Slice 5: one Perspicax account connection, as the person who speaks
 
 ### Automated (fake provider)
 
 ```sh
-pnpm exec vitest run server/perspicax-mcp.test.ts server/perspicax-mcp-bridge.test.ts server/bot-perspicax.test.ts \
-  server/perspicax-link.test.ts server/idp-session.test.ts server/oidc-rp.test.ts server/request-auth.test.ts \
-  server/org/org-mcp.e2e.test.ts server/org/org-sharing.e2e.test.ts server/oidc-session.e2e.test.ts \
-  src/components/bot-settings/PerspicaxSection.test.ts
-pnpm -s i18n:check
+pnpm exec vitest run server/perspicax/perspicax-mcp.test.ts server/perspicax/perspicax-identity.test.ts \
+  server/perspicax/perspicax-link.test.ts server/perspicax/perspicax-claims.test.ts \
+  server/perspicax-mcp-bridge.test.ts server/routes/internal-integrations.test.ts \
+  server/routes/mcp-internal.test.ts server/drivers/chat-mcp-tools.test.ts \
+  server/drivers/pi-mcp-extension.test.ts
+pnpm typecheck
 ```
 
 The fake provider now answers the RFC 8693 token exchange at its token
 endpoint (Basic auth with the link token, `subject_token` = the speaker's
-sign-in access token, `resource` = its `/mcp`), lists `profiles` per person
-in the directory, and serves a small `/mcp` that records who called which
-tool. The fake Claude CLI calls MCP tools from `FAKE_CLAUDE_MCP_CALLS`
-(for example `[{"server":"perspicax_*","tool":"api_list","arguments":{}}]`)
-and writes what it saw to `FAKE_CLAUDE_MCP_DUMP`.
+sign-in access token, canonical `resource` = its `/mcp`, with no profile in
+the exchange), lists the account's held roles, and serves a small `/mcp` that
+records who called which tool. Every harness mounts that connection as the
+fixed server `perspicax`.
 
-- `server/perspicax-mcp.test.ts`: who speaks for a turn (the Direct's
+- `server/perspicax/perspicax-mcp.test.ts`: who speaks for a turn (the Direct's
   person, a hop through `ask_bot` or `coordinate_bots`, a room member, a
-  routine's person), the exchange per profile, `invalid_target` for a
-  profile not held, the per-turn tokens revoked after the turn, no cache
-  across people.
+  routine's person), one account exchange, the fixed mount, token renewal and
+  revocation, and no cache across people.
+- `server/perspicax/perspicax-identity.test.ts`: explicit `identity_switch`
+  and `profile_use`, role-dependent tool discovery, restoration after token or
+  session renewal, generation reset, and no silent fallback to the default
+  role when restoration fails, including routine retry.
 - `server/perspicax-mcp-bridge.test.ts`: the stdio bridge the harness holds;
-  the engine sees only a turn capability, which answers 401 once the turn
-  ends.
-- `server/bot-perspicax.test.ts`: `GET` and `PUT /api/bots/:id/perspicax`
-  (`available`, `profile_not_held`, `needs_edit`, `unknown_profile`).
-- `server/org/org-mcp.e2e.test.ts` (real server): the editor offers alice's
-  profiles, scenario E (bob's turn reaches Perspicax as bob, client
-  `pulsa-bot:<server id>`, `client_name` `Pulsa Bot (<bot id>)`, tokens
-  revoked after it), T1 (no sign-in or Perspicax token in the engine's argv,
-  environment or MCP configuration), the negative (carol holds no profile:
-  no server, a note in the prompt, an activity row), the `coordinate_bots`
-  hop, and the routine lineage cases below.
+  the engine sees only a turn capability, gets `tools/list_changed` before a
+  switch response, and receives 401 once the turn ends.
+- `server/drivers/chat-mcp-tools.test.ts` and
+  `server/drivers/pi-mcp-extension.test.ts`: a role switch re-lists tools and
+  replaces the model's registered catalogue without replaying a completed
+  vendor operation.
 
 ### Against a real Perspicax (manual)
 
 Isolated instances only. Build `pulsatrix-connector` from the slice 5 head
 (Perspicax 19091, Sagax 19092, webhook 19093) and start Sagax as in slice 4
 with `FAKE_CLAUDE_MCP_CALLS` and `FAKE_CLAUDE_MCP_DUMP=$S/mcp-dump.json`.
-Create profile P ("Dispatch", slug `dispatch`, meta tool `api_list`) held by
-alice and bob; carol and dave hold none. Then walk S5-1 to S5-12 of the
-slice 5 acceptance:
+Give alice and bob the roles Dispatch and Billing, and leave one additional
+role unheld. Then walk the slice 5 acceptance:
 
 1. Discovery lists the token-exchange grant; the directory shows each
-   person's `profiles`; `GET /api/bots/X/perspicax` as alice offers P.
+   person's held roles. There is no bot Perspicax profile setting or route.
 2. The exchange contract by curl: `expires_in` at most 900, no
-   `refresh_token`, the token lists only P's tools on `/mcp`; the subject
-   token itself, a missing Basic header, a console `pxat1.`, an ordinary
-   `/mcp` token, a profile not held and a foreign resource are refused with
-   the codes in the plan; `token_exchanged` in auth_events.
-3. The "Profils Perspicax" section of bot settings in headless Chrome at
-   1280 and 390 px; the edit rules above by API.
+   `refresh_token`, `resource` is exactly `/mcp`, and no profile selector is
+   sent. The subject token itself, a missing Basic header, a console `pxat1.`,
+   an ordinary `/mcp` token and a foreign resource are refused with the codes
+   in the plan; `token_exchanged` appears in auth_events.
+3. `tools/list` on mount `perspicax` exposes role controls. Switch from
+   Dispatch to Billing, list again, and verify that each role's real tool
+   surface is used. An unheld role is refused by Perspicax.
 4. Scenario E: bob (`use` on X) sends "ping"; the reply has
    `mcp:api_list:ok`; Perspicax's journal has the rows under bob, none
    under alice; `token_revoked` within 10 s after the turn.
-5. carol gets `mcp:absent`, the note naming Dispatch and the activity row;
-   granting P to her team T turns it on within one directory period, and
-   removing her from T turns it off at once.
+5. End the generation after selecting Billing, start a warm generation, and
+   verify that it opens a new MCP session on the account default. No selected
+   role or role-specific tool catalogue crosses the boundary.
 6. No `pxlo1.` in `claude-dump.json`, `mcp-dump.json`, the Sagax log or
    `ps -Eww` during a turn; a person disabled mid-turn gets an MCP error on
    the next call, never a result.
@@ -459,11 +467,11 @@ slice 5 acceptance:
 ### Automated (fake provider)
 
 ```sh
-pnpm exec vitest run server/org/org-routine-consent.test.ts server/routines/routines.test.ts server/idp-session.test.ts \
-  server/perspicax-mcp.test.ts server/authz.test.ts server/request-auth.test.ts \
+pnpm exec vitest run server/org/org-routine-consent.test.ts server/routines/routines.test.ts server/auth/idp-session.test.ts \
+  server/perspicax/perspicax-mcp.test.ts server/auth/authz.test.ts server/auth/request-auth.test.ts \
   server/org/org-routines.e2e.test.ts server/org/org-mcp.e2e.test.ts server/org/org-sharing.e2e.test.ts \
   server/oidc-session.e2e.test.ts server/routines/routine-delegation.e2e.test.ts \
-  server/perspicax-link.test.ts server/oidc-login.test.ts \
+  server/perspicax/perspicax-link.test.ts server/auth/oidc-login.test.ts \
   src/components/routines/RoutineOwnerName.test.ts
 pnpm -s i18n:check
 ```
@@ -492,7 +500,7 @@ to 1.8.13 (`invalid_request`).
   Perspicax cannot issue it, nothing for a person who is out, and the daily
   slide while the person uses Sagax. The legacy consent callback's refusals (`routines_subject`, `binding`,
   `routines_session`, 401 without a session) are in
-  `server/oidc-login.test.ts` and `server/org/org-routines.e2e.test.ts`; the
+  `server/auth/oidc-login.test.ts` and `server/org/org-routines.e2e.test.ts`; the
   solo server's 403 `identity_perspicax` is checked by hand (S6-12). Who gets
   401 and who gets 403 on `/api/org/routine-delegation` (the gate's 403 for a
   session-less local request under service trust, its 401 for an expired or
@@ -576,18 +584,18 @@ root, path, bytes) to the admin activity log. `/api/health` adds
 ### Automated
 
 ```sh
-pnpm exec vitest run server/oidc-rp.test.ts server/org/org-admin-routes.test.ts server/org/org-admin-files.test.ts server/usage-ledger.test.ts \
-  server/admin-activity.test.ts server/bot-grants.test.ts server/section-channels.test.ts \
+pnpm exec vitest run server/auth/oidc-rp.test.ts server/org/org-admin-routes.test.ts server/org/org-admin-files.test.ts server/usage/usage-ledger.test.ts \
+  server/activity/admin-activity.test.ts server/bots/bot-grants.test.ts server/rooms/section-channels.test.ts \
   src/lib/open-thread-hash.test.ts server/org/org-admin.e2e.test.ts \
   server/org/org-routines.e2e.test.ts server/org/org-mcp.e2e.test.ts server/org/org-sharing.e2e.test.ts \
-  server/oidc-session.e2e.test.ts server/peer-approval.e2e.test.ts
+  server/oidc-session.e2e.test.ts server/peers/peer-approval.e2e.test.ts
 pnpm -s typecheck && pnpm -s lint && pnpm -s i18n:check
 ```
 
 The fake provider signs console assertions (`consoleAssertion`, one claim or
 header bent at a time).
 
-- `server/oidc-rp.test.ts` ("console assertions"): a good assertion, then
+- `server/auth/oidc-rp.test.ts` ("console assertions"): a good assertion, then
   each refusal (typ, act, an audience array or another origin, an `azp`, a
   300 s life, expired, no expiry, a future `iat`, a nonce, events, alg
   `none`, another key, an unknown kid, another issuer, the subject, the
@@ -598,13 +606,13 @@ header bent at a time).
   route, a manager's reach on bots and usage, approvals oldest first, the
   POST body (`allow` or `deny` only, never `always` or `rememberCommand`),
   the audit parameters and cursor, the replay cache's expiry and cap.
-- `server/usage-ledger.test.ts` ("organization admin usage"): speakers by
+- `server/usage/usage-ledger.test.ts` ("organization admin usage"): speakers by
   principal, routine runAs, bot or unattributed; grouping by day, bot and
   speaker with the access split; the 92 day and 20,000 row caps.
-- `server/admin-activity.test.ts` ("organization audit page"): the org
+- `server/activity/admin-activity.test.ts` ("organization audit page"): the org
   categories newest first, stable `<month>-<line>` ids, the `before` cursor,
   the time range, no secret value.
-- `server/bot-grants.test.ts` and `server/section-channels.test.ts`: one
+- `server/bots/bot-grants.test.ts` and `server/rooms/section-channels.test.ts`: one
   audit row per saved change (`grant.set`, `grant.remove`,
   `section.create` ... `section.bot.remove`), none for a refusal.
 - `server/org/org-admin.e2e.test.ts` (real server): every refusal of the gate
@@ -654,11 +662,11 @@ their own addresses).
 ### Automated
 
 ```sh
-pnpm -s vitest run shared/org-import.test.ts server/identity-migration.test.ts \
+pnpm -s vitest run shared/org-import.test.ts server/people/identity-migration.test.ts \
   server/org/org-export.test.ts server/org/org-import-routes.test.ts server/interim-attach-routes.test.ts \
-  server/principals.test.ts server/org/org-routes.test.ts server/perspicax-org-routes.test.ts \
+  server/auth/principals.test.ts server/org/org-routes.test.ts server/perspicax/perspicax-org-routes.test.ts \
   server/org/org-import.e2e.test.ts server/org/org-interim-attach.e2e.test.ts \
-  server/member-identity.e2e.test.ts server/org/org-identity.e2e.test.ts \
+  server/auth/member-identity.e2e.test.ts server/org/org-identity.e2e.test.ts \
   src/lib/org-join.test.ts src/components/OrgImportDialog.test.ts
 node --test electron/org-join.node-test.mjs
 ```

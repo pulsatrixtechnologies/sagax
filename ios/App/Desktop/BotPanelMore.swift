@@ -30,7 +30,6 @@ extension DesktopPanelSection {
         case .voice: "Voice options"
         case .visibility: "Who can see it"
         case .sharing: "Shared with"
-        case .perspicax: "Perspicax Profiles"
         case .history: "Changes"
         case .usage: "Usage"
         }
@@ -51,7 +50,6 @@ extension DesktopPanelSection {
         case .voice: String(localized: "Voice options")
         case .visibility: String(localized: "Who can see it")
         case .sharing: String(localized: "Shared with")
-        case .perspicax: String(localized: "Perspicax Profiles")
         case .history: String(localized: "Changes")
         case .usage: String(localized: "Usage")
         }
@@ -72,7 +70,6 @@ extension DesktopPanelSection {
         case .voice: "mic"
         case .visibility: "eye"
         case .sharing: "person.2"
-        case .perspicax: "powerplug"
         case .history: "clock.arrow.circlepath"
         case .usage: "dollarsign.circle"
         }
@@ -110,13 +107,20 @@ struct BotPanelMore: View {
     @EnvironmentObject private var model: DesktopShellModel
     let bot: Bot
     let slackURL: URL?
+    /// The Edit bot window's page: that one section's body, without its heading.
+    var only: DesktopPanelSection?
 
     @State private var query = ""
 
     private var sections: [DesktopPanelSection] { DesktopPanelSection.visible(gate: session.surfaceGate, slack: slackURL != nil, bot: bot) }
 
     var body: some View {
-        if let section = model.panelSection, sections.contains(section) {
+        if let only {
+            AnyView(body(of: only))
+                .id(only)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("desktop-panel-section.\(only.rawValue)")
+        } else if let section = model.panelSection, sections.contains(section) {
             VStack(alignment: .leading, spacing: 12) {
                 Text(section.title)
                     .font(theme.font(14, .medium))
@@ -227,7 +231,7 @@ struct BotPanelMore: View {
         case .soul: BotPanelSoul(bot: bot)
         case .skills: BotPanelSkills(bot: bot)
         case .memory: BotPanelMemory(bot: bot)
-        case .access: BotPanelAccess(bot: bot, showsWorksOn: !sections.contains(.worksOn))
+        case .access: BotPanelAccess(bot: bot, showsWorksOn: only == nil && !sections.contains(.worksOn))
         case .worksOn: BotPanelWorksOn(bot: bot)
         case .model: BotPanelModel(bot: bot)
         case .permissions: BotPanelPermissions(bot: bot)
@@ -236,7 +240,6 @@ struct BotPanelMore: View {
         case .history: BotPanelHistory(bot: bot)
         case .visibility: BotPanelPhoneSection { BotVisibilitySection(bot: bot) }
         case .sharing: BotPanelPhoneSection { BotSharingSection(bot: bot) }
-        case .perspicax: BotPanelPhoneSection { BotPerspicaxSection(bot: bot) }
         case .slack:
             if let slackURL { BotPanelPhoneSection { BotSlackSection(url: slackURL) } }
         }

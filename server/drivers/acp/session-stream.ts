@@ -1,8 +1,8 @@
 /** ACP session/update stream: assistant text, tools, usage. */
 import { isCwTool } from "../../../shared/cw-widgets/tool-call.ts";
 import { readUseToolCall } from "../../../shared/mcp-gateway-call.ts";
-import { cwToolResult, commandSummary, toolDetailPreview } from "../../tool-summary.ts";
-import { acpWrittenFiles, filesField } from "../../thread-files.ts";
+import { cwToolResult, commandSummary, toolDetailPreview } from "../../tools/tool-summary.ts";
+import { acpWrittenFiles, filesField } from "../../threads/thread-files.ts";
 import { acpToolEndEvents } from "./tool-items.ts";
 import { allocUnkeyedToolSeq, nextUnkeyedToolId, trackRunningTool } from "./helpers.ts";
 import { noteTurnActivity } from "./turn-latency.ts";
@@ -34,7 +34,7 @@ export function createStreamHandlers(deps: StreamHandlerDeps) {
           // A support whose agent reports no usage_update gives the context
           // size another way: Grok's per-round usage (the whole prompt of the
           // round, cached part included) is what fills its window now. Sagax
-          // folds the thread on it (server/context-budget.ts).
+          // folds the thread on it (server/context/context-budget.ts).
           const roundUsed = support.roundContextUsage?.(msg);
           if (roundUsed !== undefined) {
             const current = getSession().current;
@@ -141,6 +141,11 @@ export function createStreamHandlers(deps: StreamHandlerDeps) {
             }
             case "tool_call_update": {
               trackRunningTool(current, u);
+              // grok 1.0.62 sends use_tool's arguments on a later update: keep
+              // them for the permission ask that may follow (#1931)
+              if (!finished && support.onToolCompleted && typeof u.toolCallId === "string" && u.rawInput !== undefined) {
+                (current.toolInputs ??= new Map()).set(u.toolCallId, u.rawInput);
+              }
               if (finished) toolEnded((typeof u.toolCallId === "string" && u.toolCallId) ? u.toolCallId : current.unkeyedToolIds.shift());
               break;
             }

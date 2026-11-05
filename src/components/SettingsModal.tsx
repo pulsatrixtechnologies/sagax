@@ -21,9 +21,6 @@ import { DecisionModelSettings } from "./DecisionModelSettings";
 import { GeneralAdvancedSettings, generalAdvancedShown, isSoloDesktop } from "./settings/AdvancedSettings";
 import { useUpdaterState } from "@/lib/updater";
 import { openUpdatePrompt, requestUpdateCheck } from "@/lib/update-prompt";
-import { EnginesSettings, VoiceSettingsPage } from "./EnginesSettings";
-import { ProvidersSettings } from "./settings/ProvidersSettings";
-import { LocalComputerSection } from "./LocalComputerSection";
 import { peopleListServed, readMembership } from "../lib/membership";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { canEditConfig, canManageBackups, canManageComputers, canManageExperimental, viewerCan } from "@/lib/viewer";
@@ -32,14 +29,22 @@ import { CompactRow, PillSelect, type PillOption, requestSettingsCard, SettingRo
 import { OrgMemorySettings } from "./OrgMemorySettings";
 import { NotificationSettings } from "./NotificationSettings";
 import { TimeZoneRows } from "./settings/TimeZoneSettings";
-import { AppearanceSettings } from "./settings/AppearanceSettings";
-import { ExperimentalSettings } from "./settings/ExperimentalSettings";
+import {
+  AppearanceSettings,
+  CredentialsSettings,
+  EnginesSettings,
+  ExperimentalSettings,
+  ImportSettings,
+  LocalComputerSection,
+  ProvidersSettings,
+  UsageSection,
+  VoiceSettingsPage,
+  WorkspaceBackupSettings,
+} from "./lazy-settings-sections";
 import { currentSettingsSection, isMovedOrganizationCard } from "@/lib/settings-sections";
 import { openSettings } from "@/lib/settings-link";
 
 import { shortcutLabel } from "./ShortcutHint";
-import { UsageSection } from "./UsageSection";
-import { CredentialsSettings } from "./settings/CredentialsSettings";
 import { workspacesAvailable } from "./WorkspacesSection";
 import { AboutMeEditor, aboutMeFirstLine } from "./AboutMeSettings";
 import { SettingsSubPage, SettingsSubPageRow } from "./SettingsSubPage";
@@ -47,8 +52,6 @@ import { AccountCard } from "./settings/AccountCard";
 import { requestAbout } from "@/lib/about-ui";
 import { AvatarCropPage } from "./settings/OwnAvatarField";
 import { OpenAtLoginRow } from "./OpenAtLoginOffer";
-import { WorkspaceBackupSettings } from "./WorkspaceBackupSettings";
-import { ImportSettings } from "./settings/ImportSettings";
 import { SecurityKeySettings } from "./SecurityKeySettings";
 import { MyApprovalRules } from "./settings/MyApprovalRules";
 import { MyToolGrants } from "./settings/MyToolGrants";
@@ -682,7 +685,9 @@ export function SettingsModal() {
               groups its own (you, AI, the workspace, this app last). A
               heading shows while one of its entries does, a search too. */}
           {NAV_GROUPS.map((group) => {
-            const entries = visibleSections.filter((entry) => entry.group === group.id);
+            // 2026-11-02 (JC): About is not a row of this menu; it opens from
+            // the app menu and the sidebar, and a search still finds it.
+            const entries = visibleSections.filter((entry) => entry.group === group.id && entry.id !== "about");
             if (entries.length === 0) return null;
             const headingId = `app-settings-nav-${group.id}`;
             return (
@@ -763,7 +768,7 @@ export function SettingsModal() {
               className="w-full min-w-0 rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink focus:border-border-strong focus:outline-none sm:hidden"
             >
               {NAV_GROUPS.map((group) => {
-                const entries = availableSections.filter((entry) => entry.group === group.id);
+                const entries = availableSections.filter((entry) => entry.group === group.id && entry.id !== "about");
                 return entries.length === 0 ? null : (
                   <optgroup key={group.id} label={t(group.labelKey)}>
                     {entries.map(({ id, labelKey }) => (

@@ -1,14 +1,18 @@
 /** Non-result Claude stream-json frames (#1383). */
 import {
+  claudeArtifactUrl,
+  formatArtifactConsentFence,
   formatArtifactFence,
+  isArtifactConsentRefusal,
+  isArtifactFamilyTool,
   isArtifactTool,
   parseArtifactPublish,
 } from "../../../shared/claude-chat-blocks.ts";
 import { isPhoneToolCallName, PHONE_TOOL_OUTPUT_NOT_KEPT } from "../../../shared/phone-tools.ts";
 import { searchedToolCall } from "../../../shared/searched-tool-call.ts";
-import { pushRenewalStep } from "../../context-renewal.ts";
-import { filesField, writtenFilesFromToolInput } from "../../thread-files.ts";
-import { commandSummary, cwToolResult, toolDetailPreview } from "../../tool-summary.ts";
+import { pushRenewalStep } from "../../context/context-renewal.ts";
+import { filesField, writtenFilesFromToolInput } from "../../threads/thread-files.ts";
+import { commandSummary, cwToolResult, inputPreviewMax, toolDetailPreview, toolFailurePreview } from "../../tools/tool-summary.ts";
 import { withAbsolutePaths } from "../permission-command.ts";
 import { claudeAuthFailure } from "../claude-auth-recovery.ts";
 import { claudeSignInExpired as claudeSignInExpiredImport } from "../claude-errors.ts";
@@ -20,12 +24,21 @@ import {
   claudeVersionTooOld,
 } from "./limits.ts";
 import { COMPACTED_VOLATILE } from "./messages.ts";
-import { firstText, readArtifactHtml } from "./helpers.ts";
+import { noteArtifactPublished } from "../../claude-artifacts/events.ts";
+import { claudeAccountEmail, firstText, readArtifactHtml } from "./helpers.ts";
 import {
   STEERED_CONTINUATION_SILENCE_MS,
   steerSilenceScale,
 } from "./session-types.ts";
 import type { ClaudeTurnCtx } from "./turn-ctx.ts";
+
+/** A failed call the engine sent no words for at all (2026-11-05: an
+ * empty is_error tool_result): said in plain words, naming the tool, so
+ * the card and the routine's problems never read "no error message". */
+export function emptyFailureNote(toolName: string | undefined): string {
+  const name = toolName ? toolName.replace(/^mcp__[^_]+(?:_[^_]+)*?__/, "") : "the tool";
+  return `${name} failed, and Claude Code passed on no error text for it (an empty error result). If this repeats, the tool's own server returned the failure without a message.`;
+}
 
 export function handleClaudeContent(ctx: ClaudeTurnCtx, o: any): void {
   const {
@@ -184,6 +197,11 @@ case "assistant": {
       // #1276: a call_tool on a searched server reads as the tool it runs
       const runs = typeof b.name === "string" ? searchedToolCall(b.name, b.input, session.searchedMounts) : { name: b.name, input: b.input };
       if (typeof b.id === "string" && typeof runs.name === "string") session.toolNames.set(b.id, runs.name);
+      // the artifact an Artifact* call names, for a wrong-account card
+      if (typeof b.id === "string" && isArtifactFamilyTool(runs.name) && runs.input && typeof runs.input === "object") {
+        const url = claudeArtifactUrl(String((runs.input as { url?: unknown }).url ?? ""));
+        if (url) (session.artifactUrls ??= new Map()).set(b.id, url);
+      }
       if (session.turn && typeof b.id === "string" && typeof runs.name === "string" && !o.parent_tool_use_id) {
         pushRenewalStep(session.turn.steps ??= [], { id: b.id, name: runs.name, summary: commandSummary(runs.input) ?? toolDetailPreview(runs.input)?.slice(0, 200) });
       }
@@ -194,7 +212,7 @@ case "assistant": {
         itemId: b.id,
         title: runs.name,
         summary: commandSummary(runs.input),
-        input: toolDetailPreview(runs.input),
+        input: toolDetailPreview(runs.input, inputPreviewMax(typeof runs.name === "string" ? runs.name : undefined)),
         ...filesField(writtenFilesFromToolInput(runs.name, withAbsolutePaths(runs.name, runs.input, cwd))),
         // a sub-agent's call: nested under the Agent call that started it
         ...(typeof o.parent_tool_use_id === "string" && o.parent_tool_use_id ? { parentItemId: o.parent_tool_use_id } : {}),
@@ -232,23 +250,52 @@ case "user": {
     if (b.type === "tool_result") {
       const toolName = typeof b.tool_use_id === "string" ? session.toolNames.get(b.tool_use_id) : undefined;
       const step = session.turn?.steps?.find((entry) => entry.id === b.tool_use_id);
+      // a failed call's own words, not its content envelope (shared/tool-failure-text.ts)
+      // 2026-11-05: a failure whose content block is empty may still carry
+      // its words in the message's own `tool_use_result` (Claude Code puts
+      // a native tool's structured error there); with none at all, the card
+      // says what is known instead of "returned no error message".
+      const preview = b.is_error
+        ? toolFailurePreview(b.content) ?? toolFailurePreview(o.tool_use_result ?? o.toolUseResult) ?? emptyFailureNote(toolName)
+        : toolDetailPreview(b.content);
       if (step) {
         step.ok = !b.is_error;
-        if (!isPhoneToolCallName(toolName)) step.output = toolDetailPreview(b.content)?.slice(0, 400);
+        if (!isPhoneToolCallName(toolName)) step.output = preview?.slice(0, 400);
       }
       emit({
         ...base(threadId, currentTurnId()), type: "item.completed", itemType: "tool", itemId: b.tool_use_id, ok: !b.is_error,
         // a phone's answer reaches the model, never the event log or the chat (phone_tool)
-        output: isPhoneToolCallName(toolName) ? PHONE_TOOL_OUTPUT_NOT_KEPT : toolDetailPreview(b.content),
+        output: isPhoneToolCallName(toolName) ? PHONE_TOOL_OUTPUT_NOT_KEPT : preview,
         ...(b.is_error ? {} : cwToolResult(toolName, b.content)),
       });
       // photos a phone sent go to the model only, never into the chat (phone_tool)
       for (const img of isPhoneToolCallName(toolName) ? [] : extractMcpImages(b.content)) {
         emit({ ...base(threadId, currentTurnId()), type: "item.completed", itemType: "assistant_image", data: img.data });
       }
+      // 2026-11-05: an artifact of another claude.ai account. The CLI's
+      // "who made this" consent never reaches the permission tool, so the
+      // call fails; the card names the engine's account and offers a copy
+      // the bot owns, or reconnecting the account.
+      if (b.is_error && isArtifactFamilyTool(toolName) && typeof b.tool_use_id === "string") {
+        const words = `${typeof b.content === "string" ? b.content : JSON.stringify(b.content ?? "")} ${typeof (o.tool_use_result ?? o.toolUseResult) === "string" ? o.tool_use_result ?? o.toolUseResult : ""}`;
+        const url = session.artifactUrls?.get(b.tool_use_id);
+        if (url && isArtifactConsentRefusal(words)) {
+          const account = claudeAccountEmail(session.configDir);
+          emit({
+            ...base(threadId, currentTurnId()),
+            type: "item.completed",
+            itemType: "assistant_text",
+            text: formatArtifactConsentFence({ url, ...(account ? { account } : {}) }),
+          });
+        }
+      }
+      if (typeof b.tool_use_id === "string") session.artifactUrls?.delete(b.tool_use_id);
       if (!b.is_error && isArtifactTool(toolName)) {
-        const page = parseArtifactPublish(b.content);
+        // the structured result first (Claude Code's tool_use_result object),
+        // then a JSON tool_result from an older CLI
+        const page = parseArtifactPublish(o.tool_use_result ?? o.toolUseResult) ?? parseArtifactPublish(b.content);
         if (page) {
+          if (page.url) noteArtifactPublished({ url: page.url, title: page.title, ...(page.owned !== undefined ? { owned: page.owned } : {}), ...(session.turn?.input?.botId ? { botId: session.turn.input.botId } : {}), threadId });
           const html = page.path ? readArtifactHtml(page.path) : undefined;
           emit({
             ...base(threadId, currentTurnId()),

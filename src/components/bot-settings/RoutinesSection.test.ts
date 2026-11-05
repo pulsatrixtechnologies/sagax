@@ -28,8 +28,8 @@ const { RoutinesSection, RoutineDetailHeader } = await import("./RoutinesSection
 const bot: Bot = {
   id: "bot-1",
   threadId: "thread-1",
-  name: "Scout",
-  title: "Scout",
+  name: "Osprey",
+  title: "Osprey",
   description: "",
   notifications: false,
   color: "green",
@@ -163,17 +163,22 @@ describe("RoutinesSection", () => {
     expect(markup).not.toContain("Next ");
     const source = readFileSync(new URL("./RoutinesSection.tsx", import.meta.url), "utf8");
     const detail = source.slice(source.indexOf("if (detail)"), source.indexOf("return <div className=\"flex flex-col gap-3\">"));
-    for (const needle of ["RoutinePanelActions", "openLogs(detail.id)", "copyOf: detail", "deleteRoutine"]) expect(detail).toContain(needle);
-    // the bar itself (RoutinePanelActions, 2026-10-29)
+    // 2026-11-03: Duplicate from Edit > Advanced, Delete after a confirmation,
+    // Clear run logs on the page; a run's logs stay one click away in its sheet.
+    for (const needle of ["RoutinePanelActions", "onDuplicate={(routine) => setEditing({ copyOf: routine })}", "deleteRoutine", "confirm(", "clearRoutineRuns"]) expect(detail).toContain(needle);
+    expect(detail).toContain("onOpenRun={(run) => { setOpenedRun(run);");
+    expect(source).toContain("<RoutineRunExchange");
+    // The bar includes Check routine; each run opens its own conversation.
     const bar = source.slice(source.indexOf("export function RoutinePanelActions"));
-    for (const needle of ["RunNowButton", "botPanel.routines.pause", "botPanel.routines.edit", "data-routine-logs", "data-routine-duplicate", "data-routine-delete"]) expect(bar).toContain(needle);
+    for (const needle of ["RunNowButton", "data-routine-check", "botPanel.routines.edit", "routines.disable", "routines.enable", "data-routine-delete"]) expect(bar).toContain(needle);
+    for (const needle of ["data-routine-logs", "data-routine-duplicate"]) expect(bar).not.toContain(needle);
   });
 
   it("does not print the viewer's name twice when they own the routine and it runs as them", () => {
     const mine = {
       ...activeRoutine,
-      owner: { id: "pr_me", name: "Alex Martin" },
-      runAs: { principalId: "pr_me", name: "Alex Martin" },
+      owner: { id: "pr_me", name: "Wren" },
+      runAs: { principalId: "pr_me", name: "Wren" },
     };
     const markup = render([mine], []);
     expect(markup).toContain("Morning brief");
@@ -201,7 +206,7 @@ describe("RoutineDetailHeader", () => {
   it("back and close call their handlers", () => {
     const onBack = vi.fn();
     const onClose = vi.fn();
-    const tree = RoutineDetailHeader({ name: "Dispatch matin TN", onBack, onClose });
+    const tree = RoutineDetailHeader({ name: "Osprey inbox", onBack, onClose });
     const found = buttons(tree);
     expect(found.map((b) => b.props["aria-label"])).toEqual(["Back", "Close"]);
     found[0]!.props.onClick!();
@@ -212,10 +217,10 @@ describe("RoutineDetailHeader", () => {
   });
 
   it("uses the panel's top bar row and the shared round button", () => {
-    const markup = renderToStaticMarkup(createElement(RoutineDetailHeader, { name: "Dispatch matin TN", onBack: vi.fn(), onClose: vi.fn() }));
+    const markup = renderToStaticMarkup(createElement(RoutineDetailHeader, { name: "Osprey inbox", onBack: vi.fn(), onClose: vi.fn() }));
     expect(markup).toContain("content-topbar");
     expect(markup).toContain(CIRCLE_BUTTON);
-    expect(markup).toContain("Dispatch matin TN");
+    expect(markup).toContain("Osprey inbox");
     expect(markup.match(new RegExp(CIRCLE_BUTTON, "g"))).toHaveLength(2);
   });
 

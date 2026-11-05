@@ -21,16 +21,17 @@
 // other three into it, so a packaged build still ships one agents-proxy.js.
 import readline from "node:readline";
 
-import { availableTools, catalogProfileFromEnv, compactListed, compactToolsFromEnv, withDeferredRareTools } from "./agents-catalog.ts";
+import { availableTools, catalogProfileFromEnv, compactListed, compactToolsFromEnv, withCompactNativeDeferral, withDeferredRareTools } from "./agents-catalog.ts";
 import { applyCatalogGroups, catalogGroupsOn, routeGroupCall } from "./agents-catalog-budget.ts";
 import { catalogBridgeDefinitions, catalogBridgeOn, resolveCatalogUse, routeBridgeCall } from "./catalog-bridge.ts";
 import { mergeByAction } from "./agents-merged.ts";
 import { readMergedCall } from "../../shared/merged-agent-tools.ts";
 import { BRIDGE_USE_TOOL } from "../../shared/searched-tool-call.ts";
-import { CALL_TOOL, DESCRIBE_TOOL, SEARCH_TOOL, ToolDirectory, isDirectoryTool, type CatalogTool } from "../mcp-directory.ts";
+import { CALL_TOOL, DESCRIBE_TOOL, SEARCH_TOOL, ToolDirectory, isDirectoryTool, type CatalogTool } from "../mcp/mcp-directory.ts";
 import { callTool, capResult, toolCallContextFromEnv } from "./agents-call.ts";
+import { perspicaxToolElsewhere } from "./agents-tools/perspicax.ts";
 import { harnessClientFromEnv, type Json } from "./agents-client.ts";
-import { auditSampleFromEnv, deniedResourcesFromEnv, guardToolCall, learnCreatedBot, permissionModeFromEnv, principalFromEnv, scopeOwnersFromEnv } from "../mcp-permissions.ts";
+import { auditSampleFromEnv, deniedResourcesFromEnv, guardToolCall, learnCreatedBot, permissionModeFromEnv, principalFromEnv, scopeOwnersFromEnv } from "../mcp/mcp-permissions.ts";
 
 const PROFILE = catalogProfileFromEnv(process.env);
 const AVAILABLE_TOOLS = availableTools(PROFILE);
@@ -52,7 +53,12 @@ const AVAILABLE_TOOLS = availableTools(PROFILE);
 const COMPACT = compactToolsFromEnv(process.env);
 const BRIDGE = catalogBridgeOn(process.env);
 const GROUPS = catalogGroupsOn(process.env) && !BRIDGE && !COMPACT;
-const SEARCHED = COMPACT && !BRIDGE
+// #2037: on Claude Code the compact turn needs no directory pair: the
+// tools outside the core and the pins are listed by name and deferred to
+// the CLI's own ToolSearch (withCompactNativeDeferral), called by their own
+// names. Other engines keep search_tools / call_tool.
+const NATIVE_DEFERRAL = !!COMPACT && !BRIDGE && process.env.SAGAX_DEFER_RARE_TOOLS === "1";
+const SEARCHED = COMPACT && !BRIDGE && !NATIVE_DEFERRAL
   ? new ToolDirectory(AVAILABLE_TOOLS.filter((tool) => !compactListed(tool.name, { ...COMPACT, coordinating: PROFILE.coordinating })) as unknown as CatalogTool[])
   : undefined;
 // #1276: with the bridge, the heart of a chat turn and the bot's own most
@@ -75,6 +81,8 @@ const LISTED_TOOLS = BRIDGE
   ]
   : GROUPS
   ? applyCatalogGroups(AVAILABLE_TOOLS, process.env)
+  : NATIVE_DEFERRAL
+  ? withCompactNativeDeferral(AVAILABLE_TOOLS, { pinned: COMPACT!.pinned, coordinating: PROFILE.coordinating })
   : COMPACT
   ? [
     ...AVAILABLE_TOOLS.filter((tool) => compactListed(tool.name, { ...COMPACT, coordinating: PROFILE.coordinating })),
@@ -161,6 +169,13 @@ async function handle(msg: Json) {
       }
       if (SEARCHED && SEARCHED.tools.length && isDirectoryTool(name)) {
         if (name === SEARCH_TOOL) return ok(id, await SEARCHED.search(args));
+        // #1935: a Perspicax account tool (api_search named it) is not here:
+        // say which server runs it rather than "No tool named ...".
+        const target = typeof args.name === "string" ? args.name : "";
+        if ((name === DESCRIBE_TOOL || name === CALL_TOOL) && target && !SEARCHED.has(target) && !AVAILABLE_TOOLS.some((t) => t.name === target)) {
+          const elsewhere = await perspicaxToolElsewhere(target, CONTEXT);
+          if (elsewhere) return textResult(id, elsewhere, true);
+        }
         if (name === DESCRIBE_TOOL) return ok(id, SEARCHED.describe(args));
         if (name === CALL_TOOL) {
           const call = SEARCHED.call(args);
@@ -177,7 +192,11 @@ async function handle(msg: Json) {
         name = family.tool;
         args = family.arguments as Json;
       }
-      if (!AVAILABLE_TOOLS.some((t) => t.name === name)) return rpcErr(id, -32602, `Unknown tool: ${name}`);
+      if (!AVAILABLE_TOOLS.some((t) => t.name === name)) {
+        const elsewhere = await perspicaxToolElsewhere(name, CONTEXT);
+        if (elsewhere) return textResult(id, elsewhere, true);
+        return rpcErr(id, -32602, `Unknown tool: ${name}`);
+      }
       try {
         const { text, isError, passthrough } = await guardToolCall(GUARD, name, args, () => callTool(name, args, CONTEXT)) as Awaited<ReturnType<typeof callTool>>;
         // 2026-10-27 (#1098): a bot the person just created is theirs for

@@ -205,6 +205,10 @@ export interface FakeOidcProvider {
   /** The profile's /mcp catalog; absent: one small api_list (a measurement
    * serves a catalog as big as a real organization's, #1276). */
   mcpTools?: unknown[];
+  /** 0.8.44: refuse the account connection (no profile in the resource) with
+   * invalid_target to a person who holds no profile, as a Perspicax that
+   * gives such a person no MCP access does. Off: anyone signed in gets it. */
+  accountNeedsProfile?: boolean;
   exchanges: Array<{ sub: string | null; profile: string | null; ok: boolean; error?: string; token?: string }>;
   exchangeRevoked: string[];
   mcpRequests: FakeMcpRequest[];
@@ -269,7 +273,7 @@ export async function startFakeOidcProvider(options: { clientId?: string; user?:
   const delegationFamilies = new Set<string>();
   /** The person each sign-in code was issued to, by sub. */
   const signedInUsers = new Map<string, FakeOidcUser>();
-  const exchanged = new Map<string, { sub: string; profile: string; exp: number; revoked: boolean }>();
+  const exchanged = new Map<string, { sub: string; profile: string | null; exp: number; revoked: boolean }>();
   const newAccess = (sub: string) => {
     const token = `pxlo1.${randomBytes(16).toString("hex")}`;
     accessTokens.set(token, { sub, exp: Date.now() + 3_600_000 });
@@ -616,16 +620,24 @@ export async function startFakeOidcProvider(options: { clientId?: string; user?:
           const subject = accessTokens.get(form.subject_token);
           if (!subject || subject.exp - Date.now() < 60_000 || disabled.has(subject.sub)) return fail(400, "invalid_grant", subject?.sub ?? null);
           let profile: string | null = null;
+          let accountTarget = false;
           try {
             const target = new URL(form.resource ?? "");
-            if (`${target.origin}${target.pathname}` === `${provider.issuer}/mcp`) profile = target.searchParams.get("profile");
+            if (`${target.origin}${target.pathname}` === `${provider.issuer}/mcp`) {
+              accountTarget = !target.search;
+              profile = target.searchParams.get("profile");
+            }
           } catch { /* not a URL */ }
-          if (!profile || !provider.profiles.some((entry) => entry.id === profile) || !held(subject.sub).includes(profile)) return fail(400, "invalid_target", subject.sub, profile);
+          if (accountTarget && provider.accountNeedsProfile && held(subject.sub).length === 0) {
+            provider.exchanges.push({ sub: subject.sub, profile: null, ok: false, error: "invalid_target" });
+            return send(res, 400, { error: "invalid_target" });
+          }
+          if (!accountTarget && (!profile || !provider.profiles.some((entry) => entry.id === profile) || !held(subject.sub).includes(profile))) return fail(400, "invalid_target", subject.sub, profile);
           const token = `pxlo1.${subject.sub}.${randomBytes(16).toString("hex")}`;
           const expiresIn = Math.min(900, Math.floor((subject.exp - Date.now()) / 1000));
           exchanged.set(token, { sub: subject.sub, profile, exp: Date.now() + expiresIn * 1000, revoked: false });
           provider.exchanges.push({ sub: subject.sub, profile, ok: true, token });
-          return send(res, 200, { access_token: token, issued_token_type: "urn:ietf:params:oauth:token-type:access_token", token_type: "Bearer", expires_in: expiresIn, scope: `profile:${profile}` });
+          return send(res, 200, { access_token: token, issued_token_type: "urn:ietf:params:oauth:token-type:access_token", token_type: "Bearer", expires_in: expiresIn, scope: accountTarget ? held(subject.sub).map((id) => `profile:${id}`).join(" ") : `profile:${profile}` });
         }
         provider.lastTokenRequest = form;
         if (failNext !== null) {
@@ -782,7 +794,7 @@ export async function startFakeOidcProvider(options: { clientId?: string; user?:
           : frame.method === "tools/list"
             ? { tools: provider.mcpTools ?? [{ name: "api_list", description: "List the APIs of this profile", inputSchema: { type: "object" } }] }
             : frame.method === "tools/call"
-              ? { content: [{ type: "text", text: `profile ${entry.profile} for ${entry.sub}` }] }
+              ? { content: [{ type: "text", text: entry.profile ? `profile ${entry.profile} for ${entry.sub}` : `account for ${entry.sub}` }] }
               : {};
         res.writeHead(200, headers);
         res.end(`event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: frame.id, result })}\n\n`);

@@ -1,4 +1,4 @@
-// Seen-by receipts in the transcript (server/read-receipts.ts).
+// Seen-by receipts in the transcript (server/messages/read-receipts.ts).
 //
 // The server keeps one read position per participant per thread: a person's
 // principal id, or `bot:<botId>`, to the newest message they have seen. The

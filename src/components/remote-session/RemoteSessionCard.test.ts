@@ -36,7 +36,7 @@ describe("remote session card", () => {
     const html = renderToStaticMarkup(createElement(
       StoreProvider,
       null,
-      createElement(RemoteSessionCard, { botId: "melonie", threadId: "thread-1", view, detailsOpen: true }),
+      createElement(RemoteSessionCard, { botId: "wren", threadId: "thread-1", view, detailsOpen: true }),
     ));
     expect(html).toContain("data-remote-session-card");
     expect(html).toContain("POSTE-02");
@@ -58,7 +58,7 @@ describe("remote session card", () => {
     const html = renderToStaticMarkup(createElement(
       StoreProvider,
       null,
-      createElement(RemoteSessionCard, { botId: "melonie", threadId: "thread-1", view }),
+      createElement(RemoteSessionCard, { botId: "wren", threadId: "thread-1", view }),
     ));
     expect(html).toContain("POSTE-02");
     expect(html).toContain("UD6HFH");
@@ -76,7 +76,7 @@ describe("remote session card", () => {
     const html = renderToStaticMarkup(createElement(
       StoreProvider,
       null,
-      createElement(RemoteSessionCard, { botId: "melonie", threadId: "thread-1", view: { ...view, state: "ended", suggestions: [] } }),
+      createElement(RemoteSessionCard, { botId: "wren", threadId: "thread-1", view: { ...view, state: "ended", suggestions: [] } }),
     ));
     expect(html).toContain(t("remoteSession.closed"));
     expect(html).not.toContain("data-remote-hint");
@@ -95,13 +95,13 @@ describe("remote session surfaces", () => {
     const empty = renderToStaticMarkup(createElement(
       StoreProvider,
       null,
-      createElement(RemoteSessionsSection, { bot: { id: "melonie" } as Bot }),
+      createElement(RemoteSessionsSection, { bot: { id: "wren" } as Bot }),
     ));
     // no active session: the whole section is hidden (header and text)
     expect(empty).not.toContain("data-remote-sessions");
     expect(empty).not.toContain("Sessions à distance");
     const emptyProps = {
-      botId: "melonie",
+      botId: "wren",
       rows: [] as RemoteSessionView[],
       confirmId: null,
       error: null,
@@ -123,7 +123,7 @@ describe("remote session surfaces", () => {
       user: `exemple\\technicien ${NODEKEY}`,
     };
     const sidebar = renderToStaticMarkup(createElement(RemoteSessionsPanel, {
-      botId: "melonie",
+      botId: "wren",
       rows: [shown],
       confirmId: null,
       error: null,
@@ -145,7 +145,7 @@ describe("remote session surfaces", () => {
     expect(sidebar).not.toContain(t("remoteSession.confirmClose"));
 
     const asking = renderToStaticMarkup(createElement(RemoteSessionsPanel, {
-      botId: "melonie",
+      botId: "wren",
       rows: [shown],
       confirmId: shown.id,
       error: null,
@@ -169,7 +169,7 @@ describe("remote session surfaces", () => {
     const card = renderToStaticMarkup(createElement(
       StoreProvider,
       null,
-      createElement(RemoteSessionCard, { botId: "melonie", threadId: "thread-1", view: bare, detailsOpen: true }),
+      createElement(RemoteSessionCard, { botId: "wren", threadId: "thread-1", view: bare, detailsOpen: true }),
     ));
     expect(card).toContain("UD6HFH");
     expect(card).toContain(t("remoteSession.unknown"));
@@ -186,7 +186,7 @@ describe("remote session surfaces", () => {
     const focused: string[] = [];
     const opened: string[] = [];
     takeRemoteControl({
-      botId: "melonie",
+      botId: "wren",
       sessionId: view.id,
       focusLocal: (_bot: string, id: string) => focused.push(id),
       focusRemote: (_bot: string, id: string) => focused.push(`remote:${id}`),
@@ -226,11 +226,11 @@ describe("remote session surfaces", () => {
     expect(prompt).not.toContain(GUID);
     expect(remoteSuggestionText("missing", "POSTE-02")).toBeNull();
 
-    const actions = renderToStaticMarkup(createElement(RemoteSessionActions, { botId: "melonie", view }));
+    const actions = renderToStaticMarkup(createElement(RemoteSessionActions, { botId: "wren", view }));
     expect(actions).toContain(t("remoteSession.shell"));
     expect(actions).toContain(t("remoteSession.upload"));
     expect(actions).toContain(t("remoteSession.download"));
-    const closed = renderToStaticMarkup(createElement(RemoteSessionActions, { botId: "melonie", view: { ...view, state: "ended" } }));
+    const closed = renderToStaticMarkup(createElement(RemoteSessionActions, { botId: "wren", view: { ...view, state: "ended" } }));
     expect(closed).toContain(t("remoteSession.closed"));
     expect(closed).not.toContain(t("remoteSession.shell"));
 

@@ -1,4 +1,7 @@
+import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { PillSelect } from "../SettingsPrimitives";
+import { PANEL_INPUT, PanelRow, PanelValue } from "./PanelRows";
 
 const DEFAULT_EARLY_MINUTES = 15;
 const DEFAULT_LATE_MINUTES = 15;
@@ -58,6 +61,7 @@ export function RoutineTimingFields({
   onMode,
   onEarly,
   onLate,
+  viewing = false,
 }: {
   mode: "exact" | "flexible";
   earlyMinutes: number;
@@ -65,53 +69,31 @@ export function RoutineTimingFields({
   onMode: (mode: "exact" | "flexible") => void;
   onEarly: (minutes: number) => void;
   onLate: (minutes: number) => void;
+  /** View mode: the choice as text. */
+  viewing?: boolean;
 }) {
-  const field = "w-20 rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink outline-none focus:border-border-strong";
+  // 2026-11-03: one row of the routine panel, the app's pill menu at the
+  // right; the windows under it when flexible.
+  const options = [{ value: "exact" as const, label: t("routineTiming.exact") }, { value: "flexible" as const, label: t("routineTiming.flexible") }];
+  const minutes = (label: string, aria: string, value: number, onValue: (minutes: number) => void) => (
+    <label className="inline-flex items-center gap-1.5">
+      <span>{label}</span>
+      {viewing
+        ? <span className="tabular-nums text-ink">{value}</span>
+        : <input aria-label={aria} type="number" min={0} step={1} value={value} onChange={(event) => onValue(wholeMinutes(event.target.value))} className={cn(PANEL_INPUT, "w-14 tabular-nums")} />}
+      <span>{t("routineTiming.min")}</span>
+    </label>
+  );
   return (
-    <div className="flex flex-wrap items-center gap-2" data-routine-timing={mode}>
-      <label className="flex items-center gap-2 text-[13px] text-ink">
-        <span className="text-ink-secondary">{t("routineTiming.label")}</span>
-        <select
-          aria-label={t("routineTiming.label")}
-          value={mode}
-          onChange={(event) => onMode(event.target.value === "flexible" ? "flexible" : "exact")}
-          className="rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink outline-none focus:border-border-strong"
-        >
-          <option value="exact">{t("routineTiming.exact")}</option>
-          <option value="flexible">{t("routineTiming.flexible")}</option>
-        </select>
-      </label>
-      {mode === "flexible" && (
-        <span className="flex flex-wrap items-center gap-2 text-[13px] text-ink-secondary">
-          <label className="flex items-center gap-1">
-            {t("routineTiming.early")}
-            <input
-              aria-label={t("routineTiming.earlyAria")}
-              type="number"
-              min={0}
-              step={1}
-              value={earlyMinutes}
-              onChange={(event) => onEarly(wholeMinutes(event.target.value))}
-              className={field}
-            />
-            {t("routineTiming.min")}
-          </label>
-          <label className="flex items-center gap-1">
-            {t("routineTiming.late")}
-            <input
-              aria-label={t("routineTiming.lateAria")}
-              type="number"
-              min={0}
-              step={1}
-              value={lateMinutes}
-              onChange={(event) => onLate(wholeMinutes(event.target.value))}
-              className={field}
-            />
-            {t("routineTiming.min")}
-          </label>
-          <span>{t("routineTiming.lateHelp")}</span>
-        </span>
-      )}
-    </div>
+    <PanelRow data-routine-timing={mode} label={t("routineTiming.label")} hint={t("routineEditor.hint.timing")}
+      below={mode === "flexible" ? <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-ink-secondary">
+        {minutes(t("routineTiming.early"), t("routineTiming.earlyAria"), earlyMinutes, onEarly)}
+        {minutes(t("routineTiming.late"), t("routineTiming.lateAria"), lateMinutes, onLate)}
+        <span className="w-full text-[11.5px] text-ink-tertiary">{t("routineTiming.lateHelp")}</span>
+      </div> : undefined}>
+      {viewing
+        ? <PanelValue>{options.find((option) => option.value === mode)?.label}</PanelValue>
+        : <PillSelect ariaLabel={t("routineTiming.label")} value={mode} options={options} onChange={onMode} />}
+    </PanelRow>
   );
 }

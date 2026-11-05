@@ -82,12 +82,13 @@ export function pendingApprovals(messages: Message[]): Pending[] {
       message: m,
       requestId: m.card!.requestId!,
       tool: m.card!.tool!,
-      allowKey: m.card!.allowKey,
+      allowKey: m.card!.approvalOrigin ? m.card!.approvalOrigin.allowKey : m.card!.allowKey,
       allowSession: m.card!.allowSession,
       commandAllowlist: m.card!.commandAllowlist,
       detail: m.card!.subtitle,
       held: m.card!.held,
       heldCode: m.card!.heldCode,
+      ...(m.card!.approvalOrigin ? { threadId: m.card!.approvalOrigin.threadId, askedBy: m.from?.name ?? "" } : {}),
     }));
 }
 
@@ -129,9 +130,9 @@ export function spokenApprovalPrompt(pending: Pending, requester: string): strin
     // Raw JSON arguments are not read aloud: the plain summary is.
     const card = pending.message.card;
     const input = card?.toolInput ?? pending.detail;
-    const tool = toolLabel(pending.tool, input, card?.toolHints);
-    const detail = isTechnicalText(pending.detail)
-      ? describeApproval(pending.tool, input, card?.toolHints).summary
+    const tool = toolLabel(card?.mcpTool ?? pending.tool, input, card?.toolHints);
+    const detail = isTechnicalText(pending.detail) || (card?.mcpTool && pending.detail?.trim() === card.mcpTool)
+      ? describeApproval(card?.mcpTool ?? pending.tool, input, card?.toolHints).summary
       : pending.detail;
     // asked as a question with its two options; the spoken answer must pick
     // one (src/lib/voice-mode/answers.ts). Always allow is never offered by
@@ -185,7 +186,7 @@ export function readOnlyApprovals(approvals: Pending[]): Pending[] {
     const card = pending.message.card;
     if (!card || card.adminApproval) return false;
     if (card.routineRequest || card.skillRequest || card.profileRequest || card.ruleRequest || card.teamSetupRequest || card.questionRequest || card.terminalRequest || card.meetingRequest || card.phoneCallConsent) return false;
-    return describeApproval(pending.tool, card.toolInput ?? card.subtitle, card.toolHints).risk === "read";
+    return describeApproval(card.mcpTool ?? pending.tool, card.toolInput ?? card.subtitle, card.toolHints).risk === "read";
   });
 }
 
@@ -325,7 +326,7 @@ export const PendingApprovalPanel = memo(function PendingApprovalPanel({
                 </pre>
               )}
               {view && (view.args || pending.tool) && (
-                <TechnicalDetails key={pending.requestId} tool={pending.tool} server={view.server} args={view.args} argsLabel={t("approval.aria.reviewDetails")} defaultOpen />
+                <TechnicalDetails key={pending.requestId} tool={view.tool ?? pending.tool} server={view.server} args={view.args} argsLabel={t("approval.aria.reviewDetails")} defaultOpen />
               )}
             </>
           )}
@@ -385,7 +386,7 @@ export function PendingApprovalActions({
   const { dispatch } = useStore();
   const ownerOrAdmin = useOwnerOrAdmin();
   // 2026-10-21: the organization may keep every approval to one card
-  // (server/custom-rules-org.ts): no Always allow, and the card says why
+  // (server/rules/custom-rules-org.ts): no Always allow, and the card says why
   const orgPolicy = useOrgApprovalPolicy();
   const isRoutineRequest = isRoutineApproval(pending);
   const isSkillRequest = isSkillApproval(pending);
@@ -413,7 +414,7 @@ export function PendingApprovalActions({
     dispatch({
       type: "decideRequest",
       threadId: pending.threadId ?? threadId,
-      requestId: pending.requestId,
+      requestId: pending.message.card?.approvalOrigin?.requestId ?? pending.requestId,
       behavior,
       message: behavior === "deny" ? "Denied by the user." : undefined,
       reviewedSha256: behavior === "allow" ? reviewedSha256 : undefined,
@@ -524,7 +525,7 @@ export function PendingApprovalActions({
       candidate={candidate}
       bot={bot}
       threadId={pending.threadId ?? threadId}
-      requestId={pending.requestId}
+      requestId={pending.message.card?.approvalOrigin?.requestId ?? pending.requestId}
       className={secondary}
       onSaved={() => decide("allow")}
     />
@@ -535,7 +536,7 @@ export function PendingApprovalActions({
   ) : null;
   // 2026-10-21 (parité R10, ligne 80): a screen action on the person's own
   // computer whose app the server read says which app, and what Always
-  // allow then covers ("Katarina peut voir Safari, y cliquer et y saisir du
+  // allow then covers ("Osprey peut voir Safari, y cliquer et y saisir du
   // texte sur cet ordinateur").
   const computerApp = ownerRule?.tool === "computer_app" && typeof ownerRule.scope?.app === "string" ? ownerRule.scope.app : null;
   const appLine = computerApp ? (
@@ -766,7 +767,7 @@ export function PendingApprovalBox({
           ? {
               count: readOnly.length,
               onAllow: () => {
-                for (const each of readOnly) dispatch({ type: "decideRequest", threadId: each.threadId ?? threadId, requestId: each.requestId, behavior: "allow" });
+                for (const each of readOnly) dispatch({ type: "decideRequest", threadId: each.threadId ?? threadId, requestId: each.message.card?.approvalOrigin?.requestId ?? each.requestId, behavior: "allow" });
               },
             }
           : undefined}

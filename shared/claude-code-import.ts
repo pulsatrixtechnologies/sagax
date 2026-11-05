@@ -5,7 +5,7 @@
 // that looks like a secret (claudeCodeSecretPath: those are listed by name
 // under Left out and never opened), and hands their text here. The result is
 // an ordinary openmaus.package v2, so the same import rules hold as for any
-// file (server/package-import.ts): every bot is new, skills land switched
+// file (server/packages/package-import.ts): every bot is new, skills land switched
 // off, nothing is scheduled, connections are slots whose values the person
 // fills in, and no key, token or sign-in comes over.
 //

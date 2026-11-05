@@ -2,8 +2,8 @@
  * AppSidebar (menu button, scrim, Sidebar) beside the real ChatView, laid out
  * like App.tsx's shell row, on a synthetic store. Below 640px a drawer, 640
  * to 768px the automatic icons rail, above the person's own density.
- * Captured by scripts/capture-sidebar-rail.mjs. Every name is synthetic.
- * ?skin=<id>&lang=en|fr&density=comfortable|compact|icons&drawer=1 */
+ * Captured by scripts/capture/sidebar-rail.mjs. Every name is synthetic.
+ * ?skin=<id>&lang=en|fr&density=comfortable|compact|icons&drawer=1&limit=1|credits */
 import { StrictMode, useCallback, useMemo, useReducer, useState } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -34,6 +34,13 @@ const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.href);
   if (url.pathname === "/api/config") return reply({ profile: { name: "Alex Gagnon" } });
+  // ?limit=1|credits: the bot's engine at its limit (or out of credit), the
+  // composer locked (the maintainer, 2026-11-04, src/lib/send-state.ts engine_limit)
+  if (url.pathname.endsWith("/send-state") && params.get("limit")) {
+    const credits = params.get("limit") === "credits";
+    return reply({ block: { reason: "engine_limit", name: "Claude", message: "Claude limit reached.", action: { kind: "switch_engine" },
+      limit: credits ? { cause: "credits" } : { cause: "usage_limit", resetsAt: Date.now() + 95 * 60_000 } } });
+  }
   if (url.pathname.startsWith("/api/")) return reply({});
   return realFetch(input, init);
 };

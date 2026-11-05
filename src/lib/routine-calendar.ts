@@ -201,6 +201,47 @@ export function scheduleAt(schedule: RoutineSchedule, occurrenceAt: number, next
   };
 }
 
+/** A cron's runs of one local day, by expression, zone and day; null for a
+ * dense day (two runs within one calendar slot), which the caller walks
+ * itself. `next` is the first run on a later day, so an empty day can jump
+ * ahead. Bounded: cleared past CRON_DAY_CACHE_LIMIT days. */
+const CRON_DAY_CACHE_LIMIT = 20_000;
+const cronDayCache = new Map<string, { runs: number[]; next: number | null } | null>();
+export function cronDayRuns(
+  schedule: { expression: string; timeZone?: string },
+  day: number,
+  preview: () => (after: number, count: number) => number[],
+): { runs: number[]; next: number | null } | null {
+  const key = `${schedule.timeZone ?? ""}|${schedule.expression}|${day}`;
+  const held = cronDayCache.get(key);
+  if (held !== undefined) return held;
+  const end = addDays(day, 1);
+  const nextRuns = preview();
+  const runs: number[] = [];
+  let next: number | null = null;
+  let result: { runs: number[]; next: number | null } | null = null;
+  // Small batches, doubled: croner computes every run it is asked for.
+  let batch = 4;
+  let cursor = day - 1;
+  let previous = -Infinity;
+  outer: while (true) {
+    const upcoming = nextRuns(cursor, batch);
+    for (const at of upcoming) {
+      if (at >= end) { next = at; break outer; }
+      if (at - previous <= DENSE_CRON_GAP_MS) { result = null; next = -1; break outer; }
+      previous = at;
+      runs.push(at);
+    }
+    if (upcoming.length < batch) break;
+    cursor = upcoming[upcoming.length - 1]!;
+    batch = Math.min(CRON_BATCH, batch * 2);
+  }
+  if (next !== -1) result = { runs, next };
+  if (cronDayCache.size >= CRON_DAY_CACHE_LIMIT) cronDayCache.clear();
+  cronDayCache.set(key, result);
+  return result;
+}
+
 export function projectedRoutineItems(
   routines: Routine[],
   runs: RoutineRun[],
@@ -237,7 +278,9 @@ export function projectedRoutineItems(
   const receiptMinutes = new Map<string, number[]>();
   for (const run of runs) {
     const key = `${run.routineId}:${Math.floor(run.scheduledFor / 60_000)}`;
-    receiptMinutes.set(key, [...(receiptMinutes.get(key) ?? []), run.scheduledFor]);
+    const bucket = receiptMinutes.get(key);
+    if (bucket) bucket.push(run.scheduledFor);
+    else receiptMinutes.set(key, [run.scheduledFor]);
   }
   const hasReceipt = (routineId: string, at: number) => {
     const minute = Math.floor(at / 60_000);
@@ -255,19 +298,41 @@ export function projectedRoutineItems(
       // React are not asked for every minute (#1677). Sparser crons still
       // emit every occurrence (hourly stays 24/day).
       if (routine.nextRunAt == null) continue;
-      const nextRuns = createCronRunPreview(routine.schedule);
+      const schedule = routine.schedule;
+      let nextRuns: ((after: number, count: number) => number[]) | null = null;
+      const preview = () => (nextRuns ??= createCronRunPreview(schedule));
       for (let day = startOfDay(Math.max(from, routine.nextRunAt)); day < to; day = addDays(day, 1)) {
-        let after = Math.max(day, from, routine.createdAt, routine.nextRunAt) - 1;
-        const probe = nextRuns(after, 2);
+        const lower = Math.max(day, from, routine.createdAt, routine.nextRunAt);
+        // The day's runs come from the cache (croner costs about 0.1 ms a
+        // run, and a week of business-hour crons is hundreds of them,
+        // 2026-11-02); a dense day is walked as before.
+        const cached = cronDayRuns(schedule, day, preview);
+        if (cached) {
+          if (cached.runs.length === 0) {
+            // Jump over empty days for sparse monthly/yearly schedules.
+            if (cached.next == null || cached.next >= to) break;
+            day = addDays(startOfDay(cached.next), -1);
+            continue;
+          }
+          const end = Math.min(to, addDays(day, 1));
+          for (const at of cached.runs) {
+            if (at < lower || at >= end) continue;
+            if (!hasReceipt(routine.id, at)) items.push({
+              id: `next-${routine.id}-${at}`, at, durationMinutes: ROUTINE_MARKER_MINUTES, routine, run: null,
+            });
+          }
+          continue;
+        }
+        let after = lower - 1;
+        const probe = preview()(after, 2);
         if (!probe.length || probe[0]! >= to) break;
-        // Jump over empty days for sparse monthly/yearly schedules.
         day = startOfDay(probe[0]!);
         after = Math.max(day, from, routine.createdAt, routine.nextRunAt) - 1;
         const end = Math.min(to, addDays(day, 1));
         const dense = probe.length >= 2 && probe[1]! - probe[0]! <= DENSE_CRON_GAP_MS;
         if (dense) {
           while (after < end) {
-            const upcoming = nextRuns(after, 1);
+            const upcoming = preview()(after, 1);
             if (!upcoming.length || upcoming[0]! >= end) break;
             const at = upcoming[0]!;
             if (!hasReceipt(routine.id, at)) items.push({
@@ -278,8 +343,9 @@ export function projectedRoutineItems(
           continue;
         }
         let lastSlot = -1;
+        let batch = 16;
         while (after < end) {
-          const upcoming = nextRuns(after, CRON_BATCH);
+          const upcoming = preview()(after, batch);
           for (const at of upcoming) {
             if (at >= end) break;
             const slot = Math.floor(at / (CALENDAR_SLOT_MINUTES * 60_000));
@@ -289,8 +355,9 @@ export function projectedRoutineItems(
               id: `next-${routine.id}-${at}`, at, durationMinutes: ROUTINE_MARKER_MINUTES, routine, run: null,
             });
           }
-          if (upcoming.length < CRON_BATCH) break;
+          if (upcoming.length < batch || (upcoming.at(-1) ?? end) >= end) break;
           after = upcoming[upcoming.length - 1]!;
+          batch = Math.min(CRON_BATCH, batch * 2);
         }
       }
       continue;
@@ -382,7 +449,9 @@ export function groupCalendarSlots<T extends CalendarCollisionItem>(
   const slots = new Map<number, T[]>();
   for (const item of [...items].sort((a, b) => a.at - b.at || a.id.localeCompare(b.id))) {
     const key = Math.floor(item.at / SLOT_GROUP_MS);
-    slots.set(key, [...(slots.get(key) ?? []), item]);
+    const slot = slots.get(key);
+    if (slot) slot.push(item);
+    else slots.set(key, [item]);
   }
   const shown: T[] = [];
   const overflow: Array<{ id: string; at: number; items: T[] }> = [];

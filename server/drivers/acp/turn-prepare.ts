@@ -2,11 +2,11 @@
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { DATA_DIR } from "../../config.ts";
-import { applyStoredEngineEnv } from "../../engine-api-keys.ts";
+import { applyStoredEngineEnv } from "../../engines/engine-api-keys.ts";
 import { applyEngineCommandVariables } from "../../vault/credential-command-env.ts";
 import { newId } from "../../contracts.ts";
 import type { SendTurnInput } from "../../contracts.ts";
-import { cachePrimePrompt } from "../../voice-first-sentence.ts";
+import { cachePrimePrompt } from "../../voice/voice-first-sentence.ts";
 import { supportsApprovalMode } from "../../../shared/approval-mode.ts";
 import { narrowsNativeTools, parseToolScope } from "../../../shared/tool-scope.ts";
 import { TURN_TOKEN_ENV, warmCommsEnv } from "../spawn-contract.ts";
@@ -19,6 +19,8 @@ import { skipSubscriptionAuthForLocalInject } from "./helpers.ts";
 import { newTurnLatency } from "./turn-latency.ts";
 import type { AcpSession } from "./types.ts";
 import type { SendTurnDeps } from "./turn-deps.ts";
+import { MiB, warmResourcePerson, warmResourceTokenThread, warmResources } from "../../resources/warm-resources.ts";
+import { killCliTree } from "../../procs.ts";
 
 export type PrepareEarly = { kind: "early"; result: { turnId: string; reused?: boolean } };
 export type PrepareReady = { kind: "ready" } & Record<
@@ -137,7 +139,7 @@ export async function prepareAcpTurn(deps: SendTurnDeps, turn: SendTurnInput): P
       ? turn.integrations.agents : undefined;
     const withAgentsEnv = (agentsEnv: Record<string, string>): SendTurnInput =>
       ({ ...turn, integrations: { ...turn.integrations, agents: { ...callAgents!, env: agentsEnv } } });
-    const callAgentsEnv = callAgents ? warmCommsEnv(threadId, turn.botId, callAgents.env) : undefined;
+    const callAgentsEnv = callAgents ? warmCommsEnv(warmResourceTokenThread(turn), turn.botId, callAgents.env) : undefined;
     // Rebound once, before the prompt, when a fallbackModel support swaps
     // a model this session does not offer for one it does.
     let cliTurn =
@@ -217,6 +219,7 @@ export async function prepareAcpTurn(deps: SendTurnDeps, turn: SendTurnInput): P
     // turn gets the same process whatever the mode: an approval change
     // is one RPC, not a cold start.
     const contractKey = JSON.stringify([
+      warmResourcePerson(turn), turn.botId ?? null,
       launch.command, launch.args ?? [], spawnArgs, cwd,
       support.sessionScopedApproval ? null : turnConfig.fullAuto === true, envFingerprint,
       support.spawnFingerprint?.(spawnEnv, turnConfig) ?? null,
@@ -237,6 +240,15 @@ export async function prepareAcpTurn(deps: SendTurnDeps, turn: SendTurnInput): P
     const launchSession = () => {
       const opened = openSession(threadId, launch, [...(launch.args ?? []), ...spawnArgs], launchEnv, cwd, contractKey);
       opened.launchModel = launchModel;
+      opened.budget = warmResources.register({
+        person: warmResourcePerson(turn), kind: "acp", bytes: 256 * MiB,
+        pids: () => opened.child.pid ? [opened.child.pid] : [],
+        protected: () => Boolean(opened.current) || active.has(threadId) || warming.has(threadId),
+        evict: () => {
+          if (sessions.get(threadId) === opened) closeSession(threadId, "warm budget");
+          return killCliTree(opened.child);
+        },
+      });
       launchedThisTurn = true;
       return opened;
     };
@@ -248,7 +260,30 @@ export async function prepareAcpTurn(deps: SendTurnDeps, turn: SendTurnInput): P
     }
     const pooled = sessions.get(threadId);
     let session: AcpSession;
+    if (process.env.SAGAX_ACP_REUSE_DIAG === "1") {
+      if (!pooled) console.error(`[acp-reuse-diag] thread=${threadId.slice(0, 8)} why=none`);
+      else {
+        const contractMismatch = pooled.contractKey !== contractKey;
+        const sessionMismatch = Boolean(support.restartOnMcpChange) && pooled.sessionKey !== sessionKey;
+        const why = pooled.dead ? "dead" : pooled.closing ? "closing" : contractMismatch ? "contract" : sessionMismatch ? "sessionKey" : "reuse";
+        let diffHint = "";
+        if (contractMismatch) {
+          try {
+            const before = JSON.parse(pooled.contractKey) as unknown[];
+            const after = JSON.parse(contractKey) as unknown[];
+            const labels = ["command", "args", "spawnArgs", "cwd", "fullAuto", "envFingerprint", "spawnFingerprint", "toolScope", "inheritedScope"];
+            const parts: string[] = [];
+            for (let i = 0; i < Math.max(before.length, after.length); i++) {
+              if (JSON.stringify(before[i]) !== JSON.stringify(after[i])) parts.push(`${labels[i] ?? i}`);
+            }
+            diffHint = ` fields=${parts.join(",")}`;
+          } catch { /* ignore */ }
+        }
+        console.error(`[acp-reuse-diag] thread=${threadId.slice(0, 8)} why=${why}${diffHint} sessionKeyChanged=${pooled.sessionKey !== sessionKey} exit=${pooled.child.exitCode} dead=${pooled.dead} closing=${pooled.closing} sid=${pooled.sessionId}`);
+      }
+    }
     if (pooled && !pooled.dead && !pooled.closing && pooled.contractKey === contractKey
+        && (pooled.budget?.active() ?? true)
         && (!support.restartOnMcpChange || pooled.sessionKey === sessionKey)) {
       // adoption cancels the idle countdown — a running turn is not quiet
       if (pooled.idleTimer) clearTimeout(pooled.idleTimer);
@@ -267,7 +302,7 @@ export async function prepareAcpTurn(deps: SendTurnDeps, turn: SendTurnInput): P
     const cursor = !turn.sessionReset && typeof turn.resumeCursor === "string" ? turn.resumeCursor : null;
     // The turn reaches a live process whose native session it can
     // prompt as is: no handshake, no session/load (the voice latency log
-    // reads this, server/voice-latency.ts).
+    // reads this, server/voice/voice-latency.ts).
     const reused = session === pooled && session.sessionId !== null && session.sessionKey === sessionKey
       && (cursor === null || cursor === session.sessionId);
     // `session` rebinds mid-turn: when the establishment retry below

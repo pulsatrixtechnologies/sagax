@@ -1,3 +1,6 @@
+import { RoutineReadinessList, routineReadinessLine } from "./RoutineReadiness";
+import { RunActivityState } from "./RunActivityState";
+export { useRunActivity } from "./RunActivityState";
 // One routine run, the way a person reads it (2026-10-29): a state header
 // (running, completed, failed, waiting for them), how long it took and what
 // it cost; what waits on them first, answerable in place; then the result
@@ -12,28 +15,28 @@
 // Narrow: one column, Steps and Configuration folded under the result.
 // The steps and the conversation come from the run's activity entry
 // (GET /api/bots/:id/activity/item?runId=, the same one History shows).
-import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useState, type ReactNode } from "react";
 import { CalendarClock, ChevronDown, ChevronRight, CircleAlert, CirclePlay, FileText, History, Loader2, MessageSquareText, RotateCcw, Square } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { api, type Bot, type Group } from "@/state/store";
+import { type Bot, type Group } from "@/state/store";
 import type { Routine, RoutineRun } from "@/lib/routines";
-import { loadBotActivityDetail, type BotActivityDetail, type BotActivityStatus } from "@/lib/bot-activity";
-import { routineAutoPausedText, routineDateTime, routineQueuePosition, routineRunError, routineRunLabel, routineRunTone } from "@/lib/routine-display";
+import { type BotActivityDetail, type BotActivityStatus } from "@/lib/bot-activity";
+import { routineAutoPausedText, routineDateTime, routineQueuePosition, routineResultText, routineRunBlockedLine, routineRunError, routineRunLabel, routineRunProblems, routineRunTone } from "@/lib/routine-display";
+import { RunResultDetails, TeammateThreadLinks } from "../RoutineRunCard";
 import { formatUsd } from "@/lib/usage";
 import { ChatMarkdown } from "../ChatMarkdown";
-import { waitingSources } from "../bot-settings/ActivityDetailModal";
+import { StepBoundary, stepFallbackText } from "../MessageBoundary";
 import { ActivityStepGroups } from "../task/ActivityStepGroups";
 import { TaskComposer } from "../task/TaskComposer";
 import { activityJobStage, TaskStatusHeader } from "../task/TaskStatusHeader";
 import { WaitingOnYou, waitingKind, type WaitingNote } from "../task/WaitingOnYou";
-import { useWaitingCards, type WaitingItem } from "@/lib/use-waiting-cards";
+import { type WaitingItem } from "@/lib/use-waiting-cards";
 import { activityChip } from "../bot-settings/ActivityWindow";
 import { PILL, PRIMARY_PILL } from "../SettingsPrimitives";
 import { RoutineConfiguration } from "./RoutineConfiguration";
 
 const ActivityConversation = lazy(() => import("../bot-settings/ActivityConversation"));
-const POLL_MS = 3_000;
 /** From this width the run shows its result and its steps side by side. */
 export const RUN_WIDE_PX = 720;
 
@@ -45,32 +48,13 @@ export function runActivityStatus(run: Pick<RoutineRun, "status">): BotActivityS
     case "waiting": return "waiting";
     case "failed": case "missed": return "failed";
     case "cancelled": return "stopped";
+    // 2026-11-03 (owner report: "Blocked" beside a green check).
+    case "blocked": return "blocked";
     default: return "finished";
   }
 }
 
 export type RunView = "result" | "steps" | "conversation" | "configuration";
-
-/** The activity entry of a run (its steps, files, thread), followed while
- * it goes. `load` is the fetch; tests pass their own. */
-const loadLive = (botId: string, itemId: string): Promise<BotActivityDetail> => loadBotActivityDetail(api, botId, itemId);
-
-export function useRunActivity(run: Pick<RoutineRun, "id" | "botId" | "status" | "redacted">, load: (botId: string, itemId: string) => Promise<BotActivityDetail> = loadLive) {
-  const [detail, setDetail] = useState<BotActivityDetail | null>(null);
-  const [error, setError] = useState(false);
-  const live = ["queued", "running", "waiting"].includes(run.status);
-  const fetchDetail = useCallback(() => {
-    if (run.redacted) return Promise.resolve();
-    return load(run.botId, `run:${run.id}`).then((next) => { setDetail(next); setError(false); }).catch(() => setError(true));
-  }, [load, run.botId, run.id, run.redacted]);
-  useEffect(() => { setDetail(null); void fetchDetail(); }, [fetchDetail]);
-  useEffect(() => {
-    if (!live) return;
-    const timer = window.setInterval(() => void fetchDetail(), POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [live, fetchDetail]);
-  return { detail, error, reload: fetchDetail };
-}
 
 function Fold({ id, label, count, defaultOpen = false, children }: { id: string; label: string; count?: number; defaultOpen?: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -126,7 +110,7 @@ export function RoutineRunDetail({ run, runs, routine, bots, groups = [], viewer
 }) {
   const status = runActivityStatus(run);
   // 2026-11-01: completed, but not all of it went right.
-  const problems = run.status === "completed" && run.problems?.trim() ? run.problems.trim() : "";
+  const problems = routineRunProblems(run);
   const queue = runs ? routineQueuePosition(run, runs) : null;
   const queuePlace = queue && queue.count > 1 ? t("routineRun.queuePosition", { position: queue.position, count: queue.count }) : "";
   const live = ["queued", "running", "waiting"].includes(run.status);
@@ -144,7 +128,12 @@ export function RoutineRunDetail({ run, runs, routine, bots, groups = [], viewer
   const view = views.includes(chosen) ? chosen : views[0];
   const quiet = run.status === "completed" && run.quiet;
   const reported = Boolean(run.output?.trim()) && !run.redacted;
-  const errorText = routineRunError(run.error);
+  // 2026-11-03: a blocked run says why in one plain line (its row's line);
+  // any other error in plain words, never a lone "{".
+  const blocked = run.status === "blocked";
+  const readinessBlocker = run.readiness?.find(check => !check.ok);
+  const errorText = blocked && readinessBlocker ? routineReadinessLine(readinessBlocker) : blocked ? routineRunBlockedLine(run) : run.error ? routineResultText(routineRunError(run.error)).text || routineRunError(run.error) : undefined;
+  const readable = reported ? routineResultText(run.output) : null;
   const canReply = Boolean(onReply && live && threadId && editable && !run.redacted);
 
   // What waits on the person: the thread's own cards when they could be
@@ -180,7 +169,7 @@ export function RoutineRunDetail({ run, runs, routine, bots, groups = [], viewer
         className="px-0 pb-0 pr-0 pt-0 [&_h2]:sr-only"
       />
       <div data-run-meta className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-ink-secondary">
-        {(run.quiet || run.goalStatus || run.retried || run.status === "missed" || problems) && <><span data-run-state-label className={cn("font-medium", routineRunTone(run))}>{routineRunLabel(run)}</span><span aria-hidden="true">·</span></>}
+        {(run.quiet || run.goalStatus || run.retried || run.status === "missed" || run.status === "blocked" || problems) && <><span data-run-state-label className={cn("font-medium", routineRunTone(run))}>{routineRunLabel(run)}</span><span aria-hidden="true">·</span></>}
         <time dateTime={new Date(run.scheduledFor).toISOString()}>{routineDateTime(run.scheduledFor)}</time>
         <span aria-hidden="true">·</span>
         <span>{t(`routines.trigger.${run.triggerSource ?? (run.manual ? "manual" : "schedule")}`)}</span>
@@ -196,7 +185,9 @@ export function RoutineRunDetail({ run, runs, routine, bots, groups = [], viewer
       {waitingItems.length > 0 && <div data-run-waiting><WaitingOnYou items={waitingItems} threadId={threadId ?? ""} botFor={(id) => bots.find((candidate) => candidate.id === id)} onCancel={() => onStop?.()} onOpenThread={onOpenThread} /></div>}
       {run.status === "queued" && (run.attention || queuePlace) && <div data-run-deferred className="rounded-xl border border-accent/30 bg-accent/10 px-3.5 py-2.5 text-[12.5px] text-accent-text"><span className="font-medium">{t("routineRun.deferred")}</span>{run.attention && <> · {run.attention}</>}{queuePlace && <> · <span data-run-queue-position>{queuePlace}</span></>}</div>}
       {problems && <div data-run-problems role="status" className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-warning"><CircleAlert size={15} className="mt-0.5 shrink-0" aria-hidden="true" /><span className="min-w-0 whitespace-pre-wrap"><span className="font-medium">{t("routines.status.completedWithProblems")}</span>{"\n"}{problems}</span></div>}
-      {run.status !== "waiting" && errorText && <div data-run-error role="alert" className="flex items-start gap-2 rounded-xl border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-danger"><CircleAlert size={15} className="mt-0.5 shrink-0" aria-hidden="true" /><span className="min-w-0 whitespace-pre-wrap">{errorText}</span></div>}
+      {run.status !== "waiting" && errorText && <div data-run-error={blocked ? "blocked" : "failed"} role="alert" className={cn("flex items-start gap-2 rounded-xl border px-3.5 py-2.5 text-[12.5px] leading-relaxed", blocked ? "border-warning/30 bg-warning/10 text-warning" : "border-danger/30 bg-danger/10 text-danger")}><CircleAlert size={15} className="mt-0.5 shrink-0" aria-hidden="true" /><span className="min-w-0 whitespace-pre-wrap">{errorText}</span></div>}
+      {run.readiness && !run.redacted && <Fold id="readiness" label={t("routineReadiness.action")}><RoutineReadinessList checks={run.readiness} /></Fold>}
+      {run.handedTo && run.handedTo.length > 0 && !run.redacted && <TeammateThreadLinks handedTo={run.handedTo} onOpenThread={onOpenThread} />}
       {run.autoPaused && <div data-run-auto-paused className="flex flex-wrap items-center gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3.5 py-2.5 text-[12.5px] text-warning"><span className="font-medium">{routineAutoPausedText(run.autoPaused.failures)}</span>{onResume && <button type="button" data-routine-resume onClick={onResume} disabled={working} className="inline-flex items-center gap-1 rounded-md bg-warning/15 px-2 py-0.5 font-medium hover:bg-warning/25 disabled:opacity-50"><CirclePlay size={11} aria-hidden="true" />{t("routines.autoPause.resume")}</button>}</div>}
       {detail?.note && run.status !== "waiting" && !errorText && <p className="rounded-lg bg-warning/10 px-3 py-2 text-[12.5px] text-ink">{detail.note}</p>}
       {error && <div role="alert" className="rounded-lg bg-danger/10 px-3 py-2 text-[11.5px] text-danger">{error}</div>}
@@ -209,7 +200,7 @@ export function RoutineRunDetail({ run, runs, routine, bots, groups = [], viewer
   const result = showResult && (
     <section data-run-result aria-label={t("routineRun.result")} className="rounded-xl border border-hairline/40 bg-card px-4 py-3">
       {run.redacted ? <p className="text-[12.5px] text-ink-secondary">{t("routines.scope.redacted")}</p>
-        : reported ? <div className="chat-markdown max-w-[72ch] text-[13.5px] leading-relaxed text-ink"><ChatMarkdown text={run.output!} inert /></div>
+        : reported ? <div className="chat-markdown max-w-[72ch] text-[13.5px] leading-relaxed text-ink"><ChatMarkdown text={readable?.structured ? readable.text : run.output!} inert />{readable?.details && <RunResultDetails details={readable.details} />}</div>
         : quiet ? <p className="text-[12.5px] text-ink-secondary">{t("routineRun.quiet")}</p>
         : run.status === "running" || run.status === "queued" ? <p className="flex items-center gap-2 text-[12.5px] text-ink-secondary"><Loader2 size={13} className="animate-spin text-accent motion-reduce:animate-none" aria-hidden="true" />{t(run.status === "running" ? "routineRun.resultPending" : "routineRun.resultQueued")}</p>
         : <p className="text-[12.5px] text-ink-secondary">{t("routines.noOutput")}</p>}
@@ -220,7 +211,9 @@ export function RoutineRunDetail({ run, runs, routine, bots, groups = [], viewer
     : detail === null ? (detailError ? <p className="text-[12.5px] text-ink-secondary">{t("routineRun.stepsUnavailable")}</p> : <p className="flex items-center gap-2 text-[12.5px] text-ink-secondary"><Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />{t("routineRun.stepsLoading")}</p>)
     : steps.length === 0 ? <p className="text-[12.5px] text-ink-secondary">{detail.threadId ? t("botPanel.activity.stepsEmpty") : t("routineRun.stepsUnavailable")}</p>
     : <>
-        <ActivityStepGroups steps={steps} truncated={detail.stepsTruncated} />
+        <StepBoundary stepId={run.id} fallbackText={stepFallbackText(steps[0])}>
+          <ActivityStepGroups steps={steps} truncated={detail.stepsTruncated} />
+        </StepBoundary>
         {detail.files.length > 0 && <ul className="mt-3 flex flex-col gap-1" aria-label={t("botPanel.activity.files")}>{detail.files.map((file) => <li key={file} className="flex min-w-0 items-center gap-2 text-[12px] text-ink"><FileText size={13} aria-hidden="true" className="shrink-0 text-ink-secondary" /><span className="min-w-0 truncate font-mono" title={file}>{file}</span></li>)}</ul>}
       </>;
 
@@ -292,14 +285,10 @@ export function RoutineRunDetail({ run, runs, routine, bots, groups = [], viewer
   );
 }
 
-/** Steps and conversation wired to the live server: the run detail as the
- * Automations page and the bot panel open it. */
+/** Steps and conversation wired to the live server. */
 export function ConnectedRunActivity({ run, children }: { run: RoutineRun; children: (activity: { detail: BotActivityDetail | null; error: boolean; reload: () => Promise<void>; waiting: WaitingItem[]; conversation: (target: { botId: string; threadId: string; title: string }, onOpenInMain: () => void) => ReactNode }) => ReactNode }) {
-  const activity = useRunActivity(run);
-  // Read the waiting thread's cards again on each poll of the activity.
-  const waiting = useWaitingCards(run.status === "waiting" ? waitingSources(activity.detail) : [], `${activity.detail?.updatedAt ?? ""}:${run.status}`);
   const conversation = (target: { botId: string; threadId: string; title: string }, onOpenInMain: () => void) => (
     <ActivityConversation key={target.threadId} {...target} onOpenInMain={onOpenInMain} />
   );
-  return <>{children({ ...activity, waiting, conversation })}</>;
+  return <RunActivityState run={run}>{(activity) => children({ ...activity, conversation })}</RunActivityState>;
 }

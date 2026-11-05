@@ -27,7 +27,10 @@ vi.mock("./DesktopCapabilities", async (importOriginal) => ({
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 
 const { initialState } = await import("@/state/store");
-const { RoutinesPage, RoutineEditor, EventDetails } = await import("./RoutineCalendarPage");
+const { RoutinesPage: MemoRoutinesPage, RoutineEditor, EventDetails } = await import("./RoutineCalendarPage");
+// The page is memoized (2026-11-02, calendar performance): these tests call
+// its function directly.
+const RoutinesPage = MemoRoutinesPage.type;
 const { PageMenuItem } = await import("./content-page");
 const SOURCE = readFileSync(join(process.cwd(), "src/components/RoutineCalendarPage.tsx"), "utf8");
 
@@ -134,7 +137,35 @@ describe("routine setup", () => {
   });
   it("offers the Boat runner only behind the experimental Boat flag", () => {
     fixture.state = { ...fixture.state!, config: { ...fixture.state!.config, features: { boatComputer: true }, box: { configured: false } } as unknown as AppState["config"] };
-    expect(editorMarkup()).toContain("Boat-hosted agent");
+    // 2026-11-03: a "Runs on" row with the app's pill menu (the choices open on click).
+    const html = editorMarkup();
+    expect(html).toContain("data-routine-run-on");
+    expect(html).toContain('aria-label="Runs on"');
+  });
+  it("offers routine Effort beside Model with the bot default", () => {
+    fixture.state = { ...fixture.state!, instances: [{ instanceId: "test", capabilities: { effortLevels: ["low", "high"] }, models: { default: "test", options: [{ id: "test", label: "Test" }] } }] as unknown as AppState["instances"] };
+    const html = editorMarkup();
+    expect(html).toContain("data-routine-effort");
+    expect(html).toContain('aria-label="Effort"');
+    expect(html).toContain("Bot&#x27;s effort");
+  });
+
+  it("offers the sub-agent Model only on a Claude engine (#2049)", () => {
+    const instance = (driverKind: string) => ({ instanceId: "test", driverKind, models: { default: "test", options: [{ id: "test", label: "Test" }, { id: "fast", label: "Fast" }] } });
+    fixture.state = { ...fixture.state!, instances: [instance("claudeAgent")] as unknown as AppState["instances"] };
+    const claude = editorMarkup();
+    expect(claude).toContain("data-routine-subagent-model");
+    expect(claude).toContain('aria-label="Sub-agent model"');
+    fixture.state = { ...fixture.state!, instances: [instance("codex")] as unknown as AppState["instances"] };
+    expect(editorMarkup()).not.toContain("data-routine-subagent-model");
+  });
+
+  it("offers a Model choice that starts on the bot's model (2026-11-04)", () => {
+    fixture.state = { ...fixture.state!, instances: [{ instanceId: "test", models: { default: "test", options: [{ id: "test", label: "Test" }, { id: "fast", label: "Fast" }] } }] as unknown as AppState["instances"] };
+    const html = editorMarkup();
+    expect(html).toContain("data-routine-model");
+    expect(html).toContain('aria-label="Model"');
+    expect(html).toContain("Bot&#x27;s model");
   });
 });
 
@@ -146,13 +177,14 @@ describe("a routine's page (2026-10-29: its runs, then its Configuration, as clo
   } as unknown as import("@/lib/routines").Routine;
   function details() {
     const item = { kind: "routine" as const, id: "dispatch", at: Date.parse("2026-10-09T10:00:00Z"), durationMinutes: 30, routine, run: null };
-    return renderToStaticMarkup(createElement(EventDetails, { item, bots: [bot], onClose: vi.fn(), onEdit: vi.fn(), onDuplicate: vi.fn(), onCallChanged: vi.fn(), onOpenRoom: vi.fn() }));
+    return renderToStaticMarkup(createElement(EventDetails, { item, bots: [bot], onClose: vi.fn(), onEdit: vi.fn(), onCallChanged: vi.fn(), onOpenRoom: vi.fn() }));
   }
 
   it("opens on the run history in the right detail panel (no modal, no scrim), its summary opening the configuration", () => {
     const html = details();
     expect(html).toContain("data-routine-detail");
     expect(html).toContain("data-routine-summary");
+    expect(html).toContain("data-routine-trigger-row");
     expect(html).not.toContain('data-routine-view="configuration"');
     expect(html).toContain('data-event-details="routine"');
     // 2026-11-01: the shared DetailPanel, beside the calendar, not over it
@@ -165,9 +197,10 @@ describe("a routine's page (2026-10-29: its runs, then its Configuration, as clo
     expect(html).not.toContain("Read the board.");
   });
 
-  it("keeps every action of a routine within reach: Pause, Edit, Duplicate, Delete, Logs", () => {
+  it("a routine's bar is exactly Run now, Edit, Disable or Enable, Delete (2026-11-03); Duplicate is in Edit > Advanced", () => {
     const html = details();
-    for (const marker of ["data-routine-toggle", "data-routine-edit", "data-routine-duplicate", "data-routine-delete", "data-routine-logs"]) expect(html).toContain(marker);
+    for (const marker of ["data-routine-toggle", "data-routine-edit", "data-routine-delete"]) expect(html).toContain(marker);
+    for (const marker of ["data-routine-duplicate", "data-routine-logs"]) expect(html).not.toContain(marker);
   });
 });
 

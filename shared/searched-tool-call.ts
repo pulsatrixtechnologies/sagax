@@ -5,6 +5,7 @@
 // tool's widget, which tools a bot uses) reads the tool that call runs, as if
 // the model had called it by its own name.
 
+import { ARTIFACT_READ_ACTIONS, isArtifactFamilyTool } from "./claude-chat-blocks.ts";
 import { isMergedAgentTool, readMergedCall } from "./merged-agent-tools.ts";
 
 export const SEARCH_CALL_TOOL = "call_tool";
@@ -27,7 +28,7 @@ export const BRIDGE_FIND_TOOL = "find_tool";
 export const BRIDGE_USE_TOOL = "use_tool";
 /** Tools that only reach another tool: never the target of a call. */
 const META_TOOLS: ReadonlySet<string> = new Set([BRIDGE_FIND_TOOL, BRIDGE_USE_TOOL, "search_tools", "describe_tool", SEARCH_CALL_TOOL]);
-/** An agents tool name, as server/member-tool-scope.ts reads one. */
+/** An agents tool name, as server/people/member-tool-scope.ts reads one. */
 const AGENT_TOOL = /^[a-z][a-z0-9_]{0,63}$/;
 /** `mcp__agents__x` (Claude), `agents__x` (ACP, Codex), `agents.x`, `agents:x`, `agents/x`. */
 const AGENTS_SPELLING = /^((?:mcp(?:__|[.:]))?agents(?:__|[.:/]))([a-z][a-z0-9_]{0,63})$/;
@@ -128,12 +129,21 @@ export function preallowedCovers(entries: readonly string[], name: string): bool
  * (server/permission-proxy.ts): refuse a wrapper that runs nothing, let a
  * wrapped call through unasked when its target is pre-allowed by name, or
  * ask about the tool that really runs, with its own arguments. */
-export function permissionRoute(toolName: string, input: unknown, searched: ReadonlySet<string>, preallowed: readonly string[]):
+export function permissionRoute(toolName: string, input: unknown, searched: ReadonlySet<string>, preallowed: readonly string[], artifactReads = false):
   | { kind: "deny"; message: string }
   | { kind: "allow" }
   | { kind: "ask"; tool: string; input: unknown; searched: boolean } {
+  // #2018 Auto: an Artifact-family read runs on the person's own account.
+  if (artifactReads && isArtifactRead(toolName, input)) return { kind: "allow" };
   const runs = searchedToolCall(toolName, input, searched);
   if (runs.refused) return { kind: "deny", message: `Sagax: ${runs.refused}` };
   if (runs.searched && preallowedCovers(preallowed, runs.name)) return { kind: "allow" };
   return { kind: "ask", tool: runs.name, input: runs.input, searched: runs.searched };
+}
+
+/** #2018: an Artifact, ArtifactData or ArtifactComments call that only reads. */
+export function isArtifactRead(toolName: string, input: unknown): boolean {
+  if (!isArtifactFamilyTool(toolName)) return false;
+  const action = input && typeof input === "object" ? (input as { action?: unknown }).action : undefined;
+  return typeof action === "string" && ARTIFACT_READ_ACTIONS.has(action.trim());
 }

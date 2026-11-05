@@ -151,7 +151,7 @@ describe("markdown fields", () => {
 
   it("group instructions: mounts with the bulletin and saves it on blur", async () => {
     const group = { id: "room", name: "Ops", bulletin: "Be brief.", memberIds: [], messages: [], defaultResponder: { kind: "auto" } } as unknown as Group;
-    render(createElement(GroupPanel, { group, members: [], details: null, advanced: null, canEdit: true }));
+    render(createElement(GroupPanel, { group, members: [], roster: null, advanced: null, canEdit: true }));
     flushSync(() => button(document.body, t("groupPanel.tab.instructions"))!.click());
     const editor = await markdownEditorIn(document.body, "group-instructions");
     expect(markdownText(editor)).toBe("Be brief.");
@@ -176,16 +176,25 @@ describe("markdown fields", () => {
     expect(fixture.api).toHaveBeenCalledWith("/api/section-context?section=ops", { method: "PUT", body: JSON.stringify({ text: "## Goals\n\n- Ship\n- Test" }) });
   });
 
-  it("routine instructions: mounts with the prompt and saves it as the routine prompt", async () => {
+  it("routine instructions: enters Edit with the prompt and saves it as the routine prompt", async () => {
     const routine: Routine = {
       id: "weekly", name: "Weekly digest", prompt: "Summarise the **week**", target: "bot", botId: bot.id,
       runOn: "maus", enabled: true, schedule: { type: "daily", time: "09:00", weekdays: [1, 2, 3, 4, 5] }, durationMinutes: 30,
       nextRunAt: null, createdAt: 1, updatedAt: 1,
     };
-    const request = vi.fn().mockResolvedValue({ routine });
+    const request = vi.fn().mockImplementation(async (_path: string, init?: { body?: string }) => ({
+      routine: { ...routine, ...JSON.parse(init?.body ?? "{}") },
+    }));
     fixture.api.mockResolvedValue({});
     render(createElement(ConfirmProvider, null, createElement(BotEditorContext.Provider, { value: { request } }, createElement(RoutineEditor, { routine, bots: [bot], lockedBotId: bot.id, onClose: vi.fn() }))));
     await settle();
+    // 83dd3cc52: an existing routine opens in view mode, then Edit mounts
+    // the markdown field in place. Keep the saved prompt through both modes.
+    expect(document.body.querySelector("[data-routine-editor-actions=view]")).not.toBeNull();
+    expect(document.body.querySelector("[data-routine-instruction-text] strong")?.textContent).toBe("week");
+    const edit = document.body.querySelector<HTMLButtonElement>("[data-routine-edit-mode]");
+    expect(edit).not.toBeNull();
+    flushSync(() => edit!.click());
     const editor = await markdownEditorIn(document.body, "routine-instructions");
     expect(markdownText(editor)).toBe("Summarise the **week**");
     typeMarkdown(editor, "Summarise the **week**\n\n- wins\n- risks");
@@ -194,7 +203,10 @@ describe("markdown fields", () => {
     await settle();
     const call = request.mock.calls.find(([path]) => path === "/api/routines/weekly");
     expect(call).toBeDefined();
+    expect(call![1].method).toBe("PATCH");
     expect(JSON.parse(call![1].body).prompt).toBe("Summarise the **week**\n\n- wins\n- risks");
+    expect(document.body.querySelector("[data-routine-editor-actions=view]")).not.toBeNull();
+    expect([...document.body.querySelectorAll("[data-routine-instruction-text] li")].map((item) => item.textContent)).toEqual(["wins", "risks"]);
   });
 
   it("quick routine: mounts empty and posts the instructions as the prompt", async () => {

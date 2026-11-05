@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CALL_MARK, ENDED_MARK, INTERRUPTED_MARK, voiceCallTurn } from "../testing/voice-call-turns.ts";
 import { recordEvents } from "../testing/events.ts";
-import { buildTurnContext, replaysNatively } from "../turn-context.ts";
+import { buildTurnContext, replaysNatively } from "../turns/turn-context.ts";
 import { instanceConfigs } from "../config.ts";
 import { OpenAICompatDriver } from "./openai-compat.ts";
 
@@ -29,6 +29,18 @@ describe("OpenAICompatDriver", () => {
     expect(OpenAICompatDriver.metadata.access).toBe("api");
   });
 
+  it("advertises warmSession so POST /warm prewarms MCP mounts (#1975)", async () => {
+    const inst = await OpenAICompatDriver.create({
+      instanceId: "openaiCompat",
+      displayName: "Other",
+      enabled: true,
+      config: OpenAICompatDriver.decodeConfig({ url: "https://api.example.test/v1", apiKeyEnv: "OPENAI_COMPAT_API_KEY", allowNoKey: true }),
+      environment: {},
+    });
+    expect(inst.adapter.capabilities.warmSession).toBe(true);
+    await inst.dispose();
+  });
+
   it("falls back to the OpenRouter endpoint by default", () => {
     const cfg = OpenAICompatDriver.defaultConfig();
     expect(cfg.url).toBe("https://openrouter.ai/api/v1");
@@ -42,6 +54,17 @@ describe("OpenAICompatDriver", () => {
     });
     expect(cfg.url).toBe("https://api.groq.com/openai/v1");
     expect(cfg.apiKeyEnv).toBe("GROQ_KEY");
+  });
+
+  it("strips a pasted /chat/completions (or /models) path at call time (#2022)", () => {
+    expect(OpenAICompatDriver.decodeConfig({ url: "https://provider.example/v1/chat/completions" }).url)
+      .toBe("https://provider.example/v1");
+    expect(OpenAICompatDriver.decodeConfig({ url: "https://provider.example/v1/chat/completions/" }).url)
+      .toBe("https://provider.example/v1");
+    expect(OpenAICompatDriver.decodeConfig({ url: "https://provider.example/compatibility/v1/models/" }).url)
+      .toBe("https://provider.example/compatibility/v1");
+    expect(OpenAICompatDriver.decodeConfig({ url: "https://provider.example/compatibility/v1" }).url)
+      .toBe("https://provider.example/compatibility/v1");
   });
 
   it("allows an isolated connection to disable an inherited OpenRouter provider pin", () => {

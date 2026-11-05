@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { personLabel, resetPersonLabelsForTests } from "@/lib/person-labels";
+import { storedPersonLabel, resetPersonLabelsForTests } from "@/lib/person-labels";
 
 // The edit flows: the inline field's save goes to PUT /api/people/<id>/label
 // and the answer shows at once. The field itself is captured (its own
@@ -60,7 +60,7 @@ describe("editing a person's label", () => {
     const field = labelField();
     expect(field).toMatchObject({ placeholder: "Add a label", maxLength: 40 });
     field!.onSave!("Dispatch");
-    await vi.waitFor(() => expect(personLabel("pr_ada")).toBe("Dispatch"));
+    await vi.waitFor(() => expect(storedPersonLabel("pr_ada")).toBe("Dispatch"));
     expect(calls).toEqual([{ path: "/api/people/pr_ada/label", method: "PUT", body: { label: "Dispatch" } }]);
   });
 
@@ -75,12 +75,12 @@ describe("editing a person's label", () => {
     const field = labelField();
     expect(field).toMatchObject({ placeholder: "Add a label", maxLength: 40 });
     field!.onSave!("CTO");
-    await vi.waitFor(() => expect(personLabel("pr_me")).toBe("CTO"));
+    await vi.waitFor(() => expect(storedPersonLabel("pr_me")).toBe("CTO"));
     expect(calls[0]).toEqual({ path: "/api/people/pr_me/label", method: "PUT", body: { label: "CTO" } });
 
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "no" }), { status: 403 })));
     field!.onSave!("CFO");
     await vi.waitFor(() => expect(fixture.dispatch).toHaveBeenCalledWith({ type: "error", message: "The label could not be saved." }));
-    expect(personLabel("pr_me")).toBe("CTO");
+    expect(storedPersonLabel("pr_me")).toBe("CTO");
   });
 });

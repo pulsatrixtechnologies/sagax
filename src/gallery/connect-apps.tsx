@@ -10,8 +10,8 @@
  * Organization for that person. settings-subpage: a Settings sub-page in
  * the same window size, the navigation Connect apps' pages follow
  * (2026-10-28). The bot Rocket has its own plugins (For Rocket).
- * scripts/capture-connect-apps-manage.mjs clicks through the tabs. */
-import { StrictMode, useState } from "react";
+ * scripts/capture/connect-apps-manage.mjs clicks through the tabs. */
+import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { X } from "lucide-react";
 import { BotCatalogView } from "../components/bot-catalog/BotCatalogView";
@@ -22,8 +22,9 @@ import { SettingsSubPage } from "../components/SettingsSubPage";
 import type { PerspicaxOrg } from "../lib/perspicax-org";
 import { catalogCategories, catalogSections, catalogTemplates } from "../lib/bot-catalog";
 import { loadLocale, t } from "../lib/i18n";
+import { flowSupersededFixture, flowSupersededPluginsFixture } from "../lib/flow-superseded.fixture";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
-import { StoreProvider } from "../state/store";
+import { StoreProvider, useStore } from "../state/store";
 import "../styles.css";
 
 const params = new URLSearchParams(location.search);
@@ -182,6 +183,15 @@ const MANAGE_API: Record<string, unknown> = {
 
 // The same contract, with independent state for the person's Me scope.
 MANAGE_API["/api/me/plugins"] = { ...(MANAGE_API["/api/bots/bot-a/plugins"] as object) };
+
+// ?superseded=1: the real member panel, with an obsolete bot tenant copy.
+// All /api responses and the removal stay inside this gallery.
+const superseded = params.has("superseded");
+let flowInventory = flowSupersededFixture();
+if (superseded) {
+  MANAGE_API["/api/bots/bot-a/capabilities"] = flowInventory;
+  MANAGE_API["/api/bots/bot-a/plugins"] = flowSupersededPluginsFixture();
+}
 MANAGE_API["/api/me/skills-library"] = MANAGE_API["/api/skills-library"];
 
 // Connect apps > Tailscale (synthetic gallery). ?tailscale=disconnected|ready|waiting|connected
@@ -225,6 +235,12 @@ if (["manage", "org-settings", "settings-subpage"].includes(params.get("view") ?
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.href);
     if (!url.pathname.startsWith("/api/")) return realFetch(input, init);
     const method = (init?.method ?? "GET").toUpperCase();
+    if (superseded && url.pathname === "/api/bots/bot-a/plugins/pulsatrix-flow-osprey%40osprey" && method === "DELETE") {
+      flowInventory = { ...flowInventory, items: flowInventory.items.filter((item) => item.scope !== "bot") };
+      MANAGE_API["/api/bots/bot-a/capabilities"] = flowInventory;
+      MANAGE_API["/api/bots/bot-a/plugins"] = flowSupersededPluginsFixture(false);
+      return json(MANAGE_API["/api/bots/bot-a/plugins"]);
+    }
     if (url.pathname === "/api/me/tailscale" && method === "GET") return json(galleryTailscale);
     if (url.pathname === "/api/me/tailscale" && method === "DELETE") {
       galleryTailscale = {
@@ -292,6 +308,12 @@ if (["manage", "org-settings", "settings-subpage"].includes(params.get("view") ?
 }
 
 function Manage() {
+  const { state, dispatch } = useStore();
+  const ready = state.bots.some((bot) => bot.id === "bot-a");
+  useEffect(() => {
+    if (superseded && ready) dispatch({ type: "togglePlugins", open: true, surface: "mcp", botId: "bot-a" });
+  }, [ready, dispatch]);
+  if (superseded && (!ready || state.pluginsBotId !== "bot-a")) return <Frame>{null}</Frame>;
   return (
     <Frame>
       <PluginsPanel />

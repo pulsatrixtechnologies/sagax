@@ -1,8 +1,9 @@
 /** Shared types for Codex turn phase modules (issue #1383). */
-import type { ChildProcess } from "node:child_process";
-import type { SendTurnInput, StdioMcpSpec } from "../../contracts.ts";
-import type { RenewalStep } from "../../context-renewal.ts";
-import type { McpApprovalMode } from "./mcp-mount.ts";
+import type { SendTurnInput } from "../../contracts.ts";
+import type { RenewalStep } from "../../context/context-renewal.ts";
+
+/** PreparedCodexLaunch lives in session-types.ts with CodexSession (#1381). */
+export type { PreparedCodexLaunch } from "./session-types.ts";
 
 /** Mutable turn-level state owned by sendTurn / launchAttempt. */
 export type CodexTurnMutable = {
@@ -16,19 +17,4 @@ export type CodexTurnMutable = {
   renewalSteps: RenewalStep[];
   renewalLastText: string;
   inTurnRenewal: string | null;
-};
-
-export type PreparedCodexLaunch = {
-  env: Record<string, string | undefined>;
-  launchedLogin: string | null;
-  appServerArgs: string[];
-  privateEnv: string[];
-  provenPrivateEnv: boolean;
-  selectedMcp: Map<string, StdioMcpSpec>;
-  selectedApprovals: Map<string, McpApprovalMode>;
-  directoryMounts: Set<string>;
-  selectionConfig: { config?: Record<string, unknown> };
-  commandCwd: string;
-  releaseSlot: () => void;
-  child: ChildProcess;
 };

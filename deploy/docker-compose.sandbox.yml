@@ -10,7 +10,7 @@
 # internal network shared with the Sagax server alone, answers signed requests
 # only (a key it writes to the `sandboxd-key` volume, read-only for the
 # server), and can create nothing but the fixed, isolated sandbox spec of
-# server/user-sandbox-spec.ts, one per PERSON. The production deploy uses the same
+# server/sandbox/user-sandbox-spec.ts, one per PERSON. The production deploy uses the same
 # services under the Perspicax infra compose (service `pulsabot` there).
 services:
   omb:
@@ -62,7 +62,7 @@ services:
       SAGAX_SANDBOX_CPUS: ${SAGAX_SANDBOX_CPUS:-1}
       SAGAX_SANDBOX_PIDS: ${SAGAX_SANDBOX_PIDS:-512}
       SAGAX_SANDBOX_TMP_MB: ${SAGAX_SANDBOX_TMP_MB:-512}
-      SAGAX_SANDBOX_DISK_MB: ${SAGAX_SANDBOX_DISK_MB:-2048}
+      SAGAX_SANDBOX_DISK_MB: ${SAGAX_SANDBOX_DISK_MB:-32768}
       SAGAX_SANDBOX_MAX_FILE_MB: ${SAGAX_SANDBOX_MAX_FILE_MB:-512}
       SAGAX_SANDBOX_MAX_RUNNING: ${SAGAX_SANDBOX_MAX_RUNNING:-2}
       SAGAX_SANDBOX_IDLE_MINUTES: ${SAGAX_SANDBOX_IDLE_MINUTES:-10}

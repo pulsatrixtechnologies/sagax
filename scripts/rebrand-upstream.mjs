@@ -64,8 +64,8 @@ const SKIP_EXACT = new Set([
   // deployed paths (OMB_DATA_DIR=/data/.openmausbot, /etc/openmausbot, ...):
   // existing volumes and hosts keep them; rename with a migration of their own
   "Dockerfile",
-  "server/fleet.ts",
-  "server/fleet.test.ts",
+  "server/fleet/fleet.ts",
+  "server/fleet/fleet.test.ts",
   // the upstream block list and its checker name the old hosts on purpose
   "electron/upstream-hosts.mjs",
   "electron/upstream-hosts.d.mts",
@@ -75,13 +75,12 @@ const SKIP_EXACT = new Set([
   // compose .env names and the old hook switch, kept by hand
   "docs/verification/podman-self-hosting.md",
   "scripts/git-hooks/pre-push",
-  "server/fleet-cli.ts",
-  "server/fleet-cli.test.ts",
-  "server/fleet-cli-filesystem.test.ts",
-  "server/fleet-agent.test.ts",
+  "server/fleet/fleet-cli.ts",
+  "server/fleet/fleet-cli.test.ts",
+  "server/fleet/fleet-cli-filesystem.test.ts",
+  "server/fleet/fleet-agent.test.ts",
   // compose files read an operator's own .env (OMB_* interpolation)
   "compose.yaml",
-  "compose.mail-test.yaml",
   ".env.example",
   // generated from the docs and AGENTS.md: regenerate it (pnpm gen:self-knowledge)
   "server/self-knowledge/knowledge.generated.json",
@@ -130,8 +129,6 @@ const PROTECT = [
   re(`\\bapp\\b[^\\n]{0,8}"${OLD}"`),
   // an engine's own environment variable
   re(`HERMES_${OLD_SHORT.toUpperCase()}_[A-Z_]+`),
-  // read by deploy/fly/Caddyfile, which no bridge reaches
-  re(`OMB_CLOUD_PUBLIC_HOST`),
   // the data folder lease capability and the migration breadcrumb (legacy-names)
   re(`${OLD.toUpperCase()}_INTERNAL_DATA_DIR_LEASE`),
   re(`MOVED_FROM_${OLD.toUpperCase()}`),

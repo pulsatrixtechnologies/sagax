@@ -41,7 +41,7 @@ struct DesktopComposePicker: View {
     }
 
     private var rows: [DesktopComposeTo.Row] {
-        DesktopComposeTo.rows(mode: mode, bots: bots, canCreateBots: session.surfaceGate.allows(.createBot), people: people)
+        DesktopComposeTo.rows(mode: mode, bots: bots, canCreateBots: session.surfaceGate.allows(.createBot), people: people, query: query)
     }
 
     var body: some View {
@@ -72,6 +72,10 @@ struct DesktopComposePicker: View {
             // the desktop's autoFocus; the parity captures keep the
             // simulator's software keyboard away
             if !ParityMode.isActive { focused = true }
+            if model.composeGroupMode {
+                model.composeGroupMode = false
+                mode = .group
+            }
             #if DEBUG
             if let preset = model.parityComposePreset {
                 mode = preset.group ? .group : .browse
@@ -194,6 +198,9 @@ struct DesktopComposePicker: View {
         case .createBot:
             actionRow(icon: .plus, title: String(localized: "Create new Bot"), shortcut: shortcut, selected: selected,
                       disabled: false, id: "create-bot") { activate(row) }
+        case .createBotWizard:
+            actionRow(icon: .wand, title: String(localized: "Create a bot with the wizard"), shortcut: shortcut, selected: selected,
+                      disabled: false, id: "create-bot-wizard") { activate(row) }
         case .createGroup:
             actionRow(icon: .users, title: groupLabel, shortcut: shortcut, selected: selected,
                       disabled: mode == .group && picked.isEmpty, id: "create-group") { activate(row) }
@@ -317,6 +324,9 @@ struct DesktopComposePicker: View {
             // Lot 7: Create New Bot (quick create) first.
             model.menu = nil
             model.modal = .newBot
+        case .createBotWizard:
+            model.menu = nil
+            BotWizardPresenter.shared.open(startMode: .guided)
         case .createGroup:
             if mode == .browse {
                 mode = .group

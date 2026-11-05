@@ -1,3 +1,5 @@
+import type { EffortLevel } from "./model-selection.ts";
+import type { RoutineRequirements, RoutineReadinessCheck } from "./routine-readiness.ts";
 /** Routine wire shapes — the routine and run records as they ride the REST
  * snapshot and the `routine` / `routine.run` live frames. Moved verbatim
  * from the client's hand-maintained mirrors (src/lib/routines.ts) so the
@@ -133,6 +135,7 @@ export function routineRunMatchesStatus(run: { status: RoutineRunStatus; quiet?:
 }
 
 export interface Routine {
+  requires?: RoutineRequirements;
   id: string;
   name: string;
   prompt: string;
@@ -187,7 +190,7 @@ export interface Routine {
   /** A pre-check run before each scheduled turn (server/routines/routine-precheck.ts):
    * a condition on its own receipts, or (2026-10-26) a watch that starts the
    * run only when something changes (shared/routine-watch.ts). */
-  precheck?: RoutineWatchPrecheck | { kind: "condition"; test: string; [field: string]: unknown };
+  precheck?: RoutineWatchPrecheck | { kind: "condition"; test: string; [field: string]: unknown } | { kind: "code"; check: string };
   /** 2026-10-28 (shared/routine-folders.ts): the folder of its bot it sits
    * in. Absent: no folder. */
   folder?: string;
@@ -198,6 +201,18 @@ export interface Routine {
   deleteWhenFinished?: boolean;
   /** Confined runs: read Gmail/Calendar and write reply drafts only. */
   access?: RoutineAccess;
+  /** 2026-11-04 (shared/routine-model.ts): the model its runs use, on the
+   * bot's own engine. Absent: the bot's model. */
+  model?: string;
+  /** #2038: the model its runs' sub-agents use (Claude), on the bot's own
+   * engine; wins over `model` for them. Absent: `model`, else the bot's fast
+   * model, else the turn's model. */
+  subagentModel?: string;
+  /** 2026-11-05 (shared/routine-act-as.ts): the Perspicax role its runs act
+   * as ("Au nom de"); "" is "Moi". Absent: not chosen yet. */
+  actAs?: string;
+  /** Reasoning effort for runs only; absent follows the bot. */
+  effort?: EffortLevel;
   nextRunAt: number | null;
   /** Scheduled slot a flexible routine advances from. Absent for exact timing. */
   nominalRunAt?: number;
@@ -224,7 +239,19 @@ export interface Routine {
  * are gone and a routine paused for one resumes when the server starts. */
 export type RoutineSuspendReason = "person_out" | "no_right";
 
+/** One teammate a run handed work to, and the thread that work runs in. */
+export interface RoutineRunHandoff {
+  botId: string;
+  threadId: string;
+  /** The teammate's name when known. */
+  name?: string;
+  /** Where that work stands: queued, running, completed, failed... */
+  status: string;
+}
+
 export interface RoutineRun {
+  readiness?: RoutineReadinessCheck[];
+  requires?: RoutineRequirements;
   id: string;
   routineId: string;
   routineName: string;
@@ -257,6 +284,10 @@ export interface RoutineRun {
   /** 2026-11-01: completed, but not all of it went right: why ("Completed
    * with problems"). Counts as a problem run. */
   problems?: string;
+  /** 2026-11-03: the teammates this run handed work to ("Sent work to a
+   * teammate"), so the run and its card link the thread where that work's
+   * outcome is. */
+  handedTo?: RoutineRunHandoff[];
   /** 2026-11-01: a person started this run; its card shows from the start. */
   startedBy?: "person";
   /** 2026-11-01: a waiting run waits on its teammates' work, not on the person. */
@@ -264,6 +295,11 @@ export interface RoutineRun {
   error?: string;
   /** Set when the run used its one automatic second start, and why. */
   retried?: RoutineRetryCause;
+  /** 2026-11-02: how many times a limit sent this run on at once to another
+   * model: another engine's, or its conversation's own after only Sagax's
+   * quick model was refused (server/routines/routine-recovery.ts takeOver);
+   * it never waited for a reset. */
+  limitTakeovers?: number;
   /** A queued run starts no earlier than this. */
   retryAt?: number;
   /** Concise, redacted question or approval reason while status is waiting,
@@ -284,11 +320,20 @@ export interface RoutineRun {
   redacted?: true;
   /** Snapshot of the routine's confined access for this run. */
   access?: RoutineAccess;
+  /** Snapshot of the routine's model for this run. */
+  model?: string;
+  /** Snapshot of the routine's sub-agent model for this run. */
+  subagentModel?: string;
+  /** Snapshot of the routine's "Au nom de" role for this run ("" = Moi). */
+  actAs?: string;
+  /** Reasoning effort for runs only; absent follows the bot. */
+  effort?: EffortLevel;
   /** Items its routine's checks handed this run, so they are kept or released once it ends. */
   checkKey?: string;
 }
 
 export interface RoutineInput {
+  requires?: RoutineRequirements | null;
   name: string;
   prompt: string;
   target?: RoutineTarget;
@@ -325,6 +370,16 @@ export interface RoutineInput {
   deleteWhenFinished?: boolean;
   /** `null` clears confined access; omission preserves it on updates. */
   access?: RoutineAccess | null;
+  /** The model its runs use; null or "" goes back to the bot's model,
+   * omission preserves it on updates. */
+  model?: string | null;
+  /** The sub-agents' model (Claude); null or "" clears it, omission preserves it. */
+  subagentModel?: string | null;
+  /** The role its runs act as on Perspicax ("" = Moi); null clears the
+   * choice, omission preserves it on updates. */
+  actAs?: string | null;
+  /** null resets to the bot; omission preserves it on updates. */
+  effort?: EffortLevel | null;
 }
 
 /** True when the schedule has a known last occurrence: a one-time run, or

@@ -45,7 +45,7 @@ export function createPrepareClaimStartTurn(host: StartTurnHost) {
   } = host;
 
 
-  return async function(state: TurnState): Promise<PrepareResult> {
+  return function(state: TurnState): PrepareResult {
   // Admitted: every refusal above has passed and no other turn runs on this
   // thread, so this is the one moment the ledger's "who asked" may change.
   if (!state.warmOnly && state.opts?.trigger) turnTriggers.set(state.threadId, state.opts.trigger);
@@ -77,10 +77,14 @@ export function createPrepareClaimStartTurn(host: StartTurnHost) {
   if (!state.warmOnly && !state.opts?.cardContinuation) {
     if (state.commsDepth === 0 && state.opts?.automationSource === undefined && !state.opts?.unattended && !state.userMessage.peerAsk) {
       personAskAt.set(state.threadId, state.userMessage.at);
-      // Where the person is now (server/main-thread.ts). A line relayed
+      // Where the person is now (server/threads/main-thread.ts). A line relayed
       // from Slack was written there, not in this conversation: the line
       // says so (Message.relayed), also in a turn a computer switch continues.
       if (!state.userMessage.relayed) store.setTaskAskedAt(state.bot.id, state.threadId, state.userMessage.at);
+      // A background thread the server archived on its own is the person's
+      // again once they write in it (server/threads/background-sweep.ts).
+      // An AI client's prompt is not their writing: that thread stays put.
+      if (!state.userMessage.relayed && state.task.openedBy?.kind !== "agent") store.restoreAutoArchived(state.bot.id, state.threadId);
       // Continuing an old run as a normal conversation makes that task
       // visible again; these new replies are not routine report updates.
       if (state.task.routineRunId) store.patchTask(state.bot.id, state.threadId, { routineRunId: undefined });

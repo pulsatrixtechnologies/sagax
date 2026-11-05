@@ -9,8 +9,8 @@ import { accessSync, constants as fsConstants, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Duplex } from "node:stream";
 
-import { createSandboxAudit, type SandboxAudit } from "../sandbox-audit.ts";
-import { ensureSandboxdKey, readSandboxdKey, SANDBOXD_RUNS_AUTH_CONTEXT, sandboxdKeySource, SandboxdVerifier } from "../sandboxd-auth.ts";
+import { createSandboxAudit, type SandboxAudit } from "../sandbox/sandbox-audit.ts";
+import { ensureSandboxdKey, readSandboxdKey, SANDBOXD_RUNS_AUTH_CONTEXT, sandboxdKeySource, SandboxdVerifier } from "../sandbox/sandboxd-auth.ts";
 import type { K8sClient } from "./sandboxd-k8s-client.ts";
 import {
   IMAGE_ANNOTATION,
@@ -27,6 +27,8 @@ import {
   podIsolationProblems,
   spareReplicas,
   pvcSpec,
+  quantityBytes,
+  quantityToBytes,
   sandboxKeyFromContainerName,
   sandboxEgress,
   sandboxNetworkPolicy,
@@ -34,13 +36,13 @@ import {
   type K8sGuards,
   type K8sSandboxConfig,
 } from "./sandboxd-k8s-spec.ts";
-import { SandboxError, SandboxService } from "../sandboxd-core.ts";
-import { SANDBOX_STARTING_CODE } from "../sandbox-k8s-wake.ts";
+import { SandboxError, SandboxService } from "../sandbox/sandboxd-core.ts";
+import { SANDBOX_STARTING_CODE } from "../sandbox/sandbox-k8s-wake.ts";
 import { SPARE_TICK_MS, SpareScaler, spareConfigFromEnv } from "./sandboxd-k8s-spare.ts";
 import { DENY_HOSTS_TICK_MS, denyHostsFromEnv, resolveDenyHosts } from "./sandboxd-k8s-deny-hosts.ts";
-import { runsConfigFromEnv } from "../sandboxd-runs-spec.ts";
-import type { ContainerStats, ContainerSummary, DockerApi, ExecRequest, ExecResult, TtyExec, TtySize } from "../sandboxd-docker.ts";
-import { createSandboxdHandler, createSandboxdUpgradeHandler } from "../sandboxd.ts";
+import { runsConfigFromEnv } from "../sandbox/sandboxd-runs-spec.ts";
+import type { ContainerStats, ContainerSummary, DockerApi, ExecRequest, ExecResult, TtyExec, TtySize } from "../sandbox/sandboxd-docker.ts";
+import { createSandboxdHandler, createSandboxdUpgradeHandler } from "../sandbox/sandboxd-http.ts";
 import {
   SANDBOX_INSTANCE_LABEL,
   SANDBOX_KEY_RE,
@@ -50,7 +52,7 @@ import {
   sandboxNames,
   sandboxdConfigFromEnv,
   type SandboxdConfig,
-} from "../user-sandbox-spec.ts";
+} from "../sandbox/user-sandbox-spec.ts";
 
 type Obj = Record<string, unknown>;
 
@@ -355,7 +357,7 @@ export function kubernetesApi(sandbox: SandboxdConfig, k8s: K8sSandboxConfig, cl
       if (phase === "Failed" || phase === "Succeeded") await remove(podPath(names.container));
       // 2026-10-19: a cold node pool (0 -> 1) takes ~3 min. The caller is
       // told the environment is still starting (503 `starting`): nothing
-      // ran, so it may send the same call again (server/user-sandbox-manager.ts).
+      // ran, so it may send the same call again (server/sandbox/user-sandbox-manager.ts).
       if (now() > deadline) throw new SandboxError(503, SANDBOX_STARTING_CODE, "the server environment is still starting");
       await sleep(500);
     }
@@ -537,6 +539,23 @@ export function kubernetesApi(sandbox: SandboxdConfig, k8s: K8sSandboxConfig, cl
       const claim = await read(pvcPath(name));
       if (!claim) return null;
       return { labels: metaOf(claim).labels };
+    },
+    async growVolume(name: string) {
+      const claim = await read(pvcPath(name));
+      if (!claim) return;
+      const asked = quantityToBytes(String(asObj(asObj(asObj(claim.spec).resources).requests).storage ?? ""));
+      const wanted = sandbox.limits.workspaceQuotaBytes;
+      if (asked === null || asked >= wanted) return;
+      let key = "";
+      try { key = sandboxKeyFromContainerName(name.replace(/-workspace$/, "")); } catch { /* audit without a key */ }
+      try {
+        // The StorageClass allows expansion (allowVolumeExpansion); the CSI
+        // driver grows the disk and the filesystem, online or at next attach.
+        await merge(pvcPath(name), { spec: { resources: { requests: { storage: quantityBytes(wanted) } } } });
+        audit.record({ action: "sandbox.pvc.grow", outcome: "ok", ...(key ? { key } : {}), detail: { from: asked, to: wanted } });
+      } catch (error) {
+        audit.record({ action: "sandbox.pvc.grow", outcome: "denied", ...(key ? { key } : {}), detail: { reason: error instanceof Error ? error.message.slice(0, 120) : "failed" } });
+      }
     },
     async createVolume(spec: Record<string, unknown>) {
       const labels = asObj(spec.Labels) as Record<string, string>;
@@ -765,7 +784,7 @@ export async function startKubernetesProvisioner(env: NodeJS.ProcessEnv = proces
   }
   let runsServer: { close(callback?: () => void): unknown } | null = null;
   if (runs) {
-    const { RunService, createRunsServer } = await import("../sandboxd-runs.ts");
+    const { RunService, createRunsServer } = await import("../sandbox/sandboxd-runs.ts");
     const runsKey = readSandboxdKey(runs.keyFile);
     if (sandboxKeys().includes(runsKey)) {
       audit.record({ action: "runs.start", outcome: "denied", detail: { reason: "shared_key" } });

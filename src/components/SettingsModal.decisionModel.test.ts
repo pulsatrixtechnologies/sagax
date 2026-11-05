@@ -49,6 +49,8 @@ beforeEach(() => {
 
 const render = async () => {
   const { SettingsModal } = await import("./SettingsModal");
+  const { ExperimentalSettings } = await import("./lazy-settings-sections");
+  await ExperimentalSettings.preload();
   return renderToStaticMarkup(createElement(SettingsModal));
 };
 

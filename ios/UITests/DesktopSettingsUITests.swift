@@ -100,15 +100,23 @@ final class DesktopSettingsUITests: XCTestCase {
         let search = app.textFields["desktop-settings.search"]
         search.tap()
         search.typeText("openrouter")
-        // API keys is a card of Models and voice (#518)
-        XCTAssertTrue(app.buttons["desktop-settings.nav.engines"].waitForExistence(timeout: 5))
+        // API keys is a card of Providers (the desktop's page of 2026-10-30)
+        XCTAssertTrue(app.buttons["desktop-settings.nav.providers"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["desktop-settings.nav.backups"].exists)
         XCTAssertFalse(app.buttons["desktop-settings.nav.companion"].exists, "Pair devices left the app")
-        // the search opens the API keys card
+        // Providers > Add a provider > Paste a key opens the keys (the
+        // desktop's one flow, 2026-10-30)
+        app.buttons["desktop-settings.nav.providers"].tap()
+        let add = app.buttons["desktop-settings.providers.add"]
+        XCTAssertTrue(add.waitForExistence(timeout: 10), "Add a provider")
+        add.tap()
+        let paste = app.buttons["desktop-settings.providers.add.key"]
+        XCTAssertTrue(paste.waitForExistence(timeout: 5))
+        paste.tap()
         let key = app.secureTextFields["settings-key.openrouter"]
         _ = key.waitForExistence(timeout: 5)
         for _ in 0..<8 where !(key.exists && key.isHittable) { app.swipeUp() }
-        XCTAssertTrue(key.waitForExistence(timeout: 5), "API keys opens")
+        XCTAssertTrue(key.waitForExistence(timeout: 5), "the keys open")
 
         settings.tap()
         XCTAssertFalse(settings.waitForExistence(timeout: 2))
@@ -117,12 +125,17 @@ final class DesktopSettingsUITests: XCTestCase {
     @MainActor
     func testConnectedAppsOpensPluginsOnBothTabs() throws {
         let app = launch()
-        app.buttons["desktop-sidebar-connected-apps"].tap()
+        // the foot's round Capabilities button (2026-10-27)
+        app.buttons["desktop-sidebar-capabilities"].tap()
         let close = app.buttons["desktop-plugins.close"]
-        XCTAssertTrue(close.waitForExistence(timeout: 10), "Connected apps opens Plugins")
-        XCTAssertTrue(app.buttons["desktop-plugins.apps-tab.marketplace"].waitForExistence(timeout: 10))
-        app.buttons["desktop-plugins.tab.mcp"].tap()
-        XCTAssertTrue(app.buttons["desktop-plugins.mcp-refresh"].waitForExistence(timeout: 10))
+        XCTAssertTrue(close.waitForExistence(timeout: 10), "Capabilities opens")
+        // Me: Connect apps (Discover, Bots, Installed, Sources), one search
+        XCTAssertTrue(app.descendants(matching: .any)["connect-apps-tabs"].firstMatch.waitForExistence(timeout: 10))
+        // This bot: the open bot's capabilities
+        let thisBot = app.buttons["desktop-capabilities.scope.bot"]
+        XCTAssertTrue(thisBot.waitForExistence(timeout: 5), "This bot while a bot is open")
+        thisBot.tap()
+        XCTAssertFalse(app.descendants(matching: .any)["connect-apps-tabs"].firstMatch.waitForExistence(timeout: 2))
         close.tap()
         XCTAssertFalse(close.waitForExistence(timeout: 2))
     }

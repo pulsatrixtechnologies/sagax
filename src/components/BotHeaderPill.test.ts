@@ -22,6 +22,10 @@ function click(state: AppState): AppState {
 }
 
 describe("chat header bot pill", () => {
+  it("shows the bot without a configured Perspicax identity chip", () => {
+    expect(pill(false)).not.toContain("data-perspicax-identity");
+  });
+
   it("shows the mascot, the name, then a chevron, as a button", () => {
     const html = pill(false);
     expect(html).toMatch(/^<button type="button"/);

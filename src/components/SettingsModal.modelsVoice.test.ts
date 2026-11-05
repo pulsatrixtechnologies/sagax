@@ -9,7 +9,7 @@
 // Advanced.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => true, setAdvancedMode: () => {} }));
 import { setLocale } from "@/lib/i18n";
@@ -38,6 +38,8 @@ const baseConfig = (over: Record<string, unknown> = {}) => ({
 async function page(section?: string): Promise<string> {
   if (section) fixture.section = section;
   const { SettingsModal } = await import("./SettingsModal");
+  const { EnginesSettings, ProvidersSettings, VoiceSettingsPage } = await import("./lazy-settings-sections");
+  await Promise.all([EnginesSettings.preload(), ProvidersSettings.preload(), VoiceSettingsPage.preload()]);
   return renderToStaticMarkup(createElement(SettingsModal));
 }
 
@@ -48,6 +50,12 @@ function part(html: string, from: string, to?: string): string {
   const end = to ? html.indexOf(to, start) : -1;
   return html.slice(start, end > start ? end : undefined);
 }
+
+beforeAll(async () => {
+  // b8333c52c: these pages load on demand; static rendering runs no effects.
+  const sections = await import("./lazy-settings-sections");
+  await Promise.all([sections.EnginesSettings.preload(), sections.ProvidersSettings.preload(), sections.VoiceSettingsPage.preload()]);
+}, 60_000);
 
 beforeEach(async () => {
   // 2026-10-30: the Engines and Keys groups below are Models' former view
@@ -132,9 +140,12 @@ describe("Settings > Models and voice", () => {
   it("keeps models and voice choices while retiring duplicate account and key views", async () => {
     const models = await page();
     expect(models).toContain("data-bot-models-page");
+    // 2026-11-05 (option B): Auto's explainer sits in the Advanced fold; the
+    // link to Providers and image generation left the page (Providers > Other services)
+    expect(models).toContain('data-settings-card="models.advanced"');
     expect(models).toContain("data-auto-model-explainer");
-    expect(models).toContain("data-open-providers");
-    expect(models).toContain('data-settings-card="connections.image"');
+    expect(models).not.toContain("data-open-providers");
+    expect(models).not.toContain('data-settings-card="connections.image"');
     for (const retired of ["data-engines-list", "data-keys-section", "data-legacy-toggle", "data-provider-key="]) expect(models).not.toContain(retired);
     const voice = await page("voice");
     expect(voice).toContain('data-voice-providers="person"');

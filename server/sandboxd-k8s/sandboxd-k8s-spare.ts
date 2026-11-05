@@ -20,7 +20,7 @@
 // A failure is logged and changes nothing else: the person's own Pod never
 // waits on the reserve. Off unless SAGAX_SANDBOX_K8S_SPARE_DEPLOYMENT is set.
 import type { K8sClient } from "./sandboxd-k8s-client.ts";
-import { SANDBOX_INSTANCE_LABEL, SANDBOX_USER_LABEL } from "../user-sandbox-spec.ts";
+import { SANDBOX_INSTANCE_LABEL, SANDBOX_USER_LABEL } from "../sandbox/user-sandbox-spec.ts";
 
 export const SPARE_TICK_MS = 15_000;
 const NAME_RE = /^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$/;

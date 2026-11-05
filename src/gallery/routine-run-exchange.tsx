@@ -1,6 +1,7 @@
 /** Isolated gallery for the routine run exchange sheet footer (2026-11-01):
  * long last message, live Stop / Continue / more actions, synthetic data only.
- * ?skin=<id>&lang=<code>&status=completed|running */
+ * ?skin=<id>&lang=<code>&status=completed|running|waiting (2026-11-04: waiting pins
+ * the run's open approval above the footer) */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { ExchangeColumnProvider, useExchangeColumn } from "../components/BotExchangeChip";
@@ -15,7 +16,8 @@ const params = new URLSearchParams(location.search);
 const skinParam = params.get("skin") as SkinId | null;
 applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? skinParam : readSkin());
 await loadLocale(params.get("lang") ?? "en");
-const live = params.get("status") === "running";
+const waitingRun = params.get("status") === "waiting";
+const live = params.get("status") === "running" || waitingRun;
 
 const LONG = "Here is the full morning brief for the shared inbox and the open alerts. "
   + "Overnight, two paging events cleared themselves after the retry window, and one "
@@ -41,8 +43,16 @@ const run = {
   id: "run-1", routineId: "r1", routineName: "Morning brief", botId: "atlas", target: "bot",
   runOn: "maus", scheduledFor: base, createdAt: base, startedAt: base,
   finishedAt: live ? undefined : base + 120_000,
-  status: live ? "running" : "completed", manual: false, output: LONG, cost: 0.02,
+  status: waitingRun ? "waiting" : live ? "running" : "completed", manual: false, output: waitingRun ? undefined : LONG, cost: 0.02,
+  ...(waitingRun ? { threadId: "run-thread", attention: "Waiting for your approval" } : {}),
 } as RoutineRun;
+const approvalCard = {
+  id: "m-perm", role: "bot", kind: "options", at: base + 90_000,
+  card: {
+    title: "Approval needed", subtitle: "https://example.com/reports/overnight", options: ["Allow", "Deny"], requestId: "req-perm",
+    requestType: "permission", tool: "WebFetch", toolInput: JSON.stringify({ url: "https://example.com/reports/overnight", prompt: "read" }), allowSession: true,
+  },
+};
 
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
 const realFetch = window.fetch.bind(window);
@@ -61,6 +71,7 @@ window.fetch = async (input, init) => {
       },
     });
   }
+  if (waitingRun && url.includes("/api/threads/run-thread/messages")) return json({ messages: [approvalCard], hasMore: false });
   if (url.includes("/api/")) return json({});
   return realFetch(input, init);
 };
@@ -83,8 +94,6 @@ function Ready() {
               bots={[bot]}
               onClose={() => {}}
               onStop={live ? () => {} : undefined}
-              onRunAgain={live ? undefined : () => {}}
-              onLogs={() => {}}
             />
           )}
         </ExchangeColumnProvider>

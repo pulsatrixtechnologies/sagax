@@ -92,7 +92,7 @@ afterEach(() => {
 async function mount() {
   await act(async () => {
     root.render(createElement(StoreProvider, null, createElement(RemoteSessionsSection, {
-      bot: { id: "melonie" } as Bot,
+      bot: { id: "wren" } as Bot,
     })));
   });
   await act(async () => { await Promise.resolve(); });

@@ -13,7 +13,7 @@
 // call_tool only ever see the tools the bot may use.
 import { createInterface } from "node:readline";
 import { redactSecretsInText } from "../shared/redact.ts";
-import { allowsTool, parseToolScope, type ToolScope } from "../shared/tool-scope.ts";
+import { allowsTool, MCP_SERVER_NAME, parseToolScope, type ToolScope } from "../shared/tool-scope.ts";
 
 import type { ValidateFunction } from "ajv";
 import {
@@ -27,7 +27,7 @@ import {
   searchesCatalog,
   type CatalogTool,
   type DirectoryContext,
-} from "./mcp-directory.ts";
+} from "./mcp/mcp-directory.ts";
 import {
   MAX_REMOTE_MCP_BYTES,
   McpHttpError,
@@ -36,9 +36,9 @@ import {
   RemoteMcpClient,
   plainHttpProxyFetch,
   remoteMcpSpec,
-} from "./mcp-http.ts";
-import { lenientToolValidator, schemaProblems } from "./mcp-schema-validator.ts";
-import { rateLimitGaveUpText, rateLimitRetryText, rateLimitWait, sleepUnlessAborted } from "./rate-limit-retry.ts";
+} from "./mcp/mcp-http.ts";
+import { lenientToolValidator, schemaProblems } from "./mcp/mcp-schema-validator.ts";
+import { rateLimitGaveUpText, rateLimitRetryText, rateLimitWait, sleepUnlessAborted } from "./usage/rate-limit-retry.ts";
 
 type Json = Record<string, unknown>;
 function isRecord(value: unknown): value is Json {
@@ -110,7 +110,7 @@ function directorySettings(raw: string | undefined): { server: string; scope: To
   if (raw === undefined) return undefined;
   try {
     const value: unknown = JSON.parse(raw);
-    if (isRecord(value) && typeof value.name === "string" && /^[a-z][a-z0-9_-]{0,31}$/.test(value.name)
+    if (isRecord(value) && typeof value.name === "string" && MCP_SERVER_NAME.test(value.name)
       && Object.keys(value).every((key) => key === "name" || key === "toolScope")) {
       const parsed = parseToolScope(value.toolScope);
       if (parsed.ok) return { server: value.name, scope: parsed.scope };

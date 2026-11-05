@@ -4,7 +4,8 @@ import { expect, it } from "vitest";
 import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
 
 it("dispatches setup and canonical standing instructions through the real isolated app", async () => {
-  const fixture = await launchVerificationServer();
+  // 062d7c42e continues tool-only endings; inspect this requested turn, not a follow-up.
+  const fixture = await launchVerificationServer({ FAKE_CLAUDE_TOOL_CALLS: "[]" });
   const env = { SAGAX_URL: fixture.info.url };
   const api = async (method: string, path: string, body?: unknown) => {
     const response = await fetch(`${fixture.info.url}${path}`, {

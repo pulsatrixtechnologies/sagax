@@ -4,9 +4,11 @@
 // mascot stays in the header, chat and profile. "<Bot>'s screen" stays under
 // the frame. Click (or Enter/Space) on an asleep screen wakes it; the next
 // task also starts it. Hover/focus on a running screen shows one centered
-// "Open" pill for the full view. Pause/Stop live on hover while it runs, or
-// under Details. No Off badge, no technical sentence, no transport bar on the
-// default asleep view.
+// "Open" pill for the full view. A bot's computer shows no Play / Pause /
+// Stop: its lifecycle runs on its own and lives in the bot's settings (JC
+// 2026-11-02). Only a Tailcat remote session (source "remote") keeps its
+// pause / stop bar on hover, since nothing ends that session by itself. No
+// Off badge, no technical sentence.
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { AlertTriangle, Bot as BotIcon, Loader2, Maximize2, Monitor, Pause, Play, Square } from "lucide-react";
 
@@ -22,6 +24,8 @@ export interface ScreenControls {
   resume?: (() => void) | undefined;
   stop?: (() => void) | undefined;
 }
+
+export type ScreenSource = "server" | "local" | "browser" | "remote";
 
 export interface ScreenAction { label: string; onClick: () => void; primary?: boolean }
 
@@ -43,10 +47,11 @@ export function controlsAlwaysShown(_state: ScreenState): boolean {
   return false;
 }
 
-/** Whether the Play / Pause / Stop bar is drawn: only while running or
- * paused (revealed on hover/focus). Asleep and waking stay calm. */
-export function showsControlBar(state: ScreenState, controls: ScreenControls | undefined, _actions: ScreenAction[]): boolean {
-  if (!controls) return false;
+/** Whether the Play / Pause / Stop bar is drawn: never on a bot's computer;
+ * on a remote session only while running or paused (revealed on
+ * hover/focus). Asleep and waking stay calm. */
+export function showsControlBar(state: ScreenState, controls: ScreenControls | undefined, _actions: ScreenAction[], source: ScreenSource): boolean {
+  if (!controls || source !== "remote") return false;
   if (state === "running" || state === "paused") {
     return Boolean(controls.pause || controls.resume || controls.stop || controls.play);
   }
@@ -107,7 +112,7 @@ export function ComputerScreen({
   busy?: boolean;
   error?: string | undefined;
   /** remote: a Tailcat remote-support session (RemoteScreenCard). */
-  source: "server" | "local" | "browser" | "remote";
+  source: ScreenSource;
   /** The state's icon when nothing is live (error / setup empty states). */
   icon?: typeof Monitor;
   /** Kept for callers; calm screens use a generic muted bot, not this mascot. */
@@ -148,7 +153,7 @@ export function ComputerScreen({
     onOpen();
   };
 
-  const bar = controls && showsControlBar(state, controls, actions) ? (
+  const bar = controls && showsControlBar(state, controls, actions, source) ? (
     <div role="group" aria-label={t("computerScreen.controls")} data-screen-controls={shown ? "shown" : "hidden"}
       className={cn("flex items-center gap-1 rounded-full bg-black/60 p-1 shadow-sm transition-opacity duration-200",
         "absolute bottom-2 left-1/2 -translate-x-1/2",

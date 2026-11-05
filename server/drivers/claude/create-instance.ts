@@ -1,3 +1,4 @@
+import type { TurnModelUsage } from "../../../shared/runtime-events.ts";
 /** Claude ProviderInstance create: session maps, sendTurn wiring (#1383). */
 import { homedir } from "node:os";
 import type { ApprovalMode } from "../../../shared/approval-mode.ts";
@@ -13,13 +14,13 @@ import type {
   TurnAccessInput,
 } from "../../contracts.ts";
 import { newEventId } from "../../contracts.ts";
-import { openStartupModelCatalog, writeStartupModelCache } from "../../startup-model-catalog.ts";
+import { openStartupModelCatalog, writeStartupModelCache } from "../../models/startup-model-catalog.ts";
 import { cliVersionReader, execCli, killCliTree } from "../../procs.ts";
 import {
   claudeSubscriptionHomeKey,
   ensureClaudeSubscriptionFresh,
   onClaudeSubscriptionRenew,
-} from "../../claude-subscription-refresh.ts";
+} from "../../engines/claude-subscription-refresh.ts";
 import { sessionIdlePolicy } from "../session-idle.ts";
 import { claudeAuthRecovery } from "../claude-auth-recovery.ts";
 import { probeClaudeCommands } from "../harness-command-probe.ts";
@@ -281,6 +282,8 @@ export async function createClaudeInstance(
   const freshNextTurn = new Set<string>();
   /** Cost of the full sessions a renewed turn left behind, by turn. */
   const carriedCosts = new Map<string, number>();
+  /** The same, split by model. */
+  const carriedModels = new Map<string, TurnModelUsage[]>();
   // #1768: when this person's Claude login home is renewed, retire idle
   // processes that still hold the previous token so they cannot race the
   // rotated refresh grant.
@@ -370,6 +373,7 @@ export async function createClaudeInstance(
     renewedTurns,
     freshNextTurn,
     carriedCosts,
+    carriedModels,
     liveCommands,
     liveCommandsKey,
     listeners,

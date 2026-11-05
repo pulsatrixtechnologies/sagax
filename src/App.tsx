@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Bot as BotIcon, Loader2, Plus } from "lucide-react";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { useOrgMemoryAuto } from "@/lib/org-memory";
-import { openBot, openNotificationTarget, StoreProvider, useStore, type AppSettingsSection } from "@/state/store";
+import { openBot, openNotificationTarget, StoreProvider, type Bot, type Group, type AppSettingsSection } from "@/state/store";
+import { shallowEqual, useStoreDispatch, useStoreGetter, useStoreSelector } from "@/state/store-selector";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { useWelcomeViewer, WelcomeGate } from "@/components/onboarding/WelcomeGate";
 import { mainConversation } from "@/lib/main-view";
@@ -15,19 +16,16 @@ import { initAnalytics } from "@/lib/analytics";
 import { AppSidebar } from "@/components/AppSidebar";
 import { ChatView } from "@/components/ChatView";
 import { GroupView } from "@/components/GroupView";
-import { SplitWorkspace, useBotPanelBot } from "@/components/SplitWorkspace";
-import { PersonPanel } from "@/components/PersonPanel";
-import { MemoryManagerPanel } from "@/components/memory-manager/MemoryManagerPanel";
+import { SplitWorkspace } from "@/components/SplitWorkspace";
 import { SideThreadPanel } from "@/components/SideThreadPanel";
 import { ComposeToPicker } from "@/components/ComposeToPicker";
-import { BotWizard } from "@/components/bot-wizard/BotWizard";
-import { PluginsPanel } from "@/components/PluginsPanel";
 import {
-  AchievementsScreen, ActivityPanel, ApprovalsPage, BotCatalogModal, BotSettingsDialog, CodePage, InspectorPanel, KeyboardShortcutsModal, LocalVmWorkspace,
-  PersonaEditorModal, preloadScreens, RemoteAgentSettingsPanel, RemoteDesktopPanel, RemoteSessionsAdminPage, RoutinesPage, SettingsModal, TeamMapPage,
+  AchievementsScreen, ActivityPanel, ApprovalsPage, ArtifactsHost, BotCatalogModal, BotSettingsDialog, BotWizard, CodePage, CommandPalette, InspectorPanel, KeyboardShortcutsModal, LocalVmWorkspace,
+  MemoryManagerPanel, OrgImportDialog, PersonaEditorModal, PersonPanel, PluginsPanel, preloadScreens, RemoteAgentSettingsPanel, RemoteDesktopPanel, RemoteSessionsAdminPage, RoutinesPage, SettingsModal, StagedOrgImport, TeamMapPage,
 } from "@/components/lazy-screens";
+import { openCommandPalette } from "@/lib/command-palette-open";
 import { ArchivedBotsPanel } from "@/components/Sidebar";
-import { WorkspaceBackupRecovery } from "@/components/WorkspaceBackupSettings";
+import { WorkspaceBackupRecovery } from "@/components/workspace-backup-recovery";
 import { AboutPrompt } from "@/components/AboutDialog";
 import { ReleaseNotesPrompt } from "@/components/ReleaseNotesPrompt";
 import { TermsGate } from "@/components/TermsGate";
@@ -38,11 +36,9 @@ import { WindowCaptionButtons } from "@/components/WindowCaptionButtons";
 import { NoEngines } from "@/components/NoEngines";
 import { OrgEngineNotice } from "@/components/OrgEngineSetup";
 
-import { CommandPalette, openCommandPalette } from "@/components/CommandPalette";
-import { ArtifactsHost } from "@/components/artifacts/ArtifactsHost";
-import { OrgImportDialog, StagedOrgImport } from "@/components/OrgImportDialog";
 import { RetroAssistantHost } from "@/components/RetroAssistantHost";
 import { AchievementToaster } from "@/components/achievements/AchievementToaster";
+import { ConnectionNotice } from "@/components/ConnectionNotice";
 import { MyChromeIndicator } from "@/components/MyChromeIndicator";
 import { HostControlIndicator } from "@/components/HostControlIndicator";
 import { reportAchievement } from "@/lib/achievements";
@@ -78,14 +74,49 @@ import { MAUS_COLORS } from "@/lib/mascot";
 import { botSwitchActive, useBotAccent, useBotAccentEnabled, useBotSwitch } from "@/lib/bot-accent";
 import { usePageLookSync } from "@/lib/page-look-sync";
 
-function Shell() {
-  const { state, dispatch } = useStore();
+function BotSurface({ id, children }: { id: string; children: (bot: Bot) => ReactNode }) {
+  const bot = useStoreSelector((current) => current.bots.find((candidate) => candidate.id === id));
+  return bot ? children(bot) : null;
+}
+
+function GroupSurface({ id, children }: { id: string; children: (group: Group) => ReactNode }) {
+  const group = useStoreSelector((current) => current.groups.find((candidate) => candidate.id === id));
+  return group ? children(group) : null;
+}
+
+export function Shell() {
+  const dispatch = useStoreDispatch();
+  const getState = useStoreGetter();
+  const state = useStoreSelector((current) => ({
+    activeView: current.activeView,
+    activityOpen: current.activityOpen,
+    appSettingsOpen: current.appSettingsOpen,
+    archivedBotsOpen: current.archivedBotsOpen,
+    botCatalogOpen: current.botCatalogOpen,
+    botWizard: current.botWizard,
+    computerOpen: current.computerOpen,
+    config: current.config,
+    connected: current.connected,
+    everConnected: current.everConnected,
+    inspectorOpen: current.inspectorOpen,
+    memoryManagerOpen: current.memoryManagerOpen,
+    notice: current.notice,
+    orgImportOpen: current.orgImportOpen,
+    orgImportStaged: current.orgImportStaged,
+    personPanelId: current.personPanelId,
+    personaEditor: current.personaEditor,
+    pluginsOpen: current.pluginsOpen,
+    selectedId: current.selectedId,
+    settingsOpen: current.settingsOpen,
+    shortcutsOpen: current.shortcutsOpen,
+    hydrated: current.hydrated,
+  }), shallowEqual);
   const showThreads = useShowThreads();
   const { capabilities } = useDesktopCapabilities();
   const captionChrome = useCaptionChrome();
-  const unreadCount =
-    state.bots.filter((bot) => !bot.hidden && botShowsUnread(bot)).length +
-    state.groups.filter((group) => group.unread).length;
+  const unreadCount = useStoreSelector((current) =>
+    current.bots.filter((bot) => !bot.hidden && botShowsUnread(bot)).length +
+    current.groups.filter((group) => group.unread).length);
   const remoteClient = window.ogb?.remoteClient?.active === true;
   useEffect(() => {
     if (!window.ogb?.environments) return;
@@ -118,12 +149,13 @@ function Shell() {
     const timer = setTimeout(() => { openThreadTarget.current = null; }, 30_000);
     return () => clearTimeout(timer);
   }, []);
+  const linkedThreadVisible = useStoreSelector((current) => Boolean(openThreadTarget.current && openThreadVisible(openThreadTarget.current, current)));
   useEffect(() => {
     const target = openThreadTarget.current;
-    if (!target || !openThreadVisible(target, state)) return;
+    if (!target || !linkedThreadVisible) return;
     openThreadTarget.current = null;
-    openNotificationTarget(dispatch, target, state, showThreads);
-  }, [state.bots, state.groups, dispatch]);
+    openNotificationTarget(dispatch, target, getState(), showThreads);
+  }, [linkedThreadVisible, getState, showThreads, dispatch]);
   // `#approvals` (its filters stay in the address) and `#code` (or
   // `#code/<run>`, which then leaves the address) open their screen, at load
   // and when the hash changes in an open tab.
@@ -162,7 +194,7 @@ function Shell() {
     if (!normalizeInboxDeepLink(window.location)) return;
     saveSidebarAttentionPinned(true);
   }, []);
-  useExternalChatLinks(state, dispatch);
+  useExternalChatLinks(getState(), dispatch);
   // Phone-only drawer state. From sm up, none of these properties are emitted
   // at all — Sidebar scopes every phone class with max-sm: rather than
   // cancelling them with sm:, which would still emit a translate value and
@@ -209,7 +241,12 @@ function Shell() {
   const previousViewRef = useRef(state.activeView);
   const calendarOriginRef = useRef<"chat" | "team-map">("chat");
   // Someone with no bot of their own still opens on a group they are in.
-  const { group, bot } = mainConversation(state.bots, state.groups, state.selectedId, state.sidebarHiddenKeys);
+  const conversation = useStoreSelector((current) => {
+    const main = mainConversation(current.bots, current.groups, current.selectedId, current.sidebarHiddenKeys);
+    return { botId: main.bot?.id, groupId: main.group?.id, threadId: main.bot?.threadId ?? main.group?.threadId };
+  }, shallowEqual);
+  const bot = conversation.botId ? { id: conversation.botId, threadId: conversation.threadId } : undefined;
+  const group = conversation.groupId ? { id: conversation.groupId, threadId: conversation.threadId } : undefined;
   const calendarOpen = state.activeView === "routines";
   // Advanced is the default for everyone (2026-10-16). The choice itself
   // is written only on the switch.
@@ -235,10 +272,8 @@ function Shell() {
   // count — that CLI can still host a local model. Wait for the first
   // /api/instances response before deciding: an empty list means "not asked
   // yet", and flashing the setup screen at every launch would be worse.
-  const noEngines =
-    state.connected &&
-    state.instances.length > 0 &&
-    !state.instances.some((i) => i.snapshot.state === "available");
+  const noEngines = useStoreSelector((current) => current.connected && current.instances.length > 0 &&
+    !current.instances.some((instance) => instance.snapshot.state === "available"));
   // An OMB Cloud home with none of the person's own engines signed in yet:
   // its first run, and every bot until then, is the engine sign-in.
 
@@ -279,7 +314,7 @@ function Shell() {
 
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
-      const bots = state.bots.filter((b) => !b.hidden);
+      const bots = getState().bots.filter((b) => !b.hidden);
       if (e.key === "n" && !e.shiftKey) {
         e.preventDefault();
         setComposeOpen((open) => !open);
@@ -302,7 +337,7 @@ function Shell() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [state.bots, state.selectedId, state.shortcutsOpen, composeOpen, showThreads, dispatch]);
+  }, [getState, state.selectedId, state.shortcutsOpen, composeOpen, showThreads, dispatch]);
 
   // The Dock / taskbar count: every unread conversation (a person's direct
   // message included), unless this computer turned the badge off.
@@ -313,15 +348,13 @@ function Shell() {
   // The menu bar's bot list (macOS, Windows): the visible bots in the order
   // of the Cmd+1..9 shortcuts, with their mascot color, whether they work and
   // how many conversations are unread. A pick there opens the bot.
-  const trayRoster = useMemo(
-    () => state.bots.filter((bot) => !bot.hidden).slice(0, 9).map((bot) => ({
-      id: bot.id,
-      name: bot.name,
+  const trayRoster = useStoreSelector(
+    (current) => current.bots.filter((bot) => !bot.hidden).slice(0, 9).map((bot) => ({
+      id: bot.id, name: bot.name,
       color: MAUS_COLORS[bot.color as keyof typeof MAUS_COLORS] ?? "#8E8E93",
-      working: Boolean(bot.busy),
-      unread: botShowsUnread(bot) ? 1 : 0,
+      working: Boolean(bot.busy), unread: botShowsUnread(bot) ? 1 : 0,
     })),
-    [state.bots],
+    (a, b) => a.length === b.length && a.every((row, index) => shallowEqual(row, b[index])),
   );
   // the menu's words follow the app's language (the shell has no locale files)
   const trayLabels = {
@@ -340,17 +373,15 @@ function Shell() {
     window.ogb?.setTrayRoster?.(trayRoster, trayLabels);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trayKey]);
-  const botsRef = useRef(state.bots);
-  botsRef.current = state.bots;
   // The capture key (bots' chord with 0): a picture of the screen in the
   // open bot's composer (parity R7, system 12).
   useScreenCaptureToBot(showThreads);
   useEffect(() => {
     return window.ogb?.onOpenBot?.((botId) => {
-      const target = botsRef.current.find((bot) => bot.id === botId);
+      const target = getState().bots.find((bot) => bot.id === botId);
       if (target) navigate(() => openBot(dispatch, target, showThreads));
     });
-  }, [dispatch, showThreads]);
+  }, [dispatch, getState, showThreads]);
   // Load the nudge sound now: the first nudge rings at once, even before
   // any click in the page.
   useEffect(() => {
@@ -384,9 +415,9 @@ function Shell() {
   // opened it (panelOwner): then it is that section's bot. Always at the
   // window's right edge, one panel at a time. A group section's panel
   // portals into panelSlot, at the same place.
-  const panelBot = useBotPanelBot(bot);
+  const panelBotId = useStoreSelector((current) => current.panelOwner ? current.panelOwner.botId : bot?.id);
   const [panelSlot, setPanelSlot] = useState<HTMLElement | null>(null);
-  const botPanelOpen = !remoteClient && (state.settingsOpen || state.computerOpen) && panelBot !== undefined;
+  const botPanelOpen = !remoteClient && (state.settingsOpen || state.computerOpen) && panelBotId !== undefined;
   const mainIsTeamMap = state.activeView === "team-map";
   const mainIsMemory = state.activeView === "memory" || state.memoryManagerOpen;
   const mainIsCode = state.activeView === "code";
@@ -394,7 +425,7 @@ function Shell() {
   const mainIsRemoteSessions = state.activeView === "remote-sessions";
   const mainIsAchievements = state.activeView === "achievements";
   const mainIsApps = state.activeView === "apps" || state.pluginsOpen;
-  const archivedBots = useMemo(() => state.bots.filter((bot) => bot.hidden), [state.bots]);
+  const archivedBots = useStoreSelector((current) => current.archivedBotsOpen ? current.bots.filter((bot) => bot.hidden) : [], shallowEqual);
   const calendarFillsMain = calendarOpen;
 
   useEffect(() => {
@@ -504,7 +535,7 @@ function Shell() {
       {/* The split view (#1504): the main view below is one section; others
           show more conversations beside it (src/lib/split-view.ts). */}
       <SplitWorkspace panelSlot={panelSlot} main={composeOpen && (group || bot) ? (
-        group ? <GroupView key={`${group.id}:${uiLocale}`} group={group} /> : bot ? <ChatView key={uiLocale} bot={bot} /> : null
+        group ? <GroupSurface key={`${group.id}:${uiLocale}`} id={group.id}>{(current) => <GroupView group={current} />}</GroupSurface> : bot ? <BotSurface key={uiLocale} id={bot.id}>{(current) => <ChatView bot={current} />}</BotSurface> : null
       ) : calendarFillsMain ? (
         <RoutinesPage fill onBack={closeCalendar} onOpenRoom={openCalendarRoom} />
       ) : mainIsTeamMap ? (
@@ -533,9 +564,9 @@ function Shell() {
       ) : noEngines && !org ? (
         <NoEngines />
       ) : group ? (
-        <GroupView key={`${group.id}:${uiLocale}`} group={group} />
+        <GroupSurface key={`${group.id}:${uiLocale}`} id={group.id}>{(current) => <GroupView group={current} />}</GroupSurface>
       ) : bot ? (
-        <ChatView key={uiLocale} bot={bot} />
+        <BotSurface key={uiLocale} id={bot.id}>{(current) => <ChatView bot={current} />}</BotSurface>
       ) : (
         state.connected ? (
           // Connected with no bot: an empty state that invites creating one,
@@ -587,19 +618,19 @@ function Shell() {
       {/* One tabbed bot panel (Details, Routines, Files, Computer, Advanced) on the
           desktop; its Computer tab is the store's computer view, so both
           flags render the same panel under one key. */}
-      {botPanelOpen && panelBot && (
-        <BotSettingsDialog key={`panel:${panelBot.id}`} bot={panelBot} onOpenVmWorkspace={openLocalVmWorkspace} />
+      {botPanelOpen && panelBotId && (
+        <BotSurface key={`panel:${panelBotId}`} id={panelBotId}>{(current) => <BotSettingsDialog bot={current} onOpenVmWorkspace={openLocalVmWorkspace} />}</BotSurface>
       )}
       {/* A split-view group section's panel (GroupView, by a portal): the
           same right edge as every other panel. */}
       <div ref={setPanelSlot} data-split-panel-slot="" className="contents" />
-      {remoteClient && state.settingsOpen && panelBot && <RemoteAgentSettingsPanel bot={panelBot} />}
+      {remoteClient && state.settingsOpen && panelBotId && <BotSurface id={panelBotId}>{(current) => <RemoteAgentSettingsPanel bot={current} />}</BotSurface>}
       {state.personPanelId && <PersonPanel key={`person:${state.personPanelId}`} personId={state.personPanelId} />}
       {remoteClient && state.computerOpen && bot && (
-        <RemoteDesktopPanel key={`computer:${bot.id}`} bot={bot} />
+        <BotSurface key={`computer:${bot.id}`} id={bot.id}>{(current) => <RemoteDesktopPanel bot={current} />}</BotSurface>
       )}
-      {!remoteClient && state.inspectorOpen && bot && <InspectorPanel key={bot.threadId} bot={bot} />}
-      {!remoteClient && state.activityOpen && bot && <ActivityPanel key={`activity:${bot.id}`} bot={bot} />}
+      {!remoteClient && state.inspectorOpen && bot && <BotSurface key={bot.threadId} id={bot.id}>{(current) => <InspectorPanel bot={current} />}</BotSurface>}
+      {!remoteClient && state.activityOpen && bot && <BotSurface key={`activity:${bot.id}`} id={bot.id}>{(current) => <ActivityPanel bot={current} />}</BotSurface>}
       {state.appSettingsOpen && <SettingsModal />}
       {!remoteClient && <ModelWindowHost />}
       {/* Restored centred windows: Edit bot, New bot wizard, Browse Bots,
@@ -636,6 +667,8 @@ function Shell() {
       <TeamBotFromThreadHost />
       <RetroAssistantHost />
       <AchievementToaster />
+      {/* #2013: server updating or unreachable, Perspicax unreachable, Reconnected */}
+      <ConnectionNotice />
       <CallEngineHost />
       <FloatingBotsHost />
       <RetroBootSlot />
@@ -668,22 +701,22 @@ function Shell() {
 /** The person's look, for the bar and the frame of their published pages
  * (src/lib/page-look-sync.ts). */
 function PageLookSync() {
-  const { state } = useStore();
-  usePageLookSync(state.connected);
+  const connected = useStoreSelector((current) => current.connected);
+  usePageLookSync(connected);
   return null;
 }
 
 /** The open bot's colour as the accent, when Settings > Appearance says so. */
 function BotAccentSync() {
-  const { state } = useStore();
-  const bot = state.bots.find((candidate) => candidate.id === state.selectedId);
-  const color = bot ? MAUS_COLORS[bot.color] : null;
+  const state = useStoreSelector((current) => ({ activeView: current.activeView, appSettingsOpen: current.appSettingsOpen, pluginsOpen: current.pluginsOpen }), shallowEqual);
+  const colorKey = useStoreSelector((current) => current.bots.find((candidate) => candidate.id === current.selectedId)?.color);
+  const color = colorKey ? MAUS_COLORS[colorKey] : null;
   useBotAccent(color);
   const accentEnabled = useBotAccentEnabled();
   // The switches in the bot's own panel and screens take its colour, setting or not.
   useBotSwitch(
     color,
-    botSwitchActive({ hasBot: Boolean(bot), activeView: state.activeView, appSettingsOpen: state.appSettingsOpen, pluginsOpen: state.pluginsOpen, accentEnabled }),
+    botSwitchActive({ hasBot: Boolean(colorKey), activeView: state.activeView, appSettingsOpen: state.appSettingsOpen, pluginsOpen: state.pluginsOpen, accentEnabled }),
   );
   return null;
 }

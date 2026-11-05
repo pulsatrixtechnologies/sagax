@@ -20,11 +20,11 @@
 // the prefix offer and dragging stay away, and a call that still meets "no
 // route" says the neutral "Available after the server update.", never a red
 // error.
-import { ArrowDown, ArrowUp, Check, ChevronRight, FolderInput, FolderPlus, MoreHorizontal, Pause, Pencil, Play, Plus, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ChevronRight, Folder, FolderInput, FolderPlus, MoreHorizontal, Pause, Pencil, Play, Plus, Trash2, X } from "lucide-react";
 import { Fragment, useEffect, useImperativeHandle, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
-import { api, useStore, type Bot } from "@/state/store";
+import { api, openRoutineRun, useStore, type Bot } from "@/state/store";
 import type { Routine, RoutineRun } from "@/lib/routines";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
@@ -79,9 +79,13 @@ export function canManageRoutineFolders(routines: Routine[], supported: boolean)
 
 const MENU_ITEM = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover focus-visible:bg-hover focus-visible:outline-none disabled:opacity-50";
 
-export function RoutineFolderList({ bot, routines, runs, grouped, loading, error, viewerPrincipalId, onOpen, onCreateIn, onDuplicate, controlRef }: {
+export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, loading, error, viewerPrincipalId, onOpen, onCreateIn, onDuplicate, controlRef, folderIcon = false }: {
   bot: Bot;
   routines: Routine[];
+  /** 2026-11-03 (audit N-4): every routine of the bot, when `routines` is a
+   * filtered list. A folder action (pause, delete and its Undo) touches all
+   * of them, never only the rows shown. */
+  allRoutines?: Routine[];
   runs: RoutineRun[];
   grouped: boolean;
   loading?: boolean;
@@ -93,9 +97,20 @@ export function RoutineFolderList({ bot, routines, runs, grouped, loading, error
   /** The row menu's Duplicate: the editor on a copy. */
   onDuplicate?: (routine: Routine) => void;
   controlRef?: RefObject<RoutineFolderControl | null>;
+  /** The Automations list (grouped by bot, 2026-11-03): a folder icon before
+   * each folder's name, as sub-groups of the bot's section. */
+  folderIcon?: boolean;
 }) {
   const { state, dispatch } = useStore();
   const order = state.routineFolders?.[bot.id] ?? EMPTY;
+  // What a folder action reaches: the bot's routines in the store and the
+  // caller's full list, the shown rows winning (their copy is the newest).
+  const botRoutines = useMemo(() => {
+    const byId = new Map<string, Routine>();
+    for (const routine of [...(state.routines ?? []), ...(allRoutines ?? [])]) if (routine.botId === bot.id) byId.set(routine.id, routine);
+    for (const routine of routines) byId.set(routine.id, routine);
+    return [...byId.values()];
+  }, [state.routines, allRoutines, routines, bot.id]);
   const groups = useMemo(() => groupRoutinesByFolder(routines, order), [routines, order]);
   const folders = groups.flatMap((group) => group.folder ? [group.folder] : []);
   const editable = routines.length === 0 || routines.some((routine) => routine.canEdit !== false);
@@ -203,13 +218,13 @@ export function RoutineFolderList({ bot, routines, runs, grouped, loading, error
   };
   const setFolderEnabled = (folder: string, enabled: boolean) => {
     const key = routineFolderKey(folder);
-    for (const routine of routines) {
+    for (const routine of botRoutines) {
       if (routine.folder && routineFolderKey(routine.folder) === key && routine.enabled !== enabled) void flipRoutine(routine, pending.current, api, dispatch);
     }
   };
   const removeFolder = async (folder: string) => {
     const key = routineFolderKey(folder);
-    const inside = routines.filter((routine) => routine.folder && routineFolderKey(routine.folder) === key);
+    const inside = botRoutines.filter((routine) => routine.folder && routineFolderKey(routine.folder) === key);
     const undo: RoutineFolderUndo = { botId: bot.id, folders: [...folders], routines: inside.map((routine) => ({ id: routine.id, name: routine.name, folder: routine.folder })) };
     const answer = await act({ action: "delete", botId: bot.id, name: folder });
     if (answer) setNotice({ text: t("routineFolders.deleted", { name: folder }), undo });
@@ -295,8 +310,9 @@ export function RoutineFolderList({ bot, routines, runs, grouped, loading, error
     return () => clearTimeout(timer);
   }, [dragging, dropTarget, collapsed]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // "Running" on a row: Automations, on that run, with its live process and logs.
-  const openRunning = (routine: Routine, run: RoutineRun) => dispatch({ type: "showRoutines", section: "logs", botId: routine.botId, routineId: routine.id, runStatus: "running", runId: run.id });
+  // "Running" on a row opens that run's chat where the chat is (JC
+  // 2026-11-03), never the Automations page.
+  const openRunning = (routine: Routine, run: RoutineRun) => openRoutineRun(dispatch, { runId: run.id, routineId: routine.id, botId: run.botId ?? routine.botId });
   const canDrag = editable && supported && folders.length > 0;
   const list = (items: Routine[], label?: string) => <RoutineList
     routines={items}
@@ -380,6 +396,7 @@ export function RoutineFolderList({ bot, routines, runs, grouped, loading, error
             count={group.routines.length}
             paused={group.routines.length > 0 && !anyOn}
             collapsed={isCollapsed}
+            icon={folderIcon}
             editable={editable && supported}
             onToggle={() => toggleFolder(folder)}
             onMove={(direction) => reorder(folder, direction)}
@@ -411,8 +428,8 @@ export function RoutineFolderList({ bot, routines, runs, grouped, loading, error
           : <FolderMenuItems
             canMoveUp={folders.indexOf(menu.folder) > 0}
             canMoveDown={folders.indexOf(menu.folder) < folders.length - 1}
-            anyOn={routines.some((routine) => routine.folder && routineFolderKey(routine.folder) === routineFolderKey(menu.folder) && routine.enabled)}
-            anyRoutine={routines.some((routine) => routine.folder && routineFolderKey(routine.folder) === routineFolderKey(menu.folder))}
+            anyOn={botRoutines.some((routine) => routine.folder && routineFolderKey(routine.folder) === routineFolderKey(menu.folder) && routine.enabled)}
+            anyRoutine={botRoutines.some((routine) => routine.folder && routineFolderKey(routine.folder) === routineFolderKey(menu.folder))}
             onRename={() => { closeMenu(false); setRenaming(menu.folder); }}
             onMove={(direction) => { closeMenu(); reorder(menu.folder, direction); }}
             onSetEnabled={(enabled) => { closeMenu(); setFolderEnabled(menu.folder, enabled); }}
@@ -425,11 +442,13 @@ export function RoutineFolderList({ bot, routines, runs, grouped, loading, error
 
 /** A folder's header, the sidebar section's: 30px high, the name at 12px
  * in the secondary ink, the chevron in the gutter before it, then a count. */
-export function RoutineFolderHeader({ name, count, paused, collapsed, editable, onToggle, onMove, onMenu, onCreate }: {
+export function RoutineFolderHeader({ name, count, paused, collapsed, icon = false, editable, onToggle, onMove, onMenu, onCreate }: {
   name: string;
   count: number;
   paused: boolean;
   collapsed: boolean;
+  /** A folder icon after the chevron (the Automations list). */
+  icon?: boolean;
   editable: boolean;
   onToggle: () => void;
   onMove: (direction: -1 | 1) => void;
@@ -454,6 +473,7 @@ export function RoutineFolderHeader({ name, count, paused, collapsed, editable, 
       }}
       className="flex h-full min-w-0 flex-1 items-center gap-1 rounded-md pb-1.5 pl-0.5 pr-2 pt-2 text-left text-ink-secondary outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-accent/60">
       <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center"><ChevronRight size={12} className={cn("transition-transform", !collapsed && "rotate-90")} /></span>
+      {icon && <Folder size={13} aria-hidden="true" data-routine-folder-icon="" className="shrink-0 text-ink-tertiary" />}
       <span className="truncate text-[12px] font-normal leading-4">{name}</span>
       <span data-routine-folder-count={count} className="shrink-0 text-[11px] leading-4 tabular-nums text-ink-tertiary">{count}</span>
       {paused && <span data-routine-folder-paused="" className="shrink-0 text-[11px] leading-4 text-ink-tertiary">· {t("routineFolders.allPaused")}</span>}

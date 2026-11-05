@@ -114,12 +114,13 @@ export function approvalCardOutcome(card: OptionCardData): string | undefined {
  *  Allowed once, Declined, Expired. An ask the engine closed on its own (the
  *  turn ended, nothing could answer it) leaves the transcript. A question or
  *  a quiz is not this card. A change that applied without a person is not an
- *  ask: it stays as its one line with Undo. */
+ *  ask: it stays as its one line with Undo (#1982: even when the server
+ *  marked the receipt dismissed so it leaves the pending dock). */
 export function approvalCardStaysInChat(
   card: Pick<OptionCardData, "requestId" | "tool" | "answered" | "expired" | "dismissed" | "autoApplied" | "held"> | undefined,
 ): boolean {
   if (!card?.requestId || !card.tool) return false;
-  if (card.autoApplied === true && card.answered === "allow" && !card.held && card.dismissed !== true) return true;
+  if (card.autoApplied === true && card.answered === "allow" && !card.held) return true;
   if (card.expired === true) return true;
   return card.dismissed !== true && card.answered !== "unavailable";
 }
@@ -259,6 +260,8 @@ export interface ToolApprovalView {
   /** a command, URL or question: readable as is, shown under the title */
   plain?: string;
   server?: string;
+  /** the tool's own name for the details (never the ACP kind "other") */
+  tool?: string;
   /** arguments for the details (pretty JSON when they are JSON) */
   args?: string;
 }
@@ -273,7 +276,10 @@ export function toolApprovalView(card: OptionCardData, botName?: string): ToolAp
   // (shared/approval-describe.ts), in this app's language.
   const words = approvalPlain({ botName, tool, toolInput: input, detail: card.subtitle, hints: card.toolHints });
   const technical = isTechnicalText(card.subtitle);
-  const shown = technical || !card.subtitle?.trim() ? undefined : card.subtitle;
+  // the subtitle that only repeats the tool's id (a Grok gateway id,
+  // `cursor__user-…___23`) is no command to show (#1931)
+  const subtitle = card.subtitle?.trim();
+  const shown = technical || !subtitle || subtitle === tool || subtitle === card.mcpTool ? undefined : card.subtitle;
   // A held outbound action reads as what it sends and where, the way the
   // phones show it, not as the slug the bot happened to call.
   const outbound = outboundSummary(card);
@@ -287,6 +293,7 @@ export function toolApprovalView(card: OptionCardData, botName?: string): ToolAp
     risk: described.risk,
     plain: shown,
     server: described.server,
+    tool: described.tool ?? tool,
     args: described.argsJson ?? (technical ? card.subtitle : undefined),
   };
 }
@@ -553,7 +560,7 @@ export function ApprovalCard({
             {card.ruleSaved && <OwnerRuleInset rule={card.ruleSaved} />}
             {card.customRule && <CustomRuleNoticeLine notice={card.customRule} />}
             {card.customRuleSaved && <CustomRuleSavedInset rule={card.customRuleSaved} botId={message.from?.botId} />}
-            {(view.args || card.tool) && <TechnicalDetails tool={card.tool} server={view.server} args={view.args} />}
+            {(view.args || card.tool) && <TechnicalDetails tool={view.tool ?? card.tool} server={view.server} args={view.args} />}
           </div>
         )}
       </StepRow>
@@ -591,7 +598,7 @@ export function ApprovalCard({
             {card.answered && card.ruleSaved && <OwnerRuleInset rule={card.ruleSaved} />}
             {card.customRule && <CustomRuleNoticeLine notice={card.customRule} />}
             {card.answered === "allow" && card.customRuleSaved && <CustomRuleSavedInset rule={card.customRuleSaved} botId={message.from?.botId} />}
-            {(view.args || card.tool) && <TechnicalDetails tool={card.tool} server={view.server} args={view.args} />}
+            {(view.args || card.tool) && <TechnicalDetails tool={view.tool ?? card.tool} server={view.server} args={view.args} />}
           </div>
         )}
       </StepRow>

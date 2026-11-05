@@ -47,15 +47,15 @@ process.env.SAGAX_DATA_DIR = directory;
 process.env.SAGAX_MCP_OAUTH_KEY = "ab".repeat(32); // synthetic vault key, this process only
 const load = <T>(path: string) => import(pathToFileURL(join(repo, path)).href) as Promise<T>;
 type Any = Record<string, (...args: never[]) => unknown> & Record<string, unknown>;
-const db = await load<Any>("server/message-db.ts");
-const workspace = await load<Any>("server/workspace.ts");
-const attachments = await load<Any>("server/attachments.ts");
-const messageFile = await load<Any>("server/message-file.ts");
+const db = await load<Any>("server/messages/message-db.ts");
+const workspace = await load<Any>("server/workspace/workspace.ts");
+const attachments = await load<Any>("server/attachments/attachments.ts");
+const messageFile = await load<Any>("server/messages/message-file.ts");
 const native = await load<Any>("server/drivers/native.ts");
-const threadEvents = await load<Any>("server/thread-events.ts");
+const threadEvents = await load<Any>("server/threads/thread-events.ts");
 const config = await load<Any>("server/config.ts");
 let atRest: Any | null = null;
-try { atRest = await load<Any>("server/content-at-rest.ts"); } catch { atRest = null; }
+try { atRest = await load<Any>("server/encryption/content-at-rest.ts"); } catch { atRest = null; }
 
 const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]!;
 const round = (value: number, digits = 2) => +value.toFixed(digits);
@@ -223,7 +223,7 @@ try {
   // on disk when its append returns. Read live (small blocks), then after the
   // migration gathered them (the log quiet).
   await load<Any>("server/harness/bus.ts");
-  const activity = await load<Any>("server/activity.ts");
+  const activity = await load<Any>("server/activity/activity.ts");
   const nativeDir = config.NATIVE_DIR as string;
   const eventsDir = config.EVENTS_DIR as string;
   mkdirSync(nativeDir, { recursive: true });

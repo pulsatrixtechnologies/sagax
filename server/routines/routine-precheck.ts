@@ -95,10 +95,21 @@ const watchSchema = z.object({
   }
 });
 
-export const routinePrecheckSchema = z.union([conditionSchema, watchSchema]);
+/** 2026-11-05 (#2018): a check Sagax runs as code, by name, before a turn
+ * (options.evaluateCode in routines.ts). No LLM call per tick: the turn
+ * starts only when the check finds work. */
+export const ROUTINE_CODE_CHECKS = ["claude_artifact_comments"] as const;
+export const ROUTINE_CODE_CHECK_TIMEOUT_MS = 180_000;
+const codeSchema = z.object({
+  kind: z.literal("code"),
+  check: z.enum(ROUTINE_CODE_CHECKS),
+}).strict();
+
+export const routinePrecheckSchema = z.union([conditionSchema, watchSchema, codeSchema]);
 
 export type RoutineConditionPrecheck = z.infer<typeof conditionSchema>;
-export type RoutinePrecheck = RoutineConditionPrecheck | RoutineWatchPrecheck;
+export type RoutineCodePrecheck = z.infer<typeof codeSchema>;
+export type RoutinePrecheck = RoutineConditionPrecheck | RoutineWatchPrecheck | RoutineCodePrecheck;
 
 /** What the scheduler knows when a run is due. */
 export interface RoutinePrecheckFacts {
@@ -137,6 +148,10 @@ export function parseRoutinePrecheck(value: unknown): RoutinePrecheck {
 export function loadRoutinePrecheck(value: unknown): RoutinePrecheck | undefined {
   const parsed = routinePrecheckSchema.safeParse(value);
   return parsed.success ? parsed.data as RoutinePrecheck : undefined;
+}
+
+export function isCodePrecheck(precheck: RoutinePrecheck | undefined): precheck is RoutineCodePrecheck {
+  return precheck?.kind === "code";
 }
 
 export function isWatchPrecheck(precheck: RoutinePrecheck | undefined): precheck is RoutineWatchPrecheck {

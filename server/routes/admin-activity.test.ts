@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { appendAdminAction, flushAdminActivity } from "../admin-activity.ts";
+import { appendAdminAction, flushAdminActivity } from "../activity/admin-activity.ts";
 import { appendDecision, flushDecisionLog } from "../decision-log.ts";
 import { createAdminActivityRoutes } from "./admin-activity.ts";
 import { PASS } from "./table.ts";

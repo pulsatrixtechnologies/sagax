@@ -12,7 +12,7 @@ import { dirname } from "node:path";
 import { z } from "zod";
 
 import { writeFileAtomic } from "../atomic.ts";
-import { TEAM_ID_REGEX } from "../principals.ts";
+import { TEAM_ID_REGEX } from "../auth/principals.ts";
 
 export const MAX_ORG_TEAMS = 100_000;
 const teamSchema = z.object({ id: z.string().regex(TEAM_ID_REGEX), name: z.string().max(200) });

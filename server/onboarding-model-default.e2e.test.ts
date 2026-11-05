@@ -29,7 +29,9 @@ type Fixture = {
 };
 
 async function withUnselectedStarter(check: (fixture: Fixture) => Promise<void>) {
-  const fixture = await launchVerificationServer();
+  // 95e8f39e4 continues a tool-only ending. This discovery fixture answers
+  // with words, so the first-dispatch receipt is not replaced by a follow-up.
+  const fixture = await launchVerificationServer({ ...process.env, FAKE_CLAUDE_TOOL_CALLS: "[]" });
   const { dataDir, url, logPath } = fixture.info;
   const configPath = join(dataDir, "config.json");
   const botsPath = join(dataDir, "bots.json");
@@ -59,7 +61,7 @@ async function withUnselectedStarter(check: (fixture: Fixture) => Promise<void>)
     const config = JSON.parse(readFileSync(configPath, "utf8"));
     config.instances.claude = { ...config.instances.claude, enabled: options.enabled ?? true,
       config: { ...config.instances.claude.config, cli: lateCli },
-      environment: options.signedOut ? { FAKE_CLAUDE_AUTH: "out", FAKE_CLAUDE_MODE: "not-logged-in" } : {},
+      environment: options.signedOut ? { FAKE_CLAUDE_AUTH: "out", FAKE_CLAUDE_MODE: "not-logged-in" } : { FAKE_CLAUDE_TOOL_CALLS: "[]" },
     };
     writeFileSync(configPath, JSON.stringify(config));
     const log = openSync(logPath, "a", 0o600);
@@ -113,7 +115,7 @@ async function send(fixture: Fixture, botId: string, threadId: string, text: str
   expect(JSON.stringify(fixture.receipt().prompt)).toContain(text);
 }
 
-it("connecting a provider selects a blank starter and future bot defaults without replacing chosen models", async () => {
+it("connecting a provider selects a blank starter and future bot defaults without replacing other bots' chosen models", async () => {
   await withUnselectedStarter(async (fixture) => {
     const starter = (await fixture.api("GET", "/api/bots")).bots[0];
     const pinned = (await fixture.api("POST", `/api/bots/${starter.id}/tasks`, { title: "Pinned model" })).task;
@@ -122,14 +124,17 @@ it("connecting a provider selects a blank starter and future bot defaults withou
     await fixture.restart({ clearStarter: true });
     const missing = (await fixture.api("GET", "/api/instances")).instances.find((instance: any) => instance.instanceId === "claude");
     expect(missing.snapshot.state).not.toBe("available");
-    expect((await fixture.api("GET", "/api/bots")).bots.find((bot: any) => bot.id === starter.id).modelSelection).toEqual(EMPTY);
+    const unconnected = (await fixture.api("GET", "/api/bots")).bots.find((bot: any) => bot.id === starter.id);
+    expect(unconnected.modelSelection).toEqual(EMPTY);
+    expect(unconnected.tasks.find((task: any) => task.threadId === pinned.threadId)).toMatchObject({ modelSelection: CHOSEN, followsBotModel: false });
 
     await fixture.connect();
     const bots = (await fixture.api("GET", "/api/bots")).bots;
     const connected = bots.find((bot: any) => bot.id === starter.id);
     expect(connected.modelSelection).toEqual(DEFAULT);
     expect(connected.tasks.find((task: any) => task.threadId === starter.threadId)).toMatchObject({ modelSelection: DEFAULT, followsBotModel: true });
-    expect(connected.tasks.find((task: any) => task.threadId === pinned.threadId)).toMatchObject({ modelSelection: CHOSEN, followsBotModel: false });
+    // a9872c8a9: adopting the bot default clears every earlier thread pick.
+    expect(connected.tasks.find((task: any) => task.threadId === pinned.threadId)).toMatchObject({ modelSelection: DEFAULT, followsBotModel: true });
     expect(bots.find((bot: any) => bot.id === intentional.id).modelSelection).toEqual(CHOSEN);
     expect(fixture.saved().find((bot) => bot.id === starter.id).modelSelection).toEqual(DEFAULT);
     expect((await fixture.api("GET", "/api/bot-defaults")).modelSelection).toEqual(AUTO);
@@ -143,7 +148,7 @@ it("connecting a provider selects a blank starter and future bot defaults withou
     expect(reloaded.find((bot: any) => bot.id === starter.id).modelSelection).toEqual(DEFAULT);
     expect(reloaded.find((bot: any) => bot.id === intentional.id).modelSelection).toEqual(CHOSEN);
     expect(reloaded.find((bot: any) => bot.id === starter.id).tasks.find((task: any) => task.threadId === pinned.threadId))
-      .toMatchObject({ modelSelection: CHOSEN, followsBotModel: false });
+      .toMatchObject({ modelSelection: DEFAULT, followsBotModel: true });
   });
 }, 120_000);
 

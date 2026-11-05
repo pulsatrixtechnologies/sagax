@@ -28,7 +28,7 @@ vi.mock("./DesktopCapabilities", async (importOriginal) => ({
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 
 const { RoomToolChip } = await import("./GroupView");
-const { FailedTurnRow } = await import("./ChatView");
+const { PreSendRefusalLine } = await import("./ChatView");
 
 const claude = {
   instanceId: "claude", driverKind: "claudeAgent", displayName: "Claude",
@@ -50,14 +50,11 @@ const room = (message: Message) => renderToStaticMarkup(createElement(RoomToolCh
 describe("a member's failed turn in a room", () => {
   const signedOut = failed("error: Not logged in · Please run /login", { setup: true });
 
-  it("shows only the sign-in card for a signed-out engine: no error row, no Details", () => {
+  it("says a signed-out engine in one quiet line, no red card and no error Details (#2013)", () => {
     const markup = room(signedOut);
-    expect(markup).toContain("Sign in to Claude");
-    expect(markup).not.toContain("isn&#x27;t signed in yet");
-    // only the terminal command behind the card (#386), no error Details
-    expect(markup.match(/<details/g)).toHaveLength(1);
-    expect(markup).toContain("<details data-manual-command");
-    expect(markup).not.toContain("Not logged in");
+    expect(markup).toContain("data-presend-refusal");
+    expect(markup).toContain("Not logged in");
+    expect(markup).not.toContain("<details");
     expect(markup).not.toContain('data-testid="tool-activity"');
   });
 
@@ -73,8 +70,8 @@ describe("a member's failed turn in a room", () => {
     }
   });
 
-  it("is the very row a direct chat shows for the same failure", () => {
-    expect(room(signedOut)).toBe(renderToStaticMarkup(createElement(FailedTurnRow, { tool: signedOut.tool!, engine: claude })));
+  it("is the very line any pre-send refusal gets in a room (#2013)", () => {
+    expect(room(signedOut)).toBe(renderToStaticMarkup(createElement(PreSendRefusalLine, { tool: signedOut.tool! })));
   });
 
   it("shows a plan-limit refusal whole, next action included", () => {

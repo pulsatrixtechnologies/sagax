@@ -8,7 +8,7 @@
  * computer is illustrated only after one of these; the built-in browser's
  * read-only calls (snapshot, read, get_text, waits) stay out by the same rule. */
 export const SCREEN_TOUCHING_TOOLS: ReadonlySet<string> = new Set([
-  // cloud boat / remote computer (server/cloud-computer-tools.ts names its
+  // cloud boat / remote computer (server/computer/cloud-computer-tools.ts names its
   // key tool key_press)
   "screenshot", "click", "type_text", "press_key", "key_press", "scroll", "computer_batch", "open_url", "browser_click", "browser_fill",
   // built-in browser: the Electron surface's names, kept because a bot on an
@@ -24,7 +24,7 @@ export const SCREEN_TOUCHING_TOOLS: ReadonlySet<string> = new Set([
 
 // Keep legacy MCP namespaces accepted; desktop server__tool names follow
 // MCP_NAME in mcp-registry.ts (lowercase letters, digits, underscores, hyphens).
-export const TOOL_NAMESPACE = /^(?:mcp__.+?|[a-z][a-z0-9_-]{0,31})__/;
+export const TOOL_NAMESPACE = /^(?:mcp__.+?|[a-z][a-z0-9_-]{0,39})__/;
 
 /** The same tool reaches the poke site as `mcp__computer__click`,
  * `computer__click`, bare `click`, or pi's `computer_click`. A single-underscore

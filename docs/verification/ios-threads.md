@@ -12,7 +12,7 @@ runtime projection and loading full history after a background SSE tail.
 From the repository root:
 
 ```sh
-pnpm exec vitest run server/paired-thread-targets-api.test.ts server/independent-threads-api.test.ts server/bot-projects-api.test.ts server/thread-capacity-api.test.ts
+pnpm exec vitest run server/paired-thread-targets-api.test.ts server/workspace/independent-threads-api.test.ts server/bot-projects-api.test.ts server/thread-capacity-api.test.ts
 ```
 
 These server tests launch isolated fake-provider fixtures. They cover thread
@@ -87,7 +87,7 @@ Check on iPhone and iPad:
 Keep the `.xcresult` bundle and screenshots as evidence. Shut down and remove
 only the disposable simulators you created.
 The `iOS thread UI` workflow (`.github/workflows/ios-thread-ui.yml`) runs
-`scripts/verify-ios-thread-navigation-ci.sh` by hand from the Actions tab. It creates fresh iPhone and iPad
+`scripts/verify/release/verify-ios-thread-navigation-ci.sh` by hand from the Actions tab. It creates fresh iPhone and iPad
 simulators, runs only this offline UI fixture, deletes those exact simulators,
 and uploads both `.xcresult` bundles with screenshots as a short-lived artifact.
 PR CI runs the Swift tests and the simulator build only.

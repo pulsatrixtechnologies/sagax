@@ -364,7 +364,7 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
     HERMES_HOME: join(dataDir, ".hermes"),
     SAGAX_DATA_DIR: dataDir,
     // Verification servers run the full-duplex call path unless the caller
-    // turns it off (the product default is off, server/voice-call-duplex.ts).
+    // turns it off (the product default is off, server/voice/voice-call-duplex.ts).
     SAGAX_VOICE_FULL_DUPLEX: parentEnv.SAGAX_VOICE_FULL_DUPLEX ?? "1",
     SAGAX_PORT: String(port),
     SAGAX_WEBHOOK_PORT: String(port + 1),
@@ -386,7 +386,7 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
   });
   // The UI checks drive this fixture from a real browser, as `pnpm dev` does;
   // SAGAX_DEV_TRUST_LOCAL_BROWSER=0 tests the sign-in a browser now needs
-  // (port of OpenMausBot #2930, server/request-auth.ts fromBrowser).
+  // (port of OpenMausBot #2930, server/auth/request-auth.ts fromBrowser).
   if (parentEnv.SAGAX_DEV_TRUST_LOCAL_BROWSER !== "0") childEnv.SAGAX_DEV_TRUST_LOCAL_BROWSER = "1";
   // A suite that drives a fixed Works on or a conversation pin through the
   // HTTP API (Workspace is always Auto otherwise, the owner 2026-10-18) opts in
@@ -400,9 +400,14 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
     // FAKE_CLAUDE_DUMP stays the launcher's: assertions read fixtureDumpPath.
     if (key.startsWith("FAKE_CLAUDE_") && key !== "FAKE_CLAUDE_DUMP" && value) childEnv[key] = value;
   }
+  // Per-step turn path timing on stderr (server/turns/turn-trace.ts). Off
+  // unless the parent sets it; no test change.
+  if (parentEnv.SAGAX_TURN_TRACE === "1") childEnv.SAGAX_TURN_TRACE = "1";
+  // A Vitest run owns this namespace and removes exactly its containers.
+  if (parentEnv.SAGAX_LOCAL_VM_TEST_NAMESPACE) childEnv.SAGAX_LOCAL_VM_TEST_NAMESPACE = parentEnv.SAGAX_LOCAL_VM_TEST_NAMESPACE;
   // A suite that checks how a failed turn reads (a rate limit, a refused key)
   // turns the automatic backup engine off, or the same message would simply
-  // continue on another engine and never fail (server/limit-failover-host.ts).
+  // continue on another engine and never fail (server/usage/limit-failover-host.ts).
   if (parentEnv.SAGAX_LIMIT_FAILOVER === "0") childEnv.SAGAX_LIMIT_FAILOVER = "0";
   // Content encryption (docs/content-encryption.md) is on unless the caller
   // says otherwise: the test suite turns it off (server/testing/setup.ts)
@@ -414,7 +419,7 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
   // (POST /api/testing/org-library); the route does not exist without it.
   if (parentEnv.SAGAX_TEST_ORG_LIBRARY_KEY) childEnv.SAGAX_TEST_ORG_LIBRARY_KEY = parentEnv.SAGAX_TEST_ORG_LIBRARY_KEY;
   // A pre-warm window short enough for a test to see the idle engine closed
-  // (server/thread-prewarm.ts).
+  // (server/threads/thread-prewarm.ts).
   if (parentEnv.SAGAX_PREWARM_WINDOW_MS) childEnv.SAGAX_PREWARM_WINDOW_MS = parentEnv.SAGAX_PREWARM_WINDOW_MS;
   // The Code section's fake Perspicax (server/testing/fake-perspicax-agents.ts),
   // started inside the fixture; a solo server only, never real Perspicax.
@@ -584,7 +589,9 @@ export async function launchVerificationServer(
   });
   closeSync(log);
 
-  const deadline = Date.now() + 20_000;
+  // Strip-types boot of server/index.ts can exceed 20s when the Mac is under
+  // several concurrent verification servers; 60s keeps the harness usable.
+  const deadline = Date.now() + 60_000;
   try {
     for (;;) {
       if (signal?.aborted) throw new ControlOmbError("verification launch cancelled");

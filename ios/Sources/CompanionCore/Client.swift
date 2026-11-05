@@ -360,7 +360,7 @@ public struct PairingInvite: Equatable, Sendable {
     public static let serverCodeAlphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
 
     /// What the server does to a typed code before comparing it
-    /// (`normalizePairingCode` in `server/sessions.ts`): uppercase, drop
+    /// (`normalizePairingCode` in `server/auth/sessions.ts`): uppercase, drop
     /// dashes, spaces and anything else that is not a letter or digit, then
     /// read 0 as O and 1 as I. Identical here so the app and the server
     /// never disagree about which code was entered.
@@ -1195,7 +1195,7 @@ public struct CompanionClient: Sendable {
     /// Fetch a parked voice note with the paired-device bearer token — the
     /// same authenticated /api/attachments route avatar bytes ride, never a
     /// bare URL a page could steer. The name follows the route's own
-    /// discipline (readAttachment in server/attachments.ts): one bare
+    /// discipline (readAttachment in server/attachments/attachments.ts): one bare
     /// generated mp3 filename.
     public func voiceNote(path: String) async throws -> Data {
         guard let name = Self.voiceNoteFileName(path) else { throw APIError.badURL }

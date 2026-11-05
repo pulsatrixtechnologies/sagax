@@ -10,7 +10,7 @@ import { useMemo } from "react";
 import type { InboxApproval, InboxDestination } from "../../../shared/approvals-inbox";
 import { PendingApprovalActions, PendingApprovalPanel, pendingApprovals } from "@/components/PendingApproval";
 import { QuestionCard } from "@/components/QuestionCard";
-import { withoutIds } from "@/lib/approvals-inbox";
+import { inboxWhere, withoutIds } from "@/lib/approvals-inbox";
 import { cn } from "@/lib/cn";
 import { activeLocale, t } from "@/lib/i18n";
 import type { Bot, Message } from "@/state/store";
@@ -73,7 +73,7 @@ export function ApprovalDetail({
   const pending = useMemo(() => (message && entry.kind !== "question" ? pendingApprovals([message])[0] : undefined), [message, entry.kind]);
   // A meeting or a terminal is answered on its own card in the conversation.
   const ownCard = Boolean(card?.meetingRequest || card?.phoneCallConsent || card?.terminalRequest);
-  const where = withoutIds(entry.roomName ?? entry.threadTitle ?? "");
+  const where = withoutIds(inboxWhere(entry));
   const Destination = entry.destination ? DESTINATION_ICON[entry.destination] : undefined;
   const at = new Date(entry.at);
 

@@ -16,7 +16,7 @@ import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 
 import { t } from "@/lib/i18n";
-import { formatBytes } from "@/lib/memory";
+import { formatMemoryBytes } from "@/lib/memory";
 import { whenLabel } from "@/lib/schedule-label";
 import { utf8Bytes } from "@/lib/soul";
 import type { LocaleKey } from "@/locales";
@@ -69,7 +69,7 @@ export function historyField(field: string): string {
 export function historySummary(row: HistoryRow): string {
   const field = historyField(row.field);
   if (row.field === "soul" && typeof row.before === "string" && typeof row.after === "string") {
-    return `${field}${t("botPanel.history.separator")}${formatBytes(utf8Bytes(row.before))} → ${formatBytes(utf8Bytes(row.after))}`;
+    return `${field}${t("botPanel.history.separator")}${formatMemoryBytes(utf8Bytes(row.before))} → ${formatMemoryBytes(utf8Bytes(row.after))}`;
   }
   if (typeof row.before === "string" && typeof row.after === "string") {
     return `${field}${t("botPanel.history.separator")}${JSON.stringify(row.before)} → ${JSON.stringify(row.after)}`;

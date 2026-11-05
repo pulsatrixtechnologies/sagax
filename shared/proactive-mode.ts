@@ -1,6 +1,6 @@
 // Proactive mode: a per-bot on/off switch, set next to the approval level,
 // that says whether a bot may notice a condition (a new mail, an upcoming
-// meeting, a failed run, a bot's post, a webhook) and start work without
+// meeting, a failed run, a bot's post, a teammate's message, a webhook) and start work without
 // being asked.
 //
 // One proactive behavior (2026-11-01). Off means no wakes. Proactive means

@@ -12,6 +12,7 @@
 // already on Auto) stays with AccessSection, next to that picker. The
 // warnings remember which bot they were opened for, so a bot switch while
 // one is up never applies the choice to the newly selected bot.
+import { RoleRulesCard } from "./RoleRulesCard";
 import { useEffect, useState } from "react";
 import { Lock } from "lucide-react";
 
@@ -140,7 +141,7 @@ export function PermissionsSection({
   };
   // How autonomously this bot may act on its own. A level next to the approval
   // level, not a Chief orchestrator: the server enforces it per bot
-  // (shared/proactive-mode.ts, server/proactive.ts).
+  // (shared/proactive-mode.ts, server/proactive/proactive.ts).
   const proactiveMode: ProactiveMode = proactiveModeFor(bot);
   const setProactiveMode = (mode: ProactiveMode) => {
     if (bot.busy || (mode === proactiveMode && !proactiveMixed)) return;
@@ -329,6 +330,8 @@ export function PermissionsSection({
 
       {/* 2026-10-16: the person's custom rules, in their own words */}
       {showOwnerPermissions && <CustomRulesCard key={`custom-rules:${bot.id}`} bot={bot} />}
+      {/* 2026-11-05: the owner's "Toujours ainsi" role rules (visible roles) */}
+      {showOwnerPermissions && <RoleRulesCard key={`role-rules:${bot.id}`} botId={bot.id} />}
 
       {showToolAccess && <BotToolAccess key={`tools:${bot.id}`} bot={bot} />}
       {showParallel && <BotParallelSettings key={`parallel:${bot.id}`} bot={bot} />}

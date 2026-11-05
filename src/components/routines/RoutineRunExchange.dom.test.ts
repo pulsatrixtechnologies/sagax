@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-// Routine run exchange (2026-11-01): opens like Melonie <-> Katarina, Escape
-// closes, header X closes, footer keeps Run again / Continue / logs / configuration.
+// Routine run exchange (2026-11-01): opens like Nova <-> Orion, Escape
+// closes, the bottom Close Chat pill closes, footer keeps Run again / Continue / logs / configuration.
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -82,7 +82,7 @@ afterEach(() => {
   host.remove();
 });
 
-function mountExchange(props: { run?: RoutineRun; onClose?: () => void; onRunAgain?: () => void; onLogs?: () => void }) {
+function mountExchange(props: { run?: RoutineRun; onClose?: () => void }) {
   const onClose = props.onClose ?? vi.fn();
   flushSync(() => root.render(createElement(ExchangeColumnProvider, {
     node: column,
@@ -91,25 +91,32 @@ function mountExchange(props: { run?: RoutineRun; onClose?: () => void; onRunAga
       routine,
       bots: [bot],
       onClose,
-      ...(props.onRunAgain ? { onRunAgain: props.onRunAgain } : {}),
-      ...(props.onLogs ? { onLogs: props.onLogs } : {}),
     }),
   })));
   return onClose;
 }
 
 describe("RoutineRunExchange", () => {
-  it("portals into the exchange column with routine <-> bot header and a header close control", async () => {
-    mountExchange({ onClose: vi.fn(), onRunAgain: vi.fn(), onLogs: vi.fn() });
+  it("portals into the exchange column with routine <-> bot header and a bottom Close Chat pill", async () => {
+    mountExchange({ onClose: vi.fn() });
     await vi.waitFor(() => expect(column.querySelector("[data-testid=routine-run-exchange]")).not.toBeNull());
     const sheet = column.querySelector("[data-testid=routine-run-exchange]")!;
     expect(sheet.textContent).toContain("Morning brief");
     expect(sheet.textContent).toContain("Atlas");
     expect(sheet.querySelector("[data-routine-run-meta]")?.textContent).toMatch(/Completed/);
     const close = sheet.querySelector<HTMLButtonElement>("[data-testid=bot-exchange-close]")!;
-    expect(close.getAttribute("aria-label")).toBe("Close");
-    expect(close.textContent).not.toMatch(/Close Chat/i);
-    expect(sheet.querySelector("[data-exchange-footer]")).not.toBeNull();
+    expect(close.textContent).toBe("Close Chat");
+    expect(sheet.querySelectorAll("[data-testid=bot-exchange-close]")).toHaveLength(1);
+    const footer = sheet.querySelector("[data-exchange-footer]")!;
+    expect(footer).not.toBeNull();
+    // One row (Grok Bot): the actions, then Close Chat last, all items of the same row.
+    expect(footer.lastElementChild).toBe(close);
+    expect(footer.className).toContain("flex-wrap");
+    expect(footer.className).not.toContain("flex-col");
+    const actions = footer.querySelector("[data-routine-run-actions]")!;
+    expect(actions.parentElement).toBe(footer);
+    expect(actions.className).toContain("contents");
+    expect(close.className).not.toContain("ui-button-primary");
     expect(sheet.querySelector("[data-run-continue]")).not.toBeNull();
     expect(document.body.innerHTML).not.toMatch(/run-1|r1\b/);
   });
@@ -121,13 +128,13 @@ describe("RoutineRunExchange", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it("exposes Run again, Continue, and a configuration menu", async () => {
-    mountExchange({ onRunAgain: vi.fn(), onLogs: vi.fn() });
-    await vi.waitFor(() => expect(column.querySelector("[data-run-again]")).not.toBeNull());
-    expect(column.querySelector("[data-run-continue]")).not.toBeNull();
-    flushSync(() => column.querySelector<HTMLButtonElement>("[data-run-more]")!.click());
-    expect(column.querySelector("[data-run-logs]")).not.toBeNull();
-    expect(column.querySelector("[data-run-configuration]")).not.toBeNull();
+  it("keeps only Continue and Close Chat in the footer of a finished run (JC 2026-11-03)", async () => {
+    mountExchange({});
+    await vi.waitFor(() => expect(column.querySelector("[data-run-continue]")).not.toBeNull());
+    const actions = column.querySelector<HTMLElement>("[data-routine-run-actions]")!;
+    expect(actions.querySelectorAll("button")).toHaveLength(1);
+    expect(column.querySelector("[data-run-again]")).toBeNull();
+    expect(column.querySelector("[data-run-more]")).toBeNull();
   });
 
   it("uses the same short runCommand labels as the chat (no UUID or server path on screen)", async () => {

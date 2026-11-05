@@ -1,10 +1,14 @@
-// B1: every route the server answers has a policy row (server/tool-policy.ts).
+// B1: every route the server answers has a policy row (server/tools/tool-policy.ts).
 // A new route fails here until `node scripts/tool-policy/generate.ts` writes
 // its row and the row is reviewed.
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { routeInventory } from "./route-inventory.ts";
-import { classifyRoute, personalProviderRoute, policyFor, policyKey, toolPolicyRows, UNKNOWN_ROUTE_POLICY } from "../../server/tool-policy.ts";
+import { classifyRoute, personalProviderRoute, policyFor, policyKey, toolPolicyRows, UNKNOWN_ROUTE_POLICY } from "../../server/tools/tool-policy.ts";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const inventory = routeInventory(root);
@@ -89,4 +93,24 @@ describe("tool policy coverage", () => {
 
 it.each(["/api/me/providers/keys/openai", "/api/me/providers/servers/lab", "/api/me/voice-keys/fish"])("keeps personal provider deletion available to its person: %s", (path) => {
   expect(classifyRoute("DELETE", path)).toMatchObject({ tier: "write", scope: "me:write", defaultEnabled: true, destructive: true });
+});
+
+// 2026-11-03 (audit N-2): the generator still imported ./tool-policy-types.ts
+// after the regroup moved it to server/tools/, so the next regeneration broke
+// the typecheck. Its output must be the reviewed table, byte for byte.
+it("regenerates the reviewed table as it is, with imports that resolve", () => {
+  const dir = mkdtempSync(join(tmpdir(), "tool-policy-"));
+  try {
+    const out = join(dir, "tool-policy.generated.ts");
+    const run = spawnSync(process.execPath, [fileURLToPath(new URL("./generate.ts", import.meta.url))], {
+      env: { ...process.env, TOOL_POLICY_OUT: out }, encoding: "utf8",
+    });
+    expect(run.status, run.stderr).toBe(0);
+    expect(readFileSync(out, "utf8")).toBe(readFileSync(join(root, "server", "tool-policy.generated.ts"), "utf8"));
+    for (const [, spec] of readFileSync(out, "utf8").matchAll(/from "(\.[^"]+)"/g)) {
+      expect(existsSync(join(root, "server", spec!)), spec).toBe(true);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

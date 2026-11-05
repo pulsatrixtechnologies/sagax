@@ -19,7 +19,7 @@
 //
 // PARITY_OWNER=1 is the personal computer whose desktop app is signed in to
 // an organization: the same dataset, plus the owner identity the desktop
-// hands its server (owner-identity.json, server/owner-identity.ts) with a
+// hands its server (owner-identity.json, server/people/owner-identity.ts) with a
 // solid-colour avatar, and the phone reaching it the way an iPhone reaches
 // a personal computer: through the companion sidecar (companion/src/proxy.ts)
 // with a device token. session.json then names the sidecar, no environment,
@@ -76,6 +76,8 @@ import { RICH_LAB, seedRichLabBot, seedRichLabTranscript } from "./rich-lab.mjs"
 import { WIDGET_LAB, seedWidgetLabBot, seedWidgetLabTranscript } from "./widget-lab.mjs";
 // PARITY_LINKS=1: a second Ara conversation with the newest link, for Go to message (links-lab.mjs).
 import { LINKS_LAB, seedLinksLab, seedLinksLabTranscript } from "./links-lab.mjs";
+// PARITY_EXCHANGE=1: a bot-to-bot conversation between Ara and Helios (exchange-lab.mjs).
+import { EXCHANGE_LAB, seedExchangeLab, seedExchangeLabStore } from "./exchange-lab.mjs";
 // PARITY_PLUGINS=1: connected apps, MCP sign-in and a bot without apps for the WP9 UI tests (plugin-lab.mjs).
 import {
   PLUGIN_LAB, closePluginLab, pluginLabHook, pluginLabServerEnv, seedPluginLab, startPluginLabBroker,
@@ -164,6 +166,10 @@ function startServer(port, webhook) {
       OMB_PORT: String(port),
       OMB_WEBHOOK_PORT: String(webhook),
       FAKE_CLAUDE_MODE: "happy",
+      // The desktop references load the renderer through Vite's proxy in
+      // headless Chrome: since #2930 a local browser is no longer the owner
+      // unless this development switch says so (server/auth/request-auth.ts).
+      SAGAX_DEV_TRUST_LOCAL_BROWSER: "1",
       ...(THREAD_TITLES ? { FAKE_CLAUDE_TEXT_FILE: join(home, "thread-title.txt") } : {}),
       // No stub layer for the solo dataset: the open-source edition runs with
       // every feature on, the monthly budget included. PARITY_ORG=1 adds one
@@ -774,6 +780,7 @@ async function main() {
   if (RICH_LAB) await seedRichLabBot(base, api);
   if (WIDGET_LAB) await seedWidgetLabBot(base, api);
   if (LINKS_LAB) await seedLinksLab(base, api, seeded.ids);
+  if (EXCHANGE_LAB) await seedExchangeLab(base, api, seeded.ids);
   await stopServer(child);
 
   seedTranscripts(dataDir, seeded);
@@ -783,10 +790,11 @@ async function main() {
   if (RICH_LAB) seedRichLabTranscript(dataDir, png);
   if (WIDGET_LAB) seedWidgetLabTranscript(dataDir);
   if (LINKS_LAB) seedLinksLabTranscript(dataDir);
+  if (EXCHANGE_LAB) seedExchangeLabStore(dataDir);
   seedCommandRules(dataDir, seeded);
   const ownerMode = process.env.PARITY_OWNER === "1";
   if (ownerMode) {
-    // What the signed-in desktop leaves its server (server/owner-identity.ts).
+    // What the signed-in desktop leaves its server (server/people/owner-identity.ts).
     writeFileSync(join(dataDir, "owner-identity.json"), JSON.stringify({
       origin: "https://sagax.example.test", principalId: "pr_parity_org_person", name: "Parity Person", email: "parity.person@example.test",
       avatar: { version: "parityowner01", data: png(96, 96, ORG_AVATAR_RGB, { band: false }).toString("base64") },
@@ -832,12 +840,12 @@ async function main() {
 }
 
 /** PARITY_OWNER=1: one imported skill on Ara, disabled as an import lands,
- * through the server's own installer (server/skills.ts) while the server is
+ * through the server's own installer (server/skills/skills.ts) while the server is
  * stopped, for the advanced panel's Skills UI tests (WP16). */
 export const OWNER_SKILL = "fixture-check";
 function seedOwnerSkill(seeded) {
   const skill = `---\nname: ${OWNER_SKILL}\ndescription: Placeholder skill that checks the fixture.\n---\n\nPlaceholder: run the fixture check and report.\n`;
-  const script = `import { installSkill } from ${JSON.stringify(join(ROOT, "server", "skills.ts"))};
+  const script = `import { installSkill } from ${JSON.stringify(join(ROOT, "server", "skills", "skills.ts"))};
     const result = installSkill(${JSON.stringify(seeded.ids.ara.id)}, "parity/fixture", [{ path: "SKILL.md", content: ${JSON.stringify(skill)} }]);
     if ("error" in result) { console.error(result.error); process.exit(1); }`;
   const run = spawnSync(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", script], {

@@ -97,6 +97,8 @@ struct ChatView: View {
     /// WP4: the find bar (MS11), the bottom follow and Jump to latest (MS14),
     /// citations waiting for the next send (CO8).
     @StateObject var finder = ChatFindModel()
+    /// A room's composer hint: Jev routes an Auto room (`jevRoomRoutingOn`).
+    @State var roomJevOn = false
     @StateObject var follow = BottomFollow()
     @StateObject var citations = CitationDrafts()
     @State var shareFile: ShareFile?
@@ -130,6 +132,10 @@ struct ChatView: View {
     @State var sendBlockTick = 0
     /// "Connect <engine>" on a phone: the settings sheet.
     @State var showingEngineSettings = false
+    /// "Switch engine" on a composer locked by an engine's limit or credit.
+    @State var choosingEngineForLimit = false
+    /// A Fix on the composer's advisory line (#2013) that did not hold.
+    @State var sendBlockFixError: String?
     @State var attachmentError: String?
     @State var openingFileName: String?
     @State var fileOpenError: String?
@@ -260,7 +266,8 @@ struct ChatView: View {
     var rows: [TranscriptRow] {
         transcriptRows(
             messages, detail: toolCalls.detail, showThreads: threadPrefs.threads.allows(.transcriptReceipts),
-            threadBotId: current.isBot ? current.id : ""
+            threadBotId: current.isBot ? current.id : "",
+            hidesPreSendRefusals: current.isBot
         )
     }
 
@@ -284,7 +291,17 @@ struct ChatView: View {
         AnyView(screen)
         // "Use bot color as accent": this bot's colour while its chat is open
         .modifier(OpenBotAccent(color: current.isBot ? current.color : nil, name: current.isBot ? current.name : nil))
-        .sheet(item: $openBotConversation) { row in
+        // The iPad desktop shell: the exchange is a page over the chat
+        // column (ExchangeSheet, `absolute inset-0` in the column), the
+        // phone keeps its sheet.
+        .overlay {
+            if desktopChat != nil, let row = openBotConversation, case let .bot(bot) = current {
+                BotConversationPage(row: row, selfBot: bot, desktop: true) { openBotConversation = nil }
+                    .environmentObject(session)
+                    .transition(.opacity)
+            }
+        }
+        .sheet(item: Binding(get: { desktopChat == nil ? openBotConversation : nil }, set: { openBotConversation = $0 })) { row in
             if case let .bot(bot) = current {
                 BotConversationPage(row: row, selfBot: bot).environmentObject(session)
             }
@@ -391,7 +408,7 @@ struct ChatView: View {
                 filePreview = nil
             }
         }
-        .modifier(DevPodsPresentation(isPresented: $showingDevPods, inspector: desktopChat != nil) {
+        .modifier(DevPodsPresentation(isPresented: $showingDevPods, inspector: desktopChat != nil, enabled: devPodsEnabled || showingDevPods) {
             devPodsContent
         })
         .onValueChange(of: devPodsSignature, initial: true) { _ in evaluateDevPods() }
@@ -509,6 +526,16 @@ struct ChatView: View {
         // Can this bot answer the person now? Asked on opening, on a bot,
         // thread or model change, then every 15 s while it cannot.
         .task(id: sendBlockTaskKey) { await runSendStateChecks() }
+        // A turn ended: ask again, it may have been refused before any
+        // prompt went out (#2013), or it cleared a refusal.
+        .onValueChange(of: current.busy) { busy in
+            if !busy { sendBlockTick += 1 }
+        }
+        .sheet(isPresented: $choosingEngineForLimit) {
+            if case let .bot(bot) = current {
+                NavigationStack { ModelMenuSheet(bot: bot, close: { choosingEngineForLimit = false }) }
+            }
+        }
         .fullScreenCover(isPresented: $showingEngineSettings) {
             SettingsView(close: { showingEngineSettings = false })
                 .background(Theme.bg.ignoresSafeArea())
@@ -723,7 +750,7 @@ struct ChatView: View {
                                 if let projected = session.state.bot(bot.id)?.projected(forThread: topic.threadId) {
                                     EarlierTopicSection(
                                         chat: .bot(projected),
-                                        rows: transcriptRows(session.state.visibleTranscript(forThread: topic.threadId), detail: toolCalls.detail, showThreads: false, threadBotId: bot.id),
+                                        rows: transcriptRows(session.state.visibleTranscript(forThread: topic.threadId), detail: toolCalls.detail, showThreads: false, threadBotId: bot.id, hidesPreSendRefusals: true),
                                         openLink: openLink, openThread: openThread, revealedMessageId: revealedMessageId,
                                         scrollToMessage: { proxy.scrollTo($0, anchor: .center) }
                                     )
@@ -791,8 +818,16 @@ struct ChatView: View {
                                 } else if index > 0 {
                                     Color.clear.frame(height: Self.rowGap)
                                 }
-                                if desktopChatText == nil, row.id == newDividerBefore {
-                                    NewMessagesLine()
+                                if row.id == newDividerBefore {
+                                    if desktopChatText != nil {
+                                        // NewMessagesDivider.tsx, a row of its own
+                                        // (the rows around it reserve the message
+                                        // bar's height, which made up the rest)
+                                        DesktopNewMessagesDivider()
+                                            .padding(.bottom, DesktopChatMetrics.rowGap)
+                                    } else {
+                                        NewMessagesLine()
+                                    }
                                 }
                                 // WP15 (RM21): another person's name over their run
                                 if case let .person(_, name, initials, personId)? = roomPersonLabel(at: index, in: transcript) {
@@ -880,6 +915,7 @@ struct ChatView: View {
                     .environment(\.youtubeSendToBot, youtubeSendToBot)
                     .environment(\.conversationGallery, conversationGallery)
                     .environment(\.openPagePanel, openPagePanelAction)
+                    .environment(\.desktopFindHit, desktopFindHit)
                     .background(BottomFollowProbe(model: follow))
 #if DEBUG
                     .background(LongTranscriptMetricsProbe(rowCount: transcript.count, lazyStack: useLazyTranscript))
@@ -901,7 +937,19 @@ struct ChatView: View {
                     // voice mode's call bar keeps its own row under the name
                     // capsule (and under the pinned banner when there is one)
                     VStack(spacing: 0) {
+                        // a desktop group's header is a band (the shared
+                        // 56 pt `--app-topbar-height`) with its notices
+                        // under it (GroupView.tsx), not a float
                         Color.clear.frame(height: Self.topBarHeight)
+                        if let desktopRoom {
+                            DesktopRoomBanners(room: desktopRoom)
+                        }
+                        // ChatNotice: in the banner stack, under the header
+                        if let notice = desktopChat?.notice {
+                            DesktopChatNotice(notice: notice)
+                                .padding(.bottom, 8)
+                                .transition(.opacity)
+                        }
                         // A confidential thread's band: in the reserved
                         // inset, so the transcript never moves under it.
                         if ConfidentialBanner.shows(for: current) {
@@ -910,7 +958,18 @@ struct ChatView: View {
                         Color.clear.frame(height: (pinnedPreview == nil ? 0 : Self.pinnedBannerHeight)
                             + (callPillShown ? CallBarMetrics.inset(scale: callBarScale) : 0))
                     }
+                    // a desktop banner stack (a notice, a group's band) sits in
+                    // the column's flow, opaque: the transcript never shows
+                    // through it or the header above it
+                    .background {
+                        if let desktop = desktopChatText, desktopRoom != nil || desktopChat?.notice != nil {
+                            // a shape, not a Color: a Color background runs on
+                            // into the safe area below the stack
+                            Rectangle().fill(desktop.app)
+                        }
+                    }
                 }
+
                 // iPad desktop: an open find bar sits in the column's flow,
                 // so the transcript is cut under it (ChatView.tsx)
                 .modifier(DesktopFindClip(open: desktopChat != nil && finder.isOpen && session.surfaceGate.allows(.findInConversation)))
@@ -927,23 +986,38 @@ struct ChatView: View {
                 // a failed routine run or a routine's access card: a passing
                 // banner under the top bar, never a row (TransientNotices)
                 .overlay(alignment: .top) {
-                    TransientNoticeBanner(chat: current, messages: messages, openLink: openLink, openThread: openThread)
-                        .padding(.top, Self.topBarHeight + 6)
+                    VStack(spacing: 6) {
+                        // #2013: server updating or unreachable, Perspicax
+                        // unreachable, Reconnected; at the top, never over the composer
+                        ConnectionNoticeBanner()
+                        TransientNoticeBanner(chat: current, messages: messages, openLink: openLink, openThread: openThread)
+                    }
+                    .padding(.top, Self.topBarHeight + 6)
                 }
                 .overlay(alignment: .bottom) {
-                    if !follow.following, !transcript.isEmpty {
-                        JumpToLatestButton {
-                            follow.resume()
-                            withAnimation(Motion.animation(.snappy, reduce: reduceMotion)) { proxy.scrollTo(Self.bottomId, anchor: .bottom) }
+                    if !follow.following, !follow.held, !transcript.isEmpty {
+                        if desktopChat != nil {
+                            // JumpToLatestPill.tsx: 16 above the composer
+                            DesktopJumpToLatestPill {
+                                follow.resume()
+                                withAnimation(Motion.animation(.snappy, reduce: reduceMotion)) { proxy.scrollTo(Self.bottomId, anchor: .bottom) }
+                            }
+                            .padding(.bottom, 16)
+                        } else {
+                            JumpToLatestButton {
+                                follow.resume()
+                                withAnimation(Motion.animation(.snappy, reduce: reduceMotion)) { proxy.scrollTo(Self.bottomId, anchor: .bottom) }
+                            }
+                            .padding(.bottom, 12)
                         }
-                        .padding(.bottom, 12)
                     }
                 }
                 .animation(.snappy(duration: 0.2), value: follow.following)
                 // A conversation grows from the bottom: a transcript shorter
                 // than the screen rests at the bottom, and opening a chat
                 // starts on the newest message rather than the oldest.
-                .scrollAnchorCompat(.bottom)
+                // A desktop group starts at the top (GroupView.tsx).
+                .scrollAnchorCompat(desktopRoom == nil ? .bottom : .top)
                 // Tapping the transcript puts the keyboard away. The composer
                 // is a sibling of this scroll view rather than inside it, so
                 // nothing else here drops its focus — until this, the only way
@@ -1000,6 +1074,10 @@ struct ChatView: View {
 #if DEBUG
                 .task { await desktopParityLaunch(proxy) }
 #endif
+                .task(id: desktopRoom?.id) {
+                    guard desktopRoom != nil else { return }
+                    roomJevOn = await session.configStatus()?.jevRoomRoutingOn ?? false
+                }
                 .task(id: session.focusedMessageId) {
                     guard let messageId = session.focusedMessageId,
                           messages.contains(where: { $0.id == messageId })
@@ -1028,6 +1106,11 @@ struct ChatView: View {
                         try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000)
                         guard !Task.isCancelled else { return }
                         proxy.scrollTo(messageId, anchor: .center)
+                    }
+                    // a find hit: its words, not the bubble, in the middle
+                    if desktopChat != nil, desktopFindHit?.messageId == messageId {
+                        DesktopFindProbe.center()
+                        follow.pause()
                     }
                     session.consumeFocus(messageId)
                 }
@@ -1103,9 +1186,30 @@ struct ChatView: View {
         composerFocused = true
     }
 
+    /// The room drawn in the desktop chat column (nil for a bot, or on the phone).
+    var desktopRoom: Room? {
+        guard desktopChat != nil, case let .room(room) = current else { return nil }
+        return room
+    }
+
+    /// The landed find hit, while the desktop's find bar is open.
+    var desktopFindHit: DesktopFindHit? {
+        guard desktopChat != nil, finder.isOpen, finder.hits.indices.contains(finder.index) else { return nil }
+        return DesktopFindHit(finder.hits[finder.index])
+    }
+
+    /// `startsNewStretch` (src/lib/bot-exchange.ts): a new calendar day, or
+    /// more than 30 minutes since the previous row's last message.
     func desktopStartsANewDay(at index: Int, in rows: [TranscriptRow]) -> Bool {
+        Self.desktopStartsANewStretch(at: index, in: rows)
+    }
+
+    static func desktopStartsANewStretch(at index: Int, in rows: [TranscriptRow]) -> Bool {
         guard index > 0 else { return true }
-        return !Calendar.current.isDate(rows[index].head.date, inSameDayAs: rows[index - 1].head.date)
+        let previous = rows[index - 1]
+        let previousEnd = Date(timeIntervalSince1970: previous.endAt / 1000)
+        if !Calendar.current.isDate(rows[index].head.date, inSameDayAs: previousEnd) { return true }
+        return rows[index].at - previous.endAt > 30 * 60 * 1000
     }
 
     func startsANewStretch(at index: Int, in rows: [TranscriptRow]) -> Bool {
@@ -1406,11 +1510,30 @@ struct EarlierTopicSection: View {
     let revealedMessageId: String?
     let scrollToMessage: (String) -> Void
 
+    @Environment(\.desktopChatText) private var desktop
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                 VStack(alignment: .leading, spacing: 0) {
-                    if index > 0 { Color.clear.frame(height: ChatView.rowGap) }
+                    if let desktop {
+                        // the desktop draws its earlier topics with the same
+                        // day lines as the live one (StreamEarlierTopics)
+                        if ChatView.desktopStartsANewStretch(at: index, in: rows) {
+                            Text(verbatim: DesktopChatMetrics.dayLabel(row.head.date))
+                                .font(desktop.font(13))
+                                .frame(minHeight: 19.5)
+                                .foregroundStyle(desktop.inkSecondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .padding(.top, index == 0 ? 0 : DesktopChatMetrics.rowGap)
+                                .padding(.bottom, DesktopChatMetrics.rowGap)
+                        } else {
+                            Color.clear.frame(height: DesktopChatMetrics.rowGap)
+                        }
+                    } else if index > 0 {
+                        Color.clear.frame(height: ChatView.rowGap)
+                    }
                     switch row {
                     case let .message(message):
                         MessageRow(chat: chat, message: message, endsRun: true, openLink: openLink, openThread: openThread)
@@ -1422,6 +1545,9 @@ struct EarlierTopicSection: View {
                     }
                 }
                 .id(row.id)
+#if DEBUG
+                .background { DesktopChatParity.rowProbe(row, desktop: desktop != nil) }
+#endif
             }
         }
         .accessibilityIdentifier("chat.earlierTopic")

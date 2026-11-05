@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { vaultHandle, walletCardHandle } from "../../shared/credential-vault.ts";
 import { CredentialVault, fillResolverFor, LOCAL_VAULT_PRINCIPAL } from "./credential-vault.ts";
-import type { VaultKeySource } from "../mcp-oauth.ts";
+import type { VaultKeySource } from "../mcp/mcp-oauth.ts";
 import type { IssueOutcome, WalletIssuer } from "../wallet-issuer.ts";
 
 const KEY: VaultKeySource = { kind: "key", key: Buffer.alloc(32, 9) };

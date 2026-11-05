@@ -70,7 +70,7 @@ if (turn.access?.via === "subscription" && turn.access.claudeConfigDir) {
 }
 // A bot-level mode is authoritative for this turn. In particular, an
 // old provider instance may still be configured with
-// `bypassPermissions`; Ask/Auto must restore Claude's interactive
+// `bypassPermissions`; Ask/Auto/Full must restore Claude's interactive
 // broker instead of inheriting that silent bypass. Calls without a
 // per-turn mode keep the legacy adapter behavior.
 // 2026-10-19 (bot quality, cause B): Approve for me never starts the
@@ -80,15 +80,19 @@ if (turn.access?.via === "subscription" && turn.access.claudeConfigDir) {
 // Auto is now Auto-accept edits plus a fixed list of tools that never
 // need a person (claudeAutoAllowedTools); every other call reaches
 // Sagax's broker (mcp__ogb__approve) and becomes a real card.
+// #1982: Full also keeps the broker (Codex #1977 pattern). Host tools
+// are pre-allowed; custom MCP stays off the allowlist so every write
+// reaches request.opened and Sagax Full-approves unless a rule holds.
 const requestedMode = turn.approvalMode === undefined
   ? config.permissionMode
-  : turn.approvalMode === "full" ? "bypassPermissions"
+  : turn.approvalMode === "full" ? "acceptEdits"
     : turn.approvalMode === "auto" ? "auto"
       : turn.approvalMode === "edits" ? "acceptEdits" : "default";
 const autoAllowlist = requestedMode === "auto";
-const permissionMode = autoAllowlist ? "acceptEdits" : requestedMode;
+const fullAllowlist = turn.approvalMode === "full";
+const permissionMode = autoAllowlist || fullAllowlist ? "acceptEdits" : requestedMode;
 const controlsHost = turn.integrations?.localComputer?.scope === "local-computer";
-if (controlsHost && permissionMode === "bypassPermissions" && turn.approvalMode !== "full") {
+if (controlsHost && permissionMode === "bypassPermissions") {
   throw new Error("local computer control requires the interactive approval broker");
 }
 // The thread's last session filled up even when fresh: reopening it
@@ -218,7 +222,7 @@ if (isolated) {
   if (!mcpFromUserConfig && !keepsClaudeAiConnectors && claudeCliSupports(cliVersion, "--strict-mcp-config")) args.push("--strict-mcp-config");
   if (claudeCliSupports(cliVersion, "--setting-sources")) args.push("--setting-sources", "project");
 }
-// The bot's plugins (server/bot-plugins.ts): skills, commands and
+// The bot's plugins (server/bots/bot-plugins.ts): skills, commands and
 // agents only, loaded for this session. A guest's confined turn gets none.
 if (!turn.guestConfined && claudeCliSupports(cliVersion, "--plugin-dir")) {
   for (const dir of turn.pluginDirs ?? []) args.push("--plugin-dir", dir);
@@ -250,7 +254,7 @@ if (turn.effort) args.push("--effort", turn.effort);
   Object.assign(ctx, {
     turn, threadId, botId, relaunch, turnId, retryAbort, retry, retryScale,
     renewedFromChat, promptMsg, sessionId, newSessionId, requestedMode, autoAllowlist,
-    permissionMode, controlsHost, args, replaysUserMessages, isolated, turnModel,
+    fullAllowlist, permissionMode, controlsHost, args, replaysUserMessages, isolated, turnModel,
     injected, turnEnvironment, keepsClaudeAiConnectors, mcpFromUserConfig, orgTools,
     disallowedTools, compactWindow,
   });

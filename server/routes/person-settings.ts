@@ -1,13 +1,13 @@
 // A person's own Experimental switches and browser profiles on an
-// organization server (#1098, 2026-10-27, server/person-settings.ts). Their
+// organization server (#1098, 2026-10-27, server/people/person-settings.ts). Their
 // own: no admin right, no right to edit the installation.
 //
-//   GET   /api/me/experimental   { features, browserProfiles }
-//   PATCH /api/me/experimental   { features?: { <key>: true | false | null }, browserProfiles?: [{ id?, name }] }
+//   GET   /api/me/experimental   { features, browserProfiles, pendingApprovalExpireDays? }
+//   PATCH /api/me/experimental   { features?, browserProfiles?, pendingApprovalExpireDays?: 0..365 | null }
 //
 // A solo server answers 404: its one person edits the installation itself.
-import type { RequestAuth } from "../request-auth.ts";
-import { PersonSettingsError, type PersonSettings, type PersonSettingsStore } from "../person-settings.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { PersonSettingsError, type PersonSettings, type PersonSettingsStore } from "../people/person-settings.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const PERSON_SETTINGS_PATH = "/api/me/experimental";
@@ -31,8 +31,10 @@ export function createPersonSettingsRoutes(deps: PersonSettingsRouteDeps): Route
     if (method === "GET") return json(res, 200, deps.store.get(principalId));
     if (method !== "PATCH") return PASS;
     const body = await readBody(req).catch(() => undefined);
-    if (!body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { error: "Send { features } or { browserProfiles }." });
-    const { features, browserProfiles } = body as { features?: unknown; browserProfiles?: unknown };
+    if (!body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { error: "Send { features }, { browserProfiles } or { pendingApprovalExpireDays }." });
+    const { features, browserProfiles, pendingApprovalExpireDays } = body as {
+      features?: unknown; browserProfiles?: unknown; pendingApprovalExpireDays?: unknown;
+    };
     if (features !== undefined && (!features || typeof features !== "object" || Array.isArray(features))) {
       return json(res, 400, { error: "features must be an object." });
     }
@@ -46,6 +48,7 @@ export function createPersonSettingsRoutes(deps: PersonSettingsRouteDeps): Route
       }
       if (features !== undefined) deps.store.setFeatures(principalId, features as Record<string, unknown>);
       if (browserProfiles !== undefined) deps.store.setBrowserProfiles(principalId, browserProfiles);
+      if (pendingApprovalExpireDays !== undefined) deps.store.setPendingApprovalExpireDays(principalId, pendingApprovalExpireDays);
       const after = deps.store.get(principalId);
       deps.saved?.(principalId, before, after);
       return json(res, 200, after);

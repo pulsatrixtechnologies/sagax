@@ -29,6 +29,7 @@ export function Composer({
   onRestoreReply,
   aboutPage,
   focusOnOpen = true,
+  onRetryLast,
 }: ComposerProps) {
   const session = useComposerSession({ profile, group, members });
   const { bot, threadId } = session;
@@ -214,6 +215,7 @@ export function Composer({
       onClearReply={onClearReply}
       members={members}
       aboutPage={aboutPage}
+      onRetryLast={onRetryLast}
     />
   );
 }

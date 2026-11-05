@@ -10,6 +10,28 @@ import { autoChipLabel } from "@/lib/auto-model";
 import { effortLabel } from "@/lib/effort-label";
 import { isUltracodeEffort } from "../../../shared/ultracode-effort";
 import { modelLabel, modelProvider } from "./helpers";
+import { TABLE_CELL_CONTROL } from "../SettingsPrimitives";
+
+/** One plain line for the list chip, so the ellipsis cuts a single run. */
+/** #2050: the chip reads "Claude Sonnet 5.5 · Medium": the effort rides
+ * the model since the Bot models table has no Effort column any more. */
+export function listChipLabel({ autoOn, autoRecord, active, selection, showActiveAccount }: {
+  autoOn: boolean;
+  autoRecord: { modelLabel: string } | null | undefined;
+  active: InstanceInfo | undefined;
+  selection: ModelSelection;
+  showActiveAccount: boolean;
+}): string {
+  const effort = selection.effort ? effortLabel(selection.effort) : undefined;
+  if (autoOn) return [autoChipLabel(autoRecord), effort].filter(Boolean).join(" · ");
+  const provider = active ? modelProvider(active, selection.model) : undefined;
+  return [
+    active && showActiveAccount ? active.displayName : undefined,
+    modelLabel(active, selection.model),
+    provider || undefined,
+    effort,
+  ].filter(Boolean).join(" · ");
+}
 
 export function ModelPickerTrigger({
   windowOnly,
@@ -57,10 +79,12 @@ export function ModelPickerTrigger({
   selectedVariantLabel: string | undefined;
   advanced: boolean;
 }) {
-  return windowOnly ? null : inComposer && headless ? (
+  // headless outside the composer (#2050, Settings > Models "Set model for
+  // n bots"): no chip at all, the menu opens from `menuControl`.
+  return windowOnly ? null : headless ? (inComposer ? (
   // no chip: the + menu's Model row reads it; the Retro 98 status bar reads this
   <span hidden data-composer-model={composerLabel} />
-) : inComposer ? (
+) : null) : inComposer ? (
   <button data-tour="model"
     ref={triggerRef}
     type="button"
@@ -76,6 +100,27 @@ export function ModelPickerTrigger({
   >
     <span className="truncate">{composerLabel}</span>
     <ChevronDown size={14} className={cn("shrink-0 transition-transform", menu && "rotate-180")} />
+  </button>
+) : listChip ? (
+  // Settings > Models list cell: the engine mark and the whole model name
+  // on one left-aligned line, cut with an ellipsis; the full name rides the
+  // tooltip. Fills its column so every row's chip has the same width.
+  <button data-tour="model"
+    ref={triggerRef}
+    type="button"
+    disabled={Boolean(bot.busy)}
+    onClick={() => toggleMenu()}
+    aria-expanded={menu && !bot.busy}
+    aria-haspopup="dialog"
+    data-model-list-chip=""
+    title={bot.busy ? `${summary}${followLine}\n${t(threadId ? "model.threadBusy" : "model.busy")}` : `${summary}${followLine}`}
+    className={TABLE_CELL_CONTROL}
+  >
+    {(autoInstance ?? active) && <InstanceProviderMark instance={(autoInstance ?? active)!} size={14} />}
+    <span data-model-list-chip-label="" className="min-w-0 flex-1 truncate text-left">
+      {listChipLabel({ autoOn, autoRecord, active, selection, showActiveAccount })}
+    </span>
+    <ChevronDown size={13} aria-hidden="true" className={cn("shrink-0 text-ink-secondary transition-transform", menu && "rotate-180")} />
   </button>
 ) : (
   <button data-tour="model"
@@ -93,17 +138,16 @@ export function ModelPickerTrigger({
       // provider mark; the model name rides the tooltip (a bot with no
       // resolved engine keeps its label: the mark is what would hide it).
       // Multiple Claude accounts keep their name even in the compact chip.
-      !contained && !listChip && active && !showActiveAccount && COMPACT_SQUARE,
-      listChip && "w-full max-w-full justify-between",
+      !contained && active && !showActiveAccount && COMPACT_SQUARE,
     )}
     title={bot.busy ? `${summary}${followLine}\n${t(threadId ? "model.threadBusy" : "model.busy")}` : `${summary}${followLine}`}
   >
     {autoInstance && <InstanceProviderMark instance={autoInstance} size={14} />}
-    {!contained && !listChip && active && showActiveAccount && (
+    {!contained && active && showActiveAccount && (
       <span data-model-account-compact className="hidden max-w-20 truncate @max-4xl/chathead:inline">{active.displayName}</span>
     )}
-    <span className={cn("flex min-w-0 flex-nowrap items-center gap-1", !contained && !listChip && active && "@max-4xl/chathead:hidden")}>
-      <span className={cn("truncate", listChip ? "max-w-full" : "max-w-[160px]")}>
+    <span className={cn("flex min-w-0 flex-nowrap items-center gap-1", !contained && active && "@max-4xl/chathead:hidden")}>
+      <span className={"max-w-[160px] truncate"}>
         {active && showActiveAccount && !autoOn && (
           <span data-model-account className="text-ink-secondary">{active.displayName} · </span>
         )}
@@ -117,7 +161,7 @@ export function ModelPickerTrigger({
           must never sit under that pill. Effort stays in the picker menu.
           List rows keep effort in a sibling control, so the chip stays the
           engine and model alone. */}
-      {contained && !listChip && (selectedVariantLabel !== undefined ? (
+      {contained && (selectedVariantLabel !== undefined ? (
         <span data-model-variant className="max-w-[120px] truncate text-ink-secondary">· {selectedVariantLabel}</span>
       ) : advanced && selection.effort && (
         <span
@@ -133,7 +177,7 @@ export function ModelPickerTrigger({
       className={cn(
         "shrink-0 text-ink-secondary transition-transform",
         menu && "rotate-180",
-        !contained && !listChip && active && "@max-4xl/chathead:hidden",
+        !contained && active && "@max-4xl/chathead:hidden",
       )}
     />
   </button>

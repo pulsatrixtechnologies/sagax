@@ -8,20 +8,43 @@ export function cronLocale(): "fr" | "en" {
   return activeLocale().toLowerCase().startsWith("fr") ? "fr" : "en";
 }
 
+/** One Intl.DateTimeFormat per language and option set: building one costs
+ * far more than formatting with it, and the calendar formats a time on every
+ * card (2026-11-02). Same output as toLocaleTimeString with those options. */
+const formatters = new Map<string, Intl.DateTimeFormat>();
+export function cachedDateFormat(options: Intl.DateTimeFormatOptions, locale = activeLocale()): Intl.DateTimeFormat {
+  const key = `${locale}|${JSON.stringify(options)}`;
+  let format = formatters.get(key);
+  if (!format) {
+    format = new Intl.DateTimeFormat(locale, options);
+    formatters.set(key, format);
+  }
+  return format;
+}
+
+const dayNameCache = new Map<string, string[]>();
 /** Short weekday names (index 0 = Sunday) in the active language, read at
  * call time so they follow a language change at render. */
 export function dayNames(): string[] {
-  const format = new Intl.DateTimeFormat(activeLocale(), { weekday: "short" });
-  // 2023-01-01 was a Sunday.
-  return Array.from({ length: 7 }, (_, day) => format.format(new Date(2023, 0, 1 + day)));
+  const locale = activeLocale();
+  let names = dayNameCache.get(locale);
+  if (!names) {
+    const format = new Intl.DateTimeFormat(locale, { weekday: "short" });
+    // 2023-01-01 was a Sunday.
+    names = Array.from({ length: 7 }, (_, day) => format.format(new Date(2023, 0, 1 + day)));
+    dayNameCache.set(locale, names);
+  }
+  return [...names];
 }
 
+const TIME_OPTIONS: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
+const DATE_OPTIONS: Intl.DateTimeFormatOptions = { weekday: "long", month: "long", day: "numeric" };
 export function niceTime(at: number): string {
-  return new Date(at).toLocaleTimeString(activeLocale(), { hour: "numeric", minute: "2-digit" });
+  return cachedDateFormat(TIME_OPTIONS).format(new Date(at));
 }
 
 export function niceDate(at: number): string {
-  return new Date(at).toLocaleDateString(activeLocale(), { weekday: "long", month: "long", day: "numeric" });
+  return cachedDateFormat(DATE_OPTIONS).format(new Date(at));
 }
 
 /** A change's timestamp for a list row: the time alone if it happened

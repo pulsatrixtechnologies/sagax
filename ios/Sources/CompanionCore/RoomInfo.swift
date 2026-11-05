@@ -4,7 +4,7 @@
 // sidebar room menu (Sidebar.tsx RoomContextMenu) decide, as pure logic the
 // phone's Room info sheet and room row menu draw from.
 //
-// Who may do what mirrors src/lib/group-owner.ts and server/group-ownership.ts:
+// Who may do what mirrors src/lib/group-owner.ts and server/groups/group-ownership.ts:
 // on an organization server only a room's owner changes its settings (an
 // organization admin owns a room nobody created, and may delete any room
 // for moderation); anyone listed may leave it and bring their own bots in
@@ -76,7 +76,7 @@ public enum RoomOwnership {
         (room.humanIds ?? []).contains { isViewer($0, viewer) }
     }
 
-    /// Listed in their own name, or the recorded owner (server/group-leave.ts).
+    /// Listed in their own name, or the recorded owner (server/groups/group-leave.ts).
     public static func mayLeave(_ room: Room, viewer: RoomViewer) -> Bool {
         if isListed(room, viewer: viewer) { return true }
         guard let raw = room.ownerId, let owner = RoomViewer.norm(raw), !owner.isEmpty else { return false }
@@ -226,6 +226,18 @@ public struct RoomInfoAccess: Hashable, Sendable {
         canAddBot = manages && RoomOwnership.rosterBotChoices(room, bots: bots, viewer: viewer, owns: owns)
             .contains { !room.memberIds.contains($0.id) }
         canManageRoster = manages && (owns || canAddHuman || !own.isEmpty)
+    }
+}
+
+// MARK: - A room's call (GroupCallButton, src/components/GroupCallView.tsx)
+
+public enum RoomCallReadiness {
+    /// `CallTargetButton` with `requireExplicitVoices`: a room call speaks
+    /// with text to speech, so it waits until speech is set up and every
+    /// member has its own voice; until then the button wears the warning
+    /// dot and explains instead of calling.
+    public static func ready(speechConfigured: Bool, memberVoices: [String?]) -> Bool {
+        speechConfigured && !memberVoices.isEmpty && memberVoices.allSatisfy { ($0 ?? "").isEmpty == false }
     }
 }
 
@@ -520,11 +532,15 @@ public struct RoomPatch: Encodable, Hashable, Sendable {
     public var memberIds: [String]?
     public var humanIds: [String]?
     public var defaultResponder: GroupResponder?
+    /// `@all` notifies everyone (the panel's Advanced > Mentions).
+    public var mentionAll: Bool?
 
     public init(
         name: String? = nil, bulletin: String? = nil, section: String? = nil,
-        memberIds: [String]? = nil, humanIds: [String]? = nil, defaultResponder: GroupResponder? = nil
+        memberIds: [String]? = nil, humanIds: [String]? = nil, defaultResponder: GroupResponder? = nil,
+        mentionAll: Bool? = nil
     ) {
+        self.mentionAll = mentionAll
         self.name = name
         self.bulletin = bulletin
         self.section = section

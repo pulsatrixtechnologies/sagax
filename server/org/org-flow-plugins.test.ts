@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { OrgFlowPlugins } from "./org-flow-plugins.ts";
-import { flowPluginsSchema, type FlowPluginsDeclaration } from "../perspicax-link.ts";
+import { flowPluginsSchema, type FlowPluginsDeclaration } from "../perspicax/perspicax-link.ts";
 import { ZipWriter } from "../zip.ts";
 
 const TOKEN = "pxat1.fixture-server-link";

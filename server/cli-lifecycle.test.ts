@@ -5,7 +5,7 @@ import { hostname } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isWorkspaceRunning, runOnboardingCommand, runServe, type CliOptions } from "./cli.ts";
-import { qrToString } from "./cli-pairing.ts";
+import { qrToString } from "./cli/cli-pairing.ts";
 
 const mocks = vi.hoisted(() => ({
   // the fleet path is off in these tests: no credential in the environment
@@ -39,10 +39,10 @@ vi.mock("./tailscale.ts", () => ({
   tailscaleServeOff: mocks.tailscaleServeOff, explainTailscaleFailure: (failure: string) => failure,
 }));
 vi.mock("./tunnel.ts", () => ({ ...mocks, describeTunnelState: () => "Fixture tunnel" }));
-vi.mock("./browser-engine.ts", () => ({
+vi.mock("./browser/browser-engine.ts", () => ({
   browserEngineStatus: () => ({ kind: "ready" }), describeBrowserEngine: () => "Fixture browser ready",
 }));
-vi.mock("./cli-setup.ts", () => ({
+vi.mock("./cli/cli-setup.ts", () => ({
   runSetup: () => { throw new Error("An existing workspace must not rerun setup"); },
 }));
 

@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { AGENT_TOOL_NAMES, AGENT_TOOL_POLICY } from "../agent-api.ts";
-import { isReadOnlyAgentTool } from "../agent-tool-policy.ts";
+import { isReadOnlyAgentTool } from "../tools/agent-tool-policy.ts";
 import { AGENT_API_TOOL_NAMES, availableTools, catalogProfileFromEnv } from "./agents-catalog.ts";
 
 const names = (env: Record<string, string>) => availableTools(catalogProfileFromEnv({ SAGAX_BOT_ID: "b1", ...env })).map((tool) => tool.name);
 
 describe("agents catalog: the agent-to-agent tools", () => {
-  it("mounts the twelve tools in a direct turn when the harness turns them on", () => {
+  it("mounts the agent API tools in a direct turn when the harness turns them on", () => {
     const chief = names({ SAGAX_AGENT_API: "1", SAGAX_CHIEF_OF_STAFF: "1" });
     for (const tool of AGENT_TOOL_NAMES) expect(chief).toContain(tool);
     expect([...AGENT_API_TOOL_NAMES].sort()).toEqual([...AGENT_TOOL_NAMES].sort());

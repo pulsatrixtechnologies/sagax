@@ -41,10 +41,10 @@ describe("a team map hand-off", () => {
   it("opens the bot it went to as its row would", () => {
     const edge = { sourceBotId: "clive", targetBotId: "ada", state: "connected" as const };
     // then no fresh topic over what it opens (#763, src/lib/fresh-topic.ts)
-    expect(click(edge)).toEqual([{ type: "select", id: "ada" }, { type: "freshTopic", botId: "ada", threadId: null }]);
+    expect(click(edge)).toEqual([{ type: "select", id: "ada" }, { type: "freshTopic", botId: "ada", threadId: null, keepAsked: true }]);
     fixture.dispatch.mockClear();
     fixture.showThreads = false;
-    expect(click(edge)).toEqual([{ type: "switchTask", botId: "ada", threadId: "ada-chat" }, { type: "freshTopic", botId: "ada", threadId: null }, { type: "freshTopic", botId: "ada", threadId: null }]);
+    expect(click(edge)).toEqual([{ type: "switchTask", botId: "ada", threadId: "ada-chat" }, { type: "freshTopic", botId: "ada", threadId: null }, { type: "freshTopic", botId: "ada", threadId: null, keepAsked: true }]);
   });
 
   it("opens the thread doing the work, or the room it ran in", () => {

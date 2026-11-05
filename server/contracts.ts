@@ -14,6 +14,8 @@ import type {
 } from "../shared/runtime-events.ts";
 import type { ProviderIcon } from "../shared/provider-icon.ts";
 import type { ModelListIssue } from "../shared/azure-openai.ts";
+import type { PiModelServer } from "./drivers/pi-model-servers.ts";
+import type { PiKitIdentity } from "./drivers/pi-kit.ts";
 
 // These contract types live in shared/wire.ts now (part of the wire model);
 // re-exported here so existing server-side importers keep working.
@@ -137,10 +139,13 @@ export interface TurnAccessInput {
   /** Grok Build, Kimi Code, Gemini CLI, pi: the payer's own home for the
    * engine (HOME, KIMI_CODE_HOME, GEMINI_CLI_HOME, PI_CODING_AGENT_DIR). */
   engineHome?: string;
+  /** #2024, pi: the Perspicax model servers this person reaches, written to
+   * models.json without their keys (those ride `environment`). */
+  piModelServers?: PiModelServer[];
 }
 
 /** #1276: Claude Code, local or cloud, sends a compact tool list. The
- * stable prefix is every engine (server/compact-prompt.ts). */
+ * stable prefix is every engine (server/context/compact-prompt.ts). */
 export interface CompactPromptInput {
   /** Claude Code's auto memory folder: one per bot and person, the same for
    * every conversation, so the system prompt does not change between them. */
@@ -155,6 +160,10 @@ export interface CompactPromptInput {
 
 export interface SendTurnInput {
   threadId: ThreadId;
+  /** The person this turn acts for, independent of its payer. Pooled
+   * processes must not cross this boundary, including on an org key and
+   * with every tool disabled. Absent for older isolated adapter callers. */
+  principalId?: string;
   /** #1276: compact tool list for this turn (Claude Code). Absent: the
    * full tools/list, as before. */
   compactPrompt?: CompactPromptInput;
@@ -173,7 +182,7 @@ export interface SendTurnInput {
   /** When the person's message behind this turn was stored (epoch ms), for
    * the driver's per-turn latency line (drivers/acp/turn-latency.ts). */
   receivedAt?: number;
-  /** Organization server (slice 4, server/engine-credentials.ts): which
+  /** Organization server (slice 4, server/engines/engine-credentials.ts): which
    * credentials this one turn runs with. Absent in solo mode: the instance's
    * own configuration, as always. */
   access?: TurnAccessInput;
@@ -182,6 +191,9 @@ export interface SendTurnInput {
    * engine runs commands in its own shell adds them to that process's
    * environment, and starts a fresh process when they change. */
   commandEnvironment?: Record<string, string>;
+  /** #2024, pi: the identity a SAGAX_PI_KIT_DIR APPEND_SYSTEM.md template
+   * fills in (drivers/pi-kit.ts); an unknown variable drops its line. */
+  piKitIdentity?: PiKitIdentity;
   /** The automatic recall block the harness put in front of the person's
    * message inside `text`. It informs this turn only, so a driver that
    * replays the turn as sent later can leave it out. */
@@ -205,6 +217,12 @@ export interface SendTurnInput {
    * context, while a fresh replay retains the visible attachment marker. */
   images?: TurnImageInput[];
   model?: string;
+  /** 2026-11-04: a routine turn's model for the sub-agents the engine
+   * starts itself (Claude: CLAUDE_CODE_SUBAGENT_MODEL). Part of the
+   * process contract, so a chat turn never reuses a routine's process. */
+  subagentModel?: string;
+  /** Routine effort inherited by native sub-agents; part of the spawn contract. */
+  subagentEffort?: EffortLevel;
   effort?: EffortLevel;
   variant?: string;
   resumeCursor?: unknown;
@@ -349,7 +367,7 @@ export interface SendTurnInput {
   withholdHostTools?: boolean;
   /** Organization server, desktop bridge: the engine's own network traffic
    * (remote MCP servers, tool HTTP calls) leaves through the person's
-   * computer for this turn (server/desktop-egress.ts). The driver sets
+   * computer for this turn (server/desktop/desktop-egress.ts). The driver sets
    * HTTP(S)_PROXY to `url` and NO_PROXY to its own model hosts plus
    * `noProxy`, so the engine's model traffic never goes through it. */
   networkProxy?: { url: string; noProxy: string[] };
@@ -363,11 +381,11 @@ export interface SendTurnInput {
    * (harness-connectors.ts grokCloudConnectorsForTurn). Absent or false:
    * off, whatever the organization turn (review of #943). */
   grokCloudConnectors?: boolean;
-  /** Claude Code plugins installed on the bot (server/bot-plugins.ts): one
+  /** Claude Code plugins installed on the bot (server/bots/bot-plugins.ts): one
    * folder each, already stripped of hooks, MCP and LSP servers. The Claude
    * driver loads each with --plugin-dir. Other drivers do not get these
    * folders; their turns read the same enabled skills and commands from the
-   * skills section of the prompt (server/plugin-turn.ts). */
+   * skills section of the prompt (server/turns/plugin-turn.ts). */
   pluginDirs?: string[];
   /** The person typed one of the engine's own slash commands
    * (shared/harness-commands.ts): `text` is that command line, verbatim.
@@ -393,7 +411,7 @@ export interface HarnessCommandScope {
   /** The turn keeps the claude.ai connectors of the account it runs on
    * (server/harness-connectors.ts), so their MCP prompts are listed. */
   claudeAiConnectors?: boolean;
-  /** The bot's Claude Code plugins (server/bot-plugins.ts). Claude lists
+  /** The bot's Claude Code plugins (server/bots/bot-plugins.ts). Claude lists
    * their commands and skills from these folders. Other engines read the
    * same enabled skills and commands from the turn prompt. */
   pluginDirs?: string[];
@@ -421,7 +439,7 @@ export interface TurnStartResult {
   turnId: TurnId;
   /** The turn went to an engine process that was already running (no cold
    * start). Reported by drivers that pool a process per thread; absent
-   * elsewhere. Diagnostics only (server/voice-latency.ts). */
+   * elsewhere. Diagnostics only (server/voice/voice-latency.ts). */
   reused?: boolean;
 }
 
@@ -550,7 +568,7 @@ export interface ProviderAdapter {
    * already running is left alone. */
   releaseWarmSession?(threadId: ThreadId): void;
   /** Size on disk of the saved session a resume of this cursor would load
-   * (Claude's session file), for server/stale-session.ts. Undefined when the
+   * (Claude's session file), for server/auth/stale-session.ts. Undefined when the
    * engine cannot tell, or when a live process already holds that session
    * (nothing would be loaded). */
   sessionBytes?(threadId: ThreadId, resumeCursor: unknown): number | undefined;
@@ -701,7 +719,7 @@ export interface ModelCatalog {
      * same model id stay distinguishable. */
     provider?: string;
     /** total context window in tokens, when the driver knows it — sizes
-     * the model-facing rebuild (server/context-rebuild.ts). Unknown falls
+     * the model-facing rebuild (server/context/context-rebuild.ts). Unknown falls
      * back to a pattern table over the model id, then a conservative default. */
     contextWindow?: number;
     /** Discovery hints; the native session revalidates these before each turn. */

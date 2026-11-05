@@ -12,7 +12,7 @@ import {
   PROVIDER_KEY_KINDS,
   providerBaseUrl,
   type ProviderKeyKind,
-} from "../provider-key-check.ts";
+} from "../engines/provider-key-check.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface KeysTestRouteDeps {

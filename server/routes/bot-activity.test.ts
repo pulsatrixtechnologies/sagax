@@ -8,11 +8,12 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
-import { requiredScope } from "../request-auth.ts";
+import { requiredScope } from "../auth/request-auth.ts";
 import type { RoutineRun } from "../../shared/routines.ts";
 import type { BotActivityDetail, BotActivityItem } from "../../shared/bot-activity.ts";
 import { createBotActivityRoutes, stepError, STEP_ERROR_CHARS, type ActivityMessage, type ActivityTask, type BotActivityRouteDeps } from "./bot-activity.ts";
 import { dispatchRoutes } from "./table.ts";
+import { commandSummary, toolDetailPreview } from "../tools/tool-summary.ts";
 
 const NOW = 1_800_000_000_000;
 const servers: Server[] = [];
@@ -123,9 +124,14 @@ describe("bot activity API", () => {
     expect((await get(base, "/api/bots/pepper/activity/item?runId=run-1", "bob")).status).toBe(404);
   });
 
-  it("gives a failed run's access card to its audience only, with or without the thread", async () => {
+  it.each([
+    { status: "failed", threadId: "t-bob" },
+    { status: "failed", threadId: undefined },
+    { status: "blocked", threadId: "t-bob" },
+    { status: "blocked", threadId: undefined },
+  ] as const)("gives a $status run's access card only to its audience (thread: $threadId)", async ({ status, threadId }) => {
     const failed = [
-      { id: "run-2", routineId: "r2", routineName: "Bob's check", botId: "pepper", status: "failed", target: "bot", runOn: "auto", scheduledFor: NOW - 4_000, startedAt: NOW - 4_000, finishedAt: NOW - 3_000, manual: true, createdAt: NOW - 4_000, threadId: "t-bob", error: "no credentials" },
+      { id: "run-2", routineId: "r2", routineName: "Bob's check", botId: "pepper", status, target: "bot", runOn: "auto", scheduledFor: NOW - 4_000, startedAt: NOW - 4_000, finishedAt: NOW - 3_000, manual: true, createdAt: NOW - 4_000, ...(threadId ? { threadId } : {}), error: "no credentials" },
     ] as unknown as RoutineRun[];
     const card = { reason: "no_access", engine: "Claude", botId: "pepper", ownerPrincipalId: "alice", payer: "owner", payerPrincipalId: "alice", routine: true, cause: "no_credentials" } as const;
     const asked: Array<string | undefined> = [];
@@ -143,7 +149,8 @@ describe("bot activity API", () => {
     expect(JSON.stringify(owner.body)).not.toContain("secret plan");
     // bob reads his own thread there, without her card
     const runAs = await get(base, "/api/bots/pepper/activity/item?runId=run-2", "bob");
-    expect(runAs.body.item).toMatchObject({ threadId: "t-bob" });
+    if (threadId) expect(runAs.body.item).toMatchObject({ threadId });
+    else expect(runAs.body.item).not.toHaveProperty("threadId");
     expect(runAs.body.item).not.toHaveProperty("access");
     expect(asked).toEqual(["alice", "bob"]);
     // a completed run never asks for a card
@@ -459,5 +466,190 @@ describe("a conversation's entry is its newest turn", () => {
     const list = await get(base, "/api/bots/pepper/activity", "alice");
     expect(list.body.subagents!.some((item) => item.status === "waiting")).toBe(false);
     expect(list.body.subagents!.every((item) => !item.threadId)).toBe(true);
+  });
+});
+
+// 2026-11-02: work another bot handed over showed under Details > Coding
+// (« Running · from Echo ») while it only read an issue and its pull
+// requests, asked who was around, coordinated, commented on the issue and
+// picked a computer. A work thread keeps every request one conversation
+// sends this bot (server/store.ts workThread), and each request lands as
+// the requesting bot's line (`roomRequest`), never a person's: the newest
+// turn started nowhere, so an earlier request's commit made this one Coding.
+describe("work another bot hands over is Coding only for its own request's code work", () => {
+  const work: ActivityTask = {
+    threadId: "t-work", title: "@Echo · work", createdAt: NOW - 3 * 3_600_000, updatedAt: NOW - 1_000, busy: true, activity: "working",
+    turnStartedAt: NOW - 40_000, ownerPrincipalId: "alice", openedBy: { botId: "echo", name: "Echo", kind: "work", at: NOW - 3 * 3_600_000 },
+  };
+  const earlier = NOW - 2 * 3_600_000;
+  const request = (id: string, at: number, text: string): ActivityMessage =>
+    ({ id, role: "bot", kind: "text", at, text: `@Pepper ${text}`, roomRequest: { id: `req-${id}`, phase: "request" }, sender: null });
+  const call = (id: string, at: number, tool: NonNullable<ActivityMessage["tool"]>): ActivityMessage => ({ id, role: "bot", kind: "activity", at, tool });
+  // a shell call as the store keeps it (server/index.ts, item.started):
+  // commandSummary (newlines folded, cut at 200) and toolDetailPreview
+  const shell = (name: string, command: string) => ({ name, ok: true, summary: commandSummary({ command }), input: toolDetailPreview({ command }) });
+  // an issue comment longer than the summary, its quoted text listing git lines
+  const comment = "gh issue comment 1905 --body \"Steps to reproduce:\ngit checkout -b check\ngit push origin check\nThen approve once and the card shows twice, which is what the screenshot attached to the issue shows as well, on a clean checkout of main.\"";
+  // The first request: real code work, a commit, a push and a pull request.
+  const first: ActivityMessage[] = [
+    request("r1", earlier, "Fix the parser and open a pull request"),
+    call("w1", earlier + 10_000, { name: "Edit", ok: true, files: ["/srv/app/src/parser.ts"] }),
+    call("w2", earlier + 20_000, shell("Bash", "git commit -am 'Fix the parser' && git push -u origin fix/parser")),
+    call("w3", earlier + 30_000, { ...shell("Bash", "gh pr create --title \"Fix the parser\""), output: "https://github.com/acme/parser/pull/42" }),
+    { id: "w4", role: "bot", kind: "text", at: earlier + 40_000, text: "Opened #42.", turnSucceeded: true },
+  ];
+  // The request running now reads, coordinates and comments: no code work.
+  const reading: ActivityMessage[] = [
+    request("r2", NOW - 40_000, "Look at the approval card issue and say what you find on it"),
+    call("x1", NOW - 35_000, shell("sagax-environment__run_command", "cd /work/app && gh issue view 1905 && gh pr list --search 1905")),
+    call("x2", NOW - 30_000, { name: "github__issue_read", ok: true, input: JSON.stringify({ owner: "acme", repo: "app", issue_number: 1905 }) }),
+    call("x3", NOW - 28_000, { name: "github__pull_request_read", ok: true, input: JSON.stringify({ owner: "acme", repo: "app", pull_number: 1907 }) }),
+    call("x4", NOW - 25_000, { name: "mcp__agents__whos_around", ok: true }),
+    call("x5", NOW - 20_000, { name: "mcp__agents__coordinate_bots", ok: true, input: JSON.stringify({ bot_ids: ["echo"], message: "Found it.\ngit push was never the problem." }) }),
+    // the teammate's reply and the resume it starts: the same request goes on
+    { id: "x5r", role: "bot", kind: "activity", at: NOW - 18_000, roomRequest: { id: "req-ask-echo", phase: "result" }, tool: { name: "Echo replied", ok: true } },
+    call("x5s", NOW - 17_000, { name: "Resumed with Echo results, reviewing", ok: true }),
+    call("x6", NOW - 15_000, shell("sagax-environment__run_command", comment)),
+    call("x6b", NOW - 12_000, { name: "github__add_issue_comment", ok: true, input: JSON.stringify({ owner: "acme", repo: "app", issue_number: 1905, body: "Steps:\ngit checkout -b check\ngit push origin check" }) }),
+    call("x7", NOW - 10_000, shell("sagax-environment__run_command", "git diff $(git merge-base origin/main HEAD) --stat")),
+    call("x8", NOW - 5_000, { name: "computer_select", ok: true, input: JSON.stringify({ computer: "this-mac" }) }),
+  ];
+  const workDeps = (thread: ActivityMessage[], overrides: Partial<BotActivityRouteDeps> = {}) => deps({
+    tasks: (botId) => (botId === "pepper" ? [work] : []),
+    threadReadable: (botId, threadId, viewerId) => !viewerId || (botId === "pepper" && threadId === "t-work"),
+    threadWritable: (_botId, threadId, viewerId) => !viewerId || threadId === "t-work",
+    runs: () => [],
+    messages: (threadId, limit) => ({ messages: (threadId === "t-work" ? thread : []).slice(-limit), hasMore: false }),
+    children: () => [],
+    inRepository: () => false,
+    ...overrides,
+  });
+  const entryOf = async (base: string) => (await get(base, "/api/bots/pepper/activity", "alice")).body.items!.find((item) => item.id === "thread:t-work")!;
+
+  it("is not Coding when its request only reads, coordinates and comments, and keeps the earlier request's code work", async () => {
+    // the comment's summary is cut inside its quoted text
+    expect(comment.length).toBeGreaterThan(200);
+    const base = await serve(workDeps([...first, ...reading]));
+    const entry = await entryOf(base);
+    expect(entry).toMatchObject({ kind: "hop", status: "running", startedBy: { kind: "bot", name: "Echo" } });
+    expect(entry).not.toHaveProperty("coding");
+    expect(entry.code!.pullRequests.map((pull) => pull.number)).toEqual([42]);
+    expect((await get(base, "/api/bots/pepper/activity?filter=coding", "alice")).body.items).toEqual([]);
+    expect((await get(base, "/api/bots/pepper/activity?filter=other", "alice")).body.items!.map((item) => item.id)).toEqual(["thread:t-work"]);
+  });
+
+  it("lists only its own request's steps in the sheet", async () => {
+    const base = await serve(workDeps([...first, ...reading]));
+    const { body } = await get(base, "/api/bots/pepper/activity/item?threadId=t-work", "alice");
+    expect(body.item!.steps.map((step) => step.id)).toEqual(["x1", "x2", "x3", "x4", "x5", "x5r", "x5s", "x6", "x6b", "x7", "x8"]);
+    expect(body.item!.stepsTruncated).toBe(true);
+    expect(body.item!.files).toEqual([]);
+    expect(body.item).not.toHaveProperty("coding");
+  });
+
+  it("does not inherit Coding from an earlier request when its folder is a repository", async () => {
+    const base = await serve(workDeps([...first, ...reading], {
+      tasks: (botId) => (botId === "pepper" ? [{ ...work, cwd: "/srv/app" }] : []),
+      inRepository: (cwd) => cwd === "/srv/app",
+    }));
+    expect(await entryOf(base)).not.toHaveProperty("coding");
+  });
+
+  it("reads a person's own line in a work thread like their conversation: a repository's job as a whole", async () => {
+    const asked: ActivityMessage[] = [
+      ...first,
+      { id: "p1", role: "user", kind: "text", at: NOW - 20_000, text: "What did you change?", parentId: "w4" },
+      call("p2", NOW - 10_000, { name: "Read", ok: true, files: ["/srv/app/src/parser.ts"] }),
+    ];
+    const inRepository = await serve(workDeps(asked, {
+      tasks: (botId) => (botId === "pepper" ? [{ ...work, cwd: "/srv/app" }] : []),
+      inRepository: (cwd) => cwd === "/srv/app",
+    }));
+    expect(await entryOf(inRepository)).toMatchObject({ coding: true });
+    expect(await entryOf(await serve(workDeps(asked)))).not.toHaveProperty("coding");
+  });
+
+  it("is Coding once its own request changes code, and stays Coding while it goes on reading", async () => {
+    const coding = [
+      ...first,
+      ...reading.slice(0, 3),
+      call("y1", NOW - 27_000, { name: "Edit", ok: true, files: ["/srv/app/src/approval-card.tsx"] }),
+      ...reading.slice(3),
+    ];
+    const base = await serve(workDeps(coding));
+    expect(await entryOf(base)).toMatchObject({ coding: true });
+    const pushed = [...first, ...reading, call("y2", NOW - 2_000, shell("Bash", "cd /srv/app && git push origin fix/approval-card"))];
+    expect(await entryOf(await serve(workDeps(pushed)))).toMatchObject({ coding: true });
+  });
+
+  it("reads a request longer than the page as the turn it was, so a coding job does not drop out of Coding", async () => {
+    // a page of 8: the request and its edit scroll out while the panel polls
+    // and the job goes on reading
+    const edited = [...first, request("r3", NOW - 60_000, "Fix the approval card"), call("z1", NOW - 50_000, { name: "Edit", ok: true, files: ["/srv/app/src/approval-card.tsx"] })];
+    const read = (index: number) => call(`z${index + 2}`, NOW - 40_000 + index * 100, { name: "github__issue_read", ok: true, input: JSON.stringify({ issue_number: 1900 + index }) });
+    let thread = edited;
+    let clock = NOW;
+    const base = await serve(workDeps(edited, {
+      now: () => clock,
+      messages: (threadId, limit) => {
+        const all = threadId === "t-work" ? thread : [];
+        return { messages: all.slice(-Math.min(limit, 8)), hasMore: all.length > 8 };
+      },
+    }));
+    expect(await entryOf(base)).toMatchObject({ coding: true });
+    for (let poll = 0; poll < 6; poll++) {
+      thread = [...thread, read(poll * 3), read(poll * 3 + 1), read(poll * 3 + 2)];
+      clock += 5_000;
+      expect(await entryOf(base)).toMatchObject({ coding: true });
+    }
+    // a new request whose line scrolled out before any scan saw it is not that turn
+    thread = [...thread, request("r4", NOW - 10_000, "Say who is around"), ...Array.from({ length: 9 }, (_, index) => read(100 + index))];
+    clock += 5_000;
+    expect(await entryOf(base)).not.toHaveProperty("coding");
+  });
+
+  it("names no step of the request before as the step of a request that just started", async () => {
+    const started = [...first, request("r2", NOW - 5_000, "Say who is around")];
+    const entry = await entryOf(await serve(workDeps(started)));
+    expect(entry).toMatchObject({ status: "running" });
+    expect(entry).not.toHaveProperty("currentStep");
+    // its own call, once it runs, is its step
+    const asking = [...started, call("v1", NOW - 2_000, { name: "mcp__agents__whos_around" })];
+    expect(await entryOf(await serve(workDeps(asking)))).toMatchObject({ currentStep: "mcp__agents__whos_around" });
+  });
+
+  it("reads a settled request's outcome from its own turn, never the request before", async () => {
+    const settled = (thread: ActivityMessage[]) => workDeps(thread, { tasks: (botId) => (botId === "pepper" ? [{ ...work, busy: false, activity: undefined }] : []) });
+    const refused: ActivityMessage[] = [...first.slice(0, -1), { id: "w4", role: "bot", kind: "text", at: earlier + 40_000, text: "The push was refused.", turnSucceeded: false }];
+    const answered: ActivityMessage[] = [
+      ...refused,
+      request("r2", NOW - 40_000, "Say who is around"),
+      call("v1", NOW - 30_000, { name: "mcp__agents__whos_around", ok: true }),
+      { id: "v2", role: "bot", kind: "text", at: NOW - 20_000, text: "Echo is around." },
+    ];
+    expect(await entryOf(await serve(settled(answered)))).toMatchObject({ status: "finished" });
+    const failed: ActivityMessage[] = [...first, request("r2", NOW - 40_000, "Say who is around"), { id: "v2", role: "bot", kind: "text", at: NOW - 20_000, text: "No one answered.", turnSucceeded: false }];
+    expect(await entryOf(await serve(settled(failed)))).toMatchObject({ status: "failed" });
+  });
+});
+
+describe("activity list reuses one message page per thread", () => {
+  it("calls messagesTail once per listed thread, not once per helper", async () => {
+    const calls: Array<{ threadId: string; limit: number }> = [];
+    const base = await serve(deps({
+      messages: (threadId, limit) => {
+        calls.push({ threadId, limit });
+        return { messages: (messages[threadId] ?? []).slice(-limit), hasMore: false };
+      },
+    }));
+    await get(base, "/api/bots/pepper/activity", "alice");
+    const byThread = new Map<string, number>();
+    for (const call of calls) byThread.set(call.threadId, (byThread.get(call.threadId) ?? 0) + 1);
+    // Busy alice + completed routine thread: each paid one messagesTail (the
+    // coding-scan page), reused for untouched / settled / currentStep.
+    expect(byThread.get("t-alice")).toBe(1);
+    expect(byThread.get("t-routine")).toBe(1);
+    expect(byThread.has("t-bob")).toBe(false);
+    expect(byThread.has("t-old")).toBe(false);
   });
 });

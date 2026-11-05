@@ -3,7 +3,7 @@
 // rather than in agents-call.ts, which is at its size ratchet; callTool hands
 // these names over and returns the answer as it stands.
 //
-// All three post to the one internal card route. server/chat-widgets.ts
+// All three post to the one internal card route. server/widgets/chat-widgets.ts
 // (createAgentCard) tells them apart by the body's `tool` and is where a
 // widget is stored; the checks here only save a round trip.
 import { ASK_CHOICE_TOOL, parseAskChoiceInput, parseOptionsCardInput, WATCHER_OPTIONS_CARD_BOT_ID } from "../../shared/options-card.ts";
@@ -13,7 +13,7 @@ import { parseAppInput } from "../../shared/app.ts";
 import { PLACE_PHONE_CALL_TOOL } from "../../shared/outbound-call.ts";
 import { HANG_UP_TOOL, PLACE_CALL_TOOL, SEND_DTMF_TOOL, TRANSFER_CALL_TOOL } from "../../shared/phone-call-live.ts";
 
-import type { ToolCallContext, ToolCallResult } from "./agents-call.ts";
+import type { ToolCallContext, ToolCallResult } from "./agents-call-types.ts";
 import type { Json } from "./agents-client.ts";
 
 export const CARD_TOOL_NAMES: ReadonlySet<string> = new Set([
@@ -30,12 +30,17 @@ export async function callCardTool(name: string, args: Json, context: ToolCallCo
     if (!parsed.ok) return { text: parsed.error, isError: true };
     const result = await api(CARD_ROUTE, { method: "POST", body: JSON.stringify({ tool: ASK_CHOICE_TOOL, ...args }) });
     // #1905: under Full access a may-I was answered with the recommended
-    // option (server/chat-widgets.ts createChoiceCard); the turn goes on.
+    // option (server/widgets/chat-widgets.ts createChoiceCard); the turn goes on.
     const answered = result && typeof result === "object" && typeof (result as { answered?: { choice?: unknown } }).answered?.choice === "string"
       ? (result as { answered: { choice: string } }).answered.choice
       : null;
     if (answered) {
       return { text: `Full access answered this for the person: ${answered}. The person already authorized this work; continue in this same turn without waiting for a click, and do not ask again.` };
+    }
+    // 2026-11-03: raised where the person is not watching (a routine run): the
+    // card waits for them in Approvals and a notification, and the run with it.
+    if (result && typeof result === "object" && (result as { waitsForPerson?: unknown }).waitsForPerson === true) {
+      return { text: "The question card is waiting for the person (their notification, Approvals and this run's status). End your turn now with no further text: this run waits, and their answer arrives as their next message." };
     }
     return { text: "The question card is on the person's screen with your options. End your turn now with no further text: their click, or the answer they type under Other, arrives as their next message." };
   }
@@ -54,7 +59,7 @@ export async function callCardTool(name: string, args: Json, context: ToolCallCo
     };
   }
 
-  // The ```widget self-check (server/widget-check.ts): the report as text,
+  // The ```widget self-check (server/widgets/widget-check.ts): the report as text,
   // the screenshot as an image beside it for the front ends that pass one on.
   if (name === "check_widget") {
     if (typeof args.html !== "string" || !args.html.trim()) return { text: "html: the widget's HTML, exactly as it goes in the ```widget fence.", isError: true };
@@ -70,7 +75,7 @@ export async function callCardTool(name: string, args: Json, context: ToolCallCo
     };
   }
 
-  // place_phone_call / place_call (server/outbound-calls.ts): consent once,
+  // place_phone_call / place_call (server/outbound/outbound-calls.ts): consent once,
   // then the request card (Ask) or Auto place; the harness builds every word.
   if (name === PLACE_PHONE_CALL_TOOL || name === PLACE_CALL_TOOL) {
     const { ok, body } = await apiResponse("/api/internal/phone-call", { method: "POST", body: JSON.stringify(args) });
@@ -115,7 +120,7 @@ export async function callCardTool(name: string, args: Json, context: ToolCallCo
     };
   }
 
-  // Live apps (server/chat-apps.ts): the same internal card route, told apart
+  // Live apps (server/widgets/chat-apps.ts): the same internal card route, told apart
   // by `tool`. Checked here first so a malformed page costs no round trip.
   if (name === "show_html" || name === "update_html") {
     const parsed = parseAppInput(args);

@@ -2,13 +2,16 @@
 // route (server/routes/artifacts.ts), which checks and stores. They live
 // here rather than in agents-call.ts, which is at its size ratchet; callTool
 // hands these names over and returns the answer as it stands.
-import type { ToolCallContext, ToolCallResult } from "./agents-call.ts";
+import type { ToolCallContext, ToolCallResult } from "./agents-call-types.ts";
 import type { Json } from "./agents-client.ts";
+import { CLAUDE_ARTIFACT_TOOL_NAME } from "./agents-artifact-tools.ts";
+import { callClaudeArtifactTool } from "./agents-call-claude-artifact.ts";
 
 export { ARTIFACT_TOOL_NAMES } from "./agents-artifact-tools.ts";
 
 export async function callArtifactTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult> {
   if (context.externalRuntime) return { text: `Unknown tool: ${name}`, isError: true };
+  if (name === CLAUDE_ARTIFACT_TOOL_NAME) return callClaudeArtifactTool(args, context);
   const { ok, body } = await context.client.apiResponse("/api/internal/artifacts", {
     method: "POST",
     body: JSON.stringify({ tool: name, args: args ?? {} }),

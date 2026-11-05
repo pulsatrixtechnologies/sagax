@@ -15,14 +15,14 @@ dropdown.
 ## After (headless gallery)
 
 `src/gallery/remote-as-place.html?view=calm|rename`, captured with
-`node scripts/capture-remote-as-place.mjs`.
+`node scripts/capture/remote-as-place.mjs`.
 
 - [after-asleep.png](after-asleep.png): generic muted monochrome bot glyph,
   z Z glyphs, one line "Cloud is asleep", no badge, no transport bar.
 - [after-waking.png](after-waking.png): same muted bot glyph (soft pulse),
   "Waking up…", no z.
 - [after-running-open.png](after-running-open.png): live frame edge to edge,
-  centered "Open" pill, "Melonie's screen" caption, no badge overlay.
+  centered "Open" pill, "Wren's screen" caption, no badge overlay.
 - [after-place-rename.png](after-place-rename.png): inline rename in the place
   dropdown ("MacBook de JC"; technical name as placeholder / tooltip).
 

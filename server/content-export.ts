@@ -6,7 +6,7 @@
 // backup worker gets them in its workerData, never from disk.
 import { DatabaseSync } from "node:sqlite";
 
-import { fieldAad, messageAad, openField, openText, sealedFieldKeyId } from "./content-crypto.ts";
+import { fieldAad, messageAad, openField, openText, sealedFieldKeyId } from "./encryption/content-crypto.ts";
 
 export interface ExportedContentKey {
   keyId: string;

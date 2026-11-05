@@ -11,7 +11,7 @@ const ADMIN = "pr_admin";
 const STRANGER = "pr_stranger";
 
 /** An organization server whose rule is the one POST /api/routines/:id/run applies. */
-function setup(speaker: string | undefined, over: { organization?: boolean; inFlight?: boolean } = {}) {
+function setup(speaker: string | undefined, over: { organization?: boolean; inFlight?: boolean; missingPaths?: () => Array<{ code: string; path: string; line: number; message: string }> } = {}) {
   const runs: string[] = [];
   const startedBy: Array<string | undefined> = [];
   const audits: Array<{ routine: string; run: string; by: string | undefined }> = [];
@@ -28,6 +28,8 @@ function setup(speaker: string | undefined, over: { organization?: boolean; inFl
       botOwner: OWNER,
       ...(routine.runAs ? { runAs: routine.runAs } : {}),
     }),
+    check: async () => ({ ok: true, checks: [], checkedAt: 123 }),
+    ...(over.missingPaths ? { missingPaths: over.missingPaths } : {}),
     inFlight: () => over.inFlight === true,
     runNow: (id, by) => { runs.push(id); startedBy.push(by); return { id: `run-${id}` }; },
     standing: () => ({ status: "queued", position: 2, queuedForBot: 3, reason: "Waits for a free slot on this bot" }),
@@ -49,6 +51,29 @@ function setup(speaker: string | undefined, over: { organization?: boolean; inFl
   };
   return { call, runs, audits, startedBy };
 }
+
+describe("routine check through the internal bridge", () => {
+  it("checks with run authorization, even while a run is already in flight", async () => {
+    const h = setup(OWNER, { inFlight: true });
+    const answer = await h.call({ routineId: "r1", action: "check" });
+    expect(answer.sent[0]).toEqual({ status: 200, body: { ok: true, checks: [], checkedAt: 123 } });
+    expect(h.runs).toEqual([]); expect(h.audits).toEqual([]);
+    const stranger = setup(STRANGER);
+    expect((await stranger.call({ routineId: "r1", action: "check" })).sent[0]?.status).toBe(403);
+  });
+});
+
+describe("cited paths on the check (#1996)", () => {
+  it("adds missing paths as warnings, ok unchanged, and a run still starts", async () => {
+    const warning = { code: "path_missing", path: "/srv/wren/in.csv", line: 2, message: "Line 2 cites /srv/wren/in.csv, which cannot be found. The run still starts." };
+    const h = setup(OWNER, { missingPaths: () => [warning] });
+    expect((await h.call({ routineId: "r1", action: "check" })).sent[0]).toEqual({ status: 200, body: { ok: true, checks: [], checkedAt: 123, warnings: [warning] } });
+    expect((await h.call({ routineId: "r1" })).sent[0]?.status).toBe(201);
+    expect(h.runs).toEqual(["r1"]);
+    const broken = setup(OWNER, { missingPaths: () => { throw new Error("disk"); } });
+    expect((await broken.call({ routineId: "r1", action: "check" })).sent[0]).toEqual({ status: 200, body: { ok: true, checks: [], checkedAt: 123 } });
+  });
+});
 
 describe("POST /api/internal/routine-run", () => {
   it("refuses a person who talks to the bot but is neither its owner, the run-as person nor an admin", async () => {

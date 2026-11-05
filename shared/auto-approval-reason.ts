@@ -1,6 +1,6 @@
 // 2026-10-28: what answered a call's permission ask with no card, in a few
 // plain groups, for the call's details (never its line). `source` is the
-// decision log's (server/auto-approve.ts AutoVerdictSource, owner-approval.ts
+// decision log's (server/approvals/auto-approve.ts AutoVerdictSource, owner-approval.ts
 // OwnerDecisionSource). An unknown source reads "Approved automatically".
 
 export type AutoApprovalReason =

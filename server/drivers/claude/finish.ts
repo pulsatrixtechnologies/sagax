@@ -9,17 +9,18 @@ import {
 import {
   contextFullMessage,
   renewalPrompt,
-} from "../../context-renewal.ts";
+} from "../../context/context-renewal.ts";
 import { killCliTree } from "../../procs.ts";
 import { classifyError, computeBackoff, interruptibleDelay, RETRY_MAX_ATTEMPTS } from "../retry.ts";
 import { turnCostFromRunningTotal } from "./cost.ts";
+import { sumTurnModels } from "./session-types.ts";
 import { removePrivateTempDir } from "./helpers.ts";
 import type { ClaudeTurnCtx } from "./turn-ctx.ts";
 
 export function attachClaudeFinish(ctx: ClaudeTurnCtx): void {
   const {
     session, threadId, emit, base, settle, settleResult, child,
-    retryState, renewedTurns, freshNextTurn, carriedCosts,
+    retryState, renewedTurns, freshNextTurn, carriedCosts, carriedModels,
     active, sessions, sendTurn, retryScale,
     markClosed, currentTurnId, sessionId,
   } = ctx;
@@ -75,6 +76,8 @@ const finalizeClose = async (code: number | null) => {
       // what the full session already spent stays this turn's cost
       const spent = turnCostFromRunningTotal(session.turn.contextFullTotal ?? null, session.costTotal ?? null);
       if (spent !== null) carriedCosts.set(turnId, (carriedCosts.get(turnId) ?? 0) + spent);
+      const spentModels = sumTurnModels(carriedModels.get(turnId), session.turn.contextFullModels);
+      if (spentModels) carriedModels.set(turnId, spentModels);
       session.broker?.close();
       session.broker = undefined;
       if (session.mcpConfigPath) {
@@ -102,6 +105,7 @@ const finalizeClose = async (code: number | null) => {
         } catch (e) {
           renewedTurns.delete(turnId);
           carriedCosts.delete(turnId);
+          carriedModels.delete(turnId);
           if (active.get(threadId)?.turnId === turnId) active.delete(threadId);
           retryState.delete(threadId);
           emit({ ...base(threadId, turnId), type: "runtime.error", message: e instanceof Error ? e.message : String(e) });
@@ -114,11 +118,11 @@ const finalizeClose = async (code: number | null) => {
     retryState.delete(threadId);
     const total = session.turn.contextFullTotal ?? null;
     if (retry.cancelled) {
-      settle(false, "interrupted", total);
+      settle(false, "interrupted", total, undefined, session.turn.contextFullModels);
     } else {
       freshNextTurn.add(threadId);
       emit({ ...base(threadId, currentTurnId()), type: "runtime.error", message: contextFullMessage("Claude") });
-      settle(false, "context_full", total);
+      settle(false, "context_full", total, undefined, session.turn.contextFullModels);
     }
   } else if (session.turn && !session.turn.settled) {
     // A retained process may be running a later user turn. Its close

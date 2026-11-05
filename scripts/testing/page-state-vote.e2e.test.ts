@@ -18,7 +18,7 @@ import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 
-import { PublishedPages } from "../../server/published-pages.ts";
+import { PublishedPages } from "../../server/pages/published-pages.ts";
 import { handlePublishedPagePublic, readerAssetsFrom, type PublicPageOptions } from "../../server/routes/published-pages.ts";
 import { removeTempDir } from "../../server/testing/cleanup.ts";
 import { ensureUiBrowser } from "./control-omb-ui.ts";
@@ -100,11 +100,13 @@ const MIME: Record<string, string> = { ".js": "text/javascript", ".css": "text/c
     // the first reader, not signed in: may vote (the page says anyone)
     const first = await open();
     await expect.poll(async () => first.frame.locator("#tally").textContent()).toBe("mardi=0 jeudi=0 can=true me=yes");
-    await first.frame.locator("#mardi").click();
+    // Activate the native buttons by keyboard so the state bridge check is
+    // independent of the reader frame's position while it sizes its content.
+    await first.frame.locator("#mardi").press("Enter");
     await expect.poll(async () => first.frame.locator("#status").textContent(), { timeout: 10_000 }).toBe("ok");
     await expect.poll(async () => first.frame.locator("#tally").textContent()).toContain("mardi=1 jeudi=0");
     // a key the page leaves at its default: refused, on the server too
-    await first.frame.locator("#close").click();
+    await first.frame.locator("#close").press("Enter");
     await expect.poll(async () => first.frame.locator("#status").textContent(), { timeout: 10_000 }).toBe("refused: Connectez-vous pour modifier cette page.");
     expect(pages.state(made.page.id).closed).toBeUndefined();
 
@@ -117,7 +119,7 @@ const MIME: Record<string, string> = { ".js": "text/javascript", ".css": "text/c
     // a second reader, another browser: sees the vote, votes too, own key
     const second = await open();
     await expect.poll(async () => second.frame.locator("#tally").textContent(), { timeout: 10_000 }).toContain("mardi=1 jeudi=0");
-    await second.frame.locator("#jeudi").click();
+    await second.frame.locator("#jeudi").press("Enter");
     await expect.poll(async () => second.frame.locator("#tally").textContent(), { timeout: 10_000 }).toContain("mardi=1 jeudi=1");
     expect(Object.keys(pages.state(made.page.id))).toHaveLength(2);
 

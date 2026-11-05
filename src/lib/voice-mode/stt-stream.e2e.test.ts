@@ -8,11 +8,11 @@ import WebSocket, { WebSocketServer } from "ws";
 
 import { LiveTranscriber } from "./stt-stream";
 import { json, readBody } from "../../../server/harness/http.ts";
-import type { RequestAuth } from "../../../server/request-auth.ts";
+import type { RequestAuth } from "../../../server/auth/request-auth.ts";
 import { createDesktopViewer } from "../../../server/routes/desktop-viewer.ts";
 import { PASS, type RouteContext } from "../../../server/routes/table.ts";
 import { createOpenAiStt } from "../../../server/tts/openai-stt.ts";
-import { createVoiceModeRoutes } from "../../../server/voice-mode.ts";
+import { createVoiceModeRoutes } from "../../../server/voice/voice-mode.ts";
 
 async function listen(server: Server): Promise<string> {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

@@ -4,7 +4,7 @@ Build and run the isolated server/browser fixture on Linux or macOS:
 
 ```sh
 pnpm build
-node --experimental-strip-types scripts/verify-desktop-viewer.ts
+node --experimental-strip-types scripts/verify/dev/verify-desktop-viewer.ts
 ```
 
 To reuse installed browser tools, set `SAGAX_AGENT_BROWSER_PATH` and
@@ -61,7 +61,7 @@ upstream rejection/timeouts, and stripping workspace credentials from the
 upstream request:
 
 ```sh
-pnpm exec vitest run server/routes/desktop-viewer.test.ts server/container-computer.test.ts server/request-auth.test.ts server/vps-computer.test.ts
+pnpm exec vitest run server/routes/desktop-viewer.test.ts server/computer/container-computer.test.ts server/auth/request-auth.test.ts server/computer/vps-computer.test.ts
 pnpm exec vitest run scripts/testing/verification-docs.test.ts
 ```
 

@@ -52,4 +52,18 @@ describe("placeAnchored", () => {
     const place = placeAnchored({ anchor: anchor(100, 100), size: { width: 2000, height: 100 }, viewport, align: "start" });
     expect(place.left).toBe(8);
   });
+
+  it("stays inside the given bounds (a window over the app), flipping and capping there", () => {
+    const bounds = { left: 100, top: 100, right: 900, bottom: 700 };
+    const below = placeAnchored({ anchor: anchor(820, 300), size: { width: 340, height: 500 }, viewport, align: "start", bounds });
+    expect(below.side).toBe("bottom");
+    expect(below.top).toBe(300 + 28 + 4);
+    expect(below.maxHeight).toBe(700 - (300 + 28 + 4) - 8);
+    expect(below.left).toBe(900 - 340 - 8);
+    const above = placeAnchored({ anchor: anchor(150, 600), size: { width: 340, height: 600 }, viewport, align: "start", bounds });
+    expect(above.side).toBe("top");
+    expect(above.maxHeight).toBe(600 - 100 - 4 - 8);
+    expect(above.top).toBeGreaterThanOrEqual(100);
+    expect(above.left).toBe(150);
+  });
 });

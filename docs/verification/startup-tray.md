@@ -4,7 +4,7 @@ Run the lifecycle regressions and disposable Electron fixture:
 
 ```sh
 node --test electron/startup-tray.node-test.mjs electron/single-instance.node-test.mjs electron/server-supervisor.node-test.mjs
-node scripts/verify-startup-tray.mjs
+node scripts/verify/dev/verify-startup-tray.mjs
 ```
 
 The fixture creates a temporary Electron profile and blocks network access.

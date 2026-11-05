@@ -15,7 +15,8 @@ extension DesktopTheme {
     /// `border-hairline/50`
     var hairline50: Color { hairline.opacity(0.5) }
     /// The switch's "on" track (`bg-success`, rgb(56, 213, 145) in Pulsatrix).
-    var switchOn: Color { success }
+    /// The desktop's switch track (styles/skin-switch.css).
+    var switchOn: Color { DesktopSwitchColors.of(skin).on }
 
     /// `bg-hover` (#77777752 at 0.173) composited over the panel's `app`
     /// ground in sRGB, as the browser does.
@@ -83,6 +84,7 @@ struct PanelTextArea: View {
                     .padding(.horizontal, 10)
                     .padding(.top, 9)
                     .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
             TextEditor(text: $text)
                 .font(mono ? .system(size: 13, design: .monospaced) : theme.font(13))
@@ -96,6 +98,9 @@ struct PanelTextArea: View {
         .frame(minHeight: minHeight, alignment: .topLeading)
         .background(theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline40, lineWidth: 1))
+        // One accessibility node (the editor), so a UI test that targets this
+        // field does not hit the placeholder StaticText sharing the same id.
+        .accessibilityElement(children: .contain)
     }
 }
 
@@ -106,13 +111,15 @@ struct PanelSwitch: View {
     let label: LocalizedStringKey
     let isOn: Bool
     var disabled = false
+    /// The track when on; nil: the skin's (a routine's switch wears its bot's colour).
+    var onColor: Color? = nil
     let set: (Bool) -> Void
 
     var body: some View {
         Button { set(!isOn) } label: {
             ZStack(alignment: isOn ? .trailing : .leading) {
-                Capsule().fill(isOn ? theme.switchOn : theme.ink.opacity(0.10))
-                Capsule().fill(theme.ink).frame(width: 26, height: 16).padding(2)
+                Capsule().fill(isOn ? (onColor ?? theme.switchOn) : DesktopSwitchColors.of(theme.skin).off)
+                Capsule().fill(Color.white).frame(width: 26, height: 16).padding(2)
             }
             .frame(width: 44, height: 20)
             .opacity(disabled ? 0.5 : 1)

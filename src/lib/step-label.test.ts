@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { setLocale } from "@/lib/i18n";
-import { readStep, stepArgs, stepDuration, stepJson, stepLabel, stepPhase, stepResult } from "./step-label";
+import { readStep, stepArgs, stepDuration, stepJson, stepLabel, stepPhase, stepResult, stepToolName, stuckNoticeKey } from "./step-label";
 
 afterEach(() => {
   setLocale("en");
@@ -90,6 +90,32 @@ describe("step labels in plain words", () => {
     expect(stepLabel({ name: "frobnicate", ok: true })).toBe("A utilisé frobnicate");
   });
 
+  it("reads the loop guard's notice in the person's language, without a dash, the call after it", () => {
+    const notice = { name: "Same call repeated 5× - tool: git status - it may be stuck", ok: false };
+    expect(readStep(notice)).toEqual({ label: "Same call repeated 5 times. It may be stuck", target: "git status", title: "git status" });
+    // the same notice as rows written before 2026-11-02 carry it, with long dashes
+    const dash = "\u2014";
+    expect(readStep({ name: `Same call repeated 5× ${dash} tool: git status ${dash} it may be stuck`, ok: false })).toEqual(readStep(notice));
+    // an ACP agent's kind is no word for a person; a tool's own name stays
+    expect(readStep({ name: "Same call repeated 10× - other: sagax-environment__run_command - it may be stuck", ok: false }))
+      .toMatchObject({ label: "Same call repeated 10 times. It may be stuck", target: "sagax-environment__run_command" });
+    expect(readStep({ name: "Same call repeated 20× - Bash: npm test - it may be stuck", ok: false }).target).toBe("Bash: npm test");
+    // a call quoted on several lines, as the guard wrote an ACP or Codex
+    // title up to 0.8.28: read on one line, and the same notice with long
+    // dashes is the same notice
+    const lines = "tool: cd /work/app\npnpm lint\npnpm test";
+    const multi = `Same call repeated 5× - ${lines} - it may be stuck`;
+    expect(readStep({ name: multi, ok: false }))
+      .toEqual({ label: "Same call repeated 5 times. It may be stuck", target: "cd /work/app pnpm lint pnpm test", title: "cd /work/app\npnpm lint\npnpm test" });
+    expect(stuckNoticeKey(`Same call repeated 5× ${dash} ${lines} ${dash} it may be stuck`)).toBe(stuckNoticeKey(multi));
+    expect(stuckNoticeKey(multi)).toBe("5 tool: cd /work/app pnpm lint pnpm test");
+    expect(stuckNoticeKey("Same call repeated 10× - tool: git status - it may be stuck")).not.toBe(stuckNoticeKey(notice.name));
+    setLocale("fr");
+    const french = readStep(notice);
+    expect(french).toEqual({ label: "Même appel répété 5 fois. Il est peut-être bloqué", target: "git status", title: "git status" });
+    expect(french.label).not.toMatch(/[\u2013\u2014]/);
+  });
+
   it("does not show opaque teammate ids as names", () => {
     expect(stepLabel({ name: "coordinate_bots", ok: true, input: JSON.stringify({ bot_ids: ["0f9a8b7c-6d5e-4f3a-2b1c-0d9e8f7a6b5c"] }) })).toBe("Coordinated teammates");
   });
@@ -123,6 +149,28 @@ describe("step detail helpers", () => {
       { key: "subject", value: "Invoice 4012" },
     ]);
     expect(stepJson({ name: "mcp__outlook__get_message", ok: false, input: JSON.stringify({ message_id: messageId }) })).toContain(messageId);
+  });
+
+  // 2026-11-02 (production): a server path named after the bot's id
+  it("shows a path with a bot's id as the bot's name, else as the folder it is, the path in the tooltip", () => {
+    const botId = "5a1d0c3e-7b42-4c8e-9f10-2d3e4f5a6b7c";
+    const path = `/data/.openmausbot/workspaces/${botId}/docs`;
+    const nameOf = (id: string) => (id === botId ? "Nova" : undefined);
+    expect(stepArgs(JSON.stringify({ path }), nameOf)).toEqual([{ key: "path", value: "/data/.openmausbot/workspaces/Nova/docs", full: path }]);
+    expect(stepArgs(JSON.stringify({ path }))).toEqual([{ key: "path", value: "The bot's own folder/docs", full: path }]);
+    expect(stepArgs(JSON.stringify({ path: "/workspace/bots/nova" }))).toEqual([{ key: "path", value: "/workspace/bots/nova" }]);
+  });
+
+  it("names a tool in words in its detail, never its raw id (2026-11-02)", () => {
+    expect(stepToolName({ name: "mcp__sagax-environment__list_files" })).toBe("List files");
+    expect(stepToolName({ name: "mcp__sagax-environment__run_command" })).toBe("Run a command");
+    expect(stepToolName({ name: "mcp__desk__view_tickets" })).toBe("View tickets");
+    expect(stepToolName({ name: "mcp__gw__acme_desk__query", product: "Acme Desk" })).toBe("Query · Acme Desk");
+    for (const name of ["mcp__sagax-environment__list_files", "mcp__desk__view_tickets", "mcp__agents__coordinate_bots"]) {
+      expect(stepToolName({ name })).not.toMatch(/__|_/);
+    }
+    setLocale("fr");
+    expect(stepToolName({ name: "mcp__sagax-environment__list_files" })).toBe("Lister les fichiers");
   });
 
   it("cuts a long result and says so", () => {
@@ -206,5 +254,30 @@ describe("an MCP call names its server and tool", () => {
     expect(stepLabel({ name: "Read", ok: true })).toBe("A lu un fichier");
     expect(stepDuration(173_000)).toBe("2 min 53 s");
     expect(stepDuration(4_000)).toBe("4 s");
+  });
+});
+
+// 2026-11-03: Grok's gateway names a connector's tool with `_5f` escapes and
+// the server's number; a card read "Could not use User Outlook Get 5fmail
+// 5fmessage" and its Tool row a bare "12".
+describe("a gateway tool name reads as its connector and tool", () => {
+  const titles = ["user-Outlook-get_5fmail_5fmessage___12", "cursor__user-Outlook-get_5fmail_5fmessage___12", "mcp__cursor__user-Outlook-get_5fmail_5fmessage___12"];
+
+  it("decodes the escape and never shows a bare number as the tool", () => {
+    for (const name of titles) {
+      const label = readStep({ name, ok: false }).label;
+      expect(label).not.toMatch(/5f|User Outlook|12/);
+      expect(label).toContain("Outlook");
+      expect(stepToolName({ name })).toMatch(/^Get mail message · Outlook/);
+    }
+    expect(readStep({ name: "user-Outlook-list_5fmail_5fmessages___12", ok: true }).label).not.toMatch(/5f|User Outlook/);
+    expect(stepToolName({ name: "user-Outlook-list_5fmail_5fmessages___12" })).toMatch(/^List mail messages · Outlook/);
+  });
+
+  it("never names a tool by a number alone", () => {
+    expect(stepToolName({ name: "osprey___12" })).toBe("Osprey");
+    expect(stepToolName({ name: "mcp__wren__lookup___7" })).toBe("Lookup");
+    // an ordinary name keeps its digits and its underscores' words
+    expect(stepToolName({ name: "mcp__wren__step_12" })).toBe("Step 12");
   });
 });

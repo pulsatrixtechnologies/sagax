@@ -11,7 +11,7 @@
 //
 // Precedence, whoever wrote the rule and for whichever bot:
 //   deny > ask > allow, and within one behavior an organization rule
-//   first (2026-10-21, server/custom-rules-org.ts: an admin's ask or deny,
+//   first (2026-10-21, server/rules/custom-rules-org.ts: an admin's ask or deny,
 //   for every person and bot, that a member cannot change), then a bot's
 //   own rule before a rule for all of the person's bots.
 //
@@ -37,7 +37,7 @@
 //     2026-10-21 (the reference design parity A1, Decision: "OUI, comme Grok"): a card the
 //     matcher left to the person is then judged by a light, isolated model
 //     against the same rules (customRulesJudgePrompt, modelCustomDecision,
-//     server/custom-rules-model.ts). It approves or refuses in the person's
+//     server/rules/custom-rules-model.ts). It approves or refuses in the person's
 //     place only when it names one of their rules of that behavior, and its
 //     allow keeps every limit above (risk scope, no shell line, readable
 //     paths). Unsure, failed or unreadable: the card stays the person's.
@@ -345,7 +345,7 @@ function namedProducts(list: readonly string[], products: readonly RuleProduct[]
 }
 
 /** Which products a tool belongs to, by id: its whole server id, or behind
- * the platform's gateway (`perspicax_<slug>__<api>__<verb>`) the platform
+ * the platform's gateway (`perspicax__<api>_<verb>`, plus legacy role mounts) the platform
  * and the API id; and the kinds their words name. The ids are the ones a
  * server declares (RuleProduct.id), so a rule's named product compares to
  * them whatever the names say. */
@@ -1032,7 +1032,7 @@ export function ruleCoversCall(compiled: CompiledRule, facts: CallFacts, behavio
       }
     }
   }
-  // a tool is named whole, its server included (`perspicax_quasar__cw_psa__query`)
+  // a tool is named whole, its server included (`perspicax_quasar__cw_psa_query`)
   if (compiled.tools.length && !compiled.tools.includes(facts.tool)) return false;
   if (compiled.products.length && !compiled.products.some((product) => facts.products.includes(product))) return false;
   return true;

@@ -11,8 +11,16 @@ import { voiceUnavailableView } from "./VoiceModeCallButton";
 const ready = (status: Record<string, unknown>) => ({ state: "ready" as const, status: { provider: "xai" as const, organization: true, ...status } as never });
 
 describe("voice mode call button on an organization server", () => {
-  it("opens the bar when the server says voice mode serves the speaker (no popover)", () => {
-    expect(voiceUnavailableView(ready({ available: true, via: "org-key" }))).toBeNull();
+  it("opens the bar when the server says the realtime voice serves the speaker (no popover)", () => {
+    expect(voiceUnavailableView(ready({ available: true, realtime: true, via: "org-key" }))).toBeNull();
+  });
+
+  // 2026-11-02: a call is a realtime voice session, never text to speech
+  it("a voice without the realtime session is no call: it says what it needs", () => {
+    const view = voiceUnavailableView(ready({ available: true, via: "org-key" }))!;
+    expect(view.cause).toBe("realtime");
+    expect(view.lines.join(" ")).toMatch(/realtime voice, never text to speech/);
+    expect(view.actions).toEqual(["open-connections"]);
   });
 
   it("shows the speaker's private access card, never the legacy This computer gate", () => {

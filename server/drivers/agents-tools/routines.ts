@@ -29,11 +29,11 @@ export const DEF_LIST_ROUTINES = {
 export const DEF_RUN_ROUTINE = {
     name: "run_routine",
     description:
-      "Run one of this bot's own routines now, once. Get the routine id from list_routines. The schedule and the Active switch stay as they are; a paused routine runs and stays paused. It waits while busy, then starts; a run already in progress is returned, never doubled.",
+      "Check one of this bot's routines with action check (readiness only, no run or model turn), or run it now, once. Get the routine id from list_routines. The schedule and the Active switch stay as they are; a paused routine runs and stays paused. It waits while busy, then starts; a run already in progress is returned, never doubled.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
-      properties: { routine_id: { type: "string", minLength: 1, description: "Routine id from list_routines." } },
+      properties: { routine_id: { type: "string", minLength: 1, description: "Routine id from list_routines." }, action: { type: "string", enum: ["run", "check"], description: "check reads readiness without creating a run; its warnings list the paths the instructions cite that cannot be found (a warning never blocks a run). Omit to run." } },
       required: ["routine_id"],
     },
   };
@@ -146,8 +146,9 @@ export async function callRoutinesTool(name: string, args: Json, context: ToolCa
     if (!routineId) return { text: "run_routine needs routine_id.", isError: true };
     const r = await api("/api/internal/routine-run", {
       method: "POST",
-      body: JSON.stringify({ fromBotId: BOT_ID, fromThreadId: THREAD_ID, routineId }),
+      body: JSON.stringify({ fromBotId: BOT_ID, fromThreadId: THREAD_ID, routineId, ...(args.action === "check" ? { action: "check" } : {}) }),
     });
+    if (args.action === "check") return { text: JSON.stringify(r) };
     // 2026-11-01: the server's receipt names the routine, its bot, where the
     // run stands and where to follow it; pass it on to the person as it is.
     if (typeof r.message === "string" && typeof r.routineName === "string") {

@@ -229,7 +229,7 @@ excerpts go first, then the items). Deleting the routine deletes it; a new
 source starts a new baseline.
 
 A cloud computer that is asleep (the AKS server environments,
-`server/sandbox-k8s-wake.ts`, or a solo cloud computer) is **not woken** by
+`server/sandbox/sandbox-k8s-wake.ts`, or a solo cloud computer) is **not woken** by
 a watch: with `whenAsleep: skip` (default) the check reads only while it is
 awake and says "asleep: not checked" otherwise; the routine is not pre-woken
 before its due times either. With `whenAsleep: wake` (the person's choice,

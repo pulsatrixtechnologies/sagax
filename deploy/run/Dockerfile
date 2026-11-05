@@ -2,7 +2,7 @@
 # section 4.3). The person's sandbox image (deploy/sandbox/Dockerfile: tools,
 # Xvnc, browser) plus the engine CLIs pinned by engines.lock.json (Claude Code
 # and Codex) plus the runner (server/sagax-runner.ts), which is the Pod's only
-# process. The provisioner (server/sandboxd-runs-spec.ts) runs it as uid 1000,
+# process. The provisioner (server/sandbox/sandboxd-runs-spec.ts) runs it as uid 1000,
 # read-only root, no capabilities, with /workspace (volume), /tmp and
 # /dev/shm writable, and names no command: the entrypoint below is the run.
 #
@@ -25,7 +25,6 @@ RUN npm install -g pnpm@10.34.6
 ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/docs/package.json ./apps/docs/package.json
-COPY cloudflare/control-plane/package.json ./cloudflare/control-plane/package.json
 COPY scripts/install-git-hooks.mjs ./scripts/install-git-hooks.mjs
 RUN pnpm install --frozen-lockfile
 COPY . .

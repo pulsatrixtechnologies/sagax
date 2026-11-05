@@ -11,11 +11,11 @@ import { randomUUID } from "node:crypto";
 import type { BusySendRequest } from "../../shared/parallel-tasks.ts";
 import type { ResolvedSender } from "../../shared/wire.ts";
 import type { SteerOutcome } from "../contracts.ts";
-import type { TurnSpeaker } from "../engine-access.ts";
-import type { ReplyTarget } from "../replies.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { TurnSpeaker } from "../engines/engine-access.ts";
+import type { ReplyTarget } from "../messages/replies.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import type { Message } from "../store.ts";
-import type { UsageTrigger } from "../usage-ledger.ts";
+import type { UsageTrigger } from "../usage/usage-ledger.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 import { approvalModeFor } from "../../shared/approval-mode.ts";
@@ -39,8 +39,8 @@ import {
 import {
   prepareWidgetPress,
   reopenCancelledPress,
-} from "../chat-widgets.ts";
-import { claudeActivityEvents } from "../claude-activity.ts";
+} from "../widgets/chat-widgets.ts";
+import { claudeActivityEvents } from "../engines/claude-activity.ts";
 import {
   cloudGuestSendRefusal,
   cloudThreadRefusal,
@@ -50,35 +50,36 @@ import {
   builtInBrowserEnabled,
 } from "../config.ts";
 import { parseDataContext } from "../data-context.ts";
+import { perspicaxRoleOf } from "./perspicax-held-roles.ts";
 import { parseDevPods } from "../dev-pods-prompt.ts";
 import {
   typedCommandForTurn,
   unavailableCommandError,
 } from "../harness-commands.ts";
-import { recordHeldSteer } from "../held-steers.ts";
+import { recordHeldSteer } from "../turns/held-steers.ts";
 import { introAdvance } from "../intro-tour.ts";
-import { spokenLineFields } from "../live-call-record.ts";
-import { cancelledChatFollowup } from "../message-db.ts";
-import { misuseRefusal } from "../misuse-guardrails.ts";
+import { spokenLineFields } from "../voice/live-call-record.ts";
+import { cancelledChatFollowup } from "../messages/message-db.ts";
+import { misuseRefusal } from "../safety/misuse-guardrails.ts";
 import { ORG_FULL_ACCESS_DISABLED } from "../org/org-full-access.ts";
-import { resolvePeerComms } from "../peer-approval.ts";
-import { promptWithReply } from "../replies.ts";
+import { resolvePeerComms } from "../peers/peer-approval.ts";
+import { promptWithReply } from "../messages/replies.ts";
 import {
   personKey,
   speakerFor,
 } from "../request-speaker.ts";
 import { SAFE_POINT_NOTE } from "../safe-point-preempt.ts";
-import { safetyHttpRefusal } from "../safety-review.ts";
+import { safetyHttpRefusal } from "../safety/safety-review.ts";
 import {
   acceptedSendMatch,
   parseSendId,
   sendFingerprint,
-} from "../send-idempotency.ts";
+} from "../messages/send-idempotency.ts";
 import {
   soloGoalCommand,
   soloGoalLine,
 } from "../solo-goal.ts";
-import { assertWithinBudget } from "../spend.ts";
+import { assertWithinBudget } from "../usage/spend.ts";
 import {
   cancelSteeredMessage,
   holdSteeredQueue,
@@ -86,19 +87,19 @@ import {
   queuedSteeredMessage,
   restoreHeldSteeredQueue,
   settleHeldSteeredQueue,
-} from "../steer-queue.ts";
-import { resolveAndSendTerminal } from "../terminal-requests.ts";
-import { extractTurnImages } from "../turn-images.ts";
+} from "../turns/steer-queue.ts";
+import { resolveAndSendTerminal } from "../terminal/terminal-requests.ts";
+import { extractTurnImages } from "../turns/turn-images.ts";
 import {
   pinVoiceInterrupt,
   voiceFullDuplexEnabled,
   withoutDuplexMarks,
-} from "../voice-call-duplex.ts";
+} from "../voice/voice-call-duplex.ts";
 import {
   parseVoiceCallMeta,
   voiceCallSteerPrompt,
-} from "../voice-call-prompt.ts";
-import { parseVoiceClientTiming } from "../voice-timing.ts";
+} from "../voice/voice-call-prompt.ts";
+import { parseVoiceClientTiming } from "../voice/voice-timing.ts";
 
 /** Injected closures from index.ts. Pure move; host locals stay loosely typed. */
 export type BotsMessagesRouteDeps = Record<string, any>;
@@ -114,7 +115,8 @@ interface AutoRouteContext {
 }
 
 export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHandler {
-  return async ({ req, res, url, path, method, auth, json, readBody }) => {
+  return async (context) => {
+    const { req, res, url, path, method, auth, json, readBody } = context;
     if (!(path.startsWith("/api/bots/") || /^\/api\/threads\/[\w-]+\/respond$/.test(path))) {
       return PASS;
     }
@@ -247,7 +249,7 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
       if (notYours) return json(res, 403, { error: notYours });
       // While the thread is on a live call, every send to it is a call turn,
       // marked or not (typed words, a retry, an old page): server state,
-      // not only the page's mark (server/voice-call-session.ts).
+      // not only the page's mark (server/voice/voice-call-session.ts).
       const voiceCall = guarded ? sentVoiceCall : voiceCalls.markFor(threadId, sentVoiceCall);
       // A goal for this one bot. A team channel keeps its own /goal.
       const solo = !guarded && !voiceCall && !pressed
@@ -313,7 +315,7 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
       // An in-app destination (open_page, open_routine, open_run) was opened
       // on the device: record the press as the person's message, marked done,
       // and run no turn. The model reads it on its next turn as already done
-      // (server/replies.ts transcriptText); it is never asked to do it.
+      // (server/messages/replies.ts transcriptText); it is never asked to do it.
       if (press?.ok && press.device) {
         const earlier = sendId ? store.messagesFor(threadId).find((m: Message) => m.role === "user" && m.sendId === sendId) : undefined;
         if (earlier) return json(res, 200, { ok: true, threadId, message: earlier, device: true });
@@ -336,7 +338,7 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
       const text = press ? press.text : postedText;
       const target = resolveReplyTarget(threadId, press ? press.messageId : body.replyToId);
       // Only here is a reply known to be a press: a copy of the widget row
-      // says so to whatever composes the prompt (server/replies.ts). A typed
+      // says so to whatever composes the prompt (server/messages/replies.ts). A typed
       // reply to the same row carries no such mark, whatever its words.
       const replyTo: ReplyTarget | undefined = press && target ? { ...target, widgetPress: { label: press.label, action: press.action } } : target;
       const pressKey = press?.settles ? `${threadId}:${press.messageId}` : undefined;
@@ -344,11 +346,11 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
         return json(res, 409, { error: "That answer is already on its way." });
       }
       // A Data context is put in front of the words the model gets, and a
-      // press is read by its first line (server/replies.ts): it carries none.
+      // press is read by its first line (server/messages/replies.ts): it carries none.
       const dataContext = press ? undefined : ownPageContext(parseDataContext(body.dataContext), bot.id, auth);
       // the coding view is on for the device that sent this (server/dev-pods-prompt.ts)
       devPodsThreads.note(threadId, parseDevPods(body.devPods));
-      // Single stream (server/single-stream.ts): a client showing one
+      // Single stream (server/streams/single-stream.ts): a client showing one
       // continuous conversation (threads off) marks this thread a stream
       // segment; a client showing threads clears the mark. A client that says
       // nothing (an older build, the phone, a relay) leaves it as it is.
@@ -373,7 +375,7 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
       const messageSpeaker = speakerFor(auth);
       const postedActor = misuseActor(messageSpeaker.origin === "person" ? messageSpeaker.principalId : undefined, messageSpeaker.origin);
       const messageMisuse = misuseRefusal(text, { ...postedActor, surface: "message", botId: bot.id, threadId });
-      if (messageMisuse) return json(res, messageMisuse.status, { error: messageMisuse.message, code: messageMisuse.code });
+      if (messageMisuse) return json(res, messageMisuse.status, { error: messageMisuse.message, code: messageMisuse.code, ...(messageMisuse.reason ? { reason: messageMisuse.reason } : {}) });
       const postedSafety = safetyHttpRefusal({ text, surface: "message", triage: postedActor.triage, ...(postedActor.principalId ? { principalId: postedActor.principalId } : {}), botId: bot.id, threadId });
       if (postedSafety) return json(res, postedSafety.status, { error: postedSafety.message, code: postedSafety.code });
       // "stop", "arrête", "attends", "wait" alone while this thread works:
@@ -394,6 +396,14 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
         closeCutToolRows(threadId);
         confirmStop(threadId, stoppedTurnId);
         return json(res, 200, { ok: true, threadId, stopped: true, message });
+      }
+      // 2026-11-05 (visible roles, batch 3): the role the person picked in
+      // the composer, for the next turn of this thread only ("" = Moi). A
+      // turn already running keeps its role; the pick waits for the next one,
+      // and only the person who made it can use it (roleJournal.takePick).
+      if (!guarded && !pressed) {
+        const pickedRole = perspicaxRoleOf(body);
+        if (pickedRole !== undefined) deps.pickPerspicaxRole?.(bot, threadId, auth, pickedRole);
       }
       if (pressKey) widgetPressesInFlight.set(pressKey, sendId);
       // #1372: the goal starts only now, after every refusal above; a send
@@ -608,6 +618,8 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
               });
               // Written here, as the words that start a turn are (startTurn).
               store.setTaskAskedAt(bot.id, threadId, message.at);
+              // background-sweep.ts: what the server archived is theirs again
+              if (store.taskByThread(bot.id, threadId)?.openedBy?.kind !== "agent") store.restoreAutoArchived(bot.id, threadId);
               // Durable while the engine process holds them: a crash or stop can
               // resume them once (held-steers.ts).
               try {
@@ -899,11 +911,14 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
       const body = await readBody(req);
       const selected = requestedTaskBot(m[1], body.threadId);
       const bot = botForThread(selected.id, selected.threadId)!;
+      const source = deps.originApprovals?.sourceFor(bot.threadId, String(body.requestId));
+      if (source === false) return json(res, 409, { error: "This approval is no longer available in this conversation." });
+      if (source) return createBotsMessagesRoutes(deps)({ ...context, path: `/api/threads/${source.threadId}/respond`, readBody: async () => ({ ...body, requestId: source.requestId }) });
       const behavior = requestBehavior(body.behavior);
       const reviewedSha256 = typeof body.reviewedSha256 === "string" ? body.reviewedSha256 : undefined;
       if (!behavior) return json(res, 400, { error: "behavior must be allow, deny, or answer" });
       // The security key comes first, before any path that settles a card
-      // (a bot act included): server/step-up-gate.ts.
+      // (a bot act included): server/auth/step-up-gate.ts.
       const stepUpRefusal = stepUpGate(ruleManager(auth), bot.threadId, String(body.requestId), behavior, stepUpAnswerOf(body), body.stepUp);
       if (stepUpRefusal) return json(res, stepUpRefusal.status, stepUpRefusal.body);
       if (delegatedRequest() && store.isConfidentialThread(bot.threadId)) return json(res, 403, { error: CONFIDENTIAL_CARD_DELEGATED, code: "confidential_thread" });
@@ -1030,6 +1045,9 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
     if (m && method === "POST") {
       const threadId = m[1];
       const body = await readBody(req);
+      const source = deps.originApprovals?.sourceFor(threadId, String(body.requestId));
+      if (source === false) return json(res, 409, { error: "This approval is no longer available in this conversation." });
+      if (source) return createBotsMessagesRoutes(deps)({ ...context, path: `/api/threads/${source.threadId}/respond`, readBody: async () => ({ ...body, requestId: source.requestId }) });
       const behavior = requestBehavior(body.behavior);
       const reviewedSha256 = typeof body.reviewedSha256 === "string" ? body.reviewedSha256 : undefined;
       if (!behavior) return json(res, 400, { error: "behavior must be allow, deny, or answer" });

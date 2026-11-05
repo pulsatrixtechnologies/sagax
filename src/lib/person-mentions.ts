@@ -1,6 +1,6 @@
 // The people a room's composer can tag with @, and which ones a draft tags:
 // the rule the server notifies by (shared/person-mentions.ts,
-// server/room-mentions.ts), against the names the room's People list shows.
+// server/rooms/room-mentions.ts), against the names the room's People list shows.
 import { MENTION_ALL, mentionedPeople } from "../../shared/person-mentions";
 import { channelHumanRow, type OrgDirectoryPerson } from "./perspicax-org";
 import type { MentionPeer } from "./mentions";

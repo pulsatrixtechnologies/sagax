@@ -180,6 +180,15 @@ async function putConfig(fixture, patch) {
   if (!res.ok) throw new Error(`PUT /api/config -> ${res.status}: ${(await res.text()).slice(0, 300)}`);
 }
 
+async function acceptTerms(fixture) {
+  const server = fixture.server;
+  await fetch(`${server}/api/me/terms`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...serverHeaders(fixture, server) },
+    body: "{}",
+  }).catch(() => undefined);
+}
+
 /** On an organization server a person's preferences live on the server and
  * win over the page's (src/lib/user-preferences-sync.ts): make the server's
  * record the capture's preset, so the skin and density are the preset's. */
@@ -265,13 +274,34 @@ function context(page, viewport, fixture) {
       await mouse("mouseReleased", c.x, c.y, { button: "right" });
       await sleep(300);
     },
+    // Chrome recomputes :hover on the frame after a move: a second move a
+    // frame later makes sure the shot sees the pointer where it now is
+    // (one move left 21's bar off, and a pointer that had crossed the
+    // transcript left a stray bar on 16 and 17).
     async hover(selector) {
       const c = await center(selector);
       await mouse("mouseMoved", c.x, c.y, { button: "none" });
+      ctx.lastPointer = c;
+      await sleep(120);
+      await mouse("mouseMoved", c.x + 1, c.y, { button: "none" });
       await sleep(250);
     },
+    /** keepPointer: one more move to the resting point, so an element
+     * re-rendered under it since (the sidebar after the engines arrive)
+     * takes :hover again; headless Chrome does not refresh it on its own. */
+    async restPointer() {
+      const c = ctx.lastPointer;
+      if (!c) return;
+      await mouse("mouseMoved", c.x + 1, c.y, { button: "none" });
+      await mouse("mouseMoved", c.x, c.y, { button: "none" });
+      await sleep(200);
+    },
     async moveAway() {
-      await mouse("mouseMoved", viewport.width - 2, viewport.height - 2, { button: "none" });
+      // the header's empty left end: no row, no button, no hover state
+      for (const dx of [0, 1]) {
+        await mouse("mouseMoved", Math.round(viewport.width * 0.42) + dx, 6, { button: "none" });
+        await sleep(120);
+      }
     },
     /** key("k", ["Meta"]) */
     async key(key, modifiers = []) {
@@ -338,7 +368,11 @@ async function loadApp(page, base, viewport, preset, fixture) {
   const loaded = page.once("Page.loadEventFired", 60_000);
   await page.send("Page.navigate", { url: `${base}/` });
   await loaded;
-  await page.waitFor(`Boolean(document.querySelector("[data-app-shell]") && window.__parity.store())`, { timeoutMs: 30_000, label: "app shell" });
+  await page.waitFor(`Boolean(document.querySelector("[data-app-shell]") && window.__parity.store())`, { timeoutMs: 30_000, label: "app shell" }).catch(async (error) => {
+    const seen = await page.eval(`(document.body?.innerText ?? "").slice(0, 300)`).catch(() => "?");
+    log(`no app shell; page text: ${JSON.stringify(seen)}; console: ${JSON.stringify(page.console.slice(-5))}`);
+    throw error;
+  });
 }
 
 /** Fonts, images and network quiet, then animations settled and caret hidden. */
@@ -358,7 +392,8 @@ async function settle(page, extraMs = 0) {
     if (!style) {
       style = document.createElement("style");
       style.id = "__parity_caret";
-      style.textContent = "*, *::before, *::after { caret-color: transparent !important; }";
+      // the caret, and the achievement unlock toasts (timed, they land at random)
+      style.textContent = "*, *::before, *::after { caret-color: transparent !important; } [data-achievement-toast] { display: none !important; }";
       document.head.appendChild(style);
     }
     return true;
@@ -413,6 +448,9 @@ async function main() {
       currentPhase = item.phase;
       log(`phase: ${currentPhase.id}`);
       if (currentPhase.config) await putConfig(fixture, currentPhase.config);
+      // The terms of use (asked once per account, 2026-10-26) are accepted
+      // past the first run, as by a person who already uses the app.
+      if (currentPhase.id !== "welcome") await acceptTerms(fixture);
     }
     for (const viewport of viewports) {
       const file = `desktop-${viewport.id}-${item.name}`;
@@ -450,12 +488,14 @@ async function main() {
           break;
         }
         if (!item.surface.keepPointer) await ctx.moveAway();
+        // before settle: the hover's own transitions then finish with the rest
+        if (item.surface.keepPointer) await ctx.restPointer();
         await settle(page, item.surface.settleMs ?? 0);
         // a remount between the surface and the shot draws a blank page: retry
-        if (!(await page.eval(`Boolean(document.querySelector("[data-app-shell]") && document.body.innerText.trim().length > 0)`))) {
+        if (!item.surface.noShell && !(await page.eval(`Boolean(document.querySelector("[data-app-shell]") && document.body.innerText.trim().length > 0)`))) {
           throw new Error("blank page at capture time");
         }
-        writeFileSync(join(REFS, `${file}.png`), await page.screenshot());
+        writeFileSync(join(REFS, `${file}.png`), await page.screenshot({ repaint: item.surface.keepPointer ? viewport : null }));
         // --text also shows the end of a scrolled dialog: one more shot
         // (<file>-end.png) when its content runs past the window.
         if (withText) {

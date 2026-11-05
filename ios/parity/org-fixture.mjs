@@ -87,7 +87,7 @@ function avatarPng(size, [r, g, b]) {
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]);
 }
 
-// ── the stub fleet agent (server/fleet-client.ts speaks to it) ──────────
+// ── the stub fleet agent (server/fleet/fleet-client.ts speaks to it) ──────────
 function startFleetStub(socketPath) {
   const month = new Date().toISOString().slice(0, 7);
   const version = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version;
@@ -257,7 +257,7 @@ export async function seedOrg(org, seeded, api) {
   const id = (login) => people.find((p) => p.login === login)?.principalId;
   org.viewer.principalId = id(VIEWER.preferred_username) ?? null;
   // PARITY_PEOPLE=1 (WP15 UI tests): Sam has written to the viewer once,
-  // a direct conversation between two people (server/people-dms.ts).
+  // a direct conversation between two people (server/people/people-dms.ts).
   if (process.env.PARITY_PEOPLE === "1") await seedPeopleDm(org, id("sam.rivera")).catch((error) => console.error(`[parity] people dm: ${error.message}`));
   const ara = seeded.ids.ara.id;
   const grants = [

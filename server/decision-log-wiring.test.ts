@@ -172,7 +172,7 @@ posixOnly("authorization decisions are logged", () => {
     async () => {
       // Auto (Approve for me) on the owner's own bot: the provider's request
       // runs without a card, approved by the bot's level (owner-auto,
-      // server/auto-approve.ts), and the row says so.
+      // server/approvals/auto-approve.ts), and the row says so.
       const bot = await makePermissionBot({ name: "Granted", autoApprove: true });
       expect((await api("POST", `/api/bots/${bot.id}/messages`, { text: "run it" })).status).toBe(202);
 
@@ -334,7 +334,8 @@ posixOnly("authorization decisions are logged", () => {
     expect(res.headers.get("content-type")).toMatch(/^text\/csv/);
     expect(res.headers.get("content-disposition")).toBe(`attachment; filename="decisions-${from}-${to}.csv"`);
     const lines = (await res.text()).trim().split("\n");
-    expect(lines[0]).toBe("time,decision,source,bot,tool,summary,rule,unattended,answered_by,thread,request");
+    // bd8e55b4f includes the stable rule id beside its readable name.
+    expect(lines[0]).toBe("time,decision,source,bot,tool,summary,rule,rule_id,unattended,answered_by,thread,request");
     expect(lines).toHaveLength(all.length + 1);
     // the owner answered the cards above from loopback
     expect(lines.some((line) => line.includes(",user-approved,user,") && line.includes(",This computer,"))).toBe(true);

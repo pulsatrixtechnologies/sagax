@@ -87,7 +87,7 @@ export function parseRoutineScopeQuery(params: URLSearchParams): RoutineScopeQue
   const rawScope = params.get("scope");
   if (rawScope !== null && rawScope !== "" && !isRoutineScope(rawScope)) return { error: "scope must be mine, team or all", code: "routine_scope_invalid" };
   const query: RoutineScopeQuery = { scope: isRoutineScope(rawScope) ? rawScope : "mine" };
-  for (const key of ["teamId", "botId", "ownerId"] as const) {
+  for (const key of ["teamId", "botId", "ownerId", "routineId"] as const) {
     const value = params.get(key)?.trim();
     if (!value) continue;
     if (!ID.test(value)) return { error: `${key} is not an id`, code: "routine_scope_invalid" };
@@ -131,12 +131,14 @@ function matchesFacts(query: RoutineScopeQuery, botId: string, facts: RoutineSco
   return true;
 }
 
-const REDACTED_ROUTINE_FIELDS = ["prompt", "attachments", "sourceThreadId", "resultsThreadId"] as const;
+const REDACTED_ROUTINE_FIELDS = ["requires", "prompt", "attachments", "sourceThreadId", "resultsThreadId"] as const;
 const REDACTED_RUN_FIELDS = [
-  "prompt", "attachments", "output", "attention", "denials",
+  "requires", "readiness", "readinessEngine", "prompt", "attachments", "output", "attention", "denials",
   "executionThreadId", "sourceThreadId", "resultsThreadId", "threadId", "webhookId", "deliveryId",
   // what the organization memory told the person it runs as
   "memoryHint",
+  // the teammate threads its work went to (2026-11-03)
+  "handedTo",
 ] as const;
 
 /** Someone else's run: its status and timing, never its work. */
@@ -235,6 +237,7 @@ export function routineRunClearable(
   const wide = query.scope === "all" && allowedRoutineScopes(caller).all;
   return (run) => {
     if (!deps.mine(run) && !wide) return false;
+    if (query.routineId && run.routineId !== query.routineId) return false;
     const facts = deps.facts(run);
     if (!matchesFacts(query, run.botId, facts)) return false;
     if (query.status) {

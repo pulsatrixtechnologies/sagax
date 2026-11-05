@@ -21,7 +21,7 @@ const ICON: Record<NetVerdict, string> = { pass: "check-circle", warn: "warning"
 const ICON_COLOR: Record<NetVerdict, string> = { pass: "success", warn: "warning", fail: "danger", info: "secondary", unknown: "tertiary" };
 
 /** Explain and Suggest a fix: ordinary widget presses the bot reads as a
- * reply to the card (server/chat-widgets.ts). */
+ * reply to the card (server/widgets/chat-widgets.ts). */
 export const NET_ACTION_EXPLAIN = "nettools.explain";
 export const NET_ACTION_FIX = "nettools.fix";
 

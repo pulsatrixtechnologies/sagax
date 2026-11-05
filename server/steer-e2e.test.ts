@@ -43,7 +43,7 @@ posixOnly("mid-turn steering e2e", () => {
     return { status: res.status, body: await res.json() };
   };
   const getBot = async (id: string) => (await api("GET", "/api/bots")).body.bots.find((b: any) => b.id === id);
-  /** When a person last wrote in the thread, as the server keeps it (server/main-thread.ts). */
+  /** When a person last wrote in the thread, as the server keeps it (server/threads/main-thread.ts). */
   const askedAt = (botId: string, threadId: string) => (JSON.parse(readFileSync(join(home, ".sagax", "bots.json"), "utf8")) as any[])
     .find((bot) => bot.id === botId).tasks.find((task: any) => task.threadId === threadId).askedAt;
   /** Pair the operator's own second device (a default, admin-scope code, so
@@ -125,7 +125,7 @@ posixOnly("mid-turn steering e2e", () => {
             config: { cli: FAKE_CLAUDE, permissionMode: "bypassPermissions" },
           },
           // no live session: a message while busy uses the server-side queue
-          acp: { driver: "grokAgent", environment: { FAKE_ACP_MODE: "hang" }, config: { cli: FAKE_ACP, fullAuto: true } },
+          acp: { driver: "geminiAgent", environment: { GEMINI_API_KEY: "gemini-test-key", FAKE_ACP_MODE: "hang" }, config: { cli: FAKE_ACP, fullAuto: true } },
           // codex parks its turn on an unanswered question; turn/steer folds
           // new input into that live turn without ending it
           codex: { driver: "codex", environment: { FAKE_CODEX_MODE: "question", FAKE_CODEX_ASK_HOLD: "1" }, config: { cli: FAKE_CODEX } },
@@ -268,12 +268,13 @@ posixOnly("mid-turn steering e2e", () => {
     expect(await internalTools()).toBe(401);
     const bot = await getBot(created.id);
     const texts = bot.messages.filter((m: any) => m.kind === "text").map((m: any) => `${m.role}:${m.role === "bot" ? withoutTurnClock(m.text) : m.text}`);
+    // 7b5040911 deduplicates replies within this one owned turn, including
+    // the repeated greeting from its second native model call.
     expect(texts.slice(1)).toEqual([
       "user:first",
       "bot:hello from fake claude",
       "user:and also this",
       "bot:reply to: first",
-      "bot:hello from fake claude",
       "bot:reply to: and also this",
     ]);
     // one provider turn from the harness's point of view, over after the steered reply

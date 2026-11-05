@@ -503,34 +503,23 @@ final class ProfileUITests: XCTestCase {
         XCTAssertTrue(app.buttons["home-plus"].waitForExistence(timeout: 10), "one chat screen: Back is home")
     }
 
-    /// The iPad's bot panel has the same Links chip and rows.
+    /// The iPad's bot panel Library is the desktop's list alone
+    /// (LibraryTab.tsx): no Files / Links chips, no Plugins row.
     @MainActor
-    func testIPadLibraryShowsTheLinks() throws {
+    func testIPadLibraryIsTheListAlone() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
-        // Ara's chat, then her panel's Library tab
         let app = launch(screen: "02-chat")
-        let toggle = element("desktop-panel-toggle", in: app)
+        let toggle = element("desktop-chat-pill", in: app)
         XCTAssertTrue(toggle.waitForExistence(timeout: 30))
         let library = element("desktop-panel-tab.library", in: app)
         if !library.waitForExistence(timeout: 3) { toggle.tap() }
         XCTAssertTrue(library.waitForExistence(timeout: 10))
         library.tap()
-        let chip = element("desktop-files-chip.links", in: app)
-        XCTAssertTrue(chip.waitForExistence(timeout: 30))
-        chip.tap()
-        XCTAssertTrue(element("profile-link.1", in: app).waitForExistence(timeout: 10))
-        element("profile-show-more", in: app).tap()
-        XCTAssertTrue(element("profile-link.5", in: app).waitForExistence(timeout: 10))
-        sleep(4)
-        ParityShots.save("links-ipad", app)
-        let local = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'profile-link.' AND label CONTAINS '127.0.0.1:8787'")).firstMatch
-        XCTAssertTrue(local.label.contains("On the computer"), local.label)
-        let web = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'profile-link.' AND label CONTAINS 'docs.example.com'")).firstMatch
-        web.tap()
-        let covered = expectation(for: NSPredicate(format: "isHittable == false"), evaluatedWith: web)
-        wait(for: [covered], timeout: 10)
-        sleep(2)
-        ParityShots.save("links-ipad-browser", app)
+        let row = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "report.md")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 30), "the files are listed")
+        XCTAssertFalse(element("desktop-files-chip.links", in: app).exists, "no Links chip")
+        XCTAssertFalse(element("desktop-files-chip.files", in: app).exists, "no Files chip")
+        XCTAssertFalse(element("desktop-panel-library.open-plugins", in: app).exists, "no Plugins row")
     }
 
     /// Library: the conversation's files by kind (Images was Media), and the

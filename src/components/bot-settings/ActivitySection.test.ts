@@ -242,7 +242,7 @@ const liveOf = (items: BotActivityItem[]) => {
 };
 
 describe("Activity, live only", () => {
-  const routine = job("run:r1", { kind: "routine", status: "running", endedAt: undefined, updatedAt: NOW - 2_000, currentStep: "cw_psa__query" });
+  const routine = job("run:r1", { kind: "routine", status: "running", endedAt: undefined, updatedAt: NOW - 2_000, currentStep: "cw_psa_query" });
   const sub = job("thread:sub", { kind: "subagent", botName: "Echo", status: "running", endedAt: undefined, startedAt: NOW - 125_000, updatedAt: NOW - 125_000, canStop: true, threadId: "sub" });
   const parallel = job("thread:par", { parallel: true, title: "Parallel task", endedAt: NOW - 60_000 });
   const coding = job("thread:code", { coding: true, status: "running", endedAt: undefined });
@@ -270,7 +270,7 @@ describe("Activity, live only", () => {
   it("draws live status: spinner, elapsed time, current step, and Stop where allowed", () => {
     const html = renderToStaticMarkup(createElement(ActivityList, { items: [routine, sub], error: false, onOpen: () => {}, onStop: () => {}, now: NOW }));
     expect(html).toContain("animate-spin");
-    expect(html).toContain("Running · 1m · Routine · cw_psa__query");
+    expect(html).toContain("Running · 1m · Routine · cw_psa_query");
     expect(html).toContain("Running · 2m · Echo");
     expect(html).toContain('data-activity-stop="thread:sub"');
     expect(html).not.toContain('data-activity-stop="run:r1"');
@@ -628,7 +628,8 @@ describe("no separate Ongoing activities rail beside the bot", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const app = readFileSync(join(here, "../../App.tsx"), "utf8");
     expect(app).not.toMatch(/BackgroundWorkPanel/);
-    expect(app).toMatch(/: bot \? \(\s*<ChatView (?:key=\{\w+\} )?bot=\{bot\} \/>/);
+    // 0c909a88c: the bot leaf owns its store subscription around the same chat.
+    expect(app).toMatch(/: bot \? <BotSurface key=\{uiLocale\} id=\{bot.id\}>\{\(current\) => <ChatView bot=\{current\} \/>}<\/BotSurface> : null/);
     expect(existsSync(join(here, "../BackgroundWorkPanel.tsx"))).toBe(false);
   });
 });

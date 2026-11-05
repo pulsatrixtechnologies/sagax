@@ -4,7 +4,7 @@
 // process id (cua-driver: click, type_text, scroll... take `pid`). This
 // module only reads WHICH target a call names and whether an app rule may
 // cover it at all; the app's identity (bundle id and signing team) comes
-// from the server (server/computer-app.ts reads the pid on this computer),
+// from the server (server/computer/computer-app.ts reads the pid on this computer),
 // never from what the model wrote: a call that says `app: "Safari"` beside
 // the pid of Terminal is Terminal.
 //

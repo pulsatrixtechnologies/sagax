@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve as resolvePath, sep } from "node:path";
 
-import { ATTACHMENTS_DIR } from "../../attachments.ts";
+import { ATTACHMENTS_DIR } from "../../attachments/attachments.ts";
 import { DATA_DIR, OPENCODE_PROVIDER_ENV } from "../../config.ts";
 import { hostedWorkspaceConfigured } from "../../enterprise.ts";
 import { decodeInjectId, hostApiKey, localHost, mergeLocalInject } from "../local-inject.ts";
@@ -15,7 +15,7 @@ import { createAcpDriver, offeredModels, type AccountErrorCode, type AcpSupport 
 import { MODEL_ACCESS_DISABLED_MESSAGE, MODEL_ACCESS_DISABLED_TEXT } from "../../../shared/model-access-disabled.ts";
 import type { ModelCatalog, ProviderErrorCode } from "../../contracts.ts";
 import { titleCaseModelId } from "../../contracts.ts";
-import { engineStartGate } from "../../engine-start-gate.ts";
+import { engineStartGate } from "../../engines/engine-start-gate.ts";
 import { execCli, killCliTree, spawnCli } from "../../procs.ts";
 
 /** Nothing is offered until OpenCode itself answers. An invented default is
@@ -628,7 +628,7 @@ function withinFolder(path: string, folder: string): boolean {
 }
 
 /** Whether a turn works in one of Sagax's own folders: a bot's shared
- * folder or a conversation's private one (server/workspace.ts). Everything in
+ * folder or a conversation's private one (server/workspace/workspace.ts). Everything in
  * them was written by bots, so none of it may become OpenCode configuration. */
 export function sagaxOwnsWorkingFolder(cwd: string): boolean {
   return [join(DATA_DIR, "workspaces"), join(DATA_DIR, "task-workspaces")].some((root) =>
@@ -875,7 +875,7 @@ const support = (loadCatalog: OpenCodeCatalogLoader): AcpSupport => ({
   spawnFingerprint: openCodeLoginsFingerprint,
   // Organization server: no shell, file, web, subagent or skill tool of
   // OpenCode's own (server/drivers/host-tools.ts; verified on 1.18.34 with
-  // scripts/verify-org-host-tools.ts).
+  // scripts/verify/dev/verify-org-host-tools.ts).
   withholdsHostTools: true,
   withheldWorkspace,
   applyTurnEnv: (env, { fullAuto, botId, cwd, withholdHostTools, mcpServers }) => {

@@ -8,15 +8,15 @@ import { relative, sep } from "node:path";
 import { z } from "zod";
 import { commentsForModel, parseThreadText } from "../../shared/page-threads.ts";
 import type { MausColor } from "../../shared/wire.ts";
-import { sameAudience } from "../bot-visibility.ts";
+import { sameAudience } from "../bots/bot-visibility.ts";
 import { deliverableNotification } from "../notify.ts";
-import { pageOwnerFor } from "../published-pages.ts";
+import { pageOwnerFor } from "../pages/published-pages.ts";
 import { redactSecretsInText } from "../redact.ts";
-import { sectionContextKey } from "../section-context.ts";
+import { sectionContextKey } from "../rooms/section-context.ts";
 import { TEAM_MEMORY_KINDS, type TeamMemoryKind } from "../memory/team-memory.ts";
-import { TOOL_RESULT_MAX_CHARS } from "../tool-results.ts";
-import { workspaceDir } from "../workspace.ts";
-import { WorkspacePathError } from "../workspace-files.ts";
+import { TOOL_RESULT_MAX_CHARS } from "../tools/tool-results.ts";
+import { workspaceDir } from "../workspace/workspace.ts";
+import { WorkspacePathError } from "../workspace/workspace-files.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
 
@@ -73,7 +73,7 @@ export interface InternalMemoryDeps {
     authored: (messageId: string) => void;
     proposePage: (proposal: { pageId?: string; title: string; kind: string; content: string }) =>
       { ok: true; pageId: string; version: number } | { ok: false; status: 400 | 404 | 409; error: string };
-  }): { ok: true; messageId: string; masked?: boolean; pageId?: string; version?: number; answered?: { choice: string; question: string } } | { ok: false; status: number; error: string };
+  }): { ok: true; messageId: string; masked?: boolean; pageId?: string; version?: number; answered?: { choice: string; question: string }; waitsForPerson?: true } | { ok: false; status: number; error: string };
   authored(threadId: string, generation: string, messageId: string): void;
   proposePublishedPage(input: {
     pageId?: string;
@@ -213,6 +213,8 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
           ...(result.pageId ? { pageId: result.pageId, version: result.version } : {}),
           // #1905: a may-I ask_choice Full access answered, for the tool result
           ...(result.answered ? { answered: result.answered } : {}),
+          // 2026-11-03: raised as a real question card the run waits on
+          ...("waitsForPerson" in result && result.waitsForPerson ? { waitsForPerson: true } : {}),
         })
         : json(res, result.status, { error: result.error });
     }

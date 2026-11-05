@@ -3,7 +3,7 @@
 // struck-through body for a superseded fact. Pure helpers shared by the
 // prompt loader (which hides expired lines), background capture (which
 // must not add a fact the notebook already holds), the nightly tidy-up and
-// the rule that keeps MEMORY.md within what loads (server/workspace.ts).
+// the rule that keeps MEMORY.md within what loads (server/workspace/workspace.ts).
 
 export const UNTIL_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DATED = /^(- (\d{4}-\d{2}-\d{2}) · (?:from [^·\n]* · )?(?:readers (?:person|group:[A-Za-z0-9_-]{1,64}|room:[A-Za-z0-9_-]{1,64}) · )?)(.*)$/;

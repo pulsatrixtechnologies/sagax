@@ -72,8 +72,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ca.pulsatrix.sagax
-        MARKETING_VERSION: "0.8.28"
-        CURRENT_PROJECT_VERSION: "106"
+        MARKETING_VERSION: "0.8.50"
+        CURRENT_PROJECT_VERSION: "119"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1,2"
         # The catalog lives in App/, which is already a source path.
@@ -168,6 +168,11 @@ targets:
         # read when Xcode generates the Info.plist itself, and this target
         # supplies one, so they are silently ignored.
         UILaunchScreen: {}
+        # The bot's computer opens in its own window on iPad (a second
+        # SwiftUI scene, `WindowGroup(id: "computer-window")`): without this
+        # key iPadOS never creates another scene and `openWindow` does nothing.
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
         # Geist and Geist Mono (OFL-1.1), the interface and code faces. Listed
         # so UIKit registers them at launch; the files sit flat in the bundle.
         UIAppFonts:
@@ -299,8 +304,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ca.pulsatrix.sagax.share
-        MARKETING_VERSION: "0.8.28"
-        CURRENT_PROJECT_VERSION: "106"
+        MARKETING_VERSION: "0.8.50"
+        CURRENT_PROJECT_VERSION: "119"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1,2"
         APPLICATION_EXTENSION_API_ONLY: YES
@@ -377,8 +382,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ca.pulsatrix.sagax.notification
-        MARKETING_VERSION: "0.8.28"
-        CURRENT_PROJECT_VERSION: "106"
+        MARKETING_VERSION: "0.8.50"
+        CURRENT_PROJECT_VERSION: "119"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1,2"
         APPLICATION_EXTENSION_API_ONLY: YES
@@ -457,8 +462,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ca.pulsatrix.sagax.widgets
-        MARKETING_VERSION: "0.8.28"
-        CURRENT_PROJECT_VERSION: "106"
+        MARKETING_VERSION: "0.8.50"
+        CURRENT_PROJECT_VERSION: "119"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1,2"
         APPLICATION_EXTENSION_API_ONLY: YES

@@ -6,12 +6,12 @@ or shown to anyone else through Sagax, including the bot's owner and the
 organization's admins. It exists for the work a person would not want to
 land in a shared bot's memory, an export or an admin console.
 
-Code: `server/confidential-threads.ts` (the rules), with the enforcement in
-`server/index.ts`, `server/bot-zip.ts`, `server/org/org-admin-files.ts`,
+Code: `server/threads/confidential-threads.ts` (the rules), with the enforcement in
+`server/index.ts`, `server/bots/bot-zip.ts`, `server/org/org-admin-files.ts`,
 `server/decision-log.ts`, `server/workspace-backup.ts`,
-`server/turn-log.ts`, `server/user-sandbox-routing.ts`,
-`server/runtime/store.ts` (`forgetThread`), `server/message-db.ts`,
-`server/engine-transcripts.ts` (the engines' own session files) and
+`server/turns/turn-log.ts`, `server/sandbox/user-sandbox-routing.ts`,
+`server/runtime/store.ts` (`forgetThread`), `server/messages/message-db.ts`,
+`server/engines/engine-transcripts.ts` (the engines' own session files) and
 `server/routes/perspicax-tool-internal.ts`. Clients:
 `src/components/ConfidentialBanner.tsx`, `src/lib/confidential-thread.ts`,
 `ios/Sources/CompanionCore/ConfidentialThread.swift`,
@@ -64,7 +64,7 @@ title; a stamp on a Markdown export the person makes of their own thread.
 | `memory_update`, `memory_log`, group and team memory, rules, docs, skill staging | allowed | refused (403 `confidential_thread`) |
 | Perspicax `memory_write` to a team or `org`, `memory_propose`, `memory_promote` | allowed | refused |
 | Perspicax `memory_write` to the person's own tier (`me`) | allowed | `scope: "me"` is written in (an omitted scope never falls to Perspicax's own default); then it waits for the owner's Allow on a card; on Allow the bot is asked to repeat that exact write (scope, topic, title, body, tags, directory title, searchable), which a one-shot pass lets through |
-| Any other Perspicax call | allowed | fail closed: only known reads pass (`api_list`, `api_search`, `api_describe`, `api_lookup`, `identity`, `memory_recall`, `memory_search`, `work_search`, `claim_list`, Perspicax's own unprefixed `find_*`, `get_*`, `read_*`, `list_*`; of a profile's tools only `<profile>__query` and `read_action`; `api_plan` only when every step passes); every other call waits for the owner's card showing the server, the tool and every argument, whole (a call too long to show whole is refused); a JSON-RPC batch is refused. The file-style `memory` tool reads freely and changes only plain paths under `/memories/me/`, with the card |
+| Any other Perspicax call | allowed | fail closed: only known reads pass (`api_list`, `api_search`, `api_describe`, `api_lookup`, `identity`, `memory_recall`, `memory_search`, `work_search`, `claim_list`, Perspicax's own unprefixed `find_*`, `get_*`, `read_*`, `list_*`; of a profile's tools only `<profile>_query` and `read_action`; `api_plan` only when every step passes); every other call waits for the owner's card showing the server, the tool and every argument, whole (a call too long to show whole is refused); a JSON-RPC batch is refused. The file-style `memory` tool reads freely and changes only plain paths under `/memories/me/`, with the card |
 | Other MCP servers (connected apps, personal servers, the workplace, the bot's data tools) | by approval mode | a read verb with something after it passes; a read verb followed by a write verb is refused; a bare verb and anything else waits for the owner's card, whatever the approval mode (Full and always-allow included); the one-time Allow is bound to the server, the tool and the arguments |
 | A bot acting as its person (`act`) from an ordinary thread | the person's routes | a request naming a confidential thread is refused (any method, Full included); lists and search hits come back without confidential threads; screen commands never open one |
 | Routine results, the bot's main thread, Retry thread, pages (`propose_page`) | allowed | never into or from a confidential thread |
@@ -76,7 +76,7 @@ title; a stamp on a Markdown export the person makes of their own thread.
 | Recall: auto-recall, recent-work brief, `session_search`, `session_read`, `list_threads` from any other thread | narrowed per person | the thread never feeds another thread, its owner's included |
 | Bot zip (owner route and console package), team backup (`POST /api/teams/export` `backup`), organization copy (`POST /api/org/export`) | included with conversations | left out: messages, files, task record, id; an import that ever carries the flag restores it confidential |
 | Console file browser (`tasks`, `attachments` roots) | listed | left out of listings, reads as 404 |
-| Workspace backup (an admin export) | full | task record kept as an empty "Confidential thread" (id, dates, flag); messages, read marks, follow-ups and its turns' idempotency receipts (copies of its digest rows) removed from the message database snapshot (search index rebuilt, vacuumed); every teammate-work tree it asked or did work in removed from the runtime database snapshot (vacuumed); after a confidential thread was deleted (a `confidential-forgotten` note in the data folder, cleared by the next backup) both snapshots are rebuilt and vacuumed even when no confidential thread is left, so it leaves nothing in a free page or the search index; the legacy `room-handoffs.json.migrated` is never backed up; event and native logs, legacy transcript, work folder, its own attachments and its whole Data folder (`data-scopes/<bot>/t-<hash>`: sheet, database, downloads) left out; a restore never installs that Data folder, even from an archive an older release made with it (`confidentialDataScopePath`, `server/workspace-backup-policy.ts`); the engines' own transcripts of it in the engine homes of the data folder (`principals/<person>/<engine>`, `org/<engine>-key`, `engine-policies/*`) left out, prompt histories and logs without its lines, engine databases copied as a snapshot without its rows (`confidentialEngineKeys`, `server/engine-transcripts.ts`), and a restore never installs any of them, even from an archive an older release made with them |
+| Workspace backup (an admin export) | full | task record kept as an empty "Confidential thread" (id, dates, flag); messages, read marks, follow-ups and its turns' idempotency receipts (copies of its digest rows) removed from the message database snapshot (search index rebuilt, vacuumed); every teammate-work tree it asked or did work in removed from the runtime database snapshot (vacuumed); after a confidential thread was deleted (a `confidential-forgotten` note in the data folder, cleared by the next backup) both snapshots are rebuilt and vacuumed even when no confidential thread is left, so it leaves nothing in a free page or the search index; the legacy `room-handoffs.json.migrated` is never backed up; event and native logs, legacy transcript, work folder, its own attachments and its whole Data folder (`data-scopes/<bot>/t-<hash>`: sheet, database, downloads) left out; a restore never installs that Data folder, even from an archive an older release made with it (`confidentialDataScopePath`, `server/backup/workspace-backup-policy.ts`); the engines' own transcripts of it in the engine homes of the data folder (`principals/<person>/<engine>`, `org/<engine>-key`, `engine-policies/*`) left out, prompt histories and logs without its lines, engine databases copied as a snapshot without its rows (`confidentialEngineKeys`, `server/engines/engine-transcripts.ts`), and a restore never installs any of them, even from an archive an older release made with them |
 | Engine transcripts (each engine's own copy of the conversation: Claude Code `projects/*.jsonl` and `history.jsonl`, Codex rollouts and `state_*.sqlite`, Hermes `state.db`, Grok, pi, Cursor, Gemini, Qwen, OpenCode session files) | kept by the engine in its home, backed up when that home is in the data folder | resumed across turns as for any thread; left out of the workspace backup and never installed by a restore; purged when the thread is deleted, when a thread turns confidential (its sessions so far: the next turn starts a new session with the thread's own transcript replayed), and once at start for the threads already confidential (see « Engine transcripts » below) |
 | Approval cards and their notifications | bot owner | the thread owner only; a card they could not answer (an organization admin card, another person's machine) is refused instead of shown to anyone else; never in the console's organization queue |
 | Incidents and refused turns | Primary Bot report with 300 characters of the request and reply; problem log row with title and notice | no text: the console's problem log and the owner's notification say only « un tour d'un fil confidentiel a échoué »; no Primary Bot report |
@@ -133,7 +133,7 @@ in its home: under the data folder on a server (a person's subscription
 or `org/<engine>-key`, Hermes's `engine-policies/hermes-*`, the managed
 `providers/`) and in the server user's home (`~/.claude`, `~/.codex`,
 `~/.grok`, …, or the folder an engine's variable names: `CLAUDE_CONFIG_DIR`,
-`CODEX_HOME`, `HERMES_HOME`, …). `server/engine-transcripts.ts` finds a
+`CODEX_HOME`, `HERMES_HOME`, …). `server/engines/engine-transcripts.ts` finds a
 thread's files by keys, never by guessing:
 
 - the thread id: an engine that files sessions by working folder writes it
@@ -219,8 +219,8 @@ end-to-end encryption, and it does not hide the thread from:
   encrypted by Sagax.
 - **The model provider.** Every turn is sent to the engine the bot runs on,
   as any turn is.
-- **Perspicax.** A call the person allows (a card) or a read through a
-  Perspicax profile is seen by Perspicax and the outside system behind it,
+- **Perspicax.** A call the person allows (a card) or a read through the
+  Perspicax account connection is seen by Perspicax and the outside system behind it,
   and Perspicax keeps its own audit and journal of those calls.
 - **Engines with host access.** On a solo server, a bot whose engine has
   a shell on the host can call this server's own loopback API directly,

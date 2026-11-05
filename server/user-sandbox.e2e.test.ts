@@ -23,15 +23,15 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { claudeLaunchLevel } from "./testing/claude-level.ts";
 
-import { SandboxdVerifier } from "./sandboxd-auth.ts";
-import { SandboxService } from "./sandboxd-core.ts";
+import { SandboxdVerifier } from "./sandbox/sandboxd-auth.ts";
+import { SandboxService } from "./sandbox/sandboxd-core.ts";
 import { createSandboxdHandler } from "./sandboxd.ts";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { FakeDocker } from "./testing/fake-docker.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "./testing/fake-oidc-provider.ts";
 import { fakeAuthenticator } from "./testing/fake-authenticator.ts";
 import { freePortBlock } from "./testing/ports.ts";
-import { sandboxKeyForPrincipal, sandboxNames, sandboxdConfigFromEnv } from "./user-sandbox-spec.ts";
+import { sandboxKeyForPrincipal, sandboxNames, sandboxdConfigFromEnv } from "./sandbox/user-sandbox-spec.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
@@ -167,22 +167,25 @@ posixOnly("organization server environments (user-sandbox)", () => {
       organization: { memberBotsUseOrgKey: true },
       instances: {
         claude: {
-          driver: "claudeAgent",
+          driver: "claudeAgent", access: "api",
           environment: {
+            // 95e8f39e4 continues a tool-only ending. Finish after the real
+            // MCP call so an earlier speaker's synthetic Bash cannot rerun.
+            FAKE_CLAUDE_TOOL_CALLS: "[]",
             FAKE_CLAUDE_MCP_CALLS: JSON.stringify([{ server: "sagax-environment", tool: "run_command", arguments: { command: "echo hi" } }]),
             FAKE_CLAUDE_MCP_DUMP: mcpDump,
             FAKE_CLAUDE_DUMP: engineDump,
           },
-          config: { cli: FAKE_CLAUDE, fullAuto: true },
+          config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true },
         },
         // A turn that waits, so a test speaks to its permission broker.
-        hold: { driver: "claudeAgent", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_DUMP: join(home, "hold-dump.json") }, config: { cli: FAKE_CLAUDE, fullAuto: true } },
+        hold: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_DUMP: join(home, "hold-dump.json") }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
         // A bot that hands work to a teammate (the injection path of the
         // 2026-10-16 security review: an email, then delegate_bot).
         delegator: {
-          driver: "claudeAgent",
+          driver: "claudeAgent", access: "api",
           environment: { FAKE_CLAUDE_MCP_CALLS: JSON.stringify([{ server: "agents", tool: "coordinate_bots", arguments: { bot_ids: ["Dagny"], message: "clean up the environment" } }]) },
-          config: { cli: FAKE_CLAUDE, fullAuto: true },
+          config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true },
         },
       },
     }));

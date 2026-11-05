@@ -2,7 +2,7 @@ import Foundation
 
 // Client calls for the visual-parity screens, against routes the server
 // already has. Which of them a paired phone may reach is the server's call
-// (server/request-auth.ts CLIENT_ALLOW for a server-paired phone,
+// (server/auth/request-auth.ts CLIENT_ALLOW for a server-paired phone,
 // companion/src/routes.ts for the desktop sidecar); a refused route surfaces
 // as `APIError.status` with the server's own sentence.
 public extension CompanionClient {

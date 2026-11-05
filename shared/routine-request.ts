@@ -1,3 +1,4 @@
+import type { EffortLevel } from "./model-selection.ts";
 /**
  * Durable payload carried by a chat routine confirmation card.
  *
@@ -73,10 +74,20 @@ export interface RoutineRequestDefinition {
   folder?: string;
   /** Delete once the schedule ends and the last run settles (#1648). */
   deleteWhenFinished?: boolean;
+  /** 2026-11-04 (shared/routine-model.ts): the model its runs use. */
+  model?: string;
+  /** #2038: the model its runs' sub-agents use (Claude). */
+  subagentModel?: string;
+  /** 2026-11-05 (shared/routine-act-as.ts): the role its runs act as ("" = Moi). */
+  actAs?: string;
+  /** #1996: the routine needs its bot's computer online (Routine.requires.computer). */
+  requiresComputer?: boolean;
+  /** Reasoning effort for runs only; absent follows the bot. */
+  effort?: EffortLevel;
 }
 
 export type RoutineRequestChanges =
-  & Omit<Partial<RoutineRequestDefinition>, "schedule" | "timeoutMinutes" | "watch" | "folder">
+  & Omit<Partial<RoutineRequestDefinition>, "schedule" | "timeoutMinutes" | "watch" | "folder" | "model" | "subagentModel" | "actAs" | "effort">
   & {
     schedule?: RoutineRequestScheduleChanges;
     /** `null` removes an existing safety cap. */
@@ -85,6 +96,13 @@ export type RoutineRequestChanges =
     watch?: RoutineWatchPrecheck | null;
     /** `null` takes the routine out of its folder. */
     folder?: string | null;
+    /** `null` goes back to the bot's model. */
+    model?: string | null;
+    subagentModel?: string | null;
+    /** `null` clears the "Au nom de" choice; "" is "Moi". */
+    actAs?: string | null;
+    /** null resets to the bot; omission preserves it on updates. */
+    effort?: EffortLevel | null;
   };
 
 /** Another bot in the proposer's section that this proposal targets: a

@@ -10,15 +10,15 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import WebSocket from "ws";
+import WebSocket, { WebSocketServer } from "ws";
 
 import { json, readBody } from "./harness/http.ts";
-import type { RequestAuth } from "./request-auth.ts";
+import type { RequestAuth } from "./auth/request-auth.ts";
 import { createDesktopViewer } from "./routes/desktop-viewer.ts";
 import { PASS, type RouteContext } from "./routes/table.ts";
-import type { SessionRecord } from "./sessions.ts";
+import type { SessionRecord } from "./auth/sessions.ts";
 import { startFakeXaiVoice, XAI_VOICE_PATHS, type FakeXaiVoice } from "./testing/fake-xai-voice.ts";
-import type { VoiceUsage } from "./voice-mode.ts";
+import type { VoiceUsage } from "./voice/voice-mode.ts";
 
 const KEY = "xai-CALLfake8Hq2Zr5Lp7Wd3";
 const ada: RequestAuth = {
@@ -27,6 +27,11 @@ const ada: RequestAuth = {
 };
 
 let xai: FakeXaiVoice;
+/** A loopback xAI Voice Agent API: session.created on connect, session.updated on session.update. */
+let realtimeXai: WebSocketServer;
+let realtimeUrl = "";
+let socketGate: Pick<typeof import("./voice/voice-mode.ts"), "isVoiceSocketPath" | "VOICE_SOCKET_ACTIONS">;
+const realtimeSeen: Array<{ authorization?: string; events: string[]; session?: Record<string, unknown> }> = [];
 let server: Server;
 let origin = "";
 const usage: VoiceUsage[] = [];
@@ -35,12 +40,34 @@ const speechLog: string[] = [];
 beforeAll(async () => {
   xai = await startFakeXaiVoice({ transcripts: ["first turn", "second turn"], sttFinalizeMs: 30, ttsFirstChunkMs: 40, ttsSeconds: 0.3, sttConfidence: 0.92 });
   process.env.SAGAX_XAI_TTS_API = `${xai.url}/v1`;
+  realtimeXai = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+  realtimeXai.on("connection", (socket, request) => {
+    const seen: (typeof realtimeSeen)[number] = { authorization: request.headers.authorization, events: [] };
+    realtimeSeen.push(seen);
+    socket.send(JSON.stringify({ type: "session.created", session: { model: "grok-voice-fake" } }));
+    socket.on("message", (raw) => {
+      const event = JSON.parse(String(raw)) as { type: string; session?: Record<string, unknown> };
+      seen.events.push(event.type);
+      if (event.type === "session.update") {
+        seen.session = event.session;
+        socket.send(JSON.stringify({ type: "session.updated", session: {} }));
+      }
+    });
+  });
+  await new Promise<void>((resolve) => realtimeXai.once("listening", () => resolve()));
+  const realtimeAddress = realtimeXai.address();
+  if (!realtimeAddress || typeof realtimeAddress === "string") throw new Error("no realtime port");
+  realtimeUrl = `ws://127.0.0.1:${realtimeAddress.port}/v1/realtime`;
   const grok = await import("./tts/grok.ts");
-  const { createVoiceModeRoutes } = await import("./voice-mode.ts");
+  // imported after SAGAX_XAI_TTS_API is set: tts/grok.ts reads it on load
+  const voiceMode = await import("./voice/voice-mode.ts");
+  const { createVoiceModeRoutes } = voiceMode;
+  socketGate = voiceMode;
   const viewer = createDesktopViewer({
     target: () => undefined,
     live: () => true,
-    acceptsUpgrade: (path) => /^\/api\/bots\/[\w-]+\/voice\/(?:listen|speech)$/.test(path),
+    // the very check server/index.ts gives its upgrade gate
+    acceptsUpgrade: voiceMode.isVoiceSocketPath,
   });
   const route = createVoiceModeRoutes({
     organization: false,
@@ -61,6 +88,15 @@ beforeAll(async () => {
     upgrade: (req) => viewer.upgradeOf(req),
     utterances: (text) => (text.startsWith("```") ? [] : [text.replace(/\*\*/g, "")]),
     recordUsage: (entry) => { usage.push(entry); },
+    realtime: {
+      openUpstream: (key) => grok.openRealtimeSocket(key, realtimeUrl),
+      session: () => ({
+        bot: { name: "Quasar" },
+        history: [],
+        work: async () => ({ kind: "answer", text: "Done." }),
+        respond: async () => true,
+      }),
+    },
   });
   const handle = async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -80,6 +116,7 @@ afterAll(async () => {
   server?.closeAllConnections?.();
   await new Promise<void>((resolve) => server?.close(() => resolve()));
   await xai?.close();
+  await new Promise<void>((resolve) => (realtimeXai ? realtimeXai.close(() => resolve()) : resolve()));
 });
 
 function open(path: string, headers: Record<string, string> = {}): Promise<{ ws: WebSocket; frames: Array<Record<string, unknown>>; audio: number[] }> {
@@ -137,6 +174,27 @@ describe("voice mode live call (streaming)", () => {
 
   it("refuses a WebSocket from another origin (no CORS for WebSockets)", async () => {
     await expect(open("/api/bots/b-quasar/voice/listen", { origin: "https://evil.example" })).rejects.toThrow(/403/);
+  });
+
+  it("lets every voice socket route through the upgrade gate (0.8.29: /voice/realtime was a bare 404)", () => {
+    const { isVoiceSocketPath, VOICE_SOCKET_ACTIONS } = socketGate;
+    for (const action of VOICE_SOCKET_ACTIONS) expect(isVoiceSocketPath(`/api/bots/b-1/voice/${action}`), action).toBe(true);
+    expect(VOICE_SOCKET_ACTIONS).toContain("realtime");
+    expect(isVoiceSocketPath("/api/bots/b-1/voice/status")).toBe(false);
+    expect(isVoiceSocketPath("/api/bots/b-1/voice/realtime/x")).toBe(false);
+  });
+
+  it("opens a realtime call through the same upgrade gate as the server, the key only on the xAI side", async () => {
+    const { ws, frames } = await open("/api/bots/b-quasar/voice/realtime?language=fr&threadId=t-1");
+    const ready = await until("ready", () => frames.find((f) => f.type === "ready" || f.type === "refused"));
+    expect(ready).toMatchObject({ type: "ready", sampleRate: 24_000 });
+    const seen = await until("session.update at xAI", () => realtimeSeen.find((entry) => entry.session));
+    expect(seen.authorization).toBe(`Bearer ${KEY}`);
+    expect(seen.session).toMatchObject({ audio: { input: { format: { type: "audio/pcm", rate: 24_000 } } } });
+    ws.send(JSON.stringify({ type: "hangup" }));
+    await until("ended", () => frames.find((f) => f.type === "ended"));
+    expect(JSON.stringify(frames)).not.toContain(KEY.slice(6, 14));
+    ws.close();
   });
 
   it("refuses a plain GET without an upgrade", async () => {

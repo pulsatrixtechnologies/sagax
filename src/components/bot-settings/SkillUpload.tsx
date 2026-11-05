@@ -15,7 +15,7 @@ import { useBotEditor } from "./BotEditorContext";
 import { PILL, PRIMARY_PILL } from "../SettingsPrimitives";
 import { readableError } from "@/lib/plain-error";
 
-/** Mirrors server/skill-upload.ts. */
+/** Mirrors server/skills/skill-upload.ts. */
 export const SKILL_UPLOAD_MAX_FILES = 10;
 export const SKILL_MD_MAX_BYTES = 256 * 1024;
 export const SKILL_ZIP_MAX_BYTES = 5 * 1024 * 1024;

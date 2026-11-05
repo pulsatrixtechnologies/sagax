@@ -6,7 +6,7 @@
 import { MAX_DISABLED_MODELS, cleanDisabledModels, parseModelKey } from "../../shared/offered-models.ts";
 import type { AdminPerson } from "./org-admin-routes.ts";
 import { compileRule, type CustomRule } from "../../shared/custom-rules.ts";
-import { isOrgRuleBehavior, registeredCustomRuleStore, type CustomRuleStore, type OrgRulePatch } from "../custom-rules-store.ts";
+import { isOrgRuleBehavior, registeredCustomRuleStore, type CustomRuleStore, type OrgRulePatch } from "../rules/custom-rules-store.ts";
 import {
   badRequest,
   enumParam,
@@ -25,7 +25,7 @@ import {
 } from "./org-admin-console.ts";
 import type { EngineVia } from "./org-admin-people.ts";
 import { INCIDENT_KINDS, reasonLabel, type ProblemKind, type ProblemRow } from "./org-problem-log.ts";
-import { LOG_LEVELS, type LogLevel, type LogLine } from "../server-log-ring.ts";
+import { LOG_LEVELS, type LogLevel, type LogLine } from "../process/server-log-ring.ts";
 
 export interface ConnectionsView {
   engines: Array<{ id: string; name: string; installed: boolean; version: string | null; orgKey: boolean; people: number }>;
@@ -55,7 +55,7 @@ export interface OpsDeps {
   connections(): Promise<ConnectionsView>;
   /** One check; `null` when this kind of line cannot be tested here. An
    * MCP server started by command (stdio) is started, answers the MCP
-   * handshake and lists its tools (server/mcp-stdio-test.ts). */
+   * handshake and lists its tools (server/mcp/mcp-stdio-test.ts). */
   test(kind: TestKind, id: string, principalId: string | null): Promise<TestResult | null>;
   logs(input: { level: LogLevel | null; limit: number; before: number | null }): { lines: LogLine[]; next: number | null };
   problems(from: number): ProblemRow[];
@@ -68,7 +68,7 @@ export interface OpsDeps {
    * ConsoleRefusal for a value it refuses. */
   saveSettings(changes: SettingsChanges, adminPrincipalId: string): void;
   now(): number;
-  /** 2026-10-21 (server/custom-rules-org.ts): the organization's approval
+  /** 2026-10-21 (server/rules/custom-rules-org.ts): the organization's approval
    * rules and its Always allow switch. Default: the server's custom rule
    * store. */
   orgApprovals?: Pick<CustomRuleStore, "orgPolicy" | "orgRules" | "setOrgAlwaysAllow" | "addOrgRule" | "updateOrgRule" | "removeOrgRule">;
@@ -98,6 +98,8 @@ export interface SettingsChanges {
   disabledModels?: string[];
   defaults?: { engine?: string | null; model?: string | null; approvalMode?: string | null };
   interimAttachDays?: number;
+  /** #1940: days before a pending approval leaves the inbox (0 = never). */
+  pendingApprovalExpireDays?: number;
 }
 
 const TEST_TIMEOUT_MS = 10_000;
@@ -120,7 +122,7 @@ export async function timed(check: () => Promise<TestResult | null>): Promise<{ 
 }
 
 function settingsChanges(body: Record<string, unknown>): SettingsChanges | string {
-  const extra = onlyKeys(body, ["allowFullAccess", "memberEnvironmentAutonomy", "memberAutoApproval", "allowVaultExport", "pluginMarketplaces", "allowedEngines", "ownAccountsOutsideList", "disabledModels", "defaults", "interimAttachDays"]);
+  const extra = onlyKeys(body, ["allowFullAccess", "memberEnvironmentAutonomy", "memberAutoApproval", "allowVaultExport", "pluginMarketplaces", "allowedEngines", "ownAccountsOutsideList", "disabledModels", "defaults", "interimAttachDays", "pendingApprovalExpireDays"]);
   if (extra) return extra;
   if (!Object.keys(body).length) return "Send at least one setting.";
   const out: SettingsChanges = {};
@@ -174,6 +176,12 @@ function settingsChanges(body: Record<string, unknown>): SettingsChanges | strin
     if (!Number.isInteger(body.interimAttachDays) || (body.interimAttachDays as number) < 0 || (body.interimAttachDays as number) > 90) return "interimAttachDays is a whole number from 0 to 90.";
     out.interimAttachDays = body.interimAttachDays as number;
   }
+  if (body.pendingApprovalExpireDays !== undefined) {
+    if (!Number.isInteger(body.pendingApprovalExpireDays) || (body.pendingApprovalExpireDays as number) < 0 || (body.pendingApprovalExpireDays as number) > 365) {
+      return "pendingApprovalExpireDays is a whole number from 0 to 365 (0 means never).";
+    }
+    out.pendingApprovalExpireDays = body.pendingApprovalExpireDays as number;
+  }
   return out;
 }
 
@@ -183,7 +191,7 @@ export function opsRoutes(deps: OpsDeps): ConsoleRoute[] {
     // 2026-10-21 (the reference design parity lot 1A): the organization's approvals.
     // Rules ask first or refuse, for every person and bot, and members can
     // neither change nor remove them; alwaysAllow false keeps every approval
-    // to one card at a time (server/custom-rules-org.ts).
+    // to one card at a time (server/rules/custom-rules-org.ts).
     {
       method: "GET",
       path: "org-approvals",

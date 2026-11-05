@@ -1,7 +1,7 @@
 // Optional phone onboarding only chooses a route. The caller owns starting,
 // verifying and stopping that route, and minting/cancelling its pairing code.
-import type { CliOptions } from "../cli.ts";
-import { SetupCancelled, type SetupIo } from "../cli-prompts.ts";
+import type { CliOptions } from "../cli/cli-options.ts";
+import { SetupCancelled, type SetupIo } from "../cli/cli-prompts.ts";
 
 export type PhoneKind = "ios" | "android";
 export interface PhoneSetupResult {

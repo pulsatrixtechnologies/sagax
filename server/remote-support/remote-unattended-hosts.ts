@@ -34,7 +34,7 @@ export const HOSTS_LIST_TOOL = "remote_support_hosts";
 export const HOST_REVOKE_TOOL = "remote_support_host_revoke";
 
 /** One person's link to Perspicax for a page action: a bot of theirs with a
- * Perspicax profile, its conversation (where the session card lands), and one
+ * Perspicax account connection, its conversation (where the session card lands), and one
  * call in their name. `end` releases the link. */
 export interface PerspicaxSeat {
   botId: string;

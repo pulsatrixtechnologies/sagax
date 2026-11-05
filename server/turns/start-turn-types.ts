@@ -200,6 +200,7 @@ export type StartTurnHost = {
   holdBootEngineSlot: any,
   holdBotMemoryPlain: any,
   holdDirectMachineTurn: any,
+  holdSignInRefusal: any,
   holdTurnAttachments: any,
   honouredPin: any,
   hooksEnabled: any,
@@ -263,6 +264,7 @@ export type StartTurnHost = {
   mountPersonalMcp: any,
   mountPluginMcp: any,
   mountUserSandbox: any,
+  syncPluginsForTurn: any,
   myChromePromptFor: any,
   namedTeammates: any,
   namesEngine: any,
@@ -297,6 +299,7 @@ export type StartTurnHost = {
   personalSkillInputs: any,
   personalSkills: any,
   perspicaxTurnIntegration: any,
+  perspicaxTurnPrepare: any,
   phoneIntegration: any,
   phoneToolTaintedThreads: any,
   pickFastSentenceModel: any,
@@ -372,6 +375,7 @@ export type StartTurnHost = {
   settleDirectCoordination: any,
   settleDirectFollowup: any,
   settleInputRequests: any,
+  isBotActSend: any,
   settleTrackedRequest: any,
   settlingResourceOwners: any,
   setupModeActive: any,
@@ -416,6 +420,9 @@ export type StartTurnHost = {
   turnContextBuckets: any,
   turnHolder: any,
   turnModelRequested: any,
+  /** 2026-11-04: the routine model for this turn, a line saying it is ignored, or null. */
+  routineModelForTurn: any,
+  routineEffortForTurn: any,
   turnModelSwitches: any,
   turnNetworkProxy: any,
   turnOrigin: any,
@@ -474,5 +481,9 @@ export type StartTurnHost = {
   workplaceTurnText: any,
   workspaceCwdPrompt: any,
   workspaceLocationsPrompt: any,
+  /** The bot's folder in the person's server environment, or null. */
+  sandboxFolderFor?: any,
+  /** The server's data folder and the bot's workspace, every spelling. */
+  serverPathView: any,
   workspaceMaintenance: any
 };

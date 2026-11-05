@@ -1016,11 +1016,14 @@ public struct ArtifactPage: Equatable, Hashable, Sendable {
     public var title: String
     public var url: String?
     public var icon: String?
+    /// The engine's account owns it (false: shared by someone else); nil when unknown.
+    public var owned: Bool?
 
-    public init(title: String, url: String? = nil, icon: String? = nil) {
+    public init(title: String, url: String? = nil, icon: String? = nil, owned: Bool? = nil) {
         self.title = title
         self.url = url
         self.icon = icon
+        self.owned = owned
     }
 }
 
@@ -1077,8 +1080,10 @@ extension RichBlocks {
             let value = String(JS.trim(text).prefix(artifactIconMax))
             if !value.isEmpty { icon = value }
         }
+        var owned: Bool?
+        if case let .bool(flag)? = field("owned") { owned = flag }
         if title.isEmpty && url == nil { return nil }
-        return ArtifactPage(title: title.isEmpty ? "Page" : title, url: url, icon: icon)
+        return ArtifactPage(title: title.isEmpty ? "Page" : title, url: url, icon: icon, owned: owned)
     }
 
     private static func fenceAttrs(_ raw: String) -> [String: String] {

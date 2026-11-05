@@ -23,7 +23,7 @@ export function nextHumanIds(current: readonly string[], picked: ReadonlySet<str
 
 // The bots one person may tick in a room's roster (#1240, #1260): the room's
 // owner picks among every bot listed; anyone else only among their own
-// (server/group-ownership.ts). An archived bot stays listed while it is
+// (server/groups/group-ownership.ts). An archived bot stays listed while it is
 // still a member, so it can still be taken out.
 export function rosterBotChoices<T extends { id: string; hidden?: boolean; ownerUserId?: string }>(
   bots: readonly T[],

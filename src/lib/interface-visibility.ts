@@ -31,7 +31,6 @@ const HIDDEN_SETTINGS: ReadonlySet<AppSettingsSection> = new Set([
 const HIDDEN_BOT: ReadonlySet<BotSettingsSection> = new Set([
   "access",
   "worksOn",
-  "perspicax",
   "usage",
   "history",
   "skills",
@@ -45,6 +44,8 @@ export function simpleHidesBotSection(id: BotSettingsSection): boolean {
   return HIDDEN_BOT.has(id);
 }
 
+/** Simple hides Computer and Roles (2026-11-05: the roles graph is a
+ * detail; a refused permission still shows as a banner in the thread). */
 export function simpleHidesPanelTab(id: string): boolean {
-  return id === "computer";
+  return id === "computer" || id === "roles";
 }

@@ -18,12 +18,17 @@ import { maskedToken, statusFor } from "@/components/WebhooksPanel";
 import { whenLabel } from "@/lib/schedule-label";
 import { readableError } from "@/lib/plain-error";
 
-const ROW = "flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2";
-const LABEL = "w-24 shrink-0 text-[11.5px] font-medium text-ink-secondary";
+// 2026-11-03 (JC, Grok Bot's routine panel): one row per value, a muted
+// label at the left ("POST to", "key", "header") and the value in a quiet
+// field with its reveal and copy buttons inside, then one hint line.
+const ROW = "flex min-w-0 items-center gap-3";
+const LABEL = "w-[72px] shrink-0 whitespace-nowrap text-[13px] leading-5 text-ink-secondary";
+const FIELD = "flex h-8 min-w-0 flex-1 items-center gap-0.5 rounded-lg bg-inset pl-2.5 pr-1";
 const VALUE = "min-w-0 flex-1 truncate font-mono text-[12px] text-ink";
-const ICON = "flex size-7 shrink-0 items-center justify-center rounded-md text-ink-secondary hover:bg-raised hover:text-ink disabled:opacity-40";
+const ICON = "flex size-6 shrink-0 items-center justify-center rounded-md text-ink-tertiary hover:bg-hover hover:text-ink disabled:opacity-40";
+const TEXT_ACTION = "inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12.5px] font-medium text-ink-secondary hover:bg-hover hover:text-ink disabled:opacity-50";
 
-/** The address a delivery posts to (server/webhook-ingress.ts). */
+/** The address a delivery posts to (server/triggers/webhook-ingress.ts). */
 export function routineWebhookUrl(baseUrl: string | undefined, webhook: Pick<WebhookTrigger, "endpointId">): string {
   return `${(baseUrl ?? "").replace(/\/$/, "")}/hooks/${webhook.endpointId}`;
 }
@@ -59,9 +64,9 @@ export function RoutineWebhookPanel({ routine, bot }: { routine?: Routine; bot?:
     setTimeout(() => setCopied((current) => (current === kind ? "" : current)), 1_600);
   };
 
-  const fetchKey = async (rotate: boolean) => {
-    if (!webhook) return;
-    if (rotate && !(await confirm({ title: t("webhooks.confirmRotate"), confirmLabel: t("common.confirm"), tone: "danger" }))) return;
+  const fetchKey = async (rotate: boolean): Promise<string | undefined> => {
+    if (!webhook) return undefined;
+    if (rotate && !(await confirm({ title: t("webhooks.confirmRotate"), confirmLabel: t("common.confirm"), tone: "danger" }))) return undefined;
     setWorking(rotate ? "rotate" : "reveal");
     setError("");
     try {
@@ -69,8 +74,10 @@ export function RoutineWebhookPanel({ routine, bot }: { routine?: Routine; bot?:
       dispatch({ type: "webhookPatched", webhook: response.webhook });
       setCredential(response.credential);
       setShown(true);
+      return response.credential.token;
     } catch (cause) {
       setError(readableError(cause));
+      return undefined;
     } finally {
       setWorking("");
     }
@@ -109,49 +116,55 @@ export function RoutineWebhookPanel({ routine, bot }: { routine?: Routine; bot?:
     if (token) { setShown((open) => !open); return; }
     void fetchKey(!webhook.tokenPending);
   };
-  const copyButton = (kind: string, text: string, label: string) => (
-    <button type="button" data-copy={kind} onClick={() => void copy(kind, text)} aria-label={label} title={label} className={ICON}>
-      {copied === kind ? <Check size={14} className="text-accent" /> : <Copy size={14} />}
-    </button>
-  );
-  const eye = manage && (
-    <button type="button" data-show-key onClick={show} disabled={working !== ""} aria-pressed={shown && Boolean(token)} aria-label={shown && token ? t("routineWebhook.hide") : t("routineWebhook.show")} title={shown && token ? t("routineWebhook.hide") : webhook.tokenPending ? t("routineWebhook.show") : t("routineWebhook.showRotates")} className={ICON}>
-      {working === "reveal" ? <Loader2 size={14} className="animate-spin" /> : shown && token ? <EyeOff size={14} /> : <Eye size={14} />}
+  // Copy with the key not on screen shows it first (the same rule as Show).
+  const copySecret = async (kind: "key" | "header") => {
+    const secret = token ?? await fetchKey(!webhook.tokenPending);
+    if (secret) await copy(kind, kind === "key" ? secret : `Authorization: Bearer ${secret}`);
+  };
+  const copyIcon = (kind: string) => copied === kind ? <Check size={13} className="text-accent" /> : <Copy size={13} />;
+  const eye = (row: string) => manage && (
+    <button type="button" data-show-key={row} onClick={show} disabled={working !== ""} aria-pressed={shown && Boolean(token)} aria-label={shown && token ? t("routineWebhook.hide") : t("routineWebhook.show")} title={shown && token ? t("routineWebhook.hide") : webhook.tokenPending ? t("routineWebhook.show") : t("routineWebhook.showRotates")} className={ICON}>
+      {working === "reveal" ? <Loader2 size={13} className="animate-spin" /> : shown && token ? <EyeOff size={13} /> : <Eye size={13} />}
     </button>
   );
 
   return <div data-routine-webhook={webhook.id} className="space-y-2">
-    <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-ink-secondary">
-      <span className={cn("inline-flex items-center gap-1.5 font-medium", status.tone)}><span aria-hidden="true" className={cn("size-1.5 rounded-full", status.dot)} />{status.label}</span>
+    <div className={ROW}>
+      <span className={LABEL}>{t("routineWebhook.postTo")}</span>
+      <span className={FIELD}>
+        <span data-webhook-url className={VALUE} title={url}>{url}</span>
+        <button type="button" data-copy="url" onClick={() => void copy("url", url)} aria-label={t("routineWebhook.copyUrl")} title={t("routineWebhook.copyUrl")} className={ICON}>{copyIcon("url")}</button>
+      </span>
+    </div>
+    <div className={ROW}>
+      <span className={LABEL}>{t("routineWebhook.key")}</span>
+      <span className={FIELD}>
+        <span data-webhook-key className={VALUE}>{keyText}</span>
+        {eye("key")}
+        {manage && <button type="button" data-copy="key" onClick={() => void copySecret("key")} disabled={working !== ""} aria-label={t("routineWebhook.copyKey")} title={t("routineWebhook.copyKey")} className={ICON}>{copyIcon("key")}</button>}
+      </span>
+    </div>
+    <div className={ROW}>
+      <span className={LABEL}>{t("routineWebhook.header")}</span>
+      <span className={FIELD}>
+        <span data-webhook-header className={VALUE}>{header}</span>
+        {eye("header")}
+        {manage && <button type="button" data-copy="header" onClick={() => void copySecret("header")} disabled={working !== ""} aria-label={t("routineWebhook.copyHeader")} title={t("routineWebhook.copyHeader")} className={ICON}>{copyIcon("header")}</button>}
+      </span>
+    </div>
+    <p data-webhook-hint className="pt-0.5 text-[12px] leading-[17px] text-ink-tertiary">{t("routineWebhook.hint")}</p>
+    <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-[12px] text-ink-tertiary">
+      <span className={cn("inline-flex items-center gap-1.5 pr-1 font-medium", status.tone)}><span aria-hidden="true" className={cn("size-1.5 rounded-full", status.dot)} />{status.label}</span>
       <span>· {t("routineWebhook.deliveries", { count: webhook.deliveryCount })}</span>
       {webhook.lastReceivedAt && <span>· {t("routineWebhook.last", { when: whenLabel(webhook.lastReceivedAt) })}</span>}
     </div>
-    <div className="divide-y divide-hairline/40 rounded-xl border border-hairline/40 bg-inset/30">
-      <div className={ROW}>
-        <span className={LABEL}>{t("routineWebhook.postTo")}</span>
-        <span data-webhook-url className={VALUE} title={url}>{url}</span>
-        {copyButton("url", url, t("routineWebhook.copyUrl"))}
-      </div>
-      <div className={ROW}>
-        <span className={LABEL}>{t("routineWebhook.key")}</span>
-        <span data-webhook-key className={VALUE}>{keyText}</span>
-        {eye}
-        {manage && token && copyButton("key", token, t("routineWebhook.copyKey"))}
-      </div>
-      <div className={ROW}>
-        <span className={LABEL}>{t("routineWebhook.header")}</span>
-        <span data-webhook-header className={VALUE}>{header}</span>
-        {manage && token && copyButton("header", `Authorization: Bearer ${token}`, t("routineWebhook.copyHeader"))}
-      </div>
-    </div>
-    <div className="flex flex-wrap items-center gap-2">
-      <button type="button" data-copy-curl onClick={() => void copy("curl", routineWebhookCurl(url, token))} className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[12px] font-medium text-ink hover:bg-raised">
+    <div className="-ml-1.5 flex flex-wrap items-center gap-1">
+      <button type="button" data-copy-curl onClick={() => void copy("curl", routineWebhookCurl(url, token))} title={token ? undefined : t("routineWebhook.curlNote")} className={TEXT_ACTION}>
         {copied === "curl" ? <Check size={13} className="text-accent" /> : <Terminal size={13} />}{t("routineWebhook.copyCurl")}
       </button>
-      {manage && <button type="button" data-rotate-key onClick={() => void fetchKey(true)} disabled={working !== ""} className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-ink-secondary hover:bg-raised hover:text-ink disabled:opacity-50">
+      {manage && <button type="button" data-rotate-key onClick={() => void fetchKey(true)} disabled={working !== ""} className={TEXT_ACTION}>
         {working === "rotate" ? <Loader2 size={13} className="animate-spin" /> : <RotateCw size={13} />}{t("routineWebhook.rotate")}
       </button>}
-      {!token && <span className="text-[11px] text-ink-secondary">{t("routineWebhook.curlNote")}</span>}
     </div>
     {state.webhookIngress && !state.webhookIngress.available && <p role="alert" className="text-[11.5px] text-danger">{t("botWebhooks.receiverDown")}</p>}
     {error && <p role="alert" className="text-[11.5px] text-danger">{error}</p>}

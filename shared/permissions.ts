@@ -185,7 +185,7 @@ const definitions = [
   },
   {
     // 2026-10-28 (#1098): where their own bot works is theirs. The server
-    // still checks the path (server/bot-cwd.ts), and a person sheet with
+    // still checks the path (server/bots/bot-cwd.ts), and a person sheet with
     // `sagax_bots: use` still takes it away (server/org/org-permissions.ts).
     key: "folders.botWorkingFolder", group: "folders", memberDefault: true, adminOnly: false, memberAlways: true,
     label: { en: "Set the working folder of their bots", fr: "Choisir le dossier de travail de leurs bots" },
@@ -196,7 +196,7 @@ const definitions = [
   },
   {
     // 2026-10-28 (#1098): the owner of a group sets where it works; only
-    // the group's owner (server/group-ownership.ts), the path still checked.
+    // the group's owner (server/groups/group-ownership.ts), the path still checked.
     key: "folders.roomWorkingFolder", group: "folders", memberDefault: true, adminOnly: false, memberAlways: true,
     label: { en: "Set the working folder of their groups", fr: "Choisir le dossier de travail de leurs groupes" },
     description: {
@@ -420,7 +420,7 @@ const definitions = [
   },
   // Defensive security work (EDR triage and the like). A member default
   // since 2026-10-27 (#1098): talking about security tools is conversation,
-  // so a member holds it unless a Perspicax profile leaves it out. It does
+  // so a member holds it unless their live Perspicax permissions leave it out. It does
   // not lift the misuse blocks for escape, malware, destruction or platform
   // files.
   {

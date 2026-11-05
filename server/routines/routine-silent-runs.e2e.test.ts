@@ -46,10 +46,24 @@ it("a silent run leaves the chat and sidebar untouched; a reporting run posts on
       name: "[Finance] Acme invoices without PO", prompt: PROMPT, botId: bot.id, enabled: false,
       schedule: { type: "interval", everyMinutes: 60, anchorAt: Date.now() + 3_600_000 },
     }, 201);
+    // aa3e5a872 gives a person's Run now its own visible receipt. Exercise
+    // background silence through the real scheduler's one-time occurrences.
+    const scheduledRun = async () => {
+      const previous = new Set((await api("GET", "/api/routines")).runs.map((run: any) => run.id));
+      const at = Date.now() + 1_000;
+      await api("PATCH", `/api/routines/${routine.id}`, { enabled: true, schedule: { type: "once", at } });
+      let run: any;
+      await expect.poll(async () => {
+        run = (await api("GET", "/api/routines")).runs.find((candidate: any) => candidate.routineId === routine.id && !previous.has(candidate.id));
+        return run?.status;
+      }, { timeout: 20_000 }).toBe("completed");
+      expect(run).toMatchObject({ manual: false, triggerSource: "schedule", scheduledFor: at });
+      expect(run.startedBy).toBeUndefined();
+      return run;
+    };
 
     // 1. Silent: nothing reaches the person's conversation.
-    const { run: quiet } = await api("POST", `/api/routines/${routine.id}/run`, undefined, 201);
-    await expect.poll(async () => (await runState(quiet.id))?.status, { timeout: 20_000 }).toBe("completed");
+    const quiet = await scheduledRun();
     await control(["wait", "--bot", bot.id, "--task", (await runState(quiet.id)).threadId]);
     const quietRun = await runState(quiet.id);
     expect(quietRun).toMatchObject({ quiet: true, resultsThreadId: main });
@@ -59,11 +73,18 @@ it("a silent run leaves the chat and sidebar untouched; a reporting run posts on
     const quietTranscript = await messages(quietRun.threadId);
     expect(quietTranscript.some((message) => message.role === "user" && String(message.text).includes("finance-invoice-sweep"))).toBe(true);
     expect(quietTranscript.some((message) => message.role === "bot" && String(message.text).includes("October 22 is outside days 1-5"))).toBe(true);
-    // The bot was told the contract in its system prompt.
+    // The bot was told the quiet contract in its cold prompt (#1997 brief;
+    // full ROUTINE_EXECUTION_PROMPT remains behind sagax_help prompt:routine-execution).
     const dump = JSON.parse(readFileSync(fixture.fixtureDumpPath, "utf8"));
-    expect(JSON.stringify(dump)).toContain("end your final message with the line NOTHING_TO_REPORT on its own");
+    const seen = JSON.stringify(dump);
+    expect(seen).toContain("Quiet: last line NOTHING_TO_REPORT");
+    expect(seen).toContain('sagax_help with question \\"prompt:routine-execution\\"');
     // The chat is exactly as it was: no card, no prompt, no answer.
-    expect((await messages(main)).map((message) => message.id)).toEqual(before.map((message) => message.id));
+    const afterQuietMessages = await messages(main);
+    expect(afterQuietMessages.map((message) => message.id), JSON.stringify({
+      added: afterQuietMessages.filter((message) => !before.some((old) => old.id === message.id)),
+      run: { startedBy: quietRun.startedBy, status: quietRun.status, quiet: quietRun.quiet },
+    })).toEqual(before.map((message) => message.id));
     const afterQuiet = await currentBot();
     const mainAfterQuiet = afterQuiet.tasks.find((task: any) => task.threadId === main);
     expect(mainAfterQuiet.unread).toBeFalsy();
@@ -74,8 +95,7 @@ it("a silent run leaves the chat and sidebar untouched; a reporting run posts on
 
     // 2. A result on a routine that does NOT post results (the default):
     // still nothing reaches the conversation; it lives in Automations.
-    const { run: silentReport } = await api("POST", `/api/routines/${routine.id}/run`, undefined, 201);
-    await expect.poll(async () => (await runState(silentReport.id))?.status, { timeout: 20_000 }).toBe("completed");
+    const silentReport = await scheduledRun();
     await control(["wait", "--bot", bot.id, "--task", (await runState(silentReport.id)).threadId]);
     const silentReportRun = await runState(silentReport.id);
     expect(silentReportRun.quiet).toBeUndefined();
@@ -86,8 +106,7 @@ it("a silent run leaves the chat and sidebar untouched; a reporting run posts on
     // 3. Turn the routine's own "post results" on: now a result posts ONE
     // message, the bot's report, the routine named under it, never the prompt.
     await api("PATCH", `/api/routines/${routine.id}`, { postResults: true });
-    const { run: reported } = await api("POST", `/api/routines/${routine.id}/run`, undefined, 201);
-    await expect.poll(async () => (await runState(reported.id))?.status, { timeout: 20_000 }).toBe("completed");
+    const reported = await scheduledRun();
     await control(["wait", "--bot", bot.id, "--task", (await runState(reported.id)).threadId]);
     const reportedRun = await runState(reported.id);
     expect(reportedRun.quiet).toBeUndefined();
@@ -101,8 +120,7 @@ it("a silent run leaves the chat and sidebar untouched; a reporting run posts on
     // 4. A quiet run stays silent even with postResults on, and never
     // creates a visible sub-thread row under the bot.
     const countBeforeQuiet = (await messages(main)).length;
-    const { run: quietOn } = await api("POST", `/api/routines/${routine.id}/run`, undefined, 201);
-    await expect.poll(async () => (await runState(quietOn.id))?.status, { timeout: 20_000 }).toBe("completed");
+    const quietOn = await scheduledRun();
     const quietOnRun = await runState(quietOn.id);
     expect(quietOnRun.quiet).toBe(true);
     expect((await messages(main)).length).toBe(countBeforeQuiet);

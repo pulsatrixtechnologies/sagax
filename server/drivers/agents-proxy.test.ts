@@ -9,9 +9,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { childEnv } from "../testing/omb-env.ts";
-import { ToolResults } from "../tool-results.ts";
+import { ToolResults } from "../tools/tool-results.ts";
 import { waitForExit } from "../testing/cleanup.ts";
-import type { PeerDeliveryReceipt } from "../peer-delivery.ts";
+import type { PeerDeliveryReceipt } from "../peers/peer-delivery.ts";
 
 const PROXY = join(dirname(fileURLToPath(import.meta.url)), "agents-proxy.ts");
 const TOKEN = "test-comms-token";
@@ -70,6 +70,7 @@ let lastRoutineQuery = "";
 let lastRoutineRunBody: any = null;
 let lastActBody: any = null;
 let lastPerspicaxToolBody: any = null;
+const locatePosts: string[] = [];
 const auditPosts: any[] = [];
 let routinesResponse: unknown = {
   now: "2026-08-28T10:30:00.000Z",
@@ -396,8 +397,16 @@ beforeAll(async () => {
       let data = "";
       req.on("data", (c) => (data += c));
       req.on("end", () => {
-        lastPerspicaxToolBody = JSON.parse(data);
+        const parsed = JSON.parse(data);
         res.writeHead(200, { "content-type": "application/json" });
+        // #1935: `{ locate }` asks which profile server runs a tool
+        if (typeof parsed.locate === "string") {
+          locatePosts.push(parsed.locate);
+          return res.end(JSON.stringify(parsed.locate === "cw_psa_query"
+            ? { server: "perspicax_read_only_dispatch_view", served: true, text: "\"cw_psa_query\" is not a Sagax tool: it is a tool of the Perspicax profile on the MCP server \"perspicax_read_only_dispatch_view\"." }
+            : { server: null }));
+        }
+        lastPerspicaxToolBody = parsed;
         res.end(JSON.stringify({ text: "{\"entries\":[]}", isError: false }));
       });
       return;
@@ -718,6 +727,7 @@ describe("agents-proxy MCP surface", () => {
       "update_artifact",
       "list_artifacts",
       "delete_artifact",
+      "claude_artifact",
       "task_list",
       "propose_page",
       "page_comments",
@@ -1793,6 +1803,16 @@ describe("agents-proxy MCP surface", () => {
     expect((await callTool("answer_approval", { thread_id: "t1", request_id: "r", decision: "maybe" })).result.isError).toBe(true);
   });
 
+  it("#1935: a Perspicax profile tool called here names the profile server that runs it", async () => {
+    locatePosts.length = 0;
+    const res = await callTool("cw_psa_query", { resource: "service.tickets", id: 299045 });
+    expect(res.result.isError).toBe(true);
+    expect(res.result.content[0].text).toContain("perspicax_read_only_dispatch_view");
+    expect(locatePosts).toEqual(["cw_psa_query"]);
+    // a name no profile serves keeps the plain unknown-tool error
+    expect((await callTool("not_a_tool_anywhere", {})).error.message).toContain("Unknown tool");
+  });
+
   it("forwards the Perspicax gateway tools through the harness route", async () => {
     for (const tool of ["memory_recall", "memory_write", "api_search", "api_result_query", "identity", "flow", "flow_action", "review_write"]) {
       lastPerspicaxToolBody = null;
@@ -1902,7 +1922,7 @@ describe("agents-proxy MCP surface", () => {
     const list = await rpc("tools/list");
     const routine = list.result.tools.find((entry: { name: string }) => entry.name === "propose_routine");
     expect(routine.inputSchema.properties.run_on.enum).toEqual(["maus", "box"]);
-    expect(routine.inputSchema.properties.run_on.description).toContain("INCLUDING a self-hosted VPS");
+    expect(routine.inputSchema.properties.run_on.description).toContain("incl. VPS");
   });
 
   it("preserves execution settings copied from list_routines", async () => {
@@ -2855,5 +2875,54 @@ describe("the whole catalog listed by family (SAGAX_MERGED_TOOLS)", () => {
     const refused = await mergedRpc("tools/call", { name: "rooms", arguments: { tool: "list_bots" } });
     expect(refused.result.isError).toBe(true);
     expect(refused.result.content[0].text).toContain("rooms needs tool");
+  });
+});
+
+describe("#1935: a compact agents catalog and a Perspicax profile tool", () => {
+  let compact: ChildProcess;
+  const waiting = new Map<number, (msg: any) => void>();
+  let nextId = 1900;
+  const ask = (method: string, params?: unknown): Promise<any> =>
+    new Promise((resolve, reject) => {
+      const id = nextId++;
+      waiting.set(id, resolve);
+      compact.stdin!.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
+      setTimeout(() => { if (waiting.delete(id)) reject(new Error(`${method} timed out`)); }, 10_000).unref?.();
+    });
+
+  beforeAll(async () => {
+    compact = spawn(process.execPath, [PROXY], {
+      env: { ...childEnv(), SAGAX_HARNESS_URL: `http://127.0.0.1:${stubPort}`, SAGAX_BOT_ID: "bot-asker", SAGAX_THREAD_ID: "thread-asker-1935", SAGAX_COMMS_TOKEN: TOKEN, SAGAX_TURN_DEPTH: "0", SAGAX_COMPACT_TOOLS: JSON.stringify({ core: "default", pinned: [] }) },
+      stdio: ["pipe", "pipe", "inherit"],
+    });
+    let buf = "";
+    compact.stdout!.on("data", (c) => {
+      buf += c;
+      let nl;
+      while ((nl = buf.indexOf("\n")) !== -1) {
+        const line = buf.slice(0, nl);
+        buf = buf.slice(nl + 1);
+        if (!line.trim()) continue;
+        const msg = JSON.parse(line);
+        waiting.get(msg.id)?.(msg);
+        waiting.delete(msg.id);
+      }
+    });
+    await ask("initialize", { protocolVersion: "2024-11-05" });
+  });
+  afterAll(async () => { if (compact) await waitForExit(compact, { signal: "SIGTERM" }); });
+
+  it("call_tool and describe_tool of cw_psa_query send the bot to the profile server", async () => {
+    for (const tool of ["call_tool", "describe_tool"]) {
+      const res = await ask("tools/call", { name: tool, arguments: { name: "cw_psa_query", arguments: { resource: "service.tickets", id: 299045 } } });
+      expect(res.result.isError, tool).toBe(true);
+      expect(res.result.content[0].text, tool).toContain("MCP server \"perspicax_read_only_dispatch_view\"");
+      expect(res.result.content[0].text, tool).not.toContain("No tool named");
+    }
+  });
+
+  it("a name no profile serves keeps the directory's own answer", async () => {
+    const res = await ask("tools/call", { name: "call_tool", arguments: { name: "not_a_tool_anywhere" } });
+    expect(res.result.content[0].text).toContain("No tool named");
   });
 });

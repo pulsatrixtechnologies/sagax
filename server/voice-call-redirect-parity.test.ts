@@ -15,11 +15,11 @@ import { readUseToolCall } from "../shared/mcp-gateway-call.ts";
 import { isMessageSendTool, isOutboundTool } from "../shared/outbound.ts";
 import { placeArgsFromVoiceCall } from "../shared/outbound-call.ts";
 import type { OutboundCard } from "../shared/wire.ts";
-import { directoryCallTarget } from "./mcp-directory.ts";
-import { destructiveKindOf, ownerDecision } from "./owner-approval.ts";
-import { outboundWiring } from "./outbound-wiring.ts";
-import type { ExchangeResult } from "./perspicax-link.ts";
-import { PerspicaxMcp, VOICE_CALL_REDIRECTED, VOICE_CALL_UNAVAILABLE, type PerspicaxMcpLink } from "./perspicax-mcp.ts";
+import { directoryCallTarget } from "./mcp/mcp-directory.ts";
+import { destructiveKindOf, ownerDecision } from "./approvals/owner-approval.ts";
+import { outboundWiring } from "./outbound/outbound-wiring.ts";
+import type { ExchangeResult } from "./perspicax/perspicax-link.ts";
+import { PerspicaxMcp, VOICE_CALL_REDIRECTED, VOICE_CALL_UNAVAILABLE, type PerspicaxMcpLink } from "./perspicax/perspicax-mcp.ts";
 import type { Message } from "./store.ts";
 import { telephonyRefusal, voiceToolCall } from "./telephony-guard.ts";
 
@@ -46,10 +46,9 @@ const ENTRIES: Record<string, (args: Record<string, unknown>) => { name: string;
 function relayHarness(placeCall?: ConstructorParameters<typeof PerspicaxMcp>[0]["placeCall"]) {
   const sent: string[] = [];
   const link: PerspicaxMcpLink = {
-    exchangeToken: async (_subject, profileId): Promise<ExchangeResult> => ({ ok: true, token: `pxlo1.A.mcp-${profileId}`, expiresAt: Date.now() + 900_000 }),
+    exchangeToken: async (): Promise<ExchangeResult> => ({ ok: true, token: "pxlo1.A.mcp-main", expiresAt: Date.now() + 900_000 }),
     revokeExchanged: async () => true,
     mcpEndpoint: () => "http://perspicax:8787/mcp",
-    profileCatalog: () => [{ id: "P1", slug: "gox", name: "GOX", description: "" }],
   };
   const fetcher = (async (_input: string | URL | Request, init?: RequestInit) => {
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
@@ -63,7 +62,7 @@ function relayHarness(placeCall?: ConstructorParameters<typeof PerspicaxMcp>[0][
     link: () => link,
     subjectOf: () => ({ iss: ISS, sub: "A", disabled: false }),
     subjectToken: async () => ({ ok: true, token: "pxlo1.A.signin", expiresAt: Date.now() + 3_600_000 }),
-    botProfiles: () => ["P1"],
+    botExists: () => true,
     version: "0.1.0",
     ...(placeCall ? { placeCall } : {}),
     fetch: fetcher,
@@ -75,7 +74,7 @@ const turn = { threadId: THREAD, generation: "g1" };
 let frameId = 0;
 async function relayCall(mcp: PerspicaxMcp, call: { name: string; arguments: unknown }) {
   frameId += 1;
-  const answer = await mcp.relay({ ...turn, botId: "bot-rocket", profileId: "P1", frame: { jsonrpc: "2.0", id: frameId, method: "tools/call", params: call } });
+  const answer = await mcp.relay({ ...turn, botId: "bot-rocket" , frame: { jsonrpc: "2.0", id: frameId, method: "tools/call", params: call } });
   const result = (answer.body as { result?: { content?: Array<{ text?: string }>; isError?: boolean } }).result;
   return { text: result?.content?.[0]?.text ?? "", isError: result?.isError === true };
 }
@@ -89,8 +88,10 @@ let wiring: ReturnType<typeof outboundWiring>;
 let counter = 0;
 
 function makeWiring() {
-  return outboundWiring({
+  const made = outboundWiring({
     dataDir: dir,
+    // a fixed clock: the card's liveStartedAt (5e792c845) is compared between runs
+    now: () => Date.UTC(2026, 9, 28, 15, 0, 0),
     store: {
       messagesFor: (threadId) => threads.get(threadId) ?? [],
       appendMessage: (threadId, message) => {
@@ -121,6 +122,10 @@ function makeWiring() {
     principalSub: () => "A",
     wake: () => {},
   });
+  // the one-time acceptable-use consent (5e792c845) is its own gate, tested in
+  // outbound-wiring.test.ts; this person accepted it already
+  made.consentStore.accept(PERSON, "bot-rocket");
+  return made;
 }
 
 /** place_phone_call exactly as the agents catalog's route calls it. */
@@ -182,7 +187,7 @@ describe("voice_call becomes place_phone_call by every entry point", () => {
       wiring.calls.updateSettings({ enabled: true, callbackNumber: "+14385550199" });
 
       const { mcp, sent } = relayHarness(placeCall);
-      await mcp.prepareTurn({ ...turn, bot: { id: "bot-rocket", perspicax: { profiles: ["P1"] } }, speakerPrincipalId: PERSON, speakerOrigin: "person" });
+      await mcp.prepareTurn({ ...turn, bot: { id: "bot-rocket" }, speakerPrincipalId: PERSON, speakerOrigin: "person" });
       const first = await relayCall(mcp, ENTRIES[entry]!(args));
       expect(first.text.startsWith(VOICE_CALL_REDIRECTED)).toBe(true);
       expect(first.text).toContain(direct.first.text);
@@ -212,7 +217,7 @@ describe("voice_call becomes place_phone_call by every entry point", () => {
 
   it("the organization's pilot and do-not-call list hold a redirected call", async () => {
     const { mcp, sent } = relayHarness(placeCall);
-    await mcp.prepareTurn({ ...turn, bot: { id: "bot-rocket", perspicax: { profiles: ["P1"] } }, speakerPrincipalId: PERSON, speakerOrigin: "person" });
+    await mcp.prepareTurn({ ...turn, bot: { id: "bot-rocket" }, speakerPrincipalId: PERSON, speakerOrigin: "person" });
     wiring.calls.updateSettings({ addDoNotCall: NUMBER });
     for (const entry of Object.keys(ENTRIES)) {
       const answer = await relayCall(mcp, ENTRIES[entry]!(CONVERSATION));
@@ -228,10 +233,10 @@ describe("voice_call becomes place_phone_call by every entry point", () => {
 
   it("a dry run sends nothing and still goes to Perspicax; another tool is untouched; a harness call is not redirected", async () => {
     const { mcp, sent } = relayHarness(placeCall);
-    await mcp.prepareTurn({ ...turn, bot: { id: "bot-rocket", perspicax: { profiles: ["P1"] } }, speakerPrincipalId: PERSON, speakerOrigin: "person" });
+    await mcp.prepareTurn({ ...turn, bot: { id: "bot-rocket" }, speakerPrincipalId: PERSON, speakerOrigin: "person" });
     expect((await relayCall(mcp, { name: "voice_call", arguments: { ...CONVERSATION, dry_run: true } })).text).toBe("sent by Perspicax");
     expect((await relayCall(mcp, { name: "voice_line", arguments: {} })).text).toBe("sent by Perspicax");
-    const harness = await mcp.relay({ ...turn, botId: "bot-rocket", profileId: "P1", frame: { jsonrpc: "2.0", id: 999, method: "tools/call", params: { name: "voice_call", arguments: CONVERSATION } }, judged: true });
+    const harness = await mcp.relay({ ...turn, botId: "bot-rocket" , frame: { jsonrpc: "2.0", id: 999, method: "tools/call", params: { name: "voice_call", arguments: CONVERSATION } }, judged: true });
     expect(JSON.stringify(harness.body)).toContain("sent by Perspicax");
     expect(sent).toEqual(["voice_call", "voice_line", "voice_call"]);
     expect(card()).toBeUndefined();
@@ -239,7 +244,7 @@ describe("voice_call becomes place_phone_call by every entry point", () => {
 
   it("without place_phone_call on the server, a bot's voice_call is refused, never sent", async () => {
     const { mcp, sent } = relayHarness();
-    await mcp.prepareTurn({ ...turn, bot: { id: "bot-rocket", perspicax: { profiles: ["P1"] } }, speakerPrincipalId: PERSON, speakerOrigin: "person" });
+    await mcp.prepareTurn({ ...turn, bot: { id: "bot-rocket" }, speakerPrincipalId: PERSON, speakerOrigin: "person" });
     for (const entry of Object.keys(ENTRIES)) expect(await relayCall(mcp, ENTRIES[entry]!(CONVERSATION)), entry).toEqual({ text: VOICE_CALL_UNAVAILABLE, isError: true });
     expect(sent).toEqual([]);
   });
@@ -252,7 +257,7 @@ describe("voice_call becomes place_phone_call by every entry point", () => {
 });
 
 describe("voice_sms is a text like a Twilio Messages create", () => {
-  const twilio = { tool: "mcp__perspicax_gox__twilio_api__write", input: JSON.stringify({ resource: "Messages", action: "create", set: { To: NUMBER, Body: "Bonjour" } }) };
+  const twilio = { tool: "mcp__perspicax_gox__twilio_api_write", input: JSON.stringify({ resource: "Messages", action: "create", set: { To: NUMBER, Body: "Bonjour" } }) };
   const names = ["mcp__perspicax_gox__voice_sms", "perspicax_gox__voice_sms", "voice_sms"];
 
   it.each(names)("%s: an outbound text, with its recipient read", (tool) => {

@@ -16,10 +16,26 @@ struct DesktopPlanUsageCard: View {
     @State private var loading = true
     @State private var now = Date()
 
+    @EnvironmentObject private var shell: DesktopShellModel
+    @State private var failed = false
+
+    /// 2026-10-16: the group is always drawn under Cost; with no row it says
+    /// why. 2026-10-30 (#1774): signed-out and error rows stay listed with
+    /// Connect or Try again.
     var body: some View {
-        let providers = PlanUsageRules.connected(report)
-        Group {
-            if !providers.isEmpty { AnyView(card(providers)) }
+        let providers = report?.providers ?? []
+        DesktopSettingsGroup(Text("Plan"), accessory: AnyView(refresh), identifier: "plan") {
+            if providers.isEmpty {
+                DesktopText(loading ? Text("Checking plan usage…")
+                            : failed ? Text("Plan unavailable for this account.")
+                            : Text("Connect a subscription (Claude, ChatGPT, Grok) to see its 5-hour and weekly limits."),
+                            color: \.inkSecondary)
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+            }
+            ForEach(providers) { provider in
+                AnyView(providerView(provider))
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+            }
         }
         .task(id: session.connection?.id) {
             await load(refresh: false)
@@ -31,47 +47,47 @@ struct DesktopPlanUsageCard: View {
         }
     }
 
-    private func card(_ providers: [PlanUsageReport.Provider]) -> some View {
-        DesktopSettingsCard(
-            Text("Plan usage"),
-            subtitle: Text("Remaining allowance on each signed-in provider. 5-hour and weekly windows, when that plan has them."),
-            identifier: "usage.plan"
-        ) {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Spacer(minLength: 0)
-                    Button { Task { await load(refresh: true) } } label: {
-                        Group {
-                            if loading { ProgressView().controlSize(.small) } else { DesktopSettingsIconView(icon: .refreshCw, size: 14) }
-                        }
-                        .foregroundStyle(theme.inkSecondary)
-                        .frame(width: 30, height: 30)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(DesktopHoverFill(radius: 6, fill: \.control))
-                    .disabled(loading)
-                    .accessibilityLabel(Text("Refresh"))
+    private var refresh: some View {
+        HStack {
+            Spacer(minLength: 0)
+            Button { Task { await load(refresh: true) } } label: {
+                Group {
+                    if loading { ProgressView().controlSize(.mini) } else { DesktopSettingsIconView(icon: .refreshCw, size: 13) }
                 }
-                .padding(.bottom, 12)
-                VStack(alignment: .leading, spacing: 12) {
-                    ForEach(Array(providers.enumerated()), id: \.element.id) { index, provider in
-                        if index > 0 { Rectangle().fill(theme.hairline.opacity(0.3)).frame(height: 1) }
-                        AnyView(providerView(provider))
-                    }
-                }
+                .foregroundStyle(theme.inkSecondary)
+                .frame(width: 28, height: 28)
+                .contentShape(Circle())
             }
+            .buttonStyle(DesktopHoverFill(radius: 14))
+            .disabled(loading)
+            .accessibilityLabel(Text("Refresh"))
         }
     }
 
     private func providerView(_ provider: PlanUsageReport.Provider) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(verbatim: provider.name).font(theme.font(14, .medium)).foregroundStyle(theme.ink).lineLimit(1)
+                Text(verbatim: provider.name).font(theme.font(13)).foregroundStyle(theme.ink).lineLimit(1)
                 if let plan = provider.plan, !plan.isEmpty {
                     Text(verbatim: plan).font(theme.font(12)).foregroundStyle(theme.inkSecondary).lineLimit(1)
                 }
             }
-            if provider.ok {
+            if provider.rowState == "signed-out" {
+                VStack(alignment: .leading, spacing: 8) {
+                    DesktopText(Text("Not signed in"), size: 12, line: 16, color: \.inkSecondary)
+                    Button(String(format: AppStrings.localized("Connect %@"), provider.name)) { shell.settingsSection = .providers }
+                        .buttonStyle(DesktopPillButtonStyle())
+                        .accessibilityIdentifier("desktop-settings.plan-connect.\(provider.id)")
+                }
+            } else if provider.rowState == "error" {
+                HStack(spacing: 12) {
+                    DesktopText(verbatim: provider.error ?? AppStrings.localized("Could not load plan usage."), size: 12, line: 16, color: \.danger)
+                    Button("Try again") { Task { await load(refresh: true) } }
+                        .buttonStyle(DesktopButtonStyle(kind: .ghost, size: 12))
+                }
+            } else if provider.rowState == "no-windows" {
+                DesktopText(Text("No plan windows for this provider"), size: 12, line: 16, color: \.inkSecondary)
+            } else if provider.ok {
                 AnyView(windowRow(String(localized: "5-hour"), provider.fiveHour))
                 AnyView(windowRow(String(localized: "Weekly"), provider.weekly))
                 ForEach(Array(provider.extra.enumerated()), id: \.offset) { _, extra in
@@ -148,6 +164,9 @@ struct DesktopPlanUsageCard: View {
         if let next = try? await client.planUsage(refresh: refresh) {
             report = next
             now = Date()
+            failed = false
+        } else if report == nil {
+            failed = true
         }
         loading = false
     }

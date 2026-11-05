@@ -61,7 +61,7 @@ function DigestDetail({ message }: { message: Message }) {
 }
 
 /** A fold the person asked for is visible even when ordinary tool chips are
- * hidden. Sagax's own folds never show (server/context-budget.ts). */
+ * hidden. Sagax's own folds never show (server/context/context-budget.ts). */
 export function CompactionChip({ message }: { message: Message }) {
   if (!message.compaction || message.compaction.by === "harness") return null;
   return (

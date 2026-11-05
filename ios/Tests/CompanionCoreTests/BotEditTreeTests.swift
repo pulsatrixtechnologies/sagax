@@ -10,7 +10,7 @@ final class BotEditTreeTests: XCTestCase {
         .callVoice, .callSpeed, .callLanguage,
         .soul, .skills, .memory,
         .model, .computer, .toolsApps, .slack, .voiceAlerts,
-        .approvals, .perspicaxProfiles, .whoCanSee, .sharedWith,
+        .approvals, .whoCanSee, .sharedWith,
         .overview, .usage, .changes,
     ]
 
@@ -48,7 +48,7 @@ final class BotEditTreeTests: XCTestCase {
         XCTAssertEqual(root[3], [.voiceAlerts])
         XCTAssertEqual(
             root[4],
-            [.soul, .skills, .memory, .model, .approvals, .toolsApps, .computer, .perspicaxProfiles, .slack, .routines, .sharing]
+            [.soul, .skills, .memory, .model, .approvals, .toolsApps, .computer, .slack, .routines, .sharing]
         )
         XCTAssertEqual(root[5], [.advanced])
         XCTAssertEqual(root.last, [.archive])

@@ -5,7 +5,7 @@
 // (SAGAX_VAULT_HTTP=1, CredentialVault.injectable); the route re-checks the
 // grant, the sites and the addresses on every call. Definition and call live
 // here so agents-catalog.ts and agents-call.ts each gain one line.
-import type { ToolCallContext, ToolCallResult } from "./agents-call.ts";
+import type { ToolCallContext, ToolCallResult } from "./agents-call-types.ts";
 import type { Json } from "./agents-client.ts";
 
 export const VAULT_HTTP_TOOL_NAME = "vault_http_request";

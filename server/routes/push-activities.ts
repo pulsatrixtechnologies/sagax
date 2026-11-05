@@ -16,7 +16,7 @@ import {
   type LiveActivityToken,
   type LiveActivityTokenStore,
 } from "../push/activity-devices.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const PUSH_ACTIVITIES_PATH = "/api/push/activities";

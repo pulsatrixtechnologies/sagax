@@ -61,7 +61,7 @@ export function createDispatchStartTurn(host: StartTurnHost) {
   return async function dispatchStartTurn(state: TurnState): Promise<void> {
     // Before sendTurn: an adapter may emit the whole turn before it resolves.
     if (!state.warmOnly) handoffs.dispatching(state.threadId, state.dispatchClaimId, state.dispatchContext.handoff);
-    // Read receipts (server/read-receipts.ts): the person's words this turn
+    // Read receipts (server/messages/read-receipts.ts): the person's words this turn
     // carries are what the bot has now seen. A card continuation carries
     // none of its own: it sees the conversation it resumes.
     if (!state.warmOnly) {
@@ -71,7 +71,7 @@ export function createDispatchStartTurn(host: StartTurnHost) {
     }
     // Slice 4: this turn's credentials (an owner key is read now).
     // (solo mode takes no extra await: its dispatch timing is unchanged)
-    const turnAccess = IDENTITY.kind === "perspicax" ? await orgTurnAccess(state.threadId, state.bot, state.instance, state.speaker, state.bot.modelSelection.model) : undefined;
+    const turnAccess = IDENTITY.kind === "perspicax" ? await orgTurnAccess(state.threadId, state.bot, state.instance, state.speaker, state.routineModel ?? state.bot.modelSelection.model) : undefined;
     if (!state.warmOnly) turnTrace(state.threadId, "access");
     // An engine slash command typed by a person (or set in a routine)
     // reaches the engine verbatim (server/harness-commands.ts); a peer hop
@@ -103,14 +103,14 @@ export function createDispatchStartTurn(host: StartTurnHost) {
     } } : undefined);
     // A call turn (and the warm that prepares its process, so the two share
     // one spawn contract) runs at the engine's low effort: the person is
-    // waiting for the first word (server/voice-call-effort.ts).
-    // A pre-warm off a call (server/thread-prewarm.ts) takes the next
+    // waiting for the first word (server/voice/voice-call-effort.ts).
+    // A pre-warm off a call (server/threads/thread-prewarm.ts) takes the next
     // turn's own effort and flags, or the turn would relaunch it.
     const turnEffort = state.onCall
       ? callTurnEffort({ driverKind: state.instance.driverKind, levels: state.instance.adapter.capabilities.effortLevels, effort: state.effort })
       : resolveEngineTurnEffort(state.effort, state.instance.driverKind, state.instance.adapter.capabilities.effortLevels);
     // A routine run while the server boots waits for an engine start slot
-    // (server/engine-start-gate.ts): the runs that came due during a
+    // (server/engines/engine-start-gate.ts): the runs that came due during a
     // restart start two at a time instead of every engine at once.
     // After boot, routine turns keep a steady limit (SAGAX_ROUTINE_ENGINE_SLOTS)
     // and wait while memory is critical (server/engine-memory-guard.ts).
@@ -135,6 +135,7 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       return savedSteps.dispatch.sendTurn(state.instance, replayRequest, {
       threadId: state.threadId,
       botId: state.bot.id,
+      principalId: orgSpeakerPrincipal(state.bot, state.speaker),
       ...(state.compactPrompt ? { compactPrompt: state.compactPrompt } : {}),
       // the per-turn latency line's queue stage (drivers/acp/turn-latency.ts)
       ...(!state.warmOnly && typeof state.userMessage.at === "number" ? { receivedAt: state.userMessage.at } : {}),
@@ -153,6 +154,10 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       toolScope: state.toolScope,
       ...(state.guestConfined ? { guestConfined: true, confinedWhy: confinedWhy(state.threadId) } : {}),
       model: state.model,
+      // 2026-11-04: a routine's model reaches its sub-agents too (Claude);
+      // #2038: so do a routine's sub-agent model and the bot's fast model.
+      ...(state.subagentModel ? { subagentModel: state.subagentModel } : {}),
+      ...(state.routineEffort ? { subagentEffort: turnEffort } : {}),
       effort: turnEffort,
       variant: state.variant,
       // a rewound thread never resumes the abandoned branch's session
@@ -192,6 +197,8 @@ export function createDispatchStartTurn(host: StartTurnHost) {
     })), () => !directTurnClaimExists(state.bot.id, state.dispatchClaimId, state.threadId), async () => {
       await state.instance.adapter.interruptTurn(state.threadId).catch(() => {});
     });
+    // Adapter accepted the turn (process reused or spawned).
+    if (!state.warmOnly) turnTrace(state.threadId, "dispatched");
     if (state.warmOnly) {
       // A duplex interrupt while the person is still talking cancels this
       // claim: there is no spoken turn yet, and releasing the process

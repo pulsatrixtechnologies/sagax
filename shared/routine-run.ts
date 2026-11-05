@@ -1,3 +1,4 @@
+import type { RoutineReadinessCheck } from "./routine-readiness.ts";
 /** Durable, non-actionable projection of one background routine run.
  *
  * The provider still runs in its isolated execution task. This small card is
@@ -6,6 +7,7 @@
  * through the routines calendar.
  */
 export interface RoutineRunCardData {
+  readiness?: RoutineReadinessCheck[];
   runId: string;
   routineId: string;
   routineName: string;
@@ -26,4 +28,9 @@ export interface RoutineRunCardData {
   problems?: string;
   /** 2026-11-01: why a queued or waiting run has not gone on yet. */
   attention?: string;
+  /** 2026-11-03: the teammates the run handed work to, linked from the card. */
+  handedTo?: Array<{ botId: string; threadId: string; name?: string; status: string }>;
+  /** 2026-11-04: when the run started, so a running card shows how long it
+   * has been going. */
+  startedAt?: number;
 }

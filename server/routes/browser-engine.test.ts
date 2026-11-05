@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { HEALTH_IDENTITY } from "../../electron/legacy-names.mjs";
 import * as browserEngine from "../browser/browser-engine.ts";
 import { editionForMembers, editionStatus } from "../enterprise.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import {
   createBrowserEngineRoutes,
   type BrowserEngineRouteDeps,
@@ -29,6 +29,7 @@ function harness(overrides: Partial<BrowserEngineRouteDeps> = {}) {
     ENGINE_PROBE_TTL_MS: 60_000,
     ENGINE_PROBE_TIMEOUT_MS: 10_000,
     staticDir: () => null,
+    version: () => "0.8.45-test",
     isInstalling: () => installing,
     startInstall: (work) => {
       installing = true;
@@ -65,18 +66,24 @@ function harness(overrides: Partial<BrowserEngineRouteDeps> = {}) {
 }
 
 describe("GET /api/health", () => {
+  it("exposes aggregate warm-resource usage, caps and evictions to a signed-in reader", async () => {
+    const { sent } = await harness().call("/api/health");
+    expect(sent.body).toMatchObject({ warmResources: { count: 0, memoryBytes: 0, evictions: 0,
+      limits: { count: expect.any(Number), bytes: expect.any(Number), personCount: expect.any(Number), personBytes: expect.any(Number) } } });
+    expect(JSON.stringify((sent.body as any).warmResources)).not.toMatch(/principalId|threadId|token/);
+  });
   it("answers 503 while shutting down", async () => {
     const h = harness({ isShuttingDown: () => true });
     const { sent } = await h.call("/api/health");
     expect(sent).toMatchObject({ status: 503, body: { ok: false, shuttingDown: true, ...HEALTH_IDENTITY } });
   });
 
-  it("gives a session-less bot shell on an organization server the app name only", async () => {
+  it("gives a session-less bot shell on an organization server the app name and Sagax version (#1996)", async () => {
     const h = harness({ isOrganization: () => true });
     const { sent } = await h.call("/api/health", {
       auth: { kind: "loopback", scopes: ["client"], trust: "service" } as RequestAuth,
     });
-    expect(sent).toEqual({ status: 200, body: { ...HEALTH_IDENTITY } });
+    expect(sent).toEqual({ status: 200, body: { ...HEALTH_IDENTITY, version: "0.8.45-test" } });
   });
 
   it("gives a service loopback on a solo server capabilities without engines", async () => {
@@ -85,7 +92,7 @@ describe("GET /api/health", () => {
       auth: { kind: "loopback", scopes: ["client"], trust: "service" } as RequestAuth,
     });
     expect(sent?.status).toBe(200);
-    expect(sent?.body).toMatchObject({ ...HEALTH_IDENTITY, capabilities: expect.objectContaining({ guardedMessages: 1 }) });
+    expect(sent?.body).toMatchObject({ ...HEALTH_IDENTITY, version: "0.8.45-test", capabilities: expect.objectContaining({ guardedMessages: 1 }) });
     const body = sent!.body as { engines?: unknown; pid?: unknown };
     expect(body.engines).toBeUndefined();
     expect(body.pid).toBeUndefined();
@@ -104,6 +111,7 @@ describe("GET /api/health", () => {
     expect(sent?.status).toBe(200);
     expect(sent?.body).toMatchObject({
       ...HEALTH_IDENTITY,
+      version: "0.8.45-test",
       pid: process.pid,
       static: false,
       capabilities: { guardedMessages: 1, guardedRequests: 1, guardedFullAccess: 1, guardedOnBehalfOf: 1 },

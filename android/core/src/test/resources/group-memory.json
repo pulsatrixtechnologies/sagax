@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "canEdit": true,
+  "text": "- fact",
+  "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "capacity": {
+    "lines": 1,
+    "bytes": 6,
+    "maxLines": 200,
+    "maxBytes": 25000,
+    "loadedLines": 1,
+    "loadedBytes": 6,
+    "truncated": false
+  }
+}

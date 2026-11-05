@@ -1,0 +1,132 @@
+{
+  "engine": "codex",
+  "sessionIdleMs": 600000,
+  "launches": 4,
+  "warm": [
+    {
+      "kind": "warm",
+      "launched": true,
+      "sendToFirstEventMs": 741.7,
+      "sendToFirstDeltaMs": 1950.6,
+      "turnTraceSend": 1793800605085
+    },
+    {
+      "kind": "warm",
+      "launched": false,
+      "sendToFirstEventMs": 71.9,
+      "sendToFirstDeltaMs": 72,
+      "turnTraceSend": 1793800606679
+    },
+    {
+      "kind": "warm",
+      "launched": false,
+      "sendToFirstEventMs": 55.6,
+      "sendToFirstDeltaMs": 55.6,
+      "turnTraceSend": 1793800607256
+    },
+    {
+      "kind": "warm",
+      "launched": false,
+      "sendToFirstEventMs": 79.4,
+      "sendToFirstDeltaMs": 79.4,
+      "turnTraceSend": 1793800607851
+    },
+    {
+      "kind": "warm",
+      "launched": false,
+      "sendToFirstEventMs": 54,
+      "sendToFirstDeltaMs": 54,
+      "turnTraceSend": 1793800608426
+    },
+    {
+      "kind": "warm",
+      "launched": false,
+      "sendToFirstEventMs": 56.1,
+      "sendToFirstDeltaMs": 56.2,
+      "turnTraceSend": 1793800608987
+    },
+    {
+      "kind": "warm",
+      "launched": false,
+      "sendToFirstEventMs": 58,
+      "sendToFirstDeltaMs": 58,
+      "turnTraceSend": 1793800609566
+    },
+    {
+      "kind": "warm",
+      "launched": false,
+      "sendToFirstEventMs": 50.5,
+      "sendToFirstDeltaMs": 50.6,
+      "turnTraceSend": 1793800610140
+    },
+    {
+      "kind": "warm",
+      "launched": false,
+      "sendToFirstEventMs": 117,
+      "sendToFirstDeltaMs": 117,
+      "turnTraceSend": 1793800610724
+    },
+    {
+      "kind": "warm",
+      "launched": false,
+      "sendToFirstEventMs": 88.4,
+      "sendToFirstDeltaMs": 88.5,
+      "turnTraceSend": 1793800611351
+    }
+  ],
+  "cold": [
+    {
+      "kind": "cold",
+      "launched": true,
+      "sendToFirstEventMs": 96.6,
+      "sendToFirstDeltaMs": 1090.1,
+      "turnTraceSend": 1793800613559
+    },
+    {
+      "kind": "cold",
+      "launched": true,
+      "sendToFirstEventMs": 90.4,
+      "sendToFirstDeltaMs": 1069.7,
+      "turnTraceSend": 1793800614758
+    },
+    {
+      "kind": "cold",
+      "launched": true,
+      "sendToFirstEventMs": 175,
+      "sendToFirstDeltaMs": 1525.2,
+      "turnTraceSend": 1793800616405
+    }
+  ],
+  "warmSendToDelta": {
+    "n": 10,
+    "p50": 72,
+    "p95": 1950.6,
+    "mean": 258.2
+  },
+  "coldSendToDelta": {
+    "n": 3,
+    "p50": 1090.1,
+    "p95": 1525.2,
+    "mean": 1228.3
+  },
+  "warmSendToEvent": {
+    "n": 10,
+    "p50": 71.9,
+    "p95": 741.7,
+    "mean": 137.3
+  },
+  "coldSendToEvent": {
+    "n": 3,
+    "p50": 96.6,
+    "p95": 175,
+    "mean": 120.7
+  },
+  "notes": [
+    "startup log lines=20 turn process pids=4",
+    "initialize events (including account probes)=7",
+    "turn/start events=13",
+    "one app-server per unchanged thread and execution identity (#1969)"
+  ],
+  "turnProcessStarts": 4,
+  "warmReuses": 9
+}

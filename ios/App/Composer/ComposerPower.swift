@@ -58,7 +58,8 @@ extension ChatView {
             // the bot's own commands (`useSlashSkills`): a 1:1 chat only, as
             // in a room a command would reach several bots
             return ComposerCommandMenu.items(
-                sagax: sagax, sagaxDescription: ComposerCommandMenuView.description,
+                sagax: sagax, sagaxDescription: { ComposerCommandMenuView.description($0, room: false) },
+                sagaxHint: ComposerCommandMenuView.hint,
                 skills: power.skills(botId: bot.id), engine: engine, query: query
             )
         case let .room(room):
@@ -76,7 +77,8 @@ extension ChatView {
             }
             return ComposerCommandMenu.roomItems(
                 sagax: context.roomBotId == nil ? sagax : [],
-                sagaxDescription: ComposerCommandMenuView.description, sets: sets, query: query
+                sagaxDescription: { ComposerCommandMenuView.description($0, room: true) },
+                sagaxHint: ComposerCommandMenuView.hint, sets: sets, query: query
             )
         }
     }
@@ -105,10 +107,65 @@ extension ChatView {
     /// /goal goes in as typed text, which sends as a goal.
     func pickCommand(_ item: ComposerMenuItem) {
         guard let context = slashContext, var insertion = item.insertion else { return }
+        // /loop status and /loop stop run at once (`runLoopCommand`)
+        if case let .sagax(command) = item.kind, command.runsAtOnce {
+            power.commandMenuForced = false
+            draft = ""
+            runLoopCommand(command == .loopStop ? .stop(name: "") : .status)
+            return
+        }
         if case .sagax(.goal) = item.kind { insertion = "/goal " }
         power.commandMenuForced = false
         draft = context.trigger.replacing(in: draft, with: insertion)
         composerFocused = true
+    }
+
+    /// `runLoopCommand` (useComposerCommands.ts): /loop writes a routine for
+    /// this chat and never becomes a message the bot has to interpret;
+    /// status opens the routine list, stop turns this bot's loops off.
+    func runLoopCommand(_ command: LoopCommand) {
+        let loopBot: Bot? = {
+            switch current {
+            case let .bot(bot): return session.state.bot(bot.id) ?? bot
+            case let .room(room):
+                guard room.dm != true else { return nil }
+                return room.memberIds.compactMap { session.state.bot($0) }.first { $0.hidden != true }
+            }
+        }()
+        let groupId: String? = { if case let .room(room) = current { return room.id } else { return nil } }()
+        switch command {
+        case .incomplete:
+            session.actionError = String(localized: "Write a cadence, then the prompt. Example: /loop 5m check the board")
+        case .status:
+            guard let loopBot else { session.actionError = String(localized: "This conversation has no bot for a loop."); return }
+            draft = ""
+            if let desktopChat { desktopChat.openRoutines(loopBot.id) } else { openProfile() }
+        case let .stop(name):
+            guard let loopBot else { session.actionError = String(localized: "This conversation has no bot for a loop."); return }
+            Task {
+                let listing = await session.loadRoutines()
+                let hits = LoopCommand.stopTargets(listing.routines, botId: loopBot.id, name: name)
+                guard !hits.isEmpty else { session.actionError = String(localized: "No loop to stop."); return }
+                await session.setRoutinesEnabled(hits, enabled: false)
+                session.actionError = String(localized: "Loop stopped.")
+                draft = ""
+            }
+        case let .start(everyMinutes, prompt, raised, capped):
+            guard let loopBot else { session.actionError = String(localized: "This conversation has no bot for a loop."); return }
+            var input = RoutineInput(
+                name: LoopCommand.routineName(everyMinutes: everyMinutes, prompt: prompt), prompt: prompt, botId: loopBot.id,
+                schedule: RoutineSchedule(type: .interval, everyMinutes: everyMinutes, anchorAt: Int64(Date().timeIntervalSince1970 * 1000)),
+                groupId: groupId
+            )
+            input.postResults = true
+            input.continuity = true
+            draft = ""
+            Task {
+                guard await session.saveRoutine(input, original: nil) != nil else { return }
+                if raised { session.actionError = String(localized: "The shortest cadence is 5 minutes. This one starts at 5 minutes.") }
+                else if capped { session.actionError = String(localized: "The longest cadence is one day. This one starts at one day.") }
+            }
+        }
     }
 
     func closeCommandMenu() {
@@ -255,7 +312,7 @@ extension ChatView {
 
     func retry(_ failure: FailedSend) {
         guard !power.retrying.contains(failure.id), current.threadId == failure.threadId else { return }
-        if activeSendBlock != nil { sendBlockTick += 1; return }
+        if activeSendBlock?.blocksSend == true { sendBlockTick += 1; return }
         power.retrying.insert(failure.id)
         let chat = current
         Task {

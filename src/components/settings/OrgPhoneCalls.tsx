@@ -1,6 +1,6 @@
 // Settings > Experimental, organization admins only (moved there 2026-10-27,
 // from Organization): the phone call pilot (parité R13,
-// ÉFVP 2026-10-22, server/outbound-calls.ts). Off until an admin turns it
+// ÉFVP 2026-10-22, server/outbound/outbound-calls.ts). Off until an admin turns it
 // on; every call says the callback number set here, so none is placed
 // without it; numbers on the do-not-call list are never called. Members do
 // not get this section, and the server answers them 403. The callback number

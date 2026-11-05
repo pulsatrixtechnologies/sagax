@@ -2,6 +2,8 @@
 
 The public documentation site is a Next.js 16 + Fumadocs app. User-facing content lives in `content/docs`; the repository's top-level `docs` folder remains available for implementation notes and detailed platform records.
 
+A site page that also keeps an older repository path (`docs/deploy-vps.md`) has a generated copy there: edit the `.mdx`, then run `pnpm docs:copies` from the repository root (`scripts/docs-copies.mjs`).
+
 ## Develop
 
 From the repository root:

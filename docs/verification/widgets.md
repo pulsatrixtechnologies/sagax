@@ -12,7 +12,7 @@ To see widgets with a real bot, paste the prompts in
 Run the launcher-managed fake-engine fixture:
 
 ```sh
-pnpm exec vitest run server/chat-widgets.e2e.test.ts
+pnpm exec vitest run server/widgets/chat-widgets.e2e.test.ts
 ```
 
 The test starts a disposable server and obtains a real turn capability from

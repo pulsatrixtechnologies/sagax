@@ -3,7 +3,7 @@
 Launch the isolated server and real Files component:
 
 ```sh
-node --experimental-strip-types scripts/verify-computer-files.ts
+node --experimental-strip-types scripts/verify/dev/verify-computer-files.ts
 ```
 
 Open the printed `previewUrl`. The fixture creates four synthetic files and
@@ -33,7 +33,7 @@ Check the following in the browser:
 Focused checks:
 
 ```sh
-pnpm exec vitest run src/components/ComputerFilesPane.test.ts src/components/AttachmentGallery.test.ts src/components/AttachmentPreview.test.ts server/message-file.test.ts scripts/testing/verification-docs.test.ts
+pnpm exec vitest run src/components/ComputerFilesPane.test.ts src/components/AttachmentGallery.test.ts src/components/AttachmentPreview.test.ts server/messages/message-file.test.ts scripts/testing/verification-docs.test.ts
 pnpm typecheck
 pnpm lint
 pnpm i18n:check

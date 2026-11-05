@@ -671,6 +671,9 @@ const bridge = {
       ...(request?.focus === false ? { focus: false } : {}),
     }),
     close: (artifactId) => ipcRenderer.invoke("artifact-window:close", { artifactId: String(artifactId ?? "") }),
+    /** A claude.ai artifact (#2018) on claude.ai itself, in a window whose
+     * persistent session keeps the person's claude.ai sign-in. */
+    openClaudeAi: (url) => ipcRenderer.invoke("artifact-window:open-claude-ai", { url: String(url ?? "") }),
     onClosed: cb => {
       const handler = (_event, value) => {
         if (value && typeof value.artifactId === "string" && typeof value.botId === "string") cb({ botId: value.botId, artifactId: value.artifactId });

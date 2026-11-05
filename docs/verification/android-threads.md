@@ -46,7 +46,7 @@ when leaving the chat. Dictated text and attachments remain memory-only.
 From the repository root, exercise the existing server contract:
 
 ```sh
-pnpm exec vitest run server/paired-thread-targets-api.test.ts server/independent-threads-api.test.ts server/bot-projects-api.test.ts server/thread-capacity-api.test.ts
+pnpm exec vitest run server/paired-thread-targets-api.test.ts server/workspace/independent-threads-api.test.ts server/bot-projects-api.test.ts server/thread-capacity-api.test.ts
 ```
 
 These launch isolated fake-provider fixtures. No server routes or pairing

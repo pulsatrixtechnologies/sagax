@@ -45,7 +45,7 @@ function innerArgs(value: unknown): unknown {
 }
 
 /** `<server>_<tool>` split on a known server first, else on the first `_`
- * (server names are written with dashes: `pulsatrix-psa_cw_psa__query`). */
+ * (server names are written with dashes: `pulsatrix-psa_cw_psa_query`). */
 function splitPrefixed(name: string, servers: readonly string[]): { server: string; tool: string } | undefined {
   const known = [...servers].sort((a, b) => b.length - a.length).find((server) => name.startsWith(`${server}_`) && name.length > server.length + 1);
   if (known) return { server: known, tool: name.slice(known.length + 1) };

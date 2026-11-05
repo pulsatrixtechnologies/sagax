@@ -9,13 +9,17 @@ import CompanionCore
 
 // MARK: - Keyboard
 
-/// ⌘K palette, ⌘N New, ⌘1 to ⌘9 a bot, ⌘⇧[ / ⌘⇧] previous and next bot,
-/// ⌘/ the shortcuts, ⌘\ the sidebar rail (⌘, Settings is the app menu's,
-/// CompanionApp.swift). Invisible buttons:
+/// The app-wide chords of the desktop's catalog (src/lib/keyboard-shortcuts.ts,
+/// App.tsx): ⌘K palette, ⌘⇧F the palette too (search everything), ⌘N New,
+/// ⌘⇧N New in group mode, ⌘1 to ⌘9 a bot, ⌘⇧[ / ⌘⇧] previous and next bot,
+/// ⌘/ the shortcuts, ⌘B the sidebar rail (⌘\ kept as before), and ⌘I,
+/// ⌘L, ⌘D for the open chat's composer (DesktopComposerCommand). ⌘,
+/// Settings is the app menu's (CompanionApp.swift). Invisible buttons:
 /// iPadOS lists them in its ⌘ overlay under these titles.
 struct DesktopKeyCommands: View {
     @EnvironmentObject private var session: Session
     @EnvironmentObject private var model: DesktopShellModel
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         ZStack {
@@ -35,17 +39,34 @@ struct DesktopKeyCommands: View {
             }
             command("Previous bot", key: "[", modifiers: [.command, .shift]) { model.step(-1, in: session) }
             command("Next bot", key: "]", modifiers: [.command, .shift]) { model.step(1, in: session) }
+            command("Search conversations and messages", key: "f", modifiers: [.command, .shift]) { model.menu = nil; model.modal = .search }
+            command("Create a group chat", key: "n", modifiers: [.command, .shift]) {
+                model.composeGroupMode = true
+                model.menu = DesktopMenuRequest(kind: .new, anchor: newAnchor)
+            }
             command("Keyboard shortcuts", key: "/") { model.modal = .shortcuts }
+            // ⌘B and ⌘I are the menu bar's (CompanionApp.swift `.commands`)
             command("Toggle sidebar", key: "\\") { model.toggleCollapsed() }
+            command("Quote the selected text in the message", key: "l") { DesktopComposerCommand.post(.quote) }
+            command("Dictate into the message field (again to stop)", key: "d") { DesktopComposerCommand.post(.dictate) }
         }
         .opacity(0)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+        // Put on the desktop opens its window through the shell's openWindow
+        .onAppear { DesktopFloatingBots.shared.openWindow = openWindow }
+        .onReceive(NotificationCenter.default.publisher(for: Self.toggleSidebar)) { _ in model.toggleCollapsed() }
     }
+
+    /// ⌘B from the menu bar.
+    static let toggleSidebar = Notification.Name("sagax.desktop.toggleSidebar")
+    static func postToggleSidebar() { NotificationCenter.default.post(name: toggleSidebar, object: nil) }
 
     /// Under the round New button (brand row, or the rail's second circle).
     private var newAnchor: CGPoint {
-        model.density == .icons ? CGPoint(x: 21.5, y: 124) : CGPoint(x: model.sidebarWidth - 49, y: 80)
+        // the head starts at the top without the logo (6 + 36 + 4), under the 36 pt band with it
+        let brand = SidebarLogoRuntime.isBrandVisible(UserDefaults.standard.object(forKey: SidebarLogoPreference.key) as? Bool ?? SidebarLogoPreference.defaultEnabled)
+        return model.density == .icons ? CGPoint(x: 21.5, y: 124) : CGPoint(x: model.sidebarWidth - 49, y: brand ? 82 : 46)
     }
 
     private func command(
@@ -53,6 +74,61 @@ struct DesktopKeyCommands: View {
     ) -> some View {
         Button(action: action) { Text(title) }
             .keyboardShortcut(key, modifiers: modifiers)
+    }
+}
+
+/// ⌘I, ⌘L and ⌘D reach the open chat's composer (ChatView's desktop
+/// composer listens): go to the field, quote the selected text, dictate.
+enum DesktopComposerCommand: String {
+    case focus, quote, dictate
+
+    static let notification = Notification.Name("sagax.desktop.composerCommand")
+
+    static func post(_ command: DesktopComposerCommand) {
+        NotificationCenter.default.post(name: notification, object: command.rawValue)
+    }
+
+    static func from(_ note: Notification) -> DesktopComposerCommand? {
+        (note.object as? String).flatMap(DesktopComposerCommand.init(rawValue:))
+    }
+
+    /// The text selected where the focus is (a transcript's selectable
+    /// text, a field), for ⌘L; nil when nothing is selected.
+    @MainActor
+    static func selectedText() -> String? {
+        guard let input = FirstResponderFinder.find() as? UITextInput,
+              let range = input.selectedTextRange, !range.isEmpty,
+              let text = input.text(in: range)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty
+        else { return nil }
+        return text
+    }
+
+    /// `quoteSelection`: each line of the selection behind "> ", then a
+    /// blank line, after what the draft already holds.
+    static func quoted(_ selection: String, into draft: String) -> String {
+        let quote = selection.split(separator: "\n", omittingEmptySubsequences: false).map { "> \($0)" }.joined(separator: "\n")
+        let head = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "" : draft + (draft.hasSuffix("\n") ? "" : "\n")
+        return head + quote + "\n\n"
+    }
+}
+
+/// The first responder, through a nil-targeted action.
+@MainActor
+private enum FirstResponderFinder {
+    private static weak var found: UIResponder?
+
+    static func find() -> UIResponder? {
+        found = nil
+        UIApplication.shared.sendAction(#selector(UIResponder.desktopCaptureFirstResponder), to: nil, from: nil, for: nil)
+        return found
+    }
+
+    fileprivate static func capture(_ responder: UIResponder) { found = responder }
+}
+
+extension UIResponder {
+    @objc fileprivate func desktopCaptureFirstResponder() {
+        MainActor.assumeIsolated { FirstResponderFinder.capture(self) }
     }
 }
 
@@ -99,6 +175,14 @@ struct DesktopSidebarPrompts: ViewModifier {
                 if let team = model.sharingTeam {
                     DesktopShareTeamSheet(team: team) { model.sharingTeam = nil }
                         .environmentObject(session)
+                }
+            }
+            .sheet(isPresented: Binding(
+                get: { model.sharingBotLink != nil },
+                set: { if !$0 { model.sharingBotLink = nil } }
+            )) {
+                if let link = model.sharingBotLink {
+                    DesktopActivityView(items: [link]) { model.sharingBotLink = nil }
                 }
             }
             .sheet(item: $model.replacingPrimary) { bot in

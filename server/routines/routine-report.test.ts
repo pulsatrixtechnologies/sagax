@@ -56,10 +56,30 @@ describe("routineReportOutcome", () => {
 describe("flowRunBlockedReason", () => {
   it("names Flow refusals that must end a Sagax routine run as blocked", () => {
     expect(flowRunBlockedReason("Blocking run: previous has not been closed: one routine run at a time"))
-      .toMatch(/has not been closed/i);
-    expect(flowRunBlockedReason("unknown routine: hourly-qc1-tunnel-watch")).toMatch(/unknown routine/i);
-    expect(flowRunBlockedReason("run_exists: lease still held")).toMatch(/run_exists/i);
-    expect(flowRunBlockedReason("previous_unclosed")).toMatch(/previous_unclosed/i);
+      .toMatch(/earlier run of this Flow routine is still open/i);
+    expect(flowRunBlockedReason("unknown routine: hourly-qc1-tunnel-watch")).toMatch(/does not know the routine "hourly-qc1-tunnel-watch"/);
+    expect(flowRunBlockedReason("run_exists: lease still held")).toMatch(/already holds a run/i);
+    expect(flowRunBlockedReason("previous_unclosed")).toMatch(/never closed/i);
+  });
+
+  // 2026-11-03 production (Monday billing pass): a JSON refusal reads in
+  // plain words, never as its first line "{".
+  it("reads a JSON refusal, split across lines, in plain words", () => {
+    const refusal = `<<<UNTRUSTED source="tool">>>\n{\n  "ok": false,\n  "error": "run_exists",\n  "message": "PX_FLOW_RUN_DIR already holds a run"\n}`;
+    const reason = flowRunBlockedReason(refusal)!;
+    expect(reason).toMatch(/already holds a run/i);
+    expect(reason).not.toBe("{");
+    expect(flowRunBlockedReason(JSON.stringify({ ok: false, error: "a run of routine x (r1) started at t, last event none, has not been closed: one routine run at a time" })))
+      .toMatch(/still open/i);
+  });
+
+  it("never blocks on a document or a successful result that only names a refusal code", () => {
+    // read_file of SKILL.md, the false positive that blocked the run
+    const skill = JSON.stringify({ path: "/workspace/skills/running-px-flow/SKILL.md", content: `${"Flow runs. ".repeat(200)}\n\`run init\` reports an earlier run as \`previous_unclosed\` (an anomaly)` }, null, 2);
+    expect(flowRunBlockedReason(skill)).toBeUndefined();
+    expect(flowRunBlockedReason(`# Running\n${"Prose. ".repeat(200)}\nrun init reports previous_unclosed`)).toBeUndefined();
+    // run init succeeded and noted an earlier unclosed run: not a refusal
+    expect(flowRunBlockedReason(JSON.stringify({ run_id: "r2", routine: "x", previous_unclosed: { run_id: "r1" } }))).toBeUndefined();
   });
 
   it("ignores ordinary tool output so a healthy Flow run stays completed", () => {
@@ -118,5 +138,44 @@ describe("the bot's own run status (2026-11-01)", () => {
       expect(routineRunReportable({ status, startedBy: "person" }), status).toBe(true);
     }
     expect(routineRunReportable({ status: "nothing_to_report", startedBy: "person" })).toBe(false);
+  });
+});
+
+describe("a wake on teammates' messages is never quiet (production, 2026-11-02)", async () => {
+  const { peerWakeOutcome } = await import("./routines.ts");
+  const { routineReportOutcome } = await import("./routine-report.ts");
+  const peer = { proactive: { mode: "proactive" as const, hops: 1, sources: ["peer"], peerDigest: "Messages from teammates:\n- Osprey: Urgent 100200" } };
+
+  it("keeps the bot's words without the marker", () => {
+    const outcome = peerWakeOutcome(peer, routineReportOutcome("Already told you at 1:32 p.m. ET. Nothing new.\n\nNOTHING_TO_REPORT"));
+    expect(outcome).toMatchObject({ quiet: false, report: "Already told you at 1:32 p.m. ET. Nothing new." });
+  });
+
+  it("falls back to the digest when the bot said nothing else", () => {
+    expect(peerWakeOutcome(peer, routineReportOutcome("NOTHING_TO_REPORT")).report).toBe(peer.proactive.peerDigest);
+    expect(peerWakeOutcome(peer, routineReportOutcome("")).quiet).toBe(false);
+  });
+
+  it("a wake on a post in a two-bot DM (alwaysReport) is never quiet either", () => {
+    const dm = { proactive: { mode: "proactive" as const, hops: 1, sources: ["bot"], alwaysReport: true as const, peerDigest: "Messages from teammates:\n- Post by Osprey in K and M" } };
+    expect(peerWakeOutcome(dm, routineReportOutcome("NOTHING_TO_REPORT"))).toMatchObject({ quiet: false, report: dm.proactive.peerDigest });
+    const room = { proactive: { mode: "proactive" as const, hops: 1, sources: ["bot"] } };
+    expect(peerWakeOutcome(room, routineReportOutcome("NOTHING_TO_REPORT")).quiet).toBe(true);
+  });
+
+  it("leaves other wakes and routines as they were", () => {
+    const mail = { proactive: { mode: "proactive" as const, hops: 0, sources: ["mail"] } };
+    expect(peerWakeOutcome(mail, routineReportOutcome("NOTHING_TO_REPORT")).quiet).toBe(true);
+    expect(peerWakeOutcome({}, routineReportOutcome("NOTHING_TO_REPORT")).quiet).toBe(true);
+  });
+});
+
+describe("items only the person can do (2026-11-05)", () => {
+  it("are never quiet and always post, whatever postResults says", () => {
+    const outcome = routineReportOutcome("- [HUMAIN] **100201**: decide which client it belongs to.\nNOTHING_TO_REPORT");
+    expect(outcome.quiet).toBe(false);
+    expect(outcome.report).toBe("- [HUMAIN] **100201**: decide which client it belongs to.");
+    expect(routineRunReportable({ status: "completed", postResults: false, attention: true })).toBe(true);
+    expect(routineRunReportable({ status: "completed", postResults: false })).toBe(false);
   });
 });

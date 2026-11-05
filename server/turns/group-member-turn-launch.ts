@@ -1,7 +1,17 @@
 // @ts-nocheck
 // #1388 wave 4 step 3: runGroupMemberTurn phase. Never imports server/index.ts.
+import { hideServerPathsInSections } from "../server-path-prompt.ts";
+import { onDemandPromptParts, onDemandPromptText, promptReferencesAvailable } from "../context/prompt-references.ts";
 import type { GroupMemberTurnHost } from "./group-member-turn-types.ts";
 import type { GroupMemberTurnCtx } from "./group-member-turn-ctx.ts";
+import { subagentTurnModel } from "../../shared/routine-model.ts";
+
+/** #2038: a room member's Claude sub-agents run on the bot's fast model when
+ * it is on the turn's engine (no routine model exists in a room). */
+export function roomSubagentModel(bot: { modelSelection: { instanceId: string; fast?: { instanceId: string; model: string } } }, turnInstanceId: string): { subagentModel?: string } {
+  const subagentModel = subagentTurnModel({ fast: bot.modelSelection.fast, turnInstanceId, botInstanceId: bot.modelSelection.instanceId });
+  return subagentModel ? { subagentModel } : {};
+}
 
 export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
   const {
@@ -150,6 +160,7 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     mountPersonalMcp,
     mountPluginMcp,
     mountUserSandbox,
+    syncPluginsForTurn,
     myChromePromptFor,
     noteBotRead,
     notifyAccess,
@@ -236,6 +247,8 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     workplaceTurnText,
     workspaceCwdPrompt,
     workspaceLocationsPrompt,
+    sandboxFolderFor,
+    serverPathView,
     groupTurnCwd,
     effectiveRoomTurnTimeoutMinutes,
     roomTurnTimeoutMessage,
@@ -358,7 +371,7 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
   const resolvedLatestImages = latestUser?.text && !cardContinuation && !latestInBurst
     ? extractTurnImages(latestUser.text)
     : { text: latestUser?.text ?? "", images: [] };
-  // stored files sealed at rest go plain for the engine (server/content-at-rest.ts)
+  // stored files sealed at rest go plain for the engine (server/encryption/content-at-rest.ts)
   const roomAttachmentsHold = cardContinuation ? undefined : holdTurnAttachments(threadId, [latestUser?.text], [...burstImages, ...resolvedLatestImages.images], { picturesByPath: instance.driverKind === "codex" });
   if (roomAttachmentsHold) await roomAttachmentsHold;
   // Organization server: where this room turn's tools run (the person whose
@@ -410,16 +423,16 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     attachCustomMcp(integrations, mounted.servers, cfg);
     roomGithubWithheld = mounted.githubWithheld;
   }
-  // Slice 5: the bot's Perspicax profiles, as the person who speaks in the room.
+  // The account's main Perspicax connection, as the person who speaks in the room.
   let roomPerspicaxPrompt = "";
-  if (IDENTITY.kind === "perspicax" && instance.adapter.capabilities.customMcp === true && (store.bot(bot.id) ?? bot).perspicax?.profiles.length) {
+  if (IDENTITY.kind === "perspicax" && instance.adapter.capabilities.customMcp === true) {
     // A room turn with no person behind it (a goal routine, any other
     // automation) is never the owner speaking for MCP.
     const perspicax = await perspicaxTurnIntegration({
       bot,
       threadId,
       generation: internalGeneration,
-      speaker: roomSpeakerId ? { origin: "person", principalId: roomSpeakerId, groupId } : roomRoutineSpeaker(threadId) ?? { origin: "owner-routine" },
+      speaker: roomAccessSpeaker,
       taken: Object.keys(integrations.custom ?? {}),
       from: { botId: bot.id, name: bot.name, color: bot.color }
     });
@@ -778,6 +791,8 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
   const outsideRoom = integrations.agents && !roomPeerHop && orchestration && !orchestration.roomHandoffId
     ? reachablePeers(store.bots, bot).filter((peer) => !readyGroup.memberIds.includes(peer.id))
     : [];
+  const referenceReads = promptReferencesAvailable(Boolean(integrations.agents), roomToolScope);
+  const referenceText = (text: string) => onDemandPromptText(text, referenceReads);
   const system = [
     `You are ${bot.name}, a bot in the room "${readyGroup.name}" in Sagax.`,
     bot.title && `Role: ${bot.title}.`,
@@ -785,12 +800,12 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     `Room members: ${roster}, and ${userName} (the human).`,
     readyGroup.bulletin.trim() && `Room bulletin (shared instructions for everyone):\n${readyGroup.bulletin.trim()}`,
     `Reply as yourself, briefly and conversationally. To bring a teammate in, mention them like @Name — they'll see the conversation and respond.`,
-    outsideRoom.length > 0 && roomPeerRosterSystemPrompt(outsideRoom),
-    integrations.agents && (CREDENTIAL_PROMPT + REACTION_PROMPT + (orchestration && !orchestration.roomHandoffId && !roomPeerHop ? THREADS_PROMPT : "")).trim(),
+    outsideRoom.length > 0 && referenceText(roomPeerRosterSystemPrompt(outsideRoom)),
+    integrations.agents && referenceText(CREDENTIAL_PROMPT + REACTION_PROMPT + (orchestration && !orchestration.roomHandoffId && !roomPeerHop ? THREADS_PROMPT : "")).trim(),
     integrations.agents && (!orchestration || orchestration.roomHandoffId) && "For actual Sagax teamwork, discover IDs with list_room_targets and use coordinate_bots for advice or work in this or another room. Do not substitute native coding helpers for these named bots. Consult only when needed to make a decision; no discussion step is mandatory. Give concrete responsibilities, exact accessible paths and acceptance checks. End your turn after assigning; busy teammates queue and results automatically resume you. When they return, finish the requested verification and give the user one final answer. Native helper names are not evidence that a Sagax teammate participated. Plain @mentions are only for conversational replies in this room.",
-    integrations.agents && ROUTINE_PROMPT.trim(),
-    integrations.agents && botProfilePrompt(bot).trim(),
-    skillAuthoring && LEARN_PROMPT.trim(),
+    integrations.agents && referenceText(ROUTINE_PROMPT).trim(),
+    integrations.agents && referenceText(botProfilePrompt(bot)).trim(),
+    skillAuthoring && referenceText(LEARN_PROMPT).trim(),
     orchestration?.systemInstructions,
   ]
     .filter(Boolean)
@@ -847,6 +862,9 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
   const cwd = workspace && cloudGuestOpened(threadId)
     ? ensureTaskWorkspace(bot.id, threadId)
     : groupTurnCwd(workspace, () => store.pinGroupCwd(readyGroup.id, threadId));
+  if (IDENTITY.kind === "perspicax" && roomPrincipal) {
+    await syncPluginsForTurn(roomPrincipal, internalGeneration, bot.id);
+  }
   {
     const drift = checkSoulDrift(bot.id, bot.soul ?? "", bot.soulHash ?? "");
     if (drift.drift !== Boolean(bot.soulDrift)) store.patchBot(bot.id, { soulDrift: drift.drift });
@@ -887,12 +905,16 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     ? compactPromptFor(readyBot, roomSpeakerId || effectiveBotOwner(readyBot))
     : undefined;
   const roomPromptLevel = roomTurnApprovalMode(readyBot, threadId, orchestration);
-  const roomBuilt = buildSystemPrompt(system, store.bot(bot.id)?.soul ?? bot.soul ?? "", [
+  // 2026-11-02 (production): no server path for an engine without file
+  // tools on the Sagax server (server/server-path-prompt.ts)
+  const roomServerFiles = !withholdHostToolsFor(instance);
+  const roomEnvironmentFolder = roomServerFiles ? null : sandboxFolderFor?.(bot.id) ?? null;
+  const roomParts = [
     { id: "finish-until", label: "Do not finish until", text: finishUntilPrompt(store.bot(bot.id)?.finishUntil ?? bot.finishUntil) },
     { id: "user-profile", label: "About the user", text: userProfileSystemPrompt(botUserProfile(bot)) },
     { id: "model", label: "Model", text: modelPrompt({ engine: engineDisplayName(instance), model: roomModel, actual: modelFallbackByPayer.get(modelFallbackPayerKey(threadId, instance.instanceId, roomModel)) }) },
-    { id: "files", label: "File locations", text: workspace ? workspaceLocationsPrompt(bot.id, cwd, readyBot.cwd, { attachFile: Boolean(integrations.agents) && !HOSTED_WORKSPACE, ...(roomStable ? { cwdElsewhere: true } : {}) }) : "" },
-    { id: "files-cwd", label: "Current working folder", text: roomStable && workspace ? workspaceCwdPrompt(cwd) : "" },
+    { id: "files", label: "File locations", text: workspace ? workspaceLocationsPrompt(bot.id, cwd, readyBot.cwd, { attachFile: Boolean(integrations.agents) && !HOSTED_WORKSPACE, ...(roomStable ? { cwdElsewhere: true } : {}), serverFiles: roomServerFiles, environmentFolder: roomEnvironmentFolder }) : "" },
+    { id: "files-cwd", label: "Current working folder", text: roomStable && workspace && roomServerFiles ? workspaceCwdPrompt(cwd) : "" },
     { id: "shell", label: "Long-running commands", text: workspace ? longCommandsPrompt(roomComputerPromptKind) : "" },
     { id: "mcp", label: "MCP servers", text: customMcpPrompt(Object.keys(integrations.custom ?? {})) + githubWithheldPrompt(roomGithubWithheld) },
     { id: "perspicax", label: "Perspicax", text: roomPerspicaxPrompt },
@@ -922,7 +944,7 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     { id: "rules", label: "Rules (RULES.md)", text: rulesSystemPrompt(bot.id, { writes: Boolean(integrations.agents) }) },
     { id: "memory", label: "Memory", text: roomMemory ? `\n${roomMemory.trim()}` : "" },
     { id: "host-tools", label: "Host tools", text: withholdHostToolsFor(instance) ? WITHHELD_HOST_TOOLS_PROMPT : "" },
-    { id: "docs", label: "Documents index", text: docsIndexPrompt(bot.id, { tools: integrations.agents ? "agents" : workspace ? "files" : "none" }) },
+    { id: "docs", label: "Documents index", text: docsIndexPrompt(bot.id, { tools: integrations.agents ? "agents" : workspace && roomServerFiles ? "files" : "none" }) },
     // The group's shared memory: every bot of the group reads it here; only
     // explicit group_memory_update writes reach it (server/memory/group-memory.ts).
     { id: "group-memory", label: "Group memory", text: (() => {
@@ -931,10 +953,14 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     })() },
     // readyBot was captured before awaited setup work; an assignment PUT in
     // that window must still reach this turn's prompt.
-    { id: "skills", label: "Skills index", text: scopedSkillsPrompt(bot, instance, roomPrincipal ?? "", { managedTools: skillDiscoveryAvailable(Boolean(integrations.agents), roomToolScope), fileAccess: Boolean(workspace), syncNative: true })?.text ?? "" },
-    { id: "skill-instructions", label: "Skill instructions", text: renderSkillInstructions(selectedSkills, { includeRoot: Boolean(workspace) }) },
+    { id: "skills", label: "Skills index", text: scopedSkillsPrompt(bot, instance, roomPrincipal ?? "", { managedTools: skillDiscoveryAvailable(Boolean(integrations.agents), roomToolScope), fileAccess: Boolean(workspace), syncNative: true, nativeWorkspace: workspace ? ensureTaskWorkspace(bot.id, threadId) : undefined })?.text ?? "" },
+    { id: "skill-instructions", label: "Skill instructions", text: renderSkillInstructions(selectedSkills, { includeRoot: Boolean(workspace) && roomServerFiles }) },
     { id: "playbooks", label: "Playbooks", text: installedPlaybookInstructions(text, bot.playbooks) },
-  ], roomStable || instance.driverKind === "claudeAgent"
+  ];
+  const referencedParts = onDemandPromptParts(roomParts, referenceReads);
+  const roomHidden = roomServerFiles ? null : hideServerPathsInSections(referencedParts, serverPathView(bot.id));
+  if (roomHidden?.leaked.length) console.warn(`[prompt] server paths hidden for ${bot.id} (no server file tools): ${roomHidden.leaked.join(", ")}`);
+  const roomBuilt = buildSystemPrompt(system, store.bot(bot.id)?.soul ?? bot.soul ?? "", roomHidden?.sections ?? referencedParts, roomStable || instance.driverKind === "claudeAgent"
     ? new Set([
       ...(instance.driverKind === "claudeAgent" ? CLAUDE_REUSE_VOLATILE_SECTIONS : []),
       ...(roomStable ? COMPACT_VOLATILE_SECTIONS : []),
@@ -1101,6 +1127,7 @@ const sendRoomTurn = async (roomTurnAccess: TurnAccess | undefined) => {
       return instance.adapter.sendTurn({
         threadId,
         botId: readyBot.id,
+        principalId: orgSpeakerPrincipal(readyBot, roomSpeaker),
         ...(roomCompactPrompt ? { compactPrompt: roomCompactPrompt } : {}),
         ...(roomTurnAccess ? { access: roomTurnAccess } : {}),
         text: engineCommand ? engineCommand.engineText : withRecalled(roomRecalled, text),
@@ -1128,7 +1155,9 @@ const sendRoomTurn = async (roomTurnAccess: TurnAccess | undefined) => {
         mcpCallTimeoutMs: mcpCallTimeoutMinutes(cfg) * 60_000,
         ...(instance.instanceId === roomTurnSelection(readyBot).instanceId
           ? memberTurnSelection(roomTurnSelection(readyBot))
-          : { model: instance.models.default })
+          : { model: instance.models.default }),
+        // #2038: Claude sub-agents run on the bot's fast model (same engine).
+        ...roomSubagentModel(readyBot, instance.instanceId)
       });
     };
     // #1137: when the owner pays, the owner's computer serves its model.
@@ -1369,11 +1398,12 @@ if (providerDispatched) throw error;
     }
     if (!roomSpeaker && !isSpendCap && !isVariantError && !isToolScopeError) throw error;
     const message = error instanceof Error ? error.message : "Local VM setup failed";
-    store.appendMessage(threadId, {
+    const failure = store.appendMessage(threadId, {
       role: "bot", kind: "activity",
       from: { botId: bot.id, name: bot.name, color: bot.color },
       tool: failedTurnTool(message, error instanceof PlaceUnavailableError ? { place: error.row } : {})
     });
+    orchestration?.onFailureRecorded?.(failure.id);
     onDispatchError?.(message);
     if (orchestration) {
       // A spend-cap refusal is deterministic: record it as its own

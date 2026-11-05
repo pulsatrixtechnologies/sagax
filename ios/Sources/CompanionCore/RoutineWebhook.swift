@@ -16,7 +16,7 @@ public enum RoutineWebhook {
     }
 
     /// Where a delivery posts: `{baseUrl}/hooks/{endpointId}`
-    /// (server/webhook-ingress.ts), nil when the endpoint id is not one.
+    /// (server/triggers/webhook-ingress.ts), nil when the endpoint id is not one.
     public static func url(baseURL: String?, webhook: WebhookListing) -> String? {
         WebhookPublicURL.make(baseURL: baseURL, endpointId: webhook.endpointId, typed: false)
     }

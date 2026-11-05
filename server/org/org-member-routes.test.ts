@@ -5,7 +5,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ConsoleAssertion } from "../oidc-rp.ts";
+import type { ConsoleAssertion } from "../auth/oidc-rp.ts";
 import { createOrgMemberRoutes, MEMBER_PROGRESS_MIN_MS, QUESTION_DECLINED_MESSAGE, readThreadPage, replyAfter, summarizeTurn, type MemberPerson, type MemberRequest, type OrgMemberRouteDeps, type ThreadStatus } from "./org-member-routes.ts";
 
 const ISS = "https://perspicax.example";
@@ -628,6 +628,11 @@ describe("the AI-client approval loop (2026-10-17)", () => {
       { question: "Which branch?", options: [{ id: "1", label: "main" }, { id: "2", label: "dev" }] },
     ] });
     expect(routine).toMatchObject({ kind: "request", answerWith: "decision", choices: [{ id: "1", label: "Save" }, { id: "2", label: "Not now" }] });
+    // #1940: when the card has no expiresAt, fill from createdAt + policy days.
+    const withPolicy = readThreadPage("t1", { messages: [
+      { id: "c1", role: "bot", kind: "options", at: 1_000, card: bashCard() },
+    ] }, null, 7);
+    expect(withPolicy.approvals[0]?.expiresAt).toBe(1_000 + 7 * 86_400_000);
   });
 
   it("a bare allow on a three-option question is 409 option_required with the options; nothing is answered", async () => {
@@ -756,6 +761,32 @@ describe("the AI-client approval loop (2026-10-17)", () => {
     performed = [];
     expect((await call("GET", "approvals", token("bob"))).body).toEqual({ approvals: [], count: 0 });
     expect(performed.map((p) => p.request.path)).toEqual(["/api/bots"]);
+  });
+
+  it("lists an open routine proposal card (manage_routine) on an idle thread (#1996)", async () => {
+    status = () => "idle";
+    hiddenThread = () => null;
+    const proposal = { requestId: "req_rt", title: "Create the routine Osprey digest?", tool: "manage_routine", options: ["Approve", "Decline"], routineRequest: { operation: "create" } };
+    cards.set("t1/req_rt", { open: true, ownerPrincipalId: "pr_bob", ownerName: "Bob", adminOnly: false });
+    deps.openProposal = (threadId) => threadId === "t1";
+    respond = (request) => {
+      if (request.path === "/api/bots") return { status: 200, body: { bots: [
+        { id: "b1", name: "Wren", threadId: "t1", tasks: [] },
+        { id: "b2", name: "Atlas", threadId: "t3", tasks: [] },
+      ] } };
+      const thread = /\/api\/threads\/([\w-]+)\/messages/.exec(request.path)?.[1] ?? "";
+      return { status: 200, body: { messages: thread === "t1" ? [{ id: "m1", role: "bot", kind: "options", at: 70, card: proposal }] : [] } };
+    };
+    try {
+      const got = await call("GET", "approvals", token("bob"));
+      expect(got.status, JSON.stringify(got.body)).toBe(200);
+      expect(got.body.approvals.map((a: { id: string }) => a.id)).toEqual(["req_rt"]);
+      expect(got.body.approvals[0]).toMatchObject({ threadId: "t1", botId: "b1", tool: "manage_routine", canAnswer: true });
+      // the idle thread without a proposal is never read
+      expect(performed.some((p) => p.request.path.includes("/t3/"))).toBe(false);
+    } finally {
+      deps.openProposal = undefined;
+    }
   });
 
   it("send_prompt and await_turn that stop on a card carry it in line, with what to call next", async () => {

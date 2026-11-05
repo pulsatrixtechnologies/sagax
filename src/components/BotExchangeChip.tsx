@@ -3,18 +3,18 @@
 // stored; this only changes how they are drawn.
 import { createContext, useCallback, useContext, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeftRight, X } from "lucide-react";
+import { ArrowLeftRight } from "lucide-react";
 import { formatTime, type Bot } from "@/state/store";
 import { ConversationLink } from "./ConversationLink";
 import { PartyAvatar, isAgentParty } from "./PartyAvatar";
 import { activeLocale, t } from "@/lib/i18n";
 import { MAUS_COLORS, mausInk, type MausColor } from "@/lib/mascot";
 import { botBubbleVars } from "@/lib/bubble-colors";
-import { CHAT_BUBBLE_WIDTH_CLASS, CHAT_COLUMN_CLASS, chatBubbleWidth } from "@/lib/chat-bubble-width";
+import { chatBubbleWidth, useChatBubbleWidthClasses, useChatColumnClass } from "@/lib/chat-bubble-width";
 import { prefersWideBubble } from "@/lib/rich-blocks";
 import { runCorners } from "@/lib/room-authors";
 import { cn } from "@/lib/cn";
-import { CIRCLE_BUTTON } from "@/lib/circle-button";
+import { PILL } from "./SettingsPrimitives";
 import { getExchangeColumnHost, setExchangeColumnHost, subscribeExchangeColumnHost } from "@/lib/exchange-column-host";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ClusterLabel } from "./ClusterLabel";
@@ -55,7 +55,7 @@ export function useExchangeColumn(): { node: HTMLElement | null; ref: (node: HTM
 }
 
 /** Context column, else the registered chat-column host (bot panel sheets). */
-function useExchangePortalHost(): HTMLElement | null {
+export function useExchangePortalHost(): HTMLElement | null {
   const column = useContext(ExchangeColumnContext);
   const [host, setHost] = useState<HTMLElement | null>(() => getExchangeColumnHost());
   useEffect(() => subscribeExchangeColumnHost(() => setHost(getExchangeColumnHost())), []);
@@ -90,8 +90,10 @@ export function TranscriptDate({ at }: { at: number }) {
 /** `loadError`: the thread's lines could not be read; `onRetry` reads them
  * again. With no line to show, the sheet says so rather than staying blank
  * (#1502). Routine runs reuse this sheet with an optional quiet meta line
- * under the header and an opaque footer band of actions (Continue, Stop, …).
- * Close sits in the header as a round X, like other side surfaces. */
+ * under the header and its actions (Continue, Stop, …) in the footer row.
+ * Close is one "Close Chat" pill at the bottom, in place of the composer, as
+ * in Grok Bot: alone and centered, or last in the routine run's action row.
+ * Escape closes too. */
 export function ExchangeSheet({
   run,
   bots,
@@ -101,6 +103,7 @@ export function ExchangeSheet({
   onRetry,
   meta,
   footer,
+  pinned,
   closeLabel,
   testId = "bot-exchange-sheet",
   ariaLabel,
@@ -113,17 +116,26 @@ export function ExchangeSheet({
   onRetry?: () => void;
   /** Quiet status line under the header pill (routine runs). */
   meta?: ReactNode;
-  /** Opaque footer band of actions (routine runs: Continue, Stop, …). */
+  /** Actions placed in the footer row before Close Chat (routine runs:
+   * Continue, Stop, …); its children are the row's items. */
   footer?: ReactNode;
+  /** What waits on the person (a routine run's open approval or question,
+   * 2026-11-04): pinned above the footer, answerable there, never more than
+   * half the sheet. */
+  pinned?: ReactNode;
   closeLabel?: string;
   testId?: string;
   ariaLabel?: string;
 }) {
+  const chatColumnClassName = useChatColumnClass();
+  const bubbleWidths = useChatBubbleWidthClasses();
   const column = useExchangePortalHost();
-  const closeText = closeLabel ?? t("common.close");
+  const closeText = closeLabel ?? t("chat.exchange.closeChat");
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
+      // An open menu off the footer (the routine run's ⋯) takes Escape first.
+      if (document.querySelector("[data-anchored-popover]")) return;
       event.preventDefault();
       event.stopPropagation();
       onClose();
@@ -161,23 +173,13 @@ export function ExchangeSheet({
           })}
         </div>
         {meta && <div data-exchange-meta className="max-w-[min(92%,36rem)] px-4 text-center text-[12px] text-ink-secondary">{meta}</div>}
-        <button
-          type="button"
-          data-testid="bot-exchange-close"
-          onClick={onClose}
-          aria-label={closeText}
-          title={closeText}
-          className={cn(CIRCLE_BUTTON, "absolute end-3 top-3")}
-        >
-          <X size={17} strokeWidth={1.75} aria-hidden="true" />
-        </button>
       </div>
       {/* The same pane and column as a 1:1 chat (ChatView): the gutter, the
-          960px column, Geist at 13px, the Markdown renderer and the bubble
+          chat column, Geist at 13px, the Markdown renderer and the bubble
           widths, so the lines use the room a wider window gives. The scroll
           ends above the opaque footer band; no message text sits under it. */}
       <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-5" data-testid="bot-exchange-scroll">
-      <div className={cn(CHAT_COLUMN_CLASS, "py-6")} role="log" aria-live="off" onClick={(event) => event.stopPropagation()}>
+      <div className={cn(chatColumnClassName, "py-6")} role="log" aria-live="off" onClick={(event) => event.stopPropagation()}>
         {loadError ? (
           <div role="alert" data-testid="bot-exchange-error" className="flex flex-col items-center gap-2 py-8 text-center text-[13px] text-ink-secondary">
             <p>{t("chat.exchange.loadError")}</p>
@@ -218,7 +220,7 @@ export function ExchangeSheet({
           const joinsAbove = !newStretch && sameAuthor(previous);
           const joinsBelow = Boolean(next) && !startsNewStretch(message.at, next!.message.at) && sameAuthor(next);
           const text = exchangeBody(message);
-          const width = CHAT_BUBBLE_WIDTH_CLASS[chatBubbleWidth({ terminal: false, wide: Boolean(text) && prefersWideBubble(text) })];
+          const width = bubbleWidths[chatBubbleWidth({ terminal: false, wide: Boolean(text) && prefersWideBubble(text) })];
           const time = (
             <span className="self-end pb-1 text-[11px] tabular-nums text-ink-tertiary opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 touch:opacity-100">
               {formatTime(message.at)}
@@ -258,15 +260,32 @@ export function ExchangeSheet({
         })}
       </div>
       </div>
-      {footer && (
-        <div
-          data-exchange-footer=""
-          className="shrink-0 border-t border-hairline/40 bg-app px-4 py-3"
-          onClick={(event) => event.stopPropagation()}
-        >
-          {footer}
+      {pinned && (
+        <div data-exchange-pinned className="max-h-[50%] shrink-0 overflow-y-auto overscroll-y-contain px-5 pb-2" onClick={(event) => event.stopPropagation()}>
+          <div className={chatColumnClassName}>{pinned}</div>
         </div>
       )}
+      {/* In place of the composer (Grok Bot): one centered "Close Chat" pill
+          is the close. A routine run puts its actions in the same row, before
+          it (one row, 2026-11-02); narrow widths wrap it in order, centered. */}
+      <div
+        data-exchange-footer={footer ? "" : undefined}
+        className={cn(
+          "flex shrink-0 flex-wrap items-center justify-center gap-2 bg-app px-4",
+          footer ? "border-t border-hairline/40 py-3" : "pb-4 pt-2",
+        )}
+        onClick={(event) => event.stopPropagation()}
+      >
+        {footer}
+        <button
+          type="button"
+          data-testid="bot-exchange-close"
+          onClick={onClose}
+          className={cn(PILL, !footer && "px-4 font-medium")}
+        >
+          {closeText}
+        </button>
+      </div>
     </div>
   );
   // A column host (ChatView, GroupView, or the shared host) is the containing

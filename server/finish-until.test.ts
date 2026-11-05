@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseBotProfilePatch } from "./bot-profile.ts";
+import { parseBotProfilePatch } from "./bots/bot-profile.ts";
 import { FinishUntilRuns, finishUntilOutcome, finishUntilPrompt, remindAfterCompaction, withoutFinishUntilMarker } from "./finish-until.ts";
 import { FINISH_UNTIL_DEFAULT_ROUNDS, finishUntilLineText, finishUntilRounds } from "../shared/finish-until-line.ts";
 

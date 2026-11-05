@@ -80,7 +80,7 @@ final class DesktopShellModel: ObservableObject {
         case releaseNotes, whatsNew
 
         /// Drawn in the shell as the desktop's modals, not as sheets.
-        var inShell: Bool { [.settings, .plugins, .shortcuts, .releaseNotes, .whatsNew].contains(self) }
+        var inShell: Bool { [.settings, .search, .plugins, .shortcuts, .about, .releaseNotes, .whatsNew, .newBot].contains(self) }
         var id: String { rawValue }
     }
 
@@ -90,12 +90,12 @@ final class DesktopShellModel: ObservableObject {
     @Published var page: DesktopPage?
     @Published var panelOpen = false
     @Published var panelTab: BotPanelTab = .details
-    /// The persona editor sheet over the panel ("Edit persona").
+    /// The Edit bot window over the shell (PersonaEditorWindow.swift).
     @Published var personaOpen = false
-    /// The persona editor's open section; nil shows its list.
+    /// The section a deep link asked for (kept for the panel's callers).
     @Published var panelSection: DesktopPanelSection?
-    /// The character editor over the panel (the mascot's Edit avatar).
-    @Published var avatarEditorOpen = false
+    /// The Edit bot window's open page.
+    @Published var personaPage: DesktopPersonaPage = .overview
     /// A move the editor asks the panel's owl to play.
     @Published var avatarMove: OwlWingMove?
     /// A Shapes move the editor asks the panel's shape to play.
@@ -151,6 +151,30 @@ final class DesktopShellModel: ObservableObject {
     @Published var replacingPrimary: Bot?
     /// The team menu's Share team… (the package file, then the share sheet).
     @Published var sharingTeam: String?
+    /// A bot row's Share: the link that opens this bot in Sagax.
+    @Published var sharingBotLink: URL?
+    /// The sidebar's multi-select of bots (lot 6): the row menu's Select, the
+    /// rows' checks and the bar's grouped actions.
+    @Published var selection = DesktopBotSelection()
+    /// The bar's Edit (Edit N bots) and Archive confirmation.
+    @Published var bulkEditing = false
+    @Published var archivingSelection = false
+    /// The bot's computer window drawn in the shell (lot 6): the fallback
+    /// where iPadOS has no second scene to give it, and the parity captures.
+    @Published var computerWindow: String?
+    /// The chat column's notice (`state.notice`, ChatErrorBanner.tsx
+    /// ChatNotice): a dead thread link, a bot that is gone; it clears
+    /// itself after 6 s, as the desktop's store does.
+    @Published var notice: DesktopNotice?
+
+    func show(notice: DesktopNotice, clearsAfter seconds: Double = 6) {
+        self.notice = notice
+        let shown = notice
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            if self?.notice == shown { self?.notice = nil }
+        }
+    }
     /// The open "To:" picker's ⌘1 to ⌘9 (DesktopKeyCommands routes them).
     var composeActivate: ((Int) -> Void)?
     #if DEBUG
@@ -158,6 +182,8 @@ final class DesktopShellModel: ObservableObject {
     /// rests on a row after its click).
     var parityComposePreset: (group: Bool, cursor: Int)?
     #endif
+    /// ⌘⇧N: the next "To:" picker opens in group mode.
+    var composeGroupMode = false
     /// The WP5, WP6 and WP11 menus' prompts, mounted once by the shell.
     let threadActions = ThreadActions()
     let sectionActions = SidebarSectionActions()
@@ -211,7 +237,6 @@ final class DesktopShellModel: ObservableObject {
 
     func togglePanel() {
         withAnimation(.easeOut(duration: 0.2)) { panelOpen.toggle() }
-        if !panelOpen { avatarEditorOpen = false }
     }
 
     /// Opens the panel on a tab.
@@ -224,8 +249,15 @@ final class DesktopShellModel: ObservableObject {
     /// (a deep link such as the allowlist's Permissions).
     func showPersona(_ section: DesktopPanelSection? = nil) {
         panelSection = section
+        personaPage = DesktopPersonaPage(section: section)
         if !panelOpen { togglePanel() }
         personaOpen = true
+    }
+
+    /// A click on the bot's avatar: Edit bot on Appearance (`openPersonaEditor`).
+    func showAppearance() {
+        showPersona()
+        personaPage = .appearance
     }
 
     /// The panel's Inspector button (`toggleInspector`): the Inspector takes
@@ -310,6 +342,8 @@ struct DesktopShell: View {
     @Environment(\.themePalette) var themePalette
     @EnvironmentObject private var session: Session
     @StateObject private var model = DesktopShellModel()
+    /// The guided first run, the terms of use and the guided tour.
+    @StateObject private var onboarding = DesktopOnboardingModel()
     /// Connect apps on its Bots tab, from the old link to Browse Bots.
     @State private var connectAppsBots = false
 
@@ -332,6 +366,7 @@ struct DesktopShell: View {
         .parityLauncher()
         .modifier(DesktopShellPresenter(model: model))
         .modifier(DesktopSidebarPrompts(model: model))
+        .modifier(DesktopSelectionPrompts(model: model))
         .modifier(DesktopShellRouting(model: model))
         .onReceive(NotificationCenter.default.publisher(for: .approvalEditRule)) { _ in
             model.showPersona(.access)
@@ -353,19 +388,53 @@ struct DesktopShell: View {
             ConnectAppsPage(initialTab: .bots)
                 .environmentObject(session)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .desktopOpenSettings)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .desktopOpenSettings)) { note in
             model.menu = nil
+            // a section asked for (Capabilities > Providers' Connect: Models and voice)
+            if let raw = note.object as? String, let section = DesktopSettingsSection(rawValue: raw) { model.settingsSection = section }
             model.modal = .settings
         }
         .onAppear {
+            DesktopTermsDialog.shellPresents = true
             // What's new, once after an update (`ReleaseNotesPrompt`)
             if ReleaseNotesStore.whatsNewOnLaunch(), model.modal == nil { model.modal = .whatsNew }
+        }
+        .onDisappear { DesktopTermsDialog.shellPresents = false }
+        // the welcome is due on a workspace that never finished it
+        .task(id: session.connection?.id) {
+            #if DEBUG
+            if let screen = ParityLaunch.current?.iPadScreen {
+                switch screen {
+                case .onboardingWelcome:
+                    // the desktop reference opens on step 1 with the terms over it
+                    onboarding.firstRunStep = .engine
+                    onboarding.firstRunOpen = true
+                    onboarding.parityTerms = true
+                case .onboardingTour:
+                    onboarding.parityRecord(OnboardingStatus(completedAt: "2026-01-01T00:00:00.000Z", version: FirstRun.welcomeVersion, hintsSeen: []))
+                    onboarding.tourOpen = true
+                default: break
+                }
+                return
+            }
+            #endif
+            await onboarding.load(session)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .desktopReplayFirstRun)) { _ in
+            model.modal = nil
+            onboarding.firstRunStep = nil
+            onboarding.firstRunOpen = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .desktopReplayTour)) { _ in
+            model.modal = nil
+            onboarding.replayTour(session)
         }
     }
 
     private func columns(width: CGFloat, theme: DesktopTheme) -> some View {
         let docked = DesktopShellRules.docksPanel(width: width)
         let botOpen = model.panelOpen && selectedBot != nil && model.page == nil
+        let roomOpen = model.panelOpen && selectedPanelRoom != nil && model.page == nil
         return ZStack(alignment: .topLeading) {
             HStack(spacing: 0) {
                 AnyView(DesktopSidebar())
@@ -375,17 +444,27 @@ struct DesktopShell: View {
                     .zIndex(1)
                 AnyView(DesktopContent())
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // the tour's Automations page step points at the page
+                    .transformAnchorPreference(key: DesktopTourAnchorKey.self, value: .bounds) { if model.page == .automations { $0["automations-page"] = $1 } }
                 if docked, botOpen, let bot = selectedBot {
                     AnyView(BotPanel(bot: bot, docked: true))
                         .frame(width: model.panelWidth)
                         .overlay(alignment: .leading) { DesktopPanelResizeHandle(model: model) }
                         .transition(.move(edge: .trailing))
                 }
+                // a group's panel docks in the same slot (GroupPanel.swift)
+                if docked, roomOpen, let room = selectedPanelRoom {
+                    AnyView(DesktopGroupPanel(room: room, docked: true))
+                        .frame(width: model.panelWidth)
+                        .overlay(alignment: .leading) { DesktopPanelResizeHandle(model: model) }
+                        .transition(.move(edge: .trailing))
+                }
             }
-            // Settings open: the sidebar and the chat are hidden at once, with
-            // no animation, so nothing of them shows through or crosses it.
-            .opacity(model.modal == .settings ? 0 : 1)
-            .animation(nil, value: model.modal == .settings)
+            // the computer window's veil blurs what it covers
+            // (SandboxDesktopModal: `bg-black/60 backdrop-blur-[2px]`)
+            .blur(radius: model.computerWindow != nil ? 2 : 0)
+            // Settings open: the window stays drawn behind the centred
+            // modal, as the desktop's (2026-11-03 references).
             if !docked, botOpen, let bot = selectedBot {
                 // Below 1024 the panel covers the leading edge (measured at
                 // 834: x 0, 360 wide), the chat still visible to its right.
@@ -396,8 +475,24 @@ struct DesktopShell: View {
                     .frame(maxHeight: .infinity)
                     .transition(.move(edge: .leading))
             }
+            if !docked, roomOpen, let room = selectedPanelRoom {
+                Color.black.opacity(0.001)
+                    .onTapGesture { model.togglePanel() }
+                AnyView(DesktopGroupPanel(room: room, docked: false))
+                    .frame(width: min(model.panelWidth, width))
+                    .frame(maxHeight: .infinity)
+                    .transition(.move(edge: .leading))
+            }
+            // the desktop's model menu (ModelPicker windowOnly, "Lot 7: the
+            // full window is gone"): a popover at the window's leading edge,
+            // a tap outside closes it. The desktop pins the menu's bottom
+            // at 96 pt from the top (#1979, its top falls off the screen):
+            // here its top sits there instead.
             if model.modelPickerOpen, let bot = selectedBot {
-                AnyView(DesktopModelPicker(
+                Color.black.opacity(0.001)
+                    .ignoresSafeArea()
+                    .onTapGesture { model.modelPickerOpen = false }
+                AnyView(DesktopModelMenu(
                     bot: bot.projected(forThread: model.selected?.threadId ?? bot.threadId) ?? bot,
                     close: { model.modelPickerOpen = false },
                     openProviders: {
@@ -406,29 +501,91 @@ struct DesktopShell: View {
                         model.modal = .settings
                     }
                 ))
+                .padding(.leading, 24)
+                .padding(.top, 96)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .transition(.opacity)
+            }
+            // Edit bot, the desktop's centred window (PersonaEditorModal.tsx)
+            if model.personaOpen, let bot = selectedBot {
+                AnyView(PersonaEditorWindow(bot: bot) { model.personaOpen = false; model.panelSection = nil })
+                    .transition(.opacity)
+                    .zIndex(4)
+            }
+            // lot 6: the bot's computer window where no second scene exists
+            if let botId = model.computerWindow {
+                AnyView(DesktopComputerWindowView(botId: botId, floating: true) { model.computerWindow = nil })
+                    .transition(.opacity)
+                    .zIndex(5)
             }
             // I5: Settings and Plugins are the desktop's modals, over everything
             if model.modal == .settings {
                 AnyView(DesktopSettingsModal(close: { model.modal = nil }))
                     .transition(.identity)
             } else if model.modal == .plugins {
-                AnyView(DesktopPluginsModal(close: { model.modal = nil }))
+                // lot 3: Capabilities, the desktop's centred window
+                AnyView(DesktopCapabilitiesModal(close: { model.modal = nil }))
+                    .desktopTourAnchor("apps-panel")
+                    .transition(.opacity)
+            } else if model.modal == .search {
+                // lot 3: the desktop's command palette (⌘K)
+                AnyView(DesktopCommandPalette(close: { model.modal = nil }))
                     .transition(.opacity)
             } else if model.modal == .shortcuts {
                 AnyView(DesktopShortcutsModal(close: { model.modal = nil }))
                     .transition(.opacity)
+            } else if model.modal == .about {
+                AnyView(DesktopAboutModal(close: { model.modal = nil }, openReleaseNotes: { model.modal = .releaseNotes }))
+                    .transition(.opacity)
+            } else if model.modal == .newBot {
+                // the desktop's New bot: the wizard's first page (BotWizard.tsx)
+                AnyView(DesktopNewBotModal(close: { model.modal = nil }) { bot in
+                    model.modal = nil
+                    model.open(.bot(bot))
+                })
+                .transition(.opacity)
             } else if model.modal == .releaseNotes || model.modal == .whatsNew {
                 AnyView(DesktopReleaseNotesModal(mode: model.modal == .whatsNew ? .current : .browse, close: { model.modal = nil }))
                     .transition(.opacity)
             }
+            // the guided first run (GuidedFirstRun, rendered by WelcomeGate at
+            // the root); its More options opens New bot over the shell
+            if onboarding.firstRunOpen, model.modal == nil {
+                AnyView(DesktopGuidedFirstRun(onboarding: onboarding))
+                    .transition(.opacity)
+                    .zIndex(8)
+            }
+            // TermsGate: once per account, over everything
+            if session.termsPending, parityAllowsTerms {
+                AnyView(DesktopTermsDialog())
+                    .transition(.opacity)
+                    .zIndex(9)
+            }
         }
         .background(theme.app)
+        // GuidedTour's Spotlight over the live shell, following `data-tour` anchors
+        .overlayPreferenceValue(DesktopTourAnchorKey.self) { anchors in
+            AnyView(DesktopGuidedTour(onboarding: onboarding, anchors: anchors))
+        }
+    }
+
+    /// The parity harness shows the terms only on the welcome reference.
+    private var parityAllowsTerms: Bool {
+        #if DEBUG
+        if ParityLaunch.current != nil { return onboarding.parityTerms }
+        #endif
+        return true
     }
 
     private var selectedBot: Bot? {
         guard case let .bot(bot) = model.selected else { return nil }
         return session.state.bot(bot.id) ?? bot
+    }
+
+    /// The selected group, whose panel the header pill opens.
+    private var selectedPanelRoom: Room? {
+        guard let chat = model.selected, chat.opensGroupPanel, case let .room(room) = chat else { return nil }
+        return session.state.rooms.first { $0.id == room.id } ?? room
     }
 }
 
@@ -440,12 +597,18 @@ struct DesktopContent: View {
     @EnvironmentObject private var model: DesktopShellModel
 
     var body: some View {
-        if let page = model.page {
+        if model.modal == .plugins {
+            // App.tsx `mainIsApps`: Capabilities takes the main column's
+            // place, the chat is not drawn behind its window
+            theme.app
+        } else if let page = model.page {
             switch page {
             case .teamMap: AnyView(DesktopTeamMapPage())
             case .automations: AnyView(DesktopAutomationsPage())
+            case .memory: AnyView(DesktopMemoryPage())
             }
         } else if let chat = model.selected {
+            // the notice is in the chat's own banner stack (DesktopChatChrome.notice)
             AnyView(DesktopChatColumn(chat: chat))
                 .id(chat.threadId)
         } else {
@@ -662,23 +825,29 @@ private struct DesktopShellRouting: ViewModifier {
         default: model.presetDensity(.comfortable)
         }
         for _ in 0..<150 {
-            if screen == .groupChat {
-                // the room chat (Peer Managers), as the reference selects it
+            if screen == .groupChat || screen == .groupPanel {
+                // the room chat (Peer Managers), as the reference selects it;
+                // group-panel: its header pill opened the panel
                 if let room = session.state.rooms.first(where: { $0.name == "Peer Managers" }) {
                     model.open(.room(room))
+                    if screen == .groupPanel { model.panelOpen = true }
                     return
                 }
             } else if let ara = session.state.bots.first(where: { $0.name == "Ara" }) {
                 model.open(.bot(ara))
                 model.panelOpen = screen.opensBotPanel
                 if let tab = screen.panelTab { model.panelTab = tab }
-                model.panelSection = screen.panelSection
-                model.personaOpen = screen.opensPersonaEditor
-                model.avatarEditorOpen = screen == .panelAvatarEditor
-                model.modelPickerOpen = screen == .chatModelPicker
+                if screen == .panelAvatarEditor { model.showAppearance() }
+                else if screen.opensPersonaEditor { model.showPersona(screen.panelSection) }
                 model.applyParityModals(screen)
                 model.page = screen.parityPage
                 if screen == .keyboardShortcuts { model.modal = .shortcuts }
+                if screen == .aboutDialog { model.modal = .about }
+                if screen == .releaseNotesDialog { model.modal = .releaseNotes }
+                if screen == .newBot { model.modal = .newBot }
+                if screen == .noticeThreadGone {
+                    model.show(notice: DesktopNotice(kind: .threadGone, botName: "Helix"), clearsAfter: 600)
+                }
                 await applyParitySidebar(screen)
                 return
             }
@@ -687,7 +856,8 @@ private struct DesktopShellRouting: ViewModifier {
     }
 
     /// The sidebar surfaces' pointer and menus, at the references' points
-    /// (desktop-*-08 to -12 DOM dumps). On the iPad a right click or a long
+    /// (desktop-*-08 to -12 DOM dumps; re-measured on the 1376x1032
+    /// references of 2026-11-03: the "⋯" button's bottom, the right click). On the iPad a right click or a long
     /// press opens iPadOS's context menu with the same entries; the
     /// surfaces draw the desktop popover at the desktop's click point.
     private func applyParitySidebar(_ screen: IPadParityScreen) async {
@@ -699,21 +869,29 @@ private struct DesktopShellRouting: ViewModifier {
         case .sidebarBotMenu:
             // the reference moves the pointer away after the click: no hover
             guard let aurora = bot("Aurora") else { return }
-            model.menu = DesktopMenuRequest(kind: .bot(aurora.id), anchor: CGPoint(x: 235, y: 413))
+            model.menu = DesktopMenuRequest(kind: .bot(aurora.id), anchor: CGPoint(x: 235, y: 385))
         case .sidebarBotContextMenu:
             guard let helix = bot("Helix") else { return }
-            model.menu = DesktopMenuRequest(kind: .bot(helix.id), anchor: CGPoint(x: 76, y: 446))
+            model.menu = DesktopMenuRequest(kind: .bot(helix.id), anchor: CGPoint(x: 76, y: 418))
         case .sidebarSectionMenu:
             guard let aurora = bot("Aurora"), let team = aurora.section, !team.isEmpty else { return }
-            model.menu = DesktopMenuRequest(kind: .section(SidebarSectionID.user(team)), anchor: CGPoint(x: 68, y: 351))
+            model.menu = DesktopMenuRequest(kind: .section(SidebarSectionID.user(team)), anchor: CGPoint(x: 68, y: 322))
         case .sidebarProfileMenu:
             // 4 pt over the 48 pt account row (12 pt from the bottom)
             model.menu = DesktopMenuRequest(kind: .profile, anchor: CGPoint(x: 8, y: height - 64), opensUp: true)
         case .sidebarNewMenu:
             model.menu = DesktopMenuRequest(kind: .new, anchor: .zero)
+        case .sidebarSelect:
+            // the reference chooses Aurora from its menu, then clicks Helix
+            guard let aurora = bot("Aurora"), let helix = bot("Helix") else { return }
+            model.selection.start(with: aurora.id)
+            model.selection.toggle(helix.id)
+        case .computerWindow:
+            model.computerWindow = model.selected?.id
         case .newGroup:
-            // the reference's pointer stays on the row under the click (Orion)
-            model.parityComposePreset = (group: true, cursor: 1)
+            // the reference's pointer rests on Liora's row once the list
+            // redraws in group mode: its "Add" hint, ⌘2 on Orion
+            model.parityComposePreset = (group: true, cursor: 2)
             model.menu = DesktopMenuRequest(kind: .new, anchor: .zero)
         default:
             break
@@ -752,21 +930,9 @@ private struct DesktopShellPresenter: ViewModifier {
         case .settings:
             EmptyView()
         case .search:
-            // The phone's sheet, large: the iPad's page sheet holds it
-            // (no dim or top inset of its own).
-            SearchSheet(embedded: true, close: { model.modal = nil }) { destination in
-                model.modal = nil
-                switch destination {
-                case let .chat(chat): model.open(session.returning(to: chat))
-                case let .exact(chat): model.open(chat)
-                }
-            }
-            .searchPageSheet()
+            EmptyView()
         case .newBot:
-            CreateBotSheet(close: { model.modal = nil }) { bot in
-                model.modal = nil
-                model.open(.bot(bot))
-            }
+            EmptyView()
         case .newGroup:
             NewGroupSheet(close: { model.modal = nil }) { room in
                 model.modal = nil
@@ -785,9 +951,7 @@ private struct DesktopShellPresenter: ViewModifier {
             EmptyView()
         case .templates:
             DesktopTemplatesSheet { model.modal = nil }
-        case .about:
-            NavigationStack { AboutPage() }
-        case .shortcuts, .releaseNotes, .whatsNew:
+        case .about, .shortcuts, .releaseNotes, .whatsNew:
             EmptyView()
         case .achievements:
             NavigationStack {
@@ -805,15 +969,37 @@ private struct DesktopShellPresenter: ViewModifier {
 /// The docked panel's resize handle (`app-resize-handle`, 12 pt across its
 /// leading edge): drag to 320 to 720 pt; the width is kept.
 private struct DesktopPanelResizeHandle: View {
+    @Environment(\.desktopTheme) private var theme
     @ObservedObject var model: DesktopShellModel
     @State private var start: CGFloat?
+    @State private var hovering = false
+
+    /// `.app-resize-handle::after`: a 2 pt accent line (55 %) while the
+    /// handle is hovered, dragged or focused. The desktop's Details and
+    /// Computer references are taken with the handle focused (the panel
+    /// hands it the focus as it opens), so their parity screens draw it lit.
+    private var lit: Bool {
+        if hovering || start != nil { return true }
+        #if DEBUG
+        if let screen = ParityLaunch.current?.iPadScreen, screen == .panelDetails || screen == .panelComputer { return true }
+        #endif
+        return false
+    }
 
     var body: some View {
         Color.clear
             .frame(width: 12)
             .contentShape(Rectangle())
+            .overlay {
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(lit ? theme.accent.opacity(0.55) : .clear)
+                    .frame(width: 2)
+                    .offset(x: -3)
+                    .animation(.easeOut(duration: 0.12), value: lit)
+                    .allowsHitTesting(false)
+            }
             .offset(x: -6)
-            .hoverEffect(.highlight)
+            .onHover { hovering = $0 }
             .gesture(
                 DragGesture(minimumDistance: 2, coordinateSpace: .global)
                     .onChanged { value in
@@ -836,5 +1022,51 @@ private struct DesktopPanelResizeHandle: View {
                 @unknown default: break
                 }
             }
+    }
+}
+
+
+// MARK: - Notice
+
+/// `state.notice`: what the chat column says about a link that led nowhere.
+struct DesktopNotice: Equatable {
+    enum Kind: Equatable { case threadGone, botGone }
+    var kind: Kind
+    /// The bot shown instead (`thread.goneShowing`); nil: `thread.gone`.
+    var botName: String?
+    let id = UUID()
+}
+
+/// `ChatNotice` (ChatErrorBanner.tsx): px-5, a rounded-lg panel line with a
+/// 40 % hairline, 13 pt secondary text.
+struct DesktopChatNotice: View {
+    @Environment(\.desktopTheme) private var theme
+    let notice: DesktopNotice
+
+    var body: some View {
+        Group {
+            switch notice.kind {
+            case .botGone: Text("That bot is no longer here.")
+            case .threadGone:
+                if let name = notice.botName {
+                    Text("That thread is no longer here. Showing \(name) instead.")
+                } else {
+                    Text("That thread is no longer here.")
+                }
+            }
+        }
+        .font(theme.font(13))
+        // CSS's 1.5 line box (19.5 pt), not the face's own line
+        .frame(minHeight: 19.5)
+        .foregroundStyle(theme.inkSecondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(theme.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline.opacity(0.4), lineWidth: 1))
+        .padding(.horizontal, 20)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.updatesFrequently)
+        .accessibilityIdentifier("desktop-chat-notice")
     }
 }

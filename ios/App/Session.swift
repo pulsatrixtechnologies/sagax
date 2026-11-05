@@ -476,6 +476,33 @@ final class Session: ObservableObject {
                     }
                 }
             }
+            if arguments.contains("-roles-preview"),
+               let url = Bundle.main.url(forResource: "RolesPreview", withExtension: "json"),
+               let data = try? Data(contentsOf: url),
+               let rows = try? JSONDecoder().decode([Message].self, from: data) {
+                // 2026-11-05 (visible roles): role chips, "Agit comme" cards
+                // and role banners in every preview chat (whichever opens
+                // first), chained as stored and said by that chat's bot.
+                for index in state.bots.indices {
+                    let bot = state.bots[index]
+                    var chained = rows.map { row -> Message in
+                        var row = row
+                        row.from?.botId = bot.id
+                        row.from?.name = bot.name
+                        row.from?.color = bot.color
+                        if row.card?.roleTransition != nil {
+                            row.card?.roleTransition?.botId = bot.id
+                            row.card?.roleTransition?.botName = bot.name
+                        }
+                        return row
+                    }
+                    for position in chained.indices.dropFirst() { chained[position].parentId = chained[position - 1].id }
+                    state.messages[bot.threadId] = chained
+                    state.bots[index].activeLeafId = chained.last?.id
+                    state.bots[index].busy = false
+                }
+                if arguments.contains("-roles-top") { focusedMessageId = "roles-user" }
+            }
             if arguments.contains("-cards-top") {
                 // The cards chat from its first cards (the theme captures).
                 focusedMessageId = "c-tool"
@@ -1498,6 +1525,8 @@ final class Session: ObservableObject {
 
     private func run() async {
         let generation = streamGeneration
+        // the connection notice at the top of the chat (#2013)
+        ConnectionNoticeCenter.shared.attach(self)
         while !Task.isCancelled {
             guard let client else { return }
             status = .connecting
@@ -1543,6 +1572,7 @@ final class Session: ObservableObject {
                             state.resetCursor(cursor)
                         }
                         status = .live
+                        ConnectionNoticeCenter.shared.streamConnected()
                         resumeNativeAttachmentTransfers(using: client)
                         // this server pushes to the phone while the app is closed
                         Task { await PushRegistrar.shared.sync() }
@@ -1572,6 +1602,13 @@ final class Session: ObservableObject {
                     // a routine changed or ran: the account's routines badge
                     if case let .unknown(kind) = frame.frame, kind.hasPrefix("routine") {
                         Task { await AccountRowModel.shared.refresh(self) }
+                    }
+                    // #2013: a planned restart is coming; the Perspicax connector's reach
+                    if case .serverRestarting = frame.frame {
+                        ConnectionNoticeCenter.shared.restartAnnounced()
+                    }
+                    if case let .connectorStatus(connector) = frame.frame {
+                        ConnectionNoticeCenter.shared.connector(connector)
                     }
                     // a bot's task list changed: its Tasks card reads it again
                     if case let .botTasks(botId) = frame.frame {
@@ -1623,6 +1660,7 @@ final class Session: ObservableObject {
                 // the stream ended without an error — the harness went away
                 log.notice("stream ended without an error")
                 status = .offline("Lost the connection.")
+                ConnectionNoticeCenter.shared.streamDisconnected()
             } catch let error as APIError where error.isUnauthorized {
                 // A 401 is not a sign-out by itself (a server restart, a
                 // stale copy of the token): check again, try every copy of
@@ -1654,6 +1692,7 @@ final class Session: ObservableObject {
                 }
                 log.error("stream failed: \(error.localizedDescription, privacy: .public)")
                 status = .offline(failureMessage(for: error))
+                ConnectionNoticeCenter.shared.streamDisconnected()
             }
 
             if Task.isCancelled { return }
@@ -2836,6 +2875,27 @@ final class Session: ObservableObject {
         guard let base = client?.connection.baseURL else { return nil }
         let normalized = path.hasPrefix("/") ? path : "/\(path)"
         return URL(string: normalized, relativeTo: base)?.absoluteURL
+    }
+
+    // claude.ai artifact cards (#2018): the person's own session, never another account.
+    func claudeArtifactSummary(url: String) async throws -> ClaudeArtifactSummary {
+        guard let client else { throw APIError.transport("This computer is offline.") }
+        return try await client.claudeArtifactSummary(url: url)
+    }
+
+    func claudeArtifactComments(url: String) async throws -> [ClaudeArtifactThread] {
+        guard let client else { throw APIError.transport("This computer is offline.") }
+        return try await client.claudeArtifactComments(url: url)
+    }
+
+    func claudeArtifactReply(url: String, threadId: String, text: String) async throws {
+        guard let client else { throw APIError.transport("This computer is offline.") }
+        try await client.claudeArtifactReply(url: url, threadId: threadId, text: text)
+    }
+
+    func claudeArtifactResolve(url: String, threadId: String) async throws {
+        guard let client else { throw APIError.transport("This computer is offline.") }
+        try await client.claudeArtifactResolve(url: url, threadId: threadId)
     }
 
     func youtubeTranscript(videoId: String) async throws -> YouTubeTranscriptResponse {

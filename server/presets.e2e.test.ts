@@ -5,7 +5,7 @@ import { expect, it } from "vitest";
 
 import { launchVerificationServer } from "../scripts/control-omb.ts";
 import { canonicalJson, parsePackageDocument } from "../shared/package-format.ts";
-import { NO_PRESETS_MESSAGE } from "./package-import.ts";
+import { NO_PRESETS_MESSAGE } from "./packages/package-import.ts";
 import { ORG_PRESET_REMOVE_MESSAGE, PRESET_UNAVAILABLE_MESSAGE } from "./presets.ts";
 
 const FIXTURES = join(import.meta.dirname, "..", "shared", "package-fixtures");

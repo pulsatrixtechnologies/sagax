@@ -4,7 +4,7 @@ Use only the disposable offline fixture. It never invokes a real Claude
 executable or reads a real credential store.
 
 ```sh
-node --experimental-strip-types scripts/verify-claude-account.ts
+node --experimental-strip-types scripts/verify/dev/verify-claude-account.ts
 ```
 
 The launcher prints its API URL, preview URL, command log, disposable home,
@@ -33,7 +33,7 @@ the controller/provider during logout, unknown auth-status results, and the
 renderer using the confirmed response without a second catalog request.
 
 ```sh
-pnpm exec vitest run --no-file-parallelism server/drivers/claude-login-auth.test.ts server/drivers/claude.test.ts server/provider-auth-sessions.test.ts server/request-auth.test.ts src/components/ClaudeAccountSettings.test.ts src/components/CodexAccountSettings.test.ts src/components/EnginesSettings.test.ts
+pnpm exec vitest run --no-file-parallelism server/drivers/claude-login-auth.test.ts server/drivers/claude.test.ts server/engines/provider-auth-sessions.test.ts server/auth/request-auth.test.ts src/components/ClaudeAccountSettings.test.ts src/components/CodexAccountSettings.test.ts src/components/EnginesSettings.test.ts
 pnpm typecheck
 pnpm i18n:check
 pnpm build

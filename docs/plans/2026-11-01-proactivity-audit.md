@@ -13,7 +13,7 @@ on/off switch, set beside its approval level: `off` | `proactive` (default
 off; a garbled value fails closed to off.
 
 Events Sagax already receives wake the bot they concern
-(`server/proactive-wake.ts`, wired in `server/index.ts` `offerProactive`):
+(`server/proactive/proactive-wake.ts`, wired in `server/index.ts` `offerProactive`):
 
 | Source | Offered from | Wakes when |
 |---|---|---|
@@ -105,9 +105,9 @@ definition behind `proactive:<bot>`).
    and capacity holes fixed elsewhere).
 4. A wake's run ends truthfully like any routine run.
 
-Tests: `shared/proactive-mode.test.ts`, `server/proactive.test.ts`,
-`server/proactive-wake.test.ts`, `server/proactive-wake.e2e.test.ts`,
-`server/proactive-lane.test.ts`, `server/proactive-default.test.ts`,
+Tests: `shared/proactive-mode.test.ts`, `server/proactive/proactive.test.ts`,
+`server/proactive/proactive-wake.test.ts`, `server/proactive/proactive-wake.e2e.test.ts`,
+`server/proactive/proactive-lane.test.ts`, `server/proactive/proactive-default.test.ts`,
 `ProactiveModeTests.swift`.
 
 ## 5. Decision (JC, 2026-11-01): done

@@ -3,8 +3,11 @@
 // has gone unused, the desktop app adding the computer's own idle time and
 // state (window.ogb.systemIdle: using the computer counts as being here).
 // Coming back after an idle spell beats at once. An organization server
-// answers 404 (its presence is the signal there) and the loop stops.
+// (its descriptor names a Perspicax identity) has no such route by design:
+// its presence is the signal there, so the page never beats it (0.8.46).
+// An older server answering 404 still stops the loop.
 import type { SystemIdleState } from "../../shared/presence";
+import { fetchEnvironmentDescriptor } from "./environment-descriptor";
 
 export const ROUTINE_AWAY_BEAT_PATH = "/api/routines/away/beat";
 const BEAT_MS = 60_000;
@@ -15,11 +18,23 @@ export interface RoutineAwayBeatDeps {
   systemIdle?: () => Promise<{ state: SystemIdleState; idleSeconds: number } | null>;
   setInterval: (fn: () => void, ms: number) => unknown;
   clearInterval: (handle: unknown) => void;
+  /** True on an organization server: the loop never starts. */
+  organization?: () => Promise<boolean>;
+}
+
+/** The descriptor of an organization server: people sign in with Perspicax
+ * (server/auth/oidc-login.ts), the same test the server's route makes. */
+export function isOrganizationDescriptor(descriptor: unknown): boolean {
+  const identity = descriptor && typeof descriptor === "object" ? Reflect.get(descriptor, "identity") : undefined;
+  return Boolean(identity && typeof identity === "object" && Reflect.get(identity, "kind") === "perspicax");
 }
 
 /** The loop, for the page and for tests. Resolves null when the server has
  * no such route (an organization server, an older server). */
 export async function startRoutineAwayLoop(deps: RoutineAwayBeatDeps): Promise<{ interacted: () => void; beat: () => Promise<boolean> } | null> {
+  if (deps.organization) {
+    try { if (await deps.organization()) return null; } catch { /* unknown: the route's answer decides */ }
+  }
   let lastInteraction = deps.now();
   let stopped = false;
   let idleSpell = false;
@@ -84,6 +99,10 @@ export async function startRoutineAwayBeat(): Promise<void> {
     systemIdle: shell ? () => shell() : undefined,
     setInterval: (fn, ms) => window.setInterval(fn, ms),
     clearInterval: (handle) => window.clearInterval(handle as number),
+    organization: async () => {
+      const response = await fetchEnvironmentDescriptor({ signal: AbortSignal.timeout(5_000) });
+      return response.ok && isOrganizationDescriptor(await response.json());
+    },
   });
   if (!loop) return;
   for (const name of ["pointerdown", "keydown", "wheel", "touchstart", "focus"] as const) {

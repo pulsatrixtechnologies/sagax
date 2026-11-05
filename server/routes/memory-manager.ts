@@ -6,7 +6,7 @@
 //
 // Never returns another person's bot or a Perspicax scope the caller cannot
 // see. Bot rows follow the same owner/edit gate as the bot Memory section.
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const MEMORY_MANAGER_SOURCES = "/api/memory-manager/sources";
@@ -26,6 +26,10 @@ export interface MemoryManagerSource {
   mayManage?: boolean;
   /** Bot source: the bot id for existing memory file routes. */
   botId?: string;
+  /** Bot source: whether a current bot owns this memory. A temporary agent
+   * (create_agent: never listed with the bots) leaves a folder no bot is
+   * linked to, which the page lets the person delete. */
+  linked?: boolean;
   /** Team source: section key for /api/team-memory. */
   section?: string;
   /** Perspicax scope hint (`me`, `org`, `team:<id>`), never a person GUID. */
@@ -34,7 +38,11 @@ export interface MemoryManagerSource {
 
 export interface MemoryManagerSourcesDeps {
   /** Bots the caller may open in the manager. */
-  bots(auth: RequestAuth): Array<{ id: string; name: string; mayWrite: boolean }>;
+  bots(auth: RequestAuth): Array<{ id: string; name: string; mayWrite: boolean; temporary?: boolean }>;
+  /** Whether this bot's memory routes answer the caller (the request gate's
+   * visibility and channel checks, then the memory owner gate). A bot they
+   * refuse is not listed: its row would only open on "no such bot". */
+  botReachable(auth: RequestAuth, botId: string): boolean;
   /** Team memory sections the caller may see. */
   teamSections(auth: RequestAuth): Array<{ section: string; label: string; mayWrite: boolean; count: number }>;
   /** Whether Perspicax notes are offered for this caller. */
@@ -48,6 +56,7 @@ export function createMemoryManagerRoutes(deps: MemoryManagerSourcesDeps): Route
 
     const sources: MemoryManagerSource[] = [];
     for (const bot of deps.bots(auth)) {
+      if (!deps.botReachable(auth, bot.id)) continue;
       sources.push({
         id: `bot:${bot.id}`,
         kind: "bot",
@@ -55,6 +64,7 @@ export function createMemoryManagerRoutes(deps: MemoryManagerSourcesDeps): Route
         detail: "Bot memory",
         mayWrite: bot.mayWrite,
         botId: bot.id,
+        linked: !bot.temporary,
       });
     }
     for (const section of deps.teamSections(auth)) {

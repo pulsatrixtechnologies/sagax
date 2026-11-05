@@ -232,3 +232,31 @@ describe("planRows", () => {
     expect(rows.find((entry) => entry.id === "grok")?.message).toContain("expired");
   });
 });
+
+describe("Plan usage stars (2026-11-03)", () => {
+  const report: PlanUsageReport = {
+    providers: [
+      row({ id: "grok", name: "Grok", driver: "grok", instanceId: "grok", state: "windows", ok: true, plan: "SuperGrok Heavy", weekly: { available: true, remainingPercent: 13, usedPercent: 87, resetsAt: null } }),
+      row({ id: "codex", name: "Codex", driver: "codex", instanceId: "codex", state: "windows", ok: true, plan: "self_serve_business_prolite", fiveHour: { available: true, remainingPercent: 0, usedPercent: 100, resetsAt: null } }),
+      row({ id: "claude", state: "signed-out" }),
+    ],
+  };
+
+  it("stars each plan with windows, the favorite on, and shows plan names, never ids", () => {
+    const html = render(report, { favorite: { id: "grok", onToggle: () => {} } });
+    expect(html.match(/data-usage-favorite="on"/g)).toHaveLength(1);
+    expect(html.match(/data-usage-favorite="off"/g)).toHaveLength(1);
+    expect(html).toContain("Stop showing Grok SuperGrok Heavy in the Usage menu");
+    expect(html).toContain("Show Codex Business in the Usage menu");
+    expect(html).not.toContain("self_serve");
+  });
+
+  it("keeps the star of a favorite that signed out, so it can be cleared", () => {
+    const html = render(report, { favorite: { id: "claude", onToggle: () => {} } });
+    expect(html).toContain("Stop showing Claude in the Usage menu");
+  });
+
+  it("draws no star without a favorite store", () => {
+    expect(render(report)).not.toContain("data-usage-favorite");
+  });
+});

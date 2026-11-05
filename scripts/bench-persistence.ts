@@ -10,7 +10,7 @@ const directory = mkdtempSync(join(tmpdir(), "omb-persistence-bench-"));
 const previousDataDir = process.env.SAGAX_DATA_DIR;
 process.env.SAGAX_DATA_DIR = directory;
 mkdirSync(join(directory, "events"));
-const db = await import("../server/message-db.ts");
+const db = await import("../server/messages/message-db.ts");
 const { EventBus } = await import("../server/harness/bus.ts");
 const { appendNative } = await import("../server/drivers/native.ts");
 mkdirSync(join(directory, "native"));

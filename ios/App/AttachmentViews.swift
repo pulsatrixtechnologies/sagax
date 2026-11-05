@@ -327,12 +327,14 @@ struct TranscriptAttachmentView: View {
         .accessibilityHint(thumbnail == nil ? "Loads the image preview" : "Opens the image full screen")
     }
 
-    /// AttachmentThumbnail on the desktop: the picture itself, square, at
-    /// most 288, 16 pt corners, no caption.
+    /// AttachmentThumbnail on the desktop: the picture itself, 96 pt tall,
+    /// 16 pt corners, no caption.
     private var desktopImageTile: some View {
-        Button(action: openImage) {
+        // `h-24 w-auto max-w-48`: 96 tall, as wide as the picture, at most 192
+        let ratio = thumbnail.map { $0.size.height > 0 ? $0.size.width / $0.size.height : 1 } ?? 1
+        return Button(action: openImage) {
             Color.clear
-                .aspectRatio(1, contentMode: .fit)
+                .frame(width: min(192, max(48, 96 * ratio)), height: 96)
                 .overlay {
                     if let thumbnail {
                         Image(uiImage: thumbnail).resizable().scaledToFill()
@@ -355,11 +357,9 @@ struct TranscriptAttachmentView: View {
     /// opens the same preview as the phone's card.
     private var desktopFileChip: some View {
         Button(action: openPreview) {
-            if attachment.name.lowercased().hasSuffix(".pdf") {
-                DesktopPdfCard(name: attachment.name, loading: previewLoading)
-            } else {
-                DesktopFileChip(name: attachment.name, loading: previewLoading)
-            }
+            // a PDF under a reply is a compact pill like any other file
+            // (AttachmentGallery.tsx `beneath`), its preview button the page
+            DesktopFileChip(name: attachment.name, loading: previewLoading)
         }
         .buttonStyle(.plain)
         .hoverEffect(.highlight)

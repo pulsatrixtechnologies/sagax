@@ -6,7 +6,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { createPortal } from "react-dom";
 import { t, activeLocale } from "@/lib/i18n";
 import { useShowThreads } from "@/lib/thread-preferences";
-import { ArrowDown, ChevronDown, FolderOpen, Pin, X } from "lucide-react";
+import { ChevronDown, FolderOpen, Pin, X } from "lucide-react";
 import {
   api,
   useStore,
@@ -57,11 +57,13 @@ import type { OrgDirectoryPerson } from "@/lib/perspicax-org";
 import { StatusActivityRow } from "@/components/StatusActivityRow";
 import { normalizeState } from "@/lib/mascot";
 import { defaultResponderName, effectiveDefaultResponder, groupResponseHint, jevRoomRoutingOn } from "@/lib/group-routing";
+import { groupLeadBotId, leadResponder } from "@/lib/group-panel";
 import { openSettings } from "@/lib/settings-link";
 import { ChatMarkdown } from "./ChatMarkdown";
-import { CHAT_COLUMN_CLASS } from "@/lib/chat-bubble-width";
+import { useChatColumnClass } from "@/lib/chat-bubble-width";
 import { VideoPlayerWidget } from "./video/VideoPlayerWidget";
-import { FailedTurnRow, MessageBoundary, type SideChat } from "./ChatView";
+import { FailedTurnRow, MessageBoundary, PreSendRefusalLine, type SideChat } from "./ChatView";
+import { StepBoundary, stepFallbackText } from "./MessageBoundary";
 import { MESSAGE_ROW, MessageActions, messageActionClass } from "./MessageActions";
 import { personModerationMenu, useBotMessageMenu, userMessageMenu, type PinAction } from "./message-menu";
 import { blockPerson, isBlockedId, personLineAuthor, unblockPerson, useBlockedPeople } from "@/lib/moderation";
@@ -75,7 +77,7 @@ import { useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import { CancelledTurnRow } from "./CancelledTurnRow";
 import { isCancelledTranscriptRow } from "../../shared/client-cancel";
 import { roomRetryRequest } from "@/lib/room-retry";
-import { botEngine, failedTurnCause } from "@/lib/failed-turn";
+import { botEngine, failedTurnCause, isEngineLimitFailure, isPreSendRefusal } from "@/lib/failed-turn";
 import { CitationSelectionToolbar, SentCitations } from "./CitationUI";
 import { Composer } from "./Composer";
 import { ChatErrorBanner, ChatNotice, ChatReconnectBanner, ChatStaleBanner } from "./ChatErrorBanner";
@@ -122,6 +124,7 @@ import { foldCollapsedEntry, voiceCallPlan, voiceCallVisibleSpan } from "@/lib/v
 import { VoiceCallCard } from "./VoiceCallCard";
 import { BotExchangeChip, ExchangeColumnProvider, TranscriptDate, useExchangeColumn } from "./BotExchangeChip";
 import { GotoGroupChip } from "./GotoGroupChip";
+import { JumpToLatestPill } from "./JumpToLatestPill";
 import { collapseGotoLines, type GotoGroup } from "@/lib/goto-lines";
 import { ActivityRun } from "./ActivityRun";
 import { CwActivityWidgets, CwWidgetView, shownCwWidget } from "./cw/CwWidgetView";
@@ -179,6 +182,8 @@ export function RoomToolChip({ message, roomId }: { message: Message; roomId?: s
   if (message.inputRequest) return <InputRequestCard message={message} />;
   if (message.threadRef) return <ThreadChip message={message} />;
   if (failedTurnCause(tool.name) !== null) {
+    // #2013: refused before any prompt went out: a quiet line, not a red card
+    if (isPreSendRefusal(tool) && !isEngineLimitFailure(tool)) return <PreSendRefusalLine tool={tool} />;
     const roomThreadId = roomId ? storeGroups.find((group) => group.id === roomId)?.threadId : undefined;
     return <FailedTurnRow tool={tool} engine={botEngine(storeBots.find((b) => b.id === message.from?.botId), instances)} botId={message.from?.botId} threadId={roomThreadId} />;
   }
@@ -792,17 +797,19 @@ export const Transcript = memo(function Transcript({
               )}
               <CwActivityWidgets messages={item.messages} threadId={group.threadId} botId={first.from?.botId} />
               {showToolCalls && (
-                <ActivityRun
-                  messages={item.messages}
-                  elapsedMs={item.elapsedMs}
-                  focusedId={focusedId}
-                  nameOf={botNames(state.bots)}
-                  renderStep={(step) => (
-                    <div className="contents" data-mid={step.id}>
-                      <RoomToolChip message={step} />
-                    </div>
-                  )}
-                />
+                <StepBoundary stepId={item.id} fallbackText={stepFallbackText(item.messages[0])}>
+                  <ActivityRun
+                    messages={item.messages}
+                    elapsedMs={item.elapsedMs}
+                    focusedId={focusedId}
+                    nameOf={botNames(state.bots)}
+                    renderStep={(step) => (
+                      <div className="contents" data-mid={step.id}>
+                        <RoomToolChip message={step} />
+                      </div>
+                    )}
+                  />
+                </StepBoundary>
               )}
             </div>
           );
@@ -903,6 +910,8 @@ export const Transcript = memo(function Transcript({
             <div className="flex justify-start">
               <RoutineRunCard
                 message={m}
+                bot={state.bots.find((candidate) => candidate.id === m.from?.botId)}
+                botOf={(id) => state.bots.find((candidate) => candidate.id === id)}
                 onOpen={routineRunRef
                   ? () => openRoutineRun(dispatch, { runId: routineRunRef.runId, routineId: routineRunRef.routineId })
                   : undefined}
@@ -1042,7 +1051,7 @@ export function DefaultResponderSelect({ group, members, disabled = false }: { g
   );
 }
 
-/** Whether @all notifies every person in the room (server/room-mentions.ts).
+/** Whether @all notifies every person in the room (server/rooms/room-mentions.ts).
  * A person tagged by name is notified either way. The owner's setting. */
 function RoomMentionAll({ group, disabled = false }: { group: Group; disabled?: boolean }) {
   const { dispatch } = useStore();
@@ -1181,8 +1190,9 @@ async function loadRemoteActor(): Promise<{ id: string; role: "owner" | "admin" 
  * ⌘F, the app's banners, the group panel), which stay with the main chat. */
 export function GroupView({ group: stored, pane }: { group: Group; pane?: SideChat }) {
   "use memo";
+  const chatColumnClassName = useChatColumnClass();
   const roomShowThreads = useShowThreads();
-  // A direct conversation between two people (server/people-dms.ts) runs on
+  // A direct conversation between two people (server/people/people-dms.ts) runs on
   // the single-thread path of a bot-to-bot channel: no panel, no tasks. It
   // reads as the other person.
   const group = useMemo(() => (stored.peopleDm ? { ...stored, dm: true } : stored), [stored]);
@@ -1301,7 +1311,7 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
     memberIds: group.memberIds,
   });
   // Your own bots: a member who does not own the room still brings them in
-  // and takes them out (server/group-ownership.ts).
+  // and takes them out (server/groups/group-ownership.ts).
   const ownBotIds = new Set(state.bots.filter((bot) => actorId !== "" && (bot.ownerUserId ?? "").trim().toLowerCase() === actorId).map((bot) => bot.id));
   // "+ Add" under Bots: bots this person may add that are not in the room yet.
   // A member sees only their own; the owner sees every bot they may add.
@@ -1315,6 +1325,18 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
   const canAddRosterBot = addableBots.length > 0;
   // "Manage members": anyone who can change something in the roster.
   const canManageRoster = ownsRoom || roster.canAddHuman || ownBotIds.size > 0;
+  // 2026-11-03: under Members > Advanced (it opens both pickers at once; the
+  // inline Add rows open one at a time).
+  const manageMembersButton = (
+    <button
+      type="button"
+      data-manage-members-open=""
+      onClick={() => toggleRoster(roster.canAddHuman ? "both" : "bots")}
+      className="self-start rounded-lg bg-raised px-3 py-2 text-[13px] text-ink hover:bg-raised-hover"
+    >
+      {t(roster.canAddHuman ? "room.members.manage" : "room.members.manageBots")}
+    </button>
+  );
   const addHuman = (principalId: string) => {
     const id = principalId.trim().toLowerCase();
     if (!id) return;
@@ -1582,7 +1604,7 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
         const onResume = paused && !paused.enabled && paused.canEdit !== false
           ? () => { close(); dispatch({ type: "updateRoutine", routineId: paused.id, patch: { enabled: true } }); }
           : undefined;
-        return <RoutineRunCard message={m} onResume={onResume} onOpen={runRef ? () => { close(); openRoutineRun(dispatch, { runId: runRef.runId, routineId: runRef.routineId }); } : undefined} />;
+        return <RoutineRunCard message={m} bot={state.bots.find((candidate) => candidate.id === m.from?.botId)} botOf={(id) => state.bots.find((candidate) => candidate.id === id)} onResume={onResume} onOpen={runRef ? () => { close(); openRoutineRun(dispatch, { runId: runRef.runId, routineId: runRef.routineId }); } : undefined} />;
       }} />
       {!pane && <ChatStaleBanner />}
       {!remoteClient && <><GroupCostNotice group={group} />{!pane && <WeeklyLimitNotice />}</>}
@@ -1681,9 +1703,9 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
       >
         <div
           ref={transcriptRef}
-          // Same 960px column as a bot chat and the composer, so the
+          // Same chat column as a bot chat and the composer, so the
           // thread lines up with the field.
-          className={CHAT_COLUMN_CLASS}
+          className={chatColumnClassName}
           style={{ paddingBottom: composerDock.pad }}
           role="log"
           // off, as in ChatView: TranscriptAnnouncer speaks once per reply
@@ -1768,17 +1790,10 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
       <TranscriptAnnouncer threadKey={transcriptKey} snapshot={announcement} />
 
       {!following && (
-        <button
-          onClick={jumpToLatest}
-          aria-label={t("chat.jumpToLatestAria")}
-          className="animate-pop-in absolute left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-hairline/40 bg-raised px-3 py-1.5 text-[12.5px] text-ink shadow-lg hover:bg-raised-hover"
-          style={{ bottom: composerDock.height + 16 }}
-        >
-          <ArrowDown size={13} /> {t("chat.jumpToLatest")}
-        </button>
+        <JumpToLatestPill onClick={jumpToLatest} bottom={composerDock.height + 16} scrollRef={scrollRef} />
       )}
 
-      <div ref={composerDockRef} className="absolute inset-x-0 bottom-0 z-[2]">
+      <div ref={composerDockRef} data-composer-dock="" className="absolute inset-x-0 bottom-0 z-[2]">
       <Composer
         key={group.threadId}
         group={group}
@@ -1808,7 +1823,9 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
           members={members}
           canEdit={editable}
           readOnlyNote={!remoteClient && !ownsRoom}
-          details={
+          canAddBot={canAddRosterBot}
+          {...(mayLeave ? { onLeave: () => setLeaving(true) } : {})}
+          roster={
             <>
               <PanelSection title={t("groupPanel.people")}>
                 <ChannelMembers
@@ -1850,6 +1867,8 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
                   })}
                   {...roster}
                   addBotLabel={ownsRoom ? undefined : t("channelMembers.addMyBot")}
+                  leadBotId={groupLeadBotId(group, members)}
+                  {...(ownsRoom && !remoteClient ? { onSetLead: (id: string) => dispatch({ type: "patchGroup", groupId: group.id, patch: { defaultResponder: leadResponder(group, members, id) } }) } : {})}
                   onRemoveBot={(id) => {
                     dispatch({ type: "patchGroup", groupId: group.id, patch: { memberIds: group.memberIds.filter((memberId) => memberId !== id) } });
                   }}
@@ -1872,32 +1891,15 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
                     {t("room.people.done")}
                   </button>
                 )}
-                {canManageRoster && (
-                  <button
-                    type="button"
-                    data-manage-members-open=""
-                    onClick={() => toggleRoster(roster.canAddHuman ? "both" : "bots")}
-                    className="mt-2 rounded-lg bg-raised px-3 py-2 text-[13px] text-ink hover:bg-raised-hover"
-                  >
-                    {t(roster.canAddHuman ? "room.members.manage" : "room.members.manageBots")}
-                  </button>
-                )}
               </PanelSection>
-              {mayLeave && (
-                <button
-                  type="button"
-                  data-leave-group=""
-                  onClick={() => setLeaving(true)}
-                  className="self-start rounded-lg px-3 py-2 text-[13px] text-danger hover:bg-hover"
-                >
-                  {t("groupPanel.leave")}
-                </button>
-              )}
             </>
           }
           advanced={
-            remoteClient ? null : (
+            remoteClient ? (canManageRoster ? manageMembersButton : null) : (
               <>
+                {/* Opens the People and Bots pickers together, above: the
+                    inline Add rows do the same one list at a time. */}
+                {canManageRoster && manageMembersButton}
                 <PanelSection title={t("room.responder.aria")}>
                   <DefaultResponderSelect group={group} members={members} disabled={!ownsRoom} />
                 </PanelSection>

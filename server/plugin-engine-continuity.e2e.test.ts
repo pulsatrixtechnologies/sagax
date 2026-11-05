@@ -180,7 +180,7 @@ it("keeps the same plugin skill bytes and executes its MCP dependency across an 
     // Primary: the plugin's reference is in the prompt and readable.
     const primaryRead = await send("[read] Read the packing skill.");
     expect(primaryRead.every((entry) => entry.engine === "primary")).toBe(true);
-    expect(systemOf(primaryRead[0]!.request) + lastUser(primaryRead[0]!.request)).toContain("plugins/packing/skills/plugin-ship/SKILL.md");
+    expect(systemOf(primaryRead[0]!.request) + lastUser(primaryRead[0]!.request)).toContain("plugin-ship:");
     const primaryBytes = readBytes(toolText(primaryRead.at(-1)!.request));
     expect(primaryBytes).toBe(SKILL);
     // The receipt for this engine says what the turn really had.
@@ -202,7 +202,7 @@ it("keeps the same plugin skill bytes and executes its MCP dependency across an 
     const codexPreview = await api("GET", `/api/bots/${bot.id}/system-prompt`);
     const codexSkills = String(codexPreview.sections.find((section: any) => section.id === "skills")?.text ?? "");
     // With managed retrieval mounted the file engine gets the same alias.
-    expect(codexSkills).toContain("plugins/packing/skills/plugin-ship/SKILL.md");
+    expect(codexSkills).toContain("plugin-ship:");
     // The installed copy on disk (the native file path) holds the same bytes.
     const installed = (readdirSync(dataDir, { recursive: true }) as string[])
       .filter((path) => path.endsWith(join("packing", "skills", "plugin-ship", "SKILL.md")) && path.includes("capability-plugins"));
@@ -237,7 +237,7 @@ it("keeps the same plugin skill bytes and executes its MCP dependency across an 
     expect(failover.some((entry) => entry.engine === "primary" && entry.limited)).toBe(true);
     const backupTurn = failover.filter((entry) => entry.engine === "backup");
     expect(backupTurn.length).toBeGreaterThanOrEqual(2);
-    expect(systemOf(backupTurn[0]!.request) + lastUser(backupTurn[0]!.request)).toContain("plugins/packing/skills/plugin-ship/SKILL.md");
+    expect(systemOf(backupTurn[0]!.request) + lastUser(backupTurn[0]!.request)).toContain("plugin-ship:");
     expect(toolNames(backupTurn[0]!.request).some((name) => /skills_list/.test(name))).toBe(true);
     expect(readBytes(toolText(backupTurn.at(-1)!.request))).toBe(primaryBytes);
     const moved = (await api("GET", "/api/bots")).bots.find((entry: any) => entry.id === bot.id);

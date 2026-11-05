@@ -1,5 +1,5 @@
 // Organization server, through the real server and the fake provider: a
-// conversation between two people has threads like a bot (server/people-dms.ts).
+// conversation between two people has threads like a bot (server/people/people-dms.ts).
 //
 //   PT-1  alice and bob: create, switch, rename, pin, archive, snooze, file
 //         in a folder and delete threads; both see the same list; unread and

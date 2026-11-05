@@ -24,7 +24,7 @@ Every guarded send's user line is stored with `relayed: true`: an external
 interface relayed it, and nobody typed it in one of this workspace's clients.
 A Live call running on that thread never reads such a line, or the bot's
 answer to it, back to the caller as something they typed
-(`server/live-call.e2e.test.ts` sends one during a call).
+(`server/voice/live-call.e2e.test.ts` sends one during a call).
 
 `capabilities.guardedFullAccess: 1` additionally accepts
 `expectedApprovalMode: "full"` for a task that **already has** Full access.
@@ -111,8 +111,8 @@ tools.
 Run the isolated request/continuation checks:
 
 ```sh
-pnpm exec vitest run server/guarded-requests.test.ts server/guarded-messages-api.test.ts server/direct-coordination.e2e.test.ts server/team-setup.e2e.test.ts server/turn-dispatch-guard.test.ts server/request-auth.test.ts
-pnpm exec tsc -p tsconfig.server.json --noEmit
+pnpm exec vitest run server/auth/guarded-requests.test.ts server/guarded-messages-api.test.ts server/direct-coordination.e2e.test.ts server/team-setup.e2e.test.ts server/turns/turn-dispatch-guard.test.ts server/auth/request-auth.test.ts
+pnpm exec tsc -p server/tsconfig.json --noEmit
 ```
 
 These checks include immutable Stop targets, the null-provider-ID setup race,

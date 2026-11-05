@@ -3,7 +3,7 @@
 // between pulsa-v0.5.0 and pulsa-v0.5.1.
 //
 //   0.5.0  Promise.all: every installed CLI's `--version` at once
-//          (server/engines-self-check.ts at pulsa-v0.5.0)
+//          (server/engines/engines-self-check.ts at pulsa-v0.5.0)
 //   0.5.1  the same probes, at most two at a time (ENGINE_PROBE_CONCURRENCY)
 //   after  no spawn when the manifest already carries `reported`
 //          (what the image build stored); otherwise one probe at a time
@@ -264,7 +264,7 @@ async function individuals(targets) {
 
 let engineSelfCheckModule = null;
 async function loadEngineSelfCheck() {
-  engineSelfCheckModule ??= await import(new URL("../server/engines-self-check.ts", import.meta.url).href);
+  engineSelfCheckModule ??= await import(new URL("../server/engines/engines-self-check.ts", import.meta.url).href);
   return engineSelfCheckModule;
 }
 

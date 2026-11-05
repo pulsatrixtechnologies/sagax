@@ -115,7 +115,7 @@ final class MessageAttachmentsTests: XCTestCase {
     }
 
     func testImageLimitMatchesTheServer() {
-        // server/attachments.ts IMAGE_MAX_BYTES (32 MiB since #899); a server test reads this file too.
+        // server/attachments/attachments.ts IMAGE_MAX_BYTES (32 MiB since #899); a server test reads this file too.
         XCTAssertEqual(AttachmentPolicy.maximumImageBytes, 32 * 1_024 * 1_024)
         XCTAssertEqual(AttachmentPolicy.maximumImageMegabytes, 32)
         XCTAssertNoThrow(try AttachmentPolicy.validate([

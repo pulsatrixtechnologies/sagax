@@ -333,7 +333,7 @@ describe("skillPrompt", () => {
     const steps = runSteps([claude(PUSH, true), claude("npm publish", false), claude("gh release create v1")]);
     const prompt = skillPrompt(steps, "publish the release");
 
-    // server/skill-learn.test.ts proves the other half: a turn that opens with
+    // server/skills/skill-learn.test.ts proves the other half: a turn that opens with
     // this line is expanded into the skill-authoring turn exactly as /learn is.
     it("asks in plain words — no slash command — with the goal and the one rule under the shared opening line", () => {
       expect(prompt.startsWith(`${SAVE_RUN_AS_SKILL_LINE}\n`)).toBe(true);

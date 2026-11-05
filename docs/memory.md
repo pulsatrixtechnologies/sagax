@@ -85,7 +85,7 @@ can only go red when the lines that never move fill the budget by themselves
 saved, and the bot asks you to trim `MEMORY.md`.
 
 Both limits are `MEMORY_MAX_LINES` and `MEMORY_MAX_BYTES` in
-`server/workspace.ts`; the panel, the loader, and the bot's prompt all read the
+`server/workspace/workspace.ts`; the panel, the loader, and the bot's prompt all read the
 same two constants.
 
 Two more things load with it:
@@ -121,7 +121,7 @@ never a display name (Loi 25).
 
 ### Recall by meaning (2026-10-29)
 
-Beside the word search, a local semantic index (`server/semantic-index.ts`)
+Beside the word search, a local semantic index (`server/recall/semantic-index.ts`)
 finds a note or a message that says the same thing in other words: a typo
 ("dentst apointment"), another ending ("allergie", "allergique"), and, with
 an embedding model, a synonym. It is on by default; `memory.semanticRecall:

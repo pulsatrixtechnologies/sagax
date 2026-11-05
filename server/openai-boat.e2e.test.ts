@@ -108,18 +108,27 @@ it("keeps the selected API model for direct, group and scheduled Boat turns and 
       // An unperformed call ends the turn without an error row in the thread
       // (#1108), so the turn reads settled in every scenario.
       expect(settled.status).toBe("settled");
-      expect(requests.slice(before)).toHaveLength(2);
+      // 1c1ddb0023 gives a failed/unperformed call one corrective round.
+      // The person's hold still executes nothing, and every round keeps
+      // this bot's selected API model.
+      expect(requests.slice(before), JSON.stringify({ scenario, models: requests.slice(before).map(request => request.model) }))
+        .toHaveLength(scenario === "held" ? 3 : 2);
       expect(requests.slice(before).every(request => request.model === "chosen-vision-model")).toBe(true);
       const followup = requests[before + 1].messages;
       if (scenario === "held") {
         expect(followup.at(-1).content).toContain("The person has handed this computer back. This call was NOT performed");
+        expect(requests[before + 2].messages.at(-1)).toMatchObject({ role: "user",
+          content: expect.stringContaining("[Sagax: a tool call in this turn failed") });
+        // The panel may refresh after release; the held model screenshot
+        // remains unperformed (boat.ts separates its .model.jpg frame).
+        expect(commands.slice(commandsBefore).filter(command => command.includes(".model.jpg"))).toEqual([]);
       } else {
         expect(followup.at(-1).content[1].type).toBe("image_url");
       }
       expect(nativePrompts).toBe(0);
     }
     // Back to Approve for me: the owner's own routine on their own cloud
-    // computer runs without a card at that level (server/owner-autonomy.ts).
+    // computer runs without a card at that level (server/approvals/owner-autonomy.ts).
     await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "auto" });
     const beforeRoutine = requests.length;
     const { routine } = await api("POST", "/api/routines", { name: "Cloud fixture", botId: bot.id,
@@ -143,7 +152,7 @@ it("keeps the selected API model for direct, group and scheduled Boat turns and 
     boatReadsGate = undefined;
     readiness.release();
     // The owner's own routine runs on their own cloud computer without a
-    // card (owner lineage, server/owner-autonomy.ts), so the turn settles.
+    // card (owner lineage, server/approvals/owner-autonomy.ts), so the turn settles.
     const finished = await control(["wait", ...destination, "--timeout", "20"]);
     expect(finished.status, JSON.stringify(finished)).toBe("settled");
     const routineMessages = await api("GET", `/api/threads/${routineThread}/messages?limit=30`);

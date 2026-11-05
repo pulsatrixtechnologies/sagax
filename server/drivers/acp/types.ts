@@ -15,6 +15,7 @@ import type { LogSignal } from "./quiet-status.ts";
 import type { TurnLatency } from "./turn-latency.ts";
 import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
+import type { WarmResourceLease } from "../../resources/warm-resources.ts";
 
 /** Failures the person fixes on their provider account, not by retrying:
  * the process that reported one is healthy and stays pooled. */
@@ -128,6 +129,7 @@ export interface AcpConnection {
  *  later turns prompt the live session. The pool shape is the Claude
  *  driver's: spawn contract in, quiet-timeout out, crash drops the record. */
 export interface AcpSession {
+  budget?: WarmResourceLease;
   child: ChildProcessByStdio<Writable, Readable, Readable>;
   acp: AcpConnection;
   launch: { command: string; args?: string[] };
@@ -377,13 +379,16 @@ export interface AcpSupport {
   describeAccountError?(code: AccountErrorCode, model?: string): string;
   /** Compose the session/prompt text. Default prepends the persona. */
   buildPromptText?(turn: SendTurnInput): string;
+  /** The largest session/prompt text the agent takes whole (Grok moves a
+   * larger one to a file on the server: drivers/acp/prompt-fit.ts). */
+  promptByteLimit?: number;
   /** A standing line appended to the stable system half (and the full
    * system prompt), delivered with it once per native session. */
   stableSystemHint?: string;
   /** The agent skips MCP tool names it cannot qualify as `server__tool`
    * (Grok: a second `__`, a dot, a key over 256). Every MCP server is then
    * mounted through the gate, which registers each tool under an admissible
-   * alias and maps calls back (server/mcp-tool-names.ts). */
+   * alias and maps calls back (server/mcp/mcp-tool-names.ts). */
   mcpToolNames?: "grok";
   /** A context section added to the volatile half each turn. The section
    * split (prompt-split.ts) re-sends it only when its text changes. */
@@ -426,6 +431,9 @@ export interface AcpSupport {
     currentModelId?: string;
     /** session/new's or session/load's `configOptions`, verbatim. */
     configOptions: Array<{ id?: unknown; currentValue?: unknown }>;
+    /** True when this turn prompts a live session that did not run
+     * session/new or session/load (same MCP mounts still connected). */
+    reused?: boolean;
     /** Show the person one plain line (a runtime.notice) for this turn:
      * for instance that the session runs another model than the one picked.
      * Said once per conversation for the same message. */

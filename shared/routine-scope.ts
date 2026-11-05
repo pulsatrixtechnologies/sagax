@@ -48,6 +48,9 @@ export interface RoutineScopeQuery {
   botId?: string;
   ownerId?: string;
   status?: RoutineScopeStatus;
+  /** DELETE /api/routine-runs only (2026-11-03): one routine's runs, the
+   * routine panel's Clear run logs. */
+  routineId?: string;
 }
 
 /** A person, a team or a bot one of the filters can pick. */
@@ -76,5 +79,6 @@ export function routineScopeSearch(query: RoutineScopeQuery): string {
   if (query.botId) params.set("botId", query.botId);
   if (query.ownerId) params.set("ownerId", query.ownerId);
   if (query.status) params.set("status", query.status);
+  if (query.routineId) params.set("routineId", query.routineId);
   return params.toString();
 }

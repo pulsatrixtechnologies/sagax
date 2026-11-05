@@ -3,7 +3,7 @@
 // "Computer", and Connected apps is an experiment, off by default.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => true, setAdvancedMode: () => {} }));
 import type { AppSettingsSection } from "@/state/store";
@@ -38,6 +38,12 @@ vi.mock("./DesktopWorkspaceSwitcher", () => ({ useDesktopWorkspace: () => ({ ava
 vi.mock("./MailSettings", () => ({ MailSettings: () => "MAIL_SETTINGS_MARKER" }));
 vi.mock("./LocalComputerSection", () => ({ LocalComputerSection: () => "LOCAL_COMPUTER_MARKER" }));
 
+beforeAll(async () => {
+  // b8333c52c: these pages load on demand; static rendering runs no effects.
+  const sections = await import("./lazy-settings-sections");
+  await Promise.all([sections.AppearanceSettings.preload(), sections.LocalComputerSection.preload(), sections.UsageSection.preload()]);
+}, 60_000);
+
 beforeEach(() => {
   fixture.section = "account";
   fixture.org = null;
@@ -54,6 +60,8 @@ afterEach(() => {
 
 const render = async () => {
   const { SettingsModal } = await import("./SettingsModal");
+  const { AppearanceSettings, LocalComputerSection, UsageSection } = await import("./lazy-settings-sections");
+  await Promise.all([AppearanceSettings.preload(), LocalComputerSection.preload(), UsageSection.preload()]);
   return renderToStaticMarkup(createElement(SettingsModal));
 };
 const ORG = { org: { name: "Example", identity: { kind: "perspicax" as const, issuer: "https://px.example.test" } } };

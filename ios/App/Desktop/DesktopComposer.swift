@@ -1,11 +1,14 @@
 // iPad I3: the desktop composer pill (Composer.tsx), measured in
-// desktop-1366x1024-03-main.json: 46 tall with its ring, radius 22, padded
-// 6 x 8; from the left, attach (28), the approval mode (32, Hand), where this
-// conversation works (32, Sparkles for Auto), the field (13/20, 4 pt in),
-// the model chip (13, chevron 14), dictation (28, ringed; hidden once there
-// is text), voice (32) and, with text, send (32, accent). 4 pt between.
-// Its two policy menus and the "/" menu float above it, as the desktop's
-// popovers do, instead of pushing the transcript up.
+// desktop-1376x1032-03-main.json (2026-11-03): 46 tall with its ring,
+// radius 22, padded 6 x 8; from the left, the + (28, `SECONDARY_CIRCLE`:
+// 6 % ink, a 0.5 pt inset border, a 15 pt plus in the tertiary ink), the
+// field (13/20, 4 pt in), dictation (28, the same circle; hidden once there
+// is text) and the call button (28, filled with the bot's colour), which
+// becomes send while there is text. 4 pt between. The + opens the menu of
+// the reference design: Attach files, then the Model row (the composer has
+// no model chip and no approval control since 2026-10-18: the approval
+// level lives in the bot's settings). The + menu and the "/" menu float
+// above it, as the desktop's popovers do.
 import SwiftUI
 import UIKit
 import CompanionCore
@@ -13,11 +16,14 @@ import CompanionCore
 /// Which popover of the pill is open.
 enum DesktopComposerMenu: Equatable {
     case approval
+    /// The + menu (`ComposerPlusMenu`).
+    case plus
 }
 
 struct DesktopComposerPill: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
+    @EnvironmentObject private var shell: DesktopShellModel
     @Binding var draft: String
     let prompt: String
     var focused: FocusState<Bool>.Binding
@@ -28,6 +34,8 @@ struct DesktopComposerPill: View {
     let listening: Bool
     let inputLocked: Bool
     let bot: Bot?
+    /// A group's call (GroupCallButton): its readiness sets the warning dot.
+    var room: Room? = nil
     /// The slash or mention popup, floated above the pill's leading edge.
     let popup: AnyView?
     let attachPhotos: () -> Void
@@ -42,6 +50,12 @@ struct DesktopComposerPill: View {
     let draftChanged: (String, String) -> Void
 
     @State private var modelLabel: String?
+    /// The bot's realtime voice: false, the call button says "Calls need a
+    /// realtime voice" and opens Settings > Voice (CallView.tsx, 2026-11-02).
+    @State private var realtimeReady: Bool?
+    @State private var callHelpOpen = false
+    /// A room: text to speech is set up on the computer.
+    @State private var roomSpeechConfigured = false
     /// The model menu (#477, #478, #518), as the desktop chip opens it.
     @State private var modelMenuOpen = false
     @State private var menu: DesktopComposerMenu? = DesktopComposerPill.parityMenu
@@ -88,6 +102,8 @@ struct DesktopComposerPill: View {
                 .strokeBorder(theme.borderStrong, lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
+        // the guided tour's first step (`data-tour="composer"`)
+        .desktopTourAnchor("composer")
         .overlay(alignment: .topLeading) {
             if let popup, menu == nil {
                 // `absolute bottom-full left-2 mb-2 w-[26rem]`: a zero-high
@@ -111,45 +127,124 @@ struct DesktopComposerPill: View {
 
     @ViewBuilder
     private var chips: some View {
-        attach
-        // an admin, or the bot's owner on an organization server (2026-10-26)
-        if let bot, session.canAdminister || session.canEditBotField(bot, "approvalMode") {
-            DesktopApprovalButton(bot: bot, open: menuBinding(.approval), openAllowlist: openAllowlist)
-            // No place chip (owner 2026-10-18): Workspace is always Auto and
-            // the bot picks where each task runs.
-        }
+        plusButton
     }
 
     @ViewBuilder
     private var actions: some View {
-        if let modelLabel { modelChip(modelLabel) }
-        if !hasText { dictationButton }
-        voiceButton
-        if canSend || busy { sendButton }
+        // the mic stays beside the draft (ComposerActionBar: hidden only
+        // while dictating or recording a voice note)
+        dictationButton
+        if canSend || busy { sendButton } else { voiceButton }
     }
 
     private func menuBinding(_ which: DesktopComposerMenu) -> Binding<Bool> {
         Binding(get: { menu == which }, set: { menu = $0 ? which : nil })
     }
 
-    private var attach: some View {
-        Menu {
-            Button(action: attachPhotos) { Label("Photo library", systemImage: "photo.on.rectangle") }
-            Button(action: attachFiles) { Label("Files", systemImage: "folder") }
-            Divider()
-            Button(action: more) { Label("More", systemImage: "ellipsis.circle") }
-        } label: {
-            DesktopLucideGlyph(paths: DesktopLucide.paperclip, size: 17)
-                .foregroundStyle(theme.inkSecondary)
-                .frame(width: 28, height: 28)
-                .contentShape(Circle())
+    /// `SECONDARY_CIRCLE`: 28, 6 % ink, a 0.5 pt inset ring at 15 % ink,
+    /// the glyph in the tertiary ink (the ink on hover). 44 pt for a finger.
+    private func secondaryCircle<Glyph: View>(_ glyph: Glyph, tint: Color? = nil) -> some View {
+        glyph
+            .foregroundStyle(tint ?? theme.inkTertiary)
+            .frame(width: 28, height: 28)
+            .background(theme.ink.opacity(0.06), in: Circle())
+            .overlay(Circle().strokeBorder(theme.border, lineWidth: 0.5))
+            .frame(width: 32, height: 32)
+            .contentShape(Circle())
+    }
+
+    private var plusButton: some View {
+        Button { menu = menu == .plus ? nil : .plus } label: {
+            secondaryCircle(DesktopIconView(icon: .plus, size: 15, strokeWidth: 2.25), tint: menu == .plus ? theme.ink : nil)
         }
+        .buttonStyle(.plain)
         .disabled(busy)
-        .padding(.leading, 1)
-        .padding(.bottom, 2)
         .hoverEffect(.highlight)
-        .accessibilityLabel(Text("Attach a file"))
-        .accessibilityIdentifier("desktop-composer-attach")
+        .accessibilityLabel(Text("Composer actions"))
+        .accessibilityIdentifier("desktop-composer-plus")
+        .desktopTourAnchor("composer-plus")
+        .overlay(alignment: .topLeading) {
+            if menu == .plus { plusMenu }
+        }
+        .popover(isPresented: $modelMenuOpen) {
+            if let bot {
+                ModelMenuSheet(bot: bot, close: { modelMenuOpen = false })
+                    .environmentObject(session)
+                    .frame(minWidth: 340, idealWidth: 360, minHeight: 480, idealHeight: 560)
+            }
+        }
+        .onValueChange(of: modelMenuOpen) { open in
+            if !open { Task { await loadModelLabel() } }
+        }
+    }
+
+    /// `ComposerPlusMenu` (useComposerVoice.ts plusItems): min 220 wide,
+    /// 6 in, rows 30 tall; Attach files and Teach a task, nothing else (the
+    /// model and the approval level live in the bot's settings, Loop and
+    /// Goal in the "/" menu). The desktop's Attach files opens the file
+    /// picker; on the iPad it offers its two sources, the photo library and
+    /// Files, as a submenu of that one row.
+    private var plusMenu: some View {
+        DesktopComposerMenuPanel(label: "Composer actions", width: 220) {
+            Menu {
+                Button {
+                    menu = nil
+                    attachPhotos()
+                } label: { Label("Photo library", systemImage: "photo.on.rectangle") }
+                Button {
+                    menu = nil
+                    attachFiles()
+                } label: { Label("Files", systemImage: "folder") }
+            } label: {
+                HStack(spacing: 8) {
+                    DesktopLucideGlyph(paths: DesktopLucide.paperclip, size: 16)
+                        .frame(width: 16, height: 16)
+                    Text("Attach files").font(theme.font(13)).lineLimit(1)
+                    Spacer(minLength: 4)
+                }
+                .foregroundStyle(theme.ink)
+                .padding(.horizontal, 8)
+                .frame(width: 208, height: 30)
+                .contentShape(Rectangle())
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .hoverEffect(.highlight)
+            .accessibilityIdentifier("desktop-composer-attach")
+            if bot != nil {
+                // Teach a task: the same as picking /learn in the "/" menu
+                Button {
+                    menu = nil
+                    draft = "/learn "
+                    focused.wrappedValue = true
+                } label: {
+                    HStack(spacing: 8) {
+                        // RecordMark: a 5.6 ring (1.25) and a 2.9 dot in a 16 box
+                        Circle().strokeBorder(theme.danger, lineWidth: 1.25)
+                            .frame(width: 12.45, height: 12.45)
+                            .overlay(Circle().fill(theme.danger).frame(width: 5.8, height: 5.8))
+                            .frame(width: 16, height: 16)
+                        Text("Teach a task").font(theme.font(13)).lineLimit(1)
+                        Spacer(minLength: 4)
+                        Text(verbatim: "/learn")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(theme.inkTertiary)
+                    }
+                    .foregroundStyle(theme.ink)
+                    .padding(.horizontal, 8)
+                    .frame(width: 208, height: 30)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .hoverEffect(.highlight)
+                .accessibilityIdentifier("desktop-composer-teach")
+            }
+        }
+        .fixedSize()
+        .frame(height: 0, alignment: .bottom)
+        .offset(x: 0, y: -10)
+        .accessibilityIdentifier("desktop-composer-plus-menu")
     }
 
     private var field: some View {
@@ -169,66 +264,124 @@ struct DesktopComposerPill: View {
             .onHardwareReturn(hardwareReturn)
     }
 
-    private func modelChip(_ label: String) -> some View {
-        Button { if bot != nil { modelMenuOpen = true } else { openModel() } } label: {
-            HStack(spacing: 4) {
-                Text(verbatim: label)
-                    .font(theme.font(13))
-                    .lineLimit(1)
-                DesktopLucideGlyph(paths: DesktopLucide.chevronDown, size: 14)
-            }
-            .foregroundStyle(theme.inkSecondary)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 4)
-            .frame(height: 27.5)
-            .contentShape(RoundedRectangle(cornerRadius: 8))
-        }
-        .buttonStyle(.plain)
-        .hoverEffect(.highlight)
-        .padding(.bottom, 2.25)
-        .accessibilityLabel(Text("Model: \(label)"))
-        .accessibilityIdentifier("desktop-composer-model")
-        .popover(isPresented: $modelMenuOpen) {
-            if let bot {
-                ModelMenuSheet(bot: bot, close: { modelMenuOpen = false })
-                    .environmentObject(session)
-                    .frame(minWidth: 340, idealWidth: 360, minHeight: 480, idealHeight: 560)
-            }
-        }
-        .onValueChange(of: modelMenuOpen) { open in
-            if !open { Task { await loadModelLabel() } }
-        }
-    }
-
     private var dictationButton: some View {
         Button(action: toggleDictation) {
-            DesktopLucideGlyph(paths: DesktopLucide.mic, size: 18)
-                .foregroundStyle(listening ? theme.danger : theme.inkSecondary)
-                .frame(width: 28, height: 28)
-                .overlay(Circle().strokeBorder(theme.hairline.opacity(0.6), lineWidth: 1))
-                .contentShape(Circle())
+            secondaryCircle(DesktopLucideGlyph(paths: DesktopLucide.mic, size: 15), tint: listening ? theme.danger : nil)
         }
         .buttonStyle(.plain)
         .disabled(busy)
-        .padding(.bottom, 2)
         .hoverEffect(.highlight)
         .accessibilityLabel(Text(listening ? "Stop dictation" : "Start dictation"))
     }
 
+    /// The call-to-action circle (`CTA_CIRCLE`): 28, filled with the bot's
+    /// colour (my bubble's, BubbleColors.user), its ink; the call while the
+    /// field is empty, send while there is text.
+    private var cta: (fill: Color, ink: Color) {
+        if let paint = BubbleColors.user(botColor: bot?.color) { return (paint.fill.color, paint.ink.color) }
+        return (theme.accent, theme.accentInk)
+    }
+
     private var voiceButton: some View {
-        Button(action: voice) {
-            DesktopLucideGlyph(paths: DesktopLucide.audioLines, size: 15)
-                .foregroundStyle(theme.inkTertiary)
-                .frame(width: 32, height: 32)
-                .background(theme.composer, in: Circle())
-                .contentShape(Circle())
+        Button {
+            // CallView.tsx: an unavailable call opens its help bubble
+            if realtimeReady == false { callHelpOpen.toggle() } else { voice() }
+        } label: {
+            if bot != nil {
+                DesktopLucideGlyph(paths: DesktopLucide.audioLines, size: 16)
+                    .foregroundStyle(cta.ink)
+                    .frame(width: 28, height: 28)
+                    .background(cta.fill, in: Circle())
+                    .frame(width: 32, height: 32)
+                    .contentShape(Circle())
+            } else {
+                // a group's call: the quiet circle, no bot colour to wear
+                secondaryCircle(DesktopLucideGlyph(paths: DesktopLucide.audioLines, size: 16))
+            }
+        }
+        // the call is unavailable (no realtime voice): a 6 pt warning dot in
+        // the circle's top-right, ringed in the app ground (CallView.tsx
+        // `absolute right-1 top-1 size-1.5 rounded-full bg-warning ring-2 ring-app`)
+        .overlay(alignment: .topTrailing) {
+            if realtimeReady == false {
+                Circle().fill(theme.warning)
+                    .frame(width: 6, height: 6)
+                    .padding(2)
+                    .background(theme.app, in: Circle())
+                    // the 28 circle sits 2 in the 32 frame, the dot 4 in it, its ring 2 out
+                    .padding(4)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                    .accessibilityIdentifier("desktop-composer-voice-unavailable")
+            }
         }
         .buttonStyle(.plain)
         .disabled(blocked)
         .opacity(blocked ? 0.45 : 1)
         .hoverEffect(.highlight)
-        .accessibilityLabel(Text("Voice mode"))
+        .accessibilityLabel(voiceLabel)
+        .accessibilityHint(realtimeReady != false ? Text(verbatim: "")
+            : room == nil ? Text("A call runs on the realtime voice, never text to speech. Add or fix the xAI key in Settings > Voice.")
+            : roomSpeechConfigured ? Text("Give every group member a voice before starting a group call.")
+            : Text("Set up ElevenLabs, Fish Audio, Chatterbox, or a built-in Mac voice so the bot can speak during calls."))
         .accessibilityIdentifier("desktop-composer-voice")
+        .popover(isPresented: $callHelpOpen, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Call unavailable").font(theme.font(13, .medium)).foregroundStyle(theme.ink)
+                callHelpReason.font(theme.font(12)).foregroundStyle(theme.inkSecondary).fixedSize(horizontal: false, vertical: true)
+                Button {
+                    callHelpOpen = false
+                    shell.settingsSection = .voice
+                    shell.modal = .settings
+                } label: {
+                    Text("Open agent settings").font(theme.font(12, .medium)).foregroundStyle(theme.accentInk)
+                        .padding(.horizontal, 12).frame(height: 28)
+                        .background(theme.accent, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 6)
+                .accessibilityIdentifier("desktop-composer-voice-setup")
+            }
+            .padding(12)
+            .frame(width: 280, alignment: .leading)
+            .accessibilityIdentifier("desktop-composer-voice-help")
+        }
+        .task(id: bot?.id ?? room.map { "room:\($0.id):\($0.memberIds.joined(separator: ","))" }) {
+            if let id = bot?.id {
+                realtimeReady = await session.voiceModeStatus(botId: id)?.realtimeCallReady
+            } else if let room {
+                // a room call speaks with text to speech: speech set up and
+                // every member with its own voice (CallTargetButton)
+                let speech = await session.configStatus()?.tts?.configured == true
+                roomSpeechConfigured = speech
+                realtimeReady = RoomCallReadiness.ready(
+                    speechConfigured: speech,
+                    memberVoices: room.memberIds.map { session.state.bot($0)?.voice })
+            } else {
+                realtimeReady = nil
+            }
+        }
+    }
+
+    /// The help bubble's reason (CallView.tsx `reason`).
+    private var callHelpReason: Text {
+        if room == nil { return Text("A call runs on the realtime voice, never text to speech. Add or fix the xAI key in Settings > Voice.") }
+        return roomSpeechConfigured ? Text("Give every group member a voice before starting a group call.")
+            : Text("Set up ElevenLabs, Fish Audio, Chatterbox, or a built-in Mac voice so the bot can speak during calls.")
+    }
+
+    /// `voiceMode.start` / `voiceMode.realtimeNeededLabel`.
+    private var voiceLabel: Text {
+        if let room {
+            // CallTargetButton's labels for a group (requireExplicitVoices)
+            if realtimeReady == false {
+                return roomSpeechConfigured ? Text("Pick a voice in an agent profile to make calls") : Text("Set up a voice in an agent profile to make calls")
+            }
+            return Text("Call \(room.name)")
+        }
+        if realtimeReady == false { return Text("Calls need a realtime voice") }
+        if let bot { return Text("Talk with \(bot.name) (voice mode)") }
+        return Text("Voice mode")
     }
 
     private var sendButton: some View {
@@ -238,15 +391,15 @@ struct DesktopComposerPill: View {
         } label: {
             Group {
                 if busy {
-                    ProgressView().controlSize(.small)
+                    ProgressView().controlSize(.small).tint(cta.ink)
                 } else {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 15, weight: .semibold))
+                    DesktopIconView(icon: .arrowUp, size: 16, strokeWidth: 2.25)
                 }
             }
-            .foregroundStyle(theme.accentInk)
+            .foregroundStyle(cta.ink)
+            .frame(width: 28, height: 28)
+            .background(cta.fill, in: Circle())
             .frame(width: 32, height: 32)
-            .background(theme.accent, in: Circle())
             .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -275,12 +428,14 @@ struct DesktopComposerPill: View {
 struct DesktopComposerMenuPanel<Content: View>: View {
     @Environment(\.desktopTheme) private var theme
     let label: LocalizedStringKey
+    /// The + menu is `min-w-[220px]` and fits its two rows.
+    var width: CGFloat = 260
     @ViewBuilder let content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) { content }
             .padding(6)
-            .frame(width: 260, alignment: .leading)
+            .frame(width: width, alignment: .leading)
             .background(theme.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
             .shadow(color: .black.opacity(0.18), radius: 12, y: 6)
@@ -477,6 +632,18 @@ enum DesktopLucide {
     static let mic = ["M12 19v3", "M19 10v2a7 7 0 0 1-14 0v-2", "M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"]
     static let audioLines = ["M2 10v3", "M6 6v11", "M10 3v18", "M14 8v7", "M18 5v13", "M22 10v3"]
     static let chevronDown = ["m6 9 6 6 6-6"]
+    /// lucide Maximize2 (RichTable.tsx's fullscreen button).
+    static let maximize2 = ["M15 3h6v6", "m21 3-7 7", "m3 21 7-7", "M9 21H3v-6"]
+    /// lucide Table2 (TableFilePreview.tsx's preview button).
+    static let table2 = ["M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"]
+    /// lucide Smile, SmilePlus, Reply, Ellipsis (MessageHoverActions.tsx).
+    static let smile = [circle(12, 12, 10), "M8 14s1.5 2 4 2 4-2 4-2", "M9 9h.01", "M15 9h.01"]
+    static let smilePlus = ["M22 11v1a10 10 0 1 1-9-10", "M8 14s1.5 2 4 2 4-2 4-2", "M9 9h.01", "M15 9h.01", "M16 5h6", "M19 2v6"]
+    static let reply = ["M20 18v-2a4 4 0 0 0-4-4H4", "m9 17-5-5 5-5"]
+    static let ellipsis = [circle(12, 12, 1), circle(19, 12, 1), circle(5, 12, 1)]
+    /// lucide Columns2 and Rows2 (ExportTranscriptMenu.tsx Split right / down).
+    static let columns2 = ["M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z", "M12 3v18"]
+    static let rows2 = ["M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z", "M3 12h18"]
     static let copy = ["M10 8h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2z",
                        "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"]
     static let download = ["M12 15V3", "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", "m7 10 5 5 5-5"]

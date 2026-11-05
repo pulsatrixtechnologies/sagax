@@ -33,7 +33,9 @@ enum DesktopSidebarState {
     /// surface's preset.
     static func showThreads(model: DesktopShellModel, prefs: SidebarPrefsModel) -> Bool {
         #if DEBUG
-        if let preset = model.parityShowThreads { return preset }
+        // main-threads and chat-threads set only `omb-show-threads`: the
+        // location stays the default, the chat header, so no tree
+        if model.parityShowThreads != nil { return false }
         #endif
         return prefs.threads.allows(.sidebarTree)
     }
@@ -65,12 +67,17 @@ struct DesktopSidebar: View {
     @EnvironmentObject private var session: Session
     @EnvironmentObject private var model: DesktopShellModel
     @ObservedObject private var prefs = SidebarPrefsModel.shared
+    @AppStorage(SidebarLogoPreference.key) private var showSidebarLogo = SidebarLogoPreference.defaultEnabled
 
     var body: some View {
         let layout = prefs.layout(session)
         let icons = model.density == .icons
+        // Sidebar.tsx (mac-inset): with no logo, Search and New ride in the
+        // title bar's own 48 pt row, from the top; the 36 pt band stays only
+        // over the rail and over the brand row.
+        let band = icons || SidebarLogoRuntime.isBrandVisible(showSidebarLogo)
         return VStack(spacing: 0) {
-            Color.clear.frame(height: DesktopShellRules.topBand)
+            if band { Color.clear.frame(height: DesktopShellRules.topBand) }
             if icons {
                 AnyView(DesktopRailHead())
             } else {
@@ -78,8 +85,12 @@ struct DesktopSidebar: View {
             }
             AnyView(DesktopSidebarList(layout: layout))
                 .frame(maxHeight: .infinity)
+            // lot 6: the multi-select bar, above the foot; the rail has none
+            if model.selection.active, !icons { AnyView(DesktopSelectionBar()) }
             AnyView(DesktopSidebarFooter())
         }
+        // leaving the wide sidebar ends the selection (useSidebarMultiSelect)
+        .onValueChange(of: model.density) { if $0 == .icons { model.selection.clear() } }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(theme.sidebar.skinTexture(theme.texture, ink: UIColor(theme.sidebarInk)))
         .overlay(alignment: .trailing) {
@@ -104,9 +115,11 @@ struct DesktopSidebarHead: View {
     @Environment(\.desktopTheme) private var theme
     @AppStorage(SidebarLogoPreference.key) private var showSidebarLogo = SidebarLogoPreference.defaultEnabled
 
+    private var brand: Bool { SidebarLogoRuntime.isBrandVisible(showSidebarLogo) }
+
     var body: some View {
         HStack(spacing: 0) {
-            if SidebarLogoRuntime.isBrandVisible(showSidebarLogo) {
+            if brand {
                 HStack(spacing: 0) {
                     Image(theme.sidebarIsDark ? "PulsatrixMark-dark" : "PulsatrixMark-light")
                         .resizable()
@@ -128,10 +141,11 @@ struct DesktopSidebarHead: View {
             DesktopSearchButton()
             DesktopNewButton()
                 .padding(.leading, 8)
-                // pr-4 inside the 1 pt border
-                .padding(.trailing, 17)
+                // pr-4 (the title row) or pr-3 (the brand row), inside the 1 pt border
+                .padding(.trailing, brand ? 13 : 17)
         }
-        .frame(height: 48)
+        // SIDEBAR_TITLE_ROW h-12, SIDEBAR_HEAD_ROW h-14 under the brand
+        .frame(height: brand ? 56 : 48)
     }
 }
 
@@ -419,20 +433,24 @@ struct DesktopSectionHeader: View {
         let header = Button {
             withAnimation(.snappy(duration: 0.2)) { prefs.toggleCollapsed(session, section.id) }
         } label: {
-            HStack(spacing: 8) {
+            // SidebarSectionHeader.tsx: a 12 pt chevron (› folded, ⌄ open)
+            // at 80 %, 6 pt, the name 12/16 in the secondary ink, then the
+            // attention marks; no item count (#1664). h-[30px] px-2 pt-2 pb-1.5.
+            HStack(spacing: 6) {
+                DesktopIconView(icon: .chevronRight, size: 12, strokeWidth: 2)
+                    .rotationEffect(.degrees(collapsed ? 0 : 90))
+                    .opacity(0.8)
                 DesktopLineText(text: section.title, size: 12, weight: .regular,
                              color: hovering ? theme.sidebarInk : theme.sidebarInkSecondary, lineHeight: 16)
                 if collapsed { attentionMarks }
                 Spacer(minLength: 0)
-                // what a folded section holds, at the right
-                if collapsed, !section.rows.isEmpty {
-                    DesktopLineText(text: "\(section.rows.count)", size: 12,
-                                 color: hovering ? theme.sidebarInk : theme.sidebarInkSecondary, lineHeight: 16)
-                }
             }
             .foregroundStyle(hovering ? theme.sidebarInk : theme.sidebarInkSecondary)
-            .padding(.horizontal, 12)
-            .frame(height: 28)
+            .padding(.leading, 12)
+            .padding(.trailing, 8)
+            .padding(.top, 8)
+            .padding(.bottom, 6)
+            .frame(height: 30)
             .frame(maxWidth: .infinity)
             .background(hovering ? theme.sidebarHover : .clear, in: RoundedRectangle(cornerRadius: theme.radiusLg, style: .continuous))
             .contentShape(Rectangle())
@@ -642,12 +660,15 @@ final class DesktopSidebarFlags: ObservableObject {
     }
 }
 
-/// The places (`SidebarPlaces`: 36 pt rows 2 apart, a 20 pt icon at x 16,
-/// 13/20 at x 46), the hairline (`mx-2 my-2`), and the account row (the
-/// initials 28 at x 16, the name 13/20 medium at x 54, and under it the
-/// gamertag: a gold trophy and the points, opening the achievements; the
-/// row is 48 tall with it, 40 without) opening the account menu. The rail
-/// keeps the same rows as icons at the same heights.
+/// The foot (SidebarFoot.tsx, the owner's design of 2026-10-27, measured in
+/// desktop-1376x1032-03-main.json): one row, `px-4 pb-4`, `-mx-1.5`, 6 apart.
+/// The avatar (36, initials 13.68 medium on the raised fill) and the FULL
+/// name (14/18, normal weight, no pill) open the account menu; the
+/// gamertag (a 12 pt gold trophy, the points 13/18) sits under the name and
+/// opens the achievements; at the right a separate 36 pt round button with
+/// the apps grid opens Capabilities. No places: Team map, Automations,
+/// Memory and Browse Bots are rows of the account menu. The rail keeps the
+/// pair button, the round Capabilities button and the avatar, stacked.
 struct DesktopSidebarFooter: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
@@ -657,30 +678,34 @@ struct DesktopSidebarFooter: View {
 
     var body: some View {
         let icons = model.density == .icons
-        let places = DesktopSidebarPlaces.visible(
-            connected: session.connection != nil, gate: session.surfaceGate, features: flags.features)
-        return VStack(spacing: 0) {
+        return VStack(spacing: 8) {
+            // `data-sidebar-compact-toggle`: ChevronsRight 20 on a 36 pt row,
+            // back to the full sidebar
+            if icons {
+                Button { model.toggleCollapsed() } label: {
+                    DesktopIconView(icon: .chevronsRight, size: 20)
+                        .foregroundStyle(theme.sidebarInkSecondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 36)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(DesktopHoverFill(radius: 8, fill: \.sidebarHover))
+                .accessibilityLabel(Text("Collapse or expand the sidebar"))
+                .accessibilityIdentifier("desktop-sidebar-expand")
+            }
             if icons, DesktopSettingsSection.available(for: session.surfaceGate).contains(.companion) {
                 AnyView(DesktopRailPhoneButton())
             }
-            if !places.isEmpty {
-                VStack(spacing: 2) {
-                    ForEach(places, id: \.self) { place in
-                        AnyView(placeRow(place, icons: icons))
-                    }
-                }
-                Rectangle().fill(theme.sidebarHairline).frame(height: 1)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 8)
+            if icons {
+                if session.connection != nil { capabilitiesButton }
+                AnyView(railAccount)
+            } else {
+                AnyView(account)
             }
-            if icons { AnyView(railAccount) } else { AnyView(account) }
         }
-        .padding(.leading, 8)
-        .padding(.trailing, icons ? 9 : 13)
-        // Chrome centres the rail's 63 pt column on the next device pixel
-        .offset(x: icons ? 0.5 : 0)
+        .padding(.horizontal, icons ? 8 : 10)
         .padding(.top, 4)
-        .padding(.bottom, 12)
+        .padding(.bottom, icons ? 12 : 16)
         .task(id: session.connection?.id) {
             await flags.reload(session)
             await loadAchievements()
@@ -700,60 +725,58 @@ struct DesktopSidebarFooter: View {
         await achievements.reload()
     }
 
-    private func placeRow(_ place: DesktopSidebarPlace, icons: Bool) -> some View {
-        switch place {
-        case .teamMap:
-            DesktopPlaceRow(title: String(localized: "Team map"), icon: .network, id: place.rawValue, iconOnly: icons, selected: model.page == .teamMap) { model.show(.teamMap) }
-        case .automations:
-            DesktopPlaceRow(title: String(localized: "Automations"), icon: .calendarDays, id: place.rawValue, iconOnly: icons, selected: model.page == .automations) { model.show(.automations) }
-        case .templates:
-            DesktopPlaceRow(title: String(localized: "Browse Bots"), icon: .library, id: place.rawValue, iconOnly: icons) { model.modal = .templates }
-        }
-    }
-
     private var gamertag: String? {
         DesktopSidebarPlaces.gamertag(ready: achievements.status == .ready, snapshot: achievements.snapshot)
     }
 
     private var account: some View {
         let points = gamertag
-        let height: CGFloat = points == nil ? 40 : 48
-        return GeometryReader { geometry in
-            ZStack(alignment: .bottomLeading) {
-                Button {
-                    let frame = geometry.frame(in: .named(desktopShellSpace))
-                    model.menu = model.menu?.kind == .profile
-                        ? nil
-                        : DesktopMenuRequest(kind: .profile, anchor: CGPoint(x: frame.minX, y: frame.minY - 4), opensUp: true)
-                } label: {
-                    HStack(spacing: 10) {
-                        initialsCircle
-                        VStack(alignment: .leading, spacing: 0) {
-                            DesktopLineText(text: displayName, size: 13, weight: .medium, color: theme.sidebarInk, lineHeight: 20)
-                            if points != nil { Color.clear.frame(height: 16) }
+        return HStack(spacing: 6) {
+            GeometryReader { geometry in
+                ZStack(alignment: .topLeading) {
+                    Button {
+                        let frame = geometry.frame(in: .named(desktopShellSpace))
+                        model.menu = model.menu?.kind == .profile
+                            ? nil
+                            : DesktopMenuRequest(kind: .profile, anchor: CGPoint(x: frame.minX, y: frame.minY - 4), opensUp: true)
+                    } label: {
+                        HStack(alignment: .top, spacing: 8) {
+                            initialsCircle
+                            DesktopLineText(text: displayName, size: 14, weight: .medium, color: theme.sidebarInk, lineHeight: 18)
+                            Spacer(minLength: 0)
                         }
-                        Spacer(minLength: 0)
+                        .padding(.leading, 2)
+                        .padding(.vertical, 5)
+                        .frame(height: 46)
+                        // `open ? "ring-2 ring-accent/60"`: the open menu's
+                        // row wears the accent ring, rounded-full
+                        .overlay {
+                            if model.menu?.kind == .profile {
+                                Capsule().strokeBorder(theme.accent.opacity(0.6), lineWidth: 2)
+                            }
+                        }
+                        .contentShape(Rectangle())
                     }
-                    .padding(.leading, 8)
-                    .frame(height: height)
-                    .background(
-                        model.menu?.kind == .profile ? theme.sidebarHover : .clear,
-                        in: RoundedRectangle(cornerRadius: theme.radiusLg, style: .continuous)
-                    )
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(DesktopSidebarRowButtonStyle())
-                .accessibilityLabel(Text(verbatim: displayName))
-                .accessibilityHint(Text("Opens the account menu"))
-                .accessibilityIdentifier("desktop-sidebar-account")
-                if let points, let snapshot = achievements.snapshot {
-                    DesktopGamertag(points: points, level: snapshot.level.level) { model.modal = .achievements }
-                        .padding(.leading, 42)
-                        .padding(.bottom, 6)
+                    .buttonStyle(DesktopSidebarRowButtonStyle())
+                    .accessibilityLabel(Text(verbatim: displayName))
+                    .accessibilityHint(Text("Opens the account menu"))
+                    .accessibilityIdentifier("desktop-sidebar-account")
+                    if let points, let snapshot = achievements.snapshot {
+                        DesktopGamertag(points: points, level: snapshot.level.level) { model.modal = .achievements }
+                            .padding(.leading, 42)
+                            .padding(.top, 23)
+                    }
                 }
             }
+            .frame(height: 46)
+            if session.connection != nil { capabilitiesButton }
         }
-        .frame(height: height)
+    }
+
+    /// `FootConnectApps`: the apps grid (18) on a 36 pt circle of
+    /// sidebar-card, the secondary ink (the ink on hover); Capabilities.
+    private var capabilitiesButton: some View {
+        DesktopFootCapabilitiesButton { model.menu = nil; model.modal = .plugins }
     }
 
     private var railAccount: some View {
@@ -769,8 +792,8 @@ struct DesktopSidebarFooter: View {
     }
 
     private var initialsCircle: some View {
-        DesktopLineText(text: initials, size: 10.64, weight: .medium, color: theme.sidebarInkSecondary, lineHeight: 15.96, centered: true)
-            .frame(width: 28, height: 28)
+        DesktopLineText(text: initials, size: 13.68, weight: .medium, color: theme.inkSecondary, lineHeight: 20.52, centered: true)
+            .frame(width: 36, height: 36)
             .background(theme.raised, in: Circle())
     }
 
@@ -782,6 +805,31 @@ struct DesktopSidebarFooter: View {
         let words = displayName.split(whereSeparator: { $0 == " " || $0 == "@" || $0 == "." }).prefix(2)
         let letters = words.compactMap(\.first).map { String($0).uppercased() }.joined()
         return letters.isEmpty ? "?" : letters
+    }
+}
+
+/// The foot's round Capabilities button (`FootConnectApps`, SidebarFoot.tsx).
+struct DesktopFootCapabilitiesButton: View {
+    @Environment(\.desktopTheme) private var theme
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            DesktopIconView(icon: .appsGrid, size: 18, strokeWidth: 2)
+                .foregroundStyle(hovering ? theme.sidebarInk : theme.sidebarInkSecondary)
+                .frame(width: 36, height: 36)
+                // bg-sidebar-card: 7 % ink into the sidebar
+                .background(hovering ? theme.sidebarInk.opacity(0.12) : theme.sidebarInk.opacity(0.07), in: Circle())
+                // a 44 pt touch target around the 36 pt circle
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .padding(-4)
+        .onHover { hovering = $0 }
+        .accessibilityLabel(Text("Capabilities"))
+        .accessibilityIdentifier("desktop-sidebar-capabilities")
     }
 }
 
@@ -811,7 +859,7 @@ struct DesktopRailPhoneButton: View {
     }
 }
 
-/// `Gamertag`: an 11 pt gold trophy (stroke 2.4) and the points 11/16 in the
+/// `Gamertag`: a 12 pt gold trophy (stroke 2.4) and the points 13/18 in the
 /// secondary ink, 4 apart, padded 4 with a 6 pt hover pill; opens the
 /// achievements.
 struct DesktopGamertag: View {
@@ -826,12 +874,12 @@ struct DesktopGamertag: View {
     var body: some View {
         Button(action: open) {
             HStack(spacing: 4) {
-                DesktopIconView(icon: .trophy, size: 11, strokeWidth: 2.4)
+                DesktopIconView(icon: .trophy, size: 12, strokeWidth: 2.4)
                     .foregroundStyle(Self.gold)
-                DesktopLineText(text: points, size: 11, color: hovering ? theme.sidebarInk : theme.sidebarInkSecondary, lineHeight: 16)
+                DesktopLineText(text: points, size: 13, color: hovering ? theme.sidebarInk : theme.sidebarInkSecondary, lineHeight: 18)
             }
             .padding(.horizontal, 4)
-            .frame(height: 16)
+            .frame(height: 18)
             .background(hovering ? theme.sidebarHover : .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             .contentShape(Rectangle())
         }

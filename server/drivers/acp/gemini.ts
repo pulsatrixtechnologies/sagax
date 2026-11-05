@@ -24,7 +24,7 @@
 //
 // The ACP flag + auth method ids follow the published Gemini CLI ACP
 // contract. The organization-server profile (withheld tools) was verified
-// end to end against the real 0.62.0 CLI with scripts/verify-org-host-tools.ts.
+// end to end against the real 0.62.0 CLI with scripts/verify/dev/verify-org-host-tools.ts.
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -123,7 +123,7 @@ const support: AcpSupport = {
   ],
   // Organization server: no shell, file, web, subagent or skill tool of
   // Gemini's own (server/drivers/host-tools.ts; verified on 0.62.0 with
-  // scripts/verify-org-host-tools.ts).
+  // scripts/verify/dev/verify-org-host-tools.ts).
   withholdsHostTools: true,
   withheldWorkspace,
   credentialEnv: ["GEMINI_API_KEY", "GOOGLE_API_KEY"],

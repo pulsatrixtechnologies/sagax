@@ -137,7 +137,7 @@ export function useArtifact(botId: string, id: string): { artifact: Artifact | n
 
 // ---------------------------------------------------------------------------
 // Watch leases: an artifact refreshes while it is open somewhere (its dialog
-// or its window) or a favorite (server/artifact-refresh.ts). Every mounted
+// or its window) or a favorite (server/artifacts/artifact-refresh.ts). Every mounted
 // frame registers here; one request every 45 seconds renews them all.
 
 export const WATCH_RENEW_MS = 45_000;

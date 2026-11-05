@@ -6,7 +6,7 @@
 
 **Architecture:** On étend le `Group` actuel. `memberIds` reste les bots. `humanIds` ajoute les gens. L'annuaire réutilise `config.signIn` (admins, members) plus un enregistrement d'organisation et des invitations. L'hôte de la flotte garde les transcripts. À la tranche 3, une machine personnelle s'enregistre comme worker et reçoit le tour. La colonne Discord n'apparaît que lorsqu'une organisation existe. Sans organisation, la barre latérale actuelle reste, pour les bots d'avant.
 
-**Tech Stack:** TypeScript strict, Vitest, serveur `server/*.ts`, React dans `src/components`, schémas Zod déjà utilisés par `server/config.ts` et `server/bot-visibility.ts`.
+**Tech Stack:** TypeScript strict, Vitest, serveur `server/*.ts`, React dans `src/components`, schémas Zod déjà utilisés par `server/config.ts` et `server/bots/bot-visibility.ts`.
 
 **Spec:** `docs/superpowers/specs/2026-09-27-org-channels-design.md`. Le plan s'appuie sur la spec. L'exécutant lit les deux.
 
@@ -365,8 +365,8 @@ git commit -m "feat: show the organization directory above the enterprise card"
 - Modify: `shared/wire.ts` (type du groupe)
 - Modify: `server/store.ts` (`GroupRecord`, `patchGroup`)
 - Modify: `src/state/store.tsx` (`Group`)
-- Create: `server/channel-membership.ts`
-- Test: `server/channel-membership.test.ts`
+- Create: `server/rooms/channel-membership.ts`
+- Test: `server/rooms/channel-membership.test.ts`
 
 **Interfaces:**
 - Consumes: `OrgRole`
@@ -396,7 +396,7 @@ it("lets an admin edit people and stops a member", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm exec vitest run server/channel-membership.test.ts`
+Run: `pnpm exec vitest run server/rooms/channel-membership.test.ts`
 Expected: FAIL
 
 - [ ] **Step 3: Write minimal implementation**
@@ -405,21 +405,21 @@ Ajouter `humanIds` au schéma du groupe dans `shared/wire.ts`, à `GroupRecord`,
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm exec vitest run server/channel-membership.test.ts server/store.test.ts`
+Run: `pnpm exec vitest run server/rooms/channel-membership.test.ts server/store.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add shared/wire.ts server/store.ts server/channel-membership.ts server/channel-membership.test.ts src/state/store.tsx
+git add shared/wire.ts server/store.ts server/rooms/channel-membership.ts server/rooms/channel-membership.test.ts src/state/store.tsx
 git commit -m "feat: keep channel humans apart from bot members"
 ```
 
 ### Task 6: Visibilité des canaux et de Direct
 
 **Files:**
-- Create: `server/channel-visibility.ts`
-- Test: `server/channel-visibility.test.ts`
+- Create: `server/rooms/channel-visibility.ts`
+- Test: `server/rooms/channel-visibility.test.ts`
 
 **Interfaces:**
 - Consumes: `humanIds` de la tâche 5
@@ -445,30 +445,30 @@ it("shows another person's bot in Direct only after a grant", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm exec vitest run server/channel-visibility.test.ts`
+Run: `pnpm exec vitest run server/rooms/channel-visibility.test.ts`
 Expected: FAIL
 
 - [ ] **Step 3: Write minimal implementation**
 
-Fonctions pures, sans store. Le filtre de `GET /api/groups` pour une session member applique `canSeeChannel`. Le filtre de la zone Direct applique `canSeeDirectBot`. Une session locale sans `userId` (l'opérateur sur la machine avant les membres) continue de tout voir, comme `SEES_EVERYTHING` dans `server/bot-visibility.ts`.
+Fonctions pures, sans store. Le filtre de `GET /api/groups` pour une session member applique `canSeeChannel`. Le filtre de la zone Direct applique `canSeeDirectBot`. Une session locale sans `userId` (l'opérateur sur la machine avant les membres) continue de tout voir, comme `SEES_EVERYTHING` dans `server/bots/bot-visibility.ts`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm exec vitest run server/channel-visibility.test.ts`
+Run: `pnpm exec vitest run server/rooms/channel-visibility.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/channel-visibility.ts server/channel-visibility.test.ts
+git add server/rooms/channel-visibility.ts server/rooms/channel-visibility.test.ts
 git commit -m "feat: filter channels and direct bots by membership"
 ```
 
 ### Task 7: Accord direct
 
 **Files:**
-- Create: `server/direct-grants.ts`
-- Test: `server/direct-grants.test.ts`
+- Create: `server/auth/direct-grants.ts`
+- Test: `server/auth/direct-grants.test.ts`
 
 **Interfaces:**
 - Consumes: `canPlaceBot` n'est pas réutilisé. Produit sa propre règle.
@@ -493,7 +493,7 @@ it("lets the owner open a direct and refuses anyone else", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm exec vitest run server/direct-grants.test.ts`
+Run: `pnpm exec vitest run server/auth/direct-grants.test.ts`
 Expected: FAIL
 
 - [ ] **Step 3: Write minimal implementation**
@@ -502,13 +502,13 @@ Persister les grants à côté du bot (`bot.directGrants: string[]` des userId).
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm exec vitest run server/direct-grants.test.ts`
+Run: `pnpm exec vitest run server/auth/direct-grants.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/direct-grants.ts server/direct-grants.test.ts
+git add server/auth/direct-grants.ts server/auth/direct-grants.test.ts
 git commit -m "feat: let a bot owner open a direct to one person"
 ```
 
@@ -614,8 +614,8 @@ git commit -m "feat: list channel humans and bots separately"
 ### Task 10: Destination d'un tour
 
 **Files:**
-- Create: `server/turn-route.ts`
-- Test: `server/turn-route.test.ts`
+- Create: `server/turns/turn-route.ts`
+- Test: `server/turns/turn-route.test.ts`
 
 **Interfaces:**
 - Consumes: rien des tâches précédentes, à part le fait qu'un bot a maintenant un hôte
@@ -641,7 +641,7 @@ it("keeps a fleet bot on the fleet host", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm exec vitest run server/turn-route.test.ts`
+Run: `pnpm exec vitest run server/turns/turn-route.test.ts`
 Expected: FAIL
 
 - [ ] **Step 3: Write minimal implementation**
@@ -650,13 +650,13 @@ Fonction pure. Le champ bot `host` est ajouté au record avec défaut `{ kind: "
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm exec vitest run server/turn-route.test.ts`
+Run: `pnpm exec vitest run server/turns/turn-route.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/turn-route.ts server/turn-route.test.ts
+git add server/turns/turn-route.ts server/turns/turn-route.test.ts
 git commit -m "feat: route a bot turn to its chosen host"
 ```
 
@@ -698,7 +698,7 @@ Expected: FAIL
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm exec vitest run server/workers.test.ts server/turn-route.test.ts`
+Run: `pnpm exec vitest run server/workers.test.ts server/turns/turn-route.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -711,8 +711,8 @@ git commit -m "feat: queue channel turns while a worker is offline"
 ### Task 12: Approbation réservée au propriétaire
 
 **Files:**
-- Create: `server/approval-audience.ts`
-- Test: `server/approval-audience.test.ts`
+- Create: `server/approvals/approval-audience.ts`
+- Test: `server/approvals/approval-audience.test.ts`
 - Modify: le point qui émet la carte d'approbation d'un tour de canal (chercher `PendingApproval` côté serveur, le module qui notifie la session)
 
 **Interfaces:**
@@ -740,7 +740,7 @@ it("does not take channel members as an audience", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm exec vitest run server/approval-audience.test.ts`
+Run: `pnpm exec vitest run server/approvals/approval-audience.test.ts`
 Expected: FAIL
 
 - [ ] **Step 3: Write minimal implementation**
@@ -749,13 +749,13 @@ Avant d'émettre la carte, filtrer les sessions dont `userId` n'est pas `audienc
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm exec vitest run server/approval-audience.test.ts`
+Run: `pnpm exec vitest run server/approvals/approval-audience.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/approval-audience.ts server/approval-audience.test.ts
+git add server/approvals/approval-audience.ts server/approvals/approval-audience.test.ts
 git commit -m "feat: deliver channel approvals only to the bot owner"
 ```
 
@@ -806,7 +806,7 @@ Quand le socket du worker se ferme pendant un tour, appeler `failTurn` et écrir
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm exec vitest run server/workers.test.ts server/turn-route.test.ts server/approval-audience.test.ts server/channel-membership.test.ts src/components/OwnerWait.test.ts src/components/OrgSidebar.test.ts src/components/OrgDirectory.test.ts`
+Run: `pnpm exec vitest run server/workers.test.ts server/turns/turn-route.test.ts server/approvals/approval-audience.test.ts server/rooms/channel-membership.test.ts src/components/OwnerWait.test.ts src/components/OrgSidebar.test.ts src/components/OrgDirectory.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**

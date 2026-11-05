@@ -14,7 +14,7 @@ import {
   drainSteeredMessages,
   queueSteeredMessage,
   type SteerStore,
-} from "./steer-queue.ts";
+} from "./turns/steer-queue.ts";
 import {
   type ChannelQueueItem,
   _queuedChannelCount,
@@ -23,7 +23,7 @@ import {
   holdChannelQueue,
   queueChannelMessage,
   settleHeldChannelQueueHead,
-} from "./channel-queue.ts";
+} from "./rooms/channel-queue.ts";
 import type { BotRecord, Message } from "./store.ts";
 
 function fakeBot(id: string, threadId: string, busy: boolean): BotRecord {

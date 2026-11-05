@@ -29,15 +29,15 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { MEMBER_DEFAULT_PERMISSIONS } from "../shared/permissions.ts";
-import { SandboxdVerifier } from "./sandboxd-auth.ts";
-import { SandboxService } from "./sandboxd-core.ts";
+import { SandboxdVerifier } from "./sandbox/sandboxd-auth.ts";
+import { SandboxService } from "./sandbox/sandboxd-core.ts";
 import { createSandboxdHandler } from "./sandboxd.ts";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { FakeDocker } from "./testing/fake-docker.ts";
 import { connectFakeDesktop, type FakeDesktop } from "./testing/fake-desktop.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "./testing/fake-oidc-provider.ts";
 import { freePortBlock } from "./testing/ports.ts";
-import { sandboxdConfigFromEnv } from "./user-sandbox-spec.ts";
+import { sandboxdConfigFromEnv } from "./sandbox/user-sandbox-spec.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
@@ -123,8 +123,9 @@ posixOnly("organization server: a member's own destinations", () => {
     writeFileSync(join(data, "config.json"), JSON.stringify({
       organization: { memberBotsUseOrgKey: true },
       instances: {
-        // A turn that waits, so the test speaks to its permission broker.
-        hold: { driver: "claudeAgent", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_DUMP: join(home, "hold-dump.json") }, config: { cli: FAKE_CLAUDE, fullAuto: true } },
+        // fcce56775: this held turn uses the organization's API key, so the
+        // test can speak to its permission broker without a CLI sign-in.
+        hold: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_DUMP: join(home, "hold-dump.json") }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
       },
     }));
     child = spawn(process.execPath, [join(SERVER_DIR, "index.ts")], {

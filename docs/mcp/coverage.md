@@ -3,10 +3,10 @@
 Inventory of what the Sagax server and the Perspicax gateway can do, against
 the tools the Sagax MCP ("agents" server, `server/drivers/agents-catalog.ts`)
 exposes to a bot or an AI client. The machine-readable form is the registry in
-`server/mcp-permissions.ts`; `server/mcp-permissions.test.ts` fails when a
+`server/mcp/mcp-permissions.ts`; `server/mcp/mcp-permissions.test.ts` fails when a
 catalog tool has no permission.
 
-Totals: capabilities 158, covered 158, gaps 0.
+Totals: capabilities 161, covered 161, gaps 0.
 
 Sources read: the agents tool catalog, the internal routes it calls
 (`/api/internal/*`), the member API (`docs/org-member-api.md`), and the
@@ -19,15 +19,15 @@ Reading the table:
   shown.
 - **covered (bridge)**: a Perspicax tool the agents catalog does not list
   natively but a bot reaches through the Perspicax bridge
-  (`server/perspicax-mcp.ts`, a profile mounted on the turn). The relay judges
+  (`server/perspicax/perspicax-mcp.ts`, the account connection mounted on the turn). The relay judges
   it with the same permission, so enforce never refuses it by omission.
 - **MISSING**: no MCP tool.
 - Tool names are the ones Perspicax 1.8.28 serves (connector
   `mcp/meta_tools.rs`, `mcp/memory_tools.rs`, `mcp/flow_tools.rs`,
   `mcp/sagax_tools.rs`). The per-profile tools are matched by name pattern:
-  `<profile>__query` (read), `<profile>__write` or `<profile>__<resource>_write`
-  (write), `<profile>__action` (action), `<profile>__read_action` (read), any
-  other `<profile>__<operation>` (an operation's own tool, judged as an
+  `<profile>_query` (read), `<profile>_write` or `<profile>_<resource>_write`
+  (write), `<profile>_action` (action), `<profile>_read_action` (read), any
+  other `<profile>_<operation>` (an operation's own tool, judged as an
   action). The `-` separator (`cw_psa-query`) is read too.
 - Per-resource fine grain (a ticket update in the PSA) is not a separate
   registry row: it is the kind's permission narrowed by a resource rule,
@@ -86,6 +86,7 @@ Reading the table:
 | artifacts:update | sagax | `update_artifact` | `artifacts:update` | covered |
 | artifacts:list | sagax | `list_artifacts` | `artifacts:list` | covered |
 | artifacts:delete | sagax | `delete_artifact` | `artifacts:delete` | covered |
+| artifacts:claude | sagax | `claude_artifact` | `artifacts:claude` | covered |
 | pages:propose | sagax | `propose_page` | `pages:propose` | covered |
 | pages:comments | sagax | `page_comments` | `pages:comments` | covered |
 | phone:call | sagax | `place_phone_call` | `phone:call` | covered |
@@ -170,7 +171,9 @@ Reading the table:
 | people:ask | perspicax | `ask_person` | `people:ask` | covered (bridge) |
 | approvals:answer | sagax | `answer_approval` (Perspicax `sagax_approve`) | `approvals:answer` | covered |
 | routines:run | sagax | `run_routine` (Perspicax `sagax_routine_run`) | `routines:run` | covered |
-| routines:update | sagax | `update_routine` (Perspicax `sagax_routine_update`, member `PATCH routines/{id}`) | `routines:update` | covered |
+| routines:update | sagax | `update_routine` (agent API + Perspicax forward; member `PATCH routines/{id}`) | `routines:update` | covered |
+| agents:model | sagax | `update_agent_model`, `list_agent_models` (#1944) | `agents:model` | covered |
+| agents:settings | sagax | `update_agent_settings` (#1944) | `agents:settings` | covered |
 | people:nudge | sagax | `nudge_person` (Perspicax `sagax_nudge`) | `people:nudge` | covered |
 | api:list | perspicax | `api_list` | `api:list` | covered |
 | api:search | perspicax | `api_search` | `api:search` | covered |
@@ -187,11 +190,11 @@ Reading the table:
 | remotesupport:open | perspicax | `remote_support_open` | `remotesupport:open` | covered |
 | remotesupport:status | perspicax | `remote_support_status` | `remotesupport:status` | covered |
 | remotesupport:close | perspicax | `remote_support_close` | `remotesupport:close` | covered |
-| api:query | perspicax | `<profile>__query` | `api:query` | covered (bridge) |
-| api:write | perspicax | `<profile>__write`, `<profile>__<resource>_write` | `api:write` | covered (bridge) |
-| api:action | perspicax | `<profile>__action` | `api:action` | covered (bridge) |
-| api:action.read | perspicax | `<profile>__read_action` | `api:action.read` | covered (bridge) |
-| api:operation | perspicax | `<profile>__<operation>` | `api:operation` | covered (bridge) |
+| api:query | perspicax | `<profile>_query` | `api:query` | covered (bridge) |
+| api:write | perspicax | `<profile>_write`, `<profile>_<resource>_write` | `api:write` | covered (bridge) |
+| api:action | perspicax | `<profile>_action` | `api:action` | covered (bridge) |
+| api:action.read | perspicax | `<profile>_read_action` | `api:action.read` | covered (bridge) |
+| api:operation | perspicax | `<profile>_<operation>` | `api:operation` | covered (bridge) |
 | pairing:manage | sagax | `manage_pairing` | `pairing:manage` | covered |
 | settings:manage | sagax | `manage_settings` | `settings:manage` | covered |
 | settings:change | sagax | `sagax_settings` | `settings:change` | covered |
@@ -217,6 +220,6 @@ mode still decide. Perspicax's own Sagax tools (`sagax_bots`, `sagax_send`,
 (`PERSPICAX_TOOLS`: the memory tools, the `api_*` meta-tools, `identity`,
 `flow`, `flow_action`, the `remote_support_*` tools, `review_write`) are listed only on an organization
 server linked to Perspicax (`SAGAX_PERSPICAX_TOOLS`) and forwarded by
-`/api/internal/perspicax/tool` to the profile mounted in the turn, after the
+`/api/internal/perspicax/tool` to the account connection mounted in the turn, after the
 misuse and safety review. Reading the Perspicax catalog to vet resource names
 at turn time (`ApiCatalog`) is not wired yet.

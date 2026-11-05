@@ -87,6 +87,83 @@ function isVoiceSms(tokens: readonly string[]): boolean {
   return tokens.length >= 2 && tokens[tokens.length - 2] === "VOICE" && tokens[tokens.length - 1] === "SMS";
 }
 
+/** 2026-11-02: placing a phone call reaches a real person and costs money,
+ * like a text: it is held the same way below Full. A strict allow list,
+ * never the word "call" in a name (calls_query, call recordings and
+ * call_tool place nothing):
+ *   - `voice_call` (Perspicax Voice) and `create_call` (a Twilio toolkit's
+ *     Calls create), with or without a server prefix;
+ *   - a Twilio write of the Calls resource (`twilio_api_write`,
+ *     `twilio_api__write`, `twilio_api_Calls_write`, a bare `api_write`)
+ *     that creates and names a `To`;
+ *   - any of these run through an MCP directory's call_tool or a gateway's
+ *     use_tool.
+ * Perspicax Voice's voice_line (a read) and voice_number (search, buy,
+ * adopt, verify by text, confirm, directive, menu) never dial out. Sagax's
+ * own place_phone_call keeps its card (shared/outbound-call.ts) and is not
+ * matched here. */
+const CALL_TAILS: ReadonlyArray<readonly [string, string]> = [["VOICE", "CALL"], ["CREATE", "CALL"]];
+const META_TAILS: ReadonlyArray<readonly [string, string]> = [["CALL", "TOOL"], ["USE", "TOOL"]];
+
+function endsWith(tokens: readonly string[], tail: readonly [string, string]): boolean {
+  return tokens.length >= 2 && tokens[tokens.length - 2] === tail[0] && tokens[tokens.length - 1] === tail[1];
+}
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+
+/** "Calls", "Calls.json", "Accounts_Calls", "/2010-04-01/Accounts/AC1/Calls.json" all read "calls". */
+function callResourceKey(raw: string): string {
+  const last = raw.trim().replace(/\.json$/i, "").split("/").filter(Boolean).pop() ?? "";
+  return last.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/^accounts?(?=.)/, "");
+}
+
+function namesTo(args: Record<string, unknown>): boolean {
+  const places = [args.set, args.params, args.body, args.data, args];
+  return places.some((place) => {
+    const fields = asRecord(place);
+    if (!fields) return false;
+    return ["To", "to"].some((key) => typeof fields[key] === "string" ? (fields[key] as string).trim() !== "" : fields[key] !== undefined && fields[key] !== null);
+  });
+}
+
+function twilioCallsCreate(name: string, tokens: readonly string[], args: Record<string, unknown>): boolean {
+  const last = tokens[tokens.length - 1];
+  if (last !== "WRITE" && last !== "CREATE") return false;
+  const server = name.startsWith("mcp__") ? (name.split("__")[1] ?? "").toUpperCase() : "";
+  const twilio = tokens.includes("TWILIO") || /TWILIO/.test(server) || (tokens.length === 2 && tokens[0] === "API");
+  if (!twilio) return false;
+  const fromName = tokens.slice(0, -1).filter((token) => token !== "TWILIO" && token !== "API" && token !== "ACCOUNTS" && token !== "ACCOUNT").join("_");
+  const resource = typeof args.resource === "string" && args.resource.trim()
+    ? args.resource
+    : typeof args.path === "string" && args.path.trim() ? args.path : fromName;
+  if (callResourceKey(resource) !== "calls") return false;
+  const action = typeof args.action === "string" ? args.action.trim().toLowerCase() : "";
+  if (action && action !== "create") return false;
+  return namesTo(args);
+}
+
+/** Does this call place a phone call? `args` are the call's arguments when
+ * the caller has them: a Twilio Calls write is only read with them. */
+export function isPhoneCallTool(name: string, args?: unknown, depth = 0): boolean {
+  const tokens = actionTokens(name);
+  if (tokens.length < 2) return false;
+  if (CALL_TAILS.some((tail) => endsWith(tokens, tail))) return true;
+  const input = asRecord(args);
+  if (!input) return false;
+  if (META_TAILS.some((tail) => endsWith(tokens, tail))) {
+    if (depth > 2) return false;
+    const target = [input.name, input.tool_name, input.tool].find((value): value is string => typeof value === "string" && value.trim() !== "");
+    if (!target) return false;
+    let inner: unknown = input.arguments ?? input.tool_input ?? input.args;
+    if (typeof inner === "string") {
+      try { inner = JSON.parse(inner); } catch { inner = undefined; }
+    }
+    return isPhoneCallTool(target, inner, depth + 1);
+  }
+  return twilioCallsCreate(name, tokens, input);
+}
+
 /** Does the tool name describe a read-only action? This is deliberately
  * narrower than "not outbound": updates, deletes and other writes do not
  * become reads merely because they send nothing to another person. */
@@ -96,14 +173,37 @@ export function isReadOnlyTool(name: string): boolean {
   return tokens.length > 0 && READ_VERBS.has(tokens[0]);
 }
 
-/** Does this tool send something to someone, or move money? */
-export function isOutboundTool(name: string): boolean {
+/** Sagax agents tools that talk to another bot or room inside the app.
+ * Their names contain SEND/POST, so the verb heuristic would treat them as
+ * outbound; peer contact is gated by approvePeerComms instead (#1905). */
+const IN_APP_AGENTS_PEER_TOOLS = new Set([
+  "send_to_bot",
+  "post_to_room",
+  "coordinate_bots",
+  "ask_bot",
+  "delegate_bot",
+]);
+
+/** Bare agents tool name when `name` is an agents peer tool, else null. */
+function inAppAgentsPeerTool(name: string): string | null {
+  const trimmed = name.trim();
+  const prefixed = /^(?:mcp__)?agents__(.+)$/i.exec(trimmed);
+  const tool = (prefixed ? prefixed[1]! : trimmed).toLowerCase();
+  return IN_APP_AGENTS_PEER_TOOLS.has(tool) ? tool : null;
+}
+
+/** Does this tool send something to someone, or move money? `args`, when
+ * the caller has them, let a Twilio Calls write read as the call it places. */
+export function isOutboundTool(name: string, args?: unknown): boolean {
+  // In-app peer tools stay inside Sagax; approvePeerComms is their card.
+  if (inAppAgentsPeerTool(name)) return false;
   // A raw API call from the workbench can do anything an app tool can, and
   // nothing here can read which; it is treated as a send.
   if (name === "COMPOSIO_PROXY_EXECUTE") return true;
   const tokens = actionTokens(name);
   if (tokens.length === 0) return false;
   if (isVoiceSms(tokens)) return true;
+  if (isPhoneCallTool(name, args)) return true;
   if (isReadOnlyTool(name)) return false;
   // A draft, a reply draft included, sends nothing until it is sent.
   if (tokens.includes("DRAFT") && !tokens.includes("SEND") && !tokens.includes("SENDS")) return false;
@@ -137,6 +237,8 @@ const NOT_A_MESSAGE = new Set([
  * raw API call. */
 export function isMessageSendTool(name: string): boolean {
   if (!isOutboundTool(name)) return false;
+  // a phone call is not a text: allowed recipients never answer it
+  if (isPhoneCallTool(name)) return false;
   const tokens = actionTokens(name);
   if (isVoiceSms(tokens)) return true;
   if (tokens.some((token) => NOT_A_MESSAGE.has(token))) return false;
@@ -200,5 +302,5 @@ export function connectorCallsIn(name: string, args: unknown): ConnectorCall[] {
 
 /** The subset of a request's app tools that would send something. */
 export function outboundCallsIn(name: string, args: unknown): ConnectorCall[] {
-  return connectorCallsIn(name, args).filter((call) => isOutboundTool(call.slug));
+  return connectorCallsIn(name, args).filter((call) => isOutboundTool(call.slug, call.arguments));
 }

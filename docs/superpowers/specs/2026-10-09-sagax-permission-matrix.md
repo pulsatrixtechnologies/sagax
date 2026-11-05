@@ -41,7 +41,7 @@ whitelist per user profiles."
 
 How a member is refused today, three layers:
 
-1. **Route scope** (`server/request-auth.ts:304` `CLIENT_ALLOW`,
+1. **Route scope** (`server/auth/request-auth.ts:304` `CLIENT_ALLOW`,
    `:597` `requiredScope`): every route not listed needs the `admin` scope;
    a member's session holds `client` only. Answer:
    `403 forbidden: this session lacks the admin scope`.
@@ -60,7 +60,7 @@ How a member is refused today, three layers:
 
 Default = what a plain member holds when Perspicax sends nothing (today's
 behaviour). Gates are at base `4d379d9a6`; "route" means the admin-scope
-route list `PERMISSION_ROUTES` (`server/request-auth.ts`) now opens it to a
+route list `PERMISSION_ROUTES` (`server/auth/request-auth.ts`) now opens it to a
 person holding the key.
 
 ### bots (7)
@@ -82,7 +82,7 @@ stay outside the member's bot fields: no key opens them.
 
 | Key | Label | Today's gate | Default | adminOnly |
 |---|---|---|---|---|
-| `sharing.grants` | Share their bots with people and teams | `server/bot-grants.ts:140`, `server/direct-grants.ts:95` (owner rule; `sagax_bots: use` refuses) | yes | no |
+| `sharing.grants` | Share their bots with people and teams | `server/bots/bot-grants.ts:140`, `server/auth/direct-grants.ts:95` (owner rule; `sagax_bots: use` refuses) | yes | no |
 | `sharing.visibility` | Choose who sees their bots (visibility, sidebar section) | `server/index.ts:30193` (create), `:30644` (PATCH `visibility`, `section`) | no | no |
 
 ### engines (1)
@@ -165,8 +165,8 @@ key leaves everyone on `mine`, as before.
 | Key | Label | Today's gate | Default | adminOnly |
 |---|---|---|---|---|
 | `backup.workspace` | Back up and restore the server | `/api/workspace-backup/*` (admin scope), `manageBackups` | no | **yes** |
-| `host.shell` | Run commands on the server | `server/engine-access.ts:136` `memberBotAdminApproval` (a member bot's host-level tools wait for an admin), `server/index.ts:7838` (answering those cards), `:30495` command rules, `:30531` always-allow, `/api/mcp/servers*` `:33968`, engine `cli`/`configDir`, `/api/cli-test`, installation computers (`/api/computers/*` `:33029`, `/api/local-computer*`) | no | **yes** |
-| `server.settings` | Change the server's settings | every other admin-scope route: `PUT /api/config`, keys, mail (`server/mail/mail-routes.ts:94`), webhooks (`server/index.ts:28261`), `PATCH /api/org/settings` (`server/perspicax-org-routes.ts:209`), budgets | no | **yes** |
+| `host.shell` | Run commands on the server | `server/engines/engine-access.ts:136` `memberBotAdminApproval` (a member bot's host-level tools wait for an admin), `server/index.ts:7838` (answering those cards), `:30495` command rules, `:30531` always-allow, `/api/mcp/servers*` `:33968`, engine `cli`/`configDir`, `/api/cli-test`, installation computers (`/api/computers/*` `:33029`, `/api/local-computer*`) | no | **yes** |
+| `server.settings` | Change the server's settings | every other admin-scope route: `PUT /api/config`, keys, mail (`server/mail/mail-routes.ts:94`), webhooks (`server/index.ts:28261`), `PATCH /api/org/settings` (`server/perspicax/perspicax-org-routes.ts:209`), budgets | no | **yes** |
 | `server.link` | Link the server | the link file, sign-in list, invites, interim attach window | no | **yes** |
 
 ### Summary
@@ -231,8 +231,8 @@ permissions.
   `BOT_FIELD_PERMISSIONS`, `permissionRefusal`, `permissionCatalogue`.
 - `server/org/org-permissions.ts`: `effectivePermissions` (admin, Perspicax
   list or defaults, person sheet narrowing).
-- `server/perspicax-link.ts`: the directory schema and `permissionsOf`.
-- `server/request-auth.ts`: `PERMISSION_ROUTES` and `routePermission`; the
+- `server/perspicax/perspicax-link.ts`: the directory schema and `permissionsOf`.
+- `server/auth/request-auth.ts`: `PERMISSION_ROUTES` and `routePermission`; the
   gate asks `permits(session, key)` before refusing an admin-scope route.
 - `server/index.ts`: `principalPermissions`, `callerPermissions`,
   `callerCan`, `sessionPermits`, and each gate of section 3.
@@ -246,8 +246,8 @@ permissions.
 
 - `shared/permissions.test.ts`: catalogue invariants, `can`, normalization.
 - `server/org/org-permissions.test.ts`: effective permissions.
-- `server/request-auth.test.ts`: permission routes and the gate.
-- `server/perspicax-link.test.ts`: the directory field.
+- `server/auth/request-auth.test.ts`: permission routes and the gate.
+- `server/perspicax/perspicax-link.test.ts`: the directory field.
 - `server/org/org-admin-routes.test.ts`, `server/org/org-admin-console.e2e.test.ts`:
   catalogue in capabilities, person permissions.
 - `server/org/org-permissions.e2e.test.ts` (PM-1 to PM-5): defaults, a route gate

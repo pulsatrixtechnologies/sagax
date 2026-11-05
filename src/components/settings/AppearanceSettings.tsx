@@ -21,6 +21,7 @@ import { FRESH_TOPIC_AFTER_CHOICES, useFreshTopicAfter, writeFreshTopicAfter, ty
 import { parseSidebarDensity, setSidebarDensity, SIDEBAR_DENSITIES, useSidebarDensity, type SidebarDensity } from "@/lib/sidebar-preferences";
 import { setShowRunCard, useShowRunCard } from "@/lib/run-card-preferences";
 import { setStreamReplies, useStreamReplies } from "@/lib/stream-replies-preference";
+import { CHAT_WIDTHS, parseChatWidth, setChatWidth, useChatWidth, type ChatWidth } from "@/lib/chat-width-preference";
 import { parseSendKey, SEND_KEYS, sendKeyLabel, setSendKey, useSendKey } from "@/lib/send-key";
 import { setShowSidebarLogo, useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
 import { setSidebarPeopleApart, useSidebarPeopleApart } from "@/lib/sidebar-people-apart-preference";
@@ -125,6 +126,30 @@ function SidebarDensityRow() {
     </CompactRow>
   );
 }
+
+function ChatWidthRow() {
+  const width = useChatWidth();
+  return (
+    <CompactRow label={t("settings.chatWidth.title")} rowId="chatWidth">
+      <PillSelect<ChatWidth>
+        value={width}
+        ariaLabel={t("settings.chatWidth.chooseAria")}
+        onChange={(next) => setChatWidth(parseChatWidth(next))}
+        options={CHAT_WIDTHS.map((option) => ({
+          value: option,
+          label: t(
+            option === "wide"
+              ? "settings.chatWidth.wide"
+              : option === "full"
+                ? "settings.chatWidth.full"
+                : "settings.chatWidth.reading",
+          ),
+        }))}
+      />
+    </CompactRow>
+  );
+}
+
 
 type ThreadsView = "hidden" | ThreadsLocation;
 
@@ -437,6 +462,7 @@ export function AppearanceSettings() {
         </SettingsGroup>
       </div>
       <SettingsGroup title={t("settings.group.conversation")} groupId="conversation">
+        <ChatWidthRow />
         <ThreadsViewRow />
         <FreshTopicRow />
         <SendKeyRow />

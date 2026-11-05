@@ -5,7 +5,7 @@ loopback-only fake Images API. Do not enter real provider keys or select
 **Generate avatar** with a configured cloud provider during this check.
 
 ```sh
-node --experimental-strip-types scripts/verify-avatar-providers.ts
+node --experimental-strip-types scripts/verify/dev/verify-avatar-providers.ts
 ```
 
 Open the printed `previewUrl`. The page shows the fake API's `imageBase`.
@@ -40,7 +40,7 @@ test. The fixture does not prove paid provider access or native desktop secure
 storage; payload/credential mapping tests cover those contracts offline.
 
 ```sh
-pnpm exec vitest run server/avatar-image.test.ts server/generated-image.test.ts server/config.test.ts shared/image-generation.test.ts electron/workspace-credentials.test.mjs electron/diagnostics.test.mjs
+pnpm exec vitest run server/media/avatar-image.test.ts server/media/generated-image.test.ts server/config.test.ts shared/image-generation.test.ts electron/workspace-credentials.test.mjs electron/diagnostics.test.mjs
 pnpm exec vitest run server/index.test.ts -t 'avatar|image key'
 pnpm build
 ```

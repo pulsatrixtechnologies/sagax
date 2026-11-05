@@ -1,7 +1,7 @@
 import type { ServerResponse } from "node:http";
 import { describe, expect, it, vi } from "vitest";
 
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import {
   createRoutinesHttpRoutes,
   type RoutinesHttpDeps,
@@ -80,7 +80,7 @@ function deps(over: Partial<RoutinesHttpDeps> = {}): RoutinesHttpDeps {
     auditRunNow: () => undefined,
     routineVisible: () => true,
     routineSeenBy: () => true,
-    runAsChooser: () => ({ principalId: "pr_member", orgAdmin: false } as never),
+    runAsChooser: () => ({ principalId: "pr_member", admin: false, manager: false, managedTeamIds: [] }),
     runAsPeople: () => [],
     bot: (id) => (id === "b1" ? { id: "b1", ownerUserId: "pr_owner" } : null),
     botOwner: () => "pr_owner",
@@ -120,6 +120,63 @@ function call(
   };
   return { ctx, sent, run: () => route(ctx) };
 }
+
+describe("routine effort HTTP", () => {
+  it("passes effort through POST and preserves a null reset through PATCH", async () => {
+    const create = vi.fn((_body: unknown) => routine as never);
+    const patchAs = vi.fn((_auth: unknown, _req: unknown, _id: string, _body: unknown) => ({ status: 200, body: { routine } }));
+    const route = createRoutinesHttpRoutes(deps({ create, patchAs }));
+    const created = call(route, { method: "POST", body: { botId: "b1", model: "fast", effort: "low" } });
+    await created.run();
+    expect(created.sent[0]?.status).toBe(201);
+    expect(create.mock.calls[0]?.[0]).toMatchObject({ model: "fast", effort: "low" });
+    const changed = call(route, { path: "/api/routines/r1", method: "PATCH", body: { effort: null } });
+    await changed.run();
+    expect(changed.sent[0]?.status).toBe(200);
+    expect(patchAs.mock.calls[0]?.[3]).toEqual({ effort: null });
+  });
+});
+
+describe("routine readiness HTTP", () => {
+  it("keeps the run-as options route ahead of generic routine detail", async () => {
+    const route = createRoutinesHttpRoutes(deps());
+    const request = call(route, { path: "/api/routines/run-as-options", search: "?botId=b1" });
+    await request.run();
+    expect(request.sent[0]?.status).toBe(200);
+  });
+  it("checks with Run now rights without creating a run, and returns the last readiness on detail", async () => {
+    const answer = { ok: false, checks: [{ kind: "skills", ok: false, code: "skill_missing", params: { skill: "inbox-review" }, line: "Missing skill. Assign it." }], checkedAt: 123 } as const;
+    const check = vi.fn(async () => ({ ...answer, checks: [...answer.checks] }));
+    const runNow = vi.fn();
+    const route = createRoutinesHttpRoutes(deps({ check, runNow, listRuns: () => [{ routineId: "r1", createdAt: 1, readiness: answer.checks }] as never }));
+    const request = call(route, { path: "/api/routines/r1/check", method: "POST" });
+    await request.run();
+    expect(request.sent[0]).toEqual({ status: 200, body: answer });
+    expect(check).toHaveBeenCalledTimes(1); expect(runNow).not.toHaveBeenCalled();
+    const bridge = call(route, { path: "/api/routines/r1/run", method: "POST", body: { action: "check" } }); await bridge.run();
+    expect(bridge.sent[0]).toEqual({ status: 200, body: answer }); expect(runNow).not.toHaveBeenCalled();
+    const detail = call(route, { path: "/api/routines/r1" }); await detail.run();
+    expect(detail.sent[0]?.body).toMatchObject({ readiness: answer.checks, lastRun: { readiness: answer.checks } });
+  });
+  it("withholds another person's latest readiness and output on detail", async () => {
+    const base = deps();
+    const route = createRoutinesHttpRoutes(deps({ listRuns: () => [{ routineId: "r1", createdAt: 1, output: "private report", readiness: [{ code: "mcp_missing" }] }] as never,
+      scopeDeps: (...args) => ({ ...base.scopeDeps(...args), mine: () => false }) }));
+    const request = call(route, { path: "/api/routines/r1" }); await request.run();
+    expect(request.sent[0]?.body).toMatchObject({ lastRun: { redacted: true } });
+    expect((request.sent[0]?.body as { readiness?: unknown } | undefined)?.readiness).toBeUndefined();
+    expect(JSON.stringify(request.sent[0]?.body)).not.toContain("private report");
+  });
+  it("refuses missing run rights, a foreign routine, and a hidden target", async () => {
+    for (const over of [{ needsRun: () => true }, { mayRunNow: () => false }, { routineVisible: () => false }]) {
+      const check = vi.fn();
+      const route = createRoutinesHttpRoutes(deps({ ...over, check }));
+      const request = call(route, { path: "/api/routines/r1/check", method: "POST" }); await request.run();
+      expect(request.sent[0]?.status).toBe(over.routineVisible ? 404 : 403);
+      expect(check).not.toHaveBeenCalled();
+    }
+  });
+});
 
 describe("createRoutinesHttpRoutes", () => {
   it("PASS for foreign paths", async () => {

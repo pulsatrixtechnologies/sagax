@@ -56,10 +56,11 @@ export const CARD_HOME: Readonly<Record<string, AppSettingsSection>> = {
   "engines.legacy": "providers",
   "engines.setup": "providers",
   "engines.moreProviders": "providers",
-  // what stays on Models: image generation, web search, online computers, Decision model
-  "connections.image": "engines",
+  // 2026-11-05 (option B): image generation and web search are Providers > Other services
+  "connections.image": "providers",
+  "connections.webSearch": "providers",
+  // what stays on Models: online computers, Decision model
   "connections.integrations": "engines",
-  "connections.webSearch": "engines",
   "engines.decisionModel": "engines",
 };
 

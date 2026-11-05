@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { inboxKey, type InboxApproval } from "../../shared/approvals-inbox.ts";
 import { json, readBody } from "../harness/http.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { createApprovalsInboxRoutes, inboxSpecialCard, type ApprovalsInboxDeps } from "./approvals-inbox.ts";
 import { PASS } from "./table.ts";
 

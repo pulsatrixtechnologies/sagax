@@ -6,13 +6,13 @@
 import { normalizePhone } from "../../shared/allowed-recipients.ts";
 import { canadianNumber, formatPhone, maskPhone } from "../../shared/outbound-call.ts";
 import { parseDtmfDigits, type PhoneCallEventKind, type PhoneCallLiveEvent, type PhoneCallPhase } from "../../shared/phone-call-live.ts";
-import type { OutboundCallRecord, OutboundCalls } from "../outbound-calls.ts";
+import type { OutboundCallRecord, OutboundCalls } from "../outbound/outbound-calls.ts";
 
 type ToolAnswer = { ok: true; isError: boolean; value: unknown } | { ok: false; code: string; error: string };
 
 export interface CallControlDeps {
   calls: OutboundCalls;
-  /** twilio_api__write as the person (harness path). */
+  /** twilio_api_write as the person (harness path). */
   twilio(args: Record<string, unknown>): Promise<ToolAnswer>;
   /** Patch the live card after a control or a progress event. */
   patchLive(row: OutboundCallRecord, change: LiveCallPatch): void;

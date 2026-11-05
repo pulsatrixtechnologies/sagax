@@ -11,7 +11,7 @@
   - `holdWhileTargetBusy()` waits without counting.
   - A 24-hour check in `processOne` expires stale items. The existing `onSettled → wakeUndispatchedDelegation` path then wakes the delegating bot.
   - An exported sweep, run hourly from `server/index.ts`, catches items nothing drains.
-- `server/peer-roster.ts` gains one `peerStatus()` mapping from the harness's existing `BotActivity`. The roster, `list_bots`, handoff chips and `check_delegation` all read that one mapping.
+- `server/peers/peer-roster.ts` gains one `peerStatus()` mapping from the harness's existing `BotActivity`. The roster, `list_bots`, handoff chips and `check_delegation` all read that one mapping.
 
 **Tech Stack:** TypeScript (strict), Node, Vitest, pnpm.
 
@@ -42,15 +42,15 @@ Each of these was found while reading the code for this plan:
 - `DELEGATION_TTL_MS = 24 * 60 * 60 * 1000`.
 - `MAX_QUEUED_PER_THREAD = 4` and `MAX_COMMS_DEPTH = 1` are unchanged.
 - Run one test file with `pnpm vitest run <path>`. Typecheck: `pnpm typecheck`. Lint: `pnpm lint`.
-- Baseline before Task 1: `server/delegations.test.ts`, `server/peer-roster.test.ts`, `server/chief-of-staff.test.ts` and `server/drivers/agents-proxy.test.ts` together pass 143 tests.
+- Baseline before Task 1: `server/delegations.test.ts`, `server/peers/peer-roster.test.ts`, `server/chief-of-staff.test.ts` and `server/drivers/agents-proxy.test.ts` together pass 143 tests.
 
 ---
 
 ### Task 1: `peerStatus` and truthful roster wording
 
 **Files:**
-- Modify: `server/peer-roster.ts` (top of file, `RosterMember`, `renderRoster`)
-- Test: `server/peer-roster.test.ts`
+- Modify: `server/peers/peer-roster.ts` (top of file, `RosterMember`, `renderRoster`)
+- Test: `server/peers/peer-roster.test.ts`
 
 **Interfaces:**
 - Produces:
@@ -61,7 +61,7 @@ Each of these was found while reading the code for this plan:
 
 - [ ] **Step 1: Write the failing tests**
 
-In `server/peer-roster.test.ts`, add `peerStatus,` to the import list from `./peer-roster.ts` (after `peerRosterSystemPrompt,`). Then append:
+In `server/peers/peer-roster.test.ts`, add `peerStatus,` to the import list from `./peer-roster.ts` (after `peerRosterSystemPrompt,`). Then append:
 
 ```ts
 describe("peerStatus", () => {
@@ -99,12 +99,12 @@ describe("renderRoster status wording", () => {
 
 - [ ] **Step 2: Run them to verify they fail**
 
-Run: `pnpm vitest run server/peer-roster.test.ts`
+Run: `pnpm vitest run server/peers/peer-roster.test.ts`
 Expected: FAIL — `peerStatus` is not exported. The roster test fails because Quill renders "(working right now)".
 
 - [ ] **Step 3: Implement**
 
-At the top of `server/peer-roster.ts`, after the header comment:
+At the top of `server/peers/peer-roster.ts`, after the header comment:
 
 ```ts
 import type { BotActivity } from "./store.ts";
@@ -169,13 +169,13 @@ with:
 
 - [ ] **Step 4: Run the tests, including the Chief's roster**
 
-Run: `pnpm vitest run server/peer-roster.test.ts server/chief-of-staff.test.ts`
+Run: `pnpm vitest run server/peers/peer-roster.test.ts server/chief-of-staff.test.ts`
 Expected: PASS. The Chief fixtures use `busy: true` without `activity` and still read "(working right now)".
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/peer-roster.ts server/peer-roster.test.ts
+git add server/peers/peer-roster.ts server/peers/peer-roster.test.ts
 git commit -m "feat(peers): roster says when a teammate is waiting on the user
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
@@ -1003,7 +1003,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 Run:
 
 ```bash
-pnpm vitest run server/delegations.test.ts server/peer-roster.test.ts server/chief-of-staff.test.ts \
+pnpm vitest run server/delegations.test.ts server/peers/peer-roster.test.ts server/chief-of-staff.test.ts \
   server/drivers/agents-proxy.test.ts server/routines/routines-startup.test.ts server/comms.test.ts \
   server/thread-aware-bots.e2e.test.ts server/peer-allowlist.e2e.test.ts
 ```

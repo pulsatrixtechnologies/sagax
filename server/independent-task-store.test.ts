@@ -6,7 +6,7 @@ import { approvalModeFor } from "../shared/approval-mode.ts";
 import { DATA_DIR } from "./config.ts";
 import type { ModelSelection } from "./contracts.ts";
 import { isProjectEmoji, Store, type BotRecord, type GroupRecord, type TaskPatch } from "./store.ts";
-import { ensureTaskWorkspace } from "./workspace.ts";
+import { ensureTaskWorkspace } from "./workspace/workspace.ts";
 
 const selection = (): ModelSelection => ({ instanceId: "claude", model: "default" });
 const savedBots = (): BotRecord[] => JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8"));
@@ -215,7 +215,7 @@ describe("independent bot task state", () => {
     for (const folder of [first, second, chosen]) expect(readFileSync(join(folder, "result.txt"), "utf8")).toBe("Keep my project");
   });
 
-  it("keeps own models, approvals, cursor, rewind and pin snapshots across navigation, deletion and reload; other threads follow the bot's model", () => {
+  it("applies the bot's model to every thread while preserving each thread's approvals, cursor, rewind and pins across navigation, deletion and reload", () => {
     const store = new Store(selection);
     const bot = store.createBot({}, { seedMessages: false });
     const first = bot.threadId;
@@ -226,11 +226,16 @@ describe("independent bot task state", () => {
     });
     store.setResumeCursor(bot.id, "codex", { session: "first-session" }, first);
     store.appendMessage(first, { role: "user", kind: "text", text: "First conversation" });
+    expect(store.projectBotForTask(bot.id, first)?.modelSelection).toEqual({ instanceId: "codex", model: "first", effort: "high" });
     store.patchBot(bot.id, {
       modelSelection: { instanceId: "claude", model: "second-default" },
       approvalMode: "ask",
       alwaysAllow: ["Read"],
     });
+    // a9872c8a9 (#1810): a new bot model clears earlier thread picks;
+    // permissions and native conversation state remain independent.
+    expect(store.taskByThread(bot.id, first)?.modelSelection).toBeUndefined();
+    expect(store.projectBotForTask(bot.id, first)?.modelSelection).toEqual({ instanceId: "claude", model: "second-default" });
     // #1207: a level chosen in one thread after the bot's is its own
     // exception (setting the bot's level ends every exception).
     store.patchTask(bot.id, first, { approvalMode: "auto", autoApprove: true, alwaysAllow: ["Bash:git"] });
@@ -245,6 +250,7 @@ describe("independent bot task state", () => {
     store.setResumeCursor(bot.id, "claude", "second-session");
     store.patchTask(bot.id, second.threadId, { pinnedMessageId: "second-pin" });
     store.patchBot(bot.id, { modelSelection: selection(), alwaysAllow: ["Other"] });
+    expect(store.tasks(bot.id).every((task) => task.modelSelection === undefined)).toBe(true);
     const detached = store.createTask(bot.id, "Background", false)!;
     expect(bot.threadId).toBe(second.threadId);
 
@@ -256,7 +262,7 @@ describe("independent bot task state", () => {
       pinnedMessageId: "first-pin",
     });
     expect(store.projectBotForTask(bot.id, first)).toMatchObject({
-      modelSelection: { instanceId: "codex", model: "first", effort: "high" },
+      modelSelection: selection(),
       approvalMode: "auto",
       alwaysAllow: ["Bash:git"],
     });

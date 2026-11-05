@@ -22,10 +22,46 @@ new machine; existing credentials and connections on the destination remain
 unchanged. Conversations, drafts and user files are not automatically redacted
 and may still contain pasted secrets, so the archive must remain private.
 
+## Archive format
+
+A `.sagaxbackup` (or older `.ombbackup`) file is the header `OMB-WORKSPACE-1\n`,
+a 16-byte scrypt salt and a 12-byte IV, then an uncompressed tar encrypted with
+AES-256-GCM under the password (the header is the AAD), then the 16-byte tag.
+Nothing is parsed before the tag authenticates the whole file. The tar holds:
+
+- `manifest.json`: the summary, the source data folder, the allowlisted client
+  preferences, every file and folder of `data/` with its size, mode and
+  sha256, and `parts` (below) when the archive has any.
+- `data/`: the workspace files, minus every exclusion listed under
+  [Limits and cleanup](#limits-and-cleanup). Sealed stores (`*.enc`, `*.key`)
+  never leave a machine, `installation-capabilities.enc` included.
+- `skills-library-index.json` (from 0.8.34, version 1): the organization
+  skills library index, `{ "format": "sagax.skills-library-index",
+  "version": 1, "entries": { … } }`. Since capabilities lot 5 that index lives
+  in the sealed installation store, which a backup leaves out, so it travels as
+  this part: the library entries only, never the store's MCP servers,
+  marketplaces, markers or any secret. `manifest.parts.skillsLibraryIndex`
+  records its path, version, size, sha256 and entry count; a part that does
+  not match is refused, as is a part the manifest does not declare. When the
+  sealed store cannot be read on that launch, the archive has no part and its
+  summary says so. The skill files themselves are in
+  `data/skills-library/skills/`.
+
+On restore, the destination keeps its own sealed store. The restore leaves the
+part at `skills-library/restore-import.json`, and the next boot, once the store
+can be read, adopts it with the rules of the stranded-entry recovery: a valid
+entry whose `SKILL.md` has the recorded sha256. A workspace restore is a
+REPLACE, so an adopted entry replaces the destination's entry of the same name
+and a destination entry whose skill file the restore removed is dropped; any
+other import mode never replaces an existing name. The file is then removed (a
+file that is not a supported index is set aside as `.rejected`). Bot
+assignments travel with the bots. An archive without the part (0.8.33 and
+older) restores as before.
+
 ## Launch and drive
 
 ```sh
-node --experimental-strip-types scripts/verify-workspace-backup.ts
+node --experimental-strip-types scripts/verify/dev/verify-workspace-backup.ts
 ```
 
 This recipe accepts no live URL. It launches two owned fake-engine servers with
@@ -36,7 +72,11 @@ It compares original IDs, history, attachment bytes and app-managed paths, saved
 non-secret settings, credential exclusion and destination preservation,
 browser-state allowlisting, and the automatic safety copy. It sends a new turn
 through the restored conversation. Wrong passwords, wrong confirmation,
-non-admin access and post-confirmation writes are rejected.
+non-admin access and post-confirmation writes are rejected. A second recipe
+(`verifyWorkspaceBackupLibrarySkills`) adds organization library skills,
+assigns them to two bots, restores into a fresh install and checks they are
+listed, readable (200 from the library and from the bot) and assigned as
+before, with the sealed installation store left out of the archive.
 
 Keep its JSON output and the reported persistent log/evidence paths. The
 permanent version is:
@@ -52,10 +92,10 @@ Export worker behavior and repeatable latency measurements are documented in
 
 ```sh
 pnpm exec vitest run server/workspace-backup.test.ts \
-  server/workspace-backup-policy.test.ts \
-  server/workspace-backup-http.test.ts \
-  server/workspace-backup-maintenance.test.ts \
-  server/webhook-ingress.test.ts server/request-auth.test.ts
+  server/backup/workspace-backup-policy.test.ts \
+  server/backup/workspace-backup-http.test.ts \
+  server/backup/workspace-backup-maintenance.test.ts \
+  server/triggers/webhook-ingress.test.ts server/auth/request-auth.test.ts
 SAGAX_UI_E2E=1 pnpm exec vitest run scripts/testing/workspace-backup-ui.e2e.test.ts
 ```
 

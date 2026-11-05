@@ -7,12 +7,12 @@
  */
 import { z } from "zod";
 
-import type { GithubCredential } from "../github-access.ts";
-import { githubSkillFetch } from "../github-access.ts";
-import { botSkillTemplateSchema } from "../new-bot-defaults.ts";
-import type { RequestAuth } from "../request-auth.ts";
-import { fetchSkillFromSource } from "../skill-fetch.ts";
-import type { LibrarySkillListing } from "../skill-library.ts";
+import type { GithubCredential } from "../github/github-access.ts";
+import { githubSkillFetch } from "../github/github-access.ts";
+import { botSkillTemplateSchema } from "../bots/new-bot-defaults.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { fetchSkillFromSource } from "../skills/skill-fetch.ts";
+import type { LibrarySkillListing } from "../skills/skill-library.ts";
 import {
   acceptBotSkillReview,
   acceptLibrarySkillReview,
@@ -27,8 +27,8 @@ import {
   revertBotSkillReview,
   revertLibrarySkillReview,
   updateBotSkillByPerson,
-} from "../skill-person-edit.ts";
-import { botsUsingSharedSkill } from "../skill-share.ts";
+} from "../skills/skill-person-edit.ts";
+import { botsUsingSharedSkill } from "../skills/skill-share.ts";
 import {
   installLibrarySkill,
   listLibrarySkills,
@@ -37,15 +37,16 @@ import {
   setLibrarySkillReviewState,
   updateLibrarySkill,
   deleteLibrarySkill,
-} from "../skill-library.ts";
+} from "../skills/skill-library.ts";
 import {
   installSkill,
   listBotSkillsWithOrigin,
+  listSkills,
   removeSkill,
   setSkillEnabled,
   type SkillListing,
   type StagedSkillWrite,
-} from "../skills.ts";
+} from "../skills/skills.ts";
 import type { BotRecord } from "../store.ts";
 import { composeSkillMd, parseSkillMd, scanSkillText } from "../../shared/skill-md.ts";
 import { permissionRefusal, type PermissionKey } from "../../shared/permissions.ts";
@@ -109,6 +110,16 @@ export function createBotsContentRoutes(deps: BotsContentRouteDeps): RouteHandle
       callerCan,
       pluginSkillSource,
     } = deps;
+
+    // A per-bot skill the library sweep moved (a restored workspace, a skill
+    // added while the app was closed) stays this bot's by assignment: its
+    // GET and files read the library copy, like readBotSkillFile does for
+    // turns. A private skill of the same name still wins.
+    const assignedLibrarySkill = (botId: string, name: string): boolean => {
+      if (!skillsLibraryEnabled()) return false;
+      if (!(store.bot(botId)?.assignedSkills ?? []).includes(name)) return false;
+      return !listSkills(botId).some((skill) => skill.name === name);
+    };
 
     // Bot skills and skill-template: owner / manage / admin for changes.
     // skills-library assignment on a bot keeps the original (no refusal call).
@@ -201,9 +212,10 @@ export function createBotsContentRoutes(deps: BotsContentRouteDeps): RouteHandle
     if (m && method === "GET") {
       if (!store.bot(m[1])) return json(res, 404, { error: "no such bot" });
       const filePath = url.searchParams.get("path");
-      const folder = botSkillFolder(m[1]!, m[2]!);
+      const library = assignedLibrarySkill(m[1]!, m[2]!);
+      const folder = library ? librarySkillFolder(m[2]!) : botSkillFolder(m[1]!, m[2]!);
       if (!filePath) {
-        const payload = loadBotSkillEditor(m[1]!, m[2]!);
+        const payload = library ? loadLibrarySkillEditor(m[2]!, "library") : loadBotSkillEditor(m[1]!, m[2]!);
         if ("error" in payload) return json(res, payload.status, { error: payload.error });
         return json(res, 200, { files: payload.files });
       }
@@ -220,7 +232,7 @@ export function createBotsContentRoutes(deps: BotsContentRouteDeps): RouteHandle
     m = path.match(/^\/api\/bots\/([\w-]+)\/skills\/([a-z0-9-]+)$/);
     if (m && method === "GET") {
       if (!store.bot(m[1])) return json(res, 404, { error: "no such bot" });
-      const payload = loadBotSkillEditor(m[1]!, m[2]!);
+      const payload = assignedLibrarySkill(m[1]!, m[2]!) ? loadLibrarySkillEditor(m[2]!, "library") : loadBotSkillEditor(m[1]!, m[2]!);
       if ("error" in payload) return json(res, payload.status, { error: payload.error });
       return json(res, 200, payload);
     }

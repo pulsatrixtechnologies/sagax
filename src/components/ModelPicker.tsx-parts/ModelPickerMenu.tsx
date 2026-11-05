@@ -1,5 +1,5 @@
 // Composer model menu (extracted from ModelPicker.tsx, #1383).
-import { type RefObject } from "react";
+import { type KeyboardEvent, type RefObject } from "react";
 import type { MenuMotion } from "../MenuMotion";
 import { ChevronRight } from "lucide-react";
 import type { Bot, InstanceInfo, ModelSelection } from "@/state/store";
@@ -12,7 +12,35 @@ import { EffortRow } from "./EffortControls";
 import { toggleModelFavorite } from "@/lib/model-favorites";
 import { fastBaseOf, fastTwinOf, modelDefaultEffort, modelEffortLevels } from "../../../shared/model-capabilities";
 import type { EffortLevel } from "../../../shared/wire";
-import { MENU_WIDTH } from "./helpers";
+import { MENU_WIDTH, PANES_MENU_WIDTH } from "./helpers";
+import { AnchoredPopover, enclosingWindowBounds } from "../AnchoredPopover";
+
+function menuViewportHeight(fallback = 800): number {
+  if (typeof window === "undefined") return fallback;
+  return Number(window.innerHeight) || fallback;
+}
+
+/** The height a menu anchored by its bottom edge can take: up to 560px, never
+ * past the window's top (8px margin). */
+export function menuRoomAbove(bottom: number, viewportHeight = menuViewportHeight()): number {
+  return Math.max(120, Math.min(560, viewportHeight - bottom - 8));
+}
+
+/** The height a menu anchored by its top edge can take: up to 560px, never
+ * past the window's bottom (8px margin). */
+export function menuRoomBelow(top: number, viewportHeight = menuViewportHeight()): number {
+  return Math.max(120, Math.min(560, viewportHeight - top - 8));
+}
+
+/** Where the model window (`windowOnly`) pins its menu: top-left inside the
+ * viewport. CSS `bottom: innerHeight - 96` put the bottom edge near the top
+ * and drew the rest above the window (Refs #1979). */
+export function windowOnlyMenuPlace(viewportHeight = menuViewportHeight()): { left: number; top: number } {
+  // Keep the top edge inside the window even on a short viewport so the
+  // menu can still grow downward (menuRoomBelow floor is 120px).
+  const top = Math.min(96, Math.max(8, viewportHeight - 128));
+  return { left: 24, top };
+}
 
 export function ModelPickerMenu({
   menuRef,
@@ -34,9 +62,13 @@ export function ModelPickerMenu({
   setEffort,
   pick,
   effortTitle,
+  anchorRef,
+  panes = false,
+  turnedOff = 0,
+  openActiveModels,
 }: {
   menuRef: RefObject<HTMLDivElement | null>;
-  menuAt: { left?: number; right?: number; bottom: number } | null;
+  menuAt: { left?: number; right?: number; top?: number; bottom?: number } | null;
   menuMotion: MenuMotion;
   headless: boolean;
   closeMenu: (refocus?: boolean) => void;
@@ -55,7 +87,17 @@ export function ModelPickerMenu({
   setEffort: (effort: EffortLevel | undefined) => void;
   pick: (instance: InstanceInfo, model: string, keepOpen?: boolean) => void;
   effortTitle: string;
+  /** Hang the menu off this chip (Settings > Models list): under it or over
+   * it, inside the window that holds it, above that window's layer. */
+  anchorRef?: RefObject<HTMLElement | null>;
+  /** Two columns (providers, models) in place of the flat list (#2050). */
+  panes?: boolean;
+  /** Models this person or the organization turned off; the footer's
+   * "n turned off · Active models" opens Settings > Models > Advanced. */
+  turnedOff?: number;
+  openActiveModels?: () => void;
 }) {
+  const width = panes ? PANES_MENU_WIDTH : MENU_WIDTH;
   // The settings of the model in use, under the composer's list (the maintainer,
   // 2026-10-13, Cursor's second panel): Fast when it has a fast twin and
   // Effort › with only the levels it takes. The maintainer, 2026-10-14: Model › (the
@@ -87,44 +129,92 @@ export function ModelPickerMenu({
     />
   ) : null;
 
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    // a submenu of the + menu: its keys stay here (the + menu moves its own focus)
+    if (headless) event.stopPropagation();
+    // the left arrow from an empty search steps back to the + menu's row
+    if (headless && event.key === "ArrowLeft" && !event.defaultPrevented
+      && event.target instanceof HTMLInputElement && event.target.value === "") {
+      event.preventDefault();
+      closeMenu(true);
+      return;
+    }
+    if (event.key !== "Escape" || event.defaultPrevented) return;
+    event.preventDefault();
+    closeMenu(true);
+  };
+  const content = (
+    <>
+      <ModelSearchList variant="popover" autoFocus sections={menuSections} onPick={onRow} onEscape={() => closeMenu(true)} disabled={Boolean(bot.busy)} panes={panes}
+        favorites={{ keys: favoriteKeys, onToggle: (row) => toggleModelFavorite(row.key) }} />
+      {!viewerLocal && <ModelNoEngineNotice className="border-t border-popover-hairline px-3 py-2" onConnect={() => closeMenu()} />}
+      {/* #2050: the two-pane selector always shows the effort bar (the
+          global Simple/Advanced mode hides nothing on these pages). */}
+      {(advanced || panes) && settingsPanel}
+      <div className="border-t border-popover-hairline px-1.5 pt-1">
+        {openActiveModels && (
+          <ModelMenuItem variant="popover" data-model-active-models onClick={openActiveModels}>
+            <span>{turnedOff > 0 ? t("model.activeModelsLink", { count: turnedOff }) : t("model.activeModels")}</span>
+            <ChevronRight size={14} aria-hidden="true" className="text-popover-ink-secondary" />
+          </ModelMenuItem>
+        )}
+        <ModelMenuItem variant="popover" data-model-edit onClick={openProviders}>
+          <span>{t("settings.section.providers")}</span>
+          <ChevronRight size={14} aria-hidden="true" className="text-popover-ink-secondary" />
+        </ModelMenuItem>
+      </div>
+    </>
+  );
+
+  if (anchorRef) return (
+    <AnchoredPopover
+      anchorRef={anchorRef}
+      popoverRef={menuRef as RefObject<HTMLElement | null>}
+      align="start"
+      gap={6}
+      maxHeight={560}
+      bounds={enclosingWindowBounds}
+      data-model-menu=""
+      data-model-menu-anchored=""
+      role="dialog"
+      aria-label={t("model.menu")}
+      style={{ width }}
+      onKeyDown={onKeyDown}
+      {...menuMotion.exitProps}
+      className={cn(
+        "flex max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-xl border border-popover-hairline popover-surface bg-popover py-1 text-popover-ink shadow-2xl shadow-black/50",
+        menuMotion.className,
+      )}
+    >
+      {content}
+    </AnchoredPopover>
+  );
+
+  const menuMaxHeight = menuAt
+    ? menuAt.top != null
+      ? menuRoomBelow(menuAt.top)
+      : menuAt.bottom != null
+        ? menuRoomAbove(menuAt.bottom)
+        : 560
+    : undefined;
   const menuPanel = (
     <div
       ref={menuRef}
       data-model-menu
       role="dialog"
       aria-label={t("model.menu")}
-      style={menuAt ? { left: menuAt.left, right: menuAt.right, bottom: menuAt.bottom, width: MENU_WIDTH } : { width: MENU_WIDTH }}
-      onKeyDown={(event) => {
-        // a submenu of the + menu: its keys stay here (the + menu moves its own focus)
-        if (headless) event.stopPropagation();
-        // the left arrow from an empty search steps back to the + menu's row
-        if (headless && event.key === "ArrowLeft" && !event.defaultPrevented
-          && event.target instanceof HTMLInputElement && event.target.value === "") {
-          event.preventDefault();
-          closeMenu(true);
-          return;
-        }
-        if (event.key !== "Escape" || event.defaultPrevented) return;
-        event.preventDefault();
-        closeMenu(true);
-      }}
+      // Bottom-anchored menus open upward (2026-11-03); the model window
+      // pins by its top so the list stays inside the viewport (Refs #1979).
+      style={menuAt ? { left: menuAt.left, right: menuAt.right, top: menuAt.top, bottom: menuAt.bottom, width, maxHeight: menuMaxHeight } : { width }}
+      onKeyDown={onKeyDown}
       {...menuMotion.exitProps}
       className={cn(
-        "z-50 flex max-h-[min(560px,calc(100dvh-96px))] max-w-[calc(100vw-16px)] flex-col rounded-xl border border-popover-hairline popover-surface bg-popover py-1 text-popover-ink shadow-2xl shadow-black/50",
+        "z-50 flex max-h-[min(560px,calc(100dvh-96px))] max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-xl border border-popover-hairline popover-surface bg-popover py-1 text-popover-ink shadow-2xl shadow-black/50",
         menuAt ? "fixed" : "absolute bottom-full right-0 mb-1.5",
         menuMotion.className,
       )}
     >
-      <ModelSearchList variant="popover" autoFocus sections={menuSections} onPick={onRow} onEscape={() => closeMenu(true)} disabled={Boolean(bot.busy)}
-        favorites={{ keys: favoriteKeys, onToggle: (row) => toggleModelFavorite(row.key) }} />
-      {!viewerLocal && <ModelNoEngineNotice className="border-t border-popover-hairline px-3 py-2" onConnect={() => closeMenu()} />}
-      {advanced && settingsPanel}
-      <div className="border-t border-popover-hairline px-1.5 pt-1">
-        <ModelMenuItem variant="popover" data-model-edit onClick={openProviders}>
-          <span>{t("settings.section.providers")}</span>
-          <ChevronRight size={14} aria-hidden="true" className="text-popover-ink-secondary" />
-        </ModelMenuItem>
-      </div>
+      {content}
     </div>
   );
 

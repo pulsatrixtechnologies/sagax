@@ -93,17 +93,19 @@ function call(
   },
 ) {
   const sent: Array<{ status: number; body: unknown }> = [];
-  const ended: Array<{ status: number; body: string }> = [];
+  const ended: Array<{ status: number; body: string; headers: Record<string, string> }> = [];
   let statusCode = 200;
+  let responseHeaders: Record<string, string> = {};
   const res = {
     headersSent: false,
     writableEnded: false,
-    writeHead(status: number) {
+    writeHead(status: number, headers?: Record<string, string>) {
       statusCode = status;
+      responseHeaders = headers ?? {};
     },
     end(payload?: string) {
       (res as { writableEnded: boolean }).writableEnded = true;
-      ended.push({ status: statusCode, body: payload ?? "" });
+      ended.push({ status: statusCode, body: payload ?? "", headers: responseHeaders });
     },
   } as unknown as ServerResponse;
   const url = new URL(`http://x${opts.path}${opts.query ? `?${opts.query}` : ""}`);
@@ -115,7 +117,7 @@ function call(
     json: ((_r, status, body) => {
       sent.push({ status, body });
     }) as InternalRouteContext["json"],
-    capability: opts.capability ?? { botId: bot.id, threadId: "t-1", generation: "g-1", perspicaxProfile: "prof-1" },
+    capability: opts.capability ?? { botId: bot.id, threadId: "t-1", generation: "g-1" },
     readBody: async () => opts.body ?? {},
   };
   return {
@@ -305,31 +307,30 @@ describe("createInternalIntegrationsRoutes", () => {
     expect(sent).toEqual([]);
   });
 
-  it("POST /perspicax/mcp refuses an unmounted profile (403)", async () => {
+  it("POST /perspicax/mcp refuses an unmounted account connection (403)", async () => {
     const route = createInternalIntegrationsRoutes(deps({ perspicaxMounted: () => false }));
     const { sent, run } = call(route, {
       path: "/api/internal/perspicax/mcp",
-      query: "profile=other",
       body: { jsonrpc: "2.0", id: 1, method: "tools/list" },
     });
     await run();
     expect(sent).toEqual([{
       status: 403,
-      body: { error: "this Perspicax profile is not mounted in this turn", code: "profile_not_mounted" },
+      body: { error: "the Perspicax connection is not mounted in this turn", code: "profile_not_mounted" },
     }]);
   });
 
   it("POST /perspicax/mcp relays a frame (happy path)", async () => {
-    const perspicaxRelay = vi.fn(async () => ({ status: 200, body: { jsonrpc: "2.0", id: 7, result: { ok: true } } }));
+    const perspicaxRelay = vi.fn(async () => ({ status: 200, body: { jsonrpc: "2.0", id: 7, result: { ok: true } }, toolsChanged: true as const }));
     const route = createInternalIntegrationsRoutes(deps({ perspicaxRelay }));
     const { ended, run } = call(route, {
       path: "/api/internal/perspicax/mcp",
-      query: "profile=prof-1",
       body: { jsonrpc: "2.0", id: 7, method: "tools/list" },
     });
     await run();
     expect(perspicaxRelay).toHaveBeenCalledOnce();
     expect(ended[0]?.status).toBe(200);
+    expect(ended[0]?.headers["x-sagax-mcp-tools-changed"]).toBe("1");
     expect(JSON.parse(ended[0]!.body)).toEqual({ jsonrpc: "2.0", id: 7, result: { ok: true } });
   });
 });

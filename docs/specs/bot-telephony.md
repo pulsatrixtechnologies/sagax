@@ -111,10 +111,10 @@ approbations et ses règles de payeur.
 
 | Pièce | Où | Ce qu'elle fait | Réutilisable au téléphone |
 | --- | --- | --- | --- |
-| Mode Voix (barre flottante) | `server/voice-mode.ts`, `src/lib/voice-mode/*` | xAI en STT (`/v1/stt` en WebSocket) et TTS (`/v1/tts` en PCM streamé) ; le bot écrit la réponse | Oui : les routes serveur `listen` et `speech` sont déjà des ponts serveur vers xAI ; il faut un adaptateur mu-law 8 kHz |
-| Session d'appel | `server/voice-call-session.ts`, `voice-call-prompt.ts`, `voice-call-watchdog.ts`, `voice-call-duplex.ts` | `voiceCall` sur chaque tour, section cachée « Phone call » du prompt, `end_call`, chien de garde, duplex (#292) | Oui, tel quel : un appel PSTN est un `voiceCall` avec `channel: "pstn"` |
+| Mode Voix (barre flottante) | `server/voice/voice-mode.ts`, `src/lib/voice-mode/*` | xAI en STT (`/v1/stt` en WebSocket) et TTS (`/v1/tts` en PCM streamé) ; le bot écrit la réponse | Oui : les routes serveur `listen` et `speech` sont déjà des ponts serveur vers xAI ; il faut un adaptateur mu-law 8 kHz |
+| Session d'appel | `server/voice/voice-call-session.ts`, `voice-call-prompt.ts`, `voice-call-watchdog.ts`, `voice-call-duplex.ts` | `voiceCall` sur chaque tour, section cachée « Phone call » du prompt, `end_call`, chien de garde, duplex (#292) | Oui, tel quel : un appel PSTN est un `voiceCall` avec `channel: "pstn"` |
 | Lecture française | `server/tts/french-reading.ts`, `speech-text.ts` | Heures, prix, ordinaux lus à voix haute ; markdown retiré | Oui |
-| Appel Live (GPT-Live) | `server/live-call.ts` | OpenAI Realtime en « client delegation » : la voix mène la conversation, chaque vraie demande devient un tour du bot | Oui en phase avancée (OpenAI Realtime accepte aussi SIP) |
+| Appel Live (GPT-Live) | `server/voice/live-call.ts` | OpenAI Realtime en « client delegation » : la voix mène la conversation, chaque vraie demande devient un tour du bot | Oui en phase avancée (OpenAI Realtime accepte aussi SIP) |
 | Moteurs TTS | `server/tts/` : `grok.ts`, `elevenlabs.ts`, `fish.ts`, `chatterbox.ts` (local), `system-voices.ts` (Mac) | Synthèse par fournisseur, clé côté serveur | xAI, ElevenLabs, Fish : oui. Chatterbox et voix Mac : non pour un serveur d'org |
 | Détection de tour | Silero VAD v5 dans la page (`turns.ts`), CAM++ « Seulement ma voix » | Tour, barge-in, écho | À porter côté serveur pour Media Streams (ou laisser Twilio le faire avec ConversationRelay) |
 | Clés de voix (#533) | Réglages > Modèles et voix > Clés | Une seule gestion des clés : `xai.key`, `tts.key` (ElevenLabs), `tts.fishKey` | Oui : la voix du téléphone choisit parmi les clés déjà saisies |
@@ -135,11 +135,11 @@ Speech-to-Speech (rejeté : il remplacerait le cerveau).
 - **Aucun code de téléphonie** : aucune occurrence de voice webhook, TwiML,
   Media Streams, SIP, PSTN ni SMS entrant. Les « phone » du code sont le
   téléphone compagnon (iOS, appairage, `phone-secret.ts`), pas la téléphonie.
-- **Garde-fou existant utile** : `server/owner-approval.ts`,
+- **Garde-fou existant utile** : `server/approvals/owner-approval.ts`,
   `destructiveKindOf()` classe `external-message` tout outil d'envoi ou toute
   ressource `messages|mail|emails|sms|calls` en création. Une telle action
   ouvre toujours une carte, même en mode `auto` (test
-  `owner-approval.test.ts` : un SMS par `twilio_api__write` donne
+  `owner-approval.test.ts` : un SMS par `twilio_api_write` donne
   `{ kind: "card", reason: "destructive" }`).
 
 ### 2.3 Permissions par bot (#546), Zone de travail Auto (#564), routines, notifications
@@ -165,7 +165,7 @@ Speech-to-Speech (rejeté : il remplacerait le cerveau).
   vous, bot terminé) ; la livraison est un cadre écouté par le bureau, le
   téléphone appairé et APNs. Le SMS et l'appel deviennent deux canaux de
   livraison de plus, derrière les mêmes règles.
-- Webhooks entrants : `server/webhooks.ts` et `webhook-ingress.ts` écoutent
+- Webhooks entrants : `server/triggers/webhooks.ts` et `webhook-ingress.ts` écoutent
   sur un port à part (`SAGAX_WEBHOOK_PORT`, défaut PORT+1) avec
   `SAGAX_WEBHOOK_PUBLIC_URL`, authentifiés par jeton porteur. Twilio
   n'envoie pas de jeton porteur : il signe (`X-Twilio-Signature`). Il faut
@@ -180,8 +180,8 @@ Calls, Recordings, IncomingPhoneNumbers, Usage, sous-comptes),
 campagnes A2P 10DLC, vérifications sans frais) et `twilio_monitor` (alertes du
 débogueur, événements du compte).
 
-Comment un bot s'en sert aujourd'hui : par les outils MCP `twilio_api__query`
-et `twilio_api__write` (et équivalents), comme n'importe quel profil. Les
+Comment un bot s'en sert aujourd'hui : par les outils MCP `twilio_api_query`
+et `twilio_api_write` (et équivalents), comme n'importe quel profil. Les
 opérations d'écriture exposées incluent `CreateCall`, `CreateMessage`,
 `DeleteCall` et `CreateIncomingPhoneNumber` (achat de numéro).
 
@@ -284,12 +284,12 @@ partagé auquel l'admin Perspicax lui a donné accès : pour Sagax, c'est le mê
 cas, « le profil Twilio que cette personne détient ».
 
 Comment Sagax obtient les droits, en réutilisant le mécanisme existant
-(`server/perspicax-mcp.ts`, `perspicax-link.ts`, spec
+(`server/perspicax/perspicax-mcp.ts`, `perspicax-link.ts`, spec
 `2026-09-29-perspicax-multiuser-design.md`) :
 
 | Situation | Identité utilisée | Mécanisme |
 | --- | --- | --- |
-| La personne parle au bot dans l'app (et lui demande, par exemple, de la rappeler) | La personne connectée | Échange RFC 8693 de son jeton de connexion contre un jeton MCP court par profil, par tour (déjà en place) |
+| La personne parle au bot dans l'app (et lui demande, par exemple, de la rappeler) | La personne connectée | Échange RFC 8693 de son jeton de connexion contre le jeton court de sa connexion MCP de compte, par tour (déjà en place) |
 | Une routine appelle ou texte | La personne pour qui la routine roule (`runAs`) | Délégation de routine de cette personne (déjà en place, `routine-run-as.ts`) |
 | Un appel ou un SMS **entrant** | L'appelant, une fois authentifié (5.1) | **Délégation de routine** de la personne (R2, voir plus bas) |
 | Les opérations du service téléphonique lui-même (répondre au webhook, purger après 30 jours) | Le titulaire de la ligne (la personne qui a branché le numéro) | Délégation de routine du titulaire |
@@ -300,8 +300,8 @@ téléphonie réutilise donc la **délégation de routine** que la personne dét
 déjà (émise automatiquement à sa connexion depuis #149,
 `server/routines/routine-run-as.ts`). Aucun nouveau type de délégation, aucun
 changement de délégation côté Perspicax. Pendant l'appel, elle sert aux
-outils Twilio de la ligne et aux tours du bot (les autres profils Perspicax du
-bot, exactement comme une routine). Elle n'est utilisable qu'après
+outils Twilio de la ligne et aux tours du bot (la même connexion de compte
+centrale que pour une routine). Elle n'est utilisable qu'après
 l'authentification de l'appelant (5.1). L'activation « Me joindre par
 téléphone » dans l'app reste un consentement explicite et daté, propre à la
 téléphonie, mais il ne crée pas de délégation : il autorise Sagax à se servir
@@ -309,7 +309,7 @@ de la délégation de routine pour les appels et SMS. Sans délégation de routi
 active (personne jamais connectée, délégation révoquée), la ligne répond
 « service indisponible » et la personne est notifiée.
 
-**Ce que le profil doit permettre.** Lire et écrire `Calls` et `Messages`,
+**Ce que les permissions Twilio utilisées doivent permettre.** Lire et écrire `Calls` et `Messages`,
 lire `IncomingPhoneNumbers`, modifier les URL de webhook du numéro partagé
 (une seule fois, à la mise en service), lire l'usage. La validation des
 signatures de Twilio exige le **jeton d'authentification** du compte (une clé
@@ -322,10 +322,10 @@ Deux chemins mènent à Twilio, avec les mêmes garde-fous (R9) :
   `phone_call_person`, `phone_call_third_party`, `sms_send`), qui appelle
   Perspicax avec la délégation ou le jeton de la personne ;
 - les outils Twilio de Perspicax utilisés directement par le bot
-  (`twilio_api__write` : `CreateCall`, `CreateMessage`), permis par R9.
+  (`twilio_api_write` : `CreateCall`, `CreateMessage`), permis par R9.
 
 Les deux passent par la **garde téléphonique** de Sagax (6.5), placée dans le
-relais MCP Perspicax du serveur (`server/perspicax-mcp.ts`, qui voit déjà
+relais MCP Perspicax du serveur (`server/perspicax/perspicax-mcp.ts`, qui voit déjà
 chaque trame) : liste blanche, heures, plafonds, carte pour un tiers,
 divulgation, interdiction d'acheter un numéro.
 
@@ -818,10 +818,10 @@ réservé à un choix explicite (R3).
 
 ### 6.5 La garde téléphonique et les outils Twilio de Perspicax (R9)
 
-Les bots **peuvent** créer des appels et des SMS par `twilio_api__write`
+Les bots **peuvent** créer des appels et des SMS par `twilio_api_write`
 (`CreateCall`, `CreateMessage`), en plus des outils du service téléphonique.
 Pour que ce chemin n'échappe à aucun garde-fou, la **garde téléphonique**
-s'insère dans le relais MCP Perspicax de Sagax (`server/perspicax-mcp.ts`,
+s'insère dans le relais MCP Perspicax de Sagax (`server/perspicax/perspicax-mcp.ts`,
 fonction `relay`), avant l'envoi à Perspicax :
 
 | Appel d'outil du bot | Décision de la garde |
@@ -876,7 +876,7 @@ Partie interne sûre, sans compte ni infrastructure nouvelle, en **pilote
 interne** (conditions de l'ÉFVP Loi 25 du 2026-10-22) :
 
 - **Garde téléphonique** (`server/telephony-guard.ts`, branchée dans le relais
-  `server/perspicax-mcp.ts`) : liste blanche. Avec les outils Twilio, un bot
+  `server/perspicax/perspicax-mcp.ts`) : liste blanche. Avec les outils Twilio, un bot
   lit, et envoie un texto (`Messages` create, qui garde sa carte
   `external-message`, sans aucun champ `*Url` ni `*Callback`). Les recettes de
   lecture (`read_action`, `find_*`) passent ; une action de lecture sur un outil
@@ -886,18 +886,18 @@ interne** (conditions de l'ÉFVP Loi 25 du 2026-10-22) :
   webhooks, flux, paiements, conférences, applications, domaines SIP, codes
   courts, identifiants d'appelant, clés, comptes. Les noms d'outils sont
   comparés séparateurs repliés (`twilio_api-write`) et par ressource
-  (`twilio_api__Calls_write`). Les `_dry_run` restent permis.
+  (`twilio_api_Calls_write`). Les `_dry_run` restent permis.
 - **Pilote désactivé par défaut** : un admin l'active dans Réglages >
   Organisation > Appels téléphoniques, y saisit le **numéro de rappel**
   (obligatoire : sans numéro, aucun appel) et tient la liste **« Ne pas
   appeler »**, vérifiée à la carte et de nouveau au départ de l'appel.
-- **`place_phone_call`** (`shared/outbound-call.ts`, `server/outbound-calls.ts`) :
+- **`place_phone_call`** (`shared/outbound-call.ts`, `server/outbound/outbound-calls.ts`) :
   Canada seulement (R10, sans N11, 976 ni central 0 ou 1), ouverture fixe
   construite par Sagax (assistant IA, au nom de qui, numéro de rappel, « pour
   ne plus recevoir d'appels, dites-le au numéro de rappel »), puis objectif et
   message dits deux fois, rappel du numéro, raccroche (R16 : jamais l'`Url`
   ni le `Twiml` du bot ; pas de détection de répondeur). Essai à blanc par
-  `twilio_api__write` du profil Perspicax de la personne, puis carte « Appel
+  `twilio_api_write` du profil Perspicax de la personne, puis carte « Appel
   vers … » : la personne **coche le numéro pour le confirmer**, puis Appeler.
   Une approbation = un appel, liée au numéro, aux mots, au bot et au nom
   annoncé, 15 minutes ; jamais « Toujours permettre » (5.7). Le bot principal
@@ -952,8 +952,8 @@ peux l'entendre, dialoguer avec lui et me revenir avec un résumé. »
   mot dit ; journaux et audit gardent le numéro masqué.
 - **Règles** : le pilote d'organisation, la liste « Ne pas appeler » et les
   règles Refuser et Demander d'abord s'appliquent comme pour le mode message.
-- Code : `shared/outbound-call.ts`, `server/outbound-calls.ts`,
-  `server/outbound-wiring.ts`, `server/bot-inbound-telephony.ts`. Tests :
+- Code : `shared/outbound-call.ts`, `server/outbound/outbound-calls.ts`,
+  `server/outbound/outbound-wiring.ts`, `server/bots/bot-inbound-telephony.ts`. Tests :
   `server/outbound-conversation.test.ts` (cycle complet, faux Twilio et fausse
   voix temps réel).
 

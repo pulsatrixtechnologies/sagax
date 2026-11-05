@@ -1,3 +1,4 @@
+import { botRoutineRuns } from "@/state/view-slices";
 // Per-bot settings as a right sidebar with fold-out (accordion) categories:
 // same shell pattern as InspectorPanel. Every section lives under
 // bot-settings/; their bodies and reads (overview, system-prompt, history)
@@ -8,7 +9,8 @@ import { useEffect, useRef, useState } from "react";
 import { DockedPanelResizeHandle, useDockedPanelWidth } from "./DockedPanelResize";
 import { PanelRight } from "lucide-react";
 
-import { useStore, type Bot } from "@/state/store";
+import { shallowEqual, useStoreDispatch, useStoreSelector } from "@/state/store-selector";
+import type { Bot } from "@/state/store";
 import { useDataWindowItem } from "./DataWindowButton";
 import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { reportAchievement } from "@/lib/achievements";
@@ -16,6 +18,7 @@ import { cn } from "@/lib/cn";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { BotActionsMenu, type BotActionsMenuAnchor } from "./bot-settings/BotActionsMenu";
 import { LibraryTab } from "./bot-settings/LibraryTab";
+import { RolesTab } from "./bot-settings/RolesTab";
 import { RoutinesSection } from "./bot-settings/RoutinesSection";
 
 import { visiblePanelTabs, type PanelTab } from "./bot-settings/panel-tabs";
@@ -29,8 +32,7 @@ import { ComputerPanel } from "./ComputerPanel";
 import { BotProfileAvatarCard } from "./BotProfileAvatarCard";
 import { useCaptionChrome, useMacInsetChrome } from "./DesktopCapabilities";
 import { t } from "@/lib/i18n";
-import { canEditBotField, canSetBotHost, viewerOwnsBot } from "@/lib/bot-capabilities";
-import { TeamBotVaultSection } from "./bot-settings/TeamBotVaultSection";
+import { canEditBotField } from "@/lib/bot-capabilities";
 import { viewerBotsReadOnly } from "@/lib/viewer";
 import { useBotSectionAvailability, useBotSectionContent } from "./bot-settings/useBotSectionContent";
 import { botsReadOnlyText } from "@/lib/permissions";
@@ -43,7 +45,9 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   overlay?: boolean;
 }) {
   const advanced = useAdvancedMode();
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const state = useStoreSelector((current) => ({ botSettingsSection: current.botSettingsSection, botSettingsExpandAccordion: current.botSettingsExpandAccordion, computerOpen: current.computerOpen, config: current.config }), shallowEqual);
+  const runs = useStoreSelector((current) => botRoutineRuns(current, bot.id), shallowEqual);
   const { padClass, dragProps } = useCaptionChrome();
   const { macInset, browser } = useMacInsetChrome();
   const section = state.botSettingsSection;
@@ -60,10 +64,12 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   // "open the computer" link still lands on it. A bot that works nowhere
   // (Works on: Off) has no computer to show; Works on stays in the editor.
   const computerOff = bot.computer === "off";
-  const panelTabs = visiblePanelTabs({ advanced, computerOff });
+  // Roles: an organization server's bots act as Perspicax roles
+  const rolesOff = !state.config?.viewer?.role;
+  const panelTabs = visiblePanelTabs({ advanced, computerOff, rolesOff });
   // Simple has no computer tab. An open computer panel is otherwise closed
   // by the shell; until that lands, the tab the person picked stays up.
-  const tab: PanelTab = advanced && state.computerOpen && panelTabs.includes("computer") ? "computer" : pickedTab;
+  const tab: PanelTab = advanced && state.computerOpen && panelTabs.includes("computer") ? "computer" : panelTabs.includes(pickedTab) ? pickedTab : "details";
   // the Library holds the bot's files (an achievement teaches it)
   useEffect(() => {
     if (tab === "library") reportAchievement("files.opened");
@@ -259,20 +265,19 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
               <SuggestionsSection bot={bot} routineCount={derived.botRoutines.length} />
               <BotTaskSection botId={bot.id} />
               <ActivitySection bot={bot} />
-              {Boolean(bot.grants?.length || bot.directGrants?.length) && (viewerOwnsBot(state.config, bot) || canSetBotHost(state.config, bot)) && (
-                <TeamBotVaultSection botId={bot.id} botName={bot.name} />
-              )}
               {/* Temporary attended remote sessions: only while active, above Routines.
                   Unattended hosts live in the Computer place picker. */}
               <RemoteSessionsSection bot={bot} />
               <section data-bot-settings-section="routines" className="flex flex-col gap-2">
-                <RoutinesSection bot={bot} routines={derived.botRoutines} runs={state.routineRuns} grouped />
+                <RoutinesSection bot={bot} routines={derived.botRoutines} runs={runs} grouped />
               </section>
               <PackageProvenance bot={bot} />
             </div>
           )}
 
           {tab === "library" && <LibraryTab bot={bot} />}
+
+          {tab === "roles" && <RolesTab botId={bot.id} />}
 
           {tab === "computer" && (
             <div className="px-4 pt-2">

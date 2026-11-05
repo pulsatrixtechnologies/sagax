@@ -5,29 +5,27 @@
 import { createHash } from "node:crypto";
 import { chmodSync, existsSync, readFileSync, mkdirSync, rmSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
-import { z } from "zod";
-
 import { writeFileAtomic, writeFileAtomicIfChanged } from "./atomic.ts";
 import { PROACTIVE_MODE_DEFAULT, normalizeProactiveMode } from "../shared/proactive-mode.ts";
-import { commitBotChange, keptRevocation, saveBotsFor } from "./bots-save.ts";
-import { applyHumanIds } from "./channel-membership.ts";
+import { commitBotChange, keptRevocation, saveBotsFor } from "./bots/bots-save.ts";
+import { applyHumanIds } from "./rooms/channel-membership.ts";
 import { parseToolScope, toolScopeWidens } from "../shared/tool-scope.ts";
-import { ensureSections, readSections, changeEmptySection } from "./section-context.ts";
-import type { TeamComputers } from "./team-computers.ts";
-import { removeBotFolder, soulFile, soulHash, writeSoulMirror } from "./bot-folder.ts";
+import { ensureSections, readSections, changeEmptySection } from "./rooms/section-context.ts";
+import type { TeamComputers } from "./computer/team-computers.ts";
+import { removeBotFolder, soulFile, soulHash, writeSoulMirror } from "./bots/bot-folder.ts";
 import { cleanTemporaryAgent, type TemporaryAgent } from "./temporary-agents.ts";
-import { createdByBotMark, type BotCreatedBy } from "./bot-creation.ts";
-import type { BotProfilePatch } from "./bot-profile.ts";
-import { peerAllowKey, type PeerAction } from "./peer-approval-key.ts";
+import { createdByBotMark, type BotCreatedBy } from "./bots/bot-creation.ts";
+import type { BotProfilePatch } from "./bots/bot-profile.ts";
+import { peerAllowKey, type PeerAction } from "./peers/peer-approval-key.ts";
 import { DATA_DIR, EVENTS_DIR, NATIVE_DIR, loadBrowserProfileIdAliases } from "./config.ts";
-import * as mdb from "./message-db.ts";
-import { ThreadCache, type ThreadState } from "./thread-cache.ts";
+import * as mdb from "./messages/message-db.ts";
+import { ThreadCache, type ThreadState } from "./threads/thread-cache.ts";
 import { forgetBotMemoryJournal, journalFile } from "./memory/memory-journal.ts";
-import { forgetLogMemory } from "./content-at-rest.ts";
-import { forgetWorkspaceUsage } from "./workspace-usage.ts";
-import { nextContext } from "./context-reading.ts";
+import { forgetLogMemory } from "./encryption/content-at-rest.ts";
+import { forgetWorkspaceUsage } from "./workspace/workspace-usage.ts";
+import { nextContext } from "./context/context-reading.ts";
 import { runCommand, type Command } from "./commands.ts";
-import { workspaceDir } from "./workspace.ts";
+import { workspaceDir } from "./workspace/workspace.ts";
 import { autoOnlyDestination, type Destination } from "./surface.ts";
 import { newId, type ModelSelection } from "./contracts.ts";
 import { pickBotName } from "./names.ts";
@@ -35,20 +33,20 @@ import { redactSecretsInText } from "./redact.ts";
 import { AVATAR_FOCUS_CENTER, AVATAR_ZOOM_MIN, botAvatarProfile, clampAvatarFocus, clampAvatarZoom } from "../shared/bot-avatar.ts";
 import { approvalModeFor, isApprovalException, isApprovalMode, modelSwitchNeedsAsk, threadApprovalFields, type ApprovalException } from "../shared/approval-mode.ts";
 import { lastChangeRequestUrl } from "../shared/thread-link.ts";
-import { REMOVED_COMPUTER_DRIVER, type ComputerEngineMove } from "./computer-engine-removal.ts";
+import { REMOVED_COMPUTER_DRIVER, type ComputerEngineMove } from "./computer/computer-engine-removal.ts";
 import type { ProfileRequestChanges } from "../shared/profile-request.ts";
 import type { TaskParallelOf } from "../shared/parallel-tasks.ts";
 import type { SelectedComputer } from "../shared/execution-target.ts";
-import type { SegmentDigest } from "./single-stream.ts";
+import type { SegmentDigest } from "./streams/single-stream.ts";
 import type { TeamSetupRequest, TeamSetupResult } from "../shared/team-setup.ts";
 import type { GroupGoalRunCardData } from "../shared/group-goal-run.ts";
 import { isMentionBoundary, isMentionNameContinuation } from "../shared/mention-boundary.ts";
-import type { HandedState } from "./delta-context.ts";
-import type { AgentPart, PartPair, RoomPart } from "./package-parts.ts";
-import type { BotHost } from "./turn-route.ts";
-import { advancesPosition, type ReadMap, type ReadPosition } from "./read-receipts.ts";
+import type { HandedState } from "./context/delta-context.ts";
+import type { AgentPart, PartPair, RoomPart } from "./packages/package-parts.ts";
+import type { BotHost } from "./turns/turn-route.ts";
+import { advancesPosition, type ReadMap, type ReadPosition } from "./messages/read-receipts.ts";
 import { applyReaction, normalizeReactions, type ReactionActor, type ReactionMode } from "../shared/reactions.ts";
-import { migratePeopleDmToThreads, PEOPLE_DM_GENERAL_TITLE } from "./people-dms.ts";
+import { migratePeopleDmToThreads, PEOPLE_DM_GENERAL_TITLE } from "./people/people-dms.ts";
 import type {
   BotActivity, GroupDefaultResponder, GroupTask as GroupTaskRecord, MausColor,
   OptionCardData, TaskClosedBy, TaskOpenedBy, TaskUsage, WireBot, WireGroup,
@@ -57,9 +55,9 @@ import type {
 import type { WireBotGrant } from "../shared/wire.ts";
 import { sameModelSelection } from "../shared/thread-model.ts";
 import { nextOpenThread } from "../shared/wire.ts";
-import { namesEngine } from "./bot-engine.ts";
+import { namesEngine } from "./bots/bot-engine.ts";
 import { introTaskCard } from "./intro-tour.ts";
-import { newBotGreeting } from "./new-bot-greeting.ts";
+import { newBotGreeting } from "./bots/new-bot-greeting.ts";
 // Re-exported under their historical names so server-side importers keep working.
 export type {
   BotActivity, GroupDefaultResponder, OptionCardData,
@@ -73,7 +71,7 @@ export type { InstalledPlaybook, InstalledPackageMetadata, MausColor, MausExpres
 export type Message = WireMessage;
 
 /** Server-private: a group chat added from the organization's library, with
- * its package key, member keys and per-part hashes (server/package-parts.ts). */
+ * its package key, member keys and per-part hashes (server/packages/package-parts.ts). */
 export interface GroupPackageStamp {
   installId: string;
   key: string;
@@ -86,9 +84,9 @@ export interface GroupPackageStamp {
 export type GroupRecord = Omit<WireGroup, "working" | "usage"> & {
   installedPackage?: GroupPackageStamp;
   /** A person conversation went through the threads migration once
-   * (server/people-dms.ts migratePeopleDmToThreads). */
+   * (server/people/people-dms.ts migratePeopleDmToThreads). */
   personThreads?: 1;
-  /** The last person left (server/group-leave.ts, #1480): the group is kept
+  /** The last person left (server/groups/group-leave.ts, #1480): the group is kept
    * and listed to no one. */
   archivedAt?: number;
 };
@@ -122,16 +120,16 @@ export interface TaskRecord extends Omit<WireTask, TaskWireDerivedKeys> {
    * inline replay. Absent on tasks from before the field existed. */
   lastInstanceId?: string;
   /** per instance: the stored messages that instance's current native
-   * session has been handed on this task (server/delta-context.ts) */
+   * session has been handed on this task (server/context/delta-context.ts) */
   handedMessages?: Record<string, HandedState>;
   /** Last compaction represented by a dispatched session on this task. */
   appliedCompactionId?: string;
   /** Summaries Sagax wrote when it folded this thread on its own, newest
-   * last (server/context-rebuild.ts CompactionRecord with an anchorId). They
+   * last (server/context/context-rebuild.ts CompactionRecord with an anchorId). They
    * are the thread's memory of its older turns and stay off the chat: the
    * person never sees a fold, only the bot's next session reads it. */
   /** stale: written (or re-applied) for a stale engine session
-   * (server/stale-session.ts): the new session reads it as a pause. */
+   * (server/auth/stale-session.ts): the new session reads it as a pause. */
   contextSummaries?: Array<{ id: string; at: number; summary: string; firstKeptId: string; foldedThroughId: string; anchorId: string; tokensBefore: number; stale?: true }>;
   contextFloor?: number;
   lastContextModel?: string;
@@ -142,15 +140,15 @@ export interface TaskRecord extends Omit<WireTask, TaskWireDerivedKeys> {
    * Clients see only whether a pin is an auto pin (WireTask.surfaceAuto). */
   surfaceSource?: "user" | "auto";
   /** Where an Auto turn of this thread starts: the workspace the bot opened
-   * it with (start_thread `workspace`, server/auto-computer.ts). Checked
+   * it with (start_thread `workspace`, server/computer/auto-computer.ts). Checked
    * against what is allowed at every turn; never a pin. */
   autoWorkspace?: SelectedComputer;
   /** Epoch ms a person last wrote here: never a teammate, a routine, a
    * webhook, the bot itself or a line relayed from Slack. The newest open
-   * one is the bot's main thread (server/main-thread.ts), which clients get
+   * one is the bot's main thread (server/threads/main-thread.ts), which clients get
    * worked out (WireBot.mainThreadId). Absent until someone writes. */
   askedAt?: number;
-  /** Single stream (thread mode off, server/single-stream.ts): a person
+  /** Single stream (thread mode off, server/streams/single-stream.ts): a person
    * wrote here from a client showing one continuous conversation, so a
    * person's turn here carries the digest of their earlier topics and may
    * call recall_topic. Only `true` is stored; a send from a client showing
@@ -164,7 +162,7 @@ export interface TaskRecord extends Omit<WireTask, TaskWireDerivedKeys> {
    * (session.started), newest last, at most ENGINE_SESSIONS_KEPT: what
    * finds the engine's own files of the thread again when it turns
    * confidential or a confidential one is deleted, after a reset replaced
-   * the cursor (server/engine-transcripts.ts). Ids only. */
+   * the cursor (server/engines/engine-transcripts.ts). Ids only. */
   engineSessions?: string[];
 }
 
@@ -176,7 +174,7 @@ export const ENGINE_SESSIONS_KEPT = 64;
  * so a new server field forces a decision — wire-visible or private here. */
 export type TaskWirePrivateKeys = "resumeCursors" | "lastInstanceId" | "handedMessages" | "appliedCompactionId" | "contextSummaries" | "contextFloor" | "lastContextModel" | "surfaceSource" | "askedAt" | "autoWorkspace" | "streamSegment" | "segmentDigest" | "engineSessions";
 /** WireTask fields computed by toWireTask and never stored on a TaskRecord. */
-export type TaskWireDerivedKeys = "surfaceAuto" | "followsBotModel";
+export type TaskWireDerivedKeys = "surfaceAuto" | "followsBotModel" | "personWrote";
 export type TaskWireProjection = Pick<TaskRecord, Exclude<keyof TaskRecord, TaskWirePrivateKeys>> & Pick<WireTask, TaskWireDerivedKeys>;
 type AssertExact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
 type AssertSameKeys<A, B> = [keyof A] extends [keyof B] ? ([keyof B] extends [keyof A] ? true : never) : never;
@@ -194,7 +192,9 @@ export function toWireTask(task: TaskRecord, botModel: ModelSelection): WireTask
     appliedCompactionId: _appliedCompactionId, contextSummaries: _contextSummaries, contextFloor: _contextFloor, lastContextModel: _lastContextModel,
     surfaceSource, askedAt: _askedAt, autoWorkspace: _autoWorkspace, streamSegment: _streamSegment, segmentDigest: _segmentDigest,
     engineSessions: _engineSessions, ...stored } = task;
-  const wire: WireTask = { ...stored, modelSelection: structuredClone(task.modelSelection ?? botModel), followsBotModel: task.modelSelection === undefined };
+  const wire: WireTask = { ...stored, modelSelection: structuredClone(task.modelSelection ?? botModel), followsBotModel: task.modelSelection === undefined,
+    // only the fact, never when (shared/background-threads.ts)
+    ...(task.askedAt !== undefined ? { personWrote: true as const } : {}) };
   // Who pinned stays private. A client learns only whether the pin is the
   // machine's own record, so it never presents one as the person's choice.
   return surfaceSource === "auto" && wire.surface !== undefined ? { ...wire, surfaceAuto: true } : wire;
@@ -204,7 +204,7 @@ const TASK_PATCH_FIELDS = [
   "title", "projectId", "modelSelection", "approvalMode", "autoApprove", "alwaysAllow", "approvalOwn",
   "unread", "lastReadMessageId", "rewound", "archivedAt", "pinned", "pinnedMessageId", "resumeCursors", "lastInstanceId", "cwd",
   "routineRunId", "routineResults", "surface", "surfaceSource", "snoozedUntil", "link", "linkAuto", "appliedCompactionId", "contextSummaries", "contextFloor", "lastContextModel",
-  "autoModel", "autoWorkspace", "streamSegment", "segmentDigest", "turnTiming", "connectors",
+  "autoModel", "autoWorkspace", "streamSegment", "segmentDigest", "turnTiming", "connectors", "autoArchived",
 ] as const satisfies readonly (keyof TaskRecord)[];
 export type TaskPatch = Partial<Pick<TaskRecord, typeof TASK_PATCH_FIELDS[number]>>;
 
@@ -400,7 +400,7 @@ export type StoreChange =
   | { type: "message"; threadId: string; message: Message }
   | { type: "message.patch"; threadId: string; message: Message }
   | { type: "thread"; threadId: string; activeLeafId: string }
-  /** A participant's read position moved (server/read-receipts.ts). */
+  /** A participant's read position moved (server/messages/read-receipts.ts). */
   | { type: "thread.read"; threadId: string; participantId: string; read: ReadPosition }
   | { type: "thread.deleted"; threadId: string }
   | { type: "bot"; botId: string }
@@ -483,36 +483,21 @@ export interface BotRecord extends Omit<WireBot, "avatarUrl" | "tasks"> {
   /** Receipt committed with a reviewed team batch; prevents replay after a lost response. */
   lastTeamSetupReceipt?: { requestId: string; result: TeamSetupResult };
   /** Organization library only: each part's release and written hashes
-   * (server/package-parts.ts), for the later automatic update. */
+   * (server/packages/package-parts.ts), for the later automatic update. */
   packageBase?: Partial<Record<AgentPart, PartPair>>;
   /** Skills library (features.skillsLibrary): names of library skills
    * assigned to this bot. Server-private until the Skills UI ships. */
   assignedSkills?: string[];
-  /** Slice 5 (organization server): the Perspicax MCP profiles this bot
-   * mounts, by profile id. Each person who speaks uses their own access;
-   * changed only through /api/bots/:id/perspicax, never PATCH, never in a
-   * package or an export. */
-  perspicax?: BotPerspicax;
+  /** Legacy fields read only so old bot files can be migrated. Account roles
+   * are never configured on a bot and these are deleted on load. */
+  perspicax?: { profiles: string[] };
+  perspicaxActAs?: { slug: string; name: string };
   /** Perspicax #321: made by create_agent (server/temporary-agents.ts).
    * Never on the wire: the Sagax app does not list such a bot. */
   temporary?: TemporaryAgent;
-  /** 2026-10-17: made by a bot (create_bot, team setup), server/bot-creation.ts.
+  /** 2026-10-17: made by a bot (create_bot, team setup), server/bots/bot-creation.ts.
    * Never on the wire, never set by a PATCH: it caps how deep bots make bots. */
   createdByBot?: BotCreatedBy;
-}
-
-/** Slice 5: at most 8 profile ids per bot. */
-export const MAX_BOT_PERSPICAX_PROFILES = 8;
-const PERSPICAX_PROFILE_ID = /^[0-9A-Za-z_.:-]{1,64}$/;
-export const botPerspicaxSchema = z.object({
-  profiles: z.array(z.string().regex(PERSPICAX_PROFILE_ID)).max(MAX_BOT_PERSPICAX_PROFILES).transform((ids) => [...new Set(ids)]),
-});
-export type BotPerspicax = z.infer<typeof botPerspicaxSchema>;
-
-/** A stored `perspicax` value as a valid one, or undefined (dropped). */
-export function cleanBotPerspicax(value: unknown): BotPerspicax | undefined {
-  const parsed = botPerspicaxSchema.safeParse(value);
-  return parsed.success && parsed.data.profiles.length ? parsed.data : undefined;
 }
 
 /** BotRecord fields no client may see, plus the two the projection
@@ -520,7 +505,7 @@ export function cleanBotPerspicax(value: unknown): BotPerspicax | undefined {
  * WireTask[], avatarUrl is coerced to always-present). The exactness
  * assertion fails to compile when either side drifts, so a new server
  * field forces a decision — wire-visible or private here. */
-export type BotWirePrivateKeys = "resumeCursors" | "tasks" | "avatarUrl" | "approvalGrant" | "lastProfileRequestId" | "lastTeamSetupReceipt" | "packageBase" | "perspicax" | "assignedSkills" | "temporary" | "createdByBot";
+export type BotWirePrivateKeys = "resumeCursors" | "tasks" | "avatarUrl" | "approvalGrant" | "lastProfileRequestId" | "lastTeamSetupReceipt" | "packageBase" | "perspicax" | "perspicaxActAs" | "assignedSkills" | "temporary" | "createdByBot";
 export type BotWireProjection = Pick<BotRecord, Exclude<keyof BotRecord, BotWirePrivateKeys>>;
 export type BotWireProjectionIsExact = AssertExact<Omit<WireBot, "avatarUrl" | "tasks">, BotWireProjection> & AssertSameKeys<Omit<WireBot, "avatarUrl" | "tasks">, BotWireProjection>;
 export const botWireProjectionIsExact: BotWireProjectionIsExact = true;
@@ -695,7 +680,7 @@ export function taskHiddenFromPerson(task: { routineRunId?: string; hidden?: tru
 }
 
 
-/** A stored grant (slice 4); see server/authz.ts. */
+/** A stored grant (slice 4); see server/auth/authz.ts. */
 export type BotGrant = WireBotGrant;
 const GRANT_TARGET = /^(?:user:pr_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|team:[0-9A-Za-z]{1,64})$/;
 const GRANT_LEVELS = new Set(["use", "run", "edit", "manage"]);
@@ -763,7 +748,7 @@ export class Store {
      * organization's policy decides (2026-10-11, orgNewBotApprovalMode). */
     newBotApprovalMode: () => "ask" | "auto" = () => "auto",
     /** The language a new bot's greeting uses for the person who will own
-     * it (#1075, server/new-bot-greeting.ts). English when not given. */
+     * it (#1075, server/bots/new-bot-greeting.ts). English when not given. */
     greetingLanguage: (ownerUserId: string | undefined) => "fr" | "en" = () => "en",
   ) {
     this.defaultSelection = defaultSelection;
@@ -1033,7 +1018,7 @@ export class Store {
         groupsMigrated = true;
       }
       // A person conversation becomes threads once: what it was is its
-      // first thread, "General", and stays its default (server/people-dms.ts).
+      // first thread, "General", and stays its default (server/people/people-dms.ts).
       if (migratePeopleDmToThreads(g)) groupsMigrated = true;
       g.pinnedCwd = active.pinnedCwd;
       g.pinnedMessageId = active.pinnedMessageId;
@@ -1170,15 +1155,14 @@ export class Store {
         }
       }
     }
-    // Slice 5: a malformed Perspicax profile list is dropped.
+    // Account runtime migration: Perspicax roles and acting identity no
+    // longer belong to a bot. Drop both old settings instead of letting an
+    // invisible legacy choice affect a later turn.
     for (const b of this.bots) {
-      if (b.perspicax === undefined) continue;
-      const clean = cleanBotPerspicax(b.perspicax);
-      if (JSON.stringify(clean) !== JSON.stringify(b.perspicax)) {
-        if (clean) b.perspicax = clean;
-        else delete b.perspicax;
-        botsMigrated = true;
-      }
+      if (b.perspicax === undefined && b.perspicaxActAs === undefined) continue;
+      delete b.perspicax;
+      delete b.perspicaxActAs;
+      botsMigrated = true;
     }
     // Perspicax #321: a malformed temporary mark is dropped.
     for (const b of this.bots) {
@@ -1299,7 +1283,7 @@ export class Store {
   /** Where a person last wrote in a thread from before builds kept it
    * (TaskRecord.askedAt) is only in its transcript: once, a thread without
    * the stamp takes its newest line a person sent from an app. Without it a
-   * bot's main thread (server/main-thread.ts) is whichever thread is
+   * bot's main thread (server/threads/main-thread.ts) is whichever thread is
    * selected until someone writes again: often the oldest one, where
    * v0.1.98 to v0.1.107 reported, left selected by its activity row. */
   private fillTaskAskedAts(): void {
@@ -1539,7 +1523,7 @@ export class Store {
       defaultResponder?: GroupDefaultResponder;
     },
     humanIds?: string[],
-    /** A direct conversation between two people (server/people-dms.ts),
+    /** A direct conversation between two people (server/people/people-dms.ts),
      * set before the record is first emitted. */
     extra?: { peopleDm?: true; createdBy?: string },
   ): GroupRecord {
@@ -1648,7 +1632,7 @@ export class Store {
       join(EVENTS_DIR, `${threadId}.ndjson`),
       join(NATIVE_DIR, `${threadId}.ndjson`),
     ]) {
-      // what a view kept of it in memory goes too (server/content-at-rest.ts)
+      // what a view kept of it in memory goes too (server/encryption/content-at-rest.ts)
       forgetLogMemory(file);
       try {
         unlinkSync(file);
@@ -1858,7 +1842,7 @@ export class Store {
     return group;
   }
 
-  /** Every participant's read position on this thread (server/read-receipts.ts). */
+  /** Every participant's read position on this thread (server/messages/read-receipts.ts). */
   threadReads(threadId: string): ReadMap {
     return mdb.readThreadReads(threadId);
   }
@@ -1906,7 +1890,7 @@ export class Store {
   }
 
   /** The conversations with a turn running, whose cached transcript stays
-   * however long ago it was read (server/thread-cache.ts). */
+   * however long ago it was read (server/threads/thread-cache.ts). */
   private busyThreadIds(): Set<string> {
     const busy = new Set<string>();
     for (const bot of this.bots) {
@@ -2160,7 +2144,7 @@ export class Store {
     return this.bots.find((b) => b.threadId === threadId || b.tasks?.some((t) => t.threadId === threadId)) ?? null;
   }
 
-  /** A confidential thread (server/confidential-threads.ts): a bot thread
+  /** A confidential thread (server/threads/confidential-threads.ts): a bot thread
    * whose record carries `confidential: true`. Rooms never are. */
   isConfidentialThread(threadId: string): boolean {
     if (!threadId) return false;
@@ -2184,7 +2168,7 @@ export class Store {
     // its own key from now on, everything so far re-sealed under it now
     mdb.contentOwnerChanged([threadId]);
     // Nothing of a confidential thread feeds the single stream: its digest
-    // goes, and it stops being a stream segment (server/single-stream.ts).
+    // goes, and it stops being a stream segment (server/streams/single-stream.ts).
     delete task.streamSegment;
     delete task.segmentDigest;
     if (bot.threadId === threadId) this.mirrorActiveTask(bot, task);
@@ -2193,7 +2177,7 @@ export class Store {
     return task;
   }
 
-  /** Forget a thread's native engine sessions (server/engine-transcripts.ts):
+  /** Forget a thread's native engine sessions (server/engines/engine-transcripts.ts):
    * its cursors, the bot's mirror of them and the ids it kept go, and the
    * next turn starts a new session with the thread's own transcript
    * replayed (`rewound`), never a resume of a session whose files are gone.
@@ -2350,7 +2334,7 @@ export class Store {
           ...(chief.visibility && chief.visibility !== "everyone" ? { visibility: structuredClone(chief.visibility) } : {}),
           // ...and belongs to the Primary Bot's own person.
           ...(chief.ownerUserId ? { ownerUserId: chief.ownerUserId } : {}),
-          // ...and remembers a bot made it (server/bot-creation.ts depth).
+          // ...and remembers a bot made it (server/bots/bot-creation.ts depth).
           createdByBot: createdByBotMark(chief, createdAt),
           tasks: [{ threadId: operation.threadId, title: UNTITLED_THREAD, createdAt, updatedAt: createdAt, resumeCursors: {},
             unread: false, activity: "idle", busy: false }],
@@ -2459,7 +2443,7 @@ export class Store {
     } catch {}
     mdb.deleteBotMemoryFiles(id);
     forgetBotMemoryJournal(id);
-    // the Files list's usage record (server/workspace-usage.ts) is outside too
+    // the Files list's usage record (server/workspace/workspace-usage.ts) is outside too
     forgetWorkspaceUsage(id);
     // Generated task-workspaces are project files, not bot memory. Keep
     // them (and user-selected cwd folders) when deleting conversations.
@@ -2491,18 +2475,6 @@ export class Store {
     if (temporary !== undefined && !clean) throw new Error("invalid temporary agent record");
     if (clean) bot.temporary = clean;
     else delete bot.temporary;
-    this.saveBots();
-    this.emit({ type: "bot", botId: id });
-    return bot;
-  }
-
-  /** Slice 5: replace a bot's Perspicax profiles ([] removes the field). */
-  setBotPerspicax(id: string, profiles: readonly string[]): BotRecord | null {
-    const bot = this.bot(id);
-    if (!bot) return null;
-    const clean = cleanBotPerspicax({ profiles: [...profiles] });
-    if (clean) bot.perspicax = clean;
-    else delete bot.perspicax;
     this.saveBots();
     this.emit({ type: "bot", botId: id });
     return bot;
@@ -2689,11 +2661,14 @@ export class Store {
     return bot;
   }
 
-  setTaskActivity(botId: string, threadId: string, activity: BotActivity): BotRecord | null {
+  setTaskActivity(botId: string, threadId: string, activity: BotActivity, options?: { settledQuestion?: boolean }): BotRecord | null {
     const bot = this.bot(botId);
     const task = this.taskByThread(botId, threadId);
     if (!bot || !task) return null;
-    const busy = ACTIVITY_BUSY.has(activity);
+    // A persistent question still needs the person after its engine ended.
+    // Keep that attention state on every device, but free the turn slot so
+    // its answer starts a new turn instead of queuing behind a dead engine.
+    const busy = activity === "waiting-on-you" && options?.settledQuestion === true ? false : ACTIVITY_BUSY.has(activity);
     if ((task.activity ?? "idle") === activity && Boolean(task.busy) === busy) return bot;
     const wasBusy = Boolean(task.busy);
     task.activity = activity;
@@ -2721,18 +2696,18 @@ export class Store {
   /** The bot-wide activity (the same fold as `bot.activity`/`bot.busy`)
    * over the threads `include` keeps, plus the bot's room activity. An
    * organization viewer gets it over their own threads only
-   * (server/thread-privacy.ts), never over someone else's. */
+   * (server/threads/thread-privacy.ts), never over someone else's. */
   activityOf(botId: string, include: (task: TaskRecord) => boolean): { activity: BotActivity; busy: boolean } {
     const bot = this.bot(botId);
+    const tasks = (bot?.tasks ?? []).filter((task) => include(task) && !task.routineRunId);
+    const legacy = this.legacyActivities.get(botId);
     const activities = [
-      this.legacyActivities.get(botId),
-      ...(bot?.tasks ?? [])
-        .filter((task) => include(task) && !task.routineRunId)
-        .map((task) => task.activity),
+      legacy,
+      ...tasks.map((task) => task.activity),
     ];
     const activity = (["waiting-on-you", "no-signal", "working", "dead"] as const)
       .find((candidate) => activities.includes(candidate)) ?? "idle";
-    return { activity, busy: ACTIVITY_BUSY.has(activity) };
+    return { activity, busy: Boolean(legacy && ACTIVITY_BUSY.has(legacy)) || tasks.some((task) => task.busy === true) };
   }
 
   /** Who owns a bot, as one key per person. index.ts sets the server's own
@@ -3355,6 +3330,9 @@ export class Store {
         delete task.autoApprove;
         delete task.approvalOwn;
       }
+      // Archiving or unarchiving by hand makes the archive the person's own
+      // (server/threads/background-sweep.ts marks only its own).
+      if (Object.hasOwn(patch, "archivedAt") && !Object.hasOwn(patch, "autoArchived")) delete task.autoArchived;
       // "Until new activity" ends the moment the thread has something new for
       // the person, and every unread wake funnels through patchTask, so this
       // one hook is the whole activity alarm. A time-based snooze is left to
@@ -3574,13 +3552,19 @@ export class Store {
    * model unless the caller hands it another one: a thread opened from
    * another of this bot's threads keeps the model a person picked there. */
   createTask(botId: string, title?: string, activate = true, projectId?: string, openedBy?: TaskOpenedBy, approvalMode?: "ask" | "full",
-    ownerPrincipalId?: string, modelSelection?: ModelSelection, hidden = false, cwd?: string, confidential = false, approvalOwn?: ApprovalException): TaskRecord | null {
+    ownerPrincipalId?: string, modelSelection?: ModelSelection, hidden = false, cwd?: string, confidential = false, approvalOwn?: ApprovalException,
+    routineRunId?: string): TaskRecord | null {
     const bot = this.bot(botId);
     if (!bot) return null;
     if (projectId !== undefined && !this.project(botId, projectId)) return null;
     // An AI client's hidden conversation (#291) is never selected.
     if (hidden) activate = false;
     const task = this.buildTask(bot, title, projectId, openedBy, approvalMode, ownerPrincipalId, modelSelection, hidden, cwd, confidential, approvalOwn);
+    // A routine run's task is tagged in the frame that announces it: untagged
+    // for one frame, it is the newest plain thread, which the one
+    // conversation rule takes for the person's conversation (the chat
+    // followed it and came back, 2026-11-03).
+    if (routineRunId) task.routineRunId = routineRunId;
     this.commitBotChange(bot, "the new thread", () => {
       bot.tasks = [task, ...(bot.tasks ?? [])];
       if (activate) this.mirrorActiveTask(bot, task);
@@ -3649,7 +3633,7 @@ export class Store {
     return task;
   }
 
-  /** Organization server, once (server/thread-privacy.ts migration): give
+  /** Organization server, once (server/threads/thread-privacy.ts migration): give
    * each listed thread its owner. Never reachable from the HTTP task PATCH:
    * ownerPrincipalId is not a TASK_PATCH_FIELD. Returns how many bots changed. */
   assignTaskOwners(assignments: readonly { botId: string; threadId: string; ownerPrincipalId: string }[]): number {
@@ -3705,6 +3689,50 @@ export class Store {
     saveBotsFor("when you last wrote in this thread", () => this.saveBots());
     this.emit({ type: "bot", botId });
     return task;
+  }
+
+  /** Archive finished background threads in one write per bot
+   * (server/threads/background-sweep.ts): archivedAt like the person's
+   * Archive, marked autoArchived so a person's write brings them back.
+   * Nothing deleted. Returns how many were archived. */
+  autoArchiveTasks(entries: ReadonlyArray<{ botId: string; threadId: string }>, at = Date.now()): number {
+    const byBot = new Map<string, Set<string>>();
+    for (const entry of entries) {
+      const set = byBot.get(entry.botId) ?? new Set<string>();
+      set.add(entry.threadId);
+      byBot.set(entry.botId, set);
+    }
+    let archived = 0;
+    for (const [botId, threadIds] of byBot) {
+      const bot = this.bot(botId);
+      if (!bot) continue;
+      const tasks = (bot.tasks ?? []).filter((task) => threadIds.has(task.threadId) && task.archivedAt === undefined);
+      if (!tasks.length) continue;
+      this.commitBotChange(bot, "the background threads' archive", () => {
+        for (const task of tasks) {
+          task.archivedAt = at;
+          task.autoArchived = true;
+          task.unread = false;
+        }
+        bot.unread = botHasPersonUnread(bot);
+      });
+      archived += tasks.length;
+      this.emit({ type: "bot", botId });
+    }
+    return archived;
+  }
+
+  /** A person wrote in a thread the server archived on its own: it is
+   * theirs again, back in the list. A person's own archive stays. */
+  restoreAutoArchived(botId: string, threadId: string): void {
+    const bot = this.bot(botId);
+    const task = this.taskByThread(botId, threadId);
+    if (!bot || !task || task.autoArchived !== true) return;
+    this.commitBotChange(bot, "the thread's archive", () => {
+      delete task.archivedAt;
+      delete task.autoArchived;
+    });
+    this.emit({ type: "bot", botId });
   }
 
   /** Stamp or clear the closer record. `null` reopens: the next turn in a

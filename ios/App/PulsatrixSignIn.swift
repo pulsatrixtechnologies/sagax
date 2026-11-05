@@ -21,8 +21,8 @@ final class PulsatrixWebSignIn: NSObject, ObservableObject, ASWebAuthenticationP
     /// Open the sign-in on `origin`, asking for `scheme` (`sagax`).
     /// `completion` always runs, with what the sheet
     /// ended on: an invite, a refusal, a cancel or something unexpected.
-    func start(origin: URL, scheme: String, completion: @escaping (PulsatrixSignInOutcome) -> Void) {
-        guard !running, let url = PulsatrixSignIn.startURL(base: origin, returnScheme: scheme) else {
+    func start(origin: URL, scheme: String, fresh: Bool = false, completion: @escaping (PulsatrixSignInOutcome) -> Void) {
+        guard !running, let url = PulsatrixSignIn.startURL(base: origin, returnScheme: scheme, fresh: fresh) else {
             completion(.unexpected)
             return
         }

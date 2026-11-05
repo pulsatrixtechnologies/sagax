@@ -3,7 +3,7 @@
 Run the real Settings connection component in disposable Electron windows:
 
 ```sh
-node scripts/verify-server-connection.mjs
+node scripts/verify/dev/verify-server-connection.mjs
 ```
 
 Use the repository's installed dependencies, including the Electron binary.
@@ -196,7 +196,7 @@ and a native operation already admitted may have completed.
 ## Connector and authority tests
 
 ```sh
-pnpm exec vitest run server/shared-computers.test.ts server/shared-computers.e2e.test.ts server/shared-computers.gate.test.ts
+pnpm exec vitest run server/computer/shared-computers.test.ts server/computer/shared-computers.e2e.test.ts server/computer/shared-computers.gate.test.ts
 node --test electron/shared-computer-access.node-test.mjs electron/lending-guards.node-test.mjs
 ```
 

@@ -11,18 +11,7 @@ const fixture = vi.hoisted(() => ({
   state: {} as { bots?: Bot[]; groups?: Group[]; sections?: string[] },
 }));
 
-vi.mock("@/state/store", async (importOriginal) => {
-  const original = await importOriginal<typeof import("@/state/store")>();
-  return {
-    ...original,
-    useStore: () => {
-      const store = original.useStore();
-      return { ...store, state: { ...store.state, ...fixture.state } };
-    },
-  };
-});
-
-import { StoreProvider } from "@/state/store";
+import { BotEditorStore, initialState } from "@/state/store";
 import { Sidebar } from "./Sidebar";
 
 const bot = (id: string, extra: Partial<Bot> = {}): Bot => ({
@@ -36,7 +25,7 @@ const room = (id: string, section?: string): Group => ({
 });
 
 const render = () => renderToStaticMarkup(
-  createElement(StoreProvider, null, createElement(Sidebar, { open: true, onClose: () => {} })),
+  createElement(BotEditorStore, { value: { state: { ...initialState, ...fixture.state }, dispatch: () => {}, flushBotPatches: async () => null, refreshInstances: async () => {}, refreshModels: async () => {} }, children: createElement(Sidebar, { open: true, onClose: () => {} }) }),
 );
 
 beforeEach(() => {

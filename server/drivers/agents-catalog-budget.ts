@@ -25,7 +25,7 @@
 //     Deliberate raise above the ~97 KB baselines that forced description
 //     cuts in #1655, #1649 and #1689. Still far under 1 MiB.
 import { COMPACT_CORE_AGENT_TOOL_NAMES } from "./agents-catalog.ts";
-import { isOpenApiTool } from "../openapi-tools.ts";
+import { isOpenApiTool } from "../mcp/openapi-tools.ts";
 import { BRIDGE_USE_TOOL } from "../../shared/searched-tool-call.ts";
 
 /** Most tools a chat-completions provider takes in one request. */
@@ -103,7 +103,8 @@ export const AGENT_TOOL_GROUPS: readonly AgentToolGroup[] = [
   {
     id: "routines",
     title: "Routines, schedules and waits",
-    tools: ["propose_routine", "propose_routine_action", "list_routines", "run_routine", "wait_until", "list_waits", "cancel_wait"],
+    // list_routines / run_routine stay core (#1989): never grouped.
+    tools: ["propose_routine", "propose_routine_action", "update_routine", "wait_until", "list_waits", "cancel_wait"],
   },
   {
     id: "team",
@@ -131,7 +132,7 @@ export const AGENT_TOOL_GROUPS: readonly AgentToolGroup[] = [
   {
     id: "artifacts",
     title: "Artifacts the bot keeps",
-    tools: ["save_artifact", "update_artifact", "delete_artifact", "list_artifacts"],
+    tools: ["save_artifact", "update_artifact", "delete_artifact", "list_artifacts", "claude_artifact"],
   },
   {
     id: "settings",
@@ -167,6 +168,7 @@ export const AGENT_TOOL_GROUPS: readonly AgentToolGroup[] = [
     tools: [
       "find_agents", "get_agent", "list_agents", "send_prompt", "await_turn",
       "create_agent", "delete_agent", "run_with_engine",
+      "list_agent_models", "update_agent_model", "update_agent_settings",
     ],
   },
   {

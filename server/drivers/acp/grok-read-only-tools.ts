@@ -18,7 +18,7 @@
 // Everything else (writes, actions, sends, approvals, commands, unknown
 // tools) keeps the classifier and its cards unchanged.
 import type { McpServerSpec } from "../../contracts.ts";
-import { READ_ONLY_AGENT_TOOL_NAMES } from "../../agent-tool-policy.ts";
+import { READ_ONLY_AGENT_TOOL_NAMES } from "../../tools/agent-tool-policy.ts";
 import { SPAWNED_PROXIES } from "../../proxy-paths.ts";
 
 /** Permission vocabulary only: schemas and computation are served by the
@@ -29,10 +29,25 @@ export const PERSPICAX_FLOW_COMPUTE_TOOLS = [
 ] as const;
 
 /** Perspicax connector tools reviewed as read-only (2026-10-11). Never
- * add cw_psa__write/action, memory_write/forget/promote, memory_save/remove/
+ * add cw_psa_write/action, memory_write/forget/promote, memory_save/remove/
  * suggestions, sagax_send/approve/
  * nudge, flow_action, or anything whose effect depends on input. */
-export const PERSPICAX_READ_ONLY_TOOLS: ReadonlySet<string> = new Set([
+/** A tool name with every run of `_` as one: Perspicax names its tools
+ * with one `_` since 1.9.19 (`cw_psa_query`), earlier servers with a second
+ * `__` (`cw_psa__query`), and Grok registers the latter under the former
+ * (mcp-tool-names.ts). The same tool either way. */
+export function foldToolName(name: string): string {
+  return name.replace(/_{2,}/g, "_");
+}
+
+/** A set of single-`_` tool names whose `has` also knows the `__` spelling. */
+class FoldedToolNames extends Set<string> {
+  override has(name: string): boolean {
+    return super.has(name) || super.has(foldToolName(name));
+  }
+}
+
+export const PERSPICAX_READ_ONLY_TOOLS: ReadonlySet<string> = new FoldedToolNames([
   "memory_recall",
   "memory_search",
   // The simplified memory model (Perspicax docs/design/memory-v2.md): its
@@ -41,7 +56,7 @@ export const PERSPICAX_READ_ONLY_TOOLS: ReadonlySet<string> = new Set([
   "api_search",
   "api_describe",
   "api_result_query",
-  "cw_psa__query",
+  "cw_psa_query",
   "sagax_bots",
   "sagax_thread",
   "work_search",
@@ -63,12 +78,7 @@ export function isPerspicaxBridge(server: McpServerSpec | undefined, bridgePath:
   if (!server || "url" in server) return false;
   const spec = server as { command?: unknown; args?: unknown; env?: Record<string, unknown> };
   return Array.isArray(spec.args) && spec.args[0] === bridgePath
-    && typeof spec.env?.SAGAX_PERSPICAX_PROFILE === "string" && spec.env.SAGAX_PERSPICAX_PROFILE !== "";
-}
-
-/** Grok's admissible alias of a reviewed tool name (`_` runs -> `_`). */
-function grokAlias(tool: string): string {
-  return tool.replace(/_{2,}/g, "_");
+    && typeof spec.env?.SAGAX_PERSPICAX_TOKEN === "string" && spec.env.SAGAX_PERSPICAX_TOKEN !== "";
 }
 
 /** The `--allow` rules for this turn's read-only tools, sorted and unique. */
@@ -82,13 +92,9 @@ export function grokReadOnlyAllowRules(integrations: Integrations, bridgePath?: 
     if (server === "agents" || !SAFE_SERVER.test(server)) continue;
     if (!isPerspicaxBridge(spec, bridgePath)) continue;
     for (const tool of PERSPICAX_READ_ONLY_TOOLS) {
+      // One `_` only: an earlier Perspicax's `cw_psa__query` is registered
+      // with Grok as `cw_psa_query` by Sagax's MCP gate (mcp-tool-names.ts).
       names.add(`${server}__${tool}`);
-      // Grok cannot name a tool with a second `__`; Sagax's MCP gate
-      // registers it under its alias with `_` runs collapsed (cw_psa__query
-      // -> cw_psa_query, mcp-tool-names.ts), so the reviewed tool keeps its
-      // rule under that name. The Perspicax catalog has no tool of its own
-      // named like an alias.
-      if (tool.includes("__")) names.add(`${server}__${grokAlias(tool)}`);
     }
   }
   return [...names].sort().map((name) => `MCPTool(${name})`);

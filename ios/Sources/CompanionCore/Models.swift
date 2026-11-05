@@ -173,6 +173,9 @@ public struct OptionCard: Codable, Hashable, Sendable {
     public var ruleSaved: SavedOwnerRule? = nil
     /// A change the person took back (Undo).
     public var undone: Bool? = nil
+    /// The bot's change applied without a person (self / Full): clients show
+    /// a one-line receipt with Undo (#1982). Nil on older servers.
+    public var autoApplied: Bool? = nil
     /// How the card was answered when not by a tap (`CardAnswerer.via`).
     public var answeredBy: CardAnsweredBy? = nil
     /// 2026-10-28: the person's own "Ask first" rule that kept this card.
@@ -193,6 +196,10 @@ public struct OptionCard: Codable, Hashable, Sendable {
     /// One-time acceptable-use consent before a bot may place phone calls
     /// (`shared/phone-call-consent.ts`). Drawn as its own card, never the dock.
     public var phoneCallConsent: PhoneCallConsentCardData? = nil
+    /// 2026-11-05 (visible roles, #2016): an "Agit comme" card at a role
+    /// transition, answered on its own route (`VisibleRoles`). Nil on every
+    /// other card.
+    public var roleTransition: RoleTransitionCard? = nil
 
     /// A card is actionable while it is unanswered and still has a request
     /// behind it. Everything else is transcript.
@@ -286,6 +293,19 @@ public struct ToolActivity: Codable, Hashable, Sendable {
     /// Usage-limit switch / return / wait (shared/limit-failover.ts). A
     /// switched or back row stays out of the chat (#1668 / #1698).
     public var limitFailover: LimitFailoverLine? = nil
+    /// Epoch ms when the usage limit that stopped this turn resets, when
+    /// the engine said (shared/wire.ts `tool.limitResetsAt`).
+    public var limitResetsAt: Double? = nil
+    /// The row carries a place (shared/wire.ts `tool.place`): a failed turn
+    /// with one stays in the chat (#2013). Only its presence is kept here.
+    public var hasPlace: Bool = false
+    /// 2026-11-05 (visible roles, #2016): the Perspicax role this call ran
+    /// under (shared/wire.ts `tool.role`); "" slug is "Moi". A bad shape is
+    /// dropped; the rest of the activity still decodes.
+    public var role: ToolRole? = nil
+    /// 2026-11-05: a role fact drawn as a banner row (a lapsed role, a
+    /// refused write or a read refused with no fallback).
+    public var roleNotice: RoleNotice? = nil
 
     public init(name: String, ok: Bool? = nil, spoken: String? = nil, setup: Bool? = nil, claudeUpdate: Bool? = nil, output: String? = nil, summary: String? = nil, widget: CwWidget? = nil) {
         self.name = name
@@ -300,6 +320,8 @@ public struct ToolActivity: Codable, Hashable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case name, ok, spoken, setup, claudeUpdate, output, summary, widget, input, durationMs, product, productId, autoApproval, finishUntil, step, limitFailover
+        case limitResetsAt, place
+        case role, roleNotice
     }
 
     public init(from decoder: Decoder) throws {
@@ -319,6 +341,10 @@ public struct ToolActivity: Codable, Hashable, Sendable {
         autoApproval = try? box.decodeIfPresent(ToolAutoApproval.self, forKey: .autoApproval)
         step = try? box.decodeIfPresent(WorkingStep.self, forKey: .step)
         limitFailover = try? box.decodeIfPresent(LimitFailoverLine.self, forKey: .limitFailover)
+        limitResetsAt = try? box.decodeIfPresent(Double.self, forKey: .limitResetsAt)
+        hasPlace = box.contains(.place) && (try? box.decodeNil(forKey: .place)) == false
+        role = try? box.decodeIfPresent(ToolRole.self, forKey: .role)
+        roleNotice = try? box.decodeIfPresent(RoleNotice.self, forKey: .roleNotice)
         do {
             widget = try box.decodeIfPresent(CwWidget.self, forKey: .widget)
         } catch {
@@ -343,6 +369,11 @@ public struct ToolActivity: Codable, Hashable, Sendable {
         try box.encodeIfPresent(autoApproval, forKey: .autoApproval)
         try box.encodeIfPresent(step, forKey: .step)
         try box.encodeIfPresent(limitFailover, forKey: .limitFailover)
+        try box.encodeIfPresent(limitResetsAt, forKey: .limitResetsAt)
+        try box.encodeIfPresent(role, forKey: .role)
+        try box.encodeIfPresent(roleNotice, forKey: .roleNotice)
+        // presence only: the app never reads the place itself
+        if hasPlace { try box.encode([String: String](), forKey: .place) }
     }
 
     /// The output worth expanding the chip for; nil when there is none.
@@ -469,6 +500,42 @@ public struct CommChip: Codable, Hashable, Sendable {
     public var text: String? = nil
 }
 
+/// One item a bot's result needs the person for (shared/person-attention.ts).
+public struct PersonAttentionItem: Codable, Hashable, Sendable {
+    public var text: String
+    public var ticketId: Int? = nil
+    /// A ConnectWise deep link the computer built; https only is opened.
+    public var ticketUrl: String? = nil
+
+    public var safeTicketURL: URL? {
+        guard let raw = ticketUrl, let url = URL(string: raw), url.scheme == "https" else { return nil }
+        return url
+    }
+}
+
+/// The card a person's conversation shows for what a bot's turn elsewhere
+/// left for them (`WireMessage.attention`, desktop `AttentionCard.tsx`).
+public struct PersonAttentionCard: Codable, Hashable, Sendable {
+    public struct Opener: Codable, Hashable, Sendable {
+        public var botId: String
+        public var name: String
+    }
+    /// "human", "question" or "failure"; an unknown kind reads as "human".
+    public var kind: String
+    public var items: [PersonAttentionItem]
+    public var botId: String
+    public var botName: String
+    public var threadId: String
+    public var threadTitle: String? = nil
+    public var sourceMessageId: String
+    public var openedBy: Opener? = nil
+    public var routineRunId: String? = nil
+    public var routineName: String? = nil
+
+    /// Where the person opens it: the thread the bot said it in.
+    public var threadRef: ThreadRef { ThreadRef(botId: botId, threadId: threadId, title: threadTitle ?? botName) }
+}
+
 public struct Message: Codable, Hashable, Identifiable, Sendable {
     public enum Kind: String, Codable, Sendable {
         case text, options, activity, screen, video, secret
@@ -546,6 +613,11 @@ public struct Message: Codable, Hashable, Identifiable, Sendable {
     /// leaves the message's text, which the computer writes for exactly
     /// the clients that cannot read the card.
     public var routineRun: RoutineRunCard?
+    /// 2026-11-05: what a bot's turn elsewhere (a hand-off, a thread another
+    /// bot opened, a routine run) left for the person, carried into their own
+    /// conversation with that bot (shared/person-attention.ts). On a
+    /// routine-run row it rides beside the report.
+    public var attention: PersonAttentionCard? = nil
     /// The message this one follows; nil at the thread root. Two messages
     /// sharing a parent are a fork.
     public var parentId: String?
@@ -692,6 +764,9 @@ public struct ThreadOpener: Codable, Hashable, Sendable {
     public var name: String
     public var delegationId: String?
     public var at: Double
+    /// `work` or `pair` for a teammate's hand-off, `agent` for an AI
+    /// client's conversation over MCP; nil for a thread a bot opened.
+    public var kind: String? = nil
 }
 
 /// The bot that closed a thread with close_thread, once its result was
@@ -780,9 +855,26 @@ public struct BotTask: Codable, Hashable, Sendable {
     /// reports now go to the person's own conversation, so this old thread is
     /// kept but never listed, previewed or counted unread.
     public var routineResults: Bool? = nil
-    /// Out of the person's thread list: a routine run's execution, an
-    /// automatic routine results thread or an AI client's hidden conversation.
-    public var isHiddenFromPerson: Bool { routineRunId != nil || routineResults == true || hidden == true }
+    /// A person wrote here from an app, so a thread a bot opened is theirs
+    /// too. Server-derived; absent on older computers.
+    public var personWrote: Bool? = nil
+    /// The server archived this finished background thread on its own.
+    public var autoArchived: Bool? = nil
+    /// A background thread (shared/background-threads.ts, the same cases): a
+    /// routine run, a teammate's hand-off, a thread a bot opened, an AI
+    /// client's conversation. Never in the person's thread list; its card
+    /// in the conversation opens it, and so does "Show background".
+    public var isBackground: Bool {
+        if routineRunId != nil || routineResults == true || hidden == true { return true }
+        guard let openedBy else { return false }
+        if openedBy.kind == "agent" { return true }
+        return personWrote != true
+    }
+    /// What "Show background" lists: background threads but routine runs,
+    /// whose home is the run card.
+    public var isListedBackground: Bool { isBackground && routineRunId == nil }
+    /// Out of the person's thread list: every background thread.
+    public var isHiddenFromPerson: Bool { isBackground }
     /// A confidential thread ("Fil confidentiel"): never remembered,
     /// exported or shared beyond its owner. Permanent once set; only
     /// deleting the thread ends it. Absent means an ordinary thread.
@@ -1061,6 +1153,16 @@ public struct Bot: Codable, Hashable, Identifiable, Sendable {
     /// which only an organization server sends.
     public var turnPayer: String? = nil
     public var turnPayerDefault: String? = nil
+    /// Email draft cards (Permissions); absent or true is on.
+    public var emailDrafts: Bool? = nil
+    /// The loop guard for this bot's turns; absent or true is on.
+    public var loopGuard: Bool? = nil
+    /// Prompt-cache keep-warm: true or false overrides the workspace setting,
+    /// absent follows it.
+    public var cacheKeepWarm: Bool? = nil
+    /// Automatic recovery for this bot (`automaticRecovery`); absent is the
+    /// server default.
+    public var automaticRecovery: BotAutomaticRecovery? = nil
 
     /// #1137: who pays now (its own choice, else the default), or nil on a
     /// solo server.
@@ -1082,9 +1184,17 @@ public struct Bot: Codable, Hashable, Identifiable, Sendable {
         (AvatarFraming.clampZoom(avatarZoom), AvatarFraming.clampFocus(avatarFocusX), AvatarFraming.clampFocus(avatarFocusY))
     }
 
-    /// Routine runs' executions and automatic results threads are hidden.
+    /// The person's own conversations: background threads (runs, hand-offs,
+    /// threads a bot opened, an AI client's) are left out, except the one on
+    /// screen when it is not a routine run (opened from its card).
     public var visibleTasks: [BotTask] {
-        (tasks ?? []).filter { !$0.isHiddenFromPerson }
+        (tasks ?? []).filter { !$0.isHiddenFromPerson || ($0.threadId == threadId && $0.routineRunId == nil) }
+    }
+
+    /// "Show background": the bot's background threads but routine runs,
+    /// newest first, archived ones included.
+    public var backgroundTasks: [BotTask] {
+        (tasks ?? []).filter(\.isListedBackground).sorted { $0.listStamp > $1.listStamp }
     }
 
     /// Older computers only send the profile default. Newer ones snapshot
@@ -1120,6 +1230,17 @@ public struct Bot: Codable, Hashable, Identifiable, Sendable {
             view.hasMore = nil
         }
         return view
+    }
+}
+
+/// `WireBot.automaticRecovery`: on, and its backup model.
+public struct BotAutomaticRecovery: Codable, Hashable, Sendable {
+    public var enabled: Bool
+    public var backup: ModelSelection?
+
+    public init(enabled: Bool, backup: ModelSelection? = nil) {
+        self.enabled = enabled
+        self.backup = backup
     }
 }
 
@@ -1286,7 +1407,7 @@ public struct Room: Codable, Hashable, Identifiable, Sendable {
     /// Organization server: a direct conversation between two people.
     public var peopleDm: Bool? = nil
     /// The narrowest audience the room ever had (a served workspace): it
-    /// never widens on its own (server/bot-visibility.ts).
+    /// never widens on its own (server/bots/bot-visibility.ts).
     public var audienceFloor: BotVisibility? = nil
     /// The room's shared memory; absent means on.
     public var memoryEnabled: Bool? = nil
@@ -1305,6 +1426,8 @@ public struct Room: Codable, Hashable, Identifiable, Sendable {
     /// A direct conversation's own turn limit, minutes (#216); nil follows
     /// the server's default.
     public var turnTimeoutMinutes: Int? = nil
+    /// `@all` notifies every person in the room (`mentionAll`); absent is off.
+    public var mentionAll: Bool? = nil
 }
 
 // MARK: - Responses
@@ -1600,6 +1723,13 @@ public struct InstanceCapabilities: Codable, Hashable, Sendable {
     }
 }
 
+public struct InstanceIcon: Codable, Hashable, Sendable {
+    public var kind: String?
+    public var preset: String?
+    public var dataUrl: String?
+    public init(kind: String? = nil, preset: String? = nil, dataUrl: String? = nil) { self.kind = kind; self.preset = preset; self.dataUrl = dataUrl }
+}
+
 public struct Instance: Codable, Hashable, Identifiable, Sendable {
     public var instanceId: String
     public var driverKind: String
@@ -1609,7 +1739,13 @@ public struct Instance: Codable, Hashable, Identifiable, Sendable {
     public var capabilities: InstanceCapabilities? = nil
     /// "subscription" (a sign-in plan), "api" (a pasted key) or "custom"
     /// (a local engine with no catalogue); nil reads as a sign-in plan.
+    /// The desktop's provider mark override (`InstanceInfo.icon`): a preset
+    /// brand or a custom image; absent, the driver's own mark.
+    public var icon: InstanceIcon? = nil
     public var access: String? = nil
+    /// How to install the engine (`InstanceInfo.install`): present on the
+    /// engines the welcome flow lists.
+    public var install: InstanceInstall? = nil
 
     public var id: String { instanceId }
 }
@@ -1784,6 +1920,8 @@ public struct ConfigStatus: Codable, Sendable {
     /// Stable <instance>/<model> ids, off at organization then person level.
     public var disabledModels: [String]? = nil
     public var myDisabledModels: [String]? = nil
+    /// The welcome flow and the guided tour (`OnboardingStatus` in shared/wire.ts).
+    public var onboarding: OnboardingStatus? = nil
 
     /// `jevRoomRoutingOn`: an Auto room with Jev off answers like a lead room.
     public var jevRoomRoutingOn: Bool {
@@ -2192,6 +2330,13 @@ public struct Routine: Codable, Hashable, Identifiable, Sendable {
     /// 2026-10-28 (RoutineFolders.swift): the folder of its bot it sits in.
     /// Absent: no folder (and on an older server).
     public var folder: String? = nil
+    /// `shared/routines.ts` weekRuns: this week's runs that went well, of all.
+    public var weekRuns: RoutineWeekRuns? = nil
+}
+
+public struct RoutineWeekRuns: Codable, Hashable, Sendable {
+    public var ok: Int
+    public var total: Int
 }
 
 public struct RoutineRun: Codable, Hashable, Identifiable, Sendable {
@@ -2587,7 +2732,7 @@ public enum PulsatrixSignIn {
 
     /// `<server origin>/auth/oidc/start?client=phone[&return=sagax]`, or nil
     /// for an address that is not http(s).
-    public static func startURL(base: URL, returnScheme: String = callbackScheme) -> URL? {
+    public static func startURL(base: URL, returnScheme: String = callbackScheme, fresh: Bool = false) -> URL? {
         guard var components = URLComponents(url: base, resolvingAgainstBaseURL: false),
               let scheme = components.scheme?.lowercased(), scheme == "https" || scheme == "http",
               components.host != nil
@@ -2597,6 +2742,8 @@ public enum PulsatrixSignIn {
         components.fragment = nil
         var items = [URLQueryItem(name: "client", value: "phone")]
         if returnScheme == callbackScheme { items.append(URLQueryItem(name: "return", value: callbackScheme)) }
+        // "Sign in again" (oidc-login.ts): Perspicax asks for the factors even when signed in
+        if fresh { items.append(URLQueryItem(name: "fresh", value: "1")) }
         components.queryItems = items
         return components.url
     }

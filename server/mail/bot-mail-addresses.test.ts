@@ -11,8 +11,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { BOT_MAIL_ADDRESSES_PATH, BOT_MAIL_CACHE_MS, BotMailAddresses, type BotMailBot } from "./bot-mail-addresses.ts";
-import { PerspicaxDirectory } from "../perspicax-link.ts";
-import { PrincipalRegistry } from "../principals.ts";
+import { PerspicaxDirectory } from "../perspicax/perspicax-link.ts";
+import { PrincipalRegistry } from "../auth/principals.ts";
 
 const ISSUER = "https://px.example.test";
 const ORIGIN = "https://bot.example.test";

@@ -132,12 +132,13 @@ export function memoryLevel(memory: CgroupMemory | null, highRatio: number, crit
 
 interface IdleEntry {
   since: number;
+  expiresAt: number;
   release: () => void;
 }
 
 export interface IdleEnginePoolOptions {
   maxIdle: number;
-  /** Entries older than this are forgotten: the driver closed them itself. */
+  /** Default idle lifetime; a driver can supply its own lifetime per entry. */
   ttlMs: number;
   /** A thread whose warm process must stay (a live call). */
   exempt?: (threadId: string) => boolean;
@@ -166,9 +167,10 @@ export class IdleEnginePool {
   }
 
   /** A turn finished; its process may stay warm. */
-  noteIdle(threadId: string, release: () => void): void {
+  noteIdle(threadId: string, release: () => void, ttlMs = this.ttlMs): void {
     this.idle.delete(threadId);
-    this.idle.set(threadId, { since: this.now(), release });
+    const since = this.now();
+    this.idle.set(threadId, { since, expiresAt: since + Math.max(0, ttlMs), release });
     this.prune();
     this.enforce();
   }
@@ -238,9 +240,18 @@ export class IdleEnginePool {
     return true;
   }
 
+  /** Expire both the process and resources tied to its warm lifetime. */
+  expire(): string[] {
+    const now = this.now();
+    const closed: string[] = [];
+    for (const [threadId, entry] of this.idle) {
+      if (entry.expiresAt <= now && !this.exempt(threadId) && this.evict(threadId)) closed.push(threadId);
+    }
+    return closed;
+  }
+
   private prune(): void {
-    const cutoff = this.now() - this.ttlMs;
-    for (const [threadId, entry] of this.idle) if (entry.since < cutoff) this.idle.delete(threadId);
+    this.expire();
   }
 }
 
@@ -368,7 +379,6 @@ export class MemoryWatch {
   start(): void {
     if (this.timer || this.options.intervalMs <= 0) return;
     this.tick();
-    if (this.level === "unknown" && this.last === null && this.options.childOomScoreAdj <= 0) return;
     this.timer = setInterval(() => this.tick(), this.options.intervalMs);
     this.timer.unref?.();
   }
@@ -381,6 +391,9 @@ export class MemoryWatch {
 
   /** One reading; exported for tests and for a check before a spawn. */
   tick(): MemoryLevel {
+    // Driver idle-close is silent. Release dependent warm leases even when
+    // this host has no cgroup reading or memory pressure to trigger eviction.
+    for (const threadId of this.options.pool.expire()) this.browsers?.stopped(threadId);
     const memory = this.options.read();
     this.last = memory;
     const next = memoryLevel(memory, this.options.highRatio, this.options.criticalRatio);

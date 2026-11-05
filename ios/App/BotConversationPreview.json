@@ -35,7 +35,7 @@
      "role": "user",
      "kind": "text",
      "at": 1789088401000,
-     "text": "Peux-tu demander a Melonie le total de la semaine ?"
+     "text": "Peux-tu demander a Wren le total de la semaine ?"
     },
     {
      "id": "k2",
@@ -49,15 +49,15 @@
      "role": "bot",
      "kind": "text",
      "at": 1789088490000,
-     "text": "Melonie dit que le total est de 38 heures."
+     "text": "Wren dit que le total est de 38 heures."
     }
    ],
    "activeLeafId": "k3",
    "botConversations": [
     {
-     "threadId": "melonie-ask",
-     "otherBotId": "melonie",
-     "otherName": "Melonie",
+     "threadId": "wren-ask",
+     "otherBotId": "wren",
+     "otherName": "Wren",
      "direction": "out",
      "kind": "pair",
      "startedAt": 1789088405000,
@@ -67,9 +67,9 @@
    ]
   },
   {
-   "id": "melonie",
-   "threadId": "melonie-main",
-   "name": "Melonie",
+   "id": "wren",
+   "threadId": "wren-main",
+   "name": "Wren",
    "title": "Assistant",
    "description": "",
    "notifications": false,
@@ -83,7 +83,7 @@
    "createdAt": 1789088400000,
    "tasks": [
     {
-     "threadId": "melonie-main",
+     "threadId": "wren-main",
      "title": "Main",
      "createdAt": 1789088400000,
      "modelSelection": {

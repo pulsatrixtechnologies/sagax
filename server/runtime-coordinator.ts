@@ -11,8 +11,8 @@
 // as "not now" by the Runtime, so nothing here wraps it again.
 import { join } from "node:path";
 
-import type { Coordinator, CoordinatorHost, CoordinatorOptions, HandedOutOutcome, HandoffView, LiveHandoffEdge, RoomAddress } from "./coordinator.ts";
-import type { WorkOrigin } from "./peer-provenance.ts";
+import type { Coordinator, CoordinatorHost, CoordinatorOptions, HandedOutOutcome, HandoffView, LiveHandoffEdge, RoomAddress } from "./runtime/coordinator-types.ts";
+import type { WorkOrigin } from "./peers/peer-provenance.ts";
 import { composeEnvelope, composeQuestion, composeReport, composeResume, envelopeNote } from "./runtime/envelope.ts";
 import { Runtime } from "./runtime/runtime.ts";
 import { importLegacyHandoffs } from "./runtime/import-legacy.ts";
@@ -112,6 +112,7 @@ export function view(a: Assignment, parent?: Assignment): HandoffView {
   if (a.startedAt !== undefined) node.startedAt = a.startedAt;
   const origin = legacyOrigin(a.origin);
   if (origin) node.origin = origin;
+  if (a.request !== undefined) node.request = a.request;
   if (a.restart !== undefined) node.restart = a.restart;
   if (a.relay) node.relay = true;
   if (a.reply === "none") node.oneWay = true;
@@ -506,9 +507,12 @@ export class RuntimeCoordinator implements Coordinator {
     const roots = this.store.all().filter(a => !a.parentId && this.direct(a, threadId) && a.createdAt >= since);
     if (!roots.length) return null;
     const failed: HandedOutOutcome["failed"] = [];
+    const handed: NonNullable<HandedOutOutcome["handed"]> = [];
     for (const root of roots) {
       const children = this.store.children(root.id);
       for (const child of children) {
+        const threadId = child.assignee.destination.threadId;
+        if (threadId && !handed.some((entry) => entry.threadId === threadId)) handed.push({ botId: child.assignee.botId, threadId, status: child.status });
         if (child.reply === "none" || !isTerminal(child)) continue;
         if (child.status === "completed") continue;
         // Redone later by the same teammate, and that completed: not a failure.
@@ -520,6 +524,7 @@ export class RuntimeCoordinator implements Coordinator {
     return {
       root: { status: root.status, ...(root.outcome ? { outcome: root.outcome } : {}), detail: clip(root.outcomeDetail || "", 300), result: root.result },
       failed,
+      ...(handed.length ? { handed: handed.slice(0, 5) } : {}),
       pending: roots.some(r => !isTerminal(r)),
     };
   }
@@ -541,7 +546,6 @@ export class RuntimeCoordinator implements Coordinator {
       (n.status === "running" && (n.restart !== "rerun" || childrenSince(this.store, n).length > 0)) ||
       ((n.status === "queued" || n.status === "resume") && n.restart === "rerun")));
   }
-
 
   // ── the host's schedule ──────────────────────────────────────────────
 
@@ -609,6 +613,7 @@ export class RuntimeCoordinator implements Coordinator {
       park: (a, question, restored) => host.park(this.project(a), question, restored),
       remind: (a, question, waitedMs) => host.remind?.(this.project(a), question, waitedMs),
       parkedGone: a => host.parkedGone?.(this.project(a)) === true,
+      unparked: (a, reason, defaulted) => host.unparked?.(this.project(a), reason, defaulted),
       report: (a, parent) => host.report(view(a, parent), parent && this.project(parent)),
       changed: rows => {
         const groups = new Set<string>();

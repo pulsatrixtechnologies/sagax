@@ -49,7 +49,7 @@ import { permissionMissingText } from "@/lib/permissions";
 import { canEditBotField } from "@/lib/bot-capabilities";
 import { canEditConfig } from "@/lib/viewer";
 import { detailIdentity, discoverItems, installedEntries, privateSkills, type InstalledEntry } from "@/lib/installed-model";
-import { engineGetsNothing, enginesLine, organizationRows, useBotCapabilities } from "@/lib/capabilities";
+import { botPluginKey, engineGetsNothing, enginesLine, organizationRows, useBotCapabilities } from "@/lib/capabilities";
 import type { CapabilityForm, EngineParts } from "../../shared/capabilities";
 import type { SkillsLibrarySkillWire } from "../../shared/wire";
 import { WHOP_KEY, TAILSCALE_KEY, buildPluginItems, isGrokConnector, marketplacePluginKey, type PluginFilter, type PluginItem, type PluginTypeFilter } from "@/lib/plugins-model";
@@ -94,7 +94,7 @@ import { useServerMode } from "./ServerModeSettings";
 import { ConnectAppsView, connectAppsTabLabel, connectedCounts, isProvidersLink, normalizeConnectAppsTab, type ConnectAppsTab } from "./plugins/ConnectAppsView";
 import type { Crumb } from "./Breadcrumb";
 import { CATEGORY_MODAL, cardActionClass } from "./category-modal";
-import { BotCatalogPane } from "./lazy-screens";
+import { BotCatalogPane } from "./lazy-bot-catalog";
 import { useBotCatalogSources } from "./bot-catalog/use-bot-catalog-sources";
 import { catalogSections, type CatalogItem } from "@/lib/bot-catalog";
 import { searchConnectApps, visibleResults, type SearchGroupId, type SearchPage, type SearchResult, type SearchSource } from "@/lib/connect-apps-search";
@@ -867,7 +867,7 @@ export function PluginsPanel() {
     if (item.kind === "plugin") {
       if (scope !== "workspace") {
         // installed on this bot: Install again updates it in place (its
-        // switch and install date stay, server/bot-plugins.ts)
+        // switch and install date stay, server/bots/bot-plugins.ts)
         if (!scopedPluginView?.canChange || (item.installed && !item.updateAvailable)) return null;
         return (
           <button type="button" {...(item.installed ? { "data-bot-plugin-update": item.id } : { "data-bot-plugin-add": item.id })} disabled={botBusy !== null} onClick={() => installForBot(item.id)} className={cn(cardActionClass(item.installed ? "secondary" : "quiet"), "min-w-[76px]")}>
@@ -1104,6 +1104,7 @@ export function PluginsPanel() {
   } else if (page.page === "tailscale") {
     subpage = (
       <TailscaleConnectView
+        trail={trail}
         onBack={() => {
           back();
           void fetchBotTailscale().then(setTailscaleView).catch(() => undefined);
@@ -1289,6 +1290,12 @@ export function PluginsPanel() {
           resolved={scope === "bot" ? botCapabilities.data : undefined}
           resolvedError={scope === "bot" && !botCapabilities.data ? botCapabilities.error : null}
           onRetryResolved={() => void botCapabilities.reload()}
+          removingSuperseded={botBusy}
+          onRemoveSuperseded={scope === "bot" && scopedPluginView?.canChange ? (item) => {
+            const key = botPluginKey(item);
+            if (!key || !scopeBotId || botBusy !== null) return;
+            void botAction(`remove:${key}`, () => uninstallBotPlugin(scopeBotId, key));
+          } : undefined}
           onToggleOrganization={(item, next) => {
             if (!item.orgDeclaration) return;
             void setMine(item.orgDeclaration, next).then(() => botCapabilities.reload(), (failure) => setPanelError(readableError(failure)));

@@ -35,10 +35,13 @@ interface Msg {
 }
 
 /** One row per engine family with a fake in server/testing. `tools` is what
- * that fake's default turn is known to emit through its protocol. */
+ * that fake's scripted turn is known to emit through its protocol. */
 const ENGINES = [
-  { id: "acp", driver: "grokAgent", cli: "fake-acp-cli.ts", env: {}, tools: ["run"] },
-  { id: "claude", driver: "claudeAgent", cli: "fake-claude-cli.ts", env: {}, tools: ["Bash"] },
+  // 95e8f39e4 continues tool-only endings. These complete their tools and
+  // then answer, so one requested turn still yields exactly one digest.
+  { id: "acp", driver: "grokAgent", cli: "fake-acp-cli.ts", env: { FAKE_ACP_MODE: "interleave" }, tools: ["run"] },
+  { id: "claude", driver: "claudeAgent", cli: "fake-claude-cli.ts",
+    env: { FAKE_CLAUDE_TOOL_CALLS: JSON.stringify([{ name: "Bash", input: { command: "echo hi" }, ok: true, output: "hi" }]) }, tools: ["Bash"] },
   { id: "codex", driver: "codex", cli: "fake-codex-app-server.ts", env: {}, tools: ["*"] },
   { id: "pi", driver: "piAgent", cli: "fake-pi-cli.ts", env: { FAKE_PI_MODE: "tooluse" }, tools: ["bash"] },
 ] as const;

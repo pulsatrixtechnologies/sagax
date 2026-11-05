@@ -292,7 +292,7 @@ final class MemberEnvironmentGateTests: XCTestCase {
     func testAMemberReachesTheirOwnEngines() {
         XCTAssertTrue(member().allows(.myEngines))
         XCTAssertTrue(DesktopSettingsSection.available(for: member()).contains(.myEngines))
-        XCTAssertEqual(DesktopSettingsNavGroup.of(.myEngines), .bots)
+        XCTAssertEqual(DesktopSettingsNavGroup.of(.myEngines), .ai)
         let phone = Set(SettingsTree.reachable(SettingsContext(gate: member(), connected: true)).map(\.item))
         XCTAssertTrue(phone.contains(.myEngines))
         XCTAssertEqual(SettingsTree.path(to: .myEngines), [.bots])
@@ -315,11 +315,11 @@ final class MemberEnvironmentGateTests: XCTestCase {
         XCTAssertFalse(SurfaceGate(scope: .serverClient).allows(.myComputer))
     }
 
-    /// The routes these pages call stay in CLIENT_ALLOW (server/request-auth.ts).
+    /// The routes these pages call stay in CLIENT_ALLOW (server/auth/request-auth.ts).
     func testTheServerLetsAClientSessionReachThem() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        let text = try String(contentsOf: root.appendingPathComponent("server/request-auth.ts"), encoding: .utf8)
+        let text = try String(contentsOf: root.appendingPathComponent("server/auth/request-auth.ts"), encoding: .utf8)
         for route in [
             #"{ methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/outbound$/ }"#,
             #"{ methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/avatar\/generate$/ }"#,

@@ -1,6 +1,6 @@
 // Hands this computer's driver connection to the server the app launched,
 // and only to it: over each utility-process child's private parent port
-// (server/desktop-computer.ts). Only this main process can write to that
+// (server/computer/desktop-computer.ts). Only this main process can write to that
 // port. It is sent when the child spawns and again on every driver change,
 // so the server never reads the connection from a file or the environment.
 

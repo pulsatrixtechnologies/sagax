@@ -24,6 +24,8 @@ export interface MemoryManagerSource {
   botId?: string;
   section?: string;
   scope?: string;
+  /** Bot source: false when no current bot owns this memory (a temporary agent's). */
+  linked?: boolean;
 }
 
 export interface MemoryManagerSourcesResponse {
@@ -43,6 +45,18 @@ export interface MemoryNoteRow {
   /** Team memory kind. */
   kind?: string;
   scope?: string;
+  /** Team memory: "proposed" waits for a review. */
+  status?: string;
+  /** When the note was first written (Perspicax `created`, a bot's journal). */
+  createdAt?: number;
+  /** Who wrote it last, as a name (never an identifier). */
+  author?: string;
+  /** How many readable notes it links to or is linked from (Perspicax). */
+  links?: number;
+  /** Manual rank inside its folder (Perspicax). */
+  rank?: number | null;
+  /** An archived Perspicax note (the Archived list). */
+  archived?: boolean;
 }
 
 export interface MemoryFolderRow {
@@ -51,12 +65,36 @@ export interface MemoryFolderRow {
   count: number;
 }
 
+/** One Perspicax tier (personal, a team, the organization) with its folders. */
+export interface MemoryTierRow {
+  scope: string;
+  kind: string;
+  name: string;
+  count: number;
+  trashed: number;
+  mayWrite: boolean;
+  mayManage: boolean;
+  folders: MemoryFolderRow[];
+  /** Its archived notes. */
+  archived?: number;
+  /** Proposals waiting for a review in this tier. */
+  pending?: number;
+  /** How an edit lands: "direct" or "review". */
+  editMode?: string;
+}
+
 export interface MemoryBrowse {
   folders: MemoryFolderRow[];
   notes: MemoryNoteRow[];
   trashCount?: number;
   mayWrite: boolean;
   mayManage?: boolean;
+  /** Perspicax only: the tiers this browse read, each with its folders. */
+  tiers?: MemoryTierRow[];
+  /** Team memory: each note's whole text, by note id (the listing carries it). */
+  bodies?: Record<string, string>;
+  /** A bot's MEMORY.md, in bytes (0: empty). */
+  indexBytes?: number;
 }
 
 export interface MemoryNoteDetail {
@@ -72,6 +110,27 @@ export interface MemoryNoteDetail {
   mayEdit: boolean;
   /** Whole-file JSON or markdown with ```json blocks for the folding tree. */
   bodyKind: "markdown" | "json";
+  /** Perspicax properties, when the server sends them. */
+  author?: string;
+  createdAt?: number;
+  updatedAt?: number;
+  provenance?: Array<{ kind: string; reference: string }>;
+  /** Where the note came from (Perspicax `source`: humain, bot, import…). */
+  origin?: string;
+  versions?: number | null;
+  editMode?: string;
+  sealed?: boolean;
+  linksOut?: MemoryNoteLink[];
+  backlinks?: MemoryNoteLink[];
+}
+
+/** A link between two notes (Perspicax `links_out` and `backlinks`). */
+export interface MemoryNoteLink {
+  scope?: string;
+  id: string;
+  title: string;
+  /** The citing line around the link (backlinks only). */
+  context?: string | null;
 }
 
 export function fetchMemoryManagerSources(): Promise<MemoryManagerSourcesResponse> {
@@ -139,7 +198,7 @@ export async function browseBotSource(botId: string): Promise<MemoryBrowse> {
     { id: "topics", name: "Topics", count: overview.topics.length },
     { id: "logs", name: "Logs", count: overview.logs.length },
   ].filter((folder) => folder.count > 0);
-  return { folders, notes, mayWrite: true };
+  return { folders, notes, mayWrite: true, indexBytes: overview.index?.bytes ?? 0 };
 }
 
 export async function openBotNote(botId: string, path: string): Promise<MemoryNoteDetail> {
@@ -176,6 +235,24 @@ export async function undoBotDeletes(botId: string, undoIds: string[]) {
   for (const id of undoIds) await revertMemoryChange(botId, id);
 }
 
+/** A whole bot memory folder emptied (a folder no bot is linked to): its
+ * topics and logs deleted and its MEMORY.md cleared (it cannot be deleted),
+ * each one a journal row the Trash and Undo put back. */
+export async function emptyBotFolder(botId: string, paths: string[], clearIndex: boolean) {
+  const { undoIds } = await deleteBotNotes(botId, paths);
+  if (clearIndex) {
+    await saveMemoryDoc(botId, MEMORY_INDEX, "", undefined);
+    const journal = await fetchMemoryJournal(botId, 10);
+    const cleared = journal.find((row) => row.path === MEMORY_INDEX && row.canRevert);
+    if (cleared) undoIds.push(cleared.id);
+  }
+  return { undoIds, count: paths.length + (clearIndex ? 1 : 0) };
+}
+
+export function restoreBotChange(botId: string, changeId: string) {
+  return revertMemoryChange(botId, changeId);
+}
+
 export interface TeamEntry {
   id: string;
   kind: string;
@@ -183,6 +260,7 @@ export interface TeamEntry {
   detail: string;
   status: string;
   updatedAt: number;
+  source?: { botName?: string; at?: number };
 }
 
 export async function browseTeamSource(section: string): Promise<MemoryBrowse> {
@@ -194,6 +272,9 @@ export async function browseTeamSource(section: string): Promise<MemoryBrowse> {
     kind: entry.kind,
     excerpt: entry.detail.slice(0, 160),
     updatedAt: entry.updatedAt,
+    createdAt: entry.source?.at,
+    author: entry.source?.botName || undefined,
+    status: entry.status,
   }));
   const counts = new Map<string, number>();
   for (const note of notes) counts.set(note.folder || "term", (counts.get(note.folder || "term") ?? 0) + 1);
@@ -201,6 +282,7 @@ export async function browseTeamSource(section: string): Promise<MemoryBrowse> {
     folders: [...counts.entries()].map(([id, count]) => ({ id, name: id, count })),
     notes,
     mayWrite: true,
+    bodies: Object.fromEntries(result.entries.map((entry) => [entry.id, entry.detail])),
   };
 }
 
@@ -216,6 +298,9 @@ export async function openTeamNote(section: string, id: string): Promise<MemoryN
     folder: entry.kind,
     mayEdit: true,
     bodyKind: "markdown",
+    author: entry.source?.botName || undefined,
+    createdAt: entry.source?.at,
+    updatedAt: entry.updatedAt,
   };
 }
 
@@ -228,7 +313,14 @@ export async function browsePerspicax(folder?: string, scope?: string): Promise<
       may_write: boolean;
       may_manage?: boolean;
       trashed?: number;
-      topics: Array<{ topic: string; count: number; entries: Array<{ id: string; title: string; topic: string; tags: string[]; updated?: string; excerpt?: string }> }>;
+      archived?: number;
+      edit_mode?: string;
+      pending?: unknown[];
+      topics: Array<{
+        topic: string;
+        count: number;
+        entries: Array<{ id: string; title: string; topic: string; tags: string[]; updated?: string; created?: string; excerpt?: string; author_name?: string | null; links?: number; rank?: number | null }>;
+      }>;
     }>;
   }>("/tree");
   const notes: MemoryNoteRow[] = [];
@@ -236,11 +328,26 @@ export async function browsePerspicax(folder?: string, scope?: string): Promise<
   let mayWrite = false;
   let mayManage = false;
   let trashCount = 0;
+  const tiers: MemoryTierRow[] = [];
   for (const tier of tree.tiers) {
     if (scope && tier.scope !== scope && !(scope === "me" && tier.kind === "me")) continue;
     mayWrite = mayWrite || tier.may_write;
     mayManage = mayManage || Boolean(tier.may_manage);
     trashCount += tier.trashed ?? 0;
+    const tierFolders = tier.topics.map((topic) => ({ id: `${tier.scope}/${topic.topic}`, name: topic.topic, count: topic.count }));
+    tiers.push({
+      scope: tier.scope,
+      kind: tier.kind,
+      name: tier.name,
+      count: tier.topics.reduce((sum, topic) => sum + topic.count, 0),
+      trashed: tier.trashed ?? 0,
+      mayWrite: tier.may_write,
+      mayManage: Boolean(tier.may_manage),
+      folders: tierFolders,
+      archived: tier.archived ?? 0,
+      pending: Array.isArray(tier.pending) ? tier.pending.length : 0,
+      editMode: tier.edit_mode,
+    });
     for (const topic of tier.topics) {
       folders.push({ id: `${tier.scope}/${topic.topic}`, name: topic.topic, count: topic.count });
       for (const entry of topic.entries) {
@@ -253,11 +360,15 @@ export async function browsePerspicax(folder?: string, scope?: string): Promise<
           scope: tier.scope,
           excerpt: entry.excerpt,
           updatedAt: entry.updated ? Date.parse(entry.updated) : undefined,
+          createdAt: entry.created ? Date.parse(entry.created) : undefined,
+          author: entry.author_name || undefined,
+          links: entry.links,
+          rank: entry.rank,
         });
       }
     }
   }
-  return { folders, notes, trashCount, mayWrite, mayManage };
+  return { folders, notes, trashCount, mayWrite, mayManage, tiers };
 }
 
 export async function openPerspicaxNote(scope: string, id: string): Promise<MemoryNoteDetail> {
@@ -271,6 +382,15 @@ export async function openPerspicaxNote(scope: string, id: string): Promise<Memo
     version?: number;
     may_edit?: boolean;
     sealed?: boolean;
+    author_name?: string | null;
+    created?: string;
+    updated?: string;
+    provenance?: Array<{ kind: string; reference: string }>;
+    source?: string;
+    versions?: number | null;
+    edit_mode?: string;
+    links_out?: Array<{ scope: string; id: string; title: string; context?: string | null }>;
+    backlinks?: Array<{ scope: string; id: string; title: string; context?: string | null }>;
   }>(`/entry?scope=${encodeURIComponent(scope)}&id=${encodeURIComponent(id)}`);
   return {
     id: note.id,
@@ -282,6 +402,16 @@ export async function openPerspicaxNote(scope: string, id: string): Promise<Memo
     version: note.version,
     mayEdit: note.may_edit !== false && !note.sealed,
     bodyKind: detectBodyKind(note.body),
+    author: note.author_name || undefined,
+    createdAt: note.created ? Date.parse(note.created) : undefined,
+    updatedAt: note.updated ? Date.parse(note.updated) : undefined,
+    provenance: note.provenance,
+    origin: note.source,
+    versions: note.versions,
+    editMode: note.edit_mode,
+    sealed: note.sealed,
+    linksOut: note.links_out?.map((link) => ({ scope: link.scope, id: link.id, title: link.title })),
+    backlinks: note.backlinks?.map((link) => ({ scope: link.scope, id: link.id, title: link.title, context: link.context })),
   };
 }
 
@@ -292,4 +422,39 @@ export function filterNotes(notes: MemoryNoteRow[], query: string): MemoryNoteRo
     const hay = [note.title, note.excerpt, note.folder, ...(note.tags ?? [])].filter(Boolean).join("\n").toLowerCase();
     return hay.includes(q);
   });
+}
+
+/** An archived Perspicax note (`GET /archived`). */
+export interface ArchivedNoteRow {
+  scope: string;
+  id: string;
+  title: string;
+  topic: string;
+  tags: string[];
+  archived_at?: string;
+  author_name?: string | null;
+  may_restore?: boolean;
+}
+
+export async function fetchPerspicaxArchived(): Promise<MemoryNoteRow[]> {
+  const result = await pxMemory<{ notes?: ArchivedNoteRow[] }>("/archived");
+  return (result.notes ?? []).map((note) => ({
+    id: note.id,
+    title: note.title,
+    folder: note.topic,
+    tags: note.tags ?? [],
+    scope: note.scope,
+    author: note.author_name || undefined,
+    updatedAt: note.archived_at ? Date.parse(note.archived_at) : undefined,
+    archived: true,
+  }));
+}
+
+/** The tag vocabulary of the organization (`GET /tags`): its namespaces and their values. */
+export interface MemoryVocabulary {
+  namespaces: Array<{ id: string; label_fr?: string; label_en?: string; controlled?: boolean; required?: boolean; tags: Array<{ tag: string; label?: string }> }>;
+}
+
+export function fetchPerspicaxVocabulary(): Promise<MemoryVocabulary> {
+  return pxMemory<MemoryVocabulary>("/tags");
 }

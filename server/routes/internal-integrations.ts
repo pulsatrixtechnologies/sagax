@@ -10,18 +10,18 @@ import {
   isPendingCredentialRequest,
   type CredentialTargetId,
 } from "../../shared/credential-request.ts";
-import { CONFIDENTIAL_PEER_REFUSED } from "../confidential-threads.ts";
+import { CONFIDENTIAL_PEER_REFUSED } from "../threads/confidential-threads.ts";
 import {
   botAddedMcpServerEnabled,
   isRemoteMcpServer as isRemoteMcpServerLeaf,
   type DisabledMcpServerAdd,
   type StoredMcpServer,
-} from "../mcp-registry.ts";
+} from "../mcp/mcp-registry.ts";
 import {
   personalMcpInputFromAgent,
   PersonConnectionsError,
   type PersonalMcpInput,
-} from "../person-connections.ts";
+} from "../people/person-connections.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
 
@@ -134,19 +134,18 @@ export interface InternalIntegrationsDeps {
     botId: string;
     review?: (prompt: string, signal?: AbortSignal) => Promise<string>;
   }): Promise<string | null>;
-  perspicaxMounted(capability: InternalCapabilityView, profileId: string): boolean;
+  perspicaxMounted(capability: InternalCapabilityView): boolean;
   perspicaxRelay(input: {
     threadId: string;
     generation: string;
     botId: string;
-    profileId: string;
     frame: unknown;
-  }): Promise<{ status: number; body?: unknown }>;
+  }): Promise<{ status: number; body?: unknown; toolsChanged?: true }>;
 }
 
 export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps): InternalRouteHandler {
   return async (ctx) => {
-    const { res, path, method, json, capability, readBody, url } = ctx;
+    const { res, path, method, json, capability, readBody } = ctx;
     const sender = deps.bot(capability.botId);
     if (!sender) return PASS;
 
@@ -244,7 +243,7 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
     if (method === "POST" && path === "/api/internal/github-connect") {
       // The turn's own person connects their GitHub (device flow), like gh
       // auth login: the code and link go back to the bot to show; the device
-      // code and the token stay on the server (server/github-connect.ts).
+      // code and the token stay on the server (server/github/github-connect.ts).
       const body = await readBody();
       const owner = deps.ownsThread(sender.id, capability.threadId);
       if (!owner) return json(res, 403, { error: "source conversation does not belong to sender" });
@@ -402,11 +401,10 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
 
     // Slice 5: a Perspicax MCP frame from the stdio bridge of this turn
     // (server/perspicax-mcp-bridge.ts). The Perspicax token never leaves
-    // this process: server/perspicax-mcp.ts holds it and relays.
+    // this process: server/perspicax/perspicax-mcp.ts holds it and relays.
     if (method === "POST" && path === "/api/internal/perspicax/mcp") {
-      const profileId = url?.searchParams.get("profile") ?? "";
-      if (!deps.perspicaxMounted(capability, profileId)) {
-        return json(res, 403, { error: "this Perspicax profile is not mounted in this turn", code: "profile_not_mounted" });
+      if (!deps.perspicaxMounted(capability)) {
+        return json(res, 403, { error: "the Perspicax connection is not mounted in this turn", code: "profile_not_mounted" });
       }
       const frame = await readBody();
       // A confidential thread's memory never reaches a team or the
@@ -462,15 +460,18 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
         threadId: capability.threadId,
         generation: capability.generation,
         botId: capability.botId,
-        profileId,
         frame,
       });
+      const relayHeaders = {
+        "cache-control": "no-store",
+        ...(answer.toolsChanged ? { "x-sagax-mcp-tools-changed": "1" } : {}),
+      };
       if (answer.body === undefined) {
-        res.writeHead(answer.status, { "cache-control": "no-store" });
+        res.writeHead(answer.status, relayHeaders);
         res.end();
         return;
       }
-      res.writeHead(answer.status, { "content-type": "application/json", "cache-control": "no-store" });
+      res.writeHead(answer.status, { "content-type": "application/json", ...relayHeaders });
       res.end(JSON.stringify(answer.body));
       return;
     }

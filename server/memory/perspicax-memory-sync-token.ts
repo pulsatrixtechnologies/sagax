@@ -23,8 +23,8 @@
 //     failures are logged by kind only;
 //   - at most MINT_PER_MINUTE mints per person per minute (each mint revokes
 //     the previous token).
-import type { LinkPostLimits, LinkPostResult } from "../perspicax-link.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { LinkPostLimits, LinkPostResult } from "../perspicax/perspicax-link.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
 
 export const MEMORY_SYNC_TOKEN_ROUTE = "/api/me/memory-sync-token";

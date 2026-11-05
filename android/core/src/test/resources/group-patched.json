@@ -1,0 +1,17 @@
+{
+  "group": {
+    "id": "g-1",
+    "threadId": "g-t",
+    "name": "Renamed",
+    "memberIds": ["a"],
+    "defaultResponder": { "kind": "auto", "fallbackBotId": "a" },
+    "bulletin": "",
+    "unread": false,
+    "createdAt": 1,
+    "ownerId": "p-me",
+    "humanIds": ["p-me", "p-bob"],
+    "mentionAll": true,
+    "cwd": "/workspace/ops",
+    "peopleDm": false
+  }
+}

@@ -1,4 +1,7 @@
 import { t } from "@/lib/i18n";
+import { useChatComposerShellClass } from "@/lib/chat-bubble-width";
+import { fixSendBlock, sendBlockLocks } from "@/lib/send-state";
+import { openModelWindow } from "@/lib/model-window";
 import { effectivePlace } from "@/lib/place";
 import { changeDraftAttachmentPending } from "@/lib/drafts";
 import { retryAttachmentUpload } from "@/lib/attachment-uploads";
@@ -35,6 +38,7 @@ export function ComposerShell({
   onClearReply,
   members,
   aboutPage,
+  onRetryLast,
 }: {
   session: AnyProps;
   draft: AnyProps;
@@ -51,6 +55,7 @@ export function ComposerShell({
   onClearReply?: () => void;
   members?: Bot[];
   aboutPage?: string;
+  onRetryLast?: () => void;
 }) {
   const { bot, locked, dispatch, storeBots, config, remoteClient, threadId,
     sendState, sendBlock, busy, canSteer, composerTask, parallelQuestions,
@@ -91,8 +96,9 @@ export function ComposerShell({
     ? t("composer.placeholder.page", { title: pageTitle.trim() })
     : t("composer.placeholder.bot", { name: group ? group.name : (bot?.name ?? "") });
 
+  const composerShellClass = useChatComposerShellClass();
   return (
-    <div className="pointer-events-none relative overflow-x-clip px-[max(16px,calc((100%-960px)/2))] pb-4">
+    <div className={composerShellClass}>
       {/* No fill or hairline on this wrapper — those were the black frame
           in the pill's top corners. The dock overlays the transcript. */}
       <ComposerNotices
@@ -167,11 +173,19 @@ export function ComposerShell({
           }}
           onEdit={locked ? undefined : editQueued}
         />
-        {sendBlock && !locked && (
+        {sendBlock && (!locked || sendBlockLocks(sendBlock)) && (
           <ComposerSendBlock
             block={sendBlock}
             onConnect={() => dispatch({ type: "toggleAppSettings", open: true, section: "providers" })}
             onRetry={sendState.recheck}
+            onSwitchEngine={bot ? () => openModelWindow(bot.id) : undefined}
+            onResend={onRetryLast ? () => { onRetryLast(); sendState.recheck(); } : sendState.recheck}
+            onFix={bot && sendBlock.action.kind === "fix" ? async () => {
+              const fix = sendBlock.action.kind === "fix" ? sendBlock.action.fix : "";
+              await fixSendBlock(bot.id, bot.threadId, fix);
+              onRetryLast?.();
+              sendState.recheck();
+            } : undefined}
           />
         )}
         <ComposerEditor

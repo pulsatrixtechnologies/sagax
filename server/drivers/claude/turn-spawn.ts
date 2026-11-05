@@ -2,7 +2,9 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { spawnCli } from "../../procs.ts";
+import { killCliTree, spawnCli } from "../../procs.ts";
+import { MiB, warmResourcePerson, warmResources } from "../../resources/warm-resources.ts";
+import { retireClosedWarmProcess } from "../../resources/warm-process.ts";
 import { promptHalves, sectionFingerprints } from "../prompt-split.ts";
 import { turnFiles } from "../spawn-contract.ts";
 import { UNDELIVERED_VOLATILE } from "./messages.ts";
@@ -200,6 +202,7 @@ const session: ClaudeSession = {
   nativePermissionMode: null,
   replaysUserMessages,
   toolNames: new Map(),
+  configDir: (() => { try { return resolveClaudeConfigDir(undefined, env); } catch { return null; } })(),
   // A warm has no turn from the start, so a fast init cannot emit
   // under a phantom turn id.
   turn: turn.warmOnly === true ? null : { turnId, input: turn, retryAbort, settled: false, sawStreamDelta: false, pendingSteers: new Set(), deferred: null, continuationGrace: null, continuationSilence: null },
@@ -211,6 +214,15 @@ const session: ClaudeSession = {
   costTotal: undefined,
 };
 sessions.set(threadId, session);
+session.budget = warmResources.register({
+  person: warmResourcePerson(turn), kind: "claude", bytes: 400 * MiB,
+  pids: () => child.pid ? [child.pid] : [], protected: () => Boolean(session.turn),
+  evict: () => {
+    if (sessions.get(threadId) === session) ctx.closeSession(threadId, "warm budget");
+    return killCliTree(child);
+  },
+});
+child.once("close", () => retireClosedWarmProcess(session.budget, child));
 // The contract a keep-warm ping replays. Never for a guest's turn.
 if (turn.guestConfined) warmContracts.delete(threadId);
 else {

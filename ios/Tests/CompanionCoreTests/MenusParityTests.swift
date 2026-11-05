@@ -16,6 +16,16 @@ final class MenusParityTests: XCTestCase {
 
     // MARK: The bot's "..." menu
 
+    /// The iPad desktop shell's panel menu opens with Edit bot, as the
+    /// desktop's (`BotActionsMenu.tsx` "edit-bot"); the phone's does not.
+    func testTheDesktopShellMenuOpensWithEditBot() throws {
+        let mine = try bot("mine", owner: "pr_me")
+        let plan = BotActionsMenuPlan(gate: SurfaceGate(scope: .serverAdmin), bot: mine, viewerId: "pr_me",
+                                      editable: true, zipExport: true, activeBotCount: 3, wizard: true, editBot: true)
+        XCTAssertEqual(plan.groups.first, [.editBot, .makePrimary, .redoWizard])
+        XCTAssertFalse(plan.items.contains(.rename))
+    }
+
     func testTheOwnerGetsTheDesktopMenuInOrder() throws {
         let mine = try bot("mine", owner: "pr_me")
         let plan = BotActionsMenuPlan(gate: SurfaceGate(scope: .serverAdmin), bot: mine, viewerId: "pr_me",

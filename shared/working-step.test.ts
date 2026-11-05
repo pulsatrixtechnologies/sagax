@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { commandStep, currentWorkingStep, quietAge, workingStepFor, type WorkingStepCall } from "./working-step.ts";
+import { commandStep, currentWorkingStep, quietAge, shortPathsIn, workingStepFor, type WorkingStepCall } from "./working-step.ts";
 
 // One call, as each engine reports it (server/drivers/*.ts item.started):
 // Claude Code names the tool and puts the command beside it, Codex names the
@@ -107,5 +107,17 @@ describe("quietAge", () => {
     expect(quietAge(0, 125_000)).toEqual({ unit: "min", count: 2 });
     expect(quietAge(0, 2 * 3_600_000 + 5)).toEqual({ unit: "h", count: 2 });
     expect(quietAge(undefined, 1)).toBeNull();
+  });
+});
+
+describe("shortPathsIn", () => {
+  it("keeps only the last two segments of an absolute path in a step line", () => {
+    expect(shortPathsIn("cd /workspace/bots/osprey/dispatch-board && pnpm test")).toBe("cd osprey/dispatch-board && pnpm test");
+    expect(shortPathsIn("cat /workspace/bots/osprey/dispatch-board/src/column.ts")).toBe("cat src/column.ts");
+  });
+  it("leaves short paths, relative paths and URLs alone", () => {
+    expect(shortPathsIn("ls /tmp")).toBe("ls /tmp");
+    expect(shortPathsIn("cat src/board/column.ts")).toBe("cat src/board/column.ts");
+    expect(shortPathsIn("open https://example.com/a/b/c")).toBe("open https://example.com/a/b/c");
   });
 });

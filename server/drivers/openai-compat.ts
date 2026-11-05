@@ -1,8 +1,8 @@
 // Transcript-replay driver for OpenRouter, Groq, Together, llama.cpp, and
 // other endpoints that speak the OpenAI chat-completions contract.
 import type { ModelCatalog, ProviderDriver } from "../contracts.ts";
-import { publishedContextWindow } from "../published-context-window.ts";
-import { refusedModelsStore } from "../refused-models.ts";
+import { publishedContextWindow } from "../pages/published-context-window.ts";
+import { refusedModelsStore } from "../models/refused-models.ts";
 import { createOpenAIChatRuntime } from "./openai-chat.ts";
 import { anthropicTransport } from "./anthropic-compat.ts";
 import { currentEnvName, readEnvName } from "../../electron/legacy-names.mjs";
@@ -13,6 +13,7 @@ import {
   looksLikeAzureUrl,
   type ModelListIssue,
 } from "../../shared/azure-openai.ts";
+import { stripOpenAiEndpointSuffix } from "../../shared/openai-compat-url.ts";
 
 const DRIVER_KIND = "openai-compat";
 const DEFAULT_IDLE_TIMEOUT_MS = 180_000;
@@ -129,8 +130,11 @@ function decodeConfig(raw: unknown): OpenAICompatConfig {
     ...(config.personal === true ? { personal: true } : {}),
     ...(config.modelNames && typeof config.modelNames === "object" ? { modelNames: Object.fromEntries(Object.entries(config.modelNames).filter((entry): entry is [string, string] => typeof entry[1] === "string")) } : {}),
     ...(config.managedModels ? { managedModels: config.managedModels as string[] } : {}),
-    url: (typeof config.url === "string" && config.url ? config.url : envUrl || "https://openrouter.ai/api/v1")
-      .replace(/\/+$/, ""),
+    // Call-time strip: a saved ".../v1/chat/completions" must not become
+    // ".../chat/completions/chat/completions" (#2022).
+    url: stripOpenAiEndpointSuffix(
+      typeof config.url === "string" && config.url ? config.url : envUrl || "https://openrouter.ai/api/v1",
+    ),
     apiKeyEnv: typeof config.apiKeyEnv === "string" && config.apiKeyEnv
       ? config.apiKeyEnv
       : DEFAULT_KEY_ENV,
@@ -335,6 +339,9 @@ export const OpenAICompatDriver: ProviderDriver<OpenAICompatConfig> = {
       ...(azure ? { authHeaders: azureHeaders } : {}),
       tools: config.tools,
       computerUse: true,
+      // #1975: honour warmOnly so POST /api/bots/:id/warm mounts MCP ahead
+      // of the first HTTP turn (same path CLI engines already use).
+      warmSession: true,
       models,
       refreshModels: fetchModels,
       // OpenAI's own API: /responses, where its newer models take tools

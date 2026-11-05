@@ -7,7 +7,8 @@
 import { copyText } from "@/lib/copy-text";
 import { openTeamBotFromThread, teamBotSourceAllowed } from "@/lib/teambot-from-thread";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Check, ChevronLeft, MessagesSquare, MoreHorizontal, Plus, Search } from "lucide-react";
+import { Check, ChevronLeft, Layers, MessagesSquare, MoreHorizontal, Plus, Search } from "lucide-react";
+import { backgroundThreads, personThreads } from "../../shared/background-threads";
 import { api, currentTaskBot, useStore, type Bot, type BotProject, type Group, type GroupTaskUpdatePatch, type Task } from "@/state/store";
 import { botApprovalSetting, approvalModeFor } from "../../shared/approval-mode";
 import { llmThreadTitlesEnabled } from "@/lib/feature-flags";
@@ -155,7 +156,7 @@ export function pickerRowActions(task: Pick<PickerTask, "threadId"> & { confiden
 
 function ConversationTaskPicker({
   threadId,
-  tasks,
+  tasks: ownTasks,
   busy,
   folders,
   newButton,
@@ -167,10 +168,14 @@ function ConversationTaskPicker({
   onPin,
   threadActions,
   folderActions,
+  background,
   initialOpen = false,
 }: {
   threadId: string;
   tasks: PickerTask[];
+  /** A bot's background threads (shared/background-threads.ts): out of the
+   * list, listed instead of it by "Show background". Absent: no such filter. */
+  background?: PickerTask[];
   busy: boolean;
   /** The owner's folders (a bot's, or a conversation with a person's): the
    * list groups by them and a row can move between them. Absent: no folders. */
@@ -197,6 +202,9 @@ function ConversationTaskPicker({
   const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
+  const [showBackground, setShowBackground] = useState(false);
+  const backgroundShown = showBackground && Boolean(background?.length);
+  const tasks = backgroundShown ? background! : ownTasks;
   const [rowMenu, setRowMenu] = useState<{ threadId: string; left: number; top: number } | null>(null);
   const rowMenuAnchor = useRef<HTMLElement | null>(null);
   const [folderMenu, setFolderMenu] = useState<{ projectId: string; left: number; top: number } | null>(null);
@@ -497,6 +505,18 @@ function ConversationTaskPicker({
               );
             })}
           </div>
+          {background && background.length > 0 && <button
+            type="button"
+            role="switch"
+            aria-checked={backgroundShown}
+            data-picker-background=""
+            onClick={() => { clearDismiss(); setShowBackground(!backgroundShown); }}
+            className="flex w-full items-center gap-2 border-t border-popover-hairline px-3 py-2 text-left text-[12px] text-popover-ink-secondary hover:bg-popover-hover hover:text-popover-ink"
+          >
+            <Layers size={13} aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate">{backgroundShown ? t("task.background.hide") : t("task.background.show")}</span>
+            <span className="shrink-0 tabular-nums">{background.length}</span>
+          </button>}
           {newButton ? newButton(closeMenu) : <button
             type="button"
             onClick={() => {
@@ -572,10 +592,16 @@ export function ThreadsOffReturnLink({ bot }: { bot: Bot }) {
 /** The threads the header picker lists for a bot: that bot's own threads
  * (`bot.tasks`, which the server builds from this bot's record only and, on
  * an organization server with private threads, narrows to the viewer's own),
- * minus routine runs, newest first. "opened by <peer>" on a row is a thread
- * a teammate bot opened on this bot, still this bot's thread. */
-export function botPickerThreads(bot: Pick<Bot, "tasks">): Task[] {
-  return orderedThreadList((bot.tasks ?? []).filter((task) => !task.routineRunId));
+ * the person's own conversations only (shared/background-threads.ts: never a
+ * routine run, a hand-off, a thread a bot opened or an AI client's, unless it
+ * is the one on screen), newest first. */
+export function botPickerThreads(bot: Pick<Bot, "tasks" | "threadId">): Task[] {
+  return orderedThreadList(personThreads(bot.tasks ?? [], bot.threadId));
+}
+
+/** The header picker's "Show background" list: newest first. */
+export function botPickerBackground(bot: Pick<Bot, "tasks">): Task[] {
+  return orderedThreadList(backgroundThreads(bot.tasks ?? []));
 }
 
 export function TaskPicker({ bot, initialOpen = false }: { bot: Bot; initialOpen?: boolean }) {
@@ -644,6 +670,7 @@ export function TaskPicker({ bot, initialOpen = false }: { bot: Bot; initialOpen
     <ConversationTaskPicker
       threadId={bot.threadId}
       tasks={botPickerThreads(bot)}
+      background={botPickerBackground(bot)}
       busy={false}
       folders={bot.projects ?? []}
       newButton={(close) => <div className="mt-1 border-t border-popover-hairline">
@@ -716,7 +743,7 @@ export function GroupTaskPicker({ group }: { group: Group }) {
   );
 }
 
-/** A conversation with a person has threads like a bot (server/people-dms.ts):
+/** A conversation with a person has threads like a bot (server/people/people-dms.ts):
  * the same picker, menus and folders, in the chat header while Settings >
  * Appearance puts threads there; in the sidebar location the list sits
  * under the person's row instead, never both. No generated title (that

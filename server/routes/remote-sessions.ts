@@ -15,7 +15,7 @@ import {
 import { PASS } from "./table.ts";
 import type { RouteHandler } from "./table.ts";
 import type { InternalRouteHandler } from "./internal-route.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import type { PublishRemoteSession, RemoteSessionService } from "../remote-support/remote-sessions.ts";
 import { remoteCallerIsAgent } from "./remote-session-files.ts";
 import { consumeRemoteExecApproval, remoteCommandReadOnly } from "../remote-support/remote-session-exec.ts";

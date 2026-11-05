@@ -1,6 +1,6 @@
 // Voice mode (the floating voice bar): what a person picks for the voice
 // that reads a bot's answers and the language they speak, shared by the
-// renderer (src/lib/voice-mode/) and the server (server/voice-mode.ts).
+// renderer (src/lib/voice-mode/) and the server (server/voice/voice-mode.ts).
 //
 // xAI does the voice: speech to text (POST /v1/stt) and text to speech
 // (POST /v1/tts). The bot stays the brain: what the person says is sent to
@@ -226,7 +226,7 @@ export const FISH_VOICE_SERVER_ENGINE = "fishVoice";
  * server's key. */
 export type VoiceModeVia = "speaker-key" | "org-key" | "server";
 
-/** Where a key comes from (server/voice-keys.ts, 2026-10-28): the person's
+/** Where a key comes from (server/voice/voice-keys.ts, 2026-10-28): the person's
  * own voice key saved in Sagax (My voice keys), their own xAI key in
  * Perspicax, the organization's key, or a solo server's key. */
 export type VoiceKeySource = "voice-key" | "perspicax-key" | "org-key" | "server";
@@ -254,6 +254,10 @@ export interface VoiceKeyState extends VoiceKeyInfo {
 export interface VoiceModeStatus {
   provider: "xai";
   available: boolean;
+  /** 2026-11-02 (the maintainer): a call is a realtime voice session (xAI's Voice Agent
+   * API, GET /voice/realtime), never text to speech. False or absent: no
+   * call; the call button says to set up the realtime voice. */
+  realtime?: boolean;
   /** An organization server: voice mode is the only call there (no
    * dictation helper, no "This computer"), so the client never falls back
    * on the legacy call gate. */

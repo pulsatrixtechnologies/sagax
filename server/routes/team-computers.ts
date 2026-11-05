@@ -8,7 +8,7 @@ import {
   teamComputerCreate,
   teamComputerOwner,
   type TeamComputerRecord,
-} from "../team-computers.ts";
+} from "../computer/team-computers.ts";
 import type { TeamComputersPayload } from "../../shared/team-computer.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

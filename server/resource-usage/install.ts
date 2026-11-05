@@ -10,12 +10,12 @@ import type { RemoteSessionService } from "../remote-support/remote-sessions.ts"
 import type { InternalRouteHandler } from "../routes/internal-route.ts";
 import { createResourceUsageInternalRoutes, createResourceUsageRoutes } from "../routes/resource-usage.ts";
 import type { RouteHandler } from "../routes/table.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { resolveTailcatBinary } from "../tailcat-bin.ts";
-import { configuredHosts } from "../terminal-install.ts";
+import { configuredHosts } from "../terminal/terminal-install.ts";
 import type { TerminalAccess } from "../terminal-resources/types.ts";
 import type { AppConfig } from "../config.ts";
-import { prepareVpsSsh } from "../vps-ssh.ts";
+import { prepareVpsSsh } from "../computer/vps-ssh.ts";
 import { createResourceSamplers } from "./sampler.ts";
 import { containerSource, localSource, sshSource, tailcatSource } from "./sources.ts";
 import { resolveResourceTarget, type ResourceHostEntry, type ResourceSessionEntry, type ResourceTargetDeps } from "./targets.ts";

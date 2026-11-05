@@ -7,7 +7,7 @@
 // and agents-call.ts each gain one line.
 import { PHONE_TOOLS, isPhoneTool, type PhoneToolId } from "../../shared/phone-tools.ts";
 
-import type { ToolCallContext, ToolCallResult } from "./agents-call.ts";
+import type { ToolCallContext, ToolCallResult } from "./agents-call-types.ts";
 import type { Json } from "./agents-client.ts";
 
 export const PHONE_TOOL_NAME = "phone_tool";

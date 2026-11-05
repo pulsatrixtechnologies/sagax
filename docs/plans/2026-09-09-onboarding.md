@@ -90,7 +90,7 @@ sweep, and beats swap without the view transition.
 
 ## Preview and verification
 
-- `dev/previews/onboarding-preview.html` + `src/onboarding-preview.tsx` is a dev gallery
+- `src/gallery/onboarding.html` + `src/gallery/onboarding.tsx` (formerly `dev/previews/onboarding-preview.html`) is a dev gallery
   of every beat in every skin (`?beat=&skin=&reduced=1&all=1`).
 - Pure logic is covered by Vitest: `onboarding.test.ts`,
   `guided-tour.test.ts`, `first-conversation.test.ts`, and the config merge
@@ -106,4 +106,4 @@ sweep, and beats swap without the view transition.
 - Phone and native clients: they see nothing from this branch.
 - A skin picker inside the welcome flow.
 - Per-user onboarding state (prepared for `feat/rbac-users`, moved there).
-- The CLI setup wizard in `server/cli-setup.ts`.
+- The CLI setup wizard in `server/cli/cli-setup.ts`.

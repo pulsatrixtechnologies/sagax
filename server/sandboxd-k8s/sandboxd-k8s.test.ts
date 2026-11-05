@@ -8,18 +8,18 @@ import type { Duplex } from "node:stream";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
 
-import { createSandboxAudit } from "../sandbox-audit.ts";
-import { SANDBOX_STARTING_CODE } from "../sandbox-k8s-wake.ts";
-import { SandboxError, SandboxService } from "../sandboxd-core.ts";
+import { createSandboxAudit } from "../sandbox/sandbox-audit.ts";
+import { SANDBOX_STARTING_CODE } from "../sandbox/sandbox-k8s-wake.ts";
+import { SandboxError, SandboxService } from "../sandbox/sandboxd-core.ts";
 import { createSandboxdHandler } from "../sandboxd.ts";
-import { SandboxdVerifier } from "../sandboxd-auth.ts";
+import { SandboxdVerifier } from "../sandbox/sandboxd-auth.ts";
 import { kubeconfigFileFromEnv, kubernetesClient, type K8sClient, type K8sResponse } from "./sandboxd-k8s-client.ts";
 import { kubernetesApi, withExecEnv } from "./sandboxd-k8s.ts";
 import { PAUSED_ANNOTATION, kubernetesSandboxConfigFromEnv, sandboxEgress } from "./sandboxd-k8s-spec.ts";
 import { FakeDocker } from "../testing/fake-docker.ts";
-import { sandboxdClient } from "../user-sandbox-client.ts";
-import { SANDBOX_INSTANCE_LABEL, SANDBOX_LABEL, SANDBOX_USER_LABEL, sandboxContainerSpec, sandboxKeyForPrincipal, sandboxNames, sandboxdConfigFromEnv } from "../user-sandbox-spec.ts";
-import { callUserSandboxTool, type ToolExec } from "../user-sandbox-tools.ts";
+import { sandboxdClient } from "../sandbox/user-sandbox-client.ts";
+import { SANDBOX_INSTANCE_LABEL, SANDBOX_LABEL, SANDBOX_USER_LABEL, sandboxContainerSpec, sandboxKeyForPrincipal, sandboxNames, sandboxdConfigFromEnv } from "../sandbox/user-sandbox-spec.ts";
+import { callUserSandboxTool, type ToolExec } from "../sandbox/user-sandbox-tools.ts";
 
 const DIGEST = "cd".repeat(32);
 const REGISTRY = "ghcr.io/pulsatrixtechnologies";
@@ -194,6 +194,23 @@ describe("kubernetes sandbox lifecycle", () => {
     expect(kinds).toContain("NetworkPolicy");
     expect(kinds).not.toContain("Pod");
     expect(objects.has("/apis/networking.k8s.io/v1/namespaces/sandboxes/networkpolicies/sagax-default-deny")).toBe(true);
+  });
+
+  it("grows an older, smaller claim to the configured size at the next start (2026-11-02)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-k8s-"));
+    const { service, objects, auditFile } = harness(dir);
+    await service.installEgressPolicy();
+    expect((await service.ensure(person)).state).toBe("running");
+    const names = sandboxNames(person);
+    const claimPath = `/api/v1/namespaces/sandboxes/persistentvolumeclaims/${names.volume}`;
+    const storage = () => (((objects.get(claimPath)!.spec as Obj).resources as Obj).requests as Obj).storage;
+    expect(storage()).toBe("32768Mi");
+    (((objects.get(claimPath)!.spec as Obj).resources as Obj).requests as Obj).storage = "2Gi";
+    await service.stop(person);
+    expect((await service.ensure(person)).state).toBe("running");
+    expect(storage()).toBe("32768Mi");
+    const lines = readFileSync(auditFile, "utf8").trim().split("\n").map((line) => JSON.parse(line) as { action: string });
+    expect(lines.some((line) => line.action === "sandbox.pvc.grow")).toBe(true);
   });
 
   it("creates one pod and one claim, pauses without releasing the slot, then removes them", async () => {

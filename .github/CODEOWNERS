@@ -4,7 +4,6 @@
 /server/enterprise.test.ts      @pulsatrixtechnologies/maintainers
 /server/brand.ts                @pulsatrixtechnologies/maintainers
 /server/tunnel.ts               @pulsatrixtechnologies/maintainers
-/cloudflare/control-plane/      @pulsatrixtechnologies/maintainers
 /LICENSE                        @pulsatrixtechnologies/maintainers
 /NOTICE                         @pulsatrixtechnologies/maintainers
 /LICENSING.md                   @pulsatrixtechnologies/maintainers

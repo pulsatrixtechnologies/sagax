@@ -274,7 +274,7 @@ Server logs survive a container recreation on that same volume:
 for `GET /api/org/admin/logs`. Stdout from the container runtime is separate
 and can still rotate away with the old container; use the data-volume files
 (or the admin Logs page) when you need history across a deploy. See
-`server/server-log-ring.ts` and AGENTS.md ("Server log on disk").
+`server/process/server-log-ring.ts` and AGENTS.md ("Server log on disk").
 
 A local build keeps the Chrome for Testing (and any `ENGINES`) it installed
 first, because those layers sit beneath the app and stay cached across code
@@ -1124,7 +1124,7 @@ dropped and counted, never given access.
 
 What never travels: API keys and provider keys, files and pictures, custom
 avatars, model settings (the bots use the server's default model), connector
-and MCP grants, Perspicax profiles, computer and browser access. Copied bots
+and MCP grants, Perspicax account roles, computer and browser access. Copied bots
 start private, ask before acting, with the computer and the browser off.
 
 The organization server answers `POST /api/org/import` only to a person
@@ -1418,7 +1418,7 @@ server after a change; a running bot takes the new rules at its next launch.
 
 On an organization server, plugins and skills do not go through a bot's
 shell at all: the bot's owner adds a marketplace and installs plugins in
-Connect apps, in that bot's scope ("For <bot>", `server/bot-plugins.ts`; the
+Connect apps, in that bot's scope ("For <bot>", `server/bots/bot-plugins.ts`; the
 marketplace list is the workspace's own, one list for both scopes); Sagax
 fetches the marketplace itself and loads each plugin with `--plugin-dir`, without its
 hooks or MCP servers. The organization's admin may keep a list of allowed
@@ -1446,22 +1446,21 @@ their versions. Nothing comes from GitHub.
   them with `--plugin-dir`; the same selected copies are available to the
   person's sandbox and the capability file reader.
 - Guard: the copy has no hooks, so the Flow guard runs in Perspicax (its
-  server guard runs the pack's own PreToolUse hook on every call of a
-  Flow-linked profile: dry run, the person's GO, read back). Perspicax
-  declares `guard: "enforce"` only while that guard enforces and every
-  profile that can write is linked to Flow. Without it (an older Perspicax,
+  server guard runs the active pack's own PreToolUse hook on every Flow
+  call: dry run, the person's GO, read back). Perspicax declares
+  `guard: "enforce"` only while that guard enforces. Without it (an older Perspicax,
   the guard off or in shadow, or `enabled: false` with a `reason` such as
   `flow_guard_uncovered`) the server installs nothing, takes its copy out,
   and no turn loads it.
 - Triggers: a directory that changed, a person's sign-in,
-  a Perspicax profile added to a bot, the start of the server and a check
+  an active pack change, the start of the server and a check
   every 30 minutes. Each is idempotent and silent when the copy matches.
 - Off: the Perspicax admin sets `flow_plugins_default` to `off` (its Flow
   page); the next directory takes the copy out. A plugin someone installed
   on a bot by hand stays.
 - Status: `GET /api/org` (`settings.flowPlugins`), never a token.
 - Other engines: Codex, Grok and the rest have no Claude Code plugin system;
-  they reach Flow through the Perspicax profiles of the turn (`flow` and
+  they reach Flow through the same Perspicax account connection (`flow` and
   `flow_action`), under the same server guard.
 
 An allow rule never overrides a denial. Rules only go into
@@ -1665,7 +1664,7 @@ The figure is every cost in the usage ledger. Claude reports its own cost
 (real on your keys, an equivalent on personal subscriptions). Codex, the
 OpenAI-compatible/OpenRouter engine, Grok, MiniMax and the ACP engines report
 tokens but no price, so the server books an **estimate** from a built-in list
-of vendor list prices (`server/model-prices.ts`, each entry with its source
+of vendor list prices (`server/models/model-prices.ts`, each entry with its source
 and the date it was read) and marks the row `costSource: "estimated"`. A model
 that is not in the list is unpriced and not counted; Usage says how many
 turns that was. Estimates use each vendor's standard short-context rate, so

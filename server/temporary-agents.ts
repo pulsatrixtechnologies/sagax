@@ -44,7 +44,7 @@ export interface TemporaryAgent {
   pinned?: { principalId: string; at: number };
   archived?: { at: number; by: ArchiveActor; reason: "deleted" | "expired"; purgeAt: number };
   /** Where its Auto turns start (create_agent `workspace`,
-   * server/auto-computer.ts autoStartTarget); checked at every turn. */
+   * server/computer/auto-computer.ts autoStartTarget); checked at every turn. */
   workspace?: "this_computer" | "browser" | "cloud" | "local_vm";
 }
 

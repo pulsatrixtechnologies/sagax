@@ -1,0 +1,169 @@
+import type { EffortLevel, EngineAccess, ModelCatalog, ModelSelection, ProviderSnapshot } from "../contracts.ts";
+import { effortAcceptedByEngine } from "../../shared/ultracode-effort.ts";
+
+export interface SelectableInstance {
+  instanceId: string;
+  driverKind: string;
+  snapshot: ProviderSnapshot;
+  models: ModelCatalog;
+  capabilities?: { effortLevels?: readonly EffortLevel[]; modelVariants?: boolean };
+  access?: EngineAccess;
+  enabled?: boolean;
+}
+
+/** What an enrolled organisation adds to the choice. Both are omitted (or
+ * answer nothing) on a desktop that is not enrolled. */
+export interface DefaultSelectionContext {
+  /** True for a Company instance the enrolled organisation provides. */
+  company?: (instanceId: string) => boolean;
+  /** Why the organisation's desktop policy refuses an instance for bots. */
+  refusal?: (instance: SelectableInstance) => string | undefined;
+}
+
+const claudeFirst = (instances: readonly SelectableInstance[]) =>
+  instances.find((instance) => instance.driverKind === "claudeAgent") ?? instances[0];
+
+/** Installed and waiting on a sign-in. A custom endpoint brings its own
+ * credential, so its sign-in state does not count. */
+export function signedOut(instance: SelectableInstance): boolean {
+  return instance.snapshot.state === "available" && instance.access !== "custom" && instance.snapshot.authenticated === false;
+}
+
+/** The ready rule: an engine can run a turn now when it is available, the
+ * organisation allows it, and it is not signed out (signedOut). */
+export function readyToRun(instance: SelectableInstance, context: DefaultSelectionContext = {}): boolean {
+  return instance.enabled !== false && instance.snapshot.state === "available" && context.refusal?.(instance) === undefined && !signedOut(instance);
+}
+
+const defaultModel = (instance: SelectableInstance) => instance.models.default.trim()
+  ? instance.models.default
+  : instance.models.options.find((model) => model.id.trim())?.id ?? "";
+
+/** The engine a new bot gets, and the one a bot moved off a removed engine
+ * gets (computer-engine-removal.ts): one picker for both.
+ *
+ * A saved choice is intentional: an unavailable provider or removed model
+ * sends new bots to setup instead of silently changing their provider.
+ * Without one, an engine that can run a turn now wins (Claude first), then the
+ * first available one. On an enrolled desktop a working personal engine
+ * still beats a Company one, so billing stays the person's explicit choice. */
+export function selectDefaultModelSelection(
+  instances: readonly SelectableInstance[],
+  preferred?: ModelSelection,
+  context: DefaultSelectionContext = {},
+): ModelSelection {
+  if (preferred && (preferred.instanceId || preferred.model)) {
+    const instance = instances.find((candidate) => candidate.instanceId === preferred.instanceId);
+    if (
+      instance?.snapshot.state !== "available" ||
+      instance.enabled === false ||
+      signedOut(instance) ||
+      !preferred.model.trim() ||
+      // An organisation that disallows the saved engine makes it unusable,
+      // exactly like an unavailable one: setup, never another provider.
+      context.refusal?.(instance) !== undefined ||
+      (preferred.variant !== undefined && !instance.capabilities?.modelVariants) ||
+      !(instance.models.default === preferred.model || instance.models.options.some((model) => model.id === preferred.model))
+    ) {
+      return { instanceId: "", model: "" };
+    }
+    const selection = { ...preferred };
+    // A saved effort can outlive driver support. Keep the intentional model,
+    // but let the provider use its own effort default instead of failing turn 1.
+    if (selection.effort && !effortAcceptedByEngine(selection.effort, instance.capabilities?.effortLevels ?? [])) delete selection.effort;
+    return selection;
+  }
+  // The organisation's policy is inert (no refusal) unless this desktop is enrolled.
+  const available = instances.filter((instance) => instance.enabled !== false && instance.snapshot.state === "available" && context.refusal?.(instance) === undefined && defaultModel(instance));
+  const ready = available.filter((instance) => readyToRun(instance, context));
+  const company = context.company;
+  const personal = company && instances.some((instance) => company(instance.instanceId))
+    ? claudeFirst(ready.filter((instance) => !company(instance.instanceId)))
+    : undefined;
+  const pick = personal ?? claudeFirst(ready) ?? claudeFirst(available);
+  return { instanceId: pick?.instanceId ?? "", model: pick ? defaultModel(pick) : "" };
+}
+
+/** A brand-new bot starts on Auto (docs/plans/2026-10-08-auto-model.md): the
+ * engine is auto-resolved (selectDefaultModelSelection) and the model is Auto,
+ * so the right model is picked per task while the concrete pick stays as the
+ * fallback any Auto-unaware path still runs. An empty selection (no engine is
+ * ready yet) has nothing to ride on and stays unset; it becomes Auto once an
+ * engine is healed in. Used only where a NEW bot's default is resolved, never
+ * on a selection the person pinned, so an explicit choice is never overridden. */
+export function autoNewBotSelection(selection: ModelSelection): ModelSelection {
+  return selection.instanceId.trim() && selection.model.trim() ? { ...selection, auto: true } : selection;
+}
+
+/** Complete a new bot's selection with the template's effort
+ * (`newBotDefaults.profile.modelSelection.effort`). `defaultModelSelection`
+ * is the CLI mirror of that selection; the template wins. An explicit effort
+ * or model variant is the caller's choice and wins; an engine that does not
+ * offer the level keeps sending none rather than failing turn 1. */
+export function withNewBotEffort(
+  selection: ModelSelection,
+  effort: EffortLevel | undefined,
+  offered: readonly EffortLevel[] | undefined,
+): ModelSelection {
+  if (!effort || selection.effort !== undefined || selection.variant !== undefined || !effortAcceptedByEngine(effort, offered ?? [])) {
+    return selection;
+  }
+  return { ...selection, effort };
+}
+
+/** The models a person starred (`sagax.modelFavorites.v1`, their own
+ * preference kept on the organization server: `[[instanceId, modelId], ...]`,
+ * src/lib/model-favorites.ts), in the order they were starred. Anything
+ * malformed is dropped. */
+export function starredModelSelections(raw: string | null | undefined): ModelSelection[] {
+  if (!raw) return [];
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { return []; }
+  if (!Array.isArray(parsed)) return [];
+  const out: ModelSelection[] = [];
+  for (const entry of parsed) {
+    if (!Array.isArray(entry) || entry.length !== 2) continue;
+    const [instanceId, model] = entry as unknown[];
+    if (typeof instanceId !== "string" || typeof model !== "string" || !instanceId.trim() || !model.trim()) continue;
+    if (instanceId.length > 200 || model.length > 200) continue;
+    out.push({ instanceId, model });
+    if (out.length >= 40) break;
+  }
+  return out;
+}
+
+/** What an organization member's new bot starts on when the request names
+ * no model (#1060, #1074). Each level is tried in order and the first one
+ * that can run here wins: the person's own (the first model they starred
+ * that runs here), then the organization's default for new bots
+ * (`newBotDefaults.profile.modelSelection`, the console's setting), then the
+ * server's default (`defaultModelSelection`), then an engine that can run a
+ * turn now, on Auto. A saved choice that cannot run (engine gone, signed
+ * out, disallowed by the organization) never leaves a member's bot without
+ * an engine: the next level decides. An empty selection only when no engine
+ * at all is available here. */
+export function memberNewBotSelection(
+  instances: readonly SelectableInstance[],
+  levels: { person?: readonly ModelSelection[]; organization?: ModelSelection | null; server?: ModelSelection | null },
+  context: DefaultSelectionContext = {},
+): ModelSelection {
+  for (const preferred of [...(levels.person ?? []), levels.organization, levels.server]) {
+    if (!preferred?.instanceId?.trim() || !preferred.model?.trim()) continue;
+    const picked = selectDefaultModelSelection(instances, preferred, context);
+    if (picked.instanceId && picked.model) return picked;
+  }
+  return autoNewBotSelection(selectDefaultModelSelection(instances, undefined, context));
+}
+
+/** #1445: the engines as one organization member can use them. The server's
+ * own sign-in says nothing about a member: what runs for them is what pays
+ * for their turn (their subscription, their key, or the organization's key
+ * when it was given to them, server/engines/engine-credentials.ts). `runs` answers
+ * that per engine. An engine they cannot run is left out of every level of
+ * memberNewBotSelection; one they can run counts as signed in, even when the
+ * server's own account is signed out. */
+export function instancesForPerson<T extends SelectableInstance>(instances: readonly T[], runs: (instance: T) => boolean): T[] {
+  return instances.map((instance) => runs(instance)
+    ? { ...instance, snapshot: { ...instance.snapshot, authenticated: true } }
+    : { ...instance, enabled: false });
+}

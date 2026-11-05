@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { WAIT_KINDS } from "../../shared/waits.ts";
-import type { NewWait, WaitRecord } from "../waits.ts";
+import type { NewWait, WaitRecord } from "../waits/waits.ts";
 import { createWaitRoutes, findWaitPeer, hostWaitRefusal, isNetworkPath, parseWaitRequest, waitSourceRefusal, WAIT_MESSAGES } from "./waits.ts";
 import { PASS } from "./table.ts";
 

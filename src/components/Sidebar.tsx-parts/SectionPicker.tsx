@@ -1,6 +1,8 @@
+import { useStoreSelector } from "@/state/store-selector";
+import { equalRows, peerBots, peerGroups } from "@/state/view-slices";
 import { useEffect, useRef, useState } from "react";
 import { Check, FolderMinus } from "lucide-react";
-import { useStore } from "@/state/store";
+
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { useHeldMenuMotion } from "../MenuMotion";
@@ -25,7 +27,7 @@ export function SectionPicker({
   /** "" clears — the server drops an empty section */
   onAssign: (section: string) => void;
 }) {
-  const { state } = useStore();
+  const state = useStoreSelector((current) => ({ bots: peerBots(current), groups: peerGroups(current), sections: current.sections }), (a, b) => equalRows(a.bots, b.bots) && equalRows(a.groups, b.groups) && a.sections === b.sections);
   const [name, setName] = useState("");
   const motion = useHeldMenuMotion(anchor);
   const shown = motion.value;

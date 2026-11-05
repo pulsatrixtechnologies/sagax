@@ -1,5 +1,5 @@
 // Which people a room draft tags (src/lib/person-mentions.ts): the rule the
-// server notifies by (server/room-mentions.ts).
+// server notifies by (server/rooms/room-mentions.ts).
 import { describe, expect, it } from "vitest";
 
 import type { OrgDirectoryPerson } from "./perspicax-org";

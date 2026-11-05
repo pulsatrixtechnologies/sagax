@@ -1,4 +1,6 @@
-import { CalendarClock, ChevronRight } from "lucide-react";
+import { CalendarClock } from "lucide-react";
+import { memo } from "react";
+import { RightRailPanel } from "@/components/RightRail";
 import { t } from "@/lib/i18n";
 import type { Routine, RoutineRun } from "@/lib/routines";
 import type { Bot } from "@/state/store";
@@ -13,6 +15,9 @@ export interface CalendarSidebarProps {
   /** The upcoming routines, already narrowed by the page's filters (scope,
    * status, bot) and in run order (`upcomingRoutines`). */
   routines: Routine[];
+  /** The runs the rows read their state from (Running, Waiting, Queued):
+   * the page passes the in-flight ones only, so a finished run's frame does
+   * not render the panel (2026-11-02). */
   runs: RoutineRun[];
   bots: Bot[];
   viewerPrincipalId?: string | null;
@@ -27,24 +32,17 @@ export interface CalendarSidebarProps {
   /** Some routines match the filters but none will run (paused ones, for
    * instance): the empty line says so instead of "Nothing scheduled". */
   filteredOut?: boolean;
+  /** Hidden under 1024px, as the page has always drawn it. */
+  hideNarrow?: boolean;
 }
 
 /** The calendar's right panel (2026-10-18): the month, then what runs
  * next. Bots are scheduled by dragging them from the left sidebar, which
  * already lists them, so this panel no longer repeats them. */
-export function CalendarSidebar({ anchor, onSelectDate, routines, runs, bots, viewerPrincipalId, loading, error, onOpenRoutine, onCollapse, filteredOut = false }: CalendarSidebarProps) {
+export const CalendarSidebar = memo(function CalendarSidebar({ anchor, onSelectDate, routines, runs, bots, viewerPrincipalId, loading, error, onOpenRoutine, onCollapse, filteredOut = false, hideNarrow = false }: CalendarSidebarProps) {
   return (
-    <aside
-      aria-label={t("routines.upcoming.sidebar")}
-      className="flex h-full w-[280px] shrink-0 flex-col overflow-hidden border-l border-hairline/40 bg-panel"
-    >
-      {onCollapse && (
-        <div className="flex shrink-0 px-2 pt-2">
-          <button type="button" onClick={onCollapse} aria-label={t("routines.upcoming.hide")} title={t("routines.upcoming.hide")} className="rounded-md p-1 text-ink-secondary hover:bg-raised hover:text-ink">
-            <ChevronRight size={16} />
-          </button>
-        </div>
-      )}
+    // The shared right rail (RightRail.tsx), the same as the Memory explorer's.
+    <RightRailPanel label={t("routines.upcoming.sidebar")} onCollapse={onCollapse} hideLabel={t("routines.upcoming.hide")} hideNarrow={hideNarrow}>
       <MiniMonth anchor={anchor} onSelect={onSelectDate} />
 
       <div className="mx-4 border-t border-hairline/40" />
@@ -78,6 +76,6 @@ export function CalendarSidebar({ anchor, onSelectDate, routines, runs, bots, vi
           {t("routines.upcoming.dragHint")}
         </p>
       </section>
-    </aside>
+    </RightRailPanel>
   );
-}
+});

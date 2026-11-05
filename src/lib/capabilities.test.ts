@@ -4,9 +4,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import {
   botPluginKey, capabilityName, enginesLine, engineGetsNothing, indexCut, installationServerName, orderedCapabilities,
-  organizationRows, receivedGroups, receiptWords, roleProfileId, skillName,
+  organizationRows, receivedGroups, receiptWords, skillName,
 } from "./capabilities";
-import { CAPABILITY_ROLE_ID, capabilityFixture } from "./capabilities.fixture";
+import { capabilityFixture } from "./capabilities.fixture";
 
 beforeEach(() => setLocale("en"));
 
@@ -31,7 +31,6 @@ describe("capabilities (desktop)", () => {
     const items = capabilityFixture().items;
     expect(botPluginKey(items[1]!)).toBe("notion@market-one");
     expect(skillName(items[2]!)).toBe("vcio-writing");
-    expect(roleProfileId(items[3]!)).toBe(CAPABILITY_ROLE_ID);
     expect(installationServerName(items[6]!)).toBe("github");
     expect(botPluginKey(items[6]!)).toBeNull();
   });

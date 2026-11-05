@@ -213,6 +213,10 @@ export interface MarkdownEditorProps {
   /** 2026-10-29: a Full screen button for long text; Escape or Exit full
    * screen brings it back. */
   expandable?: boolean;
+  /** 2026-11-02: plain readable text until the person edits; the toolbar
+   * shows (under the text, so nothing jumps) on focus, in full screen or in
+   * Preview. Routine instructions in "Edit routine". */
+  toolbarOnFocus?: boolean;
 }
 
 export function MarkdownEditor({
@@ -238,6 +242,7 @@ export function MarkdownEditor({
   className,
   compact = false,
   expandable = false,
+  toolbarOnFocus = false,
 }: MarkdownEditorProps) {
   const advanced = useAdvancedMode() && !compact;
   const [full, setFull] = useState(false);
@@ -265,6 +270,8 @@ export function MarkdownEditor({
   }, [Core]);
 
   const mode: ViewMode = view === "split" && !advanced ? "write" : view;
+  const toolbarShown = !toolbarOnFocus || editing || full || mode !== "write";
+  const quiet = toolbarOnFocus && !toolbarShown;
   const changeView = (next: ViewMode) => {
     setView(next);
     writeView(next);
@@ -329,7 +336,7 @@ export function MarkdownEditor({
   } as CSSProperties;
 
   const markEditing = (next: boolean) => {
-    if (compact) setEditing(next);
+    if (compact || toolbarOnFocus) setEditing(next);
   };
   const handleBlur = () => {
     markEditing(false);
@@ -440,12 +447,13 @@ export function MarkdownEditor({
       }}
       className={cn(
         "markdown-editor flex min-w-0 flex-col rounded-lg border bg-inset outline-none focus-within:border-border-strong focus-visible:ring-2 focus-visible:ring-focus",
-        invalid ? "border-danger/60 ring-1 ring-danger/50" : "border-hairline/40",
+        invalid ? "border-danger/60 ring-1 ring-danger/50" : quiet ? "border-transparent bg-transparent hover:border-hairline/40" : "border-hairline/40",
         disabled && "opacity-60",
         full ? "fixed inset-4 z-[80] bg-elevated shadow-2xl sm:inset-8" : className,
       )}
     >
-      <div className={cn("flex flex-wrap items-center justify-between gap-1 border-b border-hairline/40", compact ? "px-1 py-0.5" : "px-1.5 py-1")}>
+      {toolbarShown && (
+      <div data-md-toolbar="" className={cn("flex flex-wrap items-center justify-between gap-1 border-hairline/40", toolbarOnFocus ? "order-last border-t" : "border-b", compact ? "px-1 py-0.5" : "px-1.5 py-1")}>
         <div
           ref={toolbar}
           role="toolbar"
@@ -517,6 +525,7 @@ export function MarkdownEditor({
           )}
         </div>
       </div>
+      )}
       {mode === "write" && writing}
       {mode === "preview" && preview}
       {mode === "split" && (

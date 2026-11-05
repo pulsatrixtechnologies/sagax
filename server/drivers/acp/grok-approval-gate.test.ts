@@ -6,9 +6,9 @@ import { SPAWNED_PROXIES } from "../../proxy-paths.ts";
 import { removeTempDir } from "../../testing/cleanup.ts";
 import { gateReadOnlyTools, GROK_APPROVAL_GATE_FILE, grokApprovalGateEnabled } from "./grok-approval-gate.ts";
 
-const bridge = { command: process.execPath, args: [SPAWNED_PROXIES.perspicax], env: { SAGAX_PERSPICAX_PROFILE: "pr_1" } };
+const bridge = { command: process.execPath, args: [SPAWNED_PROXIES.perspicax], env: { SAGAX_PERSPICAX_TOKEN: "turn" } };
 const WRITES = [
-  "cw_psa__write", "cw_psa__action", "memory_write", "memory_forget", "memory_promote", "memory_propose",
+  "cw_psa_write", "cw_psa_action", "memory_write", "memory_forget", "memory_promote", "memory_propose",
   "sagax_send", "sagax_approve", "sagax_nudge", "sagax_routine_run", "flow_action", "ask_person", "api_upload",
   "run_command", "write_file", "create_bot", "send_message", "workspace_write",
 ];
@@ -47,7 +47,7 @@ describe("gateReadOnlyTools", () => {
     const agents = gateReadOnlyTools({ name: "agents", builtin: true });
     const perspicax = gateReadOnlyTools({ name: "perspicax_owner", builtin: false, spec: bridge });
     expect(agents).toContain("list_bots");
-    expect(perspicax).toEqual(expect.arrayContaining(["api_search", "cw_psa__query", "memory_search", "flow"]));
+    expect(perspicax).toEqual(expect.arrayContaining(["api_search", "cw_psa_query", "memory_search", "flow"]));
     for (const tool of WRITES) {
       expect(agents).not.toContain(tool);
       expect(perspicax).not.toContain(tool);
@@ -56,7 +56,7 @@ describe("gateReadOnlyTools", () => {
 
   it("gives every other server nothing, whatever it is named", () => {
     expect(gateReadOnlyTools({ name: "agents", builtin: false, spec: bridge })).toEqual([]);
-    expect(gateReadOnlyTools({ name: "perspicax_fake", builtin: false, spec: { command: "node", args: ["/tmp/x.mjs"], env: { SAGAX_PERSPICAX_PROFILE: "p" } } })).toEqual([]);
+    expect(gateReadOnlyTools({ name: "perspicax_fake", builtin: false, spec: { command: "node", args: ["/tmp/x.mjs"], env: { SAGAX_PERSPICAX_TOKEN: "turn" } } })).toEqual([]);
     for (const name of ["browser", "computer", "sagax-environment", "sagax-computer", "github"]) {
       expect(gateReadOnlyTools({ name, builtin: name !== "sagax-environment" && name !== "sagax-computer" && name !== "github" })).toEqual([]);
     }

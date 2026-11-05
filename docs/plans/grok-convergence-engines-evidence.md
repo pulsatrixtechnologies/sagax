@@ -12,18 +12,18 @@ not claim real provider or comparative Grok Bot qualification.
 
 | Acceptance | Code | Tests |
 | --- | --- | --- |
-| Enabled plugin skills/commands/agents discoverable on API engines when `skills_list` and `workspace_read` are allowed | `scopedSkillInventory` in `server/index.ts` includes plugins for every instance; Flow folders stay Claude-only; `skillDiscoveryIndex` / `skills_list` page them | `server/plugin-api-delivery.e2e.test.ts` (real turn prompt + tools); `server/skill-discovery.e2e.test.ts` (Lot 1 regression) |
+| Enabled plugin skills/commands/agents discoverable on API engines when `skills_list` and `workspace_read` are allowed | `scopedSkillInventory` in `server/index.ts` includes plugins for every instance; Flow folders stay Claude-only; `skillDiscoveryIndex` / `skills_list` page them | `server/plugin-api-delivery.e2e.test.ts` (real turn prompt + tools); `server/skills/skill-discovery.e2e.test.ts` (Lot 1 regression) |
 | Bodies readable through managed aliases (`plugins/<name>/...`) | `workspace_read` via `readWorkspaceText` + `scopedPluginFolders` | e2e tool loop calls `workspace_read` and receives unique skill bytes |
 | Declared MCP dependencies keep existing proxied path on API engines | plugin `.mcp.json` / plugin.json mcpServers sanitized into turn mounts; receipt MCP branch `proxied` when `customMcp` | e2e installs packing with `packing-track`; prompt and reach list it; `shared/capabilities.test.ts` |
 | Truthful supported/unsupported receipts | `engineReceipt` serves plugin skills/commands/agents as `prompt` when `skillDiscovery`; Flow remains `none` on non-Claude; tools-off / denied list stays `none` | e2e denied `skills_list` asserts `engine.skills === "none"` and no `promptIndex`; capabilities unit tests |
 | Turn connectors claim plugins only when delivery tools are allowed | `turnConnectorsFor` uses `skillDiscoveryAvailable(integrations.agents, toolScope)` and the same engine-scoped folders as the inventory (`enginePluginFolders`) | e2e asserts plugin connector present on allowed turn and absent after deny |
-| Native Claude plugin loading stays native (`--plugin-dir`) | `turnPluginDirs` / `claudePluginDirs` unchanged; inventory marks Claude plugin rows `native: true` | `server/plugin-turn.test.ts`; capabilities Claude cases; e2e Claude preview `skills: "native"` |
+| Native Claude plugin loading stays native (`--plugin-dir`) | `turnPluginDirs` / `claudePluginDirs` unchanged; inventory marks Claude plugin rows `native: true` | `server/turns/plugin-turn.test.ts`; capabilities Claude cases; e2e Claude preview `skills: "native"` |
 | Organization Flow engine decision preserved | `fileReceipt` for `flow` is Claude-native only; org folders filtered out of non-Claude inventory | capabilities tests; e2e asserts no served Flow on API |
 | `/skill` keeps inline for API/org; managed index still available when tools allow | comment + existing `skillCommandInline` path | existing `server/skill-command.test.ts` |
 | Engine switch preserves selected skill bytes | Same bot and thread: API primary -> fake Codex file engine; alias read, `skills_list` and the installed file on disk are byte-identical to the API read | `server/plugin-engine-continuity.e2e.test.ts` |
 | Provider failover preserves bytes and dependencies | Same thread, primary returns a spent-quota 429; limit failover continues the same message once on the API backup, whose prompt carries the alias, whose `workspace_read` returns identical bytes, and whose `skills_list` and plugin MCP tool work | `server/plugin-engine-continuity.e2e.test.ts`; capability gate `recoveryCapabilityError` also asserted in `plugin-api-delivery.e2e.test.ts` |
 | Plugin declared MCP dependency executes on API engines | `mountPluginMcp` proxies the plugin's stdio server (`customMcp`); the fake MCP server records the `tools/call` | `server/plugin-engine-continuity.e2e.test.ts` (primary and backup) |
-| Large-plugin metadata lifecycle (manifest/cache/invalidation) | `server/plugin-metadata-cache.ts` v3: rebuilt on install/update/config (`bot-plugins`, `installation-plugins`), dropped on remove, marketplace removal and bot deletion; hot path = memoized manifest + lstat of known directories (mtime stamps catch additions) and files; miss = bounded live scan, partial only if that scan stopped early, one deduplicated rebuild queued after the turn (30 s cooldown) | `server/plugin-metadata-cache.test.ts` (add/move/rename/delete/tamper/mtime, miss heals off the turn, config write heals, memoized 2,000-file verification, write soft-fail, 600-file cache) |
+| Large-plugin metadata lifecycle (manifest/cache/invalidation) | `server/plugins/plugin-metadata-cache.ts` v3: rebuilt on install/update/config (`bot-plugins`, `installation-plugins`), dropped on remove, marketplace removal and bot deletion; hot path = memoized manifest + lstat of known directories (mtime stamps catch additions) and files; miss = bounded live scan, partial only if that scan stopped early, one deduplicated rebuild queued after the turn (30 s cooldown) | `server/plugins/plugin-metadata-cache.test.ts` (add/move/rename/delete/tamper/mtime, miss heals off the turn, config write heals, memoized 2,000-file verification, write soft-fail, 600-file cache) |
 | Partial/unreadable cases reported honestly | inventory `truncated` / `unreadable`; opendir/lstat failures mark incomplete/truncated (except ENOENT at depth 1); cache IO soft-fail | metadata cache + plugin-turn tests |
 | Flow stays Claude-only for reads too | `workspace_read` resolves plugin aliases from `enginePluginFolders` on the running engine | code path shared with the discovery filter; no organization Flow e2e fixture exists (see remaining) |
 | Disabled/staged privacy and stable discovery/pagination | unchanged Lot 1 `skillDiscoveryPage` rules; disable returns no such file on `workspace_read` | e2e disable + library unassign |
@@ -77,9 +77,9 @@ native Claude `--plugin-dir` loading and Flow receipts are unchanged.
 ## Verification run (worker)
 
 ```
-pnpm exec vitest run shared/capabilities.test.ts server/capabilities.test.ts \
-  server/plugin-metadata-cache.test.ts server/plugin-turn.test.ts \
-  server/skill-discovery.test.ts server/turn-connectors.test.ts \
+pnpm exec vitest run shared/capabilities.test.ts server/capabilities/capabilities.test.ts \
+  server/plugins/plugin-metadata-cache.test.ts server/turns/plugin-turn.test.ts \
+  server/skills/skill-discovery.test.ts server/turns/turn-connectors.test.ts \
   server/plugin-api-delivery.e2e.test.ts
 # 7 files, 58 tests passed
 
@@ -93,11 +93,11 @@ not run in this worker (root owns the integration gate).
 ## Verification run (second review)
 
 ```
-pnpm exec vitest run shared/capabilities.test.ts server/capabilities.test.ts \
-  server/plugin-metadata-cache.test.ts server/plugin-turn.test.ts \
-  server/bot-plugins.test.ts server/installation-plugins.test.ts \
-  server/skill-discovery.test.ts server/skill-discovery.e2e.test.ts \
-  server/turn-connectors.test.ts server/workspace-files.test.ts \
+pnpm exec vitest run shared/capabilities.test.ts server/capabilities/capabilities.test.ts \
+  server/plugins/plugin-metadata-cache.test.ts server/turns/plugin-turn.test.ts \
+  server/bots/bot-plugins.test.ts server/plugins/installation-plugins.test.ts \
+  server/skills/skill-discovery.test.ts server/skills/skill-discovery.e2e.test.ts \
+  server/turns/turn-connectors.test.ts server/workspace/workspace-files.test.ts \
   server/plugin-api-delivery.e2e.test.ts server/plugin-engine-continuity.e2e.test.ts
 # 12 files, 114 tests passed
 pnpm exec vitest run server/plugin-engine-continuity.e2e.test.ts   # 3 consecutive passes

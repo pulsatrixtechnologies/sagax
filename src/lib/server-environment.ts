@@ -1,10 +1,10 @@
 // Settings > Organization > Your server environment: the signed-in person's
 // own isolated Linux environment on the server, shared by all their bots
-// (server/user-sandbox-routes.ts).
+// (server/sandbox/user-sandbox-routes.ts).
 import { api, ApiError } from "@/state/store";
-import { formatPanelBytes as formatBytes } from "../../shared/format-bytes";
+import { formatPanelBytes } from "../../shared/format-bytes";
 
-export { formatBytes };
+export { formatPanelBytes };
 
 export interface ServerEnvironmentStatus {
   configured: boolean;
@@ -53,6 +53,9 @@ export interface ServerEnvironmentStats {
   memoryLimitBytes: number;
   workspaceBytes: number | null;
   workspaceQuotaBytes: number;
+  /** The /workspace volume itself (df), when the provisioner measured it. */
+  workspaceFreeBytes?: number;
+  workspaceTotalBytes?: number;
   os: string | null;
   arch: string | null;
   image: string;

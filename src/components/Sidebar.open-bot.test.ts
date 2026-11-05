@@ -48,6 +48,13 @@ vi.mock("@/state/store", async (importOriginal) => {
   return { ...original, api: fixture.api, useStore: () => ({ state: fixture.state, dispatch: fixture.dispatch }) };
 });
 
+vi.mock("@/state/store-selector", async (original) => ({
+  ...await original<typeof import("@/state/store-selector")>(),
+  useStoreSelector: (select: (state: AppState) => unknown) => select(fixture.state),
+  useStoreDispatch: () => fixture.dispatch,
+  useStoreGetter: () => () => fixture.state,
+}));
+
 import { initialState } from "@/state/store";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ArchivedBotsPanel, BotContextMenu, Sidebar } from "./Sidebar";
@@ -79,9 +86,11 @@ const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve()
  * over what it opens (#763, src/lib/fresh-topic.ts): with threads hidden the
  * switch clears it and so does the landing on a topic that is not idle. */
 const cleared = (id: string) => ({ type: "freshTopic", botId: id, threadId: null });
+// opening the bot itself keeps a New chat the person asked for (2026-11-02)
+const keptAsked = (id: string) => ({ type: "freshTopic", botId: id, threadId: null, keepAsked: true });
 const opened = (id: string) => fixture.showThreads
-  ? [{ type: "select", id }, cleared(id)]
-  : [{ type: "switchTask", botId: id, threadId: `${id}-main` }, cleared(id), cleared(id)];
+  ? [{ type: "select", id }, keptAsked(id)]
+  : [{ type: "switchTask", botId: id, threadId: `${id}-main` }, cleared(id), keptAsked(id)];
 const actions = () => fixture.dispatch.mock.calls.map(([action]) => action).filter((action) => action.type !== "botPatched");
 
 beforeEach(() => {

@@ -7,14 +7,14 @@ import { describe, expect, it } from "vitest";
 import { APPROVAL_MODES, type ApprovalMode } from "../shared/approval-mode.ts";
 import { DESKTOP_BRIDGE_MCP_NAME } from "../shared/bot-workplace.ts";
 import { ADMIN_ONLY_PERMISSIONS, can, isPermissionKey, normalizePermissions } from "../shared/permissions.ts";
-import { autoVerdict } from "./auto-approve.ts";
-import { memberBotAdminApproval, memberOwnedBot } from "./engine-access.ts";
-import { decide } from "./mcp-permissions.ts";
-import { HOST_LEVEL_AGENT_TOOLS } from "./member-tool-scope.ts";
-import { ownComputerChoiceCall, ownDestinationCall } from "./member-environment.ts";
+import { autoVerdict } from "./approvals/auto-approve.ts";
+import { memberBotAdminApproval, memberOwnedBot } from "./engines/engine-access.ts";
+import { decide } from "./mcp/mcp-permissions.ts";
+import { HOST_LEVEL_AGENT_TOOLS } from "./people/member-tool-scope.ts";
+import { ownComputerChoiceCall, ownDestinationCall } from "./people/member-environment.ts";
 import { terminalResourceAllowed } from "./terminal-resources/registry.ts";
 import type { TerminalAccess } from "./terminal-resources/types.ts";
-import { USER_SANDBOX_MCP_NAME } from "./user-sandbox-routing.ts";
+import { USER_SANDBOX_MCP_NAME } from "./sandbox/user-sandbox-routing.ts";
 
 const DOC = readFileSync(new URL("../docs/member-admin-audit.md", import.meta.url), "utf8");
 const OWNER = "pr_member";
@@ -64,9 +64,21 @@ describe("member admin audit, section 1: bot tool calls", () => {
   it("the speaker's own places on a bot someone else owns: no card", () => {
     expect(choice("mcp__sagax-computer__computer_select", "ask", { places: "pr_speaker", persons: [OWNER, "pr_speaker"] })).toBe("none");
   });
-  it("the safety hold, the person's ask rule and their security key still come first", () => {
-    for (const extra of [{ safetyHold: true }, { customRule: { behavior: "ask" as const, id: "r" } }, { stepUpRequired: ["screen"] }]) {
-      expect(autoVerdict("full", "mcp__sagax-computer__computer_select", { ownComputerChoice: true, ...extra }).source).not.toBe("own-computer-choice");
+  it("Full skips the safety hold; Ask, Deny and the person's security key still come first", () => {
+    const tool = "mcp__sagax-computer__computer_select";
+    // 23498ec06 (#1905, #1910): the central Full decision precedes safety
+    // holds. Explicit person/org rules and a protected gate still stand.
+    for (const mode of MODES) {
+      expect(autoVerdict(mode, tool, { ownComputerChoice: true, safetyHold: true })).toMatchObject(mode === "full"
+        ? { approve: expect.any(String), source: "own-computer-choice" }
+        : { approve: null, source: "safety-hold" });
+      for (const behavior of ["ask", "deny"] as const) {
+        for (const id of ["person_rule", "orule_required"]) {
+          expect(autoVerdict(mode, tool, { ownComputerChoice: true, sagaxGate: true,
+            safetyHold: mode === "full", customRule: { behavior, id } })).toEqual({ approve: null, source: `custom-rule-${behavior}` });
+        }
+      }
+      expect(autoVerdict(mode, tool, { ownComputerChoice: true, sagaxGate: true, stepUpRequired: ["screen"] }).approve).toBeNull();
     }
   });
   it.each([

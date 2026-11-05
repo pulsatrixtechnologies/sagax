@@ -8,13 +8,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { BotPluginError, BotPlugins, type GitRunner } from "../bot-plugins.ts";
+import { BotPluginError, BotPlugins, type GitRunner } from "../bots/bot-plugins.ts";
 import { json, readBody } from "../harness/http.ts";
-import { PluginMarketplaces } from "../plugin-marketplaces.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import { PluginMarketplaces } from "../plugins/plugin-marketplaces.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { createBotPluginRoutes, createPersonalPluginRoutes } from "./bot-plugins.ts";
-import { PersonCapabilities } from "../person-connections.ts";
-import { personalPluginStorage } from "../person-plugins.ts";
+import { PersonCapabilities } from "../people/person-connections.ts";
+import { personalPluginStorage } from "../plugins/person-plugins.ts";
 import { createMarketplaceRoutes } from "./marketplaces.ts";
 import { dispatchRoutes } from "./table.ts";
 

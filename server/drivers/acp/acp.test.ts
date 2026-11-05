@@ -20,17 +20,17 @@ import { TurnNotStartedError } from "../../contracts.ts";
 import { recordEvents, type EventRecorder } from "../../testing/events.ts";
 import { promptSplitFingerprints, writePromptSplitReceipt } from "../prompt-split.ts";
 import { GROK_TOOL_REUSE_HINT as HINT } from "./grok.ts";
-import { contextFullMessage, contextRenewedNotice } from "../../context-renewal.ts";
+import { contextFullMessage, contextRenewedNotice } from "../../context/context-renewal.ts";
 import { createAcpDriver, DEFAULT_ACP_PROMPT_IDLE_MS, skipSubscriptionAuthForLocalInject, type AcpSupport } from "./core.ts";
 import { GrokAgentDriver, grokAcceptsUnadvertisedImages, grokCloudConnectorEnv, grokConfigDeclaresMcp, grokConnectableConnectors, grokPermissionMode } from "./grok.ts";
 import { grokAccountReach } from "./grok-tool-catalog.ts";
-import { READ_ONLY_AGENT_TOOL_NAMES } from "../../agent-tool-policy.ts";
+import { READ_ONLY_AGENT_TOOL_NAMES } from "../../tools/agent-tool-policy.ts";
 import { GeminiAgentDriver } from "./gemini.ts";
 import { KimiAgentDriver } from "./kimi.ts";
 import { DroidAgentDriver } from "./droid.ts";
 import { CursorAgentDriver } from "./cursor.ts";
 import { QwenAgentDriver } from "./qwen.ts";
-import { TurnWatchdog } from "../../turn-watchdog.ts";
+import { TurnWatchdog } from "../../turns/turn-watchdog.ts";
 import { removeTempDir } from "../../testing/cleanup.ts";
 import { startFakeHttpMcp } from "../../testing/fake-http-mcp-server.ts";
 import * as procs from "../../procs.ts";
@@ -105,7 +105,7 @@ const CONTROL_PLANE_FIXTURE = {
 };
 
 /** Grok mounts connector MCP servers through the gate (tool names Grok cannot
- * qualify, server/mcp-tool-names.ts); these tests check what is behind it. */
+ * qualify, server/mcp/mcp-tool-names.ts); these tests check what is behind it. */
 type AcpServer = { name: string; command: string; args: string[]; env: Array<{ name: string; value: string }> };
 function ungated<T>(value: T): T {
   const servers = value as unknown as AcpServer[];
@@ -272,6 +272,9 @@ describe("ACP turns (fake CLI)", () => {
     delete process.env.FAKE_ACP_REASONING_COUNT_FILE;
     delete process.env.FAKE_ACP_REASONING_LEAK_TEXT;
     delete process.env.FAKE_ACP_REASONING_TOOL_FIRST;
+    delete process.env.FAKE_ACP_REASONING_REPLY_FIRST;
+    delete process.env.FAKE_ACP_REASONING_EFFORT_LOG;
+    delete process.env.FAKE_ACP_VARIANTS;
     delete process.env.SAGAX_ACP_REASONING_CONTINUE_MAX;
     delete process.env.FAKE_ACP_RPC_FAILURE_AFTER_USAGE;
     delete process.env.FAKE_ACP_LOAD_ERROR;
@@ -1727,6 +1730,24 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       expect(ran()).toEqual(["agents:create_bot"]);
     });
 
+    it("gates Full the same way: a write waits for Sagax's card, never bypasses (#1982)", async () => {
+      writeFileSync(flagFile, JSON.stringify({ bots: ["bot-gated"] }));
+      process.env.FAKE_ACP_MCP_CALLS = "agents:list_bots,agents:create_bot";
+      await create(GrokAgentDriver, "mcp-call");
+      const { turnId } = await instance.adapter.sendTurn({
+        threadId: "t-gate-full", botId: "bot-gated", text: "go", model: "grok-4.5", approvalMode: "full",
+        integrations: { agents: server("agents") },
+      });
+      const write = await nextCard(turnId, 1);
+      expect(write).toMatchObject({ requestType: "permission", mcpTool: "agents__create_bot" });
+      expect(ran()).toEqual(["agents:list_bots"]);
+      expect(await instance.adapter.respondToRequest("t-gate-full", write.requestId, { behavior: "allow" })).toBe("allowed-once");
+      await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
+      expect(ran()).toEqual(["agents:list_bots", "agents:create_bot"]);
+      const seen = JSON.parse(readFileSync(process.env.FAKE_ACP_DUMP!, "utf8")) as { argv: string[] };
+      expect(seen.argv.slice(0, 2)).toEqual(["--permission-mode", "default"]);
+    });
+
     it("declines a held call when the turn is stopped before anyone answers", async () => {
       writeFileSync(flagFile, JSON.stringify({ bots: ["bot-gated"] }));
       process.env.FAKE_ACP_MCP_CALLS = "agents:create_bot";
@@ -1746,11 +1767,14 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     it("leaves an opted-out bot, and Ask, Edits and Full access, on their current modes", async () => {
       writeFileSync(flagFile, JSON.stringify({ off: ["other-bot"] }));
       await create(GrokAgentDriver);
-      const cases: Array<{ botId: string; approvalMode: "auto" | "ask" | "edits" | "full"; mode: string }> = [
-        { botId: "other-bot", approvalMode: "auto", mode: "auto" },
-        { botId: "bot-gated", approvalMode: "ask", mode: "default" },
-        { botId: "bot-gated", approvalMode: "edits", mode: "acceptEdits" },
-        { botId: "bot-gated", approvalMode: "full", mode: "bypassPermissions" },
+      // #1982: Full under the gate runs default + gate socket (Sagax decides).
+      // An opted-out bot's Full still bypasses with no gate.
+      const cases: Array<{ botId: string; approvalMode: "auto" | "ask" | "edits" | "full"; mode: string; gated: boolean }> = [
+        { botId: "other-bot", approvalMode: "auto", mode: "auto", gated: false },
+        { botId: "other-bot", approvalMode: "full", mode: "bypassPermissions", gated: false },
+        { botId: "bot-gated", approvalMode: "ask", mode: "default", gated: false },
+        { botId: "bot-gated", approvalMode: "edits", mode: "acceptEdits", gated: false },
+        { botId: "bot-gated", approvalMode: "full", mode: "default", gated: true },
       ];
       for (const [index, entry] of cases.entries()) {
         const dump = join(scratch, `gate-off-${index}.json`);
@@ -1763,7 +1787,9 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         const seen = JSON.parse(readFileSync(dump, "utf8")) as { argv: string[]; mcpServers: Array<{ env: Array<{ name: string }> }> };
         expect(seen.argv.slice(seen.argv.indexOf("--permission-mode"), seen.argv.indexOf("--permission-mode") + 2)).toEqual(["--permission-mode", entry.mode]);
         for (const mounted of seen.mcpServers) {
-          expect(mounted.env.map((item) => item.name)).not.toContain("SAGAX_GATE_APPROVAL_SOCKET");
+          const names = mounted.env.map((item) => item.name);
+          if (entry.gated) expect(names).toContain("SAGAX_GATE_APPROVAL_SOCKET");
+          else expect(names).not.toContain("SAGAX_GATE_APPROVAL_SOCKET");
         }
       }
     });
@@ -2168,7 +2194,8 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 
   it.each([
     ["ask", true, "default"],
-    ["full", true, "bypassPermissions"],
+    // #1982: Full under the gate (on by default) stays in default, not bypass
+    ["full", true, "default"],
     ["custom", true, "default"],
     // Auto is gated by default: Grok runs `default`, Sagax decides
     ["auto", false, "default"],
@@ -2619,6 +2646,50 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     expect(recorder.events.some((e) => e.type === "item.completed" && (e as any).itemType === "tool")).toBe(true);
     expect(recorder.events.some((e) => e.type === "item.completed" && (e as any).itemType === "assistant_text")).toBe(true);
     expect(recorder.events.some((e) => e.type === "runtime.error")).toBe(false);
+  });
+
+  it("a reasoning_only answer after a committed line and a finished tool is nudged at lower effort, then the effort is put back", async () => {
+    // Prod 2026-11-02 (Grok, 0.8.29): the turn said a line and reacted to a
+    // message, then answered reasoning_only. The nudge was gated on "no reply
+    // yet", so it ended after 0 continuations and the person saw the error.
+    const effortLog = join(scratch, "reasoning-effort.log");
+    process.env.FAKE_ACP_REASONING_FAIL_TIMES = "1";
+    process.env.FAKE_ACP_REASONING_REPLY_FIRST = "1";
+    process.env.FAKE_ACP_REASONING_EFFORT_LOG = effortLog;
+    process.env.FAKE_ACP_VARIANTS = JSON.stringify({ "": { id: "reasoning_effort", currentValue: "high", options: [
+      { value: "low", name: "Low" }, { value: "medium", name: "Medium" }, { value: "high", name: "High" },
+    ] } });
+    const dump = join(scratch, "acp-reason-reply-first.json");
+    process.env.FAKE_ACP_DUMP = dump;
+    await create(GrokAgentDriver, "reasoning-only-error");
+    await instance.adapter.sendTurn({ threadId: "t-reason-reply-first", text: "go" });
+    const done = await recorder.until((e) => e.type === "turn.completed");
+    expect(done).toMatchObject({ ok: true, stopReason: null });
+    expect(recorder.events.some((e) => e.type === "runtime.error")).toBe(false);
+    const texts = recorder.events.filter((e) => e.type === "item.completed" && (e as any).itemType === "assistant_text").map((e) => (e as any).text);
+    expect(texts).toContain("here is the answer after thinking");
+    // first prompt at the bot's effort, the nudge at low
+    expect(readFileSync(effortLog, "utf8").trim().split("\n")).toEqual(["high", "low"]);
+    // lowered for the nudge, then put back for the next turn
+    const config = JSON.parse(readFileSync(`${dump}.config.json`, "utf8")) as Array<{ params: { configId: string; value: string } }>;
+    expect(config.map((call) => [call.params.configId, call.params.value])).toEqual([["reasoning_effort", "low"], ["reasoning_effort", "high"]]);
+  });
+
+  it("a reasoning_only turn that ran steps and stays empty after the nudge says the steps stand", async () => {
+    process.env.FAKE_ACP_REASONING_FAIL_TIMES = "99";
+    process.env.FAKE_ACP_REASONING_REPLY_FIRST = "1";
+    process.env.FAKE_ACP_VARIANTS = JSON.stringify({ "": { id: "reasoning_effort", currentValue: "high", options: [
+      { value: "low", name: "Low" }, { value: "high", name: "High" },
+    ] } });
+    await create(GrokAgentDriver, "reasoning-only-error");
+    await instance.adapter.sendTurn({ threadId: "t-reason-steps-stand", text: "go" });
+    const done = await recorder.until((e) => e.type === "turn.completed");
+    expect(done).toMatchObject({ ok: false, stopReason: "reasoning_only" });
+    const err = recorder.events.find((e) => e.type === "runtime.error") as { message?: string } | undefined;
+    expect(err?.message).toMatch(/reasoning without a final answer, even after Sagax asked it once more with lower reasoning effort/);
+    expect(err?.message).toMatch(/steps it already ran in this turn stand/);
+    expect(err?.message).not.toMatch(/Nothing was changed|Internal error|reasoning_only/);
+    expect(instance.adapter.hasSession("t-reason-steps-stand")).toBe(false);
   });
 
   it("a genuine internal error without reasoning_only still surfaces (no swallowing)", async () => {
@@ -3163,6 +3234,30 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     const launches = () => Number(readFileSync(countFile, "utf8"));
     const rpc = () => JSON.parse(readFileSync(rpcFile, "utf8")) as string[];
 
+    it("retires idle processes through the shared global cap across people", async () => {
+      vi.stubEnv("SAGAX_WARM_MAX_COUNT", "1");
+      try {
+        countFile = join(scratch, "budget-launches");
+        process.env.FAKE_ACP_LAUNCH_COUNT_FILE = countFile;
+        await create(SelectModelDriver, "simple");
+        for (const [threadId, principalId] of [["osprey-thread", "osprey"], ["wren-thread", "wren"], ["osprey-thread", "osprey"]]) {
+          const { turnId } = await instance.adapter.sendTurn({ threadId: threadId!, principalId, text: "Fixture reply" });
+          expect(await recorder.until(e => e.type === "turn.completed" && e.turnId === turnId)).toMatchObject({ ok: true });
+        }
+        expect(launches()).toBe(3);
+      } finally { vi.unstubAllEnvs(); }
+    });
+
+    it("does not reuse another person's process on a shared payer and thread", async () => {
+      countFile = join(scratch, "isolation-launches"); process.env.FAKE_ACP_LAUNCH_COUNT_FILE = countFile;
+      await create(SelectModelDriver, "simple");
+      for (const principalId of ["osprey", "wren"]) {
+        const { turnId } = await instance.adapter.sendTurn({ threadId: "same-thread", principalId, access: { via: "org-key", identity: "shared" }, text: "Fixture reply" });
+        expect(await recorder.until(e => e.type === "turn.completed" && e.turnId === turnId)).toMatchObject({ ok: true });
+      }
+      expect(launches()).toBe(2);
+    });
+
     it("recovers on the next explicit turn after session establishment fails", async () => {
       countFile = join(scratch, "launches");
       const appendFile = join(scratch, "rpc-all.jsonl");
@@ -3271,6 +3366,43 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         { sessionId: "fake-acp-session" },
         { sessionId: "fake-acp-session" },
       ]);
+    });
+
+    it("keeps the Grok warm session pooled across many turns (#1970)", async () => {
+      countFile = join(scratch, "launches");
+      rpcFile = join(scratch, "rpc.json");
+      process.env.FAKE_ACP_LAUNCH_COUNT_FILE = countFile;
+      process.env.FAKE_ACP_RPC_DUMP = rpcFile;
+      const latency: string[] = [];
+      const spy = vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+        if (typeof args[0] === "string" && args[0].startsWith("[turn-latency]")) latency.push(args[0]);
+      });
+      try {
+        instance = await GrokAgentDriver.create({
+          instanceId: "acp-test", displayName: "ACP Test", enabled: true,
+          environment: { HOME: scratch, USERPROFILE: scratch },
+          config: { cli: FAKE_CLI, fullAuto: false },
+        });
+        recorder = recordEvents(instance.adapter);
+        const threadId = "t-pool-many-warm";
+        for (let i = 0; i < 8; i++) {
+          const started = await instance.adapter.sendTurn({
+            threadId, text: `warm ${i + 1}`,
+            ...(i > 0 ? { resumeCursor: "fake-acp-session" } : {}),
+          });
+          expect(await recorder.until((e) => e.type === "turn.completed" && e.turnId === started.turnId)).toMatchObject({ ok: true });
+        }
+        expect(launches()).toBe(1);
+        expect(rpc().filter((m) => m === "initialize")).toHaveLength(1);
+        expect(rpc().filter((m) => m === "session/new")).toHaveLength(1);
+        expect(rpc().filter((m) => m === "session/load")).toHaveLength(0);
+        expect(rpc().filter((m) => m === "session/prompt")).toHaveLength(8);
+        const paths = latency.map((line) => /path=(\S+)/.exec(line)?.[1]);
+        expect(paths[0]).toBe("spawn");
+        expect(paths.slice(1)).toEqual(Array(7).fill("pooled"));
+      } finally {
+        spy.mockRestore();
+      }
     });
 
     it("closes the idle process and resumes on the next turn", async () => {
@@ -4006,6 +4138,8 @@ describe("grokPermissionMode", () => {
     expect(grokPermissionMode({ ...base, approvalMode: "auto" })).toBe("auto");
     expect(grokPermissionMode({ ...base, gated: true, approvalMode: "auto" })).toBe("default");
     expect(grokPermissionMode({ ...base, fullAuto: true, approvalMode: "full" })).toBe("bypassPermissions");
+    // #1982: gated Full prefers default over bypass so Sagax's gate sees MCP
+    expect(grokPermissionMode({ ...base, gated: true, fullAuto: true, approvalMode: "full" })).toBe("default");
   });
 
   it("never runs Grok's own auto or bypass with the account's connectors: every connector call asks Sagax", () => {

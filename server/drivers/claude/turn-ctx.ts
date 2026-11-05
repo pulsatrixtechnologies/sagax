@@ -1,3 +1,4 @@
+import type { TurnModelUsage } from "../../../shared/runtime-events.ts";
 /** Mutable per-sendTurn context bag shared across Claude turn phases (#1383). */
 import type { SendTurnInput } from "../../contracts.ts";
 import type { ClaudeUserMessage } from "./messages.ts";
@@ -31,6 +32,7 @@ export type ClaudeTurnCtx = SendTurnDeps & {
   newSessionId: string | null;
   requestedMode: string;
   autoAllowlist: boolean;
+  fullAllowlist: boolean;
   permissionMode: string;
   controlsHost: boolean;
   args: string[];
@@ -60,6 +62,7 @@ export type ClaudeTurnCtx = SendTurnDeps & {
   settle: SettleFn;
   settleResult: (result: NativeTurnResult) => void;
   reachLimit: (frame: { api_error_params?: { rate_limit_info?: unknown } }, words: unknown) => void;
+  noteModelUsage: (total: unknown, modelUsage: unknown, usage: { input: number; cacheRead: number; cacheWrite: number; output: number }) => TurnModelUsage[] | undefined;
   noteCostState: (total: unknown, modelUsage: unknown, usage: { input: number; cacheRead: number; cacheWrite: number; output: number }) => void;
   currentTurnId: () => string;
   handleLine: (line: string) => void;

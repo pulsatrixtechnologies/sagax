@@ -2,7 +2,7 @@
  * the bot panel's Overview with the Reach me group between the bot's email
  * address and the overview, in three states (default, text + Telegram
  * linking + hours, Telegram connected + Teams, and WhatsApp's three steps).
- * The capture script (scripts/capture-reach-me.mjs) answers /api itself.
+ * The capture script (scripts/capture/reach-me.mjs) answers /api itself.
  * Not shipped. ?skin=<id>&lang=<code>&state=default|setup|connected|
  * whatsapp-connect|whatsapp-linking|whatsapp-connected */
 import { StrictMode } from "react";

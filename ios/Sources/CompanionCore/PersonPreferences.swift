@@ -22,7 +22,7 @@ public enum PersonPrefKey {
     public static let hdMascots = HdMascots.preferenceKey
     /// "1" | "0"; absent is shown (src/lib/panel-visibility.ts).
     public static let showSuggestions = "sagax.showSuggestions.v1"
-    /// "off" stops read receipts both ways; absent is on (server/read-receipts.ts).
+    /// "off" stops read receipts both ways; absent is on (server/messages/read-receipts.ts).
     public static let readReceipts = "sagax.readReceipts.v1"
     /// Which sound a notification plays (src/lib/notification-sound.ts).
     public static let notificationSound = NotificationSoundChoice.key

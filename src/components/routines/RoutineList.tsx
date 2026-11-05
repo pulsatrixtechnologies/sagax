@@ -35,7 +35,7 @@ const UPCOMING_TONES = {
 } as const;
 
 
-export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, error, onOpen, onToggle, grouped = false, toggle = true, variant = "list", emptyText, onRowMenu, onRowDragStart, onRowStep, onOpenRunning, label, renamingId, onRenameStart, onRenameSave, onRenameCancel }: {
+export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, error, onOpen, onToggle, grouped = false, toggle = true, variant = "list", emptyText, onRowMenu, onRowDragStart, onRowStep, onOpenRunning, label, renamingId, onRenameStart, onRenameSave, onRenameCancel, showBot = false }: {
   routines: Routine[];
   /** Slice 6: the signed-in person on an organization server. */
   viewerPrincipalId?: string | null;
@@ -77,6 +77,9 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
   onRenameStart?: (routine: Routine) => void;
   onRenameSave?: (routine: Routine, name: string) => void;
   onRenameCancel?: () => void;
+  /** The list variant with the bot before the schedule line (the Automations
+   * list grouped by folder across bots, 2026-11-03). Needs `bots`. */
+  showBot?: boolean;
 }) {
   const upcoming = variant === "upcoming";
   const sorted = upcoming
@@ -93,7 +96,7 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
     {sorted.length > 0 && (
       <div className={grouped ? GROUPED_CARD : "flex flex-col gap-0.5"}>
         {sorted.map((routine) => {
-          const bot = upcoming ? bots?.find((candidate) => candidate.id === routine.botId) : undefined;
+          const bot = upcoming || showBot ? bots?.find((candidate) => candidate.id === routine.botId) : undefined;
           const botName = bot?.name ?? routine.bot?.name;
           const when = upcoming && routine.nextRunAt != null ? routineNextRunPhrase(routine.nextRunAt) : routineWhenLabel(routine);
           // The full sentence, with its zone, in the tooltip; never the expression.
@@ -116,9 +119,9 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
           const whenLine = upcoming ? when : routine.schedule.type !== "once" || routine.enabled || routine.nextRunAt != null ? scheduleLabelCompact(routine.schedule) : when;
           // 2026-10-29: the row says how the last run went and when the next
           // one is, as cloud routines list them.
-          // The running run already shows as the "Running" pill on the right;
-          // the last-run line never repeats it.
-          const lastRun = upcoming ? undefined : runs.filter((run) => run.routineId === routine.id && run.status !== "queued" && run !== runningRun).sort((a, b) => routineRunTime(b) - routineRunTime(a))[0];
+          // 2026-11-02 (JC): a live run takes the last-run line's place
+          // ("Running · 2 min ago"); the old result never shows beside it.
+          const lastRun = upcoming || runningRun ? undefined : runs.filter((run) => run.routineId === routine.id && run.status !== "queued" && run !== runningRun).sort((a, b) => routineRunTime(b) - routineRunTime(a))[0];
           const lastPreview = lastRun && !lastRun.redacted && !lastRun.quiet ? routineRunPreview(lastRun) : "";
           const nextLine = !upcoming && routine.enabled && routine.nextRunAt != null ? routineNextRunPhrase(routine.nextRunAt) : undefined;
           const whenTitle = [pausedWithSwitch ? routineWhenLabel(routine) : when, fullWhen !== when ? fullWhen : null].filter(Boolean).join("\n");
@@ -126,12 +129,12 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
             <div key={routine.id} data-routine-row data-routine-id={routine.id}
               onPointerDown={onRowDragStart && !readOnly ? (event) => {
                 if (event.pointerType === "touch" || event.button !== 0) return;
-                if ((event.target as HTMLElement).closest?.("[role=switch],[data-routine-row-menu],[data-routine-running]")) return;
+                if ((event.target as HTMLElement).closest?.("[role=switch],[data-routine-row-menu]")) return;
                 onRowDragStart(routine, event);
               } : undefined}
               onContextMenu={onRowMenu && !readOnly ? (event) => { event.preventDefault(); openMenu(routine, event.currentTarget, { x: event.clientX, y: event.clientY }); } : undefined}
               className={cn("group/routine", onRowDragStart && !readOnly && "cursor-grab select-none", grouped ? cn("flex items-center gap-2 hover:bg-hover", GROUPED_ROW, "py-1.5") : "flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-hover")}>
-              {renamingId === routine.id && onRenameSave ? <RoutineNameInput initial={routine.name} onSave={(name) => onRenameSave(routine, name)} onCancel={() => onRenameCancel?.()} /> : <button type="button" onClick={() => onOpen(routine)}
+              {renamingId === routine.id && onRenameSave ? <RoutineNameInput initial={routine.name} onSave={(name) => onRenameSave(routine, name)} onCancel={() => onRenameCancel?.()} /> : <button type="button" onClick={() => runningRun ? onOpenRunning!(routine, runningRun) : onOpen(routine)}
                 onKeyDown={(onRowMenu || onRowStep || onRenameStart) && !readOnly ? (event: ReactKeyboardEvent<HTMLButtonElement>) => {
                   if (onRenameStart && event.key === "F2") { event.preventDefault(); onRenameStart(routine); }
                   else if (onRowMenu && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) { event.preventDefault(); openMenu(routine, event.currentTarget); }
@@ -152,7 +155,15 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
                     {botName && <span aria-hidden="true" className="shrink-0">·</span>}
                     <span className="max-w-full shrink-0 truncate">{when}</span>
                   </span>
-                ) : <span data-routine-when={whenLine} title={whenTitle} className="block truncate text-[12px] leading-4 text-ink-secondary">{whenLine}{nextLine && <span data-routine-next> · {t("routines.list.next", { when: nextLine })}</span>}</span>}
+                ) : <span data-routine-when={whenLine} title={whenTitle} className="block truncate text-[12px] leading-4 text-ink-secondary">{showBot && botName && <span data-routine-bot className="inline-flex max-w-[40%] items-center gap-1 align-bottom">{bot && <BotAvatar bot={bot} size={14} animated={false} />}<span className="truncate">{botName}</span></span>}{showBot && botName && <span aria-hidden="true">{" · "}</span>}{whenLine}{nextLine && <span data-routine-next> · {t("routines.list.next", { when: nextLine })}</span>}</span>}
+                {runningRun && (
+                  <span data-routine-running aria-label={`${t("routines.status.running")}: ${routine.name}`} className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] leading-4 text-ink-secondary">
+                    <span aria-hidden="true" className="size-1.5 shrink-0 animate-pulse rounded-full bg-success motion-reduce:animate-none" />
+                    <span className="shrink-0 text-success">{t("routines.status.running")}</span>
+                    <span aria-hidden="true" className="shrink-0">·</span>
+                    <span className="shrink-0">{routineRunAgo(runningRun.startedAt || routineRunTime(runningRun))}</span>
+                  </span>
+                )}
                 {lastRun && (
                   <span data-routine-last-run={lastRun.status} title={lastPreview || undefined} className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] leading-4 text-ink-secondary">
                     <ActivityStatusIcon status={runActivityStatus(lastRun)} size={12} />
@@ -172,10 +183,6 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
                 )}
                 {/* 2026-10-26: runs only when something changes (shared/routine-watch.ts). */}
                 {routine.precheck?.kind === "watch" && <span className="mt-0.5 flex"><span data-routine-watch className="truncate rounded-md bg-inset px-1.5 text-[12px] leading-[18px] text-ink-secondary">{t("routineWatch.badge")}</span></span>}
-              </button>}
-              {runningRun && <button type="button" data-routine-running aria-label={`${t("routines.status.running")}: ${routine.name}`} onClick={() => onOpenRunning!(routine, runningRun)}
-                className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-sm bg-transparent p-0 text-[12px] leading-4 text-ink-secondary hover:text-ink focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent/60">
-                <span aria-hidden="true" className="size-1.5 animate-pulse rounded-full bg-success motion-reduce:animate-none" />{t("routines.status.running")}
               </button>}
               {onRowMenu && !readOnly && <button type="button" data-routine-row-menu aria-label={t("routineFolders.rowMenu", { name: routine.name })} title={t("routineFolders.rowMenu", { name: routine.name })}
                 onClick={(event) => openMenu(routine, event.currentTarget)}

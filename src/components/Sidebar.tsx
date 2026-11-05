@@ -1,6 +1,8 @@
-import { useStoreDispatch, useStoreSelector } from "@/state/store-selector";
+import { equalRows, peerBots, peerGroups } from "@/state/view-slices";
+import { shallowEqual, useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import { useThreadPrefetch, type ThreadPrefetchIntent } from "@/state/thread-prefetch";
 import {
+  memo,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -41,7 +43,6 @@ import {
 } from "lucide-react";
 import {
   api,
-  useStore,
   formatTime,
   visibleMessages,
   currentTaskBot,
@@ -82,7 +83,8 @@ import { useOrgPeople } from "@/lib/perspicax-org";
 import { peopleDmPeer } from "@/lib/people-dm";
 import { BotRoleTag, PersonLabelTag } from "./LabelTag";
 import { nudgeLineText } from "@/lib/nudge-line";
-import { ChevronsRight, LogOut, UserRound } from "lucide-react";
+import { ChevronsRight, Layers, LogOut, UserRound } from "lucide-react";
+import { backgroundThreads, personThreads } from "../../shared/background-threads";
 import { hideFromSidebar } from "@/lib/sidebar-hidden";
 import { PersonAvatar } from "./MessageAuthor";
 import { SidebarSharerBadge } from "./SidebarSharerBadge";
@@ -90,13 +92,14 @@ import { botSharer } from "@/lib/bot-sharer";
 import { presenceLabel, usePresence } from "@/lib/presence";
 import { itemKey, personalSectionNames, personalSectionOf, type SectionItemKind } from "@/lib/personal-sections";
 import { useConfirm } from "@/components/ConfirmProvider";
+import { BULK_THREAD_CONCURRENCY, bulkThreadTargets, runBounded, settled, type BulkThreadCandidate, type BulkThreadKind } from "@/lib/bulk-threads";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { WorkingDots } from "./WorkingIndicator";
 import { ultracodeFromSelection } from "@/lib/ultracode-chrome";
 import { StatusDot } from "./StatusDot";
 import { nextRename } from "@/lib/rename";
 import { useDesktopCapabilities } from "./DesktopCapabilities";
-import { openCommandPalette } from "./CommandPalette";
+import { openCommandPalette } from "@/lib/command-palette-open";
 import { APP_NAME } from "@/lib/app-links";
 import { isBotFloating, subscribeFloatingBots, toggleFloatingBot } from "@/lib/floating-bots";
 import { isMacPlatform, SHORTCUT_GROUPS, shortcutKeysForPlatform } from "@/lib/keyboard-shortcuts";
@@ -145,7 +148,7 @@ import { SidebarFoot, SidebarRailFoot } from "./SidebarFoot";
 import { useShowThreads, useThreadsMode } from "@/lib/thread-preferences";
 import { openBotConversationActions } from "./thread-home";
 import { useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
-import { botShowsUnread, iconUnreadDotPosition, isInterBotThread } from "@/lib/bot-unread";
+import { botShowsUnread, iconUnreadDotPosition } from "@/lib/bot-unread";
 import { sidebarBotActivityTasks } from "./SidebarBotActivity";
 import { citationPreviewText } from "@/lib/citations";
 import { groupMemberBots } from "@/lib/group-members";
@@ -293,6 +296,13 @@ export function StackedMauses({ members, density, viewerId }: { members: Bot[]; 
   );
 }
 
+/** Personal section overlays may clone a record without changing a row. */
+function sameSidebarRow<P extends object>(a: P, b: P): boolean {
+  const keys = Object.keys(a) as (keyof P)[];
+  return keys.length === Object.keys(b).length && keys.every((key) =>
+    key === "bot" || key === "group" ? equalRows([a[key]], [b[key]]) : Object.is(a[key], b[key]));
+}
+
 export function GroupListItem({
   group,
   density,
@@ -307,7 +317,14 @@ export function GroupListItem({
   query?: string;
   onMenu: (menu: { groupId: string; x: number; y: number }) => void;
 }) {
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const state = useStoreSelector((current) => ({
+    activeView: current.activeView,
+    bots: peerBots(current),
+    config: current.config,
+    instances: current.instances,
+    selectedId: current.selectedId,
+  }), (a, b) => Object.is(a.activeView, b.activeView) && equalRows(a.bots, b.bots) && Object.is(a.config, b.config) && Object.is(a.instances, b.instances) && Object.is(a.selectedId, b.selectedId));
   const showThreads = useShowThreads();
   const selected = state.activeView === "chat" && state.selectedId === group.id;
   // a search opens this room only when it has a matching thread to show,
@@ -417,11 +434,16 @@ export function GroupListItem({
   );
 }
 
-/** Sidebar mode: the threads under a bot, a room or a person sit under the
- * row's text, past its avatar and the gap after it (36px + 8px comfortable,
- * 28px + 8px compact), the same for every kind of row. */
+const MemoGroupListItem = memo(GroupListItem, sameSidebarRow);
+
+/** Sidebar mode: the threads under a bot, a room or a person nest the way
+ * Grok Bot and Cursor nest threads under a project: each title starts under
+ * the middle of the row's avatar (36px comfortable, 28px compact), inside
+ * the name column, so the title keeps the width and the hierarchy still
+ * reads (the maintainer, 2026-11-04: under the name, titles truncated after a few
+ * words). The row's own pl-6 adds to this margin. Same for every kind of row. */
 export function threadListIndent(density: SidebarDensity): string {
-  return density === "compact" ? "ml-9" : "ml-11";
+  return density === "compact" ? "ml-4" : "ml-5";
 }
 
 /** Scroll the row of a thread the person asked to open into view, once the
@@ -436,7 +458,11 @@ function useRevealedThreadRow(reveal: AppState["revealThread"], currentThreadId:
 }
 
 export function GroupThreadList({ group, selected, density = "comfortable", query = "" }: { group: Group; selected: boolean; density?: SidebarDensity; query?: string }) {
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const state = useStoreSelector((current) => ({
+    bots: peerBots(current),
+    revealThread: current.revealThread,
+  }), (a, b) => equalRows(a.bots, b.bots) && Object.is(a.revealThread, b.revealThread));
   const now = useRelativeNow();
   const [showAll, setShowAll] = useState(false);
   const busy = Boolean(group.working || group.busyBotId);
@@ -501,9 +527,15 @@ export function RoomContextMenu({
 }) {
   const motion = useHeldMenuMotion(menu);
   const shown = motion.value;
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const state = useStoreSelector((current) => ({
+    config: current.config,
+    groups: peerGroups(current),
+  }), (a, b) => Object.is(a.config, b.config) && equalRows(a.groups, b.groups));
   const remoteClient = window.ogb?.remoteClient?.active === true;
   const group = shown ? state.groups.find((g) => g.id === shown.groupId) : undefined;
+  const threadsOn = useThreadsMode() !== "one";
+  const bulk = useBulkThreadActions();
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(group?.name ?? "");
 
@@ -533,6 +565,9 @@ export function RoomContextMenu({
   const peerId = group.peopleDm ? peopleDmPeer(group, viewerActorId(state.config), new Map())?.id : undefined;
   const member = group.peopleDm ? memberMenuItems({ peer: Boolean(peerId), pinned: group.pinned === true }) : [];
   const memberHas = (item: MemberMenuItem) => member.includes(item);
+  // Threads on: Archive all threads and Delete all threads of this room
+  // (a conversation with a person keeps its own menu).
+  const threadsOwner: BulkThreadOwner | null = threadsOn && !group.peopleDm && !remoteClient ? { kind: "group", id: group.id, tasks: groupListedThreads(group) } : null;
   const ownsRoom = viewerOwnsGroup(group, state.config);
   const mayDelete = viewerMayDeleteGroup(group, state.config);
   const saveRename = () => {
@@ -626,6 +661,20 @@ export function RoomContextMenu({
           {t("sidebar.section.moveToContext")}
         </button>
       )}
+      {threadsOwner && <>
+        <button type="button" role="menuitem" data-menu-item="archive-all-threads" disabled={bulk.count(threadsOwner, "archive") === 0}
+          onClick={() => { onClose(); void bulk.archiveAll(threadsOwner); }}
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent">
+          <Archive size={16} className="text-ink" />
+          {t("task.archiveAll")}
+        </button>
+        <button type="button" role="menuitem" data-menu-item="delete-all-threads" disabled={bulk.count(threadsOwner, "delete") === 0}
+          onClick={() => { onClose(); void bulk.deleteAll(threadsOwner); }}
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-danger hover:bg-hover disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent">
+          <Trash2 size={16} className="text-danger" />
+          {t("task.deleteAll")}
+        </button>
+      </>}
       <button
         onClick={() => {
           void copyText(group.threadId);
@@ -827,7 +876,11 @@ function MoveToSectionItem({
   onAssign: (section: string) => void;
   label?: string;
 }) {
-  const { state } = useStore();
+  const state = useStoreSelector((current) => ({
+    bots: peerBots(current),
+    groups: peerGroups(current),
+    sections: current.sections,
+  }), (a, b) => equalRows(a.bots, b.bots) && equalRows(a.groups, b.groups) && Object.is(a.sections, b.sections));
   const personal = usePersonalLayout();
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -900,6 +953,59 @@ function MoveToSectionItem({
   );
 }
 
+/** The threads a bot's sidebar list shows (BotThreadList), busy marked. */
+export function botListedThreads(bot: Pick<Bot, "id" | "threadId" | "busy" | "tasks">): BulkThreadCandidate[] {
+  return personThreads(bot.tasks ?? [], bot.threadId)
+    .map((task) => ({ ...task, busy: Boolean(task.busy || (task.threadId === bot.threadId && bot.busy)) }));
+}
+
+/** A room's threads, the one at work marked busy (GroupThreadList). */
+export function groupListedThreads(group: Pick<Group, "threadId" | "tasks" | "working" | "busyBotId">): BulkThreadCandidate[] {
+  return (group.tasks ?? []).map((task) => ({
+    ...task, busy: Boolean(task.working || task.busyBotId || (task.threadId === group.threadId && (group.working || group.busyBotId))),
+  }));
+}
+
+export type BulkThreadOwner = { kind: "bot" | "group"; id: string; tasks: BulkThreadCandidate[] };
+
+/** Archive all threads / Delete all threads (the maintainer, 2026-11-04): each thread
+ * through the single Archive or Delete path, a few at a time
+ * (src/lib/bulk-threads.ts). Delete all asks first, with the count, as the
+ * single Delete thread does; Archive all needs no question (the single
+ * Archive has none, nor an Undo). */
+export function useBulkThreadActions() {
+  const dispatch = useStoreDispatch();
+  const confirm = useConfirm();
+  return useMemo(() => {
+    const run = (owner: BulkThreadOwner, kind: BulkThreadKind, targets: BulkThreadCandidate[]) =>
+      runBounded(targets, BULK_THREAD_CONCURRENCY, (task) => settled((onSettled) => {
+        if (owner.kind === "bot") {
+          dispatch(kind === "archive"
+            ? { type: "updateTask", botId: owner.id, threadId: task.threadId, patch: { archivedAt: Date.now() }, onSettled }
+            : { type: "deleteTask", botId: owner.id, threadId: task.threadId, onSettled });
+        } else {
+          dispatch(kind === "archive"
+            ? { type: "updateGroupTask", groupId: owner.id, threadId: task.threadId, patch: { archivedAt: Date.now() }, onSettled }
+            : { type: "deleteGroupTask", groupId: owner.id, threadId: task.threadId, onSettled });
+        }
+      }));
+    return {
+      count: (owner: BulkThreadOwner, kind: BulkThreadKind) => bulkThreadTargets(owner.tasks, kind).length,
+      archiveAll: async (owner: BulkThreadOwner) => {
+        const targets = bulkThreadTargets(owner.tasks, "archive");
+        if (targets.length) await run(owner, "archive", targets);
+      },
+      deleteAll: async (owner: BulkThreadOwner) => {
+        const targets = bulkThreadTargets(owner.tasks, "delete");
+        if (!targets.length) return;
+        const count = targets.length;
+        if (!(await confirm({ title: t("task.deleteAllConfirm", { count }), body: t("task.deleteAllBody", { count }), confirmLabel: t("task.deleteAll"), tone: "danger" }))) return;
+        await run(owner, "delete", targets);
+      },
+    };
+  }, [dispatch, confirm]);
+}
+
 export function BotContextMenu({
   menu,
   onClose,
@@ -933,8 +1039,16 @@ export function BotContextMenu({
 }) {
   const motion = useHeldMenuMotion(menu);
   const shown = motion.value;
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const state = useStoreSelector((current) => ({
+    bots: peerBots(current),
+    config: current.config,
+    deletingBots: current.deletingBots,
+    selectedId: current.selectedId,
+    settingsOpen: current.settingsOpen,
+  }), (a, b) => equalRows(a.bots, b.bots) && Object.is(a.config, b.config) && Object.is(a.deletingBots, b.deletingBots) && Object.is(a.selectedId, b.selectedId) && Object.is(a.settingsOpen, b.settingsOpen));
   const showThreads = useShowThreads();
+  const bulk = useBulkThreadActions();
   const remoteClient = window.ogb?.remoteClient?.active === true;
   const personal = usePersonalLayout();
   const bot = shown ? state.bots.find((b) => b.id === shown.botId) : undefined;
@@ -1125,6 +1239,8 @@ export function BotContextMenu({
   // no way to start a conversation with a bot. newTask selects the bot too.
   // Threads turned off (the single stream): New topic, a fresh context in
   // the same conversation (docs/single-stream-orchestration.md).
+  // Threads on: Archive all threads and Delete all threads of this bot.
+  const threadsOwner: BulkThreadOwner | null = showThreads ? { kind: "bot", id: bot.id, tasks: botListedThreads(bot) } : null;
   const newThreadItem = showThreads ? item(<Plus size={16} className="text-ink" />, t("task.newShort"), () => {
     dispatch({ type: "newTask", botId: bot.id });
   }, { id: "new-thread" }) : item(<Plus size={16} className="text-ink" />, t("stream.newTopic"), () => {
@@ -1161,6 +1277,13 @@ export function BotContextMenu({
     ...(shareItem ? [shareItem] : []),
     ...(primaryItem ? [primaryItem] : []),
     floatItem,
+    ...(threadsOwner ? [
+      divider("d-threads"),
+      item(<Archive size={16} className="text-ink" />, t("task.archiveAll"), () => { void bulk.archiveAll(threadsOwner); },
+        { id: "archive-all-threads", disabled: bulk.count(threadsOwner, "archive") === 0 }),
+      item(<Trash2 size={16} className="text-danger" />, t("task.deleteAll"), () => { void bulk.deleteAll(threadsOwner); },
+        { id: "delete-all-threads", danger: true, disabled: bulk.count(threadsOwner, "delete") === 0 }),
+    ] : []),
     divider("d-place"),
     // Only this person's sidebar: the bot, its owner and everyone else
     // keep it; Archive is the bot-wide action.
@@ -1243,7 +1366,7 @@ type ThreadTreeActions = Omit<Parameters<typeof SidebarThreadRow>[0], "task" | "
  * One tree for every owner of threads: a bot (BotThreadList) and a
  * conversation with a person (PersonThreadList); the owner decides only
  * where its actions go. */
-function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, tasks, projects, selected, density, query, hidden, actions, rowState, activeActivityLabel, onNew, onNewKind, onNewInFolder, onReorder, canMarkRead, markRead, children }: {
+function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, tasks: ownTasks, projects, selected, density, query, hidden, actions, rowState, activeActivityLabel, onNew, onNewKind, onNewInFolder, onReorder, canMarkRead, markRead, bulk, background, children }: {
   ownerId: string;
   ownerName: string;
   owner: FolderOwnerKind;
@@ -1271,9 +1394,18 @@ function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, task
   onReorder: (projectIds: string[], onSaved: () => void, onError: (message: string) => void) => void;
   canMarkRead: (projectId: string) => boolean;
   markRead: (projectId: string) => Promise<void>;
+  /** Archive all threads / Delete all threads in the list's menu: how many
+   * each would take, and the action (useBulkThreadActions). Absent: neither. */
+  bulk?: { archive: number; delete: number; onArchiveAll: () => void; onDeleteAll: () => void };
+  /** A bot's background threads (shared/background-threads.ts): never in the
+   * list, shown instead of it by the list menu's "Show background". */
+  background?: ThreadTreeTask[];
   children?: React.ReactNode;
 }) {
   const confirm = useConfirm();
+  const [showBackground, setShowBackground] = useState(false);
+  const backgroundShown = showBackground && Boolean(background?.length);
+  const tasks = backgroundShown ? background! : ownTasks;
   const revealThread = useStoreSelector((current) => current.revealThread);
   const dispatch = useStoreDispatch();
   const now = useRelativeNow();
@@ -1308,7 +1440,9 @@ function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, task
   }, [selected, currentProjectId]);
   useSnoozeExpiry(tasks);
   // Pin, then newest update. Search keeps the same order among matches.
-  const visibleTasks = orderedThreadList(visibleSidebarThreads(tasks, openThreadId, query, projects, showAll));
+  // Background threads are listed whole, archived ones included: the
+  // server archives them once they are done.
+  const visibleTasks = orderedThreadList(visibleSidebarThreads(tasks, openThreadId, query, projects, showAll || backgroundShown));
   // A folder rises with the thread of its that sits highest in that order.
   // An empty index sorts last. Saved order breaks ties, and still governs
   // move up and down.
@@ -1508,8 +1642,12 @@ function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, task
       <span role="status" className="sr-only">{reorderStatus}</span>
       {readError && <p role="alert" className="px-2.5 py-1 text-[12px] text-danger">{readError}</p>}
       <span role="status" className="sr-only">{readStatus}</span>
+      {backgroundShown && <div data-background-threads="" className="flex items-center gap-1.5 pl-6 pr-3 pt-1 pb-0.5 text-[11px] text-sidebar-ink-secondary">
+        <Layers size={11} aria-hidden="true" /><span className="min-w-0 flex-1 truncate">{t("task.background.heading", { count: background!.length })}</span>
+        <button type="button" onClick={() => setShowBackground(false)} className="shrink-0 hover:text-sidebar-ink">{t("task.background.hide")}</button>
+      </div>}
       {ungrouped.map(renderThread)}
-      {!query && !showAll && tasks.length > visibleTasks.length && <button type="button" onClick={() => setShowAll(true)} className="pl-6 pr-3 py-1.5 text-[11px] text-sidebar-ink-secondary hover:text-sidebar-ink">{t("task.showAll", { count: tasks.length })}</button>}
+      {!query && !showAll && !backgroundShown && tasks.length > visibleTasks.length && <button type="button" onClick={() => setShowAll(true)} className="pl-6 pr-3 py-1.5 text-[11px] text-sidebar-ink-secondary hover:text-sidebar-ink">{t("task.showAll", { count: tasks.length })}</button>}
       {children}
       {listMenuMotion.shown && listMenuPosition && createPortal(<div ref={listMenuRef} data-sidebar-thread-list-actions role="menu" aria-label={t("task.namedList", { name: ownerName })}
         style={listMenuPosition} className={cn("fixed z-50 w-[220px] rounded-lg border border-hairline/50 popover-surface bg-card p-1 shadow-xl", listMenuMotion.className)} {...listMenuMotion.exitProps}
@@ -1519,6 +1657,16 @@ function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, task
           : <button type="button" role="menuitem" onClick={() => { setListMenu(null); onNew(); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised"><Plus size={12} />{t("task.newShort")}</button>}
         {onNewInFolder && <button type="button" role="menuitem" onClick={() => { setListMenu(null); onNewInFolder(); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised"><FolderOpen size={12} />{t("task.folder.new")}</button>}
         <button type="button" role="menuitem" onClick={() => { setListMenu(null); setCreatingProject(true); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised"><FolderPlus size={12} />{t("folder.new")}</button>
+        {background && <button type="button" role="menuitemcheckbox" aria-checked={backgroundShown} data-menu-item="show-background-threads" disabled={!background.length}
+          onClick={() => { setListMenu(null); setShowBackground(!backgroundShown); }}
+          className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised disabled:opacity-40 disabled:hover:bg-transparent">
+          <Layers size={12} /><span className="min-w-0 flex-1 truncate">{backgroundShown ? t("task.background.hide") : t("task.background.show")}</span>
+          <span className="shrink-0 tabular-nums text-ink-secondary">{background.length}</span></button>}
+        {bulk && !backgroundShown && <>
+          <div className="mx-1.5 my-1 h-px bg-hairline/50" />
+          <button type="button" role="menuitem" data-menu-item="archive-all-threads" disabled={bulk.archive === 0} onClick={() => { setListMenu(null); bulk.onArchiveAll(); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised disabled:opacity-40 disabled:hover:bg-transparent"><Archive size={12} />{t("task.archiveAll")}</button>
+          <button type="button" role="menuitem" data-menu-item="delete-all-threads" disabled={bulk.delete === 0} onClick={() => { setListMenu(null); bulk.onDeleteAll(); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-danger hover:bg-raised disabled:opacity-40 disabled:hover:bg-transparent"><Trash2 size={12} />{t("task.deleteAll")}</button>
+        </>}
       </div>, document.body)}
       <div ref={createAnchorRef} className="pointer-events-none absolute left-2 top-2 size-0" aria-hidden="true" />
       {creatingProject && <BotProjectDialog bot={folderOwner} owner={owner} anchorRef={createAnchorRef} onClose={() => setCreatingProject(false)} />}
@@ -1544,10 +1692,12 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
   const dispatch = useStoreDispatch();
   const pendingQueued = useStoreSelector((current) => current.pendingQueued);
   const generatedTitles = useStoreSelector((current) => llmThreadTitlesEnabled(current.config));
-  const tasks = (bot.tasks ?? [{ threadId: bot.threadId, title: t("task.newShort"), createdAt: 0 }])
-    // bot-to-bot threads never show (the selected one stays reachable)
-    .filter((task) => !task.routineRunId && (task.threadId === bot.threadId || !isInterBotThread(bot.id, task)))
+  // The person's own conversations (shared/background-threads.ts): a
+  // routine run, a hand-off, a thread a bot opened or an AI client's never
+  // shows here; the selected one stays reachable. "Show background" lists them.
+  const tasks = personThreads(bot.tasks ?? [{ threadId: bot.threadId, title: t("task.newShort"), createdAt: 0 }], bot.threadId)
     .map((task) => ({ ...task, queued: Boolean(pendingQueued[task.threadId]?.length) }));
+  const background = backgroundThreads(bot.tasks ?? []);
   const [permissionRefresh, setPermissionRefresh] = useState<{ threadId: string; kind: "full" | "local-auto" } | null>(null);
   // the same live verb the chat pane derives from the visible tail
   // ("Reading a file"), passed to the active thread's row while it works
@@ -1594,6 +1744,12 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
       },
     };
   }, [botId, dispatch, generatedTitles, prefetch]);
+  const bulkActions = useBulkThreadActions();
+  const bulkOwner: BulkThreadOwner = { kind: "bot", id: bot.id, tasks: botListedThreads(bot) };
+  const bulk = {
+    archive: bulkActions.count(bulkOwner, "archive"), delete: bulkActions.count(bulkOwner, "delete"),
+    onArchiveAll: () => { void bulkActions.archiveAll(bulkOwner); }, onDeleteAll: () => { void bulkActions.deleteAll(bulkOwner); },
+  };
   const rowState = (task: ThreadTreeTask) => {
     const thread = currentTaskBot(bot, task.threadId);
     return {
@@ -1605,7 +1761,8 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
   };
   return (
     <ThreadTree ownerId={bot.id} ownerName={bot.name} owner="bot" folderOwner={bot} openThreadId={bot.threadId} tasks={tasks} projects={bot.projects ?? []}
-      selected={selected} density={density} query={query} hidden={hidden} actions={actions} rowState={rowState} activeActivityLabel={activeActivityLabel}
+      selected={selected} density={density} query={query} hidden={hidden} actions={actions} rowState={rowState} activeActivityLabel={activeActivityLabel} bulk={bulk}
+      background={background}
       onNew={(projectId) => dispatch({ type: "newTask", botId: bot.id, ...(projectId ? { projectId } : {}) })}
       onNewKind={{ choices: newThreadChoices(confidentialByDefault), create: (confidential) => dispatch({ type: "newTask", botId: bot.id, confidential }) }}
       onNewInFolder={canChooseFolder && advanced ? () => setFolderDialog(true) : undefined}
@@ -1639,7 +1796,7 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
 }
 
 /** The thread tree under a person's row: a conversation with a person has
- * threads like a bot (server/people-dms.ts), with the same rows, menus and
+ * threads like a bot (server/people/people-dms.ts), with the same rows, menus and
  * folders. No generated title (it would send the pair's words to a model)
  * and no approval refresh (no bot). */
 export function PersonThreadList({ group, name, selected, density = "comfortable", query = "", hidden = false }: {
@@ -1648,7 +1805,8 @@ export function PersonThreadList({ group, name, selected, density = "comfortable
   name: string;
   selected: boolean; density?: SidebarDensity; query?: string; hidden?: boolean;
 }) {
-  const { dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+
   const tasks = personPickerThreads(group);
   const latest = useRef(group);
   latest.current = group;
@@ -1697,20 +1855,21 @@ export function BotListItem({
   startRename?: boolean;
   onRenameStarted?: () => void;
 }) {
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const config = useStoreSelector((current) => current.config);
+  const selected = useStoreSelector((current) => current.activeView === "chat" && current.selectedId === bot.id);
+  const deleting = useStoreSelector((current) => current.deletingBots[bot.id] === true);
+  const mascotMotion = useStoreSelector((current) => selected && current.mascotMotion?.botId === bot.id ? current.mascotMotion : null);
+  const pendingQueued = useStoreSelector((current) => Object.fromEntries([bot.threadId, ...(bot.tasks ?? []).map((task) => task.threadId)].map((id) => [id, current.pendingQueued[id]])), shallowEqual);
+  const instances = useStoreSelector((current) => current.instances.filter((instance) => instance.instanceId === bot.modelSelection.instanceId), shallowEqual);
   const showThreads = useShowThreads();
   const remoteClient = typeof window !== "undefined" && window.ogb?.remoteClient?.active === true;
   const [renaming, setRenaming] = useState(false);
-  const selected = state.activeView === "chat" && state.selectedId === bot.id;
   // Settings > Conversation threads (useThreadsMode), one reader for the
   // row: "sidebar" folds the bot open on its threads (a chevron, the choice
   // remembered per bot); "header" and "one" draw one line per bot, nothing
   // under it and no chevron.
   const threadsMode = useThreadsMode();
-  const deleting = state.deletingBots[bot.id] === true;
-  const mascotMotion = selected && state.mascotMotion?.botId === bot.id ? state.mascotMotion : null;
-  const pendingQueued = state.pendingQueued;
-  const instances = state.instances;
   const iconOnly = density === "icons";
   const comfortable = density === "comfortable";
   useEffect(() => {
@@ -1765,10 +1924,10 @@ export function BotListItem({
   const statusLine = deleting || lineWorking || waiting || teammateWait || queued;
   // The viewer's own Primary Bot wears the orange star at the avatar's
   // bottom-right corner; a status dot then sits at the top-right instead.
-  const primary = isViewersPrimaryBot(bot, orgViewerId(state));
+  const primary = isViewersPrimaryBot(bot, orgViewerId({ config }));
   // A bot shared with the viewer wears its sharer's face at the bottom-right
   // (as in Browse Bots), so the status dot moves up, like beside the star.
-  const sharer = botSharer(bot, orgViewerId(state), useOrgPeople());
+  const sharer = botSharer(bot, orgViewerId({ config }), useOrgPeople());
   const dotCorner = primary || sharer ? "-top-0.5" : "-bottom-0.5";
   // Grok Bot marks an unread bot with a blue dot at the row's end, the name
   // keeps its weight.
@@ -1787,7 +1946,7 @@ export function BotListItem({
           size={avatarSize}
           motion={mascotMotion?.kind ?? "none"}
           motionKey={mascotMotion?.nonce ?? 0}
-          animated={mascotRowAnimated(bot, state.pendingQueued, mascotMotion?.kind)}
+          animated={mascotRowAnimated(bot, pendingQueued, mascotMotion?.kind)}
         />
         {/* status dot (StatusDot, the same one a person's presence wears):
             green while the bot is working, ringed in the row's ground so it
@@ -1857,7 +2016,7 @@ export function BotListItem({
   // Threads off: an untouched extra thread never strands the person; the row
   // lands back on their latest conversation (see thread-home.ts).
   // With threads hidden a server that names the bot's main thread decides
-  // (openBot, server/main-thread.ts); an older one without it keeps that rule.
+  // (openBot, server/threads/main-thread.ts); an older one without it keeps that rule.
   const openConversation = () => navigate(() => {
     if (showThreads || bot.mainThreadId) openBot(dispatch, bot, showThreads);
     else for (const action of openBotConversationActions(bot, showThreads)) dispatch(action);
@@ -1954,6 +2113,8 @@ export function BotListItem({
   </>;
 }
 
+const MemoBotListItem = memo(BotListItem, sameSidebarRow);
+
 export function ArchivedBotRow({
   bot,
   restoring,
@@ -2015,7 +2176,11 @@ export function ArchivedBotsPanel({
   onClose: () => void;
   onRestored: (message: string) => void;
 }) {
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const state = useStoreSelector((current) => ({
+    config: current.config,
+    deletingBots: current.deletingBots,
+  }), shallowEqual);
   const showThreads = useShowThreads();
   const dialogRef = useRef<HTMLDivElement>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -2192,11 +2357,20 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
   onCompose?: () => void;
   composeOpen?: boolean;
 }) {
-  const store = useStore();
-  const { state } = store;
+  const storeDispatch = useStoreDispatch();
+  const state = useStoreSelector((current) => ({
+    activeView: current.activeView,
+    bots: current.bots,
+    groups: current.groups,
+    config: current.config,
+    instances: current.instances,
+    pendingQueued: current.pendingQueued,
+    sections: current.sections,
+    selectedId: current.selectedId,
+  }), (a, b) => Object.is(a.activeView, b.activeView) && equalRows(a.bots, b.bots) && equalRows(a.groups, b.groups) && Object.is(a.config, b.config) && Object.is(a.instances, b.instances) && Object.is(a.pendingQueued, b.pendingQueued) && Object.is(a.sections, b.sections) && Object.is(a.selectedId, b.selectedId));
   const listFade = useScrollFade();
-  const dispatch: typeof store.dispatch = (action) => {
-    store.dispatch(action);
+  const dispatch: typeof storeDispatch = (action) => {
+    storeDispatch(action);
     if (composeOpen && COMPOSE_DISMISS.has(action.type)) onCompose?.();
   };
   const showThreads = useShowThreads();
@@ -2412,8 +2586,8 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
           setTeamMenu={sections.setTeamMenu}
           drag={dnd}
           hiddenRows={hiddenSidebarRows(sections.sidebarHidden.items, { bots: state.bots, groups: state.groups, viewerId: roster.viewerId, people: sections.sidebarPeople })}
-          renderBot={(props) => <BotListItem {...props} />}
-          renderGroup={(props) => <GroupListItem {...props} />}
+          renderBot={(props) => <MemoBotListItem {...props} />}
+          renderGroup={(props) => <MemoGroupListItem {...props} />}
         />
       </div>
       <SidebarUnreadPillBelow density={density} count={unread.moreUnread.below} onJump={() => unread.jumpToUnread("below")} />

@@ -12,7 +12,7 @@
 //   question is waiting for the person;
 // - the first line of a turn comes when a tool has run PROGRESS_FIRST_MS
 //   with nothing said yet: the quick first sentence before a slow step, on
-//   every engine (server/voice-first-sentence.ts says why the model's own
+//   every engine (server/voice/voice-first-sentence.ts says why the model's own
 //   parallel opener stays with HTTP Grok);
 // - later lines need PROGRESS_QUIET_MS of silence and PROGRESS_GAP_MS since
 //   the last line, PROGRESS_MAX_LINES per turn;
@@ -56,7 +56,7 @@ const EXACT: Array<[RegExp, ProgressKind]> = [
 ];
 
 /** Otherwise the first verb of a connector tool's name ("find_tickets",
- * "cw_psa__update_ticket", "tickets.list"). */
+ * "cw_psa_update_ticket", "tickets.list"). */
 const VERBS: Array<[RegExp, ProgressKind]> = [
   [/^(search|find|lookup|grep|query)$/, "search"],
   [/^(get|list|read|fetch|describe|check|status|show|view|count|recall|load|download|export|inspect|preview|api)$/, "check"],

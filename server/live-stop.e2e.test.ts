@@ -151,6 +151,12 @@ posixOnly("stop right away e2e", () => {
     expect(tool?.tool?.ok, JSON.stringify(tool)).not.toBeUndefined();
     const confirmations = rows.filter((m) => m.role === "bot" && m.kind === "activity" && m.tool?.name === STOPPED_TURN_NAME);
     expect(confirmations).toHaveLength(1);
+    // Stop stays final past the unfinished-turn guard's 500 ms relaunch:
+    // a native ACP cancellation must not start a second provider turn.
+    const stoppedTurnIds = [...new Set(rows.map((row) => row.turnId).filter(Boolean))];
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    expect((await getBot(bot.id)).busy).toBe(false);
+    expect([...new Set((await messages(bot.threadId)).map((row) => row.turnId).filter(Boolean))]).toEqual(stoppedTurnIds);
     // a new message after the stop starts a fresh turn
     expect((await api("POST", `/api/bots/${bot.id}/messages`, { text: "status?", threadId: bot.threadId })).status).toBe(202);
     await waitFor(async () => (await getBot(bot.id)).busy === true, "the next turn");

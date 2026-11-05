@@ -7,6 +7,8 @@
 //   /api/me/memory/trash[+ /undo|/empty]
 //   /api/me/memory/tags
 //   /api/me/memory/archived
+//   /api/me/memory/order                (PUT: a folder's manual order)
+//   /api/me/memory/collections[/<id>]   (curated, ordered notes)
 //
 // Forwards to Perspicax `/api/v1/memory/read/*` with the session's own live
 // access token as Bearer. Session only; subject is always the signed-in
@@ -17,7 +19,7 @@
 import type { ServerResponse } from "node:http";
 import type { NotesCallResult, NotesMethod, PerspicaxMemoryNotesClient } from "../memory/perspicax-memory-notes.ts";
 import { memoryReadPath } from "../memory/perspicax-memory-notes.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const ME_MEMORY_PREFIX = "/api/me/memory";
@@ -127,6 +129,26 @@ export function upstreamOf(method: string, path: string, url: URL, body: unknown
   if (rest === "/trash/undo") {
     if (method !== "POST") return "method";
     return { method: "POST", path: memoryReadPath("/trash/undo"), body };
+  }
+  if (rest === "/order") {
+    if (method !== "PUT") return "method";
+    return { method: "PUT", path: memoryReadPath("/order"), body };
+  }
+  if (rest === "/collections") {
+    if (method === "GET") return { method: "GET", path: memoryReadPath("/collections") };
+    if (method === "POST") return { method: "POST", path: memoryReadPath("/collections"), body };
+    return "method";
+  }
+  const collection = /^\/collections\/([^/]+)$/.exec(rest);
+  if (collection) {
+    // One path segment, re-encoded: the id never reaches another route upstream.
+    let raw: string;
+    try { raw = decodeURIComponent(collection[1]!); } catch { return null; }
+    const id = encodeURIComponent(raw);
+    const target = memoryReadPath(`/collections/${id}`);
+    if (method === "GET" || method === "DELETE") return { method, path: target };
+    if (method === "PUT") return { method, path: target, body };
+    return "method";
   }
   if (rest === "/trash/empty") {
     if (method !== "POST") return "method";

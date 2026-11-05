@@ -1,14 +1,14 @@
 {
   "_comment": [
     "The native tools each pinned engine CLI exposes (solo) and offers a withheld",
-    "organization turn (org), as scripts/capture-engine-native-tools.ts recorded them.",
+    "organization turn (org), as scripts/capture/engine-native-tools.ts recorded them.",
     "Regenerate an engine after bumping it in engines.lock.json; never edit by hand.",
     "server/drivers/engine-tools.test.ts checks each tool against ORG_ENGINE_TOOLS."
   ],
   "engines": {
     "claude": {
-      "version": "2.1.288",
-      "captured": "2026-10-27",
+      "version": "2.1.318",
+      "captured": "2026-11-05",
       "how": "init event of `claude -p` with an MCP server and the permission prompt tool, tool search on; org: the driver's --tools and --disallowedTools",
       "solo": [
         "AskUserQuestion",
@@ -85,7 +85,7 @@
     "gemini": {
       "version": "0.62.0",
       "captured": "2026-10-27",
-      "how": "tools offered to a local fake model by a control and a withheld turn of the Sagax driver (scripts/verify-org-host-tools.ts)",
+      "how": "tools offered to a local fake model by a control and a withheld turn of the Sagax driver (scripts/verify/dev/verify-org-host-tools.ts)",
       "solo": [
         "activate_skill",
         "enter_plan_mode",
@@ -111,7 +111,7 @@
     "grok": {
       "version": "1.0.46",
       "captured": "2026-10-27",
-      "how": "tools offered to a local fake model by a control and a withheld turn of the Sagax driver (scripts/verify-org-host-tools.ts)",
+      "how": "tools offered to a local fake model by a control and a withheld turn of the Sagax driver (scripts/verify/dev/verify-org-host-tools.ts)",
       "solo": [
         "ask_user_question",
         "enter_plan_mode",
@@ -149,7 +149,7 @@
     "hermes": {
       "version": "0.21.5",
       "captured": "2026-10-27",
-      "how": "tools offered to a local fake model by a control and a withheld turn of the Sagax driver (scripts/verify-org-host-tools.ts)",
+      "how": "tools offered to a local fake model by a control and a withheld turn of the Sagax driver (scripts/verify/dev/verify-org-host-tools.ts)",
       "solo": [
         "browser_exec",
         "browser_vault_enter_code",
@@ -184,7 +184,7 @@
     "kimi": {
       "version": "2.1.1",
       "captured": "2026-10-27",
-      "how": "tools offered to a local fake model by a control and a withheld turn of the Sagax driver (scripts/verify-org-host-tools.ts)",
+      "how": "tools offered to a local fake model by a control and a withheld turn of the Sagax driver (scripts/verify/dev/verify-org-host-tools.ts)",
       "solo": [
         "Agent",
         "AgentSwarm",
@@ -227,7 +227,7 @@
     "opencode": {
       "version": "1.18.34",
       "captured": "2026-10-27",
-      "how": "tools offered to a local fake model by a control and a withheld turn of the Sagax driver (scripts/verify-org-host-tools.ts)",
+      "how": "tools offered to a local fake model by a control and a withheld turn of the Sagax driver (scripts/verify/dev/verify-org-host-tools.ts)",
       "solo": [
         "bash",
         "edit",
@@ -263,7 +263,7 @@
     "qwen": {
       "version": "0.24.7",
       "captured": "2026-10-27",
-      "how": "tools offered to a local fake model by a control and a withheld turn of the Sagax driver (scripts/verify-org-host-tools.ts)",
+      "how": "tools offered to a local fake model by a control and a withheld turn of the Sagax driver (scripts/verify/dev/verify-org-host-tools.ts)",
       "solo": [
         "agent",
         "ask_user_question",

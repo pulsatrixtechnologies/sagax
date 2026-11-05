@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { Worker } from "node:worker_threads";
-import type { SealedKeyMaterial, SearchHit } from "./message-search-query.ts";
+import type { SealedKeyMaterial, SearchHit } from "./messages/message-search-query.ts";
 
 export class SearchUnavailable extends Error {
   readonly status = 503;
@@ -13,7 +13,7 @@ export class MessageSearchWorker {
   private stopping: Promise<void> = Promise.resolve();
   private sequence = 0;
   private readonly pending = new Map<number, {
-    resolve: (hits: SearchHit[]) => void;
+    resolve: (reply: { hits?: SearchHit[]; references?: Array<[string, string[]]> }) => void;
     reject: (error: Error) => void;
     timer: ReturnType<typeof setTimeout>;
   }>();
@@ -26,6 +26,16 @@ export class MessageSearchWorker {
   }
 
   search(query: string, limit: number, threadId?: string, sealed?: { keys: SealedKeyMaterial[]; plaintext: boolean }): Promise<SearchHit[]> {
+    return this.request({ query, limit, threadId, ...(sealed?.keys.length ? { keys: sealed.keys, plaintext: sealed.plaintext } : {}) }).then((reply) => reply.hits ?? []);
+  }
+
+  /** 2026-11-03 (audit S-5): the threads that mention each fragment, in one
+   * pass over messages, in the worker. */
+  references(fragments: readonly string[]): Promise<Map<string, string[]>> {
+    return this.request({ query: "", limit: 0, references: [...fragments] }).then((reply) => new Map(reply.references ?? []));
+  }
+
+  private request(message: Record<string, unknown>): Promise<{ hits?: SearchHit[]; references?: Array<[string, string[]]> }> {
     if (this.pending.size >= 8) return Promise.reject(new SearchUnavailable("Search is busy. Try again shortly."));
     if (!this.worker) {
       const source = new URL("./message-search.worker.ts", import.meta.url);
@@ -35,14 +45,14 @@ export class MessageSearchWorker {
         execArgv: [],
       });
       this.worker = worker;
-      worker.on("message", (reply: { id: number; hits?: SearchHit[]; failed?: boolean }) => {
+      worker.on("message", (reply: { id: number; hits?: SearchHit[]; references?: Array<[string, string[]]>; failed?: boolean }) => {
         if (this.worker !== worker) return;
         const request = this.pending.get(reply.id);
         if (!request) return;
         clearTimeout(request.timer);
         this.pending.delete(reply.id);
         if (reply.failed) request.reject(new SearchUnavailable("Search could not finish. Try again shortly."));
-        else request.resolve(reply.hits ?? []);
+        else request.resolve(reply);
         if (!this.pending.size) worker.unref();
       });
       worker.on("error", () => {
@@ -58,7 +68,7 @@ export class MessageSearchWorker {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => { void this.close(); }, this.timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
-      try { worker.postMessage({ id, query, limit, threadId, ...(sealed?.keys.length ? { keys: sealed.keys, plaintext: sealed.plaintext } : {}) }); }
+      try { worker.postMessage({ id, ...message }); }
       catch { void this.close(); }
     });
   }

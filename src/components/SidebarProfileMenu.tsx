@@ -60,12 +60,14 @@ import {
 } from "lucide-react";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { useOrgApprovalsCount } from "@/lib/org-approvals";
+import { waitingOnPersonCount } from "@/lib/bot-unread";
 
 import { InitialsAvatar } from "./Avatar";
 import { SidebarPopoverMenu, type SidebarMenuItem, type SidebarSubmenuEntry } from "./SidebarPopoverMenu";
 import { useServerMode } from "./ServerModeSettings";
 import { api } from "@/state/store";
-import { accountChoices, businessAccount, SAGAX_MOBILE_URL, switchAccount, switchTargets as listSwitchTargets, usageLines as planUsageLines, usagePercent as planUsagePercent, type AccountChoice, type SwitchTarget, type UsageLine } from "@/lib/account-menu";
+import { accountChoices, businessAccount, SAGAX_MOBILE_URL, switchAccount, switchTargets as listSwitchTargets, usageLines as planUsageLines, usageSummary, type AccountChoice, type SwitchTarget, type UsageLine } from "@/lib/account-menu";
+import { toggleUsageFavorite, useUsageFavorite } from "@/lib/usage-favorite";
 import { connectedPlanRows, type PlanRow, type PlanUsageReport } from "@/lib/plan-usage";
 import { costOf, formatCost, personalUsagePeriods, usageQuery, type PersonalUsageSummary } from "@/lib/usage-personal";
 import { requestAbout } from "@/lib/about-ui";
@@ -74,7 +76,7 @@ import { serverModeBridge } from "@/lib/launch";
 import { openExternalLink } from "@/lib/app-links";
 import { canViewUsage } from "@/lib/viewer";
 import { ShortcutHint } from "./ShortcutHint";
-import { useStore } from "@/state/store";
+import { shallowEqual, useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import { useUpdaterState, type UpdaterState } from "@/lib/updater";
 import { openUpdatePrompt, requestUpdateCheck } from "@/lib/update-prompt";
 import { brand } from "../lib/brand";
@@ -314,7 +316,12 @@ export interface ProfileMenuHandlers {
 export function profileMenuItems(input: {
   /** null: no plan reports a window, so Usage carries no percent */
   usagePercent: number | null;
+  /** the starred plan's short name while its figure is the one shown
+   * ("Grok 87%"); null or absent: the usual figure ("100% used") */
+  usageName?: string | null;
   usageLines: UsageLine[];
+  /** the starred plan's id, and how a star is toggled; absent: no stars */
+  usageFavorite?: { id: string | null; onToggle: (planId: string) => void };
   /** this month's cost of the person's own turns, formatted; null unknown */
   monthCost: string | null;
   mobile: boolean;
@@ -347,7 +354,26 @@ export function profileMenuItems(input: {
   handlers: ProfileMenuHandlers;
 }): SidebarMenuItem[] {
   const usage: SidebarSubmenuEntry[] = [
-    ...input.usageLines.map((line) => ({ key: line.key, label: line.label, subtitle: line.subtitle, value: line.value, info: true })),
+    // one star per plan, on its first line
+    ...input.usageLines.map((line, index, lines) => {
+      const favorite = input.usageFavorite;
+      const first = line.planId !== undefined && lines.findIndex((other) => other.planId === line.planId) === index;
+      const on = favorite?.id != null && favorite.id === line.planId;
+      return {
+        key: line.key,
+        label: line.label,
+        subtitle: line.subtitle,
+        value: line.value,
+        info: true,
+        ...(favorite && first && line.planId ? {
+          favorite: {
+            on,
+            label: t(on ? "usage.favorite.remove" : "usage.favorite.add", { name: line.planName ?? line.label }),
+            onToggle: () => favorite.onToggle(line.planId!),
+          },
+        } : {}),
+      };
+    }),
     ...(input.monthCost !== null ? [{ key: "month-cost", label: t("sidebar.account.monthCost"), value: input.monthCost, info: true }] : []),
   ];
   const help: SidebarSubmenuEntry[] = [
@@ -484,7 +510,11 @@ export function profileMenuItems(input: {
       key: "usage",
       label: t("sidebar.account.usage"),
       icon: <Gauge size={18} />,
-      value: input.usagePercent === null ? undefined : t("planUsage.used", { used: input.usagePercent }),
+      value: input.usagePercent === null
+        ? undefined
+        : input.usageName
+          ? t("sidebar.account.usageFavorite", { name: input.usageName, used: input.usagePercent })
+          : t("planUsage.used", { used: input.usagePercent }),
       submenu: [
         ...usage,
         { key: "view-usage", label: t("sidebar.account.viewUsage"), separatorBefore: usage.length > 0, onSelect: input.handlers.onViewUsage },
@@ -532,6 +562,8 @@ function WhenOpen({ open, onOpen }: { open: boolean; onOpen: () => void }) {
 
 interface AccountMenuData {
   percent: number | null;
+  /** the starred plan's short name while it drives the percent */
+  percentName: string | null;
   lines: UsageLine[];
   monthCost: string | null;
   targets: SwitchTarget[];
@@ -542,9 +574,10 @@ interface AccountMenuData {
  * as Settings > Usage; and Switch organization ›'s saved servers. Read once
  * the menu first opens; each part stays empty when it cannot be read. */
 function useAccountMenuData(enabled: boolean, refresh = 0): AccountMenuData {
-  const { state } = useStore();
+  const config = useStoreSelector((current) => current.config);
+  const favorite = useUsageFavorite();
   const org = usePerspicaxOrg();
-  const plans = enabled && (org !== null || canViewUsage(state.config));
+  const plans = enabled && (org !== null || canViewUsage(config));
   const [rows, setRows] = useState<PlanRow[]>([]);
   const [monthCost, setMonthCost] = useState<string | null>(null);
   const [environments, setEnvironments] = useState<Parameters<typeof listSwitchTargets>[0]>(null);
@@ -565,8 +598,10 @@ function useAccountMenuData(enabled: boolean, refresh = 0): AccountMenuData {
       .then((next) => { if (alive && next) setEnvironments(next); }, () => {});
     return () => { alive = false; };
   }, [enabled, refresh]);
+  const summary = usageSummary(rows, favorite);
   return {
-    percent: planUsagePercent(rows),
+    percent: summary.percent,
+    percentName: summary.name,
     lines: planUsageLines(rows, {
       weekly: t("planUsage.weekly"),
       fiveHour: t("planUsage.fiveHour"),
@@ -591,7 +626,8 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
    * shortcuts take the room above the row */
   memberLine?: boolean;
 }) {
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const state = useStoreSelector((current) => ({ config: current.config, activeView: current.activeView, memoryManagerOpen: current.memoryManagerOpen }), shallowEqual);
   const update = useUpdateItem();
   // the menu's figures (plan, cost, saved servers) are read the first time
   // it opens, not with every sidebar
@@ -599,9 +635,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
   const triggerRef = useRef<HTMLSpanElement>(null);
   const achievements = useAchievements();
   // conversations waiting on the person's answer (a plain count, no hook)
-  const approvalsWaiting = state.bots
-    .filter((bot) => !bot.hidden)
-    .reduce((total, bot) => total + (bot.tasks ?? []).filter((task) => task.activity === "waiting-on-you").length, 0);
+  const approvalsWaiting = useStoreSelector((current) => waitingOnPersonCount(current.bots));
   const openAchievements = () => dispatch({ type: "showAchievements" });
   // The routines badge sits at the right edge of the row; under the name,
   // the viewer's own title and points, each only while its "Show my ..."
@@ -635,6 +669,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
   // Lot 6: rename stays in the Switch account row (no window on the menu).
   const [renaming, setRenaming] = useState<{ id: string; name: string; defaultName: string; draft: string } | null>(null);
   const account = useAccountMenuData(menuOpened, namesTick);
+  const usageFavorite = useUsageFavorite();
   const serverMode = useServerMode(namesTick);
   // The desktop opens on an organization server (server mode) and this is
   // that server's page; Personal's own page (it has the saved-server list)
@@ -675,7 +710,9 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
   };
   const profileItems = profileMenuItems({
     usagePercent: account.percent,
+    usageName: account.percentName,
     usageLines: account.lines,
+    usageFavorite: { id: usageFavorite, onToggle: toggleUsageFavorite },
     monthCost: account.monthCost,
     mobile: SAGAX_MOBILE_URL !== null,
     achievementsLabel: achievements.status === "ready" ? t("achievements.menu") : null,
@@ -990,10 +1027,10 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
  * (2026-10-16: it had vanished with the avatar-only foot). A failed run
  * not seen yet turns its label into a warning. */
 export function SidebarRoutinesBadge() {
-  const { state, dispatch } = useStore();
-  const activeRoutines = activeRoutineCount(state.routines, state.bots, viewerActorId(state.config));
+  const dispatch = useStoreDispatch();
+  const activeRoutines = useStoreSelector((current) => activeRoutineCount(current.routines, current.bots, viewerActorId(current.config)));
   const badgeEnabled = useShowRoutinesBadge();
-  const routineAttention = state.routineRuns.some((run) => isRoutineProblemRun(run) && !run.seenAt);
+  const routineAttention = useStoreSelector((current) => current.routineRuns.some((run) => isRoutineProblemRun(run) && !run.seenAt));
   if (!badgeEnabled || activeRoutines <= 0) return null;
   const routinesLabel = t(
     routineAttention

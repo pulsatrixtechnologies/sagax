@@ -1,13 +1,13 @@
 // Settings > Computer > Computer care: the scheduled update of the bot's
 // computer in a maintenance window, and the disk saver (preview first,
 // nothing deleted without a click, the trash only with a confirmation).
-// Server side: server/computer-care.ts, server/routes/computer-care.ts.
+// Server side: server/computer/computer-care.ts, server/routes/computer-care.ts.
 import { useCallback, useEffect, useState } from "react";
 import { HardDrive, Loader2, RefreshCw, Trash2 } from "lucide-react";
 
 import { useConfirm } from "@/components/ConfirmProvider";
 import { activeLocale, t } from "@/lib/i18n";
-import { formatBytes } from "@/lib/server-environment";
+import { formatPanelBytes } from "@/lib/server-environment";
 import type { LocaleKey } from "@/locales";
 import { DescribedRow, PILL, PillSelect, SettingsGroup, SwitchRow } from "../SettingsPrimitives";
 import { ComputerRecoverRow } from "./ComputerRecoverRow";
@@ -176,7 +176,7 @@ export function ComputerCareSettings() {
     const userFiles = preview.items.some((item) => item.userFiles && selected.has(item.id));
     const bytes = preview.items.filter((item) => selected.has(item.id)).reduce((sum, item) => sum + item.bytes, 0);
     if (!(await confirm({
-      title: t(userFiles ? "computerCare.disk.confirmTrash" : "computerCare.disk.confirm", { size: formatBytes(bytes) }),
+      title: t(userFiles ? "computerCare.disk.confirmTrash" : "computerCare.disk.confirm", { size: formatPanelBytes(bytes) }),
       confirmLabel: t("common.delete"),
       tone: "danger",
     }))) return;
@@ -267,7 +267,7 @@ export function ComputerCareSettings() {
                             {item.userFiles && <span className="ml-1.5 text-[12px] text-danger">{t("computerCare.disk.userFiles")}</span>}
                           </>
                         )}
-                        description={<span className="tabular-nums">{formatBytes(item.bytes)}</span>}
+                        description={<span className="tabular-nums">{formatPanelBytes(item.bytes)}</span>}
                         checked={selected.has(item.id)}
                         disabled={cleaning || item.bytes === 0}
                         onChange={(on) => {
@@ -279,7 +279,7 @@ export function ComputerCareSettings() {
                       />
                     </div>
                   ))}
-                  {freed !== null && <p role="status" className="text-[12px] text-success">{t("computerCare.disk.freed", { size: formatBytes(freed) })}</p>}
+                  {freed !== null && <p role="status" className="text-[12px] text-success">{t("computerCare.disk.freed", { size: formatPanelBytes(freed) })}</p>}
                 </div>
               )}
               {error && <p role="alert" className="mt-2 text-[12px] leading-4 text-danger">{error}</p>}
@@ -293,7 +293,7 @@ export function ComputerCareSettings() {
           {preview && (
             <button type="button" className={`${PILL} gap-1.5`} disabled={cleaning || selected.size === 0} onClick={() => void clean()} data-disk-saver-clean="">
               {cleaning ? <Loader2 size={12} className="animate-spin" aria-hidden="true" /> : <Trash2 size={12} aria-hidden="true" />}
-              {t("computerCare.disk.clean", { size: formatBytes(selectedBytes) })}
+              {t("computerCare.disk.clean", { size: formatPanelBytes(selectedBytes) })}
             </button>
           )}
         </DescribedRow>

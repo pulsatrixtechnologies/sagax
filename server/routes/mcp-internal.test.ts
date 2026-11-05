@@ -31,6 +31,31 @@ describe("POST /api/internal/perspicax/tool", () => {
     expect(sent).toEqual([{ status: 200, body: { text: "{\"results\":2}", isError: false } }]);
   });
 
+  it("#1935: api_search's answer names the account server that runs its tools", async () => {
+    const callTool = vi.fn(async () => ({ ok: true as const, isError: false, value: { results: [{ tool: "cw_psa_query" }] } }));
+    const toolHome = vi.fn(() => ({ server: "perspicax", served: false }));
+    const route = createPerspicaxToolInternalRoutes({ tools, perspicaxMcp: () => ({ callTool, toolHome }), review: async () => null });
+    const searched = (await call(route, "/api/internal/perspicax/tool", { tool: "api_search", args: { query: "ticket by id" } })).sent[0]!;
+    expect(searched.status).toBe(200);
+    expect(searched.body.text).toContain("cw_psa_query");
+    expect(searched.body.text).toContain("MCP server \"perspicax\"");
+    expect(searched.body.text).toContain("The agents server does not have them.");
+    // a tool whose answer names no tool to call next is left as it came
+    expect((await call(route, "/api/internal/perspicax/tool", { tool: "identity", args: { query: "osprey" } })).sent[0]!.body.text).toBe("{\"results\":[{\"tool\":\"cw_psa_query\"}]}");
+  });
+
+  it("#1935: { locate } says the mounted account server runs a tool, without calling Perspicax", async () => {
+    const callTool = vi.fn();
+    const toolHome = vi.fn((_t: string, _g: string, _b: string, name?: string) => name === "cw_psa_query" ? { server: "perspicax", served: true } : undefined);
+    const route = createPerspicaxToolInternalRoutes({ tools, perspicaxMcp: () => ({ callTool, toolHome }), review: async () => null });
+    const found = (await call(route, "/api/internal/perspicax/tool", { locate: "cw_psa_query" })).sent[0]!;
+    expect(found).toMatchObject({ status: 200, body: { server: "perspicax", served: true } });
+    expect(found.body.text).toContain("is not a Sagax tool");
+    expect(toolHome).toHaveBeenCalledWith("t-1", "g-1", "bot-1", "cw_psa_query");
+    expect((await call(route, "/api/internal/perspicax/tool", { locate: "nothing_here" })).sent[0]).toEqual({ status: 200, body: { server: null } });
+    expect(callTool).not.toHaveBeenCalled();
+  });
+
   it("names who opened a remote support session, and only on remote_support_* answers", async () => {
     const callTool = vi.fn(async () => ({ ok: true as const, isError: false, value: { code: "BQDHS7" } }));
     const owner = vi.fn(() => ({ principalId: "person-a", botId: "bot-1" }));
@@ -58,7 +83,7 @@ describe("POST /api/internal/perspicax/tool", () => {
     expect(ownsSupportCode).toHaveBeenCalled();
   });
 
-  it("refuses an unlisted name, a review refusal, no link and no mounted profile", async () => {
+  it("refuses an unlisted name, a review refusal, no link and no mounted account connection", async () => {
     const callTool = vi.fn(async () => ({ ok: false as const, code: "profile_not_mounted" as const, error: "x" }));
     const ok = createPerspicaxToolInternalRoutes({ tools, perspicaxMcp: () => ({ callTool }), review: async () => null });
     expect((await call(ok, "/api/internal/perspicax/tool", { tool: "api_query" })).sent[0]?.status).toBe(400);
@@ -75,7 +100,7 @@ describe("POST /api/internal/mcp-audit", () => {
   it("keeps the whitelisted fields of a valid record, under the capability's bot", async () => {
     const rows: unknown[] = [];
     const route = createMcpAuditInternalRoutes({ append: (row) => rows.push(row) });
-    const record = { at: "2026-10-15T00:00:00.000Z", principal: "p", role: "member", tool: "cw_psa__write", permission: "api:write", scope: "self", decision: "denied", reason: "resource_denied", resource: "cw_psa:tickets.update", enforced: false, args: { secret: 1 } };
+    const record = { at: "2026-10-15T00:00:00.000Z", principal: "p", role: "member", tool: "cw_psa_write", permission: "api:write", scope: "self", decision: "denied", reason: "resource_denied", resource: "cw_psa:tickets.update", enforced: false, args: { secret: 1 } };
     expect((await call(route, "/api/internal/mcp-audit", record)).sent).toEqual([{ status: 200, body: { ok: true } }]);
     expect(rows).toEqual([expect.objectContaining({ action: "mcp.shadow", target: { kind: "bot", id: "bot-1" } })]);
     expect(JSON.stringify(rows)).not.toContain("secret");

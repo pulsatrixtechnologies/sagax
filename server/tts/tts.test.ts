@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import type { AppConfig } from "../config.ts";
 import * as elevenlabs from "./elevenlabs.ts";
 
-// tsconfig.server.json targets ES2023: Promise.withResolvers is ES2024.
+// server/tsconfig.json targets ES2023: Promise.withResolvers is ES2024.
 function withResolvers<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;

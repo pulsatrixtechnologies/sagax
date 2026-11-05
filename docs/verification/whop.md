@@ -13,7 +13,7 @@ Use an installed Playwright module and Chromium executable. Set
 resolve its own browser. Then run:
 
 ```sh
-node --experimental-strip-types scripts/verify-whop.ts
+node --experimental-strip-types scripts/verify/dev/verify-whop.ts
 ```
 
 This launches a disposable fake-engine workspace and synthetic OAuth/MCP
@@ -44,7 +44,7 @@ S256, refresh tokens and the `admin` scope.
 ## Regression checks
 
 ```sh
-pnpm exec vitest run src/lib/whop-integration.test.ts src/components/PluginsPanel.layout.test.ts src/components/PluginsPanel.i18n.test.ts src/components/McpServersPanel.test.ts src/components/McpServersPanel.whop.test.ts src/lib/mcp-sign-in.test.ts server/mcp-oauth.test.ts server/mcp-oauth-discovery.test.ts server/mcp-oauth-store.test.ts server/mcp-probe.test.ts server/mcp-selection.e2e.test.ts server/mcp-remote-proxy.test.ts server/mcp-gate-config.test.ts server/drivers/pi-mcp-extension.test.ts scripts/testing/verification-docs.test.ts
+pnpm exec vitest run src/lib/whop-integration.test.ts src/components/PluginsPanel.layout.test.ts src/components/PluginsPanel.i18n.test.ts src/components/McpServersPanel.test.ts src/components/McpServersPanel.whop.test.ts src/lib/mcp-sign-in.test.ts server/mcp/mcp-oauth.test.ts server/mcp/mcp-oauth-discovery.test.ts server/mcp/mcp-oauth-store.test.ts server/mcp/mcp-probe.test.ts server/mcp-selection.e2e.test.ts server/mcp-remote-proxy.test.ts server/mcp/mcp-gate-config.test.ts server/drivers/pi-mcp-extension.test.ts scripts/testing/verification-docs.test.ts
 pnpm typecheck
 pnpm lint
 pnpm i18n:check

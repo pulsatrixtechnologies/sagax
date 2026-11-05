@@ -7,7 +7,9 @@ import {
   GESTURE_WINDOW_MS,
   IDLE_MS,
   SCROLLING_CLASS,
+  THUMB_BASE_LAYER,
   installOverlayScrollbars,
+  scrollerLayer,
   scrollDeltaForThumbDelta,
   thumbGeometry,
 } from "./overlay-scrollbars";
@@ -112,5 +114,63 @@ describe("installOverlayScrollbars", () => {
     scroll();
     expect(scroller.classList.contains(SCROLLING_CLASS)).toBe(false);
     expect(document.querySelector("[data-overlay-scrollbar-part]")).toBeNull();
+  });
+
+  // 2026-11-04: the thread list's bar painted over the thread menu (z 2147483646).
+  it("paints the thumb at its scroller's level, under a menu layered above it", () => {
+    wheel();
+    scroll();
+    vi.advanceTimersByTime(20);
+    const thumb = document.querySelector<HTMLElement>('[data-overlay-scrollbar-part="y"]')!;
+    expect(Number(thumb.style.zIndex)).toBe(THUMB_BASE_LAYER);
+    expect(Number(thumb.style.zIndex)).toBeLessThan(50);
+  });
+
+  it("hides the thumb while an open menu crosses its strip", () => {
+    const menu = document.createElement("div");
+    menu.setAttribute("role", "menu");
+    menu.getBoundingClientRect = () => ({ top: 10, left: 280, right: 500, bottom: 300, width: 220, height: 290, x: 280, y: 10, toJSON: () => ({}) });
+    document.body.appendChild(menu);
+    try {
+      wheel();
+      scroll();
+      vi.advanceTimersByTime(20);
+      const thumb = document.querySelector<HTMLElement>('[data-overlay-scrollbar-part="y"]')!;
+      thumb.getBoundingClientRect = () => ({ top: 2, left: 288, right: 298, bottom: 12, width: 10, height: 10, x: 288, y: 2, toJSON: () => ({}) });
+      scroll();
+      vi.advanceTimersByTime(20);
+      expect(thumb.dataset.visible).toBe("false");
+      menu.remove();
+      scroll();
+      vi.advanceTimersByTime(20);
+      expect(thumb.dataset.visible).toBe("true");
+    } finally {
+      menu.remove();
+    }
+  });
+});
+
+describe("scrollerLayer", () => {
+  it("takes the z-index of the scroller's outermost stacking context", () => {
+    const modal = document.createElement("div");
+    modal.style.position = "fixed";
+    modal.style.zIndex = "50";
+    const inner = document.createElement("div");
+    inner.style.position = "relative";
+    inner.style.zIndex = "3";
+    const list = document.createElement("div");
+    inner.appendChild(list);
+    modal.appendChild(inner);
+    document.body.appendChild(modal);
+    try {
+      expect(scrollerLayer(list, document.body, window)).toBe(50);
+      modal.style.zIndex = "";
+      modal.style.position = "";
+      expect(scrollerLayer(list, document.body, window)).toBe(3);
+      inner.style.zIndex = "";
+      expect(scrollerLayer(list, document.body, window)).toBe(THUMB_BASE_LAYER);
+    } finally {
+      modal.remove();
+    }
   });
 });

@@ -13,7 +13,7 @@ vi.mock("@/state/store", async (importOriginal) => ({
 
 const stored = new Map<string, string>();
 
-beforeEach(() => {
+beforeEach(async () => {
   stored.clear();
   fixture.section = "appearance";
   vi.stubGlobal("localStorage", {
@@ -24,6 +24,8 @@ beforeEach(() => {
   vi.stubGlobal("window", {});
   vi.stubGlobal("document", { documentElement: { dataset: {} } });
   setLocale("en");
+  const { AppearanceSettings } = await import("./lazy-settings-sections");
+  await AppearanceSettings.preload();
 });
 
 afterEach(() => {

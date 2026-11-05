@@ -13,6 +13,10 @@ import { redactSecretsInText } from "../redact.ts";
 import { loadRoutinePrecheck, parseRoutinePrecheck } from "./routine-precheck.ts";
 import type { RoutineWatchPrecheck } from "../../shared/routine-watch.ts";
 import { cleanRoutineFolder, ROUTINE_FOLDER_MAX } from "../../shared/routine-folders.ts";
+import { EFFORT_LEVELS } from "../../shared/model-selection.ts";
+import { parseRoutineModel } from "../../shared/routine-model.ts";
+import { parseRoutineActAs } from "../../shared/routine-act-as.ts";
+import { withRequiredComputer, type RoutineRequirements } from "../../shared/routine-readiness.ts";
 import { describeCondition } from "./routine-watch.ts";
 import { parseJson, schemaIssue, type JsonObject, type JsonValue } from "../schema.ts";
 import {
@@ -125,6 +129,16 @@ const routineToolFieldsSchema = z.object({
   folder: z.string().max(200).nullable().optional(),
   /** Delete once the schedule ends and the last run settles (#1648). */
   deleteWhenFinished: z.boolean().optional(),
+  /** 2026-11-04: the model its runs use; null in an update goes back to the bot's. */
+  model: z.string().max(200).nullable().optional(),
+  /** #2038: the model its runs' sub-agents use (Claude); null in an update clears it. */
+  subagentModel: z.string().max(200).nullable().optional(),
+  /** 2026-11-05: the Perspicax role its runs act as ("" = Moi); null in an update clears it. */
+  actAs: z.string().max(120).nullable().optional(),
+  /** #1996: the routine needs its bot's computer online (Automations >
+   * Requirements > computer); skills and MCP requirements are kept. */
+  requiresComputer: z.boolean().optional(),
+  effort: z.union([z.enum(EFFORT_LEVELS), z.literal("")]).nullable().optional(),
   /** Create only: true starts the routine live, false paused; absent
    * follows `routines.newPaused`. A webhook or email trigger follows the
    * same rule. Pause and resume are actions of their own. */
@@ -293,15 +307,24 @@ const storedDefinitionSchema = z.object({
   watch: z.custom<RoutineWatchPrecheck>((value) => loadRoutinePrecheck(value)?.kind === "watch").optional(),
   folder: z.string().min(1).max(ROUTINE_FOLDER_MAX).optional(),
   deleteWhenFinished: z.boolean().optional(),
+  model: z.string().min(1).max(200).optional(),
+  subagentModel: z.string().min(1).max(200).optional(),
+  actAs: z.string().max(120).optional(),
+  requiresComputer: z.boolean().optional(),
+  effort: z.enum(EFFORT_LEVELS).optional(),
 }).strict();
 const storedChangesSchema = storedDefinitionSchema
-  .omit({ schedule: true, timeoutMinutes: true, watch: true, folder: true })
+  .omit({ schedule: true, timeoutMinutes: true, watch: true, folder: true, model: true, subagentModel: true, actAs: true, effort: true })
   .partial()
   .extend({
     schedule: storedScheduleChangesSchema.optional(),
     timeoutMinutes: z.number().int().min(5).max(240).nullable().optional(),
     watch: z.custom<RoutineWatchPrecheck | null>((value) => value === null || loadRoutinePrecheck(value)?.kind === "watch").optional(),
     folder: z.string().min(1).max(ROUTINE_FOLDER_MAX).nullable().optional(),
+    model: z.string().min(1).max(200).nullable().optional(),
+    subagentModel: z.string().min(1).max(200).nullable().optional(),
+    actAs: z.string().max(120).nullable().optional(),
+    effort: z.enum(EFFORT_LEVELS).nullable().optional(),
   })
   .strict()
   .refine(
@@ -758,6 +781,20 @@ function triggerSchedule(trigger: { type: "webhook" } | { type: "email" }): Rout
   return { type: "event", source: "email" };
 }
 
+/** A routine tool's `model`: a model id, or undefined for the bot's model. */
+function modelInput(value: unknown): string | undefined {
+  const parsed = parseRoutineModel(value);
+  if (!parsed.ok) throw new RoutineRequestError(parsed.error);
+  return parsed.model;
+}
+
+/** A routine tool's `actAs`: a role slug, "" for "Moi", undefined for none. */
+function actAsInput(value: unknown): string | undefined {
+  const parsed = parseRoutineActAs(value);
+  if (!parsed.ok) throw new RoutineRequestError(parsed.error);
+  return parsed.actAs;
+}
+
 /** A routine tool's `watch`: a watch pre-check, or null to remove one. */
 function watchInput(value: unknown): RoutineWatchPrecheck | null {
   if (value === null) return null;
@@ -788,6 +825,11 @@ function normalizeDefinition(input: RoutineToolDefinitionInput, now: number): Ro
     ...(input.watch != null ? { watch: watchInput(input.watch)! } : {}),
     ...(cleanRoutineFolder(input.folder) ? { folder: cleanRoutineFolder(input.folder)! } : {}),
     ...(input.deleteWhenFinished === true ? { deleteWhenFinished: true } : {}),
+    ...(modelInput(input.model) ? { model: modelInput(input.model)! } : {}),
+    ...(modelInput(input.subagentModel) ? { subagentModel: modelInput(input.subagentModel)! } : {}),
+    ...(actAsInput(input.actAs) !== undefined ? { actAs: actAsInput(input.actAs)! } : {}),
+    ...(input.requiresComputer === true ? { requiresComputer: true } : {}),
+    ...(input.effort ? { effort: input.effort } : {}),
   };
 }
 
@@ -808,6 +850,11 @@ function normalizeChanges(
   if (input.watch !== undefined) changes.watch = watchInput(input.watch);
   if (input.folder !== undefined) changes.folder = cleanRoutineFolder(input.folder) ?? null;
   if (input.deleteWhenFinished !== undefined) changes.deleteWhenFinished = input.deleteWhenFinished === true;
+  if (input.model !== undefined) changes.model = modelInput(input.model) ?? null;
+  if (input.subagentModel !== undefined) changes.subagentModel = modelInput(input.subagentModel) ?? null;
+  if (input.actAs !== undefined) changes.actAs = actAsInput(input.actAs) ?? null;
+  if (input.requiresComputer !== undefined) changes.requiresComputer = input.requiresComputer === true;
+  if (input.effort !== undefined) changes.effort = input.effort || null;
   return changes;
 }
 
@@ -1103,9 +1150,14 @@ function effectiveDefinition(operation: RoutineRequestOperation, manager: Routin
     ...(existing.precheck?.kind === "watch" ? { watch: structuredClone(existing.precheck) } : {}),
     ...(existing.folder ? { folder: existing.folder } : {}),
     ...(existing.deleteWhenFinished ? { deleteWhenFinished: true } : {}),
+    ...(existing.model ? { model: existing.model } : {}),
+    ...(existing.subagentModel ? { subagentModel: existing.subagentModel } : {}),
+    ...(existing.actAs !== undefined ? { actAs: existing.actAs } : {}),
+    ...(existing.requires?.computer ? { requiresComputer: true } : {}),
+    ...(existing.effort ? { effort: existing.effort } : {}),
   };
   if (operation.action !== "update") return base;
-  const { schedule, timeoutMinutes, watch, folder, ...changes } = operation.changes;
+  const { schedule, timeoutMinutes, watch, folder, model, subagentModel, actAs, effort, ...changes } = operation.changes;
   const merged: RoutineRequestDefinition = {
     ...base,
     ...changes,
@@ -1117,6 +1169,14 @@ function effectiveDefinition(operation: RoutineRequestOperation, manager: Routin
   else if (watch !== undefined) merged.watch = watch;
   if (folder === null) delete merged.folder;
   else if (folder !== undefined) merged.folder = folder;
+  if (model === null) delete merged.model;
+  else if (model !== undefined) merged.model = model;
+  if (subagentModel === null) delete merged.subagentModel;
+  else if (subagentModel !== undefined) merged.subagentModel = subagentModel;
+  if (actAs === null) delete merged.actAs;
+  else if (actAs !== undefined) merged.actAs = actAs;
+  if (effort === null) delete merged.effort;
+  else if (effort !== undefined) merged.effort = effort;
   return merged;
 }
 
@@ -1215,6 +1275,11 @@ function cardCopy(
       ...(definition.watch ? [watchLine(definition.watch)] : []),
       ...(definition.folder ? [`Folder: ${redactSecretsInText(definition.folder)}`] : []),
       ...(definition.deleteWhenFinished ? ["Delete once finished: yes"] : []),
+      ...(definition.model ? [`Model: ${redactSecretsInText(definition.model)} (the bot's engine; chat keeps the bot's model)`] : []),
+      ...(definition.subagentModel ? [`Sub-agent model: ${redactSecretsInText(definition.subagentModel)} (Claude sub-agents of its runs)`] : []),
+      ...(definition.actAs !== undefined ? [`Acts as: ${definition.actAs ? redactSecretsInText(definition.actAs) : "the person's own access"} (Perspicax role)`] : []),
+      ...(definition.requiresComputer ? ["Needs its computer: yes (the pre-run check waits for the bot's computer to be online)"] : []),
+      ...(definition.effort ? [`Effort: ${definition.effort} (chat keeps the bot's effort)`] : []),
       // Last before the instructions: the one sentence that says what
       // confirming actually does, in the reader's terms.
       ...(operation.action === "create" || operation.action === "update"
@@ -1246,6 +1311,11 @@ function inputFromDefinition(definition: RoutineRequestDefinition, botId: string
     ...(definition.watch ? { precheck: structuredClone(definition.watch) } : {}),
     ...(definition.folder ? { folder: definition.folder } : {}),
     ...(definition.deleteWhenFinished ? { deleteWhenFinished: true } : {}),
+    ...(definition.model ? { model: definition.model } : {}),
+    ...(definition.subagentModel ? { subagentModel: definition.subagentModel } : {}),
+    ...(definition.actAs !== undefined ? { actAs: definition.actAs } : {}),
+    ...(definition.requiresComputer ? { requires: { computer: true } } : {}),
+    ...(definition.effort ? { effort: definition.effort } : {}),
   };
 }
 
@@ -1253,6 +1323,7 @@ function updateFromChanges(
   changes: RoutineRequestChanges,
   now: number,
   currentSchedule: RoutineSchedule,
+  currentRequires?: RoutineRequirements,
 ): Partial<RoutineInput> {
   const patch: Partial<RoutineInput> = {};
   if (changes.name !== undefined) patch.name = changes.name;
@@ -1266,6 +1337,11 @@ function updateFromChanges(
   if (changes.watch !== undefined) patch.precheck = changes.watch === null ? null : structuredClone(changes.watch);
   if (changes.folder !== undefined) patch.folder = changes.folder;
   if (changes.deleteWhenFinished !== undefined) patch.deleteWhenFinished = changes.deleteWhenFinished;
+  if (changes.model !== undefined) patch.model = changes.model;
+  if (changes.subagentModel !== undefined) patch.subagentModel = changes.subagentModel;
+  if (changes.actAs !== undefined) patch.actAs = changes.actAs;
+  if (changes.requiresComputer !== undefined) patch.requires = withRequiredComputer(currentRequires, changes.requiresComputer);
+  if (changes.effort !== undefined) patch.effort = changes.effort;
   return patch;
 }
 
@@ -1345,6 +1421,11 @@ function revalidateOperation(operation: RoutineRequestOperation, manager: Routin
         || Boolean(routine.continuity) !== Boolean(definition.continuity)
         || (routine.overlap ?? "skip") !== (definition.overlap ?? "skip")
         || Boolean(routine.deleteWhenFinished) !== Boolean(definition.deleteWhenFinished)
+        || (routine.model ?? "") !== (definition.model ?? "")
+        || (routine.subagentModel ?? "") !== (definition.subagentModel ?? "")
+        || routine.actAs !== definition.actAs
+        || Boolean(routine.requires?.computer) !== Boolean(definition.requiresComputer)
+        || routine.effort !== definition.effort
         || !isDeepStrictEqual(routine.precheck?.kind === "watch" ? routine.precheck : undefined, definition.watch)
         || (routine.attachments?.length ?? 0) > 0) return false;
       // An omitted start means "every N minutes", not a new phase each time
@@ -1436,6 +1517,11 @@ function routineSnapshot(routine: Routine): RoutineRequestSnapshot | undefined {
     ...(routine.overlap === "queue" ? { overlap: "queue" as const } : {}),
     ...(routine.precheck ? { precheck: structuredClone(routine.precheck) } : {}),
     ...(routine.folder ? { folder: routine.folder } : {}),
+    ...(routine.model ? { model: routine.model } : {}),
+    ...(routine.subagentModel ? { subagentModel: routine.subagentModel } : {}),
+    ...(routine.actAs !== undefined ? { actAs: routine.actAs } : {}),
+    ...(routine.requires?.computer ? { requiresComputer: true } : {}),
+    ...(routine.effort ? { effort: routine.effort } : {}),
     enabled: routine.enabled,
     ...(routine.target === "room-goal" ? { target: "room-goal" as const } : {}),
     ...(routine.groupId ? { groupId: routine.groupId } : {}),
@@ -1446,7 +1532,7 @@ function routineSnapshot(routine: Routine): RoutineRequestSnapshot | undefined {
 
 /** Puts an updated routine's definition back exactly: an interval's
  * restrictions are cleared explicitly, since an omitted one is kept. */
-function restorePatch(before: RoutineRequestSnapshot, now: number): Partial<RoutineInput> {
+function restorePatch(before: RoutineRequestSnapshot, now: number, currentRequires?: RoutineRequirements): Partial<RoutineInput> {
   const schedule = asSchedule(before.schedule, now);
   return {
     name: before.name,
@@ -1461,6 +1547,11 @@ function restorePatch(before: RoutineRequestSnapshot, now: number): Partial<Rout
     overlap: before.overlap ?? "skip",
     precheck: before.precheck === undefined ? null : structuredClone(before.precheck) as RoutineInput["precheck"],
     folder: before.folder ?? null,
+    model: before.model ?? null,
+    subagentModel: before.subagentModel ?? null,
+    actAs: before.actAs ?? null,
+    requires: withRequiredComputer(currentRequires, before.requiresComputer === true),
+    effort: before.effort ?? null,
   };
 }
 
@@ -1707,7 +1798,7 @@ export class RoutineRequestService {
           const current = ownedRoutine(this.routines, routineId, owner);
           if (!current || current.updatedAt !== undo.appliedUpdatedAt) return stale;
           const patch = operation.action === "update"
-            ? restorePatch(undo.before!, now)
+            ? restorePatch(undo.before!, now, current.requires)
             : { enabled: operation.action === "pause" };
           // The Undo is said in this conversation: its line says so too.
           if (!this.routines.update(routineId, patch, undefined, { conversation: { threadId: args.threadId, messageId: message.id } })) return stale;
@@ -1732,6 +1823,9 @@ export class RoutineRequestService {
             ...(before.precheck !== undefined ? { precheck: structuredClone(before.precheck) as RoutineInput["precheck"] } : {}),
             ...(before.resultsThreadId ? { resultsThreadId: before.resultsThreadId } : {}),
             ...(before.folder ? { folder: before.folder } : {}),
+            ...(before.requiresComputer ? { requires: { computer: true } } : {}),
+            ...(before.model ? { model: before.model } : {}),
+            ...(before.effort ? { effort: before.effort } : {}),
           }).id;
           break;
         }
@@ -2018,7 +2112,7 @@ export class RoutineRequestService {
         const current = verifyManageSnapshot(operation, this.routines, operation.forBot?.botId ?? payload.botId);
         const updated = this.routines.update(
           operation.routineId,
-          updateFromChanges(operation.changes, confirmationAt, current.schedule),
+          updateFromChanges(operation.changes, confirmationAt, current.schedule, current.requires),
           {
             requestId: payload.requestId,
             messageId,

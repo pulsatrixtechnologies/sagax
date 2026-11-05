@@ -23,11 +23,15 @@ import { effortLabel } from "@/lib/effort-label";
 import { isUltracodeEffort } from "../../shared/ultracode-effort";
 import { batchModelActions } from "@/lib/batch-bot-model";
 import { useModelFavorites } from "@/lib/model-favorites";
+import { useModelFavoritesServerSync } from "@/lib/model-favorites-sync";
+import { requestSettingsCard } from "./SettingsPrimitives";
+import { modelOffer, type ModelSwitches } from "../../shared/offered-models";
 import type { EffortLevel } from "../../shared/wire";
 
 import {
   COMPOSER_MODEL_EVENT,
-  MENU_WIDTH,
+  MENU_WIDTH as BASE_MENU_WIDTH,
+  PANES_MENU_WIDTH,
   composerModelLabel,
   engineStatus,
   isDesktopLocalModel,
@@ -44,7 +48,7 @@ import { EffortRow, ModelVariantRow, variantLabel } from "./ModelPicker.tsx-part
 import { ClaudeAccountSelect, ModelEngineRail } from "./ModelPicker.tsx-parts/ModelEngineRail";
 import { buildModelPickerSections } from "./ModelPicker.tsx-parts/buildSections";
 import { ModelPickerTrigger } from "./ModelPicker.tsx-parts/ModelPickerTrigger";
-import { ModelPickerMenu } from "./ModelPicker.tsx-parts/ModelPickerMenu";
+import { ModelPickerMenu, windowOnlyMenuPlace } from "./ModelPicker.tsx-parts/ModelPickerMenu";
 import { useModelPickerEffects } from "./ModelPicker.tsx-parts/useModelPickerEffects";
 import { modelPickerComposerLabel, modelPickerFollowLine, modelPickerSummary } from "./ModelPicker.tsx-parts/labels";
 
@@ -75,6 +79,18 @@ function variantLabelForSelection(
   );
 }
 
+/** How many models of the given engines are off for this person or the
+ * organization (shared/offered-models.ts). */
+export function turnedOffCount(instances: readonly { instanceId: string; models: { options: readonly { id: string }[] } }[], switches: ModelSwitches): number {
+  let count = 0;
+  for (const instance of instances) {
+    for (const option of instance.models.options) {
+      if (modelOffer(switches, instance.instanceId, option.id) !== "on") count += 1;
+    }
+  }
+  return count;
+}
+
 export function ModelPicker({
   bot,
   threadId,
@@ -92,6 +108,7 @@ export function ModelPicker({
   fallbackAnchor,
   /** Other selected bots that receive the same model and effort. */
   alsoApplyTo,
+  panes = false,
 }: {
   bot: Bot;
   threadId?: string;
@@ -120,8 +137,13 @@ export function ModelPicker({
   /** Headless: what the menu opens above when no row asked (the mascot). */
   fallbackAnchor?: () => HTMLElement | null;
   alsoApplyTo?: readonly string[];
+  /** Settings > Models and Bot > Model (#2050): the two-pane menu
+   * (providers beside models) with the "n turned off · Active models" link. */
+  panes?: boolean;
 }) {
   const { state, dispatch, refreshInstances, refreshModels: refreshInstanceModels } = useStore();
+  // #2050: the stars follow the person through /api/me/models
+  useModelFavoritesServerSync();
   const applyToOthers = (next: ModelSelection) => {
     if (!alsoApplyTo?.length) return;
     const others = alsoApplyTo.flatMap((id) => {
@@ -133,10 +155,8 @@ export function ModelPicker({
   };
   const [menu, setMenu] = useState(windowOnly);
   const menuMotion = useMenuMotion(menu && !bot.busy);
-  const [menuAt, setMenuAt] = useState<{ left?: number; right?: number; bottom: number } | null>(() => (
-    windowOnly && typeof window !== "undefined"
-      ? { left: 24, bottom: Math.max(8, window.innerHeight - 96) }
-      : null
+  const [menuAt, setMenuAt] = useState<{ left?: number; right?: number; top?: number; bottom?: number } | null>(() => (
+    windowOnly && typeof window !== "undefined" ? windowOnlyMenuPlace() : null
   ));
   const anchorRef = useRef<HTMLElement | null>(null);
   const [menuDoneCall, setMenuDoneCall] = useState<{ call: () => void } | null>(null);
@@ -194,6 +214,13 @@ export function ModelPicker({
     closeAll();
     dispatch({ type: "toggleAppSettings", open: true, section: "providers" });
   };
+  // Settings > Models > Advanced > Active models, from the two-pane menu.
+  const openActiveModels = () => {
+    closeAll();
+    requestSettingsCard("models.advanced");
+    dispatch({ type: "toggleAppSettings", open: true, section: "engines" });
+  };
+  const turnedOff = panes ? turnedOffCount(pickerInstances, switches) : 0;
 
   const profile = state.bots.find((candidate) => candidate.id === bot.id) ?? bot;
   const follows = threadId ? profile.tasks?.find((task) => task.threadId === threadId)?.followsBotModel : undefined;
@@ -317,6 +344,7 @@ export function ModelPicker({
       closeMenu();
       return;
     }
+    const MENU_WIDTH = panes ? PANES_MENU_WIDTH : BASE_MENU_WIDTH;
     anchorRef.current = anchor;
     setMenuDoneCall(onDone ? { call: onDone } : null);
     const box = anchor ? (anchor.closest<HTMLElement>('[role="menu"]') ?? anchor) : null;
@@ -325,14 +353,16 @@ export function ModelPicker({
       if (anchor && box) {
         const left = Math.max(8, Math.min(box.getBoundingClientRect().right + 6, window.innerWidth - MENU_WIDTH - 8));
         setMenuAt({ left, bottom: Math.max(8, window.innerHeight - rect.bottom - 6) });
-      } else if (headless || windowOnly) {
+      } else if (windowOnly) {
+        setMenuAt(windowOnlyMenuPlace());
+      } else if (headless) {
         setMenuAt({ left: Math.max(8, Math.min(rect?.left ?? 24, window.innerWidth - MENU_WIDTH - 8)), bottom: Math.max(8, window.innerHeight - (rect?.top ?? 80) + 6) });
       } else {
         const right = Math.max(8, Math.min(window.innerWidth - rect.right, window.innerWidth - MENU_WIDTH - 8));
         setMenuAt({ right, bottom: window.innerHeight - rect.top + 6 });
       }
     } else if (windowOnly) {
-      setMenuAt({ left: 24, bottom: Math.max(8, window.innerHeight - 96) });
+      setMenuAt(windowOnlyMenuPlace());
     } else setMenuAt(null);
     setMenu(true);
   };
@@ -413,6 +443,11 @@ export function ModelPicker({
         setEffort,
         pick,
         effortTitle,
+        // Settings > Models list: hang off the chip, inside the Settings window.
+        anchorRef: listChip && !headless && !windowOnly ? triggerRef : undefined,
+        panes,
+        turnedOff,
+        openActiveModels: panes ? openActiveModels : undefined,
       }))}
     </div>
   );

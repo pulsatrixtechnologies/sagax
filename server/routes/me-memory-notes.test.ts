@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { NotesCallResult } from "../memory/perspicax-memory-notes.ts";
-import type { RequestAuth } from "../request-auth.ts";
-import type { SessionRecord } from "../sessions.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import type { SessionRecord } from "../auth/sessions.ts";
 import { PASS, type RouteContext } from "./table.ts";
 import { createMeMemoryNotesRoutes, ME_MEMORY_PREFIX, memoryPrincipal, upstreamOf } from "./me-memory-notes.ts";
 
@@ -54,6 +54,17 @@ describe("me-memory-notes routes", () => {
       path: "/api/v1/memory/read/bulk",
       body: { action: "delete" },
     });
+    expect(upstreamOf("PUT", "/api/me/memory/order", url, { scope: "me", kind: "note", topic: "notes", ids: ["a"] })).toEqual({
+      method: "PUT",
+      path: "/api/v1/memory/read/order",
+      body: { scope: "me", kind: "note", topic: "notes", ids: ["a"] },
+    });
+    expect(upstreamOf("GET", "/api/me/memory/order", url, undefined)).toBe("method");
+    expect(upstreamOf("GET", "/api/me/memory/collections", url, undefined)).toEqual({ method: "GET", path: "/api/v1/memory/read/collections" });
+    expect(upstreamOf("POST", "/api/me/memory/collections", url, { title: "T" })).toMatchObject({ method: "POST", path: "/api/v1/memory/read/collections" });
+    expect(upstreamOf("PUT", "/api/me/memory/collections/c1", url, { items: [] })).toMatchObject({ method: "PUT", path: "/api/v1/memory/read/collections/c1" });
+    expect(upstreamOf("DELETE", "/api/me/memory/collections/c%2F..%2Fx", url, undefined)).toEqual({ method: "DELETE", path: "/api/v1/memory/read/collections/c%2F..%2Fx" });
+    expect(upstreamOf("GET", "/api/me/memory/collections/a/b", url, undefined)).toBeNull();
     expect(upstreamOf("GET", "/api/me/connections", url, undefined)).toBeNull();
     expect(upstreamOf("DELETE", "/api/me/memory/tree", url, undefined)).toBe("method");
   });

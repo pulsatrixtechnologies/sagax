@@ -11,7 +11,7 @@
 //
 // Tool definitions and per-family handlers live under ./agents-tools/.
 import { readFileSync } from "node:fs";
-import { isOpenApiTool } from "../openapi-tools.ts";
+import { isOpenApiTool } from "../mcp/openapi-tools.ts";
 import { callCardTool, CARD_TOOL_NAMES } from "./agents-call-cards.ts";
 import { callPhoneTool, PHONE_TOOL_NAME } from "./agents-phone-tools.ts";
 import { callVideoTool, VIDEO_TOOL_NAME } from "./agents-video.ts";

@@ -4,6 +4,7 @@ import { downloadBotZip, showBotZipExport } from "@/lib/bot-zip";
 import { ThreadLinkContext } from "@/components/ThreadLinkMenu";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { isStreamSegment, segmentsAbove, segmentsToReach } from "@/lib/single-stream";
+import { startedByNewChat } from "@/lib/fresh-topic";
 import { useSegmentTranscript } from "@/lib/use-segment-transcript";
 import { useFocusMessage } from "@/lib/focus-message";
 import { citationAttachment } from "@/lib/citations";
@@ -18,7 +19,6 @@ import { ReactionChips } from "./Reactions";
 import { myReactions, reactionSelfIds, useToggleReaction } from "@/lib/reactions";
 import {
   AlertTriangle,
-  ArrowDown,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -39,6 +39,7 @@ import {
   X,
   AppWindow,
   MessageSquare,
+  Monitor,
   PanelLeftClose,
 } from "lucide-react";
 import { WorkingDots } from "@/components/WorkingIndicator";
@@ -58,7 +59,6 @@ import { useCaptionChrome, useDesktopCapabilities, useMacInsetChrome } from "@/c
 import {
   api,
   currentTaskBot,
-  useStore,
   formatTime,
   openBot,
   openThread,
@@ -81,7 +81,7 @@ import { CODEX_USAGE_URL, codexUsageLimitReached } from "../../shared/codex-usag
 import { ClaudeUpdatePrompt } from "./ClaudeUpdatePrompt";
 import { MacCuaRecoveryActions } from "./MacCuaRecoveryActions";
 import { macCuaPermissionMessage, missingMacCuaPermissions } from "@/lib/mac-cua-permissions";
-import { failedTurnCause, signedOutEngine } from "@/lib/failed-turn";
+import { failedTurnCause, isEngineLimitFailure, isPreSendRefusal, signedOutEngine } from "@/lib/failed-turn";
 import { localizedEngineCause } from "@/lib/engine-error-text";
 import { plainErrorLine, readableError } from "@/lib/plain-error";
 import { openPlaceAction, placeRowViewFor, usePlaceSeat, worksOnSimpleLabel } from "@/lib/place-view";
@@ -124,7 +124,7 @@ import { DataResultChip } from "./DataResultChip";
 import { useDataWindowItem } from "./DataWindowButton";
 import { ThreadRefText } from "./ThreadRefs";
 import { optionsCardRow } from "./OptionsCardRow";
-import { MessageBoundary, UnknownMessageCard, isUnknownMessageKind } from "./MessageBoundary";
+import { MessageBoundary, StepBoundary, UnknownMessageCard, isUnknownMessageKind, stepFallbackText, stepIdOf } from "./MessageBoundary";
 import { WidgetMessage } from "./widget/WidgetMessage";
 import { AppMessage } from "./AppMessage";
 import { PagePublishCard } from "./PublishedPages";
@@ -151,11 +151,12 @@ import { ChatFindBar } from "./ChatFindBar";
 import { ReplyQuote } from "./ReplyQuote";
 import { SecretRequestCard } from "./SecretRequestCard";
 import { RoutineRunCard } from "./RoutineRunCard";
+import { AttentionCard } from "./AttentionCard";
 import { CallRecordRow } from "./CallRecordRow";
 import { AttachmentGallery, collectMessageFiles, replyAttachmentGroup, splitMessageAttachments } from "./AttachmentGallery";
 import { ConversationGalleryProvider } from "./ConversationGallery";
 import { prefersWideBubble } from "@/lib/rich-blocks";
-import { CHAT_BUBBLE_WIDTH_CLASS, CHAT_COLUMN_CLASS, chatBubbleWidth } from "@/lib/chat-bubble-width";
+import { chatBubbleWidth, useChatBubbleWidthClasses, useChatColumnClass } from "@/lib/chat-bubble-width";
 import { ScreenFrame } from "./ScreenFrame";
 import { CompactionChip, DigestChip } from "./DigestChip";
 import { RenameTitle } from "./RenameTitle";
@@ -184,7 +185,9 @@ import { foldCollapsedEntry, voiceCallPlan, voiceCallVisibleSpan } from "@/lib/v
 import { VoiceCallCard } from "./VoiceCallCard";
 import { BotExchangeChip, ExchangeColumnProvider, TranscriptDate, useExchangeColumn } from "./BotExchangeChip";
 import { RoutineRunExchange } from "./routines/RoutineRunExchange";
+import { CodingChat } from "./coding/CodingChat";
 import { GotoGroupChip } from "./GotoGroupChip";
+import { JumpToLatestPill } from "./JumpToLatestPill";
 import { collapseGotoLines, gotoGroupFromConversations, silentChatItem, type GotoGroup, type GotoTarget } from "@/lib/goto-lines";
 import { StatusActivityRow } from "@/components/StatusActivityRow";
 import { CancelledTurnRow } from "./CancelledTurnRow";
@@ -197,7 +200,8 @@ import { useComposerDockPad, useMeasuredHeight } from "@/lib/composer-dock";
 import { useTranscriptViewport } from "@/hooks/use-transcript-viewport";
 import { offscreenAnchorShift, useOffscreenRowAnchor } from "@/hooks/use-offscreen-row-anchor";
 import { claimMessageEntrance } from "@/lib/message-entrance";
-import { useStoreDispatch, useStoreGetter, useStoreSelector } from "@/state/store-selector";
+import { equalRows, peerBots, peerGroups } from "@/state/view-slices";
+import { shallowEqual, useStoreDispatch, useStoreGetter, useStoreSelector } from "@/state/store-selector";
 import { useUnreadDivider } from "@/hooks/use-unread-divider";
 import { NewMessagesDivider } from "./NewMessagesDivider";
 import { unreadMessageIds } from "@/lib/unread-divider";
@@ -476,6 +480,8 @@ export function FailedTurnRow({ tool, engine, onRetry, botId, threadId }: {
   "use memo";
   const config = useStoreSelector((current) => current.config);
   const resume = useLimitResetContinue(botId, threadId, tool.limitResetsAt);
+  // An engine at its limit or out of credit: the composer says so, not the chat.
+  if (isEngineLimitFailure(tool)) return null;
   if (tool.place && botId) return <PlaceFailedRow place={tool.place} botId={botId} threadId={threadId} onRetry={onRetry} />;
   const signedOut = signedOutEngine(tool, engine);
   // A signed-out engine: its sign-in card is the whole answer, no error row or
@@ -517,8 +523,23 @@ export function FailedTurnRow({ tool, engine, onRetry, botId, threadId }: {
   );
 }
 
+/** #2013: a room has no composer line for a bot's engine, so an engine
+ * that refused a turn before any prompt went out is said there quietly, in
+ * the reader's words, never as a red card. */
+export function PreSendRefusalLine({ tool }: { tool: NonNullable<Message["tool"]> }) {
+  const rawCause = failedTurnCause(tool.name) ?? tool.name;
+  const cause = localizedEngineCause(rawCause) ?? rawCause;
+  const line = plainErrorLine(rawCause) ?? cause;
+  return (
+    <div role="status" data-presend-refusal className="flex w-fit max-w-[min(42rem,78%)] items-start gap-2 rounded-xl border border-hairline/40 bg-panel px-3 py-2 text-[13px] text-ink-secondary">
+      <Info size={13} aria-hidden="true" className="mt-0.5 shrink-0" />
+      <span className="min-w-0 break-words">{line}</span>
+    </div>
+  );
+}
+
 /** The text fallback for a row that will not draw. Rooms import it from here. */
-export { MessageBoundary };
+export { MessageBoundary, StepBoundary };
 
 /** Inline editor a user bubble turns into: the send key sends (forking the
  * conversation), Esc cancels. Any other Enter is a newline, like the composer. */
@@ -614,6 +635,7 @@ const Bubble = memo(function Bubble({
 }) {
   "use memo";
   const { botId, threadId, botName, viewerName, voiceId, tts, localVoice, busy, bots, mentionPeers, focus, dispatch, onBranch, reactionSelf } = useChatRows();
+  const bubbleWidths = useChatBubbleWidthClasses();
   // Emoji reactions (src/components/Reactions.tsx): the smiley of the hover
   // row and the head of its "…" menu, the chips under the bubble.
   const toggleReactionOn = useToggleReaction(threadId, dispatch);
@@ -749,7 +771,7 @@ const Bubble = memo(function Bubble({
             "text-[13px] leading-5",
             emerging && "turn-answer",
             "rounded-[18px]",
-            CHAT_BUBBLE_WIDTH_CLASS[chatBubbleWidth({ terminal: !user && Boolean(message.terminalEmbed), wide: wideBubble || remoteCard })],
+            bubbleWidths[chatBubbleWidth({ terminal: !user && Boolean(message.terminalEmbed), wide: wideBubble || remoteCard })],
             user && webhookView
               ? "overflow-hidden border border-accent/25 bg-card text-ink shadow-[0_10px_30px_rgba(0,0,0,0.18)]"
               : remoteCard && !visibleText.trim()
@@ -1010,20 +1032,57 @@ const ActivityChip = memo(function ActivityChip({ message, place = "auto" }: { m
       </div>
     );
   }
+  // 2026-11-05: no role notice in the chat (rows saved before stay hidden)
+  if (tool.roleNotice) return null;
   return <ToolActivity tool={tool} place={toolPlace(tool.name, place)} nameOf={botNames(bots)} />;
 });
 
-/** A routine run's receipt. View run opens the run's detail (2026-10-29),
- * a run of a deleted routine too, to read. */
-export function RoutineRunRow({ message, onResume }: { message: Message; botId: string; onResume?: () => void }) {
+/** What a bot's turn elsewhere left for the person (2026-11-05): its card,
+ * with the thread it was said in and the run it came from one click away. */
+export function AttentionRow({ message }: { message: Message }) {
   "use memo";
   const dispatch = useStoreDispatch();
+  const getState = useStoreGetter();
+  const showThreads = useShowThreads();
+  const card = message.attention;
+  const owner = useStoreSelector((state) => state.bots.find((candidate) => candidate.id === card?.botId));
+  if (!card) return null;
+  return (
+    <AttentionCard
+      card={card}
+      bot={owner}
+      onOpenThread={(botId, threadId) => { openThread(dispatch, { botId, threadId }, getState(), showThreads); }}
+      onOpenRun={(runId) => openRoutineRun(dispatch, { runId })}
+    />
+  );
+}
+
+/** A routine run's receipt. View run opens the run's detail (2026-10-29),
+ * a run of a deleted routine too, to read. */
+export function RoutineRunRow({ message, botId, onResume }: { message: Message; botId: string; onResume?: () => void }) {
+  "use memo";
+  const dispatch = useStoreDispatch();
+  const getState = useStoreGetter();
+  const showThreads = useShowThreads();
   const run = message.routineRun;
+  // 2026-11-04: the card leads with the bot's mascot, and a teammate it
+  // handed work to shows its own.
+  // Only the bots this card draws, so another bot's change leaves it be.
+  const ownerId = message.from?.botId ?? botId;
+  const bots = useStoreSelector((state) => {
+    const ids = new Set([ownerId, ...(run?.handedTo ?? []).map((entry) => entry.botId)]);
+    return state.bots.filter((candidate) => ids.has(candidate.id));
+  }, shallowEqual);
+  const owner = bots.find((candidate) => candidate.id === ownerId);
   return (
     <RoutineRunCard
       message={message}
+      bot={owner}
+      botOf={(id) => bots.find((candidate) => candidate.id === id)}
       onResume={onResume}
       onOpen={run?.runId ? () => openRoutineRun(dispatch, { runId: run.runId, routineId: run.routineId }) : undefined}
+      // 2026-11-03: a run that handed work to a teammate links that thread.
+      onOpenThread={(botId, threadId) => { openThread(dispatch, { botId, threadId }, getState(), showThreads); }}
     />
   );
 }
@@ -1121,8 +1180,8 @@ const MessagesList = memo(function MessagesList({
   // viewing) read slices of the store, so an unrelated dispatch (an unread
   // mark, a notice) leaves the list alone; the rows inside stay memoized on
   // ChatRows.
-  const storeBots = useStoreSelector((current) => current.bots);
-  const storeGroups = useStoreSelector((current) => current.groups);
+  const storeBots = useStoreSelector(peerBots, equalRows);
+  const storeGroups = useStoreSelector(peerGroups, equalRows);
   const config = useStoreSelector((current) => current.config);
   // read when a chip is clicked, so a store event does not render the list
   const getState = useStoreGetter();
@@ -1256,10 +1315,13 @@ const MessagesList = memo(function MessagesList({
   const withCloudAgents = (index: number, node: ReactNode): ReactNode => {
     const group = cloudAnchors.get(index);
     const item = items[index]!;
+    const first = listedItemMessages(item)[0];
     return (
-      <Fragment key={`row:${item.kind}:${listedItemMessages(item)[0]?.id ?? index}`}>
+      <Fragment key={`row:${item.kind}:${first?.id ?? index}`}>
         {conversationLines(conversationAt.before.get(index))}
-        {node}
+        <StepBoundary stepId={stepIdOf(first)} fallbackText={stepFallbackText(first)}>
+          {node}
+        </StepBoundary>
         {group && <div className="flex justify-start"><CloudAgentsCard records={group} botId={botId} confidential={confidential} /></div>}
       </Fragment>
     );
@@ -1371,32 +1433,34 @@ const MessagesList = memo(function MessagesList({
               {divider}
               <CwActivityWidgets messages={item.messages} threadId={threadId} botId={botId} />
               {shown.length > 0 && (
-                <ActivityRun
-                  messages={shown}
-                  elapsedMs={item.elapsedMs}
-                  bare={!showToolCalls}
-                  focusedId={focusedId}
-                  nameOf={botNames(bots)}
-                  renderStep={(step) => (
-                    <div className="contents" data-mid={step.id}>
-                      <ActivityChip message={step} place={place} />
-                    </div>
-                  )}
-                  renderMessage={(message) => (
-                    <div className="contents" data-mid={message.id}>
-                      <Bubble
-                        message={message}
-                        editing={false}
-                        pinned={message.id === pinnedMessageId}
-                        onStartEdit={onStartEdit}
-                        onCancelEdit={onCancelEdit}
-                        onSubmitEdit={onSubmitEdit}
-                        replyTarget={lookups.replyTarget(message)}
-                        onReply={onReply}
-                      />
-                    </div>
-                  )}
-                />
+                <StepBoundary stepId={item.id} fallbackText={stepFallbackText(shown[0])}>
+                  <ActivityRun
+                    messages={shown}
+                    elapsedMs={item.elapsedMs}
+                    bare={!showToolCalls}
+                    focusedId={focusedId}
+                    nameOf={botNames(bots)}
+                    renderStep={(step) => (
+                      <div className="contents" data-mid={step.id}>
+                        <ActivityChip message={step} place={place} />
+                      </div>
+                    )}
+                    renderMessage={(message) => (
+                      <div className="contents" data-mid={message.id}>
+                        <Bubble
+                          message={message}
+                          editing={false}
+                          pinned={message.id === pinnedMessageId}
+                          onStartEdit={onStartEdit}
+                          onCancelEdit={onCancelEdit}
+                          onSubmitEdit={onSubmitEdit}
+                          replyTarget={lookups.replyTarget(message)}
+                          onReply={onReply}
+                        />
+                      </div>
+                    )}
+                  />
+                </StepBoundary>
               )}
             </div>
           );
@@ -1428,6 +1492,10 @@ const MessagesList = memo(function MessagesList({
           // a phone call or a purchase on its card (src/components/OutboundCard.tsx)
           if (m.outbound && m.role === "bot") {
             return <MessageBoundary fallbackText={m.text ?? ""}><OutboundCard message={m} /></MessageBoundary>;
+          }
+          // 2026-11-05: what a bot's turn elsewhere left for the person (src/components/AttentionCard.tsx)
+          if (m.attention && m.role === "bot" && m.kind === "text") {
+            return <MessageBoundary fallbackText={m.text ?? ""}><AttentionRow message={m} /></MessageBoundary>;
           }
           // a widget row whose tree never arrived still reads as its text
           switch (m.kind === "widget" && !m.widget ? "text" : m.kind) {
@@ -1466,6 +1534,9 @@ const MessagesList = memo(function MessagesList({
               // plain tool runs stay out unless Settings → Tool calls is on.
               if (isTurnStoppedNotice(m)) return null;
               if (m.tool && failedTurnCause(m.tool.name) !== null) {
+                if (isEngineLimitFailure(m.tool)) return null;
+                // #2013: refused before any prompt went out: the composer says it
+                if (isPreSendRefusal(m.tool)) return null;
                 return (
                   <FailedTurnRow
                     tool={m.tool}
@@ -1719,7 +1790,7 @@ function StreamSegment({ task, first, rows, place, engine, aroundId, onQuote, on
   const transcript = useSegmentTranscript(task.threadId, aroundId);
   const messages = useMemo(() => visibleMessages({ messages: transcript.messages, activeLeafId: transcript.activeLeafId }), [transcript.messages, transcript.activeLeafId]);
   const lookups = useMemo(() => transcriptLookups(transcript.messages, messages), [transcript.messages, messages]);
-  const focusAll = useStoreSelector((current) => current.focusMessage);
+  const focusAll = useStoreSelector((current) => current.focusMessage?.threadId === task.threadId ? current.focusMessage : null);
   const focus = focusAll?.threadId === task.threadId ? focusAll : null;
   const ids = useMemo(() => new Set(messages.map((message) => message.id)), [messages]);
   const segmentRows = useMemo<ChatRows>(() => ({
@@ -1941,6 +2012,7 @@ function useStreamAnchor(
 
 export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   "use memo";
+  const chatColumnClassName = useChatColumnClass();
   const showInspector = useShowInspectorButton();
   const advanced = useAdvancedMode();
   // A switch under way with a cached page of its thread (Bot.switchPreview)
@@ -1954,12 +2026,39 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
     : stored, [stored, preview]);
   const bot = useMemo(() => currentTaskBot(profile), [profile]);
   const dataItem = useDataWindowItem(bot);
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const state = useStoreSelector((current) => ({
+    codingChat: current.codingChat,
+    computerOpen: current.computerOpen,
+    config: current.config,
+    connected: current.connected,
+    disconnectedAt: current.disconnectedAt,
+    error: current.error,
+    everConnected: current.everConnected,
+    inspectorOpen: current.inspectorOpen,
+    notice: current.notice,
+    panelOwner: current.panelOwner,
+    routineRunSheet: current.routineRunSheet,
+    settingsOpen: current.settingsOpen,
+  }), shallowEqual);
+  const storeBots = useStoreSelector(peerBots, equalRows);
+  const engine = useStoreSelector((current) => current.instances.find((instance) => instance.instanceId === bot.modelSelection.instanceId));
+  const computerStart = useStoreSelector((current) => current.computerStarts[bot.id]);
+  const mascotMotion = useStoreSelector((current) => current.mascotMotion?.botId === bot.id ? current.mascotMotion : null);
+  const pendingQueued = useStoreSelector((current) => Object.fromEntries([bot.threadId, ...(bot.tasks ?? []).map((task) => task.threadId)].map((id) => [id, current.pendingQueued[id]])), shallowEqual);
+  const focus = useStoreSelector((current) => current.focusMessage?.threadId === bot.threadId ? current.focusMessage : null);
+  const sheetRun = useStoreSelector((current) => current.routineRuns.find((run) => run.id === current.routineRunSheet?.runId));
+  const sheetRoutine = useStoreSelector((current) => {
+    const sheet = current.routineRunSheet;
+    const routineId = sheet?.routineId ?? current.routineRuns.find((run) => run.id === sheet?.runId)?.routineId;
+    return current.routines.find((routine) => routine.id === routineId) ?? null;
+  });
   const showThreads = useShowThreads();
   const remoteClient = useRemoteClient();
   // 2026-10-26: the failure that paused its routine offers Resume, and its
   // banner leaves once the routine is back on.
-  const routinesNow = state.routines;
+  const routineIds = useMemo(() => new Set(bot.messages.flatMap((message) => message.routineRun ? [message.routineRun.routineId] : [])), [bot.messages]);
+  const routinesNow = useStoreSelector((current) => current.routines.filter((routine) => routineIds.has(routine.id)), shallowEqual);
   const autoPauseSettled = useCallback((m: Message) => routineAutoPauseSettled(m, routinesNow), [routinesNow]);
   const resumeAutoPaused = (m: Message, close: () => void) => {
     const routine = isRoutineAutoPausedNotice(m) ? routinesNow.find((candidate) => candidate.id === m.routineRun?.routineId) : undefined;
@@ -2036,8 +2135,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   // A guest on an OMB Cloud home writes only in conversations it opened.
   const canWrite = useCanWriteIn(bot.threadId);
 
-  const computerStarting = computerStartLine(state.computerStarts[bot.id], bot.name);
-  const mascotMotion = state.mascotMotion?.botId === bot.id ? state.mascotMotion : null;
+  const computerStarting = computerStartLine(computerStart, bot.name);
   const [findOpen, setFindOpen] = useState(false);
   const { replyTo, selectReply, clearReply, consumeReply, restoreReply } = useReplyDraft(
     bot.threadId,
@@ -2102,7 +2200,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   const recordedRun = useMemo(() => runSteps(messages), [messages]);
   const recordedRunCounts = runSummary(recordedRun);
   const engineSupportsAgents = Boolean(
-    state.instances.find((instance) => instance.instanceId === bot.modelSelection.instanceId)?.capabilities?.agentsMcp,
+    engine?.capabilities?.agentsMcp,
   );
   const canSaveRun =
     skillAuthoringEnabled(state.config) && engineSupportsAgents && recordedRunCounts.passed > 0 && recordedRunCounts.running === 0 && !bot.busy;
@@ -2160,9 +2258,8 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   const unreadDivider = useUnreadDivider({ threadId: bot.threadId, messages, following });
 
   // What the rows read besides their own message (see ChatRows).
-  const bots = useDrawnBots(state.bots);
+  const bots = useDrawnBots(storeBots);
   const mentionPeers = useMemo(() => bots.filter((peer) => peer.id !== bot.id), [bots, bot.id]);
-  const focus = state.focusMessage?.threadId === bot.threadId ? state.focusMessage : null;
   const showToolCalls = showToolCallRows(state.config);
   const tts = state.config?.tts;
   const localVoice = useLocalSystemVoice();
@@ -2176,10 +2273,8 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   const hasMore = Boolean(bot.hasMore);
   const reactionSelfKey = reactionSelfIds(state.config, threadReads.self).join("\n");
   const reactionSelf = useMemo(() => reactionSelfKey.split("\n").filter(Boolean), [reactionSelfKey]);
-  const botDmIds = useMemo(
-    () => new Set(state.groups.filter((group) => group.dm && !group.peopleDm).map((group) => group.id)),
-    [state.groups],
-  );
+  const dmIds = useStoreSelector((current) => current.groups.filter((group) => group.dm && !group.peopleDm).map((group) => group.id), shallowEqual);
+  const botDmIds = useMemo(() => new Set(dmIds), [dmIds]);
   const rows = useMemo<ChatRows>(
     () => ({ botId: bot.id, threadId: bot.threadId, botName: bot.name, viewerName, voiceId: bot.voice, tts, localVoice, busy, hasMore, bots, mentionPeers, focus, showToolCalls, locale, dispatch, onBranch, reactionSelf, botDmIds }),
     [bot.id, bot.threadId, bot.name, viewerName, bot.voice, tts, localVoice, busy, hasMore, bots, mentionPeers, focus, showToolCalls, locale, dispatch, onBranch, reactionSelf, botDmIds],
@@ -2204,7 +2299,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   // Coming back put the fresh topic there: it gives way the moment the topic
   // under it comes alive (another device's turn, an approval), never hiding
   // a live conversation. A New topic the person started stays.
-  const queuedUnder = (state.pendingQueued[bot.threadId]?.length ?? 0) > 0;
+  const queuedUnder = (pendingQueued[bot.threadId]?.length ?? 0) > 0;
   const underAlive = Boolean(currentTask && (currentTask.busy || currentTask.activity === "working" || currentTask.activity === "waiting-on-you" || currentTask.unread || currentTask.waitingForTeammates || queuedUnder));
   useEffect(() => {
     if (fresh && freshDraft?.auto && underAlive) dispatch({ type: "freshTopic", botId: bot.id, threadId: null });
@@ -2216,7 +2311,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   // what was loaded above it. A link or a search hit into an earlier topic
   // draws them at once, above whatever of the live topic is loaded (its top
   // sentinel, between the divider and the live rows, fills the rest).
-  const streamFocus = useStoreSelector((current) => current.focusMessage);
+  const streamFocus = useStoreSelector((current) => segmentsAbove(bot.tasks, bot.threadId).some((task) => task.threadId === current.focusMessage?.threadId) ? current.focusMessage : null);
   const streamFocusEarlier = streamHasEarlier && Boolean(streamFocus && !streamFocus.consumed && segmentsAbove(bot.tasks, bot.threadId).some((task) => task.threadId === streamFocus.threadId));
   const [streamShownFor, setStreamShownFor] = useState<string | null>(null);
   // Reply on an earlier topic's message quotes it into the live composer.
@@ -2234,8 +2329,11 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
     }
     composerDockRef.current?.querySelector("textarea")?.focus();
   }, [bot.id, bot.threadId]);
-  const streamEngine = state.instances.find((i) => i.instanceId === bot.modelSelection.instanceId);
-  const streamReadBack = streamHasEarlier && !olderPending && hiddenCount === 0 && !bot.hasMore;
+  const streamEngine = engine;
+  // A topic started from New chat opens on its own (src/lib/fresh-topic.ts):
+  // reading it back to its first line does not draw the earlier topics above
+  // it; a link, a search hit or the activity pill still reaches them.
+  const streamReadBack = streamHasEarlier && !olderPending && hiddenCount === 0 && !bot.hasMore && !startedByNewChat(bot.threadId);
   // One timeline for the live topic: earlier topics above once read back.
   // An asked-for New topic clears that view (empty greeting); scrolling up
   // does not reveal the covered topic until Back (or the topics list).
@@ -2386,7 +2484,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
           size={24}
           motion={mascotMotion?.kind ?? "none"}
           motionKey={mascotMotion?.nonce ?? 0}
-          animated={mascotRowAnimated(bot, state.pendingQueued, mascotMotion?.kind)}
+          animated={mascotRowAnimated(bot, pendingQueued, mascotMotion?.kind)}
         />
       }
     />
@@ -2454,6 +2552,27 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
           // buttons clear the 26px overlay while the rest of the layout stays.
           style={controlsShiftStyle}
         >
+          {/* Advanced (and a remote client's Simple header) keeps Computer
+              here so the guided tour can point at it (Refs #2000). Simple
+              mode otherwise opens Computer from the bot panel. */}
+          {(advanced || remoteClient) && (
+            <button
+              type="button"
+              data-tour="computer"
+              onClick={() => dispatch({ type: "toggleComputer" })}
+              className={cn(
+                "relative rounded-md p-1.5 hover:bg-raised",
+                state.computerOpen ? "text-accent" : "text-ink-secondary hover:text-ink",
+              )}
+              title={t("chat.computer")}
+              aria-label={t("chat.computer")}
+            >
+              <Monitor size={18} />
+              {busy && place === "browser" && (
+                <span aria-hidden="true" className="absolute right-1 top-1 size-1.5 animate-pulse rounded-full bg-success" data-testid="computer-button-live" />
+              )}
+            </button>
+          )}
           {/* One "..." for the conversation: share and export, then the
               Inspector (Advanced) and Data (Experimental). The pill opens
               the bot's panel; while the panel is open its top bar carries
@@ -2547,7 +2666,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
           ref={transcriptRef}
           inert={preview ? true : undefined}
           aria-busy={preview ? true : undefined}
-          className={cn(CHAT_COLUMN_CLASS, "pt-14")}
+          className={cn(chatColumnClassName, "pt-14")}
           style={{ paddingBottom: composerDock.pad }}
           role="log"
           // off: a polite log re-reads every tick and chip while the bot
@@ -2567,7 +2686,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
           ) : (
             <>
           {earlierConversations.length > 0 && <PreviousTopicsLine open={conversationsOpen} onToggle={toggleConversations} />}
-          {conversationsOpen && earlierConversations.length > 0 && <EarlierConversationList self={bot} rows={earlierConversations} bots={state.bots} showToolCalls={showToolCalls} />}
+          {conversationsOpen && earlierConversations.length > 0 && <EarlierConversationList self={bot} rows={earlierConversations} bots={storeBots} showToolCalls={showToolCalls} />}
           {streamDrawn && (
             <>
               <StreamEarlierTopics bot={bot} rows={rows} place={place} engine={streamEngine} scrollRef={scrollRef} followRef={followRef} reach={streamReach} onReached={clearStreamReach} onQuote={quoteEarlier} />
@@ -2597,7 +2716,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
               lastBotTextId={lastBotTextId}
               emergingId={popping}
               canRetryLast={!bot.busy && Boolean(lastUserMessage)}
-              engine={state.instances.find((i) => i.instanceId === bot.modelSelection.instanceId)}
+              engine={engine}
               unreadDividerId={unreadDivider.messageId}
               unreadDividerFading={unreadDivider.fading}
               onStartEdit={startEdit}
@@ -2649,20 +2768,13 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
 
       {/* Dev context pods (Settings > Experimental): an overlay in the
           pane's top-right corner; the transcript above never moves. */}
-      <DevPods bot={bot} messages={messages} composerHeight={composerDock.height + runCardHeight} computerStart={state.computerStarts[bot.id]} dispatch={dispatch} />
+      <DevPods bot={bot} messages={messages} composerHeight={composerDock.height + runCardHeight} computerStart={computerStart} dispatch={dispatch} />
 
       {/* Reading scrollback — one tap back to the end, streaming or not.
           Hidden only while a phone page covers the chat; desktop keeps it
           in the side pane. */}
       {!following && !pageCover && (
-        <button
-          onClick={jumpToLatest}
-          aria-label={t("chat.jumpToLatestAria")}
-          className="animate-pop-in absolute left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-hairline/40 bg-raised px-3 py-1.5 text-[12.5px] text-ink shadow-lg hover:bg-raised-hover"
-          style={{ bottom: composerDock.height + 16 }}
-        >
-          <ArrowDown size={13} /> {t("chat.jumpToLatest")}
-        </button>
+        <JumpToLatestPill onClick={jumpToLatest} bottom={composerDock.height + 16} scrollRef={scrollRef} />
       )}
 
       {runCardOpen && lastRunStep && (
@@ -2726,6 +2838,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
         onEditLast={lastUserMessage && !lastUserMessageHasAttachments && !bot.busy && !lastUserMessage.id.startsWith("optimistic-")
           ? () => setEditingId(lastUserMessage.id)
           : undefined}
+        onRetryLast={regenerate}
       />
       )}
       {canWrite !== false && (
@@ -2823,22 +2936,26 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
       )}
     </Root>
     {state.routineRunSheet && (() => {
-      const sheet = state.routineRunSheet;
-      const run = state.routineRuns.find((candidate) => candidate.id === sheet.runId);
+      const run = sheetRun;
       if (!run) return null;
-      const routine = state.routines.find((candidate) => candidate.id === (sheet.routineId ?? run.routineId)) ?? null;
+      const routine = sheetRoutine;
       return (
         <RoutineRunExchange
           run={run}
           routine={routine}
-          bots={state.bots}
+          bots={storeBots}
           onClose={() => dispatch({ type: "closeRoutineRunSheet" })}
-          onRunAgain={routine ? () => dispatch({ type: "runRoutine", routineId: routine.id, onStarted: (started) => dispatch({ type: "openRoutineRunSheet", runId: started.id, routineId: routine.id, botId: started.botId }) }) : undefined}
           onStop={["queued", "running", "waiting"].includes(run.status) ? () => dispatch({ type: "cancelRoutineRun", runId: run.id }) : undefined}
-          onLogs={() => dispatch({ type: "showRoutines", section: "logs", routineId: routine?.id ?? run.routineId, botId: run.botId })}
         />
       );
     })()}
+    {!side && state.codingChat && (
+      <CodingChat
+        key={`${state.codingChat.botId}:${state.codingChat.itemId}`}
+        target={state.codingChat}
+        onClose={() => dispatch({ type: "closeCodingChat" })}
+      />
+    )}
     </ExchangeColumnProvider>
     </ThreadLinkContext>
   );

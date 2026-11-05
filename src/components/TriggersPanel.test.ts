@@ -10,6 +10,9 @@ import { setLocale, t } from "@/lib/i18n";
 const fixture = vi.hoisted(() => ({
   api: vi.fn(),
   dispatch: vi.fn(),
+  // Confirmations go through ConfirmDialog (useConfirm), never
+  // window.confirm (045b6bca2, lot 8).
+  confirm: vi.fn(),
   webhooks: [] as unknown[],
   bots: [] as unknown[],
   overrides: new Map<number, unknown>(),
@@ -45,6 +48,10 @@ vi.mock("@/state/store", async (importOriginal) => ({
     },
     dispatch: fixture.dispatch,
   }),
+}));
+vi.mock("@/components/ConfirmProvider", () => ({
+  useConfirm: () => fixture.confirm,
+  confirmAsync: fixture.confirm,
 }));
 vi.mock("@/components/Avatar", () => ({ BotAvatar: ({ bot }: { bot: Bot }) => createElement("span", { "data-avatar": bot.id }) }));
 import { TRIGGER_SOURCES, TriggersPanel, triggerInput } from "./TriggersPanel";
@@ -90,7 +97,9 @@ beforeEach(() => {
   fixture.webhooks = [];
   fixture.overrides = new Map();
   fixture.showThreads = true;
-  vi.stubGlobal("window", { confirm: () => true });
+  fixture.confirm.mockReset();
+  fixture.confirm.mockResolvedValue(true);
+  vi.stubGlobal("window", {});
   vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => {}, removeItem: () => {} });
 });
 afterEach(() => {
@@ -224,6 +233,9 @@ describe("Triggers / Automations > Webhooks view", () => {
     copy(0);
     (rows[1]!.props.onToggle as () => void)();
     (rows[1]!.props.onDelete as () => void)();
+    // the confirmation resolves first, then the one rotation stays pending
+    await flush();
+    expect(fixture.confirm).toHaveBeenCalledOnce();
     expect(fixture.api).toHaveBeenCalledOnce();
     expect(writeText).not.toHaveBeenCalled();
     resolveRotation({ webhook: fixture.webhooks[0], credential: { endpointUrl: "https://hooks.example/w1", token: "whsec_w1", command: `curl -X POST https://hooks.example/w1 -H "Authorization: Bearer whsec_w1"` } });
@@ -241,9 +253,8 @@ describe("Triggers / Automations > Webhooks view", () => {
     fixture.webhooks = [webhook("w1")];
     fixture.api.mockRejectedValueOnce(new Error("Offline"));
     const writeText = vi.fn().mockResolvedValue(undefined);
-    const confirm = vi.fn().mockReturnValueOnce(true).mockReturnValueOnce(false).mockReturnValue(true);
+    const confirm = fixture.confirm.mockReset().mockResolvedValueOnce(true).mockResolvedValueOnce(false).mockResolvedValue(true);
     vi.stubGlobal("navigator", { clipboard: { writeText } });
-    vi.stubGlobal("window", { confirm });
     const row = render().nodes.find((node) => (node.props.webhook as WebhookTrigger | undefined)?.id === "w1")!;
     const copy = row.props.onCopy as (kind: "command", replace: boolean) => void;
     copy("command", true);
@@ -262,8 +273,7 @@ describe("Triggers / Automations > Webhooks view", () => {
 
   it("shows only the last 4 characters of a copied token and asks before regenerating", async () => {
     fixture.webhooks = [webhook("w1")];
-    const confirm = vi.fn(() => false);
-    vi.stubGlobal("window", { confirm });
+    const confirm = fixture.confirm.mockResolvedValue(false);
     vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn() } });
     const { html, nodes: tree } = render();
     expect(html).toContain("Bearer token ending in k3Yz");
@@ -272,15 +282,15 @@ describe("Triggers / Automations > Webhooks view", () => {
     (row.props.onCopy as (kind: "command", replace: boolean) => void)("command", true);
     await flush();
     expect(confirm).toHaveBeenCalledOnce();
-    expect(String(confirm.mock.calls[0]).toLowerCase()).toContain("stops working immediately");
+    expect(confirm.mock.calls[0]![0]).toMatchObject({ tone: "danger" });
+    expect(String((confirm.mock.calls[0]![0] as { title: string }).title).toLowerCase()).toContain("stops working immediately");
     expect(fixture.api).not.toHaveBeenCalled();
   });
 
   it("hands a start-up migrated token over once through reveal, without confirming or rotating", async () => {
     fixture.webhooks = [webhook("w1", { tokenPending: true })];
-    const confirm = vi.fn(() => true);
+    const confirm = fixture.confirm;
     const writeText = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal("window", { confirm });
     vi.stubGlobal("navigator", { clipboard: { writeText } });
     const { html, nodes: tree } = render();
     expect(html).toContain("This webhook now needs a bearer token; copy it here.");

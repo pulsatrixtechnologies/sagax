@@ -1,4 +1,4 @@
-// Published pages (server/published-pages.ts, shared/published-pages.ts).
+// Published pages (server/pages/published-pages.ts, shared/published-pages.ts).
 //
 // Before the auth gate (handlePublishedPagePublic, server/index.ts):
 //   GET /pages/view/<token>    the reader's entry: a Sagax wrapper with its
@@ -84,16 +84,16 @@
 //   PUT    /api/pages/:id/state/lock        { key, locked } the page's person
 //          makes one key read-only, or writable again
 //   GET    /api/pages/:id/live             (2026-10-28) an event stream: who has
-//          the page open (presence) and "threads changed" (server/page-live.ts)
+//          the page open (presence) and "threads changed" (server/pages/page-live.ts)
 import { randomBytes } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { join } from "node:path";
 
-import type { PageError, PageRecord, PageVersionRecord, PublishedPages } from "../published-pages.ts";
-import { commentAnswerDocument, escapeHtml, pageDocument, parseReaderAssets, splitSlides, wrapperDocument, type ReaderAssets } from "../published-pages-render.ts";
+import type { PageError, PageRecord, PageVersionRecord, PublishedPages } from "../pages/published-pages.ts";
+import { commentAnswerDocument, escapeHtml, pageDocument, parseReaderAssets, splitSlides, wrapperDocument, type ReaderAssets } from "../pages/published-pages-render.ts";
 import type { ReaderBoot } from "../../shared/page-reader.ts";
-import type { PageLive } from "../page-live.ts";
+import type { PageLive } from "../pages/page-live.ts";
 import { anonymousBy, anonymousName, READER_ID, READER_ID_HEADER, STATE_LIMITS, STATE_PREFIX, stateLevelFor, stateMayWrite, stateRoleFor, validStateKey, type PageStateEntry, type PageStateView, type StateAccess, type StateRole } from "../../shared/page-state.ts";
 import { applySuggestion, parsePageQuote, parseSuggestion, parseThreadText, suggestable, type PageThread, type PageThreadsAnswer } from "../../shared/page-threads.ts";
 import { geistFace } from "../geist-face.ts";
@@ -102,7 +102,7 @@ import { lookContentTokens } from "../../src/lib/page-look.ts";
 import { readerBotColor } from "../../shared/page-reader.ts";
 import { MASCOT_COLOR_HEX, type MascotColorName } from "../../shared/mascot-colors.ts";
 import type { WidgetThemeTokens } from "../../src/lib/widget-kit.ts";
-import { requestSource, type RequestAuth } from "../request-auth.ts";
+import { requestSource, type RequestAuth } from "../auth/request-auth.ts";
 import { redactSecretsInText } from "../../shared/redact.ts";
 import { pageAudienceOf, pageMayEnter, parsePageAudience } from "../../shared/page-audience.ts";
 import {

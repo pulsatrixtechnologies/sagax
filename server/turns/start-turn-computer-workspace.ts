@@ -20,6 +20,7 @@ export function createComputerWorkspaceStartTurn(host: StartTurnHost) {
     renderSkillInstructions,
     store,
     supportsWorkspaceFiles,
+    syncPluginsForTurn,
   } = host;
 
   return async function(state: TurnState): Promise<void> {
@@ -52,7 +53,7 @@ export function createComputerWorkspaceStartTurn(host: StartTurnHost) {
     const pinnedCwd =
       state.privateWorkspace
         // A confidential thread works in its own folder, never the bot's
-        // project folder other threads share (server/confidential-threads.ts).
+        // project folder other threads share (server/threads/confidential-threads.ts).
         ? store.pinTaskCwd(state.bot.id, state.threadId, state.privateWorkspace, { privateOnly: cloudGuestOpened(state.threadId) || store.isConfidentialThread(state.threadId) })
         : null;
     // A bot's threads run side by side in one project folder, like several
@@ -112,5 +113,8 @@ export function createComputerWorkspaceStartTurn(host: StartTurnHost) {
       botId: state.bot.id, threadId: state.threadId, generation: state.dispatchClaimId,
       customMcp: state.instance.adapter.capabilities.customMcp === true, principal: state.turnPlace.principal
     });
+    if (IDENTITY.kind === "perspicax" && state.turnPlace.principal) {
+      await syncPluginsForTurn(state.turnPlace.principal, state.dispatchClaimId, state.bot.id);
+    }
   };
 }

@@ -249,7 +249,7 @@ export interface MyEngine {
    * only when the organization lets own accounts through (2026-10-30). */
   orgNotAllowed?: boolean;
   /** What the person's own turns on this engine run with, on their bots
-   * and on the bots shared with them (server/engine-credentials.ts).
+   * and on the bots shared with them (server/engines/engine-credentials.ts).
    * "expired" (2026-10-30): only a sign-in the provider refused since, which
    * pays for nothing until the person reconnects. */
   myTurns: "subscription" | "key" | "org-key" | "expired" | "none";

@@ -1,5 +1,9 @@
 // @vitest-environment happy-dom
-// Settings > Models > Bot models (#1675): the real page with synthetic bots.
+// Settings > Models > Bot models (#1675, redesigned #2050): the real page
+// with synthetic bots: the Bot / Model · effort / Backup table, "All bots",
+// the "Set model for n bots" button opening the two-pane selector, the
+// Defaults card (editable solo, read-only with a Perspicax link in an
+// organization) and the Active models link.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -73,6 +77,7 @@ const fixture = vi.hoisted(() => {
   return {
     dispatch,
     api: vi.fn(),
+    org: null as null | { org: { name: string; identity: { kind: "perspicax"; issuer: string } } },
     state: {
       bots,
       instances,
@@ -89,14 +94,14 @@ const fixture = vi.hoisted(() => {
 vi.mock("@/state/store", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/state/store")>(),
   api: (...args: unknown[]) => fixture.api(...args),
-  useStore: () => ({ state: fixture.state, dispatch: fixture.dispatch, refreshInstances: vi.fn(), refreshModels: vi.fn() }),
+  useStore: () => ({ state: fixture.state, dispatch: fixture.dispatch, refreshInstances: vi.fn(async () => {}), refreshModels: vi.fn(async () => {}) }),
 }));
 vi.mock("@/lib/perspicax-org", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/perspicax-org")>();
   return {
     ...actual,
-    // Solo path: the real ModelPicker mounts without organization readiness.
-    usePerspicaxOrg: () => null,
+    // Solo path by default: the real ModelPicker mounts without organization readiness.
+    usePerspicaxOrg: () => fixture.org,
     useMyEngines: () => null,
     useMyEngineModels: () => new Map(),
     useOrgPeople: () => [],
@@ -104,7 +109,8 @@ vi.mock("@/lib/perspicax-org", async (importOriginal) => {
   };
 });
 // Keep ModelPicker/EffortRow real on the page; only stub Defaults (opens a dialog).
-vi.mock("../NewBotDialog", () => ({
+vi.mock("../NewBotDialog", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../NewBotDialog")>(),
   DefaultBotSettings: () => createElement("div", { "data-defaults-stub": "" }, "Defaults for new bots"),
 }));
 vi.mock("@/lib/personal-sections", async (importOriginal) => ({
@@ -118,11 +124,6 @@ vi.mock("@/lib/offered-instances", () => ({
   modelSwitches: () => ({ org: null, mine: null }),
 }));
 vi.mock("@/lib/auto-model-preview", () => ({ useAutoModelStatus: () => null }));
-vi.mock("@/lib/model-favorites", () => ({
-  useModelFavorites: () => [],
-  favoriteKey: (a: string, b: string) => `${a}/${b}`,
-  toggleModelFavorite: vi.fn(),
-}));
 
 import { BotModelsSettings } from "./BotModelsSettings";
 
@@ -147,6 +148,10 @@ beforeEach(() => {
   setLocale("en");
   fixture.dispatch.mockReset();
   fixture.api.mockReset();
+  // the favorites sync reads /api/me/models once the picker mounts
+  fixture.api.mockResolvedValue({ org: [], mine: [], favoriteModels: [] });
+  fixture.org = null;
+  localStorage.clear();
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -173,24 +178,98 @@ describe("BotModelsSettings page", () => {
     // One shared list (legacy data-bot-models-table marker kept for captures).
     expect(container.querySelectorAll("[data-bot-models-table]")).toHaveLength(1);
     expect(container.querySelectorAll("[data-bot-models-list]")).toHaveLength(1);
-    expect(container.querySelectorAll("[data-bot-models-col]")).toHaveLength(6);
+    expect(container.querySelectorAll("[data-bot-models-col]")).toHaveLength(4);
     expect(container.querySelector('[data-bot-models-row="bot-scout"]')?.getAttribute("data-bot-models-section-of")).toBe("Clients");
     expect(container.querySelector('[data-bot-models-row="bot-lab"]')?.getAttribute("data-bot-models-section-of")).toBe("unassigned");
-    // Organization members do not get installation defaults; the table is theirs.
-    expect(container.textContent).not.toContain("Defaults for new bots");
+    // Solo: the Defaults card is editable (no admin gate), no Perspicax link.
+    expect(container.querySelector("[data-defaults-stub]")).not.toBeNull();
+    expect(container.querySelector('[data-perspicax-link="newBotDefaults"]')).toBeNull();
     expect(container.textContent).toContain("Bot models");
-    // List chip + effort menu (no squashed native select).
+    // One Model · effort cell per row (chip, or the read-only label when
+    // edit is denied); no separate effort or payer columns.
     const scoutModel = container.querySelector('[data-bot-models-model="bot-scout"]');
-    const scoutEffort = container.querySelector('[data-bot-models-effort="bot-scout"]');
-    // ModelPicker list chip, or the read-only label when edit is denied.
     expect(scoutModel?.textContent?.length ?? 0).toBeGreaterThan(0);
-    expect(scoutEffort?.querySelector("select")).toBeNull();
-    // Effort is a PillSelect menu when editable; otherwise plain text.
-    expect(
-      scoutEffort?.querySelector("[data-effort-menu], [data-pill-select]")
-      || (scoutEffort?.textContent?.length ?? 0) > 0,
-    ).toBeTruthy();
+    expect(scoutModel?.querySelector("select")).toBeNull();
+    expect(container.querySelector('[data-bot-models-effort="bot-scout"]')).toBeNull();
+    expect(container.querySelector('[data-bot-models-payer-cell="bot-scout"]')).toBeNull();
     expect(container.querySelector('[data-bot-models-controls="bot-scout"]')).not.toBeNull();
+    // The link to the Advanced fold (Active models) under the table.
+    expect(container.querySelector('[data-link-row="models.activeModels"]')?.textContent).toContain("Active models");
+  });
+
+  it("draws a table: visible column headers, one-line model chips, bulk bar under the table", async () => {
+    act(() => root.render(createElement(BotModelsSettings)));
+    await flush();
+    const headers = container.querySelector("[data-bot-models-cols]");
+    expect(headers?.textContent).toContain("All bots");
+    expect(headers?.textContent).toContain("Model · effort");
+    expect(headers?.textContent).toContain("Backup");
+    expect(headers?.textContent).not.toContain("Account");
+    // The select column keeps its grid slot (an sr-only span would leave the flow).
+    expect(headers?.querySelector('[data-bot-models-col="select"]')?.classList.contains("sr-only")).toBe(false);
+    // Section headings use the Settings group heading type, no band.
+    const section = container.querySelector('[data-bot-models-section="Clients"]');
+    expect(section?.querySelector("h3")?.className).toContain("text-[13px]");
+    expect(section?.className).not.toContain("bg-inset");
+    // An editable chip: engine mark plus one left-aligned label with the
+    // effort after the model ("Grok 4 · High"), full name in the tooltip.
+    const chip = container.querySelector<HTMLButtonElement>('[data-bot-models-model="bot-scout"] [data-model-list-chip]');
+    expect(chip).not.toBeNull();
+    const label = chip!.querySelector("[data-model-list-chip-label]");
+    expect(label?.className).toContain("truncate");
+    expect(label?.className).toContain("text-left");
+    expect(label?.textContent).toContain("Grok 4");
+    expect(label?.textContent).toContain("High");
+    expect(chip!.title).toContain(label?.textContent ?? "");
+    // Selecting shows the bulk bar outside the table card, with one filled action.
+    act(() => {
+      (container.querySelector('[data-bot-models-select="bot-scout"]') as HTMLInputElement).click();
+    });
+    await flush();
+    const bar = container.querySelector("[data-bot-models-bulk-bar]");
+    expect(bar).not.toBeNull();
+    expect(bar?.closest('[data-settings-group="bot-models-table"]')).toBeNull();
+    expect(bar?.querySelectorAll(".ui-button-primary")).toHaveLength(1);
+    expect(bar?.querySelector(".ui-button-primary")?.hasAttribute("data-bot-models-bulk-change")).toBe(true);
+    expect(bar?.querySelector("[data-bot-models-bulk-change]")?.textContent).toContain("Set model for 1 bot");
+    expect(bar?.querySelector("[data-bot-models-bulk-backup]")).not.toBeNull();
+    // the old separate effort / Auto buttons are gone: the selector holds both
+    expect(bar?.querySelector("[data-bot-models-bulk-effort]")).toBeNull();
+    expect(bar?.querySelector("[data-bot-models-bulk-auto]")).toBeNull();
+  });
+
+  it("selects every bot with the All bots checkbox and shows it indeterminate for a partial selection", async () => {
+    act(() => root.render(createElement(BotModelsSettings)));
+    await flush();
+    const all = container.querySelector('[data-bot-models-select-all]') as HTMLInputElement;
+    expect(all.getAttribute("aria-label")).toBe("All bots");
+    expect(all.checked).toBe(false);
+    expect(all.indeterminate).toBe(false);
+    act(() => { (container.querySelector('[data-bot-models-select="bot-scout"]') as HTMLInputElement).click(); });
+    await flush();
+    expect(all.indeterminate).toBe(true);
+    act(() => { all.click(); });
+    await flush();
+    expect([...container.querySelectorAll<HTMLInputElement>("[data-bot-models-select]")].every((box) => box.checked)).toBe(true);
+    expect(container.querySelector("[data-bot-models-bulk-change]")?.textContent).toContain("Set model for 3 bots");
+    act(() => { all.click(); });
+    await flush();
+    expect(container.querySelectorAll<HTMLInputElement>("[data-bot-models-select]:checked")).toHaveLength(0);
+    expect(container.querySelector("[data-bot-models-bulk-bar]")).toBeNull();
+  });
+
+  it("in an organization, shows Defaults for new bots read-only with the current choice and a Perspicax link", async () => {
+    fixture.org = { org: { name: "Example", identity: { kind: "perspicax", issuer: "https://px.example.test" } } };
+    act(() => root.render(createElement(BotModelsSettings)));
+    await flush();
+    expect(container.querySelector("[data-defaults-stub]"), "no editable defaults form").toBeNull();
+    const row = container.querySelector('[data-settings-row="models.newBotDefaults"]');
+    expect(row).not.toBeNull();
+    expect(row?.textContent).toContain("Chosen in Perspicax");
+    expect(row?.querySelector<HTMLAnchorElement>('[data-perspicax-link="newBotDefaults"]')?.href).toBe("https://px.example.test/console/");
+    expect(row?.textContent).toContain("Change");
+    // the table itself stays the person's: rows and checkboxes are there
+    expect(container.querySelector('[data-bot-models-select="bot-scout"]')).not.toBeNull();
   });
 
   it("warns when a bot's engine is signed out", async () => {
@@ -201,91 +280,67 @@ describe("BotModelsSettings page", () => {
     expect(atlas?.textContent).toContain("Signed out of this engine");
   });
 
-  it("shows a bulk confirmation summary before applying", async () => {
-    act(() => root.render(createElement(BotModelsSettings)));
-    await flush();
-    const selectScout = container.querySelector('[data-bot-models-select="bot-scout"]') as HTMLInputElement;
-    const selectLab = container.querySelector('[data-bot-models-select="bot-lab"]') as HTMLInputElement;
-    act(() => {
-      selectScout.click();
-      selectLab.click();
-    });
-    await flush();
-    expect(container.querySelector("[data-bot-models-bulk-bar]")).not.toBeNull();
-    expect(container.querySelector("[data-bot-models-bulk-effort]")).not.toBeNull();
-    expect(container.querySelector("[data-bot-models-bulk-backup]")).not.toBeNull();
-    act(() => {
-      (container.querySelector("[data-bot-models-bulk-auto]") as HTMLButtonElement).click();
-    });
-    await flush();
-    const confirm = document.querySelector("[data-bot-models-bulk-confirm]") ?? container.querySelector("[data-bot-models-bulk-confirm]");
-    expect(confirm).not.toBeNull();
-    const summary = document.querySelector("[data-bot-models-bulk-summary]") ?? container.querySelector("[data-bot-models-bulk-summary]");
-    expect(summary?.textContent).toContain("Scout");
-    expect(summary?.textContent).toContain("Lab Bot");
-    expect(summary?.textContent).toMatch(/to Auto/);
-    act(() => {
-      (document.querySelector("[data-confirm-action]") as HTMLButtonElement).click();
-    });
-    await flush();
-    expect(fixture.dispatch).toHaveBeenCalled();
-    const actions = fixture.dispatch.mock.calls.map((call) => call[0]);
-    expect(actions.every((action) => action.type === "setModel" && action.updateBotDefault === true && action.selection.auto === true)).toBe(true);
-    expect(actions.map((action) => action.botId).sort()).toEqual(["bot-lab", "bot-scout"]);
-  });
-
-  it("opens the bulk model picker and confirms a fixed model", async () => {
-    act(() => root.render(createElement(BotModelsSettings)));
-    await flush();
-    act(() => {
-      (container.querySelector('[data-bot-models-select="bot-lab"]') as HTMLInputElement).click();
-    });
-    await flush();
-    act(() => {
-      (container.querySelector("[data-bot-models-bulk-change]") as HTMLButtonElement).click();
-    });
-    await flush();
-    const picker = document.querySelector("[data-bot-models-bulk-picker]");
-    expect(picker).not.toBeNull();
-    act(() => {
-      (document.querySelector("[data-bot-models-bulk-pick]") as HTMLButtonElement).click();
-    });
-    await flush();
-    expect(document.querySelector("[data-bot-models-bulk-confirm]") ?? container.querySelector("[data-bot-models-bulk-confirm]")).not.toBeNull();
-    act(() => {
-      (document.querySelector("[data-confirm-action]") as HTMLButtonElement).click();
-    });
-    await flush();
-    expect(fixture.dispatch).toHaveBeenCalledWith(expect.objectContaining({
-      type: "setModel",
-      botId: "bot-lab",
-      updateBotDefault: true,
-      selection: expect.objectContaining({ model: expect.any(String) }),
-    }));
-  });
-
-  it("applies bulk effort from the bulk bar", async () => {
+  it("opens the two-pane selector from Set model for n bots and applies the pick to every selected bot", async () => {
     act(() => root.render(createElement(BotModelsSettings)));
     await flush();
     act(() => {
       (container.querySelector('[data-bot-models-select="bot-scout"]') as HTMLInputElement).click();
+      (container.querySelector('[data-bot-models-select="bot-lab"]') as HTMLInputElement).click();
     });
+    await flush();
+    const change = container.querySelector("[data-bot-models-bulk-change]") as HTMLButtonElement;
+    expect(change.textContent).toContain("Set model for 2 bots");
+    // no chip for the batch picker: only the menu, opened by the button
+    expect(container.querySelector("[data-bot-models-bulk-dock] [data-model-list-chip]")).toBeNull();
+    act(() => { change.click(); });
+    await flush();
+    const menu = document.querySelector("[data-model-menu]");
+    expect(menu, "the selector opened").not.toBeNull();
+    expect(menu?.querySelector("[data-model-panes]"), "two panes").not.toBeNull();
+    expect(menu?.querySelector('[data-model-pane-group="pane:favorites"]')).not.toBeNull();
+    expect(menu?.querySelector("[data-model-settings-effort]"), "effort bar at the bottom").not.toBeNull();
+    const option = menu!.querySelector<HTMLElement>('[data-model-panes-right] [data-model-option="grok-4"]');
+    expect(option).not.toBeNull();
+    act(() => { option!.click(); });
+    await flush();
+    const actions = fixture.dispatch.mock.calls.map((call) => call[0]).filter((action) => action.type === "setModel");
+    expect(actions.map((action) => action.botId).sort()).toEqual(["bot-lab", "bot-scout"]);
+    expect(actions.every((action) => action.updateBotDefault === true && action.selection.model === "grok-4")).toBe(true);
+    // the selection stays so the person can set a backup next
+    expect(container.querySelector("[data-bot-models-bulk-bar]")).not.toBeNull();
+  });
+
+  it("offers the Active models link inside the selector, opening the Advanced fold", async () => {
+    act(() => root.render(createElement(BotModelsSettings)));
+    await flush();
+    act(() => { (container.querySelector('[data-bot-models-select="bot-lab"]') as HTMLInputElement).click(); });
+    await flush();
+    act(() => { (container.querySelector("[data-bot-models-bulk-change]") as HTMLButtonElement).click(); });
+    await flush();
+    const link = document.querySelector<HTMLElement>("[data-model-menu] [data-model-active-models]");
+    expect(link?.textContent).toContain("Active models");
+    act(() => { link!.click(); });
+    await flush();
+    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "toggleAppSettings", open: true, section: "engines" });
+  });
+
+  it("sets a backup for every selected bot from the bulk bar", async () => {
+    act(() => root.render(createElement(BotModelsSettings)));
     await flush();
     act(() => {
-      (container.querySelector("[data-bot-models-bulk-effort]") as HTMLButtonElement).click();
+      (container.querySelector('[data-bot-models-select="bot-scout"]') as HTMLInputElement).click();
+      (container.querySelector('[data-bot-models-select="bot-lab"]') as HTMLInputElement).click();
     });
     await flush();
-    expect(document.querySelector("[data-bot-models-bulk-effort-picker]")).not.toBeNull();
-    act(() => {
-      (document.querySelector('[data-bot-models-bulk-effort-level="medium"]') as HTMLButtonElement).click();
-    });
+    act(() => { (container.querySelector("[data-bot-models-bulk-backup]") as HTMLButtonElement).click(); });
     await flush();
-    expect(fixture.dispatch).toHaveBeenCalledWith(expect.objectContaining({
-      type: "setModel",
-      botId: "bot-scout",
-      updateBotDefault: true,
-      selection: expect.objectContaining({ effort: "medium" }),
-    }));
+    const picker = document.querySelector("[data-bot-models-bulk-backup-picker]");
+    expect(picker).not.toBeNull();
+    act(() => { (document.querySelector("[data-bot-models-bulk-backup-clear]") as HTMLButtonElement).click(); });
+    await flush();
+    const actions = fixture.dispatch.mock.calls.map((call) => call[0]).filter((action) => action.type === "updateBot");
+    expect(actions.map((action) => action.botId).sort()).toEqual(["bot-lab", "bot-scout"]);
+    expect(actions.every((action) => Array.isArray(action.patch.fallback) && action.patch.fallback.length === 0)).toBe(true);
   });
 
   it("keeps control boxes non-overlapping at 640px and 900px (mocked layout)", async () => {
@@ -303,12 +358,10 @@ describe("BotModelsSettings page", () => {
         Object.defineProperty(controls!, "clientWidth", { configurable: true, value: width - 80 });
         const cells = [
           row.querySelector<HTMLElement>("[data-bot-models-model]"),
-          row.querySelector<HTMLElement>("[data-bot-models-effort]"),
-          row.querySelector<HTMLElement>("[data-bot-models-payer]"),
-          row.querySelector<HTMLElement>("[data-bot-models-backup]"),
+          row.querySelector<HTMLElement>("[data-bot-models-backup-cell]"),
         ].filter((node): node is HTMLElement => Boolean(node));
-        // Model + effort always; payer/backup when the bot has those fields.
-        expect(cells.length).toBeGreaterThanOrEqual(2);
+        // Model · effort and Backup, always.
+        expect(cells.length).toBe(2);
         // Lay out as a wrapping row: first control takes remaining width on
         // line 1 when narrow; never stack two boxes on the same origin.
         let x = 0;
@@ -342,7 +395,7 @@ describe("BotModelsSettings page", () => {
           expect(box.width).toBeGreaterThan(0);
           expect(box.height).toBeGreaterThan(0);
           const focusable = cell.querySelector<HTMLElement>("button, [data-pill-select], [data-control], select, input");
-          expect(focusable || cell.getAttribute("data-bot-models-backup") || cell.getAttribute("data-bot-models-payer")).toBeTruthy();
+          expect(focusable || cell.querySelector("[data-bot-models-backup]")).toBeTruthy();
         }
       }
     }

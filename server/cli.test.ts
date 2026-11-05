@@ -6,16 +6,17 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { applyStartupPreferences, formatSessions, parseArgs, runAccess, runLogin, runOnboardingCommand, serverEntry, type CliOptions, USAGE, verifyPhoneEndpoint } from "./cli.ts";
-import { browserSignInLines, pairingBlock, qrToString } from "./cli-pairing.ts";
-import { readAdminActivityRange } from "./admin-activity.ts";
-import { SetupCancelled } from "./cli-prompts.ts";
+import { browserSignInLines, pairingBlock, qrToString } from "./cli/cli-pairing.ts";
+import { readAdminActivityRange } from "./activity/admin-activity.ts";
+import { SetupCancelled } from "./cli/cli-prompts.ts";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { startControlPlaneStub } from "./testing/control-plane-stub.ts";
 import { freePortBlock } from "./testing/ports.ts";
+import { releaseVersion } from "./environment.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const setup = vi.hoisted(() => ({ runSetup: vi.fn(), isSetupComplete: vi.fn(), readCliStartup: vi.fn(), saveCliStartup: vi.fn() }));
-vi.mock("./cli-setup.ts", () => setup);
+vi.mock("./cli/cli-setup.ts", () => setup);
 
 describe("openmausbot command line", () => {
   it("parses commands and flags, and explains mistakes", () => {
@@ -559,7 +560,7 @@ describe.skipIf(process.platform === "win32")("serve --tunnel", () => {
       const stranger = await fetch(`${gateway}/api/bots`);
       expect(stranger.status).toBe(403);
       expect(((await stranger.json()) as { error: string }).error).toMatch(/through a proxy/);
-      expect(await (await fetch(`${gateway}/api/health`)).json()).toEqual({ app: "openmausbot", product: "sagax" });
+      expect(await (await fetch(`${gateway}/api/health`)).json()).toEqual({ app: "openmausbot", product: "sagax", version: releaseVersion() });
       expect(typeof ((await (await fetch(`http://127.0.0.1:${port}/api/health`)).json()) as { pid: unknown }).pid).toBe("number");
       // the printed code pairs a device through the gateway, and its session is honoured there
       const match = /pairing code:  ([A-Z2-9-]+)/.exec(out);

@@ -41,15 +41,15 @@ L'app de bureau garde toujours son harness local en solo. Un serveur d'organisat
 1. Réglages > Organisation > « Rejoindre un serveur Perspicax »: on colle l'adresse du serveur Pulsa Bot. L'app lit `/.well-known/openmausbot/environment` (`server/environment.ts:122`), qui annonce désormais `identity: { kind: "oidc", issuer }`.
 2. Connexion OIDC (section 2). L'environnement est enregistré.
 3. L'app propose « Copier des bots vers l'organisation ». On choisit des bots; pour chacun, avec ou sans fils et mémoire.
-4. Le transfert réutilise la sauvegarde d'équipe (`server/team-backup.ts`, `shared/team-backup.ts`: bots, tâches avec leurs messages, routines, mémoire), exportée par le harness local et importée par une route authentifiée du serveur d'organisation (`POST /api/org/import`, section 8). Les canaux (`GroupRecord`) suivent seulement si leurs seuls humains sont la personne qui migre.
-5. Réécriture des personnes: le principal local (`local: true`) reçoit `linkedSubjects: [{ iss, sub, serverOrigin }]`. À l'import, chaque référence au principal local (`ownerUserId`, `humanIds`, `directGrants`, `runAs`) devient le principal d'organisation de la même personne. Toute autre référence (une autre personne connue de ce poste) est retirée et listée dans le rapport d'import, jamais convertie en droit. Même mécanique que `server/identity-migration.ts`, avec une table de réécriture explicite au lieu d'une résolution par courriel.
+4. Le transfert réutilise la sauvegarde d'équipe (`server/backup/team-backup.ts`, `shared/team-backup.ts`: bots, tâches avec leurs messages, routines, mémoire), exportée par le harness local et importée par une route authentifiée du serveur d'organisation (`POST /api/org/import`, section 8). Les canaux (`GroupRecord`) suivent seulement si leurs seuls humains sont la personne qui migre.
+5. Réécriture des personnes: le principal local (`local: true`) reçoit `linkedSubjects: [{ iss, sub, serverOrigin }]`. À l'import, chaque référence au principal local (`ownerUserId`, `humanIds`, `directGrants`, `runAs`) devient le principal d'organisation de la même personne. Toute autre référence (une autre personne connue de ce poste) est retirée et listée dans le rapport d'import, jamais convertie en droit. Même mécanique que `server/people/identity-migration.ts`, avec une table de réécriture explicite au lieu d'une résolution par courriel.
 6. C'est une **copie**. Rien n'est effacé localement. Après vérification, l'app offre « Retirer ces bots de cet ordinateur » bot par bot.
 7. Les clés des fournisseurs ne voyagent pas (la sauvegarde les caviarde déjà, `redactSecretsInText`); le propriétaire les saisit dans le coffre du serveur (décision 7).
 
 ### Revenir en solo
 
 - « Quitter l'organisation » sur le bureau: l'app appelle la déconnexion du serveur (révocation de la session Pulsa Bot et du refresh token Perspicax, section 2), puis retire l'environnement. Le harness local n'a jamais cessé d'être solo.
-- Récupérer un bot: une personne qui a `manage` sur un bot d'organisation peut l'exporter en paquet (`server/package-export.ts`) et l'importer en local. Les fils ne suivent que si l'admin l'autorise (réglage d'organisation, désactivé par défaut: ce sont des données de l'organisation).
+- Récupérer un bot: une personne qui a `manage` sur un bot d'organisation peut l'exporter en paquet (`server/packages/package-export.ts`) et l'importer en local. Les fils ne suivent que si l'admin l'autorise (réglage d'organisation, désactivé par défaut: ce sont des données de l'organisation).
 - Désactiver le compte dans Perspicax coupe tout accès au serveur d'organisation (section 2, déconnexion par le canal arrière). Les copies locales restent à la personne.
 
 ### Serveur intérim déjà en organisation
@@ -101,7 +101,7 @@ Aujourd'hui Perspicax annonce `"id_token_signing_alg_values_supported": ["none"]
 
 ### Flux de connexion: Pulsa Bot comme BFF
 
-Le serveur Pulsa Bot est le client OIDC (patron Backend for Frontend). Ni le navigateur, ni l'app de bureau, ni le téléphone ne voient un jeton Perspicax. Ils reçoivent la session Pulsa Bot qu'ils connaissent déjà (`server/sessions.ts`: cookie HttpOnly pour le web, bearer pour les apps natives).
+Le serveur Pulsa Bot est le client OIDC (patron Backend for Frontend). Ni le navigateur, ni l'app de bureau, ni le téléphone ne voient un jeton Perspicax. Ils reçoivent la session Pulsa Bot qu'ils connaissent déjà (`server/auth/sessions.ts`: cookie HttpOnly pour le web, bearer pour les apps natives).
 
 ```
 navigateur ──GET /auth/oidc/start──▶ Pulsa Bot
@@ -120,7 +120,7 @@ navigateur ──GET /auth/oidc/start──▶ Pulsa Bot
 - `resource` vaut l'origine publique du serveur Pulsa Bot, pas `/mcp`. Le jeton d'accès de connexion a donc l'audience de Pulsa Bot et **ne vaut rien sur `/mcp`**: `validate_access_token` compare l'audience (`lib.rs:1709`) et le connecteur valide contre `app.config.audience()` (`crates/connector/src/http/bearer.rs:240`). La séparation des jetons de connexion et des jetons MCP est structurelle.
 - Client `pulsa-bot`: client public premier parti, PKCE S256, redirection exacte `https://<origine Pulsa Bot>/auth/oidc/callback`. Pas de sélecteur de profil pour lui (section 7). `iss` (RFC 9207, déjà émis par Perspicax) est vérifié au retour.
 - Vérification de l'`id_token`: `alg` exactement `ES256` (jamais `none`), `kid` connu du JWKS (rechargé une fois sur `kid` inconnu), `iss` exact, `aud` = `pulsa-bot`, `exp`, `iat` avec 60 s de tolérance, `nonce` égal à celui de la tentative.
-- Pas de nouvelle dépendance npm: `node:crypto` importe une clé JWK (`createPublicKey({ key, format: "jwk" })`) et vérifie ES256 (`dsaEncoding: "ieee-p1363"`). Même style que `server/mcp-oauth.ts`, dont on réutilise `pkcePair`, `authorizationServerMetadataUrls`, `readBounded` et `safeEndpoint`.
+- Pas de nouvelle dépendance npm: `node:crypto` importe une clé JWK (`createPublicKey({ key, format: "jwk" })`) et vérifie ES256 (`dsaEncoding: "ieee-p1363"`). Même style que `server/mcp/mcp-oauth.ts`, dont on réutilise `pkcePair`, `authorizationServerMetadataUrls`, `readBounded` et `safeEndpoint`.
 
 ### Par client
 
@@ -134,7 +134,7 @@ Le schéma personnalisé ne transporte jamais de code Perspicax, seulement l'ide
 
 ### Principal
 
-Le principal de `server/principals.ts` reste la personne. On ajoute:
+Le principal de `server/auth/principals.ts` reste la personne. On ajoute:
 
 | Champ | Rôle |
 |---|---|
@@ -148,7 +148,7 @@ Le principal de `server/principals.ts` reste la personne. On ajoute:
 ### Session sur le serveur Pulsa Bot
 
 - La session reste un `SessionRecord` (`sessions.ts:68`), avec `principalId` et un nouveau champ `idp: { iss, sub, grantRef }`. `grantRef` pointe vers l'enregistrement scellé du refresh token Perspicax de cette session, dans un coffre calqué sur `McpOAuthVault` (`mcp-oauth.ts:120`, fichier chiffré à côté des données, clé en fichier `0600` ou en variable d'environnement).
-- Validation par requête: la session Pulsa Bot, comme aujourd'hui (`server/request-auth.ts`). Pas d'introspection.
+- Validation par requête: la session Pulsa Bot, comme aujourd'hui (`server/auth/request-auth.ts`). Pas d'introspection.
 - Fraîcheur: quand une session est utilisée et que son dernier rafraîchissement date de plus de 50 minutes (le jeton d'accès vit 3600 s, `ACCESS_TOKEN_TTL_SECS`, `lib.rs:229`), le serveur fait un `refresh_token` grant, en vol unique par session (même patron que `refreshing` dans `McpOAuthManager`). Le nouvel `id_token` met à jour les claims (rôle, équipes). Un `invalid_grant` révoque la session Pulsa Bot.
 - Durée: la session suit le refresh Perspicax (30 jours glissants, `REFRESH_TOKEN_TTL_SECS`, `lib.rs:234`). `SESSION_TTL_MS` et `SESSION_MAX_AGE_MS` (`sessions.ts:36-41`) restent des plafonds.
 - Révocation immédiate: Perspicax appelle `POST /api/auth/oidc/backchannel-logout` avec un `logout_token` ES256 (`sub`, `events`, `jti`) quand un utilisateur est désactivé, supprimé, ou révoque ses sessions. Pulsa Bot ferme les sessions de ce `sub` et leurs flux SSE (`closeSessionStreams` existe déjà).
@@ -201,7 +201,7 @@ C'est exactement la règle de Perspicax pour ses profils: « a manager grants on
 
 ### `can(principal, action, resource)`
 
-Un module `server/authz.ts` absorbe `channel-visibility.ts` et `direct-grants.ts`:
+Un module `server/auth/authz.ts` absorbe `channel-visibility.ts` et `direct-grants.ts`:
 
 - Entrées: le principal (rôle et équipes à jour, `disabledAt`), l'action (`bot.use`, `bot.run`, `bot.edit`, `bot.manage`, `bot.approve`, `channel.read`, `channel.post`, `channel.moderate`, `routine.view`, `routine.edit`, `org.settings`, `computer.use`, `vault.read`), la ressource (bot, canal, routine, org).
 - Cible d'un droit: un utilisateur Perspicax (`user:<ulid>`, résolu en principal) **ou une équipe Perspicax** (`team:<ulid>`). Un droit d'équipe suit l'équipe: qui y entre l'obtient, qui en sort le perd, sans rien recopier, comme les profils `via_team`. Un canal peut avoir une équipe pour membres.
@@ -212,7 +212,7 @@ Un module `server/authz.ts` absorbe `channel-visibility.ts` et `direct-grants.ts
 - Un principal `disabledAt` n'a aucun droit; ses droits restent listés pour l'historique.
 - Utilisé par le filtre SSE, la liste des canaux et des bots, la recherche (`searchHitVisible`) et chaque route qui modifie. Les fonctions pures de `channel-visibility.ts` deviennent des cas de `can()`, avec leurs tests.
 
-La branche `fix/member-identity` (`server/viewer-identity.ts`, `memberBotFieldViolation` dans `request-auth.ts`) se garde telle quelle: le nom et le courriel viennent des claims au lieu de l'adresse de connexion.
+La branche `fix/member-identity` (`server/people/viewer-identity.ts`, `memberBotFieldViolation` dans `request-auth.ts`) se garde telle quelle: le nom et le courriel viennent des claims au lieu de l'adresse de connexion.
 
 ### Les sections de la barre latérale sont des canaux (décision de the owner, 2026-09-30)
 
@@ -232,7 +232,7 @@ Tranche: la tranche 3 livre le modèle (section = canal, migration, clic droit, 
 
 ### Recommandation: échange de jeton RFC 8693, pas un second OAuth par personne
 
-Le client OAuth MCP existant (`server/mcp-oauth.ts`) ferait refaire à chaque personne une connexion complète par profil: la page d'autorisation de Perspicax ne garde aucune session de navigateur (aucun cookie posé par `routes.rs` ni `page.rs`), donc chaque autorisation redemande mot de passe et TOTP. De plus son coffre est indexé par nom de serveur, pas par personne (`McpOAuthVault.get(name)`, `withAuthHeaders`, `mcp-oauth.ts:784`): sur un serveur partagé, la connexion d'une personne servirait à toutes.
+Le client OAuth MCP existant (`server/mcp/mcp-oauth.ts`) ferait refaire à chaque personne une connexion complète par profil: la page d'autorisation de Perspicax ne garde aucune session de navigateur (aucun cookie posé par `routes.rs` ni `page.rs`), donc chaque autorisation redemande mot de passe et TOTP. De plus son coffre est indexé par nom de serveur, pas par personne (`McpOAuthVault.get(name)`, `withAuthHeaders`, `mcp-oauth.ts:784`): sur un serveur partagé, la connexion d'une personne servirait à toutes.
 
 **Recommandation: le serveur Pulsa Bot échange le jeton de la personne contre un jeton MCP court, sur `/oauth/token`, en RFC 8693.**
 
@@ -286,7 +286,7 @@ Exigence de the owner: un bot créé en mode organisation fonctionne depuis le s
 
 ### Où vivent les accès aux engines
 
-Aujourd'hui les accès sont communs à tout le serveur: comptes Claude nommés (`server/claude-accounts.ts`, « provider credentials are server-wide »), connexions en cours rattachées à la session admin (`server/provider-auth-sessions.ts`), clés API posées dans Réglages > Connections et passées dans l'environnement de l'instance (`drivers/claude.ts:182-206`, qui retire toute clé qui ne vient pas de l'instance). En organisation:
+Aujourd'hui les accès sont communs à tout le serveur: comptes Claude nommés (`server/engines/claude-accounts.ts`, « provider credentials are server-wide »), connexions en cours rattachées à la session admin (`server/engines/provider-auth-sessions.ts`), clés API posées dans Réglages > Connections et passées dans l'environnement de l'instance (`drivers/claude.ts:182-206`, qui retire toute clé qui ne vient pas de l'instance). En organisation:
 
 | Accès | Où | Qui le pose | Pour quels tours |
 |---|---|---|---|
@@ -298,7 +298,7 @@ Révision du 2026-10-01 (décision de the owner, remplace la décision 7 du 2026
 | Clé API de la personne (Anthropic, OpenAI) | coffre de Perspicax, identifiant `scope: user` lié à la personne (P10) | la personne, dans la console Perspicax | les mêmes tours que son abonnement, quand elle n'en a pas pour cet engine |
 | Clé d'organisation | Réglages > Connections du serveur (existant), posée par un admin | un admin | repli automatique après l'abonnement et la clé de la personne, sur un engine à clé; plus d'interrupteur |
 
-Ordre de résolution pour un tour (`server/engine-credentials.ts`): engine absent, payeur désactivé (refus), abonnement du payeur, clé du payeur dans Perspicax (`owner-key` s'il est propriétaire du bot, sinon `speaker-key`), clé d'organisation, sinon refus avec la carte « connectez-vous avec votre abonnement ou ajoutez votre clé, ou demandez à un admin ». Le payeur est la personne qui parle; pour une routine du bot, toujours son **propriétaire**, quelle que soit la personne qui l'a créée, modifiée ou lancée (son `runAs` ne sert qu'à l'identité MCP). Les connexions et clés propres au serveur ne servent plus les bots des admins. La clé est lue au moment du tour, injectée dans l'environnement de l'instance de ce seul tour, jamais écrite dans `config.json`.
+Ordre de résolution pour un tour (`server/engines/engine-credentials.ts`): engine absent, payeur désactivé (refus), abonnement du payeur, clé du payeur dans Perspicax (`owner-key` s'il est propriétaire du bot, sinon `speaker-key`), clé d'organisation, sinon refus avec la carte « connectez-vous avec votre abonnement ou ajoutez votre clé, ou demandez à un admin ». Le payeur est la personne qui parle; pour une routine du bot, toujours son **propriétaire**, quelle que soit la personne qui l'a créée, modifiée ou lancée (son `runAs` ne sert qu'à l'identité MCP). Les connexions et clés propres au serveur ne servent plus les bots des admins. La clé est lue au moment du tour, injectée dans l'environnement de l'instance de ce seul tour, jamais écrite dans `config.json`.
 
 ### Quand B parle au bot de A
 
@@ -308,7 +308,7 @@ Ordre de résolution pour un tour (`server/engine-credentials.ts`): engine absen
 
 ### Ordinateurs et VM
 
-- Les VM locales passent par un runtime de conteneurs (`server/container-computer.ts`: `docker`, `podman`, `container`). L'image du serveur n'en a pas, et on ne lui donne pas le socket Docker (document du 2026-09-28, « risque trop grand »). En organisation, les bots n'ont donc pas de VM locale dans les tranches 1 à 8; le formulaire de création ne propose que ce qui existe sur le serveur (dossier du bot, navigateur sans écran).
+- Les VM locales passent par un runtime de conteneurs (`server/computer/container-computer.ts`: `docker`, `podman`, `container`). L'image du serveur n'en a pas, et on ne lui donne pas le socket Docker (document du 2026-09-28, « risque trop grand »). En organisation, les bots n'ont donc pas de VM locale dans les tranches 1 à 8; le formulaire de création ne propose que ce qui existe sur le serveur (dossier du bot, navigateur sans écran).
 - Le serveur comme VM derrière `computer:use` (décision 10) et le conteneur par propriétaire (décision 8) restent des tranches ultérieures, sur un runtime séparé.
 - Tant que tous les bots partagent le conteneur et l'utilisateur `maus`, un shell en accès complet pourrait lire l'environnement d'un autre tour (`/proc/<pid>/environ`) et donc une clé. En organisation, l'accès complet sans carte est refusé aux bots des membres jusqu'au conteneur par propriétaire (T15).
 
@@ -424,14 +424,14 @@ Rappels de ce dépôt: versions les plus récentes vérifiées sur crates.io au 
 
 | Module | Rôle |
 |---|---|
-| `server/oidc-rp.ts` | découverte, PKCE, `state` et `nonce` en mémoire (10 min, usage unique, 20 au plus comme `MAX_PENDING_FLOWS`), échange du code, vérification ES256 par `node:crypto`, cache JWKS |
-| `server/idp-session.ts` | coffre des refresh Perspicax, rafraîchissement en vol unique, déconnexion par canal arrière, révocation |
-| `server/perspicax-link.ts` | lecture du fichier de lien, annuaire (ETag), client d'échange de jeton |
-| `server/authz.ts` | `can()` (section 3) |
+| `server/auth/oidc-rp.ts` | découverte, PKCE, `state` et `nonce` en mémoire (10 min, usage unique, 20 au plus comme `MAX_PENDING_FLOWS`), échange du code, vérification ES256 par `node:crypto`, cache JWKS |
+| `server/auth/idp-session.ts` | coffre des refresh Perspicax, rafraîchissement en vol unique, déconnexion par canal arrière, révocation |
+| `server/perspicax/perspicax-link.ts` | lecture du fichier de lien, annuaire (ETag), client d'échange de jeton |
+| `server/auth/authz.ts` | `can()` (section 3) |
 | `server/perspicax-mcp-bridge.ts` | le pont stdio (section 4), sur le patron de `connector-proxy.ts` et `mcp-bridge.ts` |
 | Routes | `GET /auth/oidc/start`, `GET /auth/oidc/callback`, `POST /api/auth/oidc/backchannel-logout`, `POST /api/org/import`, `/api/org/admin/*` (assertion de la console), `POST /api/org/routine-delegation` |
-| `server/engine-credentials.ts` | résolution de l'accès d'un tour (section 4 bis): clé de routine, `credentialRef`, abonnement du propriétaire qui lance, clé du propriétaire lue dans le coffre de Perspicax par le lien, clé d'organisation si permise |
-| Connexions par principal | `server/claude-accounts.ts` et `server/provider-auth-sessions.ts`: en organisation, un dossier de connexion par principal sous `/data/principals/<id>/`, au lieu du dossier commun |
+| `server/engines/engine-credentials.ts` | résolution de l'accès d'un tour (section 4 bis): clé de routine, `credentialRef`, abonnement du propriétaire qui lance, clé du propriétaire lue dans le coffre de Perspicax par le lien, clé d'organisation si permise |
+| Connexions par principal | `server/engines/claude-accounts.ts` et `server/engines/provider-auth-sessions.ts`: en organisation, un dossier de connexion par principal sous `/data/principals/<id>/`, au lieu du dossier commun |
 | Cartes d'échec | engine absent, aucun accès, clé refusée, profil non détenu, délégation expirée (section 4 bis); au lieu d'un tour vide |
 | Création de bot par un membre | `POST /api/bots` et `memberBotFieldViolation` de la branche `fix/member-identity`; le formulaire ne propose que les engines installés et les options qui existent sur le serveur |
 | Santé | `/api/health` liste les engines installés et leur version |
@@ -455,7 +455,7 @@ Rappels de ce dépôt: versions les plus récentes vérifiées sur crates.io au 
 | `mcp-oauth.ts` | gardé pour les MCP tiers; coffre indexé par `(principalId, name)` en organisation; ses utilitaires servent à `oidc-rp.ts` |
 | `email-otp.ts`, `mailer.ts`, `mail-config.ts`, `account-signin.ts`, `src/pair/JoinPage.tsx`, `SignInAccessCard.tsx`, `compose.mail-test.yaml` | retirés à la dernière tranche, après que plus rien ne les appelle; d'ici là refusés en organisation |
 | `electron/control-plane-client.mjs` | hors sujet (le tunnel `server/tunnel.ts` l'utilise encore) |
-| `server/viewer-identity.ts` (branche `fix/member-identity`) | gardé, nourri par les claims |
+| `server/people/viewer-identity.ts` (branche `fix/member-identity`) | gardé, nourri par les claims |
 
 ## 9. Revue de sécurité
 

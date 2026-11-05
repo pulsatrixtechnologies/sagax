@@ -429,4 +429,9 @@ describe("a usage-limit switch is transparent (2026-10-29)", () => {
     expect(isHiddenStatusActivity(limitRow("recovery: Limit reached on Claude and no other engine is available: your message will be sent again when it resets (around 2:05 PM).",
       { kind: "waiting", from: "Claude", resetsAt: 0 }))).toBe(false);
   });
+
+  it("keeps consecutive-limit exhaustion visible in the chat (#1942)", () => {
+    expect(isHiddenStatusActivity(limitRow("error: Limits were reached on Claude, Codex: no other engine could answer.",
+      { kind: "exhausted", tried: ["Claude", "Codex"], resetsAt: 0 }))).toBe(false);
+  });
 });

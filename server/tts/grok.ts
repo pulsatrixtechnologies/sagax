@@ -359,7 +359,7 @@ export function openTranscriptionStream(
   // inverse text normalization needs a language
   if (options.language && options.format) query.set("format", "true");
   // vocabulary biasing: the bot's and the person's names, the thread's
-  // proper nouns (server/voice-keyterms.ts)
+  // proper nouns (server/voice/voice-keyterms.ts)
   for (const term of options.keyterms ?? []) query.append("keyterm", term);
   const url = `${API.replace(/^http/, "ws")}/stt?${query}`;
   let socket: WebSocket;
@@ -586,4 +586,39 @@ export function openSpeechStream(
     },
     close: end,
   };
+}
+
+/** wss://api.x.ai/v1/realtime for one call (server/voice/realtime-call.ts): the
+ * key in the Authorization header, never in the URL. A refused handshake
+ * comes back on `onerror` as this file's own words (key, credits, rate
+ * limit), so the call can say which key to fix. */
+export function openRealtimeSocket(key: string, url: string): {
+  readonly readyState: number;
+  onopen: ((event: unknown) => void) | null;
+  onmessage: ((event: { data: unknown }) => void) | null;
+  onclose: ((event: unknown) => void) | null;
+  onerror: ((event: unknown) => void) | null;
+  send(data: string): void;
+  close(code?: number, reason?: string): void;
+} {
+  const socket = new WsWebSocket(url, { headers: { authorization: `Bearer ${key}` } });
+  const adapter = {
+    get readyState() { return socket.readyState; },
+    onopen: null as ((event: unknown) => void) | null,
+    onmessage: null as ((event: { data: unknown }) => void) | null,
+    onclose: null as ((event: unknown) => void) | null,
+    onerror: null as ((event: unknown) => void) | null,
+    send: (data: string) => socket.send(data),
+    close: (code?: number, reason?: string) => socket.close(code, reason),
+  };
+  socket.on("open", () => adapter.onopen?.({}));
+  socket.on("message", (data: Buffer, binary: boolean) => adapter.onmessage?.({ data: binary ? data : data.toString("utf8") }));
+  // the close code says why a call ended (realtimeDropReason)
+  socket.on("close", (code: number) => adapter.onclose?.({ code }));
+  socket.on("error", (error) => adapter.onerror?.({ message: socketFailure(error) }));
+  socket.on("unexpected-response", (_request, response) => {
+    adapter.onerror?.({ message: refusal(response.statusCode ?? 0) });
+    socket.terminate();
+  });
+  return adapter;
 }

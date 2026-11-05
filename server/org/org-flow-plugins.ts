@@ -8,10 +8,10 @@ import { basename, dirname, join } from "node:path";
 import { z } from "zod";
 
 import { writeFileAtomic } from "../atomic.ts";
-import { copySanitizedPlugin } from "../bot-plugins.ts";
-import { installationCapabilityBridge } from "../installation-capability-bridge.ts";
+import { copySanitizedPlugin } from "../bots/bot-plugins.ts";
+import { installationCapabilityBridge } from "../capabilities/installation-capability-bridge.ts";
 import { ZipReader } from "../zip.ts";
-import type { FlowPluginsDeclaration } from "../perspicax-link.ts";
+import type { FlowPluginsDeclaration } from "../perspicax/perspicax-link.ts";
 
 export type OrgFlowPluginState = "installed" | "pending" | "failed";
 
@@ -356,4 +356,43 @@ export class OrgFlowPlugins {
     }
     return dirs;
   }
+}
+
+/** The product plugin's skill names a routine asks for by name. */
+const FLOW_ENTRY_SKILLS = ["using-px-flow", "running-px-flow"] as const;
+
+/** Incident 2026-11-03 (a dispatch routine on a linked server): Perspicax held the organization install back
+ * (`flow_guard_uncovered`), Sagax hides a bot's own GitHub copy of
+ * pulsatrix-flow as an alias of that install, so the turn had no Flow skill
+ * at all and nothing said where they were; the bot searched skills_list, the
+ * workspace and the catalog, then gave up. In server mode the active pack
+ * serves every product file through the routine's Flow lease, so every active
+ * member is told how to read them there. Empty when the product plugin is
+ * loaded for this turn or when Perspicax declares nothing. */
+export function flowSkillsNote(input: {
+  declaration: FlowPluginsDeclaration | undefined;
+  /** the turn's organization Flow folders (OrgFlowPlugins.dirsFor) */
+  loadedDirs: readonly string[];
+  /** the person whose turn this is is an active member */
+  member: boolean;
+}): string {
+  const { declaration } = input;
+  if (!declaration || !input.member) return "";
+  const product = declaration.plugins.find((plugin) => !plugin.tenant)?.name ?? "pulsatrix-flow";
+  if (input.loadedDirs.some((dir) => basename(dir) === product)) return "";
+  const why = !declaration.enabled
+    ? `Perspicax holds the organization install back${declaration.reason ? ` (${declaration.reason})` : ""}`
+    : !guarded(declaration)
+      ? "Perspicax does not declare its Flow guard as enforced"
+      : "the organization install is not ready on this server yet";
+  const read = (skill: string) => `{"command": "read", "args": {"argv": ["doc", "product:skills/${skill}/SKILL.md"]}}`;
+  return [
+    "",
+    "",
+    `Pulsatrix Flow skills (${FLOW_ENTRY_SKILLS.join(", ")} and the other ${product} skills) are not loaded on this turn: ${why}.`,
+    "They are not in skills_list, the workspace or a marketplace, so do not look for them there. The active Flow pack serves them through your main Perspicax connection:",
+    `after flow_run run.init, read one with flow_run ${read(FLOW_ENTRY_SKILLS[0])}`,
+    "(one part per call: follow the answer's next, adding \"--part\", \"<n>\" to argv, until next is null).",
+    "A routine that says to load a Flow skill is done this way, and a missing local copy alone never stops the pass.",
+  ].join("\n");
 }

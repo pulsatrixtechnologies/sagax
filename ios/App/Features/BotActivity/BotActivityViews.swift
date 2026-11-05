@@ -343,7 +343,19 @@ struct BotActivityHistoryView: View {
                     }
                     ForEach(shown) { item in
                         NavigationLink {
-                            BotActivityDetailView(item: item, parent: parent)
+                            if item.coding == true {
+                                CodingChatView(
+                                    target: CodingChatTarget(
+                                        botId: item.botId,
+                                        itemId: item.id,
+                                        threadId: item.threadId,
+                                        seed: item
+                                    ),
+                                    parent: parent
+                                )
+                            } else {
+                                BotActivityDetailView(item: item, parent: parent)
+                            }
                         } label: {
                             BotActivityRow(
                                 item: item,
@@ -924,6 +936,17 @@ struct BotActivitySheet: View {
                 switch route {
                 case let .history(filter):
                     BotActivityHistoryView(botId: botId, filter: filter, parent: model)
+                case let .detail(item) where item.coding == true:
+                    CodingChatView(
+                        target: CodingChatTarget(
+                            botId: item.botId,
+                            itemId: item.id,
+                            threadId: item.threadId,
+                            seed: item
+                        ),
+                        parent: model,
+                        onClose: { dismiss() }
+                    )
                 case let .detail(item):
                     BotActivityDetailView(item: item, parent: model, onOpenThread: onOpenThread)
                 }

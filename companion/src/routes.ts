@@ -184,6 +184,8 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "POST", path: /^\/api\/bots\/[\w-]+\/read$/ },
   { method: "POST", path: /^\/api\/bots\/[\w-]+\/always-allow$/ },
   { method: "POST", path: /^\/api\/bots\/[\w-]+\/messages\/[\w-]+\/edit$/ },
+  // 2026-11-05: answer an "Agit comme" role transition card from the phone
+  { method: "POST", path: /^\/api\/bots\/[\w-]+\/cards\/[\w-]+\/role-transition$/ },
   // 2026-10-30: answer a proactive proposal card from the phone
   { method: "POST", path: /^\/api\/bots\/[\w-]+\/proactive\/[\w-]+$/ },
   // A credential value crosses this one route only as an HPKE envelope. The
@@ -201,7 +203,7 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   // pull-to-refresh.
   { method: "GET", path: /^\/api\/bots\/[\w-]+\/overview$/ },
   // Read-only: what the bot did, with the outcome, built from logs that
-  // already exist (server/activity.ts). No settings reachable through it.
+  // already exist (server/activity/activity.ts). No settings reachable through it.
   { method: "GET", path: /^\/api\/bots\/[\w-]+\/activity$/ },
   // The section's shared team memory: people, places, decisions and terms.
   // Reading, adding, answering a proposal, editing a detail, and removing
@@ -493,7 +495,7 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
 /** Notices the companion itself sends the harness, never a device: they are
  * not in ALLOWED, so the proxy refuses them from a phone, and the harness
  * accepts them only with the companion's private relay token
- * (server/request-auth.ts) or, for a standalone harness, from loopback.
+ * (server/auth/request-auth.ts) or, for a standalone harness, from loopback.
  *
  * `POST /api/live/device-revoked`: a phone was just unpaired (the device id
  * rides in `x-openmausbot-companion-device`), so the harness ends the Live

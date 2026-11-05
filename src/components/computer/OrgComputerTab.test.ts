@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 
 import { chosenComputer, computerChoices, type DesktopBridgeStatus } from "@/lib/desktop-bridge";
 import { localVmView, parseLocalVmAnswer, runtimeSummaryKey, type DesktopLocalVmStatus } from "@/lib/desktop-local-vm";
-import { formatBytes, powerState, type ServerEnvironmentStatus } from "@/lib/server-environment";
+import { formatPanelBytes, powerState, type ServerEnvironmentStatus } from "@/lib/server-environment";
 import { Globe, Laptop, Server } from "lucide-react";
 import { BOT_SECTIONS } from "../bot-settings/sections";
 import { OrgComputerSettings } from "../settings/OrgComputerSettings";
@@ -128,10 +128,10 @@ describe("Computer tab on an organization server", () => {
   it("names each state of the screen (calm asleep / waking / running)", () => {
     const running = renderToStaticMarkup(createElement(OrgComputerTab, { bridge: bridge(true, "computer"), place: "vm", computerOff: true, botName: "Luna", initialLocal: status({ ...STALE, state: "running", stale: null, folder: "/Users/example/.openmausbot/vm-home", folderExists: true }) }));
     expect(running).toContain('data-computer-screen="running"');
-    // Running: live frame only, no badge, pause/stop on hover (hidden until intent).
+    // Running: live frame only, no badge, no Play / Pause / Stop (JC 2026-11-02).
     expect(running).not.toContain('data-power=');
-    expect(running).toMatch(/<button[^>]*aria-label="Pause"(?![^>]*disabled="")/);
-    expect(running).toMatch(/<button[^>]*aria-label="Stop"(?![^>]*disabled="")/);
+    expect(running).not.toContain("data-screen-controls");
+    expect(running).not.toMatch(/aria-label="(Pause|Stop)"/);
     expect(running).toContain("This bot&#x27;s computer is off");
     const missing = renderToStaticMarkup(createElement(OrgComputerTab, { bridge: bridge(true, "computer"), place: "local", computerOff: false, botName: "Luna", initialLocal: status(null) }));
     // Setup still keeps its primary action (not the calm one-line asleep).
@@ -166,7 +166,7 @@ describe("Computer tab on an organization server", () => {
     for (const state of ["running", "starting", "paused", "error"] as const) expect(controlsAlwaysShown(state)).toBe(false);
     const running = renderToStaticMarkup(createElement(OrgComputerTab, { bridge: bridge(true, "computer"), place: "vm", computerOff: false, botName: "Luna", initialLocal: status({ ...STALE, state: "running", stale: null, folder: "/Users/example/.openmausbot/vm-home", folderExists: true }) }));
     expect(running).toContain('data-controls="hidden"');
-    expect(running).toMatch(/data-screen-controls="hidden"[^>]*pointer-events-none opacity-0/);
+    expect(running).not.toContain("data-screen-controls");
     // Calm asleep: one line, no transport bar (wake by clicking the screen).
     const serverOff = renderToStaticMarkup(createElement(ComputerScreen, { source: "server", state: "off", caption: "Luna's screen", computerName: "Cloud", controls: { play: () => {} } }));
     expect(serverOff).toContain('data-screen-calm="asleep"');
@@ -178,10 +178,12 @@ describe("Computer tab on an organization server", () => {
   // Owner 2026-10-14 / calm 2026-11-01: setup keeps its primary button; a
   // plain off machine uses calm asleep (click to wake), never a transport bar.
   it("never draws Démarrer and the control bar together on a machine that is off", () => {
-    expect(showsControlBar("off", { play: () => {} }, [{ label: "Start", onClick: () => {}, primary: true }])).toBe(false);
-    expect(showsControlBar("off", { play: () => {} }, [])).toBe(false);
-    expect(showsControlBar("running", { pause: () => {} }, [])).toBe(true);
-    expect(showsControlBar("off", undefined, [])).toBe(false);
+    expect(showsControlBar("off", { play: () => {} }, [{ label: "Start", onClick: () => {}, primary: true }], "local")).toBe(false);
+    expect(showsControlBar("off", { play: () => {} }, [], "server")).toBe(false);
+    // A bot's computer never draws Play / Pause / Stop; a remote session does.
+    for (const source of ["server", "local", "browser"] as const) expect(showsControlBar("running", { pause: () => {} }, [], source)).toBe(false);
+    expect(showsControlBar("running", { pause: () => {} }, [], "remote")).toBe(true);
+    expect(showsControlBar("off", undefined, [], "remote")).toBe(false);
     const off = renderToStaticMarkup(createElement(OrgComputerTab, { bridge: bridge(true, "computer"), place: "local", computerOff: false, botName: "Luna",
       initialLocal: status({ ...STALE, state: "exited", stale: null, folder: "/Users/example/.openmausbot/vm-home", folderExists: true }) }));
     expect(off).toContain('data-computer-screen="off"');
@@ -240,8 +242,8 @@ describe("the cloud screen while its cluster wakes", () => {
   });
 
   it("shows Retry alone on an error: no control bar over it, one message", () => {
-    expect(showsControlBar("error", { play: undefined }, [{ label: "Try again", onClick: () => {} }])).toBe(false);
-    expect(showsControlBar("error", { play: undefined }, [])).toBe(false);
+    expect(showsControlBar("error", { play: undefined }, [{ label: "Try again", onClick: () => {} }], "server")).toBe(false);
+    expect(showsControlBar("error", { play: undefined }, [], "remote")).toBe(false);
     const error = render(DOWN);
     expect(error).toContain('data-computer-screen="error"');
     expect(error).toMatch(/<button[^>]*>Try again<\/button>/);
@@ -335,9 +337,8 @@ describe("the bot's Works on", () => {
 });
 
 describe("taking control of the server environment desktop", () => {
-  const controls = { stop: () => {}, pause: () => {} };
-  it("opens large, calm chrome, Watching | You have control, and power in the more menu", () => {
-    const markup = renderToStaticMarkup(createElement(SandboxDesktopModal, { title: "Luna's screen", state: "running", controls, onClose: () => {} }));
+  it("opens large, calm chrome, Watching | You have control, and one full screen button", () => {
+    const markup = renderToStaticMarkup(createElement(SandboxDesktopModal, { title: "Luna's screen", state: "running", onClose: () => {} }));
     expect(markup).toContain('role="dialog"');
     expect(markup).toContain('aria-modal="true"');
     expect(markup).toContain("h-[88vh] w-[92vw]");
@@ -348,11 +349,15 @@ describe("taking control of the server environment desktop", () => {
     expect(markup).toContain("You have control");
     expect(markup).toMatch(/data-takeover-control="release"/);
     expect(markup).toMatch(/data-takeover-control="drive"/);
-    expect(markup).toContain('data-takeover-more=""');
-    expect(markup).toMatch(/aria-label="Close and release control[^"]*"[^>]*data-takeover-close/);
-    expect(markup).toContain("data-takeover-collapse");
-    // Power and full screen stay out of the header until the "..." opens.
-    expect(markup).not.toContain('data-takeover-power="pause"');
+    expect(markup).not.toContain("data-takeover-more");
+    // 2026-11-03 (JC): no full screen button, it did not work in the app.
+    expect(markup).not.toContain("data-takeover-fullscreen");
+    // One close: the collapse button, labelled; no red close dot (2026-11-02).
+    expect(markup).toMatch(/aria-label="Close and release control[^"]*"[^>]*data-takeover-close[^>]*data-takeover-collapse/);
+    expect(markup.match(/data-takeover-close/g)).toHaveLength(1);
+    expect(markup).not.toContain("#ff5f57");
+    // No Play / Pause / Stop anywhere in the window.
+    expect(markup).not.toContain("data-takeover-power");
     expect(markup).not.toContain("Release control");
     // The live view inside asks for control (data-control="1").
     expect(markup).toContain('data-control="1"');
@@ -403,7 +408,7 @@ describe("the Local VM's view", () => {
     expect(activeComputer(bridge(true, "computer"), "browser")).toEqual({ source: "server", reason: "none" });
     expect(powerState("missing", null)).toBe("off");
     expect(powerState("stopped", "start")).toBe("starting");
-    expect(formatBytes(1536 * 1024 * 1024)).toBe("1.5 GiB");
+    expect(formatPanelBytes(1536 * 1024 * 1024)).toBe("1.5 GiB");
   });
 });
 

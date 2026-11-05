@@ -136,7 +136,7 @@ which never leaves the browser.
 SQLite does not move onto the phone. It is an implementation detail behind the
 harness API:
 
-- `server/message-db.ts` and `server/store.ts` persist and page transcripts.
+- `server/messages/message-db.ts` and `server/store.ts` persist and page transcripts.
 - The phone asks for `GET /api/bots?messages=50` and
   `GET /api/threads/:threadId/messages?before=…&limit=50`.
 - SQLite ordering and cursors are therefore tested at the server boundary,
@@ -144,7 +144,7 @@ harness API:
   responses captured through the real sidecar.
 - A storage migration may change the bytes on disk without changing the app.
   If an API payload changes, regenerate the fixtures with
-  `node scripts/capture-companion-fixtures.mjs` and review the diff.
+  `node scripts/capture/companion-fixtures.mjs` and review the diff.
 
 The sidecar keeps its device registry in `~/.sagax/devices.json`. That is
 security state owned by the network boundary, not transcript data, so it does
@@ -436,7 +436,7 @@ request the remote-client renderer makes crosses, what it hides does not) and
 `companion/test/proxy.test.ts` (the new routes reach a real harness).
 
 For a phone or tablet paired with a server (a client session), `CLIENT_ALLOW`
-in `server/request-auth.ts` adds the two steer routes (the harness applies the
+in `server/auth/request-auth.ts` adds the two steer routes (the harness applies the
 cancel's guards plus the send's: the viewer's own thread, a read-only member
 of a shared room may not steer) and, on a solo or hosted server (not an
 organization server, where a member's engines are `/api/me/engines`),
@@ -581,7 +581,7 @@ refused, as does `POST /api/bots/:id/memory/open` (it opens a window on the
 host's screen).
 
 **Client sessions on a server (S2).** Added to `CLIENT_ALLOW` in
-`server/request-auth.ts`, each held by its handler:
+`server/auth/request-auth.ts`, each held by its handler:
 
 | Route | Who |
 |---|---|
@@ -609,7 +609,7 @@ sidecar by `companion/test/proxy.test.ts`.
 
 Tests: `companion/test/routes.test.ts` ("iOS feature parity (S1, D1, D3)"),
 `companion/test/proxy.test.ts` (the routes reach a real harness; the voice
-engine route; the routine edit), `server/request-auth.test.ts`,
+engine route; the routine edit), `server/auth/request-auth.test.ts`,
 `server/routes/tts-provider.test.ts`, `server/ios-parity.e2e.test.ts` ("holds
 The owner routes of a client session to the owner").
 
@@ -647,7 +647,7 @@ module's own test under `server/routes/`.
 | `POST /api/mcp/servers/:name/oauth/start` | adds `returnTo` and `callbackOrigin` | admin or owner |
 | `PATCH /api/groups/:id` | adds `pinned` | member |
 | `GET /api/auth/session` | personal computer: `name` (Settings > General, else the OS user) and `computerName`, never an email unless the desktop is signed in to an organization (then that person's name, address and `avatarUrl`); organization server: the person, and `avatarUrl` when Perspicax has their photo | anyone signed in |
-| `GET /api/people/:id/avatar?v=` | the person's Perspicax avatar as `avatarUrl` names it (PNG or JPEG, `private, max-age=86400` for the current version), read by the server through its Perspicax link; the phone asks only this route, with its own bearer, and keeps the image keyed by the versioned URL (`AccountAvatar`, `AccountPhotoStore`) | anyone signed in (organization; on a personal computer whose desktop is signed in to an organization, its owner's avatar, `server/owner-identity.ts`) |
+| `GET /api/people/:id/avatar?v=` | the person's Perspicax avatar as `avatarUrl` names it (PNG or JPEG, `private, max-age=86400` for the current version), read by the server through its Perspicax link; the phone asks only this route, with its own bearer, and keeps the image keyed by the versioned URL (`AccountAvatar`, `AccountPhotoStore`) | anyone signed in (organization; on a personal computer whose desktop is signed in to an organization, its owner's avatar, `server/people/owner-identity.ts`) |
 | `DELETE /api/me` | `{ confirm: true }` | the person (organization) |
 
 Also through the companion: `GET /api/usage`, `GET /api/mcp/servers`,
@@ -691,7 +691,7 @@ engine's own reviewer level (`auto`, for Codex, Claude, Cursor, Grok and Qwen)
 or, without a reviewer, Ask (Full and Auto tighten to Ask; Ask and Edits
 stay). It never changes an existing conversation, never leaves Custom, and
 never turns Auto on for a bot that works on this computer. Off: a new
-conversation takes its bot's level, as before (`server/bot-settings.ts`).
+conversation takes its bot's level, as before (`server/bots/bot-settings.ts`).
 
 **Time zone.** Routines read daily times, interval windows and weekdays in
 the configured zone (the person's own on an organization server, else the

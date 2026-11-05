@@ -29,7 +29,7 @@
 // 2026-10-18: Perspicax erases only with a sign-in of the last five minutes
 // (its `403 reauth_required`), never with a token this server refreshed. So
 // the deletion uses the access token of a fresh sign-in the person made for
-// it (server/account-reauth.ts), never the session's own token:
+// it (server/auth/account-reauth.ts), never the session's own token:
 //   - POST /api/me/reauth `{ client: "web" | "phone" }` answers
 //     `{ url, expiresAt }`: the address the client opens in a browser to sign
 //     in again at Perspicax (a two-minute, single-use ticket for this session);

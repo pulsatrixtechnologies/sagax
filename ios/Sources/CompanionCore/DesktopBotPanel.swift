@@ -40,7 +40,7 @@ public enum DesktopPersonaEditor {
 /// routines, which Details holds).
 public enum DesktopPanelSection: String, CaseIterable, Hashable, Sendable {
     case overview, slack, soul, skills, memory, access, worksOn, model, permissions, voice
-    case visibility, sharing, perspicax, history, usage
+    case visibility, sharing, history, usage
 
     /// Search words beside the label (`sections.ts` keywords).
     public var keywords: [String] {
@@ -57,7 +57,6 @@ public enum DesktopPanelSection: String, CaseIterable, Hashable, Sendable {
         case .voice: ["voice", "alerts", "notifications", "speak"]
         case .visibility: ["visibility", "who can see", "private", "people", "admins", "members", "access", "hide"]
         case .sharing: ["share", "sharing", "people", "grant", "who can use", "members", "directory"]
-        case .perspicax: ["perspicax", "mcp", "profile", "profiles", "tools", "connectwise"]
         case .history: ["history", "changes", "undo", "rollback", "log"]
         case .usage: ["tokens", "cost", "billing"]
         }
@@ -76,10 +75,9 @@ public enum DesktopPanelSection: String, CaseIterable, Hashable, Sendable {
         case .voice: true
         case .visibility: gate.allows(.botVisibility)
         case .sharing: gate.allows(.botSharing)
-        case .perspicax: gate.allows(.botPerspicax)
         // its own item on a server signed in with Perspicax only (Access
         // holds it everywhere else)
-        case .worksOn: gate.allows(.botPerspicax) && gate.allows(.advancedBotPanel, bot: bot)
+        case .worksOn: gate.allows(.botSharing) && gate.allows(.advancedBotPanel, bot: bot)
         case .usage: gate.allows(.botUsage)
         }
     }
@@ -114,7 +112,7 @@ public enum DesktopPanelGroup: String, CaseIterable, Hashable, Sendable {
         case .profile: [.overview, .visibility, .sharing]
         case .instructions: [.soul, .skills]
         case .memoryFiles: [.memory]
-        case .modelTools: [.model, .access, .worksOn, .slack, .perspicax]
+        case .modelTools: [.model, .access, .worksOn, .slack]
         case .behavior: [.permissions, .voice]
         case .activity: [.history, .usage]
         }
@@ -774,9 +772,12 @@ public struct BotActionsMenuPlan: Hashable, Sendable {
     ///   - inspector: the Inspector is offered where the pairing shows it.
     ///   - activeBotCount: bots not archived, for Archive's "keep one".
     ///   - wizard: "Redo the wizard" (2026-10-26), for whoever may change the bot.
+    ///   - editBot: the desktop's first entry, Edit bot (`BotActionsMenu.tsx`
+    ///     "edit-bot"), where the bot editor is the desktop's window (the
+    ///     iPad desktop shell, 2026-11-03); the phone keeps its Edit button.
     public init(gate: SurfaceGate, bot: Bot, viewerId: String?, editable: Bool, zipExport: Bool,
-                inspector: Bool = false, activeBotCount: Int, wizard: Bool = false) {
-        var first: [BotActionsMenuItem] = []
+                inspector: Bool = false, activeBotCount: Int, wizard: Bool = false, editBot: Bool = false) {
+        var first: [BotActionsMenuItem] = editBot ? [.editBot] : []
         // Lot 6: Make / Replace primary first, then Redo the wizard, then
         // Share with people. Edit bot and Rename are gone (duplicates).
         if let viewerId, gate.allows(.primaryBot) {

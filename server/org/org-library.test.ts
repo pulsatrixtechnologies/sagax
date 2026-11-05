@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { canonicalJson, parsePackageDocument } from "../../shared/package-format.ts";
 
-const FIXTURES = join(import.meta.dirname, "..", "shared", "package-fixtures");
+const FIXTURES = join(import.meta.dirname, "..", "..", "shared", "package-fixtures");
 const fixture = (name: string): any => JSON.parse(readFileSync(join(FIXTURES, name), "utf8"));
 const sha = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 const hex = /^[a-f0-9]{64}$/;
@@ -74,7 +74,7 @@ function snapshot(): string {
  * `from`, a snapshot, to start again from what it holds). */
 async function installation(from?: string) {
   if (from) {
-    (await import("../message-db.ts")).closeMessageDb();
+    (await import("../messages/message-db.ts")).closeMessageDb();
     home = from;
   } else {
     home = mkdtempSync(join(tmpdir(), "omb-org-library-"));
@@ -86,14 +86,14 @@ async function installation(from?: string) {
   vi.stubEnv("SAGAX_DATA_DIR", join(home, ".sagax"));
   const { Store } = await import("../store.ts");
   const { RoutineManager } = await import("../routines/routines.ts");
-  const skills = await import("../skills.ts");
-  const workspace = await import("../workspace.ts");
-  const sections = await import("../section-context.ts");
-  const { saveImage } = await import("../attachments.ts");
+  const skills = await import("../skills/skills.ts");
+  const workspace = await import("../workspace/workspace.ts");
+  const sections = await import("../rooms/section-context.ts");
+  const { saveImage } = await import("../attachments/attachments.ts");
   const { botAvatarUrlFromStoredPath } = await import("../../shared/bot-avatar.ts");
   const { DATA_DIR } = await import("../config.ts");
   const { OrgLibrary, parseOrgLibraryCatalog } = await import("./org-library.ts");
-  const parts = await import("../package-parts.ts");
+  const parts = await import("../packages/package-parts.ts");
   // Preset bots (presets.ts), wired as server/index.ts wires them.
   const presetStore = (await import("../presets.ts")).createPresetStore(join(DATA_DIR, "org-library", "presets.json"));
   const store = new Store(() => ({ instanceId: "claude", model: "default-model" }));
@@ -136,7 +136,7 @@ async function installation(from?: string) {
 }
 
 afterEach(async () => {
-  const { closeMessageDb } = await import("../message-db.ts");
+  const { closeMessageDb } = await import("../messages/message-db.ts");
   closeMessageDb();
   vi.unstubAllEnvs();
   vi.useRealTimers();

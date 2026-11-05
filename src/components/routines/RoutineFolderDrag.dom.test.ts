@@ -168,23 +168,41 @@ describe("the row's state word (2026-10-28)", () => {
     expect(row("r1").querySelector("[data-routine-running]")).toBeNull();
   });
 
-  it("Running for a live run, as quiet text that opens that run in Automations", async () => {
+  it("Running for a live run takes the last-run line, and the row opens that run", async () => {
     runs.push({ id: "run-9", routineId: "r1", status: "running" });
     await mount();
-    const word = row("r1").querySelector("[data-routine-running]") as HTMLButtonElement;
-    expect(word.textContent).toBe("Running");
-    expect(word.getAttribute("aria-label")).toBe("Running: Morning");
-    expect(word.className).not.toMatch(/underline|border|bg-(?!transparent)/);
+    const line = row("r1").querySelector("[data-routine-running]") as HTMLElement;
+    expect(line.textContent).toMatch(/^Running·/);
+    expect(line.getAttribute("aria-label")).toBe("Running: Morning");
     expect(row("r2").querySelector("[data-routine-running]")).toBeNull();
-    act(() => { word.click(); });
-    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "showRoutines", section: "logs", botId: "bot-1", routineId: "r1", runStatus: "running", runId: "run-9" });
+    act(() => { (line.closest("button") as HTMLButtonElement).click(); });
+    // The run opens as its chat where the chat is, not the Automations page.
+    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "openRoutineRunSheet", runId: "run-9", routineId: "r1", botId: "bot-1" });
   });
 
-  it("shows Running once: the last-run line skips the run the Running word already shows", async () => {
+  it("shows Running instead of the last result: no Completed and no age of the old run", async () => {
     runs.push({ id: "run-8", routineId: "r1", status: "completed" }, { id: "run-9", routineId: "r1", status: "running" });
     await mount();
     expect(row("r1").querySelector("[data-routine-running]")).not.toBeNull();
-    expect(row("r1").querySelector("[data-routine-last-run]")?.getAttribute("data-routine-last-run")).toBe("completed");
+    expect(row("r1").querySelector("[data-routine-last-run]")).toBeNull();
     expect(row("r1").textContent?.match(/Running/g)?.length).toBe(1);
+  });
+});
+
+// 2026-11-03 (audit N-4): with a filter on, the grouped list passed only the
+// rows shown, so pausing a folder or deleting it (and its Undo) missed the
+// bot's other routines in that folder.
+describe("a folder action under a filter", () => {
+  it("pauses every routine of the folder, not only the rows shown", async () => {
+    const fetchMock = vi.fn(async (..._args: unknown[]) => json(200, {}));
+    vi.stubGlobal("fetch", fetchMock);
+    const hidden = routine("r4", "Hidden by the filter", "Daily");
+    await act(async () => { root.render(createElement(RoutineFolderList, { bot: bot as never, routines: [routines[0]!], allRoutines: [...routines, hidden], runs: runs as never, grouped: true, viewerPrincipalId: null, onOpen: () => {}, onCreateIn: () => {} })); });
+    await flush();
+    act(() => { (section("Daily").querySelector("[data-routine-folder-more]") as HTMLButtonElement).click(); });
+    act(() => { (document.querySelector("[data-routine-folder-action=pause]") as HTMLButtonElement).click(); });
+    await flush();
+    const patched = fetchMock.mock.calls.map((call) => String(call[0])).filter((url) => /\/api\/routines\/r\d$/.test(url)).sort();
+    expect(patched).toEqual([expect.stringContaining("/api/routines/r1"), expect.stringContaining("/api/routines/r4")]);
   });
 });

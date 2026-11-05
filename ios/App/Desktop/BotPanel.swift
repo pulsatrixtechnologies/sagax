@@ -5,9 +5,9 @@
 // Library (Files, Skills, Plugins: BotPanelLibrary.swift), Computer; no More
 // tab. Edit bot is a pencil on the mascot and the first entry of the
 // bot's one "..." menu (`BotActionsMenu.tsx`, #518), which also holds
-// Rename, the Primary Bot, the export and Archive. It opens Edit bot in a
-// sheet (BotEditIPad.swift): the Grok Bot layout of `BotEditTree`, the same
-// tree as the iPhone, with the desktop's own section views one level in. The name and label are edited where they
+// Rename, the Primary Bot, the export and Archive. Edit bot is the
+// desktop's centred window (PersonaEditorWindow.swift, 2026-11-03), on
+// Identity from the menu and on Appearance from a tap on the mascot. The name and label are edited where they
 // show, under the mascot (`InlineEditableText.tsx`). Which tabs and sections a pairing shows is
 // `DesktopPanelTab` / `DesktopPanelSection` / `DesktopPersonaEditor`
 // (CompanionCore), from `SurfaceGate`.
@@ -97,26 +97,7 @@ private struct BotPanelContent: View {
         .overlay(alignment: docked ? .leading : .trailing) {
             Rectangle().fill(theme.hairlineWeak).frame(width: 1)
         }
-        .overlay {
-            if model.avatarEditorOpen {
-                // a tap outside the editor closes it
-                Color.black.opacity(0.001)
-                    .onTapGesture { withAnimation(.easeOut(duration: 0.15)) { model.avatarEditorOpen = false } }
-                    .accessibilityHidden(true)
-            }
-        }
-        .overlay(alignment: docked ? .topTrailing : .topLeading) {
-            if model.avatarEditorOpen {
-                AnyView(BotAvatarEditorLayer(bot: current, docked: docked))
-            }
-        }
         .sheet(item: $sharedFile) { file in ActivityShareSheet(items: [file.url]) }
-        .sheet(isPresented: $model.personaOpen, onDismiss: { model.panelSection = nil }) {
-            BotEditIPadSheet(bot: current, slackURL: slackURL)
-                .environmentObject(session)
-                .environmentObject(model)
-                .environment(\.desktopTheme, theme)
-        }
         .task(id: session.connection?.id) {
             async let config = session.configStatus()
             if session.surfaceGate.allows(.botSlack) {
@@ -189,7 +170,8 @@ private struct BotPanelContent: View {
             zipExport: gate.scope != .sidecar && (session.canAdminister || PrimaryBotRules.viewerOwns(current, viewerId: session.roomViewer.actorId)),
             inspector: true,
             activeBotCount: session.state.bots.filter { $0.hidden != true }.count,
-            wizard: true
+            wizard: true,
+            editBot: true
         )
     }
 
@@ -360,16 +342,19 @@ private struct BotPanelIdentity: View {
         VStack(spacing: 0) {
             ZStack(alignment: .topTrailing) {
                 Button {
-                    withAnimation(.easeOut(duration: 0.15)) { model.avatarEditorOpen.toggle() }
+                    // the desktop's avatar click: Edit bot on Appearance
+                    model.showAppearance()
                 } label: {
-                    BotMascotView(bot: bot, size: 112, state: MausState.forChat(.bot(bot), in: session.state), animated: true, owlHandle: owlHandle)
-                        .frame(width: 112, height: 112)
-                        .frame(width: 112, height: 119, alignment: .top)
+                    // BotProfileAvatarCard: the 144 pt mascot in the panel, pt-5
+                    BotMascotView(bot: bot, size: 144, state: MausState.forChat(.bot(bot), in: session.state), animated: true, owlHandle: owlHandle)
+                        .frame(width: 144, height: 144)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text("Edit avatar"))
                 .accessibilityIdentifier("desktop-panel-avatar")
+                // 2026-11-03: no pencil on the mascot (the desktop's Edit bot
+                // is in the panel's ⋯ menu); kept only for VoiceOver
                 if DesktopPersonaEditor.offered(gate: session.surfaceGate, bot: bot) {
                     Button { model.showPersona() } label: {
                         Image(systemName: "pencil")
@@ -381,14 +366,18 @@ private struct BotPanelIdentity: View {
                     }
                     .buttonStyle(.plain)
                     .offset(x: -4, y: 28)
+                    .opacity(0)
                     .accessibilityLabel(Text("Edit persona"))
                     .accessibilityIdentifier("desktop-panel-edit-persona")
                 }
             }
-            .padding(.top, 24)
+            .padding(.top, 20)
+            // the name under the mascot (`-mt-1` under BotAvatar's 144 pt
+            // box, whose owl sits higher than the iPad's: measured on the
+            // 1376x1032 references, the name's baseline 15 pt lower)
             PanelInlineText(value: bot.name, placeholder: nil, label: "Edit name", size: 17, lineHeight: 24, weight: .medium,
                             limit: 100, required: true, isEditing: binding(.name)) { save(name: $0) }
-                .padding(.top, 20)
+                .padding(.top, 11)
                 .accessibilityIdentifier("desktop-panel-name")
             PanelInlineText(value: bot.title, placeholder: "Add a label", label: "Edit label", size: 12.5, lineHeight: 16,
                             muted: true, limit: 200, isEditing: binding(.label)) { save(title: $0) }

@@ -1,6 +1,6 @@
 /** Server-request (tools / approvals) handler for a Codex app-server session. */
 import { codexHostToolRequest } from "../host-tools.ts";
-import { CALL_TOOL, DESCRIBE_TOOL, SEARCH_TOOL, directoryCallTarget } from "../../mcp-directory.ts";
+import { CALL_TOOL, DESCRIBE_TOOL, SEARCH_TOOL, directoryCallTarget } from "../../mcp/mcp-directory.ts";
 import { parseProtocolAskQuestions, questionAnswersById, questionChoices } from "../../../shared/ask-question.ts";
 import { permissionCommand } from "../permission-command.ts";
 import {
@@ -10,10 +10,10 @@ import {
 } from "./approvals.ts";
 import type { CodexSession } from "./session-types.ts";
 import { newId } from "../../contracts.ts";
-import { commandSummary } from "../../tool-summary.ts";
+import { commandSummary } from "../../tools/tool-summary.ts";
 import { CODEX_MISSING_CREDENTIALS, codexContextFull, codexSignInExpired, codexSignInRefused, codexUserError } from "../codex-errors.ts";
 import { classifyError, RETRY_MAX_ATTEMPTS } from "../retry.ts";
-import { renewalPrompt } from "../../context-renewal.ts";
+import { renewalPrompt } from "../../context/context-renewal.ts";
 
 export const DENY_TIMEOUT_NOTE =
   "Sagax: nobody answered this permission request in time. Skip this action and finish what you can without it.";
@@ -115,7 +115,13 @@ s.handleServerRequest = (msg: any) => {
       : isAdditionalPermission
         ? { permissions: allow ? grantedPermissions(params.permissions) : {}, scope: "turn" }
         : { decision: allow ? (legacy ? "approved" : "accept") : legacy ? "denied" : "decline" };
-  if (s.autoAcceptPermissions && isPermission) {
+  // #1977: an MCP tool approval is never answered here, Full included: it
+  // goes to Sagax's gate (index.ts request.opened), where Full approves
+  // unless an organization or personal rule, the safety review or
+  // isolation holds it. Only Codex's own command, file and sandbox asks
+  // are Full's to accept in the driver (and an app-access form of
+  // Codex's own ChatGPT apps, mcpAppApprovalForm, as before).
+  if (s.autoAcceptPermissions && isPermission && !isLegacyMcpPermission) {
     return s.send({
       jsonrpc: "2.0",
       id: msg.id,
@@ -187,9 +193,12 @@ s.handleServerRequest = (msg: any) => {
     requestType: isQuestion ? "question" : "permission",
     tool,
     summary,
-    // the server Codex named in its own ask, with the tool it parsed
-    ...(isLegacyMcpPermission && mcpTool && typeof params.serverName === "string" && /^[\w-]{1,64}$/.test(params.serverName)
-      ? { mcpTool: `${params.serverName}__${mcpTool}` } : {}),
+    // The server Codex named in its own ask, with either its direct tool or
+    // the real target call_tool will run on a searched catalog. Rules and
+    // grants must never see the directory wrapper instead of that target.
+    ...(isLegacyMcpPermission && (runs ?? mcpTool) && typeof params.serverName === "string" && /^[\w-]{1,64}$/.test(params.serverName)
+      ? { mcpTool: `${params.serverName}__${runs ?? mcpTool}` } : {}),
+    ...(runs ? { input: JSON.stringify(params._meta?.tool_params?.arguments ?? {}) } : {}),
     command: method === "execCommandApproval" || method === "item/commandExecution/requestApproval"
       ? permissionCommand(params.command, params.cwd ?? (
         // Helpers may have a different workspace from their parent.

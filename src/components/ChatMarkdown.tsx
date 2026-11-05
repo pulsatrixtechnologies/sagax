@@ -48,6 +48,7 @@ import {
   getLanguageDisplayName,
   getSnippetFileName,
 } from "../lib/code-block";
+import { wrapCodeChildren } from "../lib/code-wrap";
 import { repairMarkdownTables } from "../lib/markdown-tables";
 import { TRANSCRIPT_WINDOW_SIZE } from "../lib/transcript-window";
 import { windowsPathDestinations } from "../../shared/markdown-windows-paths";
@@ -72,6 +73,8 @@ import {
 import { cwWidgetRejection, parseCwWidgetText } from "../../shared/cw-widgets/validate.ts";
 import { CwWidgetView } from "./cw/CwWidgetView";
 import { ArtifactCard } from "./ArtifactCard";
+import { ClaudeArtifactCard, ClaudeArtifactConsentCard } from "./ClaudeArtifactCard";
+import { claudeArtifactUrl, parseArtifactConsent } from "../../shared/claude-chat-blocks";
 import { EmailCard } from "./EmailCard";
 import { WidgetFrame } from "./WidgetFrame";
 import { ChartBlock } from "./ChartBlock";
@@ -251,6 +254,32 @@ async function highlightFence(code: string, lang: string): Promise<string> {
     defaultColor: "light-dark()",
   });
 }
+/** One coloured run of a line (the coding chat's diffs): its text and the
+ * two themes' colour (`light-dark()`), never HTML. */
+export interface CodeToken {
+  content: string;
+  style?: Record<string, string>;
+}
+
+/** The same grammars and themes as a code fence, as tokens per line, for a
+ * renderer that draws its own rows. Null for a language outside the curated
+ * set or a text past HIGHLIGHT_MAX_CHARS: the rows stay plain. */
+export async function highlightCodeLines(code: string, lang: string): Promise<CodeToken[][] | null> {
+  if (code.length > HIGHLIGHT_MAX_CHARS) return null;
+  const file = grammarFile(lang.trim().toLowerCase());
+  if (!file) return null;
+  const highlighter = await getHighlighter();
+  await loadGrammar(highlighter, file);
+  const result = highlighter.codeToTokens(code, {
+    lang: file,
+    themes: { light: LIGHT_THEME, dark: DARK_THEME },
+    defaultColor: "light-dark()",
+  });
+  return result.tokens.map((line) => line.map((token) => ({
+    content: token.content,
+    ...(token.htmlStyle ? { style: token.htmlStyle as Record<string, string> } : token.color ? { style: { color: token.color } } : {}),
+  })));
+}
 const highlightKey = (lang: string, code: string) => `${lang}:${hash(code)}`;
 // Past this size a block stays plain text. Shiki tokenizes on the renderer's
 // main thread: 100 KB of TypeScript took 1.1 s, 200 KB 2.3 s and 1 MB 12 s,
@@ -319,7 +348,7 @@ export function chatUrlTransform(value: string, key?: string): string {
   return defaultUrlTransform(value);
 }
 
-/** Parse link destinations exactly as server/message-file.ts does. */
+/** Parse link destinations exactly as server/messages/message-file.ts does. */
 function remarkWindowsPathDestinations(this: { data(): object }) {
   const data = this.data() as { fromMarkdownExtensions?: unknown[] };
   (data.fromMarkdownExtensions ??= []).push(windowsPathDestinations);
@@ -1410,7 +1439,17 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
         const email = kind === "email" || !kind ? parseEmailBlock(code, lang) : null;
         if (email) return <EmailCard draft={email} pending={pending} threadId={threadId} botId={botId} draftsEnabled={emailDrafts} />;
         if (kind === "widget") {
+          // the engine could not open another account's claude.ai artifact
+          const consent = pending ? null : parseArtifactConsent(code);
+          if (consent) return <ClaudeArtifactConsentCard url={consent.url} account={consent.account} onSendToBot={youtubeSendToBot} />;
           const page = parseArtifactPage(code);
+          // a claude.ai artifact is read live through the engine's session
+          const claudeUrl = page?.url ? claudeArtifactUrl(page.url) : null;
+          if (page && claudeUrl) {
+            const offset = nodeOffset(node);
+            const publishKey = !pending && offset !== undefined ? `${messageId ?? prefix}:${offset}` : undefined;
+            return <ClaudeArtifactCard url={claudeUrl} title={page.title} pending={pending} publishKey={publishKey} onSendToBot={youtubeSendToBot} />;
+          }
           // a YouTube page is the video itself: the player, not a page card
           const pageVideo = page?.url && !pending ? youtubeVideoId(page.url) : null;
           if (pageVideo) return <YouTubeMiniPlayer videoId={pageVideo} message={scopedMessage} onSendToBot={youtubeSendToBot} />;
@@ -1444,12 +1483,10 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
         );
       },
       code({ children }: { children?: ReactNode }) {
-        // break-words because a path or an identifier can be longer than
-        // the bubble is wide, and an unbreakable token has nowhere to go
-        // but outside it, off the left edge in a right-to-left paragraph,
-        // where the line ends.
+        // Compact monospace chip: wrap at path separators (see code-wrap.ts)
+        // so a long cron or script path never falls to one glyph per line.
         return (
-          <code dir="ltr" className="rounded bg-inset px-1 py-px text-[12px] break-words [unicode-bidi:isolate]">{children}</code>
+          <code dir="ltr" className="ui-code-chip break-words [unicode-bidi:isolate]">{wrapCodeChildren(children)}</code>
         );
       },
       // markdown never emits a span itself (no raw HTML); the only
@@ -1494,6 +1531,8 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
           const copy = delivered && Object.hasOwn(delivered, fileName(localPath)) ? delivered[fileName(localPath)] : undefined;
           return <LocalFileLink filePath={copy ?? localPath} name={copy ? fileName(localPath) : undefined} message={scopedMessage}>{children}</LocalFileLink>;
         }
+        const claudeUrl = href && !inert ? claudeArtifactUrl(href) : null;
+        if (claudeUrl) return <ClaudeArtifactCard url={claudeUrl} onSendToBot={youtubeSendToBot} />;
         const ytId = href && !inert ? youtubeVideoId(href) : null;
         if (ytId) {
           return (

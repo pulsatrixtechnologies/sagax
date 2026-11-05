@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { VideoGenerations, VideoJobError, type VideoScope } from "../video-generation.ts";
-import { videoGenerationSchema } from "../video-provider.ts";
+import { VideoGenerations, VideoJobError, type VideoScope } from "../video/video-generation.ts";
+import { videoGenerationSchema } from "../video/video-provider.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
 

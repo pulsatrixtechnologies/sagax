@@ -5,7 +5,7 @@
 //
 // Admin scope by default (not in CLIENT_ALLOW, not a service route).
 import { decisionsCsv, readDecisionRange, readDecisions } from "../decision-log.ts";
-import { parseUsageRange } from "../usage-ledger.ts";
+import { parseUsageRange } from "../usage/usage-ledger.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface DecisionsRouteDeps {

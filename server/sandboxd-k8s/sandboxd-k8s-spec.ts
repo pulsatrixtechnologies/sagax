@@ -1,9 +1,9 @@
 // Pure Kubernetes objects for one sandbox: a Pod, a PVC and a NetworkPolicy.
 // No client and no cluster here, so the isolation rules are asserted in CI
-// the same way the Docker spec is (server/user-sandbox-spec.ts).
+// the same way the Docker spec is (server/sandbox/user-sandbox-spec.ts).
 import { isAbsolute } from "node:path";
 
-import { SANDBOX_INSTANCE_LABEL, SANDBOX_KEY_RE, SANDBOX_LABEL, SANDBOX_UID, SANDBOX_USER_LABEL, SANDBOX_WORKSPACE, cidrContains, parseCidr, sandboxLabels, sandboxNames, type SandboxdConfig } from "../user-sandbox-spec.ts";
+import { SANDBOX_INSTANCE_LABEL, SANDBOX_KEY_RE, SANDBOX_LABEL, SANDBOX_UID, SANDBOX_USER_LABEL, SANDBOX_WORKSPACE, cidrContains, parseCidr, sandboxLabels, sandboxNames, type SandboxdConfig } from "../sandbox/user-sandbox-spec.ts";
 
 const MiB = 1024 * 1024;
 
@@ -376,6 +376,15 @@ export function quantityBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) throw new Error("quantity must be positive");
   if (bytes % MiB === 0) return `${bytes / MiB}Mi`;
   return `${Math.floor(bytes)}`;
+}
+
+/** A storage quantity ("2Gi", "2048Mi", "21474836480", "20G") in bytes,
+ * or null when it is not one. */
+export function quantityToBytes(value: string): number | null {
+  const match = /^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|Pi|k|M|G|T|P)?$/.exec(value.trim());
+  if (!match) return null;
+  const units: Record<string, number> = { Ki: 1024, Mi: 1024 ** 2, Gi: 1024 ** 3, Ti: 1024 ** 4, Pi: 1024 ** 5, k: 1e3, M: 1e6, G: 1e9, T: 1e12, P: 1e15 };
+  return Math.floor(Number(match[1]) * (match[2] ? units[match[2]]! : 1));
 }
 
 export function quantityCpu(nanoCpus: number): string {

@@ -48,6 +48,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     personalSkillInputs,
     personalSkills,
     perspicaxTurnIntegration,
+    perspicaxTurnPrepare,
     phoneIntegration,
     promptWithReply,
     refreshMcpOAuth,
@@ -78,16 +79,27 @@ export function createSetupStartTurn(host: StartTurnHost) {
     withUnseenMessages,
   } = host;
 
-  return async function setupStartTurn(state: TurnState): Promise<void> {
+  return async function setupStartTurn(state: TurnState): Promise<{ kind: "return" } | undefined> {
 
     if (state.warmOnly && state.opts?.warmSignal?.aborted) {
       state.instance.adapter.releaseWarmSession?.(state.threadId);
-      return;
+      return { kind: "return" };
     }
     if (state.enginesRead) {
       await state.enginesRead;
       if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) throw new DirectTurnSetupCancelled("turn stopped while the engines were read");
     }
+    // Perspicax token exchange, session open/verify and tools/list do not
+    // need custom mount names. Start them beside
+    // compaction, context selection and prompt build; await before mounts.
+    const perspicaxPrepared = IDENTITY.kind === "perspicax" && state.instance.adapter.capabilities.customMcp === true
+      ? perspicaxTurnPrepare({ bot: state.bot, threadId: state.threadId, generation: state.dispatchClaimId, speaker: state.speaker, ...(state.warmOnly ? { quiet: true } : {}) })
+      : null;
+    // Let an in-flight early prepare finish so revoke/endGeneration can see
+    // what it opened (a cancelled turn must still release those entries).
+    const settlePerspicaxPrepare = async () => {
+      if (perspicaxPrepared) await perspicaxPrepared.catch(() => {});
+    };
     // A call warm must not compact or rewrite the resume cursor. The first
     // spoken turn decides that, and a reset discards this process.
     if (!state.warmOnly) {
@@ -96,6 +108,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     if (state.opts?.runOn === "cloud") {
       const readiness = await cloudRoutineReadiness(state.botId, state.threadId);
       if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) {
+        await settlePerspicaxPrepare();
         throw new DirectTurnSetupCancelled("turn stopped during cloud readiness");
       }
       if (!readiness.ready) throw new Error(readiness.reason ?? "The cloud computer is not ready");
@@ -105,8 +118,12 @@ export function createSetupStartTurn(host: StartTurnHost) {
     if (!state.voiceCallTurn) await compactConversation({ bot: state.bot, threadId: state.threadId, generation: state.dispatchClaimId, instance: state.instance, model: state.model,
       excludedIds: new Set([state.userMessage.id, ...(state.opts?.excludeMessageIds ?? [])]), manual: state.opts?.compactOnly === true });
     turnTrace(state.threadId, "compacted");
-    if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) throw new DirectTurnSetupCancelled("turn stopped during context setup");
+    if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) {
+      await settlePerspicaxPrepare();
+      throw new DirectTurnSetupCancelled("turn stopped during context setup");
+    }
     if (state.opts?.compactOnly) {
+      await settlePerspicaxPrepare();
       clearDirectTurnDispatch(state.threadId, state.dispatchClaimId);
       revokeInternalCapabilityGeneration(state.threadId, state.dispatchClaimId);
       settleDirectFollowup(state.dispatchClaimId);
@@ -120,7 +137,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
       drainSecretResumes();
       drainTeamSetupResumes();
       drainDelegationWakes();
-      return;
+      return { kind: "return" };
     }
     }
     // Keep the full branch order for delivery bookkeeping, but select actual
@@ -141,6 +158,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     state.selection = selectReplay(context, { budgetBytes: cfg.context?.rebuildBytes ?? DEFAULT_REBUILD_BYTES, excludedIds: skipTranscript, compaction: state.record });
     state.transcript = state.selection.transcript.map(({ role, text }: any) => ({ role, text }));
     state.contextReset = state.selection.compacted > 0 && state.record?.id !== state.task.appliedCompactionId;
+    if (!state.warmOnly) turnTrace(state.threadId, "context-selected");
     // Whether this engine had a session here is decided on the cursors
     // from before the reset below: a fold is a continuation, not a new
     // engine joining (turn-context.ts COMPACTED_PREAMBLE).
@@ -197,7 +215,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     // the setup prompt block, and the peer-comms integration below: a driver
     // that never mounts agent tools (or a turn already at the comms-depth cap)
     // must not be steered into — or told about — tools it cannot call.
-    state.skillAuthoring = personalFeatureOn("state.skillAuthoring", skillAuthoringEnabled(cfg), vaultPrincipalForThread(state.threadId)) && state.peerToolsMounted;
+    state.skillAuthoring = personalFeatureOn("skillAuthoring", skillAuthoringEnabled(cfg), vaultPrincipalForThread(state.threadId)) && state.peerToolsMounted;
     // Setup mode's turn-text rewrite (parseSetupCommand/expandSetupTurnText)
     // must not run ahead of a system prompt that can't explain it: a driver
     // without agent tools sees the user's literal "/setup ..." message. The
@@ -259,7 +277,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
         ? buildTurnContext({ text: userTurnText, transcript: state.transcript, rewound: false, fresh: false, externallyUpdated: true, replaysNatively: false }).turnText
         : buildRecoveryText({ text: userTurnText, transcript: state.transcript });
       // What this turn puts in front of the provider, for each session it can end
-      // up in (server/delta-context.ts). buildTurnContext prepends a replay only
+      // up in (server/context/delta-context.ts). buildTurnContext prepends a replay only
       // when it replays, so a changed text means the transcript was sent.
       const carried = [...skipTranscript];
       const windowIds = state.selection.representedIds;
@@ -277,7 +295,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
       };
     };
     state.dispatchContext = state.decideContext(state.plannedConfig);
-    // A call turn (server/voice-turn.ts) runs in the call's own session,
+    // A call turn (server/voice/voice-turn.ts) runs in the call's own session,
     // never the conversation's: no conversation cursor, no handed-message
     // record. Its first dispatch (the warm, or the first spoken turn) closes
     // an idle process the thread kept, so the call never reuses the long
@@ -346,6 +364,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     if (!state.warmOnly) {
       const drift = checkSoulDrift(state.bot.id, state.bot.soul ?? "", state.bot.soulHash ?? "");
       if (drift.drift !== Boolean(state.bot.soulDrift)) store.patchBot(state.bot.id, { soulDrift: drift.drift });
+      turnTrace(state.threadId, "soul-drift");
     }
     if (!state.warmOnly && state.dispatchContext.handoff) handoffs.begin(state.threadId, state.dispatchClaimId, state.dispatchContext.handoff);
 
@@ -356,10 +375,11 @@ export function createSetupStartTurn(host: StartTurnHost) {
       state.providerText,
       [
         ...(state.instance.adapter.capabilities.phoneMcp === true ? ["phoneMcp"] : []),
-        ...(state.skillAuthoring ? ["state.skillAuthoring"] : []),
+        ...(state.skillAuthoring ? ["skillAuthoring"] : []),
       ],
       availableSkills(),
     );
+    if (!state.warmOnly) turnTrace(state.threadId, "skills-selected");
     if (state.selectedSkills.some((skill: any) => skill.manifest.requiredCapabilities.includes("phoneMcp"))) {
       state.integrations.phone = phoneIntegration(state.bot.id, state.threadId, state.dispatchClaimId);
     }
@@ -369,14 +389,33 @@ export function createSetupStartTurn(host: StartTurnHost) {
     // never pre-allowed, so every call rides the normal permission flow.
     if (state.instance.adapter.capabilities.customMcp === true) {
       await refreshMcpOAuth(state.bot);
+      if (!state.warmOnly) turnTrace(state.threadId, "oauth-refreshed");
       const mounted = mcpServersAsPerson(state.bot, orgSpeakerPrincipal(state.bot, state.speaker), state.threadId);
       attachCustomMcp(state.integrations, mounted.servers, cfg);
       state.githubWithheld = mounted.githubWithheld;
+      if (!state.warmOnly) turnTrace(state.threadId, "mcp-mounted");
     }
-    // Slice 5: the bot's Perspicax profiles, as the person who speaks.
+    // The account's main Perspicax connection, as the person who speaks.
+    // The fixed reserved mount is added after custom mounts; the early
+    // prepare/handshake started above is awaited here (#1955).
     state.perspicaxPrompt = "";
-    if (IDENTITY.kind === "perspicax" && state.instance.adapter.capabilities.customMcp === true && (store.bot(state.bot.id) ?? state.bot).perspicax?.profiles.length) {
-      const perspicax = await perspicaxTurnIntegration({ bot: state.bot, threadId: state.threadId, generation: state.dispatchClaimId, speaker: state.speaker, taken: Object.keys(state.integrations.custom ?? {}), ...(state.warmOnly ? { quiet: true } : {}) });
+    if (perspicaxPrepared || (IDENTITY.kind === "perspicax" && state.instance.adapter.capabilities.customMcp === true)) {
+      if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) {
+        await settlePerspicaxPrepare();
+        throw new DirectTurnSetupCancelled("turn stopped during Perspicax setup");
+      }
+      const perspicax = await perspicaxTurnIntegration({
+        bot: state.bot,
+        threadId: state.threadId,
+        generation: state.dispatchClaimId,
+        speaker: state.speaker,
+        taken: Object.keys(state.integrations.custom ?? {}),
+        ...(state.warmOnly ? { quiet: true } : {}),
+        ...(perspicaxPrepared ? { prepared: perspicaxPrepared } : {}),
+      });
+      if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) {
+        throw new DirectTurnSetupCancelled("turn stopped during Perspicax setup");
+      }
       if (Object.keys(perspicax.custom).length) state.integrations.custom = { ...state.integrations.custom, ...perspicax.custom };
       state.perspicaxPrompt = perspicax.prompt;
     }

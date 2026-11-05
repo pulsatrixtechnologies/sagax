@@ -31,6 +31,9 @@ export interface InboxApproval {
   roomName?: string;
   /** the conversation's own title, when it has one */
   threadTitle?: string;
+  /** 2026-11-04: the routine whose run raised the card (its hidden task),
+   * so the row names the routine as well as the bot */
+  routineName?: string;
   scope: InboxScope;
   kind: InboxKind;
   /** when the card was raised (ms) */

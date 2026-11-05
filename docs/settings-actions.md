@@ -13,7 +13,7 @@ parties hors tableau du script.
   `value`). `list` (avec `family`) donne les clés : rien n'est figé dans
   l'invite du bot.
 - Droits : la route de l'écran est rejouée avec la session de la personne
-  (`server/bot-act.ts`). Un membre ne peut pas faire par bot ce qu'il ne
+  (`server/bots/bot-act.ts`). Un membre ne peut pas faire par bot ce qu'il ne
   peut pas faire à la main : la route répond son refus, que le bot relaie.
 - Décision (`shared/settings-actions-policy.ts`), dans l'ordre :
   1. une classe que la personne protège par clé de sécurité : carte signée ;
@@ -57,7 +57,7 @@ parties hors tableau du script.
   permet Full, la personne possède le bot et a `bots.fullAccess`. Un niveau
   change même pendant que ce bot travaille (« mets-toi en Full ») ; le tour
   suivant part avec. Les cartes en attente se répondent avec
-  `sagax_approvals` (`server/primary-approvals.ts`), par n'importe quel
+  `sagax_approvals` (`server/approvals/primary-approvals.ts`), par n'importe quel
   bot que la personne possède, depuis son propre message (un « oui », y
   compris transcrit à la voix) : un « oui » qui ne nomme aucune carte
   répond à la plus récente que la personne voyait, quelle que soit la
@@ -190,7 +190,6 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | The memory's files (read only: MEMORY.md and the topics memory/<topic>.md, their size; bot.memoryFile reads and changes one) | Bot editor > Memory | `sagax_settings` get, set `bot.memoryFiles` | simple |
 | One memory file (get: value its path, e.g. memory/clients.md; set: {path, text, expectedHash?} writes or creates it, {path, renameTo} renames a topic, {path, delete: true} deletes it) | Bot editor > Memory | `sagax_settings` get, set `bot.memoryFile` | simple |
 | Undo a change of the memory (get lists the last changes; set with a change's id puts the file back) | Bot editor > Memory > History | `sagax_settings` get, set `bot.memoryUndo` | simple |
-| Perspicax tools (profiles) | Bot editor > Perspicax | `sagax_settings` get, set `bot.perspicaxProfiles` | simple (élargit les droits pour le bot qui parle lui-même) |
 | A skill on or off ({name, enabled}) | Bot editor > Skills | `sagax_settings` get, set `bot.skill` | simple |
 | Import a skill from GitHub onto a bot ({repo: owner/repo, path?: its folder, ref?: a branch or tag}, or a GitHub, SKILL.md or skills.sh link; then bot.skill {name, enabled} turns it on or off) | Bot editor > Persona > Skills > Import | `sagax_settings` get, set `bot.skillImport` | simple |
 | What the bot receives on top of its engine, read only: one list of its plugins, skills, MCP servers, account connectors, Perspicax Roles and Flow, each with its scope (bot, me, organization, installation, account), its state and what its engine receives | Bot panel > Capabilities | `sagax_settings` get, set `bot.capabilities` | simple |
@@ -232,6 +231,8 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Name | Automations > routine | `sagax_settings` get, set `routine.name` | simple |
 | Instructions | Automations > routine | `sagax_settings` get, set `routine.prompt` | simple |
 | Schedule ({type: once/daily/cron/interval, ...}) | Automations > routine > Schedule | `sagax_settings` get, set `routine.schedule` | simple |
+| Model for routine runs (null follows the bot) | Automations > routine > Model | `sagax_settings` get, set `routine.model` | simple |
+| Reasoning effort for routine runs (null follows the bot) | Automations > routine > Effort | `sagax_settings` get, set `routine.effort` | simple |
 | On or off | Bot panel > Details > Routines; Automations | `sagax_settings` get, set `routine.enabled` | simple |
 | Where it runs | Automations > routine > Runs on | `sagax_settings` get, set `routine.engine` | simple |
 | Bot that runs it | Automations > routine > Bot | `sagax_settings` get, set `routine.bot` | simple |
@@ -242,6 +243,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Delete once finished | Automations > routine > Advanced | `sagax_settings` get, set `routine.deleteWhenFinished` | simple |
 | Pause after this many failures in a row (0 never, null the default 5) | Automations > routine > Advanced | `sagax_settings` get, set `routine.autoPauseAfter` | simple |
 | Folder in the bot's Routines list (null: no folder) | Bot panel > Details > Routines > row menu > Move to folder | `sagax_settings` get, set `routine.folder` | simple |
+| Needs its computer: the pre-run check waits for the bot's computer to be online (true), or not (false); skills and MCP requirements stay | Automations > routine > Requirements | `sagax_settings` get, set `routine.requiresComputer` | simple |
 | Runs as (a person) | Automations > routine > Runs as | `sagax_settings` get, set `routine.runAs` | autrui |
 | Run only when something changes ({kind: watch, source: {type: files, path} / {type: command, command} / {type: tool, tool, args}, condition?, wakeOn?, track?, firstRun?, whenAsleep?}; null: every due time) | Automations > routine > Only when something changes | `sagax_settings` get, set `routine.precheck` | simple |
 | New routine ({name, prompt, botId, schedule, ...}) | Automations > New routine | `sagax_settings` set `routine.create` | simple |
@@ -344,6 +346,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Rows hidden from the sidebar ({items: [{kind, id, at}], unhideOnMessage: {people, bots}}) | Settings > Appearance > Hidden from the sidebar | `sagax_settings` get, set `appearance.sidebarHidden` | simple |
 | Sending to a busy bot | Settings > Appearance | `sagax_settings` get, set `appearance.busySend` | simple |
 | Show replies as they are written (on, the default; off shows each reply once it is finished) | Settings > Appearance > Conversation | `sagax_settings` get, set `appearance.streamReplies` | simple |
+| Chat width (reading 960px, the default; wide ~1280px; full fills the pane) | Settings > Appearance > Conversation | `sagax_settings` get, set `appearance.chatWidth` | simple |
 
 ### Notifications et confidentialité
 
@@ -401,10 +404,10 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Your MCP server on or off ({name, enabled}) | Capabilities > Providers | `sagax_settings` get, set `connections.mcpServerEnabled` | simple |
 | Remove your MCP server (its name) | Capabilities > Providers | `sagax_settings` set `connections.mcpServerRemove` | suppression |
 | Disconnect GitHub (true) | Capabilities > Sources > GitHub | `sagax_settings` set `connections.githubDisconnect` | suppression + secret |
-| Your web search provider ({provider: brave/exa/parallel/firecrawl/searxng, baseUrl, key?}; null forgets it). get says whether a key is saved, never the key | Settings > Models > Web search | `sagax_settings` get, set `connections.webSearch` | simple |
+| Your web search provider ({provider: brave/exa/parallel/firecrawl/searxng, baseUrl, key?}; null forgets it). get says whether a key is saved, never the key | Settings > Providers > Other services > Web search | `sagax_settings` get, set `connections.webSearch` | simple |
 | The person's webhooks (read only: names, bots, on or off; never a signing secret) | Routines > Webhooks | `sagax_settings` get, set `connections.webhooks` | simple |
 | Give a webhook a new signing secret (its id; the secret is never returned to the bot: the person sees it with Reveal) | Routines > Webhooks > webhook > Rotate | `sagax_settings` set `connections.webhookSecretRotate` | secret |
-| Test web search with the saved settings (value true) | Settings > Models > Web search > Test | `sagax_settings` set `connections.webSearchTest` | simple |
+| Test web search with the saved settings (value true) | Settings > Providers > Other services > Web search > Test | `sagax_settings` set `connections.webSearchTest` | simple |
 
 ### Coffre et clés
 
@@ -452,6 +455,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | New conversations confidential | Settings > Organization > Privacy | `sagax_settings` get, set `org.confidentialByDefault` | organisation |
 | Allow vault export | Settings > Organization > Credentials | `sagax_settings` get, set `org.allowVaultExport` | organisation |
 | People from before: days | Settings > Organization > People | `sagax_settings` get, set `org.interimAttachDays` | organisation |
+| Pending approvals expire after (days) | Settings > Organization > Approvals | `sagax_settings` get, set `org.pendingApprovalExpireDays` | organisation |
 | Plugin marketplaces | Capabilities > Sources > Organization sources and access | `sagax_settings` get, set `org.pluginMarketplaces` | organisation |
 | Public links for published pages | Settings > Pages > Organization pages | `sagax_settings` get, set `org.pagesLinkSharing` | organisation |
 | Reader comments on published pages | Settings > Pages > Organization pages | `sagax_settings` get, set `org.pagesReaderComments` | organisation |

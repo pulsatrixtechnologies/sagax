@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { NewBotDefaults } from "./new-bot-defaults.ts";
+import type { NewBotDefaults } from "./bots/new-bot-defaults.ts";
 import type { BotRecord } from "./store.ts";
 
 const FIXTURES = join(import.meta.dirname, "..", "shared", "package-fixtures");
@@ -21,13 +21,13 @@ async function installation() {
   vi.stubEnv("USERPROFILE", home);
   const { Store } = await import("./store.ts");
   const { RoutineManager } = await import("./routines/routines.ts");
-  const skills = await import("./skills.ts");
-  const workspace = await import("./workspace.ts");
-  const sections = await import("./section-context.ts");
+  const skills = await import("./skills/skills.ts");
+  const workspace = await import("./workspace/workspace.ts");
+  const sections = await import("./rooms/section-context.ts");
   const presets = await import("./presets.ts");
-  const importer = await import("./package-import.ts");
-  const exporter = await import("./package-export.ts");
-  const parts = await import("./package-parts.ts");
+  const importer = await import("./packages/package-import.ts");
+  const exporter = await import("./packages/package-export.ts");
+  const parts = await import("./packages/package-parts.ts");
   const { parsePackageDocument } = await import("../shared/package-format.ts");
   const store = new Store(() => ({ instanceId: "claude", model: "default-model" }));
   const routines = new RoutineManager({
@@ -66,7 +66,7 @@ async function installation() {
 }
 
 afterEach(async () => {
-  const { closeMessageDb } = await import("./message-db.ts");
+  const { closeMessageDb } = await import("./messages/message-db.ts");
   closeMessageDb();
   vi.unstubAllEnvs();
   rmSync(home, { recursive: true, force: true });

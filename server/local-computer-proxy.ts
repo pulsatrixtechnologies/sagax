@@ -1,8 +1,8 @@
 // Near-side gate for the host CUA process. The descriptor and turn token
 // travel in environment variables, never command-line arguments or logs.
-import { runMcpBridge } from "./mcp-bridge.ts";
+import { runMcpBridge } from "./mcp/mcp-bridge.ts";
 import { augmentedPath } from "./env-path.ts";
-import { localComputerResultLine } from "./local-computer-guidance.ts";
+import { localComputerResultLine } from "./computer/local-computer-guidance.ts";
 
 const {
   SAGAX_CUA_COMMAND: command,

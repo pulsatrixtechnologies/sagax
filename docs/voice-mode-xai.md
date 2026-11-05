@@ -1,5 +1,76 @@
 # Voice mode with xAI
 
+## A call is a realtime voice session (2026-11-02)
+
+The maintainer's decision: a voice call is never text to speech. It runs on
+the configured realtime voice API, for a full voice call, like the voice
+mode of the reference apps.
+
+Before, every call was a pipeline: the page streamed the microphone to
+xAI's speech to text, its own detector ended each turn, the words became
+an ordinary chat turn on the bot, and the bot's text was read by xAI's
+text to speech. On a call of 2026-11-02 (a bot on Grok 4.7 Fast, the
+organization server) that gave 9 to 15 s from the last word to the bot's
+text (production journal: one turn spent 17 s on tool discovery before
+its mail tool), half sentences ("That's okay, I'm, I'm") sent as turns,
+and "Are you there" said while the bot worked queued as a steer: the
+engine (Grok over ACP) cannot take words mid turn, so the queue drained
+it as a second full turn that read the same mail again.
+
+Now (`server/voice/realtime-call.ts`, `server/voice/realtime-call-host.ts`, the page's
+`src/lib/voice-mode/realtime-call.ts`, `src/components/voice-mode/RealtimeCall.tsx`):
+
+- `GET /api/bots/<id>/voice/realtime` (WebSocket) bridges the page to xAI's
+  Voice Agent API (`wss://api.x.ai/v1/realtime`, the key in the
+  Authorization header on the server, never on the page). PCM16 at 24 kHz
+  both ways. The realtime model listens and speaks natively; its server
+  turn detection (`server_vad`, 500 ms of silence) ends a turn and cuts its
+  own speech on a barge-in.
+- The bot stays the brain for real work, bridged as function calls: `work`
+  hands the person's request to the bot as an ordinary turn on the thread
+  (`via: "call"`, the call's id, the person's attribution); the voice says
+  one short sentence while it runs and speaks the result when the turn's
+  final answer comes back as the function's output. `answer_permission`
+  records a spoken allow once or deny, decided from the person's own words
+  (`spokenConsent(..., "voice")`), never from the model's arguments; a
+  question card is answered by the person's next request. `end_call` hangs up
+  after the goodbye.
+- Chit-chat, "are you there", a repeat or a thank you are answered by the
+  voice at once, with no chat turn.
+- One answer per response id: the audio of a response cut by the person
+  (barge-in, interrupt button) is dropped, never played later. A function's
+  output goes once per call id, and the same request again while it runs
+  joins it instead of running twice.
+- No realtime voice: no call. The status says `realtime: true` only when an
+  xAI key serves the speaker; without it the call button says so and opens
+  the voice settings. A key xAI refuses reaches the page in words
+  (`{"type":"refused","code":"realtime_key_refused"}`: "The realtime voice
+  key was refused. Fix it in Settings > Voice."), never a fallback to text
+  to speech. The older macOS dictation call is gone. Text to speech stays
+  for reading a message aloud.
+- Logs are counters and milliseconds only (`[voice-realtime] call ended ...
+  firstAudioP50=...`). Usage is booked as `grok-realtime` (seconds of audio,
+  estimated at 0.05 USD a minute).
+
+Fixture (`server/voice/realtime-call.e2e.test.ts`, a fake xAI realtime server and
+a fake engine on loopback): end of speech to first audio 202 ms for
+chit-chat with a voice whose own pause is 180 ms (the bridge adds about
+20 ms); a request for the bot's work is acknowledged aloud at the same
+202 ms and its result is heard 848 ms after the request with a 400 ms
+engine turn. The real provider's own pause decides the rest; acceptance
+against xAI itself is still to run with a real key.
+
+Still on the older pipeline: the room call (several bots on one line) and
+the iPhone call.
+
+Tests: `server/voice/realtime-call.test.ts`, `server/voice/realtime-call-host.test.ts`,
+`server/voice/realtime-call.e2e.test.ts`, `server/voice/voice-mode.test.ts` (status).
+
+The sections below describe the older pipeline (speech to text, a chat
+turn, text to speech). A desktop call no longer runs on it; they stay for
+the room call, the iPhone and reading a message aloud.
+
+
 ## Recognition reliability (2026-10-30)
 
 Short answers such as names, weekdays, commands and single letters are
@@ -41,7 +112,7 @@ realtime voice agent, Grok responses, chat completions or function calling,
 nor any mode where xAI writes the reply. Every accepted utterance becomes an
 ordinary bot turn through the normal send route (attributed to the person who
 spoke, private-thread rules applied), and only the bot's own reply text is
-synthesized. `server/voice-call.e2e.test.ts` and `scripts/verify-voice-mode.ts`
+synthesized. `server/voice-call.e2e.test.ts` and `scripts/verify/dev/verify-voice-mode.ts`
 fail if a call reaches any xAI path other than `/v1/stt`, `/v1/tts` and
 `/v1/tts/voices`.
 
@@ -51,7 +122,7 @@ Every turn said on a call is sent with `voiceCall` (`{ callId, interrupted?,
 language?, duplex? }`, stored on the person's message as `Message.voiceCall`; words
 typed to a bot while its call is live carry the call id too). For such a turn
 the server adds a hidden "Phone call" section to the bot's system prompt
-(`server/voice-call-prompt.ts`): a live phone call with the person, words from
+(`server/voice/voice-call-prompt.ts`): a live phone call with the person, words from
 speech recognition that may be misheard (infer the meaning, never mention a
 transcript, dictation or voice mode, never ask to type), the voice output
 contract (verdict first, one to four short spoken sentences, no markdown,
@@ -103,7 +174,7 @@ stay. Another language is left as written.
 An approval on a call is spoken as a question with its two options ("Allow
 once, or deny?", `approval.voice.commandAsk`). The answer must pick one
 (`spokenConsent(said, "voice")`, `shared/call-consent.ts`; the iPhone's
-`CallAnswers.decision`; the GPT-Live call too, `server/live-call-controller.ts`,
+`CallAnswers.decision`; the GPT-Live call too, `server/voice/live-call-controller.ts`,
 whose voice is told the same two options): a whole-utterance yes in English or French allows
 once; a no, with a reason or not, denies; a hedge ("okay", "d'accord"), a
 mix ("no wait, yes"), a condition ("yes, but rename it"), a question or
@@ -122,13 +193,13 @@ driver, the session note of ACP agents and pi. An interrupted turn always
 carries it. It is never stored as the person's text and never shown in the
 thread. The first written turn after a call is told the call ended. Words
 that join a running turn are marked as said on the call. Tests:
-`server/voice-call-prompt.test.ts`, `server/voice-call-prompt.e2e.test.ts`,
+`server/voice/voice-call-prompt.test.ts`, `server/voice/voice-call-prompt.e2e.test.ts`,
 the per-driver cases in `server/drivers/{claude,codex,openai-compat}.test.ts`.
 
 A live session gets the volatile section only when it changed, so every call
 turn's own words also carry a short bracketed call mark
 (`voiceCallTurnPrompt`, never stored). The server keeps the call's state
-per thread (`server/voice-call-session.ts`): LiveCall and the older call say when their call
+per thread (`server/voice/voice-call-session.ts`): LiveCall and the older call say when their call
 starts, stays alive and ends (`POST /api/bots/<id>/voice/call`
 `{threadId, callId, state}`), and every send to that thread while the call
 lasts is a call turn, whatever path it takes (typed words, a queued line
@@ -196,7 +267,7 @@ these desktop calls reads the server's English chip narration (the chip's
 
 The model's own parallel opener (`voice.opener`, one sentence from a fast
 model beside the turn) stays with HTTP Grok on a full-duplex call;
-`server/voice-first-sentence.ts` says why Claude, Codex and ACP engines do
+`server/voice/voice-first-sentence.ts` says why Claude, Codex and ACP engines do
 not get one.
 
 ## Full-duplex conversation (issue #292)
@@ -236,9 +307,9 @@ xAI Speech-to-Speech (`wss://api.x.ai/v1/realtime`, grok-voice-latest)
 is still not the brain: it would drop Sagax tools, memory, approvals
 and MCP. Tests: `src/lib/voice-mode/duplex-policy.test.ts`,
 `speech-fence.test.ts`, `call-logic.test.ts`,
-`server/voice-call-duplex.test.ts`,
+`server/voice/voice-call-duplex.test.ts`,
 `scripts/voice-duplex-harness.test.ts`,
-`server/voice-call-reliability.e2e.test.ts` (duplex case).
+`server/voice/voice-call-reliability.e2e.test.ts` (duplex case).
 
 Each utterance has an `utteranceId` (also its `sendId`): the server
 delivers it once, and answers a second send of it with the first receipt.
@@ -254,7 +325,7 @@ the bot carries `voiceCall.heard` and `voiceCall.unheard`; the bot reads
 "They heard up to: '...'. They did not hear: '...'", the person's message
 keeps both, and the call transcript shows the unheard words, marked.
 
-A call turn is never left unanswered (`server/voice-call-watchdog.ts`):
+A call turn is never left unanswered (`server/voice/voice-call-watchdog.ts`):
 2.5 s after a direct turn settles on a thread on a call, the person's
 newest call words with no written answer after them (nothing running or
 queued, no open question, not words they cut on purpose) run once more,
@@ -407,7 +478,7 @@ under the turn's `utteranceId` (ids and milliseconds, never the words):
   audible), and `total`. With `localStorage["omb.voiceCall.debug"]` set to
   `"1"` the console logs a `[voice-latency]` line per turn and the call's
   settings card shows the last answer's stages.
-- The server (`server/voice-latency.ts`) logs, under the same id,
+- The server (`server/voice/voice-latency.ts`) logs, under the same id,
   `received->dispatch`, `dispatch->engine` (warm, or cold start) and
   `engine->first-token`. A Claude relaunch logs which spawn contract fields
   changed (names only, `server/drivers/spawn-contract.ts`). A Grok turn is
@@ -444,7 +515,7 @@ What keeps it short:
 - **Low reasoning effort on a call.** A call turn, and the warm that starts
   its process (so both share one spawn contract), runs at the engine's low
   effort: Grok `--reasoning-effort low`, Claude `--effort low`, Codex
-  `effort: low` (`server/voice-call-effort.ts`). The rule: "low" where the
+  `effort: low` (`server/voice/voice-call-effort.ts`). The rule: "low" where the
   engine offers it, else its lowest level but "none" (which turns reasoning
   off: another answer, not a faster one); a bot already set lower keeps its
   level; a Codex bot with no effort is left alone, since Codex would keep
@@ -555,7 +626,7 @@ What keeps it short:
   when it is the one speaking, cleared at xAI (`text.clear`, confirmed by
   `audio.clear`); nothing of it reaches the page after, and what was heard
   is measured on the whole utterance's words. The server session is
-  `server/voice-speech-session.ts`. Safety nets: the page falls back to POST
+  `server/voice/voice-speech-session.ts`. Safety nets: the page falls back to POST
   `/voice/stream` for the rest of the call when the socket is not ready
   within 1.5 s, errors twice in one call, closes, or when the server gives
   up; the server reopens a dropped xAI socket with a backoff (250, 750,
@@ -645,13 +716,13 @@ release waits on it. Recipe: [docs/verification/voice-acceptance.md](verificatio
 Measured in production before this: about 5.8 s from the end of speech to
 the first words (1.9 s of turn setup over a conversation of about 183,000
 tokens, a cold engine, 3.8 s to the first token), more on a large model,
-and lines said meanwhile piled up. Now (`server/voice-turn.ts`):
+and lines said meanwhile piled up. Now (`server/voice/voice-turn.ts`):
 
 - **A fast model.** Every call turn, and the warm that starts its process
   when the call is accepted, runs on a fast model: the bot's own fast model
   when it set one, else the fast tier of its engine (Haiku on Claude Code,
   a fast Grok on Grok), else the fast tier of another engine the payer can
-  use (`pickVoiceModel`, server/model-auto.ts, the same tiers Auto uses). A
+  use (`pickVoiceModel`, server/models/model-auto.ts, the same tiers Auto uses). A
   bot pinned to a model gets it too; a request that needed another
   engine's connector keeps that engine. No fast model anywhere: the bot's
   model.
@@ -685,7 +756,7 @@ and lines said meanwhile piled up. Now (`server/voice-turn.ts`):
   its words cut, `expectedUtteranceId`), and a stale answer is still never
   spoken (the speech fence). Lines said while the bot cannot take them
   (a turn being stopped) wait in the queue, and every waiting line of the
-  same call drains as one turn (`callLineGroup`, server/steer-queue.ts)
+  same call drains as one turn (`callLineGroup`, server/turns/steer-queue.ts)
   that answers the newest, the earlier ones given as its context
   (`voiceQueuePrompt`). Every line stays in the conversation.
 - **Timings.** The Events lens line of each call turn names the model, the
@@ -695,9 +766,9 @@ and lines said meanwhile piled up. Now (`server/voice-turn.ts`):
   sentence, text to speech, playback and the total from the end of speech
   (`audioTurnNotice`). The server log has `[voice-turn]` per dispatch.
 
-Tests: `server/voice-turn.test.ts`, `server/model-auto.test.ts`
-(`pickVoiceModel`), `server/steer-queue.test.ts` (one call's lines),
-`server/voice-fast-turn.e2e.test.ts` (fake Claude CLI: the fast model and
+Tests: `server/voice/voice-turn.test.ts`, `server/models/model-auto.test.ts`
+(`pickVoiceModel`), `server/turns/steer-queue.test.ts` (one call's lines),
+`server/voice/voice-fast-turn.e2e.test.ts` (fake Claude CLI: the fast model and
 short context in one warm session, the conversation's own session after,
 barge-in, no pile-up, a heavy request handed off).
 
@@ -718,7 +789,7 @@ fail recovers on its own:
   next turn's words. A socket that never opened (an old server) gets the
   backoff only, then the call uploads.
 - **xAI's speech to text (server side).** The page's socket outlives xAI's
-  (`server/voice-listen-session.ts`). When xAI's socket closes, the server
+  (`server/voice/voice-listen-session.ts`). When xAI's socket closes, the server
   opens a new one behind the same page socket (250, 750, 2,000 ms) and sends
   the page `{"type":"reconnected"}`; the page sends the open utterance again
   and uploads the finished ones that were waiting. Only when those three
@@ -765,7 +836,7 @@ fail recovers on its own:
   details are in the chat). A stop the person asked for is no failure. The
   call waits 6 s (`CALL_FAILURE_GRACE_MS`) with the bot idle after it first
   saw the row, past the harness's one retry 2.5 s after the turn settles
-  (`server/voice-call-watchdog.ts`): a retry that answers says nothing of
+  (`server/voice/voice-call-watchdog.ts`): a retry that answers says nothing of
   the failure, a retry that fails too is said once. Once per person's
   words; never while the bot works or speaks, the person talks, or a
   question or approval waits. Words another bot asked (`peerAsk`) are
@@ -789,7 +860,7 @@ fail recovers on its own:
   again and the audio engine rebuilt with a new engine and new player
   nodes (the old ones are invalid after a reset). The reply to the call's
   `POST /voice/call` `start` carries `keyterms`, the same list the server
-  gives xAI (`server/voice-keyterms.ts`: the bot's name, the person's, the
+  gives xAI (`server/voice/voice-keyterms.ts`: the bot's name, the person's, the
   organization's terms, the thread's proper nouns; at most 100, only to a
   person allowed on that thread, and never a token that looks like a
   secret: a key prefix such as AKIA, sk-, ghp_ or xai-, a long or random
@@ -893,10 +964,10 @@ xAI's refusal is never hidden behind "didn't come through" (2026-10-28):
 ## Timings in the Events lens (2026-10-29)
 
 Where the seconds of a spoken turn went shows in the thread's Events lens
-as `runtime.notice` rows (`server/voice-timing.ts`), numbers only, never
+as `runtime.notice` rows (`server/voice/voice-timing.ts`), numbers only, never
 the words: each call turn ("Voice turn: end of speech, speech to text,
 send" from the page's `voiceCall.timing`, then "turn setup, engine (warm
-or cold start), first words" from `server/voice-latency.ts`), each
+or cold start), first words" from `server/voice/voice-latency.ts`), each
 streamed transcript (the final words after the page's finalize) and each
 whole-recording upload (how long xAI took for how many seconds of audio).
 
@@ -912,10 +983,10 @@ message (2026-10-29: 44 s, until they typed the question).
 ## Who pays, and the key
 
 The key never reaches the client. Order for the person who speaks
-(`server/voice-mode.ts` `resolveVoiceKeys`, `server/voice-keys.ts`):
+(`server/voice/voice-mode.ts` `resolveVoiceKeys`, `server/voice/voice-keys.ts`):
 
 - Organization server: the xAI key they saved in Sagax for their own voice
-  (Settings > Models and voice > My voice keys, `server/person-voice-keys.ts`,
+  (Settings > Models and voice > My voice keys, `server/voice/person-voice-keys.ts`,
   2026-10-28; it needs no grant of the organization's voice), else their own
   xAI key in Perspicax (provider `xai`), else the organization's xAI key (Settings > Models and voice, `config.xai.key`
   or `XAI_API_KEY`), else refused with an access card shown in their bar only,
@@ -1035,14 +1106,14 @@ the server's own voice routes.
 
 ## Checks
 
-- `server/voice-mode.test.ts`: authorization, payer order, refusal card, no
+- `server/voice/voice-mode.test.ts`: authorization, payer order, refusal card, no
   key in any answer, validation, rate limit, usage.
 - `server/voice-call.e2e.test.ts`: the listen WebSocket, the streamed
   speech and the streaming voice socket (clauses, barge-in `text.clear`, a
   dropped xAI socket reconnected, a refused one answered 502) over real
   sockets against a fake xAI, same-origin only, and no xAI path but speech
   to text and text to speech.
-- `server/voice-speech-session.test.ts`: the streaming voice's server
+- `server/voice/voice-speech-session.test.ts`: the streaming voice's server
   session (one utterance per answer with appends sent at once, appended
   text cleaned with its edges kept and cut at 500 characters, an open
   utterance with nothing to say yet, whole texts one at a time, clear, drop
@@ -1065,15 +1136,15 @@ the server's own voice routes.
 - `server/tts/grok.test.ts`: the xAI requests (speed, language, STT form,
   fillers kept, format, Smart Turn and its confidence passed through).
 - `src/lib/voice-mode/duplex-policy.test.ts`, `call-logic.test.ts` duplex
-  cases, `server/voice-call-duplex.test.ts`, `scripts/voice-duplex-harness.test.ts`:
+  cases, `server/voice/voice-call-duplex.test.ts`, `scripts/voice-duplex-harness.test.ts`:
   full-duplex barge-in while thinking, admit never queues, one active turn.
 - `src/lib/voice-mode/call-logic.test.ts`: the call's state machine (barge-in,
   cancellation, hold, mute), endpointing and its adaptation, the echo guard,
   the sentence splitter.
-- `server/voice-call-reliability.e2e.test.ts`: every call turn marked on
+- `server/voice/voice-call-reliability.e2e.test.ts`: every call turn marked on
   every path, no duplicate steer, heard and unheard, the unanswered
   watchdog, words sent while a turn stops; `server/org/org-mcp.e2e.test.ts`:
-  one Perspicax exchange for a whole call; `server/delta-context.e2e.test.ts`:
+  one Perspicax exchange for a whole call; `server/context/delta-context.e2e.test.ts`:
   a steer the engine echoed is never offered again.
 - `src/lib/voice-mode/player.test.ts`, `stt-stream.test.ts`: what was heard
   at a cut (also in an utterance that grows), the 24 kHz context, the
@@ -1084,11 +1155,11 @@ the server's own voice routes.
   streams the next turn on a new socket, a mid-utterance drop (each
   utterance its own words, one upload), the server's `reconnected`, two
   failed uploads reported.
-- `server/voice-listen-session.test.ts`: xAI's speech to text dropped and
+- `server/voice/voice-listen-session.test.ts`: xAI's speech to text dropped and
   reopened behind the page's socket, the page closed only after the
   backoff, the 540 s rotation while idle.
 - `src/lib/voice-mode/api.test.ts`, `call-alive.test.ts`,
-  `server/voice-call-session.test.ts`: the 8 s stall and 20 s upload
+  `server/voice/voice-call-session.test.ts`: the 8 s stall and 20 s upload
   timeouts, the heartbeat on visibility and online, a retry that dies with
   the call, an expired call registered again.
 - `src/lib/voice-mode/call.test.ts`: the call with fake devices (one turn,
@@ -1112,7 +1183,7 @@ the server's own voice routes.
   punctuation, the answer over one streaming voice socket, barge-in cleared
   at xAI, hold, the POST fallback after xAI's socket drops for good, and no
   xAI path but voice:
-  `pnpm exec vite build && node --experimental-strip-types scripts/verify-voice-mode.ts`.
+  `pnpm exec vite build && node --experimental-strip-types scripts/verify/dev/verify-voice-mode.ts`.
   It drives the call through `window.__sagaxVoiceCall`, which exists only
   when `localStorage["omb.voiceCall.debug"]` is `"1"`.
 

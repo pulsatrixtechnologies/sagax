@@ -1,6 +1,6 @@
 // The telephony guard (spec docs/specs/bot-telephony.md 6.5) on the
 // Perspicax relay: what a bot may do with the Twilio tools of its person's
-// profile, whatever its approval level. Checked in server/perspicax-mcp.ts
+// profile, whatever its approval level. Checked in server/perspicax/perspicax-mcp.ts
 // before a bot's own tools/call frame leaves for Perspicax; a call the
 // harness makes itself (place_phone_call, `judged`) is not a bot's frame
 // and is built by Sagax.
@@ -13,13 +13,13 @@
 // accounts (a new key or auth token would let a bot reach Twilio around
 // Sagax). A `_dry_run` sends nothing and stays allowed.
 //
-// Tool names are compared with separators folded (`twilio_api__write`,
-// `twilio_api-write`, `mcp__perspicax_example__twilio_api__write`) and with
-// per-resource names (`twilio_api__Calls_write`).
+// Tool names are compared with separators folded (`twilio_api_write`,
+// `twilio_api-write`, `mcp__perspicax_example__twilio_api_write`) and with
+// per-resource names (`twilio_api_Calls_write`).
 //
 // Pure: no disk, no clock.
 
-/** Read tools: `<api>__query`, `<api>__read_action`, `<api>__find_<x>`... */
+/** Read tools: `<api>_query`, `<api>_read_action`, `<api>_find_<x>`... */
 const READ_TOOL = /_(?:query|read|list|get|fetch|search|describe|read_action)$|^twilio(?:_[a-z0-9]+)?_find_[a-z0-9_]+$/;
 /** A text that carries an address Twilio would fetch or call back. */
 const URL_FIELD = /(?:url|callback)$/i;
@@ -65,6 +65,10 @@ export function telephonyRefusal(toolName: string, args: unknown, context: Telep
     }
     return FLOW_TWILIO.test(text.replace(/[\s_.-]/g, "")) || /api\.twilio\.com/i.test(text) ? TELEPHONY_WRITE_REFUSAL : null;
   }
+  // Perspicax Voice's voice_line is a read of the line (shared/outbound.ts),
+  // even when its description names Twilio and lands in twilioTools. Empty
+  // args and every other read go through; changes use voice_number.
+  if (/(?:^|_)voice_line$/.test(name)) return null;
   const at = name.search(/(?:^|_)twilio/);
   const aliased = at < 0 && [...(context.twilioTools ?? [])].some((tool) => fold(tool) === name || name.endsWith(`_${fold(tool)}`));
   if (at < 0 && !aliased) return null;

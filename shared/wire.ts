@@ -8,6 +8,7 @@
  * server/store.ts; the wire projection is typed so a new server field
  * fails compilation until it is either declared here or explicitly listed
  * as server-private. */
+import type { PersonAttentionCard } from "./person-attention.ts";
 import type { LimitFailoverLine } from "./limit-failover.ts";
 import type { OrderTracking } from "./order-tracking.ts";
 import type { SoloGoalLine } from "./solo-goal-line.ts";
@@ -67,6 +68,38 @@ import type { ArtifactsFrame } from "./artifacts.ts";
 import type { BotTasksFrame } from "./bot-task-list.ts";
 import type { WaitCardField, WaitLineField } from "./wait-request.ts";
 import { EFFORT_LEVELS, isEffortLevel, type EffortLevel, type ModelSelection } from "./model-selection.ts";
+
+import type { CwPermission, ToolRole } from "./perspicax-roles.ts";
+
+/** A role fact as a banner row (visible roles, 2026-11-05). */
+export interface RoleNotice {
+  kind: "lapsed" | "write_refused" | "read_refused";
+  role: { slug: string; name: string };
+  tool: string;
+  permission?: CwPermission;
+  /** the person the bot acts for (the "Moi" of this thread) */
+  person?: string;
+  /** cw_member:<identifier> behind the role */
+  target?: string;
+}
+
+/** An "Agit comme" card (visible roles, 2026-11-05). */
+export interface RoleTransitionCard {
+  botId: string;
+  botName: string;
+  /** the person the bot acts for: "au nom de <person>" */
+  person: string;
+  from: { slug: string; name: string };
+  to: { slug: string; name: string };
+  reason: ToolRole["reason"];
+  refusedTool?: string;
+  /** CW path of the refused read ("" for a switch) */
+  path?: string;
+  /** whether the reader may save "Toujours ainsi" (the bot's owner) */
+  canAlways?: boolean;
+  /** continue | stay | always, once answered */
+  choice?: "continue" | "stay" | "always";
+}
 
 export { EFFORT_LEVELS, isEffortLevel, type EffortLevel, type ModelSelection };
 
@@ -180,17 +213,25 @@ export interface WireTask {
    * in the sidebar, previews, typing dots, unread or notifications; reached
    * from the bot's Activity panel or a thread link. Only `true` is stored. */
   hidden?: true;
-  /** A confidential thread (server/confidential-threads.ts): nothing of it
+  /** A confidential thread (server/threads/confidential-threads.ts): nothing of it
    * is remembered, exported, logged or shared beyond its owner. Permanent
    * once set: only deleting the thread ends it. Only `true` is stored. */
   confidential?: true;
   /** Set when a bot, not a person, opened this thread. */
   openedBy?: TaskOpenedBy;
+  /** A person wrote here from an app (TaskRecord.askedAt), so a thread a bot
+   * opened is theirs too and stays in their list (shared/background-threads.ts).
+   * Derived at projection, never stored; only `true` is sent. */
+  personWrote?: true;
+  /** The server archived this finished background thread on its own
+   * (server/threads/background-sweep.ts); a person's write brings it back.
+   * Only `true` is stored. */
+  autoArchived?: true;
   /** A parallel task: the conversation and request it answers. */
   parallelOf?: TaskParallelOf;
   /** Organization server: the person this 1:1 thread belongs to (who
    * started it; a routine's runAs; else the bot owner when absent). Only
-   * they read or write it (server/thread-privacy.ts). */
+   * they read or write it (server/threads/thread-privacy.ts). */
   ownerPrincipalId?: string;
   /** Set by close_thread; absent while the thread is open. */
   closedBy?: TaskClosedBy;
@@ -328,7 +369,7 @@ export interface WireBotGrant {
 }
 
 /** A bot-to-bot conversation of this bot waiting on the person
- * (server/inter-bot-approvals.ts): never listed, its cards are answered from
+ * (server/approvals/inter-bot-approvals.ts): never listed, its cards are answered from
  * the conversation the person has open. */
 export interface WireWaitingApproval {
   threadId: string;
@@ -340,7 +381,7 @@ export interface WireWaitingApproval {
 }
 
 /** A conversation between this bot and another bot, named on both ends
- * (server/inter-bot-conversations.ts). The messages are read through
+ * (server/peers/inter-bot-conversations.ts). The messages are read through
  * GET /api/threads/:threadId/messages. */
 export interface WireBotConversation {
   threadId: string;
@@ -369,7 +410,7 @@ export interface WireBot {
   id: string;
   /** The task selected in the UI; running turns keep their own thread id. */
   threadId: string;
-  /** The bot's main thread (server/main-thread.ts): where a routine without
+  /** The bot's main thread (server/threads/main-thread.ts): where a routine without
    * a thread of its own reports, and what a bot opens to while threads are
    * hidden. Server-derived; absent only for a bot without threads. */
   mainThreadId?: string;
@@ -503,7 +544,7 @@ export interface WireBot {
   outbound?: { policy: "ask" | "allow"; dailyCap: number };
   /** Ordered backups used only by opt-in, pre-prompt startup recovery. */
   fallback?: Array<{ instanceId: string; model: string }>;
-  /** Per bot since 2026-10-15 (server/bot-runtime-settings.ts): its
+  /** Per bot since 2026-10-15 (server/bots/bot-runtime-settings.ts): its
    * conversations that may work at once (1..10). Absent: the server default. */
   maxConcurrentThreads?: number;
   /** Parallel tasks one person may have running on this bot (1..10 on an
@@ -571,7 +612,7 @@ export interface WireBot {
 }
 
 /** Who may see a bot: every signed-in person, admins only, or the listed
- * addresses (and `@domain` entries) plus admins. See server/bot-visibility.ts. */
+ * addresses (and `@domain` entries) plus admins. See server/bots/bot-visibility.ts. */
 export type BotVisibility = "everyone" | "admins" | { people: string[] };
 
 /** The person a user message is from, as the server resolved it from their
@@ -604,7 +645,7 @@ export type CardAnswerer = (
    * (sagax_approvals). The field name stays "primary-bot" (2026-10-20);
    * since 2026-10-27 any owned bot, not only the Primary Bot.
    * "auto-review": the model reviewer applied the person's rule (2026-10-21,
-   * server/custom-rules-model.ts; the card's customRule says which and why). */
+   * server/rules/custom-rules-model.ts; the card's customRule says which and why). */
   via?: "call" | "ai-client" | "primary-bot" | "auto-review" | "reach-me";
   bot?: string;
   /** "reach-me" (2026-10-26): answered from the person's own "Me joindre"
@@ -687,7 +728,7 @@ export interface VoiceCallMark {
   /** STT partial sent before end-of-speech. Must not become a parallel task. */
   speculative?: boolean;
   /** The page's stages of this turn in ms (end of speech, speech to text,
-   * send), for the Events lens (server/voice-timing.ts). Diagnostics only:
+   * send), for the Events lens (server/voice/voice-timing.ts). Diagnostics only:
    * the server never stores it on the message. */
   timing?: { endpointMs?: number; sttMs?: number; dispatchMs?: number };
 }
@@ -748,7 +789,7 @@ export interface WireMessage extends WaitLineField {
   nudge?: { fromId: string; fromName: string; toId: string; toName: string; groupId?: string };
   /** kind "roster" (#1480): one neutral line in a group chat about its
    * people, drawn centred, never a bubble. `left`: that person left the
-   * group (server/group-leave.ts). `text` is the fallback line for clients
+   * group (server/groups/group-leave.ts). `text` is the fallback line for clients
    * that do not know the kind. */
   roster?: { event: "left"; personId: string; name: string };
   /** kind "access" (organization server, slice 3): a turn that could not run
@@ -786,6 +827,14 @@ export interface WireMessage extends WaitLineField {
   secret?: SecretRequestCardData;
   /** One idempotently updated status card for a routine run. */
   routineRun?: RoutineRunCardData;
+  /** 2026-11-05: what a bot's finished turn elsewhere (a hand-off, a
+   * routine run, a thread another bot opened) left for the person, carried
+   * into their own conversation with that bot (shared/person-attention.ts).
+   * On a routine.run row it rides beside the report. `text` is the fallback. */
+  attention?: PersonAttentionCard;
+  /** 2026-11-05: a bot's answer in a routine run's task after the run had
+   * ended (a teammate's result resumed it), mirrored here: the source id. */
+  lateRunReplyOf?: string;
   /** Terminal receipt for a bounded multi-bot channel goal. */
   goalRun?: GroupGoalRunCardData;
   /** call rows (kind "call"): the finished Live call this row records. The
@@ -837,6 +886,14 @@ export interface WireMessage extends WaitLineField {
      * what answered it, shown only in the row's details, never on the line.
      * `source` is the decision log's source (auto-approve.ts). */
     autoApproval?: { source: string; rule?: string };
+    /** 2026-11-05 (visible roles): the Perspicax role this call ran under
+     * (shared/perspicax-roles.ts); "" slug is "Moi". Absent: not a
+     * Perspicax call, or one from before roles were shown. */
+    role?: ToolRole;
+    /** 2026-11-05: a role fact shown as a banner row: a lapsed role that
+     * stopped a call, a refused write (stop) or a read refused with no
+     * fallback, with the CW permission it needs. */
+    roleNotice?: RoleNotice;
     /** 2026-10-18: the bot left an engine the organization no longer
      * offers and now runs on Auto (shared/offered-engines.ts). */
     engineMove?: OrgEngineMove;
@@ -941,7 +998,7 @@ export interface WireMessage extends WaitLineField {
   /** A user message said on a voice call (src/components/voice-mode/LiveCall.tsx):
    * which call, whether the person cut the bot's previous answer to say it,
    * and the call's language when one is set. The turn it starts gets the
-   * hidden phone-call instruction (server/voice-call-prompt.ts). */
+   * hidden phone-call instruction (server/voice/voice-call-prompt.ts). */
   voiceCall?: VoiceCallMark;
   /** group threads: which member said this (sender attribution). */
   from?: { botId: string; name: string; color: string };
@@ -954,7 +1011,7 @@ export interface WireMessage extends WaitLineField {
   /** Set on the user-role line another bot delivered into this bot's own
    * conversation (ask_bot, start_thread). `incident`: the line is
    * Sagax's Team incidents report about that bot's broken run in
-   * `threadId` (server/incidents.ts), not its words; `notified`: that
+   * `threadId` (server/peers/incidents.ts), not its words; `notified`: that
    * failure already buzzed the person (a run that could not start, a
    * failed routine). */
   peerAsk?: { botId: string; name: string; unattended?: boolean; incident?: { threadId: string; notified?: boolean } };
@@ -978,13 +1035,18 @@ export interface WireMessage extends WaitLineField {
   /** A teammate parked on a question for the person (server park/remind,
    * 2026-10-19): the whole question, answered from the card in place (the
    * answer is a person's message into `threadId`, the waiting work). */
-  inputRequest?: { botId: string; threadId: string; botName: string; title?: string; question: string; reminder?: boolean; answered?: boolean };
+  inputRequest?: { botId: string; threadId: string; botName: string; title?: string; question: string; reminder?: boolean;
+    /** The person's own answer reached the waiting work. */
+    answered?: boolean;
+    /** Closed without the person's answer (0.8.46): it expired, or with
+     * `defaulted` the requester's declared default answer was used. */
+    expired?: boolean; defaulted?: boolean };
   /** A bot's page proposal (shared/published-pages.ts): the card the person
    * reviews and publishes it from. `text` is the fallback line. */
   pagePublish?: { pageId: string; version: number; title: string };
   /** An outward action that costs money or reaches a real person, on its
    * approval card (parité the reference design V4, 59, 83): a phone call
-   * (server/outbound-calls.ts) or a purchase (server/vault/credential-vault.ts).
+   * (server/outbound/outbound-calls.ts) or a purchase (server/vault/credential-vault.ts).
    * `text` is the fallback line. */
   outbound?: OutboundCard;
   /** A published Data result, linked to its bot's main viewer. */
@@ -1046,11 +1108,19 @@ export function nextOpenThread<T extends OpenThreadCandidate>(tasks: readonly T[
 }
 
 export interface OptionCardData extends WaitCardField {
+  /** Server-linked view of a teammate's card in the human initiating chat.
+   * Answers resolve to this original message before any permission checks. */
+  approvalOrigin?: { threadId: string; messageId: string; requestId: string; allowKey?: string };
+  /** Original card's durable backlink. Its copy is never another decision. */
+  approvalDestination?: { threadId: string; messageId: string };
   /** calls: one per outbound call the card covers, in subtitle order. Absent
    * on cards from older computers. */
   outboundRequest?: { tool: string; app: string | null; calls?: Array<{ app: string | null; label: string }> };
   teamMemoryRequest?: { section: string; entryId: string; kind: string };
-  /** 2026-10-30: a proactive proposal (server/proactive-wake.ts): the bot
+  /** 2026-11-05 (visible roles): an "Agit comme" card at a role transition,
+   * answered through POST /api/threads/:id/role-transition (never typed). */
+  roleTransition?: RoleTransitionCard;
+  /** 2026-10-30: a proactive proposal (server/proactive/proactive-wake.ts): the bot
    * offers to handle an event; the person's click answers it through
    * POST /api/bots/:id/proactive/:id (options[0] accepts, options[1]
    * declines), never as a typed message. */
@@ -1106,7 +1176,7 @@ export interface OptionCardData extends WaitCardField {
   ownerRule?: {
     tool: string; scope: Record<string, string>; destructive?: "delete" | "bulk" | "external-message"; description: string;
     /** 2026-10-19 ("Toujours permettre" on every card): the card's
-     * situation the rule also answers (server/owner-approval.ts `from`):
+     * situation the rule also answers (server/approvals/owner-approval.ts `from`):
      * an admin's card, a held card, a turn that is not the person's own. */
     from?: "admin" | "hold" | "origin";
   };
@@ -1182,7 +1252,7 @@ export interface OptionCardData extends WaitCardField {
    * The card stores no body and no query. */
   botActRequest?: { id: string };
   /** A confidential thread's write to its owner's own memory, waiting for
-   * their Allow (server/confidential-threads.ts). The id matches requestId. */
+   * their Allow (server/threads/confidential-threads.ts). The id matches requestId. */
   confidentialMemoryRequest?: { id: string };
   /** Interactive shell on a terminal-capable resource (approval required). */
   terminalRequest?: TerminalRequestCardData;
@@ -1193,7 +1263,7 @@ export interface OptionCardData extends WaitCardField {
    * for this person. Recorded per person; never auto-applied. */
   phoneCallConsent?: PhoneCallConsentCardData;
   /** A change asked from a ConnectWise widget, waiting for an Allow
-   * (server/cw-widget-actions.ts). `by` is the principal who asked. */
+   * (server/widgets/cw-widget-actions.ts). `by` is the principal who asked. */
   cwActionRequest?: { id: string; action: CwAction; by: string };
   /** 2026-10-16: the person's custom rule behind this card (an ask rule
    * held it, or an allow rule matched without covering its risk class),
@@ -1326,7 +1396,7 @@ export interface GroupTask {
   /** The folder (`WireGroup.projects`) this thread is filed under. */
   projectId?: string;
   /** A person conversation: this thread is unread for the viewer. Drawn
-   * per viewer from `unreadFor` (server/people-dms.ts peopleDmForViewer). */
+   * per viewer from `unreadFor` (server/people/people-dms.ts peopleDmForViewer). */
   unread?: boolean;
   /** A person conversation: which of its two people have not read this
    * thread yet (principal ids). Server-side; a client never gets it. */
@@ -1373,23 +1443,23 @@ export interface WireGroup {
   createdAt: number;
   /** Organization server: the principal who created the room. A bot's
    * follow-up no person asked for runs in this person's server environment
-   * (server/user-sandbox-routing.ts). Absent on older rooms. */
+   * (server/sandbox/user-sandbox-routing.ts). Absent on older rooms. */
   createdBy?: string;
   /** Organization server: who owns the room's settings (its creator, else
    * the first person listed; null when its organization admins do). Only
-   * The owner changes them (server/group-ownership.ts). Absent on a solo
+   * The owner changes them (server/groups/group-ownership.ts). Absent on a solo
    * server. */
   ownerId?: string | null;
   /** true for auto-created bot-bot channels. */
   dm?: boolean;
   /** Organization server: a direct conversation between two people
-   * (`humanIds`), with no bot (server/people-dms.ts). Only those two read it. */
+   * (`humanIds`), with no bot (server/people/people-dms.ts). Only those two read it. */
   peopleDm?: boolean;
   /** A conversation between two people: which of the two have not read it
    * yet (principal ids). Each person's own `unread` is drawn from it, so
    * the sender reading it never clears it for the recipient. A room: the
-   * people tagged with @ who have not read it yet (server/room-mentions.ts).
-   * Server-side; a client never gets it (server/people-dms.ts
+   * people tagged with @ who have not read it yet (server/rooms/room-mentions.ts).
+   * Server-side; a client never gets it (server/people/people-dms.ts
    * peopleDmForViewer). */
   unreadFor?: string[];
   /** A room: @all tags every person in it (a notification each). Absent:
@@ -1421,7 +1491,7 @@ export interface WireGroup {
   setupCompletedAt?: number | null;
   setupSkippedAt?: number | null;
   /** The narrowest audience this room has ever had (see
-   * server/bot-visibility.ts): a bot leaving never widens who may see the
+   * server/bots/bot-visibility.ts): a bot leaving never widens who may see the
    * transcript. Sent to admins only. */
   audienceFloor?: BotVisibility;
   /** True while any member (or hand-off) is mid-turn. Computed at
@@ -1475,7 +1545,7 @@ export interface BotAssignedSkillsWire {
 }
 
 /** One participant's read position on a thread: the newest message they
- * have seen, and when (server/read-receipts.ts). */
+ * have seen, and when (server/messages/read-receipts.ts). */
 export interface ThreadReadPosition {
   messageId: string;
   at: number;
@@ -1494,7 +1564,7 @@ export type ServerFrame =
   | { kind: "message"; threadId: string; message: WireMessage }
   | { kind: "message.patch"; threadId: string; message: WireMessage }
   | { kind: "thread"; threadId: string; activeLeafId: string }
-  /** A read position moved (server/read-receipts.ts): `participantId` is a
+  /** A read position moved (server/messages/read-receipts.ts): `participantId` is a
    * person's principal id or `bot:<botId>`. `reset` alone (no participant)
    * means someone's read receipt choice changed: fetch the positions again. */
   | { kind: "thread.read"; threadId: string; participantId?: string; read?: ThreadReadPosition; reset?: true }
@@ -1505,7 +1575,7 @@ export type ServerFrame =
   | { kind: "notify-withdraw"; threadId: string; requestId: string }
   | { kind: "group.deleted"; groupId: string }
   /** #1480: the viewer left this group; only their own streams get it
-   * (server/group-leave.ts). `roomId`, not `groupId`: the group's own frame
+   * (server/groups/group-leave.ts). `roomId`, not `groupId`: the group's own frame
    * filters would drop it, since they no longer see the group. */
   | { kind: "group.left"; roomId: string; audience: string }
   | { kind: "routine"; routine: Routine }
@@ -1515,9 +1585,9 @@ export type ServerFrame =
   | { kind: "routine.run"; run: RoutineRun }
   /** A cloud coding agent record changed (server/cloud-agents/manager.ts). */
   | { kind: "cloud.agent"; botId: string; item: CloudAgentWireItem }
-  /** A bot's artifacts changed (server/artifacts.ts): ids only, fetch again. */
+  /** A bot's artifacts changed (server/artifacts/artifacts.ts): ids only, fetch again. */
   | ArtifactsFrame
-  /** A bot's task list changed (server/bot-task-list.ts): ids only, fetch again. */
+  /** A bot's task list changed (server/bots/bot-task-list.ts): ids only, fetch again. */
   | BotTasksFrame
   | { kind: "webhook"; webhook: WebhookTrigger }
   | { kind: "webhook.attempt"; attempt: WebhookAttempt }
@@ -1536,7 +1606,7 @@ export type ServerFrame =
   /** A person's own unlocks (server/achievements.ts), to their streams only. */
   | { kind: "achievements"; audience: string; unlocked: Array<{ id: string; points: number; unlockedAt: number }> }
   /** A person's preferences after a save on any of their devices
-   * (server/user-preferences.ts), to that person's streams only. */
+   * (server/people/user-preferences.ts), to that person's streams only. */
   | { kind: "preferences"; audience: string; preferences: Record<string, string>; updatedAt: number | null }
   /** A screen or button for one person's open desktop app. iOS and Android ignore this kind. */
   | { kind: "bot-act"; audience: string; action: string; input?: Record<string, unknown> }
@@ -1562,9 +1632,14 @@ export type ServerFrame =
    * people only; with `audience`, that person's own real state (`hidden`
    * when others see them offline), to their streams only. */
   | { kind: "presence.changed"; audience?: string; people: Array<{ principalId: string; state: "online" | "away" | "offline"; lastSeenAt: number | null; hidden?: true }> }
+  /** #2013: the server is about to restart on purpose (an update, a
+   * restart): sent once, without an id, just before the live stream closes. */
+  | { kind: "server.restarting"; at: number }
+  /** #2013: this organization server's reach of its Perspicax connector changed. */
+  | { kind: "connector.status"; perspicax: { state: "ok" | "unreachable"; since: number } }
   | { kind: "live.call"; botId: string; threadId: string; call: LiveCallState | null }
   /** A short first sentence spoken ahead of the bot's own reply on a duplex
-   * call (server/voice-first-sentence.ts). The speaker's streams only. Not
+   * call (server/voice/voice-first-sentence.ts). The speaker's streams only. Not
    * stored. iOS ignores the kind. */
   | { kind: "voice.opener"; audience: string; threadId: string; callId: string; utteranceId: string; text: string }
   /** The live phone call ended. The speaker's streams only. `by` is who

@@ -5,7 +5,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { describe, expect, it, vi } from "vitest";
 
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import {
   createBotsMessagesRoutes,
   type BotsMessagesRouteDeps,
@@ -118,6 +118,57 @@ function call(
 }
 
 describe("createBotsMessagesRoutes", () => {
+  describe("approval views in the human initiating chat", () => {
+    function approvalDeps(over: Partial<BotsMessagesRouteDeps> = {}) {
+      const sourceBot = { ...bot, id: "worker", threadId: "work", modelSelection: { instanceId: "claude", model: "fake" } };
+      return baseDeps({
+        originApprovals: { sourceFor: (threadId: string) => threadId === "t1" ? { threadId: "work", requestId: "request-1" } : null },
+        store: { ...baseDeps().store, botByThread: (threadId: string) => threadId === "work" ? sourceBot : bot },
+        botForThread: (_botId: string, threadId: string) => threadId === "work" ? sourceBot : bot,
+        requestBehavior: (behavior: string) => behavior,
+        stepUpGate: vi.fn(() => null), ruleManager: () => "pr_owner", stepUpAnswerOf: () => ({}),
+        delegatedRequest: () => false, isConfidentialMemoryCard: () => false, isBotActCard: () => false,
+        adminApprovalCheck: () => null, approvalAnswerRefusal: vi.fn(() => null), cardAnswerRefusal: () => null,
+        saveOwnerRuleFromCard: vi.fn(() => null), answeringCardAs: async (_auth: unknown, _thread: string, _request: string, work: () => unknown) => work(),
+        resolveAndSendTrust: () => false, resolveAndSendCwAction: () => false, resolveAndSendEmailDraft: () => false,
+        resolveImessageCard: () => false, resolveAndSendMeeting: () => false, resolveAndSendPhoneCallConsent: () => false,
+        answerRequest: vi.fn(async () => "allowed-once"),
+        ...over,
+      });
+    }
+
+    it.each(["/api/threads/t1/respond", "/api/bots/b1/respond"])("%s answers through the original owner, key, rule and engine checks", async path => {
+      const deps = approvalDeps();
+      const result = await call(deps, { path, body: { threadId: "t1", requestId: "view-1", behavior: "allow", rule: "allow", stepUp: "signed-key" } });
+      expect(result.sent).toEqual({ status: 200, body: { ok: true, outcome: "allowed-once" } });
+      expect(deps.stepUpGate).toHaveBeenCalledWith("pr_owner", "work", "request-1", "allow", {}, "signed-key");
+      expect(deps.approvalAnswerRefusal).toHaveBeenCalledWith(sessionOwner, "work", "request-1");
+      expect(deps.saveOwnerRuleFromCard).toHaveBeenCalledWith(sessionOwner, "work", "request-1", "allow", "allow", undefined);
+      expect(deps.answerRequest).toHaveBeenCalledOnce();
+      expect(deps.answerRequest).toHaveBeenCalledWith("work", "claude", "request-1", "allow", undefined, { id: "worker", name: "Ada" }, false, false);
+    });
+
+    it("a card in another chat never bypasses the source answerer or security key", async () => {
+      const deps = approvalDeps({ approvalAnswerRefusal: () => "Only the original owner may answer." });
+      const refused = await call(deps, { path: "/api/threads/t1/respond", body: { requestId: "request-1", behavior: "allow" } });
+      expect(refused.sent?.status).toBe(403);
+      expect(deps.saveOwnerRuleFromCard).not.toHaveBeenCalled();
+      expect(deps.answerRequest).not.toHaveBeenCalled();
+      deps.stepUpGate = () => ({ status: 403, body: { error: "A security key is required." } });
+      const needsKey = await call(deps, { path: "/api/threads/t1/respond", body: { requestId: "request-1", behavior: "allow" } });
+      expect(needsKey.sent).toEqual({ status: 403, body: { error: "A security key is required." } });
+      expect(deps.answerRequest).not.toHaveBeenCalled();
+    });
+
+    it("a settled or revoked view cannot save a rule or answer again", async () => {
+      const deps = approvalDeps({ originApprovals: { sourceFor: () => false } });
+      const result = await call(deps, { path: "/api/threads/t1/respond", body: { requestId: "request-1", behavior: "allow", rule: "allow" } });
+      expect(result.sent?.status).toBe(409);
+      expect(deps.saveOwnerRuleFromCard).not.toHaveBeenCalled();
+      expect(deps.answerRequest).not.toHaveBeenCalled();
+    });
+  });
+
   it("returns PASS for foreign paths", async () => {
     const deps = baseDeps();
     expect((await call(deps, { path: "/api/search" })).out).toBe(PASS);

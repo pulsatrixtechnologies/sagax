@@ -61,13 +61,13 @@ export function applyPersonLabel(principalId: string, label: string | null | und
 }
 
 /** This person's custom tag from the store, "" when they have none.
- * Not human-label's display-name helper (name/login/email candidates). */
-export function personLabel(principalId: string | null | undefined): string {
+ * Distinct from human-label's personLabel (display name from candidates). */
+export function storedPersonLabel(principalId: string | null | undefined): string {
   return principalId ? labels.get(key(principalId)) ?? "" : "";
 }
 
 export function usePersonLabel(principalId: string | null | undefined): string {
-  const label = useSyncExternalStore(subscribe, () => personLabel(principalId), () => personLabel(principalId));
+  const label = useSyncExternalStore(subscribe, () => storedPersonLabel(principalId), () => storedPersonLabel(principalId));
   useEffect(() => { void loadPersonLabels(); }, []);
   return label;
 }

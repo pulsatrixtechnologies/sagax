@@ -1,4 +1,5 @@
-import { useStoreDispatch, useStoreGetter, useStoreSelector } from "@/state/store-selector";
+import { equalRows, peerBots } from "@/state/view-slices";
+import { shallowEqual, useStoreDispatch, useStoreGetter, useStoreSelector } from "@/state/store-selector";
 import { visibleMessages, currentTaskBot, type Bot, type Group } from "@/state/store";
 import { orgFullAccessFor } from "@/lib/full-access";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
@@ -13,7 +14,7 @@ import { useDesktopCapabilities } from "../DesktopCapabilities";
 import { useThreadRefs } from "../ThreadRefs";
 import { useParallelCards } from "../parallel-approvals";
 import { useOnCall } from "@/lib/call";
-import { useSendBlock } from "@/lib/send-state";
+import { sendBlockLocks, useSendBlock } from "@/lib/send-state";
 
 export function useComposerSession({
   profile,
@@ -36,8 +37,8 @@ export function useComposerSession({
   // bot's frame) does not render the composer while someone types.
   const dispatch = useStoreDispatch();
   const getState = useStoreGetter();
-  const storeBots = useStoreSelector((current) => current.bots);
-  const routines = useStoreSelector((current) => current.routines);
+  const storeBots = useStoreSelector(peerBots, equalRows);
+  const routines = useStoreSelector((current) => current.routines.filter((routine) => routine.botId === bot?.id || members?.some((member) => member.id === routine.botId)), shallowEqual);
   const config = useStoreSelector((current) => current.config);
   const instances = useStoreSelector((current) => current.instances);
   const ownerOrAdmin = useOwnerOrAdmin();
@@ -55,7 +56,9 @@ export function useComposerSession({
   // engine not connected for them, the computer or local server behind its
   // model down) does not take the message; one line says why and what to do,
   // and the draft stays. Asked again when the bot or its engines change.
-  const sendStateKey = bot ? `${bot.modelSelection.instanceId}\u0000${bot.modelSelection.model}\u0000${bot.activity ?? ""}\u0000${instances.map((instance) => `${instance.instanceId}:${instance.snapshot?.authenticated ?? ""}`).join(",")}` : "";
+  // A turn that ends (busy drops) asks again: an engine that just refused it
+  // for its limit or credit locks the composer at once (engine_limit).
+  const sendStateKey = bot ? `${bot.modelSelection.instanceId}\u0000${bot.modelSelection.model}\u0000${bot.activity ?? ""}\u0000${bot.busy ? "busy" : ""}\u0000${instances.map((instance) => `${instance.instanceId}:${instance.snapshot?.authenticated ?? ""}`).join(",")}` : "";
   const sendState = useSendBlock(!group ? bot?.id : undefined, !group ? bot?.threadId : undefined, sendStateKey);
   const sendBlock = sendState.block;
   const currentGroupTask = group?.tasks?.find((task) => task.threadId === threadId);
@@ -88,7 +91,9 @@ export function useComposerSession({
   // about something else leaves it open (the bot never picks for the
   // person, and there is no X on a waiting question, #885).
   const openQuestions = pendingQuestions(group ? group.messages : bot ? visibleMessages(bot) : []);
-  const approvalBotFor = (pending: Pending) => group
+  const approvalBotFor = (pending: Pending) => pending.message.card?.approvalOrigin
+    ? storeBots.find(candidate => candidate.id === pending.message.from?.botId)
+    : group
     ? members?.find((member) => member.id === pending.message.from?.botId) ??
       members?.find((member) => member.id === groupBusyBotId)
     : bot;
@@ -126,7 +131,10 @@ export function useComposerSession({
 
   return {
     bot,
-    locked,
+    // The maintainer, 2026-11-04: an engine at its limit or out of credit locks the whole
+    // composer (no typing, no send, no actions) until it resets or the bot
+    // moves to another engine or account (src/lib/send-state.ts).
+    locked: locked || sendBlockLocks(sendBlock),
     dispatch,
     getState,
     storeBots,

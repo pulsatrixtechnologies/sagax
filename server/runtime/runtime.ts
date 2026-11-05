@@ -158,7 +158,7 @@ export class Runtime {
           const stale = this.parkedStale(n, now);
           if (stale) {
             this.store.update(n, { kind: "restart_reconciled", at: now, detail: `needs_input: closed (${stale})` });
-            if (!this.applyDefaultAnswer(n)) this.cancelTree(n, stale, "expired", "expired");
+            this.closeParked(n, stale);
             continue;
           }
           this.store.update(n, { kind: "restart_reconciled", at: now, detail: "needs_input: parked again" });
@@ -512,12 +512,12 @@ export class Runtime {
         }
       } else if (n.status === "needs_input" && now - this.since(n.lastActivityAt) > this.limits.inputWaitMs) {
         this.reminded.delete(n.id);
-        if (!this.applyDefaultAnswer(n)) this.cancelTree(n, "the person did not answer", "expired", "expired");
+        this.closeParked(n, "the person did not answer");
       } else if (n.status === "needs_input") {
         const stale = this.parkedStale(n, now);
         if (stale) {
           this.reminded.delete(n.id);
-          if (!this.applyDefaultAnswer(n)) this.cancelTree(n, stale, "expired", "expired");
+          this.closeParked(n, stale);
         } else this.remindIfDue(n, now);
       } else if (n.status === "running") {
         const turn = this.turns.get(n.id);
@@ -1051,6 +1051,15 @@ export class Runtime {
       return "its question can no longer be answered";
     }
     return undefined;
+  }
+
+  /** A parked question closed without the person: the default answer when
+   * the requester declared one, else expired. Either way its cards are told
+   * (runner.unparked), so none of them reads as answered by the person. */
+  private closeParked(n: Assignment, reason: string): void {
+    const defaulted = this.applyDefaultAnswer(n);
+    if (!defaulted) this.cancelTree(n, reason, "expired", "expired");
+    if (this.runner.unparked) this.safe("unparked", () => this.runner.unparked!(n, reason, defaulted));
   }
 
   /** R6: when the requester declared a default answer, apply it as the

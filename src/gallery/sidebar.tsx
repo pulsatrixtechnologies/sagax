@@ -9,7 +9,7 @@
  * presence (the capture script serves /api/people/<id>/avatar).
  * &bulk=1: an organization where Atlas, Iris and Lina differ (model, works
  * on, Perspicax profiles) for Edit N bots; Lina's engine refuses a change
- * (scripts/capture-bulk-edit-bots.mjs). */
+ * (scripts/capture/bulk-edit-bots.mjs). */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { loadLocale } from "../lib/i18n";
@@ -17,6 +17,7 @@ import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { StoreProvider, useStore, type Bot, type Message, type Task } from "../state/store";
 import { applyPresenceList } from "../lib/presence";
 import { Sidebar } from "../components/Sidebar";
+import { ConfirmProvider } from "../components/ConfirmProvider";
 import { TaskPicker } from "../components/TaskPicker";
 import { MASCOT_CHARACTERS, type MascotLook } from "../../shared/mascot-look";
 import "../styles.css";
@@ -124,18 +125,41 @@ if (bulk) {
   set("lina", { modelSelection: { instanceId: "grok", model: "grok-4" }, grants: [{ target: "user:pr_ada", level: "use", by: "pr_me", at: 0 }, { target: "user:pr_bob", level: "edit", by: "pr_me", at: 0 }] });
   for (const member of team) member.ownerUserId ??= "pr_me";
 }
-const PROFILES = [
-  { id: "pf_cw", slug: "tickets", name: "Billets", description: "Billets et temps" },
-  { id: "pf_s1", slug: "security", name: "Sécurité", description: "Postes et menaces" },
-  { id: "pf_bs", slug: "docs", name: "Documentation", description: "Pages et guides" },
-];
-const botProfiles: Record<string, string[]> = { atlas: ["pf_cw"], iris: ["pf_cw", "pf_s1"], lina: ["pf_cw"] };
-
 // ?character=<id> dresses the whole team as that mascot (shape, frog...)
 const characterParam = params.get("character");
 if (characterParam && (MASCOT_CHARACTERS as readonly string[]).includes(characterParam)) {
   const look = { character: characterParam } as MascotLook;
   for (const member of team) member.mascotLook = look;
+}
+
+// ?threadlist=1: Atlas holds a long list of threads, some opened by a bot,
+// for the thread menu over a scrolled list and the nested row indent
+// (scripts/capture/sidebar-thread-list.mjs, 2026-11-04)
+if (params.get("threadlist") === "1") {
+  const atlas = team.find((entry) => entry.id === "atlas");
+  const titles = ["Fetch Outlook messages for review", "Can you update this routine so it runs at noon", "Archive Outlook folders older than a year", "Mail client", "Fetch exact Outlook counts by folder", "Fetch exact Outlook senders", "Fetch exact Outlook threads", "Quarterly ticket report", "Printer queue cleanup", "License renewal summary", "Backup check for the file server", "Weekly status note"];
+  if (atlas) atlas.tasks = [task("t-atlas", "Général", minutes(8)), ...titles.map((title, i) => task(`t-atlas-l${i}`, title, minutes(20 + i * 40),
+    i % 3 === 1 ? {} : { openedBy: { botId: "atlas", name: "Atlas", at: minutes(20 + i * 40) } }))];
+}
+
+// ?flood=1: Atlas as a busy bot's record reads on a live server (unified
+// chat, 2026-11-05): a few conversations of the person among dozens of
+// threads it opened on itself, teammates' "@Iris · work" hand-offs, an AI
+// client's send_prompt conversations and routine runs
+// (scripts/capture/background-threads.mjs).
+if (params.get("flood") === "1") {
+  const atlas = team.find((entry) => entry.id === "atlas");
+  const iris = team.find((entry) => entry.id === "iris");
+  if (atlas && iris) {
+    const own = ["Général", "Rapport mensuel des billets", "Migration Exchange"].map((title, i) => task(i ? `t-atlas-own${i}` : "t-atlas", title, minutes(8 + i * 90), i === 0 ? {} : { personWrote: true }));
+    const selfOpened = ["Fetch exact Outlook webhook message", "Read Outlook webhook email", "Fetch Outlook webhook email", "Read webhook Outlook message", "Silent Outlook seat-upgrade check", "Facturation watch (read-only)", "Archive Outlook message", "Read-only Outlook rehearsal"]
+      .flatMap((title, i) => [0, 1, 2].map((n) => task(`t-atlas-self${i}-${n}`, title, minutes(15 + (i * 3 + n) * 25), { openedBy: { botId: "atlas", name: "Atlas", at: minutes(15 + (i * 3 + n) * 25) } })));
+    const work = Array.from({ length: 6 }, (_, i) => task(`t-atlas-work${i}`, "@Iris · work", minutes(12 + i * 55), { openedBy: { botId: "iris", name: "Iris", kind: "work", at: minutes(12 + i * 55) } }));
+    const agent = Array.from({ length: 3 }, (_, i) => task(`t-atlas-agent${i}`, `Résumé Outlook ${i + 1}`, minutes(30 + i * 70), { openedBy: { botId: "agent:claude", name: "Claude", kind: "agent", at: minutes(30 + i * 70) } }));
+    const runs = Array.from({ length: 10 }, (_, i) => task(`t-atlas-run${i}`, "Veille facturation", minutes(5 + i * 60), { routineRunId: `run-${i}` }));
+    atlas.tasks = [...own, ...selfOpened, ...work, ...agent, ...runs];
+    iris.tasks = [task("t-iris", "Général", minutes(42)), ...Array.from({ length: 5 }, (_, i) => task(`t-iris-work${i}`, "@Atlas · work", minutes(20 + i * 50), { openedBy: { botId: "atlas", name: "Atlas", kind: "work", at: minutes(20 + i * 50) } }))];
+  }
 }
 
 // ?many=N adds N pinned bots, to check the rail's vertical scroll
@@ -167,11 +191,6 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       { instanceId: "grok", driverKind: "grokAgent", displayName: "Grok", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { options: [{ id: "grok-4", label: "Grok 4" }] } },
     ] });
     if (path === "/api/mcp/servers") return json({ servers: [{ name: "github", enabled: true }, { name: "filesystem", enabled: true }] });
-    if (target && one![2] === "/perspicax") {
-      if (method === "PUT") botProfiles[target.id] = body.profiles;
-      const mine = botProfiles[target.id] ?? [];
-      return json({ selected: PROFILES.filter((profile) => mine.includes(profile.id)).map((profile) => ({ ...profile, heldByMe: true })), available: PROFILES, canEdit: true });
-    }
     if (target && one![2] === undefined && method === "PATCH") {
       // Lina's engine is not available to take the change
       if (target.id === "lina" && body.computer !== undefined) return json({ error: "Grok n'est pas disponible pour ce Bot : reconnectez le moteur." }, 409);
@@ -233,7 +252,7 @@ function Gallery() {
       <SelectAtlas />
       <div className="flex">
         <div data-gallery className={`flex h-[1015px] ${params.get("rail") === "1" ? "w-[80px]" : "w-[368px]"} overflow-hidden bg-app text-ink`}>
-          <Sidebar open onClose={() => {}} />
+          <ConfirmProvider><Sidebar open onClose={() => {}} /></ConfirmProvider>
         </div>
         {/* the chat header's thread control, for the mode captures */}
         <div data-gallery-header className="flex h-[52px] w-[360px] items-center gap-2 border-b border-hairline/40 bg-app px-4 text-ink">

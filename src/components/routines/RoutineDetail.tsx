@@ -1,3 +1,4 @@
+import { RoutineCheckButton, RoutineReadinessList, useRoutineReadiness, type RoutineReadinessControl } from "./RoutineReadiness";
 // A routine's page (2026-10-29), the way the Automations page and the bot
 // panel open it: who runs it and what state it is in (active, paused, paused
 // by itself after failures, suspended, finished, running right now), when it
@@ -5,9 +6,14 @@
 // click away. Its configuration lives in one place, the "Edit routine"
 // modal (2026-10-29): the summary up top opens it, read-only for a routine
 // the person cannot change; the page keeps no second copy.
-// The actions: Run now, Pause or Resume, Edit, Duplicate, Delete, plus the
-// run logs filtered on it and where it reports.
-import { CirclePlay, Copy, ExternalLink, History, Loader2, Pause, Pencil, Play, Settings2, Trash2, UsersRound } from "lucide-react";
+// 2026-11-03 (JC, Grok Bot): no bot chip and no state badge; the rows are
+// Trigger (its value opens the trigger popover, saved on Apply), Runs as and
+// Active (changed in place), then Next run and This week. "Runs (n)" has
+// Clear run logs at its right. The bar is [Run now] [Edit] [Disable or
+// Enable] [Delete]; Duplicate moved to Edit > Advanced, the logs are the
+// Automations page's Logs.
+import { useRef, useState } from "react";
+import { ChevronDown, CirclePlay, Eraser, ExternalLink, Loader2, Pause, Pencil, Play, Trash2, UsersRound } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { Routine, RoutineRun } from "@/lib/routines";
@@ -16,10 +22,16 @@ import { routineDateTime, routineNextText, routineRunAgo, routineRunDuration, ro
 import { scheduleLabel } from "@/lib/schedule-label";
 import { formatUsd } from "@/lib/usage";
 import type { Bot, Group } from "@/state/store";
-import { BotAvatar } from "../Avatar";
 import { ActivityStatusIcon } from "../bot-settings/ActivityCard";
 import { PILL, PRIMARY_PILL } from "../SettingsPrimitives";
 import { runActivityStatus } from "./RoutineRunDetail";
+import { PanelRow, PanelRows, PanelToggle, PanelValue } from "./PanelRows";
+import { RunAsField, useRunAsOptions } from "./RunAsField";
+import { RoutineActAsField, useRoutineRoleCoverage } from "./RoutineActAsField";
+import { TriggerPopover } from "./TriggerPopover";
+import type { RoutineScheduleInput } from "@/lib/routines";
+import { api } from "@/state/store";
+import { routineScopeSearch } from "../../../shared/routine-scope";
 
 export const STATE_TONES: Record<RoutineStateTone, string> = {
   active: "bg-success/15 text-success",
@@ -56,7 +68,56 @@ export function RunHistoryRow({ run, now, onOpen }: { run: RoutineRun; now: numb
   );
 }
 
-export function RoutineDetail({ routine, runs, bots, groups = [], now = Date.now(), compact = false, editable = true, canRun = false, inFlight = false, starting = false, working = false, error, onOpenRun, onRunNow, onToggle, onEdit, onDuplicate, onDelete, onLogs, onOpenGroup, onConfigure, actions = true }: {
+/** Clear run logs of one routine (2026-11-03): asks first, then the person's
+ * own saved runs of it go (DELETE /api/routine-runs?routineId=, scope mine;
+ * runs in progress stay). */
+export async function clearRoutineRuns(
+  routine: Pick<Routine, "id" | "name">,
+  confirm: (request: { title: string; body?: string; confirmLabel: string; tone: "danger" }) => Promise<boolean>,
+  dispatch: (action: { type: "routineRunsRemoved"; ids: string[] }) => void,
+): Promise<void> {
+  if (!(await confirm({ title: t("routineDetail.clearRunsConfirm", { name: routine.name }), body: t("routineDetail.clearRunsBody"), confirmLabel: t("routines.clearLogsConfirm"), tone: "danger" }))) return;
+  const { removed } = await api<{ removed?: string[] }>(`/api/routine-runs?${routineScopeSearch({ scope: "mine", routineId: routine.id })}`, { method: "DELETE" });
+  dispatch({ type: "routineRunsRemoved", ids: Array.isArray(removed) ? removed : [] });
+}
+
+export type RoutinePatch = { schedule?: RoutineScheduleInput; precheck?: Routine["precheck"] | null; runAs?: string; actAs?: string | null };
+
+/** Who the routine runs as, changed in place (its own row since 2026-11-03). */
+function RunAsRow({ routine, editable, onPatch }: { routine: Routine; editable: boolean; onPatch?: (patch: RoutinePatch) => Promise<void> }) {
+  const options = useRunAsOptions({ botId: routine.botId, routineId: routine.id, target: routine.target, ...(routine.target === "room-goal" && routine.groupId ? { groupId: routine.groupId } : {}) });
+  const [value, setValue] = useState<string | undefined>(undefined);
+  if (!options || (!options.canChoose && !options.current)) return null;
+  return <RunAsField compact viewing={!editable || !onPatch} options={options} value={value} onChange={(principalId) => { setValue(principalId); void onPatch?.({ runAs: principalId }); }} />;
+}
+
+/** "Au nom de" (2026-11-05): the role its runs act as, changed in place,
+ * with its coverage preview and "Tester la couverture". */
+function ActAsRow({ routine, editable, onPatch, readiness }: { routine: Routine; editable: boolean; onPatch?: (patch: RoutinePatch) => Promise<void>; readiness?: RoutineReadinessControl }) {
+  const coverage = useRoutineRoleCoverage({ botId: routine.botId, routineId: routine.id, enabled: routine.target !== "room-goal" && !routine.redacted });
+  const [value, setValue] = useState<string | undefined>(undefined);
+  if (routine.target === "room-goal") return null;
+  const change = editable && onPatch ? (slug: string) => { setValue(slug); void onPatch({ actAs: slug }); } : undefined;
+  return <RoutineActAsField coverage={coverage} value={value ?? routine.actAs} onChange={change} viewing={!change} savedOnly={routine.actAs} readiness={readiness} testResult={false} />;
+}
+
+/** The Trigger row: its sentence, a button that opens the trigger popover. */
+function TriggerRow({ routine, bot, editable, onPatch }: { routine: Routine; bot?: Bot; editable: boolean; onPatch?: (patch: RoutinePatch) => Promise<void> }) {
+  const anchor = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const watch = routine.precheck?.kind === "watch" && <span className="shrink-0 rounded-md bg-inset px-1.5 text-[11px] leading-[18px] text-ink-secondary">{t("routineWatch.badge")}</span>;
+  return <PanelRow data-routine-trigger-row="" label={t("routineDetail.trigger")}>
+    {editable && onPatch
+      ? <button ref={anchor} type="button" data-routine-trigger aria-haspopup="dialog" aria-expanded={open} title={t("routineTrigger.change")} onClick={() => setOpen((value) => !value)}
+        className="-mr-1.5 inline-flex min-w-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-right text-[13px] leading-5 text-ink hover:bg-hover aria-expanded:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">
+        <span className="min-w-0 truncate">{scheduleLabel(routine.schedule)}</span>{watch}<ChevronDown size={13} aria-hidden="true" className="shrink-0 text-ink-tertiary" />
+      </button>
+      : <span data-routine-trigger className="flex min-w-0 items-center gap-1.5"><PanelValue>{scheduleLabel(routine.schedule)}</PanelValue>{watch}</span>}
+    {open && onPatch && <TriggerPopover routine={routine} bot={bot} anchorRef={anchor} onApply={onPatch} onClose={() => setOpen(false)} />}
+  </PanelRow>;
+}
+
+export function RoutineDetail({ routine, runs, bots, groups = [], now = Date.now(), compact = false, editable = true, canRun = false, inFlight = false, starting = false, working = false, error, onOpenRun, onRunNow, onToggle, onEdit, onDelete, onOpenGroup, onPatch, onClearRuns, actions = true, readiness: externalReadiness }: {
   routine: Routine;
   /** Every run kept for this routine, any order. */
   runs: RoutineRun[];
@@ -76,16 +137,19 @@ export function RoutineDetail({ routine, runs, bots, groups = [], now = Date.now
   onRunNow?: () => void;
   onToggle?: () => void;
   onEdit?: () => void;
-  onDuplicate?: () => void;
   onDelete?: () => void;
-  onLogs?: () => void;
   /** A team goal: its group. */
   onOpenGroup?: () => void;
-  /** Open the routine's configuration (the editor modal). */
-  onConfigure?: () => void;
+  /** Saves a change made in place (the trigger popover, Runs as). */
+  onPatch?: (patch: RoutinePatch) => Promise<void>;
+  /** Clear run logs at the right of "Runs (n)" (asks first, the caller's confirm). */
+  onClearRuns?: () => void;
   /** Draw the action row (the bot panel draws its own bar). */
   actions?: boolean;
+  readiness?: RoutineReadinessControl;
 }) {
+  const ownReadiness = useRoutineReadiness(routine.id);
+  const readiness = externalReadiness ?? ownReadiness;
   const bot = bots.find((candidate) => candidate.id === routine.botId);
   const isRoomGoal = routine.target === "room-goal";
   const group = groups.find((candidate) => candidate.id === routine.groupId);
@@ -95,34 +159,31 @@ export function RoutineDetail({ routine, runs, bots, groups = [], now = Date.now
   return (
     <div data-routine-detail className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        <header className={cn("space-y-2.5 px-4 pt-4 sm:px-5", compact && "px-4")}>
-          <div className="flex flex-wrap items-center gap-2">
-            {bot
-              ? <span className="inline-flex items-center gap-1.5 rounded-full border border-hairline/50 bg-inset py-0.5 pl-0.5 pr-2 text-[11.5px] text-ink"><BotAvatar bot={bot} state={routine.enabled ? "idle" : "sleeping"} size={20} animated={false} />{bot.name}</span>
-              : <span className="rounded-full border border-hairline/50 bg-inset px-2 py-0.5 text-[11.5px] text-ink">{routine.bot?.name ?? t("routines.unavailableBot")}</span>}
-            {isRoomGoal && <span className="inline-flex items-center gap-1 text-[11.5px] text-ink-secondary"><UsersRound size={13} aria-hidden="true" />{group?.name ?? t("routineCalendar.groupUnavailable")}</span>}
-            <span data-routine-state={state.tone} className={cn("inline-flex items-center gap-1 rounded-md px-1.5 text-[11.5px] font-medium leading-[20px]", STATE_TONES[state.tone])}>
-              {state.tone === "info" && <Loader2 size={11} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
-              {state.label}
-            </span>
-            {routine.canEdit === false && <span className="text-[11.5px] text-ink-secondary">{t("routines.scope.readOnly")}</span>}
-          </div>
-          <button type="button" data-routine-summary onClick={onConfigure} disabled={!onConfigure} title={onConfigure ? t("routineDetail.openConfiguration") : undefined} aria-label={onConfigure ? t("routineDetail.openConfiguration") : undefined} className="-mx-2 block w-[calc(100%+1rem)] rounded-lg px-2 py-1.5 text-left enabled:hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-default">
-          <span className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[12.5px]">
-            <span className="text-ink-secondary">{t("routineDetail.trigger")}</span>
-            <span data-routine-trigger className="flex min-w-0 items-start gap-1.5 text-ink"><span>{scheduleLabel(routine.schedule)}</span>{routine.precheck?.kind === "watch" && <span className="shrink-0 rounded-md bg-inset px-1.5 text-[11px] leading-[18px] text-ink-secondary">{t("routineWatch.badge")}</span>}</span>
-            <span className="text-ink-secondary">{t("routineDetail.nextRun")}</span>
-            <span data-routine-next className="text-ink">{routineNextText(routine, now)}</span>
-            {routine.weekRuns && <><span className="text-ink-secondary">{t("routineDetail.week")}</span><span data-routine-week-runs className="text-ink">{routineWeekRunsText(routine.weekRuns)}</span></>}
-            {(routine.skippedRuns ?? 0) > 0 && <><span className="text-ink-secondary">{t("routineDetail.skipped")}</span><span className="text-ink">{routine.skippedRuns}{routine.lastSkippedAt ? ` · ${t("routines.lastSkipped", { date: routineDateTime(routine.lastSkippedAt) })}` : ""}</span></>}
-            {skips > 0 && <><span className="text-ink-secondary">{t("routines.away.title")}</span><span className="text-ink">{t(skips === 1 ? "routines.away.skippedOne" : "routines.away.skippedMany", { count: skips, name: routine.name })}</span></>}
-          </span>
-            {onConfigure && <span className="mt-1.5 flex items-center gap-1 text-[11.5px] font-medium text-accent-text"><Settings2 size={12} aria-hidden="true" />{t("routineDetail.openConfiguration")}</span>}
-          </button>
+        <header className={cn("space-y-2.5 px-4 pt-3 sm:px-5", compact && "px-4")}>
+          {(isRoomGoal || routine.canEdit === false) && <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-ink-secondary">
+            {isRoomGoal && <span className="inline-flex items-center gap-1"><UsersRound size={13} aria-hidden="true" />{group?.name ?? t("routineCalendar.groupUnavailable")}</span>}
+            {routine.canEdit === false && <span>{t("routines.scope.readOnly")}</span>}
+          </div>}
+          <PanelRows data-routine-summary="">
+            <TriggerRow routine={routine} bot={bot} editable={editable} onPatch={onPatch} />
+            <RunAsRow routine={routine} editable={editable} onPatch={onPatch} />
+            <ActAsRow routine={routine} editable={editable} onPatch={onPatch} {...(canRun ? { readiness } : {})} />
+            <PanelToggle data-routine-active="" label={t("routineDetail.active")} hint={state.tone === "info" ? state.label : state.tone === "warning" ? state.label : undefined} viewing={!editable || !onToggle} checked={routine.enabled} disabled={working} onChange={() => onToggle?.()} />
+            <PanelRow label={t("routineDetail.nextRun")}><PanelValue><span data-routine-next>{routineNextText(routine, now)}</span></PanelValue></PanelRow>
+            {routine.weekRuns && <PanelRow label={t("routineDetail.week")}><PanelValue><span data-routine-week-runs>{routineWeekRunsText(routine.weekRuns)}</span></PanelValue></PanelRow>}
+            {(routine.skippedRuns ?? 0) > 0 && <PanelRow label={t("routineDetail.skipped")}><PanelValue>{routine.skippedRuns}{routine.lastSkippedAt ? ` · ${t("routines.lastSkipped", { date: routineDateTime(routine.lastSkippedAt) })}` : ""}</PanelValue></PanelRow>}
+            {skips > 0 && <PanelRow label={t("routines.away.title")}><PanelValue>{t(skips === 1 ? "routines.away.skippedOne" : "routines.away.skippedMany", { count: skips, name: routine.name })}</PanelValue></PanelRow>}
+          </PanelRows>
           {routine.autoPaused && !routine.enabled && <p data-routine-auto-paused={routine.autoPaused.failures} className="text-[11.5px] text-warning">{t("routineDetail.autoPausedAt", { date: routineDateTime(routine.autoPaused.at) })}</p>}
           {routine.deleteWhenFinished && <p data-routine-delete-when-finished="" className="text-[11.5px] text-ink-secondary">{t("routines.deleteWhenFinished.willDelete")}</p>}
           {error && <div role="alert" className="rounded-lg bg-danger/10 px-3 py-2 text-[11.5px] text-danger">{error}</div>}
-          <h3 className="flex items-center gap-1.5 pt-1 text-[12px] font-medium text-ink-secondary">{t("routineDetail.runs")}{history.length > 0 && <span className="rounded-full bg-raised px-1.5 text-[10.5px]">{history.length}</span>}</h3>
+          {readiness.checking && <p role="status" className="text-[12px] text-ink-secondary">{t("routineReadiness.checking")}</p>}
+          {readiness.error && <p role="alert" className="text-[12px] text-danger">{readiness.error}</p>}
+          {readiness.answer && <RoutineReadinessList checks={readiness.answer.checks} checkedAt={readiness.answer.checkedAt} />}
+          <div className="flex items-center justify-between gap-2 pt-1">
+            <h3 className="flex items-center gap-1.5 text-[12px] font-medium text-ink-secondary">{t("routineDetail.runs")}{history.length > 0 && <span className="rounded-full bg-raised px-1.5 text-[10.5px]">{history.length}</span>}</h3>
+            {onClearRuns && history.length > 0 && <button type="button" data-routine-clear-runs onClick={onClearRuns} aria-label={t("routineDetail.clearRuns")} title={t("routineDetail.clearRuns")} className="flex size-7 items-center justify-center rounded-full text-ink-tertiary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><Eraser size={14} aria-hidden="true" /></button>}
+          </div>
         </header>
         <div className={cn("px-3 pb-4 pt-2 sm:px-4", compact && "px-2")}>
           {history.length === 0
@@ -133,14 +194,11 @@ export function RoutineDetail({ routine, runs, bots, groups = [], now = Date.now
       {actions && (
         <div data-routine-actions className="flex flex-wrap items-center gap-2 border-t border-hairline/40 px-4 py-3">
           {canRun && onRunNow && <button type="button" data-run-now onClick={onRunNow} disabled={working || inFlight} title={inFlight ? t("routines.runNow.inFlight") : t("routines.runNow")} className={cn(PRIMARY_PILL, "gap-1.5")}>{starting ? <Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Play size={13} fill="currentColor" aria-hidden="true" />}{starting ? t("routines.runNow.starting") : t("routines.runNow")}</button>}
-          {editable && onToggle && <button type="button" data-routine-toggle onClick={onToggle} disabled={working} title={routine.enabled ? t("routineCalendar.pauseRoutine") : t("routineCalendar.resumeRoutine")} className={cn(PILL, "gap-1.5")}>{routine.enabled ? <Pause size={13} aria-hidden="true" /> : <CirclePlay size={13} aria-hidden="true" />}{routine.enabled ? t("routineCalendar.pauseRoutine") : t("routineCalendar.resumeRoutine")}</button>}
-          {isRoomGoal && onOpenGroup && <button type="button" onClick={onOpenGroup} className={cn(PILL, "gap-1.5")}><ExternalLink size={13} aria-hidden="true" />{t("routineCalendar.openGroup")}</button>}
-          <div className="ml-auto flex items-center gap-1">
-            {onLogs && <button type="button" data-routine-logs onClick={onLogs} title={t("routines.logs")} className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] text-ink-secondary hover:bg-raised hover:text-ink"><History size={13} aria-hidden="true" />{t("routines.logs")}</button>}
-            {editable && onEdit && <button type="button" data-routine-edit onClick={onEdit} title={t("routines.edit")} className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] text-ink-secondary hover:bg-raised hover:text-ink"><Pencil size={13} aria-hidden="true" />{t("routines.edit")}</button>}
-            {onDuplicate && <button type="button" data-routine-duplicate onClick={onDuplicate} title={t("routineDetail.duplicate")} className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] text-ink-secondary hover:bg-raised hover:text-ink"><Copy size={13} aria-hidden="true" />{t("routineDetail.duplicate")}</button>}
-            {editable && onDelete && <button type="button" data-routine-delete onClick={onDelete} className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] text-ink-secondary hover:bg-danger/10 hover:text-danger" title={t("common.delete")}><Trash2 size={13} aria-hidden="true" />{t("common.delete")}</button>}
-          </div>
+          {canRun && <RoutineCheckButton control={readiness} disabled={working} />}
+          {editable && onEdit && <button type="button" data-routine-edit onClick={onEdit} title={t("routines.edit")} className={cn(PILL, "gap-1.5")}><Pencil size={13} aria-hidden="true" />{t("routines.edit")}</button>}
+          {editable && onToggle && <button type="button" data-routine-toggle onClick={onToggle} disabled={working} title={routine.enabled ? t("routines.disable") : t("routines.enable")} className={cn(PILL, "gap-1.5")}>{routine.enabled ? <Pause size={13} aria-hidden="true" /> : <CirclePlay size={13} aria-hidden="true" />}{routine.enabled ? t("routines.disable") : t("routines.enable")}</button>}
+          {isRoomGoal && onOpenGroup && <button type="button" onClick={onOpenGroup} title={t("routineCalendar.openGroup")} className={cn(PILL, "gap-1.5")}><ExternalLink size={13} aria-hidden="true" />{t("routineCalendar.openGroup")}</button>}
+          {editable && onDelete && <button type="button" data-routine-delete onClick={onDelete} aria-label={t("common.delete")} title={t("common.delete")} className="ml-auto flex size-9 shrink-0 items-center justify-center rounded-full border border-hairline/50 text-ink-secondary hover:border-danger/40 hover:bg-danger/10 hover:text-danger"><Trash2 size={15} strokeWidth={1.75} aria-hidden="true" /></button>}
         </div>
       )}
     </div>

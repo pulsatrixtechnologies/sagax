@@ -113,6 +113,7 @@ describe("view: an Assignment as the legacy node", () => {
       approvalGranted: true, kind: "work", origin: { kind: "user", request: "Ship the CSV export" }, restarts: 1, restart: "rerun", requestBatchKey: "b1",
     });
     const plain = view(base);
+    expect(view(row({ request: "human-room-message" })).request).toBe("human-room-message");
     expect(plain).toMatchObject({ reported: false, approvalGranted: false, restarts: 0, lastProgressAt: 2_000 });
     for (const absent of ["startedAt", "restart", "requestBatchKey", "groupId"]) expect(absent in plain).toBe(false);
   });
@@ -999,7 +1000,7 @@ describe("handedOutOutcome", () => {
 // safe-point cut to read their new words, a turn parked on a busy computer,
 // an engine change) ends not ok while its teammate still works: the
 // conversation waits and the teammate's reply resumes it. Only Stop
-// (stopAwaitingDirect, server/teammate-replies.ts) drops it.
+// (stopAwaitingDirect, server/team/teammate-replies.ts) drops it.
 describe("a teammate's reply comes back after a cut that is not a Stop", () => {
   it("the cut turn waits and the reply resumes the conversation", async () => {
     const w = world(hold);

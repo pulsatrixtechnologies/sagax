@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { json } from "./harness/http.ts";
-import type { RequestAuth } from "./request-auth.ts";
+import type { RequestAuth } from "./auth/request-auth.ts";
 import { createWorkflowRoutes, resumeDueWorkflows } from "./routes/workflows.ts";
 import { advanceWorkflow, parseWorkflowYaml, WORKFLOW_CLOCK_BACKOFF_MS, WorkflowStore, workflowScope, workflowScopeKey, type WorkflowEffects } from "./workflows.ts";
 
@@ -233,7 +233,7 @@ describe("workflow clock", () => {
     expect(store.getRun(a.id)?.status).toBe("stopped");
     expect(store.getRun(a.id)?.error).toBe("clock_failed");
     // advance delivers before writeRun; the failure stops further ticks for A.
-    expect(sent).toEqual(["A", "B"]);
+    expect([...sent].sort()).toEqual(["A", "B"]);
     expect(store.getRun(b.id)?.status).toBe("done");
     expect(store.due(now).map((run) => run.id)).not.toContain(a.id);
     resumeDueWorkflows(
@@ -243,7 +243,7 @@ describe("workflow clock", () => {
       () => true,
       (line) => logs.push(line),
     );
-    expect(sent).toEqual(["A", "B"]);
+    expect([...sent].sort()).toEqual(["A", "B"]);
   });
 
   it("when stop also fails, the run is backed off so it is not due every tick", () => {

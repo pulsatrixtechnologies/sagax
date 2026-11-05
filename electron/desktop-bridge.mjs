@@ -3,7 +3,7 @@
 // computer: the server's bots, working for THIS person, run the solo-mode
 // tools here (shell, files, search, fetch, browser, computer use, Local VM)
 // and their network traffic leaves through here (electron/desktop-tunnel.mjs).
-// The server side is server/desktop-bridge.ts.
+// The server side is server/desktop/desktop-bridge.ts.
 //
 // Outbound only (HTTPS long poll + one WebSocket); no port opens here. The
 // session cookie and the bridge secret stay in the main process. Approvals
@@ -72,7 +72,7 @@ const READ_DEFAULT = 256_000;
 const READ_MAX = 1_000_000;
 const WRITE_MAX = 1024 * 1024;
 const FETCH_MAX = 256 * 1024;
-/** The server's largest upload (a video, server/attachments.ts). */
+/** The server's largest upload (a video, server/attachments/attachments.ts). */
 const STAGE_MAX = 1024 * 1024 * 1024;
 const ACTIONS = new Set(["run_command", "read_file", "write_file", "list_files", "search_files", "fetch_url", "browse", "computer_tools", "computer_call", "vm_status", "vm_start", "vm_run_command", "vm_create", "vm_stop", "vm_pause", "vm_resume", "vm_setup", "vm_install", "vm_screenshot", "vm_computer_call", "stage_file", "extract_archive", "local_model", "terminal_open", "vm_terminal_open"]);
 const KEYS = new Set(["action", "path", "content", "encoding", "offset", "max_bytes", "command", "cwd", "timeout_seconds", "pattern", "glob", "url", "screenshot", "tool_name", "arguments", "container", "name", "final", "endpoint", "http_method", "http_path", "json", "env"]);

@@ -3,7 +3,7 @@
 // unpins it, which restarts its idle clock. Its owner or an organization
 // admin only; never a bot or a local service.
 import { mayPin, type TemporaryAgent } from "../temporary-agents.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 const PIN = /^\/api\/bots\/([\w-]+)\/temporary-pin$/;

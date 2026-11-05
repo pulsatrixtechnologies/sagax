@@ -7,7 +7,7 @@ import {
   GROK_KNOWN_TOOLS_MAX, GROK_KNOWN_TOOLS_SECTION, knownGrokTools, knownGrokToolsSection,
   recordGrokToolUse, resetGrokToolUsageCache, useToolName,
 } from "./grok-tool-usage.ts";
-import { GROK_STALL_MAX_MS, GROK_STALL_MIN_MS, grokAdaptiveStallMs, grokStallRetryMs } from "./grok.ts";
+import { GROK_STALL_MAX_MS, GROK_STALL_MIN_MS, GROK_TOOL_REUSE_HINT, grokAdaptiveStallMs, grokStallRetryMs } from "./grok.ts";
 
 describe("grok tool usage", () => {
   let dir: string;
@@ -76,5 +76,19 @@ describe("grok tool usage", () => {
     expect(grokAdaptiveStallMs({ contextTokens: 112_605, promptChars: 8_089 })).toBeGreaterThan(19_800);
     expect(grokAdaptiveStallMs({ contextTokens: 173_260, promptChars: 51_760 })).toBeGreaterThan(18_300);
     expect(grokAdaptiveStallMs({ contextTokens: 900_000, promptChars: 0 })).toBe(GROK_STALL_MAX_MS);
+  });
+});
+
+describe("grok use_tool argument form", () => {
+  // Prod 2026-11-02: the bot wrote its arguments to /tmp and /workspace with
+  // sagax-environment write_file, then called use_tool with `file` and
+  // `tool_input_file`. Grok reads those on the Sagax server's disk, so each
+  // call failed "Cannot read complete MCP source file: ... No such file".
+  it("the standing hint asks for inline tool_input and rules out the file forms", () => {
+    expect(GROK_TOOL_REUSE_HINT).toMatch(/inline tool_input/);
+    expect(GROK_TOOL_REUSE_HINT).toMatch(/Never use its file or tool_input_file forms/);
+    expect(GROK_TOOL_REUSE_HINT).toMatch(/not your environment/);
+    // the reuse guidance it already carried is still there
+    expect(GROK_TOOL_REUSE_HINT).toMatch(/call it again directly with use_tool/);
   });
 });

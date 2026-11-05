@@ -245,11 +245,36 @@ public struct SecurityKeyPublic: Decodable, Equatable, Sendable, Identifiable {
     public var id: String
     public var name: String
     public var createdAt: Double
+    /// "multiDevice" for a passkey, else a hardware key (SecurityKeySettings.tsx).
+    public var deviceType: String?
+    public var lastUsedAt: Double?
+    /// The address the key answers for.
+    public var rpId: String?
+}
+
+public enum SecurityKeyStart: Equatable, Sendable {
+    case ceremony(StepUpStart)
+    case needsSignIn
+
+    static func isReauth(_ body: Data) -> Bool {
+        (try? JSONDecoder().decode(APIErrorCodeBody.self, from: body))?.code == "reauth_required"
+    }
 }
 
 public struct SecurityKeysList: Decodable, Equatable, Sendable {
     public var keys: [SecurityKeyPublic]
     public var classes: [String]
+    /// The first key needs a fresh sign-in (`reauth_required`, 2026-10-18).
+    public var needsSignIn: Bool?
+    /// This server's address for keys.
+    public var rpId: String?
+    public var unreadable: Bool?
+
+    /// `keyHere`: one of the keys answers this server's address.
+    public var keyHere: Bool {
+        guard let rpId else { return !keys.isEmpty }
+        return keys.contains { $0.rpId == rpId }
+    }
 }
 
 public struct TeamBotVaultList: Decodable, Equatable, Sendable {
@@ -290,7 +315,24 @@ public extension CompanionClient {
 
     /// Start adding a security key. The ceremony page is the server's.
     func beginSecurityKey(name: String) async throws -> StepUpStart {
-        try await send(makeRequest("POST", "/api/security-keys/register", body: ["name": name, "via": "page"]), as: StepUpStart.self)
+        try await send(beginSecurityKeyRequest(name: name), as: StepUpStart.self)
+    }
+
+    /// Settings > Security > Add a key: the ceremony to run, or the
+    /// server's word that the first key needs a fresh sign-in
+    /// (`reauth_required`, shown as the Sign in again row).
+    func startSecurityKey(name: String) async throws -> SecurityKeyStart {
+        let (data, response) = try await perform(beginSecurityKeyRequest(name: name))
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode),
+           SecurityKeyStart.isReauth(data) {
+            return .needsSignIn
+        }
+        try Self.check(response, data)
+        return .ceremony(try JSONDecoder().decode(StepUpStart.self, from: data))
+    }
+
+    func beginSecurityKeyRequest(name: String) throws -> URLRequest {
+        try makeRequest("POST", "/api/security-keys/register", body: ["name": name, "via": "page"])
     }
 
     func answerPurchase(id: String, decision: String) async throws {

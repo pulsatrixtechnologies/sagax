@@ -37,14 +37,14 @@ Old clients attempting
 ## Drive and evidence
 
 ```sh
-node --experimental-strip-types scripts/verify-team-backup.ts
+node --experimental-strip-types scripts/verify/dev/verify-team-backup.ts
 ```
 
 This mapped regression command uses `launchVerificationServer` and the shared
 MCP/control request core. It accepts no live URL, owns a temporary fake-engine
 server, prints its URL/PID/data directory/log path, and closes that exact
 fixture in `finally`. Its steps are covered by
-`server/team-backup-workflow.test.ts`.
+`server/backup/team-backup-workflow.test.ts`.
 
 The output records doctor, new-bot, send, wait and messages; the export/import
 counts; exact original-record and transcript comparisons; rejection of old
@@ -54,7 +54,7 @@ unique sections, checking that existing bots, section Chiefs, rooms and the
 original conversation remain unchanged after each import.
 Keep that JSON output and the printed persistent server log as evidence.
 
-`server/team-backup.test.ts` additionally covers all-task/branch restoration,
+`server/backup/team-backup.test.ts` additionally covers all-task/branch restoration,
 multi-section Chiefs, room-goal routines, repeat imports, restart persistence,
 malformed reference graphs, permission injection and rollback on failure.
 The scripted fixture does not by itself prove the native file picker or
@@ -97,7 +97,7 @@ imported skills stay disabled until individually reviewed and enabled in the
 bot profile. Existing scheduled routines still arrive paused.
 
 ```sh
-pnpm exec vitest run server/team-package-skills.e2e.test.ts --silent=false
+pnpm exec vitest run server/bots/team-package-skills.e2e.test.ts --silent=false
 ```
 
 This launches and cleans its own fake-engine fixture. It verifies explicit-only

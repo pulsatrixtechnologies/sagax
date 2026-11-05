@@ -11,7 +11,7 @@ import { GUIDES } from "./guides.ts";
 import { slug, splitHeadings } from "./markdown.ts";
 import type { KnowledgeBase, KnowledgeSection } from "../../server/self-knowledge-types.ts";
 import { availableTools } from "../../server/drivers/agents-catalog.ts";
-import { MCP_PERMISSIONS } from "../../server/mcp-permissions.ts";
+import { MCP_PERMISSIONS } from "../../server/mcp/mcp-permissions.ts";
 
 /** AGENTS.md notes left out of the committed base (see build.ts). */
 const AGENTS_NOTES_LEFT_OUT = new Set(["doc:AGENTS.md#misuse-guardrails-2026-10-12"]);
@@ -71,6 +71,7 @@ describe("self-knowledge base", () => {
     // The audit itself catches what it must (the generator exits 1 on any).
     expect(auditKnowledgeText("key sk-ant-abcdefghijklmnopqrstuvwxyz0123")).toHaveLength(1);
     expect(auditKnowledgeText("write to someone@gmail.com")).toHaveLength(1);
+    expect(auditKnowledgeText("PI_KIT_PACKAGES=\"npm:example-pi-package@1.2.3\"")).toEqual([]);
     expect(auditKnowledgeText("which team holds client:Acme")).toHaveLength(1);
     expect(auditKnowledgeText("disk-and-expired-approvals and hello@pulsatrix.ca")).toEqual([]);
   });

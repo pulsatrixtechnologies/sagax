@@ -406,7 +406,7 @@ async function runMode(mode, modules) {
 
     await check("present", async () => {
       await main.executeJavaScript(FULLSCREEN_STUB, true);
-      await main.executeJavaScript(clickJs(`[data-page-panel="${PAGE}"] [data-page-more] > button`), true);
+      await main.executeJavaScript(clickJs(`[data-page-panel="${PAGE}"] button[data-page-more]`), true);
       await waitFor(main, `Boolean(document.querySelector("[role=menu] [role=menuitem]"))`, "the page's menu");
       if (!await main.executeJavaScript(clickByTextJs(PRESENT, "[role=menu]"), true)) fail(`no ${PRESENT.join(" / ")} in the menu`);
       const asked = await waitFor(main, `window.__fullscreen.includes("page-frame") ? window.__fullscreen.join(",") : ""`, "the page frame asked for full screen", 5_000);
@@ -444,7 +444,7 @@ async function runMode(mode, modules) {
     const pageWindowId = `page:${PAGE}`;
     const openOwnWindow = async () => {
       await openPanel();
-      await main.executeJavaScript(clickJs(`[data-page-panel="${PAGE}"] [data-page-more] > button`), true);
+      await main.executeJavaScript(clickJs(`[data-page-panel="${PAGE}"] button[data-page-more]`), true);
       await waitFor(main, `Boolean(document.querySelector("[role=menu] [role=menuitem]"))`, "the page's menu");
       if (!await main.executeJavaScript(clickByTextJs(OPEN_WINDOW, "[role=menu]"), true)) fail(`no ${OPEN_WINDOW.join(" / ")} in the menu`);
       const win = await waitWindow(artifactWindows, pageWindowId, "the page's own window");

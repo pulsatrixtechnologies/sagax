@@ -21,7 +21,7 @@ import { existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, unlinkSync
 import { dirname, join, sep } from "node:path";
 
 import { writeFileAtomic } from "../atomic.ts";
-import { plainSizeFor, readAtRestTextSync } from "../content-at-rest.ts";
+import { plainSizeFor, readAtRestTextSync } from "../encryption/content-at-rest.ts";
 import { redactSecretsInText } from "../redact.ts";
 import {
   DOCS_DIR,
@@ -31,14 +31,14 @@ import {
   ensureWorkspace,
   isMemoryTopicName,
   workspaceDir,
-} from "../workspace.ts";
+} from "../workspace/workspace.ts";
 
 export const MEMORY_INDEX = "MEMORY.md";
-/** RULES.md and docs/<name>.md (server/workspace-files.ts) go through this
+/** RULES.md and docs/<name>.md (server/workspace/workspace-files.ts) go through this
  * store too, so the editor, the journal and its revert treat them exactly
  * like memory files: same containment, scrub, modes and conflict check. */
 export const RULES_PATH = "RULES.md";
-/** The folder of the extra rule sets (server/rule-sets.ts): one markdown
+/** The folder of the extra rule sets (server/rules/rule-sets.ts): one markdown
  * file per set, `rules/<id>.md`. RULES.md stays the first set's file. */
 export const RULE_SETS_DIR = "rules";
 
@@ -298,7 +298,7 @@ export interface MemoryDoc {
 export function readMemoryDoc(botId: string, path: string): MemoryDoc {
   const absolute = resolveMemoryPath(botId, path);
   try {
-    // sealed at rest or plain (server/content-at-rest.ts)
+    // sealed at rest or plain (server/encryption/content-at-rest.ts)
     const text = readAtRestTextSync(absolute);
     return { path, text, hash: hashMemoryText(text), exists: true };
   } catch (error) {

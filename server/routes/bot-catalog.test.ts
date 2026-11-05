@@ -5,9 +5,9 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { botLevel, type Level } from "../authz.ts";
+import { botLevel, type Level } from "../auth/authz.ts";
 import { json, readBody } from "../harness/http.ts";
-import { requiredScope, type RequestAuth } from "../request-auth.ts";
+import { requiredScope, type RequestAuth } from "../auth/request-auth.ts";
 import type { BotCatalogDetail, BotCatalogListing, BotCatalogResponse } from "../../shared/bot-catalog.ts";
 import { catalogSource, createBotCatalogRoutes, memberImportReset, type CatalogAuditRow, type CatalogBot } from "./bot-catalog.ts";
 import { dispatchRoutes } from "./table.ts";

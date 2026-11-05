@@ -25,15 +25,17 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 
-import { readAtRestSync } from "../content-at-rest.ts";
-import { PROVIDER_CREDENTIAL_ENV, stripWorkspaceCredentialEnv } from "../config.ts";
+import { readAtRestSync } from "../encryption/content-at-rest.ts";
+import { PI_ORG_KEY_VARIABLES, PROVIDER_CREDENTIAL_ENV, stripWorkspaceCredentialEnv } from "../config.ts";
 import { applyEngineCommandVariables } from "../vault/credential-command-env.ts";
-import { openStartupModelCatalog, writeStartupModelCache } from "../startup-model-catalog.ts";
+import { openStartupModelCatalog, writeStartupModelCache } from "../models/startup-model-catalog.ts";
 import { augmentedPath } from "../env-path.ts";
 import { describeSpawnFailure, execCli, killCliTree, spawnCli } from "../procs.ts";
 import { SEARCH_CALL_TOOL, searchedToolCall } from "../../shared/searched-tool-call.ts";
 import { PERSPICAX_TOKEN_ENV, warmCommsEnv, warmPerspicaxEnv, withoutTurnTokens } from "./spawn-contract.ts";
-import { engineStartGate } from "../engine-start-gate.ts";
+import { MiB, warmResourcePerson, warmResourceTokenThread, warmResources, type WarmResourceLease } from "../resources/warm-resources.ts";
+import { retireClosedWarmProcess } from "../resources/warm-process.ts";
+import { engineStartGate } from "../engines/engine-start-gate.ts";
 import {
   deletePromptSplitReceipt,
   promptHalves,
@@ -43,10 +45,10 @@ import {
 } from "./prompt-split.ts";
 import type { PromptSplitReceipt } from "./prompt-split.ts";
 import { STABLE_END_MARKER } from "./pi-mcp-extension.ts";
-import { COMPACT_VOLATILE_LAST } from "../compact-prompt.ts";
+import { COMPACT_VOLATILE_LAST } from "../context/compact-prompt.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts";
-import { commandSummary, cwToolResult, toolDetailPreview } from "../tool-summary.ts";
-import { filesField, writtenFilesFromToolInput } from "../thread-files.ts";
+import { commandSummary, cwToolResult, toolDetailPreview, toolFailurePreview } from "../tools/tool-summary.ts";
+import { filesField, writtenFilesFromToolInput } from "../threads/thread-files.ts";
 
 import type {
   DriverCreateInput,
@@ -76,9 +78,13 @@ import {
 import { localModelFailureMessage, providerReason } from "./engine-errors.ts";
 import { appendNative } from "./native.ts";
 import { piHostToolArgs } from "./host-tools.ts";
+import { installPiKit, piKitDir } from "./pi-kit.ts";
+import { MODEL_SERVER_DEFAULT_CONTEXT, MODEL_SERVER_DEFAULT_MAX_TOKENS, MODEL_SERVER_KEY_ENV_PREFIX, writePiModelServers } from "./pi-model-servers.ts";
 import { canUseMcpServer, parseToolScope } from "../../shared/tool-scope.ts";
-import { customServerGate, gateServer, mcpStdioServer } from "../mcp-gate-config.ts";
-import { remoteMcpSpec } from "../mcp-http.ts";
+import { customServerGate, gateServer, mcpStdioServer } from "../mcp/mcp-gate-config.ts";
+import { compactGateSearch } from "../mcp/mcp-gate-search.ts";
+import { isPerspicaxBridge } from "./acp/grok-read-only-tools.ts";
+import { remoteMcpSpec } from "../mcp/mcp-http.ts";
 import { readMcpGatewayCall } from "../../shared/mcp-gateway-call.ts";
 
 const DRIVER_KIND = "piAgent";
@@ -99,6 +105,7 @@ const PI_NEGOTIATE_FRAME = { id: "negotiate", type: "negotiate_protocol", protoc
  * files) on the same session; closed after PI_STANDBY_MS or when the server
  * exits. Anything else starts pi as before. */
 interface PiStandby {
+  budget?: WarmResourceLease;
   child: ReturnType<typeof spawnCli>;
   key: string;
   sessionFile: string;
@@ -150,6 +157,7 @@ function watchPiStandbyExit(): void {
 }
 
 function closePiStandby(entry: PiStandby): void {
+  entry.budget?.retiring();
   clearTimeout(entry.timer);
   try { entry.child.stdin.end(); } catch { /* already closed */ }
   try { killCliTree(entry.child); } catch { /* already gone */ }
@@ -168,7 +176,7 @@ export function takePiStandby(threadId: string, key: string, sessionFile: string
   const entry = piStandby.get(threadId);
   if (!entry) return undefined;
   piStandby.delete(threadId);
-  if (entry.key !== key || entry.sessionFile !== sessionFile || entry.child.exitCode !== null || entry.child.killed) {
+  if (entry.key !== key || entry.sessionFile !== sessionFile || entry.child.exitCode !== null || entry.child.killed || entry.budget?.active() === false) {
     closePiStandby(entry);
     return undefined;
   }
@@ -176,6 +184,7 @@ export function takePiStandby(threadId: string, key: string, sessionFile: string
   piStandbyChildren.delete(entry.child);
   entry.child.stdout.off("data", entry.onData);
   entry.child.removeAllListeners("close");
+  entry.child.once("close", () => retireClosedWarmProcess(entry.budget, entry.child));
   return entry;
 }
 
@@ -186,6 +195,7 @@ function startPiStandby(input: Parameters<typeof runPiStandby>[0]): Promise<void
 }
 
 async function runPiStandby(input: {
+  person: string;
   threadId: string;
   key: string;
   sessionFile: string;
@@ -200,6 +210,7 @@ async function runPiStandby(input: {
   dropPiStandby(input.threadId);
   let dir: string | null = null;
   let child: ReturnType<typeof spawnCli> | null = null;
+  let budget: WarmResourceLease | undefined;
   try {
     dir = mkdtempSync(join(tmpdir(), "omb-pi-mcp-"));
     const scopeReadyPath = input.config.toolScope !== undefined ? join(dir, "scope-ready.json") : undefined;
@@ -210,6 +221,19 @@ async function runPiStandby(input: {
       env: { ...input.env, SAGAX_MCP_CONFIG: join(dir, "mcp.json") },
     }, "bot");
     const started = child;
+    budget = warmResources.register({
+      person: input.person, kind: "pi", bytes: 256 * MiB,
+      pids: () => started.pid ? [started.pid] : [],
+      evict: () => {
+        const entry = piStandby.get(input.threadId);
+        if (entry?.child === started) { piStandby.delete(input.threadId); clearTimeout(entry.timer); }
+        return killCliTree(started).then(stopped => {
+          if (stopped && dir) rmSync(dir, { recursive: true, force: true });
+          return stopped;
+        });
+      },
+    });
+    started.once("close", () => retireClosedWarmProcess(budget, started));
     watchPiStandbyExit();
     piStandbyChildren.add(started);
     started.once("close", () => piStandbyChildren.delete(started));
@@ -230,7 +254,7 @@ async function runPiStandby(input: {
     const timeout = new Promise<boolean>((resolve) => { const t = setTimeout(() => resolve(false), 20_000); t.unref?.(); });
     if (!(await Promise.race([resumed, timeout]))) throw new Error("pi standby did not resume its session");
     const entry: PiStandby = {
-      child: started, key: input.key, sessionFile: input.sessionFile, dir, scopeReadyPath, onData,
+      budget, child: started, key: input.key, sessionFile: input.sessionFile, dir, scopeReadyPath, onData,
       timer: setTimeout(() => dropPiStandby(input.threadId), PI_STANDBY_MS),
     };
     entry.timer.unref?.();
@@ -238,7 +262,9 @@ async function runPiStandby(input: {
     // a turn may have taken the thread meanwhile: never keep two
     if (piStandby.has(input.threadId)) { closePiStandby(entry); return; }
     piStandby.set(input.threadId, entry);
+    budget.idle();
   } catch {
+    budget?.retiring();
     if (child) { try { killCliTree(child); } catch { /* already gone */ } }
     if (dir) { try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ } }
   }
@@ -247,6 +273,7 @@ async function runPiStandby(input: {
  * with no MCP server (its config comes with that conversation), so the
  * conversation pays a session switch instead of a whole pi start. */
 interface PiFresh {
+  budget?: WarmResourceLease;
   child: ReturnType<typeof spawnCli>;
   dir: string;
   sessionsRoot: string;
@@ -257,6 +284,7 @@ const piFresh = new Map<string, PiFresh>();
 const piFreshStarting = new Set<string>();
 
 function closePiFresh(entry: PiFresh): void {
+  entry.budget?.retiring();
   clearTimeout(entry.timer);
   try { entry.child.stdin.end(); } catch { /* already closed */ }
   try { killCliTree(entry.child); } catch { /* already gone */ }
@@ -268,7 +296,7 @@ export function takePiFresh(key: string): PiFresh | undefined {
   const entry = piFresh.get(key);
   if (!entry) return undefined;
   piFresh.delete(key);
-  if (entry.child.exitCode !== null || entry.child.killed) {
+  if (entry.child.exitCode !== null || entry.child.killed || entry.budget?.active() === false) {
     closePiFresh(entry);
     return undefined;
   }
@@ -276,6 +304,7 @@ export function takePiFresh(key: string): PiFresh | undefined {
   piStandbyChildren.delete(entry.child);
   entry.child.stdout.off("data", entry.onData);
   entry.child.removeAllListeners("close");
+  entry.child.once("close", () => retireClosedWarmProcess(entry.budget, entry.child));
   return entry;
 }
 
@@ -296,16 +325,30 @@ export function writePiSession(sessionsRoot: string, cwd: string): string {
   return file;
 }
 
-async function startPiFresh(input: { key: string; cli: string; args: string[]; cwd: string | undefined; env: Record<string, string | undefined> }): Promise<void> {
+async function startPiFresh(input: { person: string; key: string; cli: string; args: string[]; cwd: string | undefined; env: Record<string, string | undefined> }): Promise<void> {
   if (piFresh.has(input.key) || piFreshStarting.has(input.key)) return;
   piFreshStarting.add(input.key);
   let dir: string | null = null;
   let child: ReturnType<typeof spawnCli> | null = null;
+  let budget: WarmResourceLease | undefined;
   try {
     dir = mkdtempSync(join(tmpdir(), "omb-pi-mcp-"));
     writeFileSync(join(dir, "mcp.json"), JSON.stringify({ mcpServers: {} }), { mode: 0o600 });
     child = spawnCli(input.cli, input.args, { stdio: ["pipe", "pipe", "pipe"], cwd: input.cwd, env: { ...input.env, SAGAX_MCP_CONFIG: join(dir, "mcp.json") } }, "bot");
     const started = child;
+    budget = warmResources.register({
+      person: input.person, kind: "pi", bytes: 256 * MiB,
+      pids: () => started.pid ? [started.pid] : [],
+      evict: () => {
+        const entry = piFresh.get(input.key);
+        if (entry?.child === started) { piFresh.delete(input.key); clearTimeout(entry.timer); }
+        return killCliTree(started).then(stopped => {
+          if (stopped && dir) rmSync(dir, { recursive: true, force: true });
+          return stopped;
+        });
+      },
+    });
+    started.once("close", () => retireClosedWarmProcess(budget, started));
     watchPiStandbyExit();
     piStandbyChildren.add(started);
     started.once("close", () => piStandbyChildren.delete(started));
@@ -327,14 +370,16 @@ async function startPiFresh(input: { key: string; cli: string; args: string[]; c
     const bootSession = await Promise.race([ready, timeout]);
     if (!bootSession) throw new Error("pi started ahead did not answer");
     const entry: PiFresh = {
-      child: started, dir, sessionsRoot: dirname(dirname(bootSession)), onData,
+      budget, child: started, dir, sessionsRoot: dirname(dirname(bootSession)), onData,
       timer: setTimeout(() => { if (piFresh.get(input.key) === entry) { piFresh.delete(input.key); closePiFresh(entry); } }, PI_STANDBY_MS),
     };
     entry.timer.unref?.();
     started.on("close", () => { if (piFresh.get(input.key) === entry) { piFresh.delete(input.key); closePiFresh(entry); } });
     if (piFresh.has(input.key)) { closePiFresh(entry); return; }
     piFresh.set(input.key, entry);
+    budget.idle();
   } catch {
+    budget?.retiring();
     if (child) { try { killCliTree(child); } catch { /* already gone */ } }
     if (dir) { try { rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ } }
   } finally {
@@ -422,6 +467,7 @@ export function markSharedPrompt(
 export function withWarmTokens(turn: SendTurnInput, threadId: string): SendTurnInput {
   const integrations = turn.integrations;
   if (!integrations) return turn;
+  threadId = warmResourceTokenThread({ ...turn, threadId });
   const agents = integrations.agents?.env?.SAGAX_COMMS_TOKEN
     ? { ...integrations.agents, env: warmCommsEnv(threadId, turn.botId, integrations.agents.env) }
     : integrations.agents;
@@ -482,7 +528,10 @@ export function buildMcpServers(turn: SendTurnInput): Record<string, unknown> | 
     // listing whole only the tools the person's bots use.
     const botOwned = name in (turn.integrations?.custom ?? {});
     // a server may be named like an Object property ("constructor"): own keys only
-    const search = turn.compactPrompt && botOwned && !directory ? { pinned: Object.hasOwn(turn.compactPrompt.pinned, name) ? turn.compactPrompt.pinned[name]! : [] } : undefined;
+    // #1935: the Perspicax account bridge also lists its own core whole.
+    const search = turn.compactPrompt && botOwned && !directory
+      ? compactGateSearch(Object.hasOwn(turn.compactPrompt.pinned, name) ? turn.compactPrompt.pinned[name]! : [], isPerspicaxBridge(turn.integrations!.custom![name]))
+      : undefined;
     const gated = gateServer({ name, server, toolScope: parsed.scope, threadId: turn.threadId, nodeEnv: NODE_ENV_FLAG, directory, ...(search ? { search } : {}), ...customServerGate(name, botOwned, turn.integrations?.customResultBudgets) });
     const stdio = gated ?? mcpStdioServer(server, { nodeEnv: NODE_ENV_FLAG, ...(directory ? { directory: { name } } : {}) });
     if (!stdio) throw new Error("Pi MCP server configuration is invalid");
@@ -805,6 +854,7 @@ function piAgentDir(env: Record<string, string | undefined>): string {
 export function ensurePiInjectModel(
   modelId: string,
   env: Record<string, string | undefined> = process.env,
+  meta: { contextWindow?: number; maxTokens?: number } = {},
 ): { provider: string; modelId: string } | null {
   const split = splitPiModel(modelId);
   if (!split) return null;
@@ -864,8 +914,9 @@ export function ensurePiInjectModel(
       name: inject.model,
       reasoning: true,
       input: ["text"],
-      contextWindow: 131072,
-      maxTokens: 16384,
+      // #2024: the catalog row's own size when it knows one
+      contextWindow: positive(meta.contextWindow) ?? MODEL_SERVER_DEFAULT_CONTEXT,
+      maxTokens: positive(meta.maxTokens) ?? MODEL_SERVER_DEFAULT_MAX_TOKENS,
     });
   }
   existing.models = models;
@@ -878,6 +929,10 @@ export function ensurePiInjectModel(
     // Windows ignores POSIX modes; keep the inject even if chmod is unsupported.
   }
   return split;
+}
+
+function positive(value: number | undefined): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
 }
 
 /** The pi-side default model, read from ~/.pi/agent/settings.json so the
@@ -1022,27 +1077,54 @@ function piEnvironment(source: Record<string, string | undefined>): Record<strin
   // neither list.
   stripWorkspaceCredentialEnv(env);
   for (const key of PROVIDER_CREDENTIAL_ENV) delete env[key];
+  for (const key of PI_ACCESS_KEY_ENV) delete env[key];
+  for (const key of Object.keys(env)) if (key.startsWith(MODEL_SERVER_KEY_ENV_PREFIX)) delete env[key];
   return env;
 }
 
 /** The provider keys pi reads, as engine-credentials.ts PROVIDER_KEY_ENV
- * hands them (Perspicax providers anthropic, openai, xai, google, moonshot). */
-export const PI_ACCESS_KEY_ENV = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "XAI_API_KEY", "GEMINI_API_KEY", "MOONSHOT_API_KEY"] as const;
+ * hands them: the Perspicax providers pi knows natively (#2024). */
+export const PI_ACCESS_KEY_ENV = [
+  "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "XAI_API_KEY", "GEMINI_API_KEY", "MOONSHOT_API_KEY",
+  "OPENROUTER_API_KEY", "MISTRAL_API_KEY", "CEREBRAS_API_KEY", "GROQ_API_KEY", "ZAI_API_KEY",
+  "MINIMAX_API_KEY", "OPENCODE_API_KEY", "DEEPSEEK_API_KEY", "FIREWORKS_API_KEY", "TOGETHER_API_KEY",
+  "HF_TOKEN", "NVIDIA_API_KEY", "KIMI_API_KEY",
+] as const;
+
+/** Whether a variable is one pi bills a provider with: a native key name or
+ * the key of a Perspicax model server (pi-model-servers.ts). */
+function isPiKeyVariable(name: string): boolean {
+  return (PI_ACCESS_KEY_ENV as readonly string[]).includes(name) || name.startsWith(MODEL_SERVER_KEY_ENV_PREFIX);
+}
 
 /** Organization server: one turn's credentials (SendTurnInput.access), over
  * an environment piEnvironment already stripped of every key: the payer's
  * own PI_CODING_AGENT_DIR (never the server's ~/.pi/agent/auth.json) and
  * the keys they keep in Perspicax. */
-export function piAccessEnvironment(env: Record<string, string | undefined>, access: TurnAccessInput | undefined): Record<string, string | undefined> {
+export function piAccessEnvironment(
+  env: Record<string, string | undefined>,
+  access: TurnAccessInput | undefined,
+  orgKeys: Record<string, string | undefined> = {},
+): Record<string, string | undefined> {
   if (!access) return env;
   if (access.engineHome) {
     mkdirSync(access.engineHome, { recursive: true, mode: 0o700 });
     env.PI_CODING_AGENT_DIR = access.engineHome;
   }
-  for (const name of PI_ACCESS_KEY_ENV) {
-    const value = access.environment?.[name];
-    if (value) env[name] = value;
+  // #2024: an org-key turn bills the organization's keys (config.ts
+  // injectedEnvironment hands them under pi's names; piEnvironment stripped them)
+  if (access.via === "org-key") {
+    for (const name of PI_ORG_KEY_VARIABLES) {
+      const value = orgKeys[name];
+      if (value) env[name] = value;
+    }
   }
+  for (const [name, value] of Object.entries(access.environment ?? {})) {
+    if (value && isPiKeyVariable(name)) env[name] = value;
+  }
+  // #2024: the Perspicax model servers, by name in models.json; their keys
+  // ride this environment only ("apiKey": "$SAGAX_PI_KEY_...")
+  if (access.piModelServers) writePiModelServers(piAgentDir(env), access.piModelServers);
   return env;
 }
 
@@ -1051,7 +1133,8 @@ export function piAccessEnvironment(env: Record<string, string | undefined>, acc
  * bash tool in, never a provider key name pi would bill. pi starts for every
  * turn, so a change or a revoke holds at the next one. */
 export function piTurnEnvironment(env: Record<string, string | undefined>, commandEnvironment: Record<string, string> | undefined): Record<string, string | undefined> {
-  applyEngineCommandVariables(env, commandEnvironment, PI_ACCESS_KEY_ENV);
+  const reserved = [...PI_ACCESS_KEY_ENV, ...Object.keys(commandEnvironment ?? {}).filter((name) => name.startsWith(MODEL_SERVER_KEY_ENV_PREFIX))];
+  applyEngineCommandVariables(env, commandEnvironment, reserved);
   return env;
 }
 
@@ -1180,14 +1263,21 @@ export const PiDriver: ProviderDriver<PiConfig> = {
       // Write ~/.pi/agent/models.json before creating any credential-bearing
       // MCP temp files. If model setup fails, there is nothing sensitive to
       // clean up yet.
+      const homeEnv = {
+        ...process.env,
+        ...input.environment,
+        // the payer's own pi home, the one the child reads (piAccessEnvironment)
+        ...(turn.access?.engineHome ? { PI_CODING_AGENT_DIR: turn.access.engineHome } : {}),
+      };
       if (typeof turn.model === "string" && turn.model) {
-        ensurePiInjectModel(turn.model, {
-          ...process.env,
-          ...input.environment,
-          // the payer's own pi home, the one the child reads (piAccessEnvironment)
-          ...(turn.access?.engineHome ? { PI_CODING_AGENT_DIR: turn.access.engineHome } : {}),
-        });
+        const row = models.options.find((option) => option.id === turn.model);
+        ensurePiInjectModel(turn.model, homeEnv, { contextWindow: row?.contextWindow });
       }
+      // #2024: the operator's pi kit (SAGAX_PI_KIT_DIR), copied into this
+      // turn's pi home and loaded with explicit `-e`, which pi keeps under
+      // --no-extensions; host tools stay withheld by --exclude-tools.
+      const kit = piKitDir(homeEnv);
+      const kitArgs = kit ? installPiKit(kit, piAgentDir(homeEnv), turn.piKitIdentity ?? {}, homeEnv).args : [];
 
       // integrations → stdio MCP servers for the pi-mcp-extension. The config
       // carries credentials (boat token, comms token), so it goes
@@ -1203,11 +1293,12 @@ export const PiDriver: ProviderDriver<PiConfig> = {
         ...(turn.compactPrompt ? PI_ARGS.filter((arg) => arg !== "--no-session") : PI_ARGS),
         ...piHostToolArgs(turn.withholdHostTools === true),
         ...(mounts ? ["-e", SPAWNED_PROXIES.piMcpExtension] : []),
+        ...kitArgs,
       ];
       const standbyKey = JSON.stringify({
         cli: config.cli, args: standbyArgs, cwd: turn.cwd ?? null,
         config: { ...mcpConfig, mcpServers: withoutTurnTokens(mcpServers ?? {}) },
-        environment: input.environment ?? null, access: turn.access ?? null, command: turn.commandEnvironment ?? null,
+        environment: input.environment ?? null, person: turn.principalId ?? null, access: turn.access ?? null, command: turn.commandEnvironment ?? null,
       });
       // #1276: only a session of this turn's own pi home is ever resumed
       const resumeCursor = piResumableSession(turn.resumeCursor, turn.access?.engineHome);
@@ -1220,7 +1311,7 @@ export const PiDriver: ProviderDriver<PiConfig> = {
       // receives now) and switches it to a new session in this folder.
       const freshKey = JSON.stringify({
         bot: turn.botId ?? null, cli: config.cli, args: standbyArgs,
-        environment: input.environment ?? null, access: turn.access ?? null, command: turn.commandEnvironment ?? null,
+        environment: input.environment ?? null, person: turn.principalId ?? null, access: turn.access ?? null, command: turn.commandEnvironment ?? null,
       });
       const ahead = !standby && turn.compactPrompt && typeof turn.resumeCursor !== "string" && turn.cwd && mounts ? takePiFresh(freshKey) : undefined;
       if (standby) {
@@ -1253,7 +1344,7 @@ export const PiDriver: ProviderDriver<PiConfig> = {
         ...process.env,
         ...input.environment,
         ...(mcpTempDir ? { SAGAX_MCP_CONFIG: join(mcpTempDir, "mcp.json") } : {}),
-      }), turn.access), turn.commandEnvironment);
+      }), turn.access, input.environment), turn.commandEnvironment);
 
       // spawnCli can throw synchronously (unresolvable CLI); if it does, the
       // 0600 temp file with the boat token / comms token must
@@ -1276,6 +1367,11 @@ export const PiDriver: ProviderDriver<PiConfig> = {
           throw err;
         }
       })();
+      const budget = standby?.budget ?? ahead?.budget ?? warmResources.register({
+        person: warmResourcePerson(turn), kind: "pi", bytes: 256 * MiB,
+        pids: () => child.pid ? [child.pid] : [], evict: () => killCliTree(child),
+      });
+      child.once("close", () => retireClosedWarmProcess(budget, child));
       // Drain diagnostics on cold turns too. An unread stderr pipe can
       // fill and stop pi before it sends its next protocol frame.
       let stderr = "";
@@ -1340,13 +1436,13 @@ export const PiDriver: ProviderDriver<PiConfig> = {
         // #1276: once this pi has exited (its session file then holds the
         // whole turn), start the thread's next pi, its session resumed.
         if (ok && turn.compactPrompt && standbySession && (stopReason ?? "end_turn") === "end_turn") {
-          const resume = { threadId, key: standbyKey, sessionFile: standbySession, cli: config.cli, args: childArgs, cwd: turn.cwd, env: spawnEnv, config: mcpConfig, toolCache: readPiToolCache(mcpTempDir),
+          const resume = { person: warmResourcePerson(turn), threadId, key: standbyKey, sessionFile: standbySession, cli: config.cli, args: childArgs, cwd: turn.cwd, env: spawnEnv, config: mcpConfig, toolCache: readPiToolCache(mcpTempDir),
             // a conversation's first turn warms the bot's next one (the standby sends it)
             warm: typeof turn.resumeCursor === "string" ? undefined : readPiToolCache(mcpTempDir, PI_WARM) };
           if (child.exitCode !== null || child.signalCode !== null) void startPiStandby(resume);
           else child.once("exit", () => { void startPiStandby(resume); });
           // and a pi for the bot's next new conversation, if none waits yet
-          if (mounts && turn.cwd) void startPiFresh({ key: freshKey, cli: config.cli, args: childArgs, cwd: turn.cwd, env: spawnEnv });
+          if (mounts && turn.cwd) void startPiFresh({ person: warmResourcePerson(turn), key: freshKey, cli: config.cli, args: childArgs, cwd: turn.cwd, env: spawnEnv });
         }
         if (agentEndTimer) {
           clearTimeout(agentEndTimer);
@@ -1514,7 +1610,8 @@ export const PiDriver: ProviderDriver<PiConfig> = {
               itemType: "tool",
               itemId: evt.toolCallId,
               ok: !evt.isError,
-              output: toolDetailPreview(evt.result),
+              // a failed call's own words (shared/tool-failure-text.ts)
+              output: evt.isError ? toolFailurePreview(evt.result) : toolDetailPreview(evt.result),
               ...(evt.isError ? {} : cwToolResult(toolName, evt.result)),
             });
             return;

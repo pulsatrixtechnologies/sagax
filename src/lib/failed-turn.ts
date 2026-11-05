@@ -11,6 +11,8 @@ import { plainErrorLine } from "@/lib/plain-error";
 import { stepLabel } from "@/lib/step-label";
 import type { Bot, InstanceInfo, Message } from "@/state/store";
 import { failedTurnCause } from "../../shared/failed-turn";
+import { isEngineLimitWords } from "../../shared/engine-limit-words";
+import { preSendRefusalKind } from "../../shared/presend-refusal";
 import { isClientCancellation, isStoppedTurnName } from "../../shared/client-cancel";
 
 export { failedTurnCause };
@@ -32,6 +34,28 @@ export function engineSignedOut(engine: InstanceInfo | undefined): boolean {
  * else keeps the engine's words: they are the most precise cause there is. */
 export function signedOutEngine(tool: ActivityTool, engine: InstanceInfo | undefined): InstanceInfo | undefined {
   return tool.setup && !tool.claudeUpdate && engineSignedOut(engine) ? engine : undefined;
+}
+
+/** A failed turn refused by the engine account's usage limit or credit
+ * (the maintainer, 2026-11-04): no card in the chat for it, new or already stored; the
+ * composer locks instead and says when it comes back (send-state
+ * engine_limit). */
+export function isEngineLimitFailure(tool: ActivityTool): boolean {
+  const cause = failedTurnCause(tool.name);
+  if (cause === null) return false;
+  return tool.limitResetsAt !== undefined || isEngineLimitWords(cause);
+}
+
+/** #2013 (the maintainer, 2026-11-05): a failed turn the engine refused before any
+ * prompt went out (not ready, a configuration conflict, a limit, credit, an
+ * expired sign-in). A bot's chat draws no card for it, new or already
+ * stored: the composer line says it with its action. A room, which has no
+ * such line, words it quietly. A place row keeps its own card. */
+export function isPreSendRefusal(tool: ActivityTool): boolean {
+  if (tool.place) return false;
+  const cause = failedTurnCause(tool.name);
+  if (cause === null) return false;
+  return preSendRefusalKind(cause, { setup: tool.setup, claudeUpdate: tool.claudeUpdate, limitResetsAt: tool.limitResetsAt }) !== null;
 }
 
 /** The engine a bot's turns run on — what its failed-turn row is about. */

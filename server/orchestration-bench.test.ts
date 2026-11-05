@@ -14,8 +14,8 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import type { CoordinatorHost, HandoffView, RoomAddress } from "./coordinator.ts";
-import { createGracefulShutdown } from "./graceful-shutdown.ts";
-import { PerspicaxMcp, type PerspicaxMcpLink } from "./perspicax-mcp.ts";
+import { createGracefulShutdown } from "./process/graceful-shutdown.ts";
+import { PerspicaxMcp, type PerspicaxMcpLink } from "./perspicax/perspicax-mcp.ts";
 import { RoutineManager, type RoutineManagerOptions } from "./routines/routines.ts";
 import { createRoutineRunInternalRoutes } from "./routes/routine-run-internal.ts";
 import { RuntimeCoordinator } from "./runtime-coordinator.ts";
@@ -104,10 +104,9 @@ type Enqueue = (source: RoomAddress, generation: string, parentId: string | unde
 function perspicax() {
   const writes: unknown[] = [];
   const link: PerspicaxMcpLink = {
-    exchangeToken: async (_subject, profileId) => ({ ok: true, token: `pxlo1.B.mcp-${profileId}`, expiresAt: Date.now() + 900_000 }),
+    exchangeToken: async () => ({ ok: true as const, token: "pxlo1.B.mcp-main", expiresAt: Date.now() + 900_000 }),
     revokeExchanged: async () => true,
     mcpEndpoint: () => "http://perspicax.test/mcp",
-    profileCatalog: () => [{ id: "P1", slug: "dispatch", name: "Dispatch", description: "" }],
   };
   const fetcher = (async (_url: string | URL | Request, init?: RequestInit) => {
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
@@ -122,7 +121,7 @@ function perspicax() {
     subjectOf: () => ({ iss: "https://px.test", sub: "B", disabled: false }),
     subjectToken: async () => ({ ok: true, token: "pxlo1.B.signin", expiresAt: Date.now() + 3_600_000 }),
     routineSubjectToken: async () => ({ ok: true, token: "pxlo1.B.delegation", expiresAt: Date.now() + 3_600_000 }),
-    botProfiles: () => ["P1"], version: "1", fetch: fetcher, log: () => {},
+    version: "1", fetch: fetcher, log: () => {},
     // Both passes are routine runs: unattended writes go through write-once.
     writeOnceScope: () => "routine",
   } as ConstructorParameters<typeof PerspicaxMcp>[0]);
@@ -172,13 +171,13 @@ describe("orchestration bench (cause C)", () => {
     });
     await scenario("S11b same write from two runs at once", async () => {
       const p = perspicax();
-      const bot = { id: "dispatcher", perspicax: { profiles: ["P1"] } };
+      const bot = { id: "dispatcher" };
       for (const t of ["t1", "t2"]) await p.mcp.prepareTurn({ threadId: t, generation: "g", bot, speakerPrincipalId: "pr_bob", speakerOrigin: "person" });
       const frame = (id: number) => ({ jsonrpc: "2.0", id, method: "tools/call",
         params: { name: "psa__book_schedule_entry", arguments: { ticket: 4242, member: "tech-1", start: "2026-10-20T09:00" } } });
       const [a, b] = await Promise.all([
-        p.mcp.relay({ threadId: "t1", generation: "g", botId: "dispatcher", profileId: "P1", frame: frame(1) }),
-        p.mcp.relay({ threadId: "t2", generation: "g", botId: "dispatcher", profileId: "P1", frame: frame(2) }),
+        p.mcp.relay({ threadId: "t1", generation: "g", botId: "dispatcher" , frame: frame(1) }),
+        p.mcp.relay({ threadId: "t2", generation: "g", botId: "dispatcher" , frame: frame(2) }),
       ]);
       const okBody = (x: { status: number; body?: unknown }, id: number) => x.status === 200 && (x.body as { id?: number; result?: unknown }).id === id &&
         Boolean((x.body as { result?: unknown }).result);

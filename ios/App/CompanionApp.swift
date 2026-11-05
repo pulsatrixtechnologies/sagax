@@ -41,6 +41,51 @@ struct CompanionApp: App {
             liveRoot
             #endif
         }
+        // The desktop's ⌘B (the sidebar) and ⌘I (the message field): the
+        // menu bar's Format > Bold and Italic took them first. The fields
+        // are plain text, so the format commands have nothing to format.
+        // Both live in the menu bar's View menu, which outranks a view's
+        // own shortcuts (DesktopKeyCommands listens for the sidebar one).
+        .commands {
+            CommandGroup(replacing: .textFormatting) {}
+            CommandGroup(after: .sidebar) {
+                Button("Collapse or expand the sidebar") { DesktopKeyCommands.postToggleSidebar() }
+                    .keyboardShortcut("b", modifiers: .command)
+                Button("Go to the message field") { DesktopComposerCommand.post(.focus) }
+                    .keyboardShortcut("i", modifiers: .command)
+            }
+        }
+        // The bot's computer in its own window (lot 6): iPadOS opens it as a
+        // second scene (UIApplicationSupportsMultipleScenes in Info.plist);
+        // where it cannot, the shell draws the same panel in the app.
+        WindowGroup(id: DesktopComputerWindow.sceneId, for: String.self) { binding in
+            if let botId = binding.wrappedValue {
+                DesktopComputerWindowScene(botId: botId)
+                    .environmentObject(session)
+                    .environment(\.locale, AppLanguage.resolved(language).locale ?? .autoupdatingCurrent)
+                    .themeRoot()
+            }
+        }
+        // A bot put on the desktop (DesktopFloatingBots): its chat in a
+        // window of its own that Stage Manager floats.
+        WindowGroup(id: DesktopFloatingBots.sceneId, for: String.self) { binding in
+            if let botId = binding.wrappedValue {
+                DesktopFloatingBotScene(botId: botId)
+                    .environmentObject(session)
+                    .environment(\.locale, AppLanguage.resolved(language).locale ?? .autoupdatingCurrent)
+                    .themeRoot()
+            }
+        }
+        // Split right / Split down of a conversation (ExportTranscriptMenu):
+        // the conversation in its own window, beside this one.
+        WindowGroup(id: DesktopConversationWindow.sceneId, for: String.self) { binding in
+            if let value = binding.wrappedValue {
+                DesktopConversationWindowScene(value: value)
+                    .environmentObject(session)
+                    .environment(\.locale, AppLanguage.resolved(language).locale ?? .autoupdatingCurrent)
+                    .themeRoot()
+            }
+        }
         // `.defaultSize` is iOS 17 and `SceneBuilder` takes no conditionals,
         // so it is dropped while the app supports 16. It only suggested an
         // opening window size for iPad and Stage Manager; the system picks a
@@ -168,7 +213,8 @@ struct RootView: View {
                     // the terms of use, once per account (App Store 1.2);
                     // never over the screenshot harness
                     .sheet(isPresented: Binding(
-                        get: { session.termsPending && !parityHarnessActive },
+                        // the iPad desktop shell draws the desktop's dialog instead
+                        get: { session.termsPending && !parityHarnessActive && !DesktopTermsDialog.shellPresents },
                         set: { if !$0 { session.termsPending = false } }
                     )) {
                         TermsAcceptanceSheet().environmentObject(session)

@@ -8,16 +8,16 @@
 // runners are injected; this module never imports index.ts.
 import { z } from "zod";
 import { signTurnHandle } from "../agent-api.ts";
-import { parseAutoComputerTarget } from "../auto-computer.ts";
-import { createdByBotMark, type BotCreationRefusal } from "../bot-creation.ts";
-import { validateBotCwd } from "../bot-cwd.ts";
-import { recordedBotOwner } from "../bot-owner.ts";
-import { botMaxConcurrentThreads, botMaxParallelPerPerson, type GlobalRuntimeSettings } from "../bot-runtime-settings.ts";
-import { CONFIDENTIAL_PEER_REFUSED } from "../confidential-threads.ts";
+import { parseAutoComputerTarget } from "../computer/auto-computer.ts";
+import { createdByBotMark, type BotCreationRefusal } from "../bots/bot-creation.ts";
+import { validateBotCwd } from "../bots/bot-cwd.ts";
+import { recordedBotOwner } from "../bots/bot-owner.ts";
+import { botMaxConcurrentThreads, botMaxParallelPerPerson, type GlobalRuntimeSettings } from "../bots/bot-runtime-settings.ts";
+import { CONFIDENTIAL_PEER_REFUSED } from "../threads/confidential-threads.ts";
 import type { HandoffView } from "../coordinator.ts";
 import { newId } from "../contracts.ts";
 import { appendDecision } from "../decision-log.ts";
-import { peerApprovalFailure, requestPeerApproval, type ApprovalBus } from "../peer-approval.ts";
+import { peerApprovalFailure, requestPeerApproval, type ApprovalBus } from "../peers/peer-approval.ts";
 import {
   PEER_ACCESS_HELP,
   canAccessBot,
@@ -25,10 +25,10 @@ import {
   peerInScope,
   roomRecruitIds,
   type RosterMember,
-} from "../peer-roster.ts";
-import { planPriorityWake, parseWakePriority, releasePriorityNow } from "../priority-wake.ts";
+} from "../peers/peer-roster.ts";
+import { planPriorityWake, parseWakePriority, releasePriorityNow } from "../proactive/priority-wake.ts";
 import { redactSecretsInText } from "../redact.ts";
-import { decideRoomPost, emptyRoomPostBudget, type RoomPostAttempt, type RoomPostBudget } from "../room-post-budget.ts";
+import { decideRoomPost, emptyRoomPostBudget, type RoomPostAttempt, type RoomPostBudget } from "../rooms/room-post-budget.ts";
 import {
   chooseRelayEngine,
   relayOpening,
@@ -37,7 +37,7 @@ import {
   type RelayEngine,
 } from "../run-with-engine.ts";
 import { sectionKey, type Message } from "../store.ts";
-import { resumeOpening, resumeRefusal, subagentRequest } from "../subagent-threads.ts";
+import { resumeOpening, resumeRefusal, subagentRequest } from "../threads/subagent-threads.ts";
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
 import { fitsOnOneLine } from "../../shared/bot-profile.ts";
 import type { ModelSelection } from "../../shared/model-selection.ts";
@@ -131,6 +131,7 @@ export interface InternalRoomsDeps {
   delegationWatch: Map<string, Record<string, unknown>>;
   threadStarters: Map<string, string | undefined>;
   directRequestOwners: Map<string, { messageId?: string } | undefined>;
+  coordinationRequestId?: (threadId: string) => string | undefined;
   roomPostBudgets: Map<string, RoomPostBudget>;
   personAskAt: Map<string, number>;
   turnAttachmentsByTurn: Map<string, Array<{ kind: string; path: string; mime: string }>>;
@@ -143,6 +144,9 @@ export interface InternalRoomsDeps {
   turnAttachmentKey(threadId: string, turnId?: string): string;
   offerRoomPostToBots(room: InternalRoomsGroup, poster: InternalRoomsBot, text: string, messageId: string, hops: number): void;
   proactiveHopsFromThread(threadId: string | undefined): number;
+  /** A one-way notice now runs in `threadId` of its receiver, sent from
+   * `fromThreadId`: its hop in a chain of bots (peer inbox, 2026-11-02). */
+  notePeerNotice?(threadId: string, fromThreadId: string): void;
   pollOnlyCaller(capability: InternalCapabilityView): boolean;
   peerSpeaker(fromBotId: string, fromThreadId?: string): unknown;
   cloudGuestDriven(threadId: string): boolean;
@@ -155,6 +159,8 @@ export interface InternalRoomsDeps {
   openedThreadOwner(from: InternalRoomsBot, fromThreadId: string, target: InternalRoomsBot): string | undefined;
   openerFrom(fromThreadId: string): string | undefined;
   noteRelayParent(threadId: string, parentThreadId: string): void;
+  /** The thread is a part run_with_engine opened (noteRelayParent). */
+  isRelayPart(threadId: string): boolean;
   askBotAndWait(
     targetBotId: string,
     message: string,
@@ -255,6 +261,7 @@ export function createInternalRoomsRoutes(deps: InternalRoomsDeps): InternalRout
       openedThreadOwner,
       openerFrom,
       noteRelayParent,
+      isRelayPart,
       askBotAndWait,
       externalCompletion,
       activeRoutineRunForThread,
@@ -524,8 +531,12 @@ export function createInternalRoomsRoutes(deps: InternalRoomsDeps): InternalRout
       if (body.depth !== undefined && (!Number.isInteger(body.depth) || body.depth !== internalCapability.depth)) {
         return json(res, 403, { error: "the recursion depth does not match this turn" });
       }
-      // the part itself is one hop: it never hands a part on again
-      if (internalCapability.depth >= MAX_COMMS_DEPTH) {
+      // The part itself never hands a part on again. A teammate's work turn
+      // (depth 1, coordinate_bots) is no part: it may run its own part on
+      // another engine, as its prompt says (production 2026-11-03 00:09 UTC: a teammate,
+      // on an engine without Outlook, was refused this in 6 ms and its turn
+      // ended in tool_error). Its part runs one level deeper and stops there.
+      if (isRelayPart(fromThreadId) || internalCapability.depth > MAX_COMMS_DEPTH) {
         return json(res, 409, { error: "This turn is already a part run on another engine: do this work here." });
       }
       const message = typeof body.message === "string" ? body.message.trim() : "";
@@ -624,7 +635,7 @@ export function createInternalRoomsRoutes(deps: InternalRoomsDeps): InternalRout
       }
       const title = String(body.title ?? "").trim();
       const message = String(body.message ?? "").trim();
-      // sub-agents (parity D1, server/subagent-threads.ts): resume one by id, or run one read-only
+      // sub-agents (parity D1, server/threads/subagent-threads.ts): resume one by id, or run one read-only
       const resumeId = typeof body.resumeThreadId === "string" ? body.resumeThreadId.trim() : "";
       const readOnly = body.readOnly === true;
       if (!message || (!title && !resumeId)) return json(res, 400, { error: "title and message are required" });
@@ -644,7 +655,7 @@ export function createInternalRoomsRoutes(deps: InternalRoomsDeps): InternalRout
       const target = store.bot(toBotId);
       if (!target) return json(res, 404, { error: "no such bot" });
       // workspace: where a thread of this bot on Auto starts (sub-agents,
-      // server/auto-computer.ts). Checked again at each of its turns.
+      // server/computer/auto-computer.ts). Checked again at each of its turns.
       const autoWorkspace = body.workspace === undefined || body.workspace === null || body.workspace === "" ? null : parseAutoComputerTarget(body.workspace);
       if (body.workspace !== undefined && body.workspace !== null && body.workspace !== "" && !autoWorkspace) {
         return json(res, 400, { error: "workspace must be this_computer, browser, cloud or local_vm" });
@@ -824,7 +835,7 @@ export function createInternalRoomsRoutes(deps: InternalRoomsDeps): InternalRout
           : coordinator.enqueue(address, internalCapability.generation, internalCapability.roomHandoffId, destination, target.id, handed, false, false,
             [...store.messagesFor(fromThreadId)].reverse().find(m => m.role === "user" && m.kind === "text")?.text ?? "", undefined,
             turnOrigin(internalCapability), oneWay ? "notify" : "work", joinPerson(fromThreadId), false, undefined,
-            directRequestOwners.get(fromThreadId)?.messageId, extra).node;
+            deps.coordinationRequestId?.(fromThreadId) ?? directRequestOwners.get(fromThreadId)?.messageId, extra).node;
       } catch (error) {
         if (wakePlan.reported === "now") releasePriorityNow(from.id);
         // nothing will ever run there: take the row back before the person
@@ -837,6 +848,7 @@ export function createInternalRoomsRoutes(deps: InternalRoomsDeps): InternalRout
         store.deleteTask(target.id, task.threadId);
       }
       const threadId = node.threadId;
+      if (oneWay) deps.notePeerNotice?.(threadId, fromThreadId);
       const openedTitle = store.taskByThread(target.id, threadId)?.title ?? task.title;
       if (threadId === task.threadId) {
         const chip: Omit<Message, "id" | "at"> = {
@@ -892,7 +904,7 @@ export function createInternalRoomsRoutes(deps: InternalRoomsDeps): InternalRout
         return json(res, 403, { error: "source conversation does not belong to sender" });
       }
       // 2026-10-17: any bot of the person, not only the Primary Bot
-      // (server/bot-creation.ts). The Primary Bot's path is unchanged; any
+      // (server/bots/bot-creation.ts). The Primary Bot's path is unchanged; any
       // other bot also needs the owner's own turn, a depth and a rate.
       const primaryCreator = chief.chiefOfStaff === true;
       const creatorRefusal = () => primaryCreator ? null : nonPrimaryCreationRefusal(chief, fromThreadId, body);
@@ -981,7 +993,7 @@ export function createInternalRoomsRoutes(deps: InternalRoomsDeps): InternalRout
             ...(cwd !== undefined ? { cwd } : {}),
             // exactly the Primary Bot's audience: a restricted Primary Bot never makes a bot everyone sees
             ...(chief.visibility ? { visibility: chief.visibility } : {}),
-            // a bot made it: it cannot make more (server/bot-creation.ts)
+            // a bot made it: it cannot make more (server/bots/bot-creation.ts)
             createdByBot: createdByBotMark(chief, Date.now()),
           },
           { seedMessages: false },

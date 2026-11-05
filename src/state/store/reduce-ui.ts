@@ -1,6 +1,7 @@
 // Domain slice of the client store reduce(ui).
 // Returns the next state when it handles the action, otherwise undefined.
 import type {Action, AppState} from "./model";
+import {closedRightPanels} from "./reduce-views";
 import {withoutFreshTopicFor} from "./model";
 import {personaCategoryForSection} from "@/lib/persona-sections";
 import {currentSettingsSection} from "@/lib/settings-sections";
@@ -81,6 +82,7 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         ...state,
         activeView: "chat",
         routineRunSheet: { runId: action.runId, ...(action.routineId ?? known?.routineId ? { routineId: action.routineId ?? known?.routineId } : {}) },
+        codingChat: null,
         // Keep the bot panel if it was already open; otherwise land on chat.
         personPanelId: null,
         appSettingsOpen: false,
@@ -95,6 +97,23 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
     }
     case "closeRoutineRunSheet":
       return state.routineRunSheet ? { ...state, routineRunSheet: null } : state;
+    // 2026-11-03: a coding task opens as a chat where the chat is, never in
+    // the side panel (the panel stays open as it was, its Coding list the
+    // entry point).
+    case "openCodingChat":
+      return {
+        ...state,
+        activeView: "chat",
+        codingChat: action.target,
+        routineRunSheet: null,
+        personPanelId: null,
+        appSettingsOpen: false,
+        pluginsOpen: false,
+        triggersOpen: false,
+        memoryManagerOpen: false,
+      };
+    case "closeCodingChat":
+      return state.codingChat ? { ...state, codingChat: null } : state;
     case "openBotActivity": {
       const opened = reduce(state, { type: "toggleSettings", open: true, section: "routines", botId: action.botId });
       if (opened === state) return state;
@@ -150,6 +169,7 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         ...state,
         activeView: "memory",
         memoryManagerOpen: true,
+        ...closedRightPanels,
         settingsOpen: false,
         computerOpen: false,
         personPanelId: null,
@@ -180,6 +200,7 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         },
         triggersOpen: false,
         memoryManagerOpen: false,
+        ...closedRightPanels,
         settingsOpen: false,
         appSettingsOpen: false,
         newBotOpen: false,
@@ -227,10 +248,16 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
       const current = state.freshTopic[action.botId];
       if (!action.threadId) {
         if (!current) return state;
+        // Opening the bot, coming back to it: a New chat the person asked
+        // for stays until they send, Back or open the topic it covers.
+        if (action.keepAsked && !current.auto) return state;
         const { [action.botId]: _gone, ...rest } = state.freshTopic;
         return { ...state, freshTopic: rest };
       }
       if (current?.threadId === action.threadId && current.auto === Boolean(action.auto)) return state;
+      // Coming back after a while never turns an asked-for New chat into an
+      // invisible one over the same topic: it stays drawn empty.
+      if (action.auto && current && !current.auto && current.threadId === action.threadId) return state;
       return { ...state, freshTopic: { ...state.freshTopic, [action.botId]: { threadId: action.threadId, auto: Boolean(action.auto) } } };
     }
     case "focusMessage":

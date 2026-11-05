@@ -83,7 +83,7 @@ function mount(opts: {
     place: "auto",
     computerOff: false,
     botName: "Luna",
-    botId: "melonie",
+    botId: "wren",
     threadId: "t1",
     remoteHosts: opts.remoteHosts ?? [enrolled()],
     remoteCatalog: opts.remoteCatalog ?? [enrolled(), enrolled({ hostId: OTHER, hostname: "PC-B" })],

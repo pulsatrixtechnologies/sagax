@@ -1,0 +1,8150 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`prompt size by engine and turn kind (#1997) > measures each section and both cache halves using the production builders 1`] = `
+[
+  {
+    "approxTokens": 5739,
+    "bytes": 22954,
+    "engine": "claudeAgent",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2798,
+    "bytes": 11190,
+    "engine": "claudeAgent",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5457,
+    "bytes": 21827,
+    "engine": "claudeAgent",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5645,
+    "bytes": 22577,
+    "engine": "claudeAgent",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5739,
+    "bytes": 22954,
+    "engine": "codex",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2798,
+    "bytes": 11190,
+    "engine": "codex",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5457,
+    "bytes": 21827,
+    "engine": "codex",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5645,
+    "bytes": 22577,
+    "engine": "codex",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5739,
+    "bytes": 22954,
+    "engine": "piAgent",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2798,
+    "bytes": 11190,
+    "engine": "piAgent",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5457,
+    "bytes": 21827,
+    "engine": "piAgent",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5645,
+    "bytes": 22577,
+    "engine": "piAgent",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5739,
+    "bytes": 22954,
+    "engine": "grokAgent",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2798,
+    "bytes": 11190,
+    "engine": "grokAgent",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5457,
+    "bytes": 21827,
+    "engine": "grokAgent",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5645,
+    "bytes": 22577,
+    "engine": "grokAgent",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5739,
+    "bytes": 22954,
+    "engine": "geminiAgent",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2798,
+    "bytes": 11190,
+    "engine": "geminiAgent",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5457,
+    "bytes": 21827,
+    "engine": "geminiAgent",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5645,
+    "bytes": 22577,
+    "engine": "geminiAgent",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5739,
+    "bytes": 22954,
+    "engine": "kimiAgent",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2798,
+    "bytes": 11190,
+    "engine": "kimiAgent",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5457,
+    "bytes": 21827,
+    "engine": "kimiAgent",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5645,
+    "bytes": 22577,
+    "engine": "kimiAgent",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5739,
+    "bytes": 22954,
+    "engine": "opencodeGo",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2798,
+    "bytes": 11190,
+    "engine": "opencodeGo",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5457,
+    "bytes": 21827,
+    "engine": "opencodeGo",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5645,
+    "bytes": 22577,
+    "engine": "opencodeGo",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5739,
+    "bytes": 22954,
+    "engine": "antigravityAgent",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2798,
+    "bytes": 11190,
+    "engine": "antigravityAgent",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5457,
+    "bytes": 21827,
+    "engine": "antigravityAgent",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5645,
+    "bytes": 22577,
+    "engine": "antigravityAgent",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5739,
+    "bytes": 22954,
+    "engine": "droidAgent",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2798,
+    "bytes": 11190,
+    "engine": "droidAgent",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5457,
+    "bytes": 21827,
+    "engine": "droidAgent",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5645,
+    "bytes": 22577,
+    "engine": "droidAgent",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5739,
+    "bytes": 22954,
+    "engine": "cursorAgent",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2798,
+    "bytes": 11190,
+    "engine": "cursorAgent",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5457,
+    "bytes": 21827,
+    "engine": "cursorAgent",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5645,
+    "bytes": 22577,
+    "engine": "cursorAgent",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5739,
+    "bytes": 22954,
+    "engine": "qwenAgent",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2798,
+    "bytes": 11190,
+    "engine": "qwenAgent",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5457,
+    "bytes": 21827,
+    "engine": "qwenAgent",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5645,
+    "bytes": 22577,
+    "engine": "qwenAgent",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5739,
+    "bytes": 22954,
+    "engine": "hermesAgent",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2798,
+    "bytes": 11190,
+    "engine": "hermesAgent",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5457,
+    "bytes": 21827,
+    "engine": "hermesAgent",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5645,
+    "bytes": 22577,
+    "engine": "hermesAgent",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5739,
+    "bytes": 22954,
+    "engine": "clineAgent",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2798,
+    "bytes": 11190,
+    "engine": "clineAgent",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5457,
+    "bytes": 21827,
+    "engine": "clineAgent",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5645,
+    "bytes": 22577,
+    "engine": "clineAgent",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5739,
+    "bytes": 22954,
+    "engine": "customAcp",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2798,
+    "bytes": 11190,
+    "engine": "customAcp",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5457,
+    "bytes": 21827,
+    "engine": "customAcp",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5645,
+    "bytes": 22577,
+    "engine": "customAcp",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5683,
+    "bytes": 22729,
+    "engine": "grok",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22642,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2742,
+    "bytes": 10965,
+    "engine": "grok",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10389,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5401,
+    "bytes": 21602,
+    "engine": "grok",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21515,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5588,
+    "bytes": 22352,
+    "engine": "grok",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22265,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5683,
+    "bytes": 22729,
+    "engine": "openai-compat",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22642,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2742,
+    "bytes": 10965,
+    "engine": "openai-compat",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10389,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5401,
+    "bytes": 21602,
+    "engine": "openai-compat",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21515,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5588,
+    "bytes": 22352,
+    "engine": "openai-compat",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22265,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5683,
+    "bytes": 22729,
+    "engine": "minimax",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22642,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2742,
+    "bytes": 10965,
+    "engine": "minimax",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10389,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5401,
+    "bytes": 21602,
+    "engine": "minimax",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21515,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5588,
+    "bytes": 22352,
+    "engine": "minimax",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22265,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5683,
+    "bytes": 22729,
+    "engine": "mistral",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22642,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2742,
+    "bytes": 10965,
+    "engine": "mistral",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10389,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5401,
+    "bytes": 21602,
+    "engine": "mistral",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21515,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5588,
+    "bytes": 22352,
+    "engine": "mistral",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22265,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5683,
+    "bytes": 22729,
+    "engine": "cerebras",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22642,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2742,
+    "bytes": 10965,
+    "engine": "cerebras",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10389,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5401,
+    "bytes": 21602,
+    "engine": "cerebras",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21515,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5588,
+    "bytes": 22352,
+    "engine": "cerebras",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22265,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5683,
+    "bytes": 22729,
+    "engine": "groq",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22642,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2742,
+    "bytes": 10965,
+    "engine": "groq",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10389,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5401,
+    "bytes": 21602,
+    "engine": "groq",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21515,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5588,
+    "bytes": 22352,
+    "engine": "groq",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22265,
+    "volatileBytes": 87,
+  },
+]
+`;

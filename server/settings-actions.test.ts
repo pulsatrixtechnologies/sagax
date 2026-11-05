@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { TurnFacts } from "../shared/bot-act.ts";
-import type { BotActService } from "./bot-act.ts";
+import type { BotActService } from "./bots/bot-act.ts";
 import { sagaxInternalTool } from "./sagax-internal-tools.ts";
 import { SETTINGS } from "../shared/settings-actions.ts";
 import { createSettingsActions, settingStepUpClasses, type SettingsActionDeps } from "./settings-actions.ts";
@@ -69,6 +69,18 @@ describe("sagax_settings", () => {
     expect(result.body.text).toContain("Done");
     expect(h.planned).toEqual([expect.objectContaining({ effect: "run", method: "PATCH", path: "/api/bots/b2", body: { approvalMode: "auto" } })]);
     expect(h.audits).toEqual([expect.objectContaining({ key: "bot.approvalMode", value: "auto", how: "run", actor: "pr_owner" })]);
+  });
+
+  it("applies routine model and effort as own settings without an access grant card", async () => {
+    for (const mode of ["auto", "full"] as const) {
+      const h = harness({ mode, keyRequired: (_person, classes) => classes.includes("always-grant") ? ["always-grant"] : [] });
+      for (const [key, value] of [["routine.model", "fast"], ["routine.effort", "low"], ["routine.effort", null]] as const) {
+        const result = await h.call({ action: "set", key, target: "r1", value });
+        expect(result.body.text).toContain("Done");
+        expect(h.planned.at(-1)?.effect).toBe("run");
+        expect(h.planned.at(-1)?.stepUpClasses).not.toContain("always-grant");
+      }
+    }
   });
 
   it("applies the managed teams of the owner's Primary Bot and a routine's new name", async () => {
@@ -952,6 +964,37 @@ describe("sagax_settings: plugins, MCP servers and a routine's webhook (2026-10-
     // attaching a server to the speaking bot itself widens it: the person's Allow, as for bot.mcpServers
     const self = harness({ mode: "full", answer });
     expect((await self.call({ action: "set", key: "bot.mcpServer", value: { name: "crm", attached: true } })).body.text).toBeDefined();
+  });
+
+  // #1992: get goes through sagax_settings to GET /api/me/capabilities (servers),
+  // never POST /api/me/mcp/servers which only adds a server.
+  it("reads connections.mcpServer through get on the capabilities list (#1992)", async () => {
+    const servers = [{ name: "notes", enabled: true, url: "https://notes.example.test" }];
+    const h = harness({
+      organization: () => true,
+      answer: (path: string) => path === "/api/me/capabilities"
+        ? { github: { connected: false }, servers, sandbox: false }
+        : {},
+    });
+    const read = await h.call({ action: "get", key: "connections.mcpServer" });
+    expect(read.status).toBe(200);
+    expect(JSON.parse(String(read.body.text))).toEqual({ key: "connections.mcpServer", value: servers });
+    expect(h.planned).toEqual([expect.objectContaining({ method: "GET", path: "/api/me/capabilities", effect: "run" })]);
+    expect(JSON.stringify(h.planned)).not.toMatch(/POST only|\/api\/me\/mcp\/servers"/);
+    const enabled = await h.call({ action: "get", key: "connections.mcpServerEnabled" });
+    expect(JSON.parse(String(enabled.body.text))).toEqual({ key: "connections.mcpServerEnabled", value: servers });
+  });
+
+  it("routine.requiresComputer turns the need on and off and keeps the skills and MCP needs (#1996)", async () => {
+    const answer = { routines: [{ id: "r1", botId: "bot-a", requires: { skills: ["osprey-digest"], mcpServers: ["wren"] } }] };
+    const h = harness({ mode: "full", answer });
+    const on = await h.call({ action: "set", key: "routine.requiresComputer", target: "r1", value: true });
+    expect(on.status, JSON.stringify(on.body)).toBe(200);
+    expect(h.planned.at(-1)).toMatchObject({ method: "PATCH", path: "/api/routines/r1", body: { requires: { skills: ["osprey-digest"], mcpServers: ["wren"], computer: true } } });
+    const bare = harness({ mode: "full", answer: { routines: [{ id: "r1", botId: "bot-a", requires: { computer: true } }] } });
+    await bare.call({ action: "set", key: "routine.requiresComputer", target: "r1", value: false });
+    expect(bare.planned.at(-1)).toMatchObject({ method: "PATCH", path: "/api/routines/r1", body: { requires: null } });
+    expect((await h.call({ action: "set", key: "routine.requiresComputer", target: "r1", value: "yes" })).status).toBe(400);
   });
 
   it("reads a webhook routine's address, never a key, and rotates its key for the person to copy", async () => {

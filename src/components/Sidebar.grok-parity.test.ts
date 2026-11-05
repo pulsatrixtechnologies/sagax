@@ -5,11 +5,11 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Bot, Task } from "@/state/store";
+import type { AppState, Bot, Task } from "@/state/store";
 import type { SidebarMenuItem } from "./SidebarPopoverMenu";
 
 const fixture = vi.hoisted(() => ({
-  state: {} as { bots?: Bot[]; sections?: string[]; selectedId?: string; activeView?: string },
+  state: {} as { bots?: Bot[]; sections?: string[]; selectedId?: string; activeView?: AppState["activeView"] },
   places: [] as { key: string; label: string }[],
 }));
 
@@ -31,19 +31,9 @@ vi.mock("@/lib/feature-flags", async (importOriginal) => ({
   connectedAppsEnabled: () => flags.connectedApps,
 }));
 
-vi.mock("@/state/store", async (importOriginal) => {
-  const original = await importOriginal<typeof import("@/state/store")>();
-  return {
-    ...original,
-    useStore: () => {
-      const store = original.useStore();
-      return { ...store, state: { ...store.state, groups: [], ...fixture.state } };
-    },
-  };
-});
 
 import { setLocale } from "@/lib/i18n";
-import { StoreProvider } from "@/state/store";
+import { BotEditorStore, initialState } from "@/state/store";
 import { Sidebar } from "./Sidebar";
 import { forgetSearchDisclosuresForTests } from "@/lib/search-disclosure";
 
@@ -53,7 +43,7 @@ const bot = (id: string, extra: Partial<Bot> = {}): Bot => ({
 });
 
 const render = () => renderToStaticMarkup(
-  createElement(StoreProvider, null, createElement(Sidebar, { open: true, onClose: () => {} })),
+  createElement(BotEditorStore, { value: { state: { ...initialState, ...fixture.state }, dispatch: () => {}, flushBotPatches: async () => null, refreshInstances: async () => {}, refreshModels: async () => {} }, children: createElement(Sidebar, { open: true, onClose: () => {} }) }),
 );
 
 beforeEach(() => {

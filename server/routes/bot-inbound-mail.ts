@@ -15,11 +15,11 @@
 // bot and per owner (second review, 2026-10-22), counted only when Perspicax
 // is asked; Perspicax keeps its own limit too (429 `rate_limited`).
 //
-// Client-scoped in server/request-auth.ts; the bot visibility check every
+// Client-scoped in server/auth/request-auth.ts; the bot visibility check every
 // client route passes (bot-visibility.ts pathSubject) answers a hidden bot
 // as missing before this runs.
 import { BOT_MAIL_LOCAL_PART, NO_BOT_MAIL, type BotInboundMail, type LocalPartResult } from "../mail/bot-mail-addresses.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface BotInboundMailReadDeps {

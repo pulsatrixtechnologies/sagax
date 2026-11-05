@@ -40,7 +40,9 @@
 //                     FAKE_ACP_GATE_FILE is set hold the turn open until that
 //                     file exists — a deterministic busy window for the
 //                     steer-queue e2e, with the echo pinning exactly what a
-//                     drained turn was sent)
+//                     drained turn was sent. FAKE_ACP_ECHO_REPLY_FILE, when
+//                     present on disk, supplies a finite report instead of
+//                     echoing instructions; the prompt dump stays real)
 //                   | safe-agent-reads (simulate a native Auto reviewer around
 //                     the real injected agents MCP; not a real classifier test)
 //                   | stall-after-text (stream one message chunk, then go
@@ -188,6 +190,10 @@
 //                        1.0.46 and 1.0.50 signed in, fresh GROK_HOME)
 //   SAGAX_GROK_MODEL_PROBE=1  set by Sagax's model-list probe (initialize
 //                        only): this process is not counted or dumped
+//   SAGAX_GROK_REACH_PROBE=1  set by Sagax's grok.com reach probe: not counted
+//   SAGAX_ACP_BACKGROUND_TEXT=1  set by memory/review one-shots: not counted
+//                        (a chat session's launch counter stays honest, #1970)
+//   FAKE_ACP_LAUNCH_TRACE_FILE  append one JSON line per process start
 //
 // With FAKE_ACP_DUMP and FAKE_ACP_MODES or FAKE_ACP_MODELS, every
 // session/prompt appends {"pid","sessionId","mode","model"} to
@@ -420,24 +426,53 @@ const dumpEnv = Object.fromEntries(
     "GEMINI_API_KEY",
     "MISTRAL_API_KEY",
     "SAGAX_ANTHROPIC_API_KEY",
+    "SAGAX_ACP_BACKGROUND_TEXT",
+    "SAGAX_GROK_MODEL_PROBE",
+    "SAGAX_GROK_REACH_PROBE",
   ].flatMap((key) => (process.env[key] === undefined ? [] : [[key, process.env[key]]] as const)),
 );
 // pid rides along so a test can tell a respawned process (new pid, fresh
 // dump) from a pooled one whose dump was never rewritten
 const dumpState: Record<string, unknown> = { argv, env: dumpEnv, pid: process.pid, cwd: process.cwd() };
 const modelProbe = process.env.SAGAX_GROK_MODEL_PROBE === "1";
+const reachProbe = process.env.SAGAX_GROK_REACH_PROBE === "1";
+const backgroundText = process.env.SAGAX_ACP_BACKGROUND_TEXT === "1";
+const versionOnly = argv.includes("--version");
+const launchCountFile = process.env.FAKE_ACP_LAUNCH_COUNT_FILE;
+const launchTraceFile = process.env.FAKE_ACP_LAUNCH_TRACE_FILE;
+// Side spawns that share the chat CLI must not look like a pooled session
+// relaunch in FAKE_ACP_LAUNCH_COUNT_FILE (#1970): model-list probe, reach
+// probe, memory/review one-shots, and bare --version.
+const countLaunch = Boolean(launchCountFile)
+  && !modelProbe && !reachProbe && !backgroundText && !versionOnly;
 if (process.env.FAKE_ACP_DUMP && !modelProbe) {
   writeFileSync(process.env.FAKE_ACP_DUMP, JSON.stringify(dumpState, null, 2));
 }
-if (process.env.FAKE_ACP_LAUNCH_COUNT_FILE && !modelProbe) {
+if (countLaunch && launchCountFile) {
   // count launched processes: read-increment-write, so a test can assert
-  // how many children the driver spawned (a pooled session launches once)
+  // how many children the driver spawned (a pooled session launches once).
   let launches = 0;
   try {
-    launches = Number.parseInt(readFileSync(process.env.FAKE_ACP_LAUNCH_COUNT_FILE, "utf8").trim(), 10) || 0;
+    launches = Number.parseInt(readFileSync(launchCountFile, "utf8").trim(), 10) || 0;
   } catch {}
   try {
-    writeFileSync(process.env.FAKE_ACP_LAUNCH_COUNT_FILE, String(launches + 1));
+    writeFileSync(launchCountFile, String(launches + 1));
+  } catch {}
+}
+if (launchTraceFile) {
+  try {
+    appendFileSync(launchTraceFile, `${JSON.stringify({
+      at: Date.now(),
+      pid: process.pid,
+      argv,
+      modelProbe,
+      reachProbe,
+      backgroundText,
+      versionOnly,
+      counted: countLaunch,
+      cwd: process.cwd(),
+      grokHome: process.env.GROK_HOME ?? null,
+    })}\n`);
   } catch {}
 }
 if (argv.includes("--version")) {
@@ -1132,6 +1167,18 @@ function handle(msg: any) {
         // still nudge / soft-settle, never the raw Internal error (#1820).
         // FAKE_ACP_REASONING_TOOL_FIRST: a finished tool call before the
         // reasoning on the first prompt (a routine's turn always ran tools).
+        // FAKE_ACP_REASONING_REPLY_FIRST: on the first prompt, a committed
+        // line of text and a finished tool call before the reasoning (prod
+        // 2026-11-02: Grok said a line and reacted to a message first).
+        // FAKE_ACP_REASONING_EFFORT_LOG: append the effort each prompt ran at.
+        if (process.env.FAKE_ACP_REASONING_EFFORT_LOG) {
+          try { appendFileSync(process.env.FAKE_ACP_REASONING_EFFORT_LOG, `${currentVariant ?? ""}\n`); } catch {}
+        }
+        if (process.env.FAKE_ACP_REASONING_REPLY_FIRST && reasoningErrors === 0) {
+          out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text: "On it." } } } });
+          out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "tool_call", toolCallId: "tc-reply-first", title: "agents__react_to_message", kind: "other", status: "pending", rawInput: {} } } });
+          out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "tool_call_update", toolCallId: "tc-reply-first", status: "completed", rawOutput: { output: "reacted" } } } });
+        }
         if (process.env.FAKE_ACP_REASONING_TOOL_FIRST && reasoningErrors === 0) {
           out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "tool_call", toolCallId: "tc-reason-first", title: "agents__list_bots", kind: "other", status: "pending", rawInput: {} } } });
           out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "tool_call_update", toolCallId: "tc-reason-first", status: "completed", rawOutput: { output: "two bots" } } } });
@@ -1561,7 +1608,9 @@ function handle(msg: any) {
         // both what a drained turn was sent and what it was NOT sent (e.g.
         // the webhook untrusted-data paragraph a steered turn must not get)
         const finish = () => {
-          out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text: `echo: ${promptText}` } } } });
+          const replyFile = process.env.FAKE_ACP_ECHO_REPLY_FILE;
+          const text = replyFile && existsSync(replyFile) ? readFileSync(replyFile, "utf8") : `echo: ${promptText}`;
+          out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text } } } });
           complete();
         };
         const gate = process.env.FAKE_ACP_GATE_FILE;

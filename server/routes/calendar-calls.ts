@@ -3,13 +3,13 @@
  *
  * Registered in ROUTES after the auth gate. Never imports server/index.ts.
  */
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import {
   calendarCallRefusal,
   visibleCalendarCalls,
   type CalendarCallAccess,
-} from "../calendar-call-access.ts";
-import type { CalendarCall } from "../calendar-calls.ts";
+} from "../calendar/calendar-call-access.ts";
+import type { CalendarCall } from "../calendar/calendar-calls.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 /** A scheduled call with several bots opens a room, so its bots keep one audience too. */

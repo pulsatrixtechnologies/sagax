@@ -215,7 +215,7 @@ jobs:
           grep -q '"baseUrl":"https://localhost"' <<<"$(body -b "$jar" $H/api/webhooks)"   # SAGAX_WEBHOOK_PUBLIC_URL is advertised
           test "$(code $H/api/bots)" = 403                                        # and without the cookie it is still closed
           docker compose -f deploy/docker-compose.yml down -v
-      # No Cloud Pro home image: deploy/fly/Dockerfile and
+      # No Cloud Pro home image: deploy/fly (removed 2026-11-02) and
       # dist-server/cloud-home-start.js are not in this tree (upstream
       # #2407). Building that step failed the job after the engine gate.
 

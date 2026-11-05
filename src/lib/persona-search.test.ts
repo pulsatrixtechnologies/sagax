@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { personaPageRank, personaPagesMatching, stepPersonaResult } from "./persona-search";
 import { PERSONA_CATEGORIES, type PersonaCategory } from "./persona-sections";
 
-const label = (page: PersonaCategory) => ({ appearance: "Apparence", model: "Modèle", voice: "Voix", permissions: "Permissions", access: "Accès", perspicax: "Perspicax Profiles" } as Record<string, string>)[page] ?? page;
+const label = (page: PersonaCategory) => ({ appearance: "Apparence", model: "Modèle", voice: "Voix", permissions: "Permissions", access: "Accès" } as Record<string, string>)[page] ?? page;
 const find = (query: string) => personaPagesMatching(PERSONA_CATEGORIES, query, label);
 
 describe("persona search index", () => {
@@ -14,7 +14,7 @@ describe("persona search index", () => {
     expect(find("voix")[0]).toBe("voice");
     expect(find("horaire")).toEqual(expect.arrayContaining(["voice", "permissions", "access"]));
     expect(find("approbation")).toContain("permissions");
-    expect(find("mcp")).toEqual(expect.arrayContaining(["access", "perspicax"]));
+    expect(find("mcp")).toEqual(["access"]);
     expect(find("modele")).toContain("model");
   });
   // #1702: "moteur" / "engine" name Model, not Identity (which only shows the
@@ -33,7 +33,7 @@ describe("persona search index", () => {
   it("ranks a label before a keyword before the index", () => {
     expect(personaPageRank("voice", "Voix", "voix")).toBe(0);
     expect(personaPageRank("model", "Modèle", "claude")).toBe(2);
-    expect(find("mcp").slice(0, 2)).toEqual(["access", "perspicax"]);
+    expect(find("mcp")).toEqual(["access"]);
   });
   it("returns nothing for a word no page holds", () => {
     expect(find("zzzxq")).toEqual([]);

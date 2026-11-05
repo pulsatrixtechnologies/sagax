@@ -1,8 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import { allowsTool, canUseMcpServer, narrowsNativeTools, parseToolScope, toolScopeWidens } from "./tool-scope.ts";
+import { allowsTool, canUseMcpServer, MCP_SERVER_NAME, narrowsNativeTools, parseToolScope, toolScopeWidens } from "./tool-scope.ts";
 
 describe("per-bot tool selection", () => {
+  it("#1935: an MCP server longer than 32 characters stays mounted and selectable", () => {
+    for (const name of ["organization_ticket_dispatch_readonly", "client_service_schedule_limited_access"]) {
+      expect(MCP_SERVER_NAME.test(name)).toBe(true);
+      expect(canUseMcpServer(undefined, name)).toBe(true);
+      expect(canUseMcpServer({ allow: [`mcp:${name}:cw_psa_query`] }, name)).toBe(true);
+      expect(allowsTool({ allow: [`mcp:${name}:*`] }, { kind: "mcp", server: name, name: "cw_psa_query" })).toBe(true);
+    }
+    expect(MCP_SERVER_NAME.test(`p${"x".repeat(40)}`)).toBe(false);
+  });
+
   it("distinguishes native restrictions from an MCP-only clamp", () => {
     for (const scope of [undefined, {}, { deny: [] }, { allow: ["native:*", "mcp:notes:read"] }, { deny: ["mcp:notes:*"] }]) expect(narrowsNativeTools(scope)).toBe(false);
     for (const scope of [{ allow: [] }, { allow: ["mcp:notes:read"] }, { deny: ["native:read"] }, { allow: ["native:*"], deny: ["native:bash"] }, { allow: "all" }]) expect(narrowsNativeTools(scope)).toBe(true);
@@ -103,5 +113,13 @@ describe("per-bot tool selection", () => {
     expect(toolScopeWidens({ allow: ["native:read"] }, undefined)).toBe(true);
     expect(toolScopeWidens({ allow: null }, { allow: [] })).toBe(false);
     expect(toolScopeWidens({ allow: null }, { allow: ["native:read"] })).toBe(true);
+  });
+});
+
+describe("tool namespace of a long MCP server (#1935)", () => {
+  it("strips a 33 to 40 character server namespace from a tool name", async () => {
+    const { TOOL_NAMESPACE } = await import("./tool-surface");
+    expect("organization_ticket_dispatch_readonly__cw_psa_query".replace(TOOL_NAMESPACE, "")).toBe("cw_psa_query");
+    expect(`${"p".repeat(40)}__cw_psa_query`.replace(TOOL_NAMESPACE, "")).toBe("cw_psa_query");
   });
 });

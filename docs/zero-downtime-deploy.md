@@ -8,7 +8,7 @@ Three layers work together.
 
 ## 1. Server graceful shutdown
 
-On `SIGTERM` / `SIGINT` (`server/graceful-shutdown.ts`, wired in
+On `SIGTERM` / `SIGINT` (`server/process/graceful-shutdown.ts`, wired in
 `server/index.ts`):
 
 1. Mark probes unready (`markShuttingDown`): `/healthz` and `/api/health`
@@ -19,11 +19,11 @@ On `SIGTERM` / `SIGINT` (`server/graceful-shutdown.ts`, wired in
    (`SAGAX_SHUTDOWN_DRAIN_MS`, default 5 s on a server, 0 under the
    desktop app).
 4. Stop accepting and finish in-flight HTTP
-   (`server/http-shutdown.ts`), then flush durable state (bus, sessions,
+   (`server/process/http-shutdown.ts`), then flush durable state (bus, sessions,
    ledgers) and exit.
 
 Runtime state is already durable on disk. Interrupted turns resume once
-at the next start (`server/interrupted-turns.ts`).
+at the next start (`server/turns/interrupted-turns.ts`).
 
 Raise `SAGAX_SHUTDOWN_DRAIN_MS` together with the container stop grace
 period (Compose `stop_grace_period`, k8s `terminationGracePeriodSeconds`)
@@ -32,7 +32,7 @@ when turns need longer to land.
 ## 2. Caddy holds requests during the restart
 
 Every Caddyfile we ship (`deploy/Caddyfile`, `install.sh`,
-`server/caddy.ts`, `server/fleet.ts`, helm configmap, local/podman)
+`server/caddy.ts`, `server/fleet/fleet.ts`, helm configmap, local/podman)
 configures the reverse proxy to **wait** instead of 502 while the single
 upstream is gone:
 
@@ -102,6 +102,23 @@ Set `replicas` in values when the data volume and architecture allow more
 than one server process. This chart never applies itself; operators apply
 a rendered manifest.
 
+### What the person sees (#2013)
+
+The drain tells every live client first: one `server.restarting` frame,
+without an SSE id, just before the streams close. The app then shows
+"Server update in progress, back in a moment" instead of "can't reach the
+server", and "Reconnected" once the new process answers. A drop under
+2.5 s shows nothing. While the process drains, `/healthz` and `/api/health`
+answer 503 with `shuttingDown: true`; past `lb_try_duration`, the Caddyfile's
+`handle_errors` answers 503 with `x-sagax-maintenance`. Both read as an
+update (`src/lib/connection-notice.ts`). A roll that recreates the container
+(`docker compose up -d`) goes through the same SIGTERM drain, so it needs no
+extra step. On an organization server, the Perspicax connector's reach is
+tracked from its traffic and a light `/healthz` probe
+(`server/perspicax/perspicax-reachability.ts`, `GET /api/connector-status`,
+`connector.status` frame). Settings > Notifications > Connection notices
+turns these notices off.
+
 ### What not to do
 
 - Do not run deploy scripts against live hosts from an agent session
@@ -112,9 +129,9 @@ a rendered manifest.
 
 ## Tests
 
-- `server/http-shutdown.test.ts`, `server/graceful-shutdown.test.ts`,
-  `server/healthz.test.ts`
-- `server/caddy.test.ts`, `server/fleet.test.ts`
+- `server/process/http-shutdown.test.ts`, `server/process/graceful-shutdown.test.ts`,
+  `server/process/healthz.test.ts`
+- `server/caddy.test.ts`, `server/fleet/fleet.test.ts`
 - `src/lib/deploy-reconnect.test.ts`, `src/components/ChatErrorBanner.test.ts`
 - `companion/test/upstream-failure.test.ts`
 - iOS: `FailoverTests.testDeployOutageShowsCalmReconnectingWithoutAnotherRoute`

@@ -21,7 +21,7 @@ not exit. The pool manifests (`deploy/k8s/sandboxes/`), the Helm chart
 and the OpenTofu modules (`deploy/k8s/helm/`, `deploy/k8s/tofu/`) are the
 same tree.
 
-Sagax chooses a provisioner per call (`server/sandbox-route.ts`):
+Sagax chooses a provisioner per call (`server/sandbox/sandbox-route.ts`):
 
 | Variable | Effect |
 |---|---|
@@ -64,7 +64,7 @@ the digest in the change record. The build script does not push.
 
 Figures are estimates for a cutover done while the driver exists, from
 the idle-stop default (10 minutes), the audit's node-boot range (30–90
-seconds), a workspace copy of at most 2 GiB on the same region, and a
+seconds), a workspace copy of at most 32 GiB on the same region, and a
 Sagax container recreate. They are not measurements from the production VM.
 
 | Step | What changes | Who is interrupted | Estimate |

@@ -22,8 +22,6 @@ release
 .wrangler/
 .dev.vars
 .dev.vars.*
-!cloudflare/control-plane/.dev.vars.example
-cloudflare/control-plane/worker-configuration.d.ts
 .claude/worktrees/
 .vercel/
 .pi/
@@ -50,7 +48,7 @@ ios/.asc/
 # Gallery build (vite.gallery.config.ts)
 dist-gallery
 
-# PR evidence media kept off the tracked tree (see docs/pr-assets.md).
-# Local copies may live under pr-assets/ after an orphan move; do not add them.
+# Local scratch folder for PR evidence drafts (see docs/pr-assets.md).
+# Durable proofs that need a raw URL live on the orphan branch `pr-assets/shared`.
 pr-assets/
 artifacts/shape-gen/

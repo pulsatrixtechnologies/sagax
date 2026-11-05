@@ -3,6 +3,7 @@ import { lstat, mkdir, readFile, realpath, stat, writeFile } from "node:fs/promi
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 
 import { describeSpawnFailure, spawnCli } from "../../procs.ts";
+import { retireClosedWarmProcess } from "../../resources/warm-process.ts";
 import { appendNative } from "../native.ts";
 import { permissionLaunchCwd } from "../permission-command.ts";
 import {
@@ -314,6 +315,7 @@ export function createOpenSession(deps: OpenSessionDeps) {
     });
     child.on("error", (e) => {
       session.dead = true;
+      retireClosedWarmProcess(session.budget, child);
       // A call warm has pending RPCs but no current turn. Reject them
       // too, so the first real turn never waits for a dead handshake.
       session.acp.failAll(e);
@@ -323,6 +325,8 @@ export function createOpenSession(deps: OpenSessionDeps) {
       settle(threadId, session, false, "spawn_error");
     });
     child.on("close", (code) => {
+      retireClosedWarmProcess(session.budget, child);
+      if (process.env.SAGAX_ACP_REUSE_DIAG === "1") console.error(`[acp-reuse-diag] child-close thread=${threadId.slice(0, 8)} code=${code} closing=${session.closing}`);
       session.dead = true;
       session.acp.failAll(new Error(`${DRIVER_KIND} exited ${code} before the prompt result${session.stderr ? `: ${session.stderr.trim().slice(-300)}` : ""}`));
       const current = session.current;

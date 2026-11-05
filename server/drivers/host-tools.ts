@@ -2,7 +2,7 @@
 // the machine is the Sagax server (a container), never anyone's computer, so
 // a turn withholds them (SendTurnInput.withholdHostTools) and shell and files
 // go through the person's server environment instead
-// (server/user-sandbox-tools.ts, docs/user-sandbox.md).
+// (server/sandbox/user-sandbox-tools.ts, docs/user-sandbox.md).
 import { chmodSync, lstatSync, mkdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -10,6 +10,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 import { allowsTool, parseToolScope } from "../../shared/tool-scope.ts";
 import { DATA_DIR } from "../config.ts";
+import { codexFullApprovalPolicy } from "./codex/approvals.ts";
 
 /** A policy file Sagax owns for withheld turns (a system settings file, a
  * config an engine reads through an environment variable). Written under
@@ -40,7 +41,7 @@ export const CLAUDE_HOST_TOOLS: readonly string[] = [
   "EnterWorktree", "ExitWorktree", "Workflow", "DesignSync",
   // 2.1.288: TaskStop and TaskOutput are the current names of KillShell and
   // BashOutput (background commands); the Task* list keeps its tasks in the
-  // CLI's folder on this machine; Artifact and Projects upload a local file;
+  // CLI's folder on this machine; Projects uploads a local file;
   // Config rewrites the CLI's settings; LSP, REPL and JavaScript start a
   // process; WebBrowser drives a browser here; TeamCreate and TeamDelete
   // start and stop teammates; SendFeedback writes a local draft;
@@ -48,7 +49,7 @@ export const CLAUDE_HOST_TOOLS: readonly string[] = [
   // ShowOnboardingRolePicker installs a plugin. None is offered to a
   // withheld turn today: naming one in --tools turns some of them on.
   "TaskStop", "TaskOutput", "TaskCreate", "TaskGet", "TaskUpdate", "TaskList",
-  "Artifact", "Projects", "Config", "LSP", "REPL", "JavaScript", "WebBrowser",
+  "Projects", "Config", "LSP", "REPL", "JavaScript", "WebBrowser",
   "TeamCreate", "TeamDelete", "SendFeedback", "ReadNotifications", "ShowOnboardingRolePicker",
 ];
 
@@ -60,16 +61,20 @@ export const CLAUDE_HOST_TOOLS: readonly string[] = [
  * The first eight are exactly what a withheld turn of the pinned 2.1.288
  * offered the model under the deny list alone (init event and model
  * requests, subagents included; ToolSearch with tool search on).
- * The rest only work on the conversation or on Sagax's MCP servers and
- * the CLI turns them on under a condition of its own (an MCP server with
+ * The optional conversation/MCP tools are enabled under CLI conditions
+ * of their own (an MCP server with
  * resources, brief mode, a JSON schema, a goal); naming one in `--tools`
  * does not turn it on (probed one by one on 2.1.288), so a turn keeps
  * exactly what it had. `Agent` is the current name of `Task`; Sagax MCP
- * tools (`mcp__*`) are not built-ins and `--tools` leaves them alone. */
+ * tools (`mcp__*`) are not built-ins and `--tools` leaves them alone.
+ * The artifact family uses the signed-in person's claude.ai account. */
 export const CLAUDE_ORG_TOOLS: readonly string[] = [
   "Task", "Agent", "AskUserQuestion", "EnterPlanMode", "ExitPlanMode", "SendMessage", "Skill", "ToolSearch", "WebSearch",
   "TodoWrite", "ListMcpResourcesTool", "ReadMcpResourceTool", "ReadMcpResourceDirTool", "RefreshMcpTools",
   "SendUserMessage", "StructuredOutput", "ProposeGoal",
+  // Account-backed artifacts belong to the signed-in person, including
+  // their shared database and comments. A parent deny also hides its add-ons.
+  "Artifact", "ArtifactData", "ArtifactComments",
 ];
 const CLAUDE_ORG_TOOL_SET: ReadonlySet<string> = new Set(CLAUDE_ORG_TOOLS);
 const CLAUDE_ORG_TOOL_ARG = CLAUDE_ORG_TOOLS.join(",");
@@ -273,13 +278,15 @@ export const CODEX_WITHHELD_APPROVAL = {
   turn: { approvalPolicy: "on-request", approvalsReviewer: "user", sandboxPolicy: { type: "readOnly" } },
 } as const;
 
-/** A withheld Codex turn in Full access: Codex never asks (`never`) and its
- * own sandbox stays read-only, so nothing runs or writes on the Sagax server
- * (the target there is the person's environment or desktop, reached through
- * Sagax's MCP tools, which Full lets through without a prompt). */
+/** A withheld Codex turn in Full access: Codex never asks about a command,
+ * a file or a sandbox escalation, and its own sandbox stays read-only, so
+ * nothing runs or writes on the Sagax server (the target there is the
+ * person's environment or desktop, reached through Sagax's MCP tools).
+ * #1977: an MCP tool approval goes to Sagax's gate (codexFullApprovalPolicy);
+ * with `never` and this read-only sandbox Codex refused every such call. */
 export const CODEX_WITHHELD_FULL_APPROVAL = {
-  thread: { approvalPolicy: "never", approvalsReviewer: "user", sandbox: "read-only" },
-  turn: { approvalPolicy: "never", approvalsReviewer: "user", sandboxPolicy: { type: "readOnly" } },
+  thread: { approvalPolicy: codexFullApprovalPolicy(), approvalsReviewer: "user", sandbox: "read-only" },
+  turn: { approvalPolicy: codexFullApprovalPolicy(), approvalsReviewer: "user", sandboxPolicy: { type: "readOnly" } },
 } as const;
 
 /** The folder a withheld turn of an engine that reads workspace files runs
@@ -632,7 +639,7 @@ export function hermesTurnHome(
 }
 
 /** Host tool names per ACP engine, as each real CLI offered them to the
- * model (scripts/verify-org-host-tools.ts). */
+ * model (scripts/verify/dev/verify-org-host-tools.ts). */
 export const HOST_TOOL_NAMES_BY_ENGINE: Readonly<Record<string, readonly string[]>> = {
   qwen: QWEN_HOST_TOOLS,
   gemini: GEMINI_HOST_TOOLS,
@@ -646,7 +653,7 @@ export const HOST_TOOL_NAMES_BY_ENGINE: Readonly<Record<string, readonly string[
  * engines.lock.json: `allow` is every tool a withheld turn may be offered,
  * `deny` every tool it must not use. Each tool the pinned CLI exposes is on
  * exactly one of them (engine-tools.test.ts against engine-native-tools.json,
- * captured by scripts/capture-engine-native-tools.ts). `enforced` says how
+ * captured by scripts/capture/engine-native-tools.ts). `enforced` says how
  * a tool on neither stays off: the CLI takes the allowlist itself, or only
  * the pinned inventory (the image installs exactly the lock's version, and
  * bumping it fails the test until the new inventory is classified). */

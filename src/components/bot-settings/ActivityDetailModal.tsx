@@ -1,3 +1,5 @@
+import { waitingSources } from "./../../lib/activity-waiting-sources.ts";
+export { waitingSources } from "./../../lib/activity-waiting-sources.ts";
 // One task in full (2026-10-29, the sheet redone): a sub-agent, a parallel
 // task, a run or a coding session, at Settings' size (ActivityWindow).
 //
@@ -32,7 +34,7 @@ import {
   type BotActivityItem,
 } from "@/lib/bot-activity";
 import { currentTaskStep } from "@/lib/activity-step-groups";
-import { useWaitingCards, type WaitingItem, type WaitingSource } from "@/lib/use-waiting-cards";
+import { useWaitingCards, type WaitingItem } from "@/lib/use-waiting-cards";
 import { AccessCard, type AccessViewer } from "../AccessCard";
 import { PILL, PRIMARY_PILL } from "../SettingsPrimitives";
 import { cn } from "@/lib/cn";
@@ -40,6 +42,7 @@ import { activityChip, useElementWidth } from "./ActivityWindow";
 import { PanelPage } from "./PanelPage";
 import { activityJobStage, TaskStatusHeader } from "../task/TaskStatusHeader";
 import { WaitingOnYou, waitingKind, type WaitingNote } from "../task/WaitingOnYou";
+import { StepBoundary, stepFallbackText } from "../MessageBoundary";
 import { ActivityStepGroups } from "../task/ActivityStepGroups";
 import { SubagentList } from "../task/SubagentList";
 import { TaskComposer } from "../task/TaskComposer";
@@ -71,17 +74,7 @@ const VIEW_KEYS = {
   conversation: "activity.view.conversation",
 } as const;
 
-/** The threads whose open cards the head shows: the task's own while it
- * waits, and each waiting sub-agent's. */
-export function waitingSources(detail: BotActivityDetail | null): WaitingSource[] {
-  if (!detail) return [];
-  const sources: WaitingSource[] = [];
-  if (detail.status === "waiting" && detail.threadId) sources.push({ threadId: detail.threadId, botId: detail.botId });
-  for (const child of detail.children) {
-    if (child.status === "waiting" && child.threadId) sources.push({ threadId: child.threadId, botId: child.botId, from: child.title });
-  }
-  return sources;
-}
+
 
 const NO_BOT = () => undefined;
 
@@ -231,7 +224,11 @@ export function ActivityDetailBody({ item, detail, error, now, engineName, onSto
   const steps = detail && (
     detail.steps.length === 0
       ? <p className="text-[12.5px] text-ink-secondary">{t("botPanel.activity.stepsEmpty")}</p>
-      : <ActivityStepGroups steps={detail.steps} truncated={detail.stepsTruncated} />
+      : (
+        <StepBoundary stepId={detail.id} fallbackText={stepFallbackText(detail.steps[0])}>
+          <ActivityStepGroups steps={detail.steps} truncated={detail.stepsTruncated} />
+        </StepBoundary>
+      )
   );
 
   const tabs = views.length > 1 || (split && views.length > 0) ? (

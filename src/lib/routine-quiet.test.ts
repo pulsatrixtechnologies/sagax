@@ -60,28 +60,28 @@ describe("a quiet routine run on the client", () => {
 // single chat page." An automatic "<routine> · Results" thread (routineResults)
 // is no row under the bot, no dot, no preview, never the chat's home.
 describe("a routine results thread with threads hidden", () => {
-  const katarina = {
-    id: "katarina", name: "Katarina", threadId: "chat",
+  const osprey = {
+    id: "osprey", name: "Osprey", threadId: "chat",
     tasks: [
-      { threadId: "chat", title: "Katarina", createdAt: 1, updatedAt: 5 },
+      { threadId: "chat", title: "Osprey", createdAt: 1, updatedAt: 5 },
       { threadId: "results", title: "[Finance] Acme invoices without PO · Results", createdAt: 7, updatedAt: 9, unread: true, routineResults: true },
     ],
   } as unknown as Bot;
 
   it("is not listed under the bot and lights no dot", () => {
-    expect(sidebarBotActivityTasks(katarina, {}).map((task) => task.threadId)).toEqual([]);
-    expect(taskHiddenFromSidebar(katarina.tasks![1]!, katarina.id)).toBe(true);
-    expect(botShowsUnread(katarina)).toBe(false);
+    expect(sidebarBotActivityTasks(osprey, {}).map((task) => task.threadId)).toEqual([]);
+    expect(taskHiddenFromSidebar(osprey.tasks![1]!, osprey.id)).toBe(true);
+    expect(botShowsUnread(osprey)).toBe(false);
   });
 
   it("never becomes the single chat the bot opens to (its preview)", () => {
-    expect(streamHomeThread(katarina.tasks, "chat")).toBe("chat");
+    expect(streamHomeThread(osprey.tasks, "chat")).toBe("chat");
   });
 
   it("keeps a pinned unread thread from marking a bot that has none", () => {
     const pinned = {
-      ...katarina,
-      tasks: [katarina.tasks![0]!, { ...katarina.tasks![1]!, pinned: true as const, unread: true }],
+      ...osprey,
+      tasks: [osprey.tasks![0]!, { ...osprey.tasks![1]!, pinned: true as const, unread: true }],
     } as Bot;
     expect(botShowsUnread(pinned)).toBe(false);
   });

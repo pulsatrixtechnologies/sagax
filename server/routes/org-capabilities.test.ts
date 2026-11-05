@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
-import type { LinkPostResult } from "../perspicax-link.ts";
+import type { LinkPostResult } from "../perspicax/perspicax-link.ts";
 import {
   marketplaceNameFor,
   migrateMarketplaces,

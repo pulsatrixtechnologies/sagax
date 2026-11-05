@@ -36,12 +36,25 @@ const enabled = process.env.SAGAX_UI_E2E === "1" || Boolean(resolveAgentBrowserB
     const ui = (verb: string, ...args: string[]) => runControlOmb(["ui", verb, "--ui", info.ui, ...args]) as Promise<any>;
     const click = (name: string) => ui("click", "--name", name);
     // The browser harness does not assign refs to native <summary> nodes.
-    const toggleTeams = () => ui("eval", "--js", "document.querySelector('[data-bot-settings-section=permissions] summary').click()");
+    const toggleTeams = () => ui("eval", "--js", `(() => {
+      const summary = [...document.querySelectorAll('[data-persona-section=permissions] summary')]
+        .find(node => node.textContent.trim() === 'Additional teams');
+      if (!summary) throw new Error('Additional teams is missing');
+      summary.click();
+      return true;
+    })()`);
     const snapshot = async () => (await ui("snapshot")).snapshot as string;
     const clickRole = async (role: string, name: string | RegExp) => {
-      const refs = (await ui("snapshot")).refs as Record<string, { role: string; name: string }>;
-      const match = Object.entries(refs).find(([, entry]) => entry.role === role && (typeof name === "string" ? entry.name === name : name.test(entry.name)));
-      expect(match).toBeDefined();
+      let match: [string, { role: string; name: string }] | undefined;
+      try {
+        await expect.poll(async () => {
+          const refs = (await ui("snapshot")).refs as Record<string, { role: string; name: string }>;
+          match = Object.entries(refs).find(([, entry]) => entry.role === role && (typeof name === "string" ? entry.name === name : name.test(entry.name)));
+          return match;
+        }, { timeout: 10_000, message: `${role} ${name}` }).toBeDefined();
+      } catch (cause) {
+        throw new Error(`${role} ${name}\n${await snapshot()}`, { cause });
+      }
       return ui("click", "--ref", "@" + match![0]);
     };
     const saved = async () => (await api("/api/bots?messages=0")).bots.find((bot: any) => bot.id === info.botId);
@@ -51,10 +64,12 @@ const enabled = process.env.SAGAX_UI_E2E === "1" || Boolean(resolveAgentBrowserB
     await api("/api/bots", { name: "Private accountant", section: "Finance" }, "POST");
     await api("/api/sidebar-sections", { name: "Empty delivery" }, "POST");
     await ui("eval", "--js", "location.reload(); true");
-    await expect.poll(snapshot, { timeout: 15_000 }).toContain("Actions for Clive");
-    await clickRole("button", /^Clive Rename Clive /);
-    await expect.poll(snapshot, { timeout: 10_000 }).toContain("Open Clive's profile");
-    await clickRole("button", "Open Clive's profile");
+    await expect.poll(snapshot, { timeout: 15_000 }).toContain("Open Clive's panel");
+    await click("Open Clive's panel");
+    await expect.poll(snapshot, { timeout: 10_000 }).toContain('button "Bot menu"');
+    await click("Bot menu");
+    await expect.poll(snapshot, { timeout: 10_000 }).toContain('menuitem "Edit bot"');
+    await click("Edit bot");
     await click("Permissions");
     await expect.poll(snapshot, { timeout: 10_000 }).toContain("Additional teams");
     await toggleTeams();
@@ -72,7 +87,7 @@ const enabled = process.env.SAGAX_UI_E2E === "1" || Boolean(resolveAgentBrowserB
     expect(granted).toContain('checkbox "Research" [checked=true');
     expect(granted).toContain('checkbox "Finance" [checked=false');
     expect(granted).toContain('checkbox "Empty delivery" [checked=true');
-    expect(granted).toContain('checkbox "General" [checked=false');
+    expect(granted).toContain('checkbox "Unassigned" [checked=false');
     const screenshot = info.logPath + ".team-access.png";
     await ui("screenshot", "--out", screenshot);
     await clickRole("checkbox", "Engineering");

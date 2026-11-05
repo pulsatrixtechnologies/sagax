@@ -7,7 +7,7 @@ import { vaultHandle } from "../../shared/credential-vault.ts";
 import { inAppDigitalPurchaseRefusal, luhnOk, parsePurchaseCall, parseReceiptCall, purchaseCardText } from "../../shared/payment-vault.ts";
 import { fillResolverFor } from "./credential-vault.ts";
 import { CredentialVault, LOCAL_VAULT_PRINCIPAL } from "./credential-vault.ts";
-import type { VaultKeySource } from "../mcp-oauth.ts";
+import type { VaultKeySource } from "../mcp/mcp-oauth.ts";
 
 // Fictional payment values. 4242... is the well-known test number, not a real card.
 const PAN = "4242424242424242";
@@ -73,8 +73,8 @@ describe("payment vault", () => {
       handle: vaultHandle(saved.id), field: "cardNumber", botId: "bot-a", threadId: "thread-1", pageUrl: page,
     });
     expect(blocked.ok).toBe(false);
-    const answered = store.answerPurchase(LOCAL_VAULT_PRINCIPAL, asked.listing.id, "once", "Melonie");
-    expect(answered.listing.via).toBe("Melonie");
+    const answered = store.answerPurchase(LOCAL_VAULT_PRINCIPAL, asked.listing.id, "once", "Wren");
+    expect(answered.listing.via).toBe("Wren");
     expect(answered.note).toContain(vaultHandle(saved.id));
     expect(answered.note).not.toContain(PAN);
     const filled = await store.resolveForFill(LOCAL_VAULT_PRINCIPAL, {

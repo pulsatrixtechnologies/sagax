@@ -9,7 +9,7 @@ node --experimental-strip-types scripts/control-omb.ts ui launch
 In a second terminal, pass its exact printed handle:
 
 ```sh
-node --experimental-strip-types scripts/verify-onboarding-ui.ts /tmp/openmausbot-verify-data-XXXXXX/ui.json
+node --experimental-strip-types scripts/verify/dev/verify-onboarding-ui.ts /tmp/openmausbot-verify-data-XXXXXX/ui.json
 ```
 
 Use a fresh fixture. The recipe clears only its browser storage, then enables
@@ -33,7 +33,7 @@ Stop the launcher with Ctrl-C; it owns and removes only its disposable home.
 ## Providers connected after first launch
 
 ```sh
-pnpm exec vitest run server/onboarding-model-default.e2e.test.ts server/default-model-selection.test.ts src/components/NewBotDialog.test.ts
+pnpm exec vitest run server/onboarding-model-default.e2e.test.ts server/models/default-model-selection.test.ts src/components/NewBotDialog.test.ts
 ```
 
 The server tests launch only disposable homes and repository-owned fake engines.

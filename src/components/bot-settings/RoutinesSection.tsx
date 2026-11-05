@@ -1,7 +1,8 @@
+import { useRoutineReadiness, type RoutineReadinessControl } from "../routines/RoutineReadiness";
 // Shared by bot settings and the bot's side panel. The list keeps one action
 // (New schedule); a row opens the routine's page, which holds Run now, Pause
 // or Resume, Edit, the run logs and Delete.
-import { CalendarClock, CirclePlay, Copy as CopyIcon, History, MoreHorizontal, Pause, Pencil, Plus, Trash2 } from "lucide-react";
+import { ClipboardCheck, CalendarClock, CirclePlay, MoreHorizontal, Pause, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useServerFeature } from "@/lib/server-features";
 import { api, useStore, type Bot } from "@/state/store";
@@ -11,7 +12,8 @@ import { RoutineEditor } from "../RoutinesPage";
 import { canManageRoutineFolders, RoutineFolderList, type RoutineFolderControl } from "../routines/RoutineFolders";
 import { ACTION_LABEL_MAIN, ActionBar, ActionButton, actionButtonClass } from "../ActionBar";
 import { canRunRoutineNow, routineRunInFlight, RunNowButton } from "../routines/RunNowButton";
-import { RoutineDetail } from "../routines/RoutineDetail";
+import { clearRoutineRuns, RoutineDetail } from "../routines/RoutineDetail";
+import { useConfirm } from "../ConfirmProvider";
 import { RoutineRunExchange } from "../routines/RoutineRunExchange";
 import { PanelPageHeader as RoutineDetailHeader } from "./PanelPage";
 
@@ -19,7 +21,12 @@ export { RoutineDetailHeader };
 
 export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = false }: { bot: Bot; routines: Routine[]; runs: RoutineRun[]; defaultRunOn?: RoutineRunOn; grouped?: boolean }) {
   const { state, dispatch } = useStore();
+  const confirm = useConfirm();
   const [editing, setEditing] = useState<Routine | "new" | { copyOf: Routine } | null>(null);
+  // 2026-11-03: the routine panel opens in view mode; Edit opens it editable.
+  const [editMode, setEditMode] = useState<"view" | "edit">("view");
+  const openEditor = (routine: Routine, mode: "view" | "edit") => { setEditMode(mode); setEditing(routine); };
+  const closePanel = () => { setEditing(null); dispatch({ type: "toggleSettings", open: false }); dispatch({ type: "toggleComputer", open: false }); };
   const [openedRun, setOpenedRun] = useState<RoutineRun | null>(null);
   const [working, setWorking] = useState(false);
   // 2026-10-28: a folder's + makes the new routine in that folder.
@@ -28,6 +35,7 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
   const folderControl = useRef<RoutineFolderControl | null>(null);
   const sectionMenuLabel = t("routineFolders.sectionMenu");
   const foldersServed = useServerFeature("routineFolders") !== "no";
+  const readiness = useRoutineReadiness(detailId ?? "");
   const detail = routines.find((routine) => routine.id === detailId) ?? null;
   const toggle = (routine: Routine) => dispatch({ type: "updateRoutine", routineId: routine.id, patch: { enabled: !routine.enabled } });
   const cancelRun = async (runId: string) => {
@@ -46,11 +54,9 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
     dispatch({ type: "routineFocused" });
   }, [focus, bot.id, routines, dispatch]);
 
-  const openLogs = (routineId: string) => dispatch({ type: "showRoutines", section: "logs", routineId, botId: bot.id });
-
   // 2026-11-01: a run opened from the routine's history (or Run now) opens
-  // as an exchange sheet over the chat column (same place as Melonie <->
-  // Katarina), not as a modal over the app.
+  // as an exchange sheet over the chat column (same place as Wren <->
+  // Osprey), not as a modal over the app.
   let runSheet: React.ReactNode = null;
   if (detail && openedRun) {
     const run = state.routineRuns.find((candidate) => candidate.id === openedRun.id) ?? openedRun;
@@ -63,9 +69,6 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
         working={working}
         onClose={() => setOpenedRun(null)}
         onStop={live ? () => void cancelRun(run.id) : undefined}
-        onRunAgain={() => { setOpenedRun(null); dispatch({ type: "runRoutine", routineId: detail.id, onStarted: (started) => setOpenedRun(started) }); }}
-        onLogs={() => openLogs(detail.id)}
-        onOpenConfiguration={() => setEditing(detail)}
       />
     );
   }
@@ -88,25 +91,31 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
         viewerPrincipalId={state.config?.viewer?.principalId ?? null}
         compact
         actions={false}
+        readiness={readiness}
         editable={detail.canEdit !== false}
         canRun={canRun}
         inFlight={inFlight}
         onOpenRun={(run) => { setOpenedRun(run); if (["failed", "missed"].includes(run.status) && !run.seenAt && !run.redacted) dispatch({ type: "markRoutineRunSeen", runId: run.id }); }}
-        onConfigure={() => setEditing(detail)}
+        onToggle={() => toggle(detail)}
+        onPatch={async (patch) => { const response = await api(`/api/routines/${detail.id}`, { method: "PATCH", body: JSON.stringify(patch) }); if (response.routine) dispatch({ type: "routinePatched", routine: response.routine }); }}
+        onClearRuns={() => void clearRoutineRuns(detail, confirm, dispatch).catch(() => { /* the runs stay listed */ })}
       />
       <RoutinePanelActions
+        readiness={readiness}
         routine={detail}
         bot={bot}
         onStarted={(run) => setOpenedRun(run)}
         onToggle={() => toggle(detail)}
-        onEdit={() => setEditing(detail)}
-        onDuplicate={() => setEditing({ copyOf: detail })}
-        onLogs={() => openLogs(detail.id)}
-        onDelete={() => { dispatch({ type: "deleteRoutine", routineId: detail.id }); setDetailId(null); }}
+        onEdit={() => openEditor(detail, "edit")}
+        onDelete={async () => {
+          if (!(await confirm({ title: t("routineCalendar.deleteConfirm", { title: detail.name }), confirmLabel: t("common.delete"), tone: "danger" }))) return;
+          dispatch({ type: "deleteRoutine", routineId: detail.id });
+          setDetailId(null);
+        }}
       />
       {runSheet}
-      {editing && editing !== "new" && !("copyOf" in editing) && <RoutineEditor key={detail.id} routine={detail} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} presentation="panel" onClose={() => setEditing(null)} />}
-      {editing && editing !== "new" && "copyOf" in editing && <RoutineEditor key={`${detail.id}-copy`} copyOf={editing.copyOf} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} folder={detail.folder} presentation="panel" onClose={() => setEditing(null)} />}
+      {editing && editing !== "new" && !("copyOf" in editing) && <RoutineEditor key={detail.id} routine={detail} mode={editMode} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} presentation="panel" onClose={() => setEditing(null)} onDismiss={closePanel} onDeleted={() => { setEditing(null); setDetailId(null); }} onDuplicate={(routine) => setEditing({ copyOf: routine })} />}
+      {editing && editing !== "new" && "copyOf" in editing && <RoutineEditor key={`${detail.id}-copy`} copyOf={editing.copyOf} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} folder={detail.folder} presentation="panel" onClose={() => setEditing(null)} onDismiss={closePanel} />}
     </div>;
   }
 
@@ -138,34 +147,33 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
     {(editing === "new" || (editing && "copyOf" in editing)) && (
       <div className="absolute inset-0 z-30 min-h-[24rem]">
         {editing === "new"
-          ? <RoutineEditor key={`${bot.id}-new-${newFolder ?? ""}`} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} folder={newFolder} presentation="panel" onClose={() => { setEditing(null); setNewFolder(undefined); }} />
-          : <RoutineEditor key={`${"copyOf" in editing ? editing.copyOf.id : ""}-copy`} copyOf={"copyOf" in editing ? editing.copyOf : undefined} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} presentation="panel" onClose={() => setEditing(null)} />}
+          ? <RoutineEditor key={`${bot.id}-new-${newFolder ?? ""}`} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} folder={newFolder} presentation="panel" onClose={() => { setEditing(null); setNewFolder(undefined); }} onDismiss={() => { setNewFolder(undefined); closePanel(); }} />
+          : <RoutineEditor key={`${"copyOf" in editing ? editing.copyOf.id : ""}-copy`} copyOf={"copyOf" in editing ? editing.copyOf : undefined} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} presentation="panel" onClose={() => setEditing(null)} onDismiss={closePanel} />}
       </div>
     )}
   </div>;
 }
 
-/** The bar under a routine's page in the bot panel (2026-10-29): Run now,
- * Pause or Resume, Edit, Duplicate, Logs, Delete. Each with its words while
- * the panel has room (Run now and Pause/Resume the longest), else its icon
- * alone with a tooltip; no two icons alike (Run now a filled play, Resume a
- * play in a circle, Logs a clock). */
-export function RoutinePanelActions({ routine, bot, onStarted, onToggle, onEdit, onDuplicate, onLogs, onDelete }: {
+/** The bar under a routine's page in the bot panel (2026-11-03, JC):
+ * [Run now] [Check routine] [Edit] [Disable or Enable] [Delete]; Delete asks first.
+ * Duplicate is in Edit > Advanced; the logs are the Automations page's Logs. */
+export function RoutinePanelActions({ routine, bot, onStarted, onToggle, onEdit, onDelete, readiness: externalReadiness }: {
   routine: Routine;
-  bot: Bot;
+  readiness?: RoutineReadinessControl;
+  bot: Bot | undefined;
   onStarted: (run: RoutineRun) => void;
   onToggle: () => void;
   onEdit: () => void;
-  onDuplicate: () => void;
-  onLogs: () => void;
   onDelete: () => void;
 }) {
+  const ownReadiness = useRoutineReadiness(routine.id);
+  const readiness = externalReadiness ?? ownReadiness;
+  const { state } = useStore();
   return <ActionBar data-routine-detail-actions="">
     <RunNowButton routine={routine} bot={bot} className={actionButtonClass("primary", "main")} labelClassName={ACTION_LABEL_MAIN} onStarted={onStarted} />
-    <ActionButton fold="main" icon={routine.enabled ? <Pause size={15} /> : <CirclePlay size={15} />} label={routine.enabled ? t("botPanel.routines.pause") : t("botPanel.routines.resume")} onClick={onToggle} data-routine-toggle="" />
+    {canRunRoutineNow(state.config, routine, bot) && <ActionButton icon={<ClipboardCheck size={15} />} label={t(readiness.checking ? "routineReadiness.checking" : "routineReadiness.action")} disabled={readiness.checking} onClick={() => void readiness.check()} data-routine-check="" />}
     <ActionButton icon={<Pencil size={15} />} label={t("botPanel.routines.edit")} onClick={onEdit} data-routine-edit="" />
-    <ActionButton icon={<CopyIcon size={15} />} label={t("routineDetail.duplicate")} onClick={onDuplicate} data-routine-duplicate="" />
-    <ActionButton icon={<History size={15} />} label={t("routines.logs")} onClick={onLogs} data-routine-logs="" />
+    <ActionButton icon={routine.enabled ? <Pause size={15} /> : <CirclePlay size={15} />} label={routine.enabled ? t("routines.disable") : t("routines.enable")} onClick={onToggle} data-routine-toggle="" />
     <ActionButton icon={<Trash2 size={15} />} label={t("common.delete")} danger onClick={onDelete} data-routine-delete="" />
   </ActionBar>;
 }

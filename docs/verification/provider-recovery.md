@@ -8,10 +8,10 @@ provider charge, deployment, or running Sagax workspace is involved.
 Pass the path to an already installed CLI. These checks never update it.
 
 ```sh
-node --experimental-strip-types scripts/verify-grok-images.ts /absolute/path/to/grok
-node --experimental-strip-types scripts/verify-claude-auth-settings.ts /absolute/path/to/claude
-node --experimental-strip-types scripts/verify-claude-auth-settings.ts /absolute/path/to/claude --api-key
-node --experimental-strip-types scripts/verify-opencode-permissions.ts /absolute/path/to/opencode
+node --experimental-strip-types scripts/verify/dev/verify-grok-images.ts /absolute/path/to/grok
+node --experimental-strip-types scripts/verify/dev/verify-claude-auth-settings.ts /absolute/path/to/claude
+node --experimental-strip-types scripts/verify/dev/verify-claude-auth-settings.ts /absolute/path/to/claude --api-key
+node --experimental-strip-types scripts/verify/dev/verify-opencode-permissions.ts /absolute/path/to/opencode
 ```
 
 - Grok must deliver the **exact** synthetic PNG bytes to a loopback model.
@@ -46,7 +46,7 @@ and the account selected in OMB; never request the user's keys or tokens.
 ## ACP internal-error recovery
 
 ```sh
-pnpm exec vitest run server/drivers/acp/acp.test.ts server/acp-recovery.e2e.test.ts server/resume-recovery.test.ts server/delta-context.test.ts server/incidents.e2e.test.ts server/room-coordination.e2e.test.ts
+pnpm exec vitest run server/drivers/acp/acp.test.ts server/acp-recovery.e2e.test.ts server/resume-recovery.test.ts server/context/delta-context.test.ts server/peers/incidents.e2e.test.ts server/peers/room-coordination.e2e.test.ts
 ```
 
 The ACP transport fixture injects an internal RPC error, including one after

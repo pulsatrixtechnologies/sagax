@@ -135,11 +135,91 @@ export function onScreenBot(): string | null {
   return onScreen;
 }
 
+// ── New chat, asked for (2026-11-02) ────────────────────────────────────
+//
+// New chat (the header pencil, the bot row menu) is a real new conversation,
+// like the reference apps: it stays empty until the person sends, through a
+// switch to another bot or view and back, typing, a reload or a live frame.
+// The draft (AppState.freshTopic, auto false) is kept on this device until
+// the first message creates the topic on the server (still no empty topic
+// made ahead), Back, or a link into the covered topic. The topic that first
+// message creates opens on its own: the earlier topics stay one link, search
+// or Conversations row away instead of being drawn above it on read back.
+
+const NEW_CHAT_KEY = "sagax.newChat.v1";
+const NEW_CHAT_TOPICS_KEY = "sagax.newChatTopics.v1";
+const NEW_CHAT_TOPICS_MAX = 200;
+
+let newChatsCache: Record<string, string> | null = null;
+let newChatTopicsCache: string[] | null = null;
+
+/** The asked-for New chats on this device: bot id to the topic it covers. */
+export function readNewChats(): Record<string, string> {
+  if (newChatsCache) return newChatsCache;
+  let parsed: unknown = null;
+  try {
+    parsed = JSON.parse(storage()?.getItem(NEW_CHAT_KEY) ?? "null");
+  } catch {
+    parsed = null;
+  }
+  const out: Record<string, string> = {};
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    for (const [botId, threadId] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof threadId === "string" && threadId) out[botId] = threadId;
+    }
+  }
+  newChatsCache = out;
+  return out;
+}
+
+export function writeNewChats(next: Record<string, string>): void {
+  const current = readNewChats();
+  const same = Object.keys(next).length === Object.keys(current).length && Object.entries(next).every(([botId, threadId]) => current[botId] === threadId);
+  if (same) return;
+  newChatsCache = { ...next };
+  try {
+    storage()?.setItem(NEW_CHAT_KEY, JSON.stringify(newChatsCache));
+  } catch {
+    // Storage refused: this session still remembers.
+  }
+}
+
+function readNewChatTopics(): string[] {
+  if (newChatTopicsCache) return newChatTopicsCache;
+  let parsed: unknown = null;
+  try {
+    parsed = JSON.parse(storage()?.getItem(NEW_CHAT_TOPICS_KEY) ?? "null");
+  } catch {
+    parsed = null;
+  }
+  newChatTopicsCache = Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string" && id !== "") : [];
+  return newChatTopicsCache;
+}
+
+/** The topic `threadId` was started from New chat (its first message, or an
+ * empty newest topic New chat opened as it is). */
+export function noteNewChatTopic(threadId: string): void {
+  const kept = readNewChatTopics().filter((id) => id !== threadId);
+  newChatTopicsCache = [threadId, ...kept].slice(0, NEW_CHAT_TOPICS_MAX);
+  try {
+    storage()?.setItem(NEW_CHAT_TOPICS_KEY, JSON.stringify(newChatTopicsCache));
+  } catch {
+    // Storage refused: this session still remembers.
+  }
+}
+
+/** Whether `threadId` was started from New chat: it opens on its own. */
+export function startedByNewChat(threadId: string): boolean {
+  return readNewChatTopics().includes(threadId);
+}
+
 /** Test seam: forget this module's memory. */
 export function resetFreshTopicMemory(): void {
   leftCache = null;
   onScreen = null;
   session = null;
+  newChatsCache = null;
+  newChatTopicsCache = null;
 }
 
 // ── the landing ─────────────────────────────────────────────────────────

@@ -15,6 +15,8 @@ import * as shared from "../../shared/approval-describe";
 import { parseArgs, parseToolId } from "@/lib/approval-describe";
 import { isOpaqueId, isOpaqueValue } from "../../shared/human-id";
 import { readMcpGatewayCall, readUseToolCall, type McpGatewayCall } from "../../shared/mcp-gateway-call";
+import { humanPath } from "@/lib/short-path";
+import { gatewayToolId, toolDisplayName } from "../../shared/tool-display-name";
 
 export type StepPhase = "running" | "done" | "failed";
 
@@ -361,6 +363,32 @@ function serverSentence(name: string): string | undefined {
   return undefined;
 }
 
+/** The loop guard's notice (server/host/loop-guard.ts), "Same call repeated
+ * 5× - tool: git status - it may be stuck"; rows written before 2026-11-02
+ * carry long dashes where it has hyphens, and a call quoted on several
+ * lines (an ACP or Codex title, before the guard folded it to one). */
+const STUCK_NOTICE = /^Same call repeated (\d+)× [-\u2013\u2014] ([\s\S]+) [-\u2013\u2014] it may be stuck$/;
+/** The guard's word for a call it knows by its title, and an ACP agent's
+ * kind for an MCP call: neither says anything to a person. */
+const GENERIC_CALL = /^(?:tool|other): /;
+
+/** That notice in the person's language, with no dash: the count in the
+ * sentence, the call quiet after it. */
+function stuckNotice(name: string): StepReading | undefined {
+  const match = STUCK_NOTICE.exec(name);
+  if (!match) return undefined;
+  const call = match[2]!.replace(GENERIC_CALL, "").trim();
+  return { label: t("step.stuck", { count: Number(match[1]) }), target: oneLine(call), title: call };
+}
+
+/** A stuck notice by its count and its call, whatever its dashes: servers
+ * before 2026-11-02 wrote each one twice, once with long dashes, and the
+ * same notice twice is one (src/lib/step-group.ts). */
+export function stuckNoticeKey(name: string): string | undefined {
+  const match = STUCK_NOTICE.exec(name.trim());
+  return match ? `${match[1]} ${oneLine(match[2]!)}` : undefined;
+}
+
 /** Grok's meta tools, as rows stored before the driver named the tool a
  * use_tool ran (grok 1.0.62 titles them `use_tool` and `search_tool`, or
  * "Use Tool" and "Search Tool"): a use_tool reads as the MCP tool it ran,
@@ -384,10 +412,16 @@ function isSentence(name: string): boolean {
 
 /** The words for one step. `nameOf` turns a teammate id into its name. */
 export function readStep(tool: StepTool, nameOf?: StepNameOf): StepReading {
+  // a gateway title without its gateway part (`user-Outlook-get_5fmail_5fmessage___12`)
+  // reads as the connector it is, never "Get 5fmail 5fmessage" (2026-11-03)
+  const gatewayId = gatewayToolId(tool.name);
+  if (gatewayId && gatewayId !== tool.name.trim()) tool = { ...tool, name: gatewayId };
   const phase = stepPhase(tool);
   const name = tool.name.trim();
   const meta = grokMetaTool(tool, phase);
   if (meta) return meta;
+  const stuck = stuckNotice(name);
+  if (stuck) return stuck;
   const sentence = serverSentence(name);
   if (sentence) return { label: sentence };
   if (isSentence(name)) return { label: name };
@@ -411,6 +445,36 @@ export function readStep(tool: StepTool, nameOf?: StepNameOf): StepReading {
   return { label: t(`step.use.${phase}` as LocaleKey, { name: display }), target: summary };
 }
 
+/** 2026-11-02: what a tool is called in an opened step, never its raw id
+ * (`mcp__sagax-environment__list_files`): "List files" for the file,
+ * command, page and screen tools, else its own name in words. The id stays
+ * in the folded JSON record. */
+const TOOL_NAME: Partial<Record<Kind, LocaleKey>> = {
+  readFile: "step.toolName.readFile",
+  writeFile: "step.toolName.writeFile",
+  editFile: "step.toolName.editFile",
+  deleteFile: "step.toolName.deleteFile",
+  runCommand: "step.toolName.runCommand",
+  searchFiles: "step.toolName.searchFiles",
+  listFiles: "step.toolName.listFiles",
+  searchWeb: "step.toolName.searchWeb",
+  fetchPage: "step.toolName.fetchPage",
+  openPage: "step.toolName.openPage",
+  screen: "step.toolName.screen",
+  computer: "step.toolName.computer",
+};
+
+export function stepToolName(tool: Pick<StepTool, "name" | "product">): string {
+  const name = (tool.name ?? "").trim();
+  const kind = kindOf(name);
+  const key = kind ? TOOL_NAME[kind] : undefined;
+  if (key) return t(key);
+  // the tool's own part of an MCP id, in words: no server, no underscores,
+  // no gateway escape or number (2026-11-03: "12"); with the product the
+  // server declared for it, when it declared one (shared/tool-display-name.ts)
+  return toolDisplayName(name, tool.product);
+}
+
 /** The label alone, for callers that only need the sentence. */
 export function stepLabel(tool: StepTool, nameOf?: StepNameOf): string {
   return readStep(tool, nameOf).label;
@@ -430,7 +494,7 @@ const ARG_MAX = 6;
 
 /** The arguments a person can read: a few `key: value` pairs, long values
  * cut, nested ones counted. The full JSON stays one click further. */
-export function stepArgs(input: string | undefined): Array<{ key: string; value: string; full?: string }> {
+export function stepArgs(input: string | undefined, nameOf?: StepNameOf): Array<{ key: string; value: string; full?: string }> {
   const args = parseArgs(input);
   if (!args) return [];
   const pairs: Array<{ key: string; value: string; full?: string }> = [];
@@ -440,6 +504,15 @@ export function stepArgs(input: string | undefined): Array<{ key: string; value:
     // as "…": the value stays in the tooltip and the folded JSON record.
     if (typeof value === "string" && isOpaqueValue(value)) {
       pairs.push({ key, value: "…", full: value });
+      if (pairs.length >= ARG_MAX) break;
+      continue;
+    }
+    // 2026-11-02: a path with an id in it (/data/.../workspaces/<bot id>)
+    // reads with the bot's name, else as the folder it is; the path as
+    // written stays in the tooltip.
+    const path = typeof value === "string" ? readablePath(value, nameOf) : undefined;
+    if (path !== undefined) {
+      pairs.push({ key, value: oneLine(path, 120), full: value as string });
       if (pairs.length >= ARG_MAX) break;
       continue;
     }
@@ -454,6 +527,15 @@ export function stepArgs(input: string | undefined): Array<{ key: string; value:
     if (pairs.length >= ARG_MAX) break;
   }
   return pairs;
+}
+
+/** A path whose segments hold an opaque id, as a person reads it: a known
+ * bot's id becomes its name, any other id the folder it names or "…"
+ * (short-path.ts humanPath). Undefined for a path with no id. */
+function readablePath(value: string, nameOf?: StepNameOf): string | undefined {
+  if (!/[\\/]/.test(value) || !value.split(/[\\/]/).some(isOpaqueId)) return undefined;
+  const named = value.split(/([\\/])/).map((part) => (isOpaqueId(part) ? nameOf?.(part) ?? part : part)).join("");
+  return humanPath(named);
 }
 
 /** The first lines of a result, enough to see what came back. */

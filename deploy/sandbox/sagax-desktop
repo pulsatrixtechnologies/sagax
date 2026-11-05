@@ -4,7 +4,7 @@
 # the person's live view asks for it, so plain shell turns stay light.
 #
 #   sagax-desktop start            start Xvnc, openbox, the background and
-#                                  the launcher bar (idempotent); with
+#                                  the dock (idempotent); with
 #                                  SAGAX_VNC_FULL and SAGAX_VNC_VIEW set, also
 #                                  replace the two VNC passwords
 #   sagax-desktop status           "running" or "stopped"
@@ -12,6 +12,9 @@
 #   sagax-desktop xdotool ARGS...  run xdotool on the desktop (fixed argv)
 #   sagax-desktop type             type $SAGAX_TEXT
 #   sagax-desktop open-url         open $SAGAX_URL in Chromium
+#   sagax-desktop browser [URL]    Chromium (the dock, html files)
+#   sagax-desktop files [DIR]      Thunar, /workspace by default
+#   sagax-desktop terminal         Xfce Terminal in /workspace
 #   sagax-desktop relay            stdin/stdout <-> the VNC port (the live
 #                                  view's only path in: sandboxd attaches to
 #                                  this through docker exec)
@@ -22,6 +25,9 @@
 set -euo pipefail
 
 export DISPLAY=:1
+# GSettings in a file of HOME (Plank's settings): no dconf service here.
+export GSETTINGS_BACKEND=keyfile
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-/workspace/.config}"
 
 # The values Sagax hands this script (passwords, typed text, an address)
 # become plain shell variables, never exported: Xvnc, openbox, tint2 and
@@ -100,18 +106,84 @@ start() {
   echo running
 }
 
-# The desktop around the windows: openbox, a background and the launcher bar
-# (Chromium, Terminal, Files). Each starts only when missing, so a person
-# watching never sees an empty black screen.
+# The session bus the Xfce apps (Thunar, Xfce Terminal, Mousepad) and
+# Plank talk over, one per desktop start, its address in $STATE.
+bus() {
+  if [ -s "$STATE/dbus.env" ]; then
+    # shellcheck disable=SC1091
+    . "$STATE/dbus.env"
+    if [ -n "${DBUS_SESSION_BUS_PID:-}" ] && kill -0 "$DBUS_SESSION_BUS_PID" 2>/dev/null; then
+      export DBUS_SESSION_BUS_ADDRESS
+      return 0
+    fi
+  fi
+  command -v dbus-launch >/dev/null 2>&1 || return 0
+  dbus-launch --sh-syntax 9>&- 2>/dev/null | grep -E '^DBUS_SESSION_BUS_(ADDRESS|PID)=' > "$STATE/dbus.env" || true
+  # shellcheck disable=SC1091
+  [ -s "$STATE/dbus.env" ] && . "$STATE/dbus.env" && export DBUS_SESSION_BUS_ADDRESS
+}
+
+# The dock's items and settings, written at each start (they live in HOME,
+# which the person may have changed or emptied): Chromium, Files, Terminal,
+# always shown, no Plank icon of its own.
+dock_config() {
+  local dir="$XDG_CONFIG_HOME/plank/dock1/launchers" item
+  mkdir -p "$dir" "$XDG_CONFIG_HOME/glib-2.0/settings"
+  # Thunar's and Xfce Terminal's own entries, so the dock shows their open
+  # windows on the same icon (Thunar opens HOME, /workspace).
+  rm -f "$dir"/sagax-files.dockitem "$dir"/sagax-terminal.dockitem
+  for item in sagax-browser thunar xfce4-terminal; do
+    printf '[PlankDockItemPreferences]\nLauncher=file:///usr/share/applications/%s.desktop\n' "$item" > "$dir/$item.dockitem"
+  done
+  local keyfile="$XDG_CONFIG_HOME/glib-2.0/settings/keyfile"
+  local group="[net/launchpad/plank/docks/dock1]"
+  local body
+  body="$(printf '%s\n' "$group" \
+    "dock-items=['sagax-browser.dockitem', 'thunar.dockitem', 'xfce4-terminal.dockitem']" \
+    "hide-mode='none'" "icon-size=44" "theme='Transparent'" "position='bottom'" \
+    "alignment='center'" "lock-items=true" "show-dock-item=false" "zoom-enabled=false" "pressure-reveal=false")"
+  if [ -f "$keyfile" ]; then
+    # keep the other groups, replace the dock's own
+    python3 -I -c '
+import sys
+path, group, body = sys.argv[1], sys.argv[2], sys.argv[3]
+out, skip = [], False
+for line in open(path, encoding="utf-8", errors="replace").read().splitlines():
+    if line.startswith("["):
+        skip = line.strip() == group
+    if not skip:
+        out.append(line)
+open(path, "w", encoding="utf-8").write("\n".join([l for l in out if l.strip()] + [""] + body.splitlines()) + "\n")
+' "$keyfile" "$group" "$body" 2>/dev/null || printf '%s\n' "$body" > "$keyfile"
+  else
+    printf '%s\n' "$body" > "$keyfile"
+  fi
+  # Thunar's side pane: the bots' folders and the shared one under Places.
+  local marks="$XDG_CONFIG_HOME/gtk-3.0/bookmarks"
+  mkdir -p "$XDG_CONFIG_HOME/gtk-3.0" /workspace/bots /workspace/shared 2>/dev/null || true
+  if [ ! -s "$marks" ]; then
+    printf 'file:///workspace/bots Bots\nfile:///workspace/shared Shared\n' > "$marks"
+  fi
+}
+
+# The desktop around the windows: openbox, a light background and the dock
+# (Chromium, Files, Terminal). Each starts only when missing, so a person
+# watching never sees an empty black screen. No taskbar: the dock shows the
+# open apps.
 session() {
+  bus
   if ! pgrep -u "$(id -u)" -x openbox >/dev/null 2>&1; then
     setsid openbox --sm-disable >"$STATE/openbox.log" 2>&1 </dev/null 9>&- &
   fi
   if [ ! -e "$STATE/background" ] && command -v hsetroot >/dev/null 2>&1; then
-    hsetroot -add "#0b1220" -add "#16304f" -add "#1f4b6e" -gradient 160 >/dev/null 2>&1 && : > "$STATE/background"
+    hsetroot -add "#f6f7f9" -add "#e6e8ec" -add "#d3d7de" -gradient 180 >/dev/null 2>&1 && : > "$STATE/background"
   fi
-  if ! pgrep -u "$(id -u)" -x tint2 >/dev/null 2>&1 && command -v tint2 >/dev/null 2>&1; then
-    setsid tint2 -c /etc/xdg/sagax/tint2rc >"$STATE/tint2.log" 2>&1 </dev/null 9>&- &
+  if ! pgrep -u "$(id -u)" -x xcompmgr >/dev/null 2>&1 && command -v xcompmgr >/dev/null 2>&1; then
+    setsid xcompmgr -n >"$STATE/xcompmgr.log" 2>&1 </dev/null 9>&- &
+  fi
+  if ! pgrep -u "$(id -u)" -x plank >/dev/null 2>&1 && command -v plank >/dev/null 2>&1; then
+    dock_config
+    setsid plank >"$STATE/plank.log" 2>&1 </dev/null 9>&- &
   fi
 }
 
@@ -120,6 +192,7 @@ chromium_running() {
 }
 
 browser() {
+  bus
   mkdir -p /workspace/.sagax
   setsid chromium \
     --class=sagax-desktop-browser \
@@ -164,11 +237,33 @@ case "${1:-}" in
     echo opened
     ;;
   browser|terminal|files)
+    what="$1"
+    shift
     start >/dev/null
-    case "$1" in
-      browser) browser ;;
-      terminal) setsid xterm -fa 'DejaVu Sans Mono' -fs 11 >/dev/null 2>&1 </dev/null & ;;
-      files) setsid pcmanfm /workspace >/dev/null 2>&1 </dev/null & ;;
+    bus
+    case "$what" in
+      # A page or a file the person opened from Files (file://, http(s)://).
+      browser)
+        args=()
+        for arg in "$@"; do
+          case "$arg" in
+            http://*|https://*|file://*) args+=("$arg") ;;
+            /*) args+=("file://$arg") ;;
+          esac
+        done
+        browser "${args[@]}"
+        ;;
+      terminal) setsid xfce4-terminal --disable-server --working-directory=/workspace >"$STATE/terminal.log" 2>&1 </dev/null & ;;
+      files)
+        dir=/workspace
+        for arg in "$@"; do
+          case "$arg" in
+            file://*) dir="${arg#file://}" ;;
+            /*) dir="$arg" ;;
+          esac
+        done
+        setsid thunar "$dir" >"$STATE/thunar.log" 2>&1 </dev/null &
+        ;;
     esac
     echo opened
     ;;

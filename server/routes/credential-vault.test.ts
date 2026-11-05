@@ -10,7 +10,7 @@ import type { SecretRequestCardData } from "../../shared/wire.ts";
 import { CredentialVault, LOCAL_VAULT_PRINCIPAL } from "../vault/credential-vault.ts";
 import { json, readBody } from "../harness/http.ts";
 import { OnePassword } from "../onepassword.ts";
-import { requiredScope, type RequestAuth } from "../request-auth.ts";
+import { requiredScope, type RequestAuth } from "../auth/request-auth.ts";
 import { TOOL_POLICY_ROWS } from "../tool-policy.generated.ts";
 import { createCredentialVaultRoutes, vaultPrincipalFor, vaultRequestCard } from "./credential-vault.ts";
 import { createCredentialVaultInternalRoutes } from "./credential-vault-internal.ts";

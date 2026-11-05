@@ -1,7 +1,7 @@
 // Organization server: which ACP engines may run a turn there, and why an
 // engine is refused. An engine is admitted only when its driver withholds
 // its own shell, file and web tools (capabilities.withholdsHostTools), proved
-// with the real CLI (scripts/verify-org-host-tools.ts, AGENTS.md "Engines on
+// with the real CLI (scripts/verify/dev/verify-org-host-tools.ts, AGENTS.md "Engines on
 // an organization server"). The server refuses the others with 409
 // `host_tools`; the picker and the engine card say the same reason.
 

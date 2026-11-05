@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { DATA_DIR } from "./config.ts";
-import { closeMessageDb, closeMessageSearch, deleteThread, insertMessage, searchMessages, searchMessagesAsync } from "./message-db.ts";
+import { closeMessageDb, closeMessageSearch, deleteThread, insertMessage, searchMessages, searchMessagesAsync } from "./messages/message-db.ts";
 import { MessageSearchWorker } from "./message-search-worker.ts";
 
 beforeEach(async () => {

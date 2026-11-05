@@ -73,6 +73,8 @@ async function render(element: Parameters<Root["render"]>[0]) {
 
 async function settings(section: AppSettingsSection): Promise<HTMLElement> {
   fixture.section = section;
+  const { CredentialsSettings, EnginesSettings, ProvidersSettings, VoiceSettingsPage } = await import("./lazy-settings-sections");
+  await Promise.all([CredentialsSettings.preload(), EnginesSettings.preload(), ProvidersSettings.preload(), VoiceSettingsPage.preload()]);
   await render(createElement(SettingsModal));
   return host;
 }
@@ -136,7 +138,8 @@ describe("Settings split: every moved setting at its new place", () => {
     } as InstanceInfo));
     await settings("providers");
     const row = (id: string) => host.querySelector<HTMLElement>(`[data-provider-row="account:${id}"]`)!;
-    const toggle = (id: string) => row(id).querySelector<HTMLButtonElement>(":scope > button")!;
+    // 2026-11-05: the row's toggle sits beside its one action
+    const toggle = (id: string) => row(id).querySelector<HTMLButtonElement>("button[aria-expanded]")!;
     await act(async () => toggle("codex").click());
     vi.useFakeTimers();
     const start = [...row("codex").querySelectorAll("button")].find((button) => button.textContent?.includes("Connect ChatGPT"))!;
@@ -185,14 +188,16 @@ describe("Settings split: every moved setting at its new place", () => {
     expect(card("security")).toBeNull();
   });
 
-  it("Voice holds the microphone, the voice engine and Live calls; Models keeps Auto and image generation, Engines and Keys folded as the former view", async () => {
+  it("Voice holds the microphone, the voice engine and Live calls; Models keeps the bot models and the Advanced fold, Providers the image generation", async () => {
     await settings("voice");
     expect(pane().querySelector("h2")?.textContent).toBe("Voice");
     for (const id of ["connections.audio", "connections.voice", "voice.advanced"]) expect(card(id), id).not.toBeNull();
     expect(pane().querySelector("[data-keys-section]")).toBeNull();
     await settings("engines");
     expect(pane().querySelector("h2")?.textContent).toBe("Models");
-    expect(card("connections.image"), "connections.image").not.toBeNull();
+    // 2026-11-05 (option B): image generation and web search moved to Providers > Other services
+    expect(card("connections.image"), "connections.image").toBeNull();
+    expect(card("models.advanced"), "models.advanced").not.toBeNull();
     // 2026-10-30 (Providers, lot 1): the former engines list moved to Providers
     expect(card("engines.legacy"), "engines.legacy").toBeNull();
     // 2026-10-30: Engines and Keys are the former view, folded until asked for
@@ -292,7 +297,7 @@ describe("Settings split: old links and anchors open the new page", () => {
     expect(opened("engines", "voice.microphone")).toBe("voice");
     expect(opened("engines", "connections.voiceKeys")).toBe("providers");
     expect(opened("engines", "engines.keys")).toBe("providers");
-    expect(opened("connections", "connections.image")).toBe("engines");
+    expect(opened("connections", "connections.image")).toBe("providers");
   });
 
   it("names the new page in a sentence's link", () => {

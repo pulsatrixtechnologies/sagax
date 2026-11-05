@@ -1,5 +1,5 @@
 // The desktop's side of the network tunnel (organization server, desktop
-// bridge; the server side is server/desktop-egress.ts). One WebSocket out to
+// bridge; the server side is server/desktop/desktop-egress.ts). One WebSocket out to
 // the server, signed in as the person (their session cookie) and bound to
 // this desktop's private bridge secret. For each connection the server asks
 // for, THIS computer decides and connects: through the operating system's

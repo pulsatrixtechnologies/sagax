@@ -2,8 +2,8 @@
 // GET  /api/me/web-bot-auth   { enabled, keyId, directory }
 // PUT  /api/me/web-bot-auth   { enabled: boolean }
 // The private key is never in an answer.
-import type { RequestAuth } from "../request-auth.ts";
-import { webBotAuthScope, type WebBotAuthScope, type WebBotAuthStore } from "../web-bot-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { webBotAuthScope, type WebBotAuthScope, type WebBotAuthStore } from "../auth/web-bot-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const WEB_BOT_AUTH_PATH = "/api/me/web-bot-auth";

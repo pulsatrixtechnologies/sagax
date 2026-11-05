@@ -1,4 +1,4 @@
-// recall_topic (server/single-stream.ts): one earlier topic of a person's
+// recall_topic (server/streams/single-stream.ts): one earlier topic of a person's
 // single stream, served behind the per-turn agents capability the internal
 // block of server/index.ts checks first (bearer, bot, live turn): so this
 // module is in INTERNAL_ROUTES, never in ROUTES. The bot and the conversation

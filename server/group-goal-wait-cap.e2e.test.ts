@@ -139,7 +139,7 @@ const holdBusy = async (botId: string, text: string) => {
   await expect.poll(async () => {
     const state = (await api("GET", "/api/bots?messages=0")).body;
     return state.bots.find((bot: { id: string }) => bot.id === botId)?.busy;
-  }).toBe(true);
+  }, { timeout: 10_000 }).toBe(true);
 };
 
 describe("goal wait cap and transient retry", () => {

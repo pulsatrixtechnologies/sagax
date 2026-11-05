@@ -3,7 +3,7 @@
 > Since 2026-10-14 Data is no longer a tab of the Computer panel. It opens in
 > a window of its own (`/data-window#bot=<id>`) from the chat header's Data
 > button, behind Settings > Experimental > Data window (off by default).
-> `scripts/verify-data.ts` still drives the old in-panel tab
+> `scripts/verify/dev/verify-data.ts` still drives the old in-panel tab
 > (`[data-tour=computer-data]`) and needs porting to the window before its
 > UI steps pass again; its server-side checks are unchanged.
 
@@ -11,7 +11,7 @@ Launch the full app with a disposable server, home, browser session and real
 DuckDB database:
 
 ```sh
-node --experimental-strip-types scripts/verify-data.ts
+node --experimental-strip-types scripts/verify/dev/verify-data.ts
 ```
 
 The fixture generates 100,000 synthetic orders, Unicode and null-value JSON,
@@ -61,7 +61,7 @@ switch between **Chart** and **Table** without mounting the rest of history.
 ## Automated renderer regression
 
 ```sh
-node --experimental-strip-types scripts/verify-data.ts --check
+node --experimental-strip-types scripts/verify/dev/verify-data.ts --check
 pnpm exec vitest run server/data/data.e2e.test.ts scripts/testing/verification-docs.test.ts
 ```
 

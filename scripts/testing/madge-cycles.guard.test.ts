@@ -19,8 +19,8 @@ const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 /** Cycles left inside each tree after #1381. Lower when one goes away. */
 const MAX = {
   shared: 0,
-  src: 1,
-  server: 23,
+  src: 0,
+  server: 0,
 } as const;
 
 function circularCount(root: keyof typeof MAX): number {

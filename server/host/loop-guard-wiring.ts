@@ -12,7 +12,7 @@ import {
   type LoopGuardSettingsOpts,
 } from "./loop-guard.ts";
 
-/** Build the loop guard (on by default). Keep `server/loop-detector.ts` (identical-call
+/** Build the loop guard (on by default). Keep `server/safety/loop-detector.ts` (identical-call
  * stop) as a separate feature; this guard steers/stops on shell failure streaks. */
 export function wireLoopGuard(deps: LoopGuardDeps): LoopGuard {
   return createLoopGuard(deps);

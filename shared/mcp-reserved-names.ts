@@ -1,8 +1,8 @@
 // One rule for the MCP server names Sagax reserves (C-18, lot 1a of the
 // Capabilities migration). Before it, three rules disagreed: the
-// installation's servers (server/mcp-registry.ts), a person's own servers
+// installation's servers (server/mcp/mcp-registry.ts), a person's own servers
 // (server/index.ts PERSONAL_MCP_RESERVED_PREFIX) and the turn's Connectors
-// record (server/turn-connectors.ts). A name one refused is now refused by
+// record (server/turns/turn-connectors.ts). A name one refused is now refused by
 // all three, the strictest rule kept:
 //   - the built-in names below;
 //   - the families sagax*, perspicax*, openmausbot*, claude_ai*, claude-ai-*,
@@ -40,8 +40,8 @@ export const RESERVED_MCP_NAMES: ReadonlySet<string> = new Set([
 ]);
 
 /** Name families Sagax mounts itself or reads as a separator: Sagax's own
- * servers (`sagax-computer`, `sagax-flow`...), Perspicax profiles
- * (`perspicax_<slug>`), claude.ai connectors (`claude_ai_<Service>`), the
+ * servers (`sagax-computer`, `sagax-flow`...), the main Perspicax connection
+ * (`perspicax`), claude.ai connectors (`claude_ai_<Service>`), the
  * legacy app's servers, and `mcp...`. */
 export const RESERVED_MCP_PREFIX = /^(?:sagax|perspicax|openmausbot|claude_ai|claude-ai[-_]|mcp)/;
 
@@ -51,5 +51,5 @@ export function reservedMcpName(name: string): boolean {
   return RESERVED_MCP_NAMES.has(name) || RESERVED_MCP_PREFIX.test(name) || name.includes("__");
 }
 
-/** A Perspicax Role's server as Sagax mounts it (`perspicax_<slug>`). */
-export const PERSPICAX_MCP_PREFIX = /^perspicax_/;
+/** The main Perspicax server (legacy profile mounts also remain recognized). */
+export const PERSPICAX_MCP_PREFIX = /^perspicax(?:_|$)/;

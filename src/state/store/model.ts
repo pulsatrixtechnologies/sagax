@@ -43,7 +43,7 @@ import { type NotificationTarget } from "@/lib/notify";
 import { singleStreamTurnField } from "@/lib/thread-preferences";
 import { isEarlierSegment, isStreamSegment, opensBesideConversation, streamHomeThread, streamUnreadReadWith } from "@/lib/single-stream";
 import { openSideThread } from "@/lib/side-thread";
-import { freshTopicLanding, onScreenBot } from "@/lib/fresh-topic";
+import { freshTopicLanding, noteNewChatTopic, onScreenBot } from "@/lib/fresh-topic";
 import { type BotRole } from "@/lib/bot-roles";
 import type { OnboardingStatus } from "@/lib/onboarding";
 import { type ThreadPage } from "@/lib/thread-page-cache";
@@ -71,12 +71,16 @@ export type { MausColor } from "@/lib/mascot";
 export type { RoutineRunCardData } from "../../../shared/routine-run";
 
 export interface OptionCardData {
+  approvalOrigin?: import("../../../shared/wire").OptionCardData["approvalOrigin"];
+  approvalDestination?: import("../../../shared/wire").OptionCardData["approvalDestination"];
   title: string;
   subtitle: string;
   options: string[];
   /** 2026-10-30: a proactive proposal; answered through its own route
    * (shared/proactive-proposal.ts), options[0] accepts. */
   proactiveProposal?: { id: string };
+  /** 2026-11-05: an "Agit comme" card (shared/wire.ts RoleTransitionCard). */
+  roleTransition?: import("../../../shared/wire").RoleTransitionCard;
   /** Organization server: only an organization admin can answer this card
    * (a server command asked by a member's bot). */
   adminApproval?: boolean;
@@ -241,7 +245,7 @@ export interface Message extends Pick<import("../../../shared/wire").WireMessage
    * narration of the same chip ("reading a file"), used by call mode. */
   /** `setup` marks an error fixed by installing something, not by retrying.
    * `summary` is the call's input on one redacted line (the shell command). */
-  tool?: { name: string; ok?: boolean; spoken?: string; setup?: boolean; claudeUpdate?: boolean; place?: PlaceRow; summary?: string; input?: string; output?: string ; durationMs?: number; /** The product the server declared for the tool, and the id its tool names start with (shared/wire.ts). */ product?: string; productId?: string; itemId?: string; outputPath?: string; fullResult?: boolean; /** Files the call wrote (shared/wire.ts). */ files?: string[]; widget?: import("../../../shared/cw-widgets/types").CwWidget; ruleNotice?: import("../../../shared/custom-rules").CustomRuleNotice; /** What answered the call's ask with no card (shared/wire.ts). */ autoApproval?: { source: string; rule?: string }; engineMove?: import("../../../shared/offered-engines").OrgEngineMove; limitFailover?: import("../../../shared/limit-failover").LimitFailoverLine; connectorSwitch?: { engine: string; connector: string }; soloGoal?: import("../../../shared/solo-goal-line").SoloGoalLine; finishUntil?: import("../../../shared/finish-until-line").FinishUntilLine; /** The step the working line names (shared/working-step.ts). */ step?: import("../../../shared/working-step").WorkingStep; /** Epoch ms when the usage limit that stopped this turn resets, when the engine said. */ limitResetsAt?: number };
+  tool?: { name: string; ok?: boolean; spoken?: string; setup?: boolean; claudeUpdate?: boolean; place?: PlaceRow; summary?: string; input?: string; output?: string ; durationMs?: number; /** The product the server declared for the tool, and the id its tool names start with (shared/wire.ts). */ product?: string; productId?: string; itemId?: string; outputPath?: string; fullResult?: boolean; /** Files the call wrote (shared/wire.ts). */ files?: string[]; widget?: import("../../../shared/cw-widgets/types").CwWidget; ruleNotice?: import("../../../shared/custom-rules").CustomRuleNotice; /** What answered the call's ask with no card (shared/wire.ts). */ autoApproval?: { source: string; rule?: string }; /** 2026-11-05: the Perspicax role this call ran under (shared/perspicax-roles.ts). */ role?: import("../../../shared/perspicax-roles").ToolRole; roleNotice?: import("../../../shared/wire").RoleNotice; engineMove?: import("../../../shared/offered-engines").OrgEngineMove; limitFailover?: import("../../../shared/limit-failover").LimitFailoverLine; connectorSwitch?: { engine: string; connector: string }; soloGoal?: import("../../../shared/solo-goal-line").SoloGoalLine; finishUntil?: import("../../../shared/finish-until-line").FinishUntilLine; /** The step the working line names (shared/working-step.ts). */ step?: import("../../../shared/working-step").WorkingStep; /** Epoch ms when the usage limit that stopped this turn resets, when the engine said. */ limitResetsAt?: number };
   /** user messages sent into a running turn — the model saw it mid-turn */
   steered?: boolean;
   /** a user message that did not come from typing here: through the
@@ -306,6 +310,8 @@ export interface Message extends Pick<import("../../../shared/wire").WireMessage
   threadRef?: { botId: string; threadId: string; title: string; gone?: boolean };
   /** A teammate parked on a question for the person (WireMessage.inputRequest). */
   inputRequest?: import("../../../shared/wire").WireMessage["inputRequest"];
+  /** 2026-11-05: what a bot's turn elsewhere left for the person (WireMessage.attention). */
+  attention?: import("../../../shared/wire").WireMessage["attention"];
   /** A parallel task this line belongs to (shared/parallel-tasks.ts). */
   parallelTask?: ParallelTaskRef;
   dataResult?: import("../../../shared/wire").WireMessage["dataResult"];
@@ -347,11 +353,11 @@ export interface Group {
   createdAt: number;
   /** auto-created bot⇄bot channel (ask_bot exchanges mirror here) */
   dm?: boolean;
-  /** A direct conversation between two people (server/people-dms.ts). */
+  /** A direct conversation between two people (server/people/people-dms.ts). */
   peopleDm?: boolean;
   /** The group's shared memory; absent = on. */
   memoryEnabled?: boolean;
-  /** A room: @all notifies every person in it (server/room-mentions.ts). */
+  /** A room: @all notifies every person in it (server/rooms/room-mentions.ts). */
   mentionAll?: boolean;
   /** #1137: per bot of this room, who pays for its replies here. */
   botPayers?: Record<string, "owner" | "speaker">;
@@ -387,7 +393,7 @@ export interface Group {
   turnTimeoutMinutes?: number | null;
   /** Separate conversations in this channel. DMs deliberately stay on one
    * thread and omit this collection. A conversation with a person has them
-   * like a bot (server/people-dms.ts). */
+   * like a bot (server/people/people-dms.ts). */
   tasks?: GroupTask[];
   /** Folders of a person conversation's threads, in sidebar order. */
   projects?: BotProject[];
@@ -452,6 +458,11 @@ export interface Task {
   /** An AI client's hidden conversation (#291): the server lists it only
    * while it is the open thread; never a dot, a preview or typing dots. */
   hidden?: true;
+  /** A person wrote here from an app (WireTask.personWrote): a thread a bot
+   * opened is theirs too (shared/background-threads.ts). */
+  personWrote?: true;
+  /** The server archived this finished background thread on its own. */
+  autoArchived?: true;
   /** A confidential thread (src/lib/confidential-thread.ts): never
    * remembered, exported or shared beyond its owner. Permanent once set. */
   confidential?: true;
@@ -531,6 +542,11 @@ export interface ThreadOpener {
   botId: string;
   name: string;
   delegationId?: string;
+  /** WireTask.openedBy.kind: a teammate's hand-off ("work", "pair") or an
+   * AI client's conversation ("agent"); absent on a thread a bot opened. */
+  kind?: "pair" | "work" | "agent";
+  /** The opener's conversation a "work" thread was opened from. */
+  threadId?: string;
   at: number;
 }
 
@@ -686,7 +702,7 @@ export interface Bot {
   allowedRecipients?: string[];
   outbound?: { policy: "ask" | "allow"; dailyCap: number };
   fallback?: Array<{ instanceId: string; model: string }>;
-  /** Per bot since 2026-10-15 (server/bot-runtime-settings.ts), edited in
+  /** Per bot since 2026-10-15 (server/bots/bot-runtime-settings.ts), edited in
    * the bot editor. Absent: the server default (or, for busySend, the
    * person's own earlier default). */
   maxConcurrentThreads?: number;
@@ -761,7 +777,7 @@ export type FolderOwnerKind = "bot" | "group";
 export type GroupTaskUpdatePatch = { archivedAt?: number | null; snoozedUntil?: number | null; projectId?: string | null; pinned?: boolean };
 /** Sent on every API request: this client knows a conversation with a
  * person has threads, so the server answers with the thread this person has
- * open (server/people-dms.ts). */
+ * open (server/people/people-dms.ts). */
 export const PERSON_THREADS_HEADER = "x-sagax-person-threads";
 
 /** A conversation uses its own execution settings; the sidebar keeps the
@@ -1022,7 +1038,7 @@ export interface ConfigStatus {
   cloudHome?: boolean;
 }
 
-/** Mirrors ViewerIdentity in server/viewer-identity.ts. */
+/** Mirrors ViewerIdentity in server/people/viewer-identity.ts. */
 export interface ConfigViewer {
   /** The operator at the server's computer, or a device they paired. */
   operator: boolean;
@@ -1294,7 +1310,7 @@ export interface AppState {
   routinesLoadState: "loading" | "ready" | "error";
   /** 2026-10-28: each bot's routine folders in order (shared/routine-folders.ts). */
   routineFolders: Record<string, string[]>;
-  routinesFocus: { section?: "schedule" | "logs" | "webhooks"; view?: "calendar" | "list"; botId?: string; routineId?: string; runStatus?: RoutineRunStatusFilter; runId?: string; nonce: number };
+  routinesFocus: { section?: "schedule" | "logs" | "webhooks"; view?: "calendar" | "list"; botId?: string; routineId?: string; runStatus?: RoutineRunStatusFilter; runId?: string; /** Opens this routine's editor in the side panel. */ editRoutineId?: string; nonce: number };
   /** The Code section (src/components/code/CodePage.tsx): the run it opens,
    * or the list when none. */
   codeFocus: { runId?: string; nonce: number };
@@ -1329,8 +1345,12 @@ export interface AppState {
    * line in the conversation was clicked); RoutinesSection opens it once. */
   routineFocus: { botId: string; routineId: string } | null;
   /** 2026-11-01: a routine run open as an exchange sheet over the chat
-   * column (same place as Melonie <-> Katarina). ChatView renders it. */
+   * column (same place as Wren <-> Osprey). ChatView renders it. */
   routineRunSheet: { runId: string; routineId?: string } | null;
+  /** 2026-11-03: a coding task of the bot panel's Coding list open as a chat
+   * over the chat column (src/components/coding/CodingChat.tsx), where a
+   * routine run opens. ChatView renders it. */
+  codingChat: import("../../lib/coding-chat").CodingChatTarget | null;
   /** a link that opens Connect apps on one tab: Pages (the published
    * pages), Providers (once My accounts: the old name "accounts" still
    * leads there, see the togglePlugins action), Sources or Bots (Browse
@@ -1571,7 +1591,7 @@ export type Action =
   | { type: "sidebarHidden"; keys: ReadonlySet<string> }
   | { type: "sections"; sections: string[] }
   | { type: "sectionDeleted"; section: string; sections: string[] }
-  | { type: "showRoutines"; section?: "schedule" | "logs" | "webhooks"; view?: "calendar" | "list"; botId?: string; routineId?: string; runStatus?: RoutineRunStatusFilter; runId?: string }
+  | { type: "showRoutines"; section?: "schedule" | "logs" | "webhooks"; view?: "calendar" | "list"; botId?: string; routineId?: string; runStatus?: RoutineRunStatusFilter; runId?: string; editRoutineId?: string }
   | { type: "showTeamMap" }
   /** The Code section: the list, or one run when `runId` is set. */
   | { type: "showCode"; runId?: string }
@@ -1609,7 +1629,7 @@ export type Action =
   | { type: "groupDeleted"; groupId: string }
   | { type: "createGroup"; memberIds: string[]; humanIds?: string[]; name?: string; section?: string }
   /** Open (or create) the direct conversation with another person of the
-   * organization (server/people-dms.ts). */
+   * organization (server/people/people-dms.ts). */
   | { type: "openPeopleDm"; principalId: string }
   /** Nudge that person (POST /api/nudges). The server enforces the cooldown. */
   /** `threadId`: the thread of the pair's conversation the line goes to. */
@@ -1641,10 +1661,10 @@ export type Action =
   | { type: "renameGroupTask"; groupId: string; threadId: string; title: string }
   | { type: "pinGroupTask"; groupId: string; threadId: string; pinned: boolean; title: string }
   | { type: "setConversationTurnLimit"; groupId: string; threadId: string; minutes: number | null; dm: boolean }
-  | { type: "deleteGroupTask"; groupId: string; threadId: string }
+  | { type: "deleteGroupTask"; groupId: string; threadId: string; /** Called once the server answered (Archive all / Delete all wait on it, src/lib/bulk-threads.ts). */ onSettled?: (ok: boolean) => void }
   /** Archive, snooze, pin or file one thread of a person conversation (the
    * same fields as a bot thread's updateTask). */
-  | { type: "updateGroupTask"; groupId: string; threadId: string; patch: GroupTaskUpdatePatch }
+  | { type: "updateGroupTask"; groupId: string; threadId: string; patch: GroupTaskUpdatePatch; /** Called once the server answered (Archive all / Delete all wait on it, src/lib/bulk-threads.ts). */ onSettled?: (ok: boolean) => void }
   | { type: "interruptGroup"; groupId: string; threadId?: string; onError?: () => void }
   | { type: "instances"; instances: InstanceInfo[] }
   | { type: "configStatus"; config: ConfigStatus }
@@ -1671,6 +1691,9 @@ export type Action =
       mode?: "chat" | "goal";
       /** The Data result the person is viewing, for the model only; never part of the text. */
       dataContext?: import("../../../shared/data-context").DataContext;
+      /** Visible roles (2026-11-05): the Perspicax role the person picked in
+       * the composer for this thread's next turn ("" = Moi); absent: none. */
+      perspicaxRole?: string;
       onError?: () => void;
       /** the server took the message (its receipt came back) */
       onSent?: () => void;
@@ -1733,10 +1756,10 @@ export type Action =
   | { type: "renameTask"; botId: string; threadId: string; title: string }
   /** Name the thread again from its conversation; the new title arrives with the bot event. */
   | { type: "regenerateTaskTitle"; botId: string; threadId: string; onSettled?: (ok: boolean) => void }
-  | { type: "deleteTask"; botId: string; threadId: string }
+  | { type: "deleteTask"; botId: string; threadId: string; /** Called once the server answered (Archive all / Delete all wait on it, src/lib/bulk-threads.ts). */ onSettled?: (ok: boolean) => void }
   | { type: "newBot"; role?: BotRole; visibility?: BotVisibility; section?: string; settings?: Record<string, unknown>; preserveSelection?: boolean; onCreated?: (bot: Bot) => void; onError?: (message: string) => void }
   | { type: "botCreationPending"; on: boolean }
-  | { type: "updateTask"; botId: string; threadId: string; patch: TaskUpdatePatch }
+  | { type: "updateTask"; botId: string; threadId: string; patch: TaskUpdatePatch; /** Called once the server answered (Archive all / Delete all wait on it, src/lib/bulk-threads.ts). */ onSettled?: (ok: boolean) => void }
   /** The server confirmed a thread is now confidential. */
   | { type: "taskMadeConfidential"; botId: string; threadId: string }
   | { type: "refreshTaskPermissions"; botId: string; threadId: string; acknowledgeLocalAuto?: boolean }
@@ -1784,6 +1807,8 @@ export type Action =
   | { type: "routineFocused" }
   | { type: "openRoutineRunSheet"; runId: string; routineId?: string; botId?: string }
   | { type: "closeRoutineRunSheet" }
+  | { type: "openCodingChat"; target: import("../../lib/coding-chat").CodingChatTarget }
+  | { type: "closeCodingChat" }
   | { type: "openPersonPanel"; personId: string | null }
   /** Open a bot's panel on Details with one Coding activity item shown
    * (`run:<routineRunId>` or `thread:<threadId>`), e.g. from the owner's
@@ -1801,7 +1826,9 @@ export type Action =
   | { type: "toggleActivity"; open?: boolean }
   | { type: "focusMessage"; threadId: string; messageId: string; matchText?: string; segment?: true }
   /** Draw a fresh topic over `threadId` (null: show that topic again). */
-  | { type: "freshTopic"; botId: string; threadId: string | null; auto?: boolean }
+  /** `keepAsked` on a clear: a New chat the person asked for stays (only a
+   * draft coming back put there goes). */
+  | { type: "freshTopic"; botId: string; threadId: string | null; auto?: boolean; keepAsked?: boolean }
   | { type: "focusMessageConsumed"; nonce: number }
   | { type: "unreadDividerDone"; threadId: string }
   | { type: "toggleAppSettings"; open?: boolean; section?: AppSettingsSection; subPage?: string; phonePairing?: boolean }
@@ -2080,8 +2107,11 @@ export function openBot(
   // Coming back to the single stream after a while lands on a fresh topic
   // (src/lib/fresh-topic.ts). A notification or a link passes landing false.
   if (!threadsShown && options.landing !== false) landOnBot(dispatch, bot, opened);
-  // a notification or a link: what it names is shown, never a draft over it
-  else dispatch({ type: "freshTopic", botId: bot.id, threadId: null });
+  // A notification, a link or a message naming a thread clears the draft
+  // where it opens that thread (openBotThread, focusMessage). Opening the
+  // bot itself keeps a New chat the person asked for (2026-11-02): it is
+  // their current conversation until they send, Back or open the old one.
+  else dispatch({ type: "freshTopic", botId: bot.id, threadId: null, keepAsked: true });
 }
 
 /** Coming back to `bot` at `threadId`: a fresh topic drawn over it when the
@@ -2096,9 +2126,10 @@ export function landOnBot(
   if (!options.force && onScreenBot() === bot.id) return;
   const decision = freshTopicLanding(bot, threadId, { now: options.now ?? Date.now(), ...(options.force ? { force: true } : {}) });
   if (decision.fresh) dispatch({ type: "freshTopic", botId: bot.id, threadId, auto: true });
-  // Opening the bot by hand shows the topic it opens to; the window coming
-  // back (force) keeps a New topic the person started.
-  else if (!options.force) dispatch({ type: "freshTopic", botId: bot.id, threadId: null });
+  // Opening the bot by hand shows the topic it opens to, except a New chat
+  // the person started: that one stays (2026-11-02); the window coming back
+  // (force) keeps it too.
+  else if (!options.force) dispatch({ type: "freshTopic", botId: bot.id, threadId: null, keepAsked: true });
 }
 
 /** "New topic" (the chat header, the bot row menu): the bot's conversation
@@ -2113,9 +2144,14 @@ export function startNewTopic(
   openBot(dispatch, bot, false, { landing: false });
   const task = bot.tasks?.find((candidate) => candidate.threadId === opened);
   const empty = !task || typeof task.updatedAt !== "number" || typeof task.createdAt !== "number" || task.updatedAt <= task.createdAt;
+  const segment = Boolean(task && typeof task.createdAt === "number" && isStreamSegment({ ...task, createdAt: task.createdAt }));
   // only over a topic of the stream: a confidential or routine thread never
-  if (!empty && task && typeof task.createdAt === "number" && isStreamSegment({ ...task, createdAt: task.createdAt })) {
+  if (!empty && segment) {
     dispatch({ type: "freshTopic", botId: bot.id, threadId: opened });
+  } else if (empty && segment) {
+    // An empty newest topic is reused, never a second one: it opens on its
+    // own, without the earlier topics drawn above it (src/lib/fresh-topic.ts).
+    noteNewChatTopic(opened);
   }
 }
 
@@ -2348,7 +2384,7 @@ export function applyFolderOwner(
  * this client has open keeps it open, unless the update carries a
  * transcript (the answer to a switch, a create or a fresh load) or that
  * thread is gone. A live frame always names the conversation's default
- * thread (server/people-dms.ts). */
+ * thread (server/people/people-dms.ts). */
 export function personThreadKept(
   held: Pick<Group, "threadId" | "tasks"> & { peopleDm?: boolean },
   patch: Partial<Group>,
@@ -2473,6 +2509,7 @@ export const initialState: AppState = {
   pluginsFocusApps: null,
   routineFocus: null,
   routineRunSheet: null,
+  codingChat: null,
   pluginsPage: null,
   triggersOpen: false,
   memoryManagerOpen: false,

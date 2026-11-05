@@ -1,7 +1,9 @@
 # Automatic recovery
 
 Settings → General → Automatic recovery is off by default. Choose one backup
-engine/model and save. When an ACP engine fails during startup, before sending
+engine/model and save. On a bot, Bot → Model → If it fails (#2050) holds the
+switch and the ordered backups in one card: the first ordered backup is also
+the bot's single backup (`automaticRecovery.backup`). When an ACP engine fails during startup, before sending
 the prompt or receiving any tool, permission, file or assistant activity, the
 driver can report a recoverable failure **only after its process has stopped**.
 Claude can also report a refused sign-in before any model or tool activity.
@@ -29,7 +31,7 @@ runner changes require a manual choice. Backup provider charges may apply.
 ## Repeatable checks
 
 ```sh
-pnpm exec vitest run server/automatic-recovery.test.ts server/automatic-recovery.e2e.test.ts server/drivers/acp/acp.test.ts server/drivers/retry.test.ts server/turn-dispatch-guard.test.ts server/config.test.ts src/components/bot-settings/BotRecoverySettings.test.ts src/state/store.test.ts
+pnpm exec vitest run server/automatic-recovery.test.ts server/automatic-recovery.e2e.test.ts server/drivers/acp/acp.test.ts server/drivers/retry.test.ts server/turns/turn-dispatch-guard.test.ts server/config.test.ts src/components/bot-settings/ModelSection.dom.test.ts src/state/store.test.ts
 pnpm exec vitest run server/drivers/claude-auth-recovery.test.ts server/drivers/claude.test.ts
 pnpm exec vitest run server/direct-coordination.e2e.test.ts server/guarded-messages-api.test.ts server/acp-recovery.e2e.test.ts --maxWorkers=2
 pnpm typecheck

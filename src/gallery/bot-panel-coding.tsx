@@ -2,7 +2,7 @@
  * Coding (pull requests, branches, commits) above Routines, so the two
  * cards compare side by side (2026-10-19: "le même encadré"). Branches:
  * not pushed, pushed, pull request open, merged, and one archived. The
- * capture script (scripts/capture-bot-panel-coding.mjs) answers /api itself
+ * capture script (scripts/capture/bot-panel-coding.mjs) answers /api itself
  * with each branch read now. Not shipped in the app.
  * ?skin=<id>&lang=<code> */
 import { StrictMode } from "react";
@@ -50,7 +50,7 @@ function Panel() {
       <div className="flex flex-col gap-6 px-4 pb-6 pt-4">
         <section data-bot-settings-section="coding" className="flex flex-col gap-2">
           <SectionHeader icon={<SquareTerminal size={16} aria-hidden="true" className="text-ink-secondary" />} title={t("botPanel.coding.title")} name="coding" onOpenHistory={() => {}} />
-          <CodeWorkList work={work} now={NOW} branchActions={{ botId: "pepper", onArchive: async () => {} }} />
+          <CodeWorkList work={work} now={NOW} branchActions={{ botId: "pepper", botName: "Pepper", onArchive: async () => {} }} />
         </section>
         <section data-bot-settings-section="routines" className="flex flex-col gap-3">
           <div className="flex items-center gap-2">

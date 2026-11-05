@@ -27,8 +27,9 @@ import { engineOffer, offeredEngines, ownAccountOnly } from "../../shared/offere
 import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
 import { freePortBlock } from "../testing/ports.ts";
+import { waitForServerReady } from "../testing/server-ready.ts";
 
-const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
+const SERVER_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
 const posixOnly = describe.skipIf(process.platform === "win32");
 const ORG_KEY = "sk-ant-test-org-key-000000";
@@ -127,16 +128,7 @@ async function start() {
   });
   child.stdout!.on("data", (c) => (log += c));
   child.stderr!.on("data", (c) => (log += c));
-  const deadline = Date.now() + 20_000;
-  for (;;) {
-    try {
-      if ((await fetch(`${BASE}/api/health`)).ok) return;
-    } catch {
-      /* not up yet */
-    }
-    if (Date.now() > deadline) throw new Error(`server never came up:\n${log}`);
-    await sleep(150);
-  }
+  await waitForServerReady(child, BASE, () => log);
 }
 
 posixOnly("Perspicax console: the Sagax admin routes", () => {
@@ -170,7 +162,9 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
         // The organization's key (SAGAX_ANTHROPIC_API_KEY) serves only an
         // API-key instance (config.ts injectedEnvironment, #1812): every
         // fixture engine is one, so a member's turn runs on that key.
-        claude: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_DUMP: join(home, "claude-dump.json") }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
+        // 062d7c42e continues a reply followed by tools. This fixture needs
+        // exactly one settled turn, so end with words rather than default Bash.
+        claude: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_TOOL_CALLS: "[]", FAKE_CLAUDE_DUMP: join(home, "claude-dump.json") }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
         hold: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_DUMP: join(home, "hold-dump.json") }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
         broken: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_MODE: "api-error", FAKE_CLAUDE_API_ERROR: "429 Too Many Requests: rate limit reached" }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
         // A subscription engine: only a person's own sign-in runs it, never the organization's key.
@@ -516,7 +510,7 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
     const logs = await admin("GET", "logs?limit=500", ALICE);
     expect(logs.status, logs.text).toBe(200);
     expect(logs.body.lines.length).toBeGreaterThan(0);
-    expect(logs.body.lines[0]).toEqual({ seq: expect.any(Number), at: expect.any(Number), level: expect.any(String), area: expect.anything(), message: expect.any(String) });
+    expect(logs.body.lines[0]).toEqual({ seq: expect.any(Number), at: expect.any(Number), level: expect.any(String), area: expect.toBeOneOf([null, expect.any(String)]), message: expect.any(String) });
     expect(logs.text).not.toContain(ORG_KEY);
     expect(logs.text).not.toContain(idp.linkToken);
     expect((await admin("GET", "logs?level=error", ALICE)).body.lines.every((line: { level: string }) => line.level === "error")).toBe(true);

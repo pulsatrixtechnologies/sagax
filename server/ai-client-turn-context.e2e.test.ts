@@ -133,11 +133,12 @@ posixOnly("AI client ping: what the engine is handed (sagax_send vs send_prompt)
     writeFileSync(join(data, "config.json"), JSON.stringify({
       instances: {
         claude: {
-          driver: "claudeAgent",
+          // fcce56775 (#1812): this fixture is paid by the organization API key.
+          driver: "claudeAgent", access: "api",
           // one-shot calls (a conversation title) write elsewhere, so the
           // turn dump always holds the turn just measured
           environment: { FAKE_CLAUDE_DUMP: dumpPath(), FAKE_CLAUDE_TEXT_DUMP: join(home, "one-shot-dump.json"), FAKE_CLAUDE_EXIT_AFTER_TURN: "1" },
-          config: { cli: FAKE_CLAUDE, fullAuto: true },
+          config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true },
         },
       },
     }));

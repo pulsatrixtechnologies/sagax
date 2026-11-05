@@ -27,8 +27,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
 import { freePortBlock } from "../testing/ports.ts";
+import { waitForServerReady } from "../testing/server-ready.ts";
 
-const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
+const SERVER_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
 const posixOnly = describe.skipIf(process.platform === "win32");
 const ALICE_KEY = "sk-ant-test-alice-runas00";
@@ -95,7 +96,7 @@ async function runNow(auth: Auth, routineId: string): Promise<Run> {
   expect(started.status, started.text).toBe(201);
   const id = started.body.run.id as string;
   return waitFor(async () => (((await api("GET", "/api/routines", auth)).body.runs ?? []) as Run[])
-    .find((r) => r.id === id && ["completed", "failed", "cancelled"].includes(r.status)), 60_000);
+    .find((r) => r.id === id && ["completed", "failed", "blocked", "cancelled"].includes(r.status)), 60_000);
 }
 type Option = { principalId: string; name: string; selectable: boolean; reason?: string; pending?: true };
 const optionsFor = async (auth: Auth, query: string) => {
@@ -127,16 +128,7 @@ async function start() {
   });
   child.stdout!.on("data", (c) => (log += c));
   child.stderr!.on("data", (c) => (log += c));
-  const deadline = Date.now() + 20_000;
-  for (;;) {
-    try {
-      if ((await fetch(`${BASE}/api/health`)).ok) return;
-    } catch {
-      /* not up yet */
-    }
-    if (Date.now() > deadline) throw new Error(`server never came up:\n${log}`);
-    await sleep(150);
-  }
+  await waitForServerReady(child, BASE, () => log);
 }
 
 posixOnly("routine modal: Runs as", () => {
@@ -174,7 +166,7 @@ posixOnly("routine modal: Runs as", () => {
           driver: "claudeAgent",
           environment: {
             FAKE_CLAUDE_DUMP: join(home, "claude-dump.json"),
-            FAKE_CLAUDE_MCP_CALLS: JSON.stringify([{ server: "perspicax_*", tool: "api_list", arguments: {} }]),
+            FAKE_CLAUDE_MCP_CALLS: JSON.stringify([{ server: "perspicax", tool: "api_list", arguments: {} }]),
             FAKE_CLAUDE_MCP_DUMP: join(home, "mcp-dump.json"),
           },
           config: { cli: FAKE_CLAUDE, fullAuto: true },
@@ -192,7 +184,6 @@ posixOnly("routine modal: Runs as", () => {
     expect(created.status, created.text).toBe(201);
     botId = created.body.bot.id;
     expect((await api("PATCH", `/api/bots/${botId}`, alice, { modelSelection: { instanceId: "claude", model: "fake-model" } })).status).toBe(200);
-    expect((await api("PUT", `/api/bots/${botId}/perspicax`, alice, { profiles: [PROFILE.id] })).status).toBe(200);
     for (const login of ["bob", "carol", "dave", "mia", "erin"]) {
       const shared = await api("PUT", `/api/bots/${botId}/grants`, alice, { target: `user:${ids[login]}`, level: "run" });
       expect(shared.status, shared.text).toBe(200);
@@ -294,7 +285,8 @@ posixOnly("routine modal: Runs as", () => {
     const run = await runNow(alice, bobRoutine);
     expect(run.status, run.error).toBe("completed");
     expect(run.runAs).toBe(ids.bob);
-    expect(idp.exchanges.slice(exchangesBefore).map((exchange) => exchange.sub)).toEqual([BOB.sub]);
+    // Readiness and execution each use this person's account exchange.
+    expect(idp.exchanges.slice(exchangesBefore).map((exchange) => exchange.sub)).toEqual([BOB.sub, BOB.sub]);
   }, 90_000);
 
   it("Run now: the person it runs as may, someone else with run may not; one run in flight; audited as manual; a paused routine stays paused", async () => {
@@ -313,7 +305,7 @@ posixOnly("routine modal: Runs as", () => {
     const started = (first.status === 201 ? first : second).body.run as Run & { manual?: boolean; triggerSource?: string };
     expect(started.runAs).toBe(ids.bob);
     const finished = await waitFor(async () => (((await api("GET", "/api/routines", bob)).body.runs ?? []) as Run[])
-      .find((r) => r.id === started.id && ["completed", "failed", "cancelled"].includes(r.status)), 60_000);
+      .find((r) => r.id === started.id && ["completed", "failed", "blocked", "cancelled"].includes(r.status)), 60_000);
     expect(finished.status, finished.error).toBe("completed");
     // the routine was off (enabled: false) and stays off
     expect((await api("GET", "/api/routines", alice)).body.routines.find((r: { id: string }) => r.id === bobRoutine).enabled).toBe(false);
@@ -328,7 +320,8 @@ posixOnly("routine modal: Runs as", () => {
     const routineId = created.body.routine.id as string;
     expect((await optionsFor(alice, `routineId=${routineId}`)).current).toEqual({ principalId: ids.erin, name: "Erin", pending: true });
     const skipped = await runNow(alice, routineId);
-    expect(skipped).toMatchObject({ status: "failed", error: "Perspicax did not issue Erin's routine access yet; this run is skipped and the next one tries again" });
+    // b0cec80619: an admission refusal blocks this run, without pausing the routine.
+    expect(skipped).toMatchObject({ status: "blocked", error: "Perspicax did not issue Erin's routine access yet; this run is skipped and the next one tries again" });
     const routine = (await api("GET", "/api/routines", alice)).body.routines.find((r: { id: string }) => r.id === routineId);
     expect(routine.suspended).toBeUndefined();
     expect(routine.runAs).toEqual({ principalId: ids.erin, name: "Erin" });

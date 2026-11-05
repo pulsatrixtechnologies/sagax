@@ -1,3 +1,5 @@
+import type { CliOptions } from "./cli/cli-options.ts";
+export type { CliOptions } from "./cli/cli-options.ts";
 // `openmausbot` on the command line: run the server anywhere and pair devices
 // to it. One implementation for three homes — `npx @pulsatrixtechnologies/sagax` (the npm
 // package), `node dist-server/cli.js` (the container image) and
@@ -31,21 +33,21 @@ import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
 import { phonePairingLink } from "../shared/pairing-link.ts";
-import { parseAllowList } from "./account-signin.ts";
-import { appendAdminAction, flushAdminActivity, sharedSignIn } from "./admin-activity.ts";
+import { parseAllowList } from "./auth/account-signin.ts";
+import { appendAdminAction, flushAdminActivity, sharedSignIn } from "./activity/admin-activity.ts";
 import { bindDecisionRetention, decisionRetentionDays } from "./decision-log.ts";
 import { hostedWorkspaceConfigured } from "./enterprise.ts";
-import { resolveLoopbackTrust } from "./request-auth.ts";
-import { restartPolicy } from "./restart.ts";
+import { resolveLoopbackTrust } from "./auth/request-auth.ts";
+import { restartPolicy } from "./process/restart.ts";
 import { writeFileAtomic } from "./atomic.ts";
 import { ensureCaddy, normalizeDomainOption, startCaddy, type RunningCaddy } from "./caddy.ts";
-import { runServiceCommand } from "./service-cli.ts";
-import { runFleetCommand, type FleetInput } from "./fleet-cli.ts";
-import { startFleetAgent } from "./fleet-agent.ts";
-import { fleetLayout } from "./fleet.ts";
-import { browserSignInLines, pairingBlock } from "./cli-pairing.ts";
+import { runServiceCommand } from "./cli/service-cli.ts";
+import { runFleetCommand, type FleetInput } from "./fleet/fleet-cli.ts";
+import { startFleetAgent } from "./fleet/fleet-agent.ts";
+import { fleetLayout } from "./fleet/fleet.ts";
+import { browserSignInLines, pairingBlock } from "./cli/cli-pairing.ts";
 import { explainTailscaleFailure, tailscaleServe, tailscaleServeOff, tailscaleStatus, type TailscaleStatus } from "./tailscale.ts";
-import { defaultSetupIo, SetupCancelled, type SetupIo } from "./cli-prompts.ts";
+import { defaultSetupIo, SetupCancelled, type SetupIo } from "./cli/cli-prompts.ts";
 import { normalizePhoneOrigin, phonePairingInstructions, runPhoneSetup } from "./phone/cli-phone-setup.ts";
 import type { AppConfig } from "./config.ts";
 import { defaultDataDir, ENVIRONMENT_PATH, fetchEnvironmentDescriptor, isOwnHealth, LEGACY_ENVIRONMENT_PATH } from "../electron/legacy-names.mjs";
@@ -69,75 +71,9 @@ import {
   type TunnelRecovery,
 } from "./tunnel.ts";
 import { createDataArchive, restoreDataArchive, verifyDataArchive } from "./data-dir-archive.ts";
-import { applyTeam, giveTask, parseTeamFile, waitTask } from "./headless-cli.ts";
+import { applyTeam, giveTask, parseTeamFile, waitTask } from "./cli/headless-cli.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-
-export interface CliOptions {
-  /** No --data-dir and no SAGAX_DATA_DIR (or OMB_DATA_DIR): ~/.sagax (or an old ~/.openmausbot). */
-  dataDirIsDefault?: boolean;
-  command: "setup" | "start" | "serve" | "pair" | "sessions" | "status" | "login" | "logout" | "access" | "service" | "browser" | "fleet" | "backup" | "restore" | "team" | "task" | "help";
-  port: number;
-  dataDir: string;
-  label?: string;
-  publicUrl?: string;
-  /** `serve --domain host`: HTTPS on your own domain through a managed Caddy. */
-  domain?: string;
-  tailscale: boolean;
-  tunnel: boolean;
-  client: boolean;
-  pair: boolean;
-  revoke?: string;
-  /** `access list|add|remove` */
-  accessAction?: "list" | "add" | "remove";
-  chatOnly?: boolean;
-  /** `service install|uninstall` */
-  serviceAction?: "install" | "uninstall";
-  email?: string;
-  /** `browser install [--with-deps]` */
-  browserAction?: "install" | "status";
-  /** `fleet init|create|list|users|suspend|resume|delete|upgrade|agent` */
-  fleetAction?: FleetInput["action"] | "agent";
-  operator?: string;
-  socket?: string;
-  group?: string;
-  slug?: string;
-  admins?: string[];
-  members?: string[];
-  brandFile?: string;
-  anthropicKeyFile?: string;
-  cap?: number;
-  memory?: string;
-  dryRun?: boolean;
-  yes?: boolean;
-  keepData?: boolean;
-  /** fleet upgrade --to: the exact release to install. */
-  fleetVersion?: string;
-  fleetUserAction?: "add" | "remove";
-  withDeps?: boolean;
-  json: boolean;
-  /** Explicitly ignore saved remote access for this launch. */
-  local?: boolean;
-  open?: boolean;
-  /** Internal guided-start presentation; serve remains script-friendly. */
-  guided?: boolean;
-  phone?: "ios" | "android";
-  /** backup --output, or the archive named by restore. */
-  archive?: string;
-  /** restore --verify: check hashes, write nothing. */
-  verify?: boolean;
-  /** restore --apply: the only flag that writes the archive over the data folder. */
-  apply?: boolean;
-  /** `team apply FILE` */
-  teamAction?: "apply";
-  teamFile?: string;
-  /** `task give` or `task wait` */
-  taskAction?: "give" | "wait";
-  taskBot?: string;
-  taskText?: string;
-  taskId?: string;
-  timeoutSec?: number;
-}
 
 const COMMANDS = ["setup", "start", "serve", "pair", "sessions", "status", "login", "logout", "access", "service", "browser", "fleet", "backup", "restore", "team", "task", "help", "--help", "-h"];
 
@@ -503,7 +439,6 @@ async function showPhonePairing(options: CliOptions, origin: string | undefined,
   return true;
 }
 
-
 function originOf(link: string): string | null {
   try {
     return new URL(link).origin;
@@ -557,8 +492,6 @@ async function mintPairing(port: number, options: { label?: string; client?: boo
   return pairingBlock({ code: body.code, url, inviteUrl: invite, localUrl, expiresAt: body.expiresAt, hint: typeof body.hint === "string" ? body.hint : null, phone: options.phone });
 }
 
-
-
 // ── commands ───────────────────────────────────────────────────────────
 export async function runPair(options: CliOptions): Promise<number> {
   if (!(await serverUp(options.port))) {
@@ -572,7 +505,7 @@ export async function runPair(options: CliOptions): Promise<number> {
     // describe the next launch, not necessarily the address working now.
     let origin = options.publicUrl ?? (typeof advertised.body?.publicUrl === "string" ? advertised.body.publicUrl : undefined);
     if (!origin) {
-      const { readCliStartup } = await import("./cli-setup.ts");
+      const { readCliStartup } = await import("./cli/cli-setup.ts");
       launch = applyStartupPreferences(options, readCliStartup(options.dataDir));
       origin = launch.publicUrl;
       if (launch.tunnel) origin = describeTunnelAccount(createTunnelAccount({ dataDir: options.dataDir, version: serverVersion() }).credentials.read()).address ?? undefined;
@@ -1157,7 +1090,7 @@ export async function runServe(options: CliOptions, log: (line: string) => void 
  * RESTART_EXIT_CODE (a copied workspace committed; docs/copy-workspace.md)
  * is started again in this process, with its tunnel, Tailscale or domain
  * address unchanged, and without a second pairing code or browser tab; at
- * most MAX_RESTARTS times in a row (server/restart.ts restartPolicy). */
+ * most MAX_RESTARTS times in a row (server/process/restart.ts restartPolicy). */
 export async function serveUntilStopped(options: CliOptions, run: (options: CliOptions) => Promise<number> = runServe, now: () => number = Date.now): Promise<number> {
   const policy = restartPolicy(now);
   let launch = options;
@@ -1196,7 +1129,7 @@ export async function runOnboardingCommand(
     if (interactive && options.open !== false) await (flow.open ?? openDashboard)(options.port);
     return 0;
   }
-  const { runSetup, isSetupComplete, readCliStartup, saveCliStartup } = await import("./cli-setup.ts");
+  const { runSetup, isSetupComplete, readCliStartup, saveCliStartup } = await import("./cli/cli-setup.ts");
   const prompts = flow.prompts ?? defaultSetupIo();
   try {
     if (options.command === "setup" || !(await isSetupComplete(options.dataDir))) {

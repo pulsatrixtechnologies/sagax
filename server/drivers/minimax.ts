@@ -7,7 +7,7 @@ import { z } from "zod";
 
 import type { ModelCatalog, ProviderDriver, SendTurnInput } from "../contracts.ts";
 import { DATA_DIR } from "../config.ts";
-import { applyStoredEngineEnv } from "../engine-api-keys.ts";
+import { applyStoredEngineEnv } from "../engines/engine-api-keys.ts";
 import { createOpenAIChatRuntime } from "./openai-chat.ts";
 import { imageTransportAllowed } from "./chat-images.ts";
 

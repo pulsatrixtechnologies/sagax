@@ -38581,16 +38581,19 @@ function orgSectionNames(): string[] {
   sectionChannels?.migrate(names, sectionMigrationOwner);
   return names;
 }
-/** The section names an organization member may see: the ones they own or
- * belong to, and the ones holding a bot or room they see. */
+/** The section names an organization member may see (#2045): only the
+ * ones they own, or a legacy one they were made a member of. A section is
+ * never shown because it holds a bot or room someone shared: the bot is
+ * shared, the other person's team stays theirs. Admins included. */
 function orgVisibleSections(all: readonly string[], viewerId: string | undefined): string[] {
   if (IDENTITY.kind !== "perspicax" || !viewerId || !sectionChannels) return [...all];
   const viewer = authzViewerFromId(viewerId)!;
+  const me = viewerId.trim().toLowerCase();
   return all.filter((name) => {
     const record = sectionChannels!.byName(name);
-    if (record && (record.ownerPrincipalId === viewerId || (record.members.length && sectionRole(viewer, { ...record }) !== null))) return true;
-    return store.bots.some((bot) => sectionKey(bot.section) === name && listedBotVisible(bot, viewerId)) ||
-      store.groups.some((group) => sectionKey(group.section) === name && groupVisible(group, viewerId));
+    if (!record) return false;
+    if (record.ownerPrincipalId.trim().toLowerCase() === me) return true;
+    return record.members.length > 0 && sectionRole(viewer, { ...record }) !== null;
   });
 }
 if (sectionChannels) {
@@ -44194,6 +44197,12 @@ ROUTES.push(createTeamExportImportRoutes({
 ROUTES.push(createTeamLibraryRoutes());
 ROUTES.push(createSidebarSectionsRoutes({
   sections: () => store.sections,
+  // #2045: on an organization server each person sees only their own teams.
+  sectionsFor: (auth) => (sectionChannels ? orgVisibleSections(orgSectionNames(), auth.kind === "session" ? auth.session.principalId?.trim() || undefined : localPrincipalId()) : store.sections),
+  mayFile: (auth, bot) => !sectionChannels || auth.kind !== "session" || effectiveBotOwner(bot).trim().toLowerCase() === (auth.session.principalId ?? "").trim().toLowerCase(),
+  onSectionCreated: (section, auth) => {
+    if (sectionChannels) sectionChannels.ensure(section, auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId());
+  },
   bot: (id) => store.bot(id) ?? undefined,
   assertTeamComputerChangeIdle,
   teamComputerForSection: (section) => teamComputers.forSection(section),

@@ -4,7 +4,12 @@
 import { viewerActorId } from "@/lib/viewer";
 import { useEffect, useRef, useState } from "react";
 import { Plus } from "lucide-react";
-import { api, useStore, type Bot } from "@/state/store";
+import { useStore } from "@/state/store";
+import { usePerspicaxOrg } from "@/lib/perspicax-org";
+import { EMPTY_PERSONAL_SECTIONS, personalSectionNames, usePersonalSections, withPersonalSections } from "@/lib/personal-sections";
+import { ancestorsOf, parentOf, useSectionParents } from "@/lib/section-tree";
+import { viewerOwnsBot } from "@/lib/primary-bot";
+import { createTeam, moveBotToTeam, renameTeam, setTeamBots, setTeamParent, type TeamWriteContext } from "@/lib/team-writes";
 import { teamMapMutationError } from "@/lib/team-map-access";
 import { BotPickerList } from "./BotPickerList";
 import { NewBotDialog } from "./lazy-new-bot";
@@ -21,9 +26,24 @@ export function TeamDialog({ section, rename = false, onClose, onRenamed }: {
   onClose: () => void;
 }) {
   const { state, dispatch } = useStore();
+  // #2045: on an organization server a team is one of the person's own
+  // sidebar sections, filled with their own bots.
+  const orgMode = usePerspicaxOrg() !== null;
+  const personalStored = usePersonalSections();
+  const personal = orgMode ? personalStored ?? EMPTY_PERSONAL_SECTIONS : null;
+  const viewerId = viewerActorId(state.config);
+  const laidBots = personal ? withPersonalSections(state.bots, state.groups, personal).bots : state.bots;
+  const teamList = personal ? personalSectionNames(personal) : [...new Set([...(state.sections ?? []), ...state.groups.flatMap((group) => group.section ? [group.section] : [])])];
+  const known = new Set(teamList);
+  const tree = useSectionParents();
+  const context: TeamWriteContext = { orgMode, dispatch, viewerId, bots: state.bots, serverSections: state.sections ?? [] };
   const [name, setName] = useState(section ?? "");
   const managing = Boolean(section) && !rename;
-  const initialMembers = useRef(new Set(managing ? state.bots.filter(bot => !bot.hidden && (bot.section?.trim() ?? "") === section).map(bot => bot.id) : []));
+  const initialParent = section ? parentOf(tree, section, known) ?? "" : "";
+  const [parent, setParent] = useState(initialParent);
+  // A team may sit under any other team but itself and its own sub-teams.
+  const parentChoices = teamList.filter((candidate) => candidate !== section && !(section && ancestorsOf(tree, candidate, known).includes(section)));
+  const initialMembers = useRef(new Set(managing ? laidBots.filter(bot => !bot.hidden && (bot.section?.trim() ?? "") === section).map(bot => bot.id) : []));
   const [picked, setPicked] = useState<Set<string>>(() => new Set(initialMembers.current));
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -41,25 +61,38 @@ export function TeamDialog({ section, rename = false, onClose, onRenamed }: {
   }, [creating]);
   const moving = section !== undefined && !rename;
   const title = rename ? t("team.rename") : managing ? t(initialMembers.current.size ? "team.manageBots" : "team.addBots") : moving ? t("team.moveTo", { name: section || t("sidebar.section.general") }) : t("team.create");
-  const candidates = state.bots.filter((bot) => !bot.hidden && (managing || !moving || (bot.section?.trim() ?? "") !== section));
+  const candidates = laidBots.filter((bot) => !bot.hidden && (!orgMode || viewerOwnsBot(bot, viewerId)) && (managing || !moving || (bot.section?.trim() ?? "") !== section));
   const addBotIds = [...picked].filter(id => !initialMembers.current.has(id));
   const removeBotIds = [...initialMembers.current].filter(id => !picked.has(id));
-  const unchanged = managing ? !addBotIds.length && !removeBotIds.length : moving && !picked.size;
+  const parentChanged = parent !== initialParent;
+  const unchanged = managing ? !addBotIds.length && !removeBotIds.length && !parentChanged : moving && !picked.size;
   const save = async () => {
     if (saving || (!moving && !name.trim()) || unchanged) return;
-    if (section === undefined && [...(state.sections ?? []), ...state.bots.map((bot) => bot.section), ...state.groups.map((group) => group.section)].includes(name.trim())) {
+    const taken = orgMode ? teamList : [...(state.sections ?? []), ...state.bots.map((bot) => bot.section), ...state.groups.map((group) => group.section)];
+    if ((section === undefined || (rename && name.trim() !== section)) && taken.includes(name.trim())) {
       setError(t("team.duplicate"));
       return;
     }
     setSaving(true);
     setError("");
     try {
-      const result: { sections: string[]; bots?: Bot[] } = await api(
-        rename || managing ? `/api/sidebar-sections?section=${encodeURIComponent(section!)}` : "/api/sidebar-sections",
-        { method: rename ? "PATCH" : managing ? "PUT" : "POST", body: JSON.stringify(rename ? { name: name.trim() } : managing ? { addBotIds, removeBotIds } : { name: name.trim(), botIds: [...picked] }) },
-      );
-      dispatch({ type: "sections", sections: result.sections });
-      for (const bot of result.bots ?? []) dispatch({ type: "botPatched", bot });
+      let refused: string | null = null;
+      if (rename) refused = await renameTeam(context, section!, name.trim());
+      else if (managing) {
+        if (addBotIds.length || removeBotIds.length) refused = await setTeamBots(context, section!, addBotIds, removeBotIds);
+        if (!refused && parentChanged) refused = setTeamParent(context, section!, parent);
+      } else if (moving) {
+        for (const id of picked) {
+          refused = await moveBotToTeam(context, id, section!);
+          if (refused) break;
+        }
+      }
+      else refused = await createTeam(context, name.trim(), [...picked], parent);
+      if (refused) {
+        setError(refused);
+        setSaving(false);
+        return;
+      }
       if (rename && section !== undefined) onRenamed?.(section, name.trim());
       onCloseRef.current();
     } catch (cause) {
@@ -129,6 +162,19 @@ export function TeamDialog({ section, rename = false, onClose, onRenamed }: {
             </FieldRow>
           </div>
         )}
+        {!rename && (!moving || managing) && parentChoices.length > 0 && (
+          <div className={GROUP_CARD} data-team-parent="">
+            <FieldRow label={t("team.parent")}>
+              <div className="flex min-w-0 items-center gap-2">
+                <select value={parent} disabled={saving} aria-label={t("team.parent")} onChange={(event) => setParent(event.target.value)} className={cn(FIELD, "min-w-0 flex-1")}>
+                  <option value="">{t("team.parentNone")}</option>
+                  {parentChoices.map((choice) => <option key={choice} value={choice}>{choice}</option>)}
+                </select>
+                {parent && <button type="button" disabled={saving} onClick={() => setParent("")} className={PILL}>{t("team.detach")}</button>}
+              </div>
+            </FieldRow>
+          </div>
+        )}
         {!rename && (
           <fieldset disabled={saving} className="min-w-0">
             <SettingsGroup
@@ -146,7 +192,7 @@ export function TeamDialog({ section, rename = false, onClose, onRenamed }: {
               <div className="px-1.5">
                 <BotPickerList
                   bots={candidates}
-                  viewerId={viewerActorId(state.config)}
+                  viewerId={viewerId}
                   picked={picked}
                   emptyHint={t("team.noBots")}
                   onToggle={(id) => setPicked((previous) => {

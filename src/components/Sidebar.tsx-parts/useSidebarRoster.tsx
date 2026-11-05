@@ -1,3 +1,4 @@
+import { orderSectionTree, useSectionParents } from "@/lib/section-tree";
 import type { SidebarState } from "./types";
 import { Archive } from "lucide-react";
 import { visibleMessages, type Bot, type Group } from "@/state/store";
@@ -45,6 +46,7 @@ export function useSidebarRoster({
   onShowArchived: () => void;
 }) {
   const peopleApart = useSidebarPeopleApart();
+  const sectionParents = useSectionParents();
   const q: string = "";
   const viewerId = orgViewerId(state);
   const hiddenEntries = hiddenKeySet(sidebarHidden);
@@ -75,7 +77,7 @@ export function useSidebarRoster({
   const {
     sectionChiefs,
     sectionedBots,
-  } = partitionSidebarBots(teamBots);
+  } = partitionSidebarBots(teamBots, orgMode ? { viewerId } : undefined);
   const { botChats, peopleDms, sectionedRooms, unsectionedRooms } = partitionSidebarGroups(visibleGroups, { peopleApart });
 
   // User sections keep first-appearance order. The saved layout keeps an
@@ -95,7 +97,7 @@ export function useSidebarRoster({
     ...sectionedRooms.map((group) => group.section!),
   ])];
   const teamOrder = (key: string) => key === "" ? -1 : teamNames.includes(key) ? teamNames.indexOf(key) : teamNames.length;
-  const teamMap = buildTeamMapSections(teamBots, teamNames, { general: unsectionedRooms.length > 0 })
+  const teamMap = buildTeamMapSections(teamBots, teamNames, { general: unsectionedRooms.length > 0, viewerId: orgMode ? viewerId : undefined })
     .sort((a, b) => teamOrder(a.key) - teamOrder(b.key))
     .filter((team) => {
       if (team.key) return true;
@@ -112,7 +114,18 @@ export function useSidebarRoster({
   const orderedSectionIds = orderedSidebarSections(naturalSectionIds, sectionOrder);
   // Organization: Unassigned (what is in no section of yours) stays on top.
   const generalOnTop = orgMode && orderedSectionIds.includes(GENERAL_SECTION_ID);
-  const sectionIds = generalOnTop ? [GENERAL_SECTION_ID, ...orderedSectionIds.filter((id) => id !== GENERAL_SECTION_ID)] : orderedSectionIds;
+  const flatSectionIds = generalOnTop ? [GENERAL_SECTION_ID, ...orderedSectionIds.filter((id) => id !== GENERAL_SECTION_ID)] : orderedSectionIds;
+  // Sub-teams (#2045): each one follows its parent, a level further in, the
+  // same tree as the Team map. The team slots keep their place among the
+  // automatic sections; only the order of the teams in them changes.
+  const teamById = new Map(teamMap.filter((team) => team.key).map((team) => [userSectionId(team.key), team]));
+  const treeRows = orderSectionTree(flatSectionIds.flatMap((id) => teamById.get(id)?.key ?? []), sectionParents);
+  for (const row of treeRows) {
+    const team = teamById.get(userSectionId(row.name));
+    if (team && row.depth > 0) Object.assign(team, { depth: row.depth, parent: row.parent });
+  }
+  let nextTeam = 0;
+  const sectionIds = flatSectionIds.map((id) => teamById.has(id) ? userSectionId(treeRows[nextTeam++]!.name) : id);
   // With no team of the person's own, Unassigned is the whole list: its
   // rows show without a header (2026-10-15). Bot-to-bot threads alone do
   // not count; People does, so Unassigned keeps its header next to it.

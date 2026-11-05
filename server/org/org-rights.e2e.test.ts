@@ -486,4 +486,37 @@ posixOnly("Perspicax organization, slice 4: rights, teams, owner keys, sections"
     expect((await api("GET", `/api/threads/${a1.threadId}/messages`, dave)).status).toBe(404);
     expect((await api("GET", `/api/threads/${a1.threadId}/messages`, bob)).status).toBe(404);
   }, 60_000);
+
+  it("#2045: two people each create a team and neither sees the other's, even through a shared bot", async () => {
+    alice = await signIn(ALICE);
+    const bob = await signIn(BOB);
+    const a2 = await createBot(alice, "Aria", "claude");
+    const b2 = await createBot(bob, "Boris", "claude");
+    expect((await api("POST", "/api/sidebar-sections", alice, { name: "Equipe A", botIds: [a2.id] })).status).toBe(200);
+    const madeB = await api("POST", "/api/sidebar-sections", bob, { name: "Equipe B", botIds: [b2.id] });
+    expect(madeB.status, madeB.text).toBe(200);
+    // alice shares her bot with bob: the bot is shared, her team is not
+    expect((await api("PUT", `/api/bots/${a2.id}/grants`, alice, { target: `user:${ids.bob}`, level: "use" })).status).toBe(200);
+    const teams = async (who: Auth) => ({
+      bots: (await api("GET", "/api/bots", who)).body.sections as string[],
+      sidebar: (await api("GET", "/api/sidebar-sections", who)).body.sections as string[],
+      org: ((await api("GET", "/api/org/sections", who)).body.sections as Array<{ name: string }>).map((row) => row.name),
+    });
+    const ofAlice = await teams(alice);
+    const ofBob = await teams(bob);
+    for (const list of Object.values(ofAlice)) {
+      expect(list).toContain("Equipe A");
+      expect(list).not.toContain("Equipe B");
+    }
+    for (const list of Object.values(ofBob)) {
+      expect(list).toContain("Equipe B");
+      expect(list).not.toContain("Equipe A");
+    }
+    expect((await api("GET", "/api/bots", bob)).body.bots.map((b: { id: string }) => b.id)).toContain(a2.id);
+    // the other person's team is neither joined, renamed nor deleted by guessing its name
+    expect((await api("POST", "/api/sidebar-sections", bob, { name: "Equipe A", botIds: [b2.id] })).status).toBe(409);
+    expect((await api("PATCH", "/api/sidebar-sections?section=Equipe%20A", bob, { name: "Pris" })).status).toBe(404);
+    expect((await api("DELETE", "/api/sidebar-sections?section=Equipe%20A", bob)).status).toBe(404);
+    expect((await teams(alice)).sidebar).toContain("Equipe A");
+  }, 60_000);
 });

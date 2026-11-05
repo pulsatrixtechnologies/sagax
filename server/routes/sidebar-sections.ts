@@ -1,5 +1,6 @@
 // Sidebar team sections (#1388 slice P1): list, rename, delete, membership.
 import { z } from "zod";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import type { BotRecord } from "../store.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
@@ -12,6 +13,14 @@ const createSidebarSectionSchema = z.object({
 
 export interface SidebarSectionsRouteDeps {
   sections(): readonly string[];
+  /** #2045: the teams this caller may see and manage (their own on an
+   * organization server). Every other team answers as if it did not exist. */
+  sectionsFor?(auth: RequestAuth): readonly string[];
+  /** #2045: a new team belongs to whoever created it. */
+  onSectionCreated?(section: string, auth: RequestAuth): void;
+  /** #2045: whether this caller may file this bot in a team (their own bot
+   * on an organization server). Absent: every bot. */
+  mayFile?(auth: RequestAuth, bot: BotRecord): boolean;
   bot(id: string): BotRecord | undefined;
   /** Throws Error & { status: 409 } when a team computer change is unsafe. */
   assertTeamComputerChangeIdle(before: BotRecord, after: BotRecord): void;
@@ -33,13 +42,21 @@ export interface SidebarSectionsRouteDeps {
 }
 
 export function createSidebarSectionsRoutes(deps: SidebarSectionsRouteDeps): RouteHandler {
-  return async ({ req, res, url, path, method, json, readBody }) => {
+  return async ({ req, res, url, path, method, auth, json, readBody }) => {
+    if (!path.startsWith("/api/sidebar-sections")) return PASS;
+    const listed = () => (deps.sectionsFor ? deps.sectionsFor(auth) : deps.sections());
+    const mine = (section: string) => listed().includes(section);
+    const unfileable = (ids: readonly string[]) => ids.some((id) => {
+      const found = deps.bot(id);
+      return Boolean(found && deps.mayFile && !deps.mayFile(auth, found));
+    });
     if (path === "/api/sidebar-sections" && method === "GET") {
-      return json(res, 200, { sections: deps.sections() });
+      return json(res, 200, { sections: listed() });
     }
     if (path === "/api/sidebar-sections" && (method === "PATCH" || method === "DELETE")) {
       const section = url.searchParams.get("section")?.trim();
       if (!section) return json(res, 400, { error: "Choose a named team" });
+      if (!mine(section)) return json(res, 404, { error: "No such team" });
       if (method === "DELETE" && deps.teamComputerForSection(section)) {
         return json(res, 409, { error: "Unassign this team's computer before deleting the team" });
       }
@@ -48,6 +65,7 @@ export function createSidebarSectionsRoutes(deps: SidebarSectionsRouteDeps): Rou
         const parsed = z.object({ name: z.string().trim().min(1).max(60) }).strict().safeParse(await readBody(req));
         if (!parsed.success) return json(res, 400, { error: "Team name must be 1 to 60 characters" });
         nextName = parsed.data.name;
+        if (nextName !== section && deps.sections().includes(nextName)) return json(res, 409, { error: "A team with that name already exists" });
       }
       const error = nextName === null
         ? deps.deleteSection(section)
@@ -56,14 +74,15 @@ export function createSidebarSectionsRoutes(deps: SidebarSectionsRouteDeps): Rou
       // Slice 4: the section's channel record follows its name.
       if (nextName === null) deps.onSectionRemoved?.(section);
       else deps.onSectionRenamed?.(section, nextName);
-      return json(res, 200, { sections: deps.sections() });
+      return json(res, 200, { sections: listed() });
     }
     if (method === "PUT" && path === "/api/sidebar-sections") {
       const section = url.searchParams.get("section")?.trim();
-      if (!section || !deps.sections().includes(section)) return json(res, 404, { error: "No such team" });
+      if (!section || !mine(section)) return json(res, 404, { error: "No such team" });
       const ids = z.array(z.string().regex(/^[\w-]+$/)).max(MAX_WORKSPACE_BOTS);
       const parsed = z.object({ addBotIds: ids, removeBotIds: ids }).strict().safeParse(await readBody(req));
       if (!parsed.success) return json(res, 400, { error: "Provide addBotIds and removeBotIds" });
+      if (unfileable([...parsed.data.addBotIds, ...parsed.data.removeBotIds])) return json(res, 403, { error: "Only your own bots go in your teams" });
       for (const [botIds, destination] of [[parsed.data.addBotIds, section], [parsed.data.removeBotIds, undefined]] as const) {
         for (const id of botIds) {
           const bot = deps.bot(id);
@@ -78,7 +97,7 @@ export function createSidebarSectionsRoutes(deps: SidebarSectionsRouteDeps): Rou
             : "One or more bots are unavailable",
         });
       }
-      return json(res, 200, { sections: deps.sections(), bots: result.bots.map(deps.wireBot) });
+      return json(res, 200, { sections: listed(), bots: result.bots.map(deps.wireBot) });
     }
     if (method === "POST" && path === "/api/sidebar-sections") {
       const parsed = createSidebarSectionSchema.safeParse(await readBody(req));
@@ -91,6 +110,10 @@ export function createSidebarSectionsRoutes(deps: SidebarSectionsRouteDeps): Rou
       }
       const botIds = [...new Set(parsed.data.botIds)];
       if (!name && !botIds.length) return json(res, 400, { error: "Team name is required" });
+      if (unfileable(botIds)) return json(res, 403, { error: "Only your own bots go in your teams" });
+      // Someone else's team keeps its name: it is not joined by guessing it.
+      const created = Boolean(name) && !deps.sections().includes(name);
+      if (name && !created && !mine(name)) return json(res, 409, { error: "A team with that name already exists" });
       for (const botId of botIds) {
         const bot = deps.bot(botId);
         if (bot) deps.assertTeamComputerChangeIdle(bot, { ...bot, section: name || undefined });
@@ -99,7 +122,8 @@ export function createSidebarSectionsRoutes(deps: SidebarSectionsRouteDeps): Rou
       if (!result.ok) {
         return json(res, 404, { error: "one or more bots are unavailable" });
       }
-      return json(res, 200, { section: name, sections: deps.sections(), bots: result.bots.map(deps.wireBot) });
+      if (created) deps.onSectionCreated?.(name, auth);
+      return json(res, 200, { section: name, sections: listed(), bots: result.bots.map(deps.wireBot) });
     }
     return PASS;
   };

@@ -1,7 +1,7 @@
 {
   "direct": {
-    "bytes": 95334,
-    "sha256": "9dab630b03d1edd2db890755b3025a29b368cab55d04818169e8205d11213c92",
+    "bytes": 96426,
+    "sha256": "cbc97efba9cf401149e4090837b68d3b718c4bbb5cc8ccd20dedb4e30888b9fe",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -28,6 +28,7 @@
       "list_artifacts",
       "delete_artifact",
       "claude_artifact",
+      "choose_page_target",
       "task_list",
       "propose_page",
       "page_comments",
@@ -90,8 +91,8 @@
     ]
   },
   "direct+voice": {
-    "bytes": 96301,
-    "sha256": "fdb22fe71e3380ba15ccb5ac44a35a92acf2d4e5bc9120dbedfad3b340773069",
+    "bytes": 97393,
+    "sha256": "42925d1856f3500d7296ada70d11e093c1eb4b0f8f42257934e7a72c5b0be903",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -118,6 +119,7 @@
       "list_artifacts",
       "delete_artifact",
       "claude_artifact",
+      "choose_page_target",
       "task_list",
       "propose_page",
       "page_comments",
@@ -181,8 +183,8 @@
     ]
   },
   "direct+shared": {
-    "bytes": 97335,
-    "sha256": "d71f6e293d38fb246d7e6ce3f4c395109512fd97b1ef68fe5bd92e40a4b6a67f",
+    "bytes": 98427,
+    "sha256": "0bf706befcb7bc69c15c3a377dd5c84dfe512bcd56c0eb9bd8689c634c91dd8e",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -211,6 +213,7 @@
       "list_artifacts",
       "delete_artifact",
       "claude_artifact",
+      "choose_page_target",
       "task_list",
       "propose_page",
       "page_comments",
@@ -273,8 +276,8 @@
     ]
   },
   "direct+shared+voice": {
-    "bytes": 98302,
-    "sha256": "338f2d9c6944e972ea0b23e116b289601018f14b1253573f06d3f76cdcc76bf9",
+    "bytes": 99394,
+    "sha256": "71b73f2aae0694b03c38dce7d6d10dcf4579f7da8ae056e04a541f925df4f3e7",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -303,6 +306,7 @@
       "list_artifacts",
       "delete_artifact",
       "claude_artifact",
+      "choose_page_target",
       "task_list",
       "propose_page",
       "page_comments",
@@ -366,8 +370,8 @@
     ]
   },
   "direct+skills": {
-    "bytes": 96956,
-    "sha256": "b5a84d5a526b7620d35b5d63e4b0197b748ba45cf0e087dbaed108a1f8890853",
+    "bytes": 98048,
+    "sha256": "3d637e43c82ec3bb47ccfd76b9d80038cc8690407037cfd64ec81acb00e370dc",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -394,6 +398,7 @@
       "list_artifacts",
       "delete_artifact",
       "claude_artifact",
+      "choose_page_target",
       "task_list",
       "propose_page",
       "page_comments",
@@ -457,8 +462,8 @@
     ]
   },
   "direct+skills+voice": {
-    "bytes": 97923,
-    "sha256": "0220bf913e6f09ca426ae47ab708f91b6e8693c6b4efa282ff6dff93e57085c4",
+    "bytes": 99015,
+    "sha256": "9d85ce8d27817665187975f97c17b7bde85167b01bf1f5cca7dc9c3cd44094d8",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -485,6 +490,7 @@
       "list_artifacts",
       "delete_artifact",
       "claude_artifact",
+      "choose_page_target",
       "task_list",
       "propose_page",
       "page_comments",
@@ -549,8 +555,8 @@
     ]
   },
   "direct+skills+shared": {
-    "bytes": 98957,
-    "sha256": "056d8e47b53e0c5837f4cd77fed15ad8e8ead63b2dfc138eae004bb96f92b14b",
+    "bytes": 100049,
+    "sha256": "d5bec3904b99f5c4bb93ec1697a60c738b6157bcfffa9cc44bfd8a19f8f685f6",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -579,6 +585,7 @@
       "list_artifacts",
       "delete_artifact",
       "claude_artifact",
+      "choose_page_target",
       "task_list",
       "propose_page",
       "page_comments",
@@ -642,8 +649,8 @@
     ]
   },
   "direct+skills+shared+voice": {
-    "bytes": 99924,
-    "sha256": "5427857618c2e7db45c7d29bb2c7790554506c659c6671f62cc241bc025e9564",
+    "bytes": 101016,
+    "sha256": "e0298ca062ecff6f700845dea49fa38b5667b33068e7b8524ccf32bc59e0689b",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -672,6 +679,7 @@
       "list_artifacts",
       "delete_artifact",
       "claude_artifact",
+      "choose_page_target",
       "task_list",
       "propose_page",
       "page_comments",
@@ -2024,8 +2032,8 @@
     ]
   },
   "direct+non-chief": {
-    "bytes": 84838,
-    "sha256": "94256696bd2b7624f9339aad2632dc9e3088fe7dc2941890bad855ab8ed241bf",
+    "bytes": 85930,
+    "sha256": "af01059128a88fb65fafaff0db174fe97b137a1f1ff49144c77234326e4abc02",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2052,6 +2060,7 @@
       "list_artifacts",
       "delete_artifact",
       "claude_artifact",
+      "choose_page_target",
       "task_list",
       "propose_page",
       "page_comments",
@@ -2106,8 +2115,8 @@
     ]
   },
   "direct+voice+non-chief": {
-    "bytes": 85805,
-    "sha256": "9413a3c2ba45075509c8743b8599efe46f6e3d4f6319e02327e9107a0853a37d",
+    "bytes": 86897,
+    "sha256": "ffe777a5c6341d643702cdd2dfb6f59e5bedd6ea36abcb4b2ac66003afe7e841",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2134,6 +2143,7 @@
       "list_artifacts",
       "delete_artifact",
       "claude_artifact",
+      "choose_page_target",
       "task_list",
       "propose_page",
       "page_comments",
@@ -2189,8 +2199,8 @@
     ]
   },
   "direct+shared+non-chief": {
-    "bytes": 86839,
-    "sha256": "a2a456f0361927a577e97e9ac97b22cffdf42fcb9955dab6bb3f3db54da639d0",
+    "bytes": 87931,
+    "sha256": "d9458a7e3cba5afc7b46ef8f39a2c827dc21f1255dda62ccc4a6783eb4b9d0a5",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2219,6 +2229,7 @@
       "list_artifacts",
       "delete_artifact",
       "claude_artifact",
+      "choose_page_target",
       "task_list",
       "propose_page",
       "page_comments",
@@ -2273,8 +2284,8 @@
     ]
   },
   "direct+shared+voice+non-chief": {
-    "bytes": 87806,
-    "sha256": "104cd42fee1394efddda04c1972b7a1af1696038d4994fd85c03dcf5f68dee3e",
+    "bytes": 88898,
+    "sha256": "c38b0c67bbbb1e9db254622c07e020d712d4f017de176b01005b21c4cfaa4f94",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2303,6 +2314,7 @@
       "list_artifacts",
       "delete_artifact",
       "claude_artifact",
+      "choose_page_target",
       "task_list",
       "propose_page",
       "page_comments",
@@ -2358,8 +2370,8 @@
     ]
   },
   "direct+skills+non-chief": {
-    "bytes": 86460,
-    "sha256": "d7139bf25d3e2a91be892743444a5b5bae91dc59fc26b29a9c65258102803fde",
+    "bytes": 87552,
+    "sha256": "f91f769d5779486555516786288c7bf2b8430528c52b376882ad3928e700b607",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2386,6 +2398,7 @@
       "list_artifacts",
       "delete_artifact",
       "claude_artifact",
+      "choose_page_target",
       "task_list",
       "propose_page",
       "page_comments",
@@ -2441,8 +2454,8 @@
     ]
   },
   "direct+skills+voice+non-chief": {
-    "bytes": 87427,
-    "sha256": "9f0f1ac43e0121151fa854b08fbde87f620aba18f13f11cba0eeea9ff1c34fc4",
+    "bytes": 88519,
+    "sha256": "5cd7602a37ab1aaf31e9a43c8d96fc050d1a22a324e09f9971aa2287c63b31d7",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2469,6 +2482,7 @@
       "list_artifacts",
       "delete_artifact",
       "claude_artifact",
+      "choose_page_target",
       "task_list",
       "propose_page",
       "page_comments",
@@ -2525,8 +2539,8 @@
     ]
   },
   "direct+skills+shared+non-chief": {
-    "bytes": 88461,
-    "sha256": "d9fa3a097af2b7ade8d1be53d85ef70211d8c136c3446dd9725ba1d57516309b",
+    "bytes": 89553,
+    "sha256": "93663c7b6c02267d1ba5cc5f02c8c46dc1673617f01f0593018b647aeb709602",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2555,6 +2569,7 @@
       "list_artifacts",
       "delete_artifact",
       "claude_artifact",
+      "choose_page_target",
       "task_list",
       "propose_page",
       "page_comments",
@@ -2610,8 +2625,8 @@
     ]
   },
   "direct+skills+shared+voice+non-chief": {
-    "bytes": 89428,
-    "sha256": "7aacf813044f6b6cd507290a57bb08b2bb531b37e47073952f2e37c8b8e22762",
+    "bytes": 90520,
+    "sha256": "4cb917dbd424188f04d9cf6f9c284ff8f7ebe14430e10274ceec78b4e01b4bc6",
     "tools": [
       "ask_choice",
       "tool_result_read",
@@ -2640,6 +2655,7 @@
       "list_artifacts",
       "delete_artifact",
       "claude_artifact",
+      "choose_page_target",
       "task_list",
       "propose_page",
       "page_comments",

@@ -123,6 +123,13 @@ export const PROACTIVE_WAKE_BUDGET: ProactiveBudgetOptions = {
   windowMs: 60 * 60_000,
 };
 
+/** 2026-11-05 (perspicax#880): after a failed wake, the bot's next wake
+ * waits this long, doubled for every failed wake in a row. */
+export const PROACTIVE_FAILURE_BACKOFF_MS = 5 * 60_000;
+/** The longest wait after failed wakes; a failure this long after the last
+ * one starts a new streak (told to the person again). */
+export const PROACTIVE_FAILURE_BACKOFF_MAX_MS = 2 * 60 * 60_000;
+
 export type ProactiveOfferVerdict = "off" | "gone" | "own" | "hops" | "irrelevant" | "duplicate" | "gathered" | "auth";
 
 /** 2026-11-02 (peer inbox, second pass): the verdicts that mean no wake will
@@ -334,6 +341,8 @@ export class ProactiveWaker {
   private readonly gatherMs: number;
   private readonly minIntervalMs: number;
   private readonly lastWake = new Map<string, number>();
+  /** Failed wakes in a row per bot, the last one's time and the backoff end. */
+  private readonly failures = new Map<string, { count: number; at: number; until: number }>();
 
   constructor(deps: ProactiveWakerDeps) {
     this.deps = deps;
@@ -401,11 +410,37 @@ export class ProactiveWaker {
     return [...this.pending.values()].filter((pending) => pending.botId === botId);
   }
 
-  /** The gather window, or longer when the last wake was too recent. */
+  /** The gather window, or longer when the last wake was too recent or
+   * the bot's wakes are failing (backoff). */
   private delayFor(botId: string): number {
     const last = this.lastWake.get(botId);
     const cadence = last === undefined ? 0 : Math.max(0, last + this.minIntervalMs - this.now());
-    return Math.max(this.gatherMs, cadence);
+    return Math.max(this.gatherMs, cadence, this.backoffLeft(botId));
+  }
+
+  /** Milliseconds left before a failing bot may wake again (0: none). */
+  backoffLeft(botId: string): number {
+    const failure = this.failures.get(botId);
+    return failure ? Math.max(0, failure.until - this.now()) : 0;
+  }
+
+  /** 2026-11-05 (perspicax#880): a wake of this bot failed. Its next wake
+   * waits (5 min, doubled per failure in a row, at most 2 h) and the events
+   * that come meanwhile gather into that one wake. Returns true only for
+   * the first failure of a streak: the one the person is told about. */
+  noteWakeFailed(botId: string): boolean {
+    const now = this.now();
+    const previous = this.failures.get(botId);
+    const fresh = !previous || now - previous.at > PROACTIVE_FAILURE_BACKOFF_MAX_MS;
+    const count = fresh ? 1 : previous.count + 1;
+    const backoff = Math.min(PROACTIVE_FAILURE_BACKOFF_MS * 2 ** (count - 1), PROACTIVE_FAILURE_BACKOFF_MAX_MS);
+    this.failures.set(botId, { count, at: now, until: now + backoff });
+    return fresh;
+  }
+
+  /** A wake of this bot finished: the streak of failures ends. */
+  noteWakeSucceeded(botId: string): void {
+    this.failures.delete(botId);
   }
 
   /** Wake now with what this bot gathered for one person (the timer calls
@@ -413,6 +448,15 @@ export class ProactiveWaker {
   flush(botId: string, person?: string): ProactiveWakeBatch | null {
     const pending = person === undefined ? this.groupsOf(botId)[0] : this.pending.get(pendingKey(botId, person));
     if (!pending) return null;
+    // A wake failed after this group's timer was set: wait out the backoff,
+    // the group keeps gathering.
+    const left = this.backoffLeft(botId);
+    if (left > 0) {
+      if (pending.timer !== null) this.clearTimer(pending.timer);
+      const who = pending.person;
+      pending.timer = this.setTimer(() => this.flush(botId, who), left);
+      return null;
+    }
     this.pending.delete(pendingKey(botId, pending.person));
     this.changed(botId);
     if (pending.timer !== null) this.clearTimer(pending.timer);
@@ -486,6 +530,7 @@ export class ProactiveWaker {
     this.changed(botId);
     this.budget.forget(botId);
     this.lastWake.delete(botId);
+    this.failures.delete(botId);
   }
 }
 

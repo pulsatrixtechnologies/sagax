@@ -905,6 +905,8 @@ export const Transcript = memo(function Transcript({
             <div className="flex justify-start">
               <RoutineRunCard
                 message={m}
+                bot={state.bots.find((candidate) => candidate.id === m.from?.botId)}
+                botOf={(id) => state.bots.find((candidate) => candidate.id === id)}
                 onOpen={routineRunRef
                   ? () => openRoutineRun(dispatch, { runId: routineRunRef.runId, routineId: routineRunRef.routineId })
                   : undefined}
@@ -1596,7 +1598,7 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
         const onResume = paused && !paused.enabled && paused.canEdit !== false
           ? () => { close(); dispatch({ type: "updateRoutine", routineId: paused.id, patch: { enabled: true } }); }
           : undefined;
-        return <RoutineRunCard message={m} onResume={onResume} onOpen={runRef ? () => { close(); openRoutineRun(dispatch, { runId: runRef.runId, routineId: runRef.routineId }); } : undefined} />;
+        return <RoutineRunCard message={m} bot={state.bots.find((candidate) => candidate.id === m.from?.botId)} botOf={(id) => state.bots.find((candidate) => candidate.id === id)} onResume={onResume} onOpen={runRef ? () => { close(); openRoutineRun(dispatch, { runId: runRef.runId, routineId: runRef.routineId }); } : undefined} />;
       }} />
       {!pane && <ChatStaleBanner />}
       {!remoteClient && <><GroupCostNotice group={group} />{!pane && <WeeklyLimitNotice />}</>}

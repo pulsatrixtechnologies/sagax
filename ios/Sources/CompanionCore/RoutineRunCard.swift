@@ -11,6 +11,7 @@ import Foundation
 public struct RoutineRunCard: Codable, Hashable, Sendable {
     public enum Status: String, Sendable {
         case queued, running, waiting, completed, failed, cancelled, missed
+        case nothingToReport = "nothing_to_report"
     }
 
     public enum Tone: Sendable {
@@ -33,12 +34,29 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
     /// This failure paused the routine after this many failed runs in a row
     /// (RoutineAutoPause); the passing notice offers Resume.
     public var autoPausedAfter: Int?
+    /// 2026-11-04: the teammates this run handed work to, each with the
+    /// thread that work runs in (shared/routine-run.ts handedTo).
+    public var handedTo: [Handoff]
+
+    /// One teammate a run handed work to.
+    public struct Handoff: Codable, Hashable, Sendable {
+        public var botId: String
+        public var threadId: String
+        public var name: String?
+        public var status: String
+        public init(botId: String, threadId: String, name: String? = nil, status: String) {
+            self.botId = botId
+            self.threadId = threadId
+            self.name = name
+            self.status = status
+        }
+    }
 
     public init(
         runId: String, routineId: String, routineName: String, status: String,
         scheduledFor: Double? = nil, deferredAt: Double? = nil, goalStatus: String? = nil,
         executionThreadId: String? = nil, summary: String? = nil, error: String? = nil,
-        autoPausedAfter: Int? = nil
+        autoPausedAfter: Int? = nil, handedTo: [Handoff] = []
     ) {
         self.runId = runId
         self.routineId = routineId
@@ -51,11 +69,12 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
         self.summary = summary
         self.error = error
         self.autoPausedAfter = autoPausedAfter
+        self.handedTo = handedTo
     }
 
     private enum CodingKeys: String, CodingKey {
         case runId, routineId, routineName, scheduledFor, status, deferredAt
-        case goalStatus, executionThreadId, summary, error, autoPausedAfter
+        case goalStatus, executionThreadId, summary, error, autoPausedAfter, handedTo
     }
 
     /// Field by field and forgiving: a card is a decoration on a message the
@@ -75,6 +94,7 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
         summary = try? c.decodeIfPresent(String.self, forKey: .summary)
         error = try? c.decodeIfPresent(String.self, forKey: .error)
         autoPausedAfter = (try? c.decodeIfPresent(Int.self, forKey: .autoPausedAfter)).flatMap { $0 > 0 ? $0 : nil }
+        handedTo = ((try? c.decodeIfPresent([Handoff].self, forKey: .handedTo)) ?? nil) ?? []
     }
 
     /// "Paused after 5 failures in a row" when this failure paused its routine.
@@ -107,14 +127,20 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
         case .failed: return "failed"
         case .cancelled: return "was cancelled"
         case .missed: return "was missed"
+        case .nothingToReport: return "had nothing to report"
         case .queued: return deferredAt != nil ? "deferred: target busy" : "queued"
         case .running: return "running"
         case nil: return status
         }
     }
 
-    /// The state as a label rather than the tail of a sentence.
+    /// The state as a label rather than the tail of a sentence. 2026-11-04:
+    /// the desktop card's pill words for a finished run.
     public var stateLabel: String {
+        if goalStatus == nil || goalStatus == "completed" {
+            if knownStatus == .completed { return "Done" }
+            if knownStatus == .nothingToReport { return "Nothing to report" }
+        }
         let text = stateText
         guard let first = text.first else { return "" }
         return first.uppercased() + text.dropFirst()
@@ -132,7 +158,7 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
         case .waiting: return .attention
         case .queued: return deferredAt != nil ? .attention : .neutral
         case .failed, .missed: return .danger
-        case .completed, .cancelled, nil: return .neutral
+        case .completed, .cancelled, .nothingToReport, nil: return .neutral
         }
     }
 

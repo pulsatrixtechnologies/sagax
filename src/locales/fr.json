@@ -12218,6 +12218,7 @@
   "routineRun.handedTo": "Travail envoyé à {name}",
   "routineRun.openTeammateThread": "Ouvrir le fil de {name}",
   "routineRun.aTeammate": "un coéquipier",
+  "routineRun.card.done": "Terminé",
   "routineResult.failed": "Non terminée : {reason}",
   "routineResult.partial": "Faite en partie : {reason}",
   "routineResult.blocked": "Bloquée : {reason}",

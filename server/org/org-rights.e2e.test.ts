@@ -513,9 +513,13 @@ posixOnly("Perspicax organization, slice 4: rights, teams, owner keys, sections"
       expect(list).not.toContain("Equipe A");
     }
     expect((await api("GET", "/api/bots", bob)).body.bots.map((b: { id: string }) => b.id)).toContain(a2.id);
-    // the other person's team is neither joined, renamed nor deleted by guessing its name
-    expect((await api("POST", "/api/sidebar-sections", bob, { name: "Equipe A", botIds: [b2.id] })).status).toBe(409);
-    expect((await api("PATCH", "/api/sidebar-sections?section=Equipe%20A", bob, { name: "Pris" })).status).toBe(404);
+    // the other person's team is neither joined, renamed nor deleted by guessing its name:
+    // the same display name is a separate team of his own (per-person names)
+    expect((await api("POST", "/api/sidebar-sections", bob, { name: "Equipe A", botIds: [b2.id] })).status).toBe(200);
+    expect((await teams(alice)).sidebar.filter((name) => name === "Equipe A")).toHaveLength(1);
+    // renaming or deleting by that name only touches his own copy, never alice's
+    expect((await api("PATCH", "/api/sidebar-sections?section=Equipe%20A", bob, { name: "Pris" })).status).toBe(200);
+    expect((await api("DELETE", "/api/sidebar-sections?section=Pris", bob)).status).toBe(200);
     expect((await api("DELETE", "/api/sidebar-sections?section=Equipe%20A", bob)).status).toBe(404);
     expect((await teams(alice)).sidebar).toContain("Equipe A");
   }, 60_000);

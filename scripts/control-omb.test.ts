@@ -32,7 +32,7 @@ describe("turn-trace forwarding", () => {
   });
 });
 
-describe("HTTP MCP prewarm bench knobs (#1975)", () => {
+describe("HTTP MCP / Grok ACP prewarm bench knobs (#1975 / #2055)", () => {
   it("forwards a numeric SAGAX_PREWARM_PER_MINUTE and idle engine cap", () => {
     expect(childEnv({})).not.toHaveProperty("SAGAX_PREWARM_PER_MINUTE");
     expect(childEnv({})).not.toHaveProperty("SAGAX_MAX_IDLE_ENGINE_SESSIONS");

@@ -486,6 +486,10 @@ export interface WireBot {
    * webhook and acts at its approval level and rules. Absent reads as the
    * default "proactive" (proactiveModeFor). Never a Chief orchestrator. */
   proactiveMode?: ProactiveMode;
+  /** #2048: remembered publish target id (sagax_page, sagax_artifact,
+   * claude_artifact, or a registered id). Absent: ask when several targets
+   * are available. Null is not stored; clear by omitting the field. */
+  pageTargetDefault?: string;
   /** Tools this bot may always use without asking. */
   alwaysAllow?: string[];
   /** Speak this bot's replies aloud as they settle, without being asked. */
@@ -1248,6 +1252,9 @@ export interface OptionCardData extends WaitCardField {
   skillRequest?: SkillRequestCardData;
   /** A provider's structured question set. */
   questionRequest?: QuestionRequestCardData;
+  /** #2048: publish-target choice (Sagax page / artifact / Claude / …).
+   * Same question card family; enables "Always use this choice". */
+  pageTargetChoice?: import("./page-targets.ts").PageTargetChoiceCardData;
   /** A bot action waiting for this person's Allow. The id matches requestId.
    * The card stores no body and no query. */
   botActRequest?: { id: string };

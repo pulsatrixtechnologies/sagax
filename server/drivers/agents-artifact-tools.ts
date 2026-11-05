@@ -61,4 +61,24 @@ export const ARTIFACT_TOOL_DEFINITIONS = [
 
 export const CLAUDE_ARTIFACT_TOOL_NAME = "claude_artifact";
 
+/** #2048: pick which surface hosts a new page or artifact before publishing. */
+export const CHOOSE_PAGE_TARGET_TOOL = "choose_page_target";
+
+export const CHOOSE_PAGE_TARGET_DEF = {
+  name: CHOOSE_PAGE_TARGET_TOOL,
+  description:
+    "When the person asks you to create a page or an artifact and has not already named which surface to use, call this first. It returns the target to publish with (sagax_page → propose_page, sagax_artifact → save_artifact, claude_artifact → claude_artifact, or another registered target), or shows a choice card when several are available and this bot has no remembered default. One available target, or a remembered default that still works, skips the card. After the person picks (the next message is the target id), call that target's tool. Do not invent a surface; do not call propose_page, save_artifact or claude_artifact for a new page until this tool (or the person) has named the target. intent narrows the list: page, artifact, or any.",
+  inputSchema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      intent: {
+        type: "string",
+        enum: ["page", "artifact", "any"],
+        description: "What they asked for. page = shareable Sagax page or Claude artifact; artifact = Sagax artifact or Claude artifact; any = every available target.",
+      },
+    },
+  },
+} as const;
+
 export const ARTIFACT_TOOL_NAMES: ReadonlySet<string> = new Set(ARTIFACT_TOOL_DEFINITIONS.map((tool) => tool.name));

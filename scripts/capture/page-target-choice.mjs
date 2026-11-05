@@ -9,7 +9,7 @@ import { mkdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const here = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const _here = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // When run from /tmp, fall back to cwd / env.
 const root = process.env.SAGAX_ROOT ? resolve(process.env.SAGAX_ROOT) : resolve(process.cwd());
 const arg = (name) => { const index = process.argv.indexOf(name); return index >= 0 ? process.argv[index + 1] : undefined; };

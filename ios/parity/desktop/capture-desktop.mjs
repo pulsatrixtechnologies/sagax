@@ -299,16 +299,6 @@ function context(page, viewport, fixture) {
       await mouse("mouseMoved", c.x + 1, c.y, { button: "none" });
       await sleep(250);
     },
-    /** keepPointer: one more move to the resting point, so an element
-     * re-rendered under it since (the sidebar after the engines arrive)
-     * takes :hover again; headless Chrome does not refresh it on its own. */
-    async restPointer() {
-      const c = ctx.lastPointer;
-      if (!c) return;
-      await mouse("mouseMoved", c.x + 1, c.y, { button: "none" });
-      await mouse("mouseMoved", c.x, c.y, { button: "none" });
-      await sleep(200);
-    },
     async moveAway() {
       // the header's empty left end: no row, no button, no hover state
       for (const dx of [0, 1]) {

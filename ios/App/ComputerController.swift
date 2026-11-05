@@ -36,6 +36,9 @@ final class ComputerController: ObservableObject {
     @Published private(set) var phase: ControlPhase = .idle
     @Published private(set) var image: UIImage?
     @Published private(set) var pointer = RemotePointerEstimate()
+    /// True once the person has moved the trackpad: the drawn arrow stays
+    /// hidden at the default centre until then (the desktop shows none).
+    @Published private(set) var pointerMoved = false
     @Published private(set) var showsToast = false
     @Published private(set) var noComputer = false
     @Published var prompt: Prompt?
@@ -101,6 +104,8 @@ final class ComputerController: ObservableObject {
     func disappear() {
         visible = false
         stopLoops()
+        pointerMoved = false
+        pointer = RemotePointerEstimate()
         if phase == .held || phase == .taking {
             phase = .idle
             let client = clientProvider()
@@ -217,6 +222,13 @@ final class ComputerController: ObservableObject {
         batcher.append(contentsOf: events)
         let size = remoteSize
         pointer.apply(events, width: Double(size.width), height: Double(size.height))
+        if !pointerMoved, events.contains(where: {
+            if case .move = $0 { return true }
+            if case .moveTo = $0 { return true }
+            return false
+        }) {
+            pointerMoved = true
+        }
     }
 
     private func startLoops() {

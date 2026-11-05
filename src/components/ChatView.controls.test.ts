@@ -182,14 +182,18 @@ describe("thread control placement", () => {
     expect(markup).toContain("https://chatgpt.com/settings/usage");
     expect(markup).not.toContain(">Retry<");
   });
-  it("sends a Codex usage limit to the account's Codex usage page, not Retry", () => {
+  it("draws no chat card for a Codex usage limit (composer locks instead, 2026-11-04)", () => {
     const codex = { instanceId: "codex", driverKind: "codex", displayName: "Codex", snapshot: { state: "available", authenticated: true } } as unknown as InstanceInfo;
     const limit = `${CODEX_USAGE_LIMIT_REACHED} This is OpenAI's limit, not your Sagax plan. It resets at 5:23 PM (UTC).`;
+    // Engine account limits (including Codex) no longer draw a FailedTurnRow;
+    // send-state engine_limit locks the composer. ErrorRow still offers the
+    // Codex usage page when something else surfaces the same words.
     const markup = renderToStaticMarkup(createElement(FailedTurnRow, { tool: failedTurnTool(limit), engine: codex, onRetry: () => {} }));
-    expect(markup).toContain(limit.replaceAll("'", "&#x27;"));
-    expect(markup).toContain(`href="${CODEX_USAGE_URL}"`);
-    expect(markup).toContain("Manage usage");
-    expect(markup).not.toContain("<button");
+    expect(markup).toBe("");
+    const viaError = renderToStaticMarkup(createElement(ErrorRow, { message: limit, onRetry: () => {} }));
+    expect(viaError).toContain(`href="${CODEX_USAGE_URL}"`);
+    expect(viaError).toContain("Manage usage");
+    expect(viaError).not.toContain(">Retry<");
   });
   it("opens a signed-out engine's failed turn with only the sign-in card", () => {
     const claude = {

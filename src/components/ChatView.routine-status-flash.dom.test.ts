@@ -241,9 +241,9 @@ describe("a routine run's card flipping status fast", () => {
     expect(report.bubbleSizes).toHaveLength(1);
     // nothing came and went, in the card or the transcript
     expect(report.toggled).toEqual([]);
-    // the burst draws once: Running, then its last status (Completed: the
-    // report alone, no status chip)
-    expect(report.statusesShown).toEqual(["Running", ""]);
+    // the burst draws once: Running, then its last status. Completed keeps
+    // the status pill ("Done", 2026-11-04) so the chip never unmounts.
+    expect(report.statusesShown).toEqual(["Running", "Done"]);
     // nothing outside the card changed, the column is the same, no jump
     expect(report.outsideMutations).toBe(0);
     expect(report.columnSame).toBe(true);
@@ -252,15 +252,17 @@ describe("a routine run's card flipping status fast", () => {
     // the final state, read once the burst is over
     expect(seen.bots.find((bot) => bot.id === BOT)?.threadId).toBe(MAIN);
     expect(seen.bots.find((bot) => bot.id === BOT)?.messages.find((m) => m.id === "receipt")?.routineRun?.status).toBe("completed");
-    expect(cardOf()?.getAttribute("aria-label")).toBe("Project completion recalc routine run: Completed");
+    expect(cardOf()?.getAttribute("aria-label")).toBe("Project completion recalc routine run: Done");
     expect(cardOf()?.querySelector(".animate-spin")).toBeNull();
     expect(cardOf()?.textContent).toContain("Project 18");
   });
 
   it("still shows a single status change once it has held", async () => {
+    // Card starts completed from the burst above; running holds the previous
+    // "Done" pill until ROUTINE_STATUS_SETTLE_MS, then flips once.
     for (const frame of statusFrames("running")) send(frame);
     await settle();
-    expect(statusText()).toBe("");
+    expect(statusText()).toBe("Done");
     await tick(ROUTINE_STATUS_SETTLE_MS + 100);
     expect(statusText()).toBe("Running");
     expect(cardOf()?.querySelector(".animate-spin")).not.toBeNull();

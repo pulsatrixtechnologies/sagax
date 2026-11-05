@@ -212,7 +212,9 @@ it("coordinates a lead and its specialist from ordinary chat, returns to Clive, 
   expect(selfThread.inputSchema.properties.bot_id.enum).toEqual([f.chief.id]);
   expect(bots.find((bot: any) => bot.id === f.lead.id).tasks.find((task: any) => task.threadId === receipt.threadRef.threadId).openedBy)
     .toMatchObject({ botId: f.chief.id, name: "Clive" });
-  expect(turn.system).toContain("only an actual coordinate_bots result proves that teammate participated");
+  // #1997: cold / work-request copy uses the brief; the full peer-roster
+  // phrase stays behind sagax_help prompt:peers-bounded*.
+  expect(turn.system).toContain("Named teammates participate only through actual coordinate_bots results");
 }), 45_000);
 
 it("relays a passed-on teammate reply to the person without a resume turn", () => fixture(async f => {

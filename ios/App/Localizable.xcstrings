@@ -35556,6 +35556,16 @@
         }
       }
     },
+    "Hide background": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masquer l'arrière-plan"
+          }
+        }
+      }
+    },
     "Hide details": {
       "localizations": {
         "en": {
@@ -72256,6 +72266,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mostrar todas as rotinas"
+          }
+        }
+      }
+    },
+    "Show background": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher l'arrière-plan"
           }
         }
       }

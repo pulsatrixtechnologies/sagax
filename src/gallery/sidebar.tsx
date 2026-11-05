@@ -142,6 +142,26 @@ if (params.get("threadlist") === "1") {
     i % 3 === 1 ? {} : { openedBy: { botId: "atlas", name: "Atlas", at: minutes(20 + i * 40) } }))];
 }
 
+// ?flood=1: Atlas as a busy bot's record reads on a live server (unified
+// chat, 2026-11-05): a few conversations of the person among dozens of
+// threads it opened on itself, teammates' "@Iris · work" hand-offs, an AI
+// client's send_prompt conversations and routine runs
+// (scripts/capture/background-threads.mjs).
+if (params.get("flood") === "1") {
+  const atlas = team.find((entry) => entry.id === "atlas");
+  const iris = team.find((entry) => entry.id === "iris");
+  if (atlas && iris) {
+    const own = ["Général", "Rapport mensuel des billets", "Migration Exchange"].map((title, i) => task(i ? `t-atlas-own${i}` : "t-atlas", title, minutes(8 + i * 90), i === 0 ? {} : { personWrote: true }));
+    const selfOpened = ["Fetch exact Outlook webhook message", "Read Outlook webhook email", "Fetch Outlook webhook email", "Read webhook Outlook message", "Silent Outlook seat-upgrade check", "Facturation watch (read-only)", "Archive Outlook message", "Read-only Outlook rehearsal"]
+      .flatMap((title, i) => [0, 1, 2].map((n) => task(`t-atlas-self${i}-${n}`, title, minutes(15 + (i * 3 + n) * 25), { openedBy: { botId: "atlas", name: "Atlas", at: minutes(15 + (i * 3 + n) * 25) } })));
+    const work = Array.from({ length: 6 }, (_, i) => task(`t-atlas-work${i}`, "@Iris · work", minutes(12 + i * 55), { openedBy: { botId: "iris", name: "Iris", kind: "work", at: minutes(12 + i * 55) } }));
+    const agent = Array.from({ length: 3 }, (_, i) => task(`t-atlas-agent${i}`, `Résumé Outlook ${i + 1}`, minutes(30 + i * 70), { openedBy: { botId: "agent:claude", name: "Claude", kind: "agent", at: minutes(30 + i * 70) } }));
+    const runs = Array.from({ length: 10 }, (_, i) => task(`t-atlas-run${i}`, "Veille facturation", minutes(5 + i * 60), { routineRunId: `run-${i}` }));
+    atlas.tasks = [...own, ...selfOpened, ...work, ...agent, ...runs];
+    iris.tasks = [task("t-iris", "Général", minutes(42)), ...Array.from({ length: 5 }, (_, i) => task(`t-iris-work${i}`, "@Atlas · work", minutes(20 + i * 50), { openedBy: { botId: "atlas", name: "Atlas", kind: "work", at: minutes(20 + i * 50) } }))];
+  }
+}
+
 // ?many=N adds N pinned bots, to check the rail's vertical scroll
 for (let i = 0; i < Number(params.get("many") ?? 0); i += 1) {
   team.push(bot(`extra${i}`, `Bot ${i + 1}`, { color: "blue", mascotBody: "circle", pinned: true }, "Bonjour.", minutes(400 + i)));

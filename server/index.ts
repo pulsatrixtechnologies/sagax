@@ -2450,6 +2450,7 @@ import {
 } from "./agent-api.ts";
 import { type PriorityDelivery } from "./proactive/priority-wake.ts";
 import { parseHideList, planHiddenAgentThreads, planHiddenBotThreads } from "./threads/agent-threads.ts";
+import { backgroundIdleMs, planBackgroundSweep, RESERVED_RUN_PREFIX, sweepSummary } from "./threads/background-sweep.ts";
 import { MemberLiveText } from "./people/member-live-text.ts";
 import { computersRoutes, type ComputersDeps } from "./org/org-admin-computers.ts";
 import {
@@ -12813,12 +12814,14 @@ const coordinator: Coordinator = createCoordinator({
         const source = store.bot(parent.botId);
         if (source) markTaskContextExternallyUpdated(source, parent.threadId, markUnread);
       }
-      // A successful direct work thread closes after its result is reported:
-      // folded out of the sidebar, never deleted, and reopened if addressed.
-      // Failed or withheld work stays visible, and so does a thread whose
-      // next request is already waiting there.
+      // A direct work thread closes once its hand-off is answered, whatever
+      // the answer (unified chat, 2026-11-05): the outcome, a failure
+      // included, is on the card in the conversation that asked, which still
+      // opens the thread. Never deleted, reopened if addressed, archived once
+      // idle (background-sweep.ts). A thread whose next request is already
+      // waiting there stays open.
       const childTask = store.taskByThread(child.botId, child.threadId);
-      if (!child.groupId && child.status === "completed" && !problem && !childTask?.closedBy && !coordinator.activeDirect(child.threadId)
+      if (!child.groupId && !childTask?.closedBy && !coordinator.activeDirect(child.threadId)
         && childTask?.openedBy?.kind === "work" && childTask.openedBy.botId === parent.botId) {
         store.setTaskClosedBy(child.botId, child.threadId,
           { botId: parent.botId, name: store.bot(parent.botId)?.name ?? childTask.openedBy.name, at: Date.now() });
@@ -22032,7 +22035,7 @@ const threadPrewarm = new ThreadPrewarm({
   perPersonPerMinute: prewarmPerPersonPerMinute(),
 });
 /** routineRunId of a task reserved for a scheduled run not started yet. */
-const RESERVED_RUN_PREFIX = "prewarm:";
+
 type PrewarmOutcome = "started" | "extended" | "limited" | "skipped";
 type PrewarmTurnOpts = { speaker: TurnSpeaker; runOn?: RoutineRunOn; automationSource?: "schedule" | "manual"; commsDepth?: number; cardContinuation?: boolean; warmCoordination?: boolean };
 /** Why a thread is not warmed now, or null when it may be. */
@@ -23690,6 +23693,7 @@ async function acceptDirectSend(
           });
           // Written here, as the words that start a turn are (startTurn).
           store.setTaskAskedAt(botId, threadId, message.at);
+          if (store.taskByThread(botId, threadId)?.openedBy?.kind !== "agent") store.restoreAutoArchived(botId, threadId);
           // Durable while the engine process holds them: a crash or stop can
           // resume them once (held-steers.ts).
           try {
@@ -37594,6 +37598,36 @@ function migrateBotRuntimeSettings(): void {
     console.warn(`[bot-runtime-settings] could not copy the global values onto the bots: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
+/** A person wrote a line here from an app: never an AI client's line, a
+ * teammate's, a routine's, a webhook's or a relayed one (background-sweep.ts
+ * never archives such a thread). Read from the decrypted transcript. */
+function personWroteIn(threadId: string): boolean {
+  return store.messagesFor(threadId).some((message) => message.role === "user" && message.kind === "text"
+    && typeof message.sendId === "string" && !message.peerAsk && !message.relayed && !message.aiClient);
+}
+/** Archive the finished, idle background threads (server/threads/background-sweep.ts):
+ * at start, then every BACKGROUND_SWEEP_EVERY_MS. Counts only in the log. */
+const BACKGROUND_SWEEP_EVERY_MS = 10 * 60_000;
+function sweepBackgroundThreads(): number {
+  try {
+    const onScreen = new Set(viewerSelections.values());
+    const plan = planBackgroundSweep(store.bots.map((bot) => ({ id: bot.id, threadId: bot.threadId, tasks: store.tasks(bot.id) })), {
+      now: Date.now(),
+      idleMs: backgroundIdleMs(),
+      held: (botId, threadId) => onScreen.has(threadId) || threadBusy(botId, threadId) || coordinator.activeDirect(threadId)
+        || coordinator.outstandingDirect(threadId).length > 0 || coordinator.awaitsTeammates(threadId)
+        || Boolean(activeRoutineRunForThread(threadId)) || pendingComputerResumes.has(threadId) || delegationWatch.has(threadId)
+        || reservedWorkThreads.has(threadId) || continuationHolds.has(threadId),
+      personWroteIn,
+    });
+    const archived = plan.length ? store.autoArchiveTasks(plan) : 0;
+    if (archived) console.log(`[background-threads] archived ${archived} finished background thread(s): ${sweepSummary(plan)}`);
+    return archived;
+  } catch (error) {
+    console.warn(`[background-threads] sweep skipped: ${error instanceof Error ? error.message : String(error)}`);
+    return 0;
+  }
+}
 function hideBotThreadsOnce(): void {
   const marker = join(DATA_DIR, "agent-threads-hidden.v2");
   if (existsSync(marker)) return;
@@ -43130,6 +43164,14 @@ const agentApi = createAgentApi({
   async interrupt(agentId, threadId) {
     await interruptDirectThread(agentId, threadId);
   },
+  collected(agentId, threadId) {
+    // Only an AI client's own conversation (openedBy kind "agent"), never a
+    // person's chat a peer bot's send_prompt landed in; never one at work.
+    const task = store.taskByThread(agentId, threadId);
+    if (!task || task.openedBy?.kind !== "agent" || task.archivedAt !== undefined || task.pinned === true) return;
+    if (threadBusy(agentId, threadId) || coordinator.activeDirect(threadId) || personWroteIn(threadId)) return;
+    store.autoArchiveTasks([{ botId: agentId, threadId }]);
+  },
   notify(caller, agent, result) {
     if (caller.kind !== "bot" || !caller.sourceThreadId) return;
     const source = store.bot(caller.id);
@@ -47340,6 +47382,12 @@ settleMemberAutoLevelsFor(store.bots.map((bot) => bot.id), "at start");
 hideEarlierAgentThreads();
 hideBotThreadsOnce();
 migrateBotRuntimeSettings();
+// Unified chat (2026-11-05): background threads that finished are archived,
+// the backlog first, a minute after start so nothing restarting is caught.
+setTimeout(() => {
+  sweepBackgroundThreads();
+  setInterval(sweepBackgroundThreads, BACKGROUND_SWEEP_EVERY_MS).unref();
+}, 60_000).unref();
 
 try {
   const closedRows = closeRowsLeftByRestart(store, Date.now() - SUBAGENT_SWEEP_WINDOW_MS, Date.now());

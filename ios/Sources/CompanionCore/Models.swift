@@ -695,6 +695,9 @@ public struct ThreadOpener: Codable, Hashable, Sendable {
     public var name: String
     public var delegationId: String?
     public var at: Double
+    /// `work` or `pair` for a teammate's hand-off, `agent` for an AI
+    /// client's conversation over MCP; nil for a thread a bot opened.
+    public var kind: String? = nil
 }
 
 /// The bot that closed a thread with close_thread, once its result was
@@ -783,9 +786,26 @@ public struct BotTask: Codable, Hashable, Sendable {
     /// reports now go to the person's own conversation, so this old thread is
     /// kept but never listed, previewed or counted unread.
     public var routineResults: Bool? = nil
-    /// Out of the person's thread list: a routine run's execution, an
-    /// automatic routine results thread or an AI client's hidden conversation.
-    public var isHiddenFromPerson: Bool { routineRunId != nil || routineResults == true || hidden == true }
+    /// A person wrote here from an app, so a thread a bot opened is theirs
+    /// too. Server-derived; absent on older computers.
+    public var personWrote: Bool? = nil
+    /// The server archived this finished background thread on its own.
+    public var autoArchived: Bool? = nil
+    /// A background thread (shared/background-threads.ts, the same cases): a
+    /// routine run, a teammate's hand-off, a thread a bot opened, an AI
+    /// client's conversation. Never in the person's thread list; its card
+    /// in the conversation opens it, and so does "Show background".
+    public var isBackground: Bool {
+        if routineRunId != nil || routineResults == true || hidden == true { return true }
+        guard let openedBy else { return false }
+        if openedBy.kind == "agent" { return true }
+        return personWrote != true
+    }
+    /// What "Show background" lists: background threads but routine runs,
+    /// whose home is the run card.
+    public var isListedBackground: Bool { isBackground && routineRunId == nil }
+    /// Out of the person's thread list: every background thread.
+    public var isHiddenFromPerson: Bool { isBackground }
     /// A confidential thread ("Fil confidentiel"): never remembered,
     /// exported or shared beyond its owner. Permanent once set; only
     /// deleting the thread ends it. Absent means an ordinary thread.
@@ -1095,9 +1115,17 @@ public struct Bot: Codable, Hashable, Identifiable, Sendable {
         (AvatarFraming.clampZoom(avatarZoom), AvatarFraming.clampFocus(avatarFocusX), AvatarFraming.clampFocus(avatarFocusY))
     }
 
-    /// Routine runs' executions and automatic results threads are hidden.
+    /// The person's own conversations: background threads (runs, hand-offs,
+    /// threads a bot opened, an AI client's) are left out, except the one on
+    /// screen when it is not a routine run (opened from its card).
     public var visibleTasks: [BotTask] {
-        (tasks ?? []).filter { !$0.isHiddenFromPerson }
+        (tasks ?? []).filter { !$0.isHiddenFromPerson || ($0.threadId == threadId && $0.routineRunId == nil) }
+    }
+
+    /// "Show background": the bot's background threads but routine runs,
+    /// newest first, archived ones included.
+    public var backgroundTasks: [BotTask] {
+        (tasks ?? []).filter(\.isListedBackground).sorted { $0.listStamp > $1.listStamp }
     }
 
     /// Older computers only send the profile default. Newer ones snapshot

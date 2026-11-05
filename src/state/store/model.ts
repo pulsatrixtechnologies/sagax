@@ -454,6 +454,11 @@ export interface Task {
   /** An AI client's hidden conversation (#291): the server lists it only
    * while it is the open thread; never a dot, a preview or typing dots. */
   hidden?: true;
+  /** A person wrote here from an app (WireTask.personWrote): a thread a bot
+   * opened is theirs too (shared/background-threads.ts). */
+  personWrote?: true;
+  /** The server archived this finished background thread on its own. */
+  autoArchived?: true;
   /** A confidential thread (src/lib/confidential-thread.ts): never
    * remembered, exported or shared beyond its owner. Permanent once set. */
   confidential?: true;
@@ -533,6 +538,11 @@ export interface ThreadOpener {
   botId: string;
   name: string;
   delegationId?: string;
+  /** WireTask.openedBy.kind: a teammate's hand-off ("work", "pair") or an
+   * AI client's conversation ("agent"); absent on a thread a bot opened. */
+  kind?: "pair" | "work" | "agent";
+  /** The opener's conversation a "work" thread was opened from. */
+  threadId?: string;
   at: number;
 }
 

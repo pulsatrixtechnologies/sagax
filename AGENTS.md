@@ -1,3 +1,21 @@
+## Background threads stay out of thread mode (#2015, 2026-11-05)
+
+`shared/background-threads.ts` (vectors in `background-threads.vectors.json`,
+same cases in CompanionCore `BotTask.isBackground`) is the one rule: routine
+runs, results threads, hand-offs (`work`/`pair`), threads a bot opened and
+AI-client conversations (`agent`, #291 `hidden`) are background, unless a
+person wrote there (`WireTask.personWrote`, from `askedAt`; never for
+`agent`). Thread mode lists the person's own threads plus the open one;
+"Show background" (sidebar list menu, header picker, phone tree) lists the
+rest. `server/threads/background-sweep.ts` archives finished idle background
+threads at start and every 10 min (`SAGAX_BACKGROUND_ARCHIVE_IDLE_MIN`, 30):
+never deleted, never one a person wrote in, at work, held, pinned,
+confidential or on screen; `autoArchived` marks it and a person's write
+restores it. A direct work thread closes once answered, whatever the answer;
+an AI client's conversation is archived once await_turn collects its reply.
+Scenario: `server/threads/background-sweep.test.ts`. Captures:
+`scripts/capture/background-threads.mjs`.
+
 ## Prompt index and on-demand references (#1997, 2026-11-04)
 
 `server/context/prompt-references.ts` replaces exact shipped guidance with

@@ -186,6 +186,14 @@ export interface WireTask {
   confidential?: true;
   /** Set when a bot, not a person, opened this thread. */
   openedBy?: TaskOpenedBy;
+  /** A person wrote here from an app (TaskRecord.askedAt), so a thread a bot
+   * opened is theirs too and stays in their list (shared/background-threads.ts).
+   * Derived at projection, never stored; only `true` is sent. */
+  personWrote?: true;
+  /** The server archived this finished background thread on its own
+   * (server/threads/background-sweep.ts); a person's write brings it back.
+   * Only `true` is stored. */
+  autoArchived?: true;
   /** A parallel task: the conversation and request it answers. */
   parallelOf?: TaskParallelOf;
   /** Organization server: the person this 1:1 thread belongs to (who

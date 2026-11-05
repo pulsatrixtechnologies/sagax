@@ -83,7 +83,8 @@ import { useOrgPeople } from "@/lib/perspicax-org";
 import { peopleDmPeer } from "@/lib/people-dm";
 import { BotRoleTag, PersonLabelTag } from "./LabelTag";
 import { nudgeLineText } from "@/lib/nudge-line";
-import { ChevronsRight, LogOut, UserRound } from "lucide-react";
+import { ChevronsRight, Layers, LogOut, UserRound } from "lucide-react";
+import { backgroundThreads, personThreads } from "../../shared/background-threads";
 import { hideFromSidebar } from "@/lib/sidebar-hidden";
 import { PersonAvatar } from "./MessageAuthor";
 import { SidebarSharerBadge } from "./SidebarSharerBadge";
@@ -147,7 +148,7 @@ import { SidebarFoot, SidebarRailFoot } from "./SidebarFoot";
 import { useShowThreads, useThreadsMode } from "@/lib/thread-preferences";
 import { openBotConversationActions } from "./thread-home";
 import { useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
-import { botShowsUnread, iconUnreadDotPosition, isInterBotThread } from "@/lib/bot-unread";
+import { botShowsUnread, iconUnreadDotPosition } from "@/lib/bot-unread";
 import { sidebarBotActivityTasks } from "./SidebarBotActivity";
 import { citationPreviewText } from "@/lib/citations";
 import { groupMemberBots } from "@/lib/group-members";
@@ -954,8 +955,7 @@ function MoveToSectionItem({
 
 /** The threads a bot's sidebar list shows (BotThreadList), busy marked. */
 export function botListedThreads(bot: Pick<Bot, "id" | "threadId" | "busy" | "tasks">): BulkThreadCandidate[] {
-  return (bot.tasks ?? [])
-    .filter((task) => !task.routineRunId && (task.threadId === bot.threadId || !isInterBotThread(bot.id, task)))
+  return personThreads(bot.tasks ?? [], bot.threadId)
     .map((task) => ({ ...task, busy: Boolean(task.busy || (task.threadId === bot.threadId && bot.busy)) }));
 }
 
@@ -1366,7 +1366,7 @@ type ThreadTreeActions = Omit<Parameters<typeof SidebarThreadRow>[0], "task" | "
  * One tree for every owner of threads: a bot (BotThreadList) and a
  * conversation with a person (PersonThreadList); the owner decides only
  * where its actions go. */
-function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, tasks, projects, selected, density, query, hidden, actions, rowState, activeActivityLabel, onNew, onNewKind, onNewInFolder, onReorder, canMarkRead, markRead, bulk, children }: {
+function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, tasks: ownTasks, projects, selected, density, query, hidden, actions, rowState, activeActivityLabel, onNew, onNewKind, onNewInFolder, onReorder, canMarkRead, markRead, bulk, background, children }: {
   ownerId: string;
   ownerName: string;
   owner: FolderOwnerKind;
@@ -1397,9 +1397,15 @@ function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, task
   /** Archive all threads / Delete all threads in the list's menu: how many
    * each would take, and the action (useBulkThreadActions). Absent: neither. */
   bulk?: { archive: number; delete: number; onArchiveAll: () => void; onDeleteAll: () => void };
+  /** A bot's background threads (shared/background-threads.ts): never in the
+   * list, shown instead of it by the list menu's "Show background". */
+  background?: ThreadTreeTask[];
   children?: React.ReactNode;
 }) {
   const confirm = useConfirm();
+  const [showBackground, setShowBackground] = useState(false);
+  const backgroundShown = showBackground && Boolean(background?.length);
+  const tasks = backgroundShown ? background! : ownTasks;
   const revealThread = useStoreSelector((current) => current.revealThread);
   const dispatch = useStoreDispatch();
   const now = useRelativeNow();
@@ -1434,7 +1440,9 @@ function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, task
   }, [selected, currentProjectId]);
   useSnoozeExpiry(tasks);
   // Pin, then newest update. Search keeps the same order among matches.
-  const visibleTasks = orderedThreadList(visibleSidebarThreads(tasks, openThreadId, query, projects, showAll));
+  // Background threads are listed whole, archived ones included: the
+  // server archives them once they are done.
+  const visibleTasks = orderedThreadList(visibleSidebarThreads(tasks, openThreadId, query, projects, showAll || backgroundShown));
   // A folder rises with the thread of its that sits highest in that order.
   // An empty index sorts last. Saved order breaks ties, and still governs
   // move up and down.
@@ -1634,8 +1642,12 @@ function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, task
       <span role="status" className="sr-only">{reorderStatus}</span>
       {readError && <p role="alert" className="px-2.5 py-1 text-[12px] text-danger">{readError}</p>}
       <span role="status" className="sr-only">{readStatus}</span>
+      {backgroundShown && <div data-background-threads="" className="flex items-center gap-1.5 pl-6 pr-3 pt-1 pb-0.5 text-[11px] text-sidebar-ink-secondary">
+        <Layers size={11} aria-hidden="true" /><span className="min-w-0 flex-1 truncate">{t("task.background.heading", { count: background!.length })}</span>
+        <button type="button" onClick={() => setShowBackground(false)} className="shrink-0 hover:text-sidebar-ink">{t("task.background.hide")}</button>
+      </div>}
       {ungrouped.map(renderThread)}
-      {!query && !showAll && tasks.length > visibleTasks.length && <button type="button" onClick={() => setShowAll(true)} className="pl-6 pr-3 py-1.5 text-[11px] text-sidebar-ink-secondary hover:text-sidebar-ink">{t("task.showAll", { count: tasks.length })}</button>}
+      {!query && !showAll && !backgroundShown && tasks.length > visibleTasks.length && <button type="button" onClick={() => setShowAll(true)} className="pl-6 pr-3 py-1.5 text-[11px] text-sidebar-ink-secondary hover:text-sidebar-ink">{t("task.showAll", { count: tasks.length })}</button>}
       {children}
       {listMenuMotion.shown && listMenuPosition && createPortal(<div ref={listMenuRef} data-sidebar-thread-list-actions role="menu" aria-label={t("task.namedList", { name: ownerName })}
         style={listMenuPosition} className={cn("fixed z-50 w-[220px] rounded-lg border border-hairline/50 popover-surface bg-card p-1 shadow-xl", listMenuMotion.className)} {...listMenuMotion.exitProps}
@@ -1645,7 +1657,12 @@ function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, task
           : <button type="button" role="menuitem" onClick={() => { setListMenu(null); onNew(); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised"><Plus size={12} />{t("task.newShort")}</button>}
         {onNewInFolder && <button type="button" role="menuitem" onClick={() => { setListMenu(null); onNewInFolder(); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised"><FolderOpen size={12} />{t("task.folder.new")}</button>}
         <button type="button" role="menuitem" onClick={() => { setListMenu(null); setCreatingProject(true); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised"><FolderPlus size={12} />{t("folder.new")}</button>
-        {bulk && <>
+        {background && <button type="button" role="menuitemcheckbox" aria-checked={backgroundShown} data-menu-item="show-background-threads" disabled={!background.length}
+          onClick={() => { setListMenu(null); setShowBackground(!backgroundShown); }}
+          className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised disabled:opacity-40 disabled:hover:bg-transparent">
+          <Layers size={12} /><span className="min-w-0 flex-1 truncate">{backgroundShown ? t("task.background.hide") : t("task.background.show")}</span>
+          <span className="shrink-0 tabular-nums text-ink-secondary">{background.length}</span></button>}
+        {bulk && !backgroundShown && <>
           <div className="mx-1.5 my-1 h-px bg-hairline/50" />
           <button type="button" role="menuitem" data-menu-item="archive-all-threads" disabled={bulk.archive === 0} onClick={() => { setListMenu(null); bulk.onArchiveAll(); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised disabled:opacity-40 disabled:hover:bg-transparent"><Archive size={12} />{t("task.archiveAll")}</button>
           <button type="button" role="menuitem" data-menu-item="delete-all-threads" disabled={bulk.delete === 0} onClick={() => { setListMenu(null); bulk.onDeleteAll(); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-danger hover:bg-raised disabled:opacity-40 disabled:hover:bg-transparent"><Trash2 size={12} />{t("task.deleteAll")}</button>
@@ -1675,10 +1692,12 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
   const dispatch = useStoreDispatch();
   const pendingQueued = useStoreSelector((current) => current.pendingQueued);
   const generatedTitles = useStoreSelector((current) => llmThreadTitlesEnabled(current.config));
-  const tasks = (bot.tasks ?? [{ threadId: bot.threadId, title: t("task.newShort"), createdAt: 0 }])
-    // bot-to-bot threads never show (the selected one stays reachable)
-    .filter((task) => !task.routineRunId && (task.threadId === bot.threadId || !isInterBotThread(bot.id, task)))
+  // The person's own conversations (shared/background-threads.ts): a
+  // routine run, a hand-off, a thread a bot opened or an AI client's never
+  // shows here; the selected one stays reachable. "Show background" lists them.
+  const tasks = personThreads(bot.tasks ?? [{ threadId: bot.threadId, title: t("task.newShort"), createdAt: 0 }], bot.threadId)
     .map((task) => ({ ...task, queued: Boolean(pendingQueued[task.threadId]?.length) }));
+  const background = backgroundThreads(bot.tasks ?? []);
   const [permissionRefresh, setPermissionRefresh] = useState<{ threadId: string; kind: "full" | "local-auto" } | null>(null);
   // the same live verb the chat pane derives from the visible tail
   // ("Reading a file"), passed to the active thread's row while it works
@@ -1743,6 +1762,7 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
   return (
     <ThreadTree ownerId={bot.id} ownerName={bot.name} owner="bot" folderOwner={bot} openThreadId={bot.threadId} tasks={tasks} projects={bot.projects ?? []}
       selected={selected} density={density} query={query} hidden={hidden} actions={actions} rowState={rowState} activeActivityLabel={activeActivityLabel} bulk={bulk}
+      background={background}
       onNew={(projectId) => dispatch({ type: "newTask", botId: bot.id, ...(projectId ? { projectId } : {}) })}
       onNewKind={{ choices: newThreadChoices(confidentialByDefault), create: (confidential) => dispatch({ type: "newTask", botId: bot.id, confidential }) }}
       onNewInFolder={canChooseFolder && advanced ? () => setFolderDialog(true) : undefined}

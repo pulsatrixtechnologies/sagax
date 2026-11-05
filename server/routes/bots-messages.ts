@@ -609,6 +609,8 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
               });
               // Written here, as the words that start a turn are (startTurn).
               store.setTaskAskedAt(bot.id, threadId, message.at);
+              // background-sweep.ts: what the server archived is theirs again
+              if (store.taskByThread(bot.id, threadId)?.openedBy?.kind !== "agent") store.restoreAutoArchived(bot.id, threadId);
               // Durable while the engine process holds them: a crash or stop can
               // resume them once (held-steers.ts).
               try {

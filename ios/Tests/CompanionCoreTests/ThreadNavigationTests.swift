@@ -337,6 +337,8 @@ final class ThreadNavigationTests: XCTestCase {
         working.activity = "waiting"
         working.unread = true
         working.openedBy = ThreadOpener(botId: "other", name: "Teammate", at: 9)
+        // the person wrote there, so it is theirs and listed (BackgroundThreadsTests)
+        working.personWrote = true
         var bot = makeBot(tasks: [task("current"), working])
         bot.projects = [project("work")]
 
@@ -353,6 +355,8 @@ final class ThreadNavigationTests: XCTestCase {
         var helpers = (0..<3).map { task("helper-\($0)", title: "Helper \($0)", project: $0 == 0 ? "work" : nil) }
         for index in helpers.indices {
             helpers[index].openedBy = ThreadOpener(botId: "pm", name: "Parker", at: 5)
+            // threads the person wrote in: listed (a bot's own are background)
+            helpers[index].personWrote = true
             helpers[index].closedBy = closer
         }
         var bot = makeBot(tasks: helpers + [task("current"), task("plan", title: "Plan the launch")])

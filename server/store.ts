@@ -174,7 +174,7 @@ export const ENGINE_SESSIONS_KEPT = 64;
  * so a new server field forces a decision — wire-visible or private here. */
 export type TaskWirePrivateKeys = "resumeCursors" | "lastInstanceId" | "handedMessages" | "appliedCompactionId" | "contextSummaries" | "contextFloor" | "lastContextModel" | "surfaceSource" | "askedAt" | "autoWorkspace" | "streamSegment" | "segmentDigest" | "engineSessions";
 /** WireTask fields computed by toWireTask and never stored on a TaskRecord. */
-export type TaskWireDerivedKeys = "surfaceAuto" | "followsBotModel";
+export type TaskWireDerivedKeys = "surfaceAuto" | "followsBotModel" | "personWrote";
 export type TaskWireProjection = Pick<TaskRecord, Exclude<keyof TaskRecord, TaskWirePrivateKeys>> & Pick<WireTask, TaskWireDerivedKeys>;
 type AssertExact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
 type AssertSameKeys<A, B> = [keyof A] extends [keyof B] ? ([keyof B] extends [keyof A] ? true : never) : never;
@@ -192,7 +192,9 @@ export function toWireTask(task: TaskRecord, botModel: ModelSelection): WireTask
     appliedCompactionId: _appliedCompactionId, contextSummaries: _contextSummaries, contextFloor: _contextFloor, lastContextModel: _lastContextModel,
     surfaceSource, askedAt: _askedAt, autoWorkspace: _autoWorkspace, streamSegment: _streamSegment, segmentDigest: _segmentDigest,
     engineSessions: _engineSessions, ...stored } = task;
-  const wire: WireTask = { ...stored, modelSelection: structuredClone(task.modelSelection ?? botModel), followsBotModel: task.modelSelection === undefined };
+  const wire: WireTask = { ...stored, modelSelection: structuredClone(task.modelSelection ?? botModel), followsBotModel: task.modelSelection === undefined,
+    // only the fact, never when (shared/background-threads.ts)
+    ...(task.askedAt !== undefined ? { personWrote: true as const } : {}) };
   // Who pinned stays private. A client learns only whether the pin is the
   // machine's own record, so it never presents one as the person's choice.
   return surfaceSource === "auto" && wire.surface !== undefined ? { ...wire, surfaceAuto: true } : wire;
@@ -202,7 +204,7 @@ const TASK_PATCH_FIELDS = [
   "title", "projectId", "modelSelection", "approvalMode", "autoApprove", "alwaysAllow", "approvalOwn",
   "unread", "lastReadMessageId", "rewound", "archivedAt", "pinned", "pinnedMessageId", "resumeCursors", "lastInstanceId", "cwd",
   "routineRunId", "routineResults", "surface", "surfaceSource", "snoozedUntil", "link", "linkAuto", "appliedCompactionId", "contextSummaries", "contextFloor", "lastContextModel",
-  "autoModel", "autoWorkspace", "streamSegment", "segmentDigest", "turnTiming", "connectors",
+  "autoModel", "autoWorkspace", "streamSegment", "segmentDigest", "turnTiming", "connectors", "autoArchived",
 ] as const satisfies readonly (keyof TaskRecord)[];
 export type TaskPatch = Partial<Pick<TaskRecord, typeof TASK_PATCH_FIELDS[number]>>;
 
@@ -3328,6 +3330,9 @@ export class Store {
         delete task.autoApprove;
         delete task.approvalOwn;
       }
+      // Archiving or unarchiving by hand makes the archive the person's own
+      // (server/threads/background-sweep.ts marks only its own).
+      if (Object.hasOwn(patch, "archivedAt") && !Object.hasOwn(patch, "autoArchived")) delete task.autoArchived;
       // "Until new activity" ends the moment the thread has something new for
       // the person, and every unread wake funnels through patchTask, so this
       // one hook is the whole activity alarm. A time-based snooze is left to
@@ -3684,6 +3689,50 @@ export class Store {
     saveBotsFor("when you last wrote in this thread", () => this.saveBots());
     this.emit({ type: "bot", botId });
     return task;
+  }
+
+  /** Archive finished background threads in one write per bot
+   * (server/threads/background-sweep.ts): archivedAt like the person's
+   * Archive, marked autoArchived so a person's write brings them back.
+   * Nothing deleted. Returns how many were archived. */
+  autoArchiveTasks(entries: ReadonlyArray<{ botId: string; threadId: string }>, at = Date.now()): number {
+    const byBot = new Map<string, Set<string>>();
+    for (const entry of entries) {
+      const set = byBot.get(entry.botId) ?? new Set<string>();
+      set.add(entry.threadId);
+      byBot.set(entry.botId, set);
+    }
+    let archived = 0;
+    for (const [botId, threadIds] of byBot) {
+      const bot = this.bot(botId);
+      if (!bot) continue;
+      const tasks = (bot.tasks ?? []).filter((task) => threadIds.has(task.threadId) && task.archivedAt === undefined);
+      if (!tasks.length) continue;
+      this.commitBotChange(bot, "the background threads' archive", () => {
+        for (const task of tasks) {
+          task.archivedAt = at;
+          task.autoArchived = true;
+          task.unread = false;
+        }
+        bot.unread = botHasPersonUnread(bot);
+      });
+      archived += tasks.length;
+      this.emit({ type: "bot", botId });
+    }
+    return archived;
+  }
+
+  /** A person wrote in a thread the server archived on its own: it is
+   * theirs again, back in the list. A person's own archive stays. */
+  restoreAutoArchived(botId: string, threadId: string): void {
+    const bot = this.bot(botId);
+    const task = this.taskByThread(botId, threadId);
+    if (!bot || !task || task.autoArchived !== true) return;
+    this.commitBotChange(bot, "the thread's archive", () => {
+      delete task.archivedAt;
+      delete task.autoArchived;
+    });
+    this.emit({ type: "bot", botId });
   }
 
   /** Stamp or clear the closer record. `null` reopens: the next turn in a

@@ -13132,5 +13132,8 @@
   "limitFailover.ownerExhaustedNoTime": "This bot's owner hit usage limits on {tried}: no other engine could answer. Pick another model, add credit, or try again later.",
   "routineReadiness.flow_plan": "The Flow shadow check failed at {step}: {error}",
   "routineReadiness.ready.flow": "The Flow shadow plan has no known blocker. Run the routine when ready.",
-  "routineReadiness.flow_live": "A Flow run is live, plan not checked."
+  "routineReadiness.flow_live": "A Flow run is live, plan not checked.",
+  "task.background.show": "Show background",
+  "task.background.hide": "Hide background",
+  "task.background.heading": "Background · {count}"
 }

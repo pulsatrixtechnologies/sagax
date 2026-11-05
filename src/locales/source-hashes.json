@@ -16947,7 +16947,10 @@
       "sendBlock.engineLimitUntil": "8757e3bd1d2583e21d754c1938794e73689adeb79931f131075bcc06dc41a158",
       "sendBlock.engineLimit": "82cacd8c72a5467841d23ba1ca6b138d71cf1c260c7aff11da45495e44ffacde",
       "sendBlock.engineCredits": "3ecd3c27338d189238cb3effe5c12c9d2b71e023568c945cc18244a5d2769696",
-      "sendBlock.switchEngine": "920f86b3d430d8780a248547277514dc11384177d05be8edbff7ea4bfd07a7e4"
+      "sendBlock.switchEngine": "920f86b3d430d8780a248547277514dc11384177d05be8edbff7ea4bfd07a7e4",
+      "task.background.show": "44ee257acfe94a66d8283b88e417aaa23bb2e709eaeb7bca96059c95604d4d92",
+      "task.background.hide": "57fb8459807b26e5300a66b8b36693b316edded596b43ebe34f6ecd95ca34025",
+      "task.background.heading": "28aaeaa6e1951225fdf49f008294eeafb309c86f1315fae08819a4a995e623a1"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

@@ -238,7 +238,7 @@ function sweepSpill(dir: string): void {
 
 let spilled = 0;
 /** Whole results the model can query instead of re-reading: one gate, one MCP connection, one session. */
-const heldResults = new ResultStore();
+const heldResults = new ResultStore({ server: NAME });
 
 /** Keep the parsed payload for query_result; only a JSON object or array can be queried, text is cut as before. */
 function hold(tool: string, text: string): HeldResult | undefined {

@@ -1,6 +1,7 @@
 // @ts-nocheck
 // #1388 wave 4 step 3: startTurn dispatch (handoffs.dispatching through sendTurn).
 // Never imports server/index.ts.
+import { resolveClaudeSubagentModel } from "../../shared/claude-subagent-model.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
 
@@ -125,6 +126,14 @@ export function createDispatchStartTurn(host: StartTurnHost) {
     if (!state.warmOnly) turnTrace(state.threadId, "send");
     // Each picture within the model's limits: a scaled copy for a large one.
     const modelImages = await fitTurnImagesForModel(state.turnImages, { language: languageOfPerson(state.turnPlace.principal) });
+    // #2038: Claude sub-agents follow the routine override, else the routine
+    // model, else the bot's fast model on this engine (shared/claude-subagent-model.ts).
+    const subagentModel = resolveClaudeSubagentModel({
+      routineSubagentModel: state.routineSubagentModel,
+      routineModel: state.routineModel,
+      fast: state.bot.modelSelection?.fast,
+      turnInstanceId: state.instance.instanceId,
+    });
     // #1137: when the owner pays, the owner's computer serves its model.
     const deskPerson = desktopModelPersonFor(state.bot, state.instance, state.speaker, state.turnPlace.principal);
     state.dispatch = await guardTurnDispatch(withDesktopModelPerson(deskPerson, () => runAsBotEngine(state.bot.id, () => {
@@ -154,8 +163,7 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       toolScope: state.toolScope,
       ...(state.guestConfined ? { guestConfined: true, confinedWhy: confinedWhy(state.threadId) } : {}),
       model: state.model,
-      // 2026-11-04: a routine's model reaches its sub-agents too (Claude).
-      ...(state.routineModel ? { subagentModel: state.routineModel } : {}),
+      ...(subagentModel ? { subagentModel } : {}),
       ...(state.routineEffort ? { subagentEffort: turnEffort } : {}),
       effort: turnEffort,
       variant: state.variant,

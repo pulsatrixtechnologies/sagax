@@ -60,6 +60,7 @@ export function createPrepareAdmitStartTurn(
     repeatsShownFailure,
     resolveTurnSpeaker,
     routineModelForTurn,
+    routineSubagentModelForTurn,
     routineEffortForTurn,
     routineLineage,
     sandboxPrincipalForTurn,
@@ -172,6 +173,9 @@ export function createPrepareAdmitStartTurn(
     state.model = routineModel.model;
     state.routineModel = routineModel.model;
   }
+  // #2038: per-routine Claude sub-agent override (does not change the main model).
+  const routineSubagent = state.warmOnly ? null : routineSubagentModelForTurn?.(state.bot.id, state.threadId, state.instance);
+  if (routineSubagent && "model" in routineSubagent) state.routineSubagentModel = routineSubagent.model;
   const routineEffort = state.warmOnly ? null : routineEffortForTurn?.(state.bot.id, state.threadId, state.instance, state.model);
   state.routineEffort = routineEffort?.effort;
   const askedEffort = state.routineEffort ?? state.bot.modelSelection.effort;

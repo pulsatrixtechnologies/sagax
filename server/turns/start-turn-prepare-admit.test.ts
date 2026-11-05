@@ -11,12 +11,13 @@ import type { SendTurnInput } from "../contracts.ts";
 describe("routine effort at turn admission and dispatch", () => {
   function fixture(driverKind = "codex") {
     const selection = { instanceId: "engine", model: "chat-model", effort: "high" as const };
-    const bot = { id: "bot", name: "Runner", modelSelection: selection };
+    const bot = { id: "bot", name: "Runner", modelSelection: selection as typeof selection & { fast?: { instanceId: string; model: string } } };
     const sendTurn = vi.fn(async (_input: SendTurnInput) => ({}));
     const instance = { instanceId: "engine", driverKind, models: { options: [{ id: "chat-model" }, { id: "routine-model" }] },
       adapter: { capabilities: { effortLevels: ["low", "high"] }, sendTurn } };
     let routine = true;
     let takenOver = false;
+    let routineSubagent: string | null = null;
     const receipt = new Map();
     const noOp = vi.fn();
     const values: Record<string, unknown> = {
@@ -25,6 +26,7 @@ describe("routine effort at turn admission and dispatch", () => {
       quietTurnThreads: new Set(), autoTurnsByThread: new Map(), turnRunByThread: receipt, turnModelRequested: new Map(), turnRunFor: (value: unknown) => value,
       effortAcceptedByEngine, effortForModel, resolveEngineTurnEffort,
       routineModelForTurn: () => routine && !takenOver ? { model: "routine-model" } : null,
+      routineSubagentModelForTurn: () => routineSubagent && !takenOver ? { model: routineSubagent } : null,
       routineEffortForTurn: (_botId: string, _threadId: string, engine: typeof instance) => routineTurnEffort({
         effort: routine ? "low" : undefined, botInstanceId: "engine", turnInstanceId: engine.instanceId,
         takenOver, levels: ["low", "high"],
@@ -51,18 +53,24 @@ describe("routine effort at turn admission and dispatch", () => {
       await createDispatchStartTurn(host)(state);
       return sendTurn.mock.calls.at(-1)![0];
     }
-    return { turn, bot, selection, receipt, setRoutine: (value: boolean) => { routine = value; }, takeover: () => { takenOver = true; } };
+    return {
+      turn, bot, selection, receipt,
+      setRoutine: (value: boolean) => { routine = value; },
+      setRoutineSubagent: (value: string | null) => { routineSubagent = value; },
+      takeover: () => { takenOver = true; },
+    };
   }
 
   it.each(["codex", "claudeAgent"])("sends low routine effort to %s and its sub-agents; chat keeps the bot's settings", async (driver) => {
     const f = fixture(driver);
-    expect(await f.turn()).toMatchObject({ model: "routine-model", effort: "low", subagentEffort: "low" });
+    expect(await f.turn()).toMatchObject({ model: "routine-model", effort: "low", subagentEffort: "low", subagentModel: "routine-model" });
     expect(f.receipt.get("thread")).toMatchObject({ model: "routine-model", effort: "low" });
     expect(f.bot.modelSelection).toBe(f.selection);
     f.setRoutine(false);
     const chat = await f.turn();
     expect(chat).toMatchObject({ model: "chat-model", effort: "high" });
     expect(chat.subagentEffort).toBeUndefined();
+    expect(chat.subagentModel).toBeUndefined();
     expect(f.bot.modelSelection).toEqual({ instanceId: "engine", model: "chat-model", effort: "high" });
   });
 
@@ -70,5 +78,28 @@ describe("routine effort at turn admission and dispatch", () => {
     const f = fixture();
     f.takeover();
     expect(await f.turn()).toMatchObject({ model: "chat-model", effort: "high" });
+  });
+
+  it("derives Claude subagentModel from the bot's fast model when no routine model is set (#2038)", async () => {
+    const f = fixture("claudeAgent");
+    f.setRoutine(false);
+    f.bot.modelSelection = {
+      ...f.selection,
+      fast: { instanceId: "engine", model: "haiku-fast" },
+    };
+    const chat = await f.turn();
+    expect(chat).toMatchObject({ model: "chat-model", effort: "high", subagentModel: "haiku-fast" });
+  });
+
+  it("lets a per-routine subagentModel override the fast model without changing the main model (#2038)", async () => {
+    const f = fixture("claudeAgent");
+    f.setRoutine(false);
+    f.setRoutineSubagent("sonnet-workers");
+    f.bot.modelSelection = {
+      ...f.selection,
+      fast: { instanceId: "engine", model: "haiku-fast" },
+    };
+    const chat = await f.turn();
+    expect(chat).toMatchObject({ model: "chat-model", subagentModel: "sonnet-workers" });
   });
 });

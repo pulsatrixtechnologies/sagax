@@ -1,5 +1,6 @@
-/** 2026-11-04: a routine's own model. Its runs (and, on Claude, the
- * sub-agents they start) use it; ordinary chat keeps the bot's model.
+/** 2026-11-04: a routine's own model. Its runs use it; ordinary chat keeps
+ * the bot's model. On Claude, sub-agents follow resolveClaudeSubagentModel
+ * (#2038): this model, else the bot's fast model, else today's behaviour.
  * Only a model of the bot's own engine applies: anything else is ignored
  * at run start with one line in the run. A limit takeover wins over it. */
 
@@ -57,5 +58,5 @@ export function routineTurnModel(turn: RoutineModelTurn): { model: string } | { 
 export function routineExecutionSettingsOnly(value: unknown): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const keys = Object.keys(value);
-  return keys.length > 0 && keys.every(key => key === "model" || key === "effort");
+  return keys.length > 0 && keys.every(key => key === "model" || key === "effort" || key === "subagentModel");
 }

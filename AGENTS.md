@@ -162,13 +162,25 @@ bot's own engine; absent means the bot's model. Runs snapshot it
 turn in `start-turn-prepare-admit.ts`, never on the thread, so chat keeps the
 bot's model. A limit takeover (a failover row for the thread) or another
 engine wins; a model the engine does not offer or that is turned off is
-ignored with one `notice:` row per run. Claude turns pass `subagentModel`,
-which sets `CLAUDE_CODE_SUBAGENT_MODEL` and is part of the spawn contract.
-Writes: POST/PATCH `/api/routines` with `model` (null or "" clears), and the
-`model` field of `propose_routine` / `propose_routine_action`; `checkModel`
-refuses a model the bot's engine does not list. Tests:
-`shared/routine-model.test.ts`, `routines.test.ts`, `claude.test.ts`,
-`RoutineCalendarPage.test.ts`.
+ignored with one `notice:` row per run. Writes: POST/PATCH `/api/routines`
+with `model` (null or "" clears), and the `model` field of `propose_routine`
+/ `propose_routine_action`; `checkModel` refuses a model the bot's engine
+does not list. Tests: `shared/routine-model.test.ts`, `routines.test.ts`,
+`claude.test.ts`, `RoutineCalendarPage.test.ts`.
+
+## Claude sub-agent model (#2038)
+
+Claude turns set `CLAUDE_CODE_SUBAGENT_MODEL` via
+`resolveClaudeSubagentModel` (`shared/claude-subagent-model.ts`) in
+`start-turn-dispatch.ts`. Priority: `Routine.subagentModel` (run snapshot,
+`routineSubagentModelForTurn`), else `Routine.model` / `state.routineModel`,
+else the bot's `modelSelection.fast` when `fast.instanceId` matches the
+turn's engine. No blind default: a bot without a fast model keeps today's
+behaviour (sub-agents inherit the CLI default). The main bot's reasoning
+model is untouched. `subagentModel` is part of the Claude spawn contract.
+Writes: POST/PATCH `/api/routines` `subagentModel` (null or "" clears) and
+`subagent_model` on `propose_routine` / `propose_routine_action`. Tests:
+`shared/claude-subagent-model.test.ts`, `routines.test.ts`, `claude.test.ts`.
 
 ## Routine "Au nom de" role (visible roles batch 4, 2026-11-05)
 

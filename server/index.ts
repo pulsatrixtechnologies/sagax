@@ -21144,6 +21144,36 @@ function routineModelForTurn(botId: string, threadId: string, instance: { instan
   return decided;
 }
 
+const routineSubagentModelNoticed = new Set<string>();
+
+/** #2038: per-routine Claude sub-agent model override on the bot's own
+ * engine. Same rules as routineModelForTurn; does not change the main model. */
+function routineSubagentModelForTurn(botId: string, threadId: string, instance: { instanceId: string; models: { default?: string; options: Array<{ id: string }> } }): { model: string } | null {
+  const run = activeRoutineRunForThread(threadId);
+  if (!run?.subagentModel || run.botId !== botId) return null;
+  const bot = store.bot(botId);
+  if (!bot) return null;
+  const decided = routineTurnModel({
+    model: run.subagentModel,
+    botInstanceId: bot.modelSelection.instanceId,
+    turnInstanceId: instance.instanceId,
+    takenOver: Boolean(limitFailoverStore.failover(botId, threadId)),
+    offered: engineModelIds(instance),
+    refusal: modelSwitchRefusal(instance.instanceId, run.subagentModel, effectiveBotOwner(bot)),
+  });
+  if (decided && "ignored" in decided) {
+    if (!routineSubagentModelNoticed.has(run.id)) {
+      routineSubagentModelNoticed.add(run.id);
+      if (routineSubagentModelNoticed.size > 500) routineSubagentModelNoticed.delete(routineSubagentModelNoticed.values().next().value!);
+      const line = decided.ignored.replace(/^Routine model/, "Routine sub-agent model");
+      console.info(`[routine-subagent-model] ${threadId}: ${line}`);
+      store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: `notice: ${line}`, ok: true } });
+    }
+    return null;
+  }
+  return decided;
+}
+
 const routineEffortNoticed = new Set<string>();
 
 /** Resolve against the model selected for this turn, without changing chat. */
@@ -46952,6 +46982,7 @@ const startTurnRunner = createStartTurn({
   turnHolder,
   turnModelRequested,
   routineModelForTurn,
+  routineSubagentModelForTurn,
   routineEffortForTurn,
   turnModelSwitches,
   turnNetworkProxy,

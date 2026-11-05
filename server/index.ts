@@ -43236,6 +43236,7 @@ const agentApi = createAgentApi({
       body.requires = withRequiredComputer(current?.requires, patch.requiresComputer);
     }
     if (patch.model !== undefined) body.model = patch.model;
+    if (patch.subagentModel !== undefined) body.subagentModel = patch.subagentModel;
     if (patch.effort !== undefined) body.effort = patch.effort;
     const patched = await performAsMember(memberForAgentCaller(caller), {
       method: "PATCH",

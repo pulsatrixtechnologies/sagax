@@ -1331,6 +1331,15 @@ describe("fleet tools (#1944)", () => {
     expect((await w.api.call(person("pr_1"), "update_routine", { routine_id: "r-own", effort: "invalid" })).status).toBe(400);
   });
 
+  it("update_routine sets and clears the sub-agent model (#2049)", async () => {
+    const w = world();
+    expect((await w.api.call(person("pr_1"), "update_routine", { routine_id: "r-own", subagent_model: "sonnet" })).status).toBe(200);
+    expect(w.routinePatches.at(-1)).toEqual({ subagentModel: "sonnet" });
+    expect((await w.api.call(person("pr_1"), "update_routine", { routine_id: "r-own", subagent_model: null })).status).toBe(200);
+    expect(w.routinePatches.at(-1)).toEqual({ subagentModel: null });
+    expect((await w.api.call(person("pr_1"), "update_routine", { routine_id: "r-own", subagent_model: 7 })).status).toBe(400);
+  });
+
   it("update_routine enables and disables a routine the caller owns", async () => {
     const w = world();
     const paused = await w.api.call(person("pr_1"), "update_routine", {

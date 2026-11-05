@@ -159,6 +159,7 @@ export const AGENT_API_TOOLS = [
         schedule: { type: "object", description: "cron, daily, interval, once, webhook or event schedule object." },
         requires_computer: ROUTINE_FIELDS_SCHEMA.requires_computer,
         model: ROUTINE_FIELDS_SCHEMA.model,
+        subagent_model: ROUTINE_FIELDS_SCHEMA.subagent_model,
         effort: ROUTINE_FIELDS_SCHEMA.effort,
       },
       required: ["routine_id"],

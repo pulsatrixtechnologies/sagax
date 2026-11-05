@@ -150,6 +150,16 @@ describe("routine setup", () => {
     expect(html).toContain("Bot&#x27;s effort");
   });
 
+  it("offers the sub-agent Model only on a Claude engine (#2049)", () => {
+    const instance = (driverKind: string) => ({ instanceId: "test", driverKind, models: { default: "test", options: [{ id: "test", label: "Test" }, { id: "fast", label: "Fast" }] } });
+    fixture.state = { ...fixture.state!, instances: [instance("claudeAgent")] as unknown as AppState["instances"] };
+    const claude = editorMarkup();
+    expect(claude).toContain("data-routine-subagent-model");
+    expect(claude).toContain('aria-label="Sub-agent model"');
+    fixture.state = { ...fixture.state!, instances: [instance("codex")] as unknown as AppState["instances"] };
+    expect(editorMarkup()).not.toContain("data-routine-subagent-model");
+  });
+
   it("offers a Model choice that starts on the bot's model (2026-11-04)", () => {
     fixture.state = { ...fixture.state!, instances: [{ instanceId: "test", models: { default: "test", options: [{ id: "test", label: "Test" }, { id: "fast", label: "Fast" }] } }] as unknown as AppState["instances"] };
     const html = editorMarkup();

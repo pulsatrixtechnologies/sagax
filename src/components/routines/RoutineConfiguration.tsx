@@ -84,6 +84,7 @@ export function RoutineConfiguration({ routine, run, bots, groups = [], viewerPr
             <li>{t("routines.autoPause.label")}: {routineAutoPauseOption(routineAutoPauseAfter(routine))}</li>
             {routine.mailAlias && <li>{t("routines.mailAlias.label")}: +{routine.mailAlias}</li>}
             {routine.model && <li data-routine-config-model="">{t("routines.model.label")}: {routine.model}</li>}
+            {routine.subagentModel && <li data-routine-config-subagent-model="">{t("routines.subagentModel.label")}: {routine.subagentModel}</li>}
             {routine.effort && <li data-routine-config-effort="">{t("routines.effort.label")}: {effortLabel(routine.effort)}</li>}
             {routine.folder && <li>{t("routineDetail.folder")}: {routine.folder}</li>}
           </ul>

@@ -32,6 +32,7 @@ import {
 import { ROUTINE_WATCH_LIMITS, type RoutineWatchPrecheck } from "../../shared/routine-watch.ts";
 import { parseMailAlias } from "../../shared/routine-mail-alias.ts";
 import { loadRoutineModel, parseRoutineModel } from "../../shared/routine-model.ts";
+import { loadRoutineActAs, parseRoutineActAs } from "../../shared/routine-act-as.ts";
 import { watchNoteBlock } from "./routine-watch.ts";
 import { awayDecision, awayReportDue, loadAwaySkips, recordAwaySkip, type AwayVerdict, type RoutineAwaySkips } from "./routine-away.ts";
 import type { RoutineRequestOperation } from "../../shared/routine-request.ts";
@@ -203,6 +204,9 @@ export interface Routine {
    * bot's own engine (sub-agents too on Claude). Absent: the bot's model.
    * A model the bot's engine does not offer is ignored at run start. */
   model?: string;
+  /** 2026-11-05 (shared/routine-act-as.ts): the Perspicax role its runs act
+   * as ("Au nom de"); "" is "Moi". Absent: not chosen yet. */
+  actAs?: string;
   /** Confined runs: read Gmail/Calendar and write reply drafts only. */
   access?: RoutineAccess;
   nextRunAt: number | null;
@@ -442,6 +446,9 @@ export interface RoutineInput {
   /** The model its runs use; null or "" goes back to the bot's model,
    * omission preserves it on updates. */
   model?: string | null;
+  /** The role its runs act as on Perspicax ("" = Moi); null clears the
+   * choice, omission preserves it on updates. */
+  actAs?: string | null;
 }
 
 interface RoutineFile {
@@ -735,7 +742,7 @@ const WORK_FIELDS = ["prompt", "botId", "groupId", "target", "attachments", "pre
 const ROUTINE_DEFINITION_FIELDS = [
   "name", "prompt", "target", "botId", "groupId", "runOn", "schedule",
   "durationMinutes", "timeoutMinutes", "attachments", "continuity", "overlap",
-  "onlyWhenPresent", "precheck", "requires", "autoPauseAfter", "mailAlias", "deleteWhenFinished", "model",
+  "onlyWhenPresent", "precheck", "requires", "autoPauseAfter", "mailAlias", "deleteWhenFinished", "model", "actAs",
 ] as const;
 
 /** A run still in flight: auto-delete waits until none of these remain. */
@@ -1382,6 +1389,9 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
   const model = parseRoutineModel(input.model);
   if (!model.ok) throw new RoutineInputError(model.error);
   if (model.model && target === "room-goal") throw new RoutineInputError("A room goal runs on each bot's own model: choose the model on a bot routine");
+  const actAs = parseRoutineActAs(input.actAs);
+  if (!actAs.ok) throw new RoutineInputError(actAs.error);
+  if (actAs.actAs !== undefined && target === "room-goal") throw new RoutineInputError("A room goal's bots act with their own roles: choose \"Au nom de\" on a bot routine");
   if (input.access != null && input.access !== "read-and-draft") throw new Error("Choose read-and-draft access or none");
   return {
     name,
@@ -1408,6 +1418,7 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
     ...(input.deleteWhenFinished === true && scheduleHasKnownEnd(input.schedule) ? { deleteWhenFinished: true } : {}),
     ...(input.access === "read-and-draft" ? { access: "read-and-draft" as const } : {}),
     ...(model.model ? { model: model.model } : {}),
+    ...(actAs.actAs !== undefined ? { actAs: actAs.actAs } : {}),
   };
 }
 
@@ -1567,8 +1578,10 @@ export class RoutineManager {
               deleteWhenFinished: routine.deleteWhenFinished === true && scheduleHasKnownEnd(schedule) ? true : undefined,
               access: routine.access === "read-and-draft" ? "read-and-draft" as const : undefined,
               model: loadRoutineModel(routine.model),
+              actAs: loadRoutineActAs(routine.actAs),
             };
             if (loaded.model === undefined) delete loaded.model;
+            if (loaded.actAs === undefined) delete loaded.actAs;
             if (loaded.folder === undefined) delete loaded.folder;
             if (loaded.precheck === undefined) delete loaded.precheck;
             if (loaded.autoPauseAfter === undefined) delete loaded.autoPauseAfter;
@@ -2131,6 +2144,8 @@ export class RoutineManager {
       access: Object.hasOwn(patch, "access") ? patch.access : routine.access,
       // null or "" goes back to the bot's model; omission keeps it.
       model: Object.hasOwn(patch, "model") ? patch.model : routine.model,
+      // null clears the choice, "" is "Moi"; omission keeps it.
+      actAs: Object.hasOwn(patch, "actAs") ? patch.actAs : routine.actAs,
     }, now);
     if (this.targetState(clean) === "missing") throw new RoutineInputError(this.missingTargetMessage(clean.target));
     // Checked when it is chosen or the bot changes; a kept model whose
@@ -2214,6 +2229,7 @@ export class RoutineManager {
       if (!clean.deleteWhenFinished) delete routine.deleteWhenFinished;
       if (!clean.access) delete routine.access;
       if (!clean.model) delete routine.model;
+      if (clean.actAs === undefined) delete routine.actAs;
       foldersChanged = this.settleFolders(routine.botId);
       if (previousBotId !== routine.botId) this.settleFolders(previousBotId);
       // Turned back on (Resume on the notice, the switch, the editor): the
@@ -2506,6 +2522,7 @@ export class RoutineManager {
       attachments: [],
       ...(owned?.access === "read-and-draft" ? { access: "read-and-draft" as const } : {}),
       ...(owned?.model ? { model: owned.model } : {}),
+      ...(owned?.target === "bot" && owned.actAs !== undefined ? { actAs: owned.actAs } : {}),
       ...(input.eventSource ? { eventSource: input.eventSource } : {}),
       ...(input.resultsThreadId ? { resultsThreadId: input.resultsThreadId } : {}),
       createdAt: this.now(),
@@ -4360,6 +4377,7 @@ export class RoutineManager {
       resultsThreadId,
       ...(routine.access === "read-and-draft" ? { access: "read-and-draft" as const } : {}),
       ...(routine.target === "bot" && routine.model ? { model: routine.model } : {}),
+      ...(routine.target === "bot" && routine.actAs !== undefined ? { actAs: routine.actAs } : {}),
       createdAt: this.now(),
     };
     this.runs.push(run);

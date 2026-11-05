@@ -24,6 +24,7 @@ describe("simple visibility", () => {
       expect(simpleHidesBotSection(id), id).toBe(false);
     }
     expect(simpleHidesPanelTab("computer")).toBe(true);
+    expect(simpleHidesPanelTab("roles")).toBe(true);
     expect(simpleHidesPanelTab("details")).toBe(false);
   });
 });

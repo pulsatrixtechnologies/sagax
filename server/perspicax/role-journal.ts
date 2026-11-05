@@ -52,7 +52,13 @@ interface Persisted {
   refusals: RoleRefusalEntry[];
   transitions: RoleTransitionEntry[];
   rules: Record<string, BotRoleRule[]>;
+  /** principalId → the roles last seen held, with their Perspicax profile ids */
+  roles?: Record<string, KnownRole[]>;
 }
+
+/** A role a person held when the relay last named it (the Roles tab). */
+export interface KnownRole { slug: string; name: string; id?: string; at: number }
+const MAX_KNOWN_ROLES = 100;
 
 const MAX_REFUSALS = 2_000;
 const MAX_TRANSITIONS = 4_000;
@@ -71,6 +77,7 @@ export class RoleJournal {
   private refusals: RoleRefusalEntry[] = [];
   private transitions: RoleTransitionEntry[] = [];
   private rules = new Map<string, BotRoleRule[]>();
+  private roles = new Map<string, KnownRole[]>();
   /** threadId → steps waiting for their row */
   private pending = new Map<string, Array<{ tool: string; role: ToolRole }>>();
   /** threadId → the role the thread said to stay in (no fallback from it) */
@@ -93,6 +100,7 @@ export class RoleJournal {
       if (Array.isArray(data.refusals)) this.refusals = data.refusals.slice(-MAX_REFUSALS);
       if (Array.isArray(data.transitions)) this.transitions = data.transitions.slice(-MAX_TRANSITIONS);
       if (data.rules && typeof data.rules === "object") for (const [botId, list] of Object.entries(data.rules)) if (Array.isArray(list)) this.rules.set(botId, list.slice(0, MAX_RULES_PER_BOT));
+      if (data.roles && typeof data.roles === "object") for (const [principalId, list] of Object.entries(data.roles)) if (Array.isArray(list)) this.roles.set(principalId, list.slice(0, MAX_KNOWN_ROLES));
     } catch { /* a damaged file starts empty */ }
   }
 
@@ -100,7 +108,7 @@ export class RoleJournal {
     if (!this.file || this.saveTimer) return;
     this.saveTimer = setTimeout(() => {
       this.saveTimer = undefined;
-      const data: Persisted = { v: 1, refusals: this.refusals, transitions: this.transitions, rules: Object.fromEntries(this.rules) };
+      const data: Persisted = { v: 1, refusals: this.refusals, transitions: this.transitions, rules: Object.fromEntries(this.rules), roles: Object.fromEntries(this.roles) };
       try { writeFileAtomic(this.file!, JSON.stringify(data)); } catch { /* next change retries */ }
     }, 250);
     this.saveTimer.unref?.();
@@ -110,7 +118,7 @@ export class RoleJournal {
     if (!this.saveTimer || !this.file) return;
     clearTimeout(this.saveTimer);
     this.saveTimer = undefined;
-    const data: Persisted = { v: 1, refusals: this.refusals, transitions: this.transitions, rules: Object.fromEntries(this.rules) };
+    const data: Persisted = { v: 1, refusals: this.refusals, transitions: this.transitions, rules: Object.fromEntries(this.rules), roles: Object.fromEntries(this.roles) };
     try { writeFileAtomic(this.file, JSON.stringify(data)); } catch { /* best effort */ }
   }
 
@@ -256,6 +264,33 @@ export class RoleJournal {
     return this.stays.get(threadId);
   }
 
+  // --- the roles a person holds (Roles tab) ---------------------------------
+
+  /** The relay named this person's held roles: keep their names and ids.
+   * An id once learned (listing or act-as token) stays until it changes. */
+  noteRoles(principalId: string, held: ReadonlyArray<{ slug: string; name: string; id?: string }>): void {
+    if (!principalId || !held.length) return;
+    const before = new Map((this.roles.get(principalId) ?? []).map((role) => [role.slug, role]));
+    let changed = false;
+    for (const role of held.slice(0, MAX_KNOWN_ROLES)) {
+      if (!role.slug) continue;
+      const old = before.get(role.slug);
+      const id = role.id || old?.id;
+      if (old && old.name === role.name && old.id === id) continue;
+      before.set(role.slug, { slug: role.slug, name: role.name || role.slug, ...(id ? { id } : {}), at: this.now() });
+      changed = true;
+    }
+    if (!changed) return;
+    this.roles.set(principalId, [...before.values()].slice(-MAX_KNOWN_ROLES));
+    if (this.roles.size > 5_000) this.roles.delete(this.roles.keys().next().value!);
+    this.save();
+  }
+
+  /** The roles this person was last seen holding (never another person's). */
+  rolesOf(principalId: string): KnownRole[] {
+    return [...(this.roles.get(principalId) ?? [])];
+  }
+
   // --- the person's pick for the next turn ---------------------------------
 
   pick(threadId: string, principalId: string, slug: string): void {
@@ -268,8 +303,10 @@ export class RoleJournal {
   takePick(threadId: string, principalId: string): string | undefined {
     const pick = this.picks.get(threadId);
     if (!pick) return undefined;
+    // another person's turn on the thread never uses, nor drops, this pick
+    if (pick.principalId !== principalId) return undefined;
     this.picks.delete(threadId);
-    if (pick.principalId !== principalId || this.now() - pick.at > 10 * 60_000) return undefined;
+    if (this.now() - pick.at > 10 * 60_000) return undefined;
     return pick.slug;
   }
 }

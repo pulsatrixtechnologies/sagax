@@ -18,6 +18,7 @@ import { cn } from "@/lib/cn";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { BotActionsMenu, type BotActionsMenuAnchor } from "./bot-settings/BotActionsMenu";
 import { LibraryTab } from "./bot-settings/LibraryTab";
+import { RolesTab } from "./bot-settings/RolesTab";
 import { RoutinesSection } from "./bot-settings/RoutinesSection";
 
 import { visiblePanelTabs, type PanelTab } from "./bot-settings/panel-tabs";
@@ -63,10 +64,12 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   // "open the computer" link still lands on it. A bot that works nowhere
   // (Works on: Off) has no computer to show; Works on stays in the editor.
   const computerOff = bot.computer === "off";
-  const panelTabs = visiblePanelTabs({ advanced, computerOff });
+  // Roles: an organization server's bots act as Perspicax roles
+  const rolesOff = !state.config?.viewer?.role;
+  const panelTabs = visiblePanelTabs({ advanced, computerOff, rolesOff });
   // Simple has no computer tab. An open computer panel is otherwise closed
   // by the shell; until that lands, the tab the person picked stays up.
-  const tab: PanelTab = advanced && state.computerOpen && panelTabs.includes("computer") ? "computer" : pickedTab;
+  const tab: PanelTab = advanced && state.computerOpen && panelTabs.includes("computer") ? "computer" : panelTabs.includes(pickedTab) ? pickedTab : "details";
   // the Library holds the bot's files (an achievement teaches it)
   useEffect(() => {
     if (tab === "library") reportAchievement("files.opened");
@@ -273,6 +276,8 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
           )}
 
           {tab === "library" && <LibraryTab bot={bot} />}
+
+          {tab === "roles" && <RolesTab botId={bot.id} />}
 
           {tab === "computer" && (
             <div className="px-4 pt-2">

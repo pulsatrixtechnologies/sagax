@@ -33,7 +33,7 @@ import { executionKey, WriteOnce } from "../write-once.ts";
 import { PerspicaxIdentity, identityFailureReason, identityLapsed, identityValue, type IdentityFailure } from "./perspicax-identity.ts";
 import type { RoutineFlowInput } from "../routines/routine-flow-input.ts";
 import type { ReadinessFlow } from "../routines/routine-readiness.ts";
-import { ME_ROLE, cwPermissionFor, heldRolesOf, roleRefusalOf, type CwPermission, type HeldRole, type RoleReason, type ToolRole } from "../../shared/perspicax-roles.ts";
+import { ME_ROLE, actingAsOf, cwPermissionFor, heldRolesOf, roleRefusalOf, type CwPermission, type HeldRole, type RoleReason, type ToolRole } from "../../shared/perspicax-roles.ts";
 
 export type PerspicaxUnavailableReason = "not_held" | "no_session" | "unreachable" | "rate_limited" | "no_delegation" | "unknown_speaker";
 
@@ -320,6 +320,8 @@ interface Entry {
   profileChoiceRestoreFailed?: boolean;
   /** Visible roles (2026-11-05): the held roles this turn's listing named. */
   heldRoles?: HeldRole[];
+  /** slug → profile id learned from act-as token scopes (visible roles) */
+  roleIds?: Map<string, string>;
   /** cw_member:<identifier> (or credential:) behind the acting role. */
   targetIdentity?: string;
   /** Why the current role is the current one. */
@@ -987,6 +989,107 @@ export class PerspicaxMcp {
     return result ?? { step: "tools/list", error: "tool_missing flow_run is not available on this account connection." };
   }
 
+  /** Visible roles (composer picker, 2026-11-05): the roles THIS person
+   * holds now, from a live `identity_switch` with no argument. On the live
+   * connection of this thread and person when there is one (and `current`,
+   * the role it acts as), else on a short-lived account connection of the
+   * person's own session, closed and revoked at once. Never a listing kept
+   * from another turn or another person. Null: Perspicax is not mounted
+   * for this person (no link, no session). */
+  async heldRolesFor(principalId: string, botId: string, threadId: string | undefined, signal: AbortSignal): Promise<{ roles: HeldRole[]; current?: string } | null> {
+    const principal = principalId.trim();
+    const link = this.options.link();
+    const subject = principal ? this.options.subjectOf(principal) : null;
+    if (!link || !subject || subject.disabled || subject.iss !== this.options.issuer) return null;
+    if (threadId) {
+      for (const entry of this.entries.values()) {
+        if (entry.ended || entry.threadId !== threadId || entry.botId !== botId || entry.principalId !== principal) continue;
+        if (entry.servedTools && !entry.servedTools.has("identity_switch")) return { roles: [], current: this.currentRole(entry) };
+        try {
+          const body = await this.identityRpc(entry, "tools/call", { name: "identity_switch", arguments: {} });
+          const value = identityValue(body);
+          this.noteListing(entry, value);
+          return { roles: heldRolesOf(value), current: this.currentRole(entry) };
+        } catch { break; /* the short-lived connection below answers */ }
+      }
+    }
+    signal.throwIfAborted();
+    const source = await this.subjectFor("session", principal, { iss: subject.iss, sub: subject.sub });
+    if (!source.ok) return null;
+    const exchanged = await link.exchangeToken(source.token);
+    if (!exchanged.ok) return null;
+    let session: string | null = null;
+    const rpc = async (method: string, params: Json): Promise<unknown> => {
+      signal.throwIfAborted();
+      const id = `sagax-roles-${++this.nativeCalls}`;
+      const response = await this.fetcher(link.mcpEndpoint(), { method: "POST", redirect: "error", signal,
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: `Bearer ${exchanged.token}`, ...(session ? { "mcp-session-id": session } : {}) },
+        body: JSON.stringify({ jsonrpc: "2.0", ...(method === "notifications/initialized" ? {} : { id }), method, params }) });
+      session = response.headers.get("mcp-session-id") ?? session;
+      const text = await response.text();
+      if (!response.ok) throw new Error(`Perspicax roles HTTP ${response.status}`);
+      return method === "notifications/initialized" ? {} : parseMcpBody(text, id);
+    };
+    try {
+      await rpc("initialize", { protocolVersion: PERSPICAX_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: `Sagax roles (${botId}; ${randomUUID()})`, version: this.options.version } });
+      await rpc("notifications/initialized", {});
+      const body = await rpc("tools/call", { name: "identity_switch", arguments: {} });
+      if (!isObject(body) || isObject(body.error) || (isObject(body.result) && body.result.isError === true)) return { roles: [] };
+      return { roles: heldRolesOf(identityValue(body)) };
+    } finally {
+      if (session) await this.fetcher(link.mcpEndpoint(), { method: "DELETE", redirect: "error", signal: AbortSignal.timeout(200), headers: { authorization: `Bearer ${exchanged.token}`, "mcp-session-id": session } }).then(response => response.body?.cancel()).catch(() => {});
+      void link.revokeExchanged(exchanged.token).catch(() => {});
+    }
+  }
+
+
+  /** 2026-11-05 (visible roles, routine "Au nom de"): the roles the run-as
+   * person holds now (`identity_switch` without argument, a read) and, for
+   * a Flow recipe, its card (`flow` describe: standing_mandate and
+   * server_profiles), on a private short-lived account connection backed by
+   * that person's routine delegation. It never switches a role. */
+  async probeRoutineRoles(principalId: string, botId: string, recipe: string | undefined, signal: AbortSignal): Promise<{ held: HeldRole[]; card?: unknown; flowError?: string }> {
+    const link = this.options.link();
+    const subject = this.options.subjectOf(principalId);
+    if (!link || !subject || subject.disabled || subject.iss !== this.options.issuer) throw new Error("Perspicax routine access is unavailable.");
+    signal.throwIfAborted();
+    const source = await this.subjectFor("delegation", principalId, subject);
+    if (!source.ok) throw new Error("Perspicax routine delegation is unavailable.");
+    const exchanged = await link.exchangeToken(source.token);
+    if (!exchanged.ok) throw new Error(`Perspicax routine account exchange failed: ${exchanged.error}`);
+    let session: string | null = null;
+    const rpc = async (method: string, params: Json): Promise<Json> => {
+      signal.throwIfAborted();
+      const id = `sagax-role-coverage-${++this.nativeCalls}`;
+      const response = await this.fetcher(link.mcpEndpoint(), { method: "POST", redirect: "error", signal,
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: `Bearer ${exchanged.token}`, ...(session ? { "mcp-session-id": session } : {}) },
+        body: JSON.stringify({ jsonrpc: "2.0", ...(method === "notifications/initialized" ? {} : { id }), method, params }) });
+      session = response.headers.get("mcp-session-id") ?? session;
+      const text = await response.text();
+      if (!response.ok) throw new Error(`Perspicax role coverage HTTP ${response.status}`);
+      if (method === "notifications/initialized") return {};
+      const body = parseMcpBody(text, id);
+      if (!isObject(body)) throw new Error("Perspicax role coverage returned an invalid MCP response.");
+      return body;
+    };
+    try {
+      await rpc("initialize", { protocolVersion: PERSPICAX_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: `Sagax role coverage (${botId}; ${recipe ?? "no recipe"}; ${randomUUID()})`, version: this.options.version } });
+      await rpc("notifications/initialized", {});
+      const listed = await rpc("tools/list", {});
+      const names = new Set(isObject(listed.result) && Array.isArray(listed.result.tools) ? listed.result.tools.filter(isObject).map((tool) => String(tool.name)) : []);
+      const held = names.has("identity_switch") ? heldRolesOf(identityValue(await rpc("tools/call", { name: "identity_switch", arguments: {} }))) : [];
+      if (!recipe) return { held };
+      const describe = names.has("flow") ? "flow" : names.has("flow_run") ? "flow_run" : undefined;
+      if (!describe) return { held, flowError: "flow is not available on this account connection." };
+      const body = await rpc("tools/call", { name: describe, arguments: { command: "describe", args: { name: recipe } } });
+      if (isObject(body.error) || (isObject(body.result) && body.result.isError === true)) return { held, flowError: `Flow could not describe ${recipe}.` };
+      return { held, card: identityValue(body) };
+    } finally {
+      if (session) await this.fetcher(link.mcpEndpoint(), { method: "DELETE", redirect: "error", signal: AbortSignal.timeout(200), headers: { authorization: `Bearer ${exchanged.token}`, "mcp-session-id": session } }).then(response => response.body?.cancel()).catch(() => {});
+      void link.revokeExchanged(exchanged.token).catch(() => {});
+    }
+  }
+
   /** Exchange the speaker's access for the account's one main connection
    * before the engine starts. Never throws and never chooses a role. */
   async prepareTurn(input: {
@@ -1191,6 +1294,11 @@ export class PerspicaxMcp {
   private noteListing(entry: Entry, value: Json): void {
     const held = heldRolesOf(value);
     if (held.length) entry.heldRoles = held;
+    // a listing that serves no profile id still names the acting one in its
+    // act-as token scope (profile:<id>): the Roles tab joins journal rows by it
+    const actingRole = actingAsOf(value);
+    if (actingRole?.id) (entry.roleIds ??= new Map()).set(actingRole.slug, actingRole.id);
+    if (entry.roleIds && entry.heldRoles) entry.heldRoles = entry.heldRoles.map((role) => role.id || !entry.roleIds!.has(role.slug) ? role : { ...role, id: entry.roleIds!.get(role.slug)! });
     const acting = isObject(value.acting_as) ? value.acting_as : null;
     if (acting && typeof acting.target_identity === "string") entry.targetIdentity = acting.target_identity.slice(0, 200);
   }

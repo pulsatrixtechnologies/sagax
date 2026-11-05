@@ -744,8 +744,12 @@ import {
 import { createCustomRuleRoutes } from "./routes/custom-rules.ts";
 import { createAutoApprovalNotes, type ToolAutoApproval } from "./approvals/tool-auto-approval.ts";
 import { RoleJournal } from "./perspicax/role-journal.ts";
-import { createRoleEvents, meWriteSummary } from "./perspicax/role-events.ts";
+import { createRoleEvents, meWriteSummary, missingRoleMessage } from "./perspicax/role-events.ts";
 import { createPerspicaxRoleRoutes } from "./routes/perspicax-roles.ts";
+import { createHeldRolesRoute } from "./routes/perspicax-held-roles.ts";
+import { routineRoleCoverageRoute } from "./routes/routine-role-coverage.ts";
+import { chainRoleRoutes, createRoleTabRoutes } from "./routes/perspicax-roles-tab.ts";
+import type { MissingPermission } from "../shared/role-graph.ts";
 import { createEmailDraftRoutes } from "./routes/email-drafts.ts";
 import { createThreadWarmRoutes, warmBotAccessRefusal } from "./routes/thread-warm.ts";
 import { createEmailSendPasses, emailSendCard, sendWithMailer } from "./mail/email-draft-send.ts";
@@ -21523,15 +21527,16 @@ const personAttentionDeps: AttentionRelayDeps<BotRecord> = {
 };
 /** 2026-11-05 (visible roles): the role a Perspicax turn starts under. The
  * person's composer pick for this thread's next turn (theirs only), else a
- * routine run's "Au nom de" role. Undefined: the default surface ("Moi"). */
+ * routine run's "Au nom de" role (the run's snapshot, else the routine's).
+ * Undefined: the default surface ("Moi"). */
 function perspicaxTurnRole(turn: { threadId: string; botId: string; principalId: string; routine: boolean }): { slug: string; reason: "person" | "routine" } | undefined {
   const picked = roleJournal.takePick(turn.threadId, turn.principalId);
   if (picked !== undefined) return { slug: picked, reason: "person" };
   if (!turn.routine) return undefined;
   const run = activeRoutineRunForThread(turn.threadId);
-  const routine = run ? routines?.getRoutine(run.routineId) : null;
-  const actAs = routine && typeof (routine as { actAs?: unknown }).actAs === "string" ? (routine as { actAs?: string }).actAs : undefined;
-  return actAs !== undefined && routine?.botId === turn.botId ? { slug: actAs, reason: "routine" } : undefined;
+  if (!run || run.botId !== turn.botId) return undefined;
+  const actAs = run.actAs ?? routines?.getRoutine(run.routineId)?.actAs;
+  return actAs !== undefined ? { slug: actAs, reason: "routine" } : undefined;
 }
 
 function activeRoutineRunForThread(threadId: string): RoutineRun | null {
@@ -25866,6 +25871,46 @@ function answerProactiveProposal(botId: string, proposalId: string, accept: bool
 }
 
 ROUTES.push(createProactiveProposalRoutes({ answer: answerProactiveProposal }));
+/** 2026-11-05 (visible roles, batch 3): the composer's role picker. The
+ * signed-in person's own held roles, live; the principal is the one a turn
+ * of theirs would carry (orgSpeakerPrincipal), so a pick matches its turn. */
+// 2026-11-05 (batch 4): the routine editor's "Au nom de" coverage preview.
+const routineCoverageRoute = routineRoleCoverageRoute({
+  routine: (auth, id) => {
+    const routine = routines?.getRoutine(id);
+    if (!routine) return undefined;
+    const viewerId = channelFilterViewerId(auth);
+    if (!routineVisible(routine, visibleTo(viewerFor(auth, "/api/routines"))) || (viewerId && !routineSeenBy(routine, viewerId))) return undefined;
+    return routine;
+  },
+  mayCheck: (auth, routine) => !routineNeedsRun(auth, routine.botId) && mayRunRoutineNow(auth, routine as Routine),
+  runAsOf: (routine) => effectiveRunAs(routine),
+  recipeOf: (prompt) => routineFlowInput(prompt).routine,
+  probe: async (principalId, botId, recipe, signal) => {
+    if (IDENTITY.kind !== "perspicax" || !perspicaxMcp) throw new Error("Perspicax roles are unavailable on this server.");
+    return perspicaxMcp.probeRoutineRoles(principalId, botId, recipe, signal);
+  },
+  refusals: (principalId, botId) => roleJournal.refusalsFor(principalId, botId).map((entry) => ({ role: entry.role.slug, path: entry.permission.path, operation: entry.permission.operation })),
+});
+const heldRolesRoute = createHeldRolesRoute({
+  principal: (auth, botId) => {
+    const bot = store.bot(botId);
+    if (!bot || IDENTITY.kind !== "perspicax") return undefined;
+    return orgSpeakerPrincipal(bot, speakerFor(auth)) || undefined;
+  },
+  thread: (_auth, botId, threadId) => {
+    const bot = store.bot(botId);
+    if (!bot) return undefined;
+    try { return routeThreadId(bot, threadId); } catch { return undefined; }
+  },
+  mounts: (botId, threadId) => {
+    if (IDENTITY.kind !== "perspicax" || !perspicaxMcp) return false;
+    const bot = store.projectBotForTask(botId, threadId) ?? store.bot(botId);
+    const instance = bot ? registry.get(bot.modelSelection.instanceId) : undefined;
+    return instance?.adapter.capabilities.customMcp === true;
+  },
+  heldRolesFor: (principal, botId, threadId, signal) => perspicaxMcp ? perspicaxMcp.heldRolesFor(principal, botId, threadId, signal) : Promise.resolve(null),
+});
 ROUTES.push(createPerspicaxRoleRoutes({
   actor: (auth) => channelViewerId(auth) ?? localPrincipalId(),
   mayUseBot: (auth, botId) => {
@@ -25879,7 +25924,51 @@ ROUTES.push(createPerspicaxRoleRoutes({
   answerTransition: (input) => answerRoleTransition(input),
   rules: ({ botId, actor }) => ({ status: 200, body: { rules: roleJournal.rulesFor(botId, actor) } }),
   removeRule: ({ botId, actor, id }) => roleJournal.removeRule(botId, actor, id) ? { status: 200, body: { ok: true } } : { status: 404, body: { error: "no such rule" } },
+  // 2026-11-05: picker (batch 3), routine coverage (batch 4), Roles tab (batch 5)
+  more: chainRoleRoutes(
+    (ctx, input) => heldRolesRoute(ctx, input),
+    (ctx, input) => routineCoverageRoute(ctx, input),
+    createRoleTabRoutes({
+      journal: roleJournal,
+      perspicaxGet: async (principalId, path) => {
+        const answer = await roleJournalClient.call(principalId, "GET", path, undefined, { timeoutMs: 8_000 });
+        return answer.ok ? { ok: true, body: answer.body } : { ok: false };
+      },
+      sendToAdmins: (input) => sendMissingRoleToAdmins(input),
+    }),
+  ),
 }));
+
+/** 2026-11-05 (visible roles, batch 5): the person's own Perspicax journal
+ * rows, read with their own sign-in bearer (as the memory notes are). */
+const roleJournalClient = new PerspicaxMemoryNotesClient({
+  baseUrl: () => perspicaxBase(),
+  accessToken: (principalId) => perspicaxAccessToken(principalId),
+});
+
+/** "Envoyer à l'admin": a Sagax message from the person to each of the
+ * organization's admins, in the conversation between those two people
+ * (created as a people DM when there is none). Never a ConnectWise write. */
+function sendMissingRoleToAdmins(input: { actor: string; botId: string; missing: MissingPermission }): number {
+  if (IDENTITY.kind !== "perspicax") return 0;
+  const from = input.actor.toLowerCase();
+  const fromName = personDisplayName(principals.byId(from)) || "";
+  const botName = store.bot(input.botId)?.name ?? "";
+  const admins = principals.list()
+    .filter((person) => person.orgRole === "admin" && person.subject && person.disabledAt === undefined && !person.mergedInto && person.id.toLowerCase() !== from)
+    .slice(0, 10);
+  let reached = 0;
+  for (const admin of admins) {
+    const to = admin.id.toLowerCase();
+    const text = missingRoleMessage(languageOfPerson(to), { person: fromName, bot: botName, missing: input.missing });
+    const group = findPeopleDm(store.groups, from, to)
+      ?? store.createGroup(`${fromName}, ${personDisplayName(admin) || admin.login || ""}`, [], false, undefined, { defaultResponder: { kind: "mentions" } }, [from, to], { peopleDm: true, createdBy: from });
+    store.appendMessage(group.threadId, { role: "user", kind: "text", text, ...(fromName ? { sender: { name: fromName, id: from } } : {}) });
+    store.patchGroup(group.id, peopleDmThreadUnreadPatch(group, to, true, group.threadId));
+    reached += 1;
+  }
+  return reached;
+}
 
 // Whether an oldest thread is someone else's (frozenResultsThread) is known
 // only now: an earlier key of the owner's is theirs once settled.
@@ -44553,6 +44642,13 @@ ROUTES.push(createWebhooksRoutes({
   isBotAct: (auth) => auth.kind === "session" && isBotActSession(auth.session)
 }));
 ROUTES.push(createBotsMessagesRoutes({
+  // 2026-11-05 (visible roles, batch 3): the composer's pick, kept for the
+  // sender's next turn of this thread (perspicaxTurnRole takes it)
+  pickPerspicaxRole: (bot: BotRecord, threadId: string, auth: RequestAuth, slug: string) => {
+    if (IDENTITY.kind !== "perspicax") return;
+    const principal = orgSpeakerPrincipal(bot, speakerFor(auth));
+    if (principal) roleJournal.pick(threadId, principal, slug);
+  },
   originApprovals,
   approvalBus,
   ADMIN_APPROVAL_REQUIRED,

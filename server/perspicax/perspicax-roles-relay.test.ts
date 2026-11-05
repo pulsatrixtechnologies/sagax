@@ -127,6 +127,17 @@ describe("visible roles in the Perspicax relay", () => {
     expect(f.text(away)).toContain("the person fixed the role for this turn");
   });
 
+  it("learns a role's profile id from its act-as token when the listing serves none (Roles tab)", async () => {
+    const f = fixture();
+    await f.prepare();
+    await f.init();
+    await f.relay("identity_switch", { profile: "full-access" });
+    await f.relay("cw_psa_find_tickets");
+    const held = f.events.at(-1)?.held ?? [];
+    expect(held.find((role) => role.slug === "full-access")).toMatchObject({ id: "full-access-id" });
+    expect(held.find((role) => role.slug === "service-desk")?.id).toBeUndefined();
+  });
+
   it("asks the person before a routine under a role writes as Moi", async () => {
     const f = fixture({ routine: true, turnRole: { slug: "service-desk", reason: "routine" }, meWrite: "deny" });
     await f.prepare();

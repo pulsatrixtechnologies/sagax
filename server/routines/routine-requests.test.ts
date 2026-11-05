@@ -484,6 +484,23 @@ describe("RoutineRequestService", () => {
     expect(routines.listRoutines()[0].folder).toBeUndefined();
   });
 
+  it("a proposal sets the routine's \"Au nom de\" role, changes it to Moi and clears it (2026-11-05)", async () => {
+    const { service, routines } = harness();
+    const created = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: createProposal({ actAs: "service-desk" }) });
+    expect(created.detail).toContain("Acts as: service-desk (Perspicax role)");
+    service.resolve({ botId: "bot-a", threadId: "thread-a", requestId: created.requestId, behavior: "allow" });
+    const routine = routines.listRoutines()[0];
+    expect(routine.actAs).toBe("service-desk");
+    const me = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: { action: "update", routineId: routine.id, changes: { actAs: "" } } });
+    expect(me.detail).toContain("Acts as: the person's own access");
+    service.resolve({ botId: "bot-a", threadId: "thread-a", requestId: me.requestId, behavior: "allow" });
+    expect(routines.listRoutines()[0].actAs).toBe("");
+    const cleared = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: { action: "update", routineId: routine.id, changes: { actAs: null } } });
+    service.resolve({ botId: "bot-a", threadId: "thread-a", requestId: cleared.requestId, behavior: "allow" });
+    expect(routines.listRoutines()[0].actAs).toBeUndefined();
+    await expect(service.propose({ botId: "bot-a", threadId: "thread-a", proposal: createProposal({ actAs: "has space" }) })).rejects.toThrow(RoutineRequestError);
+  });
+
   it("canonicalizes receipt fingerprints and binds them to the card's conversation", async () => {
     const { service, store } = harness();
     await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: createProposal() });

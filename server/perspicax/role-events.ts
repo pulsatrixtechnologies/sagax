@@ -17,6 +17,7 @@ import type { RoleJournal } from "./role-journal.ts";
 import type { RoleNotice, RoleTransitionCard } from "../../shared/wire.ts";
 import type { CwPermission, ToolRole } from "../../shared/perspicax-roles.ts";
 import { matchingRoleRule } from "../../shared/perspicax-roles.ts";
+import type { MissingPermission } from "../../shared/role-graph.ts";
 
 type Catalog = Record<string, string>;
 const catalogs: Record<"en" | "fr", Catalog> = { en: en as Catalog, fr: fr as Catalog };
@@ -117,6 +118,7 @@ export function createRoleEvents(deps: RoleEventsDeps) {
   return {
     /** PerspicaxMcp onRole. */
     onRole(event: PerspicaxRoleEvent): void {
+      if (event.held?.length) journal.noteRoles(event.principalId, event.held);
       if (event.permission && (event.kind !== "step" || event.role.reason === "fallback" || event.role.reason === "rule")) {
         const role = event.refusedRole ?? { slug: event.role.slug, name: event.role.name };
         journal.logRefusal({
@@ -155,4 +157,25 @@ export function createRoleEvents(deps: RoleEventsDeps) {
 /** The "Écrire au nom de …" approval summary (askMeWrite). */
 export function meWriteSummary(language: string, input: { person: string; role: string; tool: string; permission: CwPermission }): string {
   return roleText(language, "roles.meWrite.summary", { person: input.person, role: input.role, tool: input.tool, permission: permissionLine(input.permission, language) });
+}
+
+/** "Envoyer à l'admin" (Roles tab): the message an organization admin reads,
+ * in the admin's language. Times in Eastern time (America/New_York). */
+export function missingRoleMessage(language: string, input: { person: string; bot: string; missing: MissingPermission }): string {
+  const { missing } = input;
+  const me = roleText(language, "roles.me");
+  const when = new Intl.DateTimeFormat(language === "fr" ? "fr-CA" : "en-CA", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" }).format(new Date(missing.lastAt));
+  const fix = missing.member
+    ? roleText(language, "roles.missing.fixMember", { member: missing.member })
+    : roleText(language, "roles.missing.fixRole", { role: missing.role.name || me });
+  return roleText(language, "roles.missing.adminMessage", {
+    person: input.person || roleText(language, "roles.missing.someone"),
+    bot: input.bot,
+    role: missing.role.name || me,
+    permission: permissionLine(missing.permission, language),
+    fix,
+    count: String(missing.count),
+    when,
+    tools: missing.tools.join(", "),
+  });
 }

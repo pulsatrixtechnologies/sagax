@@ -4585,6 +4585,33 @@ describe("postResults migration and per-routine choice (Owner 2026-10-22)", () =
       schedule: { type: "once", at: new Date(2026, 7, 18).getTime() } })).toThrow(RoutineInputError);
   });
 
+  it("stores an \"Au nom de\" role, keeps \"\" as Moi, snapshots it on runs and clears it with null (2026-11-05)", async () => {
+    const h = harness();
+    const at = new Date(2026, 7, 18).getTime();
+    const routine = h.manager.create({ name: "R", prompt: "Do it", botId: "maus-1", actAs: " service-desk ", schedule: { type: "once", at } });
+    expect(routine.actAs).toBe("service-desk");
+    expect(h.manager.update(routine.id, { name: "R2" })?.actAs).toBe("service-desk");
+    h.manager.runNow(routine.id); await h.manager.tick();
+    expect(h.manager.listRuns().find((run) => run.routineId === routine.id)?.actAs).toBe("service-desk");
+    // survives a reload from disk
+    expect(new RoutineManager(h.options).listRoutines().find((row) => row.id === routine.id)?.actAs).toBe("service-desk");
+    // "" is an explicit "Moi", kept on reload; null clears the choice
+    expect(h.manager.update(routine.id, { actAs: "" })?.actAs).toBe("");
+    expect(new RoutineManager(h.options).listRoutines().find((row) => row.id === routine.id)?.actAs).toBe("");
+    expect(h.manager.update(routine.id, { actAs: null })?.actAs).toBeUndefined();
+    expect(Object.hasOwn(h.manager.listRoutines().find((row) => row.id === routine.id)!, "actAs")).toBe(false);
+    expect(() => h.manager.create({ name: "Bad", prompt: "Do it", botId: "maus-1", actAs: "has space", schedule: { type: "once", at } })).toThrow(RoutineInputError);
+  });
+
+  it("a run keeps the role it started with when the routine's role changes later (2026-11-05)", async () => {
+    const h = harness();
+    const routine = h.manager.create({ name: "R", prompt: "Do it", botId: "maus-1", actAs: "service-desk", schedule: { type: "once", at: new Date(2026, 7, 18).getTime() } });
+    h.manager.runNow(routine.id); await h.manager.tick();
+    h.manager.update(routine.id, { actAs: "full-access" });
+    expect(h.manager.listRuns().find((run) => run.routineId === routine.id)?.actAs).toBe("service-desk");
+    expect(h.manager.listRoutines().find((row) => row.id === routine.id)?.actAs).toBe("full-access");
+  });
+
   it("asks checkModel when a routine model is chosen and refuses what it refuses (2026-11-04)", () => {
     const h = harness();
     const asked: string[] = [];

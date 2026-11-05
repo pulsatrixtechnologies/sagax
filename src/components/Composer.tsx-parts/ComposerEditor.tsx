@@ -12,6 +12,7 @@ import type { RoomMentionPerson } from "@/lib/person-mentions";
 import { MentionTextarea } from "../MentionTextarea";
 import { ComposerReplyStrip } from "../ReplyQuote";
 import { ComposerPlusMenu, type PlusMenuItem } from "../ComposerControls";
+import { RolePicker } from "../RolePicker";
 import { TeachChooserDialog, TeachStepsDialog } from "../TeachStepsDialog";
 import { MyChromeRecordDialog } from "../MyChromeRecordDialog";
 import type { MyChromeRecordingResult } from "@/lib/my-chrome";
@@ -63,6 +64,7 @@ export function ComposerEditor({
   channelMode,
   config,
   composerAria,
+  threadId,
   children,
 }: {
   bot?: Bot;
@@ -109,6 +111,8 @@ export function ComposerEditor({
   channelMode: "chat" | "goal";
   config: ConfigStatus | null | undefined;
   composerAria: string;
+  /** The conversation this composer sends to (the role picker's thread). */
+  threadId?: string;
   children?: ReactNode;
 }) {
   return (
@@ -182,6 +186,9 @@ export function ComposerEditor({
               /goal
             </button>
           )}
+          {/* visible roles (2026-11-05): the role of the next turn, only
+              where Perspicax is mounted for this person (RolePicker) */}
+          {bot && !group && <RolePicker botId={bot.id} threadId={threadId ?? bot.threadId} />}
         </div>
       )}
       <MentionTextarea

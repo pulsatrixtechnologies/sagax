@@ -2283,6 +2283,7 @@ import {
   ensureClaudeSubscriptionFresh,
   onClaudeSubscriptionRenewed
 } from "./engines/claude-subscription-refresh.ts";
+import { createSignInRecheck } from "./engines/sign-in-recheck.ts";
 import { cloudAgentInternalAction, handleCloudAgentInternal } from "./routes/cloud-agents-internal.ts";
 import { cloudAgentWakePrompt } from "./cloud-agents/wake.ts";
 import { cloudAgentWireItem } from "./cloud-agents/activity.ts";
@@ -31093,7 +31094,8 @@ function subscriptionExpiredCard(bot: BotRecord, instance: { driverKind: string;
     engine: engineNameForViewer(engineDisplayName(instance), driverDisplayName(instance.driverKind), payer ? personIsOrgAdmin(payer) : false),
     ...(ran?.routine ? { routine: true } : {})
   });
-  if (card) engineLogins?.markExpired(card.payerPrincipalId, instance.driverKind, "instanceId" in instance && typeof instance.instanceId === "string" ? turnSlotFor(bot, { instanceId: instance.instanceId }) : "primary");
+  // #2040: renew once before marking; a passing refusal never signs anyone out
+  if (card) void signInRecheck?.refused(card.payerPrincipalId, instance.driverKind, "instanceId" in instance && typeof instance.instanceId === "string" ? turnSlotFor(bot, { instanceId: instance.instanceId }) : "primary");
   return card;
 }
 /** The access card of a refused or lost turn: who has to act (the person
@@ -34531,6 +34533,35 @@ if (engineLogins) {
       }
     }
   });
+}
+// #2040: a refusal renews once before it marks the sign-in expired, and a
+// start (a server update) heals everyone already marked.
+const signInRecheck = engineLogins
+  ? createSignInRecheck({
+    renew: async (principalId, driver) => {
+      const engine: RunEngine | null = driver === "claudeAgent" ? "claude-code" : driver === "codex" ? "codex" : null;
+      const cli = engine ? subscriptionCli(engine) : null;
+      if (!engine || !cli || !engineLogins) return false;
+      const loginDir = engineLogins.loginDir(principalId, ENGINE_DRIVER[engine]);
+      if (engine === "claude-code") {
+        return (await ensureClaudeSubscriptionFresh({ loginDir, cli: cli.cli, environment: cli.environment, force: true })).ok;
+      }
+      await renewWithCli({ engine, cli: cli.cli, environment: cli.environment, loginDir }).catch(() => {});
+      const access = await readSubscriptionAccess(engine, loginDir);
+      return Boolean(access && (access.expiresAt === null || access.expiresAt > Date.now() + 60_000));
+    },
+    markExpired: (principalId, driver, slot) => engineLogins.markExpired(principalId, driver, slot),
+    clearExpired: (principalId, driver, slot) => engineLogins.clearExpired(principalId, driver, slot),
+    expired: (principalId, driver, slot) => engineLogins.expired(principalId, driver, slot),
+    onRestored: (principalId, driver) => resumeEngineReconnectForPerson(principalId, driver === "codex" ? "Codex" : "Claude")
+  })
+  : null;
+if (signInRecheck && !codeFixture) {
+  setTimeout(() => {
+    void signInRecheck.heal(principals.list().filter((person) => person.disabledAt === undefined).map((person) => person.id))
+      .then((restored) => { if (restored) console.log(`[sign-in] ${restored} expired sign-in(s) restored at start (#2040)`); })
+      .catch(() => {});
+  }, 30_000).unref?.();
 }
 const cloudAgentProviders = createProviderRegistry({ perspicaxBaseUrl: perspicaxBase, personalSubscriptions: () => subscriptionDepositor, perspicaxLink: perspicaxLinkBearer });
 cloudAgentManager = new CloudAgentManager({
@@ -40798,7 +40829,7 @@ ROUTES.push(createHarnessConnectorRoutes({
   isAdmin: (auth) => (IDENTITY.kind === "perspicax" ? orgAdminCaller(auth) : true),
   claudeAccountFor: claudeAccountForPrincipal,
   inventory: claudeAiInventory,
-  onSignedOut: (principalId) => engineLogins?.markExpired(principalId, "claudeAgent")
+  onSignedOut: (principalId) => { void signInRecheck?.refused(principalId, "claudeAgent"); }
 }));
 
 // The engines' own slash commands in the chat (server/harness-commands.ts):

@@ -64,6 +64,7 @@
     "test:unit": "node scripts/testing/vitest-shards.mjs --group unit",
     "test:e2e": "node scripts/testing/vitest-shards.mjs --group e2e",
     "test:shards": "node scripts/testing/vitest-shards.mjs",
+    "test:routine-smoke": "vitest run server/testing/fake-perspicax-mcp-server.test.ts server/routines/routine-smoke/routine-smoke.test.ts",
     "test:cua": "pnpm build:cua && node scripts/smoke-cua.mjs",
     "test:cua-container": "node scripts/smoke-cua-container.mjs",
     "check:electron": "node scripts/check-electron.mjs",

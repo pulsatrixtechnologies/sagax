@@ -14,8 +14,9 @@ export interface HealthPublicRouteDeps {
 export interface UnauthHealthBrandRouteDeps {
   isShuttingDown(): boolean;
   healthzUnreadyBody(): unknown;
-  /** Spread into the stranger /api/health body (app + product only). */
-  healthIdentity: { readonly app: string; readonly product: string };
+  /** Spread into the stranger /api/health body (app + product + version).
+   * #1996: version is the Sagax release people know (forkVersion). */
+  healthIdentity: { readonly app: string; readonly product: string; readonly version: string };
   loadBrand(): unknown;
 }
 

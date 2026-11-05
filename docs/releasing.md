@@ -117,9 +117,13 @@ sha you pass) is not an ancestor of `origin/main`. Run it after
    `node scripts/verify/release/verify-win-natives.mjs <win-unpacked or unzipped dir> x64|arm64`.
    Nothing here runs the app: a Windows launch (Windows, below) is still
    needed before release.
-4. Gates: `scripts/smoke-browser-bundle.mjs` (live on the host arch,
-   `--check-only` for the others) and `SAGAX_SMOKE_DIST=<resources>/server
-   node scripts/smoke-packaged-server.mjs` for every package.
+4. Gates: `pnpm test:routine-smoke` (production routine paths against a fake
+   Perspicax MCP and the real Sagax routine pipeline: readiness, run start,
+   approvals, credits failover, error reporting, token usage; see
+   `docs/verification/routine-smoke.md`), `scripts/smoke-browser-bundle.mjs`
+   (live on the host arch, `--check-only` for the others) and
+   `SAGAX_SMOKE_DIST=<resources>/server node scripts/smoke-packaged-server.mjs`
+   for every package.
    Before notarizing, launch the packaged app on the host arch:
    `pnpm smoke:launch --app release/mac-arm64/Sagax.app`, and again with
    `--user-data-copy` pointing at an existing userData folder (it is copied,

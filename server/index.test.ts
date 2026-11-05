@@ -1694,7 +1694,7 @@ describe("harness HTTP API", () => {
       req.end();
     });
     expect(probe.status).toBe(200);
-    expect(probe.body).toEqual({ app: "openmausbot", product: "sagax" });
+    expect(probe.body).toEqual({ app: "openmausbot", product: "sagax", version: "0.8.45" });
     // the brand is public too: the sign-in page is branded before anyone has a session
     const brand = await new Promise<{ status: number; body: unknown }>((resolve, reject) => {
       const req = request({ hostname: "127.0.0.1", port: PORT, path: "/api/brand", headers: { host: "example.com" } }, (res) => {
@@ -1741,6 +1741,8 @@ describe("harness HTTP API", () => {
     const { status, body } = await api("GET", "/api/health");
     expect(status).toBe(200);
     expect(body.app).toBe("openmausbot");
+    expect(typeof body.version).toBe("string");
+    expect(body.version.length).toBeGreaterThan(0);
     expect(typeof body.pid).toBe("number");
     expect(body.static).toBe(true);
   });

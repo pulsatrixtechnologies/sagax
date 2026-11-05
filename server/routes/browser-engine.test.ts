@@ -29,6 +29,7 @@ function harness(overrides: Partial<BrowserEngineRouteDeps> = {}) {
     ENGINE_PROBE_TTL_MS: 60_000,
     ENGINE_PROBE_TIMEOUT_MS: 10_000,
     staticDir: () => null,
+    version: () => "0.8.45-test",
     isInstalling: () => installing,
     startInstall: (work) => {
       installing = true;
@@ -77,12 +78,12 @@ describe("GET /api/health", () => {
     expect(sent).toMatchObject({ status: 503, body: { ok: false, shuttingDown: true, ...HEALTH_IDENTITY } });
   });
 
-  it("gives a session-less bot shell on an organization server the app name only", async () => {
+  it("gives a session-less bot shell on an organization server the app name and Sagax version (#1996)", async () => {
     const h = harness({ isOrganization: () => true });
     const { sent } = await h.call("/api/health", {
       auth: { kind: "loopback", scopes: ["client"], trust: "service" } as RequestAuth,
     });
-    expect(sent).toEqual({ status: 200, body: { ...HEALTH_IDENTITY } });
+    expect(sent).toEqual({ status: 200, body: { ...HEALTH_IDENTITY, version: "0.8.45-test" } });
   });
 
   it("gives a service loopback on a solo server capabilities without engines", async () => {
@@ -91,7 +92,7 @@ describe("GET /api/health", () => {
       auth: { kind: "loopback", scopes: ["client"], trust: "service" } as RequestAuth,
     });
     expect(sent?.status).toBe(200);
-    expect(sent?.body).toMatchObject({ ...HEALTH_IDENTITY, capabilities: expect.objectContaining({ guardedMessages: 1 }) });
+    expect(sent?.body).toMatchObject({ ...HEALTH_IDENTITY, version: "0.8.45-test", capabilities: expect.objectContaining({ guardedMessages: 1 }) });
     const body = sent!.body as { engines?: unknown; pid?: unknown };
     expect(body.engines).toBeUndefined();
     expect(body.pid).toBeUndefined();
@@ -110,6 +111,7 @@ describe("GET /api/health", () => {
     expect(sent?.status).toBe(200);
     expect(sent?.body).toMatchObject({
       ...HEALTH_IDENTITY,
+      version: "0.8.45-test",
       pid: process.pid,
       static: false,
       capabilities: { guardedMessages: 1, guardedRequests: 1, guardedFullAccess: 1, guardedOnBehalfOf: 1 },

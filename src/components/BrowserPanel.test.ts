@@ -39,6 +39,7 @@ vi.mock("@/lib/browser-input-queue", () => ({ createBrowserInputQueue: () => {
   fixture.queues.push(queue); return queue;
 } }));
 import { LiveBrowser } from "./BrowserPanel";
+import { LiveBrowserView } from "./BrowserPanel.tsx-parts/LiveBrowserView";
 import { BrowserViewport } from "./BrowserViewport";
 import { BrowserProfilesManager } from "./BrowserProfilesManager";
 import { api } from "@/state/store";
@@ -78,6 +79,11 @@ const renderElements = () => {
   let tree!: ReturnType<typeof LiveBrowser>;
   function Capture() { tree = LiveBrowser({ bot }); return tree; }
   renderToStaticMarkup(createElement(Capture));
+  // LiveBrowser delegates chrome to LiveBrowserView; expand it once so
+  // BrowserViewport and toolbar stay findable the same way as before.
+  if (isValidElement(tree) && tree.type === LiveBrowserView) {
+    tree = LiveBrowserView(tree.props as Parameters<typeof LiveBrowserView>[0]);
+  }
   return elements(tree);
 };
 const click = (nodes: Node[], label: string) => {

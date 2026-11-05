@@ -2,30 +2,21 @@
 // Per-bot settings (persona, model, computer) live in BotSettingsDialog: this
 // is the stuff shared by every bot: who you are, your keys, and the
 // machine your bots can borrow.
-import { useRetroSkin } from "./RetroChromeHost";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Archive, AudioLines, Bell, Coins, Download, FileText, FlaskConical, Import, Info, KeyRound, Monitor, Palette, Plug, Search, ShieldCheck, Terminal, User, X, Building2 } from "lucide-react";
+import { useState } from "react";
+import { FileText, Search, X } from "lucide-react";
 import { api, useStore, type AppSettingsSection } from "@/state/store";
-import { decisionModelEnabled } from "@/lib/feature-flags";
-import { usePerspicaxOrg } from "@/lib/perspicax-org";
-import { localeChoices, type LocaleKey } from "@/locales";
+import { localeChoices } from "@/locales";
 import { t } from "@/lib/i18n";
 import { withTourReset } from "@/lib/guided-tour";
 import { completionPatch } from "@/lib/onboarding";
 import { launchBridges } from "@/lib/launch";
-import { servedPage } from "@/lib/desktop";
 import { brand } from "@/lib/brand";
-import { navigate } from "@/lib/view-transitions";
-import { useServerMode } from "./ServerModeSettings";
-import { DecisionModelSettings } from "./DecisionModelSettings";
-import { GeneralAdvancedSettings, generalAdvancedShown, isSoloDesktop } from "./settings/AdvancedSettings";
 import { useUpdaterState } from "@/lib/updater";
 import { openUpdatePrompt, requestUpdateCheck } from "@/lib/update-prompt";
-import { peopleListServed, readMembership } from "../lib/membership";
-import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
-import { canEditConfig, canManageBackups, canManageComputers, canManageExperimental, viewerCan } from "@/lib/viewer";
+import { DecisionModelSettings } from "./DecisionModelSettings";
+import { GeneralAdvancedSettings, generalAdvancedShown, isSoloDesktop } from "./settings/AdvancedSettings";
+import { CompactRow, PillSelect, type PillOption, SettingRow, SettingsGroup, Switch } from "./SettingsPrimitives";
 import { OrganizationSettings } from "./OrganizationSettings";
-import { CompactRow, PillSelect, type PillOption, requestSettingsCard, SettingRow, SettingsGroup, Switch, takeRequestedSettingsCard } from "./SettingsPrimitives";
 import { OrgMemorySettings } from "./OrgMemorySettings";
 import { NotificationSettings } from "./NotificationSettings";
 import { TimeZoneRows } from "./settings/TimeZoneSettings";
@@ -41,200 +32,40 @@ import {
   VoiceSettingsPage,
   WorkspaceBackupSettings,
 } from "./lazy-settings-sections";
-import { currentSettingsSection, isMovedOrganizationCard } from "@/lib/settings-sections";
 import { openSettings } from "@/lib/settings-link";
-
 import { shortcutLabel } from "./ShortcutHint";
-import { workspacesAvailable } from "./WorkspacesSection";
-import { AboutMeEditor, aboutMeFirstLine } from "./AboutMeSettings";
+import { aboutMeFirstLine } from "./AboutMeSettings";
 import { SettingsSubPage, SettingsSubPageRow } from "./SettingsSubPage";
 import { AccountCard } from "./settings/AccountCard";
-import { requestAbout } from "@/lib/about-ui";
-import { AvatarCropPage } from "./settings/OwnAvatarField";
 import { OpenAtLoginRow } from "./OpenAtLoginOffer";
 import { SecurityKeySettings } from "./SecurityKeySettings";
 import { MyApprovalRules } from "./settings/MyApprovalRules";
 import { MyToolGrants } from "./settings/MyToolGrants";
 import { cn } from "@/lib/cn";
-import { useAdvancedMode } from "@/lib/interface-mode";
-import { simpleHidesSettingsSection } from "@/lib/interface-visibility";
 import { effectiveLanguage, setLanguageChoice, useLanguageChoice } from "@/lib/language-preference";
-import { applySettingsSearch, clearSettingsSearch, focusSettingsSearchLabel, settingsSearchLabels, settingsTextMatches } from "@/lib/settings-search";
+import { focusSettingsSearchLabel } from "@/lib/settings-search";
+import { useSettingsModal } from "./settings/useSettingsModal";
+import { NAV_GROUPS } from "./settings/settings-nav";
 
 // The threads choice moved with Appearance (0.5.6); old imports still work.
 export { chooseThreadsView } from "./settings/AppearanceSettings";
 
 export { GeneralAdvancedSettings, generalAdvancedShown, isSoloDesktop };
 
-// `labelKey`, not a label: t() reads the active pack when it is called, so a
-// label resolved here at module scope would freeze the language the app booted
-// in. The English keywords stay untranslated: they are a search index, and a
-// pack that omits them still matches what people type.
-/** Search words of the cards moved from General > Advanced to Organization
- * (2026-10-15). On a desktop with no server they stay in General > Advanced,
- * and General matches them there (sectionMatches `extra`). */
-export const ORGANIZATION_ADVANCED_KEYWORDS = ["routines", "conversation", "schedule", "mcp", "timeout", "group turns", "rooms"];
+export {
+  ORGANIZATION_ADVANCED_KEYWORDS,
+  NAV_GROUPS,
+  SECTIONS,
+  cardsMatching,
+  organizationHidesSection,
+  memberHidesSection,
+  orgMemoryAvailable,
+  PUBLISHED_PAGES_KEYWORDS,
+  publishedPagesMatch,
+  sectionMatches,
+  type SettingsNavGroup,
+} from "./settings/settings-nav";
 
-/** The headings of the settings nav (2026-10-16): Cursor Settings and
- * the reference design keep a short rail in a few groups; Sagax names its groups. A
- * heading shows while one of its pages does. Automations lives in the
- * avatar menu, not here (2026-10-16). */
-export type SettingsNavGroup = "you" | "ai" | "workspace" | "app";
-
-export const NAV_GROUPS: Array<{ id: SettingsNavGroup; labelKey: LocaleKey }> = [
-  { id: "you", labelKey: "settings.nav.you" },
-  { id: "ai", labelKey: "settings.nav.ai" },
-  { id: "workspace", labelKey: "settings.nav.workspace" },
-  { id: "app", labelKey: "settings.nav.app" },
-];
-
-export const SECTIONS: Array<{
-  id: AppSettingsSection;
-  labelKey: LocaleKey;
-  /** The nav heading it sits under (NAV_GROUPS). */
-  group: SettingsNavGroup;
-  icon: typeof User;
-  keywords: string[];
-}> = [
-  // 2026-10-16: in the order of their nav groups (NAV_GROUPS), as Cursor
-  // Settings groups its rail: you, AI, the workspace, this app last.
-  // 0.5.6: General is laid out as the reference design's (Account, Appearance,
-  // System); Updates is a page of its own, as there.
-  // 2026-10-26: Account comes first. 2026-10-28: Account keeps the account
-  // (who is signed in, name, avatar, About me, language and time zone) and
-  // what General held; Security and Vault are pages of their own again.
-  { id: "account", group: "you", labelKey: "settings.section.account", icon: User, keywords: ["account", "compte", "profile", "profil", "name", "nom", "email", "courriel", "copy email", "sign out", "se déconnecter", "déconnexion", "label", "avatar", "photo", "about me", "à propos de moi", "open at login", "ouvrir à la connexion", "suggestions", "suggested", "memory", "effort", "new bots", "reasoning", "threads", "parallel", "concurrency", "cleanup", "retention", "event log", "event-log", "log size", "automatic recovery", "backup model", "fallback", "advanced", "avancé", "diagnostics", "diagnostic", "journaux", "logs", "download logs", "télécharger les journaux", "feedback", "send feedback", "commentaires", "envoyer des commentaires", "nettoyage", "people's tool access", "language", "langue", "time zone", "timezone", "fuseau horaire", "fuseau", "tour", "tours", "visite", "welcome", "bienvenue", "system", "système", "server", "serveur"] },
-  // 2026-10-28: Security, the person's own: security keys and passkeys, the
-  // approval rules they saved (Always allow, Always deny, Ask first, paged)
-  // and their tool access. Vault: the credential vault and the one-time card.
-  { id: "security", group: "you", labelKey: "settings.section.security", icon: ShieldCheck, keywords: ["security", "sécurité", "security key", "security keys", "clé de sécurité", "clés de sécurité", "passkey", "clé d'accès", "yubikey", "webauthn", "touch id", "face id", "step-up", "sensitive", "sensibles", "approvals", "approbations", "approval level", "niveau d'approbation", "approval rules", "règles d'approbation", "rules", "règles", "always allow", "toujours permettre", "always deny", "toujours refuser", "ask first", "demander d'abord", "deny", "refuser", "tool access", "accès aux outils", "my tool access", "mon accès aux outils", "grants", "autorisations"] },
-  { id: "credentials", group: "you", labelKey: "settings.section.vault", icon: KeyRound, keywords: ["vault", "coffre", "your vault", "votre coffre", "credentials", "identifiants", "password", "mot de passe", "login", "logins", "connexions", "totp", "2fa", "one-time code", "code à usage unique", "1password", "api key", "clé api", "api keys", "clés api", "notes", "note", "autofill", "remplissage", "import", "importer", "export", "exporter", "add an item", "ajouter un élément", "one-time card", "carte à usage unique", "single-use", "shop pay", "link", "card", "carte", "purchase", "achat", "achats", "payments", "paiements", "wallet", "portefeuille", "history", "historique"] },
-  { id: "appearance", group: "you", labelKey: "settings.section.appearance", icon: Palette, keywords: ["skin", "theme", "thème", "variant", "variante", "light", "clair", "dark", "sombre", "auto", "appearance", "advanced", "simple", "mode", "tools", "tool calls", "threads", "show threads", "hide threads", "sidebar", "hidden", "hide", "show", "density", "compact", "comfortable", "avatars", "display", "run", "this run", "run card", "commands", "mascot", "owl", "desktop", "fly", "floating", "app icon", "dock", "icon", "taskbar", "providers", "sign-in", "fournisseurs", "connexion", "send", "enter", "return", "shift+enter", "ctrl+enter", "cmd+enter", "⌘+enter", "new line", "keyboard", "ime", "japanese", "font", "police", "accessibility", "accessibilité", "reduce motion", "motion", "animations", "contrast", "contraste", "text size", "taille du texte", "zoom", "hardware acceleration", "accélération matérielle", "gpu", "spell check", "spellcheck", "orthographe", "correcteur", "interface", "inspector", "inspecteur", "logo", "masqués", "mascottes", "icône", "barre latérale", "conversations", "desktop", "bureau"] },
-  // 2026-10-14: Privacy is a card of this page on an organization server.
-  { id: "notifications", group: "you", labelKey: "settings.section.notifications", icon: Bell, keywords: ["notifications", "notification", "sound", "sounds", "notification sound", "son de notification", "tick", "tic", "carillon", "chime a", "chime b", "blip", "mute", "silent", "chime", "alert", "alerts", "banner", "badge", "dock", "app icon", "icône", "unread", "nudge", "wizz", "shake", "secousse", "son", "persistent", "stay", "privacy", "read receipts", "seen", "vu", "confidentialité", "accusés de lecture", "presence", "online", "away", "offline", "last seen", "status", "en ligne", "absent", "hors ligne", "privacidade", "alertes", "on screen", "à l'écran"] },
-  // Models (2026-10-14 as Models and voice: Integrations and Models and
-  // accounts in one page; Connected apps and Decision model are cards of
-  // it). 2026-10-28: Voice is a page of its own; every key stays in Models.
-  // 2026-10-30: Providers, every account, key and server in one list (lot 1 of "Providers, models and voice")
-  { id: "providers", group: "ai", labelKey: "settings.section.providers", icon: Plug, keywords: ["providers", "fournisseurs", "model providers", "accounts", "comptes", "claude", "codex", "grok", "cli", "sign in", "connexion", "subscription", "abonnement", "keys", "clés", "api", "api key", "api keys", "xai", "mistral", "cerebras", "router", "openrouter", "base url", "openai", "anthropic", "groq", "opencode", "provider", "fournisseur", "elevenlabs", "fish audio", "azure", "foundry", "compatible", "server", "serveur", "local models", "modèles locaux", "this computer", "cet ordinateur", "needs setup", "à configurer", "to connect", "à connecter", "view as a member", "voir comme un membre", "connectors", "connecteurs", "claude.ai", "cursor", "cloud agents", "cloud coding agents", "voice keys", "clés de voix"] },
-  { id: "engines", group: "ai", labelKey: "settings.section.models", icon: Terminal, keywords: ["models", "modèles", "engines", "moteurs", "connections", "integrations", "intégrations", "image", "avatar", "box", "vps", "decision", "jev", "typesafe", "routing", "auto", "who answers", "auto model", "modèle auto", "image provider", "fournisseur d'images", "génération d'images", "web search", "recherche web", "brave", "exa", "firecrawl", "searxng", "bot models", "modèles des bots", "bulk", "defaults for new bots", "défauts des nouveaux bots", "who pays", "qui paie", "effort"] },
-  { id: "voice", group: "ai", labelKey: "settings.section.voice", icon: AudioLines, keywords: ["voice", "voix", "tts", "speech", "parole", "elevenlabs", "fish", "fish audio", "chatterbox", "grok voice", "voice engine", "moteur de voix", "live call", "live calls", "appels en direct", "read replies", "hang up", "gpt-live", "voice keys", "clés de voix", "microphone", "micro", "audio", "input device", "entrée audio"] },
-  // 2026-10-14: Memory is a card of this page (it was its own section).
-  { id: "organization", group: "workspace", labelKey: "settings.section.organization", icon: Building2, keywords: ["company", "organization", "organisation", "sign in", "enroll", "managed", "models", "disconnect", "workspace", "cloud", "hosted", "vps", "server", "servers", "connect", "pair", "switch", "local", "memory", "obsidian", "vault", "sync", "git", "perspicax", "mémoire", "cache", "pending", "domain", "dns", "caddy", "full access", "accès complet", "approvals", "approbations", "waiting for an admin", "en attente", "people from before", "rattacher", "invite", "inviter", "invitation", "people", "personnes", "this computer", "cet ordinateur", "serveurs", "oublier", "forget", ...ORGANIZATION_ADVANCED_KEYWORDS] },
-  { id: "computer", group: "workspace", labelKey: "settings.section.computer", icon: Monitor, keywords: ["computer", "local vm", "vm", "virtual", "desktop", "ordinateur", "your computer", "votre ordinateur", "other computers", "autres ordinateurs", "rename", "renommer", "remove computer", "retirer", "network", "réseau", "traffic", "trafic", "server environment", "environnement serveur", "reset", "réinitialiser", "repair", "réparer", "update", "mise à jour", "maintenance", "entretien", "disk", "disque", "disk saver", "économiseur de disque", "cache", "clean", "nettoyer"] },
-  { id: "usage", group: "workspace", labelKey: "settings.section.usage", icon: Coins, keywords: ["tokens", "cost", "billing", "plan", "forfait", "coût", "usage", "spend", "this month", "ce mois-ci", "last 30 days", "30 derniers jours", "by bot", "par bot", "by model", "par modèle", "renews", "renouvelle", "sagax business"] },
-  // 2026-10-15: People and Installations are hidden in the app, like Email,
-  // Activity and Pair devices (settings-sections.ts HIDDEN).
-  { id: "backups", group: "workspace", labelKey: "settings.section.backups", icon: Archive, keywords: ["export", "import", "restore", "full backup", "password", "recovery", "backup", "sauvegarde", "exporter", "restaurer", "replace", "remplacer", "mot de passe"] },
-  // 2026-10-19: a shared Grok Bot comes in here (port of OpenMausBot #3073).
-  { id: "import", group: "workspace", labelKey: "settings.section.import", icon: Import, keywords: ["import", "importer", "grok", "grok bot", "x.ai", "share link", "lien de partage", "template", "modèle"] },
-  // 0.5.6: this app's updates and the pre-release channel (were in General
-  // and General > Advanced). Shown where the desktop app answers.
-  { id: "updates", group: "app", labelKey: "settings.updates.title", icon: Download, keywords: ["updates", "update", "version", "mise à jour", "mises à jour", "prerelease", "pre-release", "beta", "bêta", "restart"] },
-  { id: "experimental", group: "app", labelKey: "settings.section.experimental", icon: FlaskConical, keywords: ["early", "preview", "learn", "skill", "authoring", "browser", "profiles", "experimental", "expérimental", "data window", "fenêtre data", "decision model", "modèle de décision", "compétences", "navigateur", "unavailable", "indisponible", "phone calls", "appels téléphoniques", "callback number", "numéro de rappel", "do not call", "ne pas appeler"] },
-  // About: last under App (like Grok Bot). Opens the centred About modal.
-  { id: "about", group: "app", labelKey: "sidebar.menu.about", icon: Info, keywords: ["about", "à propos", "version", "license", "licence", "github", "documentation", "docs", "release notes", "notes de version", "sagax", "openmausbot"] },
-];
-
-/** Former sections that are a card of another page now (2026-10-14), by the
- * page that holds them. Each keeps its own visibility rules: the card shows
- * where the section would have, and its page shows when the card does. */
-const HOSTED_CARDS: Partial<Record<AppSettingsSection, AppSettingsSection[]>> = {
-  engines: ["decisionModel"],
-  notifications: ["privacy"],
-  organization: ["memory"],
-};
-
-/** Collapsible cards a search opens: a match on these words means the person
- * is looking for what the card holds, so it should not stay folded. */
-const CARD_KEYWORDS: Record<string, string[]> = {
-  "general.aboutMe": ["about me"],
-  "myApprovalRules": ["always allow", "always deny", "ask first", "approval rules", "règles d'approbation"],
-  "general.threadCleanup": ["cleanup", "retention", "event log", "event-log", "log size"],
-  "organization.mcpCalls": ["mcp", "timeout", "tool call"],
-  "connections.integrations": ["box", "vps"],
-  "connections.image": ["image", "avatar", "gpt image"],
-  "providers.toConnect": ["needs setup", "à configurer", "to connect", "à connecter", "kimi", "droid", "qwen", "hermes", "cline", "antigravity"],
-  "voice.advanced": ["live call", "read replies", "hang up", "gpt-live"],
-  "companion.domain": ["domain", "dns", "caddy"],
-  "engines.decisionModel": ["decision", "jev", "typesafe"],
-  "connections.cloudAgents": ["cursor", "cloud agent", "cloud coding"],
-  "connections.webSearch": ["web search", "recherche web", "brave", "exa", "parallel", "firecrawl", "searxng"],
-  "usage.breakdown": ["by bot", "by model", "par bot", "par modèle"],
-  "organization.memory": ["obsidian", "vault"],
-  "backups.import": ["import", "restore", "restaurer"],
-};
-
-export function cardsMatching(query: string): string[] {
-  if (query.length < 3) return [];
-  return Object.entries(CARD_KEYWORDS)
-    .filter(([, words]) => words.some((word) => word.includes(query)))
-    .map(([id]) => id);
-}
-
-/** Sections an organization server (Perspicax) leaves out: its mail is
- * managed in the Perspicax admin console. A solo server keeps Email: it
- * sends its own sign-in codes and invitations. */
-export function organizationHidesSection(id: AppSettingsSection, organization: boolean): boolean {
-  // Privacy holds read receipts between people, which exist there only.
-  // (A person's own GitHub is in Connect apps > Sources, their MCP servers in Providers.)
-  return organization ? id === "mail" : id === "privacy";
-}
-
-/** Sections whose every control writes the installation. Hidden (not greyed)
- * when the viewer cannot edit it. Computer stays for an organization member:
- * their own server environment is not an installation computer. Usage stays
- * for everyone (2026-10-15): it shows the person's own usage only
- * (GET /api/me/usage). */
-export function memberHidesSection(id: AppSettingsSection, input: {
-  editConfig: boolean;
-  manageComputers: boolean;
-  manageBackups: boolean;
-  organization: boolean;
-  /** server.experimental (implied by server.settings). Defaults to editConfig
-   * for an older server that sends no permission list. */
-  manageExperimental?: boolean;
-  /** Organization server (#1098): the viewer's own Experimental switches. */
-  personalSettings?: boolean;
-}): boolean {
-  // Experimental is its own delegable right (server.experimental): a member an
-  // admin gave it sees the section without the rest of the installation.
-  if (id === "experimental") return !(input.manageExperimental ?? input.editConfig) && input.personalSettings !== true;
-  if (id === "decisionModel" || id === "workspaces") return !input.editConfig;
-  if (id === "backups" || id === "import") return !input.manageBackups;
-  if (id === "computer") return !input.manageComputers && !input.organization;
-  return false;
-}
-
-/** Settings > Memory needs the desktop app's main process (the vault is a
- * folder on this computer). */
-export function orgMemoryAvailable(): boolean {
-  return typeof window !== "undefined" && Boolean(window.ogb?.orgMemory);
-}
-
-/** Published pages left Settings for Connect apps > Pages (2026-10-26). A
- * search still finds them, as one entry that opens them there. */
-export const PUBLISHED_PAGES_KEYWORDS = ["pages", "published", "publiées", "canvas", "canevas", "share", "partager", "link", "lien", "revoke", "révoquer", "expiry", "expiration", "site", "html", "markdown"];
-
-export function publishedPagesMatch(query: string): boolean {
-  if (!query.trim()) return false;
-  return [t("settings.section.pages"), ...PUBLISHED_PAGES_KEYWORDS].some((part) => settingsTextMatches(part, query));
-}
-
-export function sectionMatches(section: (typeof SECTIONS)[number], query: string, extra: string[] = []): boolean {
-  if (!query.trim()) return true;
-  return [t(section.labelKey), ...section.keywords, ...extra].some((part) => settingsTextMatches(part, query));
-}
-
-
-
-/** Sub-pages pushed inside a section (src/components/SettingsSubPage.tsx):
- * the section they belong to, their title and their page. */
-const SUB_PAGES: Record<string, { section: AppSettingsSection; titleKey: LocaleKey; render: () => React.ReactNode }> = {
-  "general.aboutMe": { section: "account", titleKey: "settings.profile.aboutMe", render: () => <AboutMeEditor /> },
-  "general.advanced": { section: "account", titleKey: "settings.advancedPage.title", render: () => <GeneralAdvancedSettings /> },
-  "account.crop": { section: "account", titleKey: "settings.profile.photoCropTitle", render: () => <AvatarCropPage /> },
-};
 
 /** This app's updates, which download by themselves. Shown once the desktop
  * app answers: on this computer's page, never on another server's, where its
@@ -428,215 +259,12 @@ function LanguageRow() {
 }
 
 export function SettingsModal() {
-  const { state, dispatch } = useStore();
-  const advanced = useAdvancedMode();
-  const retroSkin = useRetroSkin();
-  const remoteActive = window.ogb?.remoteClient?.active === true;
-  // An old section id opens the page that holds it now. A remote client
-  // shows this desktop's own pages only (Appearance, Organization,
-  // Notifications); Pair devices, its old landing page, is hidden since
-  // 2026-10-14, so it lands on Appearance.
-  const current = currentSettingsSection(state.appSettingsSection);
-  const requested: AppSettingsSection =
-    remoteActive && current !== "appearance" && current !== "organization" && current !== "notifications" && current !== "updates"
-      ? "appearance"
-      : current;
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const paneRef = useRef<HTMLDivElement>(null);
-  const [searchLabels, setSearchLabels] = useState<string[]>([]);
-  // Closing goes back out of Settings with a quick page cross-fade.
-  const closeSettings = () => navigate(() => dispatch({ type: "toggleAppSettings", open: false }), "back", "page");
-  const openAbout = useCallback(() => {
-    dispatch({ type: "toggleAppSettings", open: false });
-    requestAbout();
-  }, [dispatch]);
-  const [query, setQuery] = useState("");
-  useEffect(() => window.ogb?.environments?.onOpenSettings?.(() => setQuery("")), []);
-  useEffect(() => window.ogb?.onOpenAppSettings?.(() => setQuery("")), []);
-  const q = query.trim().toLowerCase();
-  const ownerOrAdmin = useOwnerOrAdmin();
-  const editConfig = canEditConfig(state.config);
-  const manageComputers = canManageComputers(state.config);
-  const manageBackups = canManageBackups(state.config);
-  const manageExperimental = canManageExperimental(state.config);
-  // Server mode: this app shows its organization's server only (src/lib/launch.ts).
-  const serverMode = useServerMode();
-  const lockedServer = serverMode?.active ? serverMode : null;
-  // An organization server (Perspicax): the desktop locked to one, or a
-  // page whose server answers GET /api/org as Perspicax.
-  const perspicaxOrg = usePerspicaxOrg();
-  const organization = Boolean(lockedServer) || perspicaxOrg !== null;
-  const soloDesktop = isSoloDesktop(state.config);
-  // Whether a section id (a page, or a former page that is a card now) may
-  // show for this viewer. A card keeps the rules its section had.
-  const allowed = (id: AppSettingsSection): boolean => {
-    // a remote client shows the pages that are about this desktop
-    if (remoteActive && !["appearance", "organization", "privacy", "notifications", "memory", "updates", "about"].includes(id)) return false;
-    // this app's own updates: where the desktop app answers
-    if (id === "updates" && !window.ogb?.updater) return false;
-    // the organization memory's local cache is the desktop app's (main
-    // process), set up by itself on an organization server signed in with
-    // Perspicax: nothing to show anywhere else
-    if (id === "memory" && !(orgMemoryAvailable() && perspicaxOrg !== null)) return false;
-    // the desktop app in "No server" mode has no organization to show; it
-    // joins one from General > Server, which brings this section back
-    if (id === "organization" && soloDesktop) return false;
-    // the operator's screen for other workspaces exists only where a fleet agent does
-    if (id === "workspaces" && !workspacesAvailable(state.config)) return false;
-    // sign-in by email is a served solo server's (the desktop app pairs
-    // devices under Remote access), or the read-only view of a hosted
-    // workspace whose members the organisation's Admin decides. An
-    // organization server sends no sign-in list: Perspicax owns its people.
-    // A served page, in a browser or drawn by the desktop app on that server
-    // (electron/bundled-ui.cjs): the same server shows the same sections.
-    if (id === "people" && !(servedPage() && (readMembership(state.config).authority === "portal" || peopleListServed(state.config)))) return false;
-    // how the server sends sign-in codes and invitations: its admins and
-    // the operator, on the desktop and on the web
-    if (id === "mail" && ownerOrAdmin !== true) return false;
-    if (organizationHidesSection(id, organization)) return false;
-    // the activity log belongs to a workspace served to a browser, and to its admins
-    // (2026-10-09: and to a person whose profile includes people.activityLog)
-    if (id === "activity" && !(servedPage() && (ownerOrAdmin === true || (perspicaxOrg !== null && viewerCan(state.config, "people.activityLog"))))) return false;
-    // Installation writes the server refuses with 403: hide the section.
-    if (memberHidesSection(id, { editConfig, manageComputers, manageBackups, organization, manageExperimental, personalSettings: state.config?.personalSettings === true })) return false;
-    // Decision model is experimental, off until its switch is on.
-    if (id === "decisionModel" && !decisionModelEnabled(state.config)) return false;
-    // Simple hides technical sections. Their saved values stay.
-    return advanced || !simpleHidesSettingsSection(id);
-  };
-  const memoryShown = allowed("memory");
-  // A request for Settings > Organization (the Server menu, a deep link) on
-  // a desktop with no server opens the launch screen on Server instead,
-  // unless the page holds this computer's organization memory.
-  // A link to a card moved from General > Advanced (2026-10-15) opens
-  // General > Advanced there, where those cards stay.
-  useEffect(() => {
-    if (!soloDesktop || memoryShown || state.appSettingsSection !== "organization") return;
-    if (isMovedOrganizationCard(takeRequestedSettingsCard())) {
-      dispatch({ type: "toggleAppSettings", open: true, section: "account", subPage: "general.advanced" });
-      return;
-    }
-    dispatch({ type: "toggleAppSettings", open: false, section: "account" });
-    dispatch({ type: "toggleLaunch", open: true, mode: "server" });
-  }, [soloDesktop, memoryShown, state.appSettingsSection, dispatch]);
-  // A page shows when it is allowed, or when one of the cards it holds is.
-  const availableSections = SECTIONS.filter((entry) => allowed(entry.id) || (HOSTED_CARDS[entry.id] ?? []).some(allowed));
-  // A page this viewer cannot see (an old link to Email where People is not
-  // shown, a hidden page) draws the first page they can, at once.
-  const section: AppSettingsSection = availableSections.some((entry) => entry.id === requested) ? requested : availableSections[0]?.id ?? requested;
-  const visibleSections = availableSections.filter((entry) => sectionMatches(entry, q, soloDesktop && entry.id === "account" ? ORGANIZATION_ADVANCED_KEYWORDS : []));
-  const pagesHit = Boolean(q) && publishedPagesMatch(q);
-  const sectionLabelKey = SECTIONS.find((entry) => entry.id === section)?.labelKey;
-  const subPageId = state.appSettingsSubPage;
-  const subPage = subPageId && SUB_PAGES[subPageId]?.section === section ? SUB_PAGES[subPageId] : null;
-  const openSubPage = (id: string) => dispatch({ type: "toggleAppSettings", open: true, section: SUB_PAGES[id].section, subPage: id });
-  const closeSubPage = useCallback(() => {
-    const from = state.appSettingsSubPage;
-    dispatch({ type: "toggleAppSettings", open: true, section });
-    // Back where the person left: the row that opened the page.
-    if (from && typeof requestAnimationFrame === "function") {
-      requestAnimationFrame(() => {
-        const row = [...document.querySelectorAll<HTMLElement>("[data-settings-card]")].find((node) => node.dataset.settingsCard === from);
-        row?.querySelector<HTMLElement>("button")?.focus();
-      });
-    }
-  }, [dispatch, section, state.appSettingsSubPage]);
-  const nextVisibleSection = visibleSections.some((entry) => entry.id === section) ? undefined : visibleSections[0]?.id;
-
-  useEffect(() => {
-    for (const id of cardsMatching(q)) requestSettingsCard(id);
-  }, [q]);
-
-  // Searching shows the matching sections, not the page that was open.
-  useEffect(() => {
-    if (q && subPage) dispatch({ type: "toggleAppSettings", open: true, section });
-  }, [q, subPage, section, dispatch]);
-
-  useEffect(() => {
-    // Translated matches can change without the query changing. Follow the
-    // rendered results instead of a second filter with stale effect inputs.
-    if (nextVisibleSection) dispatch({ type: "toggleAppSettings", open: true, section: nextVisibleSection });
-  }, [dispatch, nextVisibleSection]);
-
-  // About is a Settings rail entry that opens the centred modal (not a pane).
-  useEffect(() => {
-    if (!state.appSettingsOpen || section !== "about") return;
-    openAbout();
-  }, [state.appSettingsOpen, section, openAbout]);
-
-  // The open page hides the rows that do not match and scrolls to the first
-  // one. A disclosure that opens later is filtered again, without jumping.
-  useLayoutEffect(() => {
-    const pane = paneRef.current;
-    if (!pane || !q) {
-      if (pane) clearSettingsSearch(pane);
-      setSearchLabels((prev) => (prev.length === 0 ? prev : []));
-      return;
-    }
-    let scroll = true;
-    const apply = () => {
-      const hit = applySettingsSearch(pane, q);
-      const labels = settingsSearchLabels(pane);
-      setSearchLabels((prev) => (prev.length === labels.length && prev.every((label, index) => label === labels[index]) ? prev : labels));
-      if (scroll && hit) hit.scrollIntoView({ block: "center", inline: "nearest" });
-      scroll = false;
-    };
-    apply();
-    const observer = new MutationObserver(() => apply());
-    observer.observe(pane, { childList: true, subtree: true });
-    return () => {
-      observer.disconnect();
-      clearSettingsSearch(pane);
-    };
-  }, [q, section, subPage]);
-
-  useEffect(() => {
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const dialog = dialogRef.current;
-    const search = dialog?.querySelector<HTMLInputElement>("[data-settings-search]");
-    if (search?.checkVisibility()) search.focus();
-    else dialog?.focus();
-
-    const onKey = (event: KeyboardEvent) => {
-      // A child editor owns Escape and its focus trap, including while saving.
-      if (event.defaultPrevented || (dialog && [...dialog.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]')]
-        .some(child => child.getClientRects().length))) return;
-      if (event.key === "Escape") {
-        event.preventDefault();
-        navigate(() => dispatch({ type: "toggleAppSettings", open: false }), "back", "page");
-        return;
-      }
-      if (event.key !== "Tab" || !dialog) return;
-
-      const focusable = Array.from(
-        dialog.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])',
-        ),
-      ).filter((element) => element.checkVisibility());
-      if (focusable.length === 0) {
-        event.preventDefault();
-        dialog.focus();
-        return;
-      }
-
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const active = document.activeElement;
-      if (event.shiftKey && (active === first || !dialog.contains(active))) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && active === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      previousFocus?.focus();
-    };
-  }, [dispatch]);
+  const {
+    state, dispatch, advanced, retroSkin, remoteActive, dialogRef, paneRef,
+    searchLabels, closeSettings, openAbout, query, setQuery, q, editConfig,
+    lockedServer, allowed, memoryShown, availableSections, section, visibleSections,
+    pagesHit, sectionLabelKey, subPageId, subPage, openSubPage, closeSubPage,
+  } = useSettingsModal();
 
   return (
     <div
@@ -936,5 +564,5 @@ export function SettingsModal() {
         </div>
       </div>
     </div>
-  );
+    );
 }

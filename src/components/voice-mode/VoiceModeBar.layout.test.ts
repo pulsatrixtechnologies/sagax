@@ -221,7 +221,11 @@ describe("the card's motion", () => {
 
 describe("where the bar lives", () => {
   it("ChatView puts it first in the banner stack, under the name chip; the overlay draws no call any more", () => {
-    const chat = readFileSync(new URL("../ChatView.tsx", import.meta.url), "utf8");
+    const chat = [
+      readFileSync(new URL("../ChatView.tsx", import.meta.url), "utf8"),
+      readFileSync(new URL("../ChatView.tsx-parts/ChatViewBanners.tsx", import.meta.url), "utf8"),
+      readFileSync(new URL("../ChatView.tsx-parts/ChatViewShell.tsx", import.meta.url), "utf8"),
+    ].join("\n");
     // Only a confidential thread's classification band (#683, a marking at
     // the very top of the conversation) may come before the pill.
     expect(chat).toMatch(/<div className="chat-banners[^"]*">\s*(?:\{confidential && <ConfidentialBanner position="top"[^>]*\/>\}\s*)?\{\/\*[\s\S]*?\*\/\}\s*<VoiceCallDock bot=\{bot\} \/>/);

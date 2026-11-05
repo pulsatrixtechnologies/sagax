@@ -43,7 +43,11 @@ describe("the call's states, as on a phone", () => {
 });
 
 describe("the bar's transcript and its card motion", () => {
-  const live = readFileSync(new URL("./LiveCall.tsx", import.meta.url), "utf8");
+  const live = [
+    readFileSync(new URL("./LiveCall.tsx", import.meta.url), "utf8"),
+    readFileSync(new URL("./useLiveCallEngineTurns.ts", import.meta.url), "utf8"),
+    readFileSync(new URL("./useLiveCallEngineSession.ts", import.meta.url), "utf8"),
+  ].join("\n");
   const bar = readFileSync(new URL("./VoiceModeBar.tsx", import.meta.url), "utf8");
 
   it("draws the call's lines by the card's rule: a turn sent again whole replaces its early fragment (no duplicate bubble)", () => {

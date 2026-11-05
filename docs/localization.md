@@ -48,6 +48,14 @@ pnpm i18n:check
 Commit `src/locales/source-hashes.json` with the catalog. The hash contains no
 translation content or credential; it only lets CI detect stale copy.
 
+### Format (issue #1386)
+
+The file stays a single JSON object of key → sha256 hex. On the 0.8.39 line it
+measured about 3.26 MiB and 13,059 French keys. A compact layout (NDJSON rows
+plus 16-hex truncated hashes) would cut roughly half the bytes, but every
+in-flight locale branch would have to re-sign its keys. Keep the current
+format; sign each key one by one (never `generate-locale --accept` globally).
+
 Model output is a draft, not an authority. Review tone, terminology, grammar,
 product names, and safety-sensitive copy before committing it. AI translation
 does not run in GitHub Actions: normal CI stays deterministic, secret-free,

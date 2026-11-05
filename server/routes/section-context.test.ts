@@ -77,6 +77,29 @@ describe("createSectionContextRoutes", () => {
     expect((put.sent[0]?.body as { ok: boolean } | undefined)?.ok).toBe(true);
   });
 
+  it("#2045: stores the brief under the caller's owner/id key", async () => {
+    const write = vi.fn((_section: string, text: string) => ({ text, updatedAt: 9 }));
+    const read = vi.fn(() => ({ text: "scoped", updatedAt: 4 }));
+    const alice = { kind: "session", session: { principalId: "pr_alice" } } as unknown as RequestAuth;
+    const bob = { kind: "session", session: { principalId: "pr_bob" } } as unknown as RequestAuth;
+    const route = createSectionContextRoutes(deps({
+      write,
+      read,
+      storageKey: (caller, section) => {
+        const owner = caller.kind === "session" ? caller.session.principalId : "local";
+        return `${owner}/sec_${section === "Ops" ? (owner === "pr_alice" ? "a" : "b") : "x"}`;
+      },
+    }));
+    const alicePut = ctx("/api/section-context", "PUT", { text: "Alice brief" });
+    alicePut.context.auth = alice;
+    await route(alicePut.context);
+    expect(write).toHaveBeenCalledWith("pr_alice/sec_a", "Alice brief");
+    const bobGet = ctx("/api/section-context");
+    bobGet.context.auth = bob;
+    await route(bobGet.context);
+    expect(read).toHaveBeenCalledWith("pr_bob/sec_b");
+  });
+
   it("refuses a non-string body on PUT", async () => {
     const route = createSectionContextRoutes(deps());
     const call = ctx("/api/section-context", "PUT", { text: 1 });

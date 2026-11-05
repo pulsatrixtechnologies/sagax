@@ -1147,11 +1147,14 @@ import {
   type MemoryJournalEntry
 } from "./memory/memory-journal.ts";
 import {
+  clearSectionContext,
+  migrateSectionContextKeys,
   readSectionContext,
   readSections,
   sectionContextKey,
   sectionContextLabel,
   sectionContextSystemPrompt,
+  teamDataKey,
   writeSectionContext
 } from "./rooms/section-context.ts";
 import {
@@ -10844,8 +10847,8 @@ function previewSystemPrompt(bot: BotRecord, principal?: string) {
     { id: "routine", label: "Routines", text: agentsMounted ? ROUTINE_PROMPT : "" },
     { id: "profile", label: "Profile changes", text: agentsMounted ? botProfilePrompt(bot) : "" },
     { id: "rich-output", label: "Rich output", text: richOutputPrompt(bot.emailDrafts !== false) },
-    { id: "section-context", label: "Section context", text: sectionContextSystemPrompt(bot.section) },
-    { id: "team-memory", label: "Team memory", text: teamMemory.systemPrompt(bot.section) + (agentsMounted ? TEAM_MEMORY_PROMPT : "") },
+    { id: "section-context", label: "Section context", text: (() => { const team = teamStorageForBot(bot); return sectionContextSystemPrompt(team.key, team.label); })() },
+    { id: "team-memory", label: "Team memory", text: (() => { const team = teamStorageForBot(bot); return teamMemory.systemPrompt(team.key, team.label) + (agentsMounted ? TEAM_MEMORY_PROMPT : ""); })() },
     teamAvailabilityPart(agentsMounted && coordination ? peers : []),
     { id: "rules", label: "Rules (RULES.md)", text: rulesSystemPrompt(bot.id, { writes: agentsMounted }) },
     { id: "memory", label: "Memory", text: memoryPromptFor(bot, { managedWrites: agentsMounted, fileTools: Boolean(privateWorkspace), withholdHostTools: Boolean(instance && withholdHostToolsFor(instance)) }) },
@@ -26037,13 +26040,18 @@ const outboundCounts = new OutboundCounts(join(DATA_DIR, "outbound-counts.json")
  * live stream (message.patch, under each viewer's usual filter). */
 function settleTeamMemoryCards(auth: RequestAuth, section: string, entryId: string, answer: "allow" | "deny", sourceThreadId?: string): number {
   const key = sectionContextKey(section);
-  const matches = (message: Message) => {
+  const matches = (message: Message, threadId: string) => {
     const request = message.card?.teamMemoryRequest;
-    return Boolean(request && request.entryId === entryId && sectionContextKey(request.section) === key && message.card?.requestId);
+    if (!request || request.entryId !== entryId || !message.card?.requestId) return false;
+    const cardSection = sectionContextKey(request.section);
+    if (cardSection === key) return true;
+    // #2045: cards still carry the display name; the page settles by owner/id.
+    const proposer = message.from?.botId ? store.bot(message.from.botId) : store.botByThread(threadId);
+    return teamStorageKeyFor(cardSection, proposer ? effectiveBotOwner(proposer) : undefined) === key;
   };
   const threads = new Set<string>();
   if (sourceThreadId) threads.add(sourceThreadId);
-  if (!sourceThreadId || !store.messagesFor(sourceThreadId).some(matches)) {
+  if (!sourceThreadId || !store.messagesFor(sourceThreadId).some((message) => matches(message, sourceThreadId))) {
     for (const bot of store.bots) for (const task of store.tasks(bot.id)) threads.add(task.threadId);
     for (const group of store.groups) {
       threads.add(group.threadId);
@@ -26053,7 +26061,7 @@ function settleTeamMemoryCards(auth: RequestAuth, section: string, entryId: stri
   let closed = 0;
   for (const threadId of threads) {
     for (const message of store.messagesFor(threadId)) {
-      if (!matches(message) || teamMemoryCardSettled(message.card)) continue;
+      if (!matches(message, threadId) || teamMemoryCardSettled(message.card)) continue;
       store.patchMessage(threadId, message.id, { card: { ...message.card!, answered: answer, answeredBy: cardAnswererFor(auth) } });
       const proposer = message.from?.botId ? store.bot(message.from.botId) : store.botByThread(threadId);
       appendDecision(DATA_DIR, {
@@ -26089,7 +26097,8 @@ function resolveAndSendTrust(res: ServerResponse, threadId: string, requestId: s
       json(res, late.status, late.body);
       return true;
     }
-    const result = teamMemory.resolve(request.section, request.entryId, behavior === "allow" ? "accept" : "reject");
+    const memoryKey = teamStorageKeyFor(request.section, proposer ? effectiveBotOwner(proposer) : undefined);
+    const result = teamMemory.resolve(memoryKey, request.entryId, behavior === "allow" ? "accept" : "reject");
     if (!result.claimed || result.state === "already_settled") {
       // the entry was deleted, or accepted, before this card heard of it:
       // close the card (no answerer to name) and say so
@@ -31777,7 +31786,10 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     updateDoc: (botId, update, opts) => updateDoc(botId, update as never, opts),
     searchDocs: (botId, q, limit) => searchDocFiles(botId, q, limit),
     markWorkspaceUse,
-    proposeTeamMemory: (section, entry, meta) => teamMemory.propose(section, entry, meta),
+    proposeTeamMemory: (section, entry, meta) => {
+      const owner = meta.botId ? effectiveBotOwner(store.bot(meta.botId) ?? {}) : undefined;
+      return teamMemory.propose(teamStorageKeyFor(section, owner), entry, meta);
+    },
     appendMessage: (threadId, message) => store.appendMessage(threadId, message as never),
     appendDecision: (row) => appendDecision(DATA_DIR, row as never),
     notify
@@ -38568,6 +38580,29 @@ function orgSectionNames(): string[] {
   sectionChannels?.migrate(names, sectionMigrationOwner);
   return names;
 }
+/** #2045: team instructions / memory storage key for a display name. */
+function teamStorageKeyFor(sectionName: string | null | undefined, ownerPrincipalId?: string | null): string {
+  const name = sectionContextKey(sectionName);
+  if (!name) return "";
+  if (!sectionChannels || !ownerPrincipalId?.trim()) return name;
+  const record = sectionChannels.byNameForOwner(name, ownerPrincipalId);
+  return record ? teamDataKey(record.ownerPrincipalId, record.id) : name;
+}
+
+function teamStorageKeyForAuth(auth: RequestAuth, sectionName: string): string {
+  const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
+  return teamStorageKeyFor(sectionName, owner);
+}
+
+function teamStorageForBot(bot: { section?: string; ownerUserId?: string } | null | undefined): { key: string; label: string } {
+  const name = sectionContextKey(bot?.section);
+  if (!name) return { key: "", label: "General" };
+  const owner = bot ? effectiveBotOwner(bot) : "";
+  const record = sectionChannels && owner ? sectionChannels.byNameForOwner(name, owner) : null;
+  if (record) return { key: teamDataKey(record.ownerPrincipalId, record.id), label: record.name };
+  return { key: name, label: sectionContextLabel(name) };
+}
+
 /** The section names an organization member may see (#2045): only the
  * ones they own, or a legacy one they were made a member of. A section is
  * never shown because it holds a bot or room someone shared: the bot is
@@ -38592,6 +38627,16 @@ if (sectionChannels) {
   const created = sectionChannels.migrate(store.sections, sectionMigrationOwner);
   if (created) console.log(`sections: ${created} existing section(s) became private channels`);
   migrateSectionSharesToBotGrants(sectionChannels);
+  // #2045: team instructions and memory move from name keys to owner/id.
+  const resolveTeamOwner = (name: string) => {
+    const record = sectionChannels.byName(name);
+    return record ? { ownerPrincipalId: record.ownerPrincipalId, id: record.id } : null;
+  };
+  const movedBriefs = migrateSectionContextKeys(resolveTeamOwner);
+  const movedMemory = teamMemory.migrateSectionKeys(resolveTeamOwner);
+  if (movedBriefs || movedMemory) {
+    console.log(`sections: migrated team data to owner/id (${movedBriefs} brief(s), ${movedMemory} memory section(s))`);
+  }
   const channels = sectionChannels;
   ROUTES.push(createSectionChannelRoutes({
     channels,
@@ -38605,7 +38650,15 @@ if (sectionChannels) {
     },
     // #2045: rename/delete only the owner's bots for that team name.
     renameSection: (record, nextName) => store.renameSectionForOwner(record.name, nextName, record.ownerPrincipalId, teamComputers),
-    deleteSection: (record) => (teamComputers.forSection(record.name) ? "Unassign this section's computer before deleting it" : store.deleteSectionForOwner(record.name, record.ownerPrincipalId)),
+    deleteSection: (record) => {
+      if (teamComputers.forSection(record.name)) return "Unassign this section's computer before deleting it";
+      const error = store.deleteSectionForOwner(record.name, record.ownerPrincipalId);
+      if (error) return error;
+      const key = teamDataKey(record.ownerPrincipalId, record.id);
+      try { clearSectionContext(key); } catch { /* leave disk as-is */ }
+      try { teamMemory.clearSection(key); } catch { /* leave disk as-is */ }
+      return undefined;
+    },
     onChanged: () => {
       broadcast({ kind: "sections", sections: store.sections });
       audienceChanged();
@@ -44229,6 +44282,7 @@ ROUTES.push(createTeamMemoryHttpRoutes({
   resolve: (section, entryId, decision) => teamMemory.resolve(section, entryId, decision),
   remove: (section, entryId) => teamMemory.remove(section, entryId),
   update: (section, entryId, patch) => teamMemory.update(section, entryId, patch),
+  storageKey: (auth, section) => teamStorageKeyForAuth(auth, section),
   settleCards: settleTeamMemoryCards
 }));
 ROUTES.push(createSectionContextRoutes({
@@ -44236,6 +44290,7 @@ ROUTES.push(createSectionContextRoutes({
   bots: () => store.bots,
   groups: () => store.groups,
   sectionKey,
+  storageKey: (auth, section) => teamStorageKeyForAuth(auth, section),
   read: readSectionContext,
   write: writeSectionContext
 }));

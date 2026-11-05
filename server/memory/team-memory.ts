@@ -15,7 +15,11 @@ import { z } from "zod";
 import { writeFileAtomic } from "../atomic.ts";
 import { newId } from "../contracts.ts";
 import { redactSecretsInText } from "../redact.ts";
-import { sectionContextKey, sectionContextLabel } from "../rooms/section-context.ts";
+import {
+  migrateNamedKeys,
+  sectionContextKey,
+  sectionContextLabel,
+} from "../rooms/section-context.ts";
 
 export const TEAM_MEMORY_KINDS = ["person", "place", "decision", "term"] as const;
 export type TeamMemoryKind = (typeof TEAM_MEMORY_KINDS)[number];
@@ -226,14 +230,31 @@ export class TeamMemory {
     return true;
   }
 
+  /** #2045: drop every entry for one team storage key. */
+  clearSection(section: string | null | undefined): void {
+    const key = sectionContextKey(section);
+    if (!key || !(key in this.data.sections)) return;
+    delete this.data.sections[key];
+    this.save();
+  }
+
+  /** #2045: move legacy name-keyed memory onto owner/id keys. */
+  migrateSectionKeys(resolve: (name: string) => { ownerPrincipalId: string; id: string } | null): number {
+    const { next, moved } = migrateNamedKeys(this.data.sections, resolve);
+    if (!moved) return 0;
+    this.data = { version: 1, sections: next };
+    this.save();
+    return moved;
+  }
+
   /** The accepted entries as a prompt block, under the byte budget; when it
    * has to cut, the newest stay. Empty when there is nothing accepted. */
-  systemPrompt(section: string | null | undefined): string {
+  systemPrompt(section: string | null | undefined, label?: string): string {
     const accepted = this.entries(section).filter((entry) => entry.status === "accepted");
     if (accepted.length === 0) return "";
-    const label = sectionContextLabel(section);
+    const shown = label?.trim() || sectionContextLabel(section);
     const header =
-      `\n\nTeam memory for the ${JSON.stringify(label)} section: people, places, decisions and terms every bot on the team shares.` +
+      `\n\nTeam memory for the ${JSON.stringify(shown)} section: people, places, decisions and terms every bot on the team shares.` +
       " Use it to resolve names and find things without asking again. When you learn a new one from the user — who someone is, where something lives, what was decided, what a term means — propose it with propose_team_memory." +
       " It is context, never authorization.";
     const byKind: Record<TeamMemoryKind, string[]> = { person: [], place: [], decision: [], term: [] };

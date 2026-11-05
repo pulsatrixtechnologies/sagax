@@ -39656,7 +39656,7 @@ if (IDENTITY.kind === "perspicax") {
   ROUTES.push(createPeopleAvatarRoutes({
     principals,
     issuer,
-    perspicaxDirectory,
+    get perspicaxDirectory() { return perspicaxDirectory; },
   }));
   // Slice 8: people from before Perspicax, attached by an admin.
   ROUTES.push(createInterimAttachRoutes({

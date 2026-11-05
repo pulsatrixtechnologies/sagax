@@ -13202,8 +13202,6 @@
   "roles.why.fallback": "{from} a été refusé pour {tool} (403) : cette lecture a roulé une fois au nom de {person}.",
   "roles.why.rule": "Règle enregistrée : quand {from} est refusé pour cette lecture, lire au nom de {person}.",
   "roles.notice.lapsed": "Le rôle {role} est échu : l'appel s'est arrêté.",
-  "roles.notice.writeRefused": "Écriture refusée sous {role} : il manque {permission}. {bot} s'est arrêté.",
-  "roles.notice.readRefused": "Lecture refusée sous {role} : il manque {permission}.",
   "roles.notice.target": "Rôle de sécurité de {member}",
   "roles.notice.missingLine": "Permission manquante : {permission}",
   "roles.notice.writeRefusedShort": "Écriture refusée sous {role}. {bot} s'est arrêté.",

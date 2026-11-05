@@ -29,13 +29,17 @@ The harness sets `SAGAX_PREWARM_PER_MINUTE=40` and
 both into the fixture child (otherwise the default 6 warms/min caps later
 cold threads and the table looks like a cold mount again).
 
-| Metric | Before (#1971 table) | After (prewarm) |
+| Metric | Before (#1971 table) | After (prewarm, env forward fixed) |
 |---|---:|---:|
-| overhead_ttft p50 / p95 | 653 / 1083 | 190 / 974 |
-| client first_token p50 / p95 | 1253 / 1683 | 790 / 1574 |
+| overhead_ttft p50 / p95 | 653 / 1083 | 77 / 142 |
+| client first_token p50 / p95 | 1253 / 1683 | 677 / 742 |
+| tools-reused | n/a | 8 / 8 |
 
-Local MCP-ready microbench (fake stdio MCP, 40 ms initialize + 20 ms tools/list, N=8):
-cold mount p50 ~172 ms; first-turn reuse after prewarm ~0.007 ms.
+Without the env forward, the same harness capped at 6 warms/min and later
+turns remounted (overhead_ttft p50 ~822 ms on one noisy pass).
+
+Local MCP-ready microbench (fake stdio MCP, ~60 ms handshake, N=8):
+cold mount p50 ~222 ms; first-turn reuse after prewarm ~0.007 ms.
 
 ## Reproduce
 

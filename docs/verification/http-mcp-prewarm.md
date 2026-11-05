@@ -24,6 +24,11 @@ Access matches send (`warmBotAccessRefusal`). Caps reuse ThreadPrewarm rate plus
 
 `pnpm bench:turn-latency --engine http --mode cold --turns 8`
 
+The harness sets `SAGAX_PREWARM_PER_MINUTE=40` and
+`SAGAX_MAX_IDLE_ENGINE_SESSIONS=3`. `scripts/control-omb.ts` must forward
+both into the fixture child (otherwise the default 6 warms/min caps later
+cold threads and the table looks like a cold mount again).
+
 | Metric | Before (#1971 table) | After (prewarm) |
 |---|---:|---:|
 | overhead_ttft p50 / p95 | 653 / 1083 | 190 / 974 |

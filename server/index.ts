@@ -578,7 +578,8 @@ import {
   liveCallKey,
   mergeOpenCodeProviderKeys,
   newRoutinesPaused,
-  openCodeProviderKeys
+  openCodeProviderKeys,
+  isCompatServerId,
 } from "./config.ts";
 import { sweepThreadEventLogsPaced, type ThreadLogRetentionCandidate } from "./threads/thread-retention.ts";
 import { ComputerControl } from "./computer/computer-control.ts";
@@ -1761,7 +1762,7 @@ import {
   type Principal
 } from "./auth/principals.ts";
 import { OrgTeams } from "./org/org-teams.ts";
-import { compatServers } from "./openai-compat-servers.ts";
+import { compatServers, compatServerOwner, compatServerVisible } from "./openai-compat-servers.ts";
 import { createOpenAiCompatServerRoutes } from "./routes/openai-compat-servers.ts";
 import {
   keyVia,
@@ -29135,7 +29136,8 @@ function configStatus() {
     openaiCompat: { configured: Boolean(cfg.openaiCompat?.key), url: cfg.openaiCompat?.url ?? "", model: cfg.openaiCompat?.model ?? "" },
     // lot 4: changes when the organization's declarations (public fields) do
     ...(orgCapabilitiesRevision ? { orgCapabilities: { revision: orgCapabilitiesRevision } } : {}),
-    // 2026-10-30: the named OpenAI-compatible servers, never their keys
+    // 2026-10-30: the named OpenAI-compatible servers, never their keys.
+    // Person isolation (#2054) is applied in configForPerson / instancesForViewer.
     openaiCompatServers: compatServers(cfg),
     // configured = cloud computers work here; included = through Cloud Pro,
     // not a saved key
@@ -29257,7 +29259,19 @@ function configStatus() {
  * where they set one, and their own profiles follow the installation's,
  * marked `personal`. `personalSettings` tells the app they may set them. */
 function configForPerson<T extends Parameters<typeof configForViewer>[0]>(status: T, viewer: ViewerIdentity | null): T & { viewer?: ViewerIdentity } {
-  const shown = configForViewer(status, viewer);
+  let shown = configForViewer(status, viewer);
+  // #2054: a member only sees their own named OpenAI-compatible servers
+  // plus org-wide ones; another person's stay out of Settings.
+  if (IDENTITY.kind === "perspicax" && shown && typeof shown === "object" && "openaiCompatServers" in shown) {
+    const admin = Boolean((viewer as { orgAdmin?: boolean } | null)?.orgAdmin) || viewer?.role === "admin";
+    shown = {
+      ...shown,
+      openaiCompatServers: compatServers(cfg, {
+        principalId: viewer?.principalId?.trim().toLowerCase() || null,
+        admin,
+      }),
+    };
+  }
   const owner = personSettingsOwner(viewer?.principalId);
   if (!owner) return shown;
   const own = personSettings.get(owner);
@@ -30840,8 +30854,17 @@ async function instancesForViewer(person: string | null) {
   const owner = providerAccountOwner(person);
   if (owner !== null) await syncPersonalProviders(owner).catch(() => {});
   // #1450: a model the paying account turned off is not offered again for a while
+  const compatViewer = IDENTITY.kind === "perspicax"
+    ? { principalId: person, admin: false }
+    : undefined;
   const instances = withoutRefusedModels(await describeInstances(), (instanceId) => refusedModelsFor(person, instanceId))
     .filter((instance) => personalProviderInstances.visible(instance.instanceId, IDENTITY.kind === "perspicax" ? person ?? "" : "solo"))
+    // #2054: a named OpenAI-compatible server owned by someone else stays out
+    // of this viewer's picker (org-wide servers have no owner and stay).
+    .filter((instance) => {
+      if (!compatViewer || !isCompatServerId(instance.instanceId)) return true;
+      return compatServerVisible(compatServerOwner(cfg.openaiCompatServers, instance.instanceId), compatViewer);
+    })
     .map((instance) => {
       const account = personalProviderInstances.get(instance.instanceId);
       return account ? { ...instance, access: "api" as const, providerAccount: { provider: account.provider, serverId: account.serverId } } : instance;
@@ -43579,7 +43602,12 @@ ROUTES.push(createAntigravityLeftoverRoutes({
 // (server/openai-compat-servers.ts); the provider-settings lock as above.
 ROUTES.push(createOpenAiCompatServerRoutes({
   // a hosted-models home keeps its providers (HOSTED_PROVIDER_SETTINGS_ERROR)
-  allowed: (auth) => !hostedModels && (IDENTITY.kind !== "perspicax" || orgAdminCaller(auth)),
+  allowed: () => !hostedModels,
+  // #2054: solo treats every caller as able to manage org-wide rows; on
+  // Perspicax only an organization admin changes a shared (unowned) server.
+  // A member manages their own through ownerPrincipalId below.
+  isAdmin: (auth) => IDENTITY.kind !== "perspicax" || orgAdminCaller(auth),
+  principalId: (auth) => auth.kind === "session" ? auth.session.principalId?.trim().toLowerCase() || null : null,
   instances: () => persistableInstanceConfigs(cfg),
   keys: () => cfg.openaiCompatServers,
   persist: async (instanceId, instances, keys) => {

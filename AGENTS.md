@@ -890,8 +890,10 @@ OpenAI-compatible server" (`OpenAiCompatServers`), each an engine
 `compat-<id>` on its own key (`server/openai-compat-servers.ts`,
 `openaiCompatServers` in config.json, `SAGAX_COMPAT_SERVER_API_KEY`),
 `POST/PATCH/DELETE /api/instances/openai-compat-servers[/id]`
-(`server/routes/openai-compat-servers.ts`), an
-organization admin's only. Tests: `shared/offered-engines.test.ts`,
+(`server/routes/openai-compat-servers.ts`). On an organization server
+(#2054) a member adds, edits and removes their own (`ownerPrincipalId`);
+a server with no owner is org-wide and an organization admin's only to
+change; members never see each other's. Tests: `shared/offered-engines.test.ts`,
 `shared/org-engine-readiness.test.ts`, `server/engines/engine-credentials.test.ts`,
 `server/openai-compat-servers.test.ts`, `server/desktop/desktop-local-models.test.ts`,
 `src/lib/model-payers.test.ts`, `ModelPicker.interaction.test.ts`, C5 in

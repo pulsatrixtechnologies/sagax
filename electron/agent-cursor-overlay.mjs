@@ -6,6 +6,7 @@
 import net from "node:net";
 import {
   needsSecondaryAgentCursor,
+  normalizeCursorDisplays,
   planSecondaryAgentCursor,
 } from "./agent-cursor-displays.mjs";
 
@@ -169,10 +170,7 @@ export function createAgentCursorOverlay(deps) {
 
   async function tick() {
     if (!running || !socketPath) return;
-    const displays = screen.getAllDisplays().map((display) => ({
-      id: display.id,
-      bounds: { ...display.bounds },
-    }));
+    const displays = normalizeCursorDisplays(screen.getAllDisplays());
     if (!needsSecondaryAgentCursor(platform, displays)) {
       hide();
       return;

@@ -15,6 +15,22 @@ restores it. A direct work thread closes once answered, whatever the answer;
 an AI client's conversation is archived once await_turn collects its reply.
 Scenario: `server/threads/background-sweep.test.ts`. Captures:
 `scripts/capture/background-threads.mjs`.
+## Visible roles (#2016, 2026-11-05)
+
+Every engine `tools/call` on the account's Perspicax connection reports its
+role (`PerspicaxMcp` options `onRole`, `turnRole`, `roleFallback`,
+`askMeWrite`; `shared/perspicax-roles.ts`). Chat starts on the default
+surface ("Moi"); a composer pick fixes the role for the turn; a routine
+starts under its "Au nom de" role. A read 403 under a role is read once more
+as "Moi" by the relay and the role is put back; a write 403 stops the turn's
+role switches and shows the permission; a lapsed role stops the call; a
+routine writing as "Moi" asks the person. `server/perspicax/role-journal.ts`
+keeps steps (`tool.role`), transitions, refusals, owner rules and picks,
+always per principal; `role-events.ts` draws chips, "Agit comme" cards
+(`card.roleTransition`, POST /api/bots/:id/cards/:messageId/role-transition)
+and banners (`tool.roleNotice`). Tests: `perspicax-roles-relay.test.ts`,
+`role-journal.test.ts`, `shared/perspicax-roles.test.ts`,
+`src/components/RoleChip.test.ts`; gallery `src/gallery/visible-roles.html`.
 
 ## Prompt index and on-demand references (#1997, 2026-11-04)
 
@@ -46,6 +62,40 @@ Capability files for retained proxies are scoped by speaker as well as thread.
 full-detail auth level. Defaults: 64 resources / 2 GiB globally, 12 / 1 GiB
 per person. Four `SAGAX_WARM_*` overrides, estimates, process-tree RSS sampling,
 load evidence and limits: `docs/verification/warm-resource-budget.md`.
+
+## A result that needs the person reaches the person (2026-11-05, #2014)
+
+A bot's turn that ends outside the person's own conversation with it (a
+hand-off, a thread another bot opened, a one-way notice, a routine run's
+task after its run ended) and carries a structured signal for the person
+(`shared/person-attention.ts`: a `[HUMAIN]`/`[HUMAN]`/`[NEEDS_HUMAN]` item
+line, a `needs_human` array in a JSON block, `NEEDS INPUT:`, `RUN_STATUS:
+failed|partial`) posts ONE card into the person's conversation with that bot
+(`server/turns/person-attention-relay.ts`, called from index.ts
+turn.completed): `WireMessage.attention` on a text row, its items with
+`Open ticket` (ConnectWise link from `SAGAX_CW_SITE` or the thread's own
+CW cards), `Open thread`, `Open run`; the conversation turns unread and a
+`needs-you` notification rings (desktop and phone). Never guessed from
+words, never in the person's own conversation, once per source message.
+A routine run that is still active reports through its own card instead:
+`routineReportOutcome` is never quiet with such items, `routineRunReportable`
+posts them whatever `postResults` says, and the routine.run row carries
+`attention` (RoutineRunCard draws the items). One result, one card, one ring: a run
+whose card is already in the chat takes the items on that card (a late
+resume included, `onRunCard`), never a second card; the standalone card is
+only for a result that reached no card there (a hand-off, another bot's
+thread). A routine run's task resumed
+after the run ended mirrors the bot's answer into the conversation
+(`mirrorLateRunReply`, `Message.lateRunReplyOf`). Desktop
+`src/components/AttentionCard.tsx`, iOS `AttentionCardView.swift`.
+A failed tool call always carries words: the Claude driver reads
+`tool_use_result` when the content block is empty, else `emptyFailureNote`;
+the Perspicax relay fills an empty `isError` result from `structuredContent`
+or a sentence (`withFailureWords`). Tests: `shared/person-attention.test.ts`,
+`server/turns/person-attention-relay.test.ts`,
+`server/person-attention.e2e.test.ts`,
+`server/drivers/claude/stream-content.test.ts`. Captures
+`node scripts/capture/needs-you-card.mjs`.
 
 # Sagax agent notes
 

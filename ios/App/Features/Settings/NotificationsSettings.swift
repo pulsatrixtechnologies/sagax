@@ -157,6 +157,7 @@ struct NotificationsSettingsView: View {
     @AppStorage(AttentionPrefs.nudgeSoundKey) private var nudgeSound = true
     @AppStorage(AttentionPrefs.nudgeHapticKey) private var nudgeHaptic = true
     @AppStorage(AttentionPrefs.approvalChimeKey) private var approvalChime = true
+    @AppStorage(ConnectionNoticePrefs.key) private var connectionNotices = ConnectionNoticePrefs.defaultValue
 
     var body: some View {
         SettingsPage(title: "Notifications") {
@@ -219,6 +220,18 @@ struct NotificationsSettingsView: View {
                 )
             }
             .task { await NotificationSounds.pull(session) }
+            SettingsSpacer(SettingsMetrics.cardGap)
+            SettingsCard {
+                SettingsRow(
+                    title: "Connection notices",
+                    subtitle: "A line at the top of the chat while the server updates or can't be reached.",
+                    accessory: .toggle(Binding(get: { connectionNotices }, set: { value in
+                        connectionNotices = value
+                        ConnectionNoticeCenter.shared.setEnabled(value)
+                    })),
+                    identifier: "settings-connection-notices"
+                )
+            }
             // Presence and read receipts moved to Privacy and security (2026-10-26).
         }
     }

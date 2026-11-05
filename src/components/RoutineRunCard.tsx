@@ -8,6 +8,7 @@ import { routineAutoPausedText, routineDateTime, routineResultText, routineRunBl
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { ChatMarkdown } from "./ChatMarkdown";
+import { AttentionItems } from "./AttentionCard";
 import type { RoutineRunCardData } from "../../shared/routine-run";
 import type { Bot, Message } from "@/state/store";
 
@@ -350,6 +351,13 @@ export function RoutineRunCard({
           {details && <RunResultDetails details={details} />}
         </div>
       )}
+      {/* 2026-11-05: items only the person can do, each with its ticket. */}
+      {reported && message.attention?.items.length ? (
+        <div data-routine-run-attention className="mt-2.5 pl-[42px]">
+          <div className="mb-1.5 text-[12px] font-semibold text-warning">{t("needsYou.title", { bot: message.attention.botName })}</div>
+          <AttentionItems items={message.attention.items} />
+        </div>
+      ) : null}
       {/* 2026-11-03 (JC): the problem details stay in the run detail (View run);
           the card only says "Completed with problems". */}
       {pausedAfter && (

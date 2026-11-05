@@ -3,11 +3,20 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { ChatErrorBanner, ChatNotice, ChatReconnectBanner } from "./ChatErrorBanner";
+import { connectionNotices } from "@/lib/notification-preferences";
 
 const source = (name: string) => readFileSync(new URL(`../${name}`, import.meta.url), "utf8");
 
 describe("ChatReconnectBanner", () => {
-  it("shows a calm reconnecting line only during a short post-connect outage", () => {
+  it("leaves the outage to the window's connection notice while those are on (#2013)", () => {
+    connectionNotices.set(true);
+    expect(renderToStaticMarkup(createElement(ChatReconnectBanner, {
+      connected: false, everConnected: true, disconnectedAt: Date.now() - 1_000,
+    }))).toBe("");
+  });
+
+  it("shows a calm reconnecting line only during a short post-connect outage, with connection notices off", () => {
+    connectionNotices.set(false);
     expect(renderToStaticMarkup(createElement(ChatReconnectBanner, {
       connected: true, everConnected: true, disconnectedAt: null,
     }))).toBe("");
@@ -21,6 +30,7 @@ describe("ChatReconnectBanner", () => {
     expect(markup).toContain("data-chat-reconnecting");
     expect(markup).toContain("Reconnecting");
     expect(markup).not.toContain("role=\"alert\"");
+    connectionNotices.set(true);
   });
 
   it("is mounted in the chat and the room", () => {

@@ -79,6 +79,8 @@ export interface OptionCardData {
   /** 2026-10-30: a proactive proposal; answered through its own route
    * (shared/proactive-proposal.ts), options[0] accepts. */
   proactiveProposal?: { id: string };
+  /** 2026-11-05: an "Agit comme" card (shared/wire.ts RoleTransitionCard). */
+  roleTransition?: import("../../../shared/wire").RoleTransitionCard;
   /** Organization server: only an organization admin can answer this card
    * (a server command asked by a member's bot). */
   adminApproval?: boolean;
@@ -243,7 +245,7 @@ export interface Message extends Pick<import("../../../shared/wire").WireMessage
    * narration of the same chip ("reading a file"), used by call mode. */
   /** `setup` marks an error fixed by installing something, not by retrying.
    * `summary` is the call's input on one redacted line (the shell command). */
-  tool?: { name: string; ok?: boolean; spoken?: string; setup?: boolean; claudeUpdate?: boolean; place?: PlaceRow; summary?: string; input?: string; output?: string ; durationMs?: number; /** The product the server declared for the tool, and the id its tool names start with (shared/wire.ts). */ product?: string; productId?: string; itemId?: string; outputPath?: string; fullResult?: boolean; /** Files the call wrote (shared/wire.ts). */ files?: string[]; widget?: import("../../../shared/cw-widgets/types").CwWidget; ruleNotice?: import("../../../shared/custom-rules").CustomRuleNotice; /** What answered the call's ask with no card (shared/wire.ts). */ autoApproval?: { source: string; rule?: string }; engineMove?: import("../../../shared/offered-engines").OrgEngineMove; limitFailover?: import("../../../shared/limit-failover").LimitFailoverLine; connectorSwitch?: { engine: string; connector: string }; soloGoal?: import("../../../shared/solo-goal-line").SoloGoalLine; finishUntil?: import("../../../shared/finish-until-line").FinishUntilLine; /** The step the working line names (shared/working-step.ts). */ step?: import("../../../shared/working-step").WorkingStep; /** Epoch ms when the usage limit that stopped this turn resets, when the engine said. */ limitResetsAt?: number };
+  tool?: { name: string; ok?: boolean; spoken?: string; setup?: boolean; claudeUpdate?: boolean; place?: PlaceRow; summary?: string; input?: string; output?: string ; durationMs?: number; /** The product the server declared for the tool, and the id its tool names start with (shared/wire.ts). */ product?: string; productId?: string; itemId?: string; outputPath?: string; fullResult?: boolean; /** Files the call wrote (shared/wire.ts). */ files?: string[]; widget?: import("../../../shared/cw-widgets/types").CwWidget; ruleNotice?: import("../../../shared/custom-rules").CustomRuleNotice; /** What answered the call's ask with no card (shared/wire.ts). */ autoApproval?: { source: string; rule?: string }; /** 2026-11-05: the Perspicax role this call ran under (shared/perspicax-roles.ts). */ role?: import("../../../shared/perspicax-roles").ToolRole; roleNotice?: import("../../../shared/wire").RoleNotice; engineMove?: import("../../../shared/offered-engines").OrgEngineMove; limitFailover?: import("../../../shared/limit-failover").LimitFailoverLine; connectorSwitch?: { engine: string; connector: string }; soloGoal?: import("../../../shared/solo-goal-line").SoloGoalLine; finishUntil?: import("../../../shared/finish-until-line").FinishUntilLine; /** The step the working line names (shared/working-step.ts). */ step?: import("../../../shared/working-step").WorkingStep; /** Epoch ms when the usage limit that stopped this turn resets, when the engine said. */ limitResetsAt?: number };
   /** user messages sent into a running turn — the model saw it mid-turn */
   steered?: boolean;
   /** a user message that did not come from typing here: through the
@@ -308,6 +310,8 @@ export interface Message extends Pick<import("../../../shared/wire").WireMessage
   threadRef?: { botId: string; threadId: string; title: string; gone?: boolean };
   /** A teammate parked on a question for the person (WireMessage.inputRequest). */
   inputRequest?: import("../../../shared/wire").WireMessage["inputRequest"];
+  /** 2026-11-05: what a bot's turn elsewhere left for the person (WireMessage.attention). */
+  attention?: import("../../../shared/wire").WireMessage["attention"];
   /** A parallel task this line belongs to (shared/parallel-tasks.ts). */
   parallelTask?: ParallelTaskRef;
   dataResult?: import("../../../shared/wire").WireMessage["dataResult"];

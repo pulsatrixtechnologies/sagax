@@ -36,7 +36,7 @@ export function messageAttention(input: {
   const show = input.kind === "spend" || !looking;
   if (!show) return { show: false, sound: false, persistent: false, bounce: null, flash: false };
   const fromPerson = input.kind === "message";
-  const waitsOnYou = input.kind === "question" || input.kind === "approval";
+  const waitsOnYou = input.kind === "question" || input.kind === "approval" || input.kind === "needs-you";
   return {
     show: true,
     sound: input.settings.sound,

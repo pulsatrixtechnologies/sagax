@@ -4577,6 +4577,8 @@ const artifactWindows = createArtifactWindows({
   // the page on screen drives it (each account has its page)
   getMainWindow: () => pageHandle(mainPage()),
   isTrustedMain: (event) => isDesktopUiSender(event),
+  // narrow preload: always-on-top for the page/artifact window itself (#2046)
+  preload: path.join(__dirname, "artifact-window-preload.cjs"),
   openExternal: (url) => {
     try {
       void shell.openExternal(externalOpenUrl(url)).catch(() => {});

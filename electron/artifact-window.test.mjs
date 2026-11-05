@@ -5,6 +5,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  applyArtifactWindowOnTop,
   ARTIFACT_WINDOW_MIN,
   ARTIFACT_WINDOW_SIZE,
   artifactWindowNavigationAllowed,
@@ -31,6 +32,7 @@ function fakeElectron() {
       this.options = options;
       this.bounds = { x: options.x ?? 0, y: options.y ?? 0, width: options.width, height: options.height };
       this.destroyed = false;
+      this.onTop = options.alwaysOnTop === true;
       this.events = new Map();
       this.calls = [];
       const contentHandlers = new Map();
@@ -51,6 +53,8 @@ function fakeElectron() {
       this.fire("closed");
     }
     setTitle(title) { this.calls.push(["setTitle", title]); }
+    setAlwaysOnTop(flag, level) { this.onTop = flag === true; this.calls.push(["setAlwaysOnTop", flag, level]); }
+    isAlwaysOnTop() { return this.onTop === true; }
     isMinimized() { return false; }
     isMaximized() { return false; }
     isFullScreen() { return false; }
@@ -82,7 +86,7 @@ function memoryStore(initial = null) {
   return { read: () => value, write: vi.fn((next) => { value = JSON.parse(JSON.stringify(next)); }), get: () => value };
 }
 
-function setup({ displays = [PRIMARY, SECOND], store = memoryStore(), trusted = true, session, openExternal } = {}) {
+function setup({ displays = [PRIMARY, SECOND], store = memoryStore(), trusted = true, session, openExternal, preload = "/app/electron/artifact-window-preload.cjs" } = {}) {
   const fake = fakeElectron();
   const onChange = vi.fn();
   const screen = {
@@ -98,6 +102,7 @@ function setup({ displays = [PRIMARY, SECOND], store = memoryStore(), trusted = 
     screen,
     boundsStore: store,
     onChange,
+    preload,
     ...(session ? { session } : {}),
     ...(openExternal ? { openExternal } : {}),
   });
@@ -107,12 +112,13 @@ function setup({ displays = [PRIMARY, SECOND], store = memoryStore(), trusted = 
 }
 
 describe("artifact window requests", () => {
-  it("keeps the ids, a plain title, a size, a screen point and the focus choice", () => {
-    expect(sanitizeArtifactWindowRequest({ botId: "bot-a", artifactId: "art_1", title: "Live\ntable", x: 1500.4, y: 200, focus: false })).toEqual({
-      botId: "bot-a", artifactId: "art_1", title: "Live table", width: ARTIFACT_WINDOW_SIZE.width, height: ARTIFACT_WINDOW_SIZE.height, at: { x: 1500, y: 200 }, focus: false,
+  it("keeps the ids, a plain title, a size, a screen point, the focus choice and always-on-top", () => {
+    expect(sanitizeArtifactWindowRequest({ botId: "bot-a", artifactId: "art_1", title: "Live\ntable", x: 1500.4, y: 200, focus: false, alwaysOnTop: true })).toEqual({
+      botId: "bot-a", artifactId: "art_1", title: "Live table", width: ARTIFACT_WINDOW_SIZE.width, height: ARTIFACT_WINDOW_SIZE.height, at: { x: 1500, y: 200 }, focus: false, alwaysOnTop: true,
     });
     expect(sanitizeArtifactWindowRequest({ botId: "bot-a", artifactId: "../x" })).toBeNull();
     expect(sanitizeArtifactWindowRequest({ botId: "bot-a", artifactId: "art_1", x: 1e9, y: 0 })).not.toHaveProperty("at");
+    expect(sanitizeArtifactWindowRequest({ botId: "bot-a", artifactId: "art_1" })).not.toHaveProperty("alwaysOnTop");
   });
 
   it("only navigates within its own route", () => {
@@ -168,14 +174,47 @@ describe("artifact windows", () => {
       fullscreenable: true,
       minWidth: ARTIFACT_WINDOW_MIN.width,
       minHeight: ARTIFACT_WINDOW_MIN.height,
-      webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+      webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: "/app/electron/artifact-window-preload.cjs" },
     });
-    expect(win.options.webPreferences).not.toHaveProperty("preload");
     expect(win.loadURL).toHaveBeenCalledWith(`${ORIGIN}/artifact-window#bot=bot-a&artifact=art_1`);
     expect(controller.entries()).toEqual([{ artifactId: "art_1", title: "Live table" }]);
     expect(onChange).toHaveBeenCalled();
     win.fire("ready-to-show");
     expect(win.calls).toContainEqual(["focus"]);
+  });
+
+  it("toggles always on top from the main window and from the page window itself (#2046)", async () => {
+    const { fake, open, event, store } = setup();
+    expect(await open({ artifactId: "page:pageAAAA1111" })).toBe("created");
+    const [win] = fake.windows;
+    expect(win.onTop).toBe(false);
+    expect(await fake.handlers.get("artifact-window:set-top")(event, { artifactId: "page:pageAAAA1111", on: true })).toBe(true);
+    expect(win.calls).toContainEqual(["setAlwaysOnTop", true, "floating"]);
+    expect(await fake.handlers.get("artifact-window:get-top")(event, { artifactId: "page:pageAAAA1111" })).toBe(true);
+    // the page window itself (sender = its webContents) may toggle without an id
+    expect(await fake.handlers.get("artifact-window:set-top")({ sender: win.webContents }, { on: false })).toBe(true);
+    expect(win.calls.at(-1)).toEqual(["setAlwaysOnTop", false, undefined]);
+    expect(await fake.handlers.get("artifact-window:get-top")({ sender: win.webContents })).toBe(false);
+    expect(await fake.handlers.get("artifact-window:set-top")({ sender: win.webContents }, { on: true })).toBe(true);
+    // a stranger's sender cannot toggle
+    expect(await fake.handlers.get("artifact-window:set-top")({ sender: {} }, { on: false })).toBe(false);
+    win.close();
+    expect(store.get().windows["page:pageAAAA1111"].alwaysOnTop).toBe(true);
+  });
+
+  it("remembers always-on-top and puts it back the next time (#2046)", async () => {
+    const store = memoryStore({ version: 1, windows: { "page:pageAAAA1111": { bounds: { x: 100, y: 80, width: 700, height: 500 }, maximized: false, alwaysOnTop: true } } });
+    const { fake, open } = setup({ store });
+    expect(await open({ artifactId: "page:pageAAAA1111" })).toBe("created");
+    expect(fake.windows[0].options.alwaysOnTop).toBe(true);
+    expect(fake.windows[0].calls).toContainEqual(["setAlwaysOnTop", true, "floating"]);
+  });
+
+  it("applyArtifactWindowOnTop uses the floating level when on", () => {
+    const win = { destroyed: false, isDestroyed() { return this.destroyed; }, calls: [], setAlwaysOnTop(flag, level) { this.calls.push([flag, level]); } };
+    expect(applyArtifactWindowOnTop(win, true)).toBe(true);
+    expect(applyArtifactWindowOnTop(win, false)).toBe(true);
+    expect(win.calls).toEqual([[true, "floating"], [false, undefined]]);
   });
 
   it("keeps one window per artifact: asking again brings it forward", async () => {

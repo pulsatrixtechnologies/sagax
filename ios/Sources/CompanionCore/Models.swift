@@ -289,6 +289,12 @@ public struct ToolActivity: Codable, Hashable, Sendable {
     /// Usage-limit switch / return / wait (shared/limit-failover.ts). A
     /// switched or back row stays out of the chat (#1668 / #1698).
     public var limitFailover: LimitFailoverLine? = nil
+    /// Epoch ms when the usage limit that stopped this turn resets, when
+    /// the engine said (shared/wire.ts `tool.limitResetsAt`).
+    public var limitResetsAt: Double? = nil
+    /// The row carries a place (shared/wire.ts `tool.place`): a failed turn
+    /// with one stays in the chat (#2013). Only its presence is kept here.
+    public var hasPlace: Bool = false
 
     public init(name: String, ok: Bool? = nil, spoken: String? = nil, setup: Bool? = nil, claudeUpdate: Bool? = nil, output: String? = nil, summary: String? = nil, widget: CwWidget? = nil) {
         self.name = name
@@ -303,6 +309,7 @@ public struct ToolActivity: Codable, Hashable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case name, ok, spoken, setup, claudeUpdate, output, summary, widget, input, durationMs, product, productId, autoApproval, finishUntil, step, limitFailover
+        case limitResetsAt, place
     }
 
     public init(from decoder: Decoder) throws {
@@ -322,6 +329,8 @@ public struct ToolActivity: Codable, Hashable, Sendable {
         autoApproval = try? box.decodeIfPresent(ToolAutoApproval.self, forKey: .autoApproval)
         step = try? box.decodeIfPresent(WorkingStep.self, forKey: .step)
         limitFailover = try? box.decodeIfPresent(LimitFailoverLine.self, forKey: .limitFailover)
+        limitResetsAt = try? box.decodeIfPresent(Double.self, forKey: .limitResetsAt)
+        hasPlace = box.contains(.place) && (try? box.decodeNil(forKey: .place)) == false
         do {
             widget = try box.decodeIfPresent(CwWidget.self, forKey: .widget)
         } catch {
@@ -346,6 +355,9 @@ public struct ToolActivity: Codable, Hashable, Sendable {
         try box.encodeIfPresent(autoApproval, forKey: .autoApproval)
         try box.encodeIfPresent(step, forKey: .step)
         try box.encodeIfPresent(limitFailover, forKey: .limitFailover)
+        try box.encodeIfPresent(limitResetsAt, forKey: .limitResetsAt)
+        // presence only: the app never reads the place itself
+        if hasPlace { try box.encode([String: String](), forKey: .place) }
     }
 
     /// The output worth expanding the chip for; nil when there is none.

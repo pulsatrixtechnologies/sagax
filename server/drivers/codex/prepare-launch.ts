@@ -6,6 +6,7 @@ import { canUseMcpServer } from "../../../shared/tool-scope.ts";
 import { gateServer, mcpStdioServer } from "../../mcp/mcp-gate-config.ts";
 import { compactGateSearch } from "../../mcp/mcp-gate-search.ts";
 import { codexConfigMcpServerNames, mountedMcpServerName } from "../codex-mcp-names.ts";
+import { codexHomeOf, learnedAmbientMcp } from "./ambient-mcp.ts";
 import { codexHostToolArgs } from "../host-tools.ts";
 import { codexLocalProviderArgs } from "../local-inject.ts";
 import { networkProxyEnvironment } from "../network-proxy.ts";
@@ -101,6 +102,8 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
   const directoryMounts = new Set<string>();
   /** Each mount's settings that are not secret (mountMcpServer's literalEnv). */
   const literalEnvs = new Map<string, Record<string, string>>();
+  /** A selected mount's own `env` table, as Codex reports it back (#2013). */
+  const selectedLiterals = new Map<string, Record<string, string>>();
   const scopedServer = (name: string, mountName: string, server: McpServerSpec): StdioMcpSpec | null => {
     if (!canUseMcpServer(turn.toolScope, name)) return null;
     // Codex 0.166 no longer has the old feature-gated hosted tool_search;
@@ -201,11 +204,26 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
   // model is asked. Such a server mounts under a name of its own.
   const declaredInCodexConfig = codexConfigMcpServerNames(env);
   if (turn.toolScope !== undefined) {
-    for (const name of declaredInCodexConfig) appServerArgs.push("-c", `mcp_servers.${name}.enabled=false`);
+    // #2013: also every server an earlier launch of this account and folder
+    // reported from another layer (ambient-mcp.ts), so the selection holds
+    // without the person editing anything.
+    const ambient = new Set([...declaredInCodexConfig, ...learnedAmbientMcp(codexHomeOf(env), turn.cwd ?? homedir())]);
+    for (const name of ambient) appServerArgs.push("-c", `mcp_servers.${name}.enabled=false`);
   }
   for (const [name, server] of Object.entries(turn.integrations?.custom ?? {})) {
     if (!("url" in server) && isSagaxWorkplaceProxy(name, server)) {
-      mountSagaxWorkplaceProxy(appServerArgs, env, name, server, mountedNames);
+      const mounted = mountSagaxWorkplaceProxy(appServerArgs, env, name, server, mountedNames);
+      // #2013: the person's own environment is Sagax's mount, not an ambient
+      // server. Under a tool selection it is expected as mounted, with its
+      // literal env table, so the selection check accepts it.
+      if (turn.toolScope !== undefined) {
+        // Every call asks Sagax, which answers by the person's approval
+        // level, as for the bot's data mount.
+        selectedMcp.set(name, mounted.server);
+        selectedApprovals.set(name, "prompt");
+        selectedLiterals.set(name, mounted.literal);
+        appServerArgs.push("-c", `mcp_servers.${name}.default_tools_approval_mode="prompt"`);
+      }
       continue;
     }
     const mountName = mountedMcpServerName(name, declaredInCodexConfig);
@@ -273,7 +291,7 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
 
   const selectionConfig: { config?: Record<string, unknown> } = turn.toolScope === undefined ? {} : { config: { mcp_servers: Object.fromEntries(
     [...selectedMcp].map(([name, server]) => [name, {
-      command: server.command, args: server.args, env_vars: Object.keys(server.env), env: {}, default_tools_approval_mode: selectedApprovals.get(name) ?? "prompt",
+      command: server.command, args: server.args, env_vars: Object.keys(server.env), env: selectedLiterals.get(name) ?? {}, default_tools_approval_mode: selectedApprovals.get(name) ?? "prompt",
     }]),
   ) } };
 
@@ -299,7 +317,7 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
   if (deps.stopRequested) return null;
   const previous = process?.session;
   if (previous) return {
-    env, launchedLogin, appServerArgs, privateEnv, provenPrivateEnv, selectedMcp, selectedApprovals,
+    env, launchedLogin, appServerArgs, privateEnv, provenPrivateEnv, selectedMcp, selectedApprovals, selectedLiterals,
     directoryMounts, selectionConfig, commandCwd, releaseSlot: () => {}, child: previous.child,
     process: process!, previous,
   };
@@ -320,6 +338,7 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
     provenPrivateEnv,
     selectedMcp,
     selectedApprovals,
+    selectedLiterals,
     directoryMounts,
     selectionConfig,
     commandCwd,

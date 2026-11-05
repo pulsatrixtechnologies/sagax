@@ -1,6 +1,11 @@
 import { checkRoutineReadiness, routineEngineRefusal, routineFlowSkills, type RoutineReadinessDeps, type ReadinessRoutine, type ReadinessRun, type ReadinessComputer } from "./routines/routine-readiness.ts";
 import { routineFlowInput } from "./routines/routine-flow-input.ts";
 import { noteEngineRefusal, clearEngineRefusal, activeEngineRefusal } from "./engines/engine-refusals.ts";
+import { PreSendRefusals } from "./engines/presend-refusals.ts";
+import { PerspicaxReachability, gatewayProbe, observedFetch } from "./perspicax/perspicax-reachability.ts";
+import { createConnectorStatusRoutes } from "./routes/connector-status.ts";
+import { preSendRefusalKind, isCodexAmbientMcpRefusal } from "../shared/presend-refusal.ts";
+import { ambientRefusalFor, clearAmbientRefusal, fixAmbientMcp } from "./drivers/codex/ambient-mcp.ts";
 import { classifyRoutineFailure as readinessFailureClass } from "./routines/routine-recovery.ts";
 import { canUseMcpServer } from "../shared/tool-scope.ts";
 import { createBotAvatarGenerateRoutes } from "./routes/bot-avatar-generate.ts";
@@ -5171,6 +5176,8 @@ const internalCapabilities = new Map<string, InternalCapability>();
  * the server is linked to Perspicax; declared here because capability revokes
  * reach it. */
 let perspicaxMcp: PerspicaxMcp | null = null;
+/** #2013: whether this server reaches its Perspicax connector (organization servers). */
+let perspicaxReach: PerspicaxReachability | null = null;
 /** 2026-10-11: the work rows and duplicate checks sent to Perspicax's
  * organization memory (server/memory/perspicax-memory.ts); null without a link. */
 let perspicaxMemory: PerspicaxMemory | null = null;
@@ -20363,6 +20370,9 @@ bus.subscribe((event: RuntimeEvent) => {
       break;
     }
     case "turn.retrying":
+      // #2013: Codex relaunching to turn its own native MCP entries off for
+      // a tool selection is Sagax's housekeeping, not a failure to show.
+      if (event.reason === "ambient_mcp") break;
       // the driver is about to relaunch the turn after a transient failure;
       // the activity chip keeps the bot visibly busy through the backoff
       pushMessage({
@@ -20474,7 +20484,16 @@ bus.subscribe((event: RuntimeEvent) => {
         }
       } else {
         const tool = failedTurnTool(event.message, event);
-        if (!engineLimited && !repeatsShownFailure(store.messagesFor(event.threadId), { role: "bot", kind: "activity", tool, from: failureFrom }, bot?.id ?? "")) {
+        // #2013 (the maintainer, 2026-11-05): a refusal before any prompt went out (the
+        // engine not ready, its own configuration in conflict, its sign-in
+        // expired) is no red card in a bot's chat: the composer says it with
+        // its action (sendStateFor, shared/send-state.ts engine_refused).
+        const preSend = bot && !group && !tool.place ? preSendRefusalKind(event.message, event) : null;
+        const refusedOn = bot ? registry.get(event.providerInstanceId ?? bot.modelSelection.instanceId) : null;
+        if (preSend && preSend !== "engine_limit" && bot && refusedOn) {
+          const fix = preSend === "config_conflict" && isCodexAmbientMcpRefusal(event.message) && ambientRefusalFor(event.threadId) ? "codex_native_mcp" as const : undefined;
+          preSendRefusals.note(event.threadId, { kind: preSend, cause: redactSecretsInText(event.message).slice(0, 600), instanceId: refusedOn.instanceId, ...(fix ? { fix } : {}), at: Date.now() });
+        } else if (!engineLimited && !repeatsShownFailure(store.messagesFor(event.threadId), { role: "bot", kind: "activity", tool, from: failureFrom }, bot?.id ?? "")) {
           pushMessage({ role: "bot", kind: "activity", tool });
         }
       }
@@ -29922,6 +29941,32 @@ function ownerModelOfflineRefusal(bot: BotRecord, instance: { instanceId: string
     ...(speaker.origin === "person" && speaker.principalId ? { speakerPrincipalId: speaker.principalId } : {})
   };
 }
+/** #2013: each conversation's last pre-send refusal (server/engines/presend-refusals.ts). */
+const preSendRefusals = new PreSendRefusals();
+bus.subscribe((event: RuntimeEvent) => {
+  // A new turn speaks for the engine again; one that succeeds clears it.
+  if (event.type === "turn.started" || (event.type === "turn.completed" && event.ok)) {
+    preSendRefusals.clear(event.threadId);
+    if (event.type === "turn.completed") clearAmbientRefusal(event.threadId);
+  }
+});
+/** #2013: the composer's Fix for a refusal Sagax can repair itself. Codex
+ * with a tool selection: turn the account's own native MCP entries off in
+ * its config.toml (server/drivers/codex/ambient-mcp.ts). The caller then
+ * sends the last message again. */
+function fixSendState(bot: BotRecord, fix: string): { ok: boolean; disabled?: string[]; missing?: string[] } {
+  if (fix !== "codex_native_mcp") return { ok: false };
+  const refusal = ambientRefusalFor(bot.threadId);
+  if (!refusal) {
+    preSendRefusals.clear(bot.threadId);
+    return { ok: true, disabled: [], missing: [] };
+  }
+  const result = fixAmbientMcp(refusal);
+  clearAmbientRefusal(bot.threadId);
+  preSendRefusals.clear(bot.threadId);
+  console.info(`[send-state] ${bot.id}: disabled ${result.disabled.length} native Codex MCP server(s)${result.missing.length ? `, ${result.missing.length} not found in the account's config` : ""}`);
+  return { ok: true, ...result };
+}
 /** The composer's send state for this person (shared/send-state.ts). Any
  * doubt, or a failure to judge, is no block: the message sends as before. */
 async function sendStateFor(bot: BotRecord, speaker: TurnSpeaker): Promise<SendBlock | null> {
@@ -29933,11 +29978,13 @@ async function sendStateFor(bot: BotRecord, speaker: TurnSpeaker): Promise<SendB
     const ownerOffline = ownerModelOfflineRefusal(bot, instance, speaker, selection.model);
     const refused = IDENTITY.kind === "perspicax" && !ownerOffline && orgEngineRefusal(bot, instance, speaker, selection.model) !== null &&
       speakerTurnSelection(bot, speaker) === null;
+    const preSend = preSendRefusals.for(bot.threadId, instance.instanceId);
     return sendBlockFor({
       auto: false, engine, accessRefused: refused,
       ownerComputerOffline: ownerOffline ? { ownerName: ownerOffline.ownerName ?? "" } : null,
       local: desktopLocalModels.reach(selection.model),
-      limited: await sendStateLimit(bot, speaker)
+      limited: await sendStateLimit(bot, speaker),
+      refused: preSend ? { kind: preSend.kind, cause: preSend.cause, ...(preSend.fix ? { fix: preSend.fix } : {}) } : null
     });
   } catch (error) {
     console.warn(`[send-state] ${bot.id}: ${error instanceof Error ? error.message : String(error)}`);
@@ -38561,9 +38608,11 @@ ROUTES.push(createBotHistoryRoutes<BotRecord, ReturnType<typeof wireBot>>({
   wireBot: (bot) => wireBot(bot),
   broadcast: (event) => broadcast(event)
 }));
+ROUTES.push(createConnectorStatusRoutes({ perspicax: () => perspicaxReach?.status() ?? null }));
 ROUTES.push(createBotSendStateRoutes({
   requestedTaskBot: (botId, threadId) => requestedTaskBot(botId, threadId),
-  sendStateFor: (bot, auth) => sendStateFor(bot, speakerFor(auth))
+  sendStateFor: (bot, auth) => sendStateFor(bot, speakerFor(auth)),
+  fixSendState: (bot, fix) => fixSendState(bot, fix)
 }));
 ROUTES.push(createRoutineWatchCheckRoutes({
   watchDeps: routineWatchDeps,
@@ -40659,9 +40708,21 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
   const directory = perspicaxDirectory;
   perspicaxMemory = new PerspicaxMemory({ link: () => directory });
   const issuer = IDENTITY.issuer;
+  // #2013: the people of the organization hear when the connector cannot be
+  // reached (a calm notice in their app), from this traffic and a light probe.
+  perspicaxReach = new PerspicaxReachability({
+    probe: gatewayProbe(() => { try { return directory?.mcpEndpoint() ?? null; } catch { return null; } }),
+    onChange: (status) => {
+      console.log(`perspicax connector: ${status.state}`);
+      broadcast({ kind: "connector.status", perspicax: status });
+    }
+  });
+  perspicaxReach.start();
+  const reach = perspicaxReach;
   perspicaxMcp = new PerspicaxMcp({
     issuer,
     link: () => directory,
+    fetch: observedFetch(fetch, reach),
     onIdentityWarning: ({ threadId, principalId, reason }) => {
       store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: identityWarning(reason, personLanguageOf(principalId, (id) => userPreferenceStore.get(id).preferences, cfg.language)), ok: false } });
     },
@@ -47714,9 +47775,14 @@ async function drainTurnsBeforeShutdown(): Promise<void> {
   markShuttingDown();
   // 2. End live SSE streams so clients reconnect with their cursor; the
   //    edge holds those reconnects until the next process is ready.
+  //    #2013: each first hears that this is a planned restart (an update
+  //    or a restart), so the app says "back in a moment", not "unreachable".
+  //    No id: it is transport news, never a replay boundary.
+  const restarting = `data: ${JSON.stringify({ kind: "server.restarting", at: Date.now() })}\n\n`;
   // A copy on purpose: close() removes the client from the live set.
   // oxlint-disable-next-line unicorn/no-useless-spread
   for (const client of [...sseClients]) {
+    try { deliverSseFrame(client, "server.restarting", restarting); } catch { /* already gone */ }
     try { client.close(); } catch { /* already gone */ }
   }
   routines?.pause();
@@ -47882,6 +47948,7 @@ const gracefulShutdown = createGracefulShutdown({
       for (const idle of localVmIdles.values()) idle.cancel();
       vps.closeAllVpsDesktopTunnels();
       watchdog.stop();
+      perspicaxReach?.stop();
       botWaits.stop();
       routines?.stop();
       headlessTasks.stop();

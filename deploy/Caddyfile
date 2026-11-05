@@ -44,4 +44,13 @@
 			flush_interval -1
 		}
 	}
+
+	# #2013: past lb_try_duration with the upstream still restarting, answer
+	# a 503 the app reads as "Server update in progress, back in a moment"
+	# (src/lib/connection-notice.ts readHealth), not a bare 502.
+	handle_errors 502 503 504 {
+		header x-sagax-maintenance upstream
+		header cache-control no-store
+		respond `{"ok":false,"maintenance":true}` 503
+	}
 }

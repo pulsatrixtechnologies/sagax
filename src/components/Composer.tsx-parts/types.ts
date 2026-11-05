@@ -29,4 +29,7 @@ export type ComposerProps = {
   /** False when the conversation gives focus back elsewhere as this composer
    * mounts (ChatView after a page closes: back to what opened the page). */
   focusOnOpen?: boolean;
+  /** #2013: send the conversation's last message again (the composer
+   * line's Try again and Fix after an engine refused the turn). */
+  onRetryLast?: () => void;
 };

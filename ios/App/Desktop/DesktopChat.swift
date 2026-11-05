@@ -264,7 +264,7 @@ extension ChatView {
                 prompt: desktopPrompt,
                 focused: $composerFocused,
                 canSend: canSend,
-                blocked: activeSendBlock != nil,
+                blocked: activeSendBlock?.blocksSend == true,
                 busy: preparingAttachments || sendingMessage,
                 listening: dictation.isListening,
                 inputLocked: dictation.isListening || dictation.isStarting || preparingAttachments || sendingMessage

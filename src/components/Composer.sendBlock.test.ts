@@ -15,10 +15,16 @@ const fixture = vi.hoisted(() => ({
   /** What GET /api/bots/<id>/send-state answers next; an Error rejects. */
   sendState: { block: null } as unknown,
   asked: 0,
+  /** Bodies POSTed to /send-state/fix. */
+  fixes: [] as string[],
 }));
 vi.mock("@/state/store", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/state/store")>();
-  return { ...original, api: vi.fn(async (path: string) => {
+  return { ...original, api: vi.fn(async (path: string, init?: RequestInit) => {
+    if (path.includes("/send-state/fix")) {
+      fixture.fixes.push(String(init?.body ?? ""));
+      return { ok: true, block: null };
+    }
     if (path.includes("/send-state")) {
       fixture.asked += 1;
       if (fixture.sendState instanceof Error) throw fixture.sendState;
@@ -72,6 +78,7 @@ beforeEach(() => {
   fixture.dispatch.mockClear();
   fixture.sendState = { block: null };
   fixture.asked = 0;
+  fixture.fixes = [];
   vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200, headers: { "content-type": "application/json" } })));
   host = document.createElement("div");
   document.body.append(host);
@@ -174,5 +181,37 @@ describe("composer while the bot cannot answer", () => {
     await settle();
     expect($("[data-composer-send-block]")).toBeNull();
     expect(textarea().disabled).toBe(false);
+  });
+
+  // #2013: a refusal before any prompt went out is said here, never as a red
+  // card; the line informs and the composer still sends.
+  it("shows an engine's pre-send refusal as an advisory line that still sends, with Try again", async () => {
+    fixture.sendState = { block: { reason: "engine_refused", name: "Codex", advisory: true, message: "Codex could not start this turn.", action: { kind: "resend" },
+      refusal: { kind: "engine_not_ready", cause: "Codex could not confirm its shell environment policy. No prompt was sent." } } };
+    const retryLast = vi.fn();
+    render(createElement(Composer, { bot, onRetryLast: retryLast }));
+    await settle();
+    const line = $("[data-composer-send-block]")!;
+    expect(line.getAttribute("data-composer-send-block")).toBe("engine_refused");
+    expect(line.textContent).toContain("Codex could not start this turn. Nothing was sent.");
+    expect(line.textContent).toContain("No prompt was sent");
+    flushSync(() => $<HTMLButtonElement>('[data-composer-send-block-action="resend"]')!.click());
+    expect(retryLast).toHaveBeenCalledTimes(1);
+    type("again");
+    pressEnter();
+    expect(sent()).toHaveLength(1);
+  });
+
+  it("fixes a Codex configuration conflict in one click, then sends the last message again", async () => {
+    fixture.sendState = { block: { reason: "engine_refused", name: "Codex", advisory: true, message: "Codex has its own settings.", action: { kind: "fix", fix: "codex_native_mcp" },
+      refusal: { kind: "config_conflict", cause: "Codex has an MCP server outside the selected configuration." } } };
+    const retryLast = vi.fn();
+    render(createElement(Composer, { bot, onRetryLast: retryLast }));
+    await settle();
+    expect($("[data-composer-send-block]")!.textContent).toContain("Codex has its own settings that conflict with this bot's tools.");
+    flushSync(() => $<HTMLButtonElement>('[data-composer-send-block-action="fix"]')!.click());
+    await settle();
+    expect(fixture.fixes).toEqual([JSON.stringify({ fix: "codex_native_mcp" })]);
+    expect(retryLast).toHaveBeenCalledTimes(1);
   });
 });

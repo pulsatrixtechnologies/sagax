@@ -1,6 +1,8 @@
 import { X } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { useNetworkOnline } from "@/lib/drafts";
+import { useSyncExternalStore } from "react";
+import { connectionNotices } from "@/lib/notification-preferences";
 import { isDeployOutageQuiet } from "@/lib/deploy-reconnect";
 import { plainErrorLine } from "@/lib/plain-error";
 import type { AppState } from "@/state/store";
@@ -31,6 +33,10 @@ export function ChatReconnectBanner(props: {
   everConnected: boolean;
   disconnectedAt: number | null;
 }) {
+  // #2013: the window's connection notice says it (ConnectionNotice); this
+  // line stays only for a person who turned those notices off.
+  const notices = useSyncExternalStore(connectionNotices.subscribe, connectionNotices.enabled, connectionNotices.enabled);
+  if (notices) return null;
   if (props.connected || !props.everConnected) return null;
   if (!isDeployOutageQuiet(props.disconnectedAt)) return null;
   return (

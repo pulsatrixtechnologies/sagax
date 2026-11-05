@@ -200,7 +200,7 @@ extension ChatView {
             func target() -> TranscriptRow? {
                 if let live = self.rows.first(where: matches) { return live }
                 for topic in earlierTopics.prefix(earlierTopicsShown) {
-                    let rows = transcriptRows(session.state.visibleTranscript(forThread: topic.threadId), detail: toolCalls.detail, showThreads: false, threadBotId: current.id)
+                    let rows = transcriptRows(session.state.visibleTranscript(forThread: topic.threadId), detail: toolCalls.detail, showThreads: false, threadBotId: current.id, hidesPreSendRefusals: current.isBot)
                     if let hit = rows.first(where: matches) { return hit }
                 }
                 return nil

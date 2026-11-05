@@ -28,10 +28,16 @@ extension ChatView {
         else { return }
         // The bot cannot answer now (SendState.swift): nothing goes out, the
         // draft stays, and the state is asked again.
-        if activeSendBlock != nil {
+        // An advisory line (#2013) informs and lets the message go.
+        if activeSendBlock?.blocksSend == true {
             Haptics.selection()
             sendBlockTick += 1
             return
+        }
+        // The advisory was about the turn before: this message is a new
+        // try, so the line goes; the turn's end asks again.
+        if activeSendBlock?.isAdvisory == true {
+            withAnimation(.snappy(duration: 0.2)) { sendBlockState.record(nil, for: sendBlockScope) }
         }
         // The hidden composer line toggles Hibou 98 and is never sent, as on
         // the desktop (src/lib/retro98.ts).
@@ -241,7 +247,7 @@ extension ChatView {
                             canSend: canSend,
                             busy: preparingAttachments || sendingMessage,
                             onCall: call.isOnCall(current),
-                            blocked: activeSendBlock != nil,
+                            blocked: activeSendBlock?.blocksSend == true,
                             send: { submit() },
                             voice: startVoiceMode
                         )

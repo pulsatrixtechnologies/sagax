@@ -22,6 +22,22 @@ function clockLocale(): string {
   return active === "fr" ? "fr-CA" : active;
 }
 
+/** Whether this block keeps a message from going out. An advisory line
+ * (#2013: the engine refused the last turn before any prompt went out)
+ * informs and the composer still sends: sending again is the retry. */
+export function sendBlockStops(block: SendBlock | null | undefined): boolean {
+  return Boolean(block) && block!.advisory !== true;
+}
+
+/** #2013: the composer's Fix (POST /api/bots/<id>/send-state/fix). Resolves
+ * to the send state the server answers after the repair; rejects when the
+ * repair failed. */
+export async function fixSendBlock(botId: string, threadId: string | undefined, fix: string): Promise<SendBlock | null> {
+  const query = threadId ? `?threadId=${encodeURIComponent(threadId)}` : "";
+  const body = await api<unknown>(`/api/bots/${encodeURIComponent(botId)}/send-state/fix${query}`, { method: "POST", body: JSON.stringify({ fix }) });
+  return parseSendBlock(body);
+}
+
 /** Whether this block locks the composer whole (the maintainer, 2026-11-04): the engine
  * account at its limit or out of credit takes no message and no action in
  * the chat until it resets or the bot moves to another engine or account. */
@@ -45,6 +61,11 @@ export function sendBlockText(block: SendBlock, now = Date.now()): string {
     case "computer_offline": return t("sendBlock.computerOffline");
     case "local_server_offline": return t("sendBlock.localServerOffline");
     case "owner_computer_offline": return block.name ? t("sendBlock.ownerComputerOffline", { owner: block.name }) : t("sendBlock.ownerComputerOfflineUnnamed");
+    // #2013: the engine refused the last turn before any prompt went out.
+    case "engine_refused": return block.refusal?.kind === "config_conflict"
+      ? t("sendBlock.engineConfigConflict", { engine: block.name ?? "" })
+      : t("sendBlock.engineNotReady", { engine: block.name ?? "" });
+    case "engine_signed_out": return t("sendBlock.engineSignedOut", { engine: block.name ?? "" });
     default: return block.message;
   }
 }
@@ -52,6 +73,9 @@ export function sendBlockText(block: SendBlock, now = Date.now()): string {
 /** The action button's label. */
 export function sendBlockActionLabel(block: SendBlock): string {
   if (block.action.kind === "switch_engine") return t("sendBlock.switchEngine");
+  if (block.action.kind === "fix") return t("sendBlock.fix");
+  if (block.action.kind === "resend") return t("sendBlock.retry");
+  if (block.reason === "engine_signed_out") return t("sendBlock.signIn");
   return block.action.kind === "connect" ? t("sendBlock.connect", { engine: block.action.engine }) : t("sendBlock.retry");
 }
 
@@ -60,7 +84,9 @@ export function parseSendBlock(body: unknown): SendBlock | null {
   const block = (body as { block?: unknown } | null)?.block as Partial<SendBlock> | null | undefined;
   if (!block || typeof block !== "object" || typeof block.reason !== "string" || typeof block.message !== "string") return null;
   const action = block.action as SendBlock["action"] | undefined;
-  if (!action || (action.kind !== "retry" && action.kind !== "switch_engine" && !(action.kind === "connect" && typeof action.engine === "string" && typeof action.instanceId === "string"))) return null;
+  if (!action || (action.kind !== "retry" && action.kind !== "switch_engine" && action.kind !== "resend"
+    && !(action.kind === "fix" && typeof action.fix === "string")
+    && !(action.kind === "connect" && typeof action.engine === "string" && typeof action.instanceId === "string"))) return null;
   return block as SendBlock;
 }
 

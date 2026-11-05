@@ -159,15 +159,51 @@ const label = (key: string, en: Locale, fr: Locale) => {
 
 export interface SettingsSectionRow { id: string; group: string; labelKey: string; keywords: string[] }
 
-/** The pages of Settings (src/components/settings/settings-nav.ts SECTIONS). */
-export function settingsSectionRows(root: string): SettingsSectionRow[] {
-  const source = read(root, "src/components/settings/settings-nav.ts");
-  const block = source.slice(source.indexOf("export const SECTIONS"), source.indexOf("\n];", source.indexOf("export const SECTIONS")));
+/** Source of the Settings nav pages (moved out of SettingsModal.tsx). */
+export const SETTINGS_NAV_SOURCE = "src/components/settings/settings-nav.ts";
+
+/** Parse `export const SECTIONS` from a Settings nav source file.
+ * Throws a clear error when the marker or row shape moved, so the generator
+ * does not later TypeError on a missing page label (`reading 'english'`). */
+export function parseSettingsSectionRows(source: string, sourcePath = SETTINGS_NAV_SOURCE): SettingsSectionRow[] {
+  const start = source.indexOf("export const SECTIONS");
+  if (start < 0) {
+    throw new Error(
+      `self-knowledge: export const SECTIONS not found in ${sourcePath}. ` +
+        `Settings pages moved? Update scripts/self-knowledge/build.ts (SETTINGS_NAV_SOURCE).`,
+    );
+  }
+  const end = source.indexOf("\n];", start);
+  if (end < 0) {
+    throw new Error(
+      `self-knowledge: could not find the end of SECTIONS in ${sourcePath}. ` +
+        `Update scripts/self-knowledge/build.ts.`,
+    );
+  }
+  const block = source.slice(start, end);
   const rows: SettingsSectionRow[] = [];
   for (const match of block.matchAll(/\{ id: "(\w+)", group: "(\w+)", labelKey: "([\w.]+)",[^\n]*?keywords: \[([^\]]*)\]/g)) {
     rows.push({ id: match[1], group: match[2], labelKey: match[3], keywords: [...match[4].matchAll(/"([^"]+)"/g)].map((word) => word[1]) });
   }
+  if (rows.length === 0) {
+    throw new Error(
+      `self-knowledge: parsed 0 Settings pages from ${sourcePath}. ` +
+        `SECTIONS shape changed? Update scripts/self-knowledge/build.ts.`,
+    );
+  }
   return rows;
+}
+
+/** The pages of Settings (src/components/settings/settings-nav.ts SECTIONS). */
+export function settingsSectionRows(root: string): SettingsSectionRow[] {
+  const path = SETTINGS_NAV_SOURCE;
+  if (!existsSync(join(root, path))) {
+    throw new Error(
+      `self-knowledge: ${path} is missing. ` +
+        `Settings pages moved? Update scripts/self-knowledge/build.ts (SETTINGS_NAV_SOURCE).`,
+    );
+  }
+  return parseSettingsSectionRows(read(root, path), path);
 }
 
 const NAV_GROUP_KEYS: Record<string, string> = { you: "settings.nav.you", ai: "settings.nav.ai", workspace: "settings.nav.workspace", app: "settings.nav.app" };
@@ -220,7 +256,14 @@ function settingsSections(root: string): KnowledgeSection[] {
       const title = titleKey ? label(titleKey, en, fr) : { english: titleText!, french: "" };
       const subtitleKey = /subtitle=\{t\("([\w.]+)"/.exec(window)?.[1] ?? /summary=\{t\("([\w.]+)"/.exec(window)?.[1];
       const subtitle = subtitleKey ? label(subtitleKey, en, fr) : null;
-      const pageLabel = page ? pageName.get(page)! : null;
+      // myConnections cards live in the sidebar Capabilities rail, not under a
+      // Settings page label (CARD_PAGE still maps their prefix to a retired page).
+      const pageLabel = page && prefix !== "myConnections" ? pageName.get(page) : undefined;
+      if (page && prefix !== "myConnections" && !pageLabel) {
+        throw new Error(
+          `self-knowledge: card "${id}" maps to Settings page "${page}" which is not in SECTIONS (${SETTINGS_NAV_SOURCE}).`,
+        );
+      }
       cards.set(id, {
         id: `card:${id}`,
         kind: "setting",

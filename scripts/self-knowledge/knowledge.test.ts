@@ -6,7 +6,15 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { auditKnowledgeText, buildKnowledge, KNOWLEDGE_FILE, serializeKnowledge } from "./build.ts";
+import {
+  auditKnowledgeText,
+  buildKnowledge,
+  KNOWLEDGE_FILE,
+  parseSettingsSectionRows,
+  serializeKnowledge,
+  SETTINGS_NAV_SOURCE,
+  settingsSectionRows,
+} from "./build.ts";
 import { GUIDES } from "./guides.ts";
 import { slug, splitHeadings } from "./markdown.ts";
 import type { KnowledgeBase, KnowledgeSection } from "../../server/self-knowledge-types.ts";
@@ -22,6 +30,50 @@ const fresh = buildKnowledge(root, committed.generated);
 const STRICT = new Set(["tool", "setting", "menu", "engine", "guide"]);
 const strict = (base: KnowledgeBase) => base.sections.filter((section) => STRICT.has(section.kind));
 const RUN = "stale: run `pnpm gen:self-knowledge` and commit server/self-knowledge/knowledge.generated.json";
+
+describe("settingsSectionRows", () => {
+  it(`reads every Settings page from ${SETTINGS_NAV_SOURCE}`, () => {
+    const rows = settingsSectionRows(root);
+    expect(rows.map((row) => row.id)).toEqual([
+      "account",
+      "security",
+      "credentials",
+      "appearance",
+      "notifications",
+      "providers",
+      "engines",
+      "voice",
+      "organization",
+      "computer",
+      "usage",
+      "backups",
+      "import",
+      "updates",
+      "experimental",
+      "about",
+    ]);
+    for (const row of rows) {
+      expect(row.group, row.id).toMatch(/^(you|ai|workspace|app)$/);
+      expect(row.labelKey, row.id).toMatch(/^(settings\.|sidebar\.)/);
+      expect(row.keywords.length, row.id).toBeGreaterThan(0);
+    }
+  });
+
+  it("fails loudly when SECTIONS is missing or the row shape changed", () => {
+    expect(() => parseSettingsSectionRows("export const OTHER = [];\n", "fake-nav.ts")).toThrow(
+      /export const SECTIONS not found in fake-nav\.ts/,
+    );
+    expect(() => parseSettingsSectionRows("export const SECTIONS = [\n];\n", "fake-nav.ts")).toThrow(
+      /parsed 0 Settings pages from fake-nav\.ts/,
+    );
+    expect(() =>
+      parseSettingsSectionRows(
+        'export const SECTIONS = [\n  { id: "account", group: "you", label: "Account", keywords: ["x"] },\n];\n',
+        "fake-nav.ts",
+      ),
+    ).toThrow(/parsed 0 Settings pages from fake-nav\.ts/);
+  });
+});
 
 describe("self-knowledge base", () => {
   it("is up to date with the tools, permissions, Settings, menus, engines and guides", () => {

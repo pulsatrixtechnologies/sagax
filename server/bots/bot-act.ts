@@ -5,7 +5,7 @@
 import { createHash } from "node:crypto";
 
 import type { ActTarget, TurnFacts } from "../../shared/bot-act.ts";
-import { actorForTurn, decideBotAct, summaryOf } from "../../shared/bot-act.ts";
+import { actMessageTarget, actorForTurn, decideBotAct, summaryOf } from "../../shared/bot-act.ts";
 import { botActClasses } from "../../shared/step-up.ts";
 
 /** 2026-10-19 ("Toujours permettre" on every card): what "Always allow"
@@ -99,6 +99,10 @@ export type BotActDeps = {
   now: () => number;
   newId: () => string;
   neededScope: (method: string, path: string) => "admin" | "client";
+  /** 0.8.46: the send id of a line a bot's act writes as the person. The
+   * line goes through as before; the runtime only never takes it as the
+   * person's own answer to a parked question. */
+  markActSend?: (sendId: string) => void;
   operatorAudience: () => string;
   sessionForPerson: (personKey: string) => LiveSession | null;
   /** `confirmed`: this replay follows that person's own Allow on a planned
@@ -370,6 +374,7 @@ export function createBotActService(deps: BotActDeps): BotActService {
   }
 
   async function run(actor: PerformActor, target: ActTarget, audience?: string, confirmed?: { personKey: string | null; classes: readonly string[]; primary?: { botId: string; botName: string; messageId: string } }, maxChars = 8000): Promise<BotActResult> {
+    target = tagActSend(target);
     if (target.kind === "ui") {
       deps.broadcastUi(audience ?? (actor.kind === "person" ? actor.personKey : deps.operatorAudience()), target.command, target.input);
       return { status: 200, body: { text: "Done.", status: 200 } };
@@ -382,6 +387,19 @@ export function createBotActService(deps: BotActDeps): BotActService {
     } catch {
       return { status: 502, body: { error: "The action could not be completed." } };
     }
+  }
+
+  /** A line the act writes carries a send id the runtime knows is the bot's,
+   * never the person's answer (0.8.46). The send itself is unchanged. */
+  function tagActSend(target: ActTarget): ActTarget {
+    if (!deps.markActSend || !actMessageTarget(target)) return target;
+    const given = target.kind === "ui" ? target.input.sendId
+      : target.body && typeof target.body === "object" && !Array.isArray(target.body) ? (target.body as Record<string, unknown>).sendId : undefined;
+    const sendId = typeof given === "string" && given ? given : `act-${deps.newId().replace(/[^A-Za-z0-9_-]/g, "")}`.slice(0, 80).padEnd(16, "0");
+    deps.markActSend(sendId);
+    if (target.kind === "ui") return { ...target, input: { ...target.input, sendId }, action: { ...target.action, sendId } };
+    const body = target.body && typeof target.body === "object" && !Array.isArray(target.body) ? target.body as Record<string, unknown> : {};
+    return { ...target, body: { ...body, sendId } };
   }
 }
 

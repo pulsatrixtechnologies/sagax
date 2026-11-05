@@ -88,6 +88,27 @@ export function botActConsoleRouteError(path: string): string | null {
     : null;
 }
 
+/** 0.8.46: the conversation a message-sending act would write into, or
+ * null when the act sends no line. A line there is taken as the person's own
+ * words (the request runs as the person), so an act into a conversation
+ * whose work waits on the person's answer would answer it for them. */
+export function actMessageTarget(target: ActTarget): { botId?: string; groupId?: string; threadId?: string } | null {
+  const text = (value: unknown) => typeof value === "string" && value ? value : undefined;
+  if (target.kind === "ui") {
+    if (target.command === "send" || target.command === "editMessage") return { botId: text(target.input.botId), threadId: text(target.input.threadId) };
+    if (target.command === "sendGroup") return { groupId: text(target.input.groupId), threadId: text(target.input.threadId) };
+    return null;
+  }
+  if (target.method.toUpperCase() !== "POST") return null;
+  const path = target.path.split("?")[0] ?? target.path;
+  const body = target.body && typeof target.body === "object" && !Array.isArray(target.body) ? target.body as Record<string, unknown> : {};
+  const bot = /^\/api\/bots\/([^/]+)\/(?:messages|send)$/.exec(path);
+  if (bot) return { botId: decodeURIComponent(bot[1]!), threadId: text(body.threadId) };
+  const group = /^\/api\/groups\/([^/]+)\/(?:messages|send)$/.exec(path);
+  if (group) return { groupId: decodeURIComponent(group[1]!), threadId: text(body.threadId) };
+  return null;
+}
+
 export type ActDecision =
   | { ok: false; status: 400 | 403; error: string }
   | { ok: true; effect: "run" | "hold"; summary: string; target: ActTarget };

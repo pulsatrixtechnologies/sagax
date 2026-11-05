@@ -13034,6 +13034,9 @@ const coordinator: Coordinator = createCoordinator({
     // when the requester's conversation is itself a bot-to-bot one, the
     // conversation the person started the work in gets it too.
     park: (node, question, restored) => postInputRequest(node, question, false, restored),
+    // 0.8.46: closed without the person (expired, or the requester's default
+    // answer): its cards say so instead of staying open or reading answered.
+    unparked: (node, _reason, defaulted) => settleInputRequests(node.threadId, defaulted ? "defaulted" : "expired"),
     remind: (node, question) => postInputRequest(node, question, true),
     // A parked delegation whose conversation was deleted or archived has
     // nowhere left to be answered: closed (at the restart too), so it stops
@@ -13085,6 +13088,19 @@ const originApprovals = createOriginApprovals({
   },
   withdraw: (threadId, requestId) => withdrawApprovalNotice(threadId, requestId)
 });
+/** 0.8.46: send ids of lines a bot's act wrote as the person (bot-act.ts
+ * tagActSend). Such a line is delivered as before but never answers a
+ * question the runtime parked on the person. In memory, ten minutes. */
+const botActSendIds = new Map<string, number>();
+function markBotActSend(sendId: string): void {
+  const now = Date.now();
+  for (const [id, at] of botActSendIds) if (now - at > 10 * 60_000) botActSendIds.delete(id); else break;
+  botActSendIds.set(sendId, now);
+  if (botActSendIds.size > 5_000) botActSendIds.delete(botActSendIds.keys().next().value!);
+}
+function isBotActSend(sendId: string | undefined): boolean {
+  return Boolean(sendId && botActSendIds.has(sendId));
+}
 /** The input-request cards still open per waiting work thread, so the answer
  * marks them answered (in memory: a restart parks again and re-posts). */
 const openInputRequests = new Map<string, Array<{ threadId: string; messageId: string }>>();
@@ -13156,14 +13172,18 @@ function newestQuestionCard(threadId: string, aboutThreadId: string): Message | 
     message.kind === "activity" && (message.threadRef?.threadId ?? message.comm?.threadId) === aboutThreadId
     && (message.tool?.name.includes(" needs your input: ") === true || message.tool?.name.includes(" is still waiting for your answer: ") === true));
 }
-/** The person answered in the waiting thread: its cards say so. */
-function settleInputRequests(threadId: string): void {
+/** The person answered in the waiting thread: its cards say so. Only the
+ * person's own line answers (start-turn-prepare-admit.ts); a parked question
+ * closed without them says "expired" or "default answer used" (0.8.46). */
+function settleInputRequests(threadId: string, how: "answered" | "expired" | "defaulted" = "answered"): void {
   const rows = openInputRequests.get(threadId);
   if (!rows) return;
   openInputRequests.delete(threadId);
   for (const row of rows) {
     const message = store.activePath(row.threadId).find((candidate) => candidate.id === row.messageId);
-    if (message?.inputRequest) store.patchMessage(row.threadId, row.messageId, { inputRequest: { ...message.inputRequest, answered: true } });
+    if (!message?.inputRequest || message.inputRequest.answered || message.inputRequest.expired) continue;
+    const settled = how === "answered" ? { answered: true } : { expired: true, ...(how === "defaulted" ? { defaulted: true } : {}) };
+    store.patchMessage(row.threadId, row.messageId, { inputRequest: { ...message.inputRequest, ...settled } });
   }
 }
 const groupUsageReader = new GroupUsageReader(DATA_DIR);
@@ -34924,6 +34944,9 @@ let botActService: BotActService | null = null;
 function botActs(): BotActService {
   botActService ??= createBotActService({
     now: () => Date.now(),
+    // 0.8.46: a line a bot's act writes as the person is never taken as the
+    // person's own answer to a parked question (start-turn-prepare-admit.ts).
+    markActSend: (sendId) => markBotActSend(sendId),
     newId: () => randomUUID(),
     neededScope: (method, path) => requiredScope(method, path, {
       sharedComputers: sharedComputersEnabled(cfg),
@@ -46890,6 +46913,7 @@ const startTurnRunner = createStartTurn({
   settleDirectCoordination,
   settleDirectFollowup,
   settleInputRequests,
+  isBotActSend,
   settleTrackedRequest,
   settlingResourceOwners,
   setupModeActive,

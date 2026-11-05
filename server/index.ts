@@ -45545,6 +45545,7 @@ ROUTES.push(createBrowserEngineRoutes({
   ENGINE_PROBE_TTL_MS,
   ENGINE_PROBE_TIMEOUT_MS,
   staticDir: () => STATIC_DIR,
+  version: releaseVersion,
   isInstalling: () => Boolean(browserEngineInstall),
   startInstall: (work) => {
     browserEngineInstallError = null;
@@ -45736,7 +45737,8 @@ PRE_AUTH_ROUTES.push(createCompanionPairRoutes({
 PRE_AUTH_AFTER_RESOLVE.push(createUnauthHealthBrandRoutes({
   isShuttingDown,
   healthzUnreadyBody,
-  healthIdentity: HEALTH_IDENTITY,
+  // #1996: stranger /api/health carries the Sagax release (forkVersion).
+  healthIdentity: { ...HEALTH_IDENTITY, version: releaseVersion() },
   loadBrand,
 }));
 ROUTES.push(async (ctx) => {

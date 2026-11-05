@@ -559,7 +559,7 @@ describe.skipIf(process.platform === "win32")("serve --tunnel", () => {
       const stranger = await fetch(`${gateway}/api/bots`);
       expect(stranger.status).toBe(403);
       expect(((await stranger.json()) as { error: string }).error).toMatch(/through a proxy/);
-      expect(await (await fetch(`${gateway}/api/health`)).json()).toEqual({ app: "openmausbot", product: "sagax" });
+      expect(await (await fetch(`${gateway}/api/health`)).json()).toEqual({ app: "openmausbot", product: "sagax", version: "0.8.45" });
       expect(typeof ((await (await fetch(`http://127.0.0.1:${port}/api/health`)).json()) as { pid: unknown }).pid).toBe("number");
       // the printed code pairs a device through the gateway, and its session is honoured there
       const match = /pairing code:  ([A-Z2-9-]+)/.exec(out);

@@ -44,6 +44,10 @@ export interface BrowserEngineRouteDeps {
   ENGINE_PROBE_TIMEOUT_MS: number;
   /** Truthy when a static UI directory is configured. */
   staticDir: () => string | null | undefined;
+  /** Sagax release people know (package.json forkVersion / releaseVersion).
+   * #1996: every /api/health detail level carries it so a routine can
+   * signal a version change; the well-known environment already publishes it. */
+  version: () => string;
   /** True while an install promise is in flight. */
   isInstalling: () => boolean;
   /**
@@ -68,16 +72,18 @@ export function createBrowserEngineRoutes(deps: BrowserEngineRouteDeps): RouteHa
       if (deps.isShuttingDown()) return json(res, 503, healthzUnreadyBody());
       // What this caller may learn (request-auth.ts healthDetail): a
       // session-less bot shell on an organization server learns the app name
-      // only, as a stranger does.
+      // and Sagax version only, as a stranger does (#1996: version so a
+      // routine can signal a release change).
       const detail = healthDetail(auth, { organization: deps.isOrganization() });
+      const identity = { ...HEALTH_IDENTITY, version: deps.version() };
       const capabilities = {
         guardedMessages: 1, guardedRequests: 1, guardedFullAccess: 1, guardedOnBehalfOf: 1,
         ...(deps.sharedWorkspaceFullAccessEnabled() ? { sharedWorkspaceFullAccess: 1 } : {}),
         // Slice 7: /api/org/admin/* answers the Perspicax console.
         ...(deps.isOrganization() ? { orgAdminApi: 1, orgAdminFiles: 1 } : {}),
       };
-      if (detail === "app") return json(res, 200, { ...HEALTH_IDENTITY });
-      if (detail === "capabilities") return json(res, 200, { ...HEALTH_IDENTITY, capabilities });
+      if (detail === "app") return json(res, 200, identity);
+      if (detail === "capabilities") return json(res, 200, { ...identity, capabilities });
       // The engines installed on this server (slice 3, D16), from the CLI
       // probes: refreshed here when stale, within a bounded wait.
       const probes = deps.engineProbes();
@@ -94,7 +100,7 @@ export function createBrowserEngineRoutes(deps: BrowserEngineRouteDeps): RouteHa
         .sort((a, b) => a.instanceId.localeCompare(b.instanceId));
       // app: "openmausbot" stays one release beside product: "sagax" (deployed
       // health checks grep the body for it; legacy-names.mjs HEALTH_IDENTITY).
-      return json(res, 200, { ...HEALTH_IDENTITY, pid: process.pid, static: Boolean(deps.staticDir()), capabilities, engines, warmResources: warmResources.stats() });
+      return json(res, 200, { ...identity, pid: process.pid, static: Boolean(deps.staticDir()), capabilities, engines, warmResources: warmResources.stats() });
     }
 
     // The bots' browser engine: install it on this machine (agent-browser +

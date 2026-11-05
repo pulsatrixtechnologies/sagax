@@ -1485,16 +1485,19 @@ export function resolveRequestAuth(req: IncomingMessage, options: ResolveOptions
 
 /** How much GET /api/health tells this caller.
  *
- * - `full`: the app, pid, static flag, capabilities and the engines installed
- *   on the server with their versions (spec section 4 bis). For a session
- *   (any person signed in) and for a loopback caller trusted as the owner
- *   (the desktop's boot probe keys on the pid; the serving CLI proves itself
- *   with its secret and is let in as the owner for this route).
+ * Every detail level includes the Sagax release (`version`, forkVersion)
+ * so a routine can signal a version change (#1996).
+ *
+ * - `full`: the app, version, pid, static flag, capabilities and the engines
+ *   installed on the server with their versions (spec section 4 bis). For a
+ *   session (any person signed in) and for a loopback caller trusted as the
+ *   owner (the desktop's boot probe keys on the pid; the serving CLI proves
+ *   itself with its secret and is let in as the owner for this route).
  * - `capabilities`: a session-less `service`-trust caller on a hosted
  *   workspace. The cloud Slack worker reads the guarded send contract there;
  *   pid, static and engines stay behind a session.
  * - `app`: everyone else, and a session-less loopback caller on an
- *   organization server, where loopback is any bot's shell. */
+ *   organization server, where loopback is any bot's shell (app + version). */
 export type HealthDetail = "full" | "capabilities" | "app";
 
 export function healthDetail(auth: RequestAuth | null, options: { organization: boolean }): HealthDetail {

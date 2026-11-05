@@ -2006,7 +2006,7 @@ import {
 import { MEMORY_INDEX, memoryOverview, readMemoryDoc } from "./memory/memory-store.ts";
 import { isExpired as memoryEntryExpired, parseMemoryEntries } from "./memory/memory-entries.ts";
 import { createBotLibraryRoutes } from "./routes/bot-library.ts";
-import { isSharedLibraryFilePath, libraryThreadsOfSharedBot, sharedLibraryFileAllowed } from "./bots/bot-library.ts";
+import { libraryThreadsOfSharedBot, sharedLibraryGetAllowed } from "./bots/bot-library.ts";
 import { createBotSettingsRoutes } from "./routes/bot-settings.ts";
 import { createAutoReviewRuleRoutes } from "./routes/auto-review-rules.ts";
 import { createOwnerApprovalRoutes } from "./routes/owner-approvals.ts";
@@ -33276,7 +33276,7 @@ ROUTES.push(createBotLibraryRoutes<BotRecord>({
       return viewer ? shown : [bot.threadId, ...shown];
     }
     const mayUse = Boolean(canOnBot(authzViewerFromId(viewer), "bot.use", botFacts(bot)));
-    return libraryThreadsOfSharedBot(store.tasks(bot.id), mayUse);
+    return libraryThreadsOfSharedBot(store.tasks(bot.id), mayUse, bot.threadId);
   },
   messages: (threadId) => activePath(store.messagesFor(threadId), store.activeLeaf(threadId)),
   files: (threadId) => listThreadFiles(threadFileRefsFor(threadId), (ref) => statMessageFile(ref.path, threadFileRoots(threadId, ref))),
@@ -46281,10 +46281,12 @@ async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL,
     // bot, so Links / Media / Files URLs open for a shared viewer.
     if (named && owner && !adminAnswersPendingApproval(method, path, auth) &&
       !botThreadReadable(owner, named, scopedViewerId, method === "GET" ? "thread.read" : "thread.post")) {
-      const task = store.taskByThread(owner.id, named);
-      const libraryFile = Boolean(task) && isSharedLibraryFilePath(method, path) && sharedLibraryFileAllowed({
+      // The bot's main thread (bot.threadId) is in the library too (not a task).
+      const task = named === owner.threadId ? null : store.taskByThread(owner.id, named);
+      const libraryFile = sharedLibraryGetAllowed({
+        method, path, task,
+        mainThread: named === owner.threadId,
         mayUseBot: Boolean(canOnBot(authzViewerFromId(scopedViewerId), "bot.use", botFacts(owner))),
-        confidential: task!.confidential === true,
       });
       if (!libraryFile) {
         json(res, 404, { error: "no such conversation" });

@@ -2275,11 +2275,29 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
   it("settles a failed turn whose process exit could not be confirmed without waiting for the stall watchdog", async () => {
     await create({ mode: "legacy-error" });
     vi.stubEnv("FAKE_CODEX_STOP_RETRY_MS", "50");
-    const stopping = vi.spyOn(procs, "killCliTree").mockResolvedValueOnce(false);
+    // Refuse the stop of THIS test's child only. A one-shot mock on killCliTree is not enough: a warm
+    // process left by an earlier test retires on a 2s timer (resources/warm-process.ts) and, on a loaded
+    // host, can spend the one refusal before this turn's own settle asks.
+    const spawned = new Set<number>();
+    const realSpawn = procs.spawnCli;
+    vi.spyOn(procs, "spawnCli").mockImplementation(((...args: Parameters<typeof procs.spawnCli>) => {
+      const child = realSpawn(...args);
+      if (child.pid) spawned.add(child.pid);
+      return child;
+    }) as typeof procs.spawnCli);
+    const realKill = procs.killCliTree;
+    let refused = false;
+    const stopping = vi.spyOn(procs, "killCliTree").mockImplementation(async (child, ...rest) => {
+      if (!refused && child.pid && spawned.has(child.pid)) { refused = true; return false; }
+      return realKill(child, ...rest);
+    });
     await instance.adapter.sendTurn({ threadId: "t-stop-unconfirmed", text: "hi" });
     await expect(recorder.until((e) => e.type === "turn.completed", 10_000)).resolves.toMatchObject({ ok: false });
-    expect(recorder.events.some((e) => e.type === "runtime.error" && e.message.includes("did not shut down"))).toBe(true);
-    expect(stopping.mock.calls.length).toBeGreaterThan(1);
+    // The child's own close can finish the turn (a second, real stop that succeeds) before the settle path
+    // reports its unconfirmed stop, so on a loaded host turn.completed may land first: wait for the event,
+    // not for a delay.
+    await recorder.until((e) => e.type === "runtime.error" && e.message.includes("did not shut down"), 10_000);
+    expect(stopping.mock.calls.filter(([child]) => child.pid && spawned.has(child.pid)).length).toBeGreaterThan(1);
     expect(instance.adapter.hasSession("t-stop-unconfirmed")).toBe(false);
 
     recorder.events.length = 0;
@@ -3179,6 +3197,15 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
 
   it.each([false, true])("keeps ownership after an uncertain stop even when root close arrives (before failure: %s)", async (closeFirst) => {
     await create({ mode: "legacy-error" });
+    // Only this test's child counts: a warm process retired by an earlier test also calls killCliTree.
+    const spawned = new Set<number>();
+    const realSpawn = procs.spawnCli;
+    vi.spyOn(procs, "spawnCli").mockImplementation(((...args: Parameters<typeof procs.spawnCli>) => {
+      const child = realSpawn(...args);
+      if (child.pid) spawned.add(child.pid);
+      return child;
+    }) as typeof procs.spawnCli);
+    const ours = () => stopping.mock.calls.filter(([child]) => child.pid && spawned.has(child.pid));
     const stopping = vi.spyOn(procs, "killCliTree").mockImplementation(async (child) => {
       if (closeFirst && child.exitCode === null && child.signalCode === null) {
         const closed = once(child, "close");
@@ -3190,12 +3217,12 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     try {
       await instance.adapter.sendTurn({ threadId: "t-uncertain-stop", text: "one" });
       await recorder.until((event) => event.type === "runtime.error" && event.message.includes("did not shut down"));
-      const child = stopping.mock.calls[0]![0];
+      const child = ours()[0]![0];
       if (!closeFirst) {
         const closed = once(child, "close");
         child.kill("SIGKILL");
         await closed;
-        await expect.poll(() => stopping.mock.calls.length).toBeGreaterThan(1);
+        await expect.poll(() => ours().length).toBeGreaterThan(1);
       }
       expect(recorder.events.some((event) => event.type === "turn.completed")).toBe(false);
       expect(instance.adapter.hasSession("t-uncertain-stop")).toBe(true);

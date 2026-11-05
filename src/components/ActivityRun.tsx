@@ -14,6 +14,7 @@ import type { Message } from "@/state/store";
 import { describeRun } from "@/lib/activity-runs";
 import { mergeSteps, stepGroupWords, summarizeSteps } from "@/lib/step-group";
 import { stepDuration, type StepNameOf } from "@/lib/step-label";
+import { StepBoundary, stepFallbackText, stepIdOf } from "./MessageBoundary";
 import { StepRow } from "./StepRow";
 
 export function ActivityRun({
@@ -66,7 +67,16 @@ export function ActivityRun({
           <div className="flex flex-col gap-0.5 py-0.5">
             {mergeSteps(messages, nameOf).map((entry) => {
               if (entry.kind === "message") return <div key={entry.id} className="contents">{renderMessage?.(entry.message)}</div>;
-              if (entry.messages.length === 1) return <div key={entry.id} className="contents">{renderStep(entry.messages[0]!)}</div>;
+              if (entry.messages.length === 1) {
+                const step = entry.messages[0]!;
+                return (
+                  <div key={entry.id} className="contents">
+                    <StepBoundary stepId={stepIdOf(step)} fallbackText={stepFallbackText(step)}>
+                      {renderStep(step)}
+                    </StepBoundary>
+                  </div>
+                );
+              }
               return (
                 <StepRow
                   key={entry.id}
@@ -77,7 +87,17 @@ export function ActivityRun({
                   duration={stepDuration(entry.durationMs)}
                   forceOpen={Boolean(focusedId) && entry.messages.some((message) => message.id === focusedId)}
                 >
-                  {() => <div className="flex flex-col gap-0.5 py-0.5">{entry.messages.map((message) => <div key={message.id} className="contents">{renderStep(message)}</div>)}</div>}
+                  {() => (
+                    <div className="flex flex-col gap-0.5 py-0.5">
+                      {entry.messages.map((message) => (
+                        <div key={message.id} className="contents">
+                          <StepBoundary stepId={stepIdOf(message)} fallbackText={stepFallbackText(message)}>
+                            {renderStep(message)}
+                          </StepBoundary>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </StepRow>
               );
             })}

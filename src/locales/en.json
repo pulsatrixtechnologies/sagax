@@ -2668,6 +2668,7 @@
   "composer.failed.dismissAria": "Dismiss failed message",
   "chat.stale": "This conversation may not be up to date. You are offline; messages you send wait and go out when the connection returns.",
   "chat.unknownMessage": "This message cannot be shown in this version. Update Sagax to see the full message.",
+  "chat.stepFailed": "Something went wrong in this step.",
   "composer.failed.offline": "Sent offline, waiting for the network: “{text}”",
   "composer.failed.notSent": "Not sent: “{text}”",
   "composer.goal.aria": "Finish together",

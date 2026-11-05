@@ -63,6 +63,7 @@ import { ChatMarkdown } from "./ChatMarkdown";
 import { CHAT_COLUMN_CLASS } from "@/lib/chat-bubble-width";
 import { VideoPlayerWidget } from "./video/VideoPlayerWidget";
 import { FailedTurnRow, MessageBoundary, type SideChat } from "./ChatView";
+import { StepBoundary, stepFallbackText } from "./MessageBoundary";
 import { MESSAGE_ROW, MessageActions, messageActionClass } from "./MessageActions";
 import { personModerationMenu, useBotMessageMenu, userMessageMenu, type PinAction } from "./message-menu";
 import { blockPerson, isBlockedId, personLineAuthor, unblockPerson, useBlockedPeople } from "@/lib/moderation";
@@ -794,17 +795,19 @@ export const Transcript = memo(function Transcript({
               )}
               <CwActivityWidgets messages={item.messages} threadId={group.threadId} botId={first.from?.botId} />
               {showToolCalls && (
-                <ActivityRun
-                  messages={item.messages}
-                  elapsedMs={item.elapsedMs}
-                  focusedId={focusedId}
-                  nameOf={botNames(state.bots)}
-                  renderStep={(step) => (
-                    <div className="contents" data-mid={step.id}>
-                      <RoomToolChip message={step} />
-                    </div>
-                  )}
-                />
+                <StepBoundary stepId={item.id} fallbackText={stepFallbackText(item.messages[0])}>
+                  <ActivityRun
+                    messages={item.messages}
+                    elapsedMs={item.elapsedMs}
+                    focusedId={focusedId}
+                    nameOf={botNames(state.bots)}
+                    renderStep={(step) => (
+                      <div className="contents" data-mid={step.id}>
+                        <RoomToolChip message={step} />
+                      </div>
+                    )}
+                  />
+                </StepBoundary>
               )}
             </div>
           );

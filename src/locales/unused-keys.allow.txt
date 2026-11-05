@@ -120,7 +120,6 @@ call.mode.menu
 canvas.moving
 chat.advancedOnly
 chat.backToMainThread
-chat.computer
 chat.copyMessageId
 chat.digestChip
 chat.digestChipNoFiles

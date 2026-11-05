@@ -323,7 +323,9 @@ export function ModelPicker({
       if (anchor && box) {
         const left = Math.max(8, Math.min(box.getBoundingClientRect().right + 6, window.innerWidth - MENU_WIDTH - 8));
         setMenuAt({ left, bottom: Math.max(8, window.innerHeight - rect.bottom - 6) });
-      } else if (headless || windowOnly) {
+      } else if (windowOnly) {
+        setMenuAt(windowOnlyMenuPlace());
+      } else if (headless) {
         setMenuAt({ left: Math.max(8, Math.min(rect?.left ?? 24, window.innerWidth - MENU_WIDTH - 8)), bottom: Math.max(8, window.innerHeight - (rect?.top ?? 80) + 6) });
       } else {
         const right = Math.max(8, Math.min(window.innerWidth - rect.right, window.innerWidth - MENU_WIDTH - 8));

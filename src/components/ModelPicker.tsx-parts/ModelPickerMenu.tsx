@@ -35,8 +35,11 @@ export function menuRoomBelow(top: number, viewportHeight = menuViewportHeight()
 /** Where the model window (`windowOnly`) pins its menu: top-left inside the
  * viewport. CSS `bottom: innerHeight - 96` put the bottom edge near the top
  * and drew the rest above the window (Refs #1979). */
-export function windowOnlyMenuPlace(): { left: number; top: number } {
-  return { left: 24, top: 96 };
+export function windowOnlyMenuPlace(viewportHeight = menuViewportHeight()): { left: number; top: number } {
+  // Keep the top edge inside the window even on a short viewport so the
+  // menu can still grow downward (menuRoomBelow floor is 120px).
+  const top = Math.min(96, Math.max(8, viewportHeight - 128));
+  return { left: 24, top };
 }
 
 export function ModelPickerMenu({

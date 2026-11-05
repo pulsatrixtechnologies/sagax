@@ -39,6 +39,7 @@ import {
   X,
   AppWindow,
   MessageSquare,
+  Monitor,
   PanelLeftClose,
 } from "lucide-react";
 import { WorkingDots } from "@/components/WorkingIndicator";
@@ -2546,6 +2547,27 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
           // buttons clear the 26px overlay while the rest of the layout stays.
           style={controlsShiftStyle}
         >
+          {/* Advanced (and a remote client's Simple header) keeps Computer
+              here so the guided tour can point at it (Refs #2000). Simple
+              mode otherwise opens Computer from the bot panel. */}
+          {(advanced || remoteClient) && (
+            <button
+              type="button"
+              data-tour="computer"
+              onClick={() => dispatch({ type: "toggleComputer" })}
+              className={cn(
+                "relative rounded-md p-1.5 hover:bg-raised",
+                state.computerOpen ? "text-accent" : "text-ink-secondary hover:text-ink",
+              )}
+              title={t("chat.computer")}
+              aria-label={t("chat.computer")}
+            >
+              <Monitor size={18} />
+              {busy && place === "browser" && (
+                <span aria-hidden="true" className="absolute right-1 top-1 size-1.5 animate-pulse rounded-full bg-success" data-testid="computer-button-live" />
+              )}
+            </button>
+          )}
           {/* One "..." for the conversation: share and export, then the
               Inspector (Advanced) and Data (Experimental). The pill opens
               the bot's panel; while the panel is open its top bar carries

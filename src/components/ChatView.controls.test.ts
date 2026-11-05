@@ -483,6 +483,31 @@ describe("thread control placement", () => {
     expect(renderToStaticMarkup(createElement(ChatView, { bot: { ...bot, busy: false } }))).not.toContain("primary-bot-badge");
   });
 
+  // Refs #2000: the guided tour's Computer step needs data-tour="computer".
+  it("anchors the guided tour's Computer step on the header control in Advanced mode", () => {
+    setAdvancedMode(true);
+    try {
+      const advanced = renderToStaticMarkup(createElement(ChatView, { bot: { ...bot, busy: false } }));
+      expect(advanced).toContain('data-tour="computer"');
+      setAdvancedMode(false);
+      const simple = renderToStaticMarkup(createElement(ChatView, { bot: { ...bot, busy: false } }));
+      expect(simple).not.toContain('data-tour="computer"');
+    } finally {
+      setAdvancedMode(false);
+    }
+  });
+
+  it("keeps the Computer tour anchor for a remote client's Simple header", () => {
+    setAdvancedMode(false);
+    window.ogb = { remoteClient: { active: true } } as NonNullable<Window["ogb"]>;
+    try {
+      expect(renderToStaticMarkup(createElement(ChatView, { bot: { ...bot, busy: false } }))).toContain('data-tour="computer"');
+    } finally {
+      delete window.ogb;
+      setAdvancedMode(false);
+    }
+  });
+
   it("keeps the selected thread's model in the composer, and no approval control there", () => {
     const markup = renderToStaticMarkup(createElement(ChatView, { bot }));
     expect(markup.match(/data-test-model-control/g)).toHaveLength(1);

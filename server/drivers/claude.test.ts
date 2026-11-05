@@ -37,6 +37,7 @@ import {
   readClaudeAuthSettings,
   claudeCostSnapshot,
   restoredCostBase,
+  turnModelUsage,
   STEERED_CONTINUATION_GRACE_MS,
   sumNativeTurnResults,
   turnCostFromRunningTotal,
@@ -190,6 +191,27 @@ describe("ClaudeDriver.decodeConfig", () => {
       .toEqual({ ok: false, stopReason: "end_turn", cost: 0.01, usage: first.usage });
     expect(sumNativeTurnResults({ ok: true, stopReason: null, cost: null }, { ok: true, stopReason: null, cost: null }))
       .toEqual({ ok: true, stopReason: null, cost: null });
+  });
+
+  it("splits a result's usage by model against the running state, and adds splits across native results", () => {
+    const base = claudeCostSnapshot(1, { "big-model": { inputTokens: 10, cacheReadInputTokens: 100, cacheCreationInputTokens: 5, outputTokens: 20, costUSD: 0.9 } })!;
+    const now = claudeCostSnapshot(1.3, {
+      "big-model": { inputTokens: 14, cacheReadInputTokens: 160, cacheCreationInputTokens: 5, outputTokens: 30, costUSD: 1.1 },
+      "small-model": { inputTokens: 7, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, outputTokens: 3, costUSD: 0.1 },
+    })!;
+    const split = turnModelUsage(base, now);
+    expect(split).toEqual([
+      { model: "big-model", inputTokens: 4, outputTokens: 10, cachedInputTokens: 60, costUsd: 0.2 },
+      { model: "small-model", inputTokens: 7, outputTokens: 3, costUsd: 0.1 },
+    ]);
+    // a model with nothing new is left out; a state that went back is taken whole
+    expect(turnModelUsage(now, now)).toEqual([]);
+    expect(turnModelUsage(now, base)[0]).toMatchObject({ model: "big-model", inputTokens: 10, costUsd: 0.9 });
+    const sum = (models: typeof split) => ({ ok: true, stopReason: null, cost: null, models });
+    expect(sumNativeTurnResults(sum(split), sum(split)).models).toEqual([
+      { model: "big-model", inputTokens: 8, outputTokens: 20, cachedInputTokens: 120, costUsd: 0.4 },
+      { model: "small-model", inputTokens: 14, outputTokens: 6, costUsd: 0.2 },
+    ]);
   });
 
   it("accepts the three known permission modes", () => {

@@ -4754,6 +4754,15 @@ function bookTurnUsage(row: Omit<UsageRow, "at" | "costSource">, tokensReported 
   // Missing helper usage is unpriced, not an estimated zero-dollar call.
   const cost = tokensReported || row.costUsd !== null ? ledgerCost(row, operatorPrices()) : { costUsd: null };
   const booked = { ...row, ...orgUsageFacts(row), ...cost, at: new Date().toISOString() };
+  // A model the engine gave no figure for is estimated like the row would be.
+  if (row.models?.length) {
+    booked.models = row.models.map((share) => {
+      if (share.costUsd !== null) return share;
+      const cached = share.cachedInputTokens ?? 0;
+      const input = share.inputTokens + cached + (share.cacheWriteTokens ?? 0);
+      return { ...share, costUsd: ledgerCost({ driverKind: row.driverKind, model: share.model, input, output: share.outputTokens, cachedInput: cached, costUsd: null }, operatorPrices()).costUsd };
+    });
+  }
   // The append lands asynchronously; the cap counts the row from memory
   // until it does, so the check below (and the next turn start) sees it.
   noteSpend(DATA_DIR, booked, appendUsage(DATA_DIR, booked));
@@ -20840,6 +20849,7 @@ bus.subscribe((event: RuntimeEvent) => {
           instanceId: selection.instanceId,
           driverKind: registry.get(selection.instanceId)?.driverKind ?? "unknown",
           model: selection.model,
+          ...(event.models?.length ? { models: event.models } : {}),
           input: tokens?.input ?? 0,
           output: tokens?.output ?? 0,
           ...(typeof tokens?.cachedInput === "number" ? { cachedInput: tokens.cachedInput } : {}),
@@ -20976,6 +20986,7 @@ bus.subscribe((event: RuntimeEvent) => {
           instanceId: selection?.instanceId ?? "unknown",
           driverKind: (selection && registry.get(selection.instanceId)?.driverKind) ?? "unknown",
           model: selection?.model ?? "unknown",
+          ...(event.models?.length ? { models: event.models } : {}),
           input: tokens?.input ?? 0,
           output: tokens?.output ?? 0,
           ...(typeof tokens?.cachedInput === "number" ? { cachedInput: tokens.cachedInput } : {}),

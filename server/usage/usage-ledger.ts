@@ -26,6 +26,18 @@ export type UsageTrigger =
   | { kind: "routine"; routineId?: string; label?: string; runAsPrincipalId?: string }
   | { kind: "bot"; botId?: string };
 
+/** One model's share of a turn that mixed several (the main model plus its
+ * sub-agents). `inputTokens` is fresh input only; cache reads and writes are
+ * separate, so the row's `input` is their sum. */
+export interface UsageModelShare {
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens?: number;
+  cacheWriteTokens?: number;
+  costUsd: number | null;
+}
+
 export interface UsageRow {
   at: string;
   botId: string;
@@ -33,7 +45,11 @@ export interface UsageRow {
   threadId: string;
   instanceId: string;
   driverKind: string;
+  /** The turn's main model; `models` carries the whole split. */
   model: string;
+  /** The turn's usage per model, when the engine reported one. Absent on
+   * rows written before, and for engines that run a single model. */
+  models?: UsageModelShare[];
   input: number;
   output: number;
   cachedInput?: number;
@@ -173,6 +189,21 @@ export async function flushUsageLedger(dataDir: string): Promise<void> {
 const isTrigger = (value: unknown): value is UsageTrigger =>
   typeof value === "object" && value !== null && typeof (value as UsageTrigger).kind === "string";
 
+const isModelShare = (value: unknown): value is UsageModelShare => {
+  if (typeof value !== "object" || value === null) return false;
+  const m = value as UsageModelShare;
+  const count = (n: unknown) => n === undefined || (typeof n === "number" && Number.isFinite(n));
+  return typeof m.model === "string" && m.model !== "" && count(m.inputTokens) && m.inputTokens !== undefined && count(m.outputTokens) && m.outputTokens !== undefined &&
+    count(m.cachedInputTokens) && count(m.cacheWriteTokens) && (m.costUsd === null || typeof m.costUsd === "number");
+};
+
+/** The row's valid per-model split, or null for a row without one (old rows,
+ * single-model engines, or a split that does not read). */
+export function modelSharesOf(row: Pick<UsageRow, "models">): UsageModelShare[] | null {
+  const { models } = row;
+  return Array.isArray(models) && models.length > 0 && models.every(isModelShare) ? models : null;
+}
+
 const isUsageRow = (value: unknown): value is UsageRow =>
   typeof value === "object" &&
   value !== null &&
@@ -268,12 +299,35 @@ export function triggerLabel(trigger: UsageTrigger): string {
   }
 }
 
+function modelGroup(row: Pick<UsageRow, "driverKind" | "model">): { key: string; label: string } {
+  return { key: `model:${row.driverKind}/${row.model}`, label: row.model };
+}
+
+/** The row as the models it mixed: one pseudo row per model, each with that
+ * model's own tokens and cost. A row without a split is itself. */
+function rowsByModel(row: UsageRow): UsageRow[] {
+  const shares = modelSharesOf(row);
+  if (!shares) return [row];
+  return shares.map((share) => {
+    const cached = clean(share.cachedInputTokens);
+    const { models: _split, ...rest } = row;
+    return {
+      ...rest,
+      model: share.model,
+      input: clean(share.inputTokens) + cached + clean(share.cacheWriteTokens),
+      output: clean(share.outputTokens),
+      cachedInput: cached,
+      costUsd: share.costUsd,
+    };
+  });
+}
+
 function groupOf(row: UsageRow, groupBy: UsageGroupBy): { key: string; label: string } {
   switch (groupBy) {
     case "bot":
       return { key: `bot:${row.botId}`, label: row.botName || row.botId };
     case "model":
-      return { key: `model:${row.driverKind}/${row.model}`, label: row.model };
+      return modelGroup(row);
     case "user":
       return { key: triggerKey(row.trigger), label: triggerLabel(row.trigger) };
     case "day":
@@ -319,13 +373,17 @@ export function summarizeUsage(rows: UsageRow[], groupBy: UsageGroupBy, prices: 
   const groups = new Map<string, UsageGroup>();
   const total = emptyGroup("total", "total");
   for (const row of rows) {
-    const { key, label } = groupOf(row, groupBy);
-    let group = groups.get(key);
-    if (!group) {
-      group = emptyGroup(key, label);
-      groups.set(key, group);
+    // By model, a turn that mixed several counts in each one's group, with
+    // that model's own tokens and cost; the total still counts the row once.
+    for (const part of groupBy === "model" ? rowsByModel(row) : [row]) {
+      const { key, label } = groupOf(part, groupBy);
+      let group = groups.get(key);
+      if (!group) {
+        group = emptyGroup(key, label);
+        groups.set(key, group);
+      }
+      add(group, part, prices);
     }
-    add(group, row, prices);
     add(total, row, prices);
   }
   const ordered = [...groups.values()];
@@ -370,7 +428,10 @@ export function csvCell(value: string | number | null): string {
 
 /** One line per turn, spreadsheet-ready; a billable column when a price list is given. */
 export function usageCsv(rows: UsageRow[], prices: PriceList | null = null): string {
-  const header = ["time", "bot", "model", "engine", "triggered_by", "input_tokens", "output_tokens", "cached_input_tokens", "cost_usd", "cost_source", ...(prices ? ["billable_usd"] : []), "thread"];
+  // The models column appears only when a row carries a split, so an export
+  // of older rows keeps exactly its columns.
+  const withSplit = rows.some((row) => modelSharesOf(row));
+  const header = ["time", "bot", "model", "engine", "triggered_by", "input_tokens", "output_tokens", "cached_input_tokens", "cost_usd", "cost_source", ...(prices ? ["billable_usd"] : []), "thread", ...(withSplit ? ["models"] : [])];
   const lines = [header.join(",")];
   for (const row of rows) {
     lines.push([
@@ -386,6 +447,7 @@ export function usageCsv(rows: UsageRow[], prices: PriceList | null = null): str
       costSourceOf(row),
       ...(prices ? [billableFor(row, prices)] : []),
       row.threadId,
+      ...(withSplit ? [modelSharesOf(row) ? JSON.stringify(modelSharesOf(row)) : null] : []),
     ].map(csvCell).join(","));
   }
   return lines.join("\n") + "\n";

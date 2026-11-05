@@ -389,10 +389,18 @@ struct MessageRow: View {
             }
         case .routineRun:
             if let card = message.routineRun {
+                // 2026-11-05 (#2008): the bot that ran it leads the card; a
+                // room card falls back to the message's sender when listed.
+                let runBot: Bot? = {
+                    if case let .bot(bot) = chat { return session.state.bot(bot.id) ?? bot }
+                    if let id = message.from?.botId { return session.state.bot(id) }
+                    return nil
+                }()
                 RoutineRunCardView(
                     card: card,
                     at: message.date,
                     tint: MausPalette.color(chat.color),
+                    bot: runBot,
                     openRun: routineRunOpener(card),
                     resume: card.autoPausedAfter == nil ? nil : {
                         // 2026-10-26: back on, the failure count from zero

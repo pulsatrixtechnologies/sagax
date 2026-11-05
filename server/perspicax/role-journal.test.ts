@@ -7,7 +7,6 @@ describe("role journal", () => {
     const journal = new RoleJournal(null, () => now);
     journal.pick("t", "alice", "service-desk");
     expect(journal.takePick("t", "bob")).toBeUndefined();
-    journal.pick("t", "alice", "service-desk");
     expect(journal.takePick("t", "alice")).toBe("service-desk");
     expect(journal.takePick("t", "alice")).toBeUndefined();
     journal.pick("t", "alice", "");

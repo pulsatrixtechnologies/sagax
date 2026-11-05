@@ -1,4 +1,5 @@
 import { t } from "@/lib/i18n";
+import { useChatComposerShellClass } from "@/lib/chat-bubble-width";
 import { fixSendBlock, sendBlockLocks } from "@/lib/send-state";
 import { openModelWindow } from "@/lib/model-window";
 import { effectivePlace } from "@/lib/place";
@@ -95,8 +96,9 @@ export function ComposerShell({
     ? t("composer.placeholder.page", { title: pageTitle.trim() })
     : t("composer.placeholder.bot", { name: group ? group.name : (bot?.name ?? "") });
 
+  const composerShellClass = useChatComposerShellClass();
   return (
-    <div className="pointer-events-none relative overflow-x-clip px-[max(16px,calc((100%-960px)/2))] pb-4">
+    <div className={composerShellClass}>
       {/* No fill or hairline on this wrapper — those were the black frame
           in the pill's top corners. The dock overlays the transcript. */}
       <ComposerNotices

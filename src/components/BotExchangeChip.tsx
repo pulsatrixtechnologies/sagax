@@ -10,7 +10,7 @@ import { PartyAvatar, isAgentParty } from "./PartyAvatar";
 import { activeLocale, t } from "@/lib/i18n";
 import { MAUS_COLORS, mausInk, type MausColor } from "@/lib/mascot";
 import { botBubbleVars } from "@/lib/bubble-colors";
-import { CHAT_BUBBLE_WIDTH_CLASS, CHAT_COLUMN_CLASS, chatBubbleWidth } from "@/lib/chat-bubble-width";
+import { chatBubbleWidth, useChatBubbleWidthClasses, useChatColumnClass } from "@/lib/chat-bubble-width";
 import { prefersWideBubble } from "@/lib/rich-blocks";
 import { runCorners } from "@/lib/room-authors";
 import { cn } from "@/lib/cn";
@@ -127,6 +127,8 @@ export function ExchangeSheet({
   testId?: string;
   ariaLabel?: string;
 }) {
+  const chatColumnClassName = useChatColumnClass();
+  const bubbleWidths = useChatBubbleWidthClasses();
   const column = useExchangePortalHost();
   const closeText = closeLabel ?? t("chat.exchange.closeChat");
   useEffect(() => {
@@ -173,11 +175,11 @@ export function ExchangeSheet({
         {meta && <div data-exchange-meta className="max-w-[min(92%,36rem)] px-4 text-center text-[12px] text-ink-secondary">{meta}</div>}
       </div>
       {/* The same pane and column as a 1:1 chat (ChatView): the gutter, the
-          960px column, Geist at 13px, the Markdown renderer and the bubble
+          chat column, Geist at 13px, the Markdown renderer and the bubble
           widths, so the lines use the room a wider window gives. The scroll
           ends above the opaque footer band; no message text sits under it. */}
       <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-5" data-testid="bot-exchange-scroll">
-      <div className={cn(CHAT_COLUMN_CLASS, "py-6")} role="log" aria-live="off" onClick={(event) => event.stopPropagation()}>
+      <div className={cn(chatColumnClassName, "py-6")} role="log" aria-live="off" onClick={(event) => event.stopPropagation()}>
         {loadError ? (
           <div role="alert" data-testid="bot-exchange-error" className="flex flex-col items-center gap-2 py-8 text-center text-[13px] text-ink-secondary">
             <p>{t("chat.exchange.loadError")}</p>
@@ -218,7 +220,7 @@ export function ExchangeSheet({
           const joinsAbove = !newStretch && sameAuthor(previous);
           const joinsBelow = Boolean(next) && !startsNewStretch(message.at, next!.message.at) && sameAuthor(next);
           const text = exchangeBody(message);
-          const width = CHAT_BUBBLE_WIDTH_CLASS[chatBubbleWidth({ terminal: false, wide: Boolean(text) && prefersWideBubble(text) })];
+          const width = bubbleWidths[chatBubbleWidth({ terminal: false, wide: Boolean(text) && prefersWideBubble(text) })];
           const time = (
             <span className="self-end pb-1 text-[11px] tabular-nums text-ink-tertiary opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 touch:opacity-100">
               {formatTime(message.at)}
@@ -260,7 +262,7 @@ export function ExchangeSheet({
       </div>
       {pinned && (
         <div data-exchange-pinned className="max-h-[50%] shrink-0 overflow-y-auto overscroll-y-contain px-5 pb-2" onClick={(event) => event.stopPropagation()}>
-          <div className={CHAT_COLUMN_CLASS}>{pinned}</div>
+          <div className={chatColumnClassName}>{pinned}</div>
         </div>
       )}
       {/* In place of the composer (Grok Bot): one centered "Close Chat" pill

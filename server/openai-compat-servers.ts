@@ -7,6 +7,12 @@
 // SAGAX_COMPAT_SERVER_API_KEY and never the workspace's other keys. The
 // built-in "Other (OpenAI-compatible)" stays as it was. Pure: the routes in
 // server/index.ts persist and reload.
+//
+// On an organization server (#2054): a server with `ownerPrincipalId` is that
+// person's own (they add, edit and remove it; other members never see it). A
+// server without an owner is org-wide (shared): only an organization admin
+// changes it. Solo servers keep the earlier "anyone who can reach the route"
+// behaviour.
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
@@ -14,6 +20,8 @@ import { stripOpenAiEndpointSuffix } from "../shared/openai-compat-url.ts";
 import { COMPAT_SERVER_KEY_ENV, COMPAT_SERVER_PREFIX, isCompatServerId, type AppConfig } from "./config.ts";
 
 type Instances = NonNullable<AppConfig["instances"]>;
+type Keys = NonNullable<AppConfig["openaiCompatServers"]>;
+type KeyRecord = NonNullable<Keys[string]>;
 
 /** An address the server may call: https anywhere, http only on this machine
  * or a private network (a local vLLM, Ollama, LM Studio). */
@@ -51,10 +59,49 @@ export interface CompatServerView {
   configured: boolean;
 }
 
-/** The named servers of this configuration, in the order they were added. */
-export function compatServers(cfg: Pick<AppConfig, "instances" | "openaiCompatServers">): CompatServerView[] {
+/** Who may see which named servers on an organization server. */
+export interface CompatServerViewer {
+  /** Normalized principal id, or null when unknown. */
+  principalId: string | null;
+  /** Organization admin (or solo): sees every server. */
+  admin: boolean;
+}
+
+/** The person who owns this named server, or null when it is org-wide. */
+export function compatServerOwner(keys: AppConfig["openaiCompatServers"], instanceId: string): string | null {
+  const owner = keys?.[instanceId]?.ownerPrincipalId?.trim().toLowerCase();
+  return owner || null;
+}
+
+/** Whether this viewer may change the named server (or create one). */
+export function canManageCompatServer(input: {
+  admin: boolean;
+  principalId: string | null;
+  /** Null when creating: a member stamps themselves, an admin creates org-wide. */
+  owner: string | null | undefined;
+}): boolean {
+  if (input.owner === undefined) {
+    return input.admin || Boolean(input.principalId);
+  }
+  if (!input.owner) return input.admin;
+  return Boolean(input.principalId) && input.owner === input.principalId;
+}
+
+/** Whether this viewer may see the named server in Settings / the picker. */
+export function compatServerVisible(owner: string | null, viewer: CompatServerViewer): boolean {
+  if (viewer.admin || !owner) return true;
+  return Boolean(viewer.principalId) && owner === viewer.principalId;
+}
+
+/** The named servers of this configuration, in the order they were added.
+ * Pass `viewer` on an organization server to keep person isolation. */
+export function compatServers(
+  cfg: Pick<AppConfig, "instances" | "openaiCompatServers">,
+  viewer?: CompatServerViewer,
+): CompatServerView[] {
   return Object.entries(cfg.instances ?? {})
     .filter(([id, entry]) => isCompatServerId(id) && entry.driver === "openai-compat")
+    .filter(([id]) => !viewer || compatServerVisible(compatServerOwner(cfg.openaiCompatServers, id), viewer))
     .map(([id, entry]) => ({
       instanceId: id,
       name: entry.displayName?.trim() || id,
@@ -69,20 +116,40 @@ export function strippedUrl(url: string): string {
   return stripOpenAiEndpointSuffix(url);
 }
 
+function keyRecord(base: KeyRecord | undefined, patch: { key?: string | null; ownerPrincipalId?: string | null }): KeyRecord {
+  const next: KeyRecord = { ...base };
+  if (patch.key !== undefined) {
+    if (patch.key) next.key = patch.key;
+    else delete next.key;
+  }
+  if (patch.ownerPrincipalId !== undefined) {
+    if (patch.ownerPrincipalId) next.ownerPrincipalId = patch.ownerPrincipalId;
+    else delete next.ownerPrincipalId;
+  }
+  return next;
+}
+
 /** A new named server: its instance and its key record. */
 export function addCompatServer(
   instances: Instances,
   keys: AppConfig["openaiCompatServers"],
   input: NewCompatServer,
   id: () => string = () => randomUUID().replace(/-/g, "").slice(0, 12),
-): { instanceId: string; instances: Instances; keys: NonNullable<AppConfig["openaiCompatServers"]> } {
+  ownerPrincipalId?: string | null,
+): { instanceId: string; instances: Instances; keys: Keys } {
   const instanceId = `${COMPAT_SERVER_PREFIX}${id()}`;
   const config: Record<string, unknown> = { url: strippedUrl(input.url), apiKeyEnv: COMPAT_SERVER_KEY_ENV };
   if (input.model) config.model = input.model;
   return {
     instanceId,
     instances: { ...instances, [instanceId]: { driver: "openai-compat", displayName: input.displayName.trim(), config } },
-    keys: { ...keys, [instanceId]: input.key ? { key: input.key } : {} },
+    keys: {
+      ...keys,
+      [instanceId]: keyRecord(undefined, {
+        key: input.key ?? null,
+        ownerPrincipalId: ownerPrincipalId ?? null,
+      }),
+    },
   };
 }
 
@@ -92,18 +159,14 @@ export function editCompatServer(
   keys: AppConfig["openaiCompatServers"],
   instanceId: string,
   input: EditCompatServer,
-): { instances: Instances; keys: NonNullable<AppConfig["openaiCompatServers"]> } | null {
+): { instances: Instances; keys: Keys } | null {
   const entry = instances[instanceId];
   if (!isCompatServerId(instanceId) || !entry || entry.driver !== "openai-compat") return null;
   const config = { ...(entry.config as Record<string, unknown> | undefined) };
   if (input.url !== undefined) config.url = strippedUrl(input.url);
   config.apiKeyEnv = COMPAT_SERVER_KEY_ENV;
   const next = { ...entry, config, ...(input.displayName !== undefined ? { displayName: input.displayName.trim() } : {}) };
-  const record = { ...keys?.[instanceId] };
-  if (input.key !== undefined) {
-    if (input.key) record.key = input.key;
-    else delete record.key;
-  }
+  const record = keyRecord(keys?.[instanceId], input.key !== undefined ? { key: input.key || null } : {});
   return { instances: { ...instances, [instanceId]: next }, keys: { ...keys, [instanceId]: record } };
 }
 
@@ -112,7 +175,7 @@ export function removeCompatServer(
   instances: Instances,
   keys: AppConfig["openaiCompatServers"],
   instanceId: string,
-): { instances: Instances; keys: NonNullable<AppConfig["openaiCompatServers"]> } | null {
+): { instances: Instances; keys: Keys } | null {
   const entry = instances[instanceId];
   if (!isCompatServerId(instanceId) || !entry || entry.driver !== "openai-compat") return null;
   const { [instanceId]: _removed, ...rest } = instances;

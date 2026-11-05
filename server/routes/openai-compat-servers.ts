@@ -5,12 +5,16 @@
 // PATCH /api/instances/openai-compat-servers/:id      { displayName?, url?, key? } ("" removes the key)
 // DELETE /api/instances/openai-compat-servers/:id
 //
-// An address the server connects to: on an organization server, an
-// organization admin's only (`allowed`).
+// #2054: on an organization server a member adds, edits and removes their
+// own server (ownerPrincipalId). A server with no owner is org-wide: only
+// an organization admin changes it. Person isolation: another member's
+// server answers 404.
 import type { AppConfig } from "../config.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import {
   addCompatServer,
+  canManageCompatServer,
+  compatServerOwner,
   editCompatServer,
   editCompatServerSchema,
   newCompatServerSchema,
@@ -22,8 +26,12 @@ type Instances = NonNullable<AppConfig["instances"]>;
 type Keys = NonNullable<AppConfig["openaiCompatServers"]>;
 
 export interface OpenAiCompatServerRouteDeps {
-  /** May this caller change the servers (an organization admin on an organization server). */
+  /** May this caller use the route at all (false on a hosted-models home). */
   allowed(auth: RequestAuth): boolean;
+  /** Organization admin, or solo: may change org-wide (unowned) servers. */
+  isAdmin(auth: RequestAuth): boolean;
+  /** Caller's principal id (lowercased), or null when unsigned. */
+  principalId(auth: RequestAuth): string | null;
   /** The provider instances as they would be saved now. */
   instances(): Instances;
   /** The saved keys of the named servers. */
@@ -40,6 +48,33 @@ export interface OpenAiCompatServerRouteDeps {
 
 const PATH = /^\/api\/instances\/openai-compat-servers(?:\/([\w.-]+))?$/;
 
+/** Refuse a change this caller may not make. Null when they may. */
+function refuseManage(
+  deps: OpenAiCompatServerRouteDeps,
+  auth: RequestAuth,
+  instanceId: string | undefined,
+): { status: number; body: Record<string, unknown> } | null {
+  const admin = deps.isAdmin(auth);
+  const principalId = deps.principalId(auth);
+  if (instanceId === undefined) {
+    if (canManageCompatServer({ admin, principalId, owner: undefined })) return null;
+    return { status: 403, body: { error: "Sign in to add a model server.", code: "sign_in_required" } };
+  }
+  const entry = deps.instances()[instanceId];
+  if (!entry) return null; // edit/remove answer 404 themselves
+  const owner = compatServerOwner(deps.keys(), instanceId);
+  if (canManageCompatServer({ admin, principalId, owner })) return null;
+  if (owner && owner !== principalId) return { status: 404, body: { error: "unknown server" } };
+  return {
+    status: 403,
+    body: {
+      error: "Only an organization admin can change a shared model server.",
+      code: "admin_only_field",
+      field: "openaiCompatServers",
+    },
+  };
+}
+
 export function createOpenAiCompatServerRoutes(deps: OpenAiCompatServerRouteDeps): RouteHandler {
   return async ({ req, res, path, method, auth, json, readBody }) => {
     const match = PATH.exec(path);
@@ -52,13 +87,19 @@ export function createOpenAiCompatServerRoutes(deps: OpenAiCompatServerRouteDeps
     }
     const targetId = match[1];
     if ((method === "POST") !== (targetId === undefined)) return json(res, 404, { error: "not found" });
+    const refused = refuseManage(deps, auth, targetId);
+    if (refused) return json(res, refused.status, refused.body);
     const body = method === "DELETE" ? undefined : await readBody(req, 8192);
     const answered = deps.exclusive(async () => {
+      const again = refuseManage(deps, auth, targetId);
+      if (again) return json(res, again.status, again.body);
       let next: { instanceId: string; instances: Instances; keys: Keys } | null;
       if (method === "POST") {
         const parsed = newCompatServerSchema.safeParse(body);
         if (!parsed.success) return json(res, 400, { error: "Name the server (up to 80 characters) and give its address: https, or http on this machine or a private network." });
-        next = addCompatServer(deps.instances(), deps.keys(), parsed.data);
+        // Admin creates org-wide (no owner). A member stamps themselves.
+        const owner = deps.isAdmin(auth) ? null : deps.principalId(auth);
+        next = addCompatServer(deps.instances(), deps.keys(), parsed.data, undefined, owner);
       } else if (method === "PATCH") {
         const parsed = editCompatServerSchema.safeParse(body);
         if (!parsed.success) return json(res, 400, { error: "Send a new name, address or key." });

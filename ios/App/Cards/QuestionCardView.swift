@@ -40,7 +40,11 @@ struct QuestionCardView: View {
     @Environment(\.desktopChatText) private var desktop
 
     private var card: OptionCard? { message.card }
-    private var questions: [AskQuestion] { card?.questions ?? [] }
+    private var questions: [AskQuestion] {
+        let raw = card?.questions ?? []
+        guard let targets = card?.pageTargetChoice?.targets, !targets.isEmpty else { return raw }
+        return PageTargetCopy.localizeQuestions(raw, targets: targets)
+    }
 
     private var index: Int { min(active, max(questions.count - 1, 0)) }
     private var current: AskQuestion? { questions.indices.contains(index) ? questions[index] : nil }
@@ -143,7 +147,7 @@ struct QuestionCardView: View {
                         Image(systemName: rememberTarget ? "checkmark.square.fill" : "square")
                             .font(.system(size: 14, weight: .regular))
                             .foregroundStyle(colors.inkSecondary)
-                        Text("Always use this choice")
+                        Text(PageTargetCopy.alwaysUse)
                             .font(colors.font(12.5))
                             .foregroundStyle(colors.inkSecondary)
                         Spacer(minLength: 0)

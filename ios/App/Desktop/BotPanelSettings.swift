@@ -332,9 +332,7 @@ struct BotPanelPermissions: View {
             if edits("pageTargetDefault") {
                 PanelCard {
                     Text("Publish target").panelText(13, 19.5, .medium).foregroundStyle(theme.ink)
-                    Text(bot.pageTargetDefault.map { PageTargetDefaultChoice.label(for: $0) }
-                         .map { "Always \($0)." }
-                         ?? "Ask each time when several targets are available.")
+                    Text(PageTargetDefaultChoice.summary(for: bot.pageTargetDefault))
                         .panelText(13, 19.5)
                         .foregroundStyle(theme.inkSecondary)
                         .padding(.top, 2)

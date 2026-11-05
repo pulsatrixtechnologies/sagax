@@ -294,9 +294,7 @@ struct PersonaPermissionsPage: View {
                 if edits("pageTargetDefault") {
                     DesktopDescribedRow(
                         Text("Publish target"),
-                        description: Text(bot.pageTargetDefault.map { PageTargetDefaultChoice.label(for: $0) }
-                            .map { "Always \($0)." }
-                            ?? "Ask each time when several targets are available."),
+                        description: Text(PageTargetDefaultChoice.summary(for: bot.pageTargetDefault)),
                         help: Text("When this bot is asked to create a page or an artifact and more than one surface is available, which one to use. Ask each time shows a choice card."),
                         identifier: "pageTargetDefault"
                     ) {

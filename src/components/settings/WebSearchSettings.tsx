@@ -4,7 +4,7 @@
 // no admin right, also on an organization server. The key is sent once and
 // never comes back: the row shows only that one is saved and its last four
 // characters (server/routes/web-search.ts).
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Search } from "lucide-react";
 
 import { cn } from "@/lib/cn";
@@ -17,7 +17,8 @@ import { DescribedRow, FIELD, FieldRow, PILL, PillSelect, SettingsGroup } from "
 
 type Choice = WebSearchProviderId | "";
 
-export function WebSearchSettings() {
+/** `bare` (2026-11-05): the rows alone, inside Providers > Other services. */
+export function WebSearchSettings({ bare = false }: { bare?: boolean } = {}) {
   const [view, setView] = useState<WebSearchSettingsView | null>(null);
   const [hidden, setHidden] = useState(false);
   const [provider, setProvider] = useState<Choice>("");
@@ -77,9 +78,9 @@ export function WebSearchSettings() {
 
   return (
     <div data-settings-card="connections.webSearch" data-web-search="">
-      <SettingsGroup title={t("webSearch.title")} groupId="webSearch">
+      <WebSearchGroup bare={bare}>
         <DescribedRow
-          label={t("webSearch.provider")}
+          label={bare ? t("webSearch.title") : t("webSearch.provider")}
           description={summary}
           help={t("webSearch.help")}
           icon={<Search size={14} />}
@@ -179,7 +180,12 @@ export function WebSearchSettings() {
             {note.text}
           </p>
         )}
-      </SettingsGroup>
+      </WebSearchGroup>
     </div>
   );
+}
+
+function WebSearchGroup({ bare, children }: { bare: boolean; children: ReactNode }) {
+  if (bare) return <>{children}</>;
+  return <SettingsGroup title={t("webSearch.title")} groupId="webSearch">{children}</SettingsGroup>;
 }

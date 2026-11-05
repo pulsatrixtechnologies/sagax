@@ -5,7 +5,7 @@ import fr from "./fr.json";
 
 const translated = [
   "botSettings.nav.overview",
-  "botPanel.model.backups",
+  "botModel.ifFails.title",
   "botPanel.access.nothing",
   "botPanel.overview.refresh",
   "botPanel.memory.upkeepHelp",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { cleanDisabledModels, modelKey, modelOffer, offeredModels, parseModelKey } from "./offered-models.ts";
+import { cleanDisabledModels, cleanFavoriteModels, MAX_FAVORITE_MODELS, modelKey, modelOffer, offeredModels, parseModelKey } from "./offered-models.ts";
 
 const engine = (instanceId: string, ids: string[], def = ids[0] ?? "") => ({ instanceId, models: { default: def, options: ids.map((id) => ({ id })) } });
 const solo = { organization: false, allowedEngines: null };
@@ -11,6 +11,17 @@ describe("model switches", () => {
     expect(parseModelKey("openrouter/vendor/model")).toEqual({ instanceId: "openrouter", model: "vendor/model" });
     expect(parseModelKey("nothing")).toBeNull();
     expect(cleanDisabledModels(["a/b", "a/b", "bad", 3, " c/d "])).toEqual(["a/b", "c/d"]);
+  });
+
+  // #2050: favorites keep their star order and the last stars win
+  it("cleans a favorites list in order, capped to the newest stars", () => {
+    expect(cleanFavoriteModels(["c/d", "a/b", "c/d", "bad", 3, " e/f "])).toEqual(["c/d", "a/b", "e/f"]);
+    expect(cleanFavoriteModels("c/d")).toEqual([]);
+    const many = Array.from({ length: MAX_FAVORITE_MODELS + 5 }, (_, i) => `e/m${i}`);
+    const kept = cleanFavoriteModels(many);
+    expect(kept).toHaveLength(MAX_FAVORITE_MODELS);
+    expect(kept[0]).toBe("e/m5");
+    expect(kept.at(-1)).toBe(`e/m${MAX_FAVORITE_MODELS + 4}`);
   });
 
   it("says who turned a model off: the organization first, then the person", () => {

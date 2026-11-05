@@ -1264,8 +1264,6 @@
   "botPanel.model.reasoning": "Razonamiento",
   "botPanel.model.effort": "Esfuerzo",
   "botPanel.model.reasoningStart": "Variante de razonamiento inicial del bot nuevo.",
-  "botPanel.model.backups": "Modelos de respaldo para este bot",
-  "botPanel.model.backupsHelp": "Cuando la recuperación automática está activada en Ajustes, estos modelos se prueban en orden solo si el proveedor demuestra que la solicitud nunca empezó. El trabajo que pudo haberse ejecutado no se repite. Solo cambia esa conversación. Los valores del bot y las demás conversaciones siguen igual. El proveedor de respaldo puede cobrar.",
   "botPanel.model.recoveryOff": "La recuperación automática está desactivada. Esta lista sigue inactiva hasta que la actives en Ajustes.",
   "botPanel.model.removeFallback": "Quitar {name} de la lista de respaldo",
   "botPanel.model.addFallback": "Añadir un motor de respaldo",

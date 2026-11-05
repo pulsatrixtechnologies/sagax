@@ -140,9 +140,12 @@ describe("Settings > Models and voice", () => {
   it("keeps models and voice choices while retiring duplicate account and key views", async () => {
     const models = await page();
     expect(models).toContain("data-bot-models-page");
+    // 2026-11-05 (option B): Auto's explainer sits in the Advanced fold; the
+    // link to Providers and image generation left the page (Providers > Other services)
+    expect(models).toContain('data-settings-card="models.advanced"');
     expect(models).toContain("data-auto-model-explainer");
-    expect(models).toContain("data-open-providers");
-    expect(models).toContain('data-settings-card="connections.image"');
+    expect(models).not.toContain("data-open-providers");
+    expect(models).not.toContain('data-settings-card="connections.image"');
     for (const retired of ["data-engines-list", "data-keys-section", "data-legacy-toggle", "data-provider-key="]) expect(models).not.toContain(retired);
     const voice = await page("voice");
     expect(voice).toContain('data-voice-providers="person"');

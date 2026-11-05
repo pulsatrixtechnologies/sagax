@@ -122,4 +122,7 @@ export const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled])
 
 /** The composer's model menu: a popover above the chip, never wider than the window. */
 export const MENU_WIDTH = 340;
+/** The two-pane menu (Settings > Models, Bot > Model, #2050): the column of
+ * providers beside the models; `max-w-[calc(100vw-16px)]` still caps it. */
+export const PANES_MENU_WIDTH = 520;
 

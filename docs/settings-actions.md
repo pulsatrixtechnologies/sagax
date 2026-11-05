@@ -404,10 +404,10 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Your MCP server on or off ({name, enabled}) | Capabilities > Providers | `sagax_settings` get, set `connections.mcpServerEnabled` | simple |
 | Remove your MCP server (its name) | Capabilities > Providers | `sagax_settings` set `connections.mcpServerRemove` | suppression |
 | Disconnect GitHub (true) | Capabilities > Sources > GitHub | `sagax_settings` set `connections.githubDisconnect` | suppression + secret |
-| Your web search provider ({provider: brave/exa/parallel/firecrawl/searxng, baseUrl, key?}; null forgets it). get says whether a key is saved, never the key | Settings > Models > Web search | `sagax_settings` get, set `connections.webSearch` | simple |
+| Your web search provider ({provider: brave/exa/parallel/firecrawl/searxng, baseUrl, key?}; null forgets it). get says whether a key is saved, never the key | Settings > Providers > Other services > Web search | `sagax_settings` get, set `connections.webSearch` | simple |
 | The person's webhooks (read only: names, bots, on or off; never a signing secret) | Routines > Webhooks | `sagax_settings` get, set `connections.webhooks` | simple |
 | Give a webhook a new signing secret (its id; the secret is never returned to the bot: the person sees it with Reveal) | Routines > Webhooks > webhook > Rotate | `sagax_settings` set `connections.webhookSecretRotate` | secret |
-| Test web search with the saved settings (value true) | Settings > Models > Web search > Test | `sagax_settings` set `connections.webSearchTest` | simple |
+| Test web search with the saved settings (value true) | Settings > Providers > Other services > Web search > Test | `sagax_settings` set `connections.webSearchTest` | simple |
 
 ### Coffre et clés
 

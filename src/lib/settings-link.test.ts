@@ -44,9 +44,11 @@ describe("settings links", () => {
   // link to Integrations opens it. Decision model, Privacy and Memory became
   // cards of that page. Connected apps stays its own section.
   it("redirects an old section link to the page and card that hold it now", () => {
-    // 2026-10-30: keys are on Providers; image generation and the online computers stay on Models
+    // 2026-10-30: keys are on Providers; the online computers stay on Models
+    // 2026-11-05: image generation and web search are Providers > Other services
     expect(currentSettingsSection("connections")).toBe("providers");
-    expect(currentSettingsSection("connections", "connections.image")).toBe("engines");
+    expect(currentSettingsSection("connections", "connections.image")).toBe("providers");
+    expect(currentSettingsSection("connections", "connections.webSearch")).toBe("providers");
     expect(currentSettingsSection("connections", "connections.integrations")).toBe("engines");
     expect(currentSettingsSection("engines", "engines.keys")).toBe("providers");
     // 2026-10-28: the voice card is on the Voice page

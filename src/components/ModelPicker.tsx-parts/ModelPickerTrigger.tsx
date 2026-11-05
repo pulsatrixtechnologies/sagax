@@ -13,19 +13,23 @@ import { modelLabel, modelProvider } from "./helpers";
 import { TABLE_CELL_CONTROL } from "../SettingsPrimitives";
 
 /** One plain line for the list chip, so the ellipsis cuts a single run. */
-function listChipLabel({ autoOn, autoRecord, active, selection, showActiveAccount }: {
+/** #2050: the chip reads "Claude Sonnet 5.5 · Medium": the effort rides
+ * the model since the Bot models table has no Effort column any more. */
+export function listChipLabel({ autoOn, autoRecord, active, selection, showActiveAccount }: {
   autoOn: boolean;
   autoRecord: { modelLabel: string } | null | undefined;
   active: InstanceInfo | undefined;
   selection: ModelSelection;
   showActiveAccount: boolean;
 }): string {
-  if (autoOn) return autoChipLabel(autoRecord);
+  const effort = selection.effort ? effortLabel(selection.effort) : undefined;
+  if (autoOn) return [autoChipLabel(autoRecord), effort].filter(Boolean).join(" · ");
   const provider = active ? modelProvider(active, selection.model) : undefined;
   return [
     active && showActiveAccount ? active.displayName : undefined,
     modelLabel(active, selection.model),
     provider || undefined,
+    effort,
   ].filter(Boolean).join(" · ");
 }
 
@@ -75,10 +79,12 @@ export function ModelPickerTrigger({
   selectedVariantLabel: string | undefined;
   advanced: boolean;
 }) {
-  return windowOnly ? null : inComposer && headless ? (
+  // headless outside the composer (#2050, Settings > Models "Set model for
+  // n bots"): no chip at all, the menu opens from `menuControl`.
+  return windowOnly ? null : headless ? (inComposer ? (
   // no chip: the + menu's Model row reads it; the Retro 98 status bar reads this
   <span hidden data-composer-model={composerLabel} />
-) : inComposer ? (
+) : null) : inComposer ? (
   <button data-tour="model"
     ref={triggerRef}
     type="button"

@@ -4,7 +4,7 @@
 // binary (`<cli> --version`, same PATH a real turn uses); a failed probe
 // asks before registering: the classic miss is a path the terminal sees
 // but this GUI app can't.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Check, Loader2, Phone, RefreshCw, TriangleAlert } from "lucide-react";
 
 import { api, useStore, type ConfigStatus, type InstanceInfo } from "@/state/store";
@@ -20,24 +20,23 @@ import { AntigravityFreeSpace } from "./AntigravityFreeSpace";
 import { EngineConnect, paysWithText } from "./EngineConnect";
 import { EngineConnectorsLine } from "./plugins/EngineCapabilities";
 import { reloadMyEngines, usePerspicaxOrg, type MyEngine } from "@/lib/perspicax-org";
+import { perspicaxConsoleUrl } from "./PerspicaxOrgSettings";
+import { ExternalLink } from "lucide-react";
 import { myTurnsReady } from "../../shared/org-engine-readiness";
 import { canEditConfig, canManageKeys, viewerCan, viewerIsOrgMember } from "@/lib/viewer";
 import { viewerIsOrgAdmin } from "@/lib/group-owner";
 import { boatComputerEnabled, vpsComputerEnabled } from "@/lib/feature-flags";
 import { OrgHostToolsNote, orgRefusesEngine } from "./OrgHostToolsNote";
-import { DescribedRow, FIELD, FoldRow, PILL, PillSelect, SettingsGroup } from "./SettingsPrimitives";
+import { DescribedRow, FIELD, FoldRow, PILL, PillSelect, SettingsGroup, SettingsIntro } from "./SettingsPrimitives";
 import { AutoModelSettings } from "./settings/AutoModelSettings";
 import { BotModelsSettings } from "./settings/BotModelsSettings";
 import { CacheKeepWarmSettings } from "./CacheKeepWarmSettings";
 import { ModelSwitchesSettings } from "./settings/ModelSwitchesSettings";
 import { VoiceProviderSettings } from "./settings/VoiceProviderSettings";
-import { WebSearchSettings } from "./settings/WebSearchSettings";
 import { VoiceProviderOptions } from "./settings/VoiceProviderOptions";
 import { MicrophonePermissionRow, MicrophoneSettings } from "./settings/MicrophoneSettings";
-import { ImageGenerationSettings } from "./settings/ImageGenerationSettings";
 import { LiveCallInstallationSettings } from "./LiveCallSettings";
 import { ApiKeyRow, VpsConnection } from "./ApiKeys";
-import { useViewAsMember } from "@/lib/view-as-member";
 
 interface ProbeResult {
   ok: boolean;
@@ -233,7 +232,10 @@ export function personalEngineLine(mine: MyEngine): { ready: boolean; line: stri
  * this engine. The card then shows one line on what pays for their turns and
  * their own Connect or Disconnect (EngineConnect), never the server's account
  * (which serves no one's turns there: server/engines/engine-credentials.ts). */
-export function EngineRow({ instance, mine, member = false, issuer = "", bare = false, keysManaged = false }: { instance: InstanceInfo; mine?: MyEngine; member?: boolean; issuer?: string; bare?: boolean; keysManaged?: boolean }) {
+/** `advancedFold` (2026-11-05, Providers): the technical block (CLI path,
+ * version, update, reset, Set CLI) as a closed Settings fold instead of a
+ * `<details>`, with `advancedExtra` (Copy ID...) at its end. */
+export function EngineRow({ instance, mine, member = false, issuer = "", bare = false, keysManaged = false, advancedFold = false, advancedExtra }: { instance: InstanceInfo; mine?: MyEngine; member?: boolean; issuer?: string; bare?: boolean; keysManaged?: boolean; advancedFold?: boolean; advancedExtra?: ReactNode }) {
   const { refreshInstances } = useStore();
   const [open, setOpen] = useState(false);
   const cliMotion = useMenuMotion(open);
@@ -294,57 +296,9 @@ export function EngineRow({ instance, mine, member = false, issuer = "", bare = 
   // On an organization server an engine whose own tools cannot be held back
   // never runs a turn there (409 host_tools); its card says why.
   const hostToolsNote = (member || mine !== undefined) && orgRefusesEngine(instance) && <OrgHostToolsNote instance={instance} className="mb-3 text-[12px]" />;
-  if (member && mine) return (
-    <EngineCard instance={instance} personal={personalEngineLine(mine)} bare={bare}>
-      {policyNote}
-      {hostToolsNote}
-      <div data-member-engine={instance.instanceId}><EngineConnect engine={mine} issuer={issuer} onChanged={reloadMyEngines} statusLine={false} keysManaged={keysManaged} /></div>
-    </EngineCard>
-  );
-  if (instance.readOnly) return <EngineCard instance={instance} bare={bare}>
-    {policyNote}
-    <p className="text-[13px] leading-relaxed text-ink-secondary">{t("organization.managedEngine")}</p>
-    {!engineReady(instance) && <p className="mt-2 text-[12px] text-ink-secondary">{t("organization.engineUnavailable")}</p>}
-  </EngineCard>;
-
-  return (
-    <EngineCard instance={instance} personal={mine && personalEngineLine(mine)} bare={bare}>
-      {policyNote}
-      {hostToolsNote}
-      {mine && <EngineConnect engine={mine} issuer={issuer} onChanged={reloadMyEngines} className="mb-3" statusLine={false} keysManaged={keysManaged} />}
-      {!mine && !engineReady(instance) && <EngineSetup instance={instance} intent={instance.access === "custom" ? "inject" : "cloud"} unframed keysManaged={keysManaged} />}
-      {!mine && !keysManaged && engineReady(instance) && <ApiKeyEngineManage instance={instance} className="mt-3" />}
-      {instance.snapshot.update && <EngineUpdateNotice update={instance.snapshot.update} instance={instance} className="mt-3" />}
-      {instance.snapshot.warning && <EngineWarningNotice warning={instance.snapshot.warning} className="mt-3" />}
-      {engineReady(instance) && <EngineConnectorsLine driverKind={instance.driverKind} />}
-      {!mine && instance.claudeAccount && <ClaudeAccountSettings instance={instance} />}
-      {!mine && engineReady(instance) && instance.snapshot.authenticated === true && (
-        (instance.authentication?.method === "device-code" || instance.authentication?.method === "browser-pkce") && deviceSignInProvider(instance.driverKind) === "codex"
-          ? <CodexAccountSettings instance={instance} />
-          : instance.authentication?.method === "device-code"
-          ? <p className="flex items-center gap-1.5 text-[12px] text-success"><Check size={13} />{t(DEVICE_SIGN_IN_COPY[deviceSignInProvider(instance.driverKind)].connectedAccount)}</p>
-          : instance.authentication?.method === "open-link"
-          ? <p className="flex items-center gap-1.5 text-[12px] text-success"><Check size={13} />{t(DEVICE_SIGN_IN_COPY.cursor.connectedAccount)}</p>
-          : instance.authentication?.method === "paste-code" && !instance.claudeAccount && (
-            <p className="flex items-center gap-1.5 text-[12px] text-success"><Check size={13} />{t("engineSetup.claude.connectedAccount")}</p>
-          )
-      )}
-      {instance.freeUpSpace && <AntigravityFreeSpace instance={instance} />}
-      {!member && instance.driverKind === "antigravityAgent" && (
-        <div className="mt-3 space-y-3">
-          {instance.snapshot.authenticated && <p className="break-words text-[12px] text-ink-secondary">{instance.snapshot.account?.email ?? t("engineSetup.antigravity.emailUnavailable")}</p>}
-          <AddProviderAccount antigravityInstanceId={instance.instanceId} />
-        </div>
-      )}
-      {!member && instance.driverKind === "claudeAgent" && instance.access !== "custom" && (
-        <div className="mt-3"><AddClaudeAccount /></div>
-      )}
-      {!member && instance.snapshot.chatgptPlan && !instance.snapshot.authenticationUnavailableReason && (
-        <div className="mt-3"><AddProviderAccount /></div>
-      )}
-      <details className="mt-4 border-t border-hairline/40 pt-3">
-        <summary className="cursor-pointer rounded-md py-1 text-[12px] font-medium text-ink-secondary outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-accent">{t("engines.library.advanced")}</summary>
-        <p className="mt-2 text-[12px] leading-relaxed text-ink-secondary">{t("engines.footer")}</p>
+  // The technical block of the engine: its CLI, version, update and reset.
+  const advanced = (
+    <>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-[13px]">
           {instance.cli ? (
             <span className="w-full break-all font-mono text-[11.5px] text-ink-secondary" title={instance.cli}>
@@ -407,10 +361,73 @@ export function EngineRow({ instance, mine, member = false, issuer = "", bare = 
             />
           </div>
         )}
+    </>
+  );
+  if (member && mine) return (
+    <EngineCard instance={instance} personal={personalEngineLine(mine)} bare={bare}>
+      {policyNote}
+      {hostToolsNote}
+      <div data-member-engine={instance.instanceId}><EngineConnect engine={mine} issuer={issuer} onChanged={reloadMyEngines} statusLine={false} keysManaged={keysManaged} /></div>
+    </EngineCard>
+  );
+  if (instance.readOnly) return <EngineCard instance={instance} bare={bare}>
+    {policyNote}
+    <p className="text-[13px] leading-relaxed text-ink-secondary">{t("organization.managedEngine")}</p>
+    {!engineReady(instance) && <p className="mt-2 text-[12px] text-ink-secondary">{t("organization.engineUnavailable")}</p>}
+  </EngineCard>;
+
+  return (
+    <EngineCard instance={instance} personal={mine && personalEngineLine(mine)} bare={bare}>
+      {policyNote}
+      {hostToolsNote}
+      {mine && <EngineConnect engine={mine} issuer={issuer} onChanged={reloadMyEngines} className="mb-3" statusLine={false} keysManaged={keysManaged} />}
+      {!mine && !engineReady(instance) && <EngineSetup instance={instance} intent={instance.access === "custom" ? "inject" : "cloud"} unframed keysManaged={keysManaged} />}
+      {!mine && !keysManaged && engineReady(instance) && <ApiKeyEngineManage instance={instance} className="mt-3" />}
+      {instance.snapshot.update && <EngineUpdateNotice update={instance.snapshot.update} instance={instance} className="mt-3" />}
+      {instance.snapshot.warning && <EngineWarningNotice warning={instance.snapshot.warning} className="mt-3" />}
+      {engineReady(instance) && <EngineConnectorsLine driverKind={instance.driverKind} />}
+      {!mine && instance.claudeAccount && <ClaudeAccountSettings instance={instance} />}
+      {!mine && engineReady(instance) && instance.snapshot.authenticated === true && (
+        (instance.authentication?.method === "device-code" || instance.authentication?.method === "browser-pkce") && deviceSignInProvider(instance.driverKind) === "codex"
+          ? <CodexAccountSettings instance={instance} />
+          : instance.authentication?.method === "device-code"
+          ? <p className="flex items-center gap-1.5 text-[12px] text-success"><Check size={13} />{t(DEVICE_SIGN_IN_COPY[deviceSignInProvider(instance.driverKind)].connectedAccount)}</p>
+          : instance.authentication?.method === "open-link"
+          ? <p className="flex items-center gap-1.5 text-[12px] text-success"><Check size={13} />{t(DEVICE_SIGN_IN_COPY.cursor.connectedAccount)}</p>
+          : instance.authentication?.method === "paste-code" && !instance.claudeAccount && (
+            <p className="flex items-center gap-1.5 text-[12px] text-success"><Check size={13} />{t("engineSetup.claude.connectedAccount")}</p>
+          )
+      )}
+      {instance.freeUpSpace && <AntigravityFreeSpace instance={instance} />}
+      {!member && instance.driverKind === "antigravityAgent" && (
+        <div className="mt-3 space-y-3">
+          {instance.snapshot.authenticated && <p className="break-words text-[12px] text-ink-secondary">{instance.snapshot.account?.email ?? t("engineSetup.antigravity.emailUnavailable")}</p>}
+          <AddProviderAccount antigravityInstanceId={instance.instanceId} />
+        </div>
+      )}
+      {!member && instance.driverKind === "claudeAgent" && instance.access !== "custom" && (
+        <div className="mt-3"><AddClaudeAccount /></div>
+      )}
+      {!member && instance.snapshot.chatgptPlan && !instance.snapshot.authenticationUnavailableReason && (
+        <div className="mt-3"><AddProviderAccount /></div>
+      )}
+      {advancedFold ? (
+        <div className="-mx-3.5 mt-3 border-t border-hairline/40">
+          <FoldRow cardId={`providers.advanced.${instance.instanceId}`} label={t("engines.library.advanced")} description={t("engines.footer")}>
+            <div data-engine-advanced={instance.instanceId} className="flex flex-col gap-2">{advanced}{advancedExtra}</div>
+          </FoldRow>
+        </div>
+      ) : (
+      <details className="mt-4 border-t border-hairline/40 pt-3">
+        <summary className="cursor-pointer rounded-md py-1 text-[12px] font-medium text-ink-secondary outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-accent">{t("engines.library.advanced")}</summary>
+        <p className="mt-2 text-[12px] leading-relaxed text-ink-secondary">{t("engines.footer")}</p>
+        {advanced}
       </details>
+      )}
     </EngineCard>
   );
 }
+
 
 /** In an organization, keys are for an owner, an admin, the server's
  * operator, or a member whose profile includes engines.manage (the maintainer,
@@ -425,58 +442,78 @@ export function keysShown(input: { member: boolean; remote: boolean; organizatio
   return viewer.operator || viewerIsOrgAdmin(input.config) || viewerCan(input.config, "engines.manage");
 }
 
-/** Who sees what on Models and Voice: a member's view of the engines, the
- * Keys list, and the installation's own settings (the voice engine, image
- * generation, online computers). Shared by both pages (2026-10-28), so the
- * split changes no right. */
+/** Who sees what on Models, Providers and Voice: a member's view of the
+ * engines, the Keys list, and the installation's own settings (the voice
+ * engine, image generation, online computers). Shared by the pages
+ * (2026-10-28), so the split changes no right.
+ *
+ * 2026-11-05: on an organization server the page is the same for
+ * everyone, admins included: the organization's keys, who pays and its
+ * lists are set in Perspicax and read here as they stand. */
 export function useModelsVoiceAccess() {
   const { state } = useStore();
   const org = usePerspicaxOrg();
-  // 2026-10-30: an admin's "View as a member" (Settings > Providers) draws
-  // these pages as a member reads them; it changes no right
-  const asMember = useViewAsMember() && org !== null;
-  const member = asMember || (viewerIsOrgMember(state.config) && !viewerCan(state.config, "engines.manage"));
+  const organization = org !== null || viewerIsOrgMember(state.config);
+  const member = org !== null || (viewerIsOrgMember(state.config) && !viewerCan(state.config, "engines.manage"));
   const remote = typeof window !== "undefined" && window.ogb?.remoteClient?.active === true;
-  const keys = keysShown({ member, remote, organization: org !== null || viewerIsOrgMember(state.config), config: state.config });
+  const keys = keysShown({ member, remote, organization, config: state.config });
   // The voice engine, image generation and online computers write the
   // installation too: shown to whoever may change it.
   const installation = !member && canEditConfig(state.config);
-  const personalVoiceKeys = org !== null || viewerIsOrgMember(state.config);
+  const personalVoiceKeys = organization;
   return { member, org, keys, installation, personalVoiceKeys };
 }
 
-/** Settings > Models: Auto, active models, web search, image generation
- * and the optional computers. Accounts and keys live in Providers. */
+/** Settings > Models (2026-11-05): which model each bot uses, then an
+ * Advanced fold with the active models, what Auto would choose now, the
+ * prompt cache and the optional computers. Providers, web search and
+ * image generation live in Providers. */
 export function EnginesSettings() {
   const { state } = useStore();
-  const { keys, installation } = useModelsVoiceAccess();
+  const { installation, org } = useModelsVoiceAccess();
+  const issuer = org?.org.identity.issuer;
+  const keepWarm = state.config?.cacheKeepWarm;
 
   return (
     <div className="flex min-w-0 flex-col gap-6 pb-2" data-models-voice="" data-models-page="">
-      {/* #1675: Bot models first (defaults + table + bulk), then Auto and switches */}
+      <SettingsIntro>{t("models.intro")}</SettingsIntro>
+      {/* #1675: Bot models first (defaults + table + bulk) */}
       <BotModelsSettings />
-      <ProvidersMovedNotice />
-      <ModelSwitchesSettings />
-      {installation && <CacheKeepWarmSettings />}
-      {/* the person's own web search provider and key: theirs, no admin right */}
-      <WebSearchSettings />
-      {installation && (
-        <div data-settings-card="connections.image">
-          <SettingsGroup title={t("imageGen.title")} groupId="image">
-            <ImageGenerationSettings keysLink={keys} />
-          </SettingsGroup>
-        </div>
-      )}
-      {installation && (boatComputerEnabled(state.config) || vpsComputerEnabled(state.config)) && (
-        <div data-settings-card="connections.integrations">
-          <SettingsGroup title={t("keys.integrations.title")} groupId="integrations">
-            <div className="flex flex-col gap-4 px-3.5 py-2.5">
-              {boatComputerEnabled(state.config) && <ApiKeyRow section="box" />}
-              {vpsComputerEnabled(state.config) && <VpsConnection />}
+      <div data-settings-card="models.advanced">
+        <SettingsGroup title={t("models.advanced.title")} groupId="models-advanced">
+          <FoldRow cardId="models.advanced" label={t("models.advanced.title")} description={t("models.advanced.help")}>
+            <div className="-mx-3.5 flex flex-col gap-4 pt-1" data-models-advanced="">
+              <ModelSwitchesSettings />
+              <SettingsGroup title={t("models.autoNow.title")} groupId="models-auto">
+                <div data-auto-model-explainer=""><AutoModelSettings /></div>
+              </SettingsGroup>
+              {installation && <CacheKeepWarmSettings />}
+              {!installation && keepWarm && (
+                <SettingsGroup title={t("settings.keepWarm.title")} groupId="models-keep-warm">
+                  <DescribedRow label={t("settings.keepWarm.enable")} description={keepWarm.enabled ? t("settings.keepWarm.hours", { hours: Math.round(keepWarm.windowMinutes / 60) }) : t("models.keepWarm.off")} rowId="models.keepWarm">
+                    {org && issuer && (
+                      <a href={perspicaxConsoleUrl(issuer)} target="_blank" rel="noreferrer noopener" data-perspicax-link="keepWarm" className="inline-flex items-center gap-1.5 text-[12px] font-medium text-accent-text hover:underline">
+                        {t("providers.setInPerspicax")}
+                        <ExternalLink size={12} aria-hidden="true" />
+                      </a>
+                    )}
+                  </DescribedRow>
+                </SettingsGroup>
+              )}
+              {installation && (boatComputerEnabled(state.config) || vpsComputerEnabled(state.config)) && (
+                <div data-settings-card="connections.integrations">
+                  <SettingsGroup title={t("keys.integrations.title")} groupId="integrations">
+                    <div className="flex flex-col gap-4 px-3.5 py-2.5">
+                      {boatComputerEnabled(state.config) && <ApiKeyRow section="box" />}
+                      {vpsComputerEnabled(state.config) && <VpsConnection />}
+                    </div>
+                  </SettingsGroup>
+                </div>
+              )}
             </div>
-          </SettingsGroup>
-        </div>
-      )}
+          </FoldRow>
+        </SettingsGroup>
+      </div>
     </div>
   );
 }
@@ -498,22 +535,6 @@ export function VoiceSettingsPage() {
       </div>
       {installation && <VoiceSection />}
     </div>
-  );
-}
-
-/** Auto and the one link to accounts, keys and compatible servers. */
-function ProvidersMovedNotice() {
-  const { dispatch } = useStore();
-  return (
-    <SettingsGroup title={t("engines.title")} groupId="models-auto">
-      <div data-auto-model-explainer=""><AutoModelSettings /></div>
-      <DescribedRow label={t("providers.moved.title")} description={t("providers.moved.body")} rowId="providers-moved">
-        <button type="button" data-open-providers="" className={PILL}
-          onClick={() => dispatch({ type: "toggleAppSettings", open: true, section: "providers" })}>
-          {t("providers.moved.open")}
-        </button>
-      </DescribedRow>
-    </SettingsGroup>
   );
 }
 

@@ -22206,6 +22206,12 @@ async function joinPrewarm(threadId: string): Promise<void> {
 function prewarmThread(botId: string, threadId: string, person: string, opts: PrewarmTurnOpts, windowMs?: number): PrewarmOutcome {
   if (threadPrewarm.has(threadId)) return threadPrewarm.begin(threadId, person, async () => {}, windowMs);
   if (prewarmRefusal(botId, threadId)) return "skipped";
+  // Composer open / typing (#1975): a person looks at one conversation; drop
+  // their other waiting warms so a thread switch does not keep mounting.
+  // Routine and teammate warms keep the shared waiting pool.
+  if (!opts.automationSource && !opts.runOn && !opts.warmCoordination) {
+    threadPrewarm.cancelOthers(person, threadId);
+  }
   return threadPrewarm.begin(threadId, person, (signal) => new Promise<void>((resolve) => {
     signal.addEventListener("abort", () => {
       // the driver closed its idle process (a turn's process stays)

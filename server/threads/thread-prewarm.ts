@@ -60,6 +60,8 @@ type Job = {
   controller: AbortController;
   timer: ReturnType<typeof setTimeout> | null;
   setup: Promise<void>;
+  /** Who started this warm (cancel-others on thread switch, #1975). */
+  person: string;
 };
 
 export interface ThreadPrewarmOptions {
@@ -112,7 +114,7 @@ export class ThreadPrewarm {
       this.cancel(oldest);
     }
     const controller = new AbortController();
-    const job: Job = { controller, timer: null, setup: Promise.resolve() };
+    const job: Job = { controller, timer: null, setup: Promise.resolve(), person };
     this.jobs.set(threadId, job);
     this.arm(threadId, job, windowMs);
     job.setup = (async () => {
@@ -147,6 +149,20 @@ export class ThreadPrewarm {
     this.jobs.delete(threadId);
     job.controller.abort();
     return true;
+  }
+
+  /** Abort every waiting warm of this person except `keepThreadId` (composer
+   * thread switch / #1975). Returns how many were cancelled. */
+  cancelOthers(person: string, keepThreadId: string): number {
+    const drop: string[] = [];
+    for (const [threadId, job] of this.jobs) {
+      if (job.person === person && threadId !== keepThreadId) drop.push(threadId);
+    }
+    let n = 0;
+    for (const threadId of drop) {
+      if (this.cancel(threadId)) n += 1;
+    }
+    return n;
   }
 
   has(threadId: string): boolean {

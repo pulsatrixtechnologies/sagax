@@ -28,8 +28,12 @@ export interface SignInRecheckDeps {
 }
 
 export interface SignInRecheck {
-  /** The provider refused this sign-in: renew once, mark only on failure. */
-  refused(principalId: string, driver: string, slot?: LoginSlot): Promise<void>;
+  /** The provider refused this sign-in: renew once, mark only on failure.
+   * True when the sign-in works again (the renew left a usable token). */
+  refused(principalId: string, driver: string, slot?: LoginSlot): Promise<boolean>;
+  /** Whether a refusal now gets a renew (a renewable engine, its primary
+   * sign-in, no failed renew in the cooldown). False: it marks at once. */
+  renewable(principalId: string, driver: string, slot?: LoginSlot): boolean;
   /** At start: one renew for each person whose sign-in is marked expired. */
   heal(people: readonly string[]): Promise<number>;
 }
@@ -57,19 +61,24 @@ export function createSignInRecheck(deps: SignInRecheckDeps): SignInRecheck {
     return flight;
   };
 
+  const renewable = (principalId: string, driver: string, slot: LoginSlot = "primary"): boolean => {
+    // No renew path (Grok, Kimi, a second sign-in): the refusal stands.
+    if (slot !== "primary" || !RENEWABLE.has(driver)) return false;
+    const key = `${principalId}/${driver}`;
+    const last = failedAt.get(key);
+    return !(last !== undefined && now() - last < SIGN_IN_RECHECK_COOLDOWN_MS && !inflight.has(key));
+  };
+
   return {
+    renewable,
     async refused(principalId, driver, slot = "primary") {
-      // No renew path (Grok, Kimi, a second sign-in): the refusal stands.
-      if (slot !== "primary" || !RENEWABLE.has(driver)) {
+      if (!renewable(principalId, driver, slot)) {
         deps.markExpired(principalId, driver, slot);
-        return;
+        return false;
       }
-      const last = failedAt.get(`${principalId}/${driver}`);
-      if (last !== undefined && now() - last < SIGN_IN_RECHECK_COOLDOWN_MS && !inflight.has(`${principalId}/${driver}`)) {
-        deps.markExpired(principalId, driver, slot);
-        return;
-      }
-      if (!(await renewOnce(principalId, driver))) deps.markExpired(principalId, driver, slot);
+      if (await renewOnce(principalId, driver)) return true;
+      deps.markExpired(principalId, driver, slot);
+      return false;
     },
     async heal(people) {
       let restored = 0;
@@ -82,4 +91,52 @@ export function createSignInRecheck(deps: SignInRecheckDeps): SignInRecheck {
       return restored;
     },
   };
+}
+
+/** How long a refused turn waits for its one renew before the person sees
+ * the card anyway (the CLI renew gives up after 20 s; two flights can chain). */
+export const SIGN_IN_REFUSAL_HOLD_MS = 45_000;
+
+export interface SignInRefusalInput {
+  principalId: string;
+  driver: string;
+  slot?: LoginSlot;
+  /** Show the expired card (and its notice): the renew really failed. */
+  show(): void;
+  /** The renew worked: run the refused turn again. False when it cannot
+   * run again (already retried once, a routine, the person moved on). */
+  retry(): boolean;
+  /** The renew worked but the turn is not run again: the failure, plainly. */
+  fail(): void;
+  holdMs?: number;
+  /** Test seam for the hold's bound. */
+  setTimer?: (fn: () => void, ms: number) => unknown;
+}
+
+/** #2057: a sign-in refusal waits for its one renew before anything reaches
+ * the person. The renew works: no card, the turn runs again once. It fails
+ * (or outlasts the hold): the card. True when the refusal is held, so the
+ * caller leaves its failure bookkeeping (incident, notice) to this. */
+export function settleSignInRefusal(recheck: SignInRecheck | null | undefined, input: SignInRefusalInput): boolean {
+  const slot = input.slot ?? "primary";
+  if (!recheck || !recheck.renewable(input.principalId, input.driver, slot)) {
+    input.show();
+    void recheck?.refused(input.principalId, input.driver, slot).catch(() => false);
+    return false;
+  }
+  let settled = false;
+  const settle = (restored: boolean) => {
+    if (settled) return;
+    settled = true;
+    if (!restored) input.show();
+    else if (!input.retry()) input.fail();
+  };
+  const setTimer = input.setTimer ?? ((fn: () => void, ms: number) => {
+    const timer = setTimeout(fn, ms);
+    (timer as { unref?: () => void }).unref?.();
+    return timer;
+  });
+  setTimer(() => settle(false), input.holdMs ?? SIGN_IN_REFUSAL_HOLD_MS);
+  void recheck.refused(input.principalId, input.driver, slot).then(settle, () => settle(false));
+  return true;
 }

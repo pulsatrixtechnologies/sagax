@@ -2282,7 +2282,7 @@ import {
   ensureClaudeSubscriptionFresh,
   onClaudeSubscriptionRenewed
 } from "./engines/claude-subscription-refresh.ts";
-import { createSignInRecheck } from "./engines/sign-in-recheck.ts";
+import { createSignInRecheck, settleSignInRefusal } from "./engines/sign-in-recheck.ts";
 import { cloudAgentInternalAction, handleCloudAgentInternal } from "./routes/cloud-agents-internal.ts";
 import { cloudAgentWakePrompt } from "./cloud-agents/wake.ts";
 import { cloudAgentWireItem } from "./cloud-agents/activity.ts";
@@ -16252,6 +16252,34 @@ const limitFailover = createLimitFailoverHost({
 /** One automatic chat retry after reasoning_only / empty model (server/empty-response-retry.ts). */
 const emptyResponseRetry = createEmptyResponseRetry();
 
+/** Sends a thread's latest user message again once the failed turn has
+ * released the thread: the empty-response retry and, #2057, a turn whose
+ * sign-in refusal the renew cleared. Quiet when the message is no longer
+ * the latest, the thread went away or another turn already runs. */
+function resendUserMessage(botId: string, threadId: string, messageId: string, speaker: TurnSpeaker | undefined, tag: string): void {
+  void (async () => {
+    // Wait briefly for the failed turn to release the thread.
+    for (let waited = 0; threadBusy(botId, threadId) && waited < 10_000; waited += 50) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    }
+    const path = store.activePath(threadId);
+    const message = path.find((candidate) => candidate.id === messageId);
+    if (!message || message.role !== "user" || message.kind !== "text" || !message.text || message.peerAsk) return;
+    if (path.findLast((candidate) => candidate.role === "user" && candidate.kind === "text")?.id !== messageId) return;
+    if (!store.taskByThread(botId, threadId) || threadBusy(botId, threadId)) return;
+    try {
+      await startTurn(botId, message.text, {
+        threadId, userMessage: message,
+        ...(speaker ? { speaker } : {}),
+      });
+    } catch (error) {
+      if ((error as { code?: string }).code !== "answered") {
+        console.warn(`[${tag}] ${threadId}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  })().catch(() => {});
+}
+
 // Prompt-cache keep-warm (server/cache-keepwarm.ts; design from Cache Tax,
 // MIT, Karan Bansal): an idle Claude thread with a big context gets one
 // forked, tool-less cache read per idle stretch while its window is open,
@@ -20098,11 +20126,40 @@ bus.subscribe((event: RuntimeEvent) => {
           pushMessage({ role: "bot", kind: "access", access: keyRefused });
           notifyAccess(deliverableNotification("turn-failed", bot, event.threadId, engineAccessNotice("key_refused", keyRefused.engine), { avatarUrl: bot.avatarUrl }), keyRefused);
         }
-      } else if (expiredCard && bot) {
-        if (!repeatsShownFailure(store.messagesFor(event.threadId), { role: "bot", kind: "access", access: expiredCard, from: failureFrom }, bot.id)) {
-          pushMessage({ role: "bot", kind: "access", access: expiredCard });
-          notifyAccess(deliverableNotification("turn-failed", bot, event.threadId, engineAccessNotice("no_access", expiredCard.engine, expiredCard), { avatarUrl: bot.avatarUrl }), expiredCard);
-        }
+      } else if (expiredCard && bot && refusedInstance) {
+        const showExpired = () => {
+          if (!repeatsShownFailure(store.messagesFor(event.threadId), { role: "bot", kind: "access", access: expiredCard, from: failureFrom }, bot.id)) {
+            pushMessage({ role: "bot", kind: "access", access: expiredCard });
+            notifyAccess(deliverableNotification("turn-failed", bot, event.threadId, engineAccessNotice("no_access", expiredCard.engine, expiredCard), { avatarUrl: bot.avatarUrl }), expiredCard);
+          }
+        };
+        // #2057: a chat turn the person sent waits on the renew; the card
+        // shows only when the renew really failed, and a renewed sign-in
+        // sends the same message again once, with nothing to click.
+        const request = directRequestOwners.get(event.threadId);
+        const messageId = request?.messageId;
+        const resendable = Boolean(messageId && !request?.stopped && request?.origin?.kind === "user" &&
+          !ranOn?.routine && !routines?.runForThread(event.threadId));
+        const resendSpeaker = turnSpeakers.get(event.threadId);
+        const failedTool = failedTurnTool(event.message, event);
+        const held = holdSignInRefusal(bot, refusedInstance, expiredCard, event.threadId, resendable, {
+          show: (afterHold) => {
+            showExpired();
+            if (afterHold) reportIncident({ kind: "failed", bot, threadId: event.threadId, detail: redactSecretsInText(event.message).slice(0, 600) });
+          },
+          resend: () => {
+            if (!messageId) return false;
+            resendUserMessage(bot.id, event.threadId, messageId, resendSpeaker, "sign-in-retry");
+            return true;
+          },
+          fail: () => {
+            if (!repeatsShownFailure(store.messagesFor(event.threadId), { role: "bot", kind: "activity", tool: failedTool, from: failureFrom }, bot.id)) {
+              pushMessage({ role: "bot", kind: "activity", tool: failedTool });
+            }
+            reportIncident({ kind: "failed", bot, threadId: event.threadId, detail: redactSecretsInText(event.message).slice(0, 600) });
+          }
+        });
+        if (held) signInRefusalHeld.add(event.threadId);
       } else {
         const tool = failedTurnTool(event.message, event);
         // #2013 (the maintainer, 2026-11-05): a refusal before any prompt went out (the
@@ -20283,33 +20340,15 @@ bus.subscribe((event: RuntimeEvent) => {
         const request = directRequestOwners.get(event.threadId);
         const messageId = request?.messageId;
         if (messageId && !request?.stopped && request?.origin?.kind === "user") {
-          const speaker = turnSpeakers.get(event.threadId);
-          void (async () => {
-            // Wait briefly for the failed turn to release the thread.
-            for (let waited = 0; threadBusy(bot.id, event.threadId) && waited < 10_000; waited += 50) {
-              await new Promise<void>((resolve) => setTimeout(resolve, 50));
-            }
-            const path = store.activePath(event.threadId);
-            const message = path.find((candidate) => candidate.id === messageId);
-            if (!message || message.role !== "user" || message.kind !== "text" || !message.text || message.peerAsk) return;
-            if (path.findLast((candidate) => candidate.role === "user" && candidate.kind === "text")?.id !== messageId) return;
-            if (!store.taskByThread(bot.id, event.threadId) || threadBusy(bot.id, event.threadId)) return;
-            try {
-              await startTurn(bot.id, message.text, {
-                threadId: event.threadId, userMessage: message,
-                ...(speaker ? { speaker } : {}),
-              });
-            } catch (error) {
-              if ((error as { code?: string }).code !== "answered") {
-                console.warn(`[empty-response-retry] ${event.threadId}: ${error instanceof Error ? error.message : String(error)}`);
-              }
-            }
-          })().catch(() => {});
+          resendUserMessage(bot.id, event.threadId, messageId, turnSpeakers.get(event.threadId), "empty-response-retry");
         }
       } else if (event.ok) {
         emptyResponseRetry.clear(event.threadId);
+        signInRefusalResent.delete(event.threadId);
       }
-      if (!event.ok && !stopped && !limitTaken && !emptyRetried && !lazyClaimAlreadyReported && !computerParked && !routines?.runForThread(event.threadId)) {
+      // #2057: a sign-in refusal held for its renew reports when it settles.
+      const signInHeld = signInRefusalHeld.delete(event.threadId);
+      if (!event.ok && !stopped && !limitTaken && !emptyRetried && !signInHeld && !lazyClaimAlreadyReported && !computerParked && !routines?.runForThread(event.threadId)) {
         const broken = bot ?? (speaker ? store.bot(speaker.botId) : undefined);
         if (broken) reportIncident({ kind: "failed", bot: broken, threadId: event.threadId, detail: failureCause ?? "the run ended without a result" });
       }
@@ -30729,9 +30768,54 @@ function subscriptionExpiredCard(bot: BotRecord, instance: { driverKind: string;
     engine: engineNameForViewer(engineDisplayName(instance), driverDisplayName(instance.driverKind), payer ? personIsOrgAdmin(payer) : false),
     ...(ran?.routine ? { routine: true } : {})
   });
-  // #2040: renew once before marking; a passing refusal never signs anyone out
-  if (card) void signInRecheck?.refused(card.payerPrincipalId, instance.driverKind, "instanceId" in instance && typeof instance.instanceId === "string" ? turnSlotFor(bot, { instanceId: instance.instanceId }) : "primary");
   return card;
+}
+/** #2057: chat threads whose sign-in refusal waits on its renew; the
+ * turn.completed that follows leaves the incident to the settle. */
+const signInRefusalHeld = new Set<string>();
+/** #2057: threads already sent again once after a renewed sign-in, until a
+ * turn there ends well. A second refusal right after a good renew is not a
+ * sign-in problem: it shows the engine's error, never the card. */
+const signInRefusalResent = new Set<string>();
+/** #2057 (on #2040): settles a refused subscription sign-in. A turn that
+ * can be sent again waits on the renew (bounded): renewed means the same
+ * message goes again once and no card; failed means the card. Anything else
+ * shows the card at once while the renew still runs, as before. True when
+ * the refusal is held. */
+function holdSignInRefusal(
+  bot: BotRecord,
+  instance: { driverKind: string; instanceId?: string },
+  card: { payerPrincipalId: string },
+  threadId: string,
+  resendable: boolean,
+  handlers: { show(afterHold: boolean): void; resend(): boolean; fail(): void }
+): boolean {
+  const slot = typeof instance.instanceId === "string" ? turnSlotFor(bot, { instanceId: instance.instanceId }) : "primary";
+  if (!resendable) {
+    handlers.show(false);
+    void signInRecheck?.refused(card.payerPrincipalId, instance.driverKind, slot).catch(() => false);
+    return false;
+  }
+  let held = false;
+  held = settleSignInRefusal(signInRecheck, {
+    principalId: card.payerPrincipalId, driver: instance.driverKind, slot,
+    show: () => {
+      if (held) console.info(`[sign-in-recheck] ${threadId}: renew failed, sign-in card shown`);
+      handlers.show(held);
+    },
+    retry: () => {
+      if (signInRefusalResent.has(threadId) || !handlers.resend()) return false;
+      signInRefusalResent.add(threadId);
+      console.info(`[sign-in-recheck] ${threadId}: sign-in renewed, turn sent again`);
+      return true;
+    },
+    fail: () => {
+      console.info(`[sign-in-recheck] ${threadId}: sign-in renewed, refusal shown as an engine error`);
+      handlers.fail();
+    }
+  });
+  if (held) console.info(`[sign-in-recheck] ${threadId}: refusal held while the sign-in renews`);
+  return held;
 }
 /** The access card of a refused or lost turn: who has to act (the person
  * who speaks, or the owner for a routine) and where. */
@@ -46848,6 +46932,7 @@ const startTurnRunner = createStartTurn({
   holdBootEngineSlot,
   holdBotMemoryPlain,
   holdDirectMachineTurn,
+  holdSignInRefusal,
   holdTurnAttachments,
   honouredPin,
   hooksEnabled,

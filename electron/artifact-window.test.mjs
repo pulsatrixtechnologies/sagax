@@ -8,6 +8,10 @@ import {
   ARTIFACT_WINDOW_MIN,
   ARTIFACT_WINDOW_SIZE,
   artifactWindowNavigationAllowed,
+  CLAUDE_AI_PARTITION,
+  claudeAiArtifactUrl,
+  claudeAiNavigationAllowed,
+  claudeAiPermissionAllowed,
   createArtifactWindows,
   MAX_REMEMBERED_PLACES,
   parseArtifactWindowPlaces,
@@ -78,7 +82,7 @@ function memoryStore(initial = null) {
   return { read: () => value, write: vi.fn((next) => { value = JSON.parse(JSON.stringify(next)); }), get: () => value };
 }
 
-function setup({ displays = [PRIMARY, SECOND], store = memoryStore(), trusted = true } = {}) {
+function setup({ displays = [PRIMARY, SECOND], store = memoryStore(), trusted = true, session, openExternal } = {}) {
   const fake = fakeElectron();
   const onChange = vi.fn();
   const screen = {
@@ -94,6 +98,8 @@ function setup({ displays = [PRIMARY, SECOND], store = memoryStore(), trusted = 
     screen,
     boundsStore: store,
     onChange,
+    ...(session ? { session } : {}),
+    ...(openExternal ? { openExternal } : {}),
   });
   const event = { sender: fake.main.webContents, senderFrame: { url: `${ORIGIN}/` } };
   const open = (request) => fake.handlers.get("artifact-window:open")(event, { botId: "bot-a", title: "Live table", ...request });
@@ -234,5 +240,66 @@ describe("artifact windows", () => {
     expect(fake.windows.every((win) => win.isDestroyed())).toBe(true);
     expect(controller.list()).toEqual([]);
     expect(fake.sent).toEqual([]);
+  });
+});
+
+describe("claude.ai artifact windows (#2018)", () => {
+  const URL_OK = "https://claude.ai/artifact/AbCdEf123456";
+
+  it("accepts only a claude.ai artifact link, canonical", () => {
+    expect(claudeAiArtifactUrl("https://www.claude.ai/code/artifact/AbCdEf123456/")).toBe("https://claude.ai/code/artifact/AbCdEf123456");
+    expect(claudeAiArtifactUrl("http://claude.ai/artifact/AbCdEf123456")).toBeNull();
+    expect(claudeAiArtifactUrl("https://claude.ai.example.com/artifact/AbCdEf123456")).toBeNull();
+    expect(claudeAiArtifactUrl("https://user:pw@claude.ai/artifact/AbCdEf123456")).toBeNull();
+    expect(claudeAiArtifactUrl("https://claude.ai/settings")).toBeNull();
+  });
+
+  it("navigates on claude.ai and its sign-in hosts only", () => {
+    expect(claudeAiNavigationAllowed("https://claude.ai/login")).toBe(true);
+    expect(claudeAiNavigationAllowed("https://accounts.google.com/o/oauth2/auth")).toBe(true);
+    expect(claudeAiNavigationAllowed("https://console.anthropic.com/")).toBe(true);
+    expect(claudeAiNavigationAllowed("http://claude.ai/")).toBe(false);
+    expect(claudeAiNavigationAllowed("https://evilclaude.ai/")).toBe(false);
+    expect(claudeAiNavigationAllowed("https://example.com/")).toBe(false);
+    expect(claudeAiPermissionAllowed("media")).toBe(false);
+    expect(claudeAiPermissionAllowed("clipboard-sanitized-write")).toBe(true);
+  });
+
+  it("opens claude.ai in the persistent claude-ai session, one window per link", async () => {
+    const partitions = [];
+    const shared = { setPermissionCheckHandler: vi.fn(), setPermissionRequestHandler: vi.fn() };
+    const { fake, event } = setup({ session: { fromPartition: (name) => { partitions.push(name); return shared; } } });
+    const openClaude = (url) => fake.handlers.get("artifact-window:open-claude-ai")(event, { url });
+    expect(await openClaude(`${URL_OK}/`)).toBe("created");
+    const win = fake.windows.at(-1);
+    expect(win.options.webPreferences).toMatchObject({ partition: CLAUDE_AI_PARTITION, contextIsolation: true, sandbox: true, nodeIntegration: false });
+    expect(win.options.webPreferences.preload).toBeUndefined();
+    expect(win.loadURL).toHaveBeenCalledWith(URL_OK);
+    expect(partitions).toEqual([CLAUDE_AI_PARTITION]);
+    expect(shared.setPermissionRequestHandler).toHaveBeenCalled();
+    expect(await openClaude(URL_OK)).toBe("focused");
+    expect(fake.windows).toHaveLength(1);
+    expect(await openClaude("https://example.com/artifact/AbCdEf123456")).toBe("refused");
+  });
+
+  it("sends a link off claude.ai to the system browser", async () => {
+    const openExternal = vi.fn();
+    const { fake, event } = setup({ openExternal });
+    await fake.handlers.get("artifact-window:open-claude-ai")(event, { url: URL_OK });
+    const win = fake.windows.at(-1);
+    const prevent = vi.fn();
+    win.webContents.fire("will-navigate", { preventDefault: prevent }, "https://example.com/elsewhere");
+    expect(prevent).toHaveBeenCalled();
+    expect(openExternal).toHaveBeenCalledWith("https://example.com/elsewhere");
+    const kept = vi.fn();
+    win.webContents.fire("will-navigate", { preventDefault: kept }, "https://claude.ai/login");
+    expect(kept).not.toHaveBeenCalled();
+    expect(win.openHandler({ url: "https://example.com/x" })).toEqual({ action: "deny" });
+    expect(win.openHandler({ url: "https://accounts.google.com/signin" }).action).toBe("allow");
+  });
+
+  it("refuses a page that is not the main window's own", async () => {
+    const { fake, event } = setup({ trusted: false });
+    expect(await fake.handlers.get("artifact-window:open-claude-ai")(event, { url: URL_OK })).toBe("refused");
   });
 });

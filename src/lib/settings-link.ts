@@ -3,6 +3,7 @@
 // the Settings navigation uses, so a renamed section updates every pointer.
 import type { LocaleKey } from "@/locales";
 import { requestAbout } from "@/lib/about-ui";
+import { requestProviderRow } from "@/lib/provider-row-request";
 import { t } from "@/lib/i18n";
 import { requestSettingsCard } from "@/components/SettingsPrimitives";
 import type { AppSettingsSection } from "@/state/store";
@@ -87,6 +88,13 @@ export function openSettings(dispatch: SettingsDispatch, section: AppSettingsSec
  * model that cannot run gets its key (New bot's "no model works" line). */
 export function openModelKeysSettings(dispatch: SettingsDispatch): void {
   openSettings(dispatch, "providers", "providers.list");
+}
+
+/** Settings > Providers with the Claude engine row open: where the engine's
+ * claude.ai sign-in is changed (a claude.ai card's "Reconnect the account"). */
+export function openClaudeEngineSettings(dispatch: SettingsDispatch): void {
+  openSettings(dispatch, "providers", "providers.list");
+  requestProviderRow("claude");
 }
 
 export type SettingsLinkPart = { kind: "text"; text: string } | { kind: "link"; name: string };

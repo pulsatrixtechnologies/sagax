@@ -4587,6 +4587,8 @@ const artifactWindows = createArtifactWindows({
   icon: () => currentWindowIcon(),
   log: (line) => slog(line),
   screen,
+  // a claude.ai artifact opens in its own persistent session (persist:claude-ai)
+  session,
   // each artifact's window keeps its place (artifact-windows.json in the app's data)
   boundsStore: {
     read: () => {

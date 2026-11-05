@@ -1,3 +1,4 @@
+import { editSectionParents, removeFromSectionTree } from "@/lib/section-tree";
 import type { SidebarState } from "./types";
 import { createPortal } from "react-dom";
 import type { ReactNode, RefObject } from "react";
@@ -137,13 +138,14 @@ export function SidebarOverlays(props: {
           // conversations go back to Unassigned; nothing else changes.
           if (personal) {
             writePersonalSections(deletePersonalSection(personal, name));
+            editSectionParents((tree) => removeFromSectionTree(tree, name));
             setDeletingTeam(null);
             return;
           }
           teamDeleteRunning.current = true;
           setTeamDeletePending(true);
           void api<{ sections: string[] }>(`/api/sidebar-sections?section=${encodeURIComponent(name)}`, { method: "DELETE" })
-            .then(({ sections }) => { dispatch({ type: "sectionDeleted", section: name, sections }); setDeletingTeam(null); })
+            .then(({ sections }) => { dispatch({ type: "sectionDeleted", section: name, sections }); editSectionParents((tree) => removeFromSectionTree(tree, name)); setDeletingTeam(null); })
             .catch(cause => setTeamFeedback({ error: true, text: readableError(cause) }))
             .finally(() => { teamDeleteRunning.current = false; setTeamDeletePending(false); });
         }} />

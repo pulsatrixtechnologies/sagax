@@ -185,6 +185,20 @@ describe("section routes", () => {
     expect((await h.call(ALICE, "PATCH", "/api/org/sections/general", { name: "x" })).body.code).toBe("general_is_personal");
   });
 
+  it("#2045: two people each create a team and neither lists the other's, admins included", async () => {
+    const h = harness();
+    expect((await h.call(ALICE, "POST", "/api/org/sections", { name: "Equipe A" })).status).toBe(201);
+    expect((await h.call(BOB, "POST", "/api/org/sections", { name: "Equipe B" })).status).toBe(201);
+    const names = async (who: string) => ((await h.call(who, "GET", "/api/org/sections")).body.sections as { name: string }[]).map((row) => row.name);
+    expect(await names(ALICE)).toContain("Equipe A");
+    expect(await names(ALICE)).not.toContain("Equipe B");
+    expect(await names(BOB)).toContain("Equipe B");
+    expect(await names(BOB)).not.toContain("Equipe A");
+    const admin = await names(ADMIN);
+    expect(admin).not.toContain("Equipe A");
+    expect(admin).not.toContain("Equipe B");
+  });
+
   it("members and bot placement are gone: 410 sections_are_personal, nothing changes", async () => {
     const h = harness();
     const id = (await h.call(ALICE, "POST", "/api/org/sections", { name: "Ventes" })).body.section.id;

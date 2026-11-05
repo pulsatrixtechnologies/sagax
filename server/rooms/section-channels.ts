@@ -397,9 +397,11 @@ export function createSectionChannelRoutes(deps: SectionRouteDeps): RouteHandler
     const viewer = deps.viewer(auth);
 
     if (path === "/api/org/sections" && method === "GET") {
+      // #2045: the list is the viewer's own teams (and a legacy one they
+      // belong to). Moderation by admin right no longer lists other people's.
       const sections = deps.channels.list().flatMap((record) => {
         const shown = sectionForViewer(viewer, record, deps.teamsOf);
-        return shown ? [shown] : [];
+        return shown && (!viewer || shown.viewerRole !== null) ? [shown] : [];
       });
       return json(res, 200, { sections });
     }

@@ -61,7 +61,8 @@ export function TeamSectionsLayer(props: {
             connected={connectedBotIds.includes(bot.id)} onComputer={onComputer} onArrange={arrangeBot} />
         </div>;
         return <section key={section.key} data-team-key={section.key} aria-label={t("canvas.teamRegion", { name: label })}
-          className={cn("absolute rounded-2xl border bg-panel/90 shadow-sm has-[details[open]]:z-20 data-[computer-dropping=true]:border-accent data-[computer-dropping=true]:ring-2 data-[computer-dropping=true]:ring-accent/25", dropping ? "border-accent ring-2 ring-accent/25" : "border-hairline/50")}
+          data-team-depth={section.depth ?? 0}
+          className={cn("absolute rounded-2xl border bg-panel/90 shadow-sm has-[details[open]]:z-20 data-[computer-dropping=true]:border-accent data-[computer-dropping=true]:ring-2 data-[computer-dropping=true]:ring-accent/25", dropping ? "border-accent ring-2 ring-accent/25" : "border-hairline/50", section.parent && "border-l-[3px] border-l-accent/40")}
           style={{ left: tile.x, top: tile.y, width: tile.width, height: tile.height }}>
           <header className="flex h-16 items-center gap-2 px-5">
             <button data-arrange-team={section.key} disabled={!layoutLoaded} aria-label={t("canvas.arrange", { name: label })}
@@ -74,6 +75,7 @@ export function TeamSectionsLayer(props: {
                 savePositions({ ...positions, [section.key]: { x: tile.x + delta[0] * step, y: tile.y + delta[1] * step } });
               }}>
               <h2 className="truncate text-[13px] font-semibold tracking-tight">{label}</h2>
+              {section.parent && <p data-sub-team-of={section.parent} className="truncate text-[11px] text-ink-secondary">{t("team.subTeamOf", { name: section.parent })}</p>}
             </button>
             {computer && <button aria-label={t("canvas.teamComputer", { team: label, name: computer.name })} title={`${computer.name}${computer.state ? ` · ${computer.state}` : ""}`}
               disabled={!onTeamComputer} onClick={() => onTeamComputer?.(section.key)}

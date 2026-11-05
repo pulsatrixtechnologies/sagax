@@ -584,6 +584,8 @@ function EventEditorBody({
   const [mailAlias, setMailAlias] = useState(template?.mailAlias ?? "");
   // 2026-11-04 (shared/routine-model.ts): its runs' model; "" is the bot's.
   const [routineModel, setRoutineModel] = useState(template?.model ?? "");
+  // #2049: the model of its runs' Claude sub-agents; "" is automatic.
+  const [routineSubagentModel, setRoutineSubagentModel] = useState(template?.subagentModel ?? "");
   // 2026-11-05 (shared/routine-act-as.ts): "Au nom de", the Perspicax role
   // its runs act as. Undefined: not chosen here (a saved routine keeps its
   // own; a duplicate starts from its source's).
@@ -835,6 +837,7 @@ function EventEditorBody({
           deleteWhenFinished: (recurrence === "none" || (recurrence === "interval" && intervalEndsAt != null)) && deleteWhenFinished,
           mailAlias: routineTarget === "bot" ? (mailAlias.trim() || null) : null,
           model: routineTarget === "bot" ? (routineModel || null) : null,
+          subagentModel: routineTarget === "bot" ? (routineSubagentModel || null) : null,
           // The person's choice; else, nothing chosen yet and the coverage
           // known, the minimal covering role (never over an explicit one).
           ...(() => { const role = routineTarget === "bot" ? actAsToSave(existingRoutine?.actAs, actAs, roleCoverage.answer) : undefined; return role !== undefined ? { actAs: role } : {}; })(),
@@ -967,7 +970,7 @@ function EventEditorBody({
     setMoreOpen(open);
     rememberRoutineEditorMoreOpen(open);
   };
-  const editorSnapshot = JSON.stringify([requiredSkills, requiredMcp, requiresComputer, kind, name, description, recurrence, limitReset, scheduleDraft, date, startTime, weekdays, durationMinutes, timeoutMinutes, overlap, autoPauseAfter, continuity, onlyWhenPresent, deleteWhenFinished, watchDraft, postResults, mailAlias, routineModel, actAs, routineEffort, timingMode, earlyMinutes, lateMinutes, intervalMinutes, intervalDays, intervalWeekdays, intervalWindow, intervalWindowStart, intervalWindowEnd, intervalEnd, intervalEndDate, botIds, routineTarget, groupId, runOn, attachments.map((attachment) => attachment.id), runAs]);
+  const editorSnapshot = JSON.stringify([requiredSkills, requiredMcp, requiresComputer, kind, name, description, recurrence, limitReset, scheduleDraft, date, startTime, weekdays, durationMinutes, timeoutMinutes, overlap, autoPauseAfter, continuity, onlyWhenPresent, deleteWhenFinished, watchDraft, postResults, mailAlias, routineModel, routineSubagentModel, actAs, routineEffort, timingMode, earlyMinutes, lateMinutes, intervalMinutes, intervalDays, intervalWeekdays, intervalWindow, intervalWindowStart, intervalWindowEnd, intervalEnd, intervalEndDate, botIds, routineTarget, groupId, runOn, attachments.map((attachment) => attachment.id), runAs]);
   const openedSnapshot = useRef(editorSnapshot);
   const dirty = editorSnapshot !== openedSnapshot.current;
   const requestClose = async () => {
@@ -1283,6 +1286,8 @@ function EventEditorBody({
                 if (routineEffort && !efforts.includes(routineEffort)) efforts.push(routineEffort);
                 return <><PanelSelect data-routine-model="" label={t("routines.model.label")} hint={t("routineEditor.hint.model")} viewing={viewing} value={routineModel} onChange={setRoutineModel}
                   options={[{ value: "", label: t("routines.model.botDefault") }, ...choices]} />
+                  {(engine?.driverKind === "claudeAgent" || routineSubagentModel) && <PanelSelect data-routine-subagent-model="" label={t("routines.subagentModel.label")} hint={t("routineEditor.hint.subagentModel")} viewing={viewing} value={routineSubagentModel} onChange={setRoutineSubagentModel}
+                    options={[{ value: "", label: t("routines.subagentModel.default") }, ...(routineSubagentModel && !choices.some((choice) => choice.value === routineSubagentModel) ? [{ value: routineSubagentModel, label: routineSubagentModel }] : []), ...choices]} />}
                   <PanelSelect<EffortLevel | ""> data-routine-effort="" label={t("routines.effort.label")} hint={t("routineEditor.hint.effort")} viewing={viewing} value={routineEffort} onChange={setRoutineEffort}
                     options={[{ value: "", label: t("routines.effort.botDefault") }, ...efforts.map((effort) => ({ value: effort, label: effortLabel(effort) }))]} /></>;
               })()}

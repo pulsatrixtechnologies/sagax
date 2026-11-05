@@ -1,19 +1,18 @@
 // @vitest-environment happy-dom
-// Visible roles, batch 3 (2026-11-05): the role picked in the composer rides
-// the next message of that thread only ("" = Moi), and a failed send puts it back.
+// #2032: the chat composer has no role picker and never sends a perspicaxRole.
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot } from "@/state/store";
 import { restoreComposerDraft } from "@/lib/drafts";
-import { pickRole, rolePick, takeRolePick } from "@/lib/role-pick";
+import { pickRole, takeRolePick } from "@/lib/role-pick";
 
 const fixture = vi.hoisted(() => ({ dispatch: vi.fn() }));
 vi.mock("@/state/store", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/state/store")>();
   return { ...original, useStore: () => ({
-    state: { ...original.initialState, bots: [bot], instances: [{ instanceId: "fake", driverKind: "claude", displayName: "Fake", capabilities: { agentsMcp: true, queueing: true } }] },
+    state: { ...original.initialState, bots: [bot], instances: [{ instanceId: "fake", driverKind: "claude", displayName: "Fake", capabilities: { agentsMcp: true, streaming: true } }] },
     dispatch: fixture.dispatch,
   }) };
 });
@@ -59,25 +58,11 @@ describe("the composer's role pick", () => {
   };
   const sends = () => fixture.dispatch.mock.calls.map(([action]) => action).filter((action) => action.type === "send");
 
-  it("sends the pick with the next message only", () => {
+  it("draws no role picker and never sends a role, even when one was staged", () => {
+    expect(container.querySelector("[data-role-picker]")).toBeNull();
     pickRole(bot.id, bot.threadId, "full-access");
     send("Ferme le billet");
-    send("Et le suivant");
-    expect(sends().map((action) => action.perspicaxRole)).toEqual(["full-access", undefined]);
-    expect(rolePick(bot.id, bot.threadId)).toBeUndefined();
-  });
-
-  it("sends Moi as an empty slug, and nothing when nothing was picked", () => {
-    send("Bonjour");
-    pickRole(bot.id, bot.threadId, "");
-    send("Comme moi");
-    expect(sends().map((action) => "perspicaxRole" in action ? action.perspicaxRole : "absent")).toEqual(["absent", ""]);
-  });
-
-  it("puts the pick back when the send fails", () => {
-    pickRole(bot.id, bot.threadId, "service-desk");
-    send("Ferme le billet");
-    flushSync(() => sends()[0].onError());
-    expect(rolePick(bot.id, bot.threadId)).toBe("service-desk");
+    expect(sends()).toHaveLength(1);
+    expect(sends()[0]).not.toHaveProperty("perspicaxRole");
   });
 });

@@ -31,7 +31,6 @@ import {
   type Attachment,
 } from "@/lib/composer-attachments";
 import { forgetAttachmentUploads, startAttachmentUpload } from "@/lib/attachment-uploads";
-import { pickRole, rolePick, takeRolePick } from "@/lib/role-pick";
 import { isStopIntent } from "../../../shared/stop-intent";
 import { dataWindowEnabled } from "@/lib/feature-flags";
 import { serializeThreadRefs, threadTokenFromPaste, threadTokenSpacing } from "@/lib/thread-refs";
@@ -288,9 +287,7 @@ export function useComposerSend({
       });
       track("message_sent", { room: true, mode: effectiveChannelMode, queued: busy });
     } else if (bot) {
-      // the role picked for this thread's next turn (lib/role-pick): one turn
-      const roleThread = threadId ?? bot.threadId;
-      const perspicaxRole = takeRolePick(bot.id, roleThread);
+      // 2026-11-05 (#2032): no role on chat sends; Flow routines carry actAs
       dispatch({
         type: "send",
         botId: bot.id,
@@ -301,12 +298,8 @@ export function useComposerSend({
         ...(effectiveChannelMode === "goal" ? { mode: "goal" as const } : {}),
         ...(busyMode ? { busyMode } : {}),
         dataContext,
-        ...(perspicaxRole !== undefined ? { perspicaxRole } : {}),
         onSent,
-        onError: () => {
-          if (perspicaxRole !== undefined && rolePick(bot.id, roleThread) === undefined) pickRole(bot.id, roleThread, perspicaxRole);
-          restoreDraft(sentDraft);
-        },
+        onError: () => restoreDraft(sentDraft),
       });
       track("message_sent", { driver: bot.modelSelection?.instanceId, queued: busy && !canSteer });
     }

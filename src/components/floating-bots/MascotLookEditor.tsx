@@ -36,14 +36,14 @@
 // its own skin, so switching and back finds it again. Loaded lazily with
 // the pane.
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
-import { Check, ChevronDown, Lock, Play, Search, Shuffle } from "lucide-react";
+import { Check, Lock, Search } from "lucide-react";
 import { characterLock, lockHint, reportAchievement, skinLock, useUnlocks, type LockInfo } from "@/lib/achievements";
 import "@/components/achievements/achievements.css";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { MAUS_COLORS, mausInk, swatchStyle, type MausColor, type MausMotion } from "@/lib/mascot";
-import { BotAvatar, MausAvatar } from "@/components/Avatar";
+import { MausAvatar } from "@/components/Avatar";
 import { MASCOT_SKIN_IDS, OWL_SKIN_TIER, botMascotSkin, type MascotSkinId } from "../../../shared/mascot-skins";
 import type { MascotColorGroup } from "../../../shared/mascot-colors";
 import { BUNBU_SKIN_TIER, BUNBU_SKINS, completeMascotLook, CRAB_SKIN_TIER, CRAB_SKINS, FROG_SKIN_TIER, FROG_SKINS, GRUMP_SKIN_TIER, GRUMP_SKINS, OGRE_SKIN_TIER, OGRE_SKINS, SHIBA_SKIN_TIER, SHIBA_SKINS, SHAPE_SKIN_TIER, SHAPE_SKINS, TROMBI_SKIN_TIER, TROMBI_SKINS, PUMPKIN_COLOR, SHAPE_SKINS_IN_BOT_COLOR, type MascotCharacter, type MascotLook, type MascotShape, type ShapeSkin, type SkinTier } from "../../../shared/mascot-look";
@@ -61,6 +61,7 @@ import { colorGroupsFor, colorTabFor, colorTabs, nextTab, skinTabFor, skinTierTa
 import { MASCOTS, SHAPE_CHOICES, type CompleteLook, type MascotDefinition } from "./mascots";
 import { characterMoves, type OwlMove } from "./moves";
 import { filterWardrobe, MASCOT_FAMILY_LABEL, wardrobeFilters, wardrobeShelves, wardrobeStep, type WardrobeFilter, type WardrobeShelf } from "./wardrobe";
+import { MascotLookPreview } from "./MascotLookPreview";
 
 export interface MascotLookPatch {
   color?: MausColor;
@@ -757,8 +758,6 @@ export default function MascotLookEditor({ bot, disabled, onPatch: savePatch, on
     if (!moves.length) return;
     play(moves[(stagePick.current++) % moves.length]);
   };
-  // every move as a chip, behind the move count
-  const [movesOpen, setMovesOpen] = useState(false);
 
   const randomize = () => {
     const patch = randomLook({
@@ -834,125 +833,26 @@ export default function MascotLookEditor({ bot, disabled, onPatch: savePatch, on
 
   return (
     <div data-mascot-look-editor="" className="flex flex-col gap-4">
-      {/* the preview band: the character shown, large on a ground tinted with the bot's color, and what it wears */}
-      <section
-        data-mascot-detail={shown}
-        aria-label={t("appearance.preview", { name: shownName })}
-        className="relative flex flex-col items-center gap-4 rounded-2xl border border-hairline-weak p-4 @[34rem]:h-[210px] @[34rem]:flex-row @[34rem]:gap-7 @[34rem]:px-7 @[34rem]:py-5"
-        style={{ background: `radial-gradient(120% 140% at 20% 50%, color-mix(in srgb, ${tint} 26%, var(--color-panel)) 0%, var(--color-panel) 58%)` }}
-      >
-        {/* the stage: the real avatar; hovering or clicking it previews a move */}
-        <button
-          type="button"
-          data-mascot-stage=""
-          aria-label={t("appearance.preview", { name: shownName })}
-          onMouseEnter={() => { if (moves[0]) play(moves[0]); }}
-          onClick={playNext}
-          className={cn("relative grid size-[170px] shrink-0 place-items-center rounded-2xl", focusRing)}
-        >
-          <span aria-hidden="true" className={cn("pointer-events-none", shownLock.locked && "opacity-60 grayscale")}>
-            <BotAvatar
-              bot={{ name: bot.name, color: bot.color, mascotSkin: (previewSkin && shown === "owl" ? previewSkin : owlSkin) as typeof owlSkin, mascotLook: shownLook, avatarCrop: "mascot" }}
-              size={150}
-              state="idle"
-              motion={owlMotion?.kind ?? "none"}
-              motionKey={owlMotion?.nonce ?? 0}
-              characterMove={fxMove}
-              label={t("appearance.preview", { name: shownName })}
-            />
-          </span>
-          {previewSkin && (
-            <span data-mascot-skin-preview="" className="absolute inset-x-1 bottom-1 truncate rounded-md bg-control/90 px-2 py-1 text-[11px] leading-4 text-ink-secondary">
-              {t("mascot.skinPreview")}
-            </span>
-          )}
-          {shownLock.locked && (
-            <span className="absolute right-1 top-1 grid size-6 place-items-center rounded-full bg-control text-ink-secondary" aria-hidden="true"><Lock size={12} strokeWidth={2.4} /></span>
-          )}
-        </button>
-
-        <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5 text-center @[34rem]:items-start @[34rem]:text-left">
-          <div className="max-w-full truncate text-[24px] font-semibold leading-8 text-ink" data-mascot-name="">{shownName}</div>
-          <div className="max-w-full truncate text-[13.5px] leading-5 text-ink-secondary" data-mascot-summary="">{summary}</div>
-          <div className="relative mt-2.5 flex flex-wrap items-center justify-center gap-2 @[34rem]:justify-start">
-            {/* the action: what the bot wears, the character to wear, or what unlocks it */}
-            <button
-              type="button"
-              data-mascot-action={shownLock.locked ? "locked" : inUse ? "in-use" : "use"}
-              disabled={disabled || inUse || shownLock.locked}
-              onClick={() => setLook({ character: shown })}
-              className={cn(
-                "inline-flex min-h-7 items-center gap-1.5 rounded-full px-3 py-1 text-[12px] leading-4",
-                focusRing,
-                !inUse && !shownLock.locked ? "bg-accent font-medium text-accent-ink hover:brightness-110" : inUse ? "bg-success/15 text-success" : "bg-control text-ink-secondary",
-              )}
-            >
-              {shownLock.locked ? <Lock size={12} className="shrink-0" aria-hidden="true" /> : inUse ? <Check size={13} strokeWidth={3} className="shrink-0" aria-hidden="true" /> : null}
-              <span>{shownLock.locked ? lockHint(shownLock) : inUse ? t("appearance.inUse") : t("appearance.use", { name: shownName })}</span>
-            </button>
-            {/* the move count opens every move, each a chip that plays on the stage */}
-            <button
-              type="button"
-              data-mascot-moves=""
-              aria-expanded={movesOpen}
-              aria-controls="mascot-moves"
-              onClick={() => setMovesOpen((open) => !open)}
-              className={cn("inline-flex items-center gap-1 rounded-full px-2 py-1 text-[12px] leading-4 text-ink-tertiary hover:bg-control hover:text-ink", focusRing)}
-            >
-              {t("appearance.moveCount", { count: moves.length })}
-              <ChevronDown size={12} aria-hidden="true" className={cn("transition-transform", movesOpen && "rotate-180")} />
-            </button>
-            {/* drawn closed too (hidden), so every move stays one click away and readable by a screen reader once open */}
-            <div
-                id="mascot-moves"
-                data-mascot-move-list=""
-                hidden={!movesOpen}
-                className="absolute left-0 top-full z-20 mt-1.5 w-[min(22rem,80vw)] rounded-xl border border-hairline-weak bg-elevated p-2.5 shadow-lg"
-                onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setMovesOpen(false); } }}
-              >
-                <div className={cn(heading, "mb-1.5")}>{t("mascot.moves.title")}</div>
-                <div className="flex flex-wrap gap-1">
-                  {moves.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      data-character-move={item.id}
-                      aria-label={t("mascot.moves.play", { move: item.label })}
-                      onClick={() => play(item)}
-                      onMouseEnter={() => play(item)}
-                      className={cn("rounded-md bg-control px-2 py-0.5 text-[11.5px] leading-4 text-ink hover:bg-raised-hover", focusRing)}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-          </div>
-        </div>
-
-        <div className="flex shrink-0 flex-row gap-2 @[34rem]:flex-col">
-          <button
-            type="button"
-            data-mascot-play=""
-            disabled={!moves.length}
-            onClick={playNext}
-            className={cn("inline-flex items-center justify-center gap-1.5 rounded-xl border border-hairline-weak bg-control/70 px-3.5 py-2 text-[13px] leading-4 text-ink hover:bg-raised-hover disabled:opacity-50", focusRing)}
-          >
-            <Play size={13} aria-hidden="true" />
-            {t("appearance.playMove")}
-          </button>
-          <button
-            type="button"
-            data-mascot-randomize=""
-            disabled={disabled}
-            onClick={randomize}
-            className={cn("inline-flex items-center justify-center gap-1.5 rounded-xl border border-hairline-weak bg-control/70 px-3.5 py-2 text-[13px] leading-4 text-ink hover:bg-raised-hover disabled:opacity-50", focusRing)}
-          >
-            <Shuffle size={13} aria-hidden="true" />
-            {t("appearance.randomize")}
-          </button>
-        </div>
-      </section>
+      <MascotLookPreview
+        bot={bot}
+        shown={shown}
+        shownName={shownName}
+        shownLook={shownLook}
+        shownLock={shownLock}
+        summary={summary}
+        tint={tint}
+        owlSkin={owlSkin}
+        previewSkin={previewSkin}
+        inUse={inUse}
+        disabled={disabled}
+        moves={moves}
+        owlMotion={owlMotion}
+        fxMove={fxMove}
+        onUse={() => setLook({ character: shown })}
+        onPlay={play}
+        onPlayNext={playNext}
+        onRandomize={randomize}
+      />
 
       {/* the tabs: each its current value under its label, the open one underlined in the bot's color */}
       <div role="tablist" aria-label={t("appearance.tabs")} className="flex gap-1 overflow-x-auto border-b border-hairline-weak" data-appearance-tabs="">

@@ -2495,8 +2495,12 @@ Published pages and the open page's « ⋯ » > Open in a window, a page opens i
 its own system window (src/lib/page-windows.ts): the artifact window bridge
 with the id `page:<pageId>`, one window per page, its place kept; a browser
 gets a new tab. That window draws the same PageSurface (×, title, Share, « ⋯ »)
-and asks the page again every 5 s for the bot's new version. Tests:
-`src/lib/page-windows.test.ts`, `src/components/bot-settings/LibraryTab.test.ts`.
+and asks the page again every 5 s for the bot's new version. On desktop it
+auto-fits to the page content (#2051: `src/lib/page-window-fit.ts`,
+`electron/artifact-window.mjs` + `artifact-window-preload.cjs`) until the
+person resizes it; that size is remembered per page id (`personSized`). Tests:
+`src/lib/page-windows.test.ts`, `src/lib/page-window-fit.test.ts`,
+`electron/artifact-window.test.mjs`, `src/components/bot-settings/LibraryTab.test.ts`.
 Tests: `server/pages/published-pages.test.ts` (app's own look),
 `src/components/PageViewer.surface.dom.test.ts`, `src/lib/open-page.test.ts`.
 Lot 5 evidence: `docs/plans/grok-convergence-interface-evidence.md`.

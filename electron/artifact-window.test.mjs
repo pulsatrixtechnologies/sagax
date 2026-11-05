@@ -60,13 +60,21 @@ function fakeElectron() {
     isFullScreen() { return this.fullscreen === true; }
     setFullScreen(on) { this.fullscreen = on === true; this.calls.push(["setFullScreen", on === true]); }
     maximize() { this.calls.push(["maximize"]); }
+    getBounds() { return { ...this.bounds }; }
     getNormalBounds() { return { ...this.bounds }; }
-    setBounds(bounds) { this.bounds = { ...bounds }; this.fire("move"); }
+    setBounds(bounds) { this.bounds = { ...bounds }; this.fire("resize"); this.fire("move"); }
     show() { this.calls.push(["show"]); }
     showInactive() { this.calls.push(["showInactive"]); }
     focus() { this.calls.push(["focus"]); }
     on(name, fn) { this.events.set(name, [...(this.events.get(name) ?? []), fn]); }
-    once(name, fn) { this.on(name, fn); }
+    once(name, fn) {
+      const wrap = (...args) => {
+        const list = this.events.get(name) ?? [];
+        this.events.set(name, list.filter((entry) => entry !== wrap));
+        fn(...args);
+      };
+      this.on(name, wrap);
+    }
     fire(name, ...args) { (this.events.get(name) ?? []).forEach((fn) => fn(...args)); }
   }
   const ipcMain = {
@@ -93,7 +101,13 @@ function setup({ displays = [PRIMARY, SECOND], store = memoryStore(), trusted = 
   const screen = {
     getPrimaryDisplay: () => displays[0],
     getAllDisplays: () => displays,
-    getDisplayMatching: () => displays[0],
+    getDisplayMatching: (bounds) => {
+      const point = { x: (bounds?.x ?? 0) + ((bounds?.width ?? 0) / 2), y: (bounds?.y ?? 0) + ((bounds?.height ?? 0) / 2) };
+      return displays.find((display) => {
+        const area = display.workArea;
+        return point.x >= area.x && point.x < area.x + area.width && point.y >= area.y && point.y < area.y + area.height;
+      }) ?? displays[0];
+    },
   };
   const controller = createArtifactWindows({
     BrowserWindow: fake.BrowserWindow,
@@ -343,5 +357,95 @@ describe("claude.ai artifact windows (#2018)", () => {
   it("refuses a page that is not the main window's own", async () => {
     const { fake, event } = setup({ trusted: false });
     expect(await fake.handlers.get("artifact-window:open-claude-ai")(event, { url: URL_OK })).toBe("refused");
+  });
+});
+
+describe("page window fit-to-content (#2051)", () => {
+  const PAGE_ID = "page:abcdefgh12345678";
+  const PRELOAD = "/tmp/artifact-window-preload.cjs";
+
+  it("gives a page window its preload and fits before show", async () => {
+    vi.useFakeTimers();
+    const { fake, open } = setup({ preload: PRELOAD });
+    expect(await open({ artifactId: PAGE_ID, title: "KPI" })).toBe("created");
+    const win = fake.windows[0];
+    expect(win.options.webPreferences.preload).toBe(PRELOAD);
+    win.fire("ready-to-show");
+    expect(win.calls.map(([name]) => name)).not.toContain("show");
+    const fromPage = { sender: win.webContents };
+    const fitted = await fake.handlers.get("artifact-window:fit-content")(fromPage, { width: 640, height: 360 });
+    expect(fitted).toMatchObject({ width: 640, height: 360 });
+    expect(win.bounds).toMatchObject({ width: 640, height: 360 });
+    expect(win.calls.map(([name]) => name)).toContain("show");
+    vi.useRealTimers();
+  });
+
+  it("clamps a fit to the work area and refuses a non-page window", async () => {
+    const { fake, open } = setup({ preload: PRELOAD });
+    await open({ artifactId: PAGE_ID });
+    const win = fake.windows[0];
+    const fromPage = { sender: win.webContents };
+    const fitted = await fake.handlers.get("artifact-window:fit-content")(fromPage, { width: 5000, height: 5000 });
+    expect(fitted.width).toBeLessThanOrEqual(PRIMARY.workArea.width);
+    expect(fitted.height).toBeLessThanOrEqual(PRIMARY.workArea.height);
+
+    await open({ artifactId: "art_1" });
+    const artifact = fake.windows[1];
+    // Every artifact/page window loads the shared preload (#2046/#2043/#2051);
+    // fit-content still answers only for a page window.
+    expect(artifact.options.webPreferences.preload).toBe(PRELOAD);
+    expect(await fake.handlers.get("artifact-window:fit-content")({ sender: artifact.webContents }, { width: 400, height: 300 })).toBeNull();
+  });
+
+  it("remembers a person resize and stops auto-fitting that page", async () => {
+    vi.useFakeTimers();
+    const store = memoryStore();
+    const first = setup({ store, preload: PRELOAD });
+    await first.open({ artifactId: PAGE_ID });
+    const win = first.fake.windows[0];
+    await first.fake.handlers.get("artifact-window:fit-content")({ sender: win.webContents }, { width: 640, height: 360 });
+    // person drags the size: not during an applying fit
+    win.bounds = { ...win.bounds, width: 900, height: 700 };
+    win.fire("resize");
+    await vi.advanceTimersByTimeAsync(500);
+    expect(store.get().windows[PAGE_ID]).toMatchObject({
+      bounds: { width: 900, height: 700 },
+      personSized: true,
+    });
+    expect(await first.fake.handlers.get("artifact-window:fit-content")({ sender: win.webContents }, { width: 500, height: 300 })).toBeNull();
+    expect(win.bounds).toMatchObject({ width: 900, height: 700 });
+    win.close();
+
+    const second = setup({ store, preload: PRELOAD });
+    await second.open({ artifactId: PAGE_ID });
+    const again = second.fake.windows[0];
+    expect(again.options).toMatchObject({ width: 900, height: 700 });
+    again.fire("ready-to-show");
+    expect(again.calls.map(([name]) => name)).toContain("show");
+    expect(await second.fake.handlers.get("artifact-window:fit-content")({ sender: again.webContents }, { width: 400, height: 280 })).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("shows a page window after the fit timeout when no measure arrives", async () => {
+    vi.useFakeTimers();
+    const { fake, open } = setup({ preload: PRELOAD });
+    await open({ artifactId: PAGE_ID });
+    const win = fake.windows[0];
+    win.fire("ready-to-show");
+    expect(win.calls.map(([name]) => name)).not.toContain("show");
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(win.calls.map(([name]) => name)).toContain("show");
+    vi.useRealTimers();
+  });
+
+  it("skips fit while the window is fullscreen so auto-fit never fights OS fullscreen", async () => {
+    const { fake, open } = setup({ preload: PRELOAD });
+    await open({ artifactId: PAGE_ID });
+    const win = fake.windows[0];
+    win.fire("ready-to-show");
+    win.fullscreen = true;
+    const before = { ...win.bounds };
+    expect(await fake.handlers.get("artifact-window:fit-content")({ sender: win.webContents }, { width: 640, height: 360 })).toBeNull();
+    expect(win.bounds).toEqual(before);
   });
 });

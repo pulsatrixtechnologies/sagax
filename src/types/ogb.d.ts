@@ -122,10 +122,12 @@ const __BASE_VERSION__: string;
     retroAssistantWindow?: import("../components/retro-assistant/detached-protocol").AssistantWindowBridge;
     /** Only in a floating bot's window (electron/floating-bot-preload.cjs). */
     floatingBotWindow?: import("../components/floating-bots/protocol").FloatingWindowBridge;
-    /** Only in a page/artifact own-window (electron/artifact-window-preload.cjs). Always-on-top (#2046). */
+    /** Only in a page/artifact own-window (electron/artifact-window-preload.cjs).
+     * Always-on-top (#2046); fit-to-content for page windows (#2051). */
     artifactWindowSelf?: {
       isAlwaysOnTop(): Promise<boolean>;
       setAlwaysOnTop(on: boolean): Promise<boolean>;
+      fitContent(size: { width: number; height: number }): Promise<{ width: number; height: number } | null>;
     };
     ogb?: {
       platform: NodeJS.Platform;

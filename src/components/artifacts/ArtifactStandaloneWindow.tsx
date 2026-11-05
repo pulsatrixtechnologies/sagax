@@ -6,7 +6,7 @@
 // desktop app. It shows the widget, its status, Refresh now, Full screen and
 // Close window, and has its own store, like any other tab of the app. Closing
 // the window docks the artifact; Close window does the same.
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { LoaderCircle, Maximize2, Minimize2, RefreshCw, X } from "lucide-react";
 
 import { StoreProvider, useStore } from "@/state/store";
@@ -15,6 +15,7 @@ import { effectiveLanguage, useLanguageChoice } from "@/lib/language-preference"
 import { setLocale, t } from "@/lib/i18n";
 import { refreshArtifact, useArtifact, useArtifactWatch } from "@/lib/artifacts";
 import { useOsFullscreen } from "@/hooks/use-os-fullscreen";
+import { readPageWindowFitBridge, startPageWindowFit } from "@/lib/page-window-fit";
 import { ArtifactFrame } from "./ArtifactFrame";
 import { PageSurface } from "../PageViewer";
 import { pageIdOfWindow } from "@/lib/page-windows";
@@ -142,16 +143,48 @@ function ArtifactStandaloneBody() {
   // open over its conversation; × closes the window
   const pageId = pageIdOfWindow(target.artifactId);
   if (pageId) {
-    return (
-      <main data-page-standalone={pageId} className="flex h-dvh min-h-0 flex-col bg-app text-ink">
-        <PageSurface pageId={pageId} follow onClose={() => window.close()} onChange={(page) => { if (page.title) document.title = page.title; }} />
-      </main>
-    );
+    return <PageStandaloneFit pageId={pageId} />;
   }
   return (
     <main data-artifact-standalone={target.artifactId} className="flex h-dvh min-h-0 flex-col bg-panel text-ink">
       <Title botId={target.botId} artifactId={target.artifactId} />
       <ArtifactWindowBody data={target} />
+    </main>
+  );
+}
+
+/** A page in its own desktop window: measure the content and ask Electron to
+ * size the BrowserWindow to it (#2051). In a browser tab the bridge is absent
+ * and the page fills the viewport as before. */
+function PageStandaloneFit({ pageId }: { pageId: string }) {
+  const rootRef = useRef<HTMLElement>(null);
+  const [contentHeight, setContentHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    const bridge = readPageWindowFitBridge();
+    if (!root || !bridge) return;
+    return startPageWindowFit({
+      root,
+      getFrame: () => root.querySelector<HTMLIFrameElement>("[data-page-viewer-frame]"),
+      bridge,
+      onContentHeight: setContentHeight,
+    });
+  }, [pageId]);
+
+  return (
+    <main
+      ref={rootRef}
+      data-page-standalone={pageId}
+      className={cn("flex min-h-0 flex-col bg-app text-ink", contentHeight == null && "h-dvh")}
+      style={contentHeight != null ? { height: contentHeight } : undefined}
+    >
+      <PageSurface
+        pageId={pageId}
+        follow
+        onClose={() => window.close()}
+        onChange={(page) => { if (page.title) document.title = page.title; }}
+      />
     </main>
   );
 }

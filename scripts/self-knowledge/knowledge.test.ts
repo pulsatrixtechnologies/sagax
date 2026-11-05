@@ -3,10 +3,11 @@
 // engine or a guide that changed without `pnpm gen:self-knowledge` fails
 // here. Docs, AGENTS.md and release notes may drift between builds: every
 // `pnpm build:server` regenerates the whole base.
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { auditKnowledgeText, buildKnowledge, KNOWLEDGE_FILE, serializeKnowledge } from "./build.ts";
+import { auditKnowledgeText, buildKnowledge, KNOWLEDGE_FILE, serializeKnowledge, settingsSectionRows } from "./build.ts";
 import { GUIDES } from "./guides.ts";
 import { slug, splitHeadings } from "./markdown.ts";
 import type { KnowledgeBase, KnowledgeSection } from "../../server/self-knowledge-types.ts";
@@ -24,6 +25,22 @@ const strict = (base: KnowledgeBase) => base.sections.filter((section) => STRICT
 const RUN = "stale: run `pnpm gen:self-knowledge` and commit server/self-knowledge/knowledge.generated.json";
 
 describe("self-knowledge base", () => {
+  // 2026-11-05 (#2053): SECTIONS lives in settings-nav.ts; an empty parse used
+  // to TypeError on pageLabel.english when cards looked up a missing page.
+  it("finds a non-empty Settings section list from settings-nav.ts", () => {
+    const rows = settingsSectionRows(root);
+    expect(rows.length, "settings-nav.ts SECTIONS must yield at least one page").toBeGreaterThan(0);
+    expect(rows.some((row) => row.id === "account")).toBe(true);
+    expect(rows.every((row) => row.labelKey && row.group && row.keywords.length > 0)).toBe(true);
+  });
+
+  it("names settings-nav.ts when SECTIONS is missing, never TypeErrors later", () => {
+    const dir = mkdtempSync(join(tmpdir(), "self-knowledge-nav-"));
+    mkdirSync(join(dir, "src/components/settings"), { recursive: true });
+    writeFileSync(join(dir, "src/components/settings/settings-nav.ts"), "export const OTHER = 1;\n");
+    expect(() => settingsSectionRows(dir)).toThrow(/settings-nav\.ts.*export const SECTIONS/);
+  });
+
   it("is up to date with the tools, permissions, Settings, menus, engines and guides", () => {
     const want = new Map(strict(fresh).map((section) => [section.id, section]));
     const have = new Map(strict(committed).map((section) => [section.id, section]));

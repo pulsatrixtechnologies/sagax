@@ -664,47 +664,18 @@ public enum CodingStepKind: String, Sendable {
     case command, edit, read, tool
 }
 
-private func bareToolName(_ name: String) -> String {
-    name.replacingOccurrences(of: #"^mcp__.+?__"#, with: "", options: .regularExpression).lowercased()
-}
-
-private func isShellName(_ bare: String) -> Bool {
-    bare.range(
-        of: #"^(bash|shell|sh|zsh|terminal|exec|execute|run_command|run_shell_command|run_terminal_cmd|command|commandexecution|command_execution|computer_exec|powershell|local_shell|bashoutput)$"#,
-        options: .regularExpression
-    ) != nil
-}
-
-private func isReadName(_ bare: String) -> Bool {
-    bare.range(of: #"^(read|read_file|view|open_file|cat|notebookread|read_many_files|view_file)$"#, options: .regularExpression) != nil
-}
-
-private func isWriteName(_ bare: String) -> Bool {
-    bare.range(of: #"^(write|write_file|create_file|save_file)$"#, options: .regularExpression) != nil
-}
-
-private func isEditName(_ bare: String) -> Bool {
-    bare.range(
-        of: #"^(edit|multiedit|multi_edit|apply_patch|str_replace|str_replace_editor|str_replace_based_edit_tool|replace|notebookedit|edit_file|patch|filechange|file_change)$"#,
-        options: .regularExpression
-    ) != nil
-}
-
+/// Classify a coding tool via the shared `workingStepFor` table so unusual
+/// engine names (ACP titles, Codex shell aliases, connector MCP tools) map
+/// to terminal / diff / read chips instead of a plain tool chip.
 public func stepKindOf(_ tool: CodingTool) -> CodingStepKind {
-    let bare = bareToolName(tool.name)
+    let step = workingStepFor(WorkingStepCall(name: tool.name, summary: tool.summary, input: tool.input))
+    let bare = tool.name.replacingOccurrences(of: #"^mcp__.+?__"#, with: "", options: .regularExpression).lowercased()
     if bare.range(of: #"^(apply_patch|filechange|file_change)$"#, options: .regularExpression) != nil {
         return .edit
     }
-    if isShellName(bare), commandOf(tool) != nil { return .command }
-    if isEditName(bare) || isWriteName(bare) { return .edit }
-    if isReadName(bare) { return .read }
-    if tool.name.range(of: #"\s"#, options: .regularExpression) != nil {
-        let verb = tool.name.split(whereSeparator: \.isWhitespace).first.map { String($0).lowercased() } ?? ""
-        if ["read", "reading", "view", "viewing"].contains(verb) { return .read }
-        if ["write", "writing", "create", "creating"].contains(verb) { return .edit }
-        if ["edit", "editing", "update", "updating", "patch", "patching"].contains(verb) { return .edit }
-        if commandOf(tool) != nil { return .command }
-    }
+    if step?.key == "run", commandOf(tool) != nil { return .command }
+    if step?.key == "editFile" || step?.key == "writeFile" { return .edit }
+    if step?.key == "readFile" { return .read }
     return .tool
 }
 

@@ -342,4 +342,29 @@ final class CodingChatTests: XCTestCase {
         XCTAssertTrue(snap.canContinue)
         XCTAssertTrue(CodingChatRules.showChangesBand(files: snap.files, tests: snap.tests, place: snap.place))
     }
+
+    func testStepKindOfUsesWorkingStepForSoUnusualNamesStopFallingThrough() {
+        XCTAssertEqual(
+            stepKindOf(CodingTool(name: "run_terminal_cmd", summary: "pnpm test", input: json(["command": "pnpm test"]))),
+            .command
+        )
+        XCTAssertEqual(
+            stepKindOf(CodingTool(name: "Read project/notes.md")),
+            .read
+        )
+        XCTAssertEqual(
+            stepKindOf(CodingTool(name: "Editing src/app.ts")),
+            .edit
+        )
+        XCTAssertEqual(
+            stepKindOf(CodingTool(name: "mcp__github__create_issue")),
+            .tool
+        )
+        // A search is not a coding chip; it stays a tool row.
+        XCTAssertEqual(stepKindOf(CodingTool(name: "Grep")), .tool)
+        XCTAssertEqual(
+            stepKindOf(CodingTool(name: "apply_patch", input: json(["path": "a.ts"]))),
+            .edit
+        )
+    }
 }

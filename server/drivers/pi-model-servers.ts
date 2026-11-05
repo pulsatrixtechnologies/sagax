@@ -56,14 +56,25 @@ export interface PiModelServer extends Omit<ModelServer, "apiKey"> {
 }
 
 const ID = /^[a-z0-9][a-z0-9-]{0,62}$/;
-const MODEL_ID = /^[^\s\u0000-\u001f\u007f]{1,200}$/;
+/** Whether a string holds a control character (C0 or DEL). */
+function hasControl(value: string): boolean {
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i);
+    if (code < 0x20 || code === 0x7f) return true;
+  }
+  return false;
+}
+
+function isModelId(value: unknown): value is string {
+  return typeof value === "string" && value.length >= 1 && value.length <= 200 && !/\s/.test(value) && !hasControl(value);
+}
 const MAX_SERVERS = 32;
 const MAX_MODELS = 256;
 
 function text(value: unknown, max: number): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
-  if (!trimmed || trimmed.length > max || /[\u0000-\u001f\u007f]/.test(trimmed)) return null;
+  if (!trimmed || trimmed.length > max || hasControl(trimmed)) return null;
   return trimmed;
 }
 
@@ -78,7 +89,7 @@ function isPiLevel(value: unknown): value is PiThinkingLevel {
 function parseModel(raw: unknown): ModelServerModel | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const row = raw as Record<string, unknown>;
-  const id = typeof row.id === "string" && MODEL_ID.test(row.id) ? row.id : null;
+  const id = isModelId(row.id) ? row.id : null;
   if (!id) return null;
   const input = Array.isArray(row.input) ? row.input.filter((kind): kind is "text" | "image" => kind === "text" || kind === "image") : [];
   const model: ModelServerModel = {
@@ -94,7 +105,7 @@ function parseModel(raw: unknown): ModelServerModel | null {
     for (const [level, value] of Object.entries(row.thinkingLevelMap as Record<string, unknown>)) {
       if (!isPiLevel(level)) continue;
       if (value === null) map[level] = null;
-      else if (typeof value === "string" && value.length <= 64 && !/[\u0000-\u001f\u007f]/.test(value)) map[level] = value;
+      else if (typeof value === "string" && value.length <= 64 && !hasControl(value)) map[level] = value;
     }
     if (Object.keys(map).length) model.thinkingLevelMap = map;
   }
@@ -117,7 +128,7 @@ function parseServer(raw: unknown): ModelServer | null {
   }
   // A key may be empty (an endpoint without authentication), never a
   // value pi's models.json could read as a command or a variable.
-  if (typeof apiKey !== "string" || apiKey.length > 4096 || /[\s\u0000-\u001f\u007f]/.test(apiKey)) return null;
+  if (typeof apiKey !== "string" || apiKey.length > 4096 || /\s/.test(apiKey) || hasControl(apiKey)) return null;
   const models = Array.isArray(row.models) ? row.models.slice(0, MAX_MODELS).map(parseModel).filter((model): model is ModelServerModel => model !== null) : [];
   if (!models.length) return null;
   return {

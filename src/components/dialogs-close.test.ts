@@ -37,6 +37,12 @@ const ESCAPE_HOST: Record<string, string> = {
   // the model picker window: ModelPicker.tsx wires useModelPickerEffects, whose
   // keydown effect closes the window on Escape (split out of ModelPicker.tsx, #1383)
   "components/ModelPicker.tsx-parts/ModelPickerWindow.tsx": "components/ModelPicker.tsx-parts/useModelPickerEffects.ts",
+  // Capabilities modal: usePluginsPanelState binds Escape (and Cmd+[ to step back)
+  // on the dialog it owns (split out of PluginsPanel.tsx, #1383)
+  "components/PluginsPanel.tsx-parts/PluginsPanelView.tsx": "components/PluginsPanel.tsx-parts/usePluginsPanelState.ts",
+  // the assistant's dialog: useRetroAssistantActivity closes menu, dialog then
+  // balloon on Escape (split out of RetroAssistant.tsx, #1383)
+  "components/retro-assistant/RetroAssistantChrome.tsx": "components/retro-assistant/useRetroAssistantActivity.ts",
 };
 
 const posix = (path: string) => relative(ROOT, path).split(sep).join("/");

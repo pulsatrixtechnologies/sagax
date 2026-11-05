@@ -18,7 +18,7 @@ import type { ClaudeTurnCtx } from "./turn-ctx.ts";
 export function handleClaudeResult(ctx: ClaudeTurnCtx, o: any): void {
   const {
     session, threadId, sessionId, emit, base, settleResult, reachLimit,
-    noteCostState, currentTurnId, closeSession,
+    noteCostState, noteModelUsage, currentTurnId, closeSession,
   } = ctx;
 
 // A synthetic background completion is not the result of the
@@ -44,6 +44,12 @@ if (o.is_error === true && session.turn && !session.turn.settled && !session.tur
     (session.turn.contextFull || claudeContextFull(o, "") || isContextFullText([o.result, ...(Array.isArray(o.errors) ? o.errors : [])].filter((said) => typeof said === "string").join("\n")))) {
   session.turn.contextFull = session.turn.explained = true;
   if (typeof o.total_cost_usd === "number") session.turn.contextFullTotal = o.total_cost_usd;
+  session.turn.contextFullModels = noteModelUsage(o.total_cost_usd, o.modelUsage, {
+    input: o.usage?.input_tokens || 0,
+    cacheRead: o.usage?.cache_read_input_tokens || 0,
+    cacheWrite: o.usage?.cache_creation_input_tokens || 0,
+    output: o.usage?.output_tokens || 0,
+  });
   closeSession(threadId, "context full");
   return;
 }
@@ -77,12 +83,14 @@ if (o.is_error === true && session.turn && !session.turn.settled && !session.tur
 // too, so the UI can show how much of the figure was context
 // re-read rather than new text. total_cost_usd is instead the
 // process's running total; settle() books this turn's share.
-noteCostState(o.total_cost_usd, o.modelUsage, {
+const resultUsage = {
   input: o.usage?.input_tokens || 0,
   cacheRead: o.usage?.cache_read_input_tokens || 0,
   cacheWrite: o.usage?.cache_creation_input_tokens || 0,
   output: o.usage?.output_tokens || 0,
-});
+};
+const models = noteModelUsage(o.total_cost_usd, o.modelUsage, resultUsage);
+noteCostState(o.total_cost_usd, o.modelUsage, resultUsage);
 const native: NativeTurnResult = {
   ok: o.is_error !== true || replyStands,
   // An error result's stop_reason is its synthetic message's
@@ -98,6 +106,7 @@ const native: NativeTurnResult = {
           ? o.terminal_reason ?? (typeof o.subtype === "string" && o.subtype !== "success" ? o.subtype : null) ?? o.stop_reason ?? null
           : o.stop_reason ?? o.terminal_reason ?? null,
   cost: o.total_cost_usd ?? null,
+  ...(models ? { models } : {}),
   ...(o.usage
     ? {
         usage: {

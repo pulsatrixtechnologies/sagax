@@ -38,6 +38,50 @@ function row(overrides: Partial<UsageRow> = {}): Omit<UsageRow, "at"> & { at?: s
   };
 }
 
+describe("usage ledger per-model split", () => {
+  const mixed = row({
+    model: "big-model",
+    input: 1000,
+    output: 100,
+    cachedInput: 600,
+    costUsd: 0.5,
+    models: [
+      { model: "big-model", inputTokens: 100, outputTokens: 80, cachedInputTokens: 600, cacheWriteTokens: 100, costUsd: 0.4 },
+      { model: "small-model", inputTokens: 200, outputTokens: 20, costUsd: 0.1 },
+    ],
+  }) as UsageRow;
+
+  it("groups a mixed turn by each model with its own tokens and cost, and by anything else as one row", () => {
+    const byModel = summarizeUsage([mixed, row({ at: "2026-09-03T10:00:00.000Z" }) as UsageRow], "model");
+    const big = byModel.groups.find((g) => g.label === "big-model")!;
+    expect(big).toMatchObject({ turns: 1, input: 800, output: 80, cachedInput: 600, costUsd: 0.4 });
+    expect(byModel.groups.find((g) => g.label === "small-model")).toMatchObject({ turns: 1, input: 200, output: 20, costUsd: 0.1 });
+    expect(byModel.total).toMatchObject({ turns: 2, input: 2200, costUsd: 0.512 });
+    expect(summarizeUsage([mixed], "bot").groups).toHaveLength(1);
+  });
+
+  it("keeps old rows and rows with an unreadable split grouped by their model", () => {
+    const broken = row({ model: "solo-model", models: [{ model: "x" }] as never }) as UsageRow;
+    const groups = summarizeUsage([row() as UsageRow, broken], "model").groups.map((g) => g.label).sort();
+    expect(groups).toEqual(["claude-sonnet-5", "solo-model"]);
+  });
+
+  it("writes the split to the file, reads it back, and adds a models column to the CSV", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "omb-usage-"));
+    try {
+      appendUsage(dir, { ...mixed, at: "2026-09-03T10:00:00.000Z" });
+      await flushUsageLedger(dir);
+      const [back] = readUsage(dir, { from: new Date("2026-09-01T00:00:00Z"), to: new Date("2026-09-30T00:00:00Z") });
+      expect(back?.models).toHaveLength(2);
+      const csv = usageCsv([back!]).split("\n");
+      expect(csv[0]).toMatch(/,thread,models$/);
+      expect(csv[1]).toContain('""model"":""small-model""');
+    } finally {
+      await removeTempDir(dir);
+    }
+  });
+});
+
 describe("usage ledger files", () => {
   let dataDir: string;
   beforeEach(() => { dataDir = mkdtempSync(join(tmpdir(), "omb-usage-")); });

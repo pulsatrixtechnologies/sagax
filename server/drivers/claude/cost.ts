@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DATA_DIR } from "../../config.ts";
 import { writeFileAtomic } from "../../atomic.ts";
+import type { TurnModelUsage } from "../../../shared/runtime-events.ts";
 
 export function turnCostFromRunningTotal(total: number | null, previous: number | null): number | null {
   if (total === null) return null;
@@ -16,20 +17,24 @@ export function turnCostFromRunningTotal(total: number | null, previous: number 
 export interface ClaudeCostSnapshot {
   total: number;
   models: Record<string, [number, number, number, number]>;
+  /** Per model, the running cost (modelUsage[model].costUSD) when reported. */
+  costs?: Record<string, number>;
 }
 
 export function claudeCostSnapshot(total: unknown, modelUsage: unknown): ClaudeCostSnapshot | null {
   if (typeof total !== "number" || !Number.isFinite(total)) return null;
   const count = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
   const models: ClaudeCostSnapshot["models"] = {};
+  const costs: Record<string, number> = {};
   if (modelUsage && typeof modelUsage === "object" && !Array.isArray(modelUsage)) {
     for (const [model, raw] of Object.entries(modelUsage as Record<string, unknown>)) {
       if (!raw || typeof raw !== "object") continue;
       const u = raw as Record<string, unknown>;
       models[model] = [count(u.inputTokens), count(u.cacheReadInputTokens), count(u.cacheCreationInputTokens), count(u.outputTokens)];
+      if (typeof u.costUSD === "number" && Number.isFinite(u.costUSD)) costs[model] = u.costUSD;
     }
   }
-  return { total, models };
+  return { total, models, ...(Object.keys(costs).length ? { costs } : {}) };
 }
 
 /** The running total a resumed session already carried before this
@@ -49,23 +54,57 @@ export function restoredCostBase(
   current: ClaudeCostSnapshot,
   usage: { input: number; cacheRead: number; cacheWrite: number; output: number },
 ): number {
+  return restoredCostState(earlier, current, usage).total;
+}
+
+/** The state restoredCostBase's total comes from: what the CLI restored. */
+export function restoredCostState(
+  earlier: readonly ClaudeCostSnapshot[],
+  current: ClaudeCostSnapshot,
+  usage: { input: number; cacheRead: number; cacheWrite: number; output: number },
+): ClaudeCostSnapshot {
   const turn = [usage.input, usage.cacheRead, usage.cacheWrite, usage.output];
   const nothing: ClaudeCostSnapshot = { total: 0, models: {} };
-  let exact: number | null = null;
-  let inside = 0;
+  let exact: ClaudeCostSnapshot | null = null;
+  let inside: ClaudeCostSnapshot = nothing;
   // oldest first: the session's states in the order they were recorded
   for (const state of [nothing, ...earlier]) {
     const within = Object.entries(state.models).every(([model, counts]) =>
       counts.every((n, i) => n <= (current.models[model]?.[i] ?? 0)));
     if (!within) continue;
-    inside = state.total;
+    inside = state;
     const growth = Object.entries(current.models).map(([model, counts]) =>
       counts.map((n, i) => n - (state.models[model]?.[i] ?? 0)));
     const isTurn = (counts: number[]) => counts.every((n, i) => n === turn[i]);
     const summed = turn.map((_, i) => growth.reduce((sum, counts) => sum + counts[i]!, 0));
-    if (growth.some(isTurn) || isTurn(summed)) exact = state.total;
+    if (growth.some(isTurn) || isTurn(summed)) exact = state;
   }
   return exact ?? inside;
+}
+
+/** What each model spent between two running states: the figures of `current`
+ * past `base`. A model whose counts went down (a resume that went back to an
+ * older state) is taken whole. Models with nothing new are left out. */
+export function turnModelUsage(base: ClaudeCostSnapshot, current: ClaudeCostSnapshot): TurnModelUsage[] {
+  const out: TurnModelUsage[] = [];
+  for (const [model, counts] of Object.entries(current.models)) {
+    const before = base.models[model];
+    const reset = !before || before.some((n, i) => n > counts[i]!);
+    const [input, read, write, output] = counts.map((n, i) => n - (reset ? 0 : before![i]!)) as [number, number, number, number];
+    const now = current.costs?.[model];
+    const was = reset ? 0 : base.costs?.[model] ?? 0;
+    const cost = now === undefined ? null : now < was ? now : Number((now - was).toFixed(10));
+    if (!input && !read && !write && !output && !cost) continue;
+    out.push({
+      model,
+      inputTokens: input,
+      outputTokens: output,
+      ...(read ? { cachedInputTokens: read } : {}),
+      ...(write ? { cacheWriteTokens: write } : {}),
+      costUsd: cost,
+    });
+  }
+  return out;
 }
 
 /** Each Claude session's latest cost states, so the first turn after a

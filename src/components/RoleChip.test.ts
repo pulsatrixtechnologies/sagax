@@ -31,11 +31,13 @@ function mount(element: React.ReactElement): HTMLElement {
 beforeAll(() => setLocale("fr"));
 
 describe("role chip", () => {
-  it("no role chip on a chat step: the role lives on Flow routines only (JC 2026-11-05)", () => {
+  it("no role anywhere on a chat step, even when the detail is open (JC #2033)", () => {
     const tool = { name: "cw_psa_find_tickets", ok: true, role: { slug: "service-desk", name: "Service Desk", reason: "routine" as const } };
-    const view = mount(createElement(ToolActivity, { tool }));
+    const view = mount(createElement(ToolActivity, { tool, defaultOpen: true }));
     expect(view.querySelector("[data-role-chip]")).toBeNull();
+    expect(view.querySelector("[data-testid='tool-step-role']")).toBeNull();
     expect(view.textContent).not.toContain("Service Desk");
+    expect(view.textContent).not.toContain("Agit comme");
   });
 });
 

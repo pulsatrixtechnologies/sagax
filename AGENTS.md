@@ -15,22 +15,24 @@ restores it. A direct work thread closes once answered, whatever the answer;
 an AI client's conversation is archived once await_turn collects its reply.
 Scenario: `server/threads/background-sweep.test.ts`. Captures:
 `scripts/capture/background-threads.mjs`.
-## Visible roles (#2016, 2026-11-05)
+## Visible roles (#2016, corrected #2032/#2033, 2026-11-05)
 
 Every engine `tools/call` on the account's Perspicax connection reports its
 role (`PerspicaxMcp` options `onRole`, `turnRole`, `roleFallback`,
-`askMeWrite`; `shared/perspicax-roles.ts`). Chat starts on the default
-surface ("Moi"); a composer pick fixes the role for the turn; a routine
-starts under its "Au nom de" role. A read 403 under a role is read once more
-as "Moi" by the relay and the role is put back; a write 403 stops the turn's
-role switches and shows the permission; a lapsed role stops the call; a
-routine writing as "Moi" asks the person. `server/perspicax/role-journal.ts`
-keeps steps (`tool.role`), transitions, refusals, owner rules and picks,
-always per principal; `role-events.ts` draws chips, "Agit comme" cards
-(`card.roleTransition`, POST /api/bots/:id/cards/:messageId/role-transition)
-and banners (`tool.roleNotice`). Tests: `perspicax-roles-relay.test.ts`,
+`askMeWrite`; `shared/perspicax-roles.ts`). Chat has no role picker and shows
+no role chip, "Agit comme" card or role notice (web and iOS). The role lives
+only on a Pulsatrix Flow routine's "Au nom de" field (`RoutineActAsField`,
+hidden when the routine has no Flow recipe); other routines save no role. A
+read 403 under a role is read once more as "Moi" by the relay and the role is
+put back; a write 403 stops the turn's role switches; a lapsed role stops the
+call; a routine writing as "Moi" asks the person. `server/perspicax/role-journal.ts`
+keeps transitions, refusals and owner rules per principal for the Roles tab
+and routine coverage; `role-events.ts` writes the journal only and never
+posts into the chat. Tests: `perspicax-roles-relay.test.ts`,
 `role-journal.test.ts`, `shared/perspicax-roles.test.ts`,
-`src/components/RoleChip.test.ts`; gallery `src/gallery/visible-roles.html`.
+`RoutineActAsField.dom.test.ts`, `RoleChip.test.ts`,
+`StatusActivityRow.test.ts`; gallery `src/gallery/visible-roles.html`
+(`?view=routine|tab`).
 
 ## Prompt index and on-demand references (#1997, 2026-11-04)
 

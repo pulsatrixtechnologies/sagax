@@ -11,7 +11,6 @@ import { computerSelectTarget, toolExecutionTarget } from "../../shared/executio
 import { PlaceIcon } from "./PlaceIcon";
 import { StepRow } from "./StepRow";
 import { CustomRuleNoticeLine } from "./CustomRuleNotice";
-import { roleLabel, roleWhy } from "./RoleChip";
 import { autoApprovalReason, type AutoApprovalReason } from "../../shared/auto-approval-reason";
 import { toolFailureText } from "../../shared/tool-failure-text";
 import type { LocaleKey } from "@/locales";
@@ -133,12 +132,6 @@ export function ToolStepDetail({ tool, status, nameOf, place = null }: { tool: T
           {status}{duration && phase !== "running" ? ` · ${duration}` : ""}
         </span>
       </div>
-      {tool.role && (
-        <div data-testid="tool-step-role">
-          <div className={cn(KEY, "mb-0.5")}>{t("roles.detail.actsAs")}</div>
-          <p className="text-[12px] text-ink">{roleLabel(tool.role)} · {roleWhy(tool.role)}</p>
-        </div>
-      )}
       {(tool.autoApproval || tool.ruleNotice?.outcome === "approved") && (
         <div data-testid="tool-auto-approval" data-source={tool.autoApproval?.source}>
           <div className={cn(KEY, "mb-0.5")}>{t("step.detail.approval")}</div>

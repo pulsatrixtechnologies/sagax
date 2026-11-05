@@ -15573,16 +15573,7 @@ const autoApprovals = createAutoApprovalNotes();
 /** 2026-11-05 (visible roles): the Perspicax role of each tool step, the
  * transitions, the refusals and the owner's rules (server/perspicax/role-journal.ts). */
 const roleJournal = new RoleJournal(process.env.VITEST ? null : join(DATA_DIR, "perspicax-roles.json"));
-const roleEvents = createRoleEvents({
-  journal: roleJournal,
-  messagesFor: (threadId) => store.messagesFor(threadId),
-  patchTool: (threadId, messageId, tool) => { store.patchMessage(threadId, messageId, { tool: tool as NonNullable<Message["tool"]> }); },
-  appendRow: (threadId, row) => { store.appendMessage(threadId, { role: "bot", ...row } as Omit<Message, "id" | "at">); },
-  personName: (principalId) => (isPrincipalId(principalId) ? personDisplayName(principals.byId(principalId)) : "") || "",
-  botName: (botId) => store.bot(botId)?.name ?? "",
-  ownerOf: (botId) => { const bot = store.bot(botId); return bot ? effectiveBotOwner(bot) || undefined : undefined; },
-  language: (principalId) => languageOfPerson(principalId),
-});
+const roleEvents = createRoleEvents({ journal: roleJournal });
 /** Put what answered an ask with no card on the call's own row: the newest
  * row of this tool in the conversation that has none yet (Claude writes the
  * row before it asks), else on the row the engine writes next. */
@@ -18901,17 +18892,16 @@ bus.subscribe((event: RuntimeEvent) => {
         // chip aloud without re-deriving it — and so the phrase a user
         // hears and the chip they see can never drift apart
         const approved = autoApprovals.takePending(event.threadId, name);
-        const actedAs = roleEvents.takePending(event.threadId, name);
         const product = declaredToolProduct(bot?.id, name, event.input);
         // 2026-10-29: the step the working line names, the same for every
         // engine (shared/working-step.ts); older clients ignore the field
         const step = toolWorkingStep({ name, summary: event.summary, input: event.input, product: product?.product });
+        // 2026-11-05 (JC #2033): no tool.role on chat steps; the role journal keeps it
         const message = pushMessage({
           role: "bot",
           kind: "activity",
           tool: { name, spoken: narrateTool(name) ?? undefined, summary: event.summary, input: event.input, itemId: event.itemId ?? event.eventId, ...(event.files?.length ? { files: event.files } : {}),
             ...(approved ? { autoApproval: approved.approval, ...(approved.notice ? { ruleNotice: approved.notice } : {}) } : {}),
-            ...(actedAs ? { role: actedAs } : {}),
             ...product,
             ...(step ? { step } : {}),
             ...(event.parentItemId ? { parentItemId: event.parentItemId } : {}) },
@@ -21078,13 +21068,10 @@ const personAttentionDeps: AttentionRelayDeps<BotRecord> = {
   ticketUrl: attentionTicketUrl,
   notify: (bot, threadId, title, body) => notify(deliverableNotification("needs-you", bot, threadId, body, { avatarUrl: bot.avatarUrl, title })),
 };
-/** 2026-11-05 (visible roles): the role a Perspicax turn starts under. The
- * person's composer pick for this thread's next turn (theirs only), else a
- * routine run's "Au nom de" role (the run's snapshot, else the routine's).
- * Undefined: the default surface ("Moi"). */
+/** 2026-11-05 (visible roles, #2032): the role a Perspicax turn starts under.
+ * Only a Pulsatrix Flow routine's "Au nom de" (the run's snapshot, else the
+ * routine's). Chat has no role picker. Undefined: the default surface ("Moi"). */
 function perspicaxTurnRole(turn: { threadId: string; botId: string; principalId: string; routine: boolean }): { slug: string; reason: "person" | "routine" } | undefined {
-  const picked = roleJournal.takePick(turn.threadId, turn.principalId);
-  if (picked !== undefined) return { slug: picked, reason: "person" };
   if (!turn.routine) return undefined;
   const run = activeRoutineRunForThread(turn.threadId);
   if (!run || run.botId !== turn.botId) return undefined;
@@ -44343,13 +44330,8 @@ ROUTES.push(createWebhooksRoutes({
   isBotAct: (auth) => auth.kind === "session" && isBotActSession(auth.session)
 }));
 ROUTES.push(createBotsMessagesRoutes({
-  // 2026-11-05 (visible roles, batch 3): the composer's pick, kept for the
-  // sender's next turn of this thread (perspicaxTurnRole takes it)
-  pickPerspicaxRole: (bot: BotRecord, threadId: string, auth: RequestAuth, slug: string) => {
-    if (IDENTITY.kind !== "perspicax") return;
-    const principal = orgSpeakerPrincipal(bot, speakerFor(auth));
-    if (principal) roleJournal.pick(threadId, principal, slug);
-  },
+  // 2026-11-05 (#2032): chat no longer picks a role; Flow routines use actAs
+  pickPerspicaxRole: (_bot: BotRecord, _threadId: string, _auth: RequestAuth, _slug: string) => {},
   originApprovals,
   approvalBus,
   ADMIN_APPROVAL_REQUIRED,

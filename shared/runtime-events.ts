@@ -198,6 +198,8 @@ export type RuntimeEvent = RuntimeEventBase &
          * reaches the bot as the person's next message (the late answer), so
          * no level answers it here and nothing is sent to an adapter. */
         harnessAsk?: true;
+        /** #2048: publish-target choice payload carried onto the question card. */
+        pageTargetChoice?: import("./page-targets.ts").PageTargetChoiceCardData;
         approvalScope?: "local-computer";
         /** Provider asks to widen its configured sandbox. Only explicit Full
          * access may answer this automatically; Auto/remembered grants may not. */

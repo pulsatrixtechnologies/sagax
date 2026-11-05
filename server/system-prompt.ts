@@ -270,6 +270,10 @@ const EMAIL_DRAFT_ON =
 const EMAIL_DRAFT_OFF =
   " Email drafts are turned off for you. Do not write an ```email fence. If the person asks for an email, say drafts are off for this bot and put the text in the chat instead.";
 
+/** #2048: pick the publish surface before propose_page / save_artifact / claude_artifact. */
+export const PAGE_TARGET_PROMPT =
+  " When the person asks you to create a page or an artifact and has not already named which surface to use, call choose_page_target first (intent page, artifact, or any). It returns the target id and tool to call, or shows a choice card when several targets are available and this bot has no remembered default. One available target, or a remembered default that still works, skips the card. After their pick (the next message is the target id: sagax_page, sagax_artifact, claude_artifact, or another registered id), call that target's tool (propose_page, save_artifact, or claude_artifact). Do not invent a surface and do not call those publish tools for a new page until choose_page_target or the person has named the target.";
+
 /** How the chat renders rich output (src/components/ChatMarkdown.tsx and
  * src/lib/rich-blocks.ts own the other side of each convention). Sent to
  * every bot whose replies land in the chat transcript. */
@@ -283,6 +287,7 @@ export const RICH_OUTPUT_PROMPT =
   + WIDGET_SELF_CHECK_PROMPT
   + WIDGET_KIT_PROMPT
   + " When you have a hosted page the person can open, put it in one ```artifact fence holding JSON such as {\"title\":\"Report\",\"url\":\"https://example.com/page\"} (a real https URL only, never invented); it shows as a card with Open."
+  + PAGE_TARGET_PROMPT
   + CW_FENCE_PROMPT
   + " To show a YouTube video the person wants to watch, put its link alone on its own line: it plays inline (any other time, keep the link inside a sentence); never wrap it in an ```artifact or ```widget fence."
   + " To show an image, a video file or a document, attach it or link its absolute path; a remote image loads only after the person allows it.";

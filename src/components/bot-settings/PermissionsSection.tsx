@@ -20,6 +20,7 @@ import { canEditBotField, canStepPrimary, viewerOwnsBot } from "@/lib/bot-capabi
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import type { LocaleKey } from "@/locales";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { fullAccessNeedsConfirmation, orgFullAccessFor } from "@/lib/full-access";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
@@ -27,6 +28,7 @@ import { api, useStore, type Bot } from "@/state/store";
 import { liveApprovalChange, type ApprovalMode } from "../../../shared/approval-mode";
 import { AppliedLevelNote } from "./AppliedLevelNote";
 import { proactiveModeFor, type ProactiveMode } from "../../../shared/proactive-mode";
+import { builtInPageTargets } from "../../../shared/page-targets";
 import { DEFAULT_OUTBOUND_POLICY, type OutboundPolicy } from "../../../shared/outbound";
 import { ApprovalModeSelector } from "../ApprovalModeSelector";
 import { AllowedRecipientsRow } from "./AllowedRecipientsRow";
@@ -240,6 +242,39 @@ export function PermissionsSection({
             aria-label={t("botPanel.permissions.proactive")}
             disabled={Boolean(bot.busy)}
             onClick={() => setProactiveMode(proactiveMixed || proactiveMode === "off" ? "proactive" : "off")}
+          />
+        </DescribedRow>
+      )}
+      {/* #2048: remembered publish target (page / artifact surface). */}
+      {showApproval && advanced && !only && !draft && canEditBotField(state.config, bot, "pageTargetDefault") && (
+        <DescribedRow
+          label={t("botPanel.permissions.pageTarget")}
+          help={t("botPanel.permissions.pageTargetHelp")}
+          description={bot.pageTargetDefault
+            ? t("botPanel.permissions.pageTarget.set", {
+              name: (() => {
+                const id = bot.pageTargetDefault!;
+                const key = `pageTarget.${id}.name` as LocaleKey;
+                const name = t(key);
+                return name === key ? (builtInPageTargets().find((row) => row.id === id)?.name ?? id) : name;
+              })(),
+            })
+            : t("botPanel.permissions.pageTarget.ask")}
+          rowId="pageTargetDefault"
+        >
+          <PillSelect
+            value={bot.pageTargetDefault ?? ""}
+            disabled={Boolean(bot.busy)}
+            ariaLabel={t("botPanel.permissions.pageTarget")}
+            onChange={(value) => patch({ pageTargetDefault: value || null })}
+            options={[
+              { value: "", label: t("botPanel.permissions.pageTarget.askEachTime") },
+              ...builtInPageTargets().map((row) => {
+                const key = `pageTarget.${row.id}.name` as LocaleKey;
+                const name = t(key);
+                return { value: row.id, label: name === key ? row.name : name };
+              }),
+            ]}
           />
         </DescribedRow>
       )}

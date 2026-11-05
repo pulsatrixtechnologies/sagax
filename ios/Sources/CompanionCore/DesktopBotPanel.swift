@@ -222,11 +222,15 @@ public struct BotPanelPatch: Encodable, Hashable, Sendable {
     public var browser: Bool?
     /// Proactive (`ProactiveMode` raw value).
     public var proactiveMode: String?
+    /// Remembered publish target (#2048). Empty string clears (encoded as null).
+    public var pageTargetDefault: String?
 
     public init(chiefOfStaff: Bool? = nil, approvePeerComms: Bool? = nil, approvalMode: String? = nil,
                 confirmFullAccess: Bool? = nil, applyToAllThreads: Bool? = nil, computer: String? = nil,
-                cloudBackend: String? = nil, cwd: String? = nil, browser: Bool? = nil, proactiveMode: String? = nil) {
+                cloudBackend: String? = nil, cwd: String? = nil, browser: Bool? = nil, proactiveMode: String? = nil,
+                pageTargetDefault: String? = nil) {
         self.proactiveMode = proactiveMode
+        self.pageTargetDefault = pageTargetDefault
         self.browser = browser
         self.chiefOfStaff = chiefOfStaff
         self.approvePeerComms = approvePeerComms
@@ -236,6 +240,32 @@ public struct BotPanelPatch: Encodable, Hashable, Sendable {
         self.computer = computer
         self.cloudBackend = cloudBackend
         self.cwd = cwd
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case chiefOfStaff, approvePeerComms, approvalMode, confirmFullAccess, applyToAllThreads
+        case computer, cloudBackend, cwd, browser, proactiveMode, pageTargetDefault
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(chiefOfStaff, forKey: .chiefOfStaff)
+        try container.encodeIfPresent(approvePeerComms, forKey: .approvePeerComms)
+        try container.encodeIfPresent(approvalMode, forKey: .approvalMode)
+        try container.encodeIfPresent(confirmFullAccess, forKey: .confirmFullAccess)
+        try container.encodeIfPresent(applyToAllThreads, forKey: .applyToAllThreads)
+        try container.encodeIfPresent(computer, forKey: .computer)
+        try container.encodeIfPresent(cloudBackend, forKey: .cloudBackend)
+        try container.encodeIfPresent(cwd, forKey: .cwd)
+        try container.encodeIfPresent(browser, forKey: .browser)
+        try container.encodeIfPresent(proactiveMode, forKey: .proactiveMode)
+        if let pageTargetDefault {
+            if pageTargetDefault.isEmpty {
+                try container.encodeNil(forKey: .pageTargetDefault)
+            } else {
+                try container.encode(pageTargetDefault, forKey: .pageTargetDefault)
+            }
+        }
     }
 
     public var isEmpty: Bool { self == BotPanelPatch() }

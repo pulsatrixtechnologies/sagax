@@ -35,6 +35,8 @@ public enum BotFieldRules {
         "proactiveMode": "bots.approvalLevel",
         // Standing grants: the owner's own (mirror of shared/permissions.ts, #1138).
         "alwaysAllow": "bots.approvalLevel",
+        // #2048: remembered publish target (page / artifact surface).
+        "pageTargetDefault": "bots.behaviour",
         "memoryEnabled": "bots.behaviour",
         "teamMemorySharing": "bots.behaviour",
         "memoryUpkeep": "bots.behaviour",

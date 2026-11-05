@@ -118,7 +118,7 @@ export const AGENT_TOOL_GROUPS: readonly AgentToolGroup[] = [
   {
     id: "pages",
     title: "Published pages and live HTML",
-    tools: ["propose_page", "page_comments", "show_html", "update_html"],
+    tools: ["propose_page", "page_comments", "choose_page_target", "show_html", "update_html"],
   },
   {
     id: "cloud_agents",

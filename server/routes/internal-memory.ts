@@ -33,6 +33,8 @@ export interface InternalMemoryBot {
   section?: string;
   assignedSkills?: readonly string[];
   ownerUserId?: unknown;
+  /** #2048: remembered publish target id. */
+  pageTargetDefault?: string;
 }
 
 export interface InternalMemoryGroup {
@@ -215,6 +217,9 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
           ...(result.answered ? { answered: result.answered } : {}),
           // 2026-11-03: raised as a real question card the run waits on
           ...("waitsForPerson" in result && result.waitsForPerson ? { waitsForPerson: true } : {}),
+          // #2048: choose_page_target auto-pick or listed offers
+          ...("auto" in result && result.auto ? { auto: result.auto } : {}),
+          ...("targets" in result && result.targets ? { targets: result.targets } : {}),
         })
         : json(res, result.status, { error: result.error });
     }

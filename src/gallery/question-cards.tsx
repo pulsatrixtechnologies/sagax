@@ -79,6 +79,30 @@ function Preview() {
         <Row id="ask-set" label="Plusieurs questions">
           <QuestionCard threadId="t" bot={bot} message={ask("e", [{ ...WEBHOOKS, header: "Webhooks" }, { question: "Je préviens Wren ?", header: "Wren", options: [{ label: "Oui" }, { label: "Non" }] }])} />
         </Row>
+        <Row id="page-target" label="Cible de publication (#2048)">
+          <QuestionCard
+            threadId="t"
+            bot={{ id: "preview-bot", name: "Quasar" }}
+            message={ask("pt", [{
+              question: "Where should I publish this?",
+              custom: false,
+              options: [
+                { id: "sagax_page", label: "Sagax page", description: "Shareable link the person publishes; others can open it outside Sagax.", icon: "file-text" },
+                { id: "sagax_artifact", label: "Sagax artifact", description: "Kept inside Sagax for this person; can refresh itself, no public link.", icon: "layout-dashboard" },
+                { id: "claude_artifact", label: "Claude artifact", description: "Official claude.ai artifact through the person's own Claude account.", icon: "sparkles" },
+              ],
+            }], {
+              pageTargetChoice: {
+                version: 1,
+                targets: [
+                  { id: "sagax_page", tool: "propose_page", name: "Sagax page", icon: "file-text" },
+                  { id: "sagax_artifact", tool: "save_artifact", name: "Sagax artifact", icon: "layout-dashboard" },
+                  { id: "claude_artifact", tool: "claude_artifact", name: "Claude artifact", icon: "sparkles" },
+                ],
+              },
+            })}
+          />
+        </Row>
         <Row id="person-single" label="ask_person (carte simple)">
           <OptionCard botId="preview-bot" threadId="t" message={flat("f")} />
         </Row>

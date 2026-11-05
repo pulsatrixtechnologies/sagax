@@ -12,9 +12,16 @@
 // thread) and the Approvals screen through QuestionCard. iOS draws the same
 // card in ios/App/Cards/QuestionSheet.swift.
 import type { KeyboardEvent, ReactNode } from "react";
-import { ArrowUp, Check, X } from "lucide-react";
+import { ArrowUp, Box, Check, FileText, LayoutDashboard, Sparkles, X, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { moveChoiceFocus } from "./AskCard";
+
+const CHOICE_ICONS: Record<string, LucideIcon> = {
+  "file-text": FileText,
+  "layout-dashboard": LayoutDashboard,
+  sparkles: Sparkles,
+  box: Box,
+};
 
 /** The card's width follows a prose bubble's, so the two line up. */
 export const QUESTION_SHEET_WIDTH = "w-full max-w-[min(80%,560px,calc(100%-82px))]";
@@ -110,6 +117,10 @@ export interface SheetChoice {
   /** what `picked` and `onPick` speak of when it is not the label (the
    * "Other" row, whose label may match one of the bot's) */
   id?: string;
+  /** Optional lucide icon key drawn beside the label (#2048 page targets). */
+  icon?: string;
+  /** Greyed row the person cannot pick. */
+  disabled?: boolean;
 }
 
 /**
@@ -160,24 +171,30 @@ export function SheetChoices({
       {choices.map((choice, index) => {
         const id = choice.id ?? choice.label;
         const on = picked.includes(id);
+        const rowOff = settled || disabled || choice.disabled === true;
+        const Icon = choice.icon ? CHOICE_ICONS[choice.icon] : undefined;
         return (
           <button
             key={`${index}-${id}`}
             type="button"
             data-ask-choice=""
+            data-page-target={choice.id || undefined}
             role={multi ? "checkbox" : "radio"}
             aria-checked={on}
-            aria-keyshortcuts={settled ? undefined : sheetKey(index)}
-            disabled={settled || disabled}
+            aria-disabled={choice.disabled === true || undefined}
+            aria-keyshortcuts={settled || choice.disabled ? undefined : sheetKey(index)}
+            disabled={rowOff}
             onClick={() => onPick(id)}
             className={cn(
               "flex w-full items-center gap-3 rounded-[10px] px-2 py-[7px] text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-default",
               settled
                 ? on ? "bg-ink/[0.06]" : "opacity-45"
+                : choice.disabled ? "opacity-45"
                 : on ? "bg-ink/[0.07]" : "hover:bg-ink/[0.05]",
             )}
           >
             {multi ? <SheetBox on={on} /> : <SheetKey letter={sheetKey(index)} on={on} />}
+            {Icon && <Icon size={16} strokeWidth={2} aria-hidden="true" className="shrink-0 text-ink-secondary" />}
             <span className="min-w-0 flex-1">
               {/* plaintext bidi: each label orders its own script */}
               <span className="block break-words text-[13.5px] leading-5 text-ink [unicode-bidi:plaintext]">{choice.label}</span>

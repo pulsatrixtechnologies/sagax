@@ -204,6 +204,15 @@ export async function buildBotPatchProfile(env: BotsMutateEnv, state: BotPatchSt
     }
     patch.proactiveMode = env.normalizeProactiveMode(raw);
   }
+  // #2048: remembered publish target (Sagax page / artifact / Claude / …).
+  if (body.pageTargetDefault !== undefined) {
+    const parsed = env.parsePageTargetDefault(body.pageTargetDefault);
+    if (!parsed.ok) {
+      env.json(env.res, 400, { error: parsed.error });
+      return true;
+    }
+    patch.pageTargetDefault = parsed.value ?? undefined;
+  }
   if (body.teamMemorySharing !== undefined) {
     if (!env.isTeamMemorySharing(body.teamMemorySharing)) {
       env.json(env.res, 400, { error: "teamMemorySharing must be \"shared\" or \"private\"" });

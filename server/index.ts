@@ -208,6 +208,7 @@ import {
   type ApprovalMode
 } from "../shared/approval-mode.ts";
 import { isProactiveMode, normalizeProactiveMode, proactiveModeFor } from "../shared/proactive-mode.ts";
+import { parsePageTargetDefault } from "../shared/page-targets.ts";
 import { createProactiveProposalRoutes } from "./routes/proactive-proposals.ts";
 import { ProactiveEngine, proactiveDryRunSummary } from "./proactive/proactive.ts";
 import {
@@ -2347,7 +2348,7 @@ import { parseEvalJson } from "./meetings/meet-scripts.ts";
 import type { MeetingBrowser } from "./meetings/meeting-session.ts";
 import { createTemplateLinkRoutes, handleTemplateLinkPublic } from "./routes/template-links.ts";
 import { TemplateLinks } from "./template-links.ts";
-import { PublishedPages } from "./pages/published-pages.ts";
+import { pageOwnerFor, PublishedPages } from "./pages/published-pages.ts";
 import {
   createPublishedPageRoutes,
   handlePagesOriginRequest,
@@ -16476,7 +16477,14 @@ function routineRunThread(threadId: string | undefined): boolean {
   return Boolean(bot && store.taskByThread(bot.id, threadId)?.routineRunId);
 }
 
-type HarnessChoice = { title: string; question: string; options: string[] };
+type HarnessChoice = {
+  title: string;
+  question: string;
+  options: string[];
+  /** #2048: rich options for the question card (id + description + icon). */
+  questionOptions?: import("../shared/ask-question.ts").AskQuestionOption[];
+  pageTargetChoice?: import("../shared/page-targets.ts").PageTargetChoiceCardData;
+};
 
 /** 2026-11-03 (a person: "J'ai jamais reçu de card pour faire un choix"): a Grok
  * routine run called ask_choice, the passive card landed in the run's hidden
@@ -16503,12 +16511,23 @@ function raiseHarnessQuestion(threadId: string, choice: HarnessChoice, origin: "
   if (!store.botByThread(threadId)) return null;
   const requestId = `ask-choice-${newId()}`;
   const header = choice.title !== "Your bot has a question" ? choice.title.slice(0, 40) : undefined;
+  const questionOptions = choice.questionOptions?.length
+    ? choice.questionOptions
+    : choice.options.map((label) => ({ label }));
   bus.publish({
     eventId: newId(), provider: "harness" as RuntimeEvent["provider"], threadId, createdAt: new Date().toISOString(),
-    type: "request.opened", requestType: "question", requestId, tool: "ask_choice", summary: choice.question,
+    type: "request.opened", requestType: "question", requestId,
+    tool: choice.pageTargetChoice ? "choose_page_target" : "ask_choice",
+    summary: choice.question,
     choices: choice.options,
-    questions: [{ ...(header ? { header } : {}), question: choice.question, options: choice.options.map((label) => ({ label })) }],
+    questions: [{
+      ...(header ? { header } : {}),
+      question: choice.question,
+      options: questionOptions,
+      ...(choice.pageTargetChoice ? { custom: false as const } : {}),
+    }],
     origin, harnessAsk: true,
+    ...(choice.pageTargetChoice ? { pageTargetChoice: choice.pageTargetChoice } : {}),
   });
   const messageId = askMessageByRequest.get(`${threadId}:${requestId}`);
   return messageId ? { messageId } : null;
@@ -19707,6 +19726,7 @@ bus.subscribe((event: RuntimeEvent) => {
           questionRequest: questions
             ? { version: 1, questions, ...(event.origin === "output" ? { origin: "output" as const } : {}) }
             : undefined,
+          ...(event.pageTargetChoice ? { pageTargetChoice: event.pageTargetChoice } : {}),
           commandAllowlist: command ?? undefined,
           ...(gateAllowKey && !strictCard && grantsOffered && !guestDriven && !gateGrantBlocked ? { allowKey: gateAllowKey } : {}),
           // Provider-owned session grants remain separate from exact commands.
@@ -31732,18 +31752,42 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     saveToolResult: (capability, text, truncated) => toolResults.save(capability, text, truncated),
     readToolResult: (capability, id, offset) => toolResults.read(capability, id, offset),
     checkWidget: (turnKey, body) => checkWidgetForTurn(widgetRenderer, widgetCheckAttempts, turnKey, body),
-    createCard: ({ bot, threadId, body, authored, proposePage }) => createAgentCard({
-      store,
-      bot,
-      threadId,
-      input: body,
-      authored,
-      proposePage: proposePage as Parameters<typeof createAgentCard>[0]["proposePage"],
-      // #1905: a may-I ask_choice under Full access is answered, not drawn
-      approvalLevel: sourceApprovalMode(bot.id, threadId),
-      // 2026-11-03: where nobody watches, a real question card (raiseHarnessQuestion)
-      ...(harnessQuestionThread(threadId) ? { raiseQuestion: (choice: HarnessChoice) => raiseHarnessQuestion(threadId, choice) } : {}),
-    }),
+    createCard: ({ bot, threadId, body, authored, proposePage }) => {
+      const confidential = store.isConfidentialThread(threadId);
+      const owning = store.botByThread(threadId) ?? bot;
+      const person = IDENTITY.kind === "perspicax"
+        ? pageOwnerFor(store.taskByThread(owning.id, threadId), effectiveBotOwner(owning))
+        : localPrincipalId();
+      const claude = person ? claudeAccountForPrincipal(person) : { unavailable: "no_engine" as const };
+      const claudeOk = !("unavailable" in claude);
+      const defaultId = typeof owning.pageTargetDefault === "string" ? owning.pageTargetDefault : null;
+      return createAgentCard({
+        store,
+        bot,
+        threadId,
+        input: body,
+        authored,
+        proposePage: proposePage as Parameters<typeof createAgentCard>[0]["proposePage"],
+        // #1905: a may-I ask_choice under Full access is answered, not drawn
+        approvalLevel: sourceApprovalMode(bot.id, threadId),
+        // 2026-11-03: where nobody watches, a real question card (raiseHarnessQuestion)
+        ...(harnessQuestionThread(threadId) ? { raiseQuestion: (choice: HarnessChoice) => raiseHarnessQuestion(threadId, choice) } : {}),
+        // #2048: publish-target availability for this bot, engine and person
+        pageTargetContext: {
+          defaultId,
+          availability: {
+            pages: !confidential,
+            artifacts: !confidential,
+            claudeArtifacts: claudeOk,
+            ...(claudeOk ? {} : {
+              claudeReason: "unavailable" in claude && claude.unavailable === "not_signed_in"
+                ? "Claude is not signed in for this person."
+                : "Claude artifacts are not available for this person.",
+            }),
+          },
+        },
+      });
+    },
     authored: (threadId, generation, messageId) => handoffs.authored(threadId, generation, messageId),
     proposePublishedPage: (input) => publishedPages.propose({
       ...input,
@@ -45455,6 +45499,7 @@ ROUTES.push(createBotsMutateRoutes({
   normalizeAllowedRecipients,
   normalizeOutboundPolicy,
   normalizeProactiveMode,
+  parsePageTargetDefault,
   orgFullAccessRefusalFor,
   ownerChosenVisibility,
   ownerOrAdminOf,

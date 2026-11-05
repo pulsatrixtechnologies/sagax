@@ -536,3 +536,100 @@ describe("prepareWidgetPress", () => {
     expect(fake.patchMessage).not.toHaveBeenCalled();
   });
 });
+
+describe("choose_page_target (#2048)", () => {
+  type Extra = Omit<Parameters<typeof createAgentCard>[0], "store" | "bot" | "threadId" | "input">;
+  const choose = (fake: Fake, input: Record<string, unknown> = {}, extra: Extra = {}) => createAgentCard({
+    store: fake.store,
+    bot: SCOUT,
+    threadId: THREAD,
+    input: { tool: "choose_page_target", ...input },
+    ...extra,
+  });
+
+  it("auto-picks when only one target is available and skips the card", () => {
+    const fake = fakeStore();
+    const result = choose(fake, { intent: "page" }, {
+      pageTargetContext: { availability: { pages: true, artifacts: false, claudeArtifacts: false } },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.auto).toMatchObject({ id: "sagax_page", tool: "propose_page", reason: "single" });
+    expect(result.messageId).toBe("");
+    expect(fake.appendMessage).not.toHaveBeenCalled();
+  });
+
+  it("auto-picks the bot default when it is still available", () => {
+    const fake = fakeStore();
+    const result = choose(fake, { intent: "any" }, {
+      pageTargetContext: {
+        defaultId: "sagax_artifact",
+        availability: { pages: true, artifacts: true, claudeArtifacts: true },
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.auto).toMatchObject({ id: "sagax_artifact", tool: "save_artifact", reason: "default" });
+    expect(fake.appendMessage).not.toHaveBeenCalled();
+  });
+
+  it("raises a question card with pageTargetChoice when several targets are available", () => {
+    const fake = fakeStore();
+    const raiseQuestion = vi.fn(() => ({ messageId: "m-raised" }));
+    const result = choose(fake, { intent: "any" }, {
+      raiseQuestion,
+      pageTargetContext: {
+        availability: { pages: true, artifacts: true, claudeArtifacts: true },
+      },
+    });
+    expect(result).toMatchObject({ ok: true, messageId: "m-raised", waitsForPerson: true });
+    expect(raiseQuestion).toHaveBeenCalledTimes(1);
+    const choice = (raiseQuestion.mock.calls as unknown as Array<[ {
+      pageTargetChoice?: { targets: Array<{ id: string }> };
+      questionOptions?: Array<{ id?: string }>;
+    } ]>)[0]![0];
+    expect(choice.pageTargetChoice?.targets.map((row) => row.id)).toEqual([
+      "sagax_page", "sagax_artifact", "claude_artifact",
+    ]);
+    expect(choice.questionOptions?.every((row) => Boolean(row.id))).toBe(true);
+    expect(fake.appendMessage).not.toHaveBeenCalled();
+  });
+
+  it("omits Claude when unavailable and still shows the card for the rest", () => {
+    const fake = fakeStore();
+    const raiseQuestion = vi.fn(() => ({ messageId: "m2" }));
+    const result = choose(fake, { intent: "any" }, {
+      raiseQuestion,
+      pageTargetContext: {
+        availability: {
+          pages: true,
+          artifacts: true,
+          claudeArtifacts: false,
+          claudeReason: "Claude is not signed in for this person.",
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.targets?.filter((row) => row.available).map((row) => row.id)).toEqual([
+      "sagax_page", "sagax_artifact",
+    ]);
+    expect(result.targets?.find((row) => row.id === "claude_artifact")).toMatchObject({
+      available: false,
+      reason: "Claude is not signed in for this person.",
+    });
+  });
+
+  it("refuses rooms", () => {
+    const fake = fakeStore([THREAD]);
+    expect(choose(fake, { intent: "any" })).toMatchObject({ ok: false, status: 409 });
+    expect(fake.appendMessage).not.toHaveBeenCalled();
+  });
+
+  it("refuses when no target is available", () => {
+    const fake = fakeStore();
+    expect(choose(fake, { intent: "any" }, {
+      pageTargetContext: { availability: { pages: false, artifacts: false, claudeArtifacts: false } },
+    })).toMatchObject({ ok: false, status: 409 });
+  });
+});

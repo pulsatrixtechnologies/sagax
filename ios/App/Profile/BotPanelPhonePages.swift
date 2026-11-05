@@ -352,6 +352,25 @@ struct BotPermissionsSection: View {
         } message: {
             Text("It runs commands and edits files without asking, in every thread. Use only with bots you trust.")
         }
+        // #2048: remembered publish target (page / artifact surface).
+        if edits("pageTargetDefault") {
+            Section {
+                Picker("Publish target", selection: Binding(get: { current.pageTargetDefault ?? "" }, set: { value in
+                    guard value != (current.pageTargetDefault ?? "") else { return }
+                    send(BotPanelPatch(pageTargetDefault: value.isEmpty ? "" : value))
+                })) {
+                    ForEach(PageTargetDefaultChoice.all, id: \.id) { choice in
+                        Text(choice.label).tag(choice.id)
+                    }
+                }
+                .disabled(current.busy == true)
+                .accessibilityIdentifier("permissions-page-target")
+            } footer: {
+                Text(current.pageTargetDefault.map { PageTargetDefaultChoice.label(for: $0) }
+                     .map { "Always \($0)." }
+                     ?? "Ask each time when several targets are available.")
+            }
+        }
         if !canEdit {
             Section {
                 Text("These are changed by an administrator, or in Sagax on your computer.")

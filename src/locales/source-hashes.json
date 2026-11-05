@@ -17146,7 +17146,20 @@
       "rich.claudeArtifact.commentFailed": "057c05e0305ab2cfcb3a8275431f6fbd1fb530807eae559fdc4bcb74dc393cce",
       "routines.effort.label": "4387e5d3966fc436532792769763cd1ab7cccd6464d4c01c2b91261894e96b77",
       "routines.effort.botDefault": "a6f2b10be05387215e32f014b3db3c2a378d078db65fa84390757038af7e5dad",
-      "routineEditor.hint.effort": "87361e2d484e0e3a9ec607a0da9676b91370da2c4b80302a9d8a094ba99e3d18"
+      "routineEditor.hint.effort": "87361e2d484e0e3a9ec607a0da9676b91370da2c4b80302a9d8a094ba99e3d18",
+      "pageTarget.question": "440edffb379bc42d518fbe23999f83f5134c3e895fb594155f19b84f0ae9c456",
+      "pageTarget.alwaysUse": "ed843b6e270d0d5d99805126b730993b764674383924989778217b47fc8b0552",
+      "pageTarget.sagax_page.name": "43829632e91757687e7bb8d747d23505896f4b532ea2719c58dc78a36ab3a98f",
+      "pageTarget.sagax_page.description": "a713548a213d1f27ec12e60abd55c699dc452f113fca050653cc58fa51bfe02e",
+      "pageTarget.sagax_artifact.name": "644b2dc351f539f53bb644e076c062780b578496a5f357002867da0417bf481a",
+      "pageTarget.sagax_artifact.description": "6e9370fdfc44bb50cef1f05a78985050d73822deee136a3e7a1508c6ad338fd1",
+      "pageTarget.claude_artifact.name": "b47d58330f5277b16e9565c9efbd1c3fa24cf82d3b1e9ddc68b9cdc4cd8e49be",
+      "pageTarget.claude_artifact.description": "0666c213f42d94bd821c629c13cc2cb6f369031e38bec839e8c9034a5c1c16db",
+      "botPanel.permissions.pageTarget": "f3781a4171c4ff82d5703a106f0c11d265268292b532ecba57017e27c80cd57f",
+      "botPanel.permissions.pageTargetHelp": "9d0bdfb7d0238ff51620548b035b570cc5d900faa6c6dc8f7ca84d71827ff740",
+      "botPanel.permissions.pageTarget.ask": "7b61f537e09296b2f9468825561fe30f4be6100cfd16d2f36109b1284ba44c6e",
+      "botPanel.permissions.pageTarget.askEachTime": "3be0feca7417d0316b6ee31ad0a8055f5131c62a448052cf5d67af5f4cccbbfc",
+      "botPanel.permissions.pageTarget.set": "a8ac3345ccddc01569fb447a06cf9ef30eec3e418a6852518d8de15a4427af6f"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

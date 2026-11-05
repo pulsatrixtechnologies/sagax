@@ -37,6 +37,7 @@ import { startFakeHttpMcp, type FakeHttpMcp } from "../testing/fake-http-mcp-ser
 import * as procs from "../procs.ts";
 import { autoVerdict } from "../approvals/auto-approve.ts";
 import { codexFullApprovalPolicy } from "./codex/approvals.ts";
+import { perspicaxTokenFile } from "./spawn-contract.ts";
 
 /** #1977: Full access on Codex lets MCP tool approvals reach Sagax's gate. */
 const CODEX_FULL_POLICY = codexFullApprovalPolicy();
@@ -1773,7 +1774,11 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     await create();
     const dump = join(scratch, "perspicax-bridge.json");
     process.env.FAKE_CODEX_DUMP = dump;
-    const tokenFile = join(scratch, "px-main-token");
+    // Launch may name any path; warmPerspicaxEnv rewrites each turn to the
+    // shared comms-tokens file so a kept process can reread the capability.
+    // This sendTurn has no botId, so the warm path is keyed on the thread alone.
+    const launchTokenFile = join(scratch, "px-main-token");
+    const warmTokenFile = perspicaxTokenFile("t-px-bridge", undefined);
     await instance.adapter.sendTurn({
       threadId: "t-px-bridge",
       text: "go",
@@ -1786,7 +1791,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
               ELECTRON_RUN_AS_NODE: "1",
               SAGAX_HARNESS_URL: "http://127.0.0.1:8799",
               SAGAX_PERSPICAX_TOKEN: "token-main",
-              SAGAX_PERSPICAX_TOKEN_FILE: tokenFile,
+              SAGAX_PERSPICAX_TOKEN_FILE: launchTokenFile,
               SAGAX_BOT_ID: "bot1",
               SAGAX_THREAD_ID: "t-px-bridge",
             },
@@ -1805,7 +1810,8 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     const gate = JSON.parse(seen.env[record]);
     const upstream = JSON.parse(gate.SAGAX_GATE_UPSTREAM);
     expect(upstream.env.SAGAX_PERSPICAX_TOKEN).toBe("token-main");
-    expect(upstream.env.SAGAX_PERSPICAX_TOKEN_FILE).toBe(tokenFile);
+    expect(upstream.env.SAGAX_PERSPICAX_TOKEN_FILE).toBe(warmTokenFile);
+    expect(readFileSync(warmTokenFile, "utf8")).toBe("token-main");
     expect(JSON.parse(gate.SAGAX_GATE_SEARCH)).toMatchObject({
       pinned: expect.arrayContaining(["api_list", "flow_run", "identity_switch", "memory_find"]),
       pinnedSuffixes: ["_action", "_query", "_write"],

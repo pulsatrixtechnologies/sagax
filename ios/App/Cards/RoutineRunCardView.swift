@@ -22,6 +22,9 @@ struct RoutineRunCardView: View {
     /// 2026-10-26: the failure paused its routine (RoutineAutoPause): turn
     /// it back on in one click. Nil: no button.
     var resume: (() -> Void)? = nil
+    /// 2026-11-04: opens the thread a teammate works in (the run handed work
+    /// to it). Nil: the teammate is named without a button.
+    var openThread: ((ThreadRef) -> Void)? = nil
 
     @State private var expanded = false
 
@@ -49,7 +52,7 @@ struct RoutineRunCardView: View {
 
     private var toneColor: Color {
         switch card.tone {
-        case .neutral: Theme.textSecondary
+        case .neutral: card.knownStatus == .completed && (card.goalStatus == nil || card.goalStatus == "completed") ? Theme.success : Theme.textSecondary
         case .active: tint
         case .attention: Theme.warning
         case .danger: Theme.danger
@@ -126,6 +129,13 @@ struct RoutineRunCardView: View {
                 }
             }
 
+            if !card.handedTo.isEmpty {
+                Divider().padding(.vertical, 2)
+                ForEach(card.handedTo, id: \.threadId) { entry in
+                    handoffRow(entry)
+                }
+            }
+
             if let openRun {
                 Button {
                     Haptics.selection()
@@ -161,15 +171,7 @@ struct RoutineRunCardView: View {
                     .font(.system(size: 15, weight: .semibold))
                     .lineLimit(1)
                 Spacer(minLength: 4)
-                HStack(spacing: 4) {
-                    if card.knownStatus == .running, card.goalStatus == nil {
-                        ProgressView().controlSize(.mini)
-                    }
-                    Text(card.stateLabel)
-                }
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(toneColor)
-                .accessibilityElement(children: .combine)
+                statusPill(card.stateLabel, color: toneColor, live: card.knownStatus == .running && card.goalStatus == nil)
             }
             Text(scheduled, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
                 .font(.system(size: 12))
@@ -181,5 +183,57 @@ struct RoutineRunCardView: View {
 
     private var scheduled: Date {
         card.scheduledFor.map { Date(timeIntervalSince1970: $0 / 1_000) } ?? at
+    }
+
+    /// 2026-11-04 (as the desktop card): the status as a colored pill.
+    private func statusPill(_ label: String, color: Color, live: Bool) -> some View {
+        HStack(spacing: 4) {
+            if live { ProgressView().controlSize(.mini) }
+            Text(verbatim: label)
+        }
+        .font(.system(size: 11, weight: .semibold))
+        .foregroundStyle(color)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(color.opacity(0.12)))
+        .overlay(Capsule().strokeBorder(color.opacity(0.35), lineWidth: 0.5))
+        .accessibilityElement(children: .combine)
+    }
+
+    /// One teammate the run handed work to: "Sent work to <name>", where
+    /// that work stands, and a button to its thread.
+    private func handoffRow(_ entry: RoutineRunCard.Handoff) -> some View {
+        let name = entry.name?.isEmpty == false ? entry.name! : String(localized: "a teammate")
+        let state = RoutineRunCard(runId: "", routineId: "", routineName: "", status: entry.status)
+        return HStack(spacing: 8) {
+            Image(systemName: "arrow.turn.down.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.textSecondary)
+            Text(verbatim: "Sent work to \(name)")
+                .font(.system(size: 14))
+                .foregroundStyle(Theme.textPrimary)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            if state.knownStatus != nil {
+                statusPill(state.stateLabel, color: entry.status == "completed" ? Theme.success : (entry.status == "running" ? tint : (entry.status == "failed" ? Theme.danger : Theme.textSecondary)), live: entry.status == "running")
+            }
+            if let openThread {
+                Button {
+                    Haptics.selection()
+                    openThread(ThreadRef(botId: entry.botId, threadId: entry.threadId, title: name))
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("Open thread")
+                        Image(systemName: "arrow.right").font(.system(size: 11, weight: .semibold))
+                    }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.readable(tint))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text(verbatim: "Open \(name)'s thread"))
+                .accessibilityIdentifier("routine-run-teammate-thread")
+            }
+        }
+        .accessibilityIdentifier("routine-run-handoff")
     }
 }

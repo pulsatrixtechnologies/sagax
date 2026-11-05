@@ -1017,15 +1017,26 @@ const ActivityChip = memo(function ActivityChip({ message, place = "auto" }: { m
 
 /** A routine run's receipt. View run opens the run's detail (2026-10-29),
  * a run of a deleted routine too, to read. */
-export function RoutineRunRow({ message, onResume }: { message: Message; botId: string; onResume?: () => void }) {
+export function RoutineRunRow({ message, botId, onResume }: { message: Message; botId: string; onResume?: () => void }) {
   "use memo";
   const dispatch = useStoreDispatch();
   const getState = useStoreGetter();
   const showThreads = useShowThreads();
   const run = message.routineRun;
+  // 2026-11-04: the card leads with the bot's mascot, and a teammate it
+  // handed work to shows its own.
+  // Only the bots this card draws, so another bot's change leaves it be.
+  const ownerId = message.from?.botId ?? botId;
+  const bots = useStoreSelector((state) => {
+    const ids = new Set([ownerId, ...(run?.handedTo ?? []).map((entry) => entry.botId)]);
+    return state.bots.filter((candidate) => ids.has(candidate.id));
+  }, shallowEqual);
+  const owner = bots.find((candidate) => candidate.id === ownerId);
   return (
     <RoutineRunCard
       message={message}
+      bot={owner}
+      botOf={(id) => bots.find((candidate) => candidate.id === id)}
       onResume={onResume}
       onOpen={run?.runId ? () => openRoutineRun(dispatch, { runId: run.runId, routineId: run.routineId }) : undefined}
       // 2026-11-03: a run that handed work to a teammate links that thread.

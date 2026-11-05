@@ -26,6 +26,12 @@ describe("routineRunCard", () => {
     expect(routineRunCard(run({ status: "waiting", attention: "Approve" }), "main", whole).summary).toBe("Approve");
   });
 
+  // 2026-11-04: a running card shows how long the run has been going.
+  it("carries when the run started, for the running card's elapsed time", () => {
+    expect(routineRunCard(run({ status: "running", startedAt: 42 })).startedAt).toBe(42);
+    expect(routineRunCard(run({ status: "queued" })).startedAt).toBeUndefined();
+  });
+
   it("carries the report when the run worked in its own task", () => {
     expect(routineRunCard(run(), "main").summary).toBe(REPORT);
   });

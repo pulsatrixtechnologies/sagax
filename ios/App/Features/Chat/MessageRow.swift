@@ -385,7 +385,8 @@ struct MessageRow: View {
                         Task {
                             if await session.resumeRoutine(id: card.routineId) != nil { afterResume?() }
                         }
-                    }
+                    },
+                    openThread: openThread
                 )
             } else if let text = message.text, !text.isEmpty {
                 // A computer that sent the kind without its card: the text

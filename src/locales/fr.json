@@ -13243,7 +13243,6 @@
   "roles.op.add": "Ajouter",
   "roles.op.edit": "Modifier",
   "roles.op.delete": "Supprimer",
-  "roles.detail.actsAs": "Agit comme",
   "roles.rules.title": "Rôles",
   "roles.rules.fallbackOn": "Quand {from} est refusé en lecture sur {path}, lire comme {to}.",
   "roles.rules.switch": "{from} peut passer à {to} sans demander.",

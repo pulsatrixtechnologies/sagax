@@ -15,7 +15,7 @@ import { Check } from "lucide-react";
 import { api, useStore, type Bot, type Message } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import type { LocaleKey } from "@/locales";
+import { pageTargetKeys } from "@/lib/page-target-copy";
 import {
   answerWithoutPreamble,
   formatQuestionAnswers,
@@ -50,15 +50,14 @@ function localizedPageTargetQuestions(questions: AskQuestion[], card: NonNullabl
       const id = option.id ?? option.label;
       const target = byId.get(id);
       if (!target) return option;
-      const nameKey = `pageTarget.${id}.name` as LocaleKey;
-      const descKey = `pageTarget.${id}.description` as LocaleKey;
-      const name = t(nameKey);
-      const description = t(descKey);
+      const keys = pageTargetKeys(id);
+      const name = keys ? t(keys.name) : null;
+      const description = keys ? t(keys.description) : null;
       return {
         ...option,
         id,
-        label: name === nameKey ? target.name : name,
-        description: description === descKey ? (option.description ?? target.name) : description,
+        label: name ?? target.name,
+        description: description ?? option.description ?? target.name,
         icon: option.icon ?? target.icon,
       };
     }),

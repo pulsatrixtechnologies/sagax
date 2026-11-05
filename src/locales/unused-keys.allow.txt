@@ -138,8 +138,6 @@ chat.run.worked
 chat.sandboxWaking
 chat.savedMessages.dismiss
 chat.showEarlier
-chat.stop
-chat.stopTurn
 chat.timeline.title
 chat.timeline.titleRunning
 chat.usage.cachedNote

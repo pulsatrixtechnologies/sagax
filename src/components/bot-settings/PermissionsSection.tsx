@@ -20,7 +20,6 @@ import { canEditBotField, canStepPrimary, viewerOwnsBot } from "@/lib/bot-capabi
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import type { LocaleKey } from "@/locales";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { fullAccessNeedsConfirmation, orgFullAccessFor } from "@/lib/full-access";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
@@ -29,6 +28,7 @@ import { liveApprovalChange, type ApprovalMode } from "../../../shared/approval-
 import { AppliedLevelNote } from "./AppliedLevelNote";
 import { proactiveModeFor, type ProactiveMode } from "../../../shared/proactive-mode";
 import { builtInPageTargets } from "../../../shared/page-targets";
+import { pageTargetKeys } from "@/lib/page-target-copy";
 import { DEFAULT_OUTBOUND_POLICY, type OutboundPolicy } from "../../../shared/outbound";
 import { ApprovalModeSelector } from "../ApprovalModeSelector";
 import { AllowedRecipientsRow } from "./AllowedRecipientsRow";
@@ -254,9 +254,8 @@ export function PermissionsSection({
             ? t("botPanel.permissions.pageTarget.set", {
               name: (() => {
                 const id = bot.pageTargetDefault!;
-                const key = `pageTarget.${id}.name` as LocaleKey;
-                const name = t(key);
-                return name === key ? (builtInPageTargets().find((row) => row.id === id)?.name ?? id) : name;
+                const keys = pageTargetKeys(id);
+                return keys ? t(keys.name) : (builtInPageTargets().find((row) => row.id === id)?.name ?? id);
               })(),
             })
             : t("botPanel.permissions.pageTarget.ask")}
@@ -270,9 +269,8 @@ export function PermissionsSection({
             options={[
               { value: "", label: t("botPanel.permissions.pageTarget.askEachTime") },
               ...builtInPageTargets().map((row) => {
-                const key = `pageTarget.${row.id}.name` as LocaleKey;
-                const name = t(key);
-                return { value: row.id, label: name === key ? row.name : name };
+                const keys = pageTargetKeys(row.id);
+                return { value: row.id, label: keys ? t(keys.name) : row.name };
               }),
             ]}
           />

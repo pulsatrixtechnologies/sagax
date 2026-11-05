@@ -139,9 +139,15 @@ export function createPromptStartTurn(host: StartTurnHost) {
       engine: parseLocalPromptMode(process.env.SAGAX_LOCAL_PROMPT)
     };
     state.stablePrompt = usesStablePrompt(promptMode);
-    state.compactPrompt = usesCompactPrompt({ ...promptMode, driverKind: state.instance.driverKind, model: state.model })
+    const wantsCompact = usesCompactPrompt({ ...promptMode, driverKind: state.instance.driverKind, model: state.model });
+    // #2037: Claude with localPrompt full still needs the bot's agents use
+    // so native tool search can defer everything outside the core and pins.
+    const needsAgentsUse = wantsCompact || state.instance.driverKind === "claudeAgent";
+    const compactForBot = needsAgentsUse
       ? compactPromptFor(state.liveBot ?? state.bot, typeof state.turnPrincipal === "string" && state.turnPrincipal ? state.turnPrincipal : effectiveBotOwner(state.bot))
       : undefined;
+    state.compactPrompt = wantsCompact ? compactForBot : undefined;
+    state.agentsKnownUse = !state.compactPrompt && compactForBot?.agents.core === "used" ? compactForBot.agents : undefined;
     const promptApprovalLevel = approvalModeForTurn(state.bot, state.commsDepth > 0, state.threadId);
     // Cold / automation turns (routines, webhooks, proactive): tighter
     // per-section budgets, lazy skill index, short rich-output (V1/R3).

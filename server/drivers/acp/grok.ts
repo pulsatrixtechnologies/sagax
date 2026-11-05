@@ -1162,6 +1162,10 @@ const support: AcpSupport = {
       }
       return;
     }
+    // Already on the pick (warmOnly configured it, or session/new started on
+    // it): skip the round trip so a reused first turn stays a bare prompt
+    // (#2055).
+    if (currentModelId === turn.model) return;
     try {
       await request("session/set_model", { sessionId, modelId: turn.model });
     } catch (e) {

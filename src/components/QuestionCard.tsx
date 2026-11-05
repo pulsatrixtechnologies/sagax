@@ -12,9 +12,10 @@
 // answered the card stays, showing what was chosen.
 import { useMemo, useState } from "react";
 import { Check } from "lucide-react";
-import { useStore, type Bot, type Message } from "@/state/store";
+import { api, useStore, type Bot, type Message } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { pageTargetKeys } from "@/lib/page-target-copy";
 import {
   answerWithoutPreamble,
   formatQuestionAnswers,
@@ -36,6 +37,32 @@ import {
   sheetKeyHandler,
   type SheetChoice,
 } from "./QuestionSheet";
+
+/** Localize page-target options when the card carries pageTargetChoice (#2048). */
+function localizedPageTargetQuestions(questions: AskQuestion[], card: NonNullable<Message["card"]>): AskQuestion[] {
+  const targets = card.pageTargetChoice?.targets;
+  if (!targets?.length) return questions;
+  const byId = new Map(targets.map((row) => [row.id, row]));
+  return questions.map((question) => ({
+    ...question,
+    question: t("pageTarget.question"),
+    options: question.options.map((option) => {
+      const id = option.id ?? option.label;
+      const target = byId.get(id);
+      if (!target) return option;
+      const keys = pageTargetKeys(id);
+      const name = keys ? t(keys.name) : null;
+      const description = keys ? t(keys.description) : null;
+      return {
+        ...option,
+        id,
+        label: name ?? target.name,
+        description: description ?? option.description ?? target.name,
+        icon: option.icon ?? target.icon,
+      };
+    }),
+  }));
+}
 
 /** What each question has been answered with so far. Option labels and the
  * free-text reply are kept apart so toggling "Other" off cannot silently
@@ -130,8 +157,8 @@ export function QuestionCard({
   /** answered by THREAD, so a question raised inside a room settles the
    * same way as one in a 1:1 chat */
   threadId: string;
-  /** who is asking, for the "Name has a question" line */
-  bot?: Pick<Bot, "name">;
+  /** who is asking, for the "Name has a question" line; id saves a page-target default */
+  bot?: Pick<Bot, "name"> & { id?: string };
   message: Message;
   /** told once the answer was sent (the Approvals screen shows what follows) */
   onAnswered?: () => void;
@@ -140,7 +167,10 @@ export function QuestionCard({
 }) {
   const { dispatch } = useStore();
   const card = message.card;
-  const questions = card?.questionRequest?.questions ?? [];
+  const questions = useMemo(
+    () => localizedPageTargetQuestions(card?.questionRequest?.questions ?? [], card ?? { title: "", subtitle: "", options: [] }),
+    [card],
+  );
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
   const [active, setActive] = useState(0);
   /** the questions whose "Other" field is open */
@@ -150,6 +180,8 @@ export function QuestionCard({
   const [sent, setSent] = useState<string | null>(null);
   // the last answer did not reach the bot: said on the card until the next try
   const [failed, setFailed] = useState(false);
+  /** #2048: remember this publish target as the bot's default. */
+  const [rememberTarget, setRememberTarget] = useState(false);
 
   const answered = useMemo(
     () => questions.map((question, index) => answersOf(drafts[index] ?? initialDraft(question)).length > 0),
@@ -232,22 +264,34 @@ export function QuestionCard({
     if (settled || !card?.requestId) return;
     const answers = questions.map((question, index) => answersOf(final[index] ?? initialDraft(question)));
     if (answers.some((entry) => !entry.length)) return;
-    const answer = formatQuestionAnswers(questions, answers);
+    // #2048: the bot expects the bare target id as the next message.
+    const answer = card.pageTargetChoice
+      ? (answers[0]?.[0] ?? "").trim()
+      : formatQuestionAnswers(questions, answers);
     if (!answer) return;
     setSent(answer);
     setFailed(false);
     returnFocusToComposer();
     onAnswered?.();
-    dispatch({
+    const rememberId = rememberTarget && card.pageTargetChoice ? answer : "";
+    const respond = () => dispatch({
       type: "decideRequest",
       threadId,
-      requestId: card.requestId,
+      requestId: card.requestId!,
       behavior: "answer",
       message: answer,
       // The answer never reached the bot, so the card must go back to
       // being answerable rather than sitting there looking settled.
       onError: () => { setSent(null); setFailed(true); onAnswerFailed?.(); },
     });
+    if (rememberId && bot?.id) {
+      void api(`/api/bots/${bot.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ pageTargetDefault: rememberId }),
+      }).then(respond, respond);
+      return;
+    }
+    respond();
   }
 
   const named = bot ? t("question.card.named", { name: bot.name }) : t("question.card.title");
@@ -309,6 +353,19 @@ export function QuestionCard({
 
       <SheetChoices choices={choices} picked={picked} multi={multi} ariaLabel={current.question} onPick={choose} />
 
+      {card.pageTargetChoice && !settled && (
+        <label className="mt-2 flex cursor-pointer items-center gap-2 px-1 text-[12.5px] text-ink-secondary">
+          <input
+            type="checkbox"
+            checked={rememberTarget}
+            onChange={(event) => setRememberTarget(event.target.checked)}
+            data-page-target-remember=""
+            className="size-3.5 rounded border-ink/20"
+          />
+          <span>{t("pageTarget.alwaysUse")}</span>
+        </label>
+      )}
+
       {freeText && fieldOpen && (
         <SheetField
           value={draft.custom}
@@ -341,7 +398,9 @@ function SettledQuestion({ questions, answer, closed, title }: { questions: read
   const fallback = answer ? answerWithoutPreamble(answer) : "";
   const parts = questions.map((question) => {
     const value = byQuestion[question.question] ?? (single ? fallback : "");
-    return { question, ...picksInAnswer(value, question.options.map((option) => option.label)) };
+    // Match by stable id when present (#2048 page targets send the id).
+    const keys = question.options.map((option) => option.id ?? option.label);
+    return { question, ...picksInAnswer(value, keys) };
   });
   const firstIsTitle = single && questions[0]!.question.length <= TITLE_MAX;
   return (

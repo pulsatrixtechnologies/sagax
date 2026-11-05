@@ -1485,6 +1485,100 @@ export class Store {
     return undefined;
   }
 
+  /** #2045: rename one person's team without touching another person's bots
+   * that share the same display name. */
+  renameSectionForOwner(name: string, nextName: string, ownerKey: string, computers?: TeamComputers): string | undefined {
+    if (!name) return "No such team";
+    const wanted = nextName.trim();
+    if (!wanted || wanted.length > 60 || [...wanted].some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) {
+      return "Team name must be 1 to 60 characters without control characters";
+    }
+    if (name === wanted) return undefined;
+    if (computers?.forSection(wanted)) return "A team with that name already exists";
+    const owner = ownerKey.trim().toLowerCase();
+    const members = this.bots.filter((bot) => sectionKey(bot.section) === name && this.botOwnerKey(bot) === owner);
+    const rooms = this.groups.filter((group) => {
+      if (sectionKey(group.section) !== name) return false;
+      const bots = group.memberIds.map((id) => this.bot(id)).filter((bot): bot is BotRecord => Boolean(bot));
+      return bots.every((bot) => this.botOwnerKey(bot) === owner);
+    });
+    const affected = this.bots.filter((bot) => this.botOwnerKey(bot) === owner && (
+      members.includes(bot) || bot.managedSections?.some((section) => sectionKey(section) === name)
+    ));
+    if (affected.some((bot) => bot.busy || bot.tasks?.some((task) => task.busy)) || rooms.some((group) => group.busyBotId)) {
+      return "Stop this team's active work before renaming the team";
+    }
+    const nextBots = this.bots.map((bot) => ({
+      ...bot,
+      ...(members.includes(bot) ? { section: wanted } : {}),
+      ...(bot.managedSections && this.botOwnerKey(bot) === owner
+        ? { managedSections: [...new Set(bot.managedSections.map((section) => sectionKey(section) === name ? wanted : section))] }
+        : {}),
+    }));
+    const nextGroups = this.groups.map((group) => (rooms.includes(group) ? { ...group, section: wanted } : group));
+    try {
+      this.saveBots(nextBots, false);
+      this.saveGroups(nextGroups, false);
+      this.rememberSections([wanted]);
+      // In-memory bots still hold the old names until Object.assign below;
+      // judge remaining use from the written next* records.
+      const stillUsedAfter = nextBots.some((bot) => sectionKey(bot.section) === name)
+        || nextGroups.some((group) => sectionKey(group.section) === name)
+        || Boolean(computers?.forSection(name));
+      if (!stillUsedAfter && this.sections.includes(name)) changeEmptySection(name, null);
+    } catch (error) {
+      this.saveBots(this.bots, false);
+      this.saveGroups(this.groups, false);
+      throw error;
+    }
+    for (let i = 0; i < nextBots.length; i++) Object.assign(this.bots[i], nextBots[i]);
+    for (let i = 0; i < nextGroups.length; i++) Object.assign(this.groups[i], nextGroups[i]);
+    for (const bot of affected) this.emit({ type: "bot", botId: bot.id });
+    for (const room of rooms) this.emit({ type: "group", groupId: room.id });
+    this.emit({ type: "sections" });
+    return undefined;
+  }
+
+  /** #2045: delete one person's team; another person's same-named team stays. */
+  deleteSectionForOwner(name: string, ownerKey: string): string | undefined {
+    if (!name) return "No such team";
+    const owner = ownerKey.trim().toLowerCase();
+    const members = this.bots.filter((bot) => sectionKey(bot.section) === name && this.botOwnerKey(bot) === owner);
+    const rooms = this.groups.filter((group) => {
+      if (sectionKey(group.section) !== name) return false;
+      const bots = group.memberIds.map((id) => this.bot(id)).filter((bot): bot is BotRecord => Boolean(bot));
+      return bots.every((bot) => this.botOwnerKey(bot) === owner);
+    });
+    if (members.some((bot) => bot.busy || bot.tasks?.some((task) => task.busy)) || rooms.some((group) => group.busyBotId)) {
+      return "Stop this team's active work before deleting the team";
+    }
+    const nextBots = this.bots.map((bot) => ({
+      ...bot,
+      ...(members.includes(bot) ? { section: undefined } : {}),
+      ...(bot.managedSections && this.botOwnerKey(bot) === owner
+        ? { managedSections: bot.managedSections.filter((section) => sectionKey(section) !== name) }
+        : {}),
+    }));
+    const nextGroups = this.groups.map((group) => (rooms.includes(group) ? { ...group, section: undefined } : group));
+    try {
+      this.saveBots(nextBots);
+      this.saveGroups(nextGroups);
+      const stillUsed = nextBots.some((bot) => sectionKey(bot.section) === name)
+        || nextGroups.some((group) => sectionKey(group.section) === name);
+      if (!stillUsed && this.sections.includes(name)) changeEmptySection(name, null);
+    } catch (error) {
+      this.saveBots();
+      this.saveGroups();
+      throw error;
+    }
+    for (let i = 0; i < nextBots.length; i++) Object.assign(this.bots[i], nextBots[i]);
+    for (let i = 0; i < nextGroups.length; i++) Object.assign(this.groups[i], nextGroups[i]);
+    for (const bot of members) this.emit({ type: "bot", botId: bot.id });
+    for (const group of rooms) this.emit({ type: "group", groupId: group.id });
+    this.emit({ type: "sections" });
+    return undefined;
+  }
+
   // ── groups ────────────────────────────────────────────────────────────
   /** Subscribe to every write. Listeners run after the write and after
    * save; a throwing listener never breaks the write. */

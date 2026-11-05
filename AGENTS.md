@@ -15,22 +15,24 @@ restores it. A direct work thread closes once answered, whatever the answer;
 an AI client's conversation is archived once await_turn collects its reply.
 Scenario: `server/threads/background-sweep.test.ts`. Captures:
 `scripts/capture/background-threads.mjs`.
-## Visible roles (#2016, 2026-11-05)
+## Visible roles (#2016, corrected #2032/#2033, 2026-11-05)
 
 Every engine `tools/call` on the account's Perspicax connection reports its
 role (`PerspicaxMcp` options `onRole`, `turnRole`, `roleFallback`,
-`askMeWrite`; `shared/perspicax-roles.ts`). Chat starts on the default
-surface ("Moi"); a composer pick fixes the role for the turn; a routine
-starts under its "Au nom de" role. A read 403 under a role is read once more
-as "Moi" by the relay and the role is put back; a write 403 stops the turn's
-role switches and shows the permission; a lapsed role stops the call; a
-routine writing as "Moi" asks the person. `server/perspicax/role-journal.ts`
-keeps steps (`tool.role`), transitions, refusals, owner rules and picks,
-always per principal; `role-events.ts` draws chips, "Agit comme" cards
-(`card.roleTransition`, POST /api/bots/:id/cards/:messageId/role-transition)
-and banners (`tool.roleNotice`). Tests: `perspicax-roles-relay.test.ts`,
+`askMeWrite`; `shared/perspicax-roles.ts`). Chat has no role picker and shows
+no role chip, "Agit comme" card or role notice (web and iOS). The role lives
+only on a Pulsatrix Flow routine's "Au nom de" field (`RoutineActAsField`,
+hidden when the routine has no Flow recipe); other routines save no role. A
+read 403 under a role is read once more as "Moi" by the relay and the role is
+put back; a write 403 stops the turn's role switches; a lapsed role stops the
+call; a routine writing as "Moi" asks the person. `server/perspicax/role-journal.ts`
+keeps transitions, refusals and owner rules per principal for the Roles tab
+and routine coverage; `role-events.ts` writes the journal only and never
+posts into the chat. Tests: `perspicax-roles-relay.test.ts`,
 `role-journal.test.ts`, `shared/perspicax-roles.test.ts`,
-`src/components/RoleChip.test.ts`; gallery `src/gallery/visible-roles.html`.
+`RoutineActAsField.dom.test.ts`, `RoleChip.test.ts`,
+`StatusActivityRow.test.ts`; gallery `src/gallery/visible-roles.html`
+(`?view=routine|tab`).
 
 ## Prompt index and on-demand references (#1997, 2026-11-04)
 
@@ -162,13 +164,44 @@ bot's own engine; absent means the bot's model. Runs snapshot it
 turn in `start-turn-prepare-admit.ts`, never on the thread, so chat keeps the
 bot's model. A limit takeover (a failover row for the thread) or another
 engine wins; a model the engine does not offer or that is turned off is
-ignored with one `notice:` row per run. Claude turns pass `subagentModel`,
-which sets `CLAUDE_CODE_SUBAGENT_MODEL` and is part of the spawn contract.
-Writes: POST/PATCH `/api/routines` with `model` (null or "" clears), and the
-`model` field of `propose_routine` / `propose_routine_action`; `checkModel`
-refuses a model the bot's engine does not list. Tests:
-`shared/routine-model.test.ts`, `routines.test.ts`, `claude.test.ts`,
-`RoutineCalendarPage.test.ts`.
+ignored with one `notice:` row per run. Writes: POST/PATCH `/api/routines`
+with `model` (null or "" clears), and the `model` field of `propose_routine`
+/ `propose_routine_action`; `checkModel` refuses a model the bot's engine
+does not list. Tests: `shared/routine-model.test.ts`, `routines.test.ts`,
+`claude.test.ts`, `RoutineCalendarPage.test.ts`.
+
+## Claude sub-agent model (#2038)
+
+Claude turns set `CLAUDE_CODE_SUBAGENT_MODEL` via
+`resolveClaudeSubagentModel` (`shared/claude-subagent-model.ts`) in
+`start-turn-dispatch.ts`. Priority: `Routine.subagentModel` (run snapshot,
+`routineSubagentModelForTurn`), else `Routine.model` / `state.routineModel`,
+else the bot's `modelSelection.fast` when `fast.instanceId` matches the
+turn's engine. No blind default: a bot without a fast model keeps today's
+behaviour (sub-agents inherit the CLI default). The main bot's reasoning
+model is untouched. `subagentModel` is part of the Claude spawn contract.
+Writes: POST/PATCH `/api/routines` `subagentModel` (null or "" clears) and
+`subagent_model` on `propose_routine` / `propose_routine_action`. Tests:
+`shared/claude-subagent-model.test.ts`, `routines.test.ts`, `claude.test.ts`.
+
+## Routine "Au nom de" role (visible roles batch 4, 2026-11-05)
+
+`Routine.actAs` (`shared/routine-act-as.ts`) is the Perspicax role slug its
+runs act as; "" is "Moi" (the person's own surface), absent means not chosen.
+Runs snapshot it (`RoutineRun.actAs`); `perspicaxTurnRole` (server/index.ts)
+prefers the run's snapshot, then the routine's. Writes: POST/PATCH
+`/api/routines` `actAs` (null clears, "" is Moi) and `act_as` of
+`propose_routine` / `propose_routine_action`. Bot routines only.
+`GET /api/bots/:id/roles/routine-coverage?routineId=&slug=&prompt=`
+(server/routes/routine-role-coverage.ts, through the `more` hook of
+perspicax-roles.ts) lists the run-as person's held roles live
+(`probeRoutineRoles`: short-lived connection on their routine delegation,
+`identity_switch` {} and `flow` describe of the recipe) and counts only that
+person's refusals for that bot. The editor (RoutineActAsField.tsx) saves the
+minimal covering role (`routineDefaultRole`) when nothing was chosen; an
+explicit choice is never overwritten. Tests: `routines.test.ts`,
+`routine-requests.test.ts`, `routine-role-coverage.test.ts`,
+`perspicax-routine-roles.test.ts`, `RoutineActAsField.dom.test.ts`.
 
 ## Routine "Au nom de" role (visible roles batch 4, 2026-11-05)
 
@@ -857,8 +890,10 @@ OpenAI-compatible server" (`OpenAiCompatServers`), each an engine
 `compat-<id>` on its own key (`server/openai-compat-servers.ts`,
 `openaiCompatServers` in config.json, `SAGAX_COMPAT_SERVER_API_KEY`),
 `POST/PATCH/DELETE /api/instances/openai-compat-servers[/id]`
-(`server/routes/openai-compat-servers.ts`), an
-organization admin's only. Tests: `shared/offered-engines.test.ts`,
+(`server/routes/openai-compat-servers.ts`). On an organization server
+(#2054) a member adds, edits and removes their own (`ownerPrincipalId`);
+a server with no owner is org-wide and an organization admin's only to
+change; members never see each other's. Tests: `shared/offered-engines.test.ts`,
 `shared/org-engine-readiness.test.ts`, `server/engines/engine-credentials.test.ts`,
 `server/openai-compat-servers.test.ts`, `server/desktop/desktop-local-models.test.ts`,
 `src/lib/model-payers.test.ts`, `ModelPicker.interaction.test.ts`, C5 in
@@ -2462,8 +2497,12 @@ Published pages and the open page's « ⋯ » > Open in a window, a page opens i
 its own system window (src/lib/page-windows.ts): the artifact window bridge
 with the id `page:<pageId>`, one window per page, its place kept; a browser
 gets a new tab. That window draws the same PageSurface (×, title, Share, « ⋯ »)
-and asks the page again every 5 s for the bot's new version. Tests:
-`src/lib/page-windows.test.ts`, `src/components/bot-settings/LibraryTab.test.ts`.
+and asks the page again every 5 s for the bot's new version. On desktop it
+auto-fits to the page content (#2051: `src/lib/page-window-fit.ts`,
+`electron/artifact-window.mjs` + `artifact-window-preload.cjs`) until the
+person resizes it; that size is remembered per page id (`personSized`). Tests:
+`src/lib/page-windows.test.ts`, `src/lib/page-window-fit.test.ts`,
+`electron/artifact-window.test.mjs`, `src/components/bot-settings/LibraryTab.test.ts`.
 Tests: `server/pages/published-pages.test.ts` (app's own look),
 `src/components/PageViewer.surface.dom.test.ts`, `src/lib/open-page.test.ts`.
 Lot 5 evidence: `docs/plans/grok-convergence-interface-evidence.md`.
@@ -10588,7 +10627,9 @@ in the conversation (`claudeAccountForPrincipal`). Rules:
 - Only that person's own account, never another person's: no account picked
   by the runner, no fallback. No Claude login is a 409 `claude_not_signed_in`.
   A page of another claude.ai account answers `blocked: other_account`; the
-  bot offers to publish a copy from this account.
+  bot is asked to publish a copy from an HTML file in its workspace (or a
+  paste), then return the new URL so references can be updated. A foreign
+  page cannot be read with `Artifact`.
 - The page goes in as `html` or `file` (a regular file inside the bot's
   workspace, realpath checked); `file_path` and the other local-path keys in
   `input` are refused. The runner stages it in a private temp folder and the

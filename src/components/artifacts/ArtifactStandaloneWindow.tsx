@@ -3,18 +3,20 @@
 // drawn by the desktop app in a separate BrowserWindow
 // (electron/artifact-window.mjs) that can sit outside the app's frame, beside
 // the work or on another monitor, or opened in a browser tab where there is no
-// desktop app. It shows the widget, its status, Refresh now and Close window,
-// and has its own store, like any other tab of the app. Closing the window
-// docks the artifact; Close window does the same.
-import { useEffect, useState, useSyncExternalStore } from "react";
-import { LoaderCircle, RefreshCw, X } from "lucide-react";
+// desktop app. It shows the widget, its status, Refresh now, Full screen and
+// Close window, and has its own store, like any other tab of the app. Closing
+// the window docks the artifact; Close window does the same.
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { LoaderCircle, Maximize2, Minimize2, RefreshCw, X } from "lucide-react";
 
 import { StoreProvider, useStore } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { effectiveLanguage, useLanguageChoice } from "@/lib/language-preference";
 import { setLocale, t } from "@/lib/i18n";
 import { refreshArtifact, useArtifact, useArtifactWatch } from "@/lib/artifacts";
-import { ArtifactFrame, ArtifactFullscreenHost } from "./ArtifactFrame";
+import { useOsFullscreen } from "@/hooks/use-os-fullscreen";
+import { readPageWindowFitBridge, startPageWindowFit } from "@/lib/page-window-fit";
+import { ArtifactFrame } from "./ArtifactFrame";
 import { PageSurface } from "../PageViewer";
 import { pageIdOfWindow } from "@/lib/page-windows";
 import { ArtifactStatusLine } from "./ArtifactsSection";
@@ -22,15 +24,19 @@ import { dockArtifactWindow, type ArtifactWindowData } from "./artifact-windows"
 
 const TOOL = "flex size-7 items-center justify-center rounded-md text-ink-secondary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-40";
 
-/** One artifact's window body: its widget, its state, Refresh now and Close
- * window. Mounted means visible, so it holds a watch lease. */
+/** One artifact's window body: its widget, its state, Refresh now, Full screen
+ * and Close window. Mounted means visible, so it holds a watch lease. */
 export function ArtifactWindowBody({ data }: { data: ArtifactWindowData }) {
   const { artifact, error } = useArtifact(data.botId, data.artifactId);
   useArtifactWatch(data.artifactId);
   const [refreshing, setRefreshing] = useState(false);
+  const { fullscreen, toggle } = useOsFullscreen();
+  const fullscreenLabel = fullscreen ? t("artifact.exitFullscreen") : t("artifact.fullscreen");
   return (
     <div className="flex size-full flex-col" data-artifact-window={data.artifactId}>
-      <div className="flex shrink-0 items-center gap-1 border-b border-hairline/30 px-2 py-1">
+      {/* Full screen lives in the chrome (#2043): never over the page content.
+          The click asks the OS for full screen (setFullScreen / Fullscreen API). */}
+      <div data-artifact-window-chrome className="flex shrink-0 items-center gap-1 border-b border-hairline/30 px-2 py-1">
         <span className="min-w-0 flex-1">{artifact && <ArtifactStatusLine artifact={{ ...artifact, ...(artifact.data ? { dataAt: artifact.data.at } : {}) }} />}</span>
         {artifact?.source && (
           <button
@@ -47,6 +53,21 @@ export function ArtifactWindowBody({ data }: { data: ArtifactWindowData }) {
             <RefreshCw size={13} aria-hidden="true" className={cn(refreshing && "animate-spin motion-reduce:animate-none")} />
           </button>
         )}
+        {artifact && (
+          <button
+            type="button"
+            className={TOOL}
+            data-artifact-fullscreen
+            aria-pressed={fullscreen}
+            aria-label={fullscreenLabel}
+            title={fullscreenLabel}
+            onClick={() => toggle()}
+          >
+            {fullscreen
+              ? <Minimize2 size={13} aria-hidden="true" />
+              : <Maximize2 size={13} aria-hidden="true" />}
+          </button>
+        )}
         <button
           type="button"
           className={TOOL}
@@ -60,7 +81,7 @@ export function ArtifactWindowBody({ data }: { data: ArtifactWindowData }) {
       </div>
       <div className="min-h-0 flex-1 p-2">
         {artifact ? (
-          <ArtifactFrame artifact={artifact} fill />
+          <ArtifactFrame artifact={artifact} fill bare />
         ) : error ? (
           <p role="alert" className="p-2 text-[12.5px] text-danger">{t("artifacts.error")}</p>
         ) : (
@@ -69,9 +90,6 @@ export function ArtifactWindowBody({ data }: { data: ArtifactWindowData }) {
           </span>
         )}
       </div>
-      {/* the frame's Full screen button draws here: an own window has no
-          ArtifactsHost, and the window itself goes full screen (#1495) */}
-      <ArtifactFullscreenHost windowFullscreen />
     </div>
   );
 }
@@ -125,16 +143,48 @@ function ArtifactStandaloneBody() {
   // open over its conversation; × closes the window
   const pageId = pageIdOfWindow(target.artifactId);
   if (pageId) {
-    return (
-      <main data-page-standalone={pageId} className="flex h-dvh min-h-0 flex-col bg-app text-ink">
-        <PageSurface pageId={pageId} follow onClose={() => window.close()} onChange={(page) => { if (page.title) document.title = page.title; }} />
-      </main>
-    );
+    return <PageStandaloneFit pageId={pageId} />;
   }
   return (
     <main data-artifact-standalone={target.artifactId} className="flex h-dvh min-h-0 flex-col bg-panel text-ink">
       <Title botId={target.botId} artifactId={target.artifactId} />
       <ArtifactWindowBody data={target} />
+    </main>
+  );
+}
+
+/** A page in its own desktop window: measure the content and ask Electron to
+ * size the BrowserWindow to it (#2051). In a browser tab the bridge is absent
+ * and the page fills the viewport as before. */
+function PageStandaloneFit({ pageId }: { pageId: string }) {
+  const rootRef = useRef<HTMLElement>(null);
+  const [contentHeight, setContentHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    const bridge = readPageWindowFitBridge();
+    if (!root || !bridge) return;
+    return startPageWindowFit({
+      root,
+      getFrame: () => root.querySelector<HTMLIFrameElement>("[data-page-viewer-frame]"),
+      bridge,
+      onContentHeight: setContentHeight,
+    });
+  }, [pageId]);
+
+  return (
+    <main
+      ref={rootRef}
+      data-page-standalone={pageId}
+      className={cn("flex min-h-0 flex-col bg-app text-ink", contentHeight == null && "h-dvh")}
+      style={contentHeight != null ? { height: contentHeight } : undefined}
+    >
+      <PageSurface
+        pageId={pageId}
+        follow
+        onClose={() => window.close()}
+        onChange={(page) => { if (page.title) document.title = page.title; }}
+      />
     </main>
   );
 }

@@ -706,6 +706,9 @@ struct DesktopSidebarFooter: View {
         .padding(.horizontal, icons ? 8 : 10)
         .padding(.top, 4)
         .padding(.bottom, icons ? 12 : 16)
+        // `data-tour="tools"` on the desktop's sidebar foot (Sidebar.tsx):
+        // the guided tour's tools step points here when place rows are gone
+        .desktopTourAnchor("tools")
         .task(id: session.connection?.id) {
             await flags.reload(session)
             await loadAchievements()
@@ -828,6 +831,8 @@ struct DesktopFootCapabilitiesButton: View {
         .buttonStyle(.plain)
         .padding(-4)
         .onHover { hovering = $0 }
+        // `data-tour="nav-apps"` on FootConnectApps (SidebarFoot.tsx)
+        .desktopTourAnchor("nav-apps")
         .accessibilityLabel(Text("Capabilities"))
         .accessibilityIdentifier("desktop-sidebar-capabilities")
     }

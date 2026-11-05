@@ -19,7 +19,7 @@ import { PLACE_PHONE_CALL_TOOL_SPEC } from "../../shared/outbound-call.ts";
 import {
   HANG_UP_TOOL_SPEC, PLACE_CALL_TOOL_SPEC, SEND_DTMF_TOOL_SPEC, TRANSFER_CALL_TOOL_SPEC,
 } from "../../shared/phone-call-live.ts";
-import { ARTIFACT_TOOL_DEFINITIONS } from "./agents-artifact-tools.ts";
+import { ARTIFACT_TOOL_DEFINITIONS, CHOOSE_PAGE_TARGET_DEF } from "./agents-artifact-tools.ts";
 import { TASK_LIST_TOOL_DEFINITIONS } from "./agents-task-tools.ts";
 import { HELP_TOOL_DEFINITIONS } from "./agents-help-tools.ts";
 import { SETTINGS_TOOL_DEFINITIONS } from "./agents-settings-tools.ts";
@@ -190,6 +190,7 @@ const toolDefinitions = (externalRuntime: boolean) => [
   ...WIDGET_TOOL_DEFINITIONS,
   ...APP_TOOL_DEFINITIONS,
   ...ARTIFACT_TOOL_DEFINITIONS,
+  CHOOSE_PAGE_TARGET_DEF,
   ...TASK_LIST_TOOL_DEFINITIONS,
   ...PAGE_TOOL_DEFINITIONS,
   ...HELP_TOOL_DEFINITIONS,
@@ -313,7 +314,7 @@ const ROOM_REPLACED_TOOLS = new Set(["ask_bot", "delegate_bot", "check_delegatio
 // run_with_engine starts a thread of the bot itself, which a room turn cannot
 // (startTurn: the bot is already working in that room).
 // Waits are one-to-one only (routes/waits.ts): a room holds no wait.
-const ROOM_ABSENT_TOOLS = new Set(["propose_page", "page_comments", "show_widget", "update_widget", "show_html", "update_html", "run_with_engine", ...WAIT_TOOL_NAMES]);
+const ROOM_ABSENT_TOOLS = new Set(["propose_page", "page_comments", "choose_page_target", "show_widget", "update_widget", "show_html", "update_html", "run_with_engine", ...WAIT_TOOL_NAMES]);
 // 2026-10-28: what a teammate's turn one hop away (profile.peerHop) is not
 // shown: every tool that would start another bot's turn, a job of its own,
 // or an agent-API prompt. The routes refuse these past one hop
@@ -353,7 +354,7 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   "add_mcp_server", "skill_manage", "rules_update", "docs_update",
   "launch_cloud_agent", "list_cloud_agents", "get_cloud_agent", "cancel_cloud_agent", "archive_cloud_agent",
   "cloud_agent_follow_up", "cloud_agent_transcript", "find_cloud_agent_by_pr", "list_cloud_agent_artifacts",
-  "save_artifact", "update_artifact", "delete_artifact", "list_artifacts", "claude_artifact",
+  "save_artifact", "update_artifact", "delete_artifact", "list_artifacts", "claude_artifact", "choose_page_target",
   "manage_settings", "sagax_settings", "manage_pairing", "offer_shell_terminal", "list_terminal_resources", "resource_usage", "vm_exec",
   "shared_computer", "list_shared_computers", "nudge_person", "remove_reaction", "retry_thread",
   "read_transcript", "read_transcript_cold", "read_transcript_page", "read_latest_page", "read_latest_page_with_threads",
@@ -416,15 +417,48 @@ export function compactToolsFromEnv(env: Record<string, string | undefined>): { 
  * threads prompt presents it as the way to hand a teammate a job. */
 const DEFERRED_WHEN_COORDINATING: ReadonlySet<string> = new Set(["start_thread"]);
 
+/** #2037: SAGAX_DEFER_KNOWN_USE, set by the Claude driver when native tool
+ * search is on and the bot's agents use is known (KNOWN_USE_CALLS). Only
+ * `core: "used"` widens deferral; absent or "default" keeps DEFERRED_AGENT_TOOL_NAMES. */
+export function knownUseFromEnv(env: Record<string, string | undefined>): { core: "used"; pinned: ReadonlySet<string> } | undefined {
+  const raw = env.SAGAX_DEFER_KNOWN_USE;
+  if (!raw) return undefined;
+  try {
+    const value = JSON.parse(raw) as { core?: unknown; pinned?: unknown };
+    if (value.core !== "used") return undefined;
+    const pinned = Array.isArray(value.pinned)
+      ? value.pinned.filter((name): name is string => typeof name === "string" && name.length > 0 && name.length <= 100)
+      : [];
+    return { core: "used", pinned: new Set(pinned) };
+  } catch {
+    return undefined;
+  }
+}
+
 /** The tools/list a Claude Code engine is served: the same tools, with the
  * rare ones marked `_meta["anthropic/alwaysLoad"] = false` so the CLI defers
  * them behind tool search although the server is always loaded (the CLI's
  * per-tool override of a server's alwaysLoad). Other engines never get the
- * marker (SAGAX_DEFER_RARE_TOOLS is set by the Claude driver only). */
-export function withDeferredRareTools<T extends { name: string }>(tools: readonly T[], profile: { coordinating: boolean }): Array<T & { _meta?: Record<string, unknown> }> {
-  return tools.map((tool) => DEFERRED_AGENT_TOOL_NAMES.has(tool.name) || (profile.coordinating && DEFERRED_WHEN_COORDINATING.has(tool.name))
-    ? { ...tool, _meta: { ...(tool as { _meta?: Record<string, unknown> })._meta, "anthropic/alwaysLoad": false } }
-    : tool);
+ * marker (SAGAX_DEFER_RARE_TOOLS is set by the Claude driver only).
+ * #2037: when `knownUse.core` is "used", every tool outside the chat-turn
+ * core and the bot's own pinned tools is deferred the same way; every name
+ * stays listed and callable. A bot with little recorded use omits knownUse
+ * and keeps DEFERRED_AGENT_TOOL_NAMES. */
+export function withDeferredRareTools<T extends { name: string }>(
+  tools: readonly T[],
+  profile: { coordinating: boolean; knownUse?: { core: "default" | "used"; pinned: ReadonlySet<string> } },
+): Array<T & { _meta?: Record<string, unknown> }> {
+  const known = profile.knownUse?.core === "used"
+    ? { core: "used" as const, pinned: profile.knownUse.pinned, coordinating: profile.coordinating }
+    : undefined;
+  return tools.map((tool) => {
+    const defer = known
+      ? !compactListed(tool.name, known)
+      : DEFERRED_AGENT_TOOL_NAMES.has(tool.name) || (profile.coordinating && DEFERRED_WHEN_COORDINATING.has(tool.name));
+    return defer
+      ? { ...tool, _meta: { ...(tool as { _meta?: Record<string, unknown> })._meta, "anthropic/alwaysLoad": false } }
+      : tool;
+  });
 }
 
 /** #2037, a Claude Code compact turn (SAGAX_COMPACT_TOOLS with

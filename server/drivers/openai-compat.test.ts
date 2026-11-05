@@ -126,6 +126,84 @@ describe("OpenAICompatDriver", () => {
     await inst.dispose();
   });
 
+  it("lists a private Cohere deployment's chat models from { models } (#2054)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ models: [
+      { name: "vendor-chat-small", endpoints: ["chat"] },
+      { name: "vendor-embed", endpoints: ["embed"] },
+      { name: "vendor-chat-large", endpoints: ["chat", "generate"] },
+      { name: "vendor-any" },
+    ] }), { status: 200 })));
+    const inst = await OpenAICompatDriver.create({
+      instanceId: "cohere-private", displayName: "Private", enabled: true,
+      config: OpenAICompatDriver.decodeConfig({ url: "https://models.example.test/v1", apiKeyEnv: "TEST_KEY" }),
+      environment: { TEST_KEY: "fake-key" },
+    });
+    await vi.waitFor(() => expect(inst.models.options.map((option) => option.id))
+      .toEqual(expect.arrayContaining(["vendor-chat-small", "vendor-chat-large", "vendor-any"])));
+    expect(inst.models.options.map((option) => option.id)).not.toContain("vendor-embed");
+    await inst.dispose();
+  });
+
+  it("reads vLLM's reasoning field (message and delta) (#2054)", async () => {
+    let stream = false;
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      if (String(input).endsWith("/models")) return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      if (stream) {
+        return new Response(
+          'data: {"choices":[{"delta":{"reasoning_content":null,"reasoning":"streamed thought"}}]}\n' +
+            'data: {"choices":[{"delta":{"content":"answer"}}]}\n' +
+            "data: [DONE]\n",
+          { status: 200, headers: { "content-type": "text/event-stream" } },
+        );
+      }
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: "", reasoning_content: "", reasoning: "vllm thought" }, finish_reason: "length" }],
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }));
+    const inst = await OpenAICompatDriver.create({
+      instanceId: "test-vllm-reasoning", displayName: "vLLM", enabled: true,
+      config: { url: "https://example.test/v1", apiKeyEnv: "TEST_KEY" },
+      environment: { TEST_KEY: "fake-key" },
+    });
+    await expect(inst.generateText?.("question")).resolves.toBe("vllm thought");
+    stream = true;
+    const recorder = recordEvents(inst.adapter);
+    await inst.adapter.sendTurn({ threadId: "vllm-thread", text: "question", model: "vendor/model" });
+    await recorder.until((event) => event.type === "turn.completed");
+    expect(recorder.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "content.delta", streamKind: "reasoning_text", delta: "streamed thought" }),
+      expect.objectContaining({ type: "item.completed", itemType: "assistant_text", text: "answer" }),
+    ]));
+    recorder.stop();
+    await inst.dispose();
+  });
+
+  it("a person's own server (key in Perspicax, typed model) calls <base>/chat/completions with its key and model (#2054)", async () => {
+    const calls: Array<{ url: string; auth: string | null; model: unknown }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) as { model?: unknown } : {};
+      calls.push({ url, auth: new Headers(init?.headers).get("authorization"), model: body.model });
+      if (url.endsWith("/models")) return new Response(JSON.stringify({ models: [{ name: "vendor-chat", endpoints: ["chat"] }] }), { status: 200 });
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: "", reasoning: "the answer, in reasoning" }, finish_reason: "stop" }],
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }));
+    const inst = await OpenAICompatDriver.create({
+      instanceId: "personal-fixture", displayName: "Own server", enabled: true,
+      config: OpenAICompatDriver.decodeConfig({
+        url: "https://models.example.test/v1", protocol: "openai", apiKeyEnv: "SAGAX_COMPAT_SERVER_API_KEY",
+        allowNoKey: true, personal: true, managedModels: ["vendor-chat"],
+      }),
+      environment: { SAGAX_COMPAT_SERVER_API_KEY: "fake-key" },
+    });
+    expect(inst.models.options.map((option) => option.id)).toEqual(["vendor-chat"]);
+    await expect(inst.generateText?.("question")).resolves.toBe("the answer, in reasoning");
+    const chat = calls.find((call) => call.url.endsWith("/chat/completions"));
+    expect(chat).toEqual({ url: "https://models.example.test/v1/chat/completions", auth: "Bearer fake-key", model: "vendor-chat" });
+    await inst.dispose();
+  });
+
   it("reports unavailable without an API key", async () => {
     const inst = await OpenAICompatDriver.create({
       instanceId: "test-1",

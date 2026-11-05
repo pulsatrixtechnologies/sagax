@@ -204,7 +204,8 @@ const BUDGET_BASELINE: Record<string, number> = {
   "room+own-thread+skills+voice": 88486,
   "room+own-thread+skills+shared": 89520,
   "room+own-thread+skills+shared+voice": 90487,
-  "direct+non-chief": 84242,
+  // #2048: choose_page_target joins the catalog (measured wire).
+  "direct+non-chief": 85930,
   "direct+voice+non-chief": 85209,
   "direct+shared+non-chief": 86243,
   "direct+shared+voice+non-chief": 87210,

@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { startCua, stopCua, registerCuaIpc, setCuaStateListener, currentCuaConnection } from "./cua.mjs";
+import { createAgentCursorOverlay } from "./agent-cursor-overlay.mjs";
 import { createLocalComputerGrant } from "./local-computer-grant.mjs";
 import { createHostScreenLease } from "./host-screen-lease.mjs";
 import { createAndroidDeviceController } from "./android-device.mjs";
@@ -43,6 +44,7 @@ import { createOrgJoin, forgetDetail } from "./org-join.mjs";
 import { createOwnerIdentitySync, organizationOrigins } from "./owner-identity.mjs";
 import { createMachineWorker, readMachineIdentity } from "./machine-worker.mjs";
 import { trafficLightsForSkin, windowChromeOptions } from "./window-chrome.mjs";
+import { attachFullscreenPush, setWindowFullScreen, windowFullScreenState } from "./window-fullscreen.mjs";
 import { createWindowNudger } from "./window-nudge.mjs";
 import { createDesktopAttention } from "./desktop-attention.mjs";
 import { createAllWindowsClosedQuit } from "./window-all-closed.mjs";
@@ -323,6 +325,11 @@ function installWindowStatePersistence(win) {
   win.on("unmaximize", pushMaximized);
   win.on("maximize", schedule);
   win.on("unmaximize", schedule);
+  // OS fullscreen label (#2043): every account page of this window hears it.
+  attachFullscreenPush(win, () => {
+    const pages = win === mainWindow && pageContexts ? pageContexts.openOrigins().map((origin) => pageContexts.contentsFor(origin)) : [];
+    return [...new Set([win.webContents, ...pages])];
+  });
   win.on("close", flush);
 }
 
@@ -4577,6 +4584,8 @@ const artifactWindows = createArtifactWindows({
   // the page on screen drives it (each account has its page)
   getMainWindow: () => pageHandle(mainPage()),
   isTrustedMain: (event) => isDesktopUiSender(event),
+  // narrow preload: always-on-top (#2046), OS fullscreen (#2043), fit (#2051)
+  preload: path.join(__dirname, "artifact-window-preload.cjs"),
   openExternal: (url) => {
     try {
       void shell.openExternal(externalOpenUrl(url)).catch(() => {});
@@ -4767,6 +4776,16 @@ for (const [channel, act] of [
 ipcMain.handle("window:state", (event) => {
   const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
   return { maximized: Boolean(win && !win.isDestroyed() && win.isMaximized()) };
+});
+// OS fullscreen of the sender's own window (#2043): page and artifact
+// windows call these; the label follows enter/leave-full-screen.
+ipcMain.handle("window:set-fullscreen", (event, on) => {
+  const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+  return setWindowFullScreen(win, on === true);
+});
+ipcMain.handle("window:fullscreen-state", (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+  return windowFullScreenState(win);
 });
 
 ipcMain.handle("desktop:open-external", desktopUiOnly("desktop:open-external", async (_event, rawUrl) => {
@@ -5424,18 +5443,36 @@ async function broadcastDesktopCapabilities() {
   }
 }
 
+// Cua Driver's macOS overlay covers only the primary display (trycua/cua#5336).
+// When the agent point is on another display, Sagax paints a click-through cursor there.
+const agentCursorOverlay = createAgentCursorOverlay({ BrowserWindow, screen });
+
 setCuaStateListener((connection) => {
   cuaReady = Promise.resolve(connection);
   localComputerGrant.changed(connection);
+  agentCursorOverlay.sync(connection);
   void broadcastDesktopCapabilities().catch((error) => {
     console.error("[desktop] capability broadcast failed:", error);
   });
 });
 
+const resyncAgentCursorOverlay = () => {
+  try {
+    agentCursorOverlay.sync(currentCuaConnection());
+  } catch (error) {
+    console.error("[desktop] agent cursor overlay sync failed:", error);
+  }
+};
+
 app.whenReady().then(async () => {
   // First thing once ready: no session but the app window's reaches the server.
   serverSessionGuard = { defaultSession: session.defaultSession, serverPort: () => SERVER_PORT };
   installSessionBlock(session.defaultSession, (line) => slog(`network: ${line}`));
+  // screen is only safe after ready; keep the secondary cursor in sync with layout changes.
+  screen.on("display-added", resyncAgentCursorOverlay);
+  screen.on("display-removed", resyncAgentCursorOverlay);
+  screen.on("display-metrics-changed", resyncAgentCursorOverlay);
+  resyncAgentCursorOverlay();
   // Cached-before-the-fix attachment responses outlive `no-store`: entries
   // stored under the old one-year immutable policy can replay to a second
   // identity in this profile without the visibility gate re-running. The
@@ -5852,6 +5889,9 @@ app.on("before-quit", (e) => {
   // a live dictation session runs its own helper child that holds the mic —
   // stop it here so quitting never orphans a recording process
   if (nativeActions.appleSpeech) stopSpeech();
+  try {
+    agentCursorOverlay.stop();
+  } catch {}
   const ownedHelperCleanup = Promise.race([
     Promise.all([
       stopCua().catch(() => {}),

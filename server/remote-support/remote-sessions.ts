@@ -200,7 +200,7 @@ function applyFacts(session: StoredSession, facts: RemoteSessionFacts | undefine
   if (typeof facts.ramGb === "number" && facts.ramGb > 0 && facts.ramGb < 4096) session.ramGb = facts.ramGb;
 }
 
-export function createRemoteSessionService(deps: {
+export type RemoteSessionDeps = {
   dataDir: string;
   store: Store;
   registry: TerminalResourceRegistry;
@@ -224,7 +224,34 @@ export function createRemoteSessionService(deps: {
   /** The per-session action audit (exec, file transfers), for the Remote
    * Sessions logs view. The command is redacted again at the sink. */
   actionsAudit?: { write(event: RemoteSessionActionEvent): void };
-}) {
+};
+
+type RemoteSessionEnv = {
+  deps: RemoteSessionDeps;
+  systemSsh: () => string | null;
+  actionsAudit: RemoteSessionDeps["actionsAudit"];
+  now: () => number;
+  run: RunCommand;
+  home: () => string;
+  supportDir: RemoteSessionDeps["supportDir"];
+  controls: ReturnType<typeof createRemoteControlSessions>;
+  tunnelOf: (row: Pick<StoredSession, "id" | "code" | "principalId" | "botId">) => ReturnType<typeof readTunnel>;
+  sagaxOpened: (row: StoredSession) => boolean;
+  readonly rows: StoredSession[];
+  prune: () => boolean;
+  persist: () => void;
+  exclusive: <T>(work: () => Promise<T> | T) => Promise<T>;
+  owned: (principalId: string, botId: string, id: string) => StoredSession | null;
+  hostLabel: (session: StoredSession) => string;
+  tailcatBin: () => string;
+  ssh: (session: StoredSession, command: string, timeoutMs: number) => Promise<CommandResult | null>;
+  reading: Map<string, Promise<void>>;
+  inspect: (session: StoredSession) => Promise<void>;
+  refresh: (session: StoredSession) => void;
+  writeCard: (session: StoredSession) => void;
+};
+
+function buildRemoteSessionEnv(deps: RemoteSessionDeps): RemoteSessionEnv {
   const systemSsh = deps.systemSsh ?? (() => resolveSystemSsh());
   const actionsAudit = deps.actionsAudit;
   const now = deps.now ?? (() => Date.now());
@@ -261,7 +288,7 @@ export function createRemoteSessionService(deps: {
     const cutoff = now() - PRUNE_MS;
     const kept = rows.filter((row) => !(row.state === "ended" && row.createdAt < cutoff));
     const changed = kept.length !== rows.length;
-    rows = kept;
+    if (changed) { rows.length = 0; rows.push(...kept); }
     if (now() - lastSweep > 60_000) {
       lastSweep = now();
       const dir = supportDir?.();
@@ -411,6 +438,39 @@ export function createRemoteSessionService(deps: {
     },
   }));
 
+
+  return {
+    deps,
+    systemSsh,
+    actionsAudit,
+    now,
+    run,
+    home,
+    supportDir,
+    controls,
+    tunnelOf,
+    sagaxOpened,
+    get rows() { return rows; },
+    set rows(next: StoredSession[]) { rows = next; },
+    prune,
+    persist,
+    exclusive,
+    owned,
+    hostLabel,
+    tailcatBin,
+    ssh,
+    reading,
+    inspect,
+    refresh,
+    writeCard,
+  };
+}
+
+function createRemoteSessionLifecycle(env: RemoteSessionEnv) {
+  const {
+    deps, rows, prune, persist, exclusive, owned, tunnelOf, refresh, writeCard, inspect,
+    sagaxOpened, controls, ssh, supportDir, home, now,
+  } = env;
   return {
     viewOf,
     principalFor(botId: string, threadId: string): string {
@@ -593,6 +653,49 @@ export function createRemoteSessionService(deps: {
     /** Open live control (screen + mouse + keyboard) for a session this
      * person owns and that is connected and reachable. Windows only for now;
      * the control manager answers an error otherwise. */
+    focus(principalId: string, botId: string, id: string): RemoteSessionView | null {
+      const session = owned(principalId, botId, id);
+      if (!session || session.state !== "connected") return null;
+      for (const row of rows) {
+        if (row.botId === botId && row.principalId === principalId) row.focused = row.id === id;
+      }
+      persist();
+      return viewOf(session);
+    },
+    async setOs(principalId: string, botId: string, id: string, os: RemoteSessionOs): Promise<RemoteSessionView | null> {
+      const session = owned(principalId, botId, id);
+      if (!session || session.state !== "connected") return null;
+      await exclusive(() => {
+        session.os = os;
+        delete session.osGuessed;
+        delete session.screenDenied;
+        session.inventory = "pending";
+        delete session.checkedAt;
+        writeCard(session);
+        persist();
+      });
+      void inspect(session).catch(() => {});
+      return viewOf(session);
+    },
+    /** Run one command on the connected computer for the bot, through the
+     * tunnel, and give back its exit code and output (capped). `id` names
+     * the session; without it, the session in focus in this conversation.
+     * The approval gate decides before this runs (server/remote-support/remote-session-exec.ts). */
+  };
+}
+
+function activeFromEnv(env: RemoteSessionEnv, principalId: string, botId: string, threadId: string) {
+  const mine = env.rows.filter((row) => row.principalId === principalId && row.botId === botId && row.threadId === threadId && row.state === "connected");
+  return mine.find((row) => row.focused) ?? mine[mine.length - 1] ?? null;
+}
+
+function createRemoteSessionOps(env: RemoteSessionEnv) {
+  const {
+    deps, rows, persist, exclusive, owned, tunnelOf, refresh, writeCard, inspect,
+    hostLabel, tailcatBin, ssh, run, now, actionsAudit, systemSsh, home, controls,
+  } = env;
+
+  const ops = {
     openControl(input: {
       principalId: string;
       botId: string;
@@ -618,19 +721,10 @@ export function createRemoteSessionService(deps: {
         onClosed: input.onClosed,
       });
     },
-    focus(principalId: string, botId: string, id: string): RemoteSessionView | null {
-      const session = owned(principalId, botId, id);
-      if (!session || session.state !== "connected") return null;
-      for (const row of rows) {
-        if (row.botId === botId && row.principalId === principalId) row.focused = row.id === id;
-      }
-      persist();
-      return viewOf(session);
-    },
     async openShell(args: { principalId: string; botId: string; threadId: string; id?: string }): Promise<{ hostLabel: string; messageId: string } | { error: string } | null> {
       const session = args.id
         ? owned(args.principalId, args.botId, args.id)
-        : this.active(args.principalId, args.botId, args.threadId);
+        : activeFromEnv(env, args.principalId, args.botId, args.threadId);
       if (!session || session.state !== "connected") return null;
       if (!tunnelOf(session)) return { error: "The tunnel for this remote computer is not on this server yet." };
       const access: TerminalAccess = {
@@ -765,7 +859,7 @@ export function createRemoteSessionService(deps: {
       }
       const remotePath = safeRemotePath(shot?.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).pop() ?? "");
       if (!shot || shot.code !== 0 || !remotePath || !remotePath.endsWith("px-sagax-shot.png")) return null;
-      const pulled = await this.download(principalId, botId, id, remotePath);
+      const pulled = await ops.download(principalId, botId, id, remotePath);
       try { await ssh(session, deleteRemoteCommand(session.os, remotePath), 8_000); } catch { /* the png is already local */ }
       if ("error" in pulled) return null;
       if (pulled.bytes.length < 8 || pulled.bytes[0] !== 0x89) return null;
@@ -774,27 +868,8 @@ export function createRemoteSessionService(deps: {
     },
     /** The technician says which OS it is (the computer could not tell, or it
      * told wrong): the card is read again with that OS's commands. */
-    async setOs(principalId: string, botId: string, id: string, os: RemoteSessionOs): Promise<RemoteSessionView | null> {
-      const session = owned(principalId, botId, id);
-      if (!session || session.state !== "connected") return null;
-      await exclusive(() => {
-        session.os = os;
-        delete session.osGuessed;
-        delete session.screenDenied;
-        session.inventory = "pending";
-        delete session.checkedAt;
-        writeCard(session);
-        persist();
-      });
-      void inspect(session).catch(() => {});
-      return viewOf(session);
-    },
-    /** Run one command on the connected computer for the bot, through the
-     * tunnel, and give back its exit code and output (capped). `id` names
-     * the session; without it, the session in focus in this conversation.
-     * The approval gate decides before this runs (server/remote-support/remote-session-exec.ts). */
     async exec(input: { principalId: string; botId: string; threadId: string; id?: string; command: string; timeoutMs?: number }): Promise<RemoteExecResult | { error: string }> {
-      const session = this.target(input);
+      const session = ops.target(input);
       if (!session) return { error: "No remote session is connected in this conversation." };
       if (!tunnelOf(session)) return { error: "This server does not have the tunnel of that session (it was opened outside Sagax). Open it with remote_support_open." };
       if (!systemSsh()) return { error: "This Sagax server has no ssh client (openssh-client), so it cannot reach the remote computer. Tell the person; an administrator installs it on the server." };
@@ -822,22 +897,22 @@ export function createRemoteSessionService(deps: {
     },
     /** OS, uptime, CPU, memory, disk and the busiest processes in one call. */
     async snapshot(input: { principalId: string; botId: string; threadId: string; id?: string }): Promise<RemoteExecResult | { error: string }> {
-      const session = this.target(input);
+      const session = ops.target(input);
       if (!session) return { error: "No remote session is connected in this conversation." };
       if (session.osGuessed && tunnelOf(session)) await inspect(session);
       if (session.osGuessed) return { error: "The OS of that computer is not known yet, so Sagax does not guess its commands. Ask the person which OS it is, or try again in a moment." };
-      return this.exec({ ...input, id: session.id, command: snapshotCommand(session.os), timeoutMs: 45_000 });
+      return ops.exec({ ...input, id: session.id, command: snapshotCommand(session.os), timeoutMs: 45_000 });
     },
     /** The connected session a turn would reach, for the turn's reach line
      * (server/remote-support/remote-session-reach.ts): its name and OS, never the address. */
     reachFor(input: { principalId: string; botId: string; threadId: string }): { host: string; os: RemoteSessionOs; known: boolean } | null {
-      const session = this.target(input);
+      const session = ops.target(input);
       return session ? { host: publicText(hostLabel(session)) ?? session.code, os: session.os, known: !session.osGuessed } : null;
     },
     /** The OS of the session a bot tool means, for the approval rule
      * (server/remote-support/remote-session-exec.ts); `known` false while it is guessed. */
     osFor(input: { principalId: string; botId: string; threadId: string; id?: string }): { os: RemoteSessionOs; known: boolean } | null {
-      const session = this.target(input);
+      const session = ops.target(input);
       return session ? { os: session.os, known: !session.osGuessed } : null;
     },
     /** The session a bot tool means: by id (12 hex) or code, else the one in
@@ -853,6 +928,15 @@ export function createRemoteSessionService(deps: {
     sessionDir(id: string) {
       return sessionDir(home(), id);
     },
+  };
+  return ops;
+}
+
+export function createRemoteSessionService(deps: RemoteSessionDeps) {
+  const env = buildRemoteSessionEnv(deps);
+  return {
+    ...createRemoteSessionLifecycle(env),
+    ...createRemoteSessionOps(env),
   };
 }
 

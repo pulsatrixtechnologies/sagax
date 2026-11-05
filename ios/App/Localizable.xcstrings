@@ -112379,6 +112379,292 @@
           }
         }
       }
+    },
+    "Always use this choice": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always use this choice"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toujours utiliser ce choix"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sempre usar esta escolha"
+          }
+        }
+      }
+    },
+    "Publish target": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Publish target"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cible de publication"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Destino de publicação"
+          }
+        }
+      }
+    },
+    "Ask each time": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask each time"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demander à chaque fois"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perguntar toda vez"
+          }
+        }
+      }
+    },
+    "Ask each time when several targets are available.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask each time when several targets are available."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demander à chaque fois quand plusieurs cibles sont disponibles."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perguntar toda vez quando vários destinos estiverem disponíveis."
+          }
+        }
+      }
+    },
+    "Always %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always %@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toujours %@."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sempre %@."
+          }
+        }
+      }
+    },
+    "Sagax page": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sagax page"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page Sagax"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Página Sagax"
+          }
+        }
+      }
+    },
+    "Sagax artifact": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sagax artifact"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Artefact Sagax"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Artefato Sagax"
+          }
+        }
+      }
+    },
+    "Claude artifact": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude artifact"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Artefact Claude"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Artefato Claude"
+          }
+        }
+      }
+    },
+    "Where should I publish this?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Where should I publish this?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Où dois-je publier ceci ?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Onde devo publicar isto?"
+          }
+        }
+      }
+    },
+    "Shareable link the person publishes; others can open it outside Sagax.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shareable link the person publishes; others can open it outside Sagax."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lien partageable que la personne publie; d'autres peuvent l'ouvrir hors de Sagax."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link compartilhável que a pessoa publica; outros podem abrir fora do Sagax."
+          }
+        }
+      }
+    },
+    "Kept inside Sagax for this person; can refresh itself, no public link.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kept inside Sagax for this person; can refresh itself, no public link."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gardé dans Sagax pour cette personne; peut se rafraîchir seul, sans lien public."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mantido no Sagax para esta pessoa; pode se atualizar sozinho, sem link público."
+          }
+        }
+      }
+    },
+    "Official claude.ai artifact through the person's own Claude account.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Official claude.ai artifact through the person's own Claude account."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Artefact officiel claude.ai via le compte Claude de la personne."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Artefato oficial do claude.ai pela conta Claude da própria pessoa."
+          }
+        }
+      }
+    },
+    "When this bot is asked to create a page or an artifact and more than one surface is available, which one to use. Ask each time shows a choice card.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When this bot is asked to create a page or an artifact and more than one surface is available, which one to use. Ask each time shows a choice card."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quand on demande à ce bot de créer une page ou un artefact et que plusieurs surfaces sont disponibles, laquelle utiliser. Demander à chaque fois affiche une carte de choix."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quando este bot é pedido para criar uma página ou um artefato e mais de uma superfície está disponível, qual usar. Perguntar toda vez mostra um cartão de escolha."
+          }
+        }
+      }
     }
   }
 }

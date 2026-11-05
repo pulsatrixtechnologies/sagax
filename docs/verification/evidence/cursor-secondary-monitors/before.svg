@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="420" viewBox="0 0 960 420">
+  <rect width="960" height="420" fill="#0f172a"/>
+  <text x="24" y="36" fill="#e2e8f0" font-family="system-ui" font-size="20">Before #1915 — Cua overlay on primary only</text>
+  <rect x="40" y="70" width="420" height="280" rx="12" fill="#1e293b" stroke="#64748b"/>
+  <text x="56" y="98" fill="#94a3b8" font-family="system-ui" font-size="14">Primary</text>
+  <polygon points="220,180 220,240 238,226 250,255 262,250 250,220 275,220" fill="#f8fafc" stroke="#0f172a"/>
+  <text x="220" y="170" fill="#86efac" font-family="system-ui" font-size="13">visible</text>
+  <rect x="500" y="70" width="420" height="280" rx="12" fill="#1e293b" stroke="#64748b"/>
+  <text x="516" y="98" fill="#94a3b8" font-family="system-ui" font-size="14">Secondary</text>
+  <circle cx="700" cy="210" r="8" fill="none" stroke="#f87171" stroke-width="2" stroke-dasharray="4 3"/>
+  <text x="640" y="250" fill="#f87171" font-family="system-ui" font-size="13">agent point — no cursor</text>
+  <text x="40" y="390" fill="#94a3b8" font-family="system-ui" font-size="13">NSWindow covers NSScreen.mainScreen only (trycua/cua#5336)</text>
+</svg>

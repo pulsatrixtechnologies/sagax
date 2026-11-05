@@ -167,6 +167,11 @@ export interface SendTurnInput {
   /** #1276: compact tool list for this turn (Claude Code). Absent: the
    * full tools/list, as before. */
   compactPrompt?: CompactPromptInput;
+  /** #2037: when native tool search is on (no compactPrompt) and the bot's
+   * agents use is known, the Claude driver passes this so the agents proxy
+   * defers every tool outside the core and these pins. Absent or core
+   * "default": the current DEFERRED_AGENT_TOOL_NAMES list. */
+  agentsKnownUse?: CompactPromptInput["agents"];
   /** 2026-11-02: how long a permission this turn asks waits for its person
    * before the engine hears a refusal. A routine run's turn waits longer
    * than a live chat's 15 minutes: nobody is watching it ask. */
@@ -217,8 +222,9 @@ export interface SendTurnInput {
    * context, while a fresh replay retains the visible attachment marker. */
   images?: TurnImageInput[];
   model?: string;
-  /** 2026-11-04: a routine turn's model for the sub-agents the engine
-   * starts itself (Claude: CLAUDE_CODE_SUBAGENT_MODEL). Part of the
+  /** #2038: model for the sub-agents the engine starts itself (Claude:
+   * CLAUDE_CODE_SUBAGENT_MODEL). From a per-routine override, else the
+   * routine model, else the bot's fast model on this engine. Part of the
    * process contract, so a chat turn never reuses a routine's process. */
   subagentModel?: string;
   /** Routine effort inherited by native sub-agents; part of the spawn contract. */

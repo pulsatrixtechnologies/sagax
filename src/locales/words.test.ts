@@ -34,6 +34,8 @@ const ALLOWED = new Set([
   "botWizard.recap.tools.workspace",
   // Auto-model picker: the bot's work location is called Workspace.
   "model.auto.exclude.capabilities",
+  // The claude_artifact copy prompt names the bot work location.
+  "rich.claudeArtifact.copyPrompt",
   // Keys another branch adds with its own wording go here until reviewed.
 ]);
 

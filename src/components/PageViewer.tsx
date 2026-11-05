@@ -10,7 +10,8 @@
 //   - top centre, the title pill: a click turns it into a field (pencil),
 //     Enter renames, Escape cancels;
 //   - top right, « ⋯ » (versions, annotate, present, edit, comments,
-//     decline a proposed version) and Share;
+//     decline a proposed version, Always on top in an own desktop window)
+//     and Share;
 //   - the page itself, whole and interactive, in the app's theme.
 // Earlier lots (Grok Bot parity R8, chat rows 31 to 34) are all still here:
 // rename, versions, the person's own edit, comments, the annotation mode
@@ -27,10 +28,11 @@
 // frame, and its fields are plain text (parseAnnotationMessage). Nothing
 // reaches a bot until the person presses Send.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { Check, Ellipsis, Globe, Highlighter, History, Loader2, MessageSquare, Pencil, Play, Save, Send, Share, Trash2, X, XCircle } from "lucide-react";
+import { Check, Ellipsis, Globe, Highlighter, History, Loader2, Maximize2, MessageSquare, Minimize2, Pencil, Pin, Play, Save, Send, Share, Trash2, X, XCircle } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { useOsFullscreen } from "@/hooks/use-os-fullscreen";
 import { pagePlace, rememberPagePlace } from "@/lib/open-page";
 import { acceptPageOpen } from "@/lib/sandboxed-open";
 import { api, useStore } from "@/state/store";
@@ -248,8 +250,30 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
   const rootRef = useRef<HTMLDivElement>(null);
   const look = useWidgetTheme(rootRef);
   const theme = look.scheme;
+  // OS fullscreen of the page's window (#2043): Electron setFullScreen or the
+  // Fullscreen API; the label follows enter/leave-full-screen.
+  const { fullscreen, toggle: toggleFullscreen, set: setFullscreen } = useOsFullscreen();
+  const fullscreenLabel = fullscreen ? t("pages.exitFullscreen") : t("pages.fullscreen");
   // the person's skin goes with the theme: the page's default theme takes it
   const skin = useMemo(() => encodeSkinTokens(look.tokens), [look]);
+
+  // own desktop window only: always-on-top via the narrow preload (#2046)
+  const windowSelf = typeof window !== "undefined" ? window.artifactWindowSelf : undefined;
+  const [alwaysOnTop, setAlwaysOnTop] = useState(false);
+  useEffect(() => {
+    if (!follow || !windowSelf) return;
+    let live = true;
+    void windowSelf.isAlwaysOnTop().then((on) => { if (live) setAlwaysOnTop(on === true); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [follow, windowSelf]);
+  const toggleAlwaysOnTop = useCallback(() => {
+    if (!windowSelf) return;
+    const next = !alwaysOnTop;
+    setAlwaysOnTop(next);
+    void windowSelf.setAlwaysOnTop(next).then((ok) => {
+      if (!ok) setAlwaysOnTop(!next);
+    }).catch(() => setAlwaysOnTop(!next));
+  }, [alwaysOnTop, windowSelf]);
 
   // the caller's handler may change on every render: read it from a ref, so
   // loading the page never runs again because of it
@@ -357,8 +381,8 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
   };
 
   const present = () => {
-    const frame = frameRef.current;
-    if (frame && typeof frame.requestFullscreen === "function") void frame.requestFullscreen().catch(() => { /* refused: the frame stays as is */ });
+    // Present fills the monitor via OS fullscreen (#2043), not only the frame.
+    setFullscreen(true);
   };
 
   const toggle = (next: Panel) => {
@@ -370,6 +394,9 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
+      // OS fullscreen owns Escape first (#2043): leaving full screen must not
+      // also close the page.
+      if (fullscreen) return;
       // the target may be the window or the document (focus nowhere):
       // Escape still closes, it never throws
       const target = event.target;
@@ -383,7 +410,7 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, fullscreen]);
 
   const shown = page?.versions.find((entry) => entry.n === version);
   // the place is read once per drawing: scrolling never reloads the frame
@@ -412,7 +439,7 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
         <button type="button" data-page-close aria-label={t("pages.backToChat")} title={t("pages.backToChat")} onClick={onClose} className={cn(ROUND, "window-no-drag")}>
           <X size={17} />
         </button>
-        <div className="!pointer-events-none absolute inset-x-28 flex justify-center @max-[34rem]/pagehead:start-14 @max-[34rem]/pagehead:end-[6.5rem]">
+        <div className="!pointer-events-none absolute inset-x-28 flex justify-center @max-[34rem]/pagehead:start-14 @max-[34rem]/pagehead:end-[9.5rem]">
           <div className="pointer-events-auto min-w-0 max-w-full">
             <PageTitlePill title={title} busy={busy} onRename={rename} />
           </div>
@@ -433,11 +460,33 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
                       void call<{ page: PublishedPageSummary }>("/decline", { method: "POST", body: JSON.stringify({ version: shown.n }) }).then((answer) => { if (answer) update(answer.page); });
                     }} />
                   )}
+                  {follow && windowSelf && (
+                    <MenuItem
+                      icon={<Pin size={14} />}
+                      label={t("pages.alwaysOnTop")}
+                      checked={alwaysOnTop}
+                      data-page-always-on-top=""
+                      onClick={() => { close(); toggleAlwaysOnTop(); }}
+                    />
+                  )}
                   {moreItems?.(close)}
                 </>
               )}
             </PopoverMenu>
           )}
+          {/* Full screen sits with Share in the toolbar (#2043): never over the page. */}
+          <button
+            type="button"
+            data-page-fullscreen
+            aria-pressed={fullscreen}
+            aria-label={fullscreenLabel}
+            title={fullscreenLabel}
+            disabled={!page}
+            className={cn(ROUND, "window-no-drag")}
+            onClick={() => toggleFullscreen()}
+          >
+            {fullscreen ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
+          </button>
           <button type="button" data-page-share aria-expanded={sharing} aria-haspopup="dialog" disabled={!page || version === null} className={cn(PILL, "@max-[34rem]/pagehead:px-2.5")} onClick={() => setSharing((open) => !open)}>
             <Share size={14} /><span className="@max-[34rem]/pagehead:sr-only">{t("pages.share")}</span>
           </button>

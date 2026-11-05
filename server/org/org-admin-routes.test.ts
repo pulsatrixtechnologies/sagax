@@ -47,7 +47,7 @@ function bot(id: string, owner: string, reach: Partial<AdminBotReach> = {}): { b
   return {
     bot: {
       id, name: id.toUpperCase(), owner: { principalId: owner, sub: people[owner]!.sub, name: people[owner]!.name }, ownerRole: owner === ALICE ? "admin" : "member",
-      engine: { instanceId: "claude", driverKind: "claudeAgent", installed: true }, model: null, access: "none",
+      engine: { instanceId: "claude", driverKind: "claudeAgent", installed: true, name: "Claude" }, model: null, access: "none",
       mcpProfiles: [], grants: [], sections: [], routines: 0, createdAt: null, lastActivityAt: null,
       status: "active", label: null, threads: 1,
       look: botLook({ name: id, color: "green" }, () => false), persona: botPersona({ name: id }), approvalMode: "ask",

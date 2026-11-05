@@ -84,19 +84,84 @@ async function openPanel(ctx, section) {
   await ctx.sleep(400);
 }
 
+/** English nav labels (captures run with omb-language=en). Used to check the
+ * page that is drawn, not only the store: Simple mode and a missing updater
+ * fall back to Account while the store still names the requested section. */
+export const SETTINGS_NAV_LABEL = {
+  account: "Account",
+  appearance: "Appearance",
+  organization: "Organization",
+  notifications: "Notifications",
+  privacy: "Notifications",
+  memory: "Organization",
+  // retired ids: openSettings remaps or falls back; the label is what would
+  // have to be current for the capture to keep the shot.
+  cloudAccount: "Account",
+  experimental: "Experimental",
+  connections: "Providers",
+  providers: "Providers",
+  decisionModel: "Models",
+  engines: "Models",
+  companion: "Pair devices",
+  computer: "Computer",
+  usage: "Usage",
+  people: "People",
+  mail: "Email",
+  activity: "Activity",
+  backups: "Backups",
+  workspaces: "Installations",
+  myConnections: "My connections",
+  voice: "Voice",
+  updates: "Updates",
+  about: "About",
+  security: "Security",
+  credentials: "Vault",
+  import: "Import",
+  general: "Account",
+};
+
+/** Sections Simple mode hides (`simpleHidesSettingsSection`). Their captures
+ * force Advanced so the page is the one named, not Account. */
+export const SETTINGS_NEEDS_ADVANCED = new Set([
+  "experimental", "connections", "providers", "decisionModel", "engines",
+  "voice", "computer", "mail", "activity", "backups", "import", "workspaces", "people",
+]);
+
+async function settingsNavLabel(ctx) {
+  // Scope to the Settings rail: the sidebar bot also uses aria-current="page".
+  return ctx.eval(`(() => {
+    const el = document.querySelector('[role=dialog] [data-settings-nav-group] [aria-current="page"]')
+      || document.querySelector('[role=dialog] [aria-current="page"]');
+    return el ? el.innerText.trim().replace(/\\s+/g, " ") : null;
+  })()`);
+}
+
 async function openSettings(ctx, section, { retries = 0 } = {}) {
+  const want = SETTINGS_NAV_LABEL[section] ?? section;
   await ctx.dispatch({ type: "toggleAppSettings", open: true, section });
   await ctx.sleep(600);
   // A section gated on an answer still on its way (who the viewer is, the
   // edition) is not listed yet on the first render, and the page falls back
-  // to the first one: ask again once the answer is in.
-  for (let i = 0; i < retries && (await ctx.eval(`__parity.state().appSettingsSection ?? null`)) !== section; i++) {
+  // to the first one: ask again once the answer is in. Check the drawn nav
+  // (aria-current), not only the store: Simple / missing updater leave the
+  // store on the request while Account is what the person sees.
+  for (let i = 0; i < retries && (await settingsNavLabel(ctx)) !== want; i++) {
     await ctx.sleep(700);
     await ctx.dispatch({ type: "toggleAppSettings", open: true, section });
     await ctx.sleep(600);
   }
-  const shown = await ctx.eval(`(() => { const el = document.querySelector('[aria-current="page"]'); return el ? el.innerText.trim() : null; })()`);
-  return shown;
+  return settingsNavLabel(ctx);
+}
+
+/** Open a Settings section and skip when another page is drawn. */
+async function openSettingsOrSkip(ctx, section, { retries = 0 } = {}) {
+  const shown = await openSettings(ctx, section, { retries });
+  const want = SETTINGS_NAV_LABEL[section] ?? section;
+  if (shown !== want) {
+    const store = await ctx.eval(`__parity.state().appSettingsSection ?? null`);
+    return { skip: `section ${section} not shown on this page (nav ${shown ?? "none"}, store ${store ?? "none"})` };
+  }
+  return null;
 }
 
 // ── the surfaces ────────────────────────────────────────────────────────
@@ -335,17 +400,22 @@ const SETTINGS = ["general", "organization", "cloudAccount", "appearance", "expe
 const SETTINGS_WHERE = { people: { org: true }, activity: { org: true }, mail: {}, workspaces: { org: true } };
 for (const section of SETTINGS) {
   const where = SETTINGS_WHERE[section];
-  add({ id: `settings-${section}`, phase: "main", note: `Settings > ${section}${where?.org ? " (organization server)" : where?.served ? " (served page)" : ""}`, ...where,
+  add({
+    id: `settings-${section}`, phase: "main",
+    note: `Settings > ${section}${where?.org ? " (organization server)" : where?.served ? " (served page)" : ""}`,
+    ...where,
+    ...(SETTINGS_NEEDS_ADVANCED.has(section) ? { advanced: true } : {}),
     open: async (ctx) => {
-      await openSettings(ctx, section, { retries: where ? 6 : 0 });
-      const current = await ctx.eval(`__parity.state().appSettingsSection ?? null`);
-      if (current && current !== section) return { skip: `section ${section} not shown on this page (opened ${current})` };
+      const skip = await openSettingsOrSkip(ctx, section, { retries: where ? 6 : 0 });
+      if (skip) return skip;
       await ctx.sleep(500);
-    } });
+    },
+  });
 }
 add({ id: "settings-general-scrolled", phase: "main", note: "Settings > General, scrolled to the end",
   open: async (ctx) => {
-    await openSettings(ctx, "general");
+    const skip = await openSettingsOrSkip(ctx, "general");
+    if (skip) return skip;
     await ctx.eval(`(() => { for (const el of document.querySelectorAll("[role=dialog] *")) { if (el.scrollHeight > el.clientHeight + 20 && getComputedStyle(el).overflowY !== "visible") el.scrollTop = el.scrollHeight; } return true; })()`);
   } });
 
@@ -360,9 +430,8 @@ for (const view of ["skills", "plugins"]) {
 }
 add({ id: "settings-myConnections", phase: "main", note: "Settings > myConnections (organization server)", org: true,
   open: async (ctx) => {
-    await openSettings(ctx, "myConnections", { retries: 6 });
-    const current = await ctx.eval(`__parity.state().appSettingsSection ?? null`);
-    if (current !== "myConnections") return { skip: `section myConnections not shown on this page (opened ${current})` };
+    const skip = await openSettingsOrSkip(ctx, "myConnections", { retries: 6 });
+    if (skip) return skip;
     await ctx.sleep(700);
   } });
 
@@ -391,20 +460,21 @@ for (const category of ["overview", "appearance", "soul", "rules", "skills", "me
 for (const section of ["memory", "privacy", "notifications"]) {
   add({ id: `settings-${section}`, phase: "main", note: `Settings > ${section}`,
     open: async (ctx) => {
-      await openSettings(ctx, section, { retries: 3 });
-      const current = await ctx.eval(`__parity.state().appSettingsSection ?? null`);
-      if (current && current !== section) return { skip: `section ${section} not shown on this page (opened ${current})` };
+      const skip = await openSettingsOrSkip(ctx, section, { retries: 3 });
+      if (skip) return skip;
       await ctx.sleep(500);
     } });
 }
 for (const section of ["general", "memory", "privacy", "notifications", "organization", "appearance", "experimental", "connections", "decisionModel", "engines", "companion", "computer", "usage", "backups", "myConnections"]) {
-  add({ id: `org-settings-${section}`, phase: "main", org: true, note: `Settings > ${section} (organization server)`,
+  add({
+    id: `org-settings-${section}`, phase: "main", org: true, note: `Settings > ${section} (organization server)`,
+    ...(SETTINGS_NEEDS_ADVANCED.has(section) ? { advanced: true } : {}),
     open: async (ctx) => {
-      await openSettings(ctx, section, { retries: 6 });
-      const current = await ctx.eval(`__parity.state().appSettingsSection ?? null`);
-      if (current !== section) return { skip: `section ${section} not shown on this page (opened ${current})` };
+      const skip = await openSettingsOrSkip(ctx, section, { retries: 6 });
+      if (skip) return skip;
       await ctx.sleep(700);
-    } });
+    },
+  });
 }
 
 // notes for the spec: not capturable here
@@ -472,15 +542,32 @@ const personFetch = (token) => `(() => {
   return true;
 })()`;
 for (const section of ["account", "voice", "updates", "about", "providers", "security", "credentials", "import"]) {
-  add({ id: `settings-${section}`, phase: "main", note: `Settings > ${section}`,
+  add({
+    id: `settings-${section}`, phase: "main", note: `Settings > ${section}`,
+    ...(SETTINGS_NEEDS_ADVANCED.has(section) ? { advanced: true } : {}),
     open: async (ctx) => {
       if (section === "updates") await ctx.eval(STUB_UPDATER);
       if (section === "credentials" && ctx.fixture?.token) await ctx.eval(personFetch(ctx.fixture.token));
-      await openSettings(ctx, section, { retries: 3 });
-      const current = await ctx.eval(`__parity.state().appSettingsSection ?? null`);
-      if (current && current !== section) return { skip: `section ${section} not shown on this page (opened ${current})` };
+      const skip = await openSettingsOrSkip(ctx, section, { retries: 3 });
+      if (skip) return skip;
+      // Updates: the card itself, not only the nav (Account was captured when
+      // the store said updates but the updater bridge was missing).
+      if (section === "updates" && !(await ctx.exists('[data-settings-card="updates"]'))) {
+        return { skip: "Updates card not drawn (updater bridge missing)" };
+      }
+      // Vault: wait for the signed-in page (Add / filters), not the unavailable notice.
+      if (section === "credentials") {
+        await ctx.waitFor(
+          `Boolean(document.querySelector("[data-credentials-add],[data-vault-filters]"))`,
+          { timeoutMs: 8_000 },
+        ).catch(() => {});
+        if (!(await ctx.exists("[data-credentials-add], [data-vault-filters]"))) {
+          return { skip: "Vault signed out or unavailable" };
+        }
+      }
       await ctx.sleep(700);
-    } });
+    },
+  });
 }
 
 add({ id: "sidebar-select", phase: "main", note: "sidebar multi-select: Aurora and Helix chosen, the grouped action bar",

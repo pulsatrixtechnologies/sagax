@@ -311,10 +311,10 @@ export interface AcpSupport {
   acceptsLoadedSession?(ctx: { turn: SendTurnInput; currentModelId?: string }): boolean;
   /** Some agents acknowledge a live load without applying new MCP credentials. */
   restartOnMcpChange?: boolean;
-  /** sendTurn honours warmOnly (a voice call being accepted): the pooled
-   * process is started and pays initialize, authenticate and session/load
-   * (or session/new) with no prompt and no turn events, so the call's first
-   * spoken turn is a bare session/prompt. Opt-in per harness. */
+  /** sendTurn honours warmOnly (voice accept or composer prewarm): the pooled
+   * process is started and pays initialize, authenticate, session/load|new
+   * and configureSession (model pin, MCP settle) with no prompt and no turn
+   * events, so the first real turn is a bare session/prompt (#2055). Opt-in. */
   warmSession?: boolean;
   /** Route workspace file access through ACP so edits retain approval cards. */
   clientFileSystem?: boolean;

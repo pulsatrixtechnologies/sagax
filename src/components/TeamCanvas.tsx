@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { ArrowRight, BookOpen, Brain, MessageCircle, Minus, Monitor, MoreHorizontal, Pencil, Plus, Trash2, Users } from "lucide-react";
-import { openBot, useStore, type Bot } from "@/state/store";
-import { useShowThreads } from "@/lib/thread-preferences";
+import { useStore, type Bot } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { teamMapStatus, type TeamMapSection } from "@/lib/team-map";
+import type { TeamMapSection } from "@/lib/team-map";
 import { COMPUTER_DRAG_TYPE, fitTeams, layoutTeams, loadTeamCanvasLayout, orderBots, parseBotOrders, parsePositions, reorderBot, teamCanvasKeys, wheelCanvasDelta, zoomAt, type Point, type TeamCanvasKeys, type View } from "@/lib/team-canvas";
 import { loadPerspicaxOrg } from "@/lib/perspicax-org";
-import { BotAvatar } from "./Avatar";
-import { InstanceProviderMark, ProviderMark } from "./ProviderIcons";
 import { fetchEnvironmentDescriptor } from "@/lib/environment-descriptor";
 import { readableError } from "@/lib/plain-error";
+import { TeamCanvasOverlay } from "./TeamCanvas.tsx-parts/TeamCanvasOverlay";
+import { TeamSectionsLayer } from "./TeamCanvas.tsx-parts/TeamSectionsLayer";
 
 type Gesture = {
   id: number;
@@ -19,62 +17,6 @@ type Gesture = {
   positions: Record<string, Point>;
   moved: boolean;
 } & ({ kind: "pan" } | { kind: "team"; key: string; origin: Point } | { kind: "bot"; bot: Bot });
-
-const iconButton = "flex size-9 shrink-0 items-center justify-center rounded-lg text-ink-secondary hover:bg-control hover:text-ink focus-visible:outline-2 focus-visible:outline-accent";
-const menuButton = "flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-[12px] text-ink-secondary hover:bg-control hover:text-ink";
-
-function BotCard({ bot, selected, moving, connected, onComputer, onArrange }: {
-  bot: Bot;
-  selected: boolean;
-  moving: boolean;
-  connected: boolean;
-  onComputer?: (bot: Bot) => void;
-  onArrange?: (bot: Bot, delta: number) => void;
-}) {
-  const { state, dispatch } = useStore();
-  const showThreads = useShowThreads();
-  const status = teamMapStatus(bot);
-  const instance = state.instances.find((item) => item.instanceId === bot.modelSelection.instanceId);
-  // Auto (docs/plans/2026-10-08-auto-model.md) picks per turn: the card says so.
-  const model = bot.modelSelection.auto === true ? t("model.auto.label")
-    : instance?.models.options.find((item) => item.id === bot.modelSelection.model)?.label ?? bot.modelSelection.model;
-  return <article className={cn("relative h-[126px] w-[236px] shrink-0 rounded-xl border bg-card shadow-sm transition-colors",
-    selected ? "border-accent/60 ring-1 ring-accent/15" : connected ? "border-accent/40" : "border-hairline/50 hover:border-ink-secondary/40", moving && "opacity-35")}>
-    <button data-bot-id={bot.id} aria-label={t("canvas.editBot", { name: bot.name })}
-      onClick={() => dispatch({ type: "toggleSettings", botId: bot.id, section: "details", open: true })}
-      title={onArrange ? t("canvas.reorderHint") : undefined}
-      onKeyDown={(event) => {
-        if (!onArrange || !event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
-        event.preventDefault(); event.stopPropagation();
-        onArrange(bot, event.key === "ArrowUp" ? -1 : 1);
-      }}
-      className="flex h-[82px] w-full cursor-grab items-center gap-3 rounded-t-xl px-4 text-left active:cursor-grabbing focus-visible:outline-2 focus-visible:outline-accent">
-      <BotAvatar bot={bot} primary={Boolean(bot.chiefOfStaff)} primaryRingClassName="ring-card" size={38} motion="none" motionKey={0} animated={false} />
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5"><span className="truncate text-[14px] font-semibold">{bot.name}</span></span>
-        <span className="mt-1 block truncate text-[11px] text-ink-secondary">{bot.title || (bot.chiefOfStaff ? t("chat.chiefOfStaff") : t("canvas.bot"))}</span>
-      </span>
-    </button>
-    <div className="flex h-[43px] items-center gap-1 border-t border-hairline/30 px-2">
-      <button className={cn(iconButton, "size-8")} aria-label={t("canvas.openBotChat", { name: bot.name })} title={t("canvas.openChat")}
-        onClick={() => openBot(dispatch, bot, showThreads)}><MessageCircle size={13} /></button>
-      {status.tone !== "idle" && <span className="flex items-center gap-1.5 text-[10px] text-ink-secondary" title={status.label}>
-        <span className={cn("size-1.5 rounded-full", status.tone === "success" ? "bg-success" : status.tone === "warning" ? "bg-warning" : status.tone === "danger" ? "bg-danger" : "bg-ink-secondary/35")} />
-        {status.label}
-      </span>}
-      {selected && onComputer && <button className={cn(iconButton, "size-8")} aria-label={t("canvas.botComputer", { name: bot.name })} title={t("computer.tab.computer")}
-        onClick={() => onComputer(bot)}><Monitor size={13} /></button>}
-      <button aria-label={t("canvas.changeModel", { name: bot.name })} title={`${t("canvas.defaultModel")}: ${model}`}
-        onClick={() => dispatch({ type: "toggleSettings", botId: bot.id, section: "model", open: true })}
-        className="ml-auto flex h-8 min-w-0 max-w-[130px] items-center gap-1.5 rounded-md px-2 text-[10px] text-ink-secondary hover:bg-control hover:text-ink focus-visible:outline-2 focus-visible:outline-accent">
-        <span className="flex size-3.5 shrink-0 items-center justify-center">{instance
-          ? <InstanceProviderMark instance={instance} size={13} />
-          : <ProviderMark driverKind="" size={13} />}</span>
-        <span className="truncate">{model || t("canvas.defaultModel")}</span>
-      </button>
-    </div>
-  </article>;
-}
 
 export function TeamCanvas({ sections, canManage, onMove, onInstructions, onMemory, onEditTeam, onDeleteTeam, onComputer, onComputerDrop, onTeamComputer, teamComputers = {}, connectedBotIds = [] }: {
   sections: TeamMapSection<Bot>[];
@@ -436,83 +378,37 @@ export function TeamCanvas({ sections, canManage, onMove, onInstructions, onMemo
       if (event.key === "0") { event.preventDefault(); fit(); }
     }}>
     <div data-canvas-world className="absolute left-0 top-0 origin-top-left" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}>
-      {sections.map((section, index) => {
-        const tile = tiles[index];
-        const hierarchy = section.chiefs.length > 0 && section.members.length > 0;
-        const dropping = computerDropKey === section.key || (dragged && dropKey === section.key && (dragged.bot.section?.trim() ?? "") !== section.key);
-        const computer = Object.hasOwn(teamComputers, section.key) ? teamComputers[section.key] : undefined;
-        const label = section.key ? section.name : t("sidebar.section.general");
-        const renderBot = (bot: Bot) => <div key={bot.id} className="relative">
-          {insertion?.botId === bot.id && <div className={cn("pointer-events-none absolute inset-x-1 h-0.5 rounded bg-accent", insertion.after ? "-bottom-[9px]" : "-top-[9px]")} />}
-          <BotCard bot={bot} selected={state.selectedId === bot.id && state.settingsOpen} moving={dragged?.bot.id === bot.id || moving === bot.id}
-            connected={connectedBotIds.includes(bot.id)} onComputer={onComputer} onArrange={layoutLoaded ? arrangeBot : undefined} />
-        </div>;
-        return <section key={section.key} data-team-key={section.key} aria-label={t("canvas.teamRegion", { name: label })}
-          className={cn("absolute rounded-2xl border bg-panel/90 shadow-sm has-[details[open]]:z-20 data-[computer-dropping=true]:border-accent data-[computer-dropping=true]:ring-2 data-[computer-dropping=true]:ring-accent/25", dropping ? "border-accent ring-2 ring-accent/25" : "border-hairline/50")}
-          style={{ left: tile.x, top: tile.y, width: tile.width, height: tile.height }}>
-          <header className="flex h-16 items-center gap-2 px-5">
-            <button data-arrange-team={section.key} disabled={!layoutLoaded} aria-label={t("canvas.arrange", { name: label })}
-              title={t("canvas.arrangeHint")} className="min-w-0 flex-1 cursor-grab rounded-md py-2 text-left active:cursor-grabbing focus-visible:outline-2 focus-visible:outline-accent"
-              onKeyDown={(event) => {
-                const delta = ({ ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] } as Record<string, number[]>)[event.key];
-                if (!delta) return;
-                event.preventDefault(); event.stopPropagation();
-                const step = event.shiftKey ? 40 : 10;
-                savePositions({ ...positions, [section.key]: { x: tile.x + delta[0] * step, y: tile.y + delta[1] * step } });
-              }}>
-              <h2 className="truncate text-[13px] font-semibold tracking-tight">{label}</h2>
-            </button>
-            {computer && <button aria-label={t("canvas.teamComputer", { team: label, name: computer.name })} title={`${computer.name}${computer.state ? ` · ${computer.state}` : ""}`}
-              disabled={!onTeamComputer} onClick={() => onTeamComputer?.(section.key)}
-              className="flex min-w-0 max-w-[120px] shrink items-center gap-1.5 rounded-md px-1.5 py-2 text-[10px] text-ink-secondary hover:bg-control hover:text-ink focus-visible:outline-2 focus-visible:outline-accent disabled:pointer-events-none">
-              <Monitor size={12} className="shrink-0" /><span className="truncate">{computer.name}</span>
-            </button>}
-            <span className="text-[11px] tabular-nums text-ink-secondary">{section.chiefs.length + section.members.length}</span>
-            {canManage && <details className="relative" onToggle={(event) => {
-              if (event.currentTarget.open) {
-                const bounds = viewport.current?.getBoundingClientRect();
-                setMenuAbove(bounds && event.currentTarget.getBoundingClientRect().bottom > bounds.bottom - 210 * view.scale ? section.key : null);
-                viewport.current?.querySelectorAll("details[open]").forEach((element) => { if (element !== event.currentTarget) element.removeAttribute("open"); });
-              }
-            }}>
-              <summary aria-label={t("canvas.manageTeam", { name: label })} className={cn(iconButton, "cursor-pointer list-none [&::-webkit-details-marker]:hidden")}><MoreHorizontal size={17} /></summary>
-              <div className={cn("absolute right-0 z-30 w-[220px] animate-pop-in rounded-xl border border-hairline popover-surface bg-panel p-1.5 shadow-xl", menuAbove === section.key ? "bottom-10" : "top-10")} onClick={(event) => {
-                const menu = event.currentTarget.closest("details");
-                menu?.querySelector("summary")?.focus();
-                menu?.removeAttribute("open");
-              }}>
-                <button className={menuButton} onClick={() => onEditTeam(section.key)} aria-label={t("team.moveTo", { name: label })}><Users size={14} />{t("team.moveTo", { name: label })}</button>
-                <button className={menuButton} onClick={() => onInstructions(section.key, label)} aria-label={t("team.instructionsEdit", { name: label })}><BookOpen size={14} />{t("team.instructions")}</button>
-                {onMemory && <button className={menuButton} onClick={() => onMemory(section.key, label)} aria-label={t("teamCanvas.memoryAria", { name: label })}><Brain size={14} />{t("botPanel.teamMemorySharing")}</button>}
-                {section.key && <button className={menuButton} onClick={() => onEditTeam(section.key, true)} aria-label={t("team.renameAria", { name: label })}><Pencil size={14} />{t("team.rename")}</button>}
-                {section.key && <button className={cn(menuButton, "hover:text-danger")} onClick={() => onDeleteTeam(section.key)} aria-label={t("team.deleteAria", { name: label })}><Trash2 size={14} />{t("team.delete")}</button>}
-              </div>
-            </details>}
-          </header>
-          {dropping && <div className="pointer-events-none absolute -top-7 left-2 z-30 max-w-[calc(100%-16px)] truncate rounded-md bg-accent px-2 py-1 text-[10px] text-accent-ink shadow-sm">{dropHint}</div>}
-          <div className="flex items-center px-5 pb-5">
-            {section.chiefs.length > 0 && <div className="flex flex-col gap-4">{orderBots(section.chiefs, personalOrder(section.key)).map(renderBot)}</div>}
-            {hierarchy && <div className="flex w-10 shrink-0 justify-center text-ink-secondary/35" aria-hidden="true"><ArrowRight size={22} strokeWidth={1} /></div>}
-            {section.members.length > 0 && <div className="flex flex-col gap-4">{orderBots(section.members, personalOrder(section.key)).map(renderBot)}</div>}
-            {section.chiefs.length + section.members.length === 0 && <p className="flex h-[126px] w-[236px] items-center justify-center rounded-xl border border-dashed border-hairline/70 px-6 text-center text-[12px] leading-relaxed text-ink-secondary">{t("canvas.dropHere")}</p>}
-          </div>
-        </section>;
-      })}
+      <TeamSectionsLayer
+        sections={sections}
+        tiles={tiles}
+        view={view}
+        positions={positions}
+        layoutLoaded={layoutLoaded}
+        canManage={canManage}
+        selectedId={state.selectedId}
+        settingsOpen={state.settingsOpen}
+        dragged={dragged}
+        moving={moving}
+        connectedBotIds={connectedBotIds}
+        computerDropKey={computerDropKey}
+        dropKey={dropKey}
+        dropHint={dropHint}
+        insertion={insertion}
+        teamComputers={teamComputers}
+        menuAbove={menuAbove}
+        setMenuAbove={setMenuAbove}
+        viewport={viewport}
+        personalOrder={personalOrder}
+        savePositions={savePositions}
+        arrangeBot={layoutLoaded ? arrangeBot : undefined}
+        onComputer={onComputer}
+        onTeamComputer={onTeamComputer}
+        onEditTeam={onEditTeam}
+        onInstructions={onInstructions}
+        onMemory={onMemory}
+        onDeleteTeam={onDeleteTeam}
+      />
     </div>
-    {dragged && <div className="pointer-events-none absolute z-40 rounded-xl border border-accent/40 bg-card px-4 py-3 text-[13px] shadow-lg" style={{ left: dragged.point.x + 16, top: dragged.point.y + 16 }}>
-      <span className="flex items-center gap-2"><BotAvatar bot={dragged.bot} size={24} animated={false} />{dragged.bot.name}</span>
-      {dropHint && <p className="mt-1 text-[10px] text-ink-secondary">{dropHint}</p>}
-    </div>}
-    <div className="pointer-events-none absolute inset-x-5 bottom-5 flex items-end justify-between gap-3">
-      <div className="min-w-0 rounded-lg bg-app/90 px-2 py-1.5 text-[11px] text-ink-secondary">
-        <p className="max-sm:hidden">{t("canvas.hint")}</p>
-        <p role="status" aria-live="polite" className="max-w-[440px]">{dropHint ?? announcement}</p>
-      </div>
-      <div className="pointer-events-auto flex shrink-0 items-center gap-0.5 rounded-xl border border-hairline/60 bg-panel p-1 shadow-sm">
-        <button className={iconButton} aria-label={t("canvas.zoomOut")} onClick={() => zoom(1 / 1.2)}><Minus size={15} /></button>
-        <button className="min-w-12 rounded-md px-1 py-2 text-[11px] tabular-nums text-ink-secondary hover:bg-control" aria-label={t("canvas.fit")} title={t("canvas.fitHint")} onClick={fit}>{Math.round(view.scale * 100)}%</button>
-        <button className={iconButton} aria-label={t("canvas.zoomIn")} onClick={() => zoom(1.2)}><Plus size={15} /></button>
-      </div>
-    </div>
+    <TeamCanvasOverlay dragged={dragged} dropHint={dropHint} announcement={announcement} view={view} zoom={zoom} fit={fit} />
   </div>;
 }

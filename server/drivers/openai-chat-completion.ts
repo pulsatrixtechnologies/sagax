@@ -90,6 +90,15 @@ function rejectsToolsParameter(status: number, body: string): boolean {
 
 export class UnsupportedReasoningReplayError extends Error {}
 
+/** Reasoning text from `reasoning_content` (DeepSeek style) or `reasoning`
+ * (vLLM, #2054): the first non-empty string, so an empty or null field
+ * beside the other never hides it. */
+function reasoningText(primary: unknown, secondary: unknown): string | undefined {
+  if (typeof primary === "string" && primary) return primary;
+  if (typeof secondary === "string" && secondary) return secondary;
+  return typeof primary === "string" ? primary : typeof secondary === "string" ? secondary : undefined;
+}
+
 /** DeepSeek-style providers need `reasoning_content` echoed on a tool-call
  *  assistant message; strict endpoints such as Groq reject the property. */
 function rejectsReasoningReplay(status: number, body: string): boolean {
@@ -389,7 +398,7 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
         calls.add(message?.tool_calls, false);
         const details = new ChatReasoningDetails();
         details.add(message.reasoning_details);
-        const reasoning = message.reasoning_content ?? message.reasoning;
+        const reasoning = reasoningText(message.reasoning_content, message.reasoning);
         const finishReason = json.choices?.[0]?.finish_reason ?? null;
         activeSignal.throwIfAborted();
         return {
@@ -449,7 +458,7 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
         calls.add(delta?.tool_calls, true);
         details.add(delta?.reasoning_details);
         if (choice?.finish_reason) finishReason = choice.finish_reason;
-        const reasoningPart = delta?.reasoning_content ?? delta?.reasoning;
+        const reasoningPart = reasoningText(delta?.reasoning_content, delta?.reasoning);
         if (typeof reasoningPart === "string") protocolReasoning += reasoningPart;
         const reasoningDelta = options.reasoning && typeof reasoningPart === "string"
           ? reasoningPart

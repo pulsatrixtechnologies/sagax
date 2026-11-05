@@ -32,6 +32,21 @@ describe("turn-trace forwarding", () => {
   });
 });
 
+describe("HTTP MCP / Grok ACP prewarm bench knobs (#1975 / #2055)", () => {
+  it("forwards a numeric SAGAX_PREWARM_PER_MINUTE and idle engine cap", () => {
+    expect(childEnv({})).not.toHaveProperty("SAGAX_PREWARM_PER_MINUTE");
+    expect(childEnv({})).not.toHaveProperty("SAGAX_MAX_IDLE_ENGINE_SESSIONS");
+    expect(childEnv({ SAGAX_PREWARM_PER_MINUTE: "nope" })).not.toHaveProperty("SAGAX_PREWARM_PER_MINUTE");
+    expect(childEnv({ SAGAX_MAX_IDLE_ENGINE_SESSIONS: "x" })).not.toHaveProperty("SAGAX_MAX_IDLE_ENGINE_SESSIONS");
+    expect(childEnv({ SAGAX_PREWARM_PER_MINUTE: "40" }).SAGAX_PREWARM_PER_MINUTE).toBe("40");
+    expect(childEnv({ SAGAX_MAX_IDLE_ENGINE_SESSIONS: "3" }).SAGAX_MAX_IDLE_ENGINE_SESSIONS).toBe("3");
+  });
+
+  it("still forwards SAGAX_PREWARM_WINDOW_MS", () => {
+    expect(childEnv({ SAGAX_PREWARM_WINDOW_MS: "3000" }).SAGAX_PREWARM_WINDOW_MS).toBe("3000");
+  });
+});
+
 describe("the fixture's Live call environment", () => {
   it("passes a loopback fake GPT-Live and its key through", () => {
     expect(childEnv({ SAGAX_OPENAI_LIVE_URL: " http://127.0.0.1:4100 ", SAGAX_OPENAI_API_KEY: "sk-fake" }))

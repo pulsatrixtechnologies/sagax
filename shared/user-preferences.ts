@@ -57,6 +57,8 @@ export const USER_PREFERENCE_KEYS = [
   "sagax.sidebarHidden.v1",
   // the person's own sidebar sections (src/lib/personal-sections.ts)
   "sagax.sidebarSections.v1",
+  // sub-teams: which team sits under which (src/lib/section-tree.ts, #2045)
+  "sagax.sectionParents.v1",
   // Settings > Appearance > Sidebar: keep unassigned people in their own
   // automatic section (src/lib/sidebar-people-apart-preference.ts). "on" | "off";
   // absent is on (#1661).

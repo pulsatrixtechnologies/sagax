@@ -867,18 +867,17 @@ struct DesktopRoomBanners: View {
                     DesktopIconView(icon: .pin, size: 12).foregroundStyle(theme.inkSecondary)
                     Group {
                         if let first = room.bulletin.split(separator: "\n").first, !first.isEmpty {
-                            Text(verbatim: String(first)).foregroundStyle(theme.inkSecondary)
+                            DesktopLineText(text: String(first), size: 12.5, color: theme.inkSecondary, lineHeight: 18.75)
                         } else {
-                            Text("Add group instructions…").foregroundStyle(theme.inkTertiary)
+                            DesktopLineText(text: String(localized: "Add group instructions…"), size: 12.5, color: theme.inkTertiary, lineHeight: 18.75)
                         }
                     }
-                    .font(theme.font(12.5))
                     .lineLimit(1)
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 8)
                 // `py-1.5` around a 12.5 pt line at 1.5 (18.75)
-                .frame(height: 30.75)
+                .frame(minHeight: 30.75, maxHeight: 30.75)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

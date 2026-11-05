@@ -22,28 +22,20 @@ import type { CallState } from "@/lib/voice-mode/call-machine";
 import { notifyCallSettings, useCallSettings, writeCallSettings } from "@/lib/voice-mode/call-settings";
 import { useVoiceModeSettings, voiceSettingsForBot, writeVoiceForBot, writeVoiceModeSettings } from "@/lib/voice-mode/settings";
 import { forgetVoiceprint } from "@/lib/voice-mode/speaker-id";
-import type { VoiceModeRefusalCause } from "../../../shared/voice-mode";
 import { VOICE_PROVIDER_LABELS } from "../../../shared/voice-providers";
 import { BotAvatar } from "../Avatar";
-import { openProviderKeyDialog } from "../settings/ProviderKeys";
 import { REVEAL_MOTION_MS, REVEAL_SHELL_CLASS, reducedMotion, useReveal } from "../MenuMotion";
 import type { LiveCallMetrics as CallMetrics } from "@/lib/voice-mode/live-call-store";
 import { formatCallTime, phaseLabel } from "@/lib/voice-mode/call-labels";
 
 export { formatCallTime, phaseLabel };
+export { voiceAccessCardText, type VoiceAccessCard } from "./voice-access-card";
+import type { VoiceAccessCard } from "./voice-access-card";
+import { VoiceModeBarAlerts } from "./VoiceModeBarAlerts";
 import { VoiceModeSettingsPanel, type Enrollment, type VoiceModeList } from "./VoiceModeSettingsPanel";
 import { readableOr } from "../../../shared/human-id";
 import { readableError } from "@/lib/plain-error";
 
-/** The access card of a refused voice turn: shown in the speaker's own bar
- * only (the audience of every access card), never in the thread. */
-export interface VoiceAccessCard {
-  cause: VoiceModeRefusalCause;
-  admin: boolean;
-  keysUrl?: string;
-}
-
-/** What the card says, to the person it is about. Exported for tests. */
 /** The call's debug switch (localStorage "omb.voiceCall.debug"): the
  * settings card then shows the last answer's latency stages. */
 function callDebug(): boolean {
@@ -52,13 +44,6 @@ function callDebug(): boolean {
   } catch {
     return false;
   }
-}
-
-export function voiceAccessCardText(card: VoiceAccessCard): string[] {
-  if (card.cause === "payer_disabled") return [t("voiceMode.noAccess.disabled")];
-  if (card.cause === "perspicax_unreachable") return [t("voiceMode.noAccess.unreachable")];
-  if (card.cause === "server_engine_not_allowed") return [t("voiceMode.noAccess.notGiven")];
-  return [t("voiceMode.noAccess.xaiKey"), ...(card.admin ? [t("access.noAccess.mine.admin")] : [])];
 }
 
 export interface VoiceModeBarProps {
@@ -529,49 +514,14 @@ export function VoiceModeBar(props: VoiceModeBarProps) {
                   {body(shownPanel)}
                 </div>
               )}
-              {refusal && (
-                <div role="alert" className="my-1 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-[12.5px] text-ink" data-voice-access-card>
-                  {voiceAccessCardText(refusal).map((line, index) => (
-                    <div key={index} className={index === 0 ? "font-medium" : "mt-0.5 text-ink-secondary"}>{line}</div>
-                  ))}
-                  {refusal.admin && refusal.cause === "no_credentials" && (
-                    <button
-                      type="button"
-                      data-voice-action="open-connections"
-                      onClick={() => {
-                        dispatch({ type: "toggleAppSettings", open: true, section: "providers" });
-                        // Grok voice runs on the xAI key (2026-10-14): open its row.
-                        openProviderKeyDialog("xai");
-                      }}
-                      className="mr-1.5 mt-1.5 rounded-lg bg-accent px-2.5 py-1 text-[12px] font-medium text-accent-ink hover:brightness-110"
-                    >
-                      {t("voiceMode.openXaiKey")}
-                    </button>
-                  )}
-                  {refusal.keysUrl && refusal.cause === "no_credentials" && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (window.ogb?.openExternal) void window.ogb.openExternal(refusal.keysUrl!);
-                        else window.open(refusal.keysUrl, "_blank", "noopener");
-                      }}
-                      className="mt-1.5 rounded-lg bg-accent px-2.5 py-1 text-[12px] font-medium text-accent-ink hover:brightness-110"
-                    >
-                      {t("voiceMode.addOwnKey")}
-                    </button>
-                  )}
-                </div>
-              )}
-              {(note || notice) && !refusal && (
-                <div className={cn("my-1 flex items-center justify-between gap-2 rounded-xl px-3 py-1.5 text-[12.5px]", note ? "bg-warning/10 text-warning" : "bg-raised/60 text-ink-secondary")} role={note ? "alert" : "status"}>
-                  <span>{note ?? notice}</span>
-                  {note && noteRetry && (
-                    <button type="button" onClick={onRetry} className="shrink-0 rounded-full border border-warning/40 px-2.5 py-0.5 text-[12px] hover:bg-warning/10">
-                      {t("voiceMode.retry")}
-                    </button>
-                  )}
-                </div>
-              )}
+              <VoiceModeBarAlerts
+                refusal={refusal}
+                note={note}
+                notice={notice}
+                noteRetry={noteRetry}
+                onRetry={onRetry}
+                onOpenProviders={() => dispatch({ type: "toggleAppSettings", open: true, section: "providers" })}
+              />
             </div>
           </div>
           {leaving && (

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { setLocale } from "./i18n";
-import { goalCoordinatorForComposer, groupComposerHint, openTaskWorking, roomRespondersForComposer, roomTakesImages } from "./group-routing";
+import { goalCoordinatorForComposer, groupComposerHint, openTaskWorking, preferredRoomLead, roomRespondersForComposer, roomTakesImages } from "./group-routing";
 import type { Group, GroupDefaultResponder } from "@/state/store";
 
 describe("openTaskWorking", () => {
@@ -99,6 +99,32 @@ describe("goalCoordinatorForComposer", () => {
       members,
       { defaultResponder: { kind: "mentions" } },
     )?.id).toBe("chief");
+  });
+
+  it("#2045: falls back to the viewer's own Primary Bot only", () => {
+    const room = [
+      { id: "first", name: "First", ownerUserId: "person-a" },
+      { id: "theirs", name: "Theirs", chiefOfStaff: true, ownerUserId: "person-b" },
+      { id: "mine", name: "Mine", chiefOfStaff: true, ownerUserId: "person-a" },
+    ];
+    expect(goalCoordinatorForComposer("finish this", room, { defaultResponder: { kind: "mentions" } }, "person-a")?.id).toBe("mine");
+    expect(goalCoordinatorForComposer("finish this", room, { defaultResponder: { kind: "mentions" } }, "person-b")?.id).toBe("theirs");
+  });
+});
+
+describe("preferredRoomLead", () => {
+  it("#2045: prefers the viewer's own Primary Bot over another person's", () => {
+    const group = {
+      memberIds: ["theirs", "mine", "peer"],
+      defaultResponder: { kind: "mentions" as const },
+    };
+    const bots = [
+      { id: "theirs", chiefOfStaff: true, ownerUserId: "person-b" },
+      { id: "mine", chiefOfStaff: true, ownerUserId: "person-a" },
+      { id: "peer", ownerUserId: "person-a" },
+    ];
+    expect(preferredRoomLead(group, bots, { viewerId: "person-a" })?.id).toBe("mine");
+    expect(preferredRoomLead(group, bots, { viewerId: "person-b" })?.id).toBe("theirs");
   });
 });
 

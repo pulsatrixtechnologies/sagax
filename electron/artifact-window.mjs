@@ -14,38 +14,60 @@
  *
  * The window draws the app's own page (same origin, build and Content Security
  * Policy as the main window) on its `/artifact-window` route, in the default
- * session so the person's sign-in applies as it does in the main window. Like
- * the Data window it gets no preload: no `window.ogb`, no way to call main,
- * plus contextIsolation, a sandbox and no Node. It may only navigate within its
- * own route; any other link goes to the system browser. Only the main window's
- * own page may ask for one.
+ * session so the person's sign-in applies as it does in the main window. It
+ * gets a narrow preload (`artifact-window-preload.cjs`) that exposes
+ * always-on-top (`window.artifactWindowSelf`, #2046), OS fullscreen
+ * (`window.ogb.windowFullscreen`, #2043), and fit-to-content for page
+ * windows (`artifactWindowSelf.fitContent`, #2051): no file, no network,
+ * no other window. contextIsolation, a sandbox and no Node stay on. It may
+ * only navigate within its own route; any other link goes to the system
+ * browser. Only the main window's own page may ask for one (open/close);
+ * the window itself may toggle always-on-top and OS fullscreen, and a page
+ * window may ask to fit to its content.
  *
- * Each artifact's window keeps its place: its bounds (and whether it was
- * maximized) are saved per artifact id through `boundsStore` and put back the
- * next time it opens. A place on a screen that is gone comes back on the
- * primary screen (window-state.cjs). A request may name a screen point
- * (`x`, `y`) to open at. The windows go with the main window: they are driven by its page, so
- * none is left behind to keep the app from quitting. `onChange` tells main the
- * list changed, so the Window menu names them.
+ * Each artifact's window keeps its place: its bounds (whether it was
+ * maximized, and whether always-on-top was on) are saved per artifact id
+ * through `boundsStore` and put back the next time it opens. A place on a
+ * screen that is gone comes back on the primary screen (window-state.cjs). A
+ * request may name a screen point (`x`, `y`) to open at. The windows go with
+ * the main window: they are driven by its page, so none is left behind to keep
+ * the app from quitting. `onChange` tells main the list changed, so the Window
+ * menu names them.
  */
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+
+import { attachFullscreenPush } from "./window-fullscreen.mjs";
 
 const require = createRequire(import.meta.url);
 const { resolveWindowState } = require("./window-state.cjs");
 
+/** Narrow preload: always-on-top (#2046), OS fullscreen (#2043), fit-to-content (#2051). Overridable in tests. */
+export const ARTIFACT_WINDOW_PRELOAD = fileURLToPath(new URL("./artifact-window-preload.cjs", import.meta.url));
+
 export const ARTIFACT_WINDOW_PATH = "/artifact-window";
 export const ARTIFACT_WINDOW_SIZE = Object.freeze({ width: 960, height: 720 });
 export const ARTIFACT_WINDOW_MIN = Object.freeze({ width: 320, height: 240 });
+/** First-open width for a page window that still auto-fits (#2051). */
+export const PAGE_WINDOW_FIT_DEFAULT_WIDTH = 720;
+/** Wait this long for a content measure before showing a page window anyway. */
+export const PAGE_WINDOW_FIT_SHOW_MS = 2_000;
 /** More artifact windows than this at once is a mistake, not a desk. */
 export const MAX_ARTIFACT_WINDOWS = 24;
 /** Places remembered: the most recently used artifacts. */
 export const MAX_REMEMBERED_PLACES = 100;
 const SCREEN_LIMIT = 100_000;
 const TITLE_MAX = 120;
+const PAGE_WINDOW_PREFIX = "page:";
 
 const ID_RE = /^[a-zA-Z0-9:_-]{1,128}$/;
 
 const isString = (value) => Object.prototype.toString.call(value) === "[object String]";
+
+/** Whether this desktop window id is a published page (`page:<pageId>`). */
+export function isPageWindowArtifactId(artifactId) {
+  return isString(artifactId) && artifactId.startsWith(PAGE_WINDOW_PREFIX);
+}
 const clampSize = (value, fallback, min) =>
   Number.isFinite(value) ? Math.min(4000, Math.max(min, Math.round(value))) : fallback;
 const screenCoordinate = (value) =>
@@ -53,8 +75,8 @@ const screenCoordinate = (value) =>
 
 /** The request as the renderer sent it, or null: the bot and artifact ids, a
  * short plain title, an optional size, an optional screen point to open at
- * (`x`, `y`) and `focus` (false: open or
- * keep it without taking the focus, as when the app restores its windows). */
+ * (`x`, `y`), `focus` (false: open or keep it without taking the focus, as when
+ * the app restores its windows) and optional `alwaysOnTop` (#2046). */
 export function sanitizeArtifactWindowRequest(raw) {
   if (!raw || typeof raw !== "object") return null;
   const { botId, artifactId } = raw;
@@ -71,6 +93,7 @@ export function sanitizeArtifactWindowRequest(raw) {
     height: clampSize(raw.height, ARTIFACT_WINDOW_SIZE.height, ARTIFACT_WINDOW_MIN.height),
     ...(x !== null && y !== null ? { at: { x, y } } : {}),
     focus: raw.focus !== false,
+    ...(typeof raw.alwaysOnTop === "boolean" ? { alwaysOnTop: raw.alwaysOnTop } : {}),
   };
 }
 
@@ -79,8 +102,9 @@ const integerRect = (value) =>
   [value.x, value.y, value.width, value.height].every((n) => Number.isInteger(n) && Math.abs(n) <= SCREEN_LIMIT) &&
   value.width > 0 && value.height > 0;
 
-/** The saved places, artifact id -> { bounds, maximized }, oldest first.
- * Anything malformed is dropped. */
+/** The saved places, artifact id -> { bounds, maximized, alwaysOnTop, personSized? },
+ * oldest first. Anything malformed is dropped. `personSized` means the person
+ * chose the size and auto-fit must stop for that page (#2051). */
 export function parseArtifactWindowPlaces(raw) {
   const places = new Map();
   const value = raw && typeof raw === "object" ? raw.windows : null;
@@ -88,10 +112,27 @@ export function parseArtifactWindowPlaces(raw) {
   for (const [artifactId, place] of Object.entries(value)) {
     if (!ID_RE.test(artifactId) || !place || typeof place !== "object" || !integerRect(place.bounds)) continue;
     const { x, y, width, height } = place.bounds;
-    places.set(artifactId, { bounds: { x, y, width, height }, maximized: place.maximized === true });
+    places.set(artifactId, {
+      bounds: { x, y, width, height },
+      maximized: place.maximized === true,
+      alwaysOnTop: place.alwaysOnTop === true,
+      ...(place.personSized === true ? { personSized: true } : {}),
+    });
   }
   while (places.size > MAX_REMEMBERED_PLACES) places.delete(places.keys().next().value);
   return places;
+}
+
+/** Apply always-on-top the way floating bots do (level "floating" when on). */
+export function applyArtifactWindowOnTop(win, on) {
+  if (!win || win.isDestroyed?.()) return false;
+  try {
+    if (on) win.setAlwaysOnTop(true, "floating");
+    else win.setAlwaysOnTop(false);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function serializeArtifactWindowPlaces(places) {
@@ -101,6 +142,22 @@ export function serializeArtifactWindowPlaces(places) {
 const contains = (area, point) =>
   point.x >= area.x && point.x < area.x + area.width && point.y >= area.y && point.y < area.y + area.height;
 const clamp = (value, min, max) => Math.min(Math.max(value, min), Math.max(min, max));
+
+/** Clamp a fitted page size into the work area and keep the top-left on screen. */
+export function fitPageWindowBounds(current, size, workArea) {
+  if (!integerRect(workArea) || !size || typeof size !== "object") return null;
+  const width = Math.min(Math.max(ARTIFACT_WINDOW_MIN.width, Math.round(size.width)), workArea.width);
+  const height = Math.min(Math.max(ARTIFACT_WINDOW_MIN.height, Math.round(size.height)), workArea.height);
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
+  const x0 = Number.isFinite(current?.x) ? Math.round(current.x) : workArea.x;
+  const y0 = Number.isFinite(current?.y) ? Math.round(current.y) : workArea.y;
+  return {
+    x: clamp(x0, workArea.x, workArea.x + workArea.width - width),
+    y: clamp(y0, workArea.y, workArea.y + workArea.height - height),
+    width,
+    height,
+  };
+}
 
 /**
  * Where an artifact's window opens. `workAreas` puts the primary screen first;
@@ -235,9 +292,11 @@ function pageOrigin(event) {
  * @param {{ read(): unknown, write(value: unknown): void }} [deps.boundsStore] where each artifact's place is kept
  * @param {() => void} [deps.onChange] the open windows or their titles changed (the Window menu)
  * @param {Pick<typeof import("electron").session, "fromPartition">} [deps.session] the claude.ai window's persistent session
+ * @param {string} [deps.preload] absolute path of artifact-window-preload.cjs (#2046, #2043, #2051)
  */
 export function createArtifactWindows(deps) {
   const { BrowserWindow, ipcMain, getMainWindow, isTrustedMain } = deps;
+  const preload = typeof deps.preload === "string" && deps.preload ? deps.preload : ARTIFACT_WINDOW_PRELOAD;
   const log = deps.log ?? (() => {});
   const changed = () => {
     try {
@@ -246,7 +305,7 @@ export function createArtifactWindows(deps) {
       log(`artifact window: the menu did not update (${error?.message ?? error})`);
     }
   };
-  /** artifactId -> { win, origin, botId, title, quiet } */
+  /** artifactId -> { win, origin, botId, title, quiet, onTop, personSized, applyingFit, revealed, autoFit } */
   const windows = new Map();
   let places = null;
   const readPlaces = () => {
@@ -265,17 +324,40 @@ export function createArtifactWindows(deps) {
       log(`artifact window: its place was not saved (${error?.message ?? error})`);
     }
   };
-  const remember = (artifactId, win) => {
+  const remember = (artifactId, win, { onTop = false, personSized = false } = {}) => {
     if (win.isDestroyed()) return;
     // A full-screen window keeps the place it had before.
     if (win.isFullScreen?.()) return;
     const bounds = win.getNormalBounds?.() ?? win.getBounds?.();
     if (!integerRect(bounds)) return;
     const all = readPlaces();
+    const prior = all.get(artifactId);
     all.delete(artifactId); // re-inserted last: the most recent are kept
-    all.set(artifactId, { bounds: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }, maximized: win.isMaximized?.() === true });
+    all.set(artifactId, {
+      bounds: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height },
+      maximized: win.isMaximized?.() === true,
+      alwaysOnTop: onTop === true,
+      ...((personSized || prior?.personSized === true) ? { personSized: true } : {}),
+    });
     while (all.size > MAX_REMEMBERED_PLACES) all.delete(all.keys().next().value);
     writePlaces();
+  };
+  const entryForSender = (event) => {
+    const sender = event?.sender;
+    if (!sender) return null;
+    for (const artifactId of windows.keys()) {
+      const liveEntry = live(artifactId);
+      if (liveEntry && liveEntry.win.webContents === sender) return { artifactId, entry: liveEntry };
+    }
+    return null;
+  };
+  const setOnTop = (entry, artifactId, on) => {
+    if (!entry) return false;
+    const next = on === true;
+    if (!applyArtifactWindowOnTop(entry.win, next)) return false;
+    entry.onTop = next;
+    remember(artifactId, entry.win, { onTop: next, personSized: entry.personSized === true });
+    return true;
   };
   const screenAreas = () => {
     try {
@@ -342,6 +424,9 @@ export function createArtifactWindows(deps) {
         existing.title = request.title;
         changed();
       }
+      if (typeof request.alwaysOnTop === "boolean" && existing.onTop !== request.alwaysOnTop) {
+        setOnTop(existing, request.artifactId, request.alwaysOnTop);
+      }
       if (request.focus) bringForward(existing.win);
       return "focused";
     }
@@ -349,12 +434,20 @@ export function createArtifactWindows(deps) {
     if (existing) closeQuietly(request.artifactId);
     if (windows.size >= MAX_ARTIFACT_WINDOWS) return "refused";
 
+    const pageWindow = isPageWindowArtifactId(request.artifactId);
+    const place = readPlaces().get(request.artifactId);
+    const personSized = pageWindow && place?.personSized === true;
+    const autoFit = pageWindow && !personSized;
+    const openRequest = autoFit
+      ? { ...request, width: PAGE_WINDOW_FIT_DEFAULT_WIDTH, height: Math.max(ARTIFACT_WINDOW_MIN.height, Math.min(request.height, 480)) }
+      : request;
     const placed = resolveArtifactWindowBounds({
-      place: readPlaces().get(request.artifactId),
+      place,
       workAreas: screenAreas(),
       home: homeArea(),
-      request,
+      request: openRequest,
     });
+    const onTop = typeof request.alwaysOnTop === "boolean" ? request.alwaysOnTop : place?.alwaysOnTop === true;
     const win = new BrowserWindow({
       ...placed.bounds,
       minWidth: ARTIFACT_WINDOW_MIN.width,
@@ -367,28 +460,61 @@ export function createArtifactWindows(deps) {
       fullscreenable: true,
       show: false,
       title: request.title,
+      alwaysOnTop: onTop,
       ...(deps.icon ? { icon: deps.icon() } : {}),
       backgroundColor: "#070707",
       autoHideMenuBar: true,
       webPreferences: {
-        // No preload: this page gets no bridge into main.
+        // Narrow preload: always-on-top (#2046), OS fullscreen (#2043), fit (#2051).
+        preload,
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
       },
     });
-    const entry = { win, origin, botId: request.botId, title: request.title, quiet: false };
-    windows.set(request.artifactId, entry);
-    if (placed.maximized) win.maximize?.();
-
-    win.once("ready-to-show", () => {
-      if (win.isDestroyed()) return;
-      if (!request.focus && win.showInactive) {
+    const entry = {
+      win,
+      origin,
+      botId: request.botId,
+      title: request.title,
+      quiet: false,
+      onTop,
+      personSized,
+      applyingFit: false,
+      revealed: false,
+      autoFit,
+      focusOnReveal: request.focus !== false,
+      showTimer: null,
+      reveal: null,
+    };
+    entry.reveal = () => {
+      if (entry.revealed || win.isDestroyed()) return;
+      entry.revealed = true;
+      if (entry.showTimer) {
+        clearTimeout(entry.showTimer);
+        entry.showTimer = null;
+      }
+      if (!entry.focusOnReveal && win.showInactive) {
         win.showInactive();
         return;
       }
       win.show();
       win.focus();
+    };
+    windows.set(request.artifactId, entry);
+    if (onTop) applyArtifactWindowOnTop(win, true);
+    if (placed.maximized) win.maximize?.();
+    attachFullscreenPush(win);
+
+    win.once("ready-to-show", () => {
+      if (win.isDestroyed()) return;
+      if (entry.autoFit) {
+        // Fit before show: wait for the page to measure, else show on timeout.
+        entry.showTimer = setTimeout(() => entry.reveal?.(), PAGE_WINDOW_FIT_SHOW_MS);
+        entry.showTimer.unref?.();
+        return;
+      }
+      entry.reveal?.();
     });
     // Its place is kept as the person moves and sizes it, and when it closes.
     let saveTimer = null;
@@ -396,18 +522,39 @@ export function createArtifactWindows(deps) {
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = setTimeout(() => {
         saveTimer = null;
-        remember(request.artifactId, win);
+        remember(request.artifactId, win, { onTop: entry.onTop, personSized: entry.personSized === true });
       }, 400);
       saveTimer.unref?.();
     };
-    for (const name of ["move", "resize", "maximize", "unmaximize"]) win.on(name, saveSoon);
+    win.on("move", saveSoon);
+    win.on("maximize", saveSoon);
+    win.on("unmaximize", saveSoon);
+    win.on("resize", () => {
+      if (entry.applyingFit) {
+        saveSoon();
+        return;
+      }
+      if (entry.autoFit) {
+        entry.personSized = true;
+        entry.autoFit = false;
+      }
+      saveSoon();
+    });
     win.on("close", () => {
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = null;
-      remember(request.artifactId, win);
+      if (entry.showTimer) {
+        clearTimeout(entry.showTimer);
+        entry.showTimer = null;
+      }
+      remember(request.artifactId, win, { onTop: entry.onTop, personSized: entry.personSized === true });
     });
     win.on("closed", () => {
       if (saveTimer) clearTimeout(saveTimer);
+      if (entry.showTimer) {
+        clearTimeout(entry.showTimer);
+        entry.showTimer = null;
+      }
       if (windows.get(request.artifactId)?.win === win) windows.delete(request.artifactId);
       changed();
       if (entry.quiet) return;
@@ -574,14 +721,91 @@ export function createArtifactWindows(deps) {
     return true;
   }
 
+  /** Always-on-top for this window (#2046). The window itself may toggle (no
+   * artifactId: sender must be that window). The main window may name an
+   * artifactId. */
+  function setTop(event, raw) {
+    const on = raw && typeof raw === "object" ? raw.on === true : false;
+    const named = raw && typeof raw === "object" && isString(raw.artifactId) && ID_RE.test(raw.artifactId) ? raw.artifactId : null;
+    if (named) {
+      if (!fromMainWindow(event)) return false;
+      return setOnTop(live(named), named, on);
+    }
+    const found = entryForSender(event);
+    if (!found) return false;
+    return setOnTop(found.entry, found.artifactId, on);
+  }
+
+  function getTop(event, raw) {
+    const named = raw && typeof raw === "object" && isString(raw.artifactId) && ID_RE.test(raw.artifactId) ? raw.artifactId : null;
+    if (named) {
+      if (!fromMainWindow(event)) return false;
+      return live(named)?.onTop === true;
+    }
+    return entryForSender(event)?.entry.onTop === true;
+  }
+
+  /** The page window that sent this event, or null. */
+  const senderPageWindow = (event) => {
+    if (!event?.sender) return null;
+    for (const artifactId of windows.keys()) {
+      if (!isPageWindowArtifactId(artifactId)) continue;
+      const liveEntry = live(artifactId);
+      if (liveEntry && liveEntry.win.webContents === event.sender) return { artifactId, entry: liveEntry };
+    }
+    return null;
+  };
+
+  /** Size a page window to its content (#2051). Only that window may ask, and
+   * only while auto-fit is still on (the person has not resized by hand).
+   * Skip while fullscreen or maximized so auto-fit never fights OS fullscreen. */
+  function fitContent(event, raw) {
+    const found = senderPageWindow(event);
+    if (!found || !raw || typeof raw !== "object") return null;
+    const { entry } = found;
+    if (!entry.autoFit || entry.personSized || entry.win.isDestroyed()) return null;
+    if (entry.win.isMaximized?.() || entry.win.isFullScreen?.()) return null;
+    const areas = screenAreas();
+    const bounds = entry.win.getBounds?.() ?? entry.win.getNormalBounds?.();
+    const area = (() => {
+      try {
+        if (deps.screen?.getDisplayMatching && bounds) return deps.screen.getDisplayMatching(bounds).workArea;
+      } catch {
+        // fall through to the primary work area
+      }
+      return areas[0];
+    })();
+    if (!integerRect(area) || !integerRect(bounds)) return null;
+    const next = fitPageWindowBounds(bounds, { width: raw.width, height: raw.height }, area);
+    if (!next) return null;
+    const same =
+      next.width === bounds.width && next.height === bounds.height && next.x === bounds.x && next.y === bounds.y;
+    if (!same) {
+      entry.applyingFit = true;
+      try {
+        entry.win.setBounds?.(next);
+      } finally {
+        entry.applyingFit = false;
+      }
+    }
+    entry.reveal?.();
+    return next;
+  }
+
   ipcMain.handle("artifact-window:open", (event, raw) => open(event, raw));
   ipcMain.handle("artifact-window:close", (event, raw) => close(event, raw));
   ipcMain.handle("artifact-window:open-claude-ai", (event, raw) => openClaudeAi(event, raw));
+  ipcMain.handle("artifact-window:set-top", (event, raw) => setTop(event, raw));
+  ipcMain.handle("artifact-window:get-top", (event, raw) => getTop(event, raw));
+  ipcMain.handle("artifact-window:fit-content", (event, raw) => fitContent(event, raw));
 
   return {
     open,
     close,
     openClaudeAi,
+    setTop,
+    getTop,
+    fitContent,
     /** Artifact ids with a window open. */
     list: () => [...windows.keys()].filter((artifactId) => live(artifactId)),
     /** The open windows for the Window menu, in the order they opened. */
@@ -622,6 +846,9 @@ export function createArtifactWindows(deps) {
       ipcMain.removeHandler("artifact-window:open");
       ipcMain.removeHandler("artifact-window:close");
       ipcMain.removeHandler("artifact-window:open-claude-ai");
+      ipcMain.removeHandler("artifact-window:set-top");
+      ipcMain.removeHandler("artifact-window:get-top");
+      ipcMain.removeHandler("artifact-window:fit-content");
     },
   };
 }

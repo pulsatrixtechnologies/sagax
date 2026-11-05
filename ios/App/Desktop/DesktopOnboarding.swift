@@ -696,6 +696,7 @@ struct DesktopGuidedTour: View {
     @State private var saving = false
     @State private var failed = false
     @State private var cardHeight: CGFloat = 120
+    @State private var shellSize: CGSize = .zero
 
     private static let pad: CGFloat = 8
     private static let radius: CGFloat = 14
@@ -711,6 +712,12 @@ struct DesktopGuidedTour: View {
 
     var body: some View {
         GeometryReader { geometry in
+            Color.clear
+                .frame(width: 0, height: 0)
+                .onAppear { shellSize = geometry.size }
+                .onValueChange(of: geometry.size) { shellSize = $0 }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
             if active, let step {
                 let anchor = fallback == step.id ? step.fallbackAnchor : step.anchor
                 let rect = anchor.flatMap { anchors[$0] }.map { geometry[$0].insetBy(dx: -Self.pad, dy: -Self.pad) }
@@ -887,9 +894,10 @@ struct DesktopGuidedTour: View {
     }
 
     private func finish() {
-        // leave nothing open behind: the panel, Capabilities, a page
+        // leave nothing open behind: the panel, Capabilities, a page, the menu
         if shell.panelOpen, shell.panelTab == .computer { run(.closeComputer) }
         if shell.modal == .plugins { run(.closeApps) }
+        shell.menu = nil
         run(.backToChat)
         onboarding.finishTour(session)
     }
@@ -902,8 +910,18 @@ struct DesktopGuidedTour: View {
         case .closeComputer:
             if shell.panelOpen { shell.togglePanel() }
         case .openTools:
-            // the account menu's places live in the sidebar foot; nothing to open here
-            break
+            // open the account menu with Tools expanded so Automations
+            // (`nav-automations`) is on screen for the next step
+            if shell.menu?.kind != .profile || shell.menu?.expandSubmenu != "tools" {
+                // foot of the sidebar: same place the parity captures open it
+                let height = max(shellSize.height, 600)
+                shell.menu = DesktopMenuRequest(
+                    kind: .profile,
+                    anchor: CGPoint(x: 8, y: height - 64),
+                    opensUp: true,
+                    expandSubmenu: "tools"
+                )
+            }
         case .openApps:
             shell.menu = nil
             shell.modal = .plugins

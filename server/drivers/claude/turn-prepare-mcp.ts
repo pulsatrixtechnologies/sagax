@@ -72,6 +72,8 @@ if (turn.integrations?.agents) {
   // Claude waits for always-loaded tools before building the prompt.
   // Rare agents tools wait for tool search (agents-catalog.ts
   // DEFERRED_AGENT_TOOL_NAMES): about 15,000 fewer prompt tokens a turn.
+  // #2037: when the bot's agents use is known, every tool outside the
+  // chat-turn core and its pinned tools is deferred the same way.
   // Not when the turn names its built-ins (a guest's turn, an instance
   // tool list) without ToolSearch: a deferred tool would be unreachable.
   const toolSearch = !turn.guestConfined && (config.tools === undefined || config.tools.includes("ToolSearch"));
@@ -79,12 +81,22 @@ if (turn.integrations?.agents) {
   // #2037: where the turn has ToolSearch, the remaining Sagax tools are
   // listed by name and deferred to it (SAGAX_DEFER_RARE_TOOLS, one call by
   // its own name) instead of the proxy's search_tools / call_tool pair.
+  const knownUse = !turn.compactPrompt && turn.agentsKnownUse?.core === "used"
+    ? { core: "used" as const, pinned: [...new Set(turn.agentsKnownUse.pinned)].sort() }
+    : undefined;
   const agentsEnv = turn.compactPrompt
     ? { ...turn.integrations.agents.env, SAGAX_COMPACT_TOOLS: JSON.stringify({ core: turn.compactPrompt.agents.core, pinned: [...new Set(turn.compactPrompt.agents.pinned)].sort() }), ...(toolSearch ? { SAGAX_DEFER_RARE_TOOLS: "1" } : {}) }
     // The whole catalog, with each family of tools as one tool
     // (agents-merged.ts): a family call is asked about as the tool it
     // runs (permission broker, searched-tool-call.ts).
-    : toolSearch ? { ...turn.integrations.agents.env, SAGAX_DEFER_RARE_TOOLS: "1", SAGAX_MERGED_TOOLS: "1" } : { ...turn.integrations.agents.env, SAGAX_MERGED_TOOLS: "1" };
+    : toolSearch
+      ? {
+        ...turn.integrations.agents.env,
+        SAGAX_DEFER_RARE_TOOLS: "1",
+        SAGAX_MERGED_TOOLS: "1",
+        ...(knownUse ? { SAGAX_DEFER_KNOWN_USE: JSON.stringify(knownUse) } : {}),
+      }
+      : { ...turn.integrations.agents.env, SAGAX_MERGED_TOOLS: "1" };
   mcpServers.agents = { ...turn.integrations.agents, env: agentsEnv, alwaysLoad: true };
   // The process is kept from turn to turn: the turn's comms token and
   // depth (new every turn) ride a file the proxy reads on each call,
@@ -347,8 +359,9 @@ if (authSettingsPath) args.push("--settings", authSettingsPath);
 // boundary. Native background workers cannot outlive that boundary;
 // parallel bot work must use the harness's durable delegate_bot path.
 env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS = "1";
-// 2026-11-04: a routine turn's sub-agents (Agent tool, Flow workers) run on
-// the routine's model, never the CLI's default (Opus on a subscription).
+// #2038: sub-agents (Agent tool, Flow workers) run on turn.subagentModel
+// (routine override, routine model, or the bot's fast model), never the
+// CLI's default (Opus on a subscription) when one was resolved upstream.
 const subagentModel = turn.subagentModel ? (turn.subagentModel === turn.model ? injected.model ?? turn.subagentModel : turn.subagentModel) : null;
 if (subagentModel) env.CLAUDE_CODE_SUBAGENT_MODEL = subagentModel;
 // Native sub-agents inherit this turn's routine effort.

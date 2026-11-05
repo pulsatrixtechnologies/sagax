@@ -46,39 +46,12 @@ function subscribeFullscreen(listener: () => void): () => void {
 }
 const currentFullscreen = () => fullscreenArtifact;
 
-/** In an artifact's own window the layer also takes the screen (#1495): the
- * window asks the system for full screen, and leaving it (Escape, the window's
- * own control) closes the layer. Where the system refuses, the layer still
- * fills the window. */
-function useWindowFullscreen(enabled: boolean, onClose: () => void): void {
-  const close = useRef(onClose);
-  close.current = onClose;
-  useEffect(() => {
-    if (!enabled || typeof document === "undefined") return;
-    const root = document.documentElement;
-    let entered = false;
-    const onChange = () => {
-      if (document.fullscreenElement) entered = true;
-      else if (entered) close.current();
-    };
-    document.addEventListener("fullscreenchange", onChange);
-    if (!document.fullscreenElement && typeof root.requestFullscreen === "function") {
-      void Promise.resolve(root.requestFullscreen()).catch(() => {});
-    }
-    return () => {
-      document.removeEventListener("fullscreenchange", onChange);
-      if (document.fullscreenElement && typeof document.exitFullscreen === "function") {
-        void Promise.resolve(document.exitFullscreen()).catch(() => {});
-      }
-    };
-  }, [enabled]);
-}
-
-/** The full-screen layer is a modal dialog: Escape and Tab are handled by useModalDialog. */
-function FullscreenLayer({ artifact, onClose, windowFullscreen = false }: { artifact: FullscreenArtifact; onClose: () => void; windowFullscreen?: boolean }) {
+/** The full-screen layer is a modal dialog: Escape and Tab are handled by useModalDialog.
+ * Own windows use OS fullscreen from the chrome instead (#2043); this layer
+ * remains for the main app host. */
+function FullscreenLayer({ artifact, onClose }: { artifact: FullscreenArtifact; onClose: () => void }) {
   const layer = useRef<HTMLDivElement>(null);
   useModalDialog(layer, onClose);
-  useWindowFullscreen(windowFullscreen, onClose);
   return (
     <div ref={layer} tabIndex={-1} data-artifact-fullscreen-layer className="fixed inset-0 z-[70] flex flex-col bg-panel outline-none" role="dialog" aria-modal="true" aria-label={artifact.title}>
       <div className="flex justify-end p-2">
@@ -91,15 +64,13 @@ function FullscreenLayer({ artifact, onClose, windowFullscreen = false }: { arti
   );
 }
 
-/** Mounted once per page that draws artifacts: the app (ArtifactsHost) and an
- * artifact's own window (ArtifactStandaloneWindow, #1495). Draws the
- * full-screen artifact in front of everything, independent of the popup that
- * opened it. `windowFullscreen`: the page is the artifact's own window, so the
- * window itself goes full screen too. */
-export function ArtifactFullscreenHost({ windowFullscreen = false }: { windowFullscreen?: boolean } = {}) {
+/** Mounted once per page that draws artifacts (ArtifactsHost). Draws the
+ * full-screen artifact in front of everything. Own windows use OS fullscreen
+ * from their chrome (#1495, #2043). */
+export function ArtifactFullscreenHost() {
   const artifact = useSyncExternalStore(subscribeFullscreen, currentFullscreen, currentFullscreen);
   if (!artifact || typeof document === "undefined") return null;
-  return createPortal(<FullscreenLayer artifact={artifact} windowFullscreen={windowFullscreen} onClose={() => setFullscreenArtifact(null)} />, document.body);
+  return createPortal(<FullscreenLayer artifact={artifact} onClose={() => setFullscreenArtifact(null)} />, document.body);
 }
 
 export function ArtifactFrame({ artifact, fill = false, className, bare = false }: {
@@ -107,7 +78,8 @@ export function ArtifactFrame({ artifact, fill = false, className, bare = false 
   /** Take the whole box (a window, a dialog); otherwise grow with the widget. */
   fill?: boolean;
   className?: string;
-  /** Inside the full-screen layer: no second full-screen button. */
+  /** Skip the open-slot rev sync (the layer owns it) and the Full screen
+   * control (own windows put it in the chrome, #2043). */
   bare?: boolean;
 }) {
   const holder = useRef<HTMLDivElement>(null);
@@ -176,16 +148,6 @@ export function ArtifactFrame({ artifact, fill = false, className, bare = false 
     <div ref={holder} dir="ltr" data-artifact-frame={artifact.id} className={cn("relative min-w-0", fill && "size-full", className)}>
       {notice && (
         <p role="alert" data-artifact-problem={problem} className="px-2 py-1.5 text-[12px] text-warning">{notice}</p>
-      )}
-      {!bare && !blocked && (
-        <button
-          type="button"
-          data-artifact-fullscreen
-          onClick={() => setFullscreenArtifact(artifact)}
-          className="absolute end-1 top-1 z-10 rounded-md bg-panel/90 px-2 py-0.5 text-[11px] text-ink-secondary hover:text-ink"
-        >
-          {t("artifact.fullscreen")}
-        </button>
       )}
       {blocked ? (
         <p role="alert" className="py-2 text-[12px] text-warning">{t("rich.widget.blocked")}</p>

@@ -12,12 +12,14 @@ import { parseWidgetInput, widgetAdvice } from "../../shared/widget.ts";
 import { parseAppInput } from "../../shared/app.ts";
 import { PLACE_PHONE_CALL_TOOL } from "../../shared/outbound-call.ts";
 import { HANG_UP_TOOL, PLACE_CALL_TOOL, SEND_DTMF_TOOL, TRANSFER_CALL_TOOL } from "../../shared/phone-call-live.ts";
+import { CHOOSE_PAGE_TARGET_TOOL } from "./agents-artifact-tools.ts";
+import { pageTargetAutoResult, pageTargetCardResult, type PageTargetOffer } from "../../shared/page-targets.ts";
 
 import type { ToolCallContext, ToolCallResult } from "./agents-call-types.ts";
 import type { Json } from "./agents-client.ts";
 
 export const CARD_TOOL_NAMES: ReadonlySet<string> = new Set([
-  "create_options_card", ASK_CHOICE_TOOL, "check_widget", "show_widget", "update_widget", "show_html", "update_html",
+  "create_options_card", ASK_CHOICE_TOOL, CHOOSE_PAGE_TARGET_TOOL, "check_widget", "show_widget", "update_widget", "show_html", "update_html",
   "propose_page", "page_comments", PLACE_PHONE_CALL_TOOL, PLACE_CALL_TOOL, SEND_DTMF_TOOL, TRANSFER_CALL_TOOL, HANG_UP_TOOL,
 ]);
 
@@ -25,6 +27,25 @@ const CARD_ROUTE = "/api/internal/options-card";
 
 export async function callCardTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult> {
   const { api, apiResponse } = context.client;
+  if (name === CHOOSE_PAGE_TARGET_TOOL) {
+    const intent = args?.intent === "page" || args?.intent === "artifact" || args?.intent === "any" ? args.intent : "any";
+    const { ok, body } = await apiResponse(CARD_ROUTE, {
+      method: "POST",
+      body: JSON.stringify({ tool: CHOOSE_PAGE_TARGET_TOOL, intent }),
+    });
+    if (!ok) return { text: String(body.error ?? "Could not resolve a publish target."), isError: true };
+    if (body.auto && typeof body.auto === "object") {
+      const auto = body.auto as PageTargetOffer & { reason?: "single" | "default" };
+      const reason = auto.reason === "default" || auto.reason === "single" ? auto.reason : "single";
+      return { text: pageTargetAutoResult(auto, reason) };
+    }
+    if (body.waitsForPerson === true) {
+      const offers = Array.isArray(body.targets) ? body.targets as PageTargetOffer[] : [];
+      return { text: `${pageTargetCardResult(offers)} The card is waiting for the person (their notification, Approvals and this run's status). End your turn now.` };
+    }
+    const offers = Array.isArray(body.targets) ? body.targets as PageTargetOffer[] : [];
+    return { text: pageTargetCardResult(offers) };
+  }
   if (name === ASK_CHOICE_TOOL) {
     const parsed = parseAskChoiceInput(args);
     if (!parsed.ok) return { text: parsed.error, isError: true };

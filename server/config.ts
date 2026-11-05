@@ -610,8 +610,13 @@ const appConfigSchema = z.object({
   /** 2026-10-30: the keys of the named OpenAI-compatible servers added from
    * the app (server/openai-compat-servers.ts), by engine instance id. Each
    * server's name and address live in its `instances` entry; only the key
-   * is here, write-only, handed to that one instance. */
-  openaiCompatServers: z.record(z.string().max(80), z.object({ key: optionalText }).strict()).optional(),
+   * is here, write-only, handed to that one instance. `ownerPrincipalId`
+   * (#2054): the person's own server on an organization host; absent means
+   * org-wide (an organization admin's only to change). */
+  openaiCompatServers: z.record(z.string().max(80), z.object({
+    key: optionalText,
+    ownerPrincipalId: z.string().trim().min(1).max(200).optional(),
+  }).strict()).optional(),
   /** 2026-10-30 (lot 2): on a solo server, the models its person turned off
    * (`<engine>/<model>`, shared/offered-models.ts). */
   disabledModels: z.array(z.string().max(300)).max(2000).optional(),
@@ -864,7 +869,7 @@ export interface AppConfig {
   billing?: { currency?: string; prices?: Record<string, { inputPerMillion: number; outputPerMillion: number; cachedInputPerMillion?: number }> };
   openaiCompat?: { key?: string; url?: string; model?: string; provider?: string };
   /** 2026-10-30: each named OpenAI-compatible server's key, by instance id. */
-  openaiCompatServers?: Record<string, { key?: string }>;
+  openaiCompatServers?: Record<string, { key?: string; ownerPrincipalId?: string }>;
   /** 2026-10-30: a solo server's own model switches (`<engine>/<model>` off). */
   disabledModels?: string[];
   /** #2050: a solo server's starred models (`<engine>/<model>`). */

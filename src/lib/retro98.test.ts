@@ -205,6 +205,7 @@ describe("zero cost while off", () => {
       readFileSync(join(here, "../components/RetroAssistantHost.tsx"), "utf8"),
       readFileSync(join(here, "../components/Composer.tsx"), "utf8"),
       readFileSync(join(here, "../App.tsx"), "utf8"),
+      readFileSync(join(here, "../App.tsx-parts/ShellLayout.tsx"), "utf8"),
     ].join("\n");
     const staticImports = [...eager.matchAll(/^import[^;]*from\s+"([^"]+)"/gm)].map(([, from]) => from);
     expect(staticImports.some((from) => from.includes("retro-assistant/"))).toBe(false);

@@ -1,15 +1,10 @@
-// Visible roles (2026-11-05): what the thread shows for each role fact the
-// Perspicax relay reports (perspicax-mcp.ts onRole).
+// Visible roles (2026-11-05, corrected #2032/#2033): what the role journal
+// keeps when the Perspicax relay reports a role fact (perspicax-mcp.ts onRole).
 //
-// - every Perspicax tool step carries its role (`tool.role`), put on the
-//   step's own row (or kept until the row exists);
-// - at each transition (the role differs from the thread's previous step),
-//   an inline "Agit comme" card in the approval card family, unless the
-//   bot owner's "Toujours ainsi" rule answered it;
-// - a lapsed role, a refused write, a refused read with no fallback: one
-//   banner row with the missing permission;
-// - every refusal is logged for the bot's "Permissions manquantes" and the
-//   routine coverage preview; every transition for the Roles graph.
+// The chat never shows role chips, "Agit comme" cards or role notices. The
+// journal alone keeps steps, transitions, refusals and owner rules (Roles
+// tab, routine coverage). The turn role itself lives only on Pulsatrix Flow
+// routines ("Au nom de").
 import en from "../../src/locales/en.json" with { type: "json" };
 import fr from "../../src/locales/fr.json" with { type: "json" };
 import type { PerspicaxRoleEvent } from "./perspicax-mcp.ts";
@@ -34,33 +29,15 @@ export function permissionLine(permission: CwPermission | undefined, language = 
   return `${area}${permission.path ? ` (${permission.path})` : ""} · ${op}`;
 }
 
-type Row = { id: string; kind?: string; role?: string; tool?: { name: string; role?: ToolRole } & Record<string, unknown> };
-
 export interface RoleEventsDeps {
   journal: RoleJournal;
-  messagesFor(threadId: string): readonly Row[];
-  patchTool(threadId: string, messageId: string, tool: NonNullable<Row["tool"]>): void;
-  appendRow(threadId: string, row: { kind: "activity"; tool: Record<string, unknown> } | { kind: "options"; card: Record<string, unknown> }): void;
-  personName(principalId: string): string;
-  botName(botId: string): string;
-  ownerOf(botId: string): string | undefined;
-  language(principalId: string): string;
 }
 
 export function createRoleEvents(deps: RoleEventsDeps) {
   const { journal } = deps;
 
-  function attach(threadId: string, tool: string, role: ToolRole): void {
-    const row = journal.rowFor(deps.messagesFor(threadId), tool);
-    if (row?.tool) {
-      deps.patchTool(threadId, row.id, { ...row.tool, role });
-      return;
-    }
-    journal.remember(threadId, tool, role);
-  }
-
   return {
-    /** PerspicaxMcp onRole. */
+    /** PerspicaxMcp onRole. Journal only: nothing is posted into the chat. */
     onRole(event: PerspicaxRoleEvent): void {
       if (event.held?.length) journal.noteRoles(event.principalId, event.held);
       if (event.permission && (event.kind !== "step" || event.role.reason === "fallback" || event.role.reason === "rule")) {
@@ -72,14 +49,10 @@ export function createRoleEvents(deps: RoleEventsDeps) {
         });
       }
       if (event.kind === "lapsed" || event.kind === "write_refused" || event.kind === "read_refused") {
-        attach(event.threadId, event.tool, event.role);
         // 2026-11-05: no role notice in the chat; the journal keeps it
         return;
       }
       const previous = journal.advance(event.threadId, { slug: event.role.slug, name: event.role.name });
-      const person = event.role.slug ? "" : deps.personName(event.principalId);
-      const role: ToolRole = { ...event.role, ...(previous && !event.role.previous ? { previous } : {}), ...(person ? { person } : {}) };
-      attach(event.threadId, event.tool, role);
       if (previous) {
         journal.logTransition({
           principalId: event.principalId, botId: event.botId, threadId: event.threadId,
@@ -90,9 +63,9 @@ export function createRoleEvents(deps: RoleEventsDeps) {
       }
     },
 
-    /** item.started: the role a step's relay call already reported. */
-    takePending(threadId: string, rowName: string): ToolRole | undefined {
-      return journal.takePending(threadId, rowName);
+    /** item.started: pending chat role chips are gone (#2033); drain nothing. */
+    takePending(_threadId: string, _rowName: string): ToolRole | undefined {
+      return undefined;
     },
   };
 }

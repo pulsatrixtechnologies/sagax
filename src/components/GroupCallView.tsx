@@ -11,35 +11,23 @@
 // reach several members, so a line is generic and is said in a member's voice only when
 // every tool of the turn is that member's (`turnToolAuthor`); otherwise in
 // the call's own voice, never attributed to the wrong bot.
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, PhoneOff, X } from "lucide-react";
+import { useRef } from "react";
 
-import { currentCall, deferCallCleanup, endCall, useOnCall } from "@/lib/call";
-import { routeSpokenGroupMessage } from "@/lib/group-call";
+import { useOnCall } from "@/lib/call";
 import { track } from "@/lib/analytics";
-import { normalizeState } from "@/lib/mascot";
-import { speaker } from "@/lib/tts";
 import { useSpeech } from "@/lib/tts/useSpeech";
 import { usePushToTalk } from "@/lib/push-to-talk";
-import { useStore, type Bot, type Group, type Message } from "@/state/store";
-import { cn } from "@/lib/cn";
-import { BotAvatar } from "./Avatar";
+import { useStore, type Bot, type Group } from "@/state/store";
 import { CallTargetButton, useOrganizationCall } from "./CallView";
 import { VoiceModeCallButton } from "./voice-mode/VoiceModeCallButton";
 import { useDesktopCapabilities } from "./DesktopCapabilities";
-import { isRoutineApproval, isSkillApproval, pendingApprovals, spokenApprovalPrompt } from "./PendingApproval";
-import { spokenDecision } from "@/lib/voice-mode/answers";
-import { spokenAnswer, spokenReply } from "@/lib/voice-mode/answer-budget";
-import { activeLocale, t, tIn } from "@/lib/i18n";
-import { CallProgress, progressLocale, progressText, turnToolAuthor, turnTools } from "@/lib/voice-mode/progress";
-import { CallFailure, callFailureKey } from "@/lib/voice-mode/failure";
-import { looksFrench } from "@/lib/voice-mode/turns";
-
-const CALL_ENDPOINT_MS = 850;
-/** How often the call asks whether a progress line is due. */
-const PROGRESS_TICK_MS = 500;
-
-type Phase = "listening" | "sending" | "working" | "speaking";
+import { pendingApprovals } from "./PendingApproval";
+import { CallFailure } from "@/lib/voice-mode/failure";
+import type { Phase } from "./GroupCallView.tsx-parts/types";
+import { questionIn } from "./GroupCallView.tsx-parts/questionIn";
+import { useGroupCallSpeech } from "./GroupCallView.tsx-parts/useGroupCallSpeech";
+import { useGroupCallTurnEffects } from "./GroupCallView.tsx-parts/useGroupCallTurnEffects";
+import { GroupCallStage } from "./GroupCallView.tsx-parts/GroupCallStage";
 
 export function GroupCallButton({ group, members }: { group: Group; members: Bot[] }) {
   // a room on an organization server: voice mode talks to one bot at a time
@@ -71,40 +59,26 @@ export function GroupCallOverlay({ group, members }: { group: Group; members: Bo
   return <GroupCall group={group} members={members} />;
 }
 
-function questionIn(messages: Message[]): Message | undefined {
-  return messages.find(
-    (message) =>
-      message.kind === "options" &&
-      message.card?.requestId &&
-      !message.card.tool &&
-      !message.card.answered &&
-      !message.card.dismissed,
-  );
-}
-
 function GroupCall({ group, members }: { group: Group; members: Bot[] }) {
   const { dispatch } = useStore();
-  const speech = useSpeech();
+  const speechUi = useSpeech();
   const initialPhase: Phase = group.working || group.busyBotId ? "working" : "listening";
-  const [phase, setPhase] = useState<Phase>(initialPhase);
-  const [heard, setHeard] = useState("");
-  /** the words the person is saying now: a failure line never cuts them */
-  const heardRef = useRef("");
-  heardRef.current = heard;
-  const [note, setNote] = useState<string | null>(null);
-  const [speakingMemberId, setSpeakingMemberId] = useState<string | null>(null);
-  const pushToTalk = usePushToTalk(group.id, phase === "listening", () => {
-    setNote("Push to talk couldn't start. Check Microphone and Speech Recognition access.");
+  const speech = useGroupCallSpeech({
+    groupId: group.id,
+    initialPhase,
+    dispatch,
+  });
+  const pushToTalk = usePushToTalk(group.id, speech.phase === "listening", () => {
+    speech.setNote("Push to talk couldn't start. Check Microphone and Speech Recognition access.");
   });
 
   const messages = group.messages;
   const approval = pendingApprovals(messages)[0];
   const question = questionIn(messages);
   const membersRef = useRef(members);
-  const busyRef = useRef(Boolean(group.working || group.busyBotId));
   const defaultResponderRef = useRef(group.defaultResponder);
   membersRef.current = members;
-  busyRef.current = Boolean(group.working || group.busyBotId);
+  speech.busyRef.current = Boolean(group.working || group.busyBotId);
   defaultResponderRef.current = group.defaultResponder;
 
   const spokenIds = useRef<Set<string>>(new Set());
@@ -125,528 +99,39 @@ function GroupCall({ group, members }: { group: Group; members: Bot[] }) {
     submitted: boolean;
   } | null>(null);
   const askedQuestion = useRef<{ requestId: string; member?: Bot } | null>(null);
-  const phaseRef = useRef<Phase>(initialPhase);
-  const alive = useRef(true);
-  const sayGeneration = useRef(0);
-  const queueGeneration = useRef(0);
-  const queue = useRef<Promise<void>>(Promise.resolve());
-  const queuedJobs = useRef(new Set<number>());
-  const nextJobId = useRef(0);
-  const listenWhenDrained = useRef(false);
-  const listenTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const allowBargeIn = useRef(false);
-  /** Short progress lines from this turn's real tool events (progress.ts). */
-  const progress = useRef(new CallProgress());
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
-  const move = useCallback((next: Phase) => {
-    phaseRef.current = next;
-    if (alive.current) setPhase(next);
-  }, []);
-
-  const hush = useCallback(() => {
-    void window.ogb?.speechStop?.();
-  }, []);
-
-  const listen = useCallback(() => {
-    if (!alive.current || currentCall() !== group.id) return;
-    move("listening");
-    setSpeakingMemberId(null);
-    setHeard("");
-    setNote(null);
-    void window.ogb?.speechStart?.({ endpointMs: CALL_ENDPOINT_MS }).catch(() => {
-      if (alive.current && currentCall() === group.id) {
-        setNote("The microphone couldn't start. Check Microphone and Speech Recognition access.");
-      }
-    });
-  }, [group.id, move]);
-
-  const scheduleListen = useCallback(
-    (force = false, delay = 140) => {
-      if (listenTimer.current) clearTimeout(listenTimer.current);
-      listenTimer.current = setTimeout(() => {
-        listenTimer.current = null;
-        if (!alive.current || currentCall() !== group.id || queuedJobs.current.size) return;
-        if (force || allowBargeIn.current || !busyRef.current) listen();
-      }, delay);
-    },
-    [group.id, listen],
-  );
-
-  const say = useCallback(
-    async (text: string, member?: Bot) => {
-      if (!alive.current || currentCall() !== group.id) return false;
-      const mine = ++sayGeneration.current;
-      move("speaking");
-      setSpeakingMemberId(member?.id ?? null);
-      hush();
-      await speaker.speak(text, { botId: member?.id, voiceId: member?.voice });
-      return alive.current && currentCall() === group.id && sayGeneration.current === mine;
-    },
-    [group.id, hush, move],
-  );
-
-  const enqueueSpeech = useCallback(
-    (text: string, member?: Bot, answerAfter = false) => {
-      const generation = queueGeneration.current;
-      const jobId = ++nextJobId.current;
-      queuedJobs.current.add(jobId);
-      if (answerAfter) listenWhenDrained.current = true;
-      queue.current = queue.current
-        .catch(() => {})
-        .then(async () => {
-          if (generation !== queueGeneration.current) return;
-          await say(text, member);
-        })
-        .finally(() => {
-          if (generation !== queueGeneration.current) return;
-          queuedJobs.current.delete(jobId);
-          if (queuedJobs.current.size) return;
-          setSpeakingMemberId(null);
-          const force = listenWhenDrained.current;
-          listenWhenDrained.current = false;
-          scheduleListen(force);
-        });
-    },
-    [say, scheduleListen],
-  );
-
-  const interruptSpeech = useCallback(() => {
-    const wasBusy = busyRef.current;
-    queueGeneration.current += 1;
-    queue.current = Promise.resolve();
-    queuedJobs.current.clear();
-    listenWhenDrained.current = false;
-    sayGeneration.current += 1;
-    speaker.stop();
-    setSpeakingMemberId(null);
-    progress.current.stop();
-    allowBargeIn.current = true;
-    if (wasBusy) dispatch({ type: "interruptGroup", groupId: group.id });
-    listen();
-  }, [dispatch, group.id, listen]);
-
-  useEffect(() => {
-    alive.current = true;
-    return () => {
-      alive.current = false;
-      queueGeneration.current += 1;
-      sayGeneration.current += 1;
-      if (listenTimer.current) clearTimeout(listenTimer.current);
-      deferCallCleanup(group.id, () => alive.current);
-    };
-  }, [group.id]);
-
-  useEffect(() => {
-    const bridge = window.ogb;
-    if (!bridge) return;
-    const offTranscript = bridge.onSpeechTranscript((line) => {
-      if (!alive.current || currentCall() !== group.id || phaseRef.current !== "listening") return;
-      if (line.error) {
-        setNote("Dictation stopped unexpectedly. Check Microphone and Speech Recognition access.");
-        return;
-      }
-      if (typeof line.text !== "string") return;
-      setHeard(line.text);
-      if (line.partial !== false) return;
-      const said = line.text.trim();
-      if (!said) return listen();
-
-      const openApproval = askedApproval.current;
-      if (openApproval) {
-        if (openApproval.submitted) {
-          move("working");
-          hush();
-          return;
-        }
-        const decision = spokenDecision(said);
-        if (decision) {
-          const allow = decision === "allow";
-          if (allow && openApproval.skill) {
-            setHeard("");
-            enqueueSpeech(
-              "Open the group thread to review the complete skill before enabling it. You can say no now to deny it.",
-              openApproval.member,
-              true,
-            );
-            return;
-          }
-          // Hold this approval in-flight until its server patch arrives so a
-          // slow response cannot reopen the microphone and submit it twice.
-          openApproval.submitted = true;
-          allowBargeIn.current = false;
-          move("working");
-          hush();
-          setHeard("");
-          dispatch({
-            type: "decideRequest",
-            threadId: group.threadId,
-            requestId: openApproval.requestId,
-            behavior: allow ? "allow" : "deny",
-            message: allow ? undefined : "Denied by the user, on a group call.",
-            onError: (error: string) => {
-              const pending = askedApproval.current;
-              if (
-                !alive.current ||
-                currentCall() !== group.id ||
-                pending?.requestId !== openApproval.requestId ||
-                !pending.submitted
-              ) return;
-              pending.submitted = false;
-              const detail = error.trim().slice(0, 240);
-              const decision = openApproval.routine ? "routine decision" : "approval";
-              enqueueSpeech(
-                `I couldn't save that ${decision}${detail ? `: ${detail}` : "."} Please try again.`,
-                openApproval.member,
-                true,
-              );
-            },
-          });
-          return;
-        }
-        enqueueSpeech(t("voiceMode.allowOnceOrDeny"), openApproval.member, true);
-        return;
-      }
-
-      const openQuestion = askedQuestion.current;
-      if (openQuestion) {
-        askedQuestion.current = null;
-        allowBargeIn.current = false;
-        dispatch({
-          type: "decideRequest",
-          threadId: group.threadId,
-          requestId: openQuestion.requestId,
-          behavior: "answer",
-          message: said,
-        });
-        move("working");
-        return;
-      }
-
-      const routed = routeSpokenGroupMessage(said, membersRef.current);
-      if (defaultResponderRef.current.kind === "mentions" && !routed.addressed) {
-        listen();
-        const names = membersRef.current.map((member) => member.name).join(", ");
-        setNote("Say a member's name" + (names ? " — " + names : "") + " — or say everyone.");
-        return;
-      }
-
-      allowBargeIn.current = false;
-      move(busyRef.current ? "working" : "sending");
-      progress.current.turnSent(Date.now());
-      dispatch({ type: "sendGroup", groupId: group.id, text: routed.text, threadId: group.threadId });
-      scheduleListen(false, 600);
-    });
-    const offEnd = bridge.onSpeechEnd(({ code, reason }) => {
-      if (!alive.current || currentCall() !== group.id) return;
-      if (code === 2) {
-        setNote("Calls need macOS dictation, which isn't available here yet.");
-        return;
-      }
-      if (code === 1) {
-        setNote(
-          reason === "helper-build-failed"
-            ? "The dictation helper couldn't be built. Install Apple's Command Line Tools and try again."
-            : reason === "dictation-disabled"
-              ? "Turn on Dictation in System Settings → Keyboard, then try again."
-              : reason === "speech-not-authorized"
-                ? "Allow Speech Recognition in System Settings → Privacy & Security, then try again."
-                : "Dictation couldn't start. Try again.",
-        );
-        return;
-      }
-      if (phaseRef.current === "listening") listen();
-    });
-    if ((group.working || group.busyBotId) && !approval && !question) move("working");
-    else listen();
-    return () => {
-      offTranscript();
-      offEnd();
-      void window.ogb?.speechStop?.();
-    };
-    // Live busy/card changes are handled below without restarting native capture.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dispatch, enqueueSpeech, group.id, group.threadId, hush, listen, move, scheduleListen]);
-
-  useEffect(() => {
-    let resumeAfterRoutine = false;
-    if (askedApproval.current && approval?.requestId !== askedApproval.current.requestId) {
-      resumeAfterRoutine = askedApproval.current.routine && askedApproval.current.submitted;
-      askedApproval.current = null;
-    }
-    if (askedQuestion.current && question?.card?.requestId !== askedQuestion.current.requestId) {
-      askedQuestion.current = null;
-    }
-
-    if (resumeAfterRoutine && !approval && !question && !group.working && !group.busyBotId) {
-      scheduleListen(true);
-      return;
-    }
-    // Keep the voice queue and microphone closed until this exact decision
-    // is settled or its request reports an error.
-    if (askedApproval.current?.submitted) return;
-
-    if (approval && askedApproval.current?.requestId !== approval.requestId) {
-      const member = members.find((candidate) => candidate.id === approval.message.from?.botId);
-      askedApproval.current = {
-        requestId: approval.requestId,
-        member,
-        routine: isRoutineApproval(approval),
-        skill: isSkillApproval(approval),
-        submitted: false,
-      };
-      spokenIds.current.add(approval.message.id);
-      const name = member?.name ?? approval.message.from?.name ?? "A group member";
-      const skillPrompt = approval.message.card?.skillRequest?.action === "update"
-        ? `${name} wants to update a learned skill. Open the group thread to review the complete skill before replacing the current version. You can say no to deny it.`
-        : `${name} wants to enable a new learned skill. Open the group thread to review the complete skill before enabling it. You can say no to deny it.`;
-      enqueueSpeech(isSkillApproval(approval) ? skillPrompt : spokenApprovalPrompt(approval, name), member, true);
-    }
-
-    if (question?.card?.requestId && askedQuestion.current?.requestId !== question.card.requestId) {
-      const member = members.find((candidate) => candidate.id === question.from?.botId);
-      askedQuestion.current = { requestId: question.card.requestId, member };
-      spokenIds.current.add(question.id);
-      const name = member?.name ?? question.from?.name ?? "A group member";
-      const detail = question.card.subtitle.trim();
-      const choices = question.card.options.length
-        ? " The options are " + question.card.options.join(", ") + "."
-        : "";
-      enqueueSpeech(
-        name + " asks: " + detail + (/[.!?]$/.test(detail) ? "" : ".") + choices,
-        member,
-        true,
-      );
-    }
-
-    const fresh = messages.filter((message) => !spokenIds.current.has(message.id));
-    if (!fresh.length) return;
-    for (const message of fresh) spokenIds.current.add(message.id);
-
-    const replies = fresh.filter(
-      (message) => message.role === "bot" && message.kind === "text" && message.text?.trim(),
-    );
-    // each member's answer: at most four sentences, up to a question
-    // (answer-budget.ts), the follow-up below --- never said
-    const lastUserText = [...messages].reverse().find((message) => message.role === "user" && !message.parallelTask)?.text;
-    const restInChat = tIn(progressLocale({ lastUserText, pageLocale: activeLocale(), looksFrench }), "voiceMode.restInChat");
-    // the "rest is in the chat" line once, after the last answer that was cut
-    const lastCut = replies.map((reply) => spokenAnswer(reply.text!).cut).lastIndexOf("length");
-    replies.forEach((reply, index) => {
-      const member = members.find((candidate) => candidate.id === reply.from?.botId);
-      const said = spokenReply(reply.text!, index === lastCut ? restInChat : null);
-      if (said) enqueueSpeech(said, member);
-    });
-    if (replies.length) progress.current.heard(Date.now());
-    // No tool-chip narration: the progress tick below says the turn's lines.
-  }, [approval, enqueueSpeech, group.busyBotId, group.working, members, messages, question, scheduleListen]);
-
-  // ── progress while the room works in silence (progress.ts) ────────────
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (!alive.current || currentCall() !== group.id) return;
-      // a failed turn is said once, in one sentence, never its cause
-      const failed = failure.current?.next({
-        now: Date.now(),
-        messages: messagesRef.current,
-        botBusy: busyRef.current,
-        // the bot talking, or the person (words coming in, or being sent)
-        botSpeaking: phaseRef.current === "speaking" || phaseRef.current === "sending" || Boolean(heardRef.current) || speaker.isSpeaking() || queuedJobs.current.size > 0,
-        awaitingAnswer: Boolean(askedApproval.current || askedQuestion.current),
-      });
-      if (failed) {
-        const lastUserText = [...messagesRef.current].reverse().find((message) => message.role === "user" && !message.parallelTask)?.text;
-        const locale = progressLocale({ lastUserText, pageLocale: activeLocale(), looksFrench });
-        // in the call's voice, then the room listens again
-        enqueueSpeech(tIn(locale, callFailureKey(failed)) ?? t(callFailureKey(failed)), undefined, true);
-        return;
-      }
-      const planner = progress.current;
-      if (!planner.active) return;
-      const line = planner.next({
-        now: Date.now(),
-        thinking: phaseRef.current === "working",
-        botBusy: busyRef.current,
-        botSpeaking: phaseRef.current === "speaking" || speaker.isSpeaking(),
-        // an approval being settled keeps the call quiet too (see above)
-        awaitingAnswer: Boolean(askedApproval.current || askedQuestion.current),
-        queued: queuedJobs.current.size > 0,
-        tools: turnTools(messagesRef.current),
-      });
-      if (!line) return;
-      // this call has no language of its own: the person's last words
-      // (French or not) on an English or French page, else the page's
-      const lastUserText = [...messagesRef.current].reverse().find((message) => message.role === "user" && !message.parallelTask)?.text;
-      const locale = progressLocale({ lastUserText, pageLocale: activeLocale(), looksFrench });
-      const text = progressText(line, (key, params) => tIn(locale, key, params));
-      if (!text) return;
-      const author = turnToolAuthor(messagesRef.current);
-      const member = author ? membersRef.current.find((candidate) => candidate.id === author) : undefined;
-      enqueueSpeech(text, member);
-    }, PROGRESS_TICK_MS);
-    return () => clearInterval(timer);
-  }, [enqueueSpeech, group.id]);
-
-  useEffect(() => {
-    const busy = Boolean(group.working || group.busyBotId);
-    busyRef.current = busy;
-    if (busy) {
-      if (
-        (phaseRef.current === "listening" || phaseRef.current === "sending") &&
-        !askedApproval.current &&
-        !askedQuestion.current &&
-        !allowBargeIn.current
-      ) {
-        move("working");
-        hush();
-      }
-      return;
-    }
-    allowBargeIn.current = false;
-    if (
-      (phaseRef.current === "working" || phaseRef.current === "sending") &&
-      !askedApproval.current &&
-      !askedQuestion.current
-    ) {
-      scheduleListen();
-    }
-  }, [group.busyBotId, group.working, hush, move, scheduleListen]);
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        endCall(group.id);
-      } else if (event.code === "Space" && speaker.isSpeaking()) {
-        event.preventDefault();
-        interruptSpeech();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [group.id, interruptSpeech]);
-
-  const speakingMember = members.find((member) => member.id === speakingMemberId);
-  const workingMember = members.find((member) => member.id === group.busyBotId);
-  const focusId = speakingMember?.id ?? workingMember?.id;
-  const status =
-    phase === "listening"
-      ? pushToTalk
-        ? "Push to talk"
-        : "Listening"
-      : phase === "sending"
-        ? "Bringing the group in"
-        : phase === "speaking"
-          ? (speakingMember?.name ?? "Group member") + " is speaking"
-          : workingMember
-            ? workingMember.name + " is working"
-            : "Working";
+  useGroupCallTurnEffects({
+    group,
+    members,
+    messages,
+    approval,
+    question,
+    dispatch: dispatch as (action: Record<string, unknown>) => void,
+    speech,
+    membersRef,
+    defaultResponderRef,
+    messagesRef,
+    spokenIds,
+    failure,
+    askedApproval,
+    askedQuestion,
+  });
 
   return (
-    <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-6 bg-app/95 px-8 backdrop-blur-sm">
-      <button
-        onClick={() => endCall(group.id)}
-        aria-label={t("call.live.hangUp")}
-        className="absolute right-5 top-5 rounded-md p-2 text-ink-secondary hover:bg-raised hover:text-ink"
-      >
-        <X size={18} />
-      </button>
-
-      <div className="max-w-full overflow-x-auto px-4 py-3">
-        <div className="flex min-w-max items-end justify-center gap-3">
-          {members.map((member) => {
-            const focused = member.id === focusId;
-            const state =
-              speakingMember?.id === member.id
-                ? "sending"
-                : workingMember?.id === member.id
-                  ? "working"
-                  : phase === "listening"
-                    ? "listening"
-                    : normalizeState(member.mascotExpression) ?? "happy";
-            return (
-              <div
-                key={member.id}
-                className={cn(
-                  "flex w-[124px] flex-col items-center gap-2 rounded-3xl px-2 py-3 transition-[scale,opacity,background-color,box-shadow] duration-moderate ease-out-quint motion-reduce:transition-none",
-                  focused ? "scale-105 bg-raised/70 shadow-lg" : "opacity-75",
-                )}
-              >
-                <BotAvatar
-                  bot={member}
-                  state={state}
-                  size={94}
-                  animated
-                  motion={workingMember?.id === member.id ? "working" : "none"}
-                  motionKey={workingMember?.id === member.id ? 1 : 0}
-                />
-                <span className={cn("text-[13px] font-medium", focused ? "text-ink" : "text-ink-secondary")}>
-                  {member.name}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="flex flex-col items-center gap-1.5 text-center">
-        <div className="text-[20px] font-medium text-ink">{group.name}</div>
-        <div className="flex items-center gap-2 text-[13.5px] text-ink-secondary">
-          {(phase === "working" || phase === "sending") && <Loader2 size={13} className="animate-spin" />}
-          {status}
-        </div>
-      </div>
-
-      <div className="min-h-[3.5rem] max-w-[620px] text-center text-[15px] leading-relaxed text-ink">
-        {phase === "listening" ? (
-          heard || (
-            <span className="text-ink-secondary">
-              {pushToTalk
-                ? "Release Control + Option to send…"
-                : "Say a name, say “everyone,” or just talk to the group…"}
-            </span>
-          )
-        ) : phase === "speaking" ? (
-          speech.caption
-        ) : (
-          <span className="text-ink-secondary">{workingMember ? "You’ll hear each response in turn." : ""}</span>
-        )}
-      </div>
-
-      {note && (
-        <div className="flex max-w-[520px] flex-col items-center gap-2 text-center text-[12.5px] text-warning">
-          <span>{note}</span>
-          <button
-            onClick={listen}
-            className="rounded-full border border-warning/40 px-3 py-1.5 text-[12px] hover:bg-warning/10"
-          >
-            {t("call.tryMicAgain")}
-          </button>
-        </div>
-      )}
-      {speech.error && <div className="max-w-[460px] text-center text-[12.5px] text-danger">{speech.error}</div>}
-
-      <div className="flex items-center gap-3">
-        {speaker.isSpeaking() && (
-          <button
-            onClick={interruptSpeech}
-            className="rounded-full border border-hairline/50 px-4 py-2 text-[13.5px] text-ink hover:bg-raised"
-          >
-            Interrupt
-          </button>
-        )}
-        <button
-          onClick={() => endCall(group.id)}
-          className="flex items-center gap-2 rounded-full bg-danger px-5 py-2.5 text-[14px] font-medium text-white hover:brightness-110"
-        >
-          <PhoneOff size={16} /> Hang up
-        </button>
-      </div>
-
-      <div className="text-[11.5px] text-ink-tertiary">
-        Hold Control + Option to talk · Say a member’s name to direct the turn · Space interrupts · Esc hangs up
-      </div>
-    </div>
+    <GroupCallStage
+      group={group}
+      members={members}
+      phase={speech.phase}
+      heard={speech.heard}
+      note={speech.note}
+      speakingMemberId={speech.speakingMemberId}
+      pushToTalk={pushToTalk}
+      speechCaption={speechUi.caption}
+      speechError={speechUi.error}
+      onListen={speech.listen}
+      onInterrupt={speech.interruptSpeech}
+    />
   );
 }

@@ -138,6 +138,7 @@ describe("floating bots: the per-device list", () => {
       readFileSync(join(here, "../components/FloatingBotsHost.tsx"), "utf8"),
       readFileSync(join(here, "../components/Sidebar.tsx"), "utf8"),
       readFileSync(join(here, "../App.tsx"), "utf8"),
+      readFileSync(join(here, "../App.tsx-parts/ShellLayout.tsx"), "utf8"),
     ].join("\n");
     const staticImports = [...eager.matchAll(/^import[^;]*from\s+"([^"]+)"/gm)].map(([, from]) => from);
     expect(staticImports.some((from) => from.includes("floating-bots/"))).toBe(false);

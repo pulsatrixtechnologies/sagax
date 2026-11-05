@@ -137,6 +137,7 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   autoApprove: "settings",
   approvalMode: "settings",
   proactiveMode: "settings",
+  pageTargetDefault: "settings",
   alwaysAllow: "host",
   allowedRecipients: { drop: "the owner's contacts and bot ids of this server: they never travel in a package" },
   toolScope: "settings",

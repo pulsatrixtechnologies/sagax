@@ -131,7 +131,7 @@ const routineToolFieldsSchema = z.object({
   deleteWhenFinished: z.boolean().optional(),
   /** 2026-11-04: the model its runs use; null in an update goes back to the bot's. */
   model: z.string().max(200).nullable().optional(),
-  /** #2038: the model its runs' sub-agents use (Claude); null in an update clears it. */
+  /** #2038: Claude sub-agent model; null in an update clears it. */
   subagentModel: z.string().max(200).nullable().optional(),
   /** 2026-11-05: the Perspicax role its runs act as ("" = Moi); null in an update clears it. */
   actAs: z.string().max(120).nullable().optional(),
@@ -1276,7 +1276,7 @@ function cardCopy(
       ...(definition.folder ? [`Folder: ${redactSecretsInText(definition.folder)}`] : []),
       ...(definition.deleteWhenFinished ? ["Delete once finished: yes"] : []),
       ...(definition.model ? [`Model: ${redactSecretsInText(definition.model)} (the bot's engine; chat keeps the bot's model)`] : []),
-      ...(definition.subagentModel ? [`Sub-agent model: ${redactSecretsInText(definition.subagentModel)} (Claude sub-agents of its runs)`] : []),
+      ...(definition.subagentModel ? [`Sub-agent model: ${redactSecretsInText(definition.subagentModel)} (Claude Agent / Flow workers; main model unchanged)`] : []),
       ...(definition.actAs !== undefined ? [`Acts as: ${definition.actAs ? redactSecretsInText(definition.actAs) : "the person's own access"} (Perspicax role)`] : []),
       ...(definition.requiresComputer ? ["Needs its computer: yes (the pre-run check waits for the bot's computer to be online)"] : []),
       ...(definition.effort ? [`Effort: ${definition.effort} (chat keeps the bot's effort)`] : []),

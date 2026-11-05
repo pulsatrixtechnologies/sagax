@@ -598,11 +598,12 @@ export function PopoverMenu({ label, icon, buttonClass, menuLabel, children, cla
   );
 }
 
-export function MenuItem({ icon, label, ariaLabel, title, disabled, onClick, ...data }: { icon: React.ReactNode; label: string; ariaLabel?: string; title?: string; disabled?: boolean; onClick: () => void } & Record<`data-${string}`, string>) {
+export function MenuItem({ icon, label, ariaLabel, title, disabled, checked, onClick, ...data }: { icon: React.ReactNode; label: string; ariaLabel?: string; title?: string; disabled?: boolean; /** When set, the row is a checkbox (page always-on-top, #2046). */ checked?: boolean; onClick: () => void } & Record<`data-${string}`, string>) {
   return (
-    <button type="button" role="menuitem" disabled={disabled} aria-label={ariaLabel} title={title} onClick={onClick} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ink hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40" {...data}>
+    <button type="button" role={checked === undefined ? "menuitem" : "menuitemcheckbox"} aria-checked={checked} disabled={disabled} aria-label={ariaLabel} title={title} onClick={onClick} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ink hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40" {...data}>
       <span className="shrink-0 text-ink-secondary">{icon}</span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
+      {checked !== undefined && <Check size={13} aria-hidden="true" className={cn("shrink-0", checked ? "text-ink" : "invisible")} />}
     </button>
   );
 }

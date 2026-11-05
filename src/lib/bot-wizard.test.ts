@@ -73,6 +73,17 @@ describe("the wizard's calls", () => {
     expect(guideBot([{ id: "new" }], "new")).toBeNull();
   });
 
+  it("#2045: the guide is the viewer's own Primary Bot, never another person's", () => {
+    const bots = [
+      { id: "new", ownerUserId: "person-a" },
+      { id: "theirs", chiefOfStaff: true, ownerUserId: "person-b" },
+      { id: "mine", chiefOfStaff: true, ownerUserId: "person-a" },
+      { id: "other", ownerUserId: "person-a" },
+    ];
+    expect(guideBot(bots, "new", "person-a")?.id).toBe("mine");
+    expect(guideBot(bots, "new", "person-b")?.id).toBe("theirs");
+  });
+
   it("a Bot designer leads first, in either language, and never the one being made", () => {
     const bots = [{ id: "p", chiefOfStaff: true }, { id: "d", name: "  Concepteur de  bots " }, { id: "x", name: "Bot Designer", hidden: true }];
     expect(guideBot(bots, "new")?.id).toBe("d");

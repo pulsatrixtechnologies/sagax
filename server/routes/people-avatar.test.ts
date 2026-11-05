@@ -34,7 +34,7 @@ describe("createPeopleAvatarRoutes", () => {
     const route = createPeopleAvatarRoutes({
       principals: { byId: () => null },
       issuer: "iss",
-      perspicaxDirectory: {},
+      perspicaxDirectory: () => null,
     });
     expect(await route(ctx("/api/people/pr_1", "GET").context)).toBe(PASS);
     expect(await route(ctx("/api/people/pr_1/avatar", "POST").context)).toBe(PASS);
@@ -47,14 +47,38 @@ describe("createPeopleAvatarRoutes", () => {
         byId: () => ({ subject: { iss: "iss", sub: "s" }, avatar: "abc" }),
       },
       issuer: "iss",
-      perspicaxDirectory: {
+      perspicaxDirectory: () => ({
         avatar: vi.fn(async () => ({ contentType: "image/png", bytes })),
-      },
+      }),
     });
     const call = ctx("/api/people/pr_1/avatar", "GET", "?v=abc");
     await route(call.context);
     expect(call.sent).toEqual([]);
     expect(call.ended[0]).toEqual(bytes);
     expect(call.heads[0]?.["content-type"]).toBe("image/png");
+  });
+
+  // #2056: the route table is built before the Perspicax directory exists, so
+  // a directory attached afterwards must still serve the avatar.
+  it("uses a directory attached after the route is built", async () => {
+    const bytes = Buffer.from([137, 80, 78, 71]);
+    let directory: { avatar: (sub: string, version: string) => Promise<{ contentType: string; bytes: Buffer }> } | null = null;
+    const route = createPeopleAvatarRoutes({
+      principals: { byId: () => ({ subject: { iss: "iss", sub: "s" }, avatar: "v1" }) },
+      issuer: "iss",
+      perspicaxDirectory: () => directory,
+    });
+    const before = ctx("/api/people/pr_1/avatar", "GET", "?v=v1");
+    await route(before.context);
+    expect(before.sent).toEqual([{ status: 404, body: { error: "no avatar" } }]);
+
+    const avatar = vi.fn(async () => ({ contentType: "image/png", bytes }));
+    directory = { avatar };
+    const after = ctx("/api/people/pr_1/avatar", "GET", "?v=v1");
+    await route(after.context);
+    expect(after.sent).toEqual([]);
+    expect(avatar).toHaveBeenCalledWith("s", "v1");
+    expect(after.ended[0]).toEqual(bytes);
+    expect(after.heads[0]?.["cache-control"]).toBe("private, max-age=86400");
   });
 });

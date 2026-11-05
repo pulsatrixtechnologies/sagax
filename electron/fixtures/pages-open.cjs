@@ -20,7 +20,7 @@
 //                    carries the page's own words), never the app
 //   chat-panel       a click on the card opens the page over the
 //                    conversation: the frame shows the page
-//   present          Present asks the page's frame for full screen
+//   present          Present asks the window for OS full screen (#2043)
 //   close-x          the round × closes the panel
 //   close-escape     Escape closes it
 //   library          the bot panel's Library opens the page the same way
@@ -30,8 +30,8 @@
 //   reading-link     « Open in browser » sends the reading link out of the
 //                    app (the window open handler), never into a window
 //   artifact-window  the Library opens an artifact in its own window; the
-//                    widget shows; Full screen draws the layer and asks the
-//                    window for full screen; Escape leaves it; × closes
+//                    widget shows; Full screen asks the window for OS full
+//                    screen from the chrome (#2043); Escape leaves it; × closes
 //   plain-window     a window nobody has written yet (no preload, no hook of
 //                    its own) loading the page's own-window address shows
 //                    the page: the frame watch covers it too
@@ -113,16 +113,25 @@ const bundledUiModule = require(path.join(ELECTRON_DIR, "bundled-ui.cjs"));
 const localOrigin = require(path.join(ELECTRON_DIR, "local-origin.cjs"));
 const importModule = (name) => import(pathToFileURL(path.join(ELECTRON_DIR, name)).href);
 
-/** Every window hidden and offscreen; show and focus never do anything. */
+/** Every window hidden and offscreen; show and focus never do anything.
+ * setFullScreen is recorded instead of granted (#2043): no Space may appear. */
 class HiddenWindow extends BrowserWindow {
   static created = [];
+  static fullscreenCalls = [];
   constructor(options = {}) {
     super({ ...options, show: false, webPreferences: { ...options.webPreferences, offscreen: true } });
+    this.__fullscreen = false;
     HiddenWindow.created.push(this);
   }
   show() {}
   showInactive() {}
   focus() {}
+  isFullScreen() { return this.__fullscreen === true; }
+  setFullScreen(on) {
+    this.__fullscreen = on === true;
+    HiddenWindow.fullscreenCalls.push({ id: this.id, on: this.__fullscreen });
+    this.emit(this.__fullscreen ? "enter-full-screen" : "leave-full-screen");
+  }
 }
 
 /** Poll an expression in a frame until it is truthy. */
@@ -324,7 +333,25 @@ async function runMode(mode, modules) {
   // has none of those (a null answer where an object is expected would not)
   const invoked = { "window:state": { maximized: false } };
   for (const [channel, value] of Object.entries(invoked)) ipcMain.handle(channel, () => value);
-  syncListeners.push(() => { for (const channel of Object.keys(invoked)) ipcMain.removeHandler(channel); });
+  // OS fullscreen of the sender's own window (#2043)
+  HiddenWindow.fullscreenCalls = [];
+  ipcMain.handle("window:set-fullscreen", (event, on) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win && !win.isDestroyed()) {
+      win.setFullScreen(on === true);
+      event.sender.send("window:fullscreen-changed", on === true);
+    }
+    return true;
+  });
+  ipcMain.handle("window:fullscreen-state", (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    return { fullscreen: Boolean(win && !win.isDestroyed() && win.isFullScreen()) };
+  });
+  syncListeners.push(() => {
+    for (const channel of Object.keys(invoked)) ipcMain.removeHandler(channel);
+    ipcMain.removeHandler("window:set-fullscreen");
+    ipcMain.removeHandler("window:fullscreen-state");
+  });
 
   const opened = [];
   let mainWindow = null;
@@ -405,12 +432,16 @@ async function runMode(mode, modules) {
     });
 
     await check("present", async () => {
-      await main.executeJavaScript(FULLSCREEN_STUB, true);
+      HiddenWindow.fullscreenCalls = [];
       await main.executeJavaScript(clickJs(`[data-page-panel="${PAGE}"] button[data-page-more]`), true);
       await waitFor(main, `Boolean(document.querySelector("[role=menu] [role=menuitem]"))`, "the page's menu");
       if (!await main.executeJavaScript(clickByTextJs(PRESENT, "[role=menu]"), true)) fail(`no ${PRESENT.join(" / ")} in the menu`);
-      const asked = await waitFor(main, `window.__fullscreen.includes("page-frame") ? window.__fullscreen.join(",") : ""`, "the page frame asked for full screen", 5_000);
-      return asked;
+      await waitFor(main, `document.querySelector("[data-page-fullscreen]")?.getAttribute("aria-pressed") === "true" ? "pressed" : ""`, "Full screen pressed", 5_000);
+      if (!HiddenWindow.fullscreenCalls.some((call) => call.on === true)) fail("the window never entered OS full screen");
+      // leave so later Escape closes the panel, not only full screen
+      await main.executeJavaScript(clickJs(`[data-page-panel="${PAGE}"] [data-page-fullscreen]`), true);
+      await waitFor(main, `document.querySelector("[data-page-fullscreen]")?.getAttribute("aria-pressed") === "false" ? "off" : ""`, "Full screen left", 5_000);
+      return "os-fullscreen";
     });
 
     await check("close-x", async () => {
@@ -511,7 +542,6 @@ async function runMode(mode, modules) {
       const win = await waitWindow(artifactWindows, ARTIFACT, "the artifact's own window");
       const contents = win.webContents;
       await waitFor(contents, `Boolean(document.querySelector(${q(`[data-artifact-window="${ARTIFACT}"] iframe`)}))`, "the artifact's frame", 30_000);
-      await contents.executeJavaScript(FULLSCREEN_STUB, true);
       // the widget's own document (a srcdoc frame) carries the bot's words
       const deadline = Date.now() + STEP_MS;
       let texts = [];
@@ -527,13 +557,21 @@ async function runMode(mode, modules) {
       }
       await sleep(800);
       await capture(win, `${mode}-artifact-window`);
+      const inChrome = await contents.executeJavaScript(`(() => {
+        const button = document.querySelector("[data-artifact-fullscreen]");
+        const chrome = document.querySelector("[data-artifact-window-chrome]");
+        return Boolean(button && chrome && chrome.contains(button));
+      })()`, true);
+      if (!inChrome) fail("Full screen is not in the window chrome");
+      HiddenWindow.fullscreenCalls = [];
       await contents.executeJavaScript(clickJs("[data-artifact-fullscreen]"), true);
-      await waitFor(contents, `Boolean(document.querySelector("[data-artifact-fullscreen-layer]"))`, "the full-screen layer");
-      const asked = await waitFor(contents, `window.__fullscreen.includes("document") ? "document" : ""`, "the window asked for full screen", 5_000);
-      const how = await escapeUntilGone(contents, `Boolean(document.querySelector("[data-artifact-fullscreen-layer]"))`, "the layer after Escape");
+      await waitFor(contents, `document.querySelector("[data-artifact-fullscreen]")?.getAttribute("aria-pressed") === "true" ? "pressed" : ""`, "Full screen pressed", 5_000);
+      if (!HiddenWindow.fullscreenCalls.some((call) => call.on === true)) fail("the artifact window never entered OS full screen");
+      await contents.executeJavaScript(clickJs("[data-artifact-fullscreen]"), true);
+      await waitFor(contents, `document.querySelector("[data-artifact-fullscreen]")?.getAttribute("aria-pressed") === "false" ? "off" : ""`, "Full screen left", 5_000);
       await contents.executeJavaScript(clickJs("[data-artifact-close-window]"), true);
       await Promise.race([closed(win), sleep(STEP_MS).then(() => fail("× did not close the artifact's window"))]);
-      return `full screen asked by ${asked}; escape via ${how}`;
+      return "os-fullscreen from chrome";
     });
 
     await check("plain-window", async () => {

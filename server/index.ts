@@ -688,7 +688,6 @@ import {
 } from "./usage/spend.ts";
 import { fleetAvailable, fleetRequest, fleetSocketPath } from "./fleet/fleet-client.ts";
 import { entitled } from "./enterprise.ts";
-import { HOSTED_CONTRACT_HEADER, HOSTED_CONTRACT_METADATA, HOSTED_CONTRACT_VERSION } from "./hosted-contract.ts";
 import { describeSpawnFailure, execCli, runAsBotEngine } from "./procs.ts";
 import {
   blockedTarget,
@@ -965,7 +964,7 @@ import {
   ManagedDesktopPolicy,
   type ComputerKind
 } from "./managed-policy.ts";
-import { hostedModelPolicy, HOSTED_MODEL_POLICY_HEADER, HOSTED_PROVIDER_SETTINGS_ERROR } from "./models/hosted-models.ts";
+import { hostedModelPolicy, HOSTED_PROVIDER_SETTINGS_ERROR } from "./models/hosted-models.ts";
 import { holdIncludedServices, voiceCredential } from "./included-services.ts";
 import type { ProviderInstance, RemoteMcpSpec } from "./contracts.ts";
 import {
@@ -2370,6 +2369,7 @@ import { createOrgBotsRoutes } from "./routes/org-bots.ts";
 import { createPeopleAvatarRoutes } from "./routes/people-avatar.ts";
 import { createRoutineDelegationStubRoutes } from "./routes/routine-delegation-stub.ts";
 import { createHandleDesktopTrustedApprovalMessage } from "./desktop-trusted-approval.ts";
+import { createOriginGates } from "./request-pipeline/origin-gates.ts";
 import { adminAuditPlan, type AuditPlan } from "./admin/admin-audit-plan.ts";
 import { externalRuntimeMayCall } from "./admin/external-runtime-may-call.ts";
 import { createShapeAvatarGenerateInternalRoutes, createShapeAvatarGenerateRoutes } from "./routes/shape-avatar-generate.ts";
@@ -2423,7 +2423,6 @@ import {
   identityConfigFromEnv,
   OIDC_START_PATH,
   identityDescriptor,
-  INTERIM_SIGNIN_REFUSAL,
   isInterimSignInRoute,
   MANAGED_PROFILE_REFUSAL,
   oidcSessionFields,
@@ -2515,7 +2514,6 @@ import {
   createPublicInviteRoutes,
   createSoloOrgRoutes,
   inviteMailMessage,
-  PUBLIC_INVITE_PATH,
   type OrgState
 } from "./org/org-routes.ts";
 import { createDirectGrantRoutes } from "./auth/direct-grants.ts";
@@ -3827,7 +3825,6 @@ function sharedComputerPrincipal(capability: Pick<InternalCapability, "botId" | 
     (messageId) => linePersonKey(store.messagesFor(capability.threadId).find((message) => message.id === messageId)));
 }
 
-
 /** Whose lent computers a status reader may see: on a Cloud home, only the
  * owner's own devices (admin sessions) see the lent Mac, never a guest or a
  * local process; elsewhere, the person behind the asking session. */
@@ -3862,7 +3859,6 @@ function withRoutineWriter<T>(writer: string, work: () => T): T {
   routineWriterInFlight = writer;
   try { return work(); } finally { routineWriterInFlight = previous; }
 }
-
 
 /** On a Cloud home: a conversation someone other than the owner opened (a
  * guest, a guest's routine, or its room; on a personal Cloud, one a revoked
@@ -3967,7 +3963,6 @@ function cloudOwnerPerson(person: string | undefined): boolean {
   if (person === CLOUD_OWNER_KEY || cloudEarlierOwners.adopted.has(person)) return true;
   return cloudOwnerDevice(person);
 }
-
 
 /** Written before the owner had one key: a device of theirs still paired. */
 function cloudOwnerDevice(person: string): boolean {
@@ -4557,7 +4552,6 @@ function recordAdminConfigChange(before: unknown, after: unknown): void {
   for (const row of configChangeRows(before, after)) appendAdminAction(DATA_DIR, { ...row, actor: scope.actor });
 }
 
-
 const WEBHOOK_AUDIT_FIELDS = ["name", "prompt", "botId", "runOn", "enabled", "eventTypes", "source"] as const;
 const auditBot = (id: string | undefined) => (id ? botAuditSnapshot(store.bot(id) as unknown as Record<string, unknown> | null) : null);
 const auditHook = (id: string | undefined) => (id ? webhooks.list().find((hook) => hook.id === id) : undefined);
@@ -4680,7 +4674,6 @@ function adminAuditRows(
   }
   return rows;
 }
-
 
 /** The guarded send contract external interfaces (the Slack worker) opt into.
  * `onBehalfOf` is additive and advertised by /api/health
@@ -5606,7 +5599,6 @@ function agentsIntegration(
     }
   };
 }
-
 
 /** Engine lifecycle hooks (item 0.2): a turn-scoped bearer the engine's hook
  * helper presents on /api/internal/hook. SAGAX_HOOKS=0 turns the channel off. */
@@ -11199,8 +11191,6 @@ function roomTurnApprovalMode(bot: BotRecord, threadId: string, orchestration?: 
  * surface itself. Only Electron's private utility-process channel can deliver
  * this message. */
 
-
-
 const handleDesktopTrustedApprovalMessage = createHandleDesktopTrustedApprovalMessage(() => ({
   MEMBER_BOT_FULL_ACCESS,
   MEMBER_AUTO_NOT_ALLOWED,
@@ -14114,7 +14104,6 @@ sessions.onSessionRevoked((sessionId) => {
   phoneTools.dropDevice(`session:${sessionId}`);
   // A revoked owner device no longer vouches for its lines (cloudOwnerPerson).
 });
-
 
 /** Every frame is numbered, and the last few hundred are kept, so a client
  * whose connection dropped can ask for what it missed instead of
@@ -23892,7 +23881,6 @@ async function startTurn(
   return (startTurnRunner as typeof startTurnRunner)(botId, text, opts);
 }
 
-
 // ── routines: persisted definitions → detached bot tasks ───────────────
 // The scheduler owns timing and receipts; the existing harness remains the
 // only owner of provider sessions, approvals, tools, computers and messages.
@@ -25218,7 +25206,6 @@ resumeEngineReconnectForPerson = (person, engineName) => {
 // Off or on. When on, events wake a background run at the bot's ordinary
 // approval level; dry runs are recorded on the wake before writes. One
 // Events line per wake. Hops travel on every side effect of a wake.
-
 
 /** 2026-11-02: hops of teammates' one-way notices (proactive-wake.ts). */
 const peerNoticeHops = new PeerNoticeHops();
@@ -26865,7 +26852,6 @@ function serializeRoomContext(
     .join("\n");
 }
 
-
 /** The decision model's view of a room message: the room, its people, the
  * last room lines before this one, and the message. Text is scrubbed of
  * secrets and attachment markup before it leaves this machine. */
@@ -28226,7 +28212,6 @@ function skillCardCopy(staged: { action: "create" | "update"; name: string; gist
   };
 }
 
-
 function appendSkillRequestCard(args: {
   /** What Always allow keeps on this card (skillRuleCandidate). */
   ownerRule?: { tool: string; scope: Record<string, string>; description: string };
@@ -28460,7 +28445,6 @@ function sendSkillResolution(
   json(res, 200, { ok: true, outcome: result.outcome, alreadySettled: result.alreadySettled });
   return true;
 }
-
 
 /** A turn parked at the computer wait ceiling (#1651): settled, with this
  * entry registered until the seat it queued on frees. Mirrors the connector
@@ -45403,80 +45387,6 @@ ROUTES.push(createBotsMutateRoutes({
   broadcast
 }));
 
-/** #1388 wave 4 step 2: pages origin, hosted health, org/inbound/link gates, sign-in refusals. */
-async function originGates(req: IncomingMessage, res: ServerResponse, url: URL, path: string, method: string): Promise<boolean> {
-  // The separate pages origin (SAGAX_PAGES_ORIGIN) serves the published
-  // pages' frames and nothing else: before any other route or credential.
-  if (PAGES_ORIGIN && handlePagesOriginRequest(publishedPageOptions(), req, res, path, method)) return true;
-  // Unlike the legacy reachability probe, this attests the running
-  // server's portal-membership capability, including the layer's live
-  // entitlement (never the open-source edition's own features).
-  if (method === "GET" && path === "/api/health/hosted") {
-    res.setHeader("cache-control", "no-store");
-    const hosted = hostedWorkspaceConfiguration();
-    if (!hosted?.portalMembership || !workspaceAccess || !hostedAccessEntitled()) {
-      json(res, 503, { error: "Hosted workspace readiness is unavailable." });
-      return true;
-    }
-    res.setHeader(HOSTED_CONTRACT_HEADER, String(HOSTED_CONTRACT_VERSION));
-    if (hostedModels) res.setHeader(HOSTED_MODEL_POLICY_HEADER, "1");
-    json(res, 200, { ok: true, service: "openmausbot", membershipAuthority: "portal", workspace: hosted.workspace, ...HOSTED_CONTRACT_METADATA });
-    return true;
-  }
-  // Slice 7: the console's admin API, before every other credential: a
-  // console assertion only, never a session cookie or loopback trust.
-  if (await orgAdmin(req, res, url)) return true;
-  // 2026-10-09: the member API, same credential rule: an assertion only.
-  if (await orgMember(req, res, url)) return true;
-  // 2026-10-21: bot inbound mail from the Perspicax relay, same rule.
-  if (await inboundMail(req, res, url)) return true;
-  // 2026-10-26: bot phone events from Perspicax Voice, same rule.
-  if (await inboundTelephony(req, res, url)) return true;
-  // 2026-10-11: Perspicax's link routes, the link token only.
-  if (await orgLink(req, res, url)) return true;
-  // 2026-10-16: a security key ceremony, its own id only (server/routes/security-keys.ts).
-  if (await securityKeyCeremonies(req, res, url)) return true;
-  // An organization server signs people in with Pulsatrix only: the
-  // interim email codes and invitation links are refused outright.
-  if (IDENTITY.kind === "perspicax") {
-    if (isInterimSignInRoute(method, path)) {
-      json(res, 403, INTERIM_SIGNIN_REFUSAL);
-      return true;
-    }
-    // The old invitation page sends its visitors to the sign-in page.
-    if (method === "GET" && (path === "/join" || path === "/join/")) {
-      res.writeHead(302, { location: "/pair", "cache-control": "no-store" });
-      res.end();
-      return true;
-    }
-    if (oidcLogin && await oidcLogin(req, res, url)) return true;
-  }
-  // Hosted workspaces have one sign-in authority. A missing optional layer
-  // must not accidentally reactivate legacy email/QR credential minting.
-  if (HOSTED_WORKSPACE) {
-    if ((method === "POST" && ["/api/auth/pair", "/api/pair", "/api/auth/pairing", "/api/auth/email/start", "/api/auth/email/verify"].includes(path)) || PUBLIC_INVITE_PATH.test(path)) {
-      json(res, 403, { error: "Sign in through the workspace portal." });
-      return true;
-    }
-    if (workspaceAccess) {
-      if (await workspaceAccess.handlePublic(req, res, url)) return true;
-    } else if (path.startsWith("/api/auth/hosted/") || path === "/pair" || (path === "/" && (!isLoopbackHost(req.headers.host) || isProxied(req)))) {
-      json(res, 503, { error: "Workspace sign-in is unavailable." });
-      return true;
-    }
-  }
-  // An enrolled organisation that turns remote access off refuses new pairing
-  // codes and new remote sessions. Existing sessions and this app are unchanged.
-  if (method === "POST" && (["/api/auth/pair", "/api/pair", "/api/auth/pairing", "/api/auth/email/start", "/api/auth/email/verify"].includes(path) || PUBLIC_INVITE_PATH.test(path))) {
-    const refusal = managedPolicy.remoteAccessRefusal();
-    if (refusal) {
-      json(res, 403, { error: refusal, code: "managed_policy" });
-      return true;
-    }
-  }
-  return false;
-}
-
 /** #1388 wave 4 step 2: PRE_AUTH_ROUTES, static, media, template and published pages. */
 async function runPreAuth(req: IncomingMessage, res: ServerResponse, url: URL, path: string, method: string): Promise<boolean> {
   // ── who is asking (server/auth/request-auth.ts) ──────────────────────────
@@ -46300,7 +46210,6 @@ async function fallback(_req: IncomingMessage, res: ServerResponse, _url: URL, p
   return true;
 }
 
-
 // #1388 wave 4 step 3: startTurn host (injected into server/turns; no turns→index import).
 
 const runGroupMemberTurnRunner = createRunGroupMemberTurn({
@@ -47075,6 +46984,30 @@ const startTurnRunner = createStartTurn({
   serverPathView,
   workspaceMaintenance
 });
+
+const originGates = createOriginGates(() => ({
+  HOSTED_WORKSPACE,
+  IDENTITY,
+  PAGES_ORIGIN,
+  handlePagesOriginRequest,
+  hostedAccessEntitled,
+  hostedModels,
+  hostedWorkspaceConfiguration,
+  inboundMail,
+  inboundTelephony,
+  isInterimSignInRoute,
+  isLoopbackHost,
+  isProxied,
+  json,
+  managedPolicy,
+  oidcLogin,
+  orgAdmin,
+  orgLink,
+  orgMember,
+  publishedPageOptions,
+  securityKeyCeremonies,
+  workspaceAccess,
+}));
 
 const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
   const parsed = parseRequest(req, res, PORT, json);

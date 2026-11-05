@@ -159,18 +159,21 @@ struct StepMessageRow: View {
             let args = StepLabel.arguments(tool.input, words: words)
             let result = StepLabel.result(tool.output)
             VStack(alignment: .leading, spacing: 4) {
-                Button {
-                    withAnimation(.easeOut(duration: 0.15)) { open.toggle() }
-                    Haptics.selection()
-                } label: {
-                    StepLineLabel(
-                        label: reading.label, target: reading.target, phase: StepPhase.of(tool),
-                        duration: StepLabel.duration(tool.durationMs, words: words), expandable: true, expanded: open
-                    )
+                // 2026-11-05 (visible roles): the Perspicax role after the step
+                RoleStepLine(role: tool.role, words: words) {
+                    Button {
+                        withAnimation(.easeOut(duration: 0.15)) { open.toggle() }
+                        Haptics.selection()
+                    } label: {
+                        StepLineLabel(
+                            label: reading.label, target: reading.target, phase: StepPhase.of(tool),
+                            duration: StepLabel.duration(tool.durationMs, words: words), expandable: true, expanded: open
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel([reading.label, reading.target].compactMap { $0 }.joined(separator: ", "))
+                    .accessibilityIdentifier("step.\(message.id)")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel([reading.label, reading.target].compactMap { $0 }.joined(separator: ", "))
-                .accessibilityIdentifier("step.\(message.id)")
                 if open {
                     StepDetail(toolName: tool.name, args: args, result: result, words: words, autoApproval: tool.autoApproval)
                 }
@@ -192,15 +195,18 @@ struct StepRepeatRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Button {
-                withAnimation(.easeOut(duration: 0.15)) { open.toggle() }
-                Haptics.selection()
-            } label: {
-                StepLineLabel(label: label, target: target, phase: phase, duration: duration, expandable: true, expanded: open)
+            // the repeated calls share one role (StepGroup.merge splits on a change)
+            RoleStepLine(role: messages[0].tool?.role, words: words) {
+                Button {
+                    withAnimation(.easeOut(duration: 0.15)) { open.toggle() }
+                    Haptics.selection()
+                } label: {
+                    StepLineLabel(label: label, target: target, phase: phase, duration: duration, expandable: true, expanded: open)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel([label, target].compactMap { $0 }.joined(separator: ", "))
+                .accessibilityIdentifier("step-repeat.\(messages[0].id)")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel([label, target].compactMap { $0 }.joined(separator: ", "))
-            .accessibilityIdentifier("step-repeat.\(messages[0].id)")
             if open {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(messages, id: \.id) { StepMessageRow(message: $0, words: words, nameOf: nameOf) }

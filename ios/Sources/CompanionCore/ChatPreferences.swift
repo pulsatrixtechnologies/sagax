@@ -325,6 +325,8 @@ public func isToolActivityRow(_ message: Message) -> Bool {
     if ErrorRowRules.isError(message) { return false }
     if isStatusNotice(message) { return false }
     if message.comm != nil || message.threadRef != nil { return false }
+    // 2026-11-05 (visible roles): a role banner is a row of its own
+    if message.tool?.roleNotice != nil { return false }
     // A ConnectWise widget is the transcript row. The tool chip stays folded.
     if message.tool?.widget != nil, CwWidgets.isViewTool(message.tool?.name) { return false }
     return true

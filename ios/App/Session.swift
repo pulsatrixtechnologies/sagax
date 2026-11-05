@@ -476,6 +476,33 @@ final class Session: ObservableObject {
                     }
                 }
             }
+            if arguments.contains("-roles-preview"),
+               let url = Bundle.main.url(forResource: "RolesPreview", withExtension: "json"),
+               let data = try? Data(contentsOf: url),
+               let rows = try? JSONDecoder().decode([Message].self, from: data) {
+                // 2026-11-05 (visible roles): role chips, "Agit comme" cards
+                // and role banners in every preview chat (whichever opens
+                // first), chained as stored and said by that chat's bot.
+                for index in state.bots.indices {
+                    let bot = state.bots[index]
+                    var chained = rows.map { row -> Message in
+                        var row = row
+                        row.from?.botId = bot.id
+                        row.from?.name = bot.name
+                        row.from?.color = bot.color
+                        if row.card?.roleTransition != nil {
+                            row.card?.roleTransition?.botId = bot.id
+                            row.card?.roleTransition?.botName = bot.name
+                        }
+                        return row
+                    }
+                    for position in chained.indices.dropFirst() { chained[position].parentId = chained[position - 1].id }
+                    state.messages[bot.threadId] = chained
+                    state.bots[index].activeLeafId = chained.last?.id
+                    state.bots[index].busy = false
+                }
+                if arguments.contains("-roles-top") { focusedMessageId = "roles-user" }
+            }
             if arguments.contains("-cards-top") {
                 // The cards chat from its first cards (the theme captures).
                 focusedMessageId = "c-tool"

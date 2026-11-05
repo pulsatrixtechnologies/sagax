@@ -196,6 +196,10 @@ public struct OptionCard: Codable, Hashable, Sendable {
     /// One-time acceptable-use consent before a bot may place phone calls
     /// (`shared/phone-call-consent.ts`). Drawn as its own card, never the dock.
     public var phoneCallConsent: PhoneCallConsentCardData? = nil
+    /// 2026-11-05 (visible roles, #2016): an "Agit comme" card at a role
+    /// transition, answered on its own route (`VisibleRoles`). Nil on every
+    /// other card.
+    public var roleTransition: RoleTransitionCard? = nil
 
     /// A card is actionable while it is unanswered and still has a request
     /// behind it. Everything else is transcript.
@@ -295,6 +299,13 @@ public struct ToolActivity: Codable, Hashable, Sendable {
     /// The row carries a place (shared/wire.ts `tool.place`): a failed turn
     /// with one stays in the chat (#2013). Only its presence is kept here.
     public var hasPlace: Bool = false
+    /// 2026-11-05 (visible roles, #2016): the Perspicax role this call ran
+    /// under (shared/wire.ts `tool.role`); "" slug is "Moi". A bad shape is
+    /// dropped; the rest of the activity still decodes.
+    public var role: ToolRole? = nil
+    /// 2026-11-05: a role fact drawn as a banner row (a lapsed role, a
+    /// refused write or a read refused with no fallback).
+    public var roleNotice: RoleNotice? = nil
 
     public init(name: String, ok: Bool? = nil, spoken: String? = nil, setup: Bool? = nil, claudeUpdate: Bool? = nil, output: String? = nil, summary: String? = nil, widget: CwWidget? = nil) {
         self.name = name
@@ -310,6 +321,7 @@ public struct ToolActivity: Codable, Hashable, Sendable {
     enum CodingKeys: String, CodingKey {
         case name, ok, spoken, setup, claudeUpdate, output, summary, widget, input, durationMs, product, productId, autoApproval, finishUntil, step, limitFailover
         case limitResetsAt, place
+        case role, roleNotice
     }
 
     public init(from decoder: Decoder) throws {
@@ -331,6 +343,8 @@ public struct ToolActivity: Codable, Hashable, Sendable {
         limitFailover = try? box.decodeIfPresent(LimitFailoverLine.self, forKey: .limitFailover)
         limitResetsAt = try? box.decodeIfPresent(Double.self, forKey: .limitResetsAt)
         hasPlace = box.contains(.place) && (try? box.decodeNil(forKey: .place)) == false
+        role = try? box.decodeIfPresent(ToolRole.self, forKey: .role)
+        roleNotice = try? box.decodeIfPresent(RoleNotice.self, forKey: .roleNotice)
         do {
             widget = try box.decodeIfPresent(CwWidget.self, forKey: .widget)
         } catch {
@@ -356,6 +370,8 @@ public struct ToolActivity: Codable, Hashable, Sendable {
         try box.encodeIfPresent(step, forKey: .step)
         try box.encodeIfPresent(limitFailover, forKey: .limitFailover)
         try box.encodeIfPresent(limitResetsAt, forKey: .limitResetsAt)
+        try box.encodeIfPresent(role, forKey: .role)
+        try box.encodeIfPresent(roleNotice, forKey: .roleNotice)
         // presence only: the app never reads the place itself
         if hasPlace { try box.encode([String: String](), forKey: .place) }
     }

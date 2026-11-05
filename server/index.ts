@@ -2365,6 +2365,12 @@ import {
 } from "./routines/routine-away.ts";
 import { createPersonLabelRoutes } from "./routes/person-labels.ts";
 import { createMeAvatarRoutes } from "./routes/me-avatar.ts";
+import { createMeEnginesRoutes } from "./routes/me-engines.ts";
+import { createOrgBotsRoutes } from "./routes/org-bots.ts";
+import { createPeopleAvatarRoutes } from "./routes/people-avatar.ts";
+import { createRoutineDelegationStubRoutes } from "./routes/routine-delegation-stub.ts";
+import { adminAuditPlan, type AuditPlan } from "./admin/admin-audit-plan.ts";
+import { externalRuntimeMayCall } from "./admin/external-runtime-may-call.ts";
 import { createShapeAvatarGenerateInternalRoutes, createShapeAvatarGenerateRoutes } from "./routes/shape-avatar-generate.ts";
 import { createMediaWidgetRoutes, handleMediaProxy } from "./routes/media-widgets.ts";
 import { initMediaProxy } from "./media/media-proxy.ts";
@@ -4550,51 +4556,6 @@ function recordAdminConfigChange(before: unknown, after: unknown): void {
   for (const row of configChangeRows(before, after)) appendAdminAction(DATA_DIR, { ...row, actor: scope.actor });
 }
 
-interface AuditPlan {
-  /** An admin-scope change: config saves made while it runs are recorded. */
-  config: boolean;
-  /** A bot whose permissions or audience this request may change. */
-  botId?: string;
-  createsBots: boolean;
-  deletesBot?: string;
-  createsWebhook: boolean;
-  /** A webhook changed, deleted or given a new secret by id. */
-  webhookId?: string;
-  sessionId?: string;
-  pairing: boolean;
-  engineAction?: { id: string; action: string };
-  /** A room whose audience an admin may reset (PATCH {resetAudience}). */
-  roomId?: string;
-}
-
-/** The "add an account" routes and the engine each one adds to, for the audit log. */
-const ACCOUNT_ADD_ENGINES = new Map([["/api/instances/claude-accounts", "claude"], ["/api/instances/chatgpt-accounts", "chatgpt"],
-  ["/api/instances/antigravity-accounts", "antigravity"]]);
-
-function adminAuditPlan(method: string, path: string): AuditPlan | null {
-  if (method === "GET" || method === "HEAD" || method === "OPTIONS") return null;
-  if (path.startsWith("/api/internal/") || path.startsWith("/api/testing/")) return null;
-  const plan: AuditPlan = {
-    config: requiredScope(method, path, { sharedComputers: lendingEnabled() }) === "admin",
-    createsBots: method === "POST" && (path === "/api/bots" || path === "/api/teams/import" || path === "/api/org/import" || path === "/api/org-library/add"),
-    createsWebhook: method === "POST" && path === "/api/webhooks",
-    pairing: method === "POST" && path === "/api/auth/pairing"
-  };
-  let m = /^\/api\/bots\/([\w-]+)(?:\/(always-allow|model))?$/.exec(path);
-  if (m && ((!m[2] && method === "PATCH") || (m[2] === "model" && method === "PATCH") || (m[2] === "always-allow" && method === "POST"))) plan.botId = m[1];
-  if (m && !m[2] && method === "DELETE") plan.deletesBot = m[1];
-  m = /^\/api\/webhooks\/([\w-]+)(\/rotate)?$/.exec(path);
-  if (m && ((m[2] && method === "POST") || (!m[2] && (method === "PATCH" || method === "DELETE")))) plan.webhookId = m[1];
-  m = /^\/api\/auth\/sessions\/([\w-]+)$/.exec(path);
-  if (m && method === "DELETE") plan.sessionId = m[1];
-  m = /^\/api\/groups\/([\w-]+)$/.exec(path);
-  if (m && method === "PATCH") plan.roomId = m[1];
-  m = /^\/api\/instances\/([\w.-]+)\/(install|auth\/complete|auth\/sign-out|claude-update|leftover-files\/remove)$/.exec(path);
-  if (m && method === "POST") plan.engineAction = { id: m[1]!, action: m[2]!.replace("/", "-") };
-  const accountAdd = method === "POST" ? ACCOUNT_ADD_ENGINES.get(path) : undefined;
-  if (accountAdd) plan.engineAction = { id: accountAdd, action: "account-add" };
-  return plan.config || plan.botId || plan.createsBots || plan.deletesBot || plan.createsWebhook || plan.webhookId || plan.sessionId || plan.pairing || plan.engineAction || plan.roomId ? plan : null;
-}
 
 const WEBHOOK_AUDIT_FIELDS = ["name", "prompt", "botId", "runOn", "enabled", "eventTypes", "source"] as const;
 const auditBot = (id: string | undefined) => (id ? botAuditSnapshot(store.bot(id) as unknown as Record<string, unknown> | null) : null);
@@ -4624,7 +4585,7 @@ function requestedBotFields(req: IncomingMessage, path: string): string[] {
  * defect 0.8.32 fixed for the request scopes): handleRequest enters it from
  * RequestScopes.adminActor, with the others (enterRequestScopes). */
 function beginAdminAudit(req: IncomingMessage, res: ServerResponse, method: string, path: string, auth: RequestAuth): AdminActorScope {
-  const plan = DESKTOP_MANAGED ? null : adminAuditPlan(method, path);
+  const plan = DESKTOP_MANAGED ? null : adminAuditPlan(method, path, { requiredScope, lendingEnabled });
   const actor = plan ? adminActorFor(auth, req) : null;
   // Whether several people share the workspace as the request begins: a
   // change that ends sharing (the last chat-only phone signed out) is kept.
@@ -5232,14 +5193,6 @@ const computerSelectionMoves = new Map<string, Surface>();
 // it must not be readable by other users (mode 600).
 const EXTERNAL_RUNTIME_GENERATION = "external-runtime";
 const EXTERNAL_RUNTIMES_FILE = join(DATA_DIR, "external-runtimes.json");
-/** The standing capability is for peer comms only. Everything that creates or
- * changes state on this server (threads, bots, rooms, skills, memory, …) needs
- * a real turn, which an external runtime never has here, so the routes are an
- * allow-list rather than flags on the capability. */
-function externalRuntimeMayCall(method: string, path: string): boolean {
-  if (method === "GET") return path === "/api/internal/agents" || /^\/api\/internal\/delegations\/[\w-]+$/.test(path);
-  return method === "POST" && (path === "/api/internal/ask-bot" || path === "/api/internal/delegate-bot");
-}
 /** An external runtime polls check/wait_delegation for what it hands off, so
  * the result must not also wake the bot's own engine on the pinned thread. */
 function externalCompletion(capability: InternalCapability): { completionOwner?: "external" } {
@@ -38847,36 +38800,19 @@ if (IDENTITY.kind === "perspicax") {
   // D14: the bots whose sharing the caller administers, with their grants,
   // never their messages. Admin: every bot; a team manager: bots shared with
   // one of their teams or members; anyone else: bots they own or manage.
-  ROUTES.push(async ({ res, path, method, auth, json }) => {
-    if (path !== "/api/org/bots") return PASS;
-    if (method !== "GET") return json(res, 405, { error: "method not allowed" });
-    const viewer = authzViewerFor(auth);
-    const bots = store.bots.flatMap((bot) => {
-      const facts = botFacts(bot);
-      const shown = visibleGrants(viewer, facts, principalTeams);
-      if (!viewer || viewer.orgAdmin) {
-        // everything
-      } else if (!shown) {
-        return [];
-      }
-      const owner = principals.byId(facts.ownerPrincipalId);
-      return [{
-        id: bot.id,
-        name: bot.name,
-        ownerPrincipalId: facts.ownerPrincipalId,
-        ownerName: owner ? describeGrantTarget(`user:${owner.id}`).label : "",
-        ...(bot.section ? { section: bot.section } : {}),
-        engine: engineOfBot(bot),
-        grants: wireGrants(shown ?? facts.grants, describeGrantTarget),
-        // Its public look (as a group shows it) and whether it is working
-        // now, so the list draws the avatar and the force-stop state.
-        look: botPublicProfile(bot),
-        running: botRunning(bot.id)
-      }];
-    });
-    res.setHeader("cache-control", "no-store");
-    return json(res, 200, { bots });
-  });
+  ROUTES.push(createOrgBotsRoutes({
+    authzViewerFor,
+    store,
+    botFacts,
+    visibleGrants,
+    principalTeams,
+    principals,
+    describeGrantTarget,
+    wireGrants,
+    engineOfBot,
+    botPublicProfile,
+    botRunning,
+  }));
 }
 // Slice 4 (D10): a person's own engines. What their own turns run with (on
 // their bots and on bots shared with them: engine-credentials.ts), and their
@@ -38935,119 +38871,40 @@ if (IDENTITY.kind === "perspicax" && engineLogins) {
       ...(reach ? { connectors: reach.groups.map((group) => ({ label: GROK_CLOUD_CONNECTORS.find((entry) => entry.id === group.id)?.name ?? group.label, tools: group.tools })) } : {})
     };
   });
-  ROUTES.push(async ({ req, res, url, path, method, auth, json, readBody }) => {
-    if (path !== "/api/me/engines" && !path.startsWith("/api/me/engines/")) return PASS;
-    res.setHeader("cache-control", "no-store");
-    const principalId = auth.kind === "session" ? auth.session.principalId?.trim() || "" : localPrincipalId();
-    if (!principalId || !isPrincipalId(principalId)) return json(res, 403, { error: "sign in as a person first" });
-    const person = principals.byId(principalId);
-    const sub = person?.subject?.iss === IDENTITY.issuer ? person.subject.sub : undefined;
-    if (method === "GET" && path === "/api/me/engines") {
-      const owner = providerAccountOwner(principalId);
-      if (owner) await syncPersonalProviders(owner).catch(() => undefined);
-      const engines = orgOfferedEngines(registry.entries(), principalId)
-        .filter((entry) => personalProviderInstances.visible(entry.instanceId, principalId))
-        .map((entry) => {
-        const driver = entry.shadow?.driverKind ?? entry.live?.driverKind ?? "";
-        // #1098: outside the organization's list only the person's own
-        // account or key runs it, never the organization's key
-        const orgNotAllowed = !consoleEngineAllowed(entry.instanceId);
-        const installed = engineInstalled(entry.instanceId);
-        // #1533: an API-key engine has no sign-in of its own; the person's subscription never runs it
-        const supported = isLoginDriver(driver) && !keyOnlyInstance(entry.instanceId);
-        const signedIn = supported && logins.signedIn(principalId, driver);
-        // #1533: the provider refused that sign-in since (the card says Reconnect)
-        const expired = signedIn && logins.expired(principalId, driver);
-        const held = sub ? perspicaxDirectory?.providerKeys(sub) ?? [] : [];
-        const myKey = providersOfInstance(entry.instanceId, driver).some((provider) => held.includes(provider));
-        // a key sealed for this person on this server serves their turns too (engine-credentials.ts 4b)
-        const localKey = fileKeyConfigured(DATA_DIR, { organization: true, principalId }, driver);
-        const orgKeySet = !orgNotAllowed && driverKeyBacked(cfg, driver, entry.instanceId);
-        // 2026-10-16: the organization's key serves this person only when
-        // Perspicax gives them this engine (an admin always).
-        const orgKey = orgKeySet && serverEngineAllowedFor(principalId, entry.instanceId);
-        // the order of engine-credentials.ts for this person speaking
-        // 2026-10-30: an expired sign-in no longer pays (engine-credentials.ts
-        // step 3): the key or the organization's serves, else "expired",
-        // which is never ready, never Auto's, and counted under Needs setup
-        // A personal endpoint may deliberately accept requests without a key.
-        // Its owner still has working personal access, never the org key.
-        const personalServer = personalProviderInstances.get(entry.instanceId)?.owner === principalId;
-        const myTurns = !installed || person?.disabledAt !== undefined ? "none" : signedIn && !expired ? "subscription" : myKey || localKey || personalServer ? "key" : orgKey ? "org-key" : expired ? "expired" : "none";
-        const live = registry.get(entry.instanceId);
-        const notAvailable = installed ? undefined : engineNotAvailableReason(entry.instanceId);
-        return {
-          instanceId: entry.instanceId,
-          driver,
-          displayName: engineNameForPerson(entry.instanceId, live ? engineDisplayName(live) : entry.instanceId, driver, principalId),
-          installed,
-          // "Not available on this server" rather than "Not installed": the
-          // image deliberately does not carry it (engines.lock.json).
-          ...(notAvailable ? { notAvailable } : {}),
-          subscription: { supported, signedIn, ...(expired ? { expired: true } : {}) },
-          myKey,
-          // 2026-10-30 (Providers, lot 1): where the person's own key lives,
-          // in the order engine-credentials.ts reads them (Perspicax first)
-          ...(myKey ? { keyWhere: "perspicax" } : localKey ? { keyWhere: "server" } : {}),
-          orgKey,
-          ...(orgKeySet && !orgKey ? { orgKeyNotGiven: true } : {}),
-          ...(orgNotAllowed ? { orgNotAllowed: true } : {}),
-          myTurns,
-          // 2026-10-29: a person's two Grok sign-ins (personal and team), each with what it brings through grok.com
-          ...(supported && secondLoginSupported(driver) ? { accounts: grokAccountsFor(principalId, entry.instanceId) } : {})
-        };
-      });
-      return json(res, 200, { engines, ...(perspicaxKeysUrl() ? { keysUrl: perspicaxKeysUrl() } : {}) });
-    }
-    const status = /^\/api\/me\/engines\/([\w.-]+)\/login\/status$/.exec(path);
-    const action = /^\/api\/me\/engines\/([\w.-]+)\/login\/(start|complete|cancel|sign-out)$/.exec(path);
-    const instanceId = (status ?? action)?.[1];
-    if (!instanceId) return json(res, 404, { error: "not found" });
-    const entry = registry.entries().find((candidate) => candidate.instanceId === instanceId);
-    const driver = entry?.shadow?.driverKind ?? entry?.live?.driverKind ?? "";
-    if (!entry || !subscriptionDriver(driver)) return json(res, 404, { error: "This engine has no personal sign-in." });
-    // 2026-10-29: `?account=second` is the person's second sign-in on an engine that keeps one (Grok)
-    const slot = loginSlotOf(url.searchParams.get("account"));
-    if (slot === "second" && !secondLoginSupported(driver)) return json(res, 400, { error: "This engine keeps one sign-in per person." });
-    const owner = auth.kind === "session" ? auth.session.id : "loopback";
-    try {
-      if (status && method === "GET") {
-        return json(res, 200, { auth: await logins.status(principalId, instanceId, owner, url.searchParams.get("flowId") ?? "", slot) });
-      }
-      if (!action || method !== "POST") return json(res, 405, { error: "method not allowed" });
-      if (!String(req.headers["content-type"] ?? "").toLowerCase().startsWith("application/json")) {
-        return json(res, 415, { error: "content-type must be application/json" });
-      }
-      const verb = action[2];
-      if (verb === "start") {
-        const started = await logins.start(principalId, instanceId, owner, slot);
-        if (auth.kind === "session" && !sessions.isLive(auth.session.id)) {
-          logins.revokeOwner(owner);
-          return json(res, 401, { error: "Your session ended. Start a new sign-in." });
-        }
-        return json(res, 200, { auth: started });
-      }
-      if (verb === "sign-out") {
-        await logins.signOut(principalId, instanceId, owner, slot);
-        return json(res, 200, { ok: true });
-      }
-      const body = await readBody(req, 4096);
-      const flowId = typeof body?.flowId === "string" ? body.flowId : "";
-      if (verb === "complete") {
-        const pasted = typeof body?.callbackUrl === "string" ? body.callbackUrl : typeof body?.code === "string" ? body.code : "";
-        if (!flowId || !pasted) return json(res, 400, { error: "flowId and a code or callbackUrl are required" });
-        await logins.complete(principalId, instanceId, owner, flowId, pasted, slot);
-        return json(res, 200, { ok: true });
-      }
-      await logins.cancel(principalId, instanceId, owner, flowId, slot);
-      return json(res, 200, { ok: true });
-    } catch (error) {
-      const requested = error && typeof error === "object" ? (error as { status?: unknown }).status : undefined;
-      const code = typeof requested === "number" && [400, 401, 404, 409, 413, 415].includes(requested) ? requested : 500;
-      return json(res, code, { error: error instanceof Error ? error.message : String(error) });
-    }
-  });
+  ROUTES.push(createMeEnginesRoutes({
+    IDENTITY,
+    localPrincipalId,
+    isPrincipalId,
+    principals,
+    get providerAccountOwner() { return providerAccountOwner; },
+    get syncPersonalProviders() { return syncPersonalProviders; },
+    orgOfferedEngines,
+    registry,
+    personalProviderInstances,
+    get consoleEngineAllowed() { return consoleEngineAllowed; },
+    engineInstalled,
+    isLoginDriver,
+    keyOnlyInstance,
+    providersOfInstance,
+    get perspicaxDirectory() { return perspicaxDirectory; },
+    fileKeyConfigured,
+    DATA_DIR,
+    driverKeyBacked,
+    cfg,
+    serverEngineAllowedFor,
+    engineNotAvailableReason,
+    engineNameForPerson,
+    engineDisplayName,
+    secondLoginSupported,
+    grokAccountsFor,
+    perspicaxKeysUrl,
+    subscriptionDriver,
+    loginSlotOf,
+    logins,
+    sessions,
+  }));
 }
+
 /** Slice 4: who owns a section at its first organization boot (the owner
  * of most of its bots; else the first organization admin). */
 function sectionMigrationOwner(name: string): string {
@@ -39985,21 +39842,11 @@ if (IDENTITY.kind === "perspicax") {
   // A person's Perspicax avatar (personAvatarUrl), read through the link and
   // served to any signed-in caller, as Perspicax serves it to its own. The
   // version in the URL makes a changed image a new URL.
-  ROUTES.push(async ({ res, url, path, method, json }) => {
-    const match = /^\/api\/people\/([\w-]{1,80})\/avatar$/.exec(path);
-    if (!match || method !== "GET") return PASS;
-    const person = principals.byId(match[1]!);
-    if (!person?.subject || person.subject.iss !== issuer || !person.avatar || !perspicaxDirectory) return json(res, 404, { error: "no avatar" });
-    const image = await perspicaxDirectory.avatar(person.subject.sub, person.avatar);
-    if (!image) return json(res, 404, { error: "no avatar" });
-    res.writeHead(200, {
-      "content-type": image.contentType,
-      "content-length": String(image.bytes.length),
-      "x-content-type-options": "nosniff",
-      "cache-control": url.searchParams.get("v") === person.avatar ? "private, max-age=86400" : "no-store"
-    });
-    res.end(image.bytes);
-  });
+  ROUTES.push(createPeopleAvatarRoutes({
+    principals,
+    issuer,
+    perspicaxDirectory,
+  }));
   // Slice 8: people from before Perspicax, attached by an admin.
   ROUTES.push(createInterimAttachRoutes({
     isAdmin: orgAdminCaller,
@@ -40121,9 +39968,7 @@ if (IDENTITY.kind === "perspicax") {
     link: (input) => principals.linkSubject(input).linkedSubjects ?? []
   }));
   // Slice 6: routine delegation exists only on an organization server.
-  ROUTES.push(async ({ res, path, json }) => path === "/api/org/routine-delegation"
-    ? json(res, 403, { error: "This server does not sign people in with Pulsatrix.", code: "identity_perspicax" })
-    : PASS);
+  ROUTES.push(createRoutineDelegationStubRoutes());
 }
 ROUTES.push(createWorkerRoutes({
   workers: () => registeredWorkers,

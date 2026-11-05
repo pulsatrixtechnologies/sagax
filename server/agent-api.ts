@@ -289,6 +289,8 @@ export interface AgentSettingsResult {
 
 export interface AgentRoutinePatch {
   model?: string | null;
+  /** #2049: the model the run's sub-agents use (Claude). */
+  subagentModel?: string | null;
   effort?: EffortLevel | null;
   enabled?: boolean;
   name?: string;
@@ -1446,7 +1448,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
     },
 
     async update_routine(caller, args) {
-      const bad = onlyKeys(args, ["routine_id", "enabled", "name", "instructions", "schedule", "requires_computer", "model", "effort"]);
+      const bad = onlyKeys(args, ["routine_id", "enabled", "name", "instructions", "schedule", "requires_computer", "model", "subagent_model", "effort"]);
       if (bad) return bad;
       const routineId = typeof args.routine_id === "string" ? args.routine_id.trim() : "";
       if (!routineId || !ID.test(routineId)) {
@@ -1487,13 +1489,18 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         if (!parsed.ok) return refuse(400, "bad_request", parsed.error);
         patch.model = parsed.model ?? null;
       }
+      if (Object.hasOwn(args, "subagent_model")) {
+        const parsed = parseRoutineModel(args.subagent_model);
+        if (!parsed.ok) return refuse(400, "bad_request", parsed.error);
+        patch.subagentModel = parsed.model ?? null;
+      }
       if (Object.hasOwn(args, "effort")) {
         const parsed = parseRoutineEffort(args.effort);
         if (!parsed.ok) return refuse(400, "bad_request", parsed.error);
         patch.effort = parsed.effort ?? null;
       }
       if (!Object.keys(patch).length) {
-        return refuse(400, "bad_request", "Pass at least one of enabled, name, instructions, schedule, requires_computer, model, effort.");
+        return refuse(400, "bad_request", "Pass at least one of enabled, name, instructions, schedule, requires_computer, model, subagent_model, effort.");
       }
       const updated = await deps.updateRoutine(caller, routineId, patch);
       if (isRefusal(updated)) return updated;

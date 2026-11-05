@@ -2431,7 +2431,15 @@
               "null"
             ],
             "maxLength": 200,
-            "description": "Model id for runs/sub-agents on this bot's engine; chat unchanged. null resets."
+            "description": "Model id for runs on this bot's engine; chat unchanged. null resets."
+          },
+          "subagent_model": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200,
+            "description": "Model id for the sub-agents of runs (Claude). null resets."
           },
           "act_as": {
             "type": [
@@ -2718,7 +2726,15 @@
                   "null"
                 ],
                 "maxLength": 200,
-                "description": "Model id for runs/sub-agents on this bot's engine; chat unchanged. null resets."
+                "description": "Model id for runs on this bot's engine; chat unchanged. null resets."
+              },
+              "subagent_model": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200,
+                "description": "Model id for the sub-agents of runs (Claude). null resets."
               },
               "act_as": {
                 "type": [

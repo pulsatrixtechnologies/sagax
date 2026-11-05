@@ -36,7 +36,9 @@ window.fetch = async (input, init) => {
   return realFetch(input, init);
 };
 
-const bot = { id: "bot-ember", name: "Ember", color: "violet", tasks: [], threadId: "thread-ember" } as unknown as Bot;
+const bot = { id: "bot-ember", name: "Ember", color: "violet", tasks: [], threadId: "thread-ember", modelSelection: { instanceId: "claude-1", model: "opus", auto: false } } as unknown as Bot;
+// #2049: a Claude engine, so the editor offers Model and Sub-agent model.
+const claudeInstance = { instanceId: "claude-1", driverKind: "claudeAgent", models: { default: "opus", options: [{ id: "opus", label: "Opus" }, { id: "sonnet", label: "Sonnet" }, { id: "haiku", label: "Haiku" }] } };
 const prompt = [
   "Passe en revue les billets ouverts et résume ce qui a changé depuis la dernière exécution.",
   "",
@@ -72,6 +74,7 @@ function Seed({ children }: { children: ReactNode }) {
   const { state, dispatch } = useStore();
   useEffect(() => {
     dispatch({ type: "hydrate", bots: [bot], groups: [], sections: [], computerControl: {} } as never);
+    dispatch({ type: "instances", instances: [claudeInstance] } as never);
     dispatch({ type: "webhooksHydrated", webhooks, attempts: [], ingress: { available: true, baseUrl: "https://hooks.example.test" } } as never);
     dispatch({ type: "routinesHydrated", routines: [routine], runs } as never);
     if (view === "panel") dispatch({ type: "openRoutine", botId: bot.id, routineId: routine.id } as never);

@@ -1691,6 +1691,9 @@ export type Action =
       mode?: "chat" | "goal";
       /** The Data result the person is viewing, for the model only; never part of the text. */
       dataContext?: import("../../../shared/data-context").DataContext;
+      /** Visible roles (2026-11-05): the Perspicax role the person picked in
+       * the composer for this thread's next turn ("" = Moi); absent: none. */
+      perspicaxRole?: string;
       onError?: () => void;
       /** the server took the message (its receipt came back) */
       onSent?: () => void;

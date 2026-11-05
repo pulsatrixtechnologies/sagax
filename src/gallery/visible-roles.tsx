@@ -8,6 +8,8 @@ import { createRoot } from "react-dom/client";
 import { ToolActivity } from "../components/ToolActivity";
 import { RoleTransitionCard } from "../components/RoleTransitionCard";
 import { RoleNoticeRow } from "../components/RoleNoticeRow";
+import { RolePicker, type HeldRolesAnswer } from "../components/RolePicker";
+import { pickRole } from "../lib/role-pick";
 import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import type { Message } from "../state/store";
@@ -77,11 +79,45 @@ function Thread() {
   );
 }
 
+const held: HeldRolesAnswer = {
+  available: true,
+  current: "",
+  roles: [
+    { slug: "service-desk", name: "Service Desk", readOnly: false, explicitOnly: false, reachable: true, can: { read: true, write: true, routines_run: true } },
+    { slug: "dispatch", name: "Dispatch", readOnly: true, explicitOnly: false, reachable: true, can: { read: true, write: false } },
+    { slug: "full-access", name: "Full Access", readOnly: false, explicitOnly: true, reachable: true, can: { read: true, write: true, routines_run: true, approvals_answer: true, flow: true, sagax: true } },
+  ],
+};
+
+/** Batch 3: the composer's role picker, open, above a composer-like pill;
+ * below it, the chip once Service Desk is picked for the next message. */
+function Picker() {
+  pickRole("nova", "picked", "service-desk");
+  return (
+    <>
+      <div className="self-end rounded-[18px] bg-bubble-user px-3 py-2 text-[13px] text-ink">Ferme les billets réglés du tableau 1</div>
+      <Section title="Sélecteur de rôle (ouvert)">
+        <div className="h-[330px]" />
+        <div className="flex min-h-11 items-center gap-2 rounded-[22px] border-[0.5px] border-border bg-composer px-2 py-1.5">
+          <RolePicker botId="nova" threadId="open" initialOpen organization load={async () => held} />
+          <span className="text-[14px] text-ink-tertiary">Message à Nova</span>
+        </div>
+      </Section>
+      <Section title="Rôle choisi pour le prochain message">
+        <div className="flex min-h-11 items-center gap-2 rounded-[22px] border-[0.5px] border-border bg-composer px-2 py-1.5">
+          <RolePicker botId="nova" threadId="picked" organization load={async () => held} />
+          <span className="text-[14px] text-ink-tertiary">Message à Nova</span>
+        </div>
+      </Section>
+    </>
+  );
+}
+
 function Gallery() {
   return (
     <div className="min-h-screen bg-app p-8 text-ink">
       <div className="mx-auto flex max-w-xl flex-col gap-5" data-gallery={view}>
-        <Thread />
+        {view === "picker" ? <Picker /> : <Thread />}
       </div>
     </div>
   );

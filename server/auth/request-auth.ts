@@ -583,6 +583,8 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // "Toujours ainsi" rules; the handlers check the thread and the owner
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/cards\/[\w-]+\/role-transition$/ },
   { methods: ["GET", "DELETE"], path: /^\/api\/bots\/[\w-]+\/roles\/rules$/ },
+  // the composer's role picker: the signed-in person's own held roles (live identity_switch)
+  { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/roles\/held$/ },
   // pre-warm the engine of a conversation the person opened (server/threads/thread-prewarm.ts)
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/warm$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/active-branch$/ },

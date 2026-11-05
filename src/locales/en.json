@@ -13199,5 +13199,21 @@
   "roles.rules.remove": "Remove this rule",
   "task.background.show": "Show background",
   "task.background.hide": "Hide background",
-  "task.background.heading": "Background · {count}"
+  "task.background.heading": "Background · {count}",
+  "roles.picker.menu": "Act as",
+  "roles.picker.aria": "Role for your next message: {role}",
+  "roles.picker.meDetail": "Your own access (default)",
+  "roles.picker.can": "can: {abilities}",
+  "roles.picker.ability.read": "read",
+  "roles.picker.ability.write": "write",
+  "roles.picker.ability.routinesRun": "run routines",
+  "roles.picker.ability.approvalsAnswer": "answer approvals",
+  "roles.picker.ability.flow": "use Flow",
+  "roles.picker.ability.sagax": "use Sagax",
+  "roles.picker.explicitOnly": "on request only",
+  "roles.picker.unreachable": "unreachable now",
+  "roles.picker.current": "in use",
+  "roles.picker.loading": "Reading your roles…",
+  "roles.picker.failed": "Your roles could not be read. Open the menu again to retry.",
+  "roles.picker.hint": "Applies to your next message only."
 }

@@ -268,8 +268,10 @@ export class RoleJournal {
   takePick(threadId: string, principalId: string): string | undefined {
     const pick = this.picks.get(threadId);
     if (!pick) return undefined;
+    // another person's turn on the thread never uses, nor drops, this pick
+    if (pick.principalId !== principalId) return undefined;
     this.picks.delete(threadId);
-    if (pick.principalId !== principalId || this.now() - pick.at > 10 * 60_000) return undefined;
+    if (this.now() - pick.at > 10 * 60_000) return undefined;
     return pick.slug;
   }
 }

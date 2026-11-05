@@ -13199,5 +13199,21 @@
   "roles.rules.remove": "Retirer cette règle",
   "task.background.show": "Afficher l'arrière-plan",
   "task.background.hide": "Masquer l'arrière-plan",
-  "task.background.heading": "Arrière-plan · {count}"
+  "task.background.heading": "Arrière-plan · {count}",
+  "roles.picker.menu": "Agir comme",
+  "roles.picker.aria": "Rôle de votre prochain message : {role}",
+  "roles.picker.meDetail": "Votre propre accès (par défaut)",
+  "roles.picker.can": "peut : {abilities}",
+  "roles.picker.ability.read": "lire",
+  "roles.picker.ability.write": "écrire",
+  "roles.picker.ability.routinesRun": "lancer des routines",
+  "roles.picker.ability.approvalsAnswer": "répondre aux approbations",
+  "roles.picker.ability.flow": "utiliser Flow",
+  "roles.picker.ability.sagax": "utiliser Sagax",
+  "roles.picker.explicitOnly": "sur demande seulement",
+  "roles.picker.unreachable": "injoignable pour l'instant",
+  "roles.picker.current": "en cours",
+  "roles.picker.loading": "Lecture de vos rôles…",
+  "roles.picker.failed": "Vos rôles n'ont pas pu être lus. Rouvrez le menu pour réessayer.",
+  "roles.picker.hint": "S'applique à votre prochain message seulement."
 }

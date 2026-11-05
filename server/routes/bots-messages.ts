@@ -50,6 +50,7 @@ import {
   builtInBrowserEnabled,
 } from "../config.ts";
 import { parseDataContext } from "../data-context.ts";
+import { perspicaxRoleOf } from "./perspicax-held-roles.ts";
 import { parseDevPods } from "../dev-pods-prompt.ts";
 import {
   typedCommandForTurn,
@@ -395,6 +396,14 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
         closeCutToolRows(threadId);
         confirmStop(threadId, stoppedTurnId);
         return json(res, 200, { ok: true, threadId, stopped: true, message });
+      }
+      // 2026-11-05 (visible roles, batch 3): the role the person picked in
+      // the composer, for the next turn of this thread only ("" = Moi). A
+      // turn already running keeps its role; the pick waits for the next one,
+      // and only the person who made it can use it (roleJournal.takePick).
+      if (!guarded && !pressed) {
+        const pickedRole = perspicaxRoleOf(body);
+        if (pickedRole !== undefined) deps.pickPerspicaxRole?.(bot, threadId, auth, pickedRole);
       }
       if (pressKey) widgetPressesInFlight.set(pressKey, sendId);
       // #1372: the goal starts only now, after every refusal above; a send

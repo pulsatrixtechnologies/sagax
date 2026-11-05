@@ -987,6 +987,59 @@ export class PerspicaxMcp {
     return result ?? { step: "tools/list", error: "tool_missing flow_run is not available on this account connection." };
   }
 
+  /** Visible roles (composer picker, 2026-11-05): the roles THIS person
+   * holds now, from a live `identity_switch` with no argument. On the live
+   * connection of this thread and person when there is one (and `current`,
+   * the role it acts as), else on a short-lived account connection of the
+   * person's own session, closed and revoked at once. Never a listing kept
+   * from another turn or another person. Null: Perspicax is not mounted
+   * for this person (no link, no session). */
+  async heldRolesFor(principalId: string, botId: string, threadId: string | undefined, signal: AbortSignal): Promise<{ roles: HeldRole[]; current?: string } | null> {
+    const principal = principalId.trim();
+    const link = this.options.link();
+    const subject = principal ? this.options.subjectOf(principal) : null;
+    if (!link || !subject || subject.disabled || subject.iss !== this.options.issuer) return null;
+    if (threadId) {
+      for (const entry of this.entries.values()) {
+        if (entry.ended || entry.threadId !== threadId || entry.botId !== botId || entry.principalId !== principal) continue;
+        if (entry.servedTools && !entry.servedTools.has("identity_switch")) return { roles: [], current: this.currentRole(entry) };
+        try {
+          const body = await this.identityRpc(entry, "tools/call", { name: "identity_switch", arguments: {} });
+          const value = identityValue(body);
+          this.noteListing(entry, value);
+          return { roles: heldRolesOf(value), current: this.currentRole(entry) };
+        } catch { break; /* the short-lived connection below answers */ }
+      }
+    }
+    signal.throwIfAborted();
+    const source = await this.subjectFor("session", principal, { iss: subject.iss, sub: subject.sub });
+    if (!source.ok) return null;
+    const exchanged = await link.exchangeToken(source.token);
+    if (!exchanged.ok) return null;
+    let session: string | null = null;
+    const rpc = async (method: string, params: Json): Promise<unknown> => {
+      signal.throwIfAborted();
+      const id = `sagax-roles-${++this.nativeCalls}`;
+      const response = await this.fetcher(link.mcpEndpoint(), { method: "POST", redirect: "error", signal,
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: `Bearer ${exchanged.token}`, ...(session ? { "mcp-session-id": session } : {}) },
+        body: JSON.stringify({ jsonrpc: "2.0", ...(method === "notifications/initialized" ? {} : { id }), method, params }) });
+      session = response.headers.get("mcp-session-id") ?? session;
+      const text = await response.text();
+      if (!response.ok) throw new Error(`Perspicax roles HTTP ${response.status}`);
+      return method === "notifications/initialized" ? {} : parseMcpBody(text, id);
+    };
+    try {
+      await rpc("initialize", { protocolVersion: PERSPICAX_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: `Sagax roles (${botId}; ${randomUUID()})`, version: this.options.version } });
+      await rpc("notifications/initialized", {});
+      const body = await rpc("tools/call", { name: "identity_switch", arguments: {} });
+      if (!isObject(body) || isObject(body.error) || (isObject(body.result) && body.result.isError === true)) return { roles: [] };
+      return { roles: heldRolesOf(identityValue(body)) };
+    } finally {
+      if (session) await this.fetcher(link.mcpEndpoint(), { method: "DELETE", redirect: "error", signal: AbortSignal.timeout(200), headers: { authorization: `Bearer ${exchanged.token}`, "mcp-session-id": session } }).then(response => response.body?.cancel()).catch(() => {});
+      void link.revokeExchanged(exchanged.token).catch(() => {});
+    }
+  }
+
   /** Exchange the speaker's access for the account's one main connection
    * before the engine starts. Never throws and never chooses a role. */
   async prepareTurn(input: {

@@ -746,6 +746,7 @@ import { createAutoApprovalNotes, type ToolAutoApproval } from "./approvals/tool
 import { RoleJournal } from "./perspicax/role-journal.ts";
 import { createRoleEvents, meWriteSummary } from "./perspicax/role-events.ts";
 import { createPerspicaxRoleRoutes } from "./routes/perspicax-roles.ts";
+import { createHeldRolesRoute } from "./routes/perspicax-held-roles.ts";
 import { createEmailDraftRoutes } from "./routes/email-drafts.ts";
 import { createThreadWarmRoutes, warmBotAccessRefusal } from "./routes/thread-warm.ts";
 import { createEmailSendPasses, emailSendCard, sendWithMailer } from "./mail/email-draft-send.ts";
@@ -25866,6 +25867,28 @@ function answerProactiveProposal(botId: string, proposalId: string, accept: bool
 }
 
 ROUTES.push(createProactiveProposalRoutes({ answer: answerProactiveProposal }));
+/** 2026-11-05 (visible roles, batch 3): the composer's role picker. The
+ * signed-in person's own held roles, live; the principal is the one a turn
+ * of theirs would carry (orgSpeakerPrincipal), so a pick matches its turn. */
+const heldRolesRoute = createHeldRolesRoute({
+  principal: (auth, botId) => {
+    const bot = store.bot(botId);
+    if (!bot || IDENTITY.kind !== "perspicax") return undefined;
+    return orgSpeakerPrincipal(bot, speakerFor(auth)) || undefined;
+  },
+  thread: (_auth, botId, threadId) => {
+    const bot = store.bot(botId);
+    if (!bot) return undefined;
+    try { return routeThreadId(bot, threadId); } catch { return undefined; }
+  },
+  mounts: (botId, threadId) => {
+    if (IDENTITY.kind !== "perspicax" || !perspicaxMcp) return false;
+    const bot = store.projectBotForTask(botId, threadId) ?? store.bot(botId);
+    const instance = bot ? registry.get(bot.modelSelection.instanceId) : undefined;
+    return instance?.adapter.capabilities.customMcp === true;
+  },
+  heldRolesFor: (principal, botId, threadId, signal) => perspicaxMcp ? perspicaxMcp.heldRolesFor(principal, botId, threadId, signal) : Promise.resolve(null),
+});
 ROUTES.push(createPerspicaxRoleRoutes({
   actor: (auth) => channelViewerId(auth) ?? localPrincipalId(),
   mayUseBot: (auth, botId) => {
@@ -25879,6 +25902,7 @@ ROUTES.push(createPerspicaxRoleRoutes({
   answerTransition: (input) => answerRoleTransition(input),
   rules: ({ botId, actor }) => ({ status: 200, body: { rules: roleJournal.rulesFor(botId, actor) } }),
   removeRule: ({ botId, actor, id }) => roleJournal.removeRule(botId, actor, id) ? { status: 200, body: { ok: true } } : { status: 404, body: { error: "no such rule" } },
+  more: (ctx, input) => heldRolesRoute(ctx, input),
 }));
 
 // Whether an oldest thread is someone else's (frozenResultsThread) is known
@@ -44553,6 +44577,13 @@ ROUTES.push(createWebhooksRoutes({
   isBotAct: (auth) => auth.kind === "session" && isBotActSession(auth.session)
 }));
 ROUTES.push(createBotsMessagesRoutes({
+  // 2026-11-05 (visible roles, batch 3): the composer's pick, kept for the
+  // sender's next turn of this thread (perspicaxTurnRole takes it)
+  pickPerspicaxRole: (bot: BotRecord, threadId: string, auth: RequestAuth, slug: string) => {
+    if (IDENTITY.kind !== "perspicax") return;
+    const principal = orgSpeakerPrincipal(bot, speakerFor(auth));
+    if (principal) roleJournal.pick(threadId, principal, slug);
+  },
   originApprovals,
   approvalBus,
   ADMIN_APPROVAL_REQUIRED,

@@ -14,6 +14,8 @@ import type {
 } from "../shared/runtime-events.ts";
 import type { ProviderIcon } from "../shared/provider-icon.ts";
 import type { ModelListIssue } from "../shared/azure-openai.ts";
+import type { PiModelServer } from "./drivers/pi-model-servers.ts";
+import type { PiKitIdentity } from "./drivers/pi-kit.ts";
 
 // These contract types live in shared/wire.ts now (part of the wire model);
 // re-exported here so existing server-side importers keep working.
@@ -137,6 +139,9 @@ export interface TurnAccessInput {
   /** Grok Build, Kimi Code, Gemini CLI, pi: the payer's own home for the
    * engine (HOME, KIMI_CODE_HOME, GEMINI_CLI_HOME, PI_CODING_AGENT_DIR). */
   engineHome?: string;
+  /** #2024, pi: the Perspicax model servers this person reaches, written to
+   * models.json without their keys (those ride `environment`). */
+  piModelServers?: PiModelServer[];
 }
 
 /** #1276: Claude Code, local or cloud, sends a compact tool list. The
@@ -186,6 +191,9 @@ export interface SendTurnInput {
    * engine runs commands in its own shell adds them to that process's
    * environment, and starts a fresh process when they change. */
   commandEnvironment?: Record<string, string>;
+  /** #2024, pi: the identity a SAGAX_PI_KIT_DIR APPEND_SYSTEM.md template
+   * fills in (drivers/pi-kit.ts); an unknown variable drops its line. */
+  piKitIdentity?: PiKitIdentity;
   /** The automatic recall block the harness put in front of the person's
    * message inside `text`. It informs this turn only, so a driver that
    * replays the turn as sent later can leave it out. */

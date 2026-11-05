@@ -148,6 +148,19 @@ RUN npm install -g agent-browser@${AGENT_BROWSER_VERSION} \
   && /opt/openmausbot-browser/chrome --headless --disable-gpu --no-sandbox --version \
   && node /app/engines/chrome-launch-check.mjs /opt/openmausbot-browser/chrome \
   && agent-browser --version
+# A pi kit's packages (SAGAX_PI_KIT_DIR, docs/custom-engines.md "A pi kit"),
+# preinstalled while npm is still here: PI_KIT_PACKAGES lists the kit's
+# packages.txt npm sources, space separated ("npm:<name>@<version>" or a bare
+# spec). Empty by default, so a stock image installs nothing. A pi turn loads
+# a preinstalled package from SAGAX_PI_PACKAGES_DIR; one missing there is
+# passed to pi as written.
+ARG PI_KIT_PACKAGES=""
+RUN mkdir -p /opt/sagax-pi-packages \
+  && if [ -n "${PI_KIT_PACKAGES}" ]; then \
+    specs=""; for spec in ${PI_KIT_PACKAGES}; do specs="${specs} ${spec#npm:}"; done; \
+    npm install --prefix /opt/sagax-pi-packages --omit=dev --no-audit --no-fund ${specs}; \
+  fi
+ENV SAGAX_PI_PACKAGES_DIR=/opt/sagax-pi-packages/node_modules
 # Overlay again after agent-browser, then drop the npm CLI and the Node
 # image's Yarn (only the installer used them), docs, and apt indexes. Node
 # stays; engines and the bundled server do not call npm or yarn at runtime.

@@ -2621,7 +2621,9 @@ import { DesktopBridges, resolveBotWorkplace, type WorkplaceDecision } from "./d
 import { DesktopLocalModels } from "./desktop/desktop-local-models.ts";
 import { withDesktopModelPerson } from "./desktop/desktop-model-grant.ts";
 import { isDesktopInjectModel, isLocalModelId, setDesktopInjectModels } from "./drivers/local-inject.ts";
-import { isPiLocalModel, piLocalKeyRefusalLifted } from "./models/pi-local-model.ts";
+import { isPiServedModel, piLocalKeyRefusalLifted } from "./models/pi-local-model.ts";
+import { modelServerAccess, overlayModelServers, type PiModelServer } from "./drivers/pi-model-servers.ts";
+import { piKitDir, type PiKitIdentity } from "./drivers/pi-kit.ts";
 import { defaultTurnPayerMode, effectiveTurnPayerMode, type TurnPayerMode } from "../shared/turn-payer.ts";
 import { handleDesktopBridgeMcp } from "./desktop/desktop-bridge-tools.ts";
 import { cloudOnlyBot } from "./bots/cloud-only-bots.ts";
@@ -8951,10 +8953,39 @@ function commandVariablesFor(botId: string, threadId: string, principalId: strin
 }
 /** The command variables a turn's engine shell gets: none where the engine
  * has no shell of its own on this computer (an organization server). */
-function turnCommandEnvironment(instance: Parameters<typeof withholdHostToolsFor>[0], botId: string, threadId: string): { commandEnvironment?: Record<string, string> } {
-  if (withholdHostToolsFor(instance)) return {};
+function turnCommandEnvironment(instance: Parameters<typeof withholdHostToolsFor>[0], botId: string, threadId: string): { commandEnvironment?: Record<string, string>; piKitIdentity?: PiKitIdentity } {
+  // #2024: a pi turn under a SAGAX_PI_KIT_DIR kit fills its template with the person's identity
+  const kit = instance.driverKind === "piAgent" && piKitDir(process.env) ? { piKitIdentity: piKitIdentityFor(vaultPrincipalForThread(threadId)) } : {};
+  if (withholdHostToolsFor(instance)) return kit;
   const vars = commandVariablesFor(botId, threadId);
-  return Object.keys(vars).length ? { commandEnvironment: vars } : {};
+  return Object.keys(vars).length ? { commandEnvironment: vars, ...kit } : kit;
+}
+/** #2024: what this server knows of a person for a pi kit's APPEND_SYSTEM.md
+ * (drivers/pi-kit.ts). A variable left out drops its line. CW_MEMBER and
+ * MAX_PARALLEL come from the server's environment (SAGAX_PI_CW_MEMBER is a
+ * single-person server's; SAGAX_PI_MAX_PARALLEL), USER_ORG from SAGAX_ORG_NAME. */
+function piKitIdentityFor(principalId: string | null): PiKitIdentity {
+  const person = principalId && isPrincipalId(principalId) ? principalId : null;
+  const name = person ? personDisplayName(principals.byId(person)) : cfg.profile?.name?.trim();
+  const timeZone = (person ? botSettings.person(person).timeZone : null) || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const code = languageOfPerson(person);
+  let language = "";
+  try {
+    language = new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? "";
+  } catch {
+    /* an unknown tag leaves the line out */
+  }
+  const identity: PiKitIdentity = {};
+  if (name) identity.USER_NAME = name;
+  if (timeZone) identity.TIMEZONE = timeZone;
+  if (language) identity.LANG_NAME = language;
+  const org = process.env.SAGAX_ORG_NAME?.trim();
+  if (org) identity.USER_ORG = org;
+  const member = process.env.SAGAX_PI_CW_MEMBER?.trim();
+  if (member && IDENTITY.kind !== "perspicax") identity.CW_MEMBER = member;
+  const parallel = process.env.SAGAX_PI_MAX_PARALLEL?.trim();
+  if (parallel && /^[1-9][0-9]{0,2}$/.test(parallel)) identity.MAX_PARALLEL = parallel;
+  return identity;
 }
 /** Whose vault a turn on this conversation reads: the one local vault on a
  * desktop or a solo server; on an organization server the person the turn
@@ -30198,7 +30229,8 @@ function warmPayerAccountModels(bot: BotRecord, speaker: TurnSpeaker): void {
 /** #1422 (pi-local-model.ts) for one selection on a registered engine: the
  * selection being judged, never the bot's own when they differ. */
 function piLocalModel(selection: { instanceId: string; model?: string | null }): boolean {
-  return isPiLocalModel(registry.get(selection.instanceId)?.driverKind, selection.model);
+  // #2024: a Perspicax model server's model is served the same way
+  return isPiServedModel(registry.get(selection.instanceId)?.driverKind, selection.model);
 }
 /** #1137, #1154: the model a person's turn runs on, so every turn of a bot
  * (a group included) runs on an engine the person who pays can pay for
@@ -30679,7 +30711,8 @@ async function orgTurnAccess(threadId: string, bot: BotRecord, instance: { insta
   // #1422: a local pi model (the model this turn runs, never the bot's own
   // when they differ) has no key to fetch; it still runs in a pi home of its
   // person's own, never the server's shared one (piLocalTurnAccess).
-  if (piLocalModel({ instanceId: instance.instanceId, model })) return piLocalTurnAccess(bot, speaker);
+  // #2024: so does a Perspicax model server's, whose key comes with it.
+  if (piLocalModel({ instanceId: instance.instanceId, model })) return withPiModelServers(piLocalTurnAccess(bot, speaker), instance, bot, speaker);
   const input = orgEngineInput(bot, instance, speaker);
   const outcome = await materializeEngineAccess(input, resolveEngineAccess(input), {
     dataDir: DATA_DIR,
@@ -30704,7 +30737,46 @@ async function orgTurnAccess(threadId: string, bot: BotRecord, instance: { insta
     ...(payerSub ? { payerSub } : {}),
     ...(provider ? { provider } : {})
   });
-  return outcome.access;
+  return withPiModelServers(outcome.access, instance, bot, speaker);
+}
+/** #2024: the person a pi turn serves, in piLocalTurnAccess's order. */
+function piTurnPerson(bot: BotRecord, speaker: TurnSpeaker): string | undefined {
+  const ids = [
+    speaker.origin === "person" ? speaker.principalId : undefined,
+    autoPayerKey(bot, speaker),
+    effectiveBotOwner(bot),
+  ].map((id) => id?.trim().toLowerCase() ?? "");
+  return ids.find((id) => id && isPrincipalId(id));
+}
+/** #2024: every pi turn on a linked organization server carries the model
+ * servers its person reaches through Perspicax (60 s cache in the link):
+ * models.json names them, their keys ride this turn's environment only.
+ * Without a link nothing changes; an unreachable Perspicax leaves the
+ * person's pi home as the last turn wrote it. A turn on the organization's
+ * key moves to the person's own pi home, so one person's servers never
+ * reach the shared one. */
+async function withPiModelServers(access: TurnAccess, instance: { driverKind: string }, bot: BotRecord, speaker: TurnSpeaker): Promise<TurnAccess> {
+  if (instance.driverKind !== "piAgent" || !perspicaxDirectory) return access;
+  const person = piTurnPerson(bot, speaker);
+  const sub = person ? perspicaxSubOf(person) : null;
+  if (!sub) return access;
+  const result = await perspicaxDirectory.resolveModelServers(sub);
+  if (!result.ok) return access;
+  const { environment, servers } = modelServerAccess(result.servers);
+  const engineHome = access.via === "org-key" && servers.length && person ? join(DATA_DIR, "principals", person, "piAgent-key") : access.engineHome;
+  return {
+    ...access,
+    ...(Object.keys(environment).length ? { environment: { ...access.environment, ...environment } } : {}),
+    piModelServers: servers,
+    ...(engineHome ? { engineHome } : {}),
+  };
+}
+/** #2024: the model servers a viewer reaches, for the picker (no keys). */
+async function piModelServersForViewer(principalId: string | null | undefined): Promise<PiModelServer[]> {
+  const sub = perspicaxSubOf(principalId?.trim().toLowerCase() ?? "");
+  if (!perspicaxDirectory || !sub) return [];
+  const result = await perspicaxDirectory.resolveModelServers(sub);
+  return result.ok ? modelServerAccess(result.servers).servers : [];
 }
 /** #1422, #1276: the pi home of a local model's turn on an organization
  * server. pi keeps its sessions (whole conversations) and models.json in
@@ -31120,7 +31192,9 @@ async function instancesForViewer(person: string | null) {
       return account ? { ...instance, access: "api" as const, providerAccount: { provider: account.provider, serverId: account.serverId } } : instance;
     });
   if (IDENTITY.kind !== "perspicax") return instances;
-  return desktopLocalModels.overlay(orgOfferedEngines(instances, person), person);
+  // #2024: pi lists the viewer's Perspicax model servers with their thinking levels
+  const served = overlayModelServers(orgOfferedEngines(instances, person), await piModelServersForViewer(person).catch(() => []));
+  return desktopLocalModels.overlay(served, person);
 }
 /** #1450: models refused as turned off on the account that pays for them. */
 const modelAccessRefusals = createModelAccessRefusals();

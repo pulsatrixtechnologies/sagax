@@ -209,6 +209,10 @@ export interface Routine {
    * bot's own engine (sub-agents too on Claude). Absent: the bot's model.
    * A model the bot's engine does not offer is ignored at run start. */
   model?: string;
+  /** #2038: the model its runs' sub-agents use (Claude), on the bot's own
+   * engine; wins over `model` for them. Absent: `model`, else the bot's fast
+   * model, else the turn's model. */
+  subagentModel?: string;
   /** 2026-11-05 (shared/routine-act-as.ts): the Perspicax role its runs act
    * as ("Au nom de"); "" is "Moi". Absent: not chosen yet. */
   actAs?: string;
@@ -453,6 +457,9 @@ export interface RoutineInput {
   /** The model its runs use; null or "" goes back to the bot's model,
    * omission preserves it on updates. */
   model?: string | null;
+  /** The model its runs' sub-agents use (Claude); null or "" clears it,
+   * omission preserves it on updates. */
+  subagentModel?: string | null;
   /** The role its runs act as on Perspicax ("" = Moi); null clears the
    * choice, omission preserves it on updates. */
   actAs?: string | null;
@@ -756,7 +763,7 @@ const WORK_FIELDS = ["prompt", "botId", "groupId", "target", "attachments", "pre
 const ROUTINE_DEFINITION_FIELDS = [
   "name", "prompt", "target", "botId", "groupId", "runOn", "schedule",
   "durationMinutes", "timeoutMinutes", "attachments", "continuity", "overlap",
-  "onlyWhenPresent", "precheck", "requires", "autoPauseAfter", "mailAlias", "deleteWhenFinished", "model", "actAs", "effort",
+  "onlyWhenPresent", "precheck", "requires", "autoPauseAfter", "mailAlias", "deleteWhenFinished", "model", "subagentModel", "actAs", "effort",
 ] as const;
 
 /** A run still in flight: auto-delete waits until none of these remain. */
@@ -1407,6 +1414,9 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
   const model = parseRoutineModel(input.model);
   if (!model.ok) throw new RoutineInputError(model.error);
   if (model.model && target === "room-goal") throw new RoutineInputError("A room goal runs on each bot's own model: choose the model on a bot routine");
+  const subagentModel = parseRoutineModel(input.subagentModel);
+  if (!subagentModel.ok) throw new RoutineInputError(subagentModel.error);
+  if (subagentModel.model && target === "room-goal") throw new RoutineInputError("A room goal runs on each bot's own model: choose the sub-agent model on a bot routine");
   const actAs = parseRoutineActAs(input.actAs);
   if (!actAs.ok) throw new RoutineInputError(actAs.error);
   if (actAs.actAs !== undefined && target === "room-goal") throw new RoutineInputError("A room goal's bots act with their own roles: choose \"Au nom de\" on a bot routine");
@@ -1436,6 +1446,7 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
     ...(input.deleteWhenFinished === true && scheduleHasKnownEnd(input.schedule) ? { deleteWhenFinished: true } : {}),
     ...(input.access === "read-and-draft" ? { access: "read-and-draft" as const } : {}),
     ...(model.model ? { model: model.model } : {}),
+    ...(subagentModel.model ? { subagentModel: subagentModel.model } : {}),
     ...(actAs.actAs !== undefined ? { actAs: actAs.actAs } : {}),
     ...(effort.effort ? { effort: effort.effort } : {}),
   };
@@ -1597,10 +1608,12 @@ export class RoutineManager {
               deleteWhenFinished: routine.deleteWhenFinished === true && scheduleHasKnownEnd(schedule) ? true : undefined,
               access: routine.access === "read-and-draft" ? "read-and-draft" as const : undefined,
               model: loadRoutineModel(routine.model),
+              subagentModel: loadRoutineModel(routine.subagentModel),
               actAs: loadRoutineActAs(routine.actAs),
               effort: loadRoutineEffort(routine.effort),
             };
             if (loaded.model === undefined) delete loaded.model;
+            if (loaded.subagentModel === undefined) delete loaded.subagentModel;
             if (loaded.actAs === undefined) delete loaded.actAs;
             if (loaded.effort === undefined) delete loaded.effort;
             if (loaded.folder === undefined) delete loaded.folder;
@@ -1892,10 +1905,13 @@ export class RoutineManager {
     if (refusal) throw new RoutineInputError(refusal);
   }
 
-  private assertModel(clean: { botId: string; model?: string }): void {
-    if (!clean.model || !this.options.checkModel) return;
-    const refusal = this.options.checkModel(clean.botId, clean.model);
-    if (refusal) throw new RoutineInputError(refusal);
+  private assertModel(clean: { botId: string; model?: string; subagentModel?: string }): void {
+    if (!this.options.checkModel) return;
+    for (const model of [clean.model, clean.subagentModel]) {
+      if (!model) continue;
+      const refusal = this.options.checkModel(clean.botId, model);
+      if (refusal) throw new RoutineInputError(refusal);
+    }
   }
 
   private routineWithHealth(routine: Routine): Routine {
@@ -2172,6 +2188,8 @@ export class RoutineManager {
       access: Object.hasOwn(patch, "access") ? patch.access : routine.access,
       // null or "" goes back to the bot's model; omission keeps it.
       model: Object.hasOwn(patch, "model") ? patch.model : routine.model,
+      // Same rule for the sub-agents' model (Claude): null or "" clears it.
+      subagentModel: Object.hasOwn(patch, "subagentModel") ? patch.subagentModel : routine.subagentModel,
       // null clears the choice, "" is "Moi"; omission keeps it.
       actAs: Object.hasOwn(patch, "actAs") ? patch.actAs : routine.actAs,
       effort: Object.hasOwn(patch, "effort") ? patch.effort : routine.effort,
@@ -2179,7 +2197,7 @@ export class RoutineManager {
     if (this.targetState(clean) === "missing") throw new RoutineInputError(this.missingTargetMessage(clean.target));
     // Checked when it is chosen or the bot changes; a kept model whose
     // engine moved on is ignored at run start instead (shared/routine-model.ts).
-    if (clean.model !== routine.model || clean.botId !== routine.botId) this.assertModel(clean);
+    if (clean.model !== routine.model || clean.subagentModel !== routine.subagentModel || clean.botId !== routine.botId) this.assertModel(clean);
     if (clean.effort !== routine.effort || clean.botId !== routine.botId) this.assertEffort(clean);
     if (clean.folder) clean.folder = this.admitFolder(clean.botId, clean.folder);
     const previousBotId = routine.botId;
@@ -2259,6 +2277,7 @@ export class RoutineManager {
       if (!clean.deleteWhenFinished) delete routine.deleteWhenFinished;
       if (!clean.access) delete routine.access;
       if (!clean.model) delete routine.model;
+      if (!clean.subagentModel) delete routine.subagentModel;
       if (clean.actAs === undefined) delete routine.actAs;
       if (!clean.effort) delete routine.effort;
       foldersChanged = this.settleFolders(routine.botId);
@@ -2553,6 +2572,7 @@ export class RoutineManager {
       attachments: [],
       ...(owned?.access === "read-and-draft" ? { access: "read-and-draft" as const } : {}),
       ...(owned?.model ? { model: owned.model } : {}),
+      ...(owned?.subagentModel ? { subagentModel: owned.subagentModel } : {}),
       ...(owned?.target === "bot" && owned.actAs !== undefined ? { actAs: owned.actAs } : {}),
       ...(owned?.effort ? { effort: owned.effort } : {}),
       ...(input.eventSource ? { eventSource: input.eventSource } : {}),
@@ -4419,6 +4439,7 @@ export class RoutineManager {
       resultsThreadId,
       ...(routine.access === "read-and-draft" ? { access: "read-and-draft" as const } : {}),
       ...(routine.target === "bot" && routine.model ? { model: routine.model } : {}),
+      ...(routine.target === "bot" && routine.subagentModel ? { subagentModel: routine.subagentModel } : {}),
       ...(routine.target === "bot" && routine.actAs !== undefined ? { actAs: routine.actAs } : {}),
       ...(routine.target === "bot" && routine.effort ? { effort: routine.effort } : {}),
       createdAt: this.now(),

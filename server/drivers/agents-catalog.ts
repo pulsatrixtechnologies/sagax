@@ -427,6 +427,20 @@ export function withDeferredRareTools<T extends { name: string }>(tools: readonl
     : tool);
 }
 
+/** #2037, a Claude Code compact turn (SAGAX_COMPACT_TOOLS with
+ * SAGAX_DEFER_RARE_TOOLS=1): the heart of a chat turn, the bot's pinned tools
+ * and shared_computer are loaded whole; every other tool is listed by its own
+ * name with `_meta["anthropic/alwaysLoad"] = false`, so the CLI shows the
+ * model the name and loads the schema through ToolSearch on first use. No
+ * search_tools / call_tool pair: a tool found this way is called by its own
+ * name, through the same checks and approvals as a listed one, in one round
+ * trip. `core` does not apply: a bot with no recorded use sees every name. */
+export function withCompactNativeDeferral<T extends { name: string }>(tools: readonly T[], input: { pinned: ReadonlySet<string>; coordinating: boolean }): Array<T & { _meta?: Record<string, unknown> }> {
+  return tools.map((tool) => compactListed(tool.name, { core: "used", pinned: input.pinned, coordinating: input.coordinating })
+    ? tool
+    : { ...tool, _meta: { ...(tool as { _meta?: Record<string, unknown> })._meta, "anthropic/alwaysLoad": false } });
+}
+
 /** A description names only tools its turn is shown: a sentence that steers
  * the model to a tool this turn lacks is rewritten to the one it has, or
  * dropped (a person's direct chat coordinates through coordinate_bots, and

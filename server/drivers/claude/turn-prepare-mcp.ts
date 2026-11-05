@@ -75,10 +75,12 @@ if (turn.integrations?.agents) {
   // Not when the turn names its built-ins (a guest's turn, an instance
   // tool list) without ToolSearch: a deferred tool would be unreachable.
   const toolSearch = !turn.guestConfined && (config.tools === undefined || config.tools.includes("ToolSearch"));
-  // #1276: a compact prompt lists the core and searches the remaining
-  // Sagax tools itself (agents-proxy.ts), independently of native tools.
+  // #1276: a compact prompt lists the core and the bot's pinned tools whole.
+  // #2037: where the turn has ToolSearch, the remaining Sagax tools are
+  // listed by name and deferred to it (SAGAX_DEFER_RARE_TOOLS, one call by
+  // its own name) instead of the proxy's search_tools / call_tool pair.
   const agentsEnv = turn.compactPrompt
-    ? { ...turn.integrations.agents.env, SAGAX_COMPACT_TOOLS: JSON.stringify({ core: turn.compactPrompt.agents.core, pinned: [...new Set(turn.compactPrompt.agents.pinned)].sort() }) }
+    ? { ...turn.integrations.agents.env, SAGAX_COMPACT_TOOLS: JSON.stringify({ core: turn.compactPrompt.agents.core, pinned: [...new Set(turn.compactPrompt.agents.pinned)].sort() }), ...(toolSearch ? { SAGAX_DEFER_RARE_TOOLS: "1" } : {}) }
     // The whole catalog, with each family of tools as one tool
     // (agents-merged.ts): a family call is asked about as the tool it
     // runs (permission broker, searched-tool-call.ts).

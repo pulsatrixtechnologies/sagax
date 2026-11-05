@@ -4637,6 +4637,22 @@ describe("postResults migration and per-routine choice (Owner 2026-10-22)", () =
       schedule: { type: "once", at: new Date(2026, 7, 18).getTime() } })).toThrow(RoutineInputError);
   });
 
+  it("stores a routine sub-agent model, snapshots it on runs, keeps it when omitted, and clears it with null (#2038)", async () => {
+    const h = harness();
+    const at = new Date(2026, 7, 18).getTime();
+    const routine = h.manager.create({ name: "R", prompt: "Do it", botId: "maus-1", subagentModel: " small-model ", schedule: { type: "once", at } });
+    expect(routine.subagentModel).toBe("small-model");
+    expect(routine.model).toBeUndefined();
+    expect(h.manager.update(routine.id, { name: "R2" })?.subagentModel).toBe("small-model");
+    h.manager.runNow(routine.id); await h.manager.tick();
+    expect(h.manager.listRuns().find((run) => run.routineId === routine.id)?.subagentModel).toBe("small-model");
+    expect(new RoutineManager(h.options).listRoutines().find((row) => row.id === routine.id)?.subagentModel).toBe("small-model");
+    expect(h.manager.update(routine.id, { subagentModel: null })?.subagentModel).toBeUndefined();
+    expect(h.manager.update(routine.id, { subagentModel: "other-model" })?.subagentModel).toBe("other-model");
+    expect(h.manager.update(routine.id, { subagentModel: "" })?.subagentModel).toBeUndefined();
+    expect(() => h.manager.create({ name: "Bad", prompt: "Do it", botId: "maus-1", subagentModel: "has space", schedule: { type: "once", at } })).toThrow(RoutineInputError);
+  });
+
   it("stores an \"Au nom de\" role, keeps \"\" as Moi, snapshots it on runs and clears it with null (2026-11-05)", async () => {
     const h = harness();
     const at = new Date(2026, 7, 18).getTime();

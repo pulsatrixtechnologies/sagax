@@ -154,8 +154,9 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       toolScope: state.toolScope,
       ...(state.guestConfined ? { guestConfined: true, confinedWhy: confinedWhy(state.threadId) } : {}),
       model: state.model,
-      // 2026-11-04: a routine's model reaches its sub-agents too (Claude).
-      ...(state.routineModel ? { subagentModel: state.routineModel } : {}),
+      // 2026-11-04: a routine's model reaches its sub-agents too (Claude);
+      // #2038: so do a routine's sub-agent model and the bot's fast model.
+      ...(state.subagentModel ? { subagentModel: state.subagentModel } : {}),
       ...(state.routineEffort ? { subagentEffort: turnEffort } : {}),
       effort: turnEffort,
       variant: state.variant,

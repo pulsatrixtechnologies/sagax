@@ -41,6 +41,8 @@ export type TurnState = {
   /** 2026-11-04: the routine's model this turn runs on (shared/routine-model.ts), else undefined. */
   routineModel: any;
   routineEffort: any;
+  /** #2038: the model Claude sub-agents run on, else undefined (they inherit the turn's). */
+  subagentModel: any;
   notice: any;
   onCall: any;
   onDispatchError: any;
@@ -209,6 +211,7 @@ export function createTurnState(init: {
     model: undefined,
     routineModel: undefined,
     routineEffort: undefined,
+    subagentModel: undefined,
     notice: undefined,
     onCall: undefined,
     onDispatchError: undefined,

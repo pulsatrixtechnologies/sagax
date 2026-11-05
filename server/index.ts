@@ -694,6 +694,7 @@ import {
   buildSpendNotification,
   deliverableNotification,
   quietForCall,
+  routineIncidentTitle,
   routineRunTitle,
   summarize,
   type Notification
@@ -21426,7 +21427,7 @@ function incidentRefused(chief: BotRecord, incidentsThreadId: string, asks: Read
   }
 }
 
-function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: string; detail: string; routine?: { routineId: string; runAs?: string }; run?: Incident["run"] }): void {
+function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: string; detail: string; routine?: { routineId: string; runAs?: string }; run?: Incident["run"]; title?: string }): void {
   const { bot, threadId } = input;
   const task = store.taskByThread(bot.id, threadId);
   // A confidential thread's incident carries no text: no title, request,
@@ -21448,7 +21449,8 @@ function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: s
   const failedCause = input.kind === "failed" ? latestFailedTurnCause(threadId) : null;
   void appendProblem(DATA_DIR, {
     kind: input.kind, botId: bot.id, botName: bot.name, ownerPrincipalId: effectiveBotOwner(bot) || null, threadId,
-    title: task?.title ?? store.groupByThread(threadId)?.name ?? null,
+    // a run names itself: the thread it reported into may be a conversation's
+    title: input.title ?? task?.title ?? store.groupByThread(threadId)?.name ?? null,
     engine: (task?.modelSelection ?? bot.modelSelection)?.instanceId ?? null,
     ...(input.routine ? { routineId: input.routine.routineId, ...(input.routine.runAs ? { runAsPrincipalId: input.routine.runAs } : {}) } : {}),
     // The reason code may read the turn's last reply (a provider error the
@@ -21465,7 +21467,7 @@ function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: s
     kind: input.kind,
     bot,
     threadId,
-    title: task?.title ?? null,
+    title: input.title ?? task?.title ?? null,
     room: group?.name ?? null,
     detail: redactSecretsInText(input.detail),
     ...(input.run ? { run: input.run } : {}),
@@ -25136,7 +25138,7 @@ routines = new RoutineManager({
       ...(run.proactive ? { ownWake: true, hops: run.proactive.hops } : { hops: 0 }),
       ...(run.runAs && !run.proactive ? { runAs: run.runAs } : {})
     });
-    reportIncident({ kind: "routine-failed", bot, threadId: run.threadId ?? bot.threadId, detail, routine: { routineId: run.routineId, ...(run.runAs ? { runAs: run.runAs } : {}) }, run: runKind });
+    reportIncident({ kind: "routine-failed", bot, threadId: run.threadId ?? bot.threadId, detail, title: redactSecretsInText(routineIncidentTitle(notificationBot.name, run)), routine: { routineId: run.routineId, ...(run.runAs ? { runAs: run.runAs } : {}) }, run: runKind });
   },
   onRunDeferred: (run, alert) => {
     const bot = store.bot(run.botId);

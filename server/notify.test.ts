@@ -2,7 +2,7 @@
 // tests are mostly about the cases where the answer is "stay quiet".
 import { describe, expect, it } from "vitest";
 
-import { blockedTarget, buildNotification, buildSpendNotification, CALL_QUIET_MS, quietForCall, routineRunTitle, summarize } from "./notify.ts";
+import { blockedTarget, buildNotification, buildSpendNotification, CALL_QUIET_MS, quietForCall, routineIncidentTitle, routineRunTitle, summarize } from "./notify.ts";
 
 const bot = { id: "bot-1", name: "Scout", threadId: "thread-1" };
 
@@ -35,6 +35,15 @@ describe("buildNotification", () => {
     expect(routineRunTitle("Scout", {}, "waiting")).toBeUndefined();
     const title = routineRunTitle("Scout", { webhookId: "hook-1" }, "waiting");
     expect(buildNotification("routine-deferred", bot, "thread-1", "New email: waiting for the reset", { title })?.title).toBe("Scout's webhook run is waiting");
+  });
+
+  // 2026-11-05: a routine that reported into the bot's main thread showed that
+  // thread's last conversation title as the failed routine in the inbox.
+  it("titles a failed run's incident by the run, never by the thread it reported into", () => {
+    expect(routineIncidentTitle("Scout", { routineName: "Nightly check" })).toBe("Nightly check");
+    expect(routineIncidentTitle("Scout", { routineName: "Nightly check", proactive: { mode: "proactive" } })).toBe("Scout's proactive wake failed");
+    expect(routineIncidentTitle("Scout", { routineName: "New email", webhookId: "hook-1" })).toBe("Scout's webhook run failed");
+    expect(routineIncidentTitle("Scout", { routineName: "  " })).toBe("Routine failed");
   });
 
   it("announces a delegation settle as a resume with results", () => {

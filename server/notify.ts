@@ -155,6 +155,14 @@ export function routineRunTitle(who: string, run: { proactive?: unknown; webhook
   return undefined;
 }
 
+/** The title a failed run's incident carries in the console's problem log and
+ * inbox. It names the run, never the thread the run reported into: a routine
+ * without a thread of its own reports into the bot's main thread, whose title
+ * is whatever someone last asked the bot there, unrelated to the routine. */
+export function routineIncidentTitle(who: string, run: { proactive?: unknown; webhookId?: string; routineName: string }): string {
+  return routineRunTitle(who, run, "failed") ?? (run.routineName.trim() || "Routine failed");
+}
+
 /** At most this many choices ride a notification; the phone shows fewer. */
 export const NOTIFICATION_CHOICES_MAX = 10;
 /** A choice longer than this is clipped: a button, not a paragraph. */

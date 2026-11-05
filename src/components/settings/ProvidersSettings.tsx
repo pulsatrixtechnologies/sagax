@@ -29,6 +29,7 @@ import {
 } from "@/lib/provider-rows";
 import { PERSONAL_PROVIDER_NAMES, type PersonalProvider } from "../../../shared/provider-accounts";
 import { useProviderAccounts } from "@/lib/provider-accounts";
+import { takeProviderRow, useProviderRowRequest } from "@/lib/provider-row-request";
 import { PersonalProviderKey, PersonalProviderServerForm } from "./PersonalProviderAccount";
 import { EngineRow, useModelsVoiceAccess } from "../EnginesSettings";
 import { engineReady } from "../EngineLibrary";
@@ -367,6 +368,7 @@ export function ProvidersSettings() {
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const editingKey = useOpenProviderKey();
+  const rowRequest = useProviderRowRequest();
   const issuer = org?.org.identity.issuer;
   const nameOf = (instanceId: string) => state.instances.find((entry) => entry.instanceId === instanceId)?.displayName ?? "";
 
@@ -402,6 +404,18 @@ export function ProvidersSettings() {
     if (placed.toConnect.some((row) => row.id === match.id)) requestSettingsCard("providers.toConnect");
     if (placed.off.some((row) => row.id === match.id)) requestSettingsCard("providers.adminOff");
   }, [editingKey, rows]);
+
+  // A claude.ai card's "Reconnect the account" opens the Claude engine row.
+  useEffect(() => {
+    if (rowRequest !== "claude") return;
+    const match = rows.find((row) => row.claude);
+    if (!match) return;
+    takeProviderRow();
+    setOpenRow(match.id);
+    const placed = splitProviderRows(rows);
+    if (placed.toConnect.some((row) => row.id === match.id)) requestSettingsCard("providers.toConnect");
+    if (placed.off.some((row) => row.id === match.id)) requestSettingsCard("providers.adminOff");
+  }, [rowRequest, rows]);
 
   const line = (row: ProviderRow) => (
     <ProviderLine key={row.id} row={row} open={openRow === row.id} onToggle={() => setOpenRow(openRow === row.id ? null : row.id)} nameOf={nameOf}

@@ -33,7 +33,7 @@ import { DESCRIBE_TOOL, SEARCH_TOOL, ToolDirectory, directoryCallTarget, isDirec
 import { lenientToolValidator, schemaProblems } from "./mcp/mcp-schema-validator.ts";
 import { parseGateSearch, pinnedToolNames, searchedCatalog } from "./mcp/mcp-gate-search.ts";
 import { QUERY_TOOL, QUERY_TOOL_NAME, ResultStore, answerQuery, describeShape, exampleQuery } from "./mcp/mcp-shape.ts";
-import { DEFAULT_RESULT_BUDGET, type HeldResult, trimResultText, trimStructured } from "./mcp/mcp-trim.ts";
+import { DEFAULT_RESULT_BUDGET, type HeldResult, trimResultText } from "./mcp/mcp-trim.ts";
 import { ToolNameAliases, mapJsonStrings } from "./mcp/mcp-tool-names.ts";
 import { killCliTree } from "./procs.ts";
 import { misuseGateBlockText } from "../shared/misuse-guardrails.ts";
@@ -270,29 +270,6 @@ function spill(tool: string, text: string): string | undefined {
   }
 }
 
-/** Whether `text` is `value` serialized: the same data, object key order
- * aside (a server may build the two copies differently); array order counts. */
-function sameJson(text: string, value: unknown): boolean {
-  try {
-    return sameValue(JSON.parse(text), value, 0);
-  } catch {
-    return false;
-  }
-}
-
-function sameValue(a: unknown, b: unknown, depth: number): boolean {
-  if (a === b) return true;
-  if (depth > 200 || !a || !b || typeof a !== "object" || typeof b !== "object") return false;
-  if (Array.isArray(a) || Array.isArray(b)) {
-    return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item, i) => sameValue(item, b[i], depth + 1));
-  }
-  const left = a as Record<string, unknown>;
-  const right = b as Record<string, unknown>;
-  const keys = Object.keys(left);
-  return keys.length === Object.keys(right).length
-    && keys.every((key) => Object.hasOwn(right, key) && sameValue(left[key], right[key], depth + 1));
-}
-
 /** Rewrite one `tools/call` result in place. Returns true when anything was
  * actually trimmed, so the caller can report it on stderr. */
 function trimCallResult(result: Json, tool: string): boolean {
@@ -313,34 +290,39 @@ function trimCallResult(result: Json, tool: string): boolean {
   const share = Math.floor(BUDGET / textBlocks.length);
   const path = spill(tool, textBlocks.map((block) => block.text).join("\n"));
   const held = textBlocks.length === 1 ? hold(tool, textBlocks[0]!.text) : undefined;
-  // The usual shape: one text block that is structuredContent serialized.
-  const structuredIsText = textBlocks.length === 1 && Boolean(result.structuredContent) && typeof result.structuredContent === "object"
-    && sameJson(textBlocks[0]!.text, result.structuredContent);
   let trimmed = false;
-  let keptValue: unknown;
   for (const block of textBlocks) {
     const outcome = trimResultText({ text: block.text, budget: share, spillPath: path, spillHint: SPILL_HINT, toolName: tool, held });
     if (!outcome.trimmed) continue;
     block.text = outcome.text;
-    keptValue = outcome.value;
     trimmed = true;
   }
 
-  // A tool that also answers with structuredContent would otherwise hand the
-  // provider a second, full copy of everything just cut. When it is the same
-  // data as the text, it keeps exactly the records the text kept; otherwise
-  // it is trimmed the same way on its own, structurally only so it stays
-  // valid against the tool's output schema, and left untouched when it
-  // cannot be cut without mangling it.
-  if (trimmed && result.structuredContent && typeof result.structuredContent === "object") {
-    if (structuredIsText && keptValue && typeof keptValue === "object") {
-      result.structuredContent = keptValue as Json;
-    } else {
-      const structured = trimStructured(result.structuredContent, BUDGET);
-      if (structured) result.structuredContent = structured.value as Json;
-    }
-  }
+  // A tool that also answers with structuredContent is dropped to the text
+  // alone once that text was cut. Measured 2026-11-05 (Claude Code 2.1.288
+  // in production, 2.1.318 locally): when a result carries structuredContent
+  // the engine hands the model that value serialized INSTEAD of the text
+  // blocks, so a trimmed copy kept beside the text either put the whole
+  // payload back in context (a document, which has no array to cut) or hid
+  // the banner that says the result is incomplete. Every bot's flow_run read
+  // came back whole, 40 KB a call, with the gate "on". The text block is the
+  // one copy every engine shows, banner included, and the whole value stays
+  // held for query_result. A tool's outputSchema is stripped from the catalog
+  // (withoutOutputSchema) so no client refuses the result for lacking it.
+  if (trimmed && result.structuredContent !== undefined) delete result.structuredContent;
   return trimmed;
+}
+
+/** The catalog a trimming gate shows never declares an outputSchema: a
+ * trimmed result has no structuredContent (trimCallResult), and an MCP
+ * client that saw the schema would reject the result for lacking one. */
+function withoutOutputSchema(tools: Json[]): Json[] {
+  if (BUDGET === 0) return tools;
+  return tools.map((tool) => {
+    if (!isRecord(tool) || tool.outputSchema === undefined) return tool;
+    const { outputSchema: _dropped, ...rest } = tool;
+    return rest as Json;
+  });
 }
 
 /** The connector status the harness and Settings read: what the server
@@ -524,7 +506,7 @@ async function searchRoute(line: string, message: Json): Promise<void> {
       if (params?.cursor !== undefined) return rejectRequest(message.id, -32602, "Invalid cursor");
       const { directory, searched } = await loadSearch();
       const tools: Json[] = searched ? [...directory.pinned(pinnedToolNames(directory.tools, SEARCH!)), ...directory.listed(searchContext)] : [...directory.tools];
-      return reply(message.id, { tools: BUDGET > 0 ? [...tools.filter((tool) => tool.name !== QUERY_TOOL_NAME), QUERY_TOOL] : tools });
+      return reply(message.id, { tools: BUDGET > 0 ? [...withoutOutputSchema(tools.filter((tool) => tool.name !== QUERY_TOOL_NAME)), QUERY_TOOL] : tools });
     }
     const { directory, searched } = await loadSearch();
     const name = params?.name;
@@ -733,9 +715,11 @@ createInterface({ input: child.stdout }).on("line", (line) => {
     result.tools = outcome.tools;
     reportToolNames(tools.map((tool) => tool.name), outcome);
   }
-  // query_result rides the last page of the catalog, in place of any upstream tool of that name.
-  if (BUDGET > 0 && request?.kind === "list" && message.error === undefined && isRecord(result) && Array.isArray(result.tools) && result.nextCursor === undefined) {
-    result.tools = [...result.tools.filter((tool: unknown) => !isRecord(tool) || tool.name !== QUERY_TOOL_NAME), QUERY_TOOL];
+  // query_result rides the last page of the catalog, in place of any upstream
+  // tool of that name; no page keeps an outputSchema (see trimCallResult).
+  if (BUDGET > 0 && request?.kind === "list" && message.error === undefined && isRecord(result) && Array.isArray(result.tools)) {
+    const tools = withoutOutputSchema(result.tools.filter((tool: unknown) => !isRecord(tool) || tool.name !== QUERY_TOOL_NAME));
+    result.tools = result.nextCursor === undefined ? [...tools, QUERY_TOOL] : tools;
   }
   // 2026-11-02: a connector name Grok cannot call never reaches the bot:
   // the gateway's own tools (api_search, api_describe, api_list, flow...,

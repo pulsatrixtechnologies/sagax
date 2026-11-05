@@ -8,6 +8,8 @@ import {
   readCostHistory,
   recordCostState,
   restoredCostBase,
+  restoredCostState,
+  turnModelUsage,
   turnCostFromRunningTotal,
 } from "./cost.ts";
 import {
@@ -16,13 +18,14 @@ import {
   claudeLimitRefusal,
 } from "./limits.ts";
 import { removePrivateTempDir } from "./helpers.ts";
-import type { NativeTurnResult } from "./session-types.ts";
+import { sumTurnModels, type NativeTurnResult } from "./session-types.ts";
+import type { TurnModelUsage } from "../../../shared/runtime-events.ts";
 import type { ClaudeTurnCtx } from "./turn-ctx.ts";
 
 export function attachClaudeWire(ctx: ClaudeTurnCtx): void {
   const {
     session, threadId, turnId, emit, base, retryState, active,
-    closeSession, armIdle, carriedCosts, renewedTurns,
+    closeSession, armIdle, carriedCosts, carriedModels, renewedTurns,
     refreshSubscriptionHome, sendTurn,
   } = ctx;
 
@@ -31,6 +34,7 @@ const settle = (
   stopReason: string | null,
   total: number | null = null,
   usage?: { input: number; output: number; cachedInput?: number },
+  models?: TurnModelUsage[],
 ) => {
   const t = session.turn;
   if (!t || t.settled) return;
@@ -130,10 +134,13 @@ const settle = (
   carriedCosts.delete(t.turnId);
   renewedTurns.delete(t.turnId);
   const cost = carried === undefined ? own : Number(((own ?? 0) + carried).toFixed(10));
-  emit({ ...base(threadId, t.turnId), type: "turn.completed", ok, stopReason, cost, ...(usage ? { usage } : {}) });
+  const carriedSplit = carriedModels.get(t.turnId);
+  carriedModels.delete(t.turnId);
+  const split = sumTurnModels(carriedSplit, models);
+  emit({ ...base(threadId, t.turnId), type: "turn.completed", ok, stopReason, cost, ...(usage ? { usage } : {}), ...(split?.length ? { models: split } : {}) });
   if (session.child.exitCode === null && !session.closing) armIdle(threadId);
 };
-const settleResult = (result: NativeTurnResult) => settle(result.ok, result.stopReason, result.cost, result.usage);
+const settleResult = (result: NativeTurnResult) => settle(result.ok, result.stopReason, result.cost, result.usage, result.models);
 const currentTurnId = () => session.turn?.turnId ?? turnId;
 // The turn ran into its account's usage limit: one plain line, once, in
 // place of the CLI's words or whatever else the refused call said. It
@@ -151,6 +158,19 @@ const reachLimit = (frame: { api_error_params?: { rate_limit_info?: unknown } },
 // The process's first result with a cost says what --resume restored,
 // which its turns are measured from; every result is kept for a later
 // resume. A result without one (an API error) decides nothing yet.
+// The per-model usage of one result: what modelUsage grew by since the last
+// result of this process (the first one starts from what --resume restored).
+// Called before noteCostState, which records this very state in the history.
+const noteModelUsage = (total: unknown, modelUsage: unknown, usage: Parameters<typeof restoredCostBase>[2]) => {
+  const state = claudeCostSnapshot(total, modelUsage);
+  if (!state) return undefined;
+  const base = session.modelBase ?? (session.sessionId
+    ? restoredCostState(readCostHistory()[session.sessionId] ?? [], state, usage)
+    : { total: 0, models: {} });
+  session.modelBase = state;
+  const split = turnModelUsage(base, state);
+  return split.length ? split : undefined;
+};
 const noteCostState = (total: unknown, modelUsage: unknown, usage: Parameters<typeof restoredCostBase>[2]) => {
   const state = claudeCostSnapshot(total, modelUsage);
   if (!state) return;
@@ -166,5 +186,6 @@ const noteCostState = (total: unknown, modelUsage: unknown, usage: Parameters<ty
   ctx.settleResult = settleResult;
   ctx.currentTurnId = currentTurnId;
   ctx.reachLimit = reachLimit;
+  ctx.noteModelUsage = noteModelUsage;
   ctx.noteCostState = noteCostState;
 }

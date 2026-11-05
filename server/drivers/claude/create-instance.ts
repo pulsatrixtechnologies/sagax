@@ -1,3 +1,4 @@
+import type { TurnModelUsage } from "../../../shared/runtime-events.ts";
 /** Claude ProviderInstance create: session maps, sendTurn wiring (#1383). */
 import { homedir } from "node:os";
 import type { ApprovalMode } from "../../../shared/approval-mode.ts";
@@ -281,6 +282,8 @@ export async function createClaudeInstance(
   const freshNextTurn = new Set<string>();
   /** Cost of the full sessions a renewed turn left behind, by turn. */
   const carriedCosts = new Map<string, number>();
+  /** The same, split by model. */
+  const carriedModels = new Map<string, TurnModelUsage[]>();
   // #1768: when this person's Claude login home is renewed, retire idle
   // processes that still hold the previous token so they cannot race the
   // rotated refresh grant.
@@ -370,6 +373,7 @@ export async function createClaudeInstance(
     renewedTurns,
     freshNextTurn,
     carriedCosts,
+    carriedModels,
     liveCommands,
     liveCommandsKey,
     listeners,

@@ -77,6 +77,7 @@ export {
 export {
   claudeCostSnapshot,
   restoredCostBase,
+  turnModelUsage,
   turnCostFromRunningTotal,
   type ClaudeCostSnapshot,
 } from "./claude/cost.ts";

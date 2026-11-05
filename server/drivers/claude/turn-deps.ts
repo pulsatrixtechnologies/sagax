@@ -1,3 +1,4 @@
+import type { TurnModelUsage } from "../../../shared/runtime-events.ts";
 /** Shared deps bag for Claude create / sendTurn phases (#1383 wave 5). */
 import type { ApprovalMode } from "../../../shared/approval-mode.ts";
 import type {
@@ -58,6 +59,7 @@ export type SendTurnDeps = {
   renewedTurns: Set<string>;
   freshNextTurn: Set<string>;
   carriedCosts: Map<string, number>;
+  carriedModels: Map<string, TurnModelUsage[]>;
   liveCommands: Map<string, { names: string[]; terminal: string[] }>;
   liveCommandsKey: (botId: string, identity: string | undefined) => string;
   listeners: Set<RuntimeEventListener>;
@@ -94,4 +96,5 @@ export type SettleFn = (
   stopReason: string | null,
   total?: number | null,
   usage?: NativeTurnResult["usage"],
+  models?: TurnModelUsage[],
 ) => Promise<void> | void;

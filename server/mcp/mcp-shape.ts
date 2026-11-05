@@ -13,6 +13,8 @@ import { QUERY_TOOL_NAME, trimResultText } from "./mcp-trim.ts";
 export { QUERY_TOOL_NAME };
 
 const MAX_KEYS = 12;
+/** The least a string window shows, however small the budget. */
+const MIN_WINDOW = 256;
 /** Results held per gate process; the oldest go first. A session's gate lives as long as its MCP connection. */
 const DEFAULT_MAX_BYTES = 64 * 1024 * 1024;
 
@@ -28,12 +30,14 @@ export const QUERY_TOOL = {
     + "The shaped result names its handle (\"r3\") and its shape; pass that handle and a JMESPath query that selects only "
     + "the fields and rows you need, e.g. items[?price < `200`].{name: name, price: price} | [0:30], length(items), "
     + "sort_by(items, &price)[0:5].name, or items[?contains(name, `pizza`)].id. Big answers are cut too, so narrow "
-    + "the query rather than asking for everything. Read-only: it never calls the original tool again.",
+    + "the query rather than asking for everything. A query that selects one long string (a document's text) comes back "
+    + "as a window; pass from (the offset the window names) to read the next part. Read-only: it never calls the original tool again.",
   inputSchema: {
     type: "object",
     properties: {
       result: { type: "string", description: "The handle named in the shaped result, such as \"r3\"." },
       query: { type: "string", description: "A JMESPath expression over the whole held result." },
+      from: { type: "integer", minimum: 0, description: "When the query selects one string: the character offset to start the window at (the previous window names it). Default 0." },
     },
     required: ["result", "query"],
     additionalProperties: false,
@@ -140,8 +144,34 @@ export function answerQuery(store: ResultStore, args: unknown, budget: number): 
     const reason = error instanceof Error ? error.message : String(error);
     return text(`Invalid JMESPath query (${reason}). The held result "${args.result}" is ${shape}. Examples: ${example}; length(@).`, true);
   }
+  if (typeof selected === "string") return windowString(selected, args.result, args.query, args.from, budget);
   const body = JSON.stringify(selected) ?? "null";
   if (body.length <= budget) return text(body);
   const out = trimResultText({ text: body, budget, toolName: QUERY_TOOL_NAME, held: { handle: args.result, shape, example, queried: true } });
   return text(out.text);
+}
+
+/** A query that selects one long string is a document the model wants to
+ * read, not a record set it can narrow: it is shown raw, one budget-sized window
+ * at a time, each window naming the offset the next call passes as `from`.
+ * Cutting it the way a JSON record is cut would stop at the first window
+ * for good; the model then re-ran the tool and the whole document came back. */
+function windowString(value: string, handle: string, query: string, from: unknown, budget: number): QueryToolResult {
+  const start = typeof from === "number" && Number.isInteger(from) && from >= 0 ? from : 0;
+  // A string that fits is answered as any other selection, JSON-encoded.
+  if (start === 0 && value.length + 2 <= budget) return text(JSON.stringify(value));
+  if (start >= value.length) {
+    return text(`"${handle}" ${query} is ${value.length} chars long; from ${start} is past its end. The last window starts before ${value.length}.`, true);
+  }
+  const next = (end: number) => `${QUERY_TOOL_NAME} {"result":"${handle}","query":${JSON.stringify(query)},"from":${end}}`;
+  const headOf = (end: number) => `⚠️ WINDOW by Sagax: chars ${start} to ${end} of ${value.length} of your query on "${handle}"; the rest was NOT shown.${end < value.length ? ` Next part: ${next(end)}.` : " This is the last part."}`;
+  const footOf = (end: number) => end < value.length ? `⚠️ WINDOW by Sagax: ends at char ${end} of ${value.length}; next part: ${next(end)}.` : `⚠️ WINDOW by Sagax: last part, ends at char ${end} of ${value.length}.`;
+  // The widest the two banners get: the last window, or the one just before
+  // it, which still names the next call with the longest offset.
+  const widest = Math.max(...[value.length, value.length - 1].map((end) => headOf(end).length + footOf(end).length));
+  const room = Math.max(MIN_WINDOW, budget - (widest + 4));
+  let end = Math.min(value.length, start + room);
+  const last = value.charCodeAt(end - 1);
+  if (end < value.length && last >= 0xd800 && last <= 0xdbff) end -= 1;
+  return text(`${headOf(end)}\n\n${value.slice(start, end)}\n\n${footOf(end)}`);
 }

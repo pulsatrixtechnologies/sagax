@@ -100,6 +100,7 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("artifacts:update", "own", "update_artifact"),
   p("artifacts:list", "read", "list_artifacts"),
   p("artifacts:delete", "own", "delete_artifact"),
+  p("artifacts:claude", "own", "claude_artifact"),
   p("pages:propose", "own", "propose_page"),
   p("pages:comments", "own", "page_comments"),
   // place_call is the same tool under its compatibility name

@@ -84,6 +84,8 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   update_artifact: "conversation",
   list_artifacts: "read",
   delete_artifact: "conversation",
+  // claude.ai artifacts through the speaking person's own Claude account (#2018)
+  claude_artifact: "conversation",
   // a page proposal: a card in the member's own conversation; publishing is theirs
   propose_page: "conversation",
   // the annotations of the member's own page, answered in their own conversation

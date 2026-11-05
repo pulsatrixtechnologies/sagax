@@ -353,7 +353,7 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   "add_mcp_server", "skill_manage", "rules_update", "docs_update",
   "launch_cloud_agent", "list_cloud_agents", "get_cloud_agent", "cancel_cloud_agent", "archive_cloud_agent",
   "cloud_agent_follow_up", "cloud_agent_transcript", "find_cloud_agent_by_pr", "list_cloud_agent_artifacts",
-  "save_artifact", "update_artifact", "delete_artifact", "list_artifacts",
+  "save_artifact", "update_artifact", "delete_artifact", "list_artifacts", "claude_artifact",
   "manage_settings", "sagax_settings", "manage_pairing", "offer_shell_terminal", "list_terminal_resources", "resource_usage", "vm_exec",
   "shared_computer", "list_shared_computers", "nudge_person", "remove_reaction", "retry_thread",
   "read_transcript", "read_transcript_cold", "read_transcript_page", "read_latest_page", "read_latest_page_with_threads",

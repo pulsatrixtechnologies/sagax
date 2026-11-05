@@ -189,7 +189,7 @@ export interface Routine {
   /** A pre-check run before each scheduled turn (server/routines/routine-precheck.ts):
    * a condition on its own receipts, or (2026-10-26) a watch that starts the
    * run only when something changes (shared/routine-watch.ts). */
-  precheck?: RoutineWatchPrecheck | { kind: "condition"; test: string; [field: string]: unknown };
+  precheck?: RoutineWatchPrecheck | { kind: "condition"; test: string; [field: string]: unknown } | { kind: "code"; check: string };
   /** 2026-10-28 (shared/routine-folders.ts): the folder of its bot it sits
    * in. Absent: no folder. */
   folder?: string;

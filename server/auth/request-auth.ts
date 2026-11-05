@@ -655,6 +655,10 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/background-brief\/pass$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/background-brief\/[\w-]+\/(?:reject|keep)$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/artifacts\/art_[\w-]+\/refresh$/ },
+  // claude.ai artifacts (server/routes/claude-artifacts.ts, #2018): every
+  // call runs through the session person's own Claude account
+  { methods: ["GET"], path: /^\/api\/claude-artifacts\/(?:summary|comments)$/ },
+  { methods: ["POST"], path: /^\/api\/claude-artifacts\/(?:comments\/(?:reply|resolve)|copy)$/ },
   // Share as Template: a single-bot package without secrets (owner or admin).
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/export$/ },
   // The bot's standing instructions for the profile's Instructions row

@@ -99,6 +99,7 @@ import { ToolResults } from "./tools/tool-results.ts";
 import {
   basename,
   dirname,
+  isAbsolute,
   join,
   relative,
   sep
@@ -2313,6 +2314,12 @@ import type { Artifact } from "../shared/artifacts.ts";
 import { createPreferenceStore } from "./people/preference-import.ts";
 import { createPreferenceImportRoutes } from "./routes/preference-import.ts";
 import { createArtifactInternalRoutes, createArtifactRoutes } from "./routes/artifacts.ts";
+import { createClaudeArtifactInternalRoutes, createClaudeArtifactRoutes } from "./routes/claude-artifacts.ts";
+import { onArtifactPublished } from "./claude-artifacts/events.ts";
+import { runClaudeArtifact } from "./claude-artifacts/runner.ts";
+import { ArtifactSummaryCache, listClaudeArtifactComments, threadWantsClaude, type PersonArtifactResult } from "./claude-artifacts/service.ts";
+import { TrackedArtifactStore } from "./claude-artifacts/tracked.ts";
+import { CLAUDE_ARTIFACT_COMMENTS_ROUTINE, claudeArtifactCommentsNote } from "./claude-artifacts/comments-routine.ts";
 import { createBotTaskInternalRoutes, createBotTaskRoutes } from "./routes/bot-task-list.ts";
 import { createBotTaskStore } from "./bots/bot-task-list.ts";
 import { botTasksFrameAllowed, sameBotTaskOwner } from "../shared/bot-task-list.ts";
@@ -25061,6 +25068,8 @@ routines = new RoutineManager({
   botName: (botId) => store.bot(botId)?.name,
   evaluateWatch: (routine, watch) => routineWatchEvaluator(routine, watch),
   forgetWatch: (routineId) => routineWatchStates.forget(routineId),
+  // #2018: "Commentaires des artefacts" (server/claude-artifacts/comments-routine.ts)
+  evaluateCode: (routine) => claudeArtifactCommentsCheck(routine),
   languageFor: (routine) => {
     const person = IDENTITY.kind === "perspicax" && routine.botId
       ? effectiveRunAs({ botId: routine.botId, ...(routine.runAs ? { runAs: routine.runAs } : {}) })
@@ -32041,6 +32050,13 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       });
       return { engine: name };
     }
+  }),
+  // claude_artifact: claude.ai artifacts through the speaker's own account (#2018)
+  createClaudeArtifactInternalRoutes({
+    call: (principalId, tool, input, page) => personClaudeArtifactCall(principalId, tool, input, page),
+    ownsThread: (botId, threadId) => Boolean(connectorThread(botId, threadId)),
+    speaker: (threadId) => safetyPrincipal(threadId).principalId ?? (IDENTITY.kind === "solo" ? localPrincipalId() : undefined),
+    workspaceFile: (botId, file) => claudeArtifactWorkspaceFile(botId, file)
   }),
   // save_artifact, update_artifact, list_artifacts, delete_artifact (server/routes/artifacts.ts)
   createArtifactInternalRoutes({
@@ -40507,6 +40523,130 @@ function claudeAccountForPrincipal(principalId: string): { cli: string; env: Nod
   }
   return { cli, env, key: `instance:${instanceId}` };
 }
+
+// claude.ai artifacts (#2018): every call runs through the person's OWN
+// Claude account (claudeAccountForPrincipal), never another person's.
+async function personClaudeArtifactCall(
+  principalId: string,
+  tool: "Artifact" | "ArtifactData" | "ArtifactComments",
+  input: Record<string, unknown>,
+  page?: { html?: string; file?: string },
+): Promise<PersonArtifactResult> {
+  // Solo: the one local person only.
+  if (IDENTITY.kind === "solo" && principalId.trim().toLowerCase() !== localPrincipalId().trim().toLowerCase()) {
+    return { ok: false, unavailable: "not_signed_in" };
+  }
+  const account = claudeAccountForPrincipal(principalId);
+  if ("unavailable" in account) return { ok: false, unavailable: account.unavailable };
+  return runClaudeArtifact({ account: { cli: account.cli, env: account.env }, tool, input, ...(page ?? {}) });
+}
+let claudeArtifactSummaries: ArtifactSummaryCache | undefined;
+function claudeArtifactSummaryCache(): ArtifactSummaryCache {
+  return claudeArtifactSummaries ??= new ArtifactSummaryCache();
+}
+let claudeArtifactTrackedStore: TrackedArtifactStore | undefined;
+function claudeArtifactTracked(): TrackedArtifactStore {
+  return claudeArtifactTrackedStore ??= new TrackedArtifactStore(join(DATA_DIR, "claude-artifacts.json"));
+}
+/** A file the bot names for claude_artifact: inside its workspace, or null. */
+function claudeArtifactWorkspaceFile(botId: string, file: string): string | null {
+  try {
+    const root = realpathSync(workspaceDir(botId));
+    const resolved = realpathSync(isAbsolute(file) ? file : join(root, file));
+    if (resolved !== root && !resolved.startsWith(`${root}${sep}`)) return null;
+    return statSync(resolved).isFile() ? resolved : null;
+  } catch {
+    return null;
+  }
+}
+/** The person's "Commentaires des artefacts" routine, made once, turned on. */
+function ensureClaudeArtifactCommentsRoutine(principalId: string, botId: string): void {
+  if (!routines || !store.bot(botId)) return;
+  const tracked = claudeArtifactTracked();
+  const all = routines.listRoutines();
+  const key = principalId.trim().toLowerCase();
+  const known = tracked.routineFor(key);
+  if (known && all.some((routine) => routine.id === known)) return;
+  const existing = all.find((routine) => routine.precheck?.kind === "code"
+    && (routine.precheck as { check?: string }).check === CLAUDE_ARTIFACT_COMMENTS_ROUTINE.check
+    && (routine.runAs ?? "").trim().toLowerCase() === key);
+  if (existing) { tracked.setRoutine(key, existing.id); return; }
+  try {
+    const created = routines.create({
+      name: CLAUDE_ARTIFACT_COMMENTS_ROUTINE.name,
+      prompt: CLAUDE_ARTIFACT_COMMENTS_ROUTINE.prompt,
+      botId,
+      schedule: { type: "interval", everyMinutes: CLAUDE_ARTIFACT_COMMENTS_ROUTINE.everyMinutes, anchorAt: Date.now() },
+      precheck: { kind: "code", check: CLAUDE_ARTIFACT_COMMENTS_ROUTINE.check },
+      overlap: "skip",
+    }, undefined, { runAs: key });
+    routines.update(created.id, { enabled: true });
+    tracked.setRoutine(key, created.id);
+  } catch (error) {
+    console.warn(`claude artifacts: the comments routine could not be made (${error instanceof Error ? error.message : String(error)})`);
+  }
+}
+/** The routine's code check: wake only on threads sent to Claude. */
+async function claudeArtifactCommentsCheck(routine: Routine): Promise<{ wake: true; note: string } | { wake: false; reason: string }> {
+  const principalId = routine.runAs ?? (IDENTITY.kind === "solo" ? localPrincipalId() : undefined);
+  if (!principalId) return { wake: false, reason: "no person for this routine" };
+  const artifacts = claudeArtifactTracked().forPrincipal(principalId);
+  if (!artifacts.length) return { wake: false, reason: "no artifact to watch" };
+  const waiting: Parameters<typeof claudeArtifactCommentsNote>[0] = [];
+  for (const artifact of artifacts) {
+    try {
+      const threads = (await listClaudeArtifactComments(personClaudeArtifactCall, principalId, artifact.url)).filter(threadWantsClaude);
+      if (threads.length) waiting.push({ url: artifact.url, title: artifact.title, threads });
+    } catch {
+      // one artifact that cannot be read never hides the others
+    }
+  }
+  if (!waiting.length) return { wake: false, reason: "no comment waits for Claude" };
+  return { wake: true, note: claudeArtifactCommentsNote(waiting) };
+}
+onArtifactPublished((event) => {
+  claudeArtifactSummaries?.invalidate(event.url);
+  if (event.owned === false || !event.botId) return;
+  const principalId = event.principalId
+    ?? (event.threadId ? safetyPrincipal(event.threadId).principalId : undefined)
+    ?? (IDENTITY.kind === "solo" ? localPrincipalId() : undefined);
+  if (!principalId) return;
+  claudeArtifactTracked().track({ principalId, botId: event.botId, url: event.url, title: event.title ?? "" });
+  ensureClaudeArtifactCommentsRoutine(principalId, event.botId);
+});
+function claudeArtifactPrincipal(auth: RequestAuth): string | undefined {
+  if (auth.kind === "loopback" && auth.trust === "service") return undefined;
+  return actorPrincipalId(auth) || (IDENTITY.kind === "solo" ? localPrincipalId() : undefined);
+}
+ROUTES.push(createClaudeArtifactRoutes({
+  principalId: claudeArtifactPrincipal,
+  call: personClaudeArtifactCall,
+  cache: claudeArtifactSummaryCache(),
+  copy: async (auth, botId, threadId, url) => {
+    const bot = store.bot(botId);
+    if (!bot) return { status: 404, error: "unknown bot" };
+    const viewerId = channelFilterViewerId(auth);
+    const viewer = viewerId ? authzViewerFromId(viewerId) : undefined;
+    if (viewerId && !(viewer && canOnBot(viewer, "bot.use", botFacts(bot)))) return { status: 403, error: "not your bot" };
+    const thread = threadId ?? botMainThread(botId);
+    if (!thread) return { status: 404, error: "no conversation" };
+    try {
+      await acceptDirectSend({
+        botId, threadId: thread,
+        text: `Publie une copie de ${url} depuis ton compte avec claude_artifact.`,
+        sendId: randomUUID().replaceAll("-", ""),
+        sender: messageSender(auth),
+        trigger: usageTriggerFor(auth),
+        speaker: speakerFor(auth),
+        personPresent: true
+      });
+      return { ok: true };
+    } catch (error) {
+      if (error instanceof DirectSendRefused) return { status: error.status, error: error.message };
+      throw error;
+    }
+  }
+}));
 
 // "Connect Microsoft Teams" cards (server/routes/connector-setup.ts): the
 // person who asked checks theirs; Claude's inventory is read again.

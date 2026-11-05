@@ -13331,5 +13331,6 @@
   "roles.missing.adminMessage": "{person} asks for a ConnectWise permission for the bot {bot}. The role {role} was refused: {permission}. To fix: {fix}. Refused {count} times, last on {when} (ET). Tools: {tools}.",
   "routines.effort.label": "Effort",
   "routines.effort.botDefault": "Bot's effort",
-  "routineEditor.hint.effort": "Its runs and their sub-agents use this effort. Chat keeps the bot's effort."
+  "routineEditor.hint.effort": "Its runs and their sub-agents use this effort. Chat keeps the bot's effort.",
+  "pages.alwaysOnTop": "Always on top"
 }

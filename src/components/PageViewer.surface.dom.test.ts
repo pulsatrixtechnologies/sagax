@@ -117,4 +117,34 @@ describe("the open page", () => {
     act(() => (host.querySelector("[data-page-close]") as HTMLButtonElement).click());
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it("offers Always on top only in an own desktop window (#2046)", async () => {
+    render({ follow: true });
+    await flush();
+    act(() => (host.querySelector("[data-page-more]") as HTMLButtonElement).click());
+    // the menu portals to document.body
+    expect(document.querySelector("[data-page-always-on-top]")).toBeNull();
+    // close the menu and remount so open state does not carry over
+    act(() => root!.unmount());
+    host.innerHTML = "";
+    root = createRoot(host);
+
+    const setAlwaysOnTop = vi.fn(async () => true);
+    const isAlwaysOnTop = vi.fn(async () => false);
+    (window as unknown as { artifactWindowSelf: { isAlwaysOnTop: typeof isAlwaysOnTop; setAlwaysOnTop: typeof setAlwaysOnTop } }).artifactWindowSelf = {
+      isAlwaysOnTop,
+      setAlwaysOnTop,
+    };
+    render({ follow: true });
+    await flush();
+    act(() => (host.querySelector("[data-page-more]") as HTMLButtonElement).click());
+    await flush();
+    const row = document.querySelector("[data-page-always-on-top]") as HTMLButtonElement;
+    expect(row).not.toBeNull();
+    expect(row.getAttribute("aria-checked")).toBe("false");
+    await act(async () => { row.click(); });
+    await flush();
+    expect(setAlwaysOnTop).toHaveBeenCalledWith(true);
+    delete (window as unknown as { artifactWindowSelf?: unknown }).artifactWindowSelf;
+  });
 });

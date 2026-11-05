@@ -3,6 +3,9 @@
  * ?lang=<code>&skin=<id>&page=<pageId>&kind=html|markdown|presentation
  * &status=published|draft&policy=off&view=dialog|card&deleted=1 (the page was
  * deleted: every /api/pages/<id> call answers the server's 404)
+ * &window=1 draws the page as an own desktop window (follow + mock
+ * artifactWindowSelf) so Always on top (#2046) shows in « ⋯ »
+ * &menu=1 opens the more menu; &ontop=1 starts Always on top checked
  * The page id must be one a pages server behind /pages/ knows (the capture
  * script runs one); without it the frame shows that server's 404. Every
  * message the viewer sends to a bot lands in window.__sent and every write in
@@ -27,12 +30,27 @@ const kind = (params.get("kind") ?? "html") as PageKind;
 const published = params.get("status") !== "draft";
 const linkSharing = params.get("policy") !== "off";
 const deleted = params.get("deleted") === "1";
+const ownWindow = params.get("window") === "1";
+const openMenu = params.get("menu") === "1";
+let onTop = params.get("ontop") === "1";
 
 declare global {
-  interface Window { __sent: unknown[]; __writes: unknown[] }
+  interface Window { __sent: unknown[]; __writes: unknown[]; __alwaysOnTop?: boolean }
 }
 window.__sent = [];
 window.__writes = [];
+window.__alwaysOnTop = onTop;
+if (ownWindow) {
+  window.artifactWindowSelf = {
+    isAlwaysOnTop: async () => onTop,
+    setAlwaysOnTop: async (on) => {
+      onTop = on === true;
+      window.__alwaysOnTop = onTop;
+      window.__writes.push({ method: "ALWAYS_ON_TOP", on: onTop });
+      return true;
+    },
+  };
+}
 
 const now = Date.UTC(2026, 9, 21, 15, 0);
 let page: PublishedPageSummary = {
@@ -117,14 +135,18 @@ const message = {
 function Gallery() {
   const [open, setOpen] = useState(params.get("view") !== "card");
   return (
-    <div className="min-h-screen bg-canvas p-6 text-ink">
+    <div className="min-h-screen bg-canvas p-6 text-ink" data-gallery-page-viewer="">
       <div className="mx-auto max-w-[760px]">
         <div className="mb-3 rounded-2xl bg-card px-4 py-3 text-[14px]">Voici la page demandée.</div>
         <PagePublishCard message={message} />
         <button type="button" data-gallery-open className="text-[12px] text-accent" onClick={() => setOpen(true)}>open</button>
       </div>
-      {/* the open page, as the conversation's full panel draws it */}
-      {open && <div className="fixed inset-0 z-50 flex"><PageSurface pageId={pageId} onClose={() => setOpen(false)} /></div>}
+      {/* the open page: conversation panel, or own-window mode (?window=1) */}
+      {open && (
+        <div className="fixed inset-0 z-50 flex" data-gallery-page-surface="">
+          <PageSurface pageId={pageId} follow={ownWindow} onClose={() => setOpen(false)} />
+        </div>
+      )}
     </div>
   );
 }
@@ -136,3 +158,16 @@ createRoot(document.getElementById("root")!).render(
     </BotEditorStore>
   </StrictMode>,
 );
+
+if (openMenu) {
+  void (async () => {
+    for (let i = 0; i < 60; i += 1) {
+      await new Promise((done) => setTimeout(done, 50));
+      const button = document.querySelector<HTMLButtonElement>("[data-page-more]");
+      if (button) {
+        button.click();
+        return;
+      }
+    }
+  })();
+}

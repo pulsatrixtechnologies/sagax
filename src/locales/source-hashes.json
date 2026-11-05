@@ -17146,7 +17146,8 @@
       "rich.claudeArtifact.commentFailed": "057c05e0305ab2cfcb3a8275431f6fbd1fb530807eae559fdc4bcb74dc393cce",
       "routines.effort.label": "4387e5d3966fc436532792769763cd1ab7cccd6464d4c01c2b91261894e96b77",
       "routines.effort.botDefault": "a6f2b10be05387215e32f014b3db3c2a378d078db65fa84390757038af7e5dad",
-      "routineEditor.hint.effort": "87361e2d484e0e3a9ec607a0da9676b91370da2c4b80302a9d8a094ba99e3d18"
+      "routineEditor.hint.effort": "87361e2d484e0e3a9ec607a0da9676b91370da2c4b80302a9d8a094ba99e3d18",
+      "pages.alwaysOnTop": "56130e653e13cf2f810dd6385f09a040b9ffef59b92dec472e73df74ed4ef90d"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

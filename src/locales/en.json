@@ -13201,8 +13201,6 @@
   "roles.why.fallback": "{from} was refused for {tool} (403), so this read ran once on behalf of {person}.",
   "roles.why.rule": "A saved rule: when {from} is refused for this read, read on behalf of {person}.",
   "roles.notice.lapsed": "The role {role} lapsed: the call stopped.",
-  "roles.notice.writeRefused": "Write refused as {role}: {permission} is missing. {bot} stopped.",
-  "roles.notice.readRefused": "Read refused as {role}: {permission} is missing.",
   "roles.notice.target": "Security role of {member}",
   "roles.notice.missingLine": "Missing permission: {permission}",
   "roles.notice.writeRefusedShort": "Write refused as {role}. {bot} stopped.",

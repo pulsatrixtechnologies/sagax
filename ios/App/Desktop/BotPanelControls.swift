@@ -84,6 +84,7 @@ struct PanelTextArea: View {
                     .padding(.horizontal, 10)
                     .padding(.top, 9)
                     .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
             TextEditor(text: $text)
                 .font(mono ? .system(size: 13, design: .monospaced) : theme.font(13))
@@ -97,6 +98,9 @@ struct PanelTextArea: View {
         .frame(minHeight: minHeight, alignment: .topLeading)
         .background(theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline40, lineWidth: 1))
+        // One accessibility node (the editor), so a UI test that targets this
+        // field does not hit the placeholder StaticText sharing the same id.
+        .accessibilityElement(children: .contain)
     }
 }
 

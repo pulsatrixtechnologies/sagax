@@ -7,6 +7,7 @@
 // desktop calls (Client+InstructionsPages.swift, Client+BotAdvanced.swift).
 import CompanionCore
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 // MARK: - Shared pieces
@@ -51,6 +52,11 @@ private struct InstructionsPane<Content: View>: View {
 }
 
 /// `inputCls`: the inset field, 13 pt, `px-2.5 py-1.5`.
+///
+/// UIKit-backed so a field under the SOUL `UITextView` (Do not finish until)
+/// can take first responder after that editor was focused (#1939). SwiftUI
+/// `TextField` in the same window often never receives keyboard focus once
+/// the representable UITextView has been first responder.
 private struct InstructionsField: View {
     @Environment(\.desktopTheme) private var theme
     let placeholder: String
@@ -61,20 +67,89 @@ private struct InstructionsField: View {
     var onSubmit: () -> Void = {}
 
     var body: some View {
-        TextField("", text: $text, prompt: Text(verbatim: placeholder).foregroundColor(theme.inkSecondary))
-            .font(mono ? Theme.mono(13) : theme.font(13))
-            .foregroundStyle(theme.ink)
-            .tint(theme.focus)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-            .padding(.leading, leading)
-            .padding(.trailing, 10)
-            .frame(height: 33)
-            .background(theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline40, lineWidth: 1))
-            .onSubmit(onSubmit)
-            .accessibilityLabel(Text(verbatim: placeholder))
-            .accessibilityIdentifier(identifier)
+        InstructionsUIKitField(
+            text: $text, placeholder: placeholder, mono: mono, leading: leading,
+            identifier: identifier, theme: theme, onSubmit: onSubmit
+        )
+        .frame(height: 33)
+        .background(theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline40, lineWidth: 1))
+        .accessibilityLabel(Text(verbatim: placeholder))
+    }
+}
+
+private struct InstructionsUIKitField: UIViewRepresentable {
+    @Binding var text: String
+    var placeholder: String
+    var mono: Bool
+    var leading: CGFloat
+    var identifier: String
+    var theme: DesktopTheme
+    var onSubmit: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> UITextField {
+        let field = UITextField()
+        field.delegate = context.coordinator
+        field.borderStyle = .none
+        field.backgroundColor = .clear
+        field.adjustsFontForContentSizeCategory = false
+        field.autocorrectionType = .no
+        field.autocapitalizationType = .none
+        field.spellCheckingType = .no
+        field.returnKeyType = .done
+        field.accessibilityIdentifier = identifier
+        field.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        field.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .editingChanged)
+        apply(field)
+        return field
+    }
+
+    func updateUIView(_ field: UITextField, context: Context) {
+        context.coordinator.parent = self
+        apply(field)
+        if field.text != text { field.text = text }
+    }
+
+    private func apply(_ field: UITextField) {
+        let font = mono
+            ? UIFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+            : theme.uiFont(13)
+        field.font = font
+        field.textColor = UIColor(theme.ink)
+        field.tintColor = UIColor(theme.focus)
+        field.attributedPlaceholder = NSAttributedString(
+            string: placeholder,
+            attributes: [.foregroundColor: UIColor(theme.inkSecondary), .font: font]
+        )
+        field.leftView = UIView(frame: CGRect(x: 0, y: 0, width: leading, height: 1))
+        field.leftViewMode = .always
+        field.rightView = UIView(frame: CGRect(x: 0, y: 0, width: 10, height: 1))
+        field.rightViewMode = .always
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: InstructionsUIKitField
+        init(_ parent: InstructionsUIKitField) { self.parent = parent }
+
+        func textFieldShouldBeginEditing(_ textField: UITextField) -> Bool {
+            // Clear a stuck SOUL UITextView responder before this field focuses.
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            return true
+        }
+
+        @objc func changed(_ field: UITextField) {
+            let value = field.text ?? ""
+            if parent.text != value { parent.text = value }
+        }
+
+        func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+            parent.onSubmit()
+            textField.resignFirstResponder()
+            return true
+        }
     }
 }
 
@@ -1130,6 +1205,9 @@ private struct PersonaWriteCommand: View {
     @State private var saving = false
     @State private var message = ""
     @State private var error = ""
+    /// Software keyboard height; when it covers the in-card Save, the same
+    /// control rides above the keyboard (#1939).
+    @State private var keyboardHeight: CGFloat = 0
 
     private var problem: WrittenSkill.Problem? {
         WrittenSkill.problem(name: name, description: description, instructions: instructions, taken: taken)
@@ -1137,6 +1215,7 @@ private struct PersonaWriteCommand: View {
     private var touched: Bool {
         [name, description, instructions].contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
+    private var keyboardUp: Bool { keyboardHeight > 40 }
 
     var body: some View {
         InstructionsPane(
@@ -1176,16 +1255,38 @@ private struct PersonaWriteCommand: View {
                     DesktopText(verbatim: touched ? problem.map(Self.problemText) ?? message : message, size: 11.5, line: 16, color: \.inkSecondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("desktop-skills.command-message")
-                    Button(saving ? AppStrings.localized("Saving…") : AppStrings.localized("Save command")) { Task { await save() } }
-                        .buttonStyle(pillStyle(primary: true))
-                        .disabled(saving || problem != nil)
-                        .accessibilityIdentifier("desktop-skills.command-save")
+                    saveButton(identifier: keyboardUp ? "desktop-skills.command-save-inline" : "desktop-skills.command-save")
                 }
                 if !error.isEmpty {
                     DesktopText(verbatim: error, size: 12, line: 16, color: \.danger)
                 }
             }
         }
+        .toolbar {
+            // Same control above the software keyboard so a tap never lands
+            // on the keys that covered the in-card Save (#1939).
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                saveButton(identifier: keyboardUp ? "desktop-skills.command-save" : "desktop-skills.command-save-keyboard")
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { note in
+            guard let frame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
+            keyboardHeight = max(0, UIScreen.main.bounds.height - frame.minY)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardHeight = 0
+        }
+    }
+
+    private func saveButton(identifier: String) -> some View {
+        Button(saving ? AppStrings.localized("Saving…") : AppStrings.localized("Save command")) {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            Task { await save() }
+        }
+        .buttonStyle(pillStyle(primary: true))
+        .disabled(saving || problem != nil)
+        .accessibilityIdentifier(identifier)
     }
 
     static func problemText(_ problem: WrittenSkill.Problem) -> String {

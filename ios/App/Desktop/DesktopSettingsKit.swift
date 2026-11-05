@@ -276,7 +276,12 @@ struct DesktopModalFrame<Content: View>: View {
         GeometryReader { geometry in
             let box = DesktopModalGeometry.frame(width: width, in: geometry.size)
             ZStack(alignment: .topLeading) {
+                // Full-screen scrim, including the home indicator. The box
+                // itself stays in the keyboard-safe area so a field low on
+                // the page (Skills > Save command) is not covered by the
+                // software keyboard (#1939).
                 Color.black.opacity(0.5)
+                    .ignoresSafeArea()
                     .contentShape(Rectangle())
                     .onTapGesture(perform: close)
                     .accessibilityHidden(true)
@@ -292,7 +297,7 @@ struct DesktopModalFrame<Content: View>: View {
                     .offset(x: box.minX, y: box.minY)
             }
         }
-        .ignoresSafeArea()
+        .ignoresSafeArea(.container)
         .background(DesktopEscapeKey(action: close))
     }
 }

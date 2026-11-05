@@ -158,9 +158,9 @@ describe("navigate", () => {
     expect(sidebar).toMatch(/onSelect: \(task: Row\) => navigate\(\(\) => \{ if \(task\.threadId !== latest\.current\.threadId\) dispatch\(\{ type: "switchTask", botId, threadId: task\.threadId \}\);/);
     expect(sidebar).toContain('onClick={() => navigate(() => dispatch({ type: "select", id: group.id }))}');
     expect(read("../components/CommandPalette.tsx")).toContain("navigate(() => openBot(dispatch, action.bot, showThreads))");
-    const app = read("../App.tsx");
-    expect(app).toContain("navigate(() => openBot(dispatch, target, showThreads))");
-    expect(app).toContain('navigate(() => openBot(dispatch, next, showThreads), e.key === "]" ? "forward" : "back")');
+    const shellNav = read("../App.tsx-parts/useShellNavigation.ts");
+    expect(shellNav).toContain("navigate(() => openBot(dispatch, target, showThreads))");
+    expect(shellNav).toContain('navigate(() => openBot(dispatch, next, showThreads), e.key === "]" ? "forward" : "back")');
     const settings = read("../components/SettingsModal.tsx");
     expect(settings).toContain('navigate(() => dispatch({ type: "toggleAppSettings", open: false }), "back", "page")');
     expect(settings).toContain("starting:scale-98 starting:opacity-0");

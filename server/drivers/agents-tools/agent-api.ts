@@ -2,7 +2,6 @@ import { ROUTINE_FIELDS_SCHEMA } from "./shared.ts";
 // Agents tool family: Agent-to-agent API and run_with_engine.
 // Never import server/index.ts.
 import { agentToolAnnotations } from "../../tools/agent-tool-policy.ts";
-import { AGENT_SETTINGS_FIELDS } from "../../fleet-agent-settings.ts";
 import type { ToolCallContext, ToolCallResult } from "../agents-call-types.ts";
 import type { Json } from "../agents-client.ts";
 
@@ -12,10 +11,10 @@ import type { Json } from "../agents-client.ts";
 const AGENT_ID = { type: "string", description: "The agent's id, exactly as list_agents or find_agents returned it." } as const;
 const AGENT_CURSOR = { type: "string", description: "next_cursor of the previous page: entries before it." } as const;
 
-/** Loose property for every Edit-bot / runtime / primary field the agent API accepts. */
-const AGENT_SETTINGS_PROPERTIES: Record<string, Record<string, unknown>> = Object.fromEntries(
-  AGENT_SETTINGS_FIELDS.map((field) => [field, { description: `Edit bot field "${field}" (same value as PATCH /api/bots/:id or runtime-settings / primary).` }]),
-);
+/** #2023: update_agent_settings accepts any Edit-bot / runtime / primary key
+ * (AGENT_SETTINGS_FIELDS in fleet-agent-settings.ts). Enumerating all 61 keys
+ * with repeated descriptions blew the agents soft ceiling by ~8 KB; the server
+ * still validates each key. */
 export const AGENT_API_TOOLS = [
   {
     name: "list_agents",
@@ -118,31 +117,30 @@ export const AGENT_API_TOOLS = [
   },
   {
     name: "update_agent_model",
-    description: "Change a reachable agent's default engine/model/effort, or turn Auto on (auto true). Same rights as Edit bot in Sagax: the owner, a person granted edit, or an admin. Pass instance_id (or engine), model, optional effort; or auto true (keeps the current engine/model as Auto's base when omitted). An invalid model is refused with the valid choices. Threads that follow the bot move on their next turn. Call list_agent_models first.",
+    description: "Change a reachable agent's default engine/model/effort, or turn Auto on. Same rights as Edit bot. Call list_agent_models first.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
       properties: {
         agent_id: AGENT_ID,
-        instance_id: { type: "string", minLength: 1, maxLength: 120, description: "Engine instance id from list_agent_models." },
-        instance: { type: "string", minLength: 1, maxLength: 120, description: "Alias of instance_id." },
-        engine: { type: "string", minLength: 1, maxLength: 120, description: "Alias of instance_id (engine id or family name the server resolves)." },
-        model: { type: "string", minLength: 1, maxLength: 200, description: "Model id on that engine, from list_agent_models." },
-        effort: { type: "string", minLength: 1, maxLength: 40, description: "Optional effort level the model accepts." },
-        auto: { type: "boolean", description: "true turns Auto on for this agent (uses list_agent_models / auto-model)." },
+        instance_id: { type: "string", minLength: 1, maxLength: 120, description: "From list_agent_models." },
+        instance: { type: "string", minLength: 1, maxLength: 120 },
+        engine: { type: "string", minLength: 1, maxLength: 120 },
+        model: { type: "string", minLength: 1, maxLength: 200, description: "From list_agent_models." },
+        effort: { type: "string", minLength: 1, maxLength: 40 },
+        auto: { type: "boolean", description: "true turns Auto on." },
       },
       required: ["agent_id"],
     },
   },
   {
     name: "update_agent_settings",
-    description: "Partial patch of an agent's Edit bot fields: identity and look, permission-gated settings (approval level, tools, computer, workspace, visibility, section, cwd, voice notes, …), runtime settings (maxConcurrentThreads and the rest), and primary (true/false for the Primary Bot switch). Same rights as the Sagax Edit bot window: the server checks each field. Returns changed and refused (each with a plain reason). Model changes use update_agent_model.",
+    description: "Partial patch of an agent's Edit bot fields (identity, look, approval, tools, computer, workspace, visibility, section, cwd, voice notes, runtime, primary). Same rights as Edit bot. Returns changed and refused. Model changes use update_agent_model.",
     inputSchema: {
       type: "object",
-      additionalProperties: false,
+      additionalProperties: true,
       properties: {
         agent_id: AGENT_ID,
-        ...AGENT_SETTINGS_PROPERTIES,
       },
       required: ["agent_id"],
     },

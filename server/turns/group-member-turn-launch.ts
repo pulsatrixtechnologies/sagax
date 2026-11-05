@@ -4,6 +4,14 @@ import { hideServerPathsInSections } from "../server-path-prompt.ts";
 import { onDemandPromptParts, onDemandPromptText, promptReferencesAvailable } from "../context/prompt-references.ts";
 import type { GroupMemberTurnHost } from "./group-member-turn-types.ts";
 import type { GroupMemberTurnCtx } from "./group-member-turn-ctx.ts";
+import { subagentTurnModel } from "../../shared/routine-model.ts";
+
+/** #2038: a room member's Claude sub-agents run on the bot's fast model when
+ * it is on the turn's engine (no routine model exists in a room). */
+export function roomSubagentModel(bot: { modelSelection: { instanceId: string; fast?: { instanceId: string; model: string } } }, turnInstanceId: string): { subagentModel?: string } {
+  const subagentModel = subagentTurnModel({ fast: bot.modelSelection.fast, turnInstanceId, botInstanceId: bot.modelSelection.instanceId });
+  return subagentModel ? { subagentModel } : {};
+}
 
 export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
   const {
@@ -1153,7 +1161,9 @@ const sendRoomTurn = async (roomTurnAccess: TurnAccess | undefined) => {
         mcpCallTimeoutMs: mcpCallTimeoutMinutes(cfg) * 60_000,
         ...(instance.instanceId === roomTurnSelection(readyBot).instanceId
           ? memberTurnSelection(roomTurnSelection(readyBot))
-          : { model: instance.models.default })
+          : { model: instance.models.default }),
+        // #2038: Claude sub-agents run on the bot's fast model (same engine).
+        ...roomSubagentModel(readyBot, instance.instanceId)
       });
     };
     // #1137: when the owner pays, the owner's computer serves its model.

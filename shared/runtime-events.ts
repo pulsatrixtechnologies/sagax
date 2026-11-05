@@ -84,6 +84,9 @@ export type RuntimeEvent = RuntimeEventBase &
          * is a live indicator whose meaning differs per driver (a per-call
          * delta, a thread total, a per-step figure) and must never be summed. */
         usage?: { input: number; output: number; cachedInput?: number };
+        /** THIS turn's usage split by model, when the provider reports one
+         * (Claude mixes models inside a turn: the main one plus sub-agents). */
+        models?: TurnModelUsage[];
       }
     | {
         /** A resumable terminal: the turn exhausted its model/tool budget,
@@ -271,3 +274,15 @@ export type RuntimeEvent = RuntimeEventBase &
   );
 
 export type RuntimeEventListener = (event: RuntimeEvent) => void;
+
+/** One model's share of a turn. `inputTokens` counts fresh input only; cache
+ * reads and cache writes are their own fields. `costUsd` is the engine's own
+ * figure for that model, null when it reported none. */
+export interface TurnModelUsage {
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens?: number;
+  cacheWriteTokens?: number;
+  costUsd: number | null;
+}

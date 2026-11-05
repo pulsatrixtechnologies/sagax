@@ -58,5 +58,41 @@ export function routineTurnModel(turn: RoutineModelTurn): { model: string } | { 
 export function routineExecutionSettingsOnly(value: unknown): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const keys = Object.keys(value);
-  return keys.length > 0 && keys.every(key => key === "model" || key === "effort" || key === "subagentModel");
+  return keys.length > 0 && keys.every(key => key === "model" || key === "subagentModel" || key === "effort");
+}
+
+export interface SubagentModelTurn {
+  /** The routine's own sub-agent model (RoutineRun.subagentModel). */
+  routineSubagentModel?: string;
+  /** The routine model this turn already runs on (applied, not just saved). */
+  routineModel?: string;
+  /** The bot's fast model (ModelSelection.fast). */
+  fast?: { instanceId: string; model: string };
+  /** The engine this turn resolved to. */
+  turnInstanceId: string;
+  /** The engine the bot itself is on (its profile, not the thread). */
+  botInstanceId: string;
+  /** A usage-limit takeover moved this thread: nothing applies. */
+  takenOver?: boolean;
+  /** The models the turn's engine lists; empty when not known yet. */
+  offered?: readonly string[];
+  /** Why a model cannot be used (turned off by the organization or person). */
+  refusal?: (model: string) => string | undefined;
+}
+
+/** The model a Claude turn's sub-agents run on (CLAUDE_CODE_SUBAGENT_MODEL),
+ * or undefined (they inherit the turn's model). Precedence: the routine's
+ * subagentModel, then the routine model, then the bot's fast model when it
+ * is on the turn's own engine. The main turn's model is never touched. */
+export function subagentTurnModel(turn: SubagentModelTurn): string | undefined {
+  if (turn.takenOver) return undefined;
+  if (turn.routineSubagentModel && turn.turnInstanceId === turn.botInstanceId) {
+    const model = turn.routineSubagentModel;
+    const listed = !turn.offered?.length || turn.offered.includes(model);
+    if (listed && !turn.refusal?.(model)) return model;
+  }
+  if (turn.routineModel) return turn.routineModel;
+  const fast = turn.fast;
+  if (fast && fast.model && fast.instanceId === turn.turnInstanceId && !turn.refusal?.(fast.model)) return fast.model;
+  return undefined;
 }

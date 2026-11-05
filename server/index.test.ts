@@ -44,6 +44,7 @@ import {
 } from "./phone/phone-secret.ts";
 import { InstallationCapabilityStore } from "./capabilities/installation-capability-store.ts";
 import { resolveVaultKey } from "./mcp/mcp-oauth.ts";
+import { releaseVersion } from "./environment.ts";
 
 /** Lot 5: MCP servers (and secret env) live in the sealed installation store. */
 function readInstallationMcpServers(dataDir: string): Record<string, any> {
@@ -1694,7 +1695,7 @@ describe("harness HTTP API", () => {
       req.end();
     });
     expect(probe.status).toBe(200);
-    expect(probe.body).toEqual({ app: "openmausbot", product: "sagax", version: "0.8.45" });
+    expect(probe.body).toEqual({ app: "openmausbot", product: "sagax", version: releaseVersion() });
     // the brand is public too: the sign-in page is branded before anyone has a session
     const brand = await new Promise<{ status: number; body: unknown }>((resolve, reject) => {
       const req = request({ hostname: "127.0.0.1", port: PORT, path: "/api/brand", headers: { host: "example.com" } }, (res) => {

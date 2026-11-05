@@ -26,7 +26,7 @@ import { dirname, join, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { readAtRestSync } from "../encryption/content-at-rest.ts";
-import { PROVIDER_CREDENTIAL_ENV, stripWorkspaceCredentialEnv } from "../config.ts";
+import { PI_ORG_KEY_VARIABLES, PROVIDER_CREDENTIAL_ENV, stripWorkspaceCredentialEnv } from "../config.ts";
 import { applyEngineCommandVariables } from "../vault/credential-command-env.ts";
 import { openStartupModelCatalog, writeStartupModelCache } from "../models/startup-model-catalog.ts";
 import { augmentedPath } from "../env-path.ts";
@@ -78,6 +78,8 @@ import {
 import { localModelFailureMessage, providerReason } from "./engine-errors.ts";
 import { appendNative } from "./native.ts";
 import { piHostToolArgs } from "./host-tools.ts";
+import { installPiKit, piKitDir } from "./pi-kit.ts";
+import { MODEL_SERVER_DEFAULT_CONTEXT, MODEL_SERVER_DEFAULT_MAX_TOKENS, MODEL_SERVER_KEY_ENV_PREFIX, writePiModelServers } from "./pi-model-servers.ts";
 import { canUseMcpServer, parseToolScope } from "../../shared/tool-scope.ts";
 import { customServerGate, gateServer, mcpStdioServer } from "../mcp/mcp-gate-config.ts";
 import { compactGateSearch } from "../mcp/mcp-gate-search.ts";
@@ -852,6 +854,7 @@ function piAgentDir(env: Record<string, string | undefined>): string {
 export function ensurePiInjectModel(
   modelId: string,
   env: Record<string, string | undefined> = process.env,
+  meta: { contextWindow?: number; maxTokens?: number } = {},
 ): { provider: string; modelId: string } | null {
   const split = splitPiModel(modelId);
   if (!split) return null;
@@ -911,8 +914,9 @@ export function ensurePiInjectModel(
       name: inject.model,
       reasoning: true,
       input: ["text"],
-      contextWindow: 131072,
-      maxTokens: 16384,
+      // #2024: the catalog row's own size when it knows one
+      contextWindow: positive(meta.contextWindow) ?? MODEL_SERVER_DEFAULT_CONTEXT,
+      maxTokens: positive(meta.maxTokens) ?? MODEL_SERVER_DEFAULT_MAX_TOKENS,
     });
   }
   existing.models = models;
@@ -925,6 +929,10 @@ export function ensurePiInjectModel(
     // Windows ignores POSIX modes; keep the inject even if chmod is unsupported.
   }
   return split;
+}
+
+function positive(value: number | undefined): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
 }
 
 /** The pi-side default model, read from ~/.pi/agent/settings.json so the
@@ -1069,27 +1077,54 @@ function piEnvironment(source: Record<string, string | undefined>): Record<strin
   // neither list.
   stripWorkspaceCredentialEnv(env);
   for (const key of PROVIDER_CREDENTIAL_ENV) delete env[key];
+  for (const key of PI_ACCESS_KEY_ENV) delete env[key];
+  for (const key of Object.keys(env)) if (key.startsWith(MODEL_SERVER_KEY_ENV_PREFIX)) delete env[key];
   return env;
 }
 
 /** The provider keys pi reads, as engine-credentials.ts PROVIDER_KEY_ENV
- * hands them (Perspicax providers anthropic, openai, xai, google, moonshot). */
-export const PI_ACCESS_KEY_ENV = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "XAI_API_KEY", "GEMINI_API_KEY", "MOONSHOT_API_KEY"] as const;
+ * hands them: the Perspicax providers pi knows natively (#2024). */
+export const PI_ACCESS_KEY_ENV = [
+  "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "XAI_API_KEY", "GEMINI_API_KEY", "MOONSHOT_API_KEY",
+  "OPENROUTER_API_KEY", "MISTRAL_API_KEY", "CEREBRAS_API_KEY", "GROQ_API_KEY", "ZAI_API_KEY",
+  "MINIMAX_API_KEY", "OPENCODE_API_KEY", "DEEPSEEK_API_KEY", "FIREWORKS_API_KEY", "TOGETHER_API_KEY",
+  "HF_TOKEN", "NVIDIA_API_KEY", "KIMI_API_KEY",
+] as const;
+
+/** Whether a variable is one pi bills a provider with: a native key name or
+ * the key of a Perspicax model server (pi-model-servers.ts). */
+function isPiKeyVariable(name: string): boolean {
+  return (PI_ACCESS_KEY_ENV as readonly string[]).includes(name) || name.startsWith(MODEL_SERVER_KEY_ENV_PREFIX);
+}
 
 /** Organization server: one turn's credentials (SendTurnInput.access), over
  * an environment piEnvironment already stripped of every key: the payer's
  * own PI_CODING_AGENT_DIR (never the server's ~/.pi/agent/auth.json) and
  * the keys they keep in Perspicax. */
-export function piAccessEnvironment(env: Record<string, string | undefined>, access: TurnAccessInput | undefined): Record<string, string | undefined> {
+export function piAccessEnvironment(
+  env: Record<string, string | undefined>,
+  access: TurnAccessInput | undefined,
+  orgKeys: Record<string, string | undefined> = {},
+): Record<string, string | undefined> {
   if (!access) return env;
   if (access.engineHome) {
     mkdirSync(access.engineHome, { recursive: true, mode: 0o700 });
     env.PI_CODING_AGENT_DIR = access.engineHome;
   }
-  for (const name of PI_ACCESS_KEY_ENV) {
-    const value = access.environment?.[name];
-    if (value) env[name] = value;
+  // #2024: an org-key turn bills the organization's keys (config.ts
+  // injectedEnvironment hands them under pi's names; piEnvironment stripped them)
+  if (access.via === "org-key") {
+    for (const name of PI_ORG_KEY_VARIABLES) {
+      const value = orgKeys[name];
+      if (value) env[name] = value;
+    }
   }
+  for (const [name, value] of Object.entries(access.environment ?? {})) {
+    if (value && isPiKeyVariable(name)) env[name] = value;
+  }
+  // #2024: the Perspicax model servers, by name in models.json; their keys
+  // ride this environment only ("apiKey": "$SAGAX_PI_KEY_...")
+  if (access.piModelServers) writePiModelServers(piAgentDir(env), access.piModelServers);
   return env;
 }
 
@@ -1098,7 +1133,8 @@ export function piAccessEnvironment(env: Record<string, string | undefined>, acc
  * bash tool in, never a provider key name pi would bill. pi starts for every
  * turn, so a change or a revoke holds at the next one. */
 export function piTurnEnvironment(env: Record<string, string | undefined>, commandEnvironment: Record<string, string> | undefined): Record<string, string | undefined> {
-  applyEngineCommandVariables(env, commandEnvironment, PI_ACCESS_KEY_ENV);
+  const reserved = [...PI_ACCESS_KEY_ENV, ...Object.keys(commandEnvironment ?? {}).filter((name) => name.startsWith(MODEL_SERVER_KEY_ENV_PREFIX))];
+  applyEngineCommandVariables(env, commandEnvironment, reserved);
   return env;
 }
 
@@ -1227,14 +1263,21 @@ export const PiDriver: ProviderDriver<PiConfig> = {
       // Write ~/.pi/agent/models.json before creating any credential-bearing
       // MCP temp files. If model setup fails, there is nothing sensitive to
       // clean up yet.
+      const homeEnv = {
+        ...process.env,
+        ...input.environment,
+        // the payer's own pi home, the one the child reads (piAccessEnvironment)
+        ...(turn.access?.engineHome ? { PI_CODING_AGENT_DIR: turn.access.engineHome } : {}),
+      };
       if (typeof turn.model === "string" && turn.model) {
-        ensurePiInjectModel(turn.model, {
-          ...process.env,
-          ...input.environment,
-          // the payer's own pi home, the one the child reads (piAccessEnvironment)
-          ...(turn.access?.engineHome ? { PI_CODING_AGENT_DIR: turn.access.engineHome } : {}),
-        });
+        const row = models.options.find((option) => option.id === turn.model);
+        ensurePiInjectModel(turn.model, homeEnv, { contextWindow: row?.contextWindow });
       }
+      // #2024: the operator's pi kit (SAGAX_PI_KIT_DIR), copied into this
+      // turn's pi home and loaded with explicit `-e`, which pi keeps under
+      // --no-extensions; host tools stay withheld by --exclude-tools.
+      const kit = piKitDir(homeEnv);
+      const kitArgs = kit ? installPiKit(kit, piAgentDir(homeEnv), turn.piKitIdentity ?? {}, homeEnv).args : [];
 
       // integrations → stdio MCP servers for the pi-mcp-extension. The config
       // carries credentials (boat token, comms token), so it goes
@@ -1250,6 +1293,7 @@ export const PiDriver: ProviderDriver<PiConfig> = {
         ...(turn.compactPrompt ? PI_ARGS.filter((arg) => arg !== "--no-session") : PI_ARGS),
         ...piHostToolArgs(turn.withholdHostTools === true),
         ...(mounts ? ["-e", SPAWNED_PROXIES.piMcpExtension] : []),
+        ...kitArgs,
       ];
       const standbyKey = JSON.stringify({
         cli: config.cli, args: standbyArgs, cwd: turn.cwd ?? null,
@@ -1300,7 +1344,7 @@ export const PiDriver: ProviderDriver<PiConfig> = {
         ...process.env,
         ...input.environment,
         ...(mcpTempDir ? { SAGAX_MCP_CONFIG: join(mcpTempDir, "mcp.json") } : {}),
-      }), turn.access), turn.commandEnvironment);
+      }), turn.access, input.environment), turn.commandEnvironment);
 
       // spawnCli can throw synchronously (unresolvable CLI); if it does, the
       // 0600 temp file with the boat token / comms token must

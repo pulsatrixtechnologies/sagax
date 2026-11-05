@@ -2185,6 +2185,7 @@ export class RoutineManager {
       access: Object.hasOwn(patch, "access") ? patch.access : routine.access,
       // null or "" goes back to the bot's model; omission keeps it.
       model: Object.hasOwn(patch, "model") ? patch.model : routine.model,
+      // Same rule for the sub-agents' model (Claude): null or "" clears it.
       subagentModel: Object.hasOwn(patch, "subagentModel") ? patch.subagentModel : routine.subagentModel,
       // null clears the choice, "" is "Moi"; omission keeps it.
       actAs: Object.hasOwn(patch, "actAs") ? patch.actAs : routine.actAs,

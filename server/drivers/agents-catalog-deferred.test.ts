@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { childEnv } from "../testing/omb-env.ts";
 import { waitForExit } from "../testing/cleanup.ts";
-import { availableTools, catalogProfileFromEnv, COMPACT_CORE_AGENT_TOOL_NAMES, DEFERRED_AGENT_TOOL_NAMES, knownUseFromEnv, withDeferredRareTools } from "./agents-catalog.ts";
+import { availableTools, catalogProfileFromEnv, COMPACT_CORE_AGENT_TOOL_NAMES, DEFERRED_AGENT_TOOL_NAMES, knownUseFromEnv, withCompactNativeDeferral, withDeferredRareTools } from "./agents-catalog.ts";
 import { mergeByAction } from "./agents-merged.ts";
 
 const PROXY = join(dirname(fileURLToPath(import.meta.url)), "agents-proxy.ts");
@@ -182,5 +182,43 @@ describe("deferred rare agents tools", () => {
       expect(size(after)).toBeLessThan(size(before));
       expect(after.map((tool) => tool.name).sort()).toEqual(before.map((tool) => tool.name).sort());
     });
+  });
+
+  // #2037: a compact Claude turn used to list the core and the pins whole and
+  // hide every other tool behind search_tools / call_tool (two round trips a
+  // call, names invisible). With ToolSearch the rest is listed by name and
+  // deferred to it: a bot with no recorded use dropped from 34k to 18k
+  // tokens of context floor (haiku, agents server alone), and every tool is
+  // called by its own name.
+  it("#2037: a compact Claude turn lists every tool by name and loads only the core and the pins up front", async () => {
+    const plain = await listTools(EVERYTHING);
+    const compact = await listTools({ ...EVERYTHING, SAGAX_COMPACT_TOOLS: JSON.stringify({ core: "default", pinned: ["propose_routine"] }), SAGAX_DEFER_RARE_TOOLS: "1" });
+    const names = compact.map((tool) => tool.name);
+    expect([...names].sort()).toEqual(plain.map((tool) => tool.name).sort());
+    expect(names).not.toContain("search_tools");
+    expect(names).not.toContain("call_tool");
+    const loaded = compact.filter((tool) => tool._meta?.["anthropic/alwaysLoad"] !== false).map((tool) => tool.name);
+    for (const name of ALWAYS_LOADED) if (names.includes(name)) expect(loaded).toContain(name);
+    expect(loaded).toContain("propose_routine");
+    expect(loaded).toContain("shared_computer");
+    expect(loaded).not.toContain("update_agent_settings");
+    expect(loaded).not.toContain("propose_team_setup");
+    expect(loaded).not.toContain("start_thread");
+    expect(loaded.every((name) => COMPACT_CORE_AGENT_TOOL_NAMES.has(name) || name === "propose_routine" || name === "shared_computer")).toBe(true);
+    expect(compact.find((tool) => tool.name === "update_agent_settings")?._meta).toEqual({ "anthropic/alwaysLoad": false });
+    // the bot's recorded use does not narrow the names: core "used" lists the same set
+    const used = await listTools({ ...EVERYTHING, SAGAX_COMPACT_TOOLS: JSON.stringify({ core: "used", pinned: [] }), SAGAX_DEFER_RARE_TOOLS: "1" });
+    expect(used.map((tool) => tool.name).sort()).toEqual([...names].sort());
+    // an engine without ToolSearch keeps the directory pair and no marker
+    const other = await listTools({ ...EVERYTHING, SAGAX_COMPACT_TOOLS: JSON.stringify({ core: "used", pinned: [] }) });
+    expect(other.map((tool) => tool.name)).toContain("search_tools");
+    expect(other.some((tool) => tool._meta !== undefined)).toBe(false);
+  }, 60_000);
+
+  it("withCompactNativeDeferral keeps a tool's own fields and marks all but the core, the pins and shared_computer", () => {
+    const tools = [{ name: "ask_bot", description: "a" }, { name: "shared_computer", description: "s" }, { name: "update_agent_settings", description: "u", _meta: { kept: true } }, { name: "propose_routine", description: "p" }];
+    const out = withCompactNativeDeferral(tools, { pinned: new Set(["propose_routine"]), coordinating: true });
+    expect(out.map((tool) => tool._meta)).toEqual([undefined, undefined, { kept: true, "anthropic/alwaysLoad": false }, undefined]);
+    expect(out.map((tool) => tool.description)).toEqual(["a", "s", "u", "p"]);
   });
 });

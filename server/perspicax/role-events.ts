@@ -100,6 +100,7 @@ export function createRoleEvents(deps: RoleEventsDeps) {
       ...(path ? { path } : {}),
       canAlways: Boolean(owner && owner === event.principalId),
     };
+    // a notice of a role switch the relay already made, the turn never waits on it; full-access: exempt
     deps.appendRow(event.threadId, {
       kind: "options",
       card: {

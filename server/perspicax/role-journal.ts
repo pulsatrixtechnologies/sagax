@@ -1,13 +1,13 @@
-// Visible roles, server side (2026-11-05). What Sagax keeps about the roles
-// its Perspicax relay used, per person and bot:
-// - the role of each engine tool step, waiting for that step's row
-//   (`tool.role`), like the auto-approval note of tool-auto-approval.ts;
+// Visible roles, server side (2026-11-05, #2032/#2033). What Sagax keeps about
+// the roles its Perspicax relay used, per person and bot (never posted into
+// the chat):
 // - the refusals it logged (403), for a bot's "Permissions manquantes" and a
 //   routine's coverage preview;
 // - the transitions (one role to another) and their history, the local half
 //   of the bot's Roles graph (counts come from Perspicax's own journal);
 // - the bot owner's "Toujours ainsi" rules, and a thread's "Rester en …";
-// - a role the person picked in the composer, for their next turn only.
+// - pending step roles and composer picks remain in the API for older clients
+//   but chat no longer publishes or consumes them.
 //
 // Isolation: every record carries the principal it was made for, and every
 // read filters on the asking principal. Rules are the bot owner's; a bot

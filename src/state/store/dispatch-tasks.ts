@@ -30,9 +30,11 @@ export function dispatchTasksEffects(action: Action, env: DispatchEnv): void {
             );
           }
           break;
-        case "updateTask":
-          persistTaskPatch(action.botId, action.threadId, action.patch);
+        case "updateTask": {
+          const saved = persistTaskPatch(action.botId, action.threadId, action.patch);
+          if (action.onSettled) void saved.then(() => action.onSettled!(true), () => action.onSettled!(false));
           break;
+        }
         case "makeTaskConfidential":
           void api<{ bot?: BotAnnouncement }>(`/api/bots/${action.botId}/tasks/${action.threadId}`, {
             method: "PATCH",
@@ -173,8 +175,8 @@ export function dispatchTasksEffects(action: Action, env: DispatchEnv): void {
         case "deleteTask":
           threadPages.delete(action.threadId);
           api<{ bot?: BotAnnouncement }>(`/api/bots/${action.botId}/tasks/${action.threadId}`, { method: "DELETE" })
-            .then((r) => r?.bot && dispatch({ type: "botPatched", bot: r.bot }))
-            .catch(showError);
+            .then((r) => { if (r?.bot) dispatch({ type: "botPatched", bot: r.bot }); action.onSettled?.(true); })
+            .catch((error) => { showError(error); action.onSettled?.(false); });
           break;
         // Channel tasks mirror bot tasks, but hydrate the whole channel so
         // switching atomically replaces its transcript, folder and pin.
@@ -199,7 +201,7 @@ export function dispatchTasksEffects(action: Action, env: DispatchEnv): void {
           api(`/api/groups/${action.groupId}/tasks/${action.threadId}`, {
             method: "PATCH",
             body: JSON.stringify(action.patch),
-          }).catch(showError);
+          }).then(() => action.onSettled?.(true), (error) => { showError(error); action.onSettled?.(false); });
           break;
         case "renameGroupTask":
           api(`/api/groups/${action.groupId}/tasks/${action.threadId}`, {
@@ -223,8 +225,8 @@ export function dispatchTasksEffects(action: Action, env: DispatchEnv): void {
           break;
         case "deleteGroupTask":
           api<{ group?: Partial<Group> & { id: string } }>(`/api/groups/${action.groupId}/tasks/${action.threadId}`, { method: "DELETE" })
-            .then((r) => r?.group && dispatch({ type: "groupPatched", group: r.group }))
-            .catch(showError);
+            .then((r) => { if (r?.group) dispatch({ type: "groupPatched", group: r.group }); action.onSettled?.(true); })
+            .catch((error) => { showError(error); action.onSettled?.(false); });
           break;
         case "interruptGroup":
           api(`/api/groups/${action.groupId}/interrupt`, {

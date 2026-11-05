@@ -57,7 +57,8 @@ const TRANSIENT_PATTERNS: Array<{ pattern: RegExp; reason: TransientReason }> = 
  * session limit", "…your Opus limit", "…your team's shared budget", "You're
  * out of usage credits", "You're out of extra usage", 2.1.295); a
  * per-minute "rate limit" stays transient. */
-export const USAGE_LIMIT = /\busage limits?\b|\breached (?:your|its) (?:(?:weekly|daily|monthly|session|5-hour|plan|subscription) )?limits?\b|\bhit your (?:(?!rate\b)[\w'’-]+ ){0,3}(?:limit|budget)\b|\b(?:weekly|daily|monthly|subscription|usage|session|5-hour) limit reached\b|\bout of (?:usage(?: credits)?|extra usage|credits)\b/i;
+import { USAGE_LIMIT } from "../../shared/engine-limit-words.ts";
+export { USAGE_LIMIT };
 
 /** A provider or model that is not enabled for this account. Mentions of
  * billing here only say it will not be used (#1758); that is config/auth,

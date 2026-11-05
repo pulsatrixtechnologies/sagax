@@ -38,7 +38,7 @@ export type DispatchEnv = StoreDispatchCtx & {
   };
   persistCard: (botId: string, messageId: string, patch: Partial<OptionCardData>) => void;
   waitForExecutionSettings: (expectedBots: Bot[], threadId?: string) => Promise<void>;
-  persistTaskPatch: (botId: string, threadId: string, patch: TaskUpdatePatch) => void;
+  persistTaskPatch: (botId: string, threadId: string, patch: TaskUpdatePatch) => Promise<unknown>;
   dispatch: (action: Action) => void;
   executionBotsBeforeAction: Bot[];
   quizBeforeSend: ReturnType<typeof openOnboardingCard> | undefined;

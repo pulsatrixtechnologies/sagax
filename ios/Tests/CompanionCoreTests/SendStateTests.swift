@@ -17,6 +17,23 @@ final class SendStateTests: XCTestCase {
         XCTAssertEqual(block.message, "Claude is not connected for you.")
     }
 
+    /// The maintainer, 2026-11-04: an engine at its limit or out of credit locks the composer.
+    func testEngineLimitBlockParsed() throws {
+        let block = try XCTUnwrap(parse(#"""
+        {"block":{"reason":"engine_limit","name":"Claude","message":"Claude limit reached.","action":{"kind":"switch_engine"},"limit":{"cause":"usage_limit","resetsAt":1800000000000}}}
+        """#))
+        XCTAssertEqual(block.reason, .engineLimit)
+        XCTAssertEqual(block.action, .switchEngine)
+        XCTAssertTrue(block.locksComposer)
+        XCTAssertEqual(block.limitCause, "usage_limit")
+        XCTAssertEqual(block.resetsAt, Date(timeIntervalSince1970: 1_800_000_000))
+        let credits = try XCTUnwrap(parse(#"{"block":{"reason":"engine_limit","name":"Grok","message":"m","action":{"kind":"switch_engine"},"limit":{"cause":"credits"}}}"#))
+        XCTAssertEqual(credits.limitCause, "credits")
+        XCTAssertNil(credits.resetsAt)
+        let other = try XCTUnwrap(parse(#"{"block":{"reason":"computer_offline","message":"m","action":{"kind":"retry"}}}"#))
+        XCTAssertFalse(other.locksComposer)
+    }
+
     func testRetryBlocksParsed() throws {
         for reason in ["computer_offline", "local_server_offline", "owner_computer_offline"] {
             let block = try XCTUnwrap(parse(#"{"block":{"reason":"\#(reason)","message":"m","action":{"kind":"retry"}}}"#), reason)

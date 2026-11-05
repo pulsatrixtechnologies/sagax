@@ -6,7 +6,8 @@
 // answer, an error, an older server) sends as before.
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { t } from "@/lib/i18n";
+import { activeLocale, t } from "@/lib/i18n";
+import { resetClockText } from "../../shared/limit-failover";
 import { api } from "@/state/store";
 import type { SendBlock } from "../../shared/send-state";
 
@@ -15,9 +16,31 @@ export type { SendBlock };
 /** While blocked, how often the composer asks again. */
 export const SEND_BLOCK_RECHECK_MS = 15_000;
 
+/** The locale a clock is written in: Quebec French for the French UI. */
+function clockLocale(): string {
+  const active = activeLocale();
+  return active === "fr" ? "fr-CA" : active;
+}
+
+/** Whether this block locks the composer whole (the maintainer, 2026-11-04): the engine
+ * account at its limit or out of credit takes no message and no action in
+ * the chat until it resets or the bot moves to another engine or account. */
+export function sendBlockLocks(block: SendBlock | null | undefined): boolean {
+  return block?.reason === "engine_limit";
+}
+
 /** The line above the composer, in the reader's language. */
-export function sendBlockText(block: SendBlock): string {
+export function sendBlockText(block: SendBlock, now = Date.now()): string {
   switch (block.reason) {
+    case "engine_limit": {
+      const engine = block.name ?? "";
+      if (block.limit?.cause === "credits") return t("sendBlock.engineCredits", { engine });
+      const at = block.limit?.resetsAt;
+      // the reader's own clock and time zone, never UTC
+      return typeof at === "number" && at > now
+        ? t("sendBlock.engineLimitUntil", { engine, time: resetClockText(at, clockLocale(), undefined, now) })
+        : t("sendBlock.engineLimit", { engine });
+    }
     case "engine_not_connected": return t("sendBlock.engineNotConnected", { engine: block.name ?? (block.action.kind === "connect" ? block.action.engine : "") });
     case "computer_offline": return t("sendBlock.computerOffline");
     case "local_server_offline": return t("sendBlock.localServerOffline");
@@ -28,6 +51,7 @@ export function sendBlockText(block: SendBlock): string {
 
 /** The action button's label. */
 export function sendBlockActionLabel(block: SendBlock): string {
+  if (block.action.kind === "switch_engine") return t("sendBlock.switchEngine");
   return block.action.kind === "connect" ? t("sendBlock.connect", { engine: block.action.engine }) : t("sendBlock.retry");
 }
 
@@ -36,7 +60,7 @@ export function parseSendBlock(body: unknown): SendBlock | null {
   const block = (body as { block?: unknown } | null)?.block as Partial<SendBlock> | null | undefined;
   if (!block || typeof block !== "object" || typeof block.reason !== "string" || typeof block.message !== "string") return null;
   const action = block.action as SendBlock["action"] | undefined;
-  if (!action || (action.kind !== "retry" && !(action.kind === "connect" && typeof action.engine === "string" && typeof action.instanceId === "string"))) return null;
+  if (!action || (action.kind !== "retry" && action.kind !== "switch_engine" && !(action.kind === "connect" && typeof action.engine === "string" && typeof action.instanceId === "string"))) return null;
   return block as SendBlock;
 }
 
@@ -61,6 +85,15 @@ export function useSendBlock(botId: string | undefined, threadId: string | undef
     const timer = setInterval(recheck, SEND_BLOCK_RECHECK_MS);
     return () => clearInterval(timer);
   }, [block, recheck]);
+
+  // A limit with a known reset asks again the moment it passes, so the
+  // composer comes back on time and not up to 15 s late.
+  const resetsAt = block?.limit?.resetsAt;
+  useEffect(() => {
+    if (typeof resetsAt !== "number") return;
+    const timer = setTimeout(recheck, Math.max(0, resetsAt - Date.now()) + 1_000);
+    return () => clearTimeout(timer);
+  }, [resetsAt, recheck]);
 
   useEffect(() => {
     const onFocus = () => { if (blockedRef.current) recheck(); };

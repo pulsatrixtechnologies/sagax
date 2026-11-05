@@ -11,6 +11,7 @@ import { plainErrorLine } from "@/lib/plain-error";
 import { stepLabel } from "@/lib/step-label";
 import type { Bot, InstanceInfo, Message } from "@/state/store";
 import { failedTurnCause } from "../../shared/failed-turn";
+import { isEngineLimitWords } from "../../shared/engine-limit-words";
 import { isClientCancellation, isStoppedTurnName } from "../../shared/client-cancel";
 
 export { failedTurnCause };
@@ -32,6 +33,16 @@ export function engineSignedOut(engine: InstanceInfo | undefined): boolean {
  * else keeps the engine's words: they are the most precise cause there is. */
 export function signedOutEngine(tool: ActivityTool, engine: InstanceInfo | undefined): InstanceInfo | undefined {
   return tool.setup && !tool.claudeUpdate && engineSignedOut(engine) ? engine : undefined;
+}
+
+/** A failed turn refused by the engine account's usage limit or credit
+ * (the maintainer, 2026-11-04): no card in the chat for it, new or already stored; the
+ * composer locks instead and says when it comes back (send-state
+ * engine_limit). */
+export function isEngineLimitFailure(tool: ActivityTool): boolean {
+  const cause = failedTurnCause(tool.name);
+  if (cause === null) return false;
+  return tool.limitResetsAt !== undefined || isEngineLimitWords(cause);
 }
 
 /** The engine a bot's turns run on — what its failed-turn row is about. */

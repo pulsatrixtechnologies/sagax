@@ -91,6 +91,7 @@ import { botSharer } from "@/lib/bot-sharer";
 import { presenceLabel, usePresence } from "@/lib/presence";
 import { itemKey, personalSectionNames, personalSectionOf, type SectionItemKind } from "@/lib/personal-sections";
 import { useConfirm } from "@/components/ConfirmProvider";
+import { BULK_THREAD_CONCURRENCY, bulkThreadTargets, runBounded, settled, type BulkThreadCandidate, type BulkThreadKind } from "@/lib/bulk-threads";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { WorkingDots } from "./WorkingIndicator";
 import { ultracodeFromSelection } from "@/lib/ultracode-chrome";
@@ -434,11 +435,14 @@ export function GroupListItem({
 
 const MemoGroupListItem = memo(GroupListItem, sameSidebarRow);
 
-/** Sidebar mode: the threads under a bot, a room or a person sit under the
- * row's text, past its avatar and the gap after it (36px + 8px comfortable,
- * 28px + 8px compact), the same for every kind of row. */
+/** Sidebar mode: the threads under a bot, a room or a person nest the way
+ * Grok Bot and Cursor nest threads under a project: each title starts under
+ * the middle of the row's avatar (36px comfortable, 28px compact), inside
+ * the name column, so the title keeps the width and the hierarchy still
+ * reads (the maintainer, 2026-11-04: under the name, titles truncated after a few
+ * words). The row's own pl-6 adds to this margin. Same for every kind of row. */
 export function threadListIndent(density: SidebarDensity): string {
-  return density === "compact" ? "ml-9" : "ml-11";
+  return density === "compact" ? "ml-4" : "ml-5";
 }
 
 /** Scroll the row of a thread the person asked to open into view, once the
@@ -529,6 +533,8 @@ export function RoomContextMenu({
   }), (a, b) => Object.is(a.config, b.config) && equalRows(a.groups, b.groups));
   const remoteClient = window.ogb?.remoteClient?.active === true;
   const group = shown ? state.groups.find((g) => g.id === shown.groupId) : undefined;
+  const threadsOn = useThreadsMode() !== "one";
+  const bulk = useBulkThreadActions();
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(group?.name ?? "");
 
@@ -558,6 +564,9 @@ export function RoomContextMenu({
   const peerId = group.peopleDm ? peopleDmPeer(group, viewerActorId(state.config), new Map())?.id : undefined;
   const member = group.peopleDm ? memberMenuItems({ peer: Boolean(peerId), pinned: group.pinned === true }) : [];
   const memberHas = (item: MemberMenuItem) => member.includes(item);
+  // Threads on: Archive all threads and Delete all threads of this room
+  // (a conversation with a person keeps its own menu).
+  const threadsOwner: BulkThreadOwner | null = threadsOn && !group.peopleDm && !remoteClient ? { kind: "group", id: group.id, tasks: groupListedThreads(group) } : null;
   const ownsRoom = viewerOwnsGroup(group, state.config);
   const mayDelete = viewerMayDeleteGroup(group, state.config);
   const saveRename = () => {
@@ -651,6 +660,20 @@ export function RoomContextMenu({
           {t("sidebar.section.moveToContext")}
         </button>
       )}
+      {threadsOwner && <>
+        <button type="button" role="menuitem" data-menu-item="archive-all-threads" disabled={bulk.count(threadsOwner, "archive") === 0}
+          onClick={() => { onClose(); void bulk.archiveAll(threadsOwner); }}
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent">
+          <Archive size={16} className="text-ink" />
+          {t("task.archiveAll")}
+        </button>
+        <button type="button" role="menuitem" data-menu-item="delete-all-threads" disabled={bulk.count(threadsOwner, "delete") === 0}
+          onClick={() => { onClose(); void bulk.deleteAll(threadsOwner); }}
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-danger hover:bg-hover disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent">
+          <Trash2 size={16} className="text-danger" />
+          {t("task.deleteAll")}
+        </button>
+      </>}
       <button
         onClick={() => {
           void copyText(group.threadId);
@@ -929,6 +952,60 @@ function MoveToSectionItem({
   );
 }
 
+/** The threads a bot's sidebar list shows (BotThreadList), busy marked. */
+export function botListedThreads(bot: Pick<Bot, "id" | "threadId" | "busy" | "tasks">): BulkThreadCandidate[] {
+  return (bot.tasks ?? [])
+    .filter((task) => !task.routineRunId && (task.threadId === bot.threadId || !isInterBotThread(bot.id, task)))
+    .map((task) => ({ ...task, busy: Boolean(task.busy || (task.threadId === bot.threadId && bot.busy)) }));
+}
+
+/** A room's threads, the one at work marked busy (GroupThreadList). */
+export function groupListedThreads(group: Pick<Group, "threadId" | "tasks" | "working" | "busyBotId">): BulkThreadCandidate[] {
+  return (group.tasks ?? []).map((task) => ({
+    ...task, busy: Boolean(task.working || task.busyBotId || (task.threadId === group.threadId && (group.working || group.busyBotId))),
+  }));
+}
+
+export type BulkThreadOwner = { kind: "bot" | "group"; id: string; tasks: BulkThreadCandidate[] };
+
+/** Archive all threads / Delete all threads (the maintainer, 2026-11-04): each thread
+ * through the single Archive or Delete path, a few at a time
+ * (src/lib/bulk-threads.ts). Delete all asks first, with the count, as the
+ * single Delete thread does; Archive all needs no question (the single
+ * Archive has none, nor an Undo). */
+export function useBulkThreadActions() {
+  const dispatch = useStoreDispatch();
+  const confirm = useConfirm();
+  return useMemo(() => {
+    const run = (owner: BulkThreadOwner, kind: BulkThreadKind, targets: BulkThreadCandidate[]) =>
+      runBounded(targets, BULK_THREAD_CONCURRENCY, (task) => settled((onSettled) => {
+        if (owner.kind === "bot") {
+          dispatch(kind === "archive"
+            ? { type: "updateTask", botId: owner.id, threadId: task.threadId, patch: { archivedAt: Date.now() }, onSettled }
+            : { type: "deleteTask", botId: owner.id, threadId: task.threadId, onSettled });
+        } else {
+          dispatch(kind === "archive"
+            ? { type: "updateGroupTask", groupId: owner.id, threadId: task.threadId, patch: { archivedAt: Date.now() }, onSettled }
+            : { type: "deleteGroupTask", groupId: owner.id, threadId: task.threadId, onSettled });
+        }
+      }));
+    return {
+      count: (owner: BulkThreadOwner, kind: BulkThreadKind) => bulkThreadTargets(owner.tasks, kind).length,
+      archiveAll: async (owner: BulkThreadOwner) => {
+        const targets = bulkThreadTargets(owner.tasks, "archive");
+        if (targets.length) await run(owner, "archive", targets);
+      },
+      deleteAll: async (owner: BulkThreadOwner) => {
+        const targets = bulkThreadTargets(owner.tasks, "delete");
+        if (!targets.length) return;
+        const count = targets.length;
+        if (!(await confirm({ title: t("task.deleteAllConfirm", { count }), body: t("task.deleteAllBody", { count }), confirmLabel: t("task.deleteAll"), tone: "danger" }))) return;
+        await run(owner, "delete", targets);
+      },
+    };
+  }, [dispatch, confirm]);
+}
+
 export function BotContextMenu({
   menu,
   onClose,
@@ -971,6 +1048,7 @@ export function BotContextMenu({
     settingsOpen: current.settingsOpen,
   }), (a, b) => equalRows(a.bots, b.bots) && Object.is(a.config, b.config) && Object.is(a.deletingBots, b.deletingBots) && Object.is(a.selectedId, b.selectedId) && Object.is(a.settingsOpen, b.settingsOpen));
   const showThreads = useShowThreads();
+  const bulk = useBulkThreadActions();
   const remoteClient = window.ogb?.remoteClient?.active === true;
   const personal = usePersonalLayout();
   const bot = shown ? state.bots.find((b) => b.id === shown.botId) : undefined;
@@ -1161,6 +1239,8 @@ export function BotContextMenu({
   // no way to start a conversation with a bot. newTask selects the bot too.
   // Threads turned off (the single stream): New topic, a fresh context in
   // the same conversation (docs/single-stream-orchestration.md).
+  // Threads on: Archive all threads and Delete all threads of this bot.
+  const threadsOwner: BulkThreadOwner | null = showThreads ? { kind: "bot", id: bot.id, tasks: botListedThreads(bot) } : null;
   const newThreadItem = showThreads ? item(<Plus size={16} className="text-ink" />, t("task.newShort"), () => {
     dispatch({ type: "newTask", botId: bot.id });
   }, { id: "new-thread" }) : item(<Plus size={16} className="text-ink" />, t("stream.newTopic"), () => {
@@ -1197,6 +1277,13 @@ export function BotContextMenu({
     ...(shareItem ? [shareItem] : []),
     ...(primaryItem ? [primaryItem] : []),
     floatItem,
+    ...(threadsOwner ? [
+      divider("d-threads"),
+      item(<Archive size={16} className="text-ink" />, t("task.archiveAll"), () => { void bulk.archiveAll(threadsOwner); },
+        { id: "archive-all-threads", disabled: bulk.count(threadsOwner, "archive") === 0 }),
+      item(<Trash2 size={16} className="text-danger" />, t("task.deleteAll"), () => { void bulk.deleteAll(threadsOwner); },
+        { id: "delete-all-threads", danger: true, disabled: bulk.count(threadsOwner, "delete") === 0 }),
+    ] : []),
     divider("d-place"),
     // Only this person's sidebar: the bot, its owner and everyone else
     // keep it; Archive is the bot-wide action.
@@ -1279,7 +1366,7 @@ type ThreadTreeActions = Omit<Parameters<typeof SidebarThreadRow>[0], "task" | "
  * One tree for every owner of threads: a bot (BotThreadList) and a
  * conversation with a person (PersonThreadList); the owner decides only
  * where its actions go. */
-function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, tasks, projects, selected, density, query, hidden, actions, rowState, activeActivityLabel, onNew, onNewKind, onNewInFolder, onReorder, canMarkRead, markRead, children }: {
+function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, tasks, projects, selected, density, query, hidden, actions, rowState, activeActivityLabel, onNew, onNewKind, onNewInFolder, onReorder, canMarkRead, markRead, bulk, children }: {
   ownerId: string;
   ownerName: string;
   owner: FolderOwnerKind;
@@ -1307,6 +1394,9 @@ function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, task
   onReorder: (projectIds: string[], onSaved: () => void, onError: (message: string) => void) => void;
   canMarkRead: (projectId: string) => boolean;
   markRead: (projectId: string) => Promise<void>;
+  /** Archive all threads / Delete all threads in the list's menu: how many
+   * each would take, and the action (useBulkThreadActions). Absent: neither. */
+  bulk?: { archive: number; delete: number; onArchiveAll: () => void; onDeleteAll: () => void };
   children?: React.ReactNode;
 }) {
   const confirm = useConfirm();
@@ -1555,6 +1645,11 @@ function ThreadTree({ ownerId, ownerName, owner, folderOwner, openThreadId, task
           : <button type="button" role="menuitem" onClick={() => { setListMenu(null); onNew(); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised"><Plus size={12} />{t("task.newShort")}</button>}
         {onNewInFolder && <button type="button" role="menuitem" onClick={() => { setListMenu(null); onNewInFolder(); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised"><FolderOpen size={12} />{t("task.folder.new")}</button>}
         <button type="button" role="menuitem" onClick={() => { setListMenu(null); setCreatingProject(true); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised"><FolderPlus size={12} />{t("folder.new")}</button>
+        {bulk && <>
+          <div className="mx-1.5 my-1 h-px bg-hairline/50" />
+          <button type="button" role="menuitem" data-menu-item="archive-all-threads" disabled={bulk.archive === 0} onClick={() => { setListMenu(null); bulk.onArchiveAll(); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-ink hover:bg-raised disabled:opacity-40 disabled:hover:bg-transparent"><Archive size={12} />{t("task.archiveAll")}</button>
+          <button type="button" role="menuitem" data-menu-item="delete-all-threads" disabled={bulk.delete === 0} onClick={() => { setListMenu(null); bulk.onDeleteAll(); }} className="flex w-full items-center gap-2 rounded px-2.5 py-2 text-left text-[12px] text-danger hover:bg-raised disabled:opacity-40 disabled:hover:bg-transparent"><Trash2 size={12} />{t("task.deleteAll")}</button>
+        </>}
       </div>, document.body)}
       <div ref={createAnchorRef} className="pointer-events-none absolute left-2 top-2 size-0" aria-hidden="true" />
       {creatingProject && <BotProjectDialog bot={folderOwner} owner={owner} anchorRef={createAnchorRef} onClose={() => setCreatingProject(false)} />}
@@ -1630,6 +1725,12 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
       },
     };
   }, [botId, dispatch, generatedTitles, prefetch]);
+  const bulkActions = useBulkThreadActions();
+  const bulkOwner: BulkThreadOwner = { kind: "bot", id: bot.id, tasks: botListedThreads(bot) };
+  const bulk = {
+    archive: bulkActions.count(bulkOwner, "archive"), delete: bulkActions.count(bulkOwner, "delete"),
+    onArchiveAll: () => { void bulkActions.archiveAll(bulkOwner); }, onDeleteAll: () => { void bulkActions.deleteAll(bulkOwner); },
+  };
   const rowState = (task: ThreadTreeTask) => {
     const thread = currentTaskBot(bot, task.threadId);
     return {
@@ -1641,7 +1742,7 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
   };
   return (
     <ThreadTree ownerId={bot.id} ownerName={bot.name} owner="bot" folderOwner={bot} openThreadId={bot.threadId} tasks={tasks} projects={bot.projects ?? []}
-      selected={selected} density={density} query={query} hidden={hidden} actions={actions} rowState={rowState} activeActivityLabel={activeActivityLabel}
+      selected={selected} density={density} query={query} hidden={hidden} actions={actions} rowState={rowState} activeActivityLabel={activeActivityLabel} bulk={bulk}
       onNew={(projectId) => dispatch({ type: "newTask", botId: bot.id, ...(projectId ? { projectId } : {}) })}
       onNewKind={{ choices: newThreadChoices(confidentialByDefault), create: (confidential) => dispatch({ type: "newTask", botId: bot.id, confidential }) }}
       onNewInFolder={canChooseFolder && advanced ? () => setFolderDialog(true) : undefined}

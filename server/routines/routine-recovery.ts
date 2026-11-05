@@ -78,8 +78,7 @@ const OWNER_CAUSES = new Set<string>(["signed_out", "credits", "usage_limit", "s
 /** Codex's ChatGPT workspace routing lookup: passing, unlike its "unauthorized" variant (a sign-in problem). */
 const ROUTING_LOOKUP = /\bworkspace routing discovery (?:failed|timed out)\b/i;
 
-/** A provider refusing for want of credit or payment, in its own words. */
-const OUT_OF_CREDITS = /\bpayment required\b|\b(?:http|status) 402\b|\binsufficient (?:account )?(?:funds|balance|credits?)\b|\b(?:credit|account) balance is too low\b|\busage balance (?:is |has been )?(?:used up|exhausted)\b|\bout of credits?\b|\bno credits? (?:left|remaining)\b|\bused all (?:available |of (?:your|its) )?credits\b/i;
+import { OUT_OF_CREDITS } from "../../shared/engine-limit-words.ts";
 
 const OWNER_ACTION: Record<Exclude<RoutineOwnerCause, "setup" | "usage_limit">, string> = {
   signed_out: "This bot's engine is signed out. Sign in again in Settings → Model providers.",

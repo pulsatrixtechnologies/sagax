@@ -2032,7 +2032,10 @@ button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
 }
 .overlay-scrollbar-thumb {
   position: fixed;
-  z-index: 2147483646;
+  /* the scroller's own stacking level, set per paint by
+     src/lib/overlay-scrollbars.ts (scrollerLayer): menus, popovers and
+     dialogs above a scroller paint above its bar (2026-11-04) */
+  z-index: 1;
   box-sizing: border-box;
   width: 10px;
   height: 10px;

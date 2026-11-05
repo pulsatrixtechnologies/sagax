@@ -40,7 +40,9 @@ const DECIDED_IN: Record<FullAccessSurface, string | null> = {
   "peer-contact": "server/index.ts",
   "proposal": "server/index.ts",
   "send": "server/index.ts",
-  "chat-engine": "server/drivers/openai-chat-turn.ts",
+  // retired (#1982): chat-completions no longer decides at Full; its MCP
+  // asks are engine-bridge and request.opened judges them.
+  "chat-engine": null,
   "engine-bridge": null,
   "isolation": null,
   "exempt": null,
@@ -102,7 +104,9 @@ describe("every approval or choice card reads the Full access decision", () => {
 
   it("every registered surface is emitted somewhere, so the registry never lists a phantom", () => {
     const emitted = new Set(hits.map((hit) => hit.marker));
-    const missing = (Object.keys(FULL_ACCESS_SURFACES) as FullAccessSurface[]).filter((id) => !emitted.has(id));
+    // chat-engine is registered only so an old marker still passes (#1982)
+    const retired = new Set<FullAccessSurface>(["chat-engine"]);
+    const missing = (Object.keys(FULL_ACCESS_SURFACES) as FullAccessSurface[]).filter((id) => !emitted.has(id) && !retired.has(id));
     expect(missing).toEqual([]);
   });
 
@@ -173,10 +177,11 @@ describe("every approval or choice card reads the Full access decision", () => {
     expect(auto).toMatch(/if \(full\.acts && !\(context\?\.sagaxGate && context\.stepUpRequired\?\.length\)\)/);
   });
 
-  it("the chat-completions engines answer their own gate through the decision, not a bare level compare", () => {
+  it("the chat-completions engines never answer Full themselves: every MCP ask reaches request.opened (#1982)", () => {
     const chat = readFileSync(join(SERVER, "drivers", "openai-chat-turn.ts"), "utf8");
-    expect(chat).toMatch(/fullAccessActs\(turn\.approvalMode\)/);
+    expect(chat).not.toMatch(/fullAccessActs\(turn\.approvalMode\)/);
     expect(chat).not.toMatch(/turn\.approvalMode === "full" \|\| !shown\.ask/);
+    expect(chat).toMatch(/\/\/ full-access: engine-bridge/);
   });
 
   it("no driver answers or holds a permission request where it emits it, except the chat engines through the decision", () => {

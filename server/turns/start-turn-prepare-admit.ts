@@ -169,7 +169,7 @@ export function createPrepareAdmitStartTurn(
   // 2026-11-04: a routine run uses its routine's model on the bot's own
   // engine (a limit takeover wins). Chat on the bot keeps the bot's model.
   const routineModel = state.warmOnly ? null : routineModelForTurn?.(state.bot.id, state.threadId, state.instance);
-  if (routineModel && "model" in routineModel) {
+  if (routineModel?.model) {
     state.model = routineModel.model;
     state.routineModel = routineModel.model;
   }

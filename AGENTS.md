@@ -203,6 +203,25 @@ explicit choice is never overwritten. Tests: `routines.test.ts`,
 `routine-requests.test.ts`, `routine-role-coverage.test.ts`,
 `perspicax-routine-roles.test.ts`, `RoutineActAsField.dom.test.ts`.
 
+## Routine "Au nom de" role (visible roles batch 4, 2026-11-05)
+
+`Routine.actAs` (`shared/routine-act-as.ts`) is the Perspicax role slug its
+runs act as; "" is "Moi" (the person's own surface), absent means not chosen.
+Runs snapshot it (`RoutineRun.actAs`); `perspicaxTurnRole` (server/index.ts)
+prefers the run's snapshot, then the routine's. Writes: POST/PATCH
+`/api/routines` `actAs` (null clears, "" is Moi) and `act_as` of
+`propose_routine` / `propose_routine_action`. Bot routines only.
+`GET /api/bots/:id/roles/routine-coverage?routineId=&slug=&prompt=`
+(server/routes/routine-role-coverage.ts, through the `more` hook of
+perspicax-roles.ts) lists the run-as person's held roles live
+(`probeRoutineRoles`: short-lived connection on their routine delegation,
+`identity_switch` {} and `flow` describe of the recipe) and counts only that
+person's refusals for that bot. The editor (RoutineActAsField.tsx) saves the
+minimal covering role (`routineDefaultRole`) when nothing was chosen; an
+explicit choice is never overwritten. Tests: `routines.test.ts`,
+`routine-requests.test.ts`, `routine-role-coverage.test.ts`,
+`perspicax-routine-roles.test.ts`, `RoutineActAsField.dom.test.ts`.
+
 ## Flow routine shadow readiness (#1991, 2026-11-04)
 
 Flow readiness calls `flow_run` on the account's main Perspicax connection

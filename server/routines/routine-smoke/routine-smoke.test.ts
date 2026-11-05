@@ -13,7 +13,6 @@ import { capabilityPrompt } from "../../capabilities/capability-prompt.ts";
 import { approvalLevelPrompt } from "../../approvals/approval-level-prompt.ts";
 import { onDemandPromptParts } from "../../context/prompt-references.ts";
 import { compactVolatileOrder } from "../../context/compact-prompt.ts";
-import { runFailureWakesBot } from "../../proactive/proactive-wake.ts";
 import { bookRoutineUsage, noteCreditsRefusal, startRoutineSmokeHarness, type SmokeHarness } from "./harness.ts";
 import { runDispatchPass, runScriptedRoutine } from "./scripted-engine.ts";
 import { RoutineManager } from "../routines.ts";
@@ -50,7 +49,7 @@ function isFeedVisibleApproval(message: {
 }
 
 describe("routine smoke suite (#2006)", () => {
-  it("does not false-green a Flow pre-flight when the shadow plan fails", async () => {
+  it("a routine called by name runs: a failing Flow shadow plan never blocks the run (#2012)", async () => {
     const h = await open({
       planError: { code: "missing_reads", message: "Read the selection first." },
     });
@@ -66,44 +65,13 @@ describe("routine smoke suite (#2006)", () => {
     h.manager.runNow(routine.id);
     await h.flush();
     const run = h.manager.listRuns()[0]!;
-    expect(run.status).toBe("blocked");
-    expect(run.error).toMatch(/missing_reads|Flow shadow|plan/i);
-    expect(run.readiness).toEqual(expect.arrayContaining([
-      expect.objectContaining({ kind: "flow", ok: false, code: "flow_plan" }),
+    // The shadow check stays on the explicit Check routine button only.
+    expect(run.status).not.toBe("blocked");
+    expect(run.readiness ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "flow", code: "flow_plan" }),
     ]));
-    expect(h.createTask).not.toHaveBeenCalled();
-    expect(h.startTurn).not.toHaveBeenCalled();
-    expect(h.onRunFailed).toHaveBeenCalled();
-    // Blocked + readiness failure: never a proactive wake (runFailureWakesBot).
-    expect(runFailureWakesBot(run)).toBe(false);
+    expect(h.onRunFailed).not.toHaveBeenCalled();
     expect(h.mcp.leases()).toHaveLength(0);
-  });
-
-  it("stops a deterministic block early with one clear line and no orphan run", async () => {
-    const h = await open({
-      planError: { code: "missing_reads", message: "Read the selection first." },
-    });
-    const routine = h.manager.create({
-      name: "Blocked dispatch",
-      prompt: 'Run Flow routine `morning-dispatch`. flow_run {"command":"plan","args":{"units":[{"id":42}]}}',
-      botId: "osprey",
-      schedule: { type: "interval", everyMinutes: 60, anchorAt: h.now() },
-      requires: { skills: ["running-px-flow"] },
-    }, undefined, { runAs: "pr_osprey" });
-    h.manager.runNow(routine.id);
-    await h.flush();
-    const run = h.manager.listRuns()[0]!;
-    expect(run.status).toBe("blocked");
-    expect(run.error!.includes("\n")).toBe(false);
-    expect(run.error!.length).toBeGreaterThan(0);
-    expect(run.error!.length).toBeLessThanOrEqual(500);
-    expect(run.error).toMatch(/missing_reads|Flow shadow|plan/i);
-    expect(h.mcp.leases()).toHaveLength(0);
-    expect(runFailureWakesBot(run)).toBe(false);
-    // A second identical block does not re-notify (no wake loop).
-    h.manager.runNow(routine.id);
-    await h.flush();
-    expect(h.alerts.at(-1)).toBeNull();
   });
 
   it("never double-inits: a live lease answers already_running and finish frees it", async () => {

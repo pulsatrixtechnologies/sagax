@@ -1422,6 +1422,7 @@ function revalidateOperation(operation: RoutineRequestOperation, manager: Routin
         || (routine.overlap ?? "skip") !== (definition.overlap ?? "skip")
         || Boolean(routine.deleteWhenFinished) !== Boolean(definition.deleteWhenFinished)
         || (routine.model ?? "") !== (definition.model ?? "")
+        || (routine.subagentModel ?? "") !== (definition.subagentModel ?? "")
         || routine.actAs !== definition.actAs
         || Boolean(routine.requires?.computer) !== Boolean(definition.requiresComputer)
         || routine.effort !== definition.effort
@@ -1517,6 +1518,7 @@ function routineSnapshot(routine: Routine): RoutineRequestSnapshot | undefined {
     ...(routine.precheck ? { precheck: structuredClone(routine.precheck) } : {}),
     ...(routine.folder ? { folder: routine.folder } : {}),
     ...(routine.model ? { model: routine.model } : {}),
+    ...(routine.subagentModel ? { subagentModel: routine.subagentModel } : {}),
     ...(routine.actAs !== undefined ? { actAs: routine.actAs } : {}),
     ...(routine.requires?.computer ? { requiresComputer: true } : {}),
     ...(routine.effort ? { effort: routine.effort } : {}),
@@ -1546,6 +1548,7 @@ function restorePatch(before: RoutineRequestSnapshot, now: number, currentRequir
     precheck: before.precheck === undefined ? null : structuredClone(before.precheck) as RoutineInput["precheck"],
     folder: before.folder ?? null,
     model: before.model ?? null,
+    subagentModel: before.subagentModel ?? null,
     actAs: before.actAs ?? null,
     requires: withRequiredComputer(currentRequires, before.requiresComputer === true),
     effort: before.effort ?? null,

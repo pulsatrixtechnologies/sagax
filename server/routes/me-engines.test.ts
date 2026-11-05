@@ -89,6 +89,6 @@ describe("createMeEnginesRoutes", () => {
     const call = ctx("/api/me/engines", "GET");
     await route(call.context);
     expect(call.sent[0]?.status).toBe(200);
-    expect((call.sent[0]?.body as { engines: unknown[] }).engines).toHaveLength(1);
+    expect((call.sent[0]?.body as { engines: unknown[] } | undefined)?.engines).toHaveLength(1);
   });
 });

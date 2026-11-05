@@ -5,6 +5,8 @@ import type { SendTurnInput } from "../../contracts.ts";
 import type { WarmResourceLease } from "../../resources/warm-resources.ts";
 import type { RenewalStep } from "../../context/context-renewal.ts";
 import type { ClaudeLimit } from "./limits.ts";
+import type { TurnModelUsage } from "../../../shared/runtime-events.ts";
+import type { ClaudeCostSnapshot } from "./cost.ts";
 
 export type ClaudeChild = ChildProcessByStdio<Writable, Readable, Readable>;
 
@@ -16,6 +18,25 @@ export interface NativeTurnResult {
   stopReason: string | null;
   cost: number | null;
   usage?: { input: number; output: number; cachedInput?: number };
+  /** This result's own usage per model (delta of the CLI's running modelUsage). */
+  models?: TurnModelUsage[];
+}
+
+/** Adds two per-model splits, model by model. */
+export function sumTurnModels(a: TurnModelUsage[] | undefined, b: TurnModelUsage[] | undefined): TurnModelUsage[] | undefined {
+  if (!a?.length) return b;
+  if (!b?.length) return a;
+  const by = new Map<string, TurnModelUsage>();
+  for (const m of [...a, ...b]) {
+    const seen = by.get(m.model);
+    if (!seen) { by.set(m.model, { ...m }); continue; }
+    seen.inputTokens += m.inputTokens;
+    seen.outputTokens += m.outputTokens;
+    if (m.cachedInputTokens !== undefined || seen.cachedInputTokens !== undefined) seen.cachedInputTokens = (seen.cachedInputTokens ?? 0) + (m.cachedInputTokens ?? 0);
+    if (m.cacheWriteTokens !== undefined || seen.cacheWriteTokens !== undefined) seen.cacheWriteTokens = (seen.cacheWriteTokens ?? 0) + (m.cacheWriteTokens ?? 0);
+    seen.costUsd = seen.costUsd === null && m.costUsd === null ? null : Number(((seen.costUsd ?? 0) + (m.costUsd ?? 0)).toFixed(10));
+  }
+  return [...by.values()];
 }
 
 /** Minimal broker surface the session bag needs (createPermissionBroker). */
@@ -165,6 +186,8 @@ export type ClaudeSession = {
     contextFull?: boolean;
     /** The CLI's running cost total on the result that said so. */
     contextFullTotal?: number;
+    /** The same result's usage per model, carried to the fresh session. */
+    contextFullModels?: TurnModelUsage[];
     /** The tool calls this turn made, for that fresh session's note. */
     steps?: RenewalStep[];
     /** The turn's latest reply text, for the same note. */
@@ -179,6 +202,9 @@ export type ClaudeSession = {
    * first turn settles, then the last settled turn's total_cost_usd.
    * undefined until the first result; null when the start is unknown. */
   costTotal: number | null | undefined;
+  /** The CLI's running per-model state after the last result, which the next
+   * result's per-model usage is measured from. undefined until the first. */
+  modelBase?: ClaudeCostSnapshot;
   /** Root close can precede a failed group stop; retry its finalization. */
   finishClose?: () => Promise<void>;
   /** resolves once the process's close has been handled: a turn it was
@@ -205,10 +231,12 @@ export function sumNativeTurnResults(earlier: NativeTurnResult | null, latest: N
           : {}),
       }
     : latest.usage ?? earlier.usage;
+  const models = sumTurnModels(earlier.models, latest.models);
   return {
     ok: earlier.ok && latest.ok,
     stopReason: latest.stopReason ?? earlier.stopReason,
     cost: latest.cost ?? earlier.cost,
     ...(usage ? { usage } : {}),
+    ...(models ? { models } : {}),
   };
 }

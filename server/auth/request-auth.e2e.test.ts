@@ -7,6 +7,7 @@ import { launchVerificationServer } from "../../scripts/control-omb.ts";
 import { BROWSER_SIGN_IN } from "./request-auth.ts";
 import { findChrome, launchPipeChrome } from "../testing/chrome-pipe.ts";
 import { hostTimeout } from "../testing/host-timeout.ts";
+import { releaseVersion } from "../environment.ts";
 
 const chrome = findChrome();
 
@@ -47,7 +48,7 @@ describe("a browser on a self-hosted server's own machine", () => {
       });
       expect(socket.status).toBe(401);
       // Public routes still answer a stranger: the sign-in page needs them.
-      expect(await raw(url, "/api/health", fromPage(url)).then((answer) => JSON.parse(answer.body))).toEqual({ app: "openmausbot", product: "sagax", version: "0.8.45" });
+      expect(await raw(url, "/api/health", fromPage(url)).then((answer) => JSON.parse(answer.body))).toEqual({ app: "openmausbot", product: "sagax", version: releaseVersion() });
 
       // The CLI is Node's fetch, which sends Sec-Fetch-Mode alone.
       const cli = await fetch(`${url}/api/bots`);

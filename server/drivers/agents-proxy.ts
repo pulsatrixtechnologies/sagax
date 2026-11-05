@@ -21,7 +21,7 @@
 // other three into it, so a packaged build still ships one agents-proxy.js.
 import readline from "node:readline";
 
-import { availableTools, catalogProfileFromEnv, compactListed, compactToolsFromEnv, knownUseFromEnv, withDeferredRareTools } from "./agents-catalog.ts";
+import { availableTools, catalogProfileFromEnv, compactListed, compactToolsFromEnv, knownUseFromEnv, withCompactNativeDeferral, withDeferredRareTools } from "./agents-catalog.ts";
 import { applyCatalogGroups, catalogGroupsOn, routeGroupCall } from "./agents-catalog-budget.ts";
 import { catalogBridgeDefinitions, catalogBridgeOn, resolveCatalogUse, routeBridgeCall } from "./catalog-bridge.ts";
 import { mergeByAction } from "./agents-merged.ts";
@@ -57,7 +57,12 @@ const COMPACT = compactToolsFromEnv(process.env);
 const KNOWN_USE = knownUseFromEnv(process.env);
 const BRIDGE = catalogBridgeOn(process.env);
 const GROUPS = catalogGroupsOn(process.env) && !BRIDGE && !COMPACT;
-const SEARCHED = COMPACT && !BRIDGE
+// #2037: on Claude Code the compact turn needs no directory pair: the
+// tools outside the core and the pins are listed by name and deferred to
+// the CLI's own ToolSearch (withCompactNativeDeferral), called by their own
+// names. Other engines keep search_tools / call_tool.
+const NATIVE_DEFERRAL = !!COMPACT && !BRIDGE && process.env.SAGAX_DEFER_RARE_TOOLS === "1";
+const SEARCHED = COMPACT && !BRIDGE && !NATIVE_DEFERRAL
   ? new ToolDirectory(AVAILABLE_TOOLS.filter((tool) => !compactListed(tool.name, { ...COMPACT, coordinating: PROFILE.coordinating })) as unknown as CatalogTool[])
   : undefined;
 // #1276: with the bridge, the heart of a chat turn and the bot's own most
@@ -80,6 +85,8 @@ const LISTED_TOOLS = BRIDGE
   ]
   : GROUPS
   ? applyCatalogGroups(AVAILABLE_TOOLS, process.env)
+  : NATIVE_DEFERRAL
+  ? withCompactNativeDeferral(AVAILABLE_TOOLS, { pinned: COMPACT!.pinned, coordinating: PROFILE.coordinating })
   : COMPACT
   ? [
     ...AVAILABLE_TOOLS.filter((tool) => compactListed(tool.name, { ...COMPACT, coordinating: PROFILE.coordinating })),

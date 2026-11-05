@@ -62,6 +62,32 @@ describe("answerQuery", () => {
     expect(answer.content[0]!.text).toContain(`"${handle}"`);
   });
 
+  it("shows a selected string raw, in windows the model pages through with from", () => {
+    const docs = new ResultStore();
+    const body = Array.from({ length: 2_000 }, (_, i) => `line ${i} of the guide.`).join("\n");
+    const doc = docs.put("read_doc", { title: "Guide", body });
+    const first = answerQuery(docs, { result: doc, query: "body" }, 4_000);
+    expect(first.isError).toBeUndefined();
+    const head = first.content[0]!.text;
+    expect(head.length).toBeLessThanOrEqual(4_000);
+    expect(head.startsWith("⚠️ WINDOW by Sagax: chars 0 to ")).toBe(true);
+    const end = Number(/chars 0 to (\d+) of/.exec(head)![1]);
+    expect(head).toContain(`"from":${end}`);
+    expect(head.slice(head.indexOf("\n\n") + 2, head.lastIndexOf("\n\n"))).toBe(body.slice(0, end));
+
+    const second = answerQuery(docs, { result: doc, query: "body", from: end }, 4_000);
+    expect(second.content[0]!.text.startsWith(`⚠️ WINDOW by Sagax: chars ${end} to `)).toBe(true);
+
+    const tail = answerQuery(docs, { result: doc, query: "body", from: body.length - 100 }, 4_000);
+    expect(tail.content[0]!.text).toContain("last part");
+    expect(tail.content[0]!.text).toContain(body.slice(-100));
+    expect(tail.content[0]!.text).not.toContain("\"from\"");
+
+    const past = answerQuery(docs, { result: doc, query: "body", from: body.length }, 4_000);
+    expect(past.isError).toBe(true);
+    expect(past.content[0]!.text).toContain("past its end");
+  });
+
   it("explains a query it cannot parse and shows the shape to query against", () => {
     const answer = answerQuery(store, { result: handle, query: "products[?price <" }, 8_000);
     expect(answer.isError).toBe(true);

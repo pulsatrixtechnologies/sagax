@@ -151,7 +151,7 @@ describe("toolFailureSource (#1988)", () => {
   const result = { content: [{ type: "text", text: JSON.stringify(body) }], structuredContent: body, _meta: null };
 
   it("keeps a Codex mcpToolCall result when error is null, empty, or wordless", () => {
-    for (const error of [null, undefined, "", {}, { code: "params_invalid" }]) {
+    for (const error of [null, undefined, "", {}, { code: "params_invalid" }, { message: "" }]) {
       const text = toolFailurePreview(toolFailureSource(error, result));
       expect(text).toContain("call flow_run {\"command\": \"run.finish\"} instead (params_invalid)");
       expect(text).toContain("call flow_run with");

@@ -472,6 +472,42 @@ public struct CommChip: Codable, Hashable, Sendable {
     public var text: String? = nil
 }
 
+/// One item a bot's result needs the person for (shared/person-attention.ts).
+public struct PersonAttentionItem: Codable, Hashable, Sendable {
+    public var text: String
+    public var ticketId: Int? = nil
+    /// A ConnectWise deep link the computer built; https only is opened.
+    public var ticketUrl: String? = nil
+
+    public var safeTicketURL: URL? {
+        guard let raw = ticketUrl, let url = URL(string: raw), url.scheme == "https" else { return nil }
+        return url
+    }
+}
+
+/// The card a person's conversation shows for what a bot's turn elsewhere
+/// left for them (`WireMessage.attention`, desktop `AttentionCard.tsx`).
+public struct PersonAttentionCard: Codable, Hashable, Sendable {
+    public struct Opener: Codable, Hashable, Sendable {
+        public var botId: String
+        public var name: String
+    }
+    /// "human", "question" or "failure"; an unknown kind reads as "human".
+    public var kind: String
+    public var items: [PersonAttentionItem]
+    public var botId: String
+    public var botName: String
+    public var threadId: String
+    public var threadTitle: String? = nil
+    public var sourceMessageId: String
+    public var openedBy: Opener? = nil
+    public var routineRunId: String? = nil
+    public var routineName: String? = nil
+
+    /// Where the person opens it: the thread the bot said it in.
+    public var threadRef: ThreadRef { ThreadRef(botId: botId, threadId: threadId, title: threadTitle ?? botName) }
+}
+
 public struct Message: Codable, Hashable, Identifiable, Sendable {
     public enum Kind: String, Codable, Sendable {
         case text, options, activity, screen, video, secret
@@ -549,6 +585,11 @@ public struct Message: Codable, Hashable, Identifiable, Sendable {
     /// leaves the message's text, which the computer writes for exactly
     /// the clients that cannot read the card.
     public var routineRun: RoutineRunCard?
+    /// 2026-11-05: what a bot's turn elsewhere (a hand-off, a thread another
+    /// bot opened, a routine run) left for the person, carried into their own
+    /// conversation with that bot (shared/person-attention.ts). On a
+    /// routine-run row it rides beside the report.
+    public var attention: PersonAttentionCard? = nil
     /// The message this one follows; nil at the thread root. Two messages
     /// sharing a parent are a fork.
     public var parentId: String?

@@ -8,6 +8,7 @@
  * server/store.ts; the wire projection is typed so a new server field
  * fails compilation until it is either declared here or explicitly listed
  * as server-private. */
+import type { PersonAttentionCard } from "./person-attention.ts";
 import type { LimitFailoverLine } from "./limit-failover.ts";
 import type { OrderTracking } from "./order-tracking.ts";
 import type { SoloGoalLine } from "./solo-goal-line.ts";
@@ -786,6 +787,14 @@ export interface WireMessage extends WaitLineField {
   secret?: SecretRequestCardData;
   /** One idempotently updated status card for a routine run. */
   routineRun?: RoutineRunCardData;
+  /** 2026-11-05: what a bot's finished turn elsewhere (a hand-off, a
+   * routine run, a thread another bot opened) left for the person, carried
+   * into their own conversation with that bot (shared/person-attention.ts).
+   * On a routine.run row it rides beside the report. `text` is the fallback. */
+  attention?: PersonAttentionCard;
+  /** 2026-11-05: a bot's answer in a routine run's task after the run had
+   * ended (a teammate's result resumed it), mirrored here: the source id. */
+  lateRunReplyOf?: string;
   /** Terminal receipt for a bounded multi-bot channel goal. */
   goalRun?: GroupGoalRunCardData;
   /** call rows (kind "call"): the finished Live call this row records. The

@@ -20,6 +20,7 @@
 //     a fresh subject; when that fails the call answers "Perspicax access
 //     for this turn ended" (a disabled person mid-turn, S5-10);
 //   - no token is ever logged or put in an error.
+import { toolFailureText } from "../../shared/tool-failure-text.ts";
 import { randomUUID } from "node:crypto";
 import { guardToolCall, type GuardOptions } from "../mcp/mcp-permissions.ts";
 import { MiB, warmResources, type WarmResourceBudget, type WarmResourceLease } from "../resources/warm-resources.ts";
@@ -460,6 +461,20 @@ export function parseMcpBody(text: string, id: unknown): unknown {
       }
     });
   return frames.findLast((frame) => frame.id === id) ?? frames.at(-1) ?? null;
+}
+
+/** 2026-11-05: a tools/call result flagged isError whose content has no
+ * words (the engine then shows "returned no error message"): the words
+ * Perspicax gave elsewhere (structuredContent, _meta) become its text, else
+ * a plain sentence naming the tool. A result with words is left as it is. */
+export function withFailureWords(body: unknown, tool: string): unknown {
+  if (!isObject(body) || !isObject(body.result) || body.result.isError !== true) return body;
+  const result = body.result;
+  const content = Array.isArray(result.content) ? result.content : [];
+  if (toolFailureText(content)) return body;
+  const found = toolFailureText(result.structuredContent) ?? toolFailureText(result._meta);
+  const text = found ?? `${tool || "The tool"} failed on Perspicax and its answer carried no error message${result.structuredContent !== undefined ? `: ${JSON.stringify(result.structuredContent).slice(0, 600)}` : ""}.`;
+  return { ...body, result: { ...result, content: [...content.filter((block) => !(isObject(block) && block.type === "text")), { type: "text", text }] } };
 }
 
 /** The `elicitation` capability added to a client's own (2026-10-26). */
@@ -1314,6 +1329,7 @@ export class PerspicaxMcp {
         entry.twilioTools = new Set(named.slice(0, 500));
         entry.toolsListBody = body;
       }
+      if (frame.method === "tools/call") body = withFailureWords(body, isObject(frame.params) ? String(frame.params.name ?? "") : "");
       const answer: PerspicaxRelayAnswer = body === null
         ? { status: 200, body: rpcError(id, -32000, "Perspicax sent no answer") }
         : { status: 200, body };

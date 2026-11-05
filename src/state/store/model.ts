@@ -308,6 +308,8 @@ export interface Message extends Pick<import("../../../shared/wire").WireMessage
   threadRef?: { botId: string; threadId: string; title: string; gone?: boolean };
   /** A teammate parked on a question for the person (WireMessage.inputRequest). */
   inputRequest?: import("../../../shared/wire").WireMessage["inputRequest"];
+  /** 2026-11-05: what a bot's turn elsewhere left for the person (WireMessage.attention). */
+  attention?: import("../../../shared/wire").WireMessage["attention"];
   /** A parallel task this line belongs to (shared/parallel-tasks.ts). */
   parallelTask?: ParallelTaskRef;
   dataResult?: import("../../../shared/wire").WireMessage["dataResult"];

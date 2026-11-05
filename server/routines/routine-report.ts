@@ -19,6 +19,7 @@
 
 import type { RoutineGoalStatus, RoutineRunStatus } from "../../shared/routines.ts";
 import { findStructure, meaningfulLine } from "../../shared/routine-result.ts";
+import { personAttention } from "../../shared/person-attention.ts";
 
 export const ROUTINE_QUIET_MARKER = "NOTHING_TO_REPORT";
 /** 2026-11-01: the bot's own word that the run failed or did only part of
@@ -123,6 +124,9 @@ export function routineReportOutcome(output: string | undefined): RoutineReportO
   const { declared, rest: text } = declaredStatus(raw);
   if (declared) return { quiet: false, report: text.replace(new RegExp(`^\\s*${ROUTINE_QUIET_MARKER}\\s*$`, "gim"), "").trim(), declared };
   const lines = text.split(/\r?\n/);
+  // 2026-11-05: items only the person can do ([HUMAIN], needs_human, a
+  // question) are never quiet, whatever marker the bot added after them.
+  if (personAttention(text)) return { quiet: false, report: lines.filter((line) => !MARKER_LINE.test(line.trim())).join("\n").trim() };
   const last = lines.findLastIndex((line) => line.trim() !== "");
   if (last >= 0 && MARKER_LINE.test(lines[last]!.trim())) {
     return { quiet: true, report: lines.slice(0, last).join("\n").trim() };
@@ -152,6 +156,9 @@ export interface RoutineRunReportFacts {
   problems?: string;
   /** 2026-11-01: a person started it: its card shows from the start. */
   startedBy?: "person";
+  /** 2026-11-05: its report holds items only the person can do
+   * (shared/person-attention.ts): it posts whatever postResults says. */
+  attention?: boolean;
 }
 
 /** Whether a run has something for the person's conversation now. A plain
@@ -167,7 +174,7 @@ export function routineRunReportable(run: RoutineRunReportFacts): boolean {
     case "failed":
     case "blocked": return true;
     // A run that completed with problems tells the person, like a failure.
-    case "completed": return run.problems ? true : run.quiet !== true && run.postResults === true;
+    case "completed": return run.problems || run.attention ? true : run.quiet !== true && run.postResults === true;
     default: return false;
   }
 }

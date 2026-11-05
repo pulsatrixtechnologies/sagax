@@ -150,6 +150,7 @@ import { ChatFindBar } from "./ChatFindBar";
 import { ReplyQuote } from "./ReplyQuote";
 import { SecretRequestCard } from "./SecretRequestCard";
 import { RoutineRunCard } from "./RoutineRunCard";
+import { AttentionCard } from "./AttentionCard";
 import { CallRecordRow } from "./CallRecordRow";
 import { AttachmentGallery, collectMessageFiles, replyAttachmentGroup, splitMessageAttachments } from "./AttachmentGallery";
 import { ConversationGalleryProvider } from "./ConversationGallery";
@@ -1017,6 +1018,26 @@ const ActivityChip = memo(function ActivityChip({ message, place = "auto" }: { m
   return <ToolActivity tool={tool} place={toolPlace(tool.name, place)} nameOf={botNames(bots)} />;
 });
 
+/** What a bot's turn elsewhere left for the person (2026-11-05): its card,
+ * with the thread it was said in and the run it came from one click away. */
+export function AttentionRow({ message }: { message: Message }) {
+  "use memo";
+  const dispatch = useStoreDispatch();
+  const getState = useStoreGetter();
+  const showThreads = useShowThreads();
+  const card = message.attention;
+  const owner = useStoreSelector((state) => state.bots.find((candidate) => candidate.id === card?.botId));
+  if (!card) return null;
+  return (
+    <AttentionCard
+      card={card}
+      bot={owner}
+      onOpenThread={(botId, threadId) => { openThread(dispatch, { botId, threadId }, getState(), showThreads); }}
+      onOpenRun={(runId) => openRoutineRun(dispatch, { runId })}
+    />
+  );
+}
+
 /** A routine run's receipt. View run opens the run's detail (2026-10-29),
  * a run of a deleted routine too, to read. */
 export function RoutineRunRow({ message, botId, onResume }: { message: Message; botId: string; onResume?: () => void }) {
@@ -1447,6 +1468,10 @@ const MessagesList = memo(function MessagesList({
           // a phone call or a purchase on its card (src/components/OutboundCard.tsx)
           if (m.outbound && m.role === "bot") {
             return <MessageBoundary fallbackText={m.text ?? ""}><OutboundCard message={m} /></MessageBoundary>;
+          }
+          // 2026-11-05: what a bot's turn elsewhere left for the person (src/components/AttentionCard.tsx)
+          if (m.attention && m.role === "bot" && m.kind === "text") {
+            return <MessageBoundary fallbackText={m.text ?? ""}><AttentionRow message={m} /></MessageBoundary>;
           }
           // a widget row whose tree never arrived still reads as its text
           switch (m.kind === "widget" && !m.widget ? "text" : m.kind) {

@@ -2,13 +2,54 @@ import { describe, expect, it } from "vitest";
 
 import {
   antArtifactToMarkdown,
+  claudeArtifactUrl,
+  formatArtifactConsentFence,
   formatArtifactFence,
+  isArtifactConsentRefusal,
   isArtifactTool,
   isSafeHttpUrl,
   liftClaudeChatBlocks,
+  parseArtifactConsent,
   parseArtifactPage,
   parseArtifactPublish,
 } from "./claude-chat-blocks.ts";
+import { isArtifactRead, permissionRoute } from "./searched-tool-call.ts";
+
+describe("#2018 artifact helpers", () => {
+  it("reads the structured tool_use_result of a real publish", () => {
+    expect(parseArtifactPublish({
+      url: "https://claude.ai/artifact/HBXTc3TAqqC5odi1H6Bgu9", path: "/tmp/p.html", artifact_id: "x",
+      title: "Sagax probe", updated: false, owned: true, icon: "code",
+    })).toEqual({ title: "Sagax probe", url: "https://claude.ai/artifact/HBXTc3TAqqC5odi1H6Bgu9", icon: "code", path: "/tmp/p.html", owned: true });
+  });
+
+  it("keeps only canonical claude.ai artifact links", () => {
+    expect(claudeArtifactUrl("https://claude.ai/artifact/HBXTc3TAqqC5odi1H6Bgu9?x=1")).toBe("https://claude.ai/artifact/HBXTc3TAqqC5odi1H6Bgu9");
+    expect(claudeArtifactUrl("https://www.claude.ai/code/artifact/abcdef12-3456")).toBe("https://claude.ai/code/artifact/abcdef12-3456");
+    expect(claudeArtifactUrl("https://evil.example/artifact/HBXTc3TAqqC5odi1H6Bgu9")).toBeNull();
+    expect(claudeArtifactUrl("https://claude.ai/chat/HBXTc3TAqqC5odi1H6Bgu9")).toBeNull();
+  });
+
+  it("recognises the consent refusal and round-trips its fence", () => {
+    expect(isArtifactConsentRefusal("Error: Claude couldn't check who made this artifact. Let Claude read it?")).toBe(true);
+    expect(isArtifactConsentRefusal("Published page")).toBe(false);
+    const fence = formatArtifactConsentFence({ url: "https://claude.ai/artifact/FWS66o6mXuVcnsNca5cYmB", account: "bot@example.com" });
+    const body = fence.split("\n")[1]!;
+    expect(parseArtifactConsent(body)).toEqual({ url: "https://claude.ai/artifact/FWS66o6mXuVcnsNca5cYmB", account: "bot@example.com" });
+    expect(parseArtifactPage(body)).toBeNull();
+    expect(parseArtifactConsent(JSON.stringify({ blocked: "other_account", url: "https://evil.example/x" }))).toBeNull();
+  });
+
+  it("auto-allows Artifact reads only when the turn says so", () => {
+    expect(isArtifactRead("ArtifactData", { action: "query" })).toBe(true);
+    expect(isArtifactRead("Artifact", { action: "publish" })).toBe(false);
+    expect(isArtifactRead("Read", { action: "read" })).toBe(false);
+    const none = new Set<string>();
+    expect(permissionRoute("ArtifactComments", { action: "list" }, none, [], true)).toEqual({ kind: "allow" });
+    expect(permissionRoute("ArtifactComments", { action: "list" }, none, [], false).kind).toBe("ask");
+    expect(permissionRoute("ArtifactData", { action: "set" }, none, [], true).kind).toBe("ask");
+  });
+});
 
 describe("isArtifactTool", () => {
   it("matches the Agent SDK tool name exactly", () => {

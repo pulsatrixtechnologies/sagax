@@ -21,6 +21,7 @@ import {
 } from "../spawn-contract.ts";
 import { COMPACT_DIRECTORY_TOOLS } from "./prepare-constants.ts";
 import { CLAUDE_HOST_TOOLS } from "../host-tools.ts";
+import { ARTIFACT_TOOLS } from "../../../shared/claude-chat-blocks.ts";
 import { DWEB_PROXY_PATH, HOOK_HELPER_PATH, NODE_ENV_FLAG, PERM_PROXY_PATH } from "./helpers.ts";
 import type { ClaudeTurnCtx, ClaudeTurnEarly } from "./turn-ctx.ts";
 
@@ -228,6 +229,9 @@ allowed.splice(0, allowed.length, ...allowed.filter((name) => Object.hasOwn(mcpS
 if ((autoAllowlist || fullAllowlist) && !turn.guestConfined) {
   allowed.push(...claudeAutoAllowedTools());
   if (fullAllowlist) allowed.push(...CLAUDE_HOST_TOOLS);
+  // #2018 Full: the claude.ai Artifact family runs on the person's own
+  // account (publish, data, comments); it never asks in Full.
+  if (fullAllowlist) allowed.push(...ARTIFACT_TOOLS);
 }
 // Keep ask_user available even in Full access. #1982: Full keeps the
 // broker too (no bypassPermissions), so MCP asks reach request.opened.
@@ -240,6 +244,9 @@ const permissionEnv: Record<string, string> = {
   ...NODE_ENV_FLAG,
   ...(turn.toolScope !== undefined ? { SAGAX_PERMISSION_TOOL_SCOPE: JSON.stringify(turn.toolScope) } : {}),
   ...(searchedMounts.size ? { SAGAX_PERMISSION_SEARCHED: JSON.stringify([...searchedMounts].sort()) } : {}),
+  // #2018 Auto: Artifact reads (list, read, get, query) run unasked;
+  // a publish, a data write or a comment still asks.
+  ...(autoAllowlist && !turn.guestConfined ? { SAGAX_PERMISSION_ARTIFACT_READS: "1" } : {}),
 };
 // Finding a tool runs nothing: search_tools and describe_tool of a
 // searched server never ask (call_tool asks as the tool it runs).

@@ -1,6 +1,10 @@
 /** Non-result Claude stream-json frames (#1383). */
 import {
+  claudeArtifactUrl,
+  formatArtifactConsentFence,
   formatArtifactFence,
+  isArtifactConsentRefusal,
+  isArtifactFamilyTool,
   isArtifactTool,
   parseArtifactPublish,
 } from "../../../shared/claude-chat-blocks.ts";
@@ -20,7 +24,7 @@ import {
   claudeVersionTooOld,
 } from "./limits.ts";
 import { COMPACTED_VOLATILE } from "./messages.ts";
-import { firstText, readArtifactHtml } from "./helpers.ts";
+import { claudeAccountEmail, firstText, readArtifactHtml } from "./helpers.ts";
 import {
   STEERED_CONTINUATION_SILENCE_MS,
   steerSilenceScale,
@@ -192,6 +196,11 @@ case "assistant": {
       // #1276: a call_tool on a searched server reads as the tool it runs
       const runs = typeof b.name === "string" ? searchedToolCall(b.name, b.input, session.searchedMounts) : { name: b.name, input: b.input };
       if (typeof b.id === "string" && typeof runs.name === "string") session.toolNames.set(b.id, runs.name);
+      // the artifact an Artifact* call names, for a wrong-account card
+      if (typeof b.id === "string" && isArtifactFamilyTool(runs.name) && runs.input && typeof runs.input === "object") {
+        const url = claudeArtifactUrl(String((runs.input as { url?: unknown }).url ?? ""));
+        if (url) (session.artifactUrls ??= new Map()).set(b.id, url);
+      }
       if (session.turn && typeof b.id === "string" && typeof runs.name === "string" && !o.parent_tool_use_id) {
         pushRenewalStep(session.turn.steps ??= [], { id: b.id, name: runs.name, summary: commandSummary(runs.input) ?? toolDetailPreview(runs.input)?.slice(0, 200) });
       }
@@ -262,8 +271,28 @@ case "user": {
       for (const img of isPhoneToolCallName(toolName) ? [] : extractMcpImages(b.content)) {
         emit({ ...base(threadId, currentTurnId()), type: "item.completed", itemType: "assistant_image", data: img.data });
       }
+      // 2026-11-05: an artifact of another claude.ai account. The CLI's
+      // "who made this" consent never reaches the permission tool, so the
+      // call fails; the card names the engine's account and offers a copy
+      // the bot owns, or reconnecting the account.
+      if (b.is_error && isArtifactFamilyTool(toolName) && typeof b.tool_use_id === "string") {
+        const words = `${typeof b.content === "string" ? b.content : JSON.stringify(b.content ?? "")} ${typeof (o.tool_use_result ?? o.toolUseResult) === "string" ? o.tool_use_result ?? o.toolUseResult : ""}`;
+        const url = session.artifactUrls?.get(b.tool_use_id);
+        if (url && isArtifactConsentRefusal(words)) {
+          const account = claudeAccountEmail(session.configDir);
+          emit({
+            ...base(threadId, currentTurnId()),
+            type: "item.completed",
+            itemType: "assistant_text",
+            text: formatArtifactConsentFence({ url, ...(account ? { account } : {}) }),
+          });
+        }
+      }
+      if (typeof b.tool_use_id === "string") session.artifactUrls?.delete(b.tool_use_id);
       if (!b.is_error && isArtifactTool(toolName)) {
-        const page = parseArtifactPublish(b.content);
+        // the structured result first (Claude Code's tool_use_result object),
+        // then a JSON tool_result from an older CLI
+        const page = parseArtifactPublish(o.tool_use_result ?? o.toolUseResult) ?? parseArtifactPublish(b.content);
         if (page) {
           const html = page.path ? readArtifactHtml(page.path) : undefined;
           emit({

@@ -995,6 +995,7 @@ import { allowedFallbackSelection, engineAllowed } from "../shared/org-allowed-e
 import { offeredEngines, orgEngineMoveLine } from "../shared/offered-engines.ts";
 import {
   cleanDisabledModels,
+  cleanFavoriteModels,
   modelOffer,
   modelOn,
   type ModelSwitches
@@ -39445,6 +39446,17 @@ ROUTES.push(createModelSwitchRoutes({
       applyModelSwitches(owner);
       // each stream gets its own person's list (configForPerson)
       broadcast({ kind: "config", ...configStatus() });
+    }
+  },
+  // #2050: the person's starred models (model selector), no broadcast: the
+  // stars are the selector's own, read when it opens.
+  favorites: (owner) => (owner === "installation" ? cleanFavoriteModels(cfg.favoriteModels) : (personSettings.get(owner).favoriteModels ?? [])),
+  saveFavorites: (owner, list) => {
+    if (owner === "installation") {
+      saveConfig({ favoriteModels: list });
+      cfg.favoriteModels = list;
+    } else {
+      personSettings.setFavoriteModels(owner, list);
     }
   }
 }));

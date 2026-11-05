@@ -20,7 +20,7 @@ import {
   PERSONAL_BROWSER_PROFILE_PREFIX,
   type PersonalFeature,
 } from "../../shared/person-settings.ts";
-import { cleanDisabledModels } from "../../shared/offered-models.ts";
+import { cleanDisabledModels, cleanFavoriteModels } from "../../shared/offered-models.ts";
 import { writeFileAtomic } from "../atomic.ts";
 
 export const PERSON_SETTINGS_FILE = "person-settings.json";
@@ -35,6 +35,9 @@ export interface PersonSettings {
    * bots, Auto and voice, as `<engine>/<model>` (shared/offered-models.ts).
    * Absent when none. */
   disabledModels?: string[];
+  /** #2050: the models this person starred in the model selector, as
+   * `<engine>/<model>`, in star order. Absent when none. */
+  favoriteModels?: string[];
   /** #1940: days before a pending approval in this person's inbox expires
    * (0 = never). Absent follows the organization setting, then the env /
    * default (7). */
@@ -88,11 +91,13 @@ function parse(value: unknown): PersonSettings {
     browserProfiles.push({ id, name });
   }
   const disabledModels = cleanDisabledModels(raw.disabledModels);
+  const favoriteModels = cleanFavoriteModels(raw.favoriteModels);
   const pendingApprovalExpireDays = parseExpireDays(raw.pendingApprovalExpireDays);
   return {
     features,
     browserProfiles,
     ...(disabledModels.length ? { disabledModels } : {}),
+    ...(favoriteModels.length ? { favoriteModels } : {}),
     ...(pendingApprovalExpireDays !== undefined ? { pendingApprovalExpireDays } : {}),
   };
 }
@@ -153,6 +158,15 @@ export class PersonSettingsStore {
     const { disabledModels: _, ...rest } = current;
     const next = cleanDisabledModels(list);
     return this.save(principalId, { ...rest, ...(next.length ? { disabledModels: next } : {}) });
+  }
+
+  /** #2050: the person's starred models, the whole list. */
+  setFavoriteModels(principalId: string, list: unknown): PersonSettings {
+    if (!Array.isArray(list)) throw new PersonSettingsError("favoriteModels must be a list.");
+    const current = this.get(principalId);
+    const { favoriteModels: _, ...rest } = current;
+    const next = cleanFavoriteModels(list);
+    return this.save(principalId, { ...rest, ...(next.length ? { favoriteModels: next } : {}) });
   }
 
   /** #1940: personal override for pending approval age. `null` clears it

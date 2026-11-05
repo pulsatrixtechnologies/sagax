@@ -23,11 +23,15 @@ import { effortLabel } from "@/lib/effort-label";
 import { isUltracodeEffort } from "../../shared/ultracode-effort";
 import { batchModelActions } from "@/lib/batch-bot-model";
 import { useModelFavorites } from "@/lib/model-favorites";
+import { useModelFavoritesServerSync } from "@/lib/model-favorites-sync";
+import { requestSettingsCard } from "./SettingsPrimitives";
+import { modelOffer, type ModelSwitches } from "../../shared/offered-models";
 import type { EffortLevel } from "../../shared/wire";
 
 import {
   COMPOSER_MODEL_EVENT,
-  MENU_WIDTH,
+  MENU_WIDTH as BASE_MENU_WIDTH,
+  PANES_MENU_WIDTH,
   composerModelLabel,
   engineStatus,
   isDesktopLocalModel,
@@ -75,6 +79,18 @@ function variantLabelForSelection(
   );
 }
 
+/** How many models of the given engines are off for this person or the
+ * organization (shared/offered-models.ts). */
+export function turnedOffCount(instances: readonly { instanceId: string; models: { options: readonly { id: string }[] } }[], switches: ModelSwitches): number {
+  let count = 0;
+  for (const instance of instances) {
+    for (const option of instance.models.options) {
+      if (modelOffer(switches, instance.instanceId, option.id) !== "on") count += 1;
+    }
+  }
+  return count;
+}
+
 export function ModelPicker({
   bot,
   threadId,
@@ -92,6 +108,7 @@ export function ModelPicker({
   fallbackAnchor,
   /** Other selected bots that receive the same model and effort. */
   alsoApplyTo,
+  panes = false,
 }: {
   bot: Bot;
   threadId?: string;
@@ -120,8 +137,13 @@ export function ModelPicker({
   /** Headless: what the menu opens above when no row asked (the mascot). */
   fallbackAnchor?: () => HTMLElement | null;
   alsoApplyTo?: readonly string[];
+  /** Settings > Models and Bot > Model (#2050): the two-pane menu
+   * (providers beside models) with the "n turned off · Active models" link. */
+  panes?: boolean;
 }) {
   const { state, dispatch, refreshInstances, refreshModels: refreshInstanceModels } = useStore();
+  // #2050: the stars follow the person through /api/me/models
+  useModelFavoritesServerSync();
   const applyToOthers = (next: ModelSelection) => {
     if (!alsoApplyTo?.length) return;
     const others = alsoApplyTo.flatMap((id) => {
@@ -192,6 +214,13 @@ export function ModelPicker({
     closeAll();
     dispatch({ type: "toggleAppSettings", open: true, section: "providers" });
   };
+  // Settings > Models > Advanced > Active models, from the two-pane menu.
+  const openActiveModels = () => {
+    closeAll();
+    requestSettingsCard("models.advanced");
+    dispatch({ type: "toggleAppSettings", open: true, section: "engines" });
+  };
+  const turnedOff = panes ? turnedOffCount(pickerInstances, switches) : 0;
 
   const profile = state.bots.find((candidate) => candidate.id === bot.id) ?? bot;
   const follows = threadId ? profile.tasks?.find((task) => task.threadId === threadId)?.followsBotModel : undefined;
@@ -315,6 +344,7 @@ export function ModelPicker({
       closeMenu();
       return;
     }
+    const MENU_WIDTH = panes ? PANES_MENU_WIDTH : BASE_MENU_WIDTH;
     anchorRef.current = anchor;
     setMenuDoneCall(onDone ? { call: onDone } : null);
     const box = anchor ? (anchor.closest<HTMLElement>('[role="menu"]') ?? anchor) : null;
@@ -415,6 +445,9 @@ export function ModelPicker({
         effortTitle,
         // Settings > Models list: hang off the chip, inside the Settings window.
         anchorRef: listChip && !headless && !windowOnly ? triggerRef : undefined,
+        panes,
+        turnedOff,
+        openActiveModels: panes ? openActiveModels : undefined,
       }))}
     </div>
   );

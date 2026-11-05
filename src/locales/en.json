@@ -13341,5 +13341,15 @@
   "roles.missing.adminMessage": "{person} asks for a ConnectWise permission for the bot {bot}. The role {role} was refused: {permission}. To fix: {fix}. Refused {count} times, last on {when} (ET). Tools: {tools}.",
   "routines.effort.label": "Effort",
   "routines.effort.botDefault": "Bot's effort",
-  "routineEditor.hint.effort": "Its runs and their sub-agents use this effort. Chat keeps the bot's effort."
+  "routineEditor.hint.effort": "Its runs and their sub-agents use this effort. Chat keeps the bot's effort.",
+  "model.panes.noFavorites": "No favorites yet. Star a model to list it here.",
+  "model.activeModels": "Active models",
+  "model.activeModelsLink": "{count} turned off · Active models",
+  "botModels.selectAll": "All bots",
+  "botModels.col.modelEffort": "Model · effort",
+  "botModels.bulk.setModelFor": "Set model for {count} bots",
+  "botModels.bulk.setModelForOne": "Set model for 1 bot",
+  "botModels.defaults.perspicax": "Chosen in Perspicax",
+  "botModels.activeModels": "{count} turned off · Active models",
+  "botModels.activeModelsNone": "Active models"
 }

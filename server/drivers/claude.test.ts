@@ -2008,6 +2008,40 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(seen.mcpConfig.mcpServers.agents.env.SAGAX_MERGED_TOOLS).toBe("1");
   });
 
+  // #2037: known agents use widens deferral on a native tool-search turn.
+  it("passes known-use pins so the agents proxy can defer outside the core (#2037)", async () => {
+    await create(undefined, { FAKE_CLAUDE_VERSION: "2.1.284" });
+    const dump = join(scratch, "known-use-dump.json");
+    process.env.FAKE_CLAUDE_DUMP = dump;
+    await instance.adapter.sendTurn({
+      threadId: "t-known-use", text: "hi",
+      agentsKnownUse: { core: "used", pinned: ["api_list", "ask_bot", "api_list"] },
+      integrations: { agents: { command: process.execPath, args: ["/fake/agents-proxy.js"], env: { SAGAX_BOT_ID: "b1", SAGAX_COMMS_TOKEN: "tok" } } },
+    });
+    await recorder.until((e) => e.type === "turn.completed");
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.mcpConfig.mcpServers.agents.env.SAGAX_DEFER_RARE_TOOLS).toBe("1");
+    expect(JSON.parse(seen.mcpConfig.mcpServers.agents.env.SAGAX_DEFER_KNOWN_USE)).toEqual({ core: "used", pinned: ["api_list", "ask_bot"] });
+    expect(seen.mcpConfig.mcpServers.agents.env.SAGAX_COMPACT_TOOLS).toBeUndefined();
+  });
+
+  it("does not pass known-use pins on a compact prompt (#2037)", async () => {
+    await create(undefined, { FAKE_CLAUDE_VERSION: "2.1.284" });
+    const dump = join(scratch, "compact-known-dump.json");
+    process.env.FAKE_CLAUDE_DUMP = dump;
+    await instance.adapter.sendTurn({
+      threadId: "t-compact-known", text: "hi",
+      compactPrompt: { agents: { core: "used", pinned: ["ask_bot"] }, pinned: {} },
+      agentsKnownUse: { core: "used", pinned: ["api_list"] },
+      integrations: { agents: { command: process.execPath, args: ["/fake/agents-proxy.js"], env: { SAGAX_BOT_ID: "b1", SAGAX_COMMS_TOKEN: "tok" } } },
+    } as Parameters<typeof instance.adapter.sendTurn>[0]);
+    await recorder.until((e) => e.type === "turn.completed");
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.mcpConfig.mcpServers.agents.env.SAGAX_DEFER_KNOWN_USE).toBeUndefined();
+    expect(seen.mcpConfig.mcpServers.agents.env.SAGAX_DEFER_RARE_TOOLS).toBeUndefined();
+    expect(JSON.parse(seen.mcpConfig.mcpServers.agents.env.SAGAX_COMPACT_TOOLS)).toEqual({ core: "used", pinned: ["ask_bot"] });
+  });
+
   it("keeps native tool search on and the catalog unmerged on a compact prompt", async () => {
     await create(undefined, { FAKE_CLAUDE_VERSION: "2.1.284" });
     const dump = join(scratch, "compact-dump.json");

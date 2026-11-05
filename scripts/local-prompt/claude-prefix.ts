@@ -44,10 +44,13 @@ const AGENTS_PROFILE: Record<string, string> = {
 
 interface Variant { name: string; toolSearch: boolean; agentsEnv: Record<string, string> }
 /** tool-search-off: before #1990 (turn-prepare-mcp forced tool search off, every agents
- * tool listed whole). current: what turn-prepare-mcp.ts sends today. */
+ * tool listed whole). current: what turn-prepare-mcp.ts sends today for a bot
+ * with little recorded use. known-use (#2037): native tool search with the
+ * bot's agents use known (core used, no extra pins). */
 const VARIANTS: Variant[] = [
   { name: "tool-search-off", toolSearch: false, agentsEnv: { SAGAX_MERGED_TOOLS: "1" } },
   { name: "current", toolSearch: true, agentsEnv: { SAGAX_DEFER_RARE_TOOLS: "1", SAGAX_MERGED_TOOLS: "1" } },
+  { name: "known-use", toolSearch: true, agentsEnv: { SAGAX_DEFER_RARE_TOOLS: "1", SAGAX_MERGED_TOOLS: "1", SAGAX_DEFER_KNOWN_USE: JSON.stringify({ core: "used", pinned: [] }) } },
 ];
 
 async function capture(dir: string): Promise<{ server: Server; port: number; bodies: () => string[] }> {

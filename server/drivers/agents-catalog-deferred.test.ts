@@ -9,7 +9,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { childEnv } from "../testing/omb-env.ts";
 import { waitForExit } from "../testing/cleanup.ts";
-import { availableTools, catalogProfileFromEnv, DEFERRED_AGENT_TOOL_NAMES, withDeferredRareTools } from "./agents-catalog.ts";
+import { availableTools, catalogProfileFromEnv, COMPACT_CORE_AGENT_TOOL_NAMES, DEFERRED_AGENT_TOOL_NAMES, knownUseFromEnv, withDeferredRareTools } from "./agents-catalog.ts";
+import { mergeByAction } from "./agents-merged.ts";
 
 const PROXY = join(dirname(fileURLToPath(import.meta.url)), "agents-proxy.ts");
 const EVERYTHING = {
@@ -124,4 +125,62 @@ describe("deferred rare agents tools", () => {
       }
     }
   }, 60_000);
+
+  // #2037: when the bot's agents use is known, native tool search defers
+  // every tool outside the chat-turn core and the bot's own pins. Every
+  // name stays listed; a bot with little use keeps DEFERRED_AGENT_TOOL_NAMES.
+  describe("known-use deferral (#2037)", () => {
+    it("reads only core used from SAGAX_DEFER_KNOWN_USE", () => {
+      expect(knownUseFromEnv({})).toBeUndefined();
+      expect(knownUseFromEnv({ SAGAX_DEFER_KNOWN_USE: JSON.stringify({ core: "default", pinned: ["ask_bot"] }) })).toBeUndefined();
+      expect(knownUseFromEnv({ SAGAX_DEFER_KNOWN_USE: "{bad" })).toBeUndefined();
+      const used = knownUseFromEnv({ SAGAX_DEFER_KNOWN_USE: JSON.stringify({ core: "used", pinned: ["ask_bot", ""] }) });
+      expect(used?.core).toBe("used");
+      expect([...used!.pinned]).toEqual(["ask_bot"]);
+    });
+
+    it("defers everything outside the core and pins, and keeps every name", () => {
+      const tools = availableTools(catalogProfileFromEnv(EVERYTHING));
+      const pinned = new Set(["api_list", "claim"]);
+      const marked = withDeferredRareTools(tools, { coordinating: false, knownUse: { core: "used", pinned } });
+      expect(marked.map(({ _meta, ...tool }) => tool)).toEqual(tools);
+      for (const tool of marked) {
+        const keep = COMPACT_CORE_AGENT_TOOL_NAMES.has(tool.name) || tool.name === "shared_computer" || pinned.has(tool.name);
+        expect(tool._meta?.["anthropic/alwaysLoad"], tool.name).toBe(keep ? undefined : false);
+      }
+      // Pins stay loaded even when they are in the rare set.
+      expect(marked.find((tool) => tool.name === "api_list")?._meta?.["anthropic/alwaysLoad"]).toBeUndefined();
+      expect(DEFERRED_AGENT_TOOL_NAMES.has("propose_routine")).toBe(true);
+      expect(marked.find((tool) => tool.name === "propose_routine")?._meta).toEqual({ "anthropic/alwaysLoad": false });
+    });
+
+    it("keeps the current rare list when known use is absent or default", () => {
+      const tools = availableTools(catalogProfileFromEnv(EVERYTHING));
+      const plain = withDeferredRareTools(tools, { coordinating: false });
+      expect(withDeferredRareTools(tools, { coordinating: false, knownUse: { core: "default", pinned: new Set(["api_list"]) } })).toEqual(plain);
+    });
+
+    it("serves the known-use marker from the proxy and leaves every name listed", async () => {
+      const pins = JSON.stringify({ core: "used", pinned: ["api_list"] });
+      const before = await listTools({ ...EVERYTHING, SAGAX_DEFER_RARE_TOOLS: "1", SAGAX_MERGED_TOOLS: "1" });
+      const after = await listTools({ ...EVERYTHING, SAGAX_DEFER_RARE_TOOLS: "1", SAGAX_MERGED_TOOLS: "1", SAGAX_DEFER_KNOWN_USE: pins });
+      expect(after.map((tool) => tool.name)).toEqual(before.map((tool) => tool.name));
+      const beforeLoaded = before.filter((tool) => tool._meta?.["anthropic/alwaysLoad"] !== false);
+      const afterLoaded = after.filter((tool) => tool._meta?.["anthropic/alwaysLoad"] !== false);
+      expect(afterLoaded.length).toBeLessThan(beforeLoaded.length);
+      expect(after.find((tool) => tool.name === "api_list")?._meta?.["anthropic/alwaysLoad"]).toBeUndefined();
+      expect(after.find((tool) => tool.name === "memory_search")?._meta).toEqual({ "anthropic/alwaysLoad": false });
+      expect(after.find((tool) => tool.name === "ask_bot")?._meta?.["anthropic/alwaysLoad"]).toBeUndefined();
+    }, 30_000);
+
+    it("shrinks the loaded catalog bytes once use is known", () => {
+      const tools = availableTools(catalogProfileFromEnv(EVERYTHING));
+      const size = (list: Array<{ name: string; description?: string; inputSchema?: unknown; _meta?: Record<string, unknown> }>) =>
+        JSON.stringify(list.filter((tool) => tool._meta?.["anthropic/alwaysLoad"] !== false).map(({ name, description, inputSchema }) => ({ name, description, inputSchema }))).length;
+      const before = mergeByAction(withDeferredRareTools(tools, { coordinating: false }));
+      const after = mergeByAction(withDeferredRareTools(tools, { coordinating: false, knownUse: { core: "used", pinned: new Set() } }));
+      expect(size(after)).toBeLessThan(size(before));
+      expect(after.map((tool) => tool.name).sort()).toEqual(before.map((tool) => tool.name).sort());
+    });
+  });
 });

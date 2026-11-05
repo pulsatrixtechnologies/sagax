@@ -105,6 +105,46 @@ public struct OwnerRuleCandidate: Codable, Hashable, Sendable {
     public var from: String? = nil
 }
 
+/// One offer on a page-target choice card (`OptionCardData.pageTargetChoice`).
+public struct PageTargetChoiceTarget: Codable, Hashable, Sendable {
+    public var id: String
+    public var tool: String
+    public var name: String
+    public var icon: String?
+
+    public init(id: String, tool: String, name: String, icon: String? = nil) {
+        self.id = id
+        self.tool = tool
+        self.name = name
+        self.icon = icon
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id) ?? ""
+        tool = try container.decodeIfPresent(String.self, forKey: .tool) ?? ""
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+        icon = try container.decodeIfPresent(String.self, forKey: .icon)
+    }
+}
+
+/// Durable payload on the publish-target choice card (#2048).
+public struct PageTargetChoiceCardData: Codable, Hashable, Sendable {
+    public var version: Int
+    public var targets: [PageTargetChoiceTarget]
+
+    public init(version: Int = 1, targets: [PageTargetChoiceTarget]) {
+        self.version = version
+        self.targets = targets
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        targets = try container.decodeIfPresent([PageTargetChoiceTarget].self, forKey: .targets) ?? []
+    }
+}
+
 public struct OptionCard: Codable, Hashable, Sendable {
     public var title: String
     public var subtitle: String
@@ -200,6 +240,9 @@ public struct OptionCard: Codable, Hashable, Sendable {
     /// transition, answered on its own route (`VisibleRoles`). Nil on every
     /// other card.
     public var roleTransition: RoleTransitionCard? = nil
+    /// #2048: publish-target choice card (page / artifact surface). Nil on
+    /// every other card. Decoding is forgiving.
+    public var pageTargetChoice: PageTargetChoiceCardData? = nil
 
     /// A card is actionable while it is unanswered and still has a request
     /// behind it. Everything else is transcript.
@@ -1069,6 +1112,8 @@ public struct Bot: Codable, Hashable, Identifiable, Sendable {
     public var approvalSetting: String? = nil
     /// The bot's proactive mode (`ProactiveMode`); nil reads as the default.
     public var proactiveMode: String? = nil
+    /// Remembered publish target id (`pageTargetDefault`); nil means ask each time (#2048).
+    public var pageTargetDefault: String? = nil
     /// The level the open conversation really runs at, with why, when it is
     /// not `approvalSetting` (`WireBot.approvalApplied`).
     public var approvalApplied: AppliedApprovalLevel? = nil

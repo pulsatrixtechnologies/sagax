@@ -290,6 +290,44 @@ struct PersonaPermissionsPage: View {
                     }
                     .accessibilityIdentifier("persona-permissions.proactive")
                 }
+                // #2048: remembered publish target (page / artifact surface).
+                if edits("pageTargetDefault") {
+                    DesktopDescribedRow(
+                        Text("Publish target"),
+                        description: Text(bot.pageTargetDefault.map { PageTargetDefaultChoice.label(for: $0) }
+                            .map { "Always \($0)." }
+                            ?? "Ask each time when several targets are available."),
+                        help: Text("When this bot is asked to create a page or an artifact and more than one surface is available, which one to use. Ask each time shows a choice card."),
+                        identifier: "pageTargetDefault"
+                    ) {
+                        Menu {
+                            ForEach(PageTargetDefaultChoice.all, id: \.id) { choice in
+                                Button {
+                                    let current = bot.pageTargetDefault ?? ""
+                                    guard choice.id != current else { return }
+                                    Task {
+                                        _ = await sendPanelPatch(
+                                            BotPanelPatch(pageTargetDefault: choice.id.isEmpty ? "" : choice.id),
+                                            bot: bot, session: session
+                                        )
+                                    }
+                                } label: {
+                                    if (bot.pageTargetDefault ?? "") == choice.id {
+                                        Label(choice.label, systemImage: "checkmark")
+                                    } else {
+                                        Text(choice.label)
+                                    }
+                                }
+                            }
+                        } label: {
+                            Text(PageTargetDefaultChoice.label(for: bot.pageTargetDefault ?? ""))
+                                .font(theme.font(13))
+                                .foregroundStyle(theme.ink)
+                        }
+                        .disabled(bot.busy == true)
+                        .accessibilityIdentifier("persona-permissions.page-target")
+                    }
+                }
             }
         }
         if mode.advanced, edits("approvePeerComms") {

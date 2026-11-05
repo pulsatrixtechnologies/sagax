@@ -15,15 +15,37 @@ public struct AskQuestionOption: Codable, Hashable, Sendable {
     /// The model's one-line gloss under the label. Named `detail` because
     /// `description` is Swift's own printing hook.
     public var detail: String?
+    /// Stable id the answer carries when it differs from the visible label
+    /// (page-target choice #2048: sagax_page, …). Absent: the label is the answer.
+    public var id: String?
+    /// Optional icon key the sheet knows (lucide name → SF Symbol on iOS).
+    public var icon: String?
+    /// Greyed row the person cannot pick (unavailable target with a reason).
+    public var disabled: Bool?
 
     private enum CodingKeys: String, CodingKey {
         case label
         case detail = "description"
+        case id
+        case icon
+        case disabled
     }
 
-    public init(label: String, detail: String? = nil) {
+    public init(label: String, detail: String? = nil, id: String? = nil, icon: String? = nil, disabled: Bool? = nil) {
         self.label = label
         self.detail = detail
+        self.id = id
+        self.icon = icon
+        self.disabled = disabled
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        label = try container.decode(String.self, forKey: .label)
+        detail = try container.decodeIfPresent(String.self, forKey: .detail)
+        id = try container.decodeIfPresent(String.self, forKey: .id)
+        icon = try container.decodeIfPresent(String.self, forKey: .icon)
+        disabled = try container.decodeIfPresent(Bool.self, forKey: .disabled)
     }
 }
 

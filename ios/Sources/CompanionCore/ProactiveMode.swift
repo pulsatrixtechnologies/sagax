@@ -64,3 +64,21 @@ public struct ProactiveProposalRef: Codable, Hashable, Sendable {
     public var id: String
     public init(id: String) { self.id = id }
 }
+
+/// Built-in publish targets for `bot.pageTargetDefault` (#2048). Empty id
+/// means ask each time (clear). Labels match desktop `pageTarget.*.name`.
+public struct PageTargetDefaultChoice: Hashable, Sendable {
+    public var id: String
+    public var label: String
+
+    public static let all: [PageTargetDefaultChoice] = [
+        PageTargetDefaultChoice(id: "", label: "Ask each time"),
+        PageTargetDefaultChoice(id: "sagax_page", label: "Sagax page"),
+        PageTargetDefaultChoice(id: "sagax_artifact", label: "Sagax artifact"),
+        PageTargetDefaultChoice(id: "claude_artifact", label: "Claude artifact"),
+    ]
+
+    public static func label(for id: String) -> String {
+        all.first { $0.id == id }?.label ?? (id.isEmpty ? "Ask each time" : id)
+    }
+}

@@ -328,6 +328,57 @@ struct BotPanelPermissions: View {
                     .foregroundStyle(theme.inkSecondary)
                     .padding(.top, 6)
             }
+            // #2048: remembered publish target (page / artifact surface).
+            if edits("pageTargetDefault") {
+                PanelCard {
+                    Text("Publish target").panelText(13, 19.5, .medium).foregroundStyle(theme.ink)
+                    Text(bot.pageTargetDefault.map { PageTargetDefaultChoice.label(for: $0) }
+                         .map { "Always \($0)." }
+                         ?? "Ask each time when several targets are available.")
+                        .panelText(13, 19.5)
+                        .foregroundStyle(theme.inkSecondary)
+                        .padding(.top, 2)
+                    Menu {
+                        ForEach(PageTargetDefaultChoice.all, id: \.id) { choice in
+                            Button {
+                                let current = bot.pageTargetDefault ?? ""
+                                guard choice.id != current else { return }
+                                Task {
+                                    _ = await sendPanelPatch(
+                                        BotPanelPatch(pageTargetDefault: choice.id.isEmpty ? "" : choice.id),
+                                        bot: bot, session: session
+                                    )
+                                }
+                            } label: {
+                                if (bot.pageTargetDefault ?? "") == choice.id {
+                                    Label(choice.label, systemImage: "checkmark")
+                                } else {
+                                    Text(choice.label)
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 10) {
+                            Text(PageTargetDefaultChoice.label(for: bot.pageTargetDefault ?? ""))
+                                .font(theme.font(13))
+                                .foregroundStyle(theme.ink)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(theme.inkSecondary)
+                        }
+                        .padding(.horizontal, 14)
+                        .frame(height: 40)
+                        .background(theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline40, lineWidth: 1))
+                        .contentShape(Rectangle())
+                    }
+                    .disabled(bot.busy == true)
+                    .padding(.top, 12)
+                    .accessibilityLabel(Text("Publish target"))
+                    .accessibilityIdentifier("desktop-panel-page-target")
+                }
+            }
             if session.surfaceGate.allows(.botOutbound, bot: bot) {
                 AnyView(BotPanelOutbound(bot: bot))
             }

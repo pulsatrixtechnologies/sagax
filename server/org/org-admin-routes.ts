@@ -30,8 +30,10 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { aggregateOrgUsage, ORG_USAGE_MAX_ROWS, parseOrgUsageRange, type OrgUsageAggregate, type UsageRow } from "../usage/usage-ledger.ts";
 import type { ConsoleAssertion, ConsoleGrant, ConsoleGrantKind } from "../auth/oidc-rp.ts";
 import type { IdentifiedAdminAction } from "../activity/admin-activity.ts";
+import type { AdminBotEngine } from "./org-admin-bot-engine.ts";
 import type { AdminBotLook, AdminBotPersona } from "./org-admin-look.ts";
 import { ADMIN_FILES_ROUTE, answerBotFiles, type OrgAdminFilesDeps } from "./org-admin-files.ts";
+export type { AdminBotEngine } from "./org-admin-bot-engine.ts";
 import {
   compileRoutes,
   consoleLocale,
@@ -119,7 +121,8 @@ export interface AdminBot {
   name: string;
   owner: AdminPerson;
   ownerRole: "admin" | "member";
-  engine: { instanceId: string; driverKind: string; installed: boolean };
+  /** #2067: `name` is the desktop engine display name (English/default). */
+  engine: AdminBotEngine;
   model: string | null;
   access: AccessKind;
   mcpProfiles: Array<{ id: string; name: string }>;

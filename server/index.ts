@@ -2605,6 +2605,7 @@ import {
 } from "./org/org-person-connections.ts";
 import { peopleRoutes, type EngineVia, type PeopleDeps } from "./org/org-admin-people.ts";
 import { botsRoutes, type BotsDeps } from "./org/org-admin-bots.ts";
+import { adminBotEngine } from "./org/org-admin-bot-engine.ts";
 import { botLook, botPersona, readBotAvatar } from "./org/org-admin-look.ts";
 import { ConsoleRefusal } from "./org/org-admin-console.ts";
 import { routineScheduleLabel } from "./org/org-admin-schedule.ts";
@@ -40988,7 +40989,16 @@ function orgAdminBots(): Array<{ bot: AdminBot; reach: AdminBotReach }> {
         name: bot.name,
         owner: adminPerson(facts.ownerPrincipalId),
         ownerRole,
-        engine: { instanceId: engine.instanceId, driverKind: engine.driver, installed: engineInstalled(engine.instanceId) },
+        engine: (() => {
+          const live = registry.get(engine.instanceId);
+          return adminBotEngine({
+            instanceId: engine.instanceId,
+            driverKind: engine.driver,
+            installed: engineInstalled(engine.instanceId),
+            displayName: live?.displayName,
+            driverDisplayName: engine.driver ? driverDisplayName(engine.driver) : null,
+          });
+        })(),
         model: bot.modelSelection?.model || null,
         access,
         // Kept empty for the older console wire shape. Roles belong to the

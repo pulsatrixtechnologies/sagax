@@ -256,7 +256,7 @@ posixOnly("Perspicax organization, slice 7: the console admin API", () => {
     for (const bot of [bots.x!, bots.y!, bots.z!, bots.w!]) expect([...byId.keys()]).toContain(bot.id);
     expect(byId.get(bots.x!.id)).toMatchObject({
       name: "Xavier", owner: { principalId: ids.alice, sub: ALICE.sub, name: "Alice" }, ownerRole: "admin",
-      engine: { instanceId: "claude", driverKind: "claudeAgent", installed: true }, access: "org-key",
+      engine: { instanceId: "claude", driverKind: "claudeAgent", installed: true, name: "Claude" }, access: "org-key",
       grants: [{ target: `team:${TEAM_T}`, kind: "team", label: "T", level: "run" }], routines: 0,
     });
     expect(byId.get(bots.z!.id)).toMatchObject({ owner: { name: "Carol" }, ownerRole: "member" });

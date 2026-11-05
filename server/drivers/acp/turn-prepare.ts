@@ -14,6 +14,7 @@ import {
   INIT_TIMEOUT,
   LOAD_SESSION_TIMEOUT,
   NEW_SESSION_TIMEOUT,
+  SESSION_CONFIG_TIMEOUT,
 } from "./constants.ts";
 import { skipSubscriptionAuthForLocalInject } from "./helpers.ts";
 import { newTurnLatency } from "./turn-latency.ts";
@@ -21,6 +22,7 @@ import type { AcpSession } from "./types.ts";
 import type { SendTurnDeps } from "./turn-deps.ts";
 import { MiB, warmResourcePerson, warmResourceTokenThread, warmResources } from "../../resources/warm-resources.ts";
 import { killCliTree } from "../../procs.ts";
+import { turnTrace } from "../../turns/turn-trace.ts";
 
 export type PrepareEarly = { kind: "early"; result: { turnId: string; reused?: boolean } };
 export type PrepareReady = { kind: "ready" } & Record<
@@ -367,10 +369,11 @@ export async function prepareAcpTurn(deps: SendTurnDeps, turn: SendTurnInput): P
       return { sessionServers, selectionParams };
     };
 
-    // A call was accepted (warmOnly): pay the handshake and establish the
-    // native session now, with no prompt and no turn events, and park the
-    // process until the call's first turn adopts it. A warm that fails
-    // leaves the turn path to start over; it never shows in the thread.
+    // A call / composer prewarm (warmOnly): pay the handshake, establish the
+    // native session, and run configureSession (model pin, MCP settle) now,
+    // with no prompt and no turn events, so the first real turn is a bare
+    // session/prompt (#2055). A warm that fails leaves the turn path to start
+    // over; it never shows in the thread.
     if (turn.warmOnly === true) {
       const result = { turnId, ...(reused ? { reused: true } : {}) };
       if (!reused) {
@@ -405,6 +408,40 @@ export async function prepareAcpTurn(deps: SendTurnDeps, turn: SendTurnInput): P
               session.sessionConfigResult = created;
             });
           }
+          const sessionId = session.sessionId;
+          if (sessionId && support.configureSession) {
+            await support.configureSession({
+              request: async (method, params, timeoutMs) => {
+                const configured = await request(method, params, timeoutMs ?? SESSION_CONFIG_TIMEOUT);
+                if (method === "session/set_model" && params && typeof params === "object" &&
+                    "modelId" in params && typeof (params as { modelId?: unknown }).modelId === "string") {
+                  session.sessionConfigResult = {
+                    ...session.sessionConfigResult,
+                    models: {
+                      ...session.sessionConfigResult?.models,
+                      currentModelId: (params as { modelId: string }).modelId,
+                    },
+                  };
+                }
+                return configured;
+              },
+              sessionId,
+              env: spawnEnv,
+              config: turnConfig,
+              turn: cliTurn,
+              sessionModels: Array.isArray(session.sessionConfigResult?.models?.availableModels)
+                ? session.sessionConfigResult.models.availableModels
+                : [],
+              currentModelId: session.sessionConfigResult?.models?.currentModelId,
+              configOptions: Array.isArray(session.sessionConfigResult?.configOptions)
+                ? session.sessionConfigResult.configOptions
+                : [],
+              // Just established: settle MCP and pin the model once here.
+              reused: false,
+              notice: () => {},
+            });
+          }
+          turnTrace(threadId, "acp-prewarmed");
         })();
         const settled = warm.then(() => {}, () => {});
         warming.set(threadId, settled);
@@ -416,6 +453,8 @@ export async function prepareAcpTurn(deps: SendTurnDeps, turn: SendTurnInput): P
         } finally {
           if (warming.get(threadId) === settled) warming.delete(threadId);
         }
+      } else {
+        turnTrace(threadId, "acp-prewarmed");
       }
       const signal = turn.warmSignal;
       const releaseIfIdle = () => {

@@ -45,7 +45,7 @@ describe("routine readiness", () => {
   });
   it("blocks a failed Flow shadow plan instead of passing only its access checks (#1991)", async () => {
     const answer = await checkRoutineReadiness({ ...routine, prompt: "Use flow_run." }, run,
-      deps({ flow: async () => ({ step: "plan", error: "internal_error Plan failed." }) }));
+      deps({ flow: async () => ({ step: "plan", error: "internal_error Plan failed." }) }), "check");
     expect(answer.ok).toBe(false);
     expect(loadRoutineReadiness(answer.checks)?.find(check => check.kind === "flow")).toMatchObject({ code: "flow_plan", ok: false, params: { step: "plan", error: "internal_error Plan failed." } });
   });
@@ -59,7 +59,7 @@ describe("routine readiness", () => {
         engine: () => ({ engine, name: "Primary", driver: supported ? "codex" : "claudeAgent", accessVia: "subscription" }),
         backup: () => ({ engine: "backup", name: "Backup", driver: supported ? "claudeAgent" : "codex", accessVia: "subscription" }),
         flow: async () => ({ step: "plan", error: "missing_reads Read first." }),
-      }));
+      }), "check");
       expect(answer.ok).toBe(false);
       expect(answer.checks.filter(check => !check.ok).map(check => check.code)).toEqual(supported ? ["flow_plan"] : ["engine_artifacts", "flow_plan"]);
       expect(loadRoutineReadiness(answer.checks)).toEqual(answer.checks);
@@ -72,15 +72,17 @@ describe("routine readiness", () => {
     const check = deps({ now: () => now, flow });
     const first = { ...routine, id: "morning", prompt: "Use flow_run.", requires: { skills: ["running-px-flow"] } };
     await checkRoutineReadiness(first, run, check);
+    expect(flow).not.toHaveBeenCalled();  // a routine run never probes Flow (2026-11-04)
+    await checkRoutineReadiness(first, run, check, "check");
     await checkRoutineReadiness(first, run, check, "check");
     expect(flow).toHaveBeenCalledOnce();
-    await checkRoutineReadiness({ ...first, id: "evening" }, run, check);
-    await checkRoutineReadiness({ ...first, prompt: "Use flow_run with different inputs." }, run, check);
-    await checkRoutineReadiness(first, { ...run, runAs: "wren" }, check);
+    await checkRoutineReadiness({ ...first, id: "evening" }, run, check, "check");
+    await checkRoutineReadiness({ ...first, prompt: "Use flow_run with different inputs." }, run, check, "check");
+    await checkRoutineReadiness(first, { ...run, runAs: "wren" }, check, "check");
     now = 60_000;
-    await checkRoutineReadiness(first, run, check);
+    await checkRoutineReadiness(first, run, check, "check");
     expect(flow).toHaveBeenCalledTimes(5);
-    await checkRoutineReadiness(routine, run, check);
+    await checkRoutineReadiness(routine, run, check, "check");
     expect(flow).toHaveBeenCalledTimes(5);
   });
   it("passes unknown facts, checks every category and never infers a successful run", async () => {

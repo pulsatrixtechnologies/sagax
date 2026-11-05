@@ -62,7 +62,7 @@ describe("Flow shadow readiness through the bot's routine MCP connection (#1991)
     expect(h.revoke).toHaveBeenCalledOnce();
     expect(h.mcp.size()).toBe(0);
   });
-  it.each(["run", "check"] as const)("blocks an actual plan error in %s mode and always releases its lease", async (mode) => {
+  it.each(["check"] as const)("blocks an actual plan error in %s mode and always releases its lease", async (mode) => {
     const h = fixture({ call: command => command === "plan" ? { status: "failed", output: { ok: false, error: "missing_reads", message: "Read the selected units first." } } : undefined });
     expect(await h.check(mode)).toMatchObject({ ok: false, checks: expect.arrayContaining([expect.objectContaining({ kind: "flow", code: "flow_plan", ok: false,
       line: "The Flow shadow check failed at plan: missing_reads Read the selected units first." })]) });
@@ -85,7 +85,7 @@ describe("Flow shadow readiness through the bot's routine MCP connection (#1991)
     expect(h.calls.some(call => call.frame?.method === "tools/list")).toBe(true);
     expect(h.delegation).toHaveBeenCalledWith("pr_wren");
   });
-  it.each(["run", "check"] as const)("checks named recipe init without planning undiscovered units in %s mode", async mode => {
+  it.each(["check"] as const)("checks named recipe init without planning undiscovered units in %s mode", async mode => {
     const h = fixture({ call: command => command === "plan" ? { status: "failed", output: { error: "missing_reads" } } : undefined });
     h.routine.prompt = "Passe Pulsatrix Flow `inbox-review`. Suis la routine Flow jusqu'à `run close` avec running-px-flow.";
     expect((await h.check(mode)).ok).toBe(true);
@@ -141,9 +141,9 @@ describe("Flow shadow readiness through the bot's routine MCP connection (#1991)
       expect(h.commands()).toContainEqual({ command: "release", args: { routine, run_id: `shadow-${routine}` } });
     }
   });
-  it.each(["run", "check"] as const)("never releases another run when the run.init response is lost in %s mode", async (mode) => {
+  it.each(["check"] as const)("never releases another run when the run.init response is lost in %s mode", async (mode) => {
     const h = fixture({ call: command => { if (command === "run.init") throw new Error("init response lost"); } });
-    expect((await h.check(mode)).checks.find(check => check.kind === "flow")).toMatchObject({ code: "probe_error", ok: mode === "run", detail: "init response lost" });
+    expect((await h.check(mode)).checks.find(check => check.kind === "flow")).toMatchObject({ code: "probe_error", ok: false, detail: "init response lost" });
     expect(h.commands().map(call => call.command)).toEqual(["run.init"]);
   });
   it("never releases when a successful init has no owned run id", async () => {
@@ -162,9 +162,9 @@ describe("Flow shadow readiness through the bot's routine MCP connection (#1991)
     expect(h.commands().map(call => call.command)).toEqual(["run.init"]);
     expect(h.revoke).toHaveBeenCalledOnce();
   });
-  it.each(["run", "check"] as const)("releases after a thrown plan transport error, using probe_error in %s mode", async (mode) => {
+  it.each(["check"] as const)("releases after a thrown plan transport error, using probe_error in %s mode", async (mode) => {
     const h = fixture({ call: command => { if (command === "plan") throw new Error("Connection lost"); } });
-    expect((await h.check(mode)).checks.find(check => check.kind === "flow")).toMatchObject({ code: "probe_error", ok: mode === "run", detail: "Connection lost" });
+    expect((await h.check(mode)).checks.find(check => check.kind === "flow")).toMatchObject({ code: "probe_error", ok: false, detail: "Connection lost" });
     expect(h.commands().at(-1)).toEqual({ command: "release", args: { routine: "inbox-review", run_id: "shadow-1" } });
   });
   it("keeps the plan's explicit failure when cleanup loses its connection", async () => {
@@ -172,7 +172,7 @@ describe("Flow shadow readiness through the bot's routine MCP connection (#1991)
       if (command === "plan") return { status: "failed", output: { error: "internal_error", message: "Plan failed." } };
       if (command === "release") throw new Error("Connection lost");
     } });
-    expect((await h.check("run")).checks.find(check => check.kind === "flow")).toMatchObject({ code: "flow_plan", ok: false, params: { error: "internal_error Plan failed." } });
+    expect((await h.check("check")).checks.find(check => check.kind === "flow")).toMatchObject({ code: "flow_plan", ok: false, params: { error: "internal_error Plan failed." } });
   });
   it("retains a known plan failure while its finally crosses the probe abort deadline", async () => {
     vi.useFakeTimers();
@@ -180,17 +180,17 @@ describe("Flow shadow readiness through the bot's routine MCP connection (#1991)
       if (command === "plan") return new Promise(resolve => setTimeout(() => resolve({ status: "failed", output: { error: "missing_reads", message: "Read first." } }), 43_000));
       if (command === "release") return new Promise(resolve => setTimeout(() => resolve({ status: "ok" }), 1_000));
     } });
-    const pending = h.check("run");
+    const pending = h.check("check");
     await vi.advanceTimersByTimeAsync(ROUTINE_FLOW_READINESS_TIMEOUT_MS);
     expect((await pending).checks.find(check => check.kind === "flow")).toMatchObject({ code: "flow_plan", ok: false });
     expect(vi.getTimerCount()).toBe(0);
   });
-  it.each(["run", "check"] as const)("times out independently, releases with a fresh signal and returns probe_error in %s mode", async (mode) => {
+  it.each(["check"] as const)("times out independently, releases with a fresh signal and returns probe_error in %s mode", async (mode) => {
     vi.useFakeTimers();
     const h = fixture({ call: (command, signal) => command === "plan" ? new Promise((_resolve, reject) => signal!.addEventListener("abort", () => reject(signal!.reason), { once: true })) : undefined });
     const pending = h.check(mode);
     await vi.advanceTimersByTimeAsync(ROUTINE_FLOW_READINESS_TIMEOUT_MS);
-    expect((await pending).checks.find(check => check.kind === "flow")).toMatchObject({ code: "probe_error", ok: mode === "run", detail: expect.stringContaining("timed out") });
+    expect((await pending).checks.find(check => check.kind === "flow")).toMatchObject({ code: "probe_error", ok: false, detail: expect.stringContaining("timed out") });
     expect(h.commands().at(-1)?.command).toBe("release");
     expect(h.calls.find(call => call.frame?.params?.arguments?.command === "release")?.signal?.aborted).toBe(false);
     expect(h.revoke).toHaveBeenCalledOnce();
@@ -214,5 +214,11 @@ describe("Flow shadow readiness through the bot's routine MCP connection (#1991)
     expect((await h.check()).ok).toBe(true);
     expect(h.exchange).toHaveBeenCalledWith("fixture-subject");
     expect(h.calls.some(call => call.frame?.params?.name === "identity_switch")).toBe(false);
+  });
+  it("never probes Flow before a routine run: a routine called by name runs (2026-11-04)", async () => {
+    const h = fixture({ call: () => { throw new Error("no Flow call in run mode"); } });
+    const answer = await h.check("run");
+    expect(answer.checks.find(check => check.kind === "flow")).toBeUndefined();
+    expect(h.commands()).toEqual([]);
   });
 });

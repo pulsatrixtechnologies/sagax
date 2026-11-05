@@ -10600,7 +10600,9 @@ in the conversation (`claudeAccountForPrincipal`). Rules:
 - Only that person's own account, never another person's: no account picked
   by the runner, no fallback. No Claude login is a 409 `claude_not_signed_in`.
   A page of another claude.ai account answers `blocked: other_account`; the
-  bot offers to publish a copy from this account.
+  bot is asked to publish a copy from an HTML file in its workspace (or a
+  paste), then return the new URL so references can be updated. A foreign
+  page cannot be read with `Artifact`.
 - The page goes in as `html` or `file` (a regular file inside the bot's
   workspace, realpath checked); `file_path` and the other local-path keys in
   `input` are refused. The runner stages it in a private temp folder and the

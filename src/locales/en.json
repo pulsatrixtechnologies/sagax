@@ -5617,7 +5617,7 @@
   "rich.claudeArtifact.consentBodyAccount": "This artifact belongs to another claude.ai account. The Claude engine is signed in as {account}, so it cannot read it.",
   "rich.claudeArtifact.consentTitle": "Artifact from another account",
   "rich.claudeArtifact.copy": "Have the bot publish a copy",
-  "rich.claudeArtifact.copyPrompt": "Publish a copy of {url} from your account with claude_artifact",
+  "rich.claudeArtifact.copyPrompt": "Publish a copy of {url} from your account with claude_artifact. You cannot read that page from another claude.ai account: publish from an HTML file in your workspace (or a paste), then give the new URL so references can be updated.",
   "rich.claudeArtifact.copySent": "Asked the bot",
   "rich.claudeArtifact.error": "This artifact could not be read right now.",
   "rich.claudeArtifact.loading": "Reading the artifact…",

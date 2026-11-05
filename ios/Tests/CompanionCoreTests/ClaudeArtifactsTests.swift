@@ -25,7 +25,10 @@ final class ClaudeArtifactsTests: XCTestCase {
         let fence = "{\"blocked\":\"other_account\",\"url\":\"https://claude.ai/artifact/HBXTc3TAqqC5odi1H6Bgu9\",\"account\":\"a@b.test\"}"
         XCTAssertEqual(ClaudeArtifacts.parseConsent(fence), ClaudeArtifactConsent(url: "https://claude.ai/artifact/HBXTc3TAqqC5odi1H6Bgu9", account: "a@b.test"))
         XCTAssertNil(ClaudeArtifacts.parseConsent("{\"title\":\"x\",\"url\":\"https://claude.ai/artifact/HBXTc3TAqqC5odi1H6Bgu9\"}"))
-        XCTAssertEqual(ClaudeArtifacts.copyMessage(url: "U"), "Publie une copie de U depuis ton compte avec claude_artifact")
+        XCTAssertEqual(
+            ClaudeArtifacts.copyMessage(url: "U"),
+            "Publie une copie de U depuis ton compte avec claude_artifact. Tu ne peux pas lire cette page (autre compte claude.ai) : publie depuis un fichier HTML de ton workspace (ou un collage), puis donne la nouvelle URL pour mettre à jour les références."
+        )
     }
 
     func testPublishFenceCarriesOwned() {

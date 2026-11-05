@@ -40179,7 +40179,7 @@ ROUTES.push(createClaudeArtifactRoutes({
     try {
       await acceptDirectSend({
         botId, threadId: thread,
-        text: `Publie une copie de ${url} depuis ton compte avec claude_artifact.`,
+        text: `Publie une copie de ${url} depuis ton compte avec claude_artifact. Tu ne peux pas lire cette page (autre compte claude.ai) : publie depuis un fichier HTML de ton workspace (ou un collage), puis donne la nouvelle URL pour mettre à jour les références.`,
         sendId: randomUUID().replaceAll("-", ""),
         sender: messageSender(auth),
         trigger: usageTriggerFor(auth),

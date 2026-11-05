@@ -4352,7 +4352,7 @@
   "rich.claudeArtifact.consentBodyAccount": "Cet artifact appartient à un autre compte claude.ai. Le moteur Claude est connecté avec {account} : il ne peut pas le lire.",
   "rich.claudeArtifact.consentTitle": "Artifact d'un autre compte",
   "rich.claudeArtifact.copy": "Publier une copie par le bot",
-  "rich.claudeArtifact.copyPrompt": "Publie une copie de {url} depuis ton compte avec claude_artifact",
+  "rich.claudeArtifact.copyPrompt": "Publie une copie de {url} depuis ton compte avec claude_artifact. Tu ne peux pas lire cette page (autre compte claude.ai) : publie depuis un fichier HTML de ton workspace (ou un collage), puis donne la nouvelle URL pour mettre à jour les références.",
   "rich.claudeArtifact.copySent": "Demandé au bot",
   "rich.claudeArtifact.error": "Impossible de lire cet artifact pour le moment.",
   "rich.claudeArtifact.loading": "Lecture de l'artifact…",

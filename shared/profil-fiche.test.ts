@@ -252,6 +252,10 @@ describe("preparerProfilDepuisFiche", () => {
 
     const sources = [
       `${dossier}/profil-fiche.ts`,
+      `${dossier}/profil-fiche-types.ts`,
+      `${dossier}/profil-fiche-helpers.ts`,
+      `${dossier}/profil-fiche-yaml.ts`,
+      `${dossier}/profil-fiche-validate.ts`,
       `${dossier}/profil-fiche.test.ts`,
       `${dossier}/profil-fiche.exemple.yaml`,
     ];
@@ -260,7 +264,10 @@ describe("preparerProfilDepuisFiche", () => {
       expect(readFileSync(source, "utf8")).not.toContain(jeton);
     }
     const moduleSource = readFileSync(`${dossier}/profil-fiche.ts`, "utf8");
-    expect(moduleSource).not.toMatch(/^import /m);
+    // #1383: facade may import only sibling phase modules under profil-fiche-*.
+    for (const line of moduleSource.split("\n").filter((row) => /^import\b/.test(row))) {
+      expect(line).toMatch(/from "\.\/profil-fiche-[a-z-]+\.ts";$/);
+    }
     expect(moduleSource.match(/^export function [A-Za-z0-9_]+/gm)).toEqual([
       "export function preparerProfilDepuisFiche",
     ]);

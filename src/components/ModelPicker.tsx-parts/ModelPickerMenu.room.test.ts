@@ -28,4 +28,9 @@ describe("windowOnly menu place", () => {
     // 1376 x 1032 capture: room from top 96 down leaves the full 560 ceiling
     expect(96 + menuRoomBelow(96, 1032)).toBeLessThanOrEqual(1032 - 8);
   });
+  it("clamps the top pin on a short viewport so the menu stays on screen", () => {
+    expect(windowOnlyMenuPlace(1032)).toEqual({ left: 24, top: 96 });
+    expect(windowOnlyMenuPlace(180)).toEqual({ left: 24, top: 52 });
+    expect(windowOnlyMenuPlace(100)).toEqual({ left: 24, top: 8 });
+  });
 });

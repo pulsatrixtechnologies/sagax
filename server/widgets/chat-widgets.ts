@@ -312,6 +312,7 @@ function choosePageTargetCard(args: Parameters<typeof createAgentCard>[0], input
     return { ok: true, messageId: raised.messageId, waitsForPerson: true, targets };
   }
   const from = store.groupByThread(threadId) ? { from: { botId: args.bot.id, name: args.bot.name, color: args.bot.color } } : {};
+  // full-access: ask-choice (publish-target choice)
   const message = store.appendMessage(threadId, {
     role: "bot",
     kind: "options",

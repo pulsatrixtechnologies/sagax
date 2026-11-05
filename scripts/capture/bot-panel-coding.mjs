@@ -31,11 +31,13 @@ const INFO = {
   "spike/old-parser": { state: state({ ahead: 3, worktree: undefined }) },
 };
 // Branches whose repository is on the bot's own computer (place "remote"):
-// one actionable (its actions run there), one with the computer offline. The
-// `/code/branch` reply returns these verbatim instead of the server default.
+// one actionable on a client's computer (its actions run there), one on the
+// person's cloud computer while it is stopped (the menu says why and each
+// action asks the bot instead). The `/code/branch` reply returns these
+// verbatim instead of the server default.
 const REMOTE = {
-  "feat/on-bot-computer": { branch: "feat/on-bot-computer", place: "remote", host: "Studio de Max", folderName: "web", repo: "acme/web", canPublish: true, state: state({ ahead: 1, changes: [{ path: "src/widgets/grid.tsx", status: "modified" }, { path: "src/widgets/tools.ts", status: "untracked" }] }), proposedMessage: "Add the IT tools widgets" },
-  "feat/bot-offline": { branch: "feat/bot-offline", place: "remote", host: "Studio de Max", offline: true, canPublish: false, publishBlocked: "offline" },
+  "feat/on-bot-computer": { branch: "feat/on-bot-computer", place: "remote", computer: "remote_session", host: "Studio de Max", folderName: "web", repo: "acme/web", canPublish: true, state: state({ ahead: 1, changes: [{ path: "src/widgets/grid.tsx", status: "modified" }, { path: "src/widgets/tools.ts", status: "untracked" }] }), proposedMessage: "Add the IT tools widgets" },
+  "feat/bot-offline": { branch: "feat/bot-offline", place: "remote", computer: "sandbox", offline: true, canPublish: false, publishBlocked: "offline" },
 };
 const PULL = {
   "feat/dark-mode": { number: 42, url: "https://github.com/acme/web/pull/42", state: "open" },
@@ -124,7 +126,8 @@ try {
     await page.waitForTimeout(250);
     await page.screenshot({ path: join(outDir, `after-menu-bot-computer-${label}.png`), clip: { x: 0, y: 0, width: 380, height: 820 } });
     await page.keyboard.press("Escape");
-    // the same, but the bot's computer is offline: one plain reason.
+    // a branch on the person's cloud computer while it is stopped: one plain
+    // reason, then each action asks the bot to do it.
     await page.click('[data-branch-menu-button="feat/bot-offline"]');
     await page.waitForSelector("[data-branch-menu]");
     await page.waitForTimeout(250);

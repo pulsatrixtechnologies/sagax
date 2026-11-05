@@ -76,6 +76,7 @@ export function createSessionHelpers(deps: SessionHelperDeps) {
     const s = sessions.get(threadId);
     if (!s || s.closing) return;
     s.closing = true;
+    s.budget?.retiring();
     for (const waiter of s.controlWaiters?.values() ?? []) waiter(false);
     s.controlWaiters?.clear();
     if (s.sessionId && s.sawInit && !s.lastTurnFailed && s.volatile !== UNDELIVERED_VOLATILE && (!s.turn || s.turn.settled)) {
@@ -112,6 +113,7 @@ export function createSessionHelpers(deps: SessionHelperDeps) {
     const held = (warmHolds.get(threadId) ?? 0) - Date.now();
     s.idleTimer = setTimeout(() => closeSession(threadId, "idle"), Math.min(2_147_483_647, Math.max(SESSION_IDLE_MS, held)));
     s.idleTimer.unref?.();
+    s.budget?.idle();
   };
 
   /** Park a pooled process with no user turn. A later warm of the same

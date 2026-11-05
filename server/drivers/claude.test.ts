@@ -1543,7 +1543,8 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     await create(undefined, {}, { permissionMode: "bypassPermissions" });
     const dump = join(scratch, "approval-transitions.json");
     process.env.FAKE_CLAUDE_DUMP = dump;
-    for (const [approvalMode, nativeMode] of [["full", "bypassPermissions"], ["auto", "acceptEdits"], ["edits", "acceptEdits"], ["ask", "default"]] as const) {
+    // #1982: Full keeps acceptEdits + the broker (no bypassPermissions).
+    for (const [approvalMode, nativeMode] of [["full", "acceptEdits"], ["auto", "acceptEdits"], ["edits", "acceptEdits"], ["ask", "default"]] as const) {
       const { turnId } = await instance.adapter.sendTurn({
         threadId: "t-mode-transitions",
         text: "hello",
@@ -1555,19 +1556,21 @@ describe("ClaudeDriver turns (fake CLI)", () => {
       const seen = JSON.parse(readFileSync(dump, "utf8"));
       expect(seen.argv[seen.argv.indexOf("--model") + 1]).toBe(model);
       expect(seen.argv[seen.argv.indexOf("--permission-mode") + 1]).toBe(nativeMode);
-      expect(seen.argv.includes("--permission-prompt-tool")).toBe(approvalMode !== "full");
+      expect(seen.argv.includes("--permission-prompt-tool")).toBe(true);
       expect(seen.argv).toContain("--resume");
     }
   });
 
-  it("maps Full to bypassPermissions on an organization server and still denies the host tools", async () => {
+  it("maps Full to acceptEdits + broker on an organization server and still denies the host tools (#1982)", async () => {
     await create();
     const dump = join(scratch, "org-full.json");
     process.env.FAKE_CLAUDE_DUMP = dump;
     const { turnId } = await instance.adapter.sendTurn({ threadId: "t-org-full", text: "hello", approvalMode: "full", withholdHostTools: true });
     await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
     const seen = JSON.parse(readFileSync(dump, "utf8"));
-    expect(seen.argv[seen.argv.indexOf("--permission-mode") + 1]).toBe("bypassPermissions");
+    expect(seen.argv[seen.argv.indexOf("--permission-mode") + 1]).toBe("acceptEdits");
+    expect(seen.argv).toContain("--permission-prompt-tool");
+    expect(seen.mcpConfig.mcpServers.ogb).toBeTruthy();
     const denied = String(seen.argv[seen.argv.indexOf("--disallowedTools") + 1]).split(",");
     for (const tool of ["Bash", "Read", "Write", "Edit", "WebFetch"]) expect(denied).toContain(tool);
     // and names its built-ins: the allowlist, nothing a newer CLI adds
@@ -1621,6 +1624,7 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(seen.env.CLAUDE_CODE_ARTIFACT).toBe("1");
     expect(seen.env.CLAUDE_CODE_ARTIFACT_TOOLSET).toBe("1");
     expect(seen.env.ENABLE_TOOL_SEARCH).toBe("true");
+    expect(seen.argv).toContain("--permission-prompt-tool");
   });
 
   it("hands a stricter level to the running CLI so its next tool call asks (#1373)", async () => {
@@ -2034,7 +2038,7 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     await recorder.until((e) => e.type === "turn.completed");
     const seen = JSON.parse(readFileSync(dump, "utf8"));
     const bridge = JSON.parse(seen.mcpConfig.mcpServers.perspicax.env.SAGAX_GATE_SEARCH);
-    expect(bridge.pinned).toEqual(["api_describe", "api_result_query", "api_search", "cw_psa_find_tickets"]);
+    expect(bridge.pinned).toEqual(["api_describe", "api_list", "api_result_query", "api_search", "cw_psa_find_tickets", "flow", "flow_action", "flow_run", "identity_switch", "memory_find", "memory_recall", "memory_search"]);
     expect(bridge.pinnedSuffixes).toEqual(["_action", "_query", "_write"]);
     // another server the bot owns keeps only its own most used tools
     expect(JSON.parse(seen.mcpConfig.mcpServers.ops.env.SAGAX_GATE_SEARCH).pinnedSuffixes).toBeUndefined();
@@ -3065,6 +3069,36 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(allowed.filter((name: string) => name.startsWith("mcp__notes"))).toEqual(["mcp__notes__query_result"]);
     // and its credential value stays out of argv
     expect(JSON.stringify(seen.argv)).not.toContain("tok-notes");
+  });
+
+  it("keeps the broker at Full and still routes custom MCP through it (#1982)", async () => {
+    await create();
+    const dump = join(scratch, "full-mcp-broker.json");
+    process.env.FAKE_CLAUDE_DUMP = dump;
+    await instance.adapter.sendTurn({
+      threadId: "t-full-mcp",
+      text: "hi",
+      approvalMode: "full",
+      integrations: {
+        custom: { notes: { command: "npx", args: ["-y", "@x/notes-mcp"], env: {} } },
+        agents: {
+          command: process.execPath,
+          args: ["/fake/agents-proxy.js"],
+          env: { SAGAX_HARNESS_URL: "http://127.0.0.1:1", SAGAX_BOT_ID: "b1", SAGAX_COMMS_TOKEN: "tok", SAGAX_TURN_DEPTH: "0" },
+        },
+      },
+    });
+    await recorder.until((e) => e.type === "turn.completed");
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.argv[seen.argv.indexOf("--permission-mode") + 1]).toBe("acceptEdits");
+    expect(seen.argv).toContain("--permission-prompt-tool");
+    expect(seen.mcpConfig.mcpServers.ogb).toBeTruthy();
+    const allowed = String(seen.argv[seen.argv.indexOf("--allowedTools") + 1]).split(",");
+    expect(allowed).toContain("mcp__agents");
+    expect(allowed).toContain("Bash");
+    expect(allowed).toContain("Write");
+    expect(allowed).not.toContain("mcp__notes");
+    expect(allowed).toContain("mcp__notes__query_result");
   });
 
   it("passes normalized available and denied built-in tool sets to Claude", async () => {

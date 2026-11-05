@@ -336,9 +336,11 @@ struct PersonaEditorWindow: View {
         return Button { model.personaPage = item } label: {
             HStack(spacing: 9) {
                 PersonaIconView(icon: item.icon, size: 15)
+                // `min-w-0 flex-1 truncate`: the label takes the row's room
                 DesktopText(verbatim: item.label)
                     .lineLimit(1)
-                Spacer(minLength: 0)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .layoutPriority(1)
                 if isLocked {
                     PersonaIconView(icon: .lock, size: 12, strokeWidth: 2)
                         .foregroundStyle(theme.inkTertiary)
@@ -428,11 +430,28 @@ struct PersonaEditorWindow: View {
         if locked(page) {
             note(AppStrings.localized("Read only"), lock: true)
         } else {
+            // each page is the desktop's own section view (PersonaPages*.swift)
             switch page {
             case .overview:
-                PhoneBotIdentityFields(bot: current) { model.personaPage = .appearance }
+                PersonaIdentityPage(bot: current)
             case .appearance:
                 PersonaAppearancePane(bot: current)
+            case .soul:
+                PersonaPersonalityPage(bot: current, slackURL: slackURL)
+            case .skills:
+                PersonaSkillsPage(bot: current, slackURL: slackURL)
+            case .access:
+                PersonaAccessPage(bot: current, slackURL: slackURL)
+            case .model:
+                PersonaModelPage(bot: current, slackURL: slackURL)
+            case .permissions:
+                PersonaPermissionsPage(bot: current, slackURL: slackURL)
+            case .voice:
+                PersonaVoicePage(bot: current, slackURL: slackURL)
+            case .history:
+                PersonaChangesPage(bot: current, slackURL: slackURL)
+            case .usage:
+                PersonaUsagePage(bot: current, slackURL: slackURL)
             default:
                 if let section = page.section {
                     BotPanelMore(bot: current, slackURL: slackURL, only: section)
@@ -448,6 +467,8 @@ struct PersonaEditorWindow: View {
         NavigationStack {
             if page == .rules {
                 BotWorkspaceDocEditor(bot: current, path: BotWorkspaceFiles.rulesPath)
+            } else if PersonaBotFolderPage.replacesStack {
+                PersonaBotFolderPage(bot: current, slackURL: slackURL, memory: reachable(.memory))
             } else {
                 BotDocsList(bot: current)
                     .safeAreaInset(edge: .bottom) {

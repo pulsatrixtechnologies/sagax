@@ -80,6 +80,14 @@ export type RouteTarget = {
 
 export type ActTarget = UiTarget | RouteTarget;
 
+/** These APIs are called by Perspicax with its own per-request assertion.
+ * A delegated Sagax session is opaque and cannot stand in for that JWS. */
+export function botActConsoleRouteError(path: string): string | null {
+  return /^\/api\/org\/(?:admin|member)(?:\/|$)/.test(path)
+    ? "This route requires a per-request console assertion signed by Perspicax. Connect a Perspicax profile to this bot and use its Sagax console tools. For your own bots and routines, use act with /api/bots, /api/routines or /api/routines/runs."
+    : null;
+}
+
 /** 0.8.46: the conversation a message-sending act would write into, or
  * null when the act sends no line. A line there is taken as the person's own
  * words (the request runs as the person), so an act into a conversation
@@ -298,6 +306,8 @@ export function decideBotAct(input: {
   if (!parsed.ok) return parsed;
   const target = nudgeActRoute(parsed.target);
   if (target.kind === "route") {
+    const consoleError = botActConsoleRouteError(target.path);
+    if (consoleError) return { ok: false, status: 400, error: consoleError };
     const needed = input.neededScope(target.method, target.path);
     if (!input.scopes.includes(needed)) {
       return { ok: false, status: 403, error: "This person cannot call that route." };

@@ -85,7 +85,7 @@ export function dispatchSendEffects(action: Action, env: DispatchEnv): void {
               }
               return api(`/api/bots/${action.botId}/messages`, {
                 method: "POST",
-                body: JSON.stringify({ text: action.text, replyToId: action.replyToId, threadId, sendId, ...(action.mode === "goal" ? { mode: "goal" } : {}), ...(voiceCall ? { voiceCall } : {}), ...(busyMode === "auto" ? { routeWhileBusy: true } : busyMode ? { busyMode } : {}), ...(action.dataContext ? { dataContext: action.dataContext } : {}), ...devPodsTurnField(), ...singleStreamTurnField() }),
+                body: JSON.stringify({ text: action.text, replyToId: action.replyToId, threadId, sendId, ...(action.mode === "goal" ? { mode: "goal" } : {}), ...(voiceCall ? { voiceCall } : {}), ...(busyMode === "auto" ? { routeWhileBusy: true } : busyMode ? { busyMode } : {}), ...(action.dataContext ? { dataContext: action.dataContext } : {}), ...(typeof action.perspicaxRole === "string" ? { perspicaxRole: action.perspicaxRole } : {}), ...devPodsTurnField(), ...singleStreamTurnField() }),
               });
             })
             .then((body) => {

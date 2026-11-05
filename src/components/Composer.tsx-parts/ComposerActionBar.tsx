@@ -1,6 +1,7 @@
 import type { RefObject } from "react";
 import { ArrowUp, Clock } from "lucide-react";
 import { t } from "@/lib/i18n";
+import { sendBlockLocks, sendBlockStops, type SendBlock } from "@/lib/send-state";
 import type { Bot, Group } from "@/state/store";
 import { ModelPicker, type ComposerModelMenuControl } from "../ModelPicker";
 import { CallButton } from "../CallView";
@@ -160,7 +161,7 @@ export function ComposerActionBar({
     const sendButton = !retroSkin && !locked ? (
       <ComposerSendButton
         onClick={() => send()}
-        disabled={attachmentPending || !hasContent || Boolean(sendBlock)}
+        disabled={attachmentPending || !hasContent || sendBlockStops(sendBlock as SendBlock | null)}
         tone={ctaTone}
         queued={busy && !canSteer}
         label={sendLabelFor()}
@@ -169,6 +170,8 @@ export function ComposerActionBar({
     ) : null;
     const typed = Boolean(sendButton && hasContent);
     if (bot && !group) {
+      // an engine at its limit or out of credit: no call either (send-state engine_limit)
+      if (sendBlockLocks(sendBlock as SendBlock | null)) return null;
       return <ComposerCtaSeat typed={typed} send={sendButton} voice={<CallButton bot={bot} tone={ctaTone} />} />;
     }
     if (group) return typed ? sendButton : <GroupCallButton group={group} members={members ?? []} />;

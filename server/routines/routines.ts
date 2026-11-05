@@ -32,6 +32,7 @@ import {
 import { ROUTINE_WATCH_LIMITS, type RoutineWatchPrecheck } from "../../shared/routine-watch.ts";
 import { parseMailAlias } from "../../shared/routine-mail-alias.ts";
 import { loadRoutineModel, parseRoutineModel } from "../../shared/routine-model.ts";
+import { loadRoutineActAs, parseRoutineActAs } from "../../shared/routine-act-as.ts";
 import { watchNoteBlock } from "./routine-watch.ts";
 import { awayDecision, awayReportDue, loadAwaySkips, recordAwaySkip, type AwayVerdict, type RoutineAwaySkips } from "./routine-away.ts";
 import type { RoutineRequestOperation } from "../../shared/routine-request.ts";
@@ -70,9 +71,10 @@ import {
 } from "../engines/engine-reconnect-ahead.ts";
 import type { LoginDriver } from "../engines/principal-engine-logins.ts";
 import {
-  classifyRoutineFailure, firstOwnerNotice, dispatchRefusal, engineFacts, loadOwnerNotices, recoverRun, retryNote, weekRuns,
+  classifyRoutineFailure, firstOwnerNotice, dispatchRefusal, engineFacts, engineTakeovers, loadOwnerNotices, recoverRun, retryNote, ROUTINE_LIMIT_TAKEOVERS, weekRuns,
   type RoutineAlert, type RoutineFailureFacts, type RoutineOwnerNotice,
 } from "./routine-recovery.ts";
+import type { RoutineUsageLimit } from "./routine-limit-words.ts";
 import { ROUTINE_DEFERRAL_NOTICE_MS, ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED, ROUTINE_SUPERSEDED_BY_NEW_RUN, ROUTINE_TURN_LOST, ROUTINE_TURN_LOST_MS, skipNeedsNotice, supersededBy } from "./routine-execution.ts";
 
 export type { RoutineAccess };
@@ -202,6 +204,9 @@ export interface Routine {
    * bot's own engine (sub-agents too on Claude). Absent: the bot's model.
    * A model the bot's engine does not offer is ignored at run start. */
   model?: string;
+  /** 2026-11-05 (shared/routine-act-as.ts): the Perspicax role its runs act
+   * as ("Au nom de"); "" is "Moi". Absent: not chosen yet. */
+  actAs?: string;
   /** Confined runs: read Gmail/Calendar and write reply drafts only. */
   access?: RoutineAccess;
   nextRunAt: number | null;
@@ -441,6 +446,9 @@ export interface RoutineInput {
   /** The model its runs use; null or "" goes back to the bot's model,
    * omission preserves it on updates. */
   model?: string | null;
+  /** The role its runs act as on Perspicax ("" = Moi); null clears the
+   * choice, omission preserves it on updates. */
+  actAs?: string | null;
 }
 
 interface RoutineFile {
@@ -606,6 +614,11 @@ export interface RoutineManagerOptions {
   };
   /** A failed attempt went back to the queue: what the attempt left pending must not reach its second start. */
   onRunRequeued?: (run: RoutineRun) => void;
+  /** A bot run's failed turn, read by the usage-limit failover (server/limit-failover-host.ts routineLimit): null
+   * when it is no limit; else the engine that really refused (the model the turn ran on, a wake's fast model
+   * included), its reset, and, when `takeover` allows it, who runs the run now. A routine, a webhook run and a
+   * proactive wake alike go on at once on that engine instead of failing. */
+  usageLimit?: (run: RoutineRun, failure: string, facts: RoutineFailureFacts, takeover: boolean) => RoutineUsageLimit | null;
   /** A successful provider turn is intermediate while its peer work or
    * queued continuation still belongs to this detached execution. */
   hasPendingDelegations?: (threadId: string) => boolean;
@@ -729,7 +742,7 @@ const WORK_FIELDS = ["prompt", "botId", "groupId", "target", "attachments", "pre
 const ROUTINE_DEFINITION_FIELDS = [
   "name", "prompt", "target", "botId", "groupId", "runOn", "schedule",
   "durationMinutes", "timeoutMinutes", "attachments", "continuity", "overlap",
-  "onlyWhenPresent", "precheck", "requires", "autoPauseAfter", "mailAlias", "deleteWhenFinished", "model",
+  "onlyWhenPresent", "precheck", "requires", "autoPauseAfter", "mailAlias", "deleteWhenFinished", "model", "actAs",
 ] as const;
 
 /** A run still in flight: auto-delete waits until none of these remain. */
@@ -1376,6 +1389,9 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
   const model = parseRoutineModel(input.model);
   if (!model.ok) throw new RoutineInputError(model.error);
   if (model.model && target === "room-goal") throw new RoutineInputError("A room goal runs on each bot's own model: choose the model on a bot routine");
+  const actAs = parseRoutineActAs(input.actAs);
+  if (!actAs.ok) throw new RoutineInputError(actAs.error);
+  if (actAs.actAs !== undefined && target === "room-goal") throw new RoutineInputError("A room goal's bots act with their own roles: choose \"Au nom de\" on a bot routine");
   if (input.access != null && input.access !== "read-and-draft") throw new Error("Choose read-and-draft access or none");
   return {
     name,
@@ -1402,6 +1418,7 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
     ...(input.deleteWhenFinished === true && scheduleHasKnownEnd(input.schedule) ? { deleteWhenFinished: true } : {}),
     ...(input.access === "read-and-draft" ? { access: "read-and-draft" as const } : {}),
     ...(model.model ? { model: model.model } : {}),
+    ...(actAs.actAs !== undefined ? { actAs: actAs.actAs } : {}),
   };
 }
 
@@ -1561,8 +1578,10 @@ export class RoutineManager {
               deleteWhenFinished: routine.deleteWhenFinished === true && scheduleHasKnownEnd(schedule) ? true : undefined,
               access: routine.access === "read-and-draft" ? "read-and-draft" as const : undefined,
               model: loadRoutineModel(routine.model),
+              actAs: loadRoutineActAs(routine.actAs),
             };
             if (loaded.model === undefined) delete loaded.model;
+            if (loaded.actAs === undefined) delete loaded.actAs;
             if (loaded.folder === undefined) delete loaded.folder;
             if (loaded.precheck === undefined) delete loaded.precheck;
             if (loaded.autoPauseAfter === undefined) delete loaded.autoPauseAfter;
@@ -1710,8 +1729,9 @@ export class RoutineManager {
         (run.restartResumes ?? 0) < ROUTINE_RESTART_RESUMES) {
         run.status = "running";
         run.restartResumes = (run.restartResumes ?? 0) + 1;
-        // The resume is its one automatic second start.
+        // The resume is its one automatic second start (a limit's takeover was not).
         run.retried ??= "restarted";
+        delete run.takeoverRetried;
         run.attention = undefined;
         this.restartResumes.push(run.id);
         resumable = true;
@@ -2124,6 +2144,8 @@ export class RoutineManager {
       access: Object.hasOwn(patch, "access") ? patch.access : routine.access,
       // null or "" goes back to the bot's model; omission keeps it.
       model: Object.hasOwn(patch, "model") ? patch.model : routine.model,
+      // null clears the choice, "" is "Moi"; omission keeps it.
+      actAs: Object.hasOwn(patch, "actAs") ? patch.actAs : routine.actAs,
     }, now);
     if (this.targetState(clean) === "missing") throw new RoutineInputError(this.missingTargetMessage(clean.target));
     // Checked when it is chosen or the bot changes; a kept model whose
@@ -2207,6 +2229,7 @@ export class RoutineManager {
       if (!clean.deleteWhenFinished) delete routine.deleteWhenFinished;
       if (!clean.access) delete routine.access;
       if (!clean.model) delete routine.model;
+      if (clean.actAs === undefined) delete routine.actAs;
       foldersChanged = this.settleFolders(routine.botId);
       if (previousBotId !== routine.botId) this.settleFolders(previousBotId);
       // Turned back on (Resume on the notice, the switch, the editor): the
@@ -2499,6 +2522,7 @@ export class RoutineManager {
       attachments: [],
       ...(owned?.access === "read-and-draft" ? { access: "read-and-draft" as const } : {}),
       ...(owned?.model ? { model: owned.model } : {}),
+      ...(owned?.target === "bot" && owned.actAs !== undefined ? { actAs: owned.actAs } : {}),
       ...(input.eventSource ? { eventSource: input.eventSource } : {}),
       ...(input.resultsThreadId ? { resultsThreadId: input.resultsThreadId } : {}),
       createdAt: this.now(),
@@ -3786,7 +3810,24 @@ export class RoutineManager {
     const refusal = classifyRoutineFailure(failure, facts);
     const engine = this.readinessEngines.get(run.id) ?? this.options.engineForRun?.(run);
     if (engine && refusal.kind === "owner" && refusal.cause !== "setup") noteEngineRefusal({ ...engine, cause: refusal.cause, resetsAt: refusal.resetsAt, at: this.now() });
-    const recovery = recoverRun(run, redactSecretsInText(failure), facts, this.now(), this.ownerNotices);
+    const said = redactSecretsInText(failure);
+    // The usage-limit failover reads which engine refused (and who takes the run over) before the run fails: a
+    // routine, a webhook run and a proactive wake go on at once on another engine instead of a failure that names
+    // "this bot's engine".
+    let limit: RoutineUsageLimit | null = null;
+    if (run.target === "bot" && this.options.usageLimit) {
+      try {
+        limit = this.options.usageLimit(cloneRun(run), said, facts, engineTakeovers(run) < ROUTINE_LIMIT_TAKEOVERS);
+      } catch (error) {
+        console.warn(`routine: usage limit read failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    const who = { botId: run.botId, ...(run.runAs ? { runAs: run.runAs } : {}) };
+    const language = this.options.languageFor?.(who);
+    const timeZone = this.options.timeZoneFor?.(who);
+    const recovery = recoverRun(run, said, limit ? { ...facts, limit } : facts, this.now(), this.ownerNotices, {
+      ...(language ? { language } : {}), ...(timeZone ? { timeZone } : {}),
+    });
     if ("waiting" in recovery && recovery.waiting) {
       this.wait(run, recovery.attention);
       delete run.error;
@@ -3801,7 +3842,10 @@ export class RoutineManager {
     } else if ("error" in recovery) {
       if (refusal.kind === "owner" && refusal.cause !== "setup") {
         const routineName = this.routines.find(routine => routine.id === run.routineId)?.name ?? run.routineName;
-        this.blockRun(run, recovery.error, recovery.alert ? { detail: `${routineName}: "${recovery.error}" ${recovery.alert.detail}` } : null);
+        // A limit's words already are the run's error (routine-limit-words): said once, never quoted before themselves.
+        const detail = recovery.alert && (recovery.alert.detail === recovery.error ? `${routineName}: ${recovery.error}`
+          : `${routineName}: "${recovery.error}" ${recovery.alert.detail}`);
+        this.blockRun(run, recovery.error, detail ? { detail } : null);
       } else this.failRun(run, recovery.error, recovery.alert);
     }
     queueMicrotask(() => this.tickInBackground());
@@ -4333,6 +4377,7 @@ export class RoutineManager {
       resultsThreadId,
       ...(routine.access === "read-and-draft" ? { access: "read-and-draft" as const } : {}),
       ...(routine.target === "bot" && routine.model ? { model: routine.model } : {}),
+      ...(routine.target === "bot" && routine.actAs !== undefined ? { actAs: routine.actAs } : {}),
       createdAt: this.now(),
     };
     this.runs.push(run);

@@ -1730,6 +1730,24 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       expect(ran()).toEqual(["agents:create_bot"]);
     });
 
+    it("gates Full the same way: a write waits for Sagax's card, never bypasses (#1982)", async () => {
+      writeFileSync(flagFile, JSON.stringify({ bots: ["bot-gated"] }));
+      process.env.FAKE_ACP_MCP_CALLS = "agents:list_bots,agents:create_bot";
+      await create(GrokAgentDriver, "mcp-call");
+      const { turnId } = await instance.adapter.sendTurn({
+        threadId: "t-gate-full", botId: "bot-gated", text: "go", model: "grok-4.5", approvalMode: "full",
+        integrations: { agents: server("agents") },
+      });
+      const write = await nextCard(turnId, 1);
+      expect(write).toMatchObject({ requestType: "permission", mcpTool: "agents__create_bot" });
+      expect(ran()).toEqual(["agents:list_bots"]);
+      expect(await instance.adapter.respondToRequest("t-gate-full", write.requestId, { behavior: "allow" })).toBe("allowed-once");
+      await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
+      expect(ran()).toEqual(["agents:list_bots", "agents:create_bot"]);
+      const seen = JSON.parse(readFileSync(process.env.FAKE_ACP_DUMP!, "utf8")) as { argv: string[] };
+      expect(seen.argv.slice(0, 2)).toEqual(["--permission-mode", "default"]);
+    });
+
     it("declines a held call when the turn is stopped before anyone answers", async () => {
       writeFileSync(flagFile, JSON.stringify({ bots: ["bot-gated"] }));
       process.env.FAKE_ACP_MCP_CALLS = "agents:create_bot";
@@ -1749,11 +1767,14 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     it("leaves an opted-out bot, and Ask, Edits and Full access, on their current modes", async () => {
       writeFileSync(flagFile, JSON.stringify({ off: ["other-bot"] }));
       await create(GrokAgentDriver);
-      const cases: Array<{ botId: string; approvalMode: "auto" | "ask" | "edits" | "full"; mode: string }> = [
-        { botId: "other-bot", approvalMode: "auto", mode: "auto" },
-        { botId: "bot-gated", approvalMode: "ask", mode: "default" },
-        { botId: "bot-gated", approvalMode: "edits", mode: "acceptEdits" },
-        { botId: "bot-gated", approvalMode: "full", mode: "bypassPermissions" },
+      // #1982: Full under the gate runs default + gate socket (Sagax decides).
+      // An opted-out bot's Full still bypasses with no gate.
+      const cases: Array<{ botId: string; approvalMode: "auto" | "ask" | "edits" | "full"; mode: string; gated: boolean }> = [
+        { botId: "other-bot", approvalMode: "auto", mode: "auto", gated: false },
+        { botId: "other-bot", approvalMode: "full", mode: "bypassPermissions", gated: false },
+        { botId: "bot-gated", approvalMode: "ask", mode: "default", gated: false },
+        { botId: "bot-gated", approvalMode: "edits", mode: "acceptEdits", gated: false },
+        { botId: "bot-gated", approvalMode: "full", mode: "default", gated: true },
       ];
       for (const [index, entry] of cases.entries()) {
         const dump = join(scratch, `gate-off-${index}.json`);
@@ -1766,7 +1787,9 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         const seen = JSON.parse(readFileSync(dump, "utf8")) as { argv: string[]; mcpServers: Array<{ env: Array<{ name: string }> }> };
         expect(seen.argv.slice(seen.argv.indexOf("--permission-mode"), seen.argv.indexOf("--permission-mode") + 2)).toEqual(["--permission-mode", entry.mode]);
         for (const mounted of seen.mcpServers) {
-          expect(mounted.env.map((item) => item.name)).not.toContain("SAGAX_GATE_APPROVAL_SOCKET");
+          const names = mounted.env.map((item) => item.name);
+          if (entry.gated) expect(names).toContain("SAGAX_GATE_APPROVAL_SOCKET");
+          else expect(names).not.toContain("SAGAX_GATE_APPROVAL_SOCKET");
         }
       }
     });
@@ -2171,7 +2194,8 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 
   it.each([
     ["ask", true, "default"],
-    ["full", true, "bypassPermissions"],
+    // #1982: Full under the gate (on by default) stays in default, not bypass
+    ["full", true, "default"],
     ["custom", true, "default"],
     // Auto is gated by default: Grok runs `default`, Sagax decides
     ["auto", false, "default"],
@@ -3210,6 +3234,30 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     const launches = () => Number(readFileSync(countFile, "utf8"));
     const rpc = () => JSON.parse(readFileSync(rpcFile, "utf8")) as string[];
 
+    it("retires idle processes through the shared global cap across people", async () => {
+      vi.stubEnv("SAGAX_WARM_MAX_COUNT", "1");
+      try {
+        countFile = join(scratch, "budget-launches");
+        process.env.FAKE_ACP_LAUNCH_COUNT_FILE = countFile;
+        await create(SelectModelDriver, "simple");
+        for (const [threadId, principalId] of [["osprey-thread", "osprey"], ["wren-thread", "wren"], ["osprey-thread", "osprey"]]) {
+          const { turnId } = await instance.adapter.sendTurn({ threadId: threadId!, principalId, text: "Fixture reply" });
+          expect(await recorder.until(e => e.type === "turn.completed" && e.turnId === turnId)).toMatchObject({ ok: true });
+        }
+        expect(launches()).toBe(3);
+      } finally { vi.unstubAllEnvs(); }
+    });
+
+    it("does not reuse another person's process on a shared payer and thread", async () => {
+      countFile = join(scratch, "isolation-launches"); process.env.FAKE_ACP_LAUNCH_COUNT_FILE = countFile;
+      await create(SelectModelDriver, "simple");
+      for (const principalId of ["osprey", "wren"]) {
+        const { turnId } = await instance.adapter.sendTurn({ threadId: "same-thread", principalId, access: { via: "org-key", identity: "shared" }, text: "Fixture reply" });
+        expect(await recorder.until(e => e.type === "turn.completed" && e.turnId === turnId)).toMatchObject({ ok: true });
+      }
+      expect(launches()).toBe(2);
+    });
+
     it("recovers on the next explicit turn after session establishment fails", async () => {
       countFile = join(scratch, "launches");
       const appendFile = join(scratch, "rpc-all.jsonl");
@@ -3318,6 +3366,43 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         { sessionId: "fake-acp-session" },
         { sessionId: "fake-acp-session" },
       ]);
+    });
+
+    it("keeps the Grok warm session pooled across many turns (#1970)", async () => {
+      countFile = join(scratch, "launches");
+      rpcFile = join(scratch, "rpc.json");
+      process.env.FAKE_ACP_LAUNCH_COUNT_FILE = countFile;
+      process.env.FAKE_ACP_RPC_DUMP = rpcFile;
+      const latency: string[] = [];
+      const spy = vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+        if (typeof args[0] === "string" && args[0].startsWith("[turn-latency]")) latency.push(args[0]);
+      });
+      try {
+        instance = await GrokAgentDriver.create({
+          instanceId: "acp-test", displayName: "ACP Test", enabled: true,
+          environment: { HOME: scratch, USERPROFILE: scratch },
+          config: { cli: FAKE_CLI, fullAuto: false },
+        });
+        recorder = recordEvents(instance.adapter);
+        const threadId = "t-pool-many-warm";
+        for (let i = 0; i < 8; i++) {
+          const started = await instance.adapter.sendTurn({
+            threadId, text: `warm ${i + 1}`,
+            ...(i > 0 ? { resumeCursor: "fake-acp-session" } : {}),
+          });
+          expect(await recorder.until((e) => e.type === "turn.completed" && e.turnId === started.turnId)).toMatchObject({ ok: true });
+        }
+        expect(launches()).toBe(1);
+        expect(rpc().filter((m) => m === "initialize")).toHaveLength(1);
+        expect(rpc().filter((m) => m === "session/new")).toHaveLength(1);
+        expect(rpc().filter((m) => m === "session/load")).toHaveLength(0);
+        expect(rpc().filter((m) => m === "session/prompt")).toHaveLength(8);
+        const paths = latency.map((line) => /path=(\S+)/.exec(line)?.[1]);
+        expect(paths[0]).toBe("spawn");
+        expect(paths.slice(1)).toEqual(Array(7).fill("pooled"));
+      } finally {
+        spy.mockRestore();
+      }
     });
 
     it("closes the idle process and resumes on the next turn", async () => {
@@ -4053,6 +4138,8 @@ describe("grokPermissionMode", () => {
     expect(grokPermissionMode({ ...base, approvalMode: "auto" })).toBe("auto");
     expect(grokPermissionMode({ ...base, gated: true, approvalMode: "auto" })).toBe("default");
     expect(grokPermissionMode({ ...base, fullAuto: true, approvalMode: "full" })).toBe("bypassPermissions");
+    // #1982: gated Full prefers default over bypass so Sagax's gate sees MCP
+    expect(grokPermissionMode({ ...base, gated: true, fullAuto: true, approvalMode: "full" })).toBe("default");
   });
 
   it("never runs Grok's own auto or bypass with the account's connectors: every connector call asks Sagax", () => {

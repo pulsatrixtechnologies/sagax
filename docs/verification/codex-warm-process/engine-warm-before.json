@@ -1,0 +1,131 @@
+{
+  "engine": "codex",
+  "launches": 16,
+  "warm": [
+    {
+      "kind": "warm",
+      "launched": true,
+      "sendToFirstEventMs": 343.4,
+      "sendToFirstDeltaMs": 1323.1,
+      "turnTraceSend": 1793800957199
+    },
+    {
+      "kind": "warm",
+      "launched": true,
+      "sendToFirstEventMs": 70.9,
+      "sendToFirstDeltaMs": 70.9,
+      "turnTraceSend": 1793800958774
+    },
+    {
+      "kind": "warm",
+      "launched": true,
+      "sendToFirstEventMs": 62.7,
+      "sendToFirstDeltaMs": 62.7,
+      "turnTraceSend": 1793800959858
+    },
+    {
+      "kind": "warm",
+      "launched": true,
+      "sendToFirstEventMs": 64.2,
+      "sendToFirstDeltaMs": 64.2,
+      "turnTraceSend": 1793800960962
+    },
+    {
+      "kind": "warm",
+      "launched": true,
+      "sendToFirstEventMs": 35.7,
+      "sendToFirstDeltaMs": 35.7,
+      "turnTraceSend": 1793800962024
+    },
+    {
+      "kind": "warm",
+      "launched": true,
+      "sendToFirstEventMs": 37.1,
+      "sendToFirstDeltaMs": 37.1,
+      "turnTraceSend": 1793800963068
+    },
+    {
+      "kind": "warm",
+      "launched": true,
+      "sendToFirstEventMs": 28.6,
+      "sendToFirstDeltaMs": 28.6,
+      "turnTraceSend": 1793800964114
+    },
+    {
+      "kind": "warm",
+      "launched": true,
+      "sendToFirstEventMs": 69.9,
+      "sendToFirstDeltaMs": 70,
+      "turnTraceSend": 1793800965225
+    },
+    {
+      "kind": "warm",
+      "launched": true,
+      "sendToFirstEventMs": 35,
+      "sendToFirstDeltaMs": 35.1,
+      "turnTraceSend": 1793800966782
+    },
+    {
+      "kind": "warm",
+      "launched": true,
+      "sendToFirstEventMs": 54.6,
+      "sendToFirstDeltaMs": 54.7,
+      "turnTraceSend": 1793800967849
+    }
+  ],
+  "cold": [
+    {
+      "kind": "cold",
+      "launched": true,
+      "sendToFirstEventMs": 65.5,
+      "sendToFirstDeltaMs": 1038.4,
+      "turnTraceSend": 1793800970734
+    },
+    {
+      "kind": "cold",
+      "launched": true,
+      "sendToFirstEventMs": 85.6,
+      "sendToFirstDeltaMs": 1041.7,
+      "turnTraceSend": 1793800971882
+    },
+    {
+      "kind": "cold",
+      "launched": true,
+      "sendToFirstEventMs": 74.3,
+      "sendToFirstDeltaMs": 1036.8,
+      "turnTraceSend": 1793800973323
+    }
+  ],
+  "warmSendToDelta": {
+    "n": 10,
+    "p50": 62.7,
+    "p95": 1323.1,
+    "mean": 178.2
+  },
+  "coldSendToDelta": {
+    "n": 3,
+    "p50": 1038.4,
+    "p95": 1041.7,
+    "mean": 1039
+  },
+  "warmSendToEvent": {
+    "n": 10,
+    "p50": 62.7,
+    "p95": 343.4,
+    "mean": 80.2
+  },
+  "coldSendToEvent": {
+    "n": 3,
+    "p50": 74.3,
+    "p95": 85.6,
+    "mean": 75.1
+  },
+  "notes": [
+    "startup log lines=29 distinct pids=16",
+    "initialize events=16",
+    "turn/start events=13",
+    "today each Codex turn launches a new app-server (finish.ts)"
+  ],
+  "turnProcessStarts": 13,
+  "warmReuses": 0
+}

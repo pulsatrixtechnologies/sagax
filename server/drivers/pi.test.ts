@@ -297,7 +297,7 @@ describe("buildMcpServers", () => {
       custom: { perspicax: { command: process.execPath, args: [SPAWNED_PROXIES.perspicax], env: { SAGAX_PERSPICAX_TOKEN: "synthetic-account-token", SAGAX_PERSPICAX_TOKEN_FILE: "/fake/px-main-token" } } },
     } }) as Record<string, { env: Record<string, string> }>;
     const search = JSON.parse(bridged.perspicax!.env.SAGAX_GATE_SEARCH!);
-    expect(search.pinned).toEqual(["api_describe", "api_result_query", "api_search"]);
+    expect(search.pinned).toEqual(["api_describe", "api_list", "api_result_query", "api_search", "flow", "flow_action", "flow_run", "identity_switch", "memory_find", "memory_recall", "memory_search"]);
     expect(search.pinnedSuffixes).toEqual(["_action", "_query", "_write"]);
     // without a compact prompt nothing changes
     const plain = buildMcpServers({ threadId: "plain", text: "Go", integrations: {

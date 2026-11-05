@@ -718,7 +718,7 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
   }
 
   function runCard(run: RoutineRun, viewerId: string | undefined): WireAccessCard | undefined {
-    return run.status === "failed" ? deps.runAccessCard?.(run, viewerId) : undefined;
+    return run.status === "failed" || run.status === "blocked" ? deps.runAccessCard?.(run, viewerId) : undefined;
   }
 
   function runDetail(bot: ActivityBot, run: RoutineRun, viewerId: string | undefined): BotActivityDetail {

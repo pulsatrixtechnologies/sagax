@@ -190,6 +190,10 @@
 //                        1.0.46 and 1.0.50 signed in, fresh GROK_HOME)
 //   SAGAX_GROK_MODEL_PROBE=1  set by Sagax's model-list probe (initialize
 //                        only): this process is not counted or dumped
+//   SAGAX_GROK_REACH_PROBE=1  set by Sagax's grok.com reach probe: not counted
+//   SAGAX_ACP_BACKGROUND_TEXT=1  set by memory/review one-shots: not counted
+//                        (a chat session's launch counter stays honest, #1970)
+//   FAKE_ACP_LAUNCH_TRACE_FILE  append one JSON line per process start
 //
 // With FAKE_ACP_DUMP and FAKE_ACP_MODES or FAKE_ACP_MODELS, every
 // session/prompt appends {"pid","sessionId","mode","model"} to
@@ -422,24 +426,53 @@ const dumpEnv = Object.fromEntries(
     "GEMINI_API_KEY",
     "MISTRAL_API_KEY",
     "SAGAX_ANTHROPIC_API_KEY",
+    "SAGAX_ACP_BACKGROUND_TEXT",
+    "SAGAX_GROK_MODEL_PROBE",
+    "SAGAX_GROK_REACH_PROBE",
   ].flatMap((key) => (process.env[key] === undefined ? [] : [[key, process.env[key]]] as const)),
 );
 // pid rides along so a test can tell a respawned process (new pid, fresh
 // dump) from a pooled one whose dump was never rewritten
 const dumpState: Record<string, unknown> = { argv, env: dumpEnv, pid: process.pid, cwd: process.cwd() };
 const modelProbe = process.env.SAGAX_GROK_MODEL_PROBE === "1";
+const reachProbe = process.env.SAGAX_GROK_REACH_PROBE === "1";
+const backgroundText = process.env.SAGAX_ACP_BACKGROUND_TEXT === "1";
+const versionOnly = argv.includes("--version");
+const launchCountFile = process.env.FAKE_ACP_LAUNCH_COUNT_FILE;
+const launchTraceFile = process.env.FAKE_ACP_LAUNCH_TRACE_FILE;
+// Side spawns that share the chat CLI must not look like a pooled session
+// relaunch in FAKE_ACP_LAUNCH_COUNT_FILE (#1970): model-list probe, reach
+// probe, memory/review one-shots, and bare --version.
+const countLaunch = Boolean(launchCountFile)
+  && !modelProbe && !reachProbe && !backgroundText && !versionOnly;
 if (process.env.FAKE_ACP_DUMP && !modelProbe) {
   writeFileSync(process.env.FAKE_ACP_DUMP, JSON.stringify(dumpState, null, 2));
 }
-if (process.env.FAKE_ACP_LAUNCH_COUNT_FILE && !modelProbe) {
+if (countLaunch && launchCountFile) {
   // count launched processes: read-increment-write, so a test can assert
-  // how many children the driver spawned (a pooled session launches once)
+  // how many children the driver spawned (a pooled session launches once).
   let launches = 0;
   try {
-    launches = Number.parseInt(readFileSync(process.env.FAKE_ACP_LAUNCH_COUNT_FILE, "utf8").trim(), 10) || 0;
+    launches = Number.parseInt(readFileSync(launchCountFile, "utf8").trim(), 10) || 0;
   } catch {}
   try {
-    writeFileSync(process.env.FAKE_ACP_LAUNCH_COUNT_FILE, String(launches + 1));
+    writeFileSync(launchCountFile, String(launches + 1));
+  } catch {}
+}
+if (launchTraceFile) {
+  try {
+    appendFileSync(launchTraceFile, `${JSON.stringify({
+      at: Date.now(),
+      pid: process.pid,
+      argv,
+      modelProbe,
+      reachProbe,
+      backgroundText,
+      versionOnly,
+      counted: countLaunch,
+      cwd: process.cwd(),
+      grokHome: process.env.GROK_HOME ?? null,
+    })}\n`);
   } catch {}
 }
 if (argv.includes("--version")) {

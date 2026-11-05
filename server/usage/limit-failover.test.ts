@@ -101,6 +101,19 @@ describe("LimitFailoverStore", () => {
     expect(store.failover("bot", "t")).toBeUndefined();
   });
 
+  // 2026-11-02 (review of the final pass): what held the engine the thread started on stays that engine's, whatever
+  // moved the thread on since: a limit bound only to its model still holds until its reset, whoever refused after.
+  it("keeps whether the thread's own limit bound only its model across a second move, and only from the first", () => {
+    at.now = 1_000_000;
+    const store = make();
+    const a = { instanceId: "claude", model: "opus" }, b = { instanceId: "codex", model: "gpt" }, c = { instanceId: "grok", model: "grok-4.5" };
+    store.record({ botId: "bot", threadId: "t", from: a, to: b, resetsAt: at.now + 1_000, at: at.now, modelOnly: true });
+    expect(store.record({ botId: "bot", threadId: "t", from: b, to: c, resetsAt: at.now + 1_000, at: at.now })).toMatchObject({ from: a, to: c, modelOnly: true });
+    store.forget("t");
+    store.record({ botId: "bot", threadId: "t", from: a, to: b, resetsAt: at.now + 1_000, at: at.now });
+    expect(store.record({ botId: "bot", threadId: "t", from: b, to: c, resetsAt: at.now + 1_000, at: at.now, modelOnly: true })).not.toHaveProperty("modelOnly");
+  });
+
   it("lets a backup take one message over at most MAX_RESENDS times", () => {
     const store = make();
     for (let index = 0; index < MAX_RESENDS; index++) expect(store.takeResend("m")).toBe(true);

@@ -658,7 +658,7 @@ describe("the sidecar in front of an unmodified harness", () => {
     }
   });
 
-  it("says the harness is down rather than hanging, when it is", async () => {
+  it("asks the device to reconnect while the harness is restarting", async () => {
     const orphan = createServer(
       createProxyHandler({
         harnessPort: 1,
@@ -673,8 +673,9 @@ describe("the sidecar in front of an unmodified harness", () => {
       const res = await fetch(`http://127.0.0.1:${port}/api/bots`, {
         headers: { authorization: `Bearer ${TOKEN}` },
       });
-      expect(res.status).toBe(502);
-      expect(((await res.json()) as { error: string }).error).toContain("not running");
+      // 84841aeed: refused/reset connections are a retryable restart (503).
+      expect(res.status).toBe(503);
+      expect(await res.json()).toEqual({ error: "Sagax is restarting. Reconnecting…" });
     } finally {
       await new Promise<void>((r) => orphan.close(() => r()));
     }

@@ -213,7 +213,8 @@ struct RootView: View {
                     // the terms of use, once per account (App Store 1.2);
                     // never over the screenshot harness
                     .sheet(isPresented: Binding(
-                        get: { session.termsPending && !parityHarnessActive },
+                        // the iPad desktop shell draws the desktop's dialog instead
+                        get: { session.termsPending && !parityHarnessActive && !DesktopTermsDialog.shellPresents },
                         set: { if !$0 { session.termsPending = false } }
                     )) {
                         TermsAcceptanceSheet().environmentObject(session)

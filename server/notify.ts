@@ -122,6 +122,8 @@ export function buildNotification(
                   ? `${who} resumed with results`
                   : kind === "wait"
                     ? `${who}'s wait is done`
+                  : kind === "needs-you"
+                    ? `${who} needs you`
                   : `${who} finished`;
 
   // A "finished" with nothing to say is not worth a notification — the
@@ -142,6 +144,15 @@ export function buildNotification(
     if (choices.length) notification.choices = choices;
   }
   return notification;
+}
+
+/** The title of a run's failure or wait notification when the run is not a
+ * routine's: a proactive wake or a webhook run says which run it is
+ * (2026-11-02). Undefined for a routine's run: the kind's own title. */
+export function routineRunTitle(who: string, run: { proactive?: unknown; webhookId?: string }, state: "failed" | "waiting" | "blocked"): string | undefined {
+  if (run.proactive) return state === "failed" ? `${who}'s proactive wake failed` : `${who}'s proactive wake is ${state}`;
+  if (run.webhookId) return state === "failed" ? `${who}'s webhook run failed` : `${who}'s webhook run is ${state}`;
+  return undefined;
 }
 
 /** At most this many choices ride a notification; the phone shows fewer. */

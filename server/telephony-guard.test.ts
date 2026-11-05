@@ -89,4 +89,17 @@ describe("telephonyRefusal", () => {
     expect(telephonyRefusal("flow_action", { name: "twilio.place_call", _dry_run: true })).toBeNull();
     expect(telephonyRefusal("flow_action", { name: "cw.add_note", params: { text: "ok" } })).toBeNull();
   });
+
+  // #1994: a read of the Perspicax Voice line is never a Twilio change, even
+  // when tools/list put voice_line in twilioTools because its description
+  // names Twilio.
+  it("allows voice_line reads, including when aliased as a Twilio tool (#1994)", () => {
+    const twilioTools = new Set(["voice_line", "voice_sms", "voice_number"]);
+    expect(telephonyRefusal("voice_line", {}, { twilioTools })).toBeNull();
+    expect(telephonyRefusal("voice_line", { action: "read" }, { twilioTools })).toBeNull();
+    expect(telephonyRefusal("mcp__perspicax__voice_line", {}, { twilioTools })).toBeNull();
+    expect(telephonyRefusal("mcp__perspicax_osprey__voice_line", {}, { twilioTools })).toBeNull();
+    // voice_number still changes numbers: refuse when aliased
+    expect(telephonyRefusal("voice_number", { action: "buy" }, { twilioTools })).toBe(TELEPHONY_WRITE_REFUSAL);
+  });
 });

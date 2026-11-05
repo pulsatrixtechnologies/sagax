@@ -14,6 +14,7 @@ import {
   parseCodexUsage,
   parseGrokUsage,
   planAccountsFromInstances,
+  spentPlanUntil,
   type PlanAccount,
   type PlanFetch,
   type PlanResponse,
@@ -446,5 +447,40 @@ describe("plan threshold alerts (J4)", () => {
   it("uses the configured line", () => {
     expect(newPlanUsageAlerts(report(60), "p", 50)).toHaveLength(1);
     expect(planUsageAlertText({ providerId: "c", provider: "Claude", window: "weekly", level: "warn", usedPercent: 82, resetsAt: null }).title).toBe("Claude: 82% of your weekly limit used");
+  });
+
+  // 2026-11-02: a spent window is what the usage-limit failover holds the
+  // engine on (its provider's own reset), never a guess.
+  it("says until when a plan is spent: the latest reset of its windows at 100 %", () => {
+    expect(spentPlanUntil(row(99) as never)).toBeNull();
+    expect(spentPlanUntil(row(100) as never)).toBe(Date.parse("2026-10-27T00:00:00Z"));
+    const both = { ...row(100, "2026-11-05T18:00:00Z"), fiveHour: { available: true, usedPercent: 100, remainingPercent: 0, resetsAt: "2026-11-02T18:00:00Z" } };
+    expect(spentPlanUntil(both as never)).toBe(Date.parse("2026-11-05T18:00:00Z"));
+    // A spent window with no reset, or a row that read no windows: Sagax cannot say until when.
+    expect(spentPlanUntil({ ...row(100), weekly: { available: true, usedPercent: 100, remainingPercent: 0, resetsAt: null } } as never)).toBeNull();
+    expect(spentPlanUntil({ ...row(100), state: "error" } as never)).toBeNull();
+  });
+
+  // 2026-11-02 (review): a weekly window at 100 % with Claude's extra usage still on is no spent plan: the engine
+  // answers on its extra usage, and Sagax's quick pick must not skip it. Spent extra usage leaves the plan spent.
+  it("never reads a plan as spent while its extra usage or credit is left", () => {
+    const weekly = "2026-11-05T18:00:00Z";
+    const claude = (extra: number) => {
+      const windows = parseClaudeUsage({ seven_day: { utilization: 100, resets_at: weekly }, extra_usage: { is_enabled: true, utilization: extra } });
+      return { ...row(100, weekly), ...windows, state: "windows" };
+    };
+    expect(claude(24).extra).toEqual([expect.objectContaining({ label: "Extra Usage", remainingPercent: 76 })]);
+    expect(spentPlanUntil(claude(24) as never)).toBeNull();
+    expect(spentPlanUntil(claude(100) as never)).toBe(Date.parse(weekly));
+    // Extra usage turned off: Claude reports no line for it, and the spent window stands.
+    const off = { ...row(100, weekly), ...parseClaudeUsage({ seven_day: { utilization: 100, resets_at: weekly }, extra_usage: { is_enabled: false, utilization: null } }), state: "windows" };
+    expect(off.extra).toEqual([]);
+    expect(spentPlanUntil(off as never)).toBe(Date.parse(weekly));
+    // A credit balance left on a row (Grok's), whatever its windows say.
+    const credits = { ...row(100, weekly), extra: [{ label: "Credits", usedPercent: 40, remainingPercent: 60, resetsAt: null }] };
+    expect(spentPlanUntil(credits as never)).toBeNull();
+    // Any other extra window at 100 % is no allowance.
+    const oauth = { ...row(100, weekly), extra: [{ label: "Oauth Apps", usedPercent: 10, remainingPercent: 90, resetsAt: null }] };
+    expect(spentPlanUntil(oauth as never)).toBe(Date.parse(weekly));
   });
 });

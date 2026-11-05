@@ -48,6 +48,22 @@ describe("Store", () => {
     expect(store.activityOf(bot.id, () => true)).toEqual({ activity: "idle", busy: false });
   });
 
+  it("keeps a settled question visible without occupying its thread, and scopes attention between people (#1984)", () => {
+    const store = new Store(selection);
+    const bot = store.createBot({ name: "Wren" }, { seedMessages: false });
+    store.setTaskActivity(bot.id, bot.threadId, "waiting-on-you");
+    expect(store.activityOf(bot.id, () => true)).toEqual({ activity: "waiting-on-you", busy: true });
+    store.setTaskActivity(bot.id, bot.threadId, "waiting-on-you", { settledQuestion: true });
+    expect(store.taskByThread(bot.id, bot.threadId)).toMatchObject({ activity: "waiting-on-you", busy: false });
+    expect(store.activityOf(bot.id, () => true)).toEqual({ activity: "waiting-on-you", busy: false });
+    expect(store.activityOf(bot.id, () => false)).toEqual({ activity: "idle", busy: false });
+    const other = store.createTask(bot.id, "Other work", false)!;
+    store.setTaskActivity(bot.id, other.threadId, "working");
+    expect(store.activityOf(bot.id, () => true)).toEqual({ activity: "waiting-on-you", busy: true });
+    store.setTaskActivity(bot.id, bot.threadId, "idle");
+    expect(store.activityOf(bot.id, () => true)).toEqual({ activity: "working", busy: true });
+  });
+
   it("runs a routine's threads at the bot's current approval level (#1169)", () => {
     const store = new Store(selection);
     const bot = store.createBot({ name: "Dispatch" }, { seedMessages: false });

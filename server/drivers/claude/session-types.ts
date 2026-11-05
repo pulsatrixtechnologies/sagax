@@ -2,6 +2,7 @@
 import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
 import type { SendTurnInput } from "../../contracts.ts";
+import type { WarmResourceLease } from "../../resources/warm-resources.ts";
 import type { RenewalStep } from "../../context/context-renewal.ts";
 import type { ClaudeLimit } from "./limits.ts";
 
@@ -165,6 +166,7 @@ export type ClaudeSession = {
     lastText?: string;
   } | null;
   idleTimer: ReturnType<typeof setTimeout> | null;
+  budget?: WarmResourceLease;
   closing: boolean;
   stderr: string;
   /** The CLI's running total that the next turn's cost is measured from

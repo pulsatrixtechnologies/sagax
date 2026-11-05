@@ -1107,13 +1107,15 @@ add({
 
 // ── connections (the person's own) ─────────────────────────────────────
 add({
+  // #1992: list lives on GET /api/me/capabilities (servers field). POST
+  // /api/me/mcp/servers only adds a server, so a get there answered "POST only".
   key: "connections.mcpServer", family: "connections", target: "none", value: "object", label: "Add your MCP server ({name, url|command, auth, ...})", where: "Capabilities > Providers",
-  read: () => ({ path: "/api/me/mcp/servers" }),
+  read: () => ({ path: "/api/me/capabilities", field: "servers" }),
   write: (_ids, v) => ({ method: "POST", path: "/api/me/mcp/servers", body: v }), classes: always("secret"),
 });
 add({
   key: "connections.mcpServerEnabled", family: "connections", target: "none", value: "object", label: "Your MCP server on or off ({name, enabled})", where: "Capabilities > Providers",
-  read: () => ({ path: "/api/me/mcp/servers" }),
+  read: () => ({ path: "/api/me/capabilities", field: "servers" }),
   write: (_ids, v) => {
     const s = v as { name?: unknown; enabled?: unknown } | null;
     if (!s || typeof s.name !== "string" || typeof s.enabled !== "boolean") return "value is {name, enabled}.";

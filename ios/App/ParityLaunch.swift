@@ -200,8 +200,6 @@ enum IPadParityScreen: String, CaseIterable {
     case settingsBackups = "settings-backups"
     case settingsWorkspaces = "settings-workspaces"
     case settingsGeneralScrolled = "settings-general-scrolled"
-    case panelLibrarySkills = "panel-library-skills"
-    case panelLibraryPlugins = "panel-library-plugins"
     case settingsMyConnections = "settings-myConnections"
     case personaOverview = "persona-overview"
     case personaAppearance = "persona-appearance"
@@ -289,7 +287,8 @@ enum IPadParityScreen: String, CaseIterable {
         case .mainCompact, .mainCollapsed, .mainThreads, .sidebarRowHover, .sidebarBotMenu,
              .sidebarBotContextMenu, .sidebarSectionMenu, .sidebarProfileMenu, .sidebarNewMenu, .newGroup: true
         default: isDesktopChat || opensBotPanel || isDesktopSettings || parityPage != nil || self == .keyboardShortcuts || self == .aboutDialog || self == .releaseNotesDialog
-            || self == .sidebarSelect || self == .computerWindow || self == .newBot || self == .noticeThreadGone
+            || self == .sidebarSelect || self == .computerWindow || self == .newBot || self == .noticeThreadGone || self == .groupPanel
+            || self == .onboardingWelcome || self == .onboardingTour
         }
     }
 
@@ -300,7 +299,7 @@ enum IPadParityScreen: String, CaseIterable {
     var panelTab: DesktopPanelTab? {
         switch self {
         case .panelDetails, .panelAvatarEditor: .details
-        case .panelLibrary, .panelLibrarySkills, .panelLibraryPlugins: .library
+        case .panelLibrary: .library
         case .panelComputer: .computer
         // the persona editor opens over Details, as on the desktop
         case .panelMore: .details

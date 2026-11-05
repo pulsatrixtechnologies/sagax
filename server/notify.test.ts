@@ -2,7 +2,7 @@
 // tests are mostly about the cases where the answer is "stay quiet".
 import { describe, expect, it } from "vitest";
 
-import { blockedTarget, buildNotification, buildSpendNotification, CALL_QUIET_MS, quietForCall, summarize } from "./notify.ts";
+import { blockedTarget, buildNotification, buildSpendNotification, CALL_QUIET_MS, quietForCall, routineRunTitle, summarize } from "./notify.ts";
 
 const bot = { id: "bot-1", name: "Scout", threadId: "thread-1" };
 
@@ -23,6 +23,18 @@ describe("buildNotification", () => {
     expect(buildNotification("incident", bot, "thread-1", "the run stopped: exit_before_result")?.title).toBe("Scout hit a problem");
     expect(buildNotification("turn-failed", bot, "thread-1", "the Local VM is not ready")?.title)
       .toBe("Scout couldn't start");
+  });
+
+  // 2026-11-02: a proactive wake or a webhook run is not "a routine", failed or waiting.
+  it("names a proactive wake and a webhook run for what they are, failed or waiting", () => {
+    expect(routineRunTitle("Scout", { proactive: { mode: "proactive" } }, "failed")).toBe("Scout's proactive wake failed");
+    expect(routineRunTitle("Scout", { proactive: { mode: "proactive" } }, "waiting")).toBe("Scout's proactive wake is waiting");
+    expect(routineRunTitle("Scout", { webhookId: "hook-1" }, "failed")).toBe("Scout's webhook run failed");
+    expect(routineRunTitle("Scout", { webhookId: "hook-1" }, "waiting")).toBe("Scout's webhook run is waiting");
+    // A routine's run keeps the kind's own title.
+    expect(routineRunTitle("Scout", {}, "waiting")).toBeUndefined();
+    const title = routineRunTitle("Scout", { webhookId: "hook-1" }, "waiting");
+    expect(buildNotification("routine-deferred", bot, "thread-1", "New email: waiting for the reset", { title })?.title).toBe("Scout's webhook run is waiting");
   });
 
   it("announces a delegation settle as a resume with results", () => {

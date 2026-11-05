@@ -162,6 +162,9 @@ for (;;) {
     // the session is genuinely gone; the loop falls through to
     // session/new on the replacement child.
     session.current = null;
+    if (process.env.SAGAX_ACP_REUSE_DIAG === "1") {
+      console.error(`[acp-reuse-diag] thread=${threadId.slice(0, 8)} why=reestablish live=${liveSessionId} cursor=${cursor} sessionKeyChanged=${session.sessionKey !== sessionKey}`);
+    }
     closeSession(threadId, "reestablish");
     session = launchSession();
     sessionRef.current = session;

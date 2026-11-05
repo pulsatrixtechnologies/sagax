@@ -265,23 +265,27 @@ struct DesktopSettingsNav: View {
             // at 26 pt from the top: 10 pt inset, 32 pt tall), the title below.
             // SettingsModal.tsx: "Settings" over the search, then the rail
             // under the desktop's headings (Personal, AI, Installation, App).
-            // `px-2 py-2 text-[13px] font-semibold`, then the search `mt-1 mb-2`
-            DesktopText(Text("Settings"), size: 13, weight: .semibold, line: 19.5)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 8)
-                .accessibilityAddTraits(.isHeader)
-            search
-                .padding(.top, 4)
-                .padding(.bottom, 8)
-            if sections.isEmpty {
-                DesktopText(Text("No settings match “\(query.trimmingCharacters(in: .whitespaces))”."),
-                            size: 12.5, line: 20.3, color: \.inkSecondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 16)
-            }
+            ScrollViewReader { reader in
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 2) {
-                    ForEach(DesktopSettingsNavGroup.grouped(sections), id: \.group) { entry in
+                    // the desktop's rail is one scroller: the title and the search scroll with it
+                    // `px-2 py-2 text-[13px] font-semibold`, then the search `mt-1 mb-2`
+                    DesktopText(Text("Settings"), size: 13, weight: .semibold, line: 19.5)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 8)
+                        .accessibilityAddTraits(.isHeader)
+                    search
+                        .padding(.top, 4)
+                        .padding(.bottom, 8)
+                    if sections.isEmpty {
+                        DesktopText(Text("No settings match “\(query.trimmingCharacters(in: .whitespaces))”."),
+                                    size: 12.5, line: 20.3, color: \.inkSecondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 16)
+                    }
+                    // 2026-11-02 (desktop): About is not a row of the rail; it opens
+                    // from the app menu and the sidebar
+                    ForEach(DesktopSettingsNavGroup.grouped(sections.filter { $0 != .about }), id: \.group) { entry in
                         DesktopText(Text(entry.group.label), size: 11.5, weight: .medium, line: 16, color: \.inkTertiary)
                             .padding(.horizontal, 9)
                             .padding(.top, 12)
@@ -291,7 +295,16 @@ struct DesktopSettingsNav: View {
                             navRow(section)
                         }
                     }
+                    Color.clear.frame(height: 0).id(DesktopSettingsScroll.navBottom)
                 }
+            }
+            // settings-general-scrolled: the desktop scrolls every scroller of
+            // the dialog to its end, the rail too
+            .task {
+                guard DesktopSettingsScroll.parityScrollsToEnd else { return }
+                try? await Task.sleep(nanoseconds: 600_000_000)
+                reader.scrollTo(DesktopSettingsScroll.navBottom, anchor: .bottom)
+            }
             }
             Spacer(minLength: 0)
         }
@@ -482,6 +495,7 @@ extension DesktopShellModel {
 /// settings-general-scrolled: the page scrolled to its end.
 enum DesktopSettingsScroll {
     static let bottom = "desktop-settings.bottom"
+    static let navBottom = "desktop-settings.nav-bottom"
 
     static var parityScrollsToEnd: Bool {
         #if DEBUG

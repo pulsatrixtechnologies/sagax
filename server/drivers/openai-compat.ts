@@ -335,6 +335,9 @@ export const OpenAICompatDriver: ProviderDriver<OpenAICompatConfig> = {
       ...(azure ? { authHeaders: azureHeaders } : {}),
       tools: config.tools,
       computerUse: true,
+      // #1975: honour warmOnly so POST /api/bots/:id/warm mounts MCP ahead
+      // of the first HTTP turn (same path CLI engines already use).
+      warmSession: true,
       models,
       refreshModels: fetchModels,
       // OpenAI's own API: /responses, where its newer models take tools

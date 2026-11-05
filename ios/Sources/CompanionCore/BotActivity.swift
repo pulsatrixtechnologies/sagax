@@ -153,14 +153,113 @@ public struct BotActivityItem: Codable, Hashable, Identifiable, Sendable {
     public var stoppable: Bool { canStop == true && threadId != nil && status.isActive }
 }
 
-/// The repository work of a coding conversation (`BotCodeWork`). Only the
-/// fields the Environment pod shows are read; the rest of the payload is
-/// ignored.
-public struct BotCodeWork: Codable, Hashable, Sendable {
-    /// owner/name of the folder's origin remote.
+/// What the bot did to a pull request, read off its own calls (`gh pr create`
+/// opened it, …). Not GitHub's live state.
+public enum BotCodePullAction: String, Codable, Hashable, Sendable {
+    case opened, merged, closed, updated
+}
+
+public struct BotCodePullRequest: Codable, Hashable, Sendable {
     public var repo: String?
+    public var number: Int?
+    public var title: String?
+    public var url: String?
+    public var action: BotCodePullAction
+    public var branch: String?
+    public var at: Double
+
+    public init(repo: String? = nil, number: Int? = nil, title: String? = nil, url: String? = nil, action: BotCodePullAction = .opened, branch: String? = nil, at: Double = 0) {
+        self.repo = repo
+        self.number = number
+        self.title = title
+        self.url = url
+        self.action = action
+        self.branch = branch
+        self.at = at
+    }
+}
+
+public struct BotCodeBranch: Codable, Hashable, Sendable {
+    public var name: String
+    public var repo: String?
+    public var pushed: Bool
+    public var url: String?
+    public var at: Double
+
+    public init(name: String, repo: String? = nil, pushed: Bool = false, url: String? = nil, at: Double = 0) {
+        self.name = name
+        self.repo = repo
+        self.pushed = pushed
+        self.url = url
+        self.at = at
+    }
+}
+
+public struct BotCodeCommit: Codable, Hashable, Sendable {
+    public var sha: String
+    public var message: String?
+    public var branch: String?
+    public var repo: String?
+    public var pushed: Bool
+    public var url: String?
+    public var at: Double
+
+    public init(sha: String, message: String? = nil, branch: String? = nil, repo: String? = nil, pushed: Bool = false, url: String? = nil, at: Double = 0) {
+        self.sha = sha
+        self.message = message
+        self.branch = branch
+        self.repo = repo
+        self.pushed = pushed
+        self.url = url
+        self.at = at
+    }
+}
+
+/// The repository work of a coding conversation (`BotCodeWork`).
+public struct BotCodeWork: Codable, Hashable, Sendable {
+    /// The folder its turns run in, when it is a git repository on the server.
+    public var folder: String?
     /// The branch checked out in that folder now.
     public var branch: String?
+    /// owner/name of the folder's origin remote.
+    public var repo: String?
+    public var repoUrl: String?
+    public var pullRequests: [BotCodePullRequest]
+    public var branches: [BotCodeBranch]
+    public var commits: [BotCodeCommit]
+
+    public init(
+        folder: String? = nil,
+        branch: String? = nil,
+        repo: String? = nil,
+        repoUrl: String? = nil,
+        pullRequests: [BotCodePullRequest] = [],
+        branches: [BotCodeBranch] = [],
+        commits: [BotCodeCommit] = []
+    ) {
+        self.folder = folder
+        self.branch = branch
+        self.repo = repo
+        self.repoUrl = repoUrl
+        self.pullRequests = pullRequests
+        self.branches = branches
+        self.commits = commits
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case folder, branch, repo, repoUrl, pullRequests, branches, commits
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        folder = try values.decodeIfPresent(String.self, forKey: .folder)
+        branch = try values.decodeIfPresent(String.self, forKey: .branch)
+        repo = try values.decodeIfPresent(String.self, forKey: .repo)
+        repoUrl = try values.decodeIfPresent(String.self, forKey: .repoUrl)
+        pullRequests = try values.decodeIfPresent([BotCodePullRequest].self, forKey: .pullRequests) ?? []
+        branches = try values.decodeIfPresent([BotCodeBranch].self, forKey: .branches) ?? []
+        commits = try values.decodeIfPresent([BotCodeCommit].self, forKey: .commits) ?? []
+    }
 }
 
 /// A pull request tied to a launched agent's failed run.
@@ -233,23 +332,26 @@ public struct BotActivityStep: Decodable, Hashable, Identifiable, Sendable {
     public var `where`: Where?
     public var files: [String]?
     public var input: String?
+    /// A failed call's own error (bounded, redacted).
+    public var error: String?
     public var parentId: String?
     public var subagent: Subagent?
 
-    public init(id: String, name: String, summary: String? = nil, ok: Bool? = nil, at: Double = 0, where place: Where? = nil, input: String? = nil, parentId: String? = nil, subagent: Subagent? = nil) {
+    public init(id: String, name: String, summary: String? = nil, ok: Bool? = nil, at: Double = 0, where place: Where? = nil, input: String? = nil, error: String? = nil, files: [String]? = nil, parentId: String? = nil, subagent: Subagent? = nil) {
         self.id = id
         self.name = name
         self.summary = summary
         self.ok = ok
         self.at = at
         self.where = place
-        self.files = nil
+        self.files = files
         self.input = input
+        self.error = error
         self.parentId = parentId
         self.subagent = subagent
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, summary, ok, at, `where`, files, input, parentId, subagent }
+    private enum CodingKeys: String, CodingKey { case id, name, summary, ok, at, `where`, files, input, error, parentId, subagent }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -261,6 +363,7 @@ public struct BotActivityStep: Decodable, Hashable, Identifiable, Sendable {
         self.where = try? values.decodeIfPresent(Where.self, forKey: .where)
         files = try values.decodeIfPresent([String].self, forKey: .files)
         input = try values.decodeIfPresent(String.self, forKey: .input)
+        error = try values.decodeIfPresent(String.self, forKey: .error)
         parentId = try values.decodeIfPresent(String.self, forKey: .parentId)
         subagent = try? values.decodeIfPresent(Subagent.self, forKey: .subagent)
     }

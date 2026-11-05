@@ -24,6 +24,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "./testing/fake-oidc-provider.ts";
 import { freePortBlock } from "./testing/ports.ts";
+import { waitForServerReady } from "./testing/server-ready.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const FAKE_ACP = join(SERVER_DIR, "testing", "fake-acp-cli.ts");
@@ -55,14 +56,24 @@ function scenarios(input: { call: () => Call; log: () => string; fullBot: () => 
     expect(result.status, `${method} ${path}: ${result.text}\n${input.log().slice(-2000)}`).toBe(status);
     return result.body;
   };
+  // These calls use the account gateway, not a computer. Auto can discover
+  // an ambient Local VM asynchronously and would make this fixture host-dependent.
   const newBot = async (name: string, instanceId: string, approvalMode: "ask" | "auto") => {
-    const bot = (await api("POST", "/api/bots", { name, modelSelection: { instanceId, model: "grok-4.7" } }, 201)).bot;
-    await api("PATCH", `/api/bots/${bot.id}`, { approvalMode });
+    const bot = (await api("POST", "/api/bots", { name, computer: "off", browser: false, modelSelection: { instanceId, model: "grok-4.7" } }, 201)).bot;
+    const configured = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode, computer: "off", browser: false });
+    expect(configured.bot.computer).toBe("off");
     await api("PATCH", `/api/bots/${bot.id}/tasks/${bot.threadId}`, { approvalMode });
     return bot as { id: string; threadId: string };
   };
   const messages = async (bot: { threadId: string }) => (await api("GET", `/api/threads/${bot.threadId}/messages?limit=200`)).messages as any[];
   const cards = async (bot: { threadId: string }) => (await messages(bot)).filter((message) => message.kind === "options" && message.card?.requestId && message.card.requestType === "permission");
+  const waitForCard = async (bot: { threadId: string }) => {
+    try {
+      await expect.poll(async () => (await cards(bot)).length, { timeout: 30_000 }).toBe(1);
+    } catch (error) {
+      throw new Error(`${error instanceof Error ? error.message : error}\nThread: ${JSON.stringify(await messages(bot))}\nServer: ${input.log().slice(-4000)}`);
+    }
+  };
   const idle = async (bot: { id: string }) => expect.poll(async () => (await api("GET", "/api/bots?messages=0")).bots.find((row: any) => row.id === bot.id)?.busy, { timeout: 30_000 }).toBeFalsy();
   const replied = async (bot: { threadId: string }, line: string) =>
     expect.poll(async () => (await messages(bot)).some((message) => message.role === "bot" && typeof message.text === "string" && message.text.includes(line)), { timeout: 30_000 }).toBe(true);
@@ -81,7 +92,7 @@ function scenarios(input: { call: () => Call; log: () => string; fullBot: () => 
   it("a send at Ask shows its card; denied, it never runs", async () => {
     const bot = await newBot("Sender ask", "groksend", "ask");
     await send(bot, "Envoie le suivi à Ana.");
-    await expect.poll(async () => (await cards(bot)).length, { timeout: 30_000 }).toBe(1);
+    await waitForCard(bot);
     const card = (await cards(bot))[0].card;
     expect(card.mcpTool).toBe(SEND);
     // never a session-wide allow on a send
@@ -94,7 +105,7 @@ function scenarios(input: { call: () => Call; log: () => string; fullBot: () => 
   it("a send at Auto shows its card too: Approve for me never sends for the person", async () => {
     const bot = await newBot("Sender auto", "groksend", "auto");
     await send(bot, "Envoie le suivi à Ana.");
-    await expect.poll(async () => (await cards(bot)).length, { timeout: 30_000 }).toBe(1);
+    await waitForCard(bot);
     const card = (await cards(bot))[0].card;
     await api("POST", `/api/threads/${bot.threadId}/respond`, { requestId: card.requestId, behavior: "allow" });
     await replied(bot, `${SEND} -> ran (asked)`);
@@ -104,7 +115,7 @@ function scenarios(input: { call: () => Call; log: () => string; fullBot: () => 
   it("a send through a personal account's gateway, whose tool name is no plain server__tool, keeps its card at Auto", async () => {
     const bot = await newBot("Sender personal", "groksendpersonal", "auto");
     await send(bot, "Envoie le suivi à Ana.");
-    await expect.poll(async () => (await cards(bot)).length, { timeout: 30_000 }).toBe(1);
+    await waitForCard(bot);
     const card = (await cards(bot))[0].card;
     expect(card.mcpTool).toBe(PERSONAL_SEND);
     await api("POST", `/api/threads/${bot.threadId}/respond`, { requestId: card.requestId, behavior: "deny" });
@@ -115,7 +126,7 @@ function scenarios(input: { call: () => Call; log: () => string; fullBot: () => 
   it("Always allow on the send's card is kept: the same send then goes with no card", async () => {
     const bot = await newBot("Sender always", "groksend", "ask");
     await send(bot, "Envoie le suivi à Ana.");
-    await expect.poll(async () => (await cards(bot)).length, { timeout: 30_000 }).toBe(1);
+    await waitForCard(bot);
     const card = (await cards(bot))[0].card;
     expect(card.ownerRule, JSON.stringify(card)).toBeTruthy();
     await api("POST", `/api/threads/${bot.threadId}/respond`, { requestId: card.requestId, behavior: "allow", rule: "allow" });
@@ -150,16 +161,6 @@ async function fetchCall(base: string, method: string, path: string, body?: unkn
   return { status: response.status, body: parsed, text };
 }
 
-async function waitForHealth(base: string, log: () => string): Promise<void> {
-  const deadline = Date.now() + 30_000;
-  for (;;) {
-    try {
-      if ((await fetch(`${base}/api/health`)).ok) return;
-    } catch { /* not up yet */ }
-    if (Date.now() > deadline) throw new Error(`server never came up:\n${log()}`);
-    await new Promise((resolve) => setTimeout(resolve, 150));
-  }
-}
 
 posixOnly("solo server: the operator's own Grok sign-in", () => {
   let home = "";
@@ -179,11 +180,15 @@ posixOnly("solo server: the operator's own Grok sign-in", () => {
     });
     child.stdout!.on("data", (chunk) => (log += chunk));
     child.stderr!.on("data", (chunk) => (log += chunk));
-    await waitForHealth(base, () => log);
+    await waitForServerReady(child, base, () => log);
   };
   beforeAll(async () => {
     chmodSync(FAKE_ACP, 0o755);
     home = mkdtempSync(join(tmpdir(), "omb-grok-connectors-solo-"));
+    // Match the signed-in account this fixture claims to exercise. A late
+    // availability probe must not turn its fake CLI into a signed-out account.
+    mkdirSync(join(home, ".grok"), { recursive: true });
+    writeFileSync(join(home, ".grok", "auth.json"), '{"fixture":"offline"}\n', { mode: 0o600 });
     const data = join(home, ".sagax");
     mkdirSync(data, { recursive: true });
     writeFileSync(join(data, "config.json"), JSON.stringify({ instances: grokInstances() }));
@@ -192,9 +197,10 @@ posixOnly("solo server: the operator's own Grok sign-in", () => {
     await boot();
     // Full access is turned on in the desktop app, never through this API:
     // fixture setup, the owned server stopped while its disposable data changes
-    const created = await fetchCall(base, "POST", "/api/bots", { name: "Sender full", modelSelection: { instanceId: "groksend", model: "grok-4.7" } });
+    const created = await fetchCall(base, "POST", "/api/bots", { name: "Sender full", computer: "off", browser: false, modelSelection: { instanceId: "groksend", model: "grok-4.7" } });
     expect(created.status, created.text).toBe(201);
     fullBot = created.body.bot;
+    expect((await fetchCall(base, "PATCH", `/api/bots/${fullBot!.id}`, { computer: "off", browser: false })).status).toBe(200);
     await waitForExit(child, { signal: "SIGTERM" });
     const saved = JSON.parse(readFileSync(join(data, "bots.json"), "utf8"));
     const row = saved.find((bot: { id: string }) => bot.id === fullBot!.id);
@@ -202,7 +208,7 @@ posixOnly("solo server: the operator's own Grok sign-in", () => {
     for (const task of row.tasks ?? []) { delete task.approvalMode; delete task.autoApprove; delete task.approvalOwn; }
     writeFileSync(join(data, "bots.json"), JSON.stringify(saved, null, 2));
     await boot();
-  }, 90_000);
+  }, 150_000);
   afterAll(async () => {
     if (child) await waitForExit(child, { signal: "SIGTERM" });
     if (home) await removeTempDir(home);
@@ -260,7 +266,7 @@ posixOnly("organization server: the person's own Grok sign-in", () => {
     });
     child.stdout!.on("data", (chunk) => (log += chunk));
     child.stderr!.on("data", (chunk) => (log += chunk));
-    await waitForHealth(base, () => log);
+    await waitForServerReady(child, base, () => log);
     cookie = await signIn();
     // Alice's own grok.com sign-in on this server: the marker a device
     // sign-in writes (principal-engine-logins.ts), so her turns run on it
@@ -282,7 +288,7 @@ posixOnly("organization server: the person's own Grok sign-in", () => {
     log: () => log,
     // an organization admin turns Full access on with its confirmation
     fullBot: async () => {
-      const created = await fetchCall(base, "POST", "/api/bots", { name: "Sender full", modelSelection: { instanceId: "groksend", model: "grok-4.7" } }, { cookie });
+      const created = await fetchCall(base, "POST", "/api/bots", { name: "Sender full", computer: "off", browser: false, modelSelection: { instanceId: "groksend", model: "grok-4.7" } }, { cookie });
       expect(created.status, created.text).toBe(201);
       const bot = created.body.bot as { id: string; threadId: string };
       for (const path of [`/api/bots/${bot.id}`, `/api/bots/${bot.id}/tasks/${bot.threadId}`]) {

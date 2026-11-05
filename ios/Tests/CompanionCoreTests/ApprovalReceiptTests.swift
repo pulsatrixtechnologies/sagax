@@ -102,6 +102,19 @@ final class ApprovalReceiptTests: XCTestCase {
                        "a proposal keeps its card")
     }
 
+    /// #1982: a bot-created routine's Undo receipt stays in the chat even
+    /// when the server marked it dismissed (so it leaves the pending dock).
+    func testAnAutoAppliedReceiptStaysInChatWhenDismissed() throws {
+        let receipt = try card(#"""
+        {"title":"Schedule?","subtitle":"","options":[],"answered":"allow","dismissed":true,
+         "autoApplied":true,"requestId":"r","tool":"schedule_routine","routineRequest":{}}
+        """#)
+        XCTAssertTrue(ApprovalReceiptRules.staysInChat(receipt))
+        XCTAssertEqual(receipt.autoApplied, true)
+        let plainDismissed = try card(#"{"title":"t","subtitle":"s","options":[],"answered":"allow","dismissed":true,"requestId":"r","tool":"Bash"}"#)
+        XCTAssertFalse(ApprovalReceiptRules.staysInChat(plainDismissed))
+    }
+
     // MARK: The server's words in the reader's language (#1089)
 
     func testTheServerPhraseIsUsedOnlyInItsOwnLanguage() throws {

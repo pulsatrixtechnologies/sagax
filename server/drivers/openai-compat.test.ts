@@ -29,6 +29,18 @@ describe("OpenAICompatDriver", () => {
     expect(OpenAICompatDriver.metadata.access).toBe("api");
   });
 
+  it("advertises warmSession so POST /warm prewarms MCP mounts (#1975)", async () => {
+    const inst = await OpenAICompatDriver.create({
+      instanceId: "openaiCompat",
+      displayName: "Other",
+      enabled: true,
+      config: OpenAICompatDriver.decodeConfig({ url: "https://api.example.test/v1", apiKeyEnv: "OPENAI_COMPAT_API_KEY", allowNoKey: true }),
+      environment: {},
+    });
+    expect(inst.adapter.capabilities.warmSession).toBe(true);
+    await inst.dispose();
+  });
+
   it("falls back to the OpenRouter endpoint by default", () => {
     const cfg = OpenAICompatDriver.defaultConfig();
     expect(cfg.url).toBe("https://openrouter.ai/api/v1");

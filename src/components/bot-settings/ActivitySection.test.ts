@@ -628,7 +628,8 @@ describe("no separate Ongoing activities rail beside the bot", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const app = readFileSync(join(here, "../../App.tsx"), "utf8");
     expect(app).not.toMatch(/BackgroundWorkPanel/);
-    expect(app).toMatch(/: bot \? \(\s*<BotSurface key=\{uiLocale\} id=\{bot.id\}>\{\(current\) => <ChatView bot=\{current\} \/>\}<\/BotSurface>/);
+    // 0c909a88c: the bot leaf owns its store subscription around the same chat.
+    expect(app).toMatch(/: bot \? <BotSurface key=\{uiLocale\} id=\{bot.id\}>\{\(current\) => <ChatView bot=\{current\} \/>}<\/BotSurface> : null/);
     expect(existsSync(join(here, "../BackgroundWorkPanel.tsx"))).toBe(false);
   });
 });

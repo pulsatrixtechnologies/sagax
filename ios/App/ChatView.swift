@@ -132,6 +132,10 @@ struct ChatView: View {
     @State var sendBlockTick = 0
     /// "Connect <engine>" on a phone: the settings sheet.
     @State var showingEngineSettings = false
+    /// "Switch engine" on a composer locked by an engine's limit or credit.
+    @State var choosingEngineForLimit = false
+    /// A Fix on the composer's advisory line (#2013) that did not hold.
+    @State var sendBlockFixError: String?
     @State var attachmentError: String?
     @State var openingFileName: String?
     @State var fileOpenError: String?
@@ -262,7 +266,8 @@ struct ChatView: View {
     var rows: [TranscriptRow] {
         transcriptRows(
             messages, detail: toolCalls.detail, showThreads: threadPrefs.threads.allows(.transcriptReceipts),
-            threadBotId: current.isBot ? current.id : ""
+            threadBotId: current.isBot ? current.id : "",
+            hidesPreSendRefusals: current.isBot
         )
     }
 
@@ -521,6 +526,16 @@ struct ChatView: View {
         // Can this bot answer the person now? Asked on opening, on a bot,
         // thread or model change, then every 15 s while it cannot.
         .task(id: sendBlockTaskKey) { await runSendStateChecks() }
+        // A turn ended: ask again, it may have been refused before any
+        // prompt went out (#2013), or it cleared a refusal.
+        .onValueChange(of: current.busy) { busy in
+            if !busy { sendBlockTick += 1 }
+        }
+        .sheet(isPresented: $choosingEngineForLimit) {
+            if case let .bot(bot) = current {
+                NavigationStack { ModelMenuSheet(bot: bot, close: { choosingEngineForLimit = false }) }
+            }
+        }
         .fullScreenCover(isPresented: $showingEngineSettings) {
             SettingsView(close: { showingEngineSettings = false })
                 .background(Theme.bg.ignoresSafeArea())
@@ -735,7 +750,7 @@ struct ChatView: View {
                                 if let projected = session.state.bot(bot.id)?.projected(forThread: topic.threadId) {
                                     EarlierTopicSection(
                                         chat: .bot(projected),
-                                        rows: transcriptRows(session.state.visibleTranscript(forThread: topic.threadId), detail: toolCalls.detail, showThreads: false, threadBotId: bot.id),
+                                        rows: transcriptRows(session.state.visibleTranscript(forThread: topic.threadId), detail: toolCalls.detail, showThreads: false, threadBotId: bot.id, hidesPreSendRefusals: true),
                                         openLink: openLink, openThread: openThread, revealedMessageId: revealedMessageId,
                                         scrollToMessage: { proxy.scrollTo($0, anchor: .center) }
                                     )
@@ -806,10 +821,9 @@ struct ChatView: View {
                                 if row.id == newDividerBefore {
                                     if desktopChatText != nil {
                                         // NewMessagesDivider.tsx, a row of its own
-                                        // measured on the reference: about 50 pt between
-                                        // the bubbles around it (12 + 6 + 20 + 12)
+                                        // (the rows around it reserve the message
+                                        // bar's height, which made up the rest)
                                         DesktopNewMessagesDivider()
-                                            .padding(.top, 6)
                                             .padding(.bottom, DesktopChatMetrics.rowGap)
                                     } else {
                                         NewMessagesLine()
@@ -972,8 +986,13 @@ struct ChatView: View {
                 // a failed routine run or a routine's access card: a passing
                 // banner under the top bar, never a row (TransientNotices)
                 .overlay(alignment: .top) {
-                    TransientNoticeBanner(chat: current, messages: messages, openLink: openLink, openThread: openThread)
-                        .padding(.top, Self.topBarHeight + 6)
+                    VStack(spacing: 6) {
+                        // #2013: server updating or unreachable, Perspicax
+                        // unreachable, Reconnected; at the top, never over the composer
+                        ConnectionNoticeBanner()
+                        TransientNoticeBanner(chat: current, messages: messages, openLink: openLink, openThread: openThread)
+                    }
+                    .padding(.top, Self.topBarHeight + 6)
                 }
                 .overlay(alignment: .bottom) {
                     if !follow.following, !follow.held, !transcript.isEmpty {

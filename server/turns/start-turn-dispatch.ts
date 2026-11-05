@@ -135,6 +135,7 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       return savedSteps.dispatch.sendTurn(state.instance, replayRequest, {
       threadId: state.threadId,
       botId: state.bot.id,
+      principalId: orgSpeakerPrincipal(state.bot, state.speaker),
       ...(state.compactPrompt ? { compactPrompt: state.compactPrompt } : {}),
       // the per-turn latency line's queue stage (drivers/acp/turn-latency.ts)
       ...(!state.warmOnly && typeof state.userMessage.at === "number" ? { receivedAt: state.userMessage.at } : {}),

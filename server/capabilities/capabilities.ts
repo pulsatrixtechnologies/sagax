@@ -246,6 +246,14 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
     if (aliases.has(plugin.key)) continue;
     const loaded = dirs.has(plugin.dir);
     const selected = folders.some((folder) => folder.dir === plugin.dir);
+    const tenant = scope === "bot" && inputs.organization && inputs.orgFlow.pack && inputs.orgFlow.guarded && inputs.orgFlow.member
+      ? inputs.orgFlow.declared?.find((entry) => entry.tenant && entry.name === plugin.name)
+      : undefined;
+    const tenantDir = tenant && inputs.orgFlow.dirOf(tenant.name);
+    const tenantVersion = tenant && inputs.orgFlow.versionOf?.(tenant.name);
+    const supersededBy = tenant && tenantDir && dirs.has(tenantDir) && !selected && tenantVersion && plugin.version && olderRelease(plugin.version, tenantVersion)
+      ? { tenant: tenant.name.replace(/^pulsatrix-flow-/, ""), version: tenantVersion }
+      : undefined;
     const state: CapabilityState = !plugin.enabled || !selected ? "off" : loaded ? "on" : plugin.present ? "not_served" : "off";
     push({
       key: `plugin:${scope}:${plugin.key}`,
@@ -258,6 +266,7 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
       enabled: plugin.enabled,
       canToggle: scope === "me" || viewer.mayChange,
       ...(plugin.updateAvailable ? { updateAvailable: true } : {}),
+      ...(supersededBy ? { supersededBy } : {}),
       brings: { skills: plugin.contents.skills, commands: plugin.contents.commands, agents: plugin.contents.agents, mcpServers: plugin.declaredMcpServers },
       // MCP receipts are completed below using the actual selected mounts.
       engine: receipt("plugin", { skills: has(plugin.contents.skills), commands: has(plugin.contents.commands), agents: has(plugin.contents.agents) }),
@@ -418,7 +427,7 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
       key: "mcp:account:perspicax",
       form: "mcp",
       name: "Perspicax",
-      description: "Your account connection. Use identity_switch when a routine needs one of your held roles.",
+      description: "Your account connection. Sagax starts each turn under its role and shows it on every step; switch with identity_switch once, only when the work needs another held role.",
       source: { kind: "perspicax", label: inputs.organizationName ?? "Perspicax" },
       scope: "account",
       state: engine.customMcp ? "on" : "not_served",
@@ -609,6 +618,18 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
     items,
     ...(inputs.promptIndex ? { promptIndex: inputs.promptIndex } : {}),
   };
+}
+
+/** Flow publishes stable release versions. An unrecognized version is not
+ * evidence that an installed copy is older. */
+function olderRelease(installed: string, replacement: string): boolean {
+  if (![installed, replacement].every((version) => /^\d+\.\d+\.\d+$/.test(version))) return false;
+  const a = installed.split(".").map(BigInt);
+  const b = replacement.split(".").map(BigInt);
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return a[i]! < b[i]!;
+  }
+  return false;
 }
 
 /** Installed records keep names after a resource is removed or replaced.

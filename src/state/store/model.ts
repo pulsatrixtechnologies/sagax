@@ -79,6 +79,8 @@ export interface OptionCardData {
   /** 2026-10-30: a proactive proposal; answered through its own route
    * (shared/proactive-proposal.ts), options[0] accepts. */
   proactiveProposal?: { id: string };
+  /** 2026-11-05: an "Agit comme" card (shared/wire.ts RoleTransitionCard). */
+  roleTransition?: import("../../../shared/wire").RoleTransitionCard;
   /** Organization server: only an organization admin can answer this card
    * (a server command asked by a member's bot). */
   adminApproval?: boolean;
@@ -243,7 +245,7 @@ export interface Message extends Pick<import("../../../shared/wire").WireMessage
    * narration of the same chip ("reading a file"), used by call mode. */
   /** `setup` marks an error fixed by installing something, not by retrying.
    * `summary` is the call's input on one redacted line (the shell command). */
-  tool?: { name: string; ok?: boolean; spoken?: string; setup?: boolean; claudeUpdate?: boolean; place?: PlaceRow; summary?: string; input?: string; output?: string ; durationMs?: number; /** The product the server declared for the tool, and the id its tool names start with (shared/wire.ts). */ product?: string; productId?: string; itemId?: string; outputPath?: string; fullResult?: boolean; /** Files the call wrote (shared/wire.ts). */ files?: string[]; widget?: import("../../../shared/cw-widgets/types").CwWidget; ruleNotice?: import("../../../shared/custom-rules").CustomRuleNotice; /** What answered the call's ask with no card (shared/wire.ts). */ autoApproval?: { source: string; rule?: string }; engineMove?: import("../../../shared/offered-engines").OrgEngineMove; limitFailover?: import("../../../shared/limit-failover").LimitFailoverLine; connectorSwitch?: { engine: string; connector: string }; soloGoal?: import("../../../shared/solo-goal-line").SoloGoalLine; finishUntil?: import("../../../shared/finish-until-line").FinishUntilLine; /** The step the working line names (shared/working-step.ts). */ step?: import("../../../shared/working-step").WorkingStep; /** Epoch ms when the usage limit that stopped this turn resets, when the engine said. */ limitResetsAt?: number };
+  tool?: { name: string; ok?: boolean; spoken?: string; setup?: boolean; claudeUpdate?: boolean; place?: PlaceRow; summary?: string; input?: string; output?: string ; durationMs?: number; /** The product the server declared for the tool, and the id its tool names start with (shared/wire.ts). */ product?: string; productId?: string; itemId?: string; outputPath?: string; fullResult?: boolean; /** Files the call wrote (shared/wire.ts). */ files?: string[]; widget?: import("../../../shared/cw-widgets/types").CwWidget; ruleNotice?: import("../../../shared/custom-rules").CustomRuleNotice; /** What answered the call's ask with no card (shared/wire.ts). */ autoApproval?: { source: string; rule?: string }; /** 2026-11-05: the Perspicax role this call ran under (shared/perspicax-roles.ts). */ role?: import("../../../shared/perspicax-roles").ToolRole; roleNotice?: import("../../../shared/wire").RoleNotice; engineMove?: import("../../../shared/offered-engines").OrgEngineMove; limitFailover?: import("../../../shared/limit-failover").LimitFailoverLine; connectorSwitch?: { engine: string; connector: string }; soloGoal?: import("../../../shared/solo-goal-line").SoloGoalLine; finishUntil?: import("../../../shared/finish-until-line").FinishUntilLine; /** The step the working line names (shared/working-step.ts). */ step?: import("../../../shared/working-step").WorkingStep; /** Epoch ms when the usage limit that stopped this turn resets, when the engine said. */ limitResetsAt?: number };
   /** user messages sent into a running turn — the model saw it mid-turn */
   steered?: boolean;
   /** a user message that did not come from typing here: through the
@@ -308,6 +310,8 @@ export interface Message extends Pick<import("../../../shared/wire").WireMessage
   threadRef?: { botId: string; threadId: string; title: string; gone?: boolean };
   /** A teammate parked on a question for the person (WireMessage.inputRequest). */
   inputRequest?: import("../../../shared/wire").WireMessage["inputRequest"];
+  /** 2026-11-05: what a bot's turn elsewhere left for the person (WireMessage.attention). */
+  attention?: import("../../../shared/wire").WireMessage["attention"];
   /** A parallel task this line belongs to (shared/parallel-tasks.ts). */
   parallelTask?: ParallelTaskRef;
   dataResult?: import("../../../shared/wire").WireMessage["dataResult"];
@@ -454,6 +458,11 @@ export interface Task {
   /** An AI client's hidden conversation (#291): the server lists it only
    * while it is the open thread; never a dot, a preview or typing dots. */
   hidden?: true;
+  /** A person wrote here from an app (WireTask.personWrote): a thread a bot
+   * opened is theirs too (shared/background-threads.ts). */
+  personWrote?: true;
+  /** The server archived this finished background thread on its own. */
+  autoArchived?: true;
   /** A confidential thread (src/lib/confidential-thread.ts): never
    * remembered, exported or shared beyond its owner. Permanent once set. */
   confidential?: true;
@@ -533,6 +542,11 @@ export interface ThreadOpener {
   botId: string;
   name: string;
   delegationId?: string;
+  /** WireTask.openedBy.kind: a teammate's hand-off ("work", "pair") or an
+   * AI client's conversation ("agent"); absent on a thread a bot opened. */
+  kind?: "pair" | "work" | "agent";
+  /** The opener's conversation a "work" thread was opened from. */
+  threadId?: string;
   at: number;
 }
 
@@ -1647,10 +1661,10 @@ export type Action =
   | { type: "renameGroupTask"; groupId: string; threadId: string; title: string }
   | { type: "pinGroupTask"; groupId: string; threadId: string; pinned: boolean; title: string }
   | { type: "setConversationTurnLimit"; groupId: string; threadId: string; minutes: number | null; dm: boolean }
-  | { type: "deleteGroupTask"; groupId: string; threadId: string }
+  | { type: "deleteGroupTask"; groupId: string; threadId: string; /** Called once the server answered (Archive all / Delete all wait on it, src/lib/bulk-threads.ts). */ onSettled?: (ok: boolean) => void }
   /** Archive, snooze, pin or file one thread of a person conversation (the
    * same fields as a bot thread's updateTask). */
-  | { type: "updateGroupTask"; groupId: string; threadId: string; patch: GroupTaskUpdatePatch }
+  | { type: "updateGroupTask"; groupId: string; threadId: string; patch: GroupTaskUpdatePatch; /** Called once the server answered (Archive all / Delete all wait on it, src/lib/bulk-threads.ts). */ onSettled?: (ok: boolean) => void }
   | { type: "interruptGroup"; groupId: string; threadId?: string; onError?: () => void }
   | { type: "instances"; instances: InstanceInfo[] }
   | { type: "configStatus"; config: ConfigStatus }
@@ -1677,6 +1691,9 @@ export type Action =
       mode?: "chat" | "goal";
       /** The Data result the person is viewing, for the model only; never part of the text. */
       dataContext?: import("../../../shared/data-context").DataContext;
+      /** Visible roles (2026-11-05): the Perspicax role the person picked in
+       * the composer for this thread's next turn ("" = Moi); absent: none. */
+      perspicaxRole?: string;
       onError?: () => void;
       /** the server took the message (its receipt came back) */
       onSent?: () => void;
@@ -1739,10 +1756,10 @@ export type Action =
   | { type: "renameTask"; botId: string; threadId: string; title: string }
   /** Name the thread again from its conversation; the new title arrives with the bot event. */
   | { type: "regenerateTaskTitle"; botId: string; threadId: string; onSettled?: (ok: boolean) => void }
-  | { type: "deleteTask"; botId: string; threadId: string }
+  | { type: "deleteTask"; botId: string; threadId: string; /** Called once the server answered (Archive all / Delete all wait on it, src/lib/bulk-threads.ts). */ onSettled?: (ok: boolean) => void }
   | { type: "newBot"; role?: BotRole; visibility?: BotVisibility; section?: string; settings?: Record<string, unknown>; preserveSelection?: boolean; onCreated?: (bot: Bot) => void; onError?: (message: string) => void }
   | { type: "botCreationPending"; on: boolean }
-  | { type: "updateTask"; botId: string; threadId: string; patch: TaskUpdatePatch }
+  | { type: "updateTask"; botId: string; threadId: string; patch: TaskUpdatePatch; /** Called once the server answered (Archive all / Delete all wait on it, src/lib/bulk-threads.ts). */ onSettled?: (ok: boolean) => void }
   /** The server confirmed a thread is now confidential. */
   | { type: "taskMadeConfidential"; botId: string; threadId: string }
   | { type: "refreshTaskPermissions"; botId: string; threadId: string; acknowledgeLocalAuto?: boolean }

@@ -184,6 +184,8 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: "POST", path: /^\/api\/bots\/[\w-]+\/read$/ },
   { method: "POST", path: /^\/api\/bots\/[\w-]+\/always-allow$/ },
   { method: "POST", path: /^\/api\/bots\/[\w-]+\/messages\/[\w-]+\/edit$/ },
+  // 2026-11-05: answer an "Agit comme" role transition card from the phone
+  { method: "POST", path: /^\/api\/bots\/[\w-]+\/cards\/[\w-]+\/role-transition$/ },
   // 2026-10-30: answer a proactive proposal card from the phone
   { method: "POST", path: /^\/api\/bots\/[\w-]+\/proactive\/[\w-]+$/ },
   // A credential value crosses this one route only as an HPKE envelope. The

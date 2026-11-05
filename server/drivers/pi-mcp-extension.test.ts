@@ -453,7 +453,10 @@ describe("Pi MCP extension registration", () => {
       expect(await f.handlers.get("tool_call")?.({ toolName: "mail_read_notes_2" })).toMatchObject({ block: true });
     } finally { await f.handlers.get("session_shutdown")?.(); }
   });
-  it.each([["ask", 1], ["auto", 1], ["edits", 1], ["full", 0]] as const)("asks before Sagax's own Browser and Data tools at %s, as on Claude (engine parity)", async (approvalMode, cards) => {
+  // #1982: Full also confirms so Sagax's gate sees the call (reads/writes
+  // follow the level in index.ts). confirm(false) declines; confirm(true)
+  // stands for the harness Full-approving.
+  it.each([["ask"], ["auto"], ["edits"], ["full"]] as const)("asks before Sagax's own Browser and Data tools at %s, as on Claude (engine parity)", async (approvalMode) => {
     const receipt = join(tempDir(), "data-call.txt");
     const script = fakeMcpScript(`
       import { createInterface } from "node:readline";
@@ -476,12 +479,16 @@ describe("Pi MCP extension registration", () => {
       const asked: string[] = [];
       const ui = { confirm: async (title: string) => { asked.push(title); return false; } };
       await tools[0].execute("call", { sql: "select 1" }, undefined, undefined, { ui });
-      expect(asked).toEqual(cards ? ["Allow data:data_sql?"] : []);
-      expect(existsSync(receipt)).toBe(cards === 0);
+      expect(asked).toEqual(["Allow data:data_sql?"]);
+      expect(existsSync(receipt)).toBe(false);
+      asked.length = 0;
+      await tools[0].execute("call", { sql: "select 1" }, undefined, undefined, { ui: { confirm: async (title: string) => { asked.push(title); return true; } } });
+      expect(asked).toEqual(["Allow data:data_sql?"]);
+      expect(readFileSync(receipt, "utf8")).toBe("data_sql");
     } finally { await handlers.get("session_shutdown")?.(); }
   });
 
-  it.each([["ask", 1], ["auto", 1], ["edits", 1], ["full", 0]] as const)("asks before each tool on the person's own computer at %s, and not under her Full access", async (approvalMode, cards) => {
+  it.each([["ask"], ["auto"], ["edits"], ["full"]] as const)("asks before each tool on the person's own computer at %s (#1982 Full reaches Sagax)", async (approvalMode) => {
     const receipt = join(tempDir(), "computer-call.txt");
     const script = fakeMcpScript(`
       import { createInterface } from "node:readline";
@@ -504,8 +511,12 @@ describe("Pi MCP extension registration", () => {
       const asked: string[] = [];
       const ui = { confirm: async (title: string) => { asked.push(title); return false; } };
       await tools[0].execute("call", { x: 1 }, undefined, undefined, { ui });
-      expect(asked).toEqual(cards ? ["Allow click on your computer?"] : []);
-      expect(existsSync(receipt)).toBe(cards === 0);
+      expect(asked).toEqual(["Allow click on your computer?"]);
+      expect(existsSync(receipt)).toBe(false);
+      asked.length = 0;
+      await tools[0].execute("call", { x: 1 }, undefined, undefined, { ui: { confirm: async (title: string) => { asked.push(title); return true; } } });
+      expect(asked).toEqual(["Allow click on your computer?"]);
+      expect(readFileSync(receipt, "utf8")).toBe("click");
     } finally { await handlers.get("session_shutdown")?.(); }
   });
 

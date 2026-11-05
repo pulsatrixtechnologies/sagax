@@ -137,6 +137,15 @@ export function caddyUpstreamHoldLines(indent: string, options?: { sse?: boolean
 
 /** The Docker stack's Caddyfile with this server's ports; certificates and
  * state live under the data dir so they survive restarts and upgrades. */
+/** The edge's answer while the upstream is down past the hold (#2013). */
+export const CADDY_MAINTENANCE_LINES = [
+  "\thandle_errors 502 503 504 {",
+  "\t\theader x-sagax-maintenance upstream",
+  "\t\theader cache-control no-store",
+  "\t\trespond `{\"ok\":false,\"maintenance\":true}` 503",
+  "\t}",
+];
+
 export function caddyfileFor(input: { domain: string; appPort: number; webhookPort: number }): string {
   return [
     "# Written by openmausbot serve --domain. Edit the command, not this file.",
@@ -162,6 +171,10 @@ export function caddyfileFor(input: { domain: string; appPort: number; webhookPo
     ...caddyUpstreamHoldLines("\t\t\t", { sse: true }),
     "\t\t}",
     "\t}",
+    "",
+    // #2013: the upstream still restarting past the hold reads as an update
+    // in the app (src/lib/connection-notice.ts), not as a bare 502.
+    ...CADDY_MAINTENANCE_LINES,
     "}",
     "",
   ].join("\n");

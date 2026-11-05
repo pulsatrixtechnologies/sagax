@@ -2,15 +2,17 @@
 import { describe, expect, it } from "vitest";
 
 import type { McpAuditRecord } from "../mcp/mcp-permissions.ts";
+import { WarmResourceBudget, MiB } from "../resources/warm-resources.ts";
 import type { SubjectTokenOutcome } from "../auth/idp-session.ts";
 import type { ExchangeResult } from "./perspicax-link.ts";
-import { PERSPICAX_ACCESS_ENDED, PERSPICAX_KEEPALIVE_PER_PERSON, PERSPICAX_ROUTINE_RETRY_MS, PERSPICAX_SESSION_RESET, PERSPICAX_UNAVAILABLE_WHY, PerspicaxMcp, parseMcpBody, perspicaxReadOnlyToolsOf, perspicaxReplayable, reviewedReadsOf, perspicaxSessionLost, perspicaxUnavailableRow, perspicaxUnavailableWhy, type PerspicaxMcpLink, type PerspicaxMcpOptions } from "./perspicax-mcp.ts";
+import { PERSPICAX_ACCESS_ENDED, PERSPICAX_KEEPALIVE_PER_PERSON, PERSPICAX_ROUTINE_RETRY_MS, PERSPICAX_SESSION_RESET, PERSPICAX_UNAVAILABLE_WHY, PerspicaxMcp, parseMcpBody, perspicaxReadOnlyToolsOf, perspicaxReplayable, reviewedReadsOf, perspicaxSessionLost, perspicaxUnavailableRow, perspicaxUnavailableWhy, withFailureWords, type PerspicaxMcpLink, type PerspicaxMcpOptions } from "./perspicax-mcp.ts";
 
 const ISS = "https://px.example.test";
 const ALICE = "pr_alice";
 const BOB = "pr_bob";
 const CAROL = "pr_carol";
 function harness(options: {
+  warmBudget?: WarmResourceBudget;
   mcp?: (request: { headers: Record<string, string>; body: any; method: string }) => Response | Promise<Response>;
   onCall?: Set<string>;
   engineWarm?: Set<string>;
@@ -74,6 +76,7 @@ function harness(options: {
     });
   }) as typeof fetch;
   const mcp = new PerspicaxMcp({
+    warmBudget: options.warmBudget ?? new WarmResourceBudget({ intervalMs: 0 }),
     issuer: ISS,
     link: () => link,
     subjectOf: (id) => subjects[id] ?? null,
@@ -139,6 +142,40 @@ function harness(options: {
 
 const bot = { id: "x" };
 const turn = { threadId: "t1", generation: "g1" };
+
+describe("Perspicax shared warm budget", () => {
+  it("protects active generations and revokes an idle session evicted by the global cap", async () => {
+    const budget = new WarmResourceBudget({ intervalMs: 0, limits: { count: 1, bytes: 10 * MiB, personCount: 10, personBytes: 10 * MiB } });
+    const h = harness({ warmBudget: budget, engineWarm: new Set(["t1", "t2"]) });
+    try {
+      await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+      await h.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+      await h.mcp.prepareTurn({ threadId: "t2", generation: "g2", bot, speakerPrincipalId: ALICE, speakerOrigin: "person" });
+      expect(budget.stats()).toMatchObject({ active: 2, evictions: 0, overBudget: true });
+      await h.mcp.endGeneration("t1", "g1"); await budget.settled();
+      expect(h.revoked).toHaveLength(1); expect(h.mcpCalls.some(c => c.method === "DELETE")).toBe(true);
+      expect(budget.stats()).toMatchObject({ active: 1, resources: 1, evictions: 1 });
+      await h.mcp.prepareTurn({ threadId: "t1", generation: "g3", bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+      expect(h.exchanges).toHaveLength(3);
+    } finally { await h.mcp.endAll(); }
+    expect(budget.stats().resources).toBe(0);
+  });
+
+  it("evicts only the person exceeding their retained memory cap", async () => {
+    const budget = new WarmResourceBudget({ intervalMs: 0, limits: { count: 10, bytes: 10 * MiB, personCount: 10, personBytes: MiB + 1024 } });
+    const h = harness({ warmBudget: budget, engineWarm: new Set(["wren", "osprey-one", "osprey-two"]) });
+    try {
+      for (const [threadId, speakerPrincipalId] of [["wren", BOB], ["osprey-one", ALICE], ["osprey-two", ALICE]]) {
+        await h.mcp.prepareTurn({ threadId: threadId!, generation: "g", bot, speakerPrincipalId: speakerPrincipalId!, speakerOrigin: "person" });
+        await h.mcp.endGeneration(threadId!, "g"); await budget.settled();
+      }
+      expect(budget.stats()).toMatchObject({ resources: 2, personEvictions: 1, globalEvictions: 0 });
+      const before = h.exchanges.length;
+      await h.mcp.prepareTurn({ threadId: "wren", generation: "g2", bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+      expect(h.exchanges.length).toBe(before);
+    } finally { await h.mcp.endAll(); }
+  });
+});
 
 /** The approval form of the Flow guard's GO (Perspicax approval_schema). */
 const GO_SCHEMA = { type: "object", properties: { decision: { type: "string", oneOf: [{ const: "allow", title: "Allow once" }, { const: "deny", title: "Deny" }] } }, required: ["decision"] };
@@ -1159,5 +1196,21 @@ describe("PerspicaxMcp reviewedReads", () => {
     expect(h.mcp.reviewedReads("x", "ACME_DESK_SERVICE")).toBe(true);
     expect(h.mcp.reviewedReads("x", "vpn_api")).toBe(false);
     expect(h.mcp.reviewedReads("y", "acme_desk")).toBe(false);
+  });
+});
+
+describe("withFailureWords (2026-11-05)", () => {
+  it("gives an empty isError result words from structuredContent, else a sentence", () => {
+    const structured = withFailureWords({ jsonrpc: "2.0", id: 1, result: { isError: true, content: [], structuredContent: { status: "blocked", reason: "run_not_yours", detail: "this run is not held by your account" } } }, "flow_run") as any;
+    expect(structured.result.content).toEqual([{ type: "text", text: "this run is not held by your account" }]);
+    const bare = withFailureWords({ jsonrpc: "2.0", id: 1, result: { isError: true, content: [{ type: "text", text: " " }] } }, "flow_run") as any;
+    expect(bare.result.content).toEqual([{ type: "text", text: "flow_run failed on Perspicax and its answer carried no error message." }]);
+  });
+
+  it("leaves a result with words, and a success, as they are", () => {
+    const worded = { jsonrpc: "2.0", id: 1, result: { isError: true, content: [{ type: "text", text: "refused" }] } };
+    expect(withFailureWords(worded, "flow_run")).toBe(worded);
+    const ok = { jsonrpc: "2.0", id: 1, result: { content: [] } };
+    expect(withFailureWords(ok, "flow_run")).toBe(ok);
   });
 });

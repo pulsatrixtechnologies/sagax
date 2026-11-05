@@ -15,8 +15,7 @@
 //     their sidebar, unread counts and typing dots;
 //   - nothing in it notifies the person (push, watch, banner, sound), except
 //     what only they can answer: an approval or a question
-//     (`agentConversationNotifies`), and that on the desktop only: never a
-//     phone or a watch (`quietOnPhones`, server/index.ts notify).
+//     (`agentConversationNotifies`), on desktop, phones and watches too.
 //
 // The turn still runs as the person who owns the connection, with their
 // rights and sign-ins: only where it is shown and who is told change.

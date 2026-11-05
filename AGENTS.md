@@ -1,3 +1,37 @@
+## Background threads stay out of thread mode (#2015, 2026-11-05)
+
+`shared/background-threads.ts` (vectors in `background-threads.vectors.json`,
+same cases in CompanionCore `BotTask.isBackground`) is the one rule: routine
+runs, results threads, hand-offs (`work`/`pair`), threads a bot opened and
+AI-client conversations (`agent`, #291 `hidden`) are background, unless a
+person wrote there (`WireTask.personWrote`, from `askedAt`; never for
+`agent`). Thread mode lists the person's own threads plus the open one;
+"Show background" (sidebar list menu, header picker, phone tree) lists the
+rest. `server/threads/background-sweep.ts` archives finished idle background
+threads at start and every 10 min (`SAGAX_BACKGROUND_ARCHIVE_IDLE_MIN`, 30):
+never deleted, never one a person wrote in, at work, held, pinned,
+confidential or on screen; `autoArchived` marks it and a person's write
+restores it. A direct work thread closes once answered, whatever the answer;
+an AI client's conversation is archived once await_turn collects its reply.
+Scenario: `server/threads/background-sweep.test.ts`. Captures:
+`scripts/capture/background-threads.mjs`.
+## Visible roles (#2016, 2026-11-05)
+
+Every engine `tools/call` on the account's Perspicax connection reports its
+role (`PerspicaxMcp` options `onRole`, `turnRole`, `roleFallback`,
+`askMeWrite`; `shared/perspicax-roles.ts`). Chat starts on the default
+surface ("Moi"); a composer pick fixes the role for the turn; a routine
+starts under its "Au nom de" role. A read 403 under a role is read once more
+as "Moi" by the relay and the role is put back; a write 403 stops the turn's
+role switches and shows the permission; a lapsed role stops the call; a
+routine writing as "Moi" asks the person. `server/perspicax/role-journal.ts`
+keeps steps (`tool.role`), transitions, refusals, owner rules and picks,
+always per principal; `role-events.ts` draws chips, "Agit comme" cards
+(`card.roleTransition`, POST /api/bots/:id/cards/:messageId/role-transition)
+and banners (`tool.roleNotice`). Tests: `perspicax-roles-relay.test.ts`,
+`role-journal.test.ts`, `shared/perspicax-roles.test.ts`,
+`src/components/RoleChip.test.ts`; gallery `src/gallery/visible-roles.html`.
+
 ## Prompt index and on-demand references (#1997, 2026-11-04)
 
 `server/context/prompt-references.ts` replaces exact shipped guidance with
@@ -13,6 +47,55 @@ delivery notes below. Per-turn surface, routine execution, selected skill
 bodies, playbooks, cwd and group memory are volatile on every engine.
 Measurements and limits: `docs/verification/prompt-diet.md`; targeted builder
 snapshots: `server/context/prompt-budget.test.ts`.
+
+## Shared warm-resource budget (#1985, 2026-11-04)
+
+`server/resources/warm-resources.ts` is the shared retention registry for
+Codex, every ACP engine, Claude, Pi standby/fresh processes, per-thread HTTP
+MCP mounts and Perspicax sessions. Register active, claim before reuse,
+park idle only after the turn, mark ordinary teardown `retiring`, and forget
+only after close. Per-person caps reclaim that person's idle LRU first;
+global caps reclaim idle LRU across the server. Active turns never yield to
+budget pressure. Normal identity contracts and idle timers remain in place.
+Capability files for retained proxies are scoped by speaker as well as thread.
+`GET /api/health` includes aggregate `warmResources` only at its existing
+full-detail auth level. Defaults: 64 resources / 2 GiB globally, 12 / 1 GiB
+per person. Four `SAGAX_WARM_*` overrides, estimates, process-tree RSS sampling,
+load evidence and limits: `docs/verification/warm-resource-budget.md`.
+
+## A result that needs the person reaches the person (2026-11-05, #2014)
+
+A bot's turn that ends outside the person's own conversation with it (a
+hand-off, a thread another bot opened, a one-way notice, a routine run's
+task after its run ended) and carries a structured signal for the person
+(`shared/person-attention.ts`: a `[HUMAIN]`/`[HUMAN]`/`[NEEDS_HUMAN]` item
+line, a `needs_human` array in a JSON block, `NEEDS INPUT:`, `RUN_STATUS:
+failed|partial`) posts ONE card into the person's conversation with that bot
+(`server/turns/person-attention-relay.ts`, called from index.ts
+turn.completed): `WireMessage.attention` on a text row, its items with
+`Open ticket` (ConnectWise link from `SAGAX_CW_SITE` or the thread's own
+CW cards), `Open thread`, `Open run`; the conversation turns unread and a
+`needs-you` notification rings (desktop and phone). Never guessed from
+words, never in the person's own conversation, once per source message.
+A routine run that is still active reports through its own card instead:
+`routineReportOutcome` is never quiet with such items, `routineRunReportable`
+posts them whatever `postResults` says, and the routine.run row carries
+`attention` (RoutineRunCard draws the items). One result, one card, one ring: a run
+whose card is already in the chat takes the items on that card (a late
+resume included, `onRunCard`), never a second card; the standalone card is
+only for a result that reached no card there (a hand-off, another bot's
+thread). A routine run's task resumed
+after the run ended mirrors the bot's answer into the conversation
+(`mirrorLateRunReply`, `Message.lateRunReplyOf`). Desktop
+`src/components/AttentionCard.tsx`, iOS `AttentionCardView.swift`.
+A failed tool call always carries words: the Claude driver reads
+`tool_use_result` when the content block is empty, else `emptyFailureNote`;
+the Perspicax relay fills an empty `isError` result from `structuredContent`
+or a sentence (`withFailureWords`). Tests: `shared/person-attention.test.ts`,
+`server/turns/person-attention-relay.test.ts`,
+`server/person-attention.e2e.test.ts`,
+`server/drivers/claude/stream-content.test.ts`. Captures
+`node scripts/capture/needs-you-card.mjs`.
 
 # Sagax agent notes
 
@@ -74,6 +157,25 @@ refuses a model the bot's engine does not list. Tests:
 `shared/routine-model.test.ts`, `routines.test.ts`, `claude.test.ts`,
 `RoutineCalendarPage.test.ts`.
 
+## Routine "Au nom de" role (visible roles batch 4, 2026-11-05)
+
+`Routine.actAs` (`shared/routine-act-as.ts`) is the Perspicax role slug its
+runs act as; "" is "Moi" (the person's own surface), absent means not chosen.
+Runs snapshot it (`RoutineRun.actAs`); `perspicaxTurnRole` (server/index.ts)
+prefers the run's snapshot, then the routine's. Writes: POST/PATCH
+`/api/routines` `actAs` (null clears, "" is Moi) and `act_as` of
+`propose_routine` / `propose_routine_action`. Bot routines only.
+`GET /api/bots/:id/roles/routine-coverage?routineId=&slug=&prompt=`
+(server/routes/routine-role-coverage.ts, through the `more` hook of
+perspicax-roles.ts) lists the run-as person's held roles live
+(`probeRoutineRoles`: short-lived connection on their routine delegation,
+`identity_switch` {} and `flow` describe of the recipe) and counts only that
+person's refusals for that bot. The editor (RoutineActAsField.tsx) saves the
+minimal covering role (`routineDefaultRole`) when nothing was chosen; an
+explicit choice is never overwritten. Tests: `routines.test.ts`,
+`routine-requests.test.ts`, `routine-role-coverage.test.ts`,
+`perspicax-routine-roles.test.ts`, `RoutineActAsField.dom.test.ts`.
+
 ## Flow routine shadow readiness (#1991, 2026-11-04)
 
 Flow readiness calls `flow_run` on the account's main Perspicax connection
@@ -132,6 +234,84 @@ stays compact. Explicit engine settings and Claude account eligibility still
 apply. Routine readiness uses the resolved driver and payer access to explain
 artifact dependencies on API accounts or another engine before creating a task.
 Evidence and configuration matrix: `docs/verification/claude-artifacts.md`.
+
+## Local act and Perspicax assertions (#1993, 2026-11-04)
+
+`act` delegates an opaque Sagax session, never a Perspicax console JWS.
+`botActConsoleRouteError` (`shared/bot-act.ts`) explains `/api/org/admin`
+and `/api/org/member` before scope checks or approval; `performBotActRoute`
+also checks before delegating a session for a planned replay. Console calls
+go through the person's Perspicax account connection; local bots and routines use
+`/api/bots`, `/api/routines` and `/api/routines/runs` with the existing
+person checks. Never accept a Sagax bearer at the assertion gate.
+Regression: `server/member-own-act.e2e.test.ts` (isolated organization,
+admin and member replays) and `shared/bot-act.test.ts`.
+
+## Obsolete bot Flow tenant copies (#1993, 2026-11-04)
+
+The capabilities resolver reports `supersededBy: { tenant, version }` on
+an older bot tenant copy when the installed signed organization Flow pack
+already supplies it. Use the loaded tenant version, not the declaration's
+advertised version or the product version. Installed shows that replacement
+in en/fr and offers Remove directly through the bot's existing plugin DELETE
+route to anyone who may change that bot. Removal refreshes the resolved
+inventory, keeps the organization pack, and reports failure in place.
+Tests: `capabilities.test.ts`, `PluginsPanel.modal.dom.test.ts`.
+Headless journey: `scripts/capture/flow-superseded.mjs`; recipe and limits:
+`docs/verification/flow-superseded.md`.
+
+## Routine regression fixtures (#1995, 2026-11-04)
+
+Routine readiness accepts a computer that can start or be provisioned,
+keeps its specific refusal and refreshes provider state after configuration
+writes. A provider-blocked run stays on the routine failover path. A blocked
+payer still gets the actionable access card through the existing audience
+checks, without allocating an execution thread or exposing another person's
+transcript. Warm engine expiry releases its dependent leases even without
+cgroups, honors the actual driver's idle policy and exempts live calls.
+Isolated cold boots use `server/testing/server-ready.ts` (bounded probes,
+child exit and pid checks). Fixture launches and restarts retain the run's
+Local VM namespace; gateway-only fixtures explicitly turn computers off.
+MCP fixtures finish with words after their calls and require lease revocation
+after the configured engine idle close, including after warm voice sessions.
+
+## Blocking decisions are cards (#1984, 2026-11-04)
+
+Every blocking decision uses ask_choice, a native question tool, or the write
+tool's approval gate. `server/approvals/final-confirmation.ts` recognizes English and
+French confirmation requests in a successful final routine/MCP reply. The main
+runtime fold raises them through `raiseHarnessQuestion` before the routine
+settles. Existing open cards, ordinary chats, quoted examples, failures and
+stopped turns are left alone. The output is a question, never permission to
+write; its answer resumes through the usual gates and person isolation.
+`Store.setTaskActivity` keeps a settled question at `waiting-on-you` with
+`settledQuestion: true` and `busy: false`, including after restart: iOS keeps
+it in Needs you and the answer can start a fresh turn. Bot-wide busy reflects
+occupied slots independently of that attention state.
+MCP ask_choice uses this same persistent question path. Blocking MCP questions
+and approvals reach phones and watches too. `send_prompt.prompt` carries an
+already-given GO as `Operator GO (quoted):` (exact words), then `Scope:` (exact
+writes). The system prompt honors that scope without re-asking or overriding a
+gate; untrusted event data cannot supply consent. Format: `docs/agent-api.md`.
+Tests and isolated verification: `server/approvals/final-confirmation*.test.ts`,
+`docs/verification/decisions-as-cards.md`.
+
+## Codex retains one app-server per conversation (#1969, 2026-11-04)
+
+`server/drivers/codex/sessions.ts` owns the per-instance, per-thread process
+pool, with the shared `sessionIdlePolicy("CODEX")` (10 minutes by default).
+The contract includes the person independently of the payer, bot, account,
+model, effort, permissions, cwd, MCP mounts, command variables and stable
+instructions. Changed volatile context and file-backed turn capabilities
+reuse the process. Native Codex ignores instruction overrides on an already
+loaded thread, so changed stable instructions require a new process.
+`principalId` travels on direct and room turns even without an MCP mount.
+`codex/lifecycle.ts` retires idle sessions on model, engine, ownership and
+deletion changes. Stop, sign-out and disposal close the owned process tree.
+A crash gets one replacement within the same logical turn; after ACK it
+resumes native history with a continuation and received steps. Stop wins.
+Tests: `codex.test.ts`, `codex/sessions.test.ts`, `codex/lifecycle.test.ts`.
+Recipe and measurements: `docs/verification/codex-warm-process.md`.
 
 ## Desktop store subscriptions
 
@@ -1135,6 +1315,140 @@ plain words (`noModelLeftMessage`). Tests:
 `server/drivers/openai-responses.test.ts`, `server/models/refused-models.test.ts`,
 `server/usage/limit-failover-host.test.ts`.
 
+## A refused run goes on elsewhere, and says who refused (2026-11-02)
+
+A routine run, a webhook run or a proactive wake whose turn a limit refused
+never fails as "This bot's engine reached its usage limit" any more (a
+Primary Bot relayed that as the bot being down while its own engine was
+answering: the wake had run on its fast model, #1694, on another engine,
+and the failover skipped it because the turn's model was not the thread's).
+Before the run fails, `RoutineManager` asks the limit failover
+(`usageLimit`, wired to `limitFailover.routineLimit`,
+`server/usage/limit-failover-host.ts`), which reads the turn it saw dispatched:
+the engine and model that really refused, the reset (said or estimated) and
+who takes the run over: the conversation's own model when only a fast
+detour refused, else a backup as for a person's message (`pickLimitBackup`
+on `candidatesNow`), else Auto's next pick. The run then starts again at
+once in its own thread, the same run with the same webhook event
+(`takeOver`, `server/routines/routine-recovery.ts`: queued, `limitTakeover` the model
+of its next start, at most `ROUTINE_LIMIT_TAKEOVERS` takeovers by another
+engine, `engineTakeovers`: the one retry on the conversation's own model
+after only its engine's quick model refused, `limitModelRetry`, does not
+count), with no failure, notification or incident; `startTurn`
+(`server/turns/start-turn-prepare-validate.ts`) moves its thread there and
+skips the wake's fast pick (`limitFailover.takeOver`), and
+`server/turns/start-turn-prompt.ts` notes a turn on a fast pick as a detour
+(`LimitDispatch.detour`). The return is always recorded, at the
+reset of the limit that moved it (`limitTakeoverUntil`) or a later hold:
+a model-only refusal never leaves a conversation on the backup, the
+person's own chat included (a wait's follow-up runs there). A run that
+starts once that limit is over (it waited past the reset, its conversation
+busy) moves nothing: never to the backup and straight back, two switches
+that would replay its engine session. The engine's error row becomes the hidden
+switch notice, and the run's status reads "Continued on another model
+after a limit", never "Ran after the usage limit reset"
+(`routines.retried.limitSwitched`). A quick model Sagax picked is not the
+conversation's (`LimitDispatch.detour`, `RoutineUsageLimit.detour`,
+`LimitFailoverLine.detour`): its lines say Sagax skips it for quick turns
+until it resets, never that the run goes back to it nor to choose another
+engine for the bot. A call turn on such a model goes again at once when a
+limit refuses it (`turnFailed`, `detourFailed`), its conversation
+untouched and no incident filed. A fast model Sagax picked on the
+conversation's own engine (`LimitDispatch.detour`) holds only that model for
+the payer (`refuseModel`, Auto's refusal memory), never the whole engine,
+unless that engine's plan is spent. So does a refusal bound to one model
+(Claude's `limitScope` "model": its extra-usage credits, its family's weekly
+window) of any quick model Sagax picked, on any engine: nothing engine-wide,
+but the next wake's or call's quick pick skips that model until the reset, as
+the lines say, instead of picking it again (a call's message used to go back
+onto it up to `MAX_RESENDS` times). An Auto conversation's call turn included
+(`quickPicked`): its quick pick runs in place of Auto's own, so Auto's refusal
+memory never sees it, even when it is the model Auto falls back to (Auto sent
+the message again onto it up to six times). A takeover is not the run's one
+automatic retry: its start carries the limit's note (`retried`) with
+`takeoverRetried`, so a stall or an empty response on the engine that took
+the run over, or a wait for a reset after it, still gets that retry
+(`usedRetry`, `server/routines/routine-recovery.ts`); a restart's resume uses it.
+When the engine that refused was itself standing in for the run's
+conversation's own model (an earlier takeover, `homeOf`), the verdict names
+that model's engine and its own reset (`RoutineUsageLimit.home`): the run
+goes on elsewhere and back there at that reset, never to the backup that
+refused; it goes back at once when that limit is over (`backHome`, even past
+the two takeovers: it is no other engine; `takeOver` then ends the takeover
+with no second line); with no taker it waits for the earlier real reset
+under 12 h of the two (the bot's own engine on a tie, its next start naming
+no takeover model, so `beforeTurn` brings the conversation back), else
+fails with the bot's own engine and its reset. A backup never is another
+sign-in to a subscription engine this payer is held on, whatever engine
+refused (`outOf`, as `autoExcluded`): a chat backup, `beforeTurn` and a run's
+takeover agree, and the conversation's own engine is never a backup for its
+own refused model. With no taker the words say why (`noTaker`: no other
+engine this person may use, the two moves already made, or switching off
+with `SAGAX_LIMIT_FAILOVER=0`); they advise choosing another engine for the
+bot only when switching is off. A failed run's own error is those words
+(its row, any tool reading runs); the engine's raw words stay in its
+thread. Every line names the engine (its model on a detour) and gives the
+real reset or says the engine gave none, in English or Quebec French ("2 nov.
+à 15 h 16") by the person's language and zone
+(`server/routines/routine-limit-words.ts`); a rate limit is called one. The
+thread's notice names a backup standing in (`LimitFailoverLine.home`,
+`limitFailover.switchedStandIn`) and a return after its refusal
+(`back` with `refused`, `limitFailover.backAfterLimit`); a person's message
+(and a run left to `turnFailed`) says the same when that backup is refused,
+or known to be held before the next turn (`beforeTurn`): the switch names
+the backup at its limit and the engine it stood in for, never that engine
+as the one that refused, and goes back there at that engine's own reset;
+with nothing else to take it, the wait names both and the engine it waits
+for (`waiting` or `waitingRoutine` with `home`,
+`limitFailover.waitingStandIn`, `limitFailover.waitingRoutineStandIn`), the
+bot owner's limit included (`limitFailover.ownerSwitchedStandIn`,
+`limitFailover.ownerWaitingStandIn`). When the backup picked then is the
+conversation's own engine (its hold ended before its return was due: within
+the minute after its reset, or a turn on it worked since), the conversation
+goes back to its own model at once, as a run does (`backHome`): its row is
+forgotten and the line is `back` with `refused`, never "continuing on
+Claude, back on Claude when it resets". A limit bound only to its own model
+held nothing on that engine (`LimitFailover.modelOnly`, kept across a second
+move): that engine is no backup until the row's reset (`ownModelHolds`, as
+`routineBackup`), even when a turn on another of its models works.
+Incidents and notification titles say "proactive wake" or "webhook run",
+failed or waiting (`routineRunTitle`, `server/notify.ts`), never "scheduled
+routine".
+
+What Sagax holds is per payer and per engine, and as accurate as it knows.
+Only a refusal Sagax saw holds an engine for Auto, its panel, a backup
+(chat, `beforeTurn`) and a run's takeover. A plan window the person's own
+usage report showed spent (J4, `GET /api/plan-usage` through
+`announcePlanThresholds`, `spentPlanUntil`, read as `planLimitUntil`) is a
+hint, since a report can be wrong: it never reads as spent while the row
+shows extra usage or credit left (Claude's "Extra Usage", a "Credits"
+line), it keeps only Sagax's quick pick (a wake's or a call's fast model,
+`autoExcluded(..., "quick")`) off that engine until a turn on it works again
+(`planWorked`, from `turnSucceeded`). A real refusal there that names no
+reset is still held for the one-hour estimate, marked as one, and the engine
+tried again after it, never until that window's reset: a top-up shows only in
+a later report, which clears the hint and never a hold, so such a hold kept
+the person's own conversation off that engine for days. A person's chosen
+engine is still moved only after a real refusal. The engines' report
+(`/api/limit-resets`) notes a refusal only when it holds the
+whole engine (`refusalHoldsEngine`): never one bound to one model (its
+extra-usage credits, its own weekly window), nor a fast model Sagax picked
+on the conversation's own engine. A hold, and a takeover's return
+(`LimitFailover.estimated`, `RoutineRun.limitTakeoverEstimated`), remember
+when their time is only Sagax's estimate (`LimitFailoverStore.block` with
+`estimated`, `holdOf`), and every switch or wait line then says the engine
+gave no reset time instead of passing the estimate off as one
+(`LimitFailoverLine.estimated`, `limitFailover.*NoReset`). A conversation a
+backup standing in for its engine moved on goes back at its own engine's
+reset, never at the later reset of that backup. Tests:
+`server/usage/limit-failover-runs.test.ts`, `server/usage/limit-failover-runs.e2e.test.ts`
+(a wake on another engine's fast model, and a wake nothing could take with
+its notification and incident, end to end),
+`server/routines/routine-limit-words.test.ts`, `server/usage/limit-failover-host.test.ts`,
+`server/routines/routine-recovery.test.ts`, `server/notify.test.ts`,
+`server/peers/incidents.test.ts`, `server/usage/plan-usage.test.ts`,
+`src/lib/limit-failover.test.ts`, `src/lib/routine-display.test.ts`.
+
 ## A reply is never an error (2026-10-29)
 
 A bot's reply always reads as a reply, its Markdown whole. Claude Code can
@@ -1519,8 +1833,8 @@ Perspicax) is not the person typing: its turns go to its own conversation
 with the bot, drawn like a bot-to-bot one ("<client> ⇆ <bot>", neutral
 icon), never into the person's chat, and nothing in it notifies them
 (push, watch, banner, sound, red dot) except an approval or a question,
-which reaches the desktop only: never a phone or a watch (`quietOnPhones`
-on the notification, 2026-10-29), since the client that asked carries it. One rule, one place: `shared/agent-conversation.ts`
+which reaches every device, phones and watches included (#1984,
+2026-11-04). One rule, one place: `shared/agent-conversation.ts`
 (opener `{ kind: "agent", botId: "agent:<slug>", name }`, the notification
 rule); `agentConversationFor` in server/index.ts opens or reuses it per bot,
 person and client; the name is the `client_name` Perspicax signs into the
@@ -1564,8 +1878,8 @@ there; the question first.
   (`NeedsYouIsland`) sizes to its content (small face, name, question,
   answers never cut off). The Live Activity has no alert of its own (the
   notification is the one buzz) and a `.small` layout for the watch.
-- MCP: a conversation an AI client holds (outside agent or hidden) never
-  rings a phone or a watch (`quietOnPhones`), approvals included.
+- MCP: a conversation an AI client holds (outside agent or hidden) rings a
+  phone or a watch for an approval or a question (#1984, 2026-11-04).
 - "Needs you" is the server's, shared by every device: a settled card
   (any path) moves its conversation off `waiting-on-you` once no card is
   open there (`settleWaitingActivity`); iOS counts a card it still holds as
@@ -7706,15 +8020,84 @@ so the card shows what the bot did to it until GitHub says more.
 Rules, none optional (`server/routes/bot-code-branches.ts`, git in
 `server/code-branches.ts`):
 
-- Where: the coding thread's own folder (`task.cwd`) when it is a git
-  repository on this server; a branch is acted on only if that thread
-  worked on it (its own calls; never the folder's checked-out branch just
-  because it is there). A branch
-  whose repository is elsewhere (the person's sandbox, a Local VM, their
-  computer through the bridge) reads `place: "elsewhere"` and nothing runs
-  (known gap: those places have exec paths, `UserSandboxManager.exec`,
-  `containerExec`, the bridge's `run_command`, but no thread records the
-  repository's folder there).
+- Where (2026-11-02, a branch the bot made on the person's cloud computer
+  read "elsewhere" with every action greyed): a branch is acted on only if
+  its thread worked on it (its own calls; never the folder's checked-out
+  branch just because it is there), WHERE that thread's git ran for it
+  (`server/remote-support/branch-place.ts`: the newest call that created,
+  checked out, committed on or pushed it, its `cd`s and `git -C` followed;
+  `""` is the folder where that computer's commands start, a git run there
+  with no `cd`). On one of the bot's computers the actions run there,
+  through the channel the bot's own commands used (`branch-channels.ts`,
+  `place: "remote"`, `computer` says which): `sagax-environment`
+  run_command, the viewer's own cloud computer (server environment, in the
+  bot's folder there); `sagax-desktop` run_command and `local_vm`, the
+  viewer's own computer and its Local VM through their desktop app (its
+  text answer framed: output and errors come back base64 on one marker
+  line, exact); `vm_exec`, a solo server's Local VM (never an organization
+  server's host; the frame sized to its 20,000 characters); a remote
+  session. A tool's name is read the same way whatever engine wrote it
+  (`toolKey`: `mcp__server__tool`, `server__tool`, pi's own
+  `sagax_environment_run_command`, the ACP titles, Codex's bare name). The
+  ACP engines other than Grok name a run_command row by its command text
+  (`server/drivers/acp/session-stream.ts`), so their branch has no place
+  and the panel offers to ask the bot. The desktop's own shell (`$SHELL
+  -lc`) and a remote session's login shell get the command inside `/bin/sh
+  -c '...'` (fish and csh users too: no word holds a backslash, a `!` or a
+  line break, `q()`). The panel takes one command slot at a time per
+  person on their computers (2026-11-03, review: it reads every row at
+  once, and their bots need the same slots): the desktop app (it runs its
+  jobs one at a time and keeps eight), on the desktop the request named,
+  and their cloud computer (sandboxd runs four commands of one person at
+  once, shared by all their bots). A full computer reads busy, never
+  stopped; a desktop command that ran out of time while that desktop stayed
+  connected (a long job of its own ahead of it) reads busy, and the next
+  panel commands to it answer busy at once while it still works. The panel
+  holds at most one of the person's four sandboxd slots: while its command
+  runs, a fourth command of their bots can still be refused (429), fewer
+  refusals than before but not none. A command
+  longer than its channel carries (a remote session's 8,000 characters, a
+  solo Local VM's 20,000, the desktop app's 100,000; 120,000 UTF-8 bytes
+  where Linux caps one argument at 131,072: the cloud computer, a Linux
+  desktop, the desktop's Local VM) is not sent (`too_long`, 413), and a
+  remote session's own `[cut at 64 KB]` mark reads as a cut, never as
+  data. A commit there is one command (2026-11-03, final review: git add,
+  then git commit only when the add worked), so a refusal before it runs
+  (too long, busy, offline) leaves nothing staged. Every file checked in
+  the dialog (it says so) commits every change, unnamed (`git add --all`),
+  also those the list does not show (past 500, past a cut, made since), as
+  the server path does; some files checked commits exactly those, each name
+  to its last byte (`setWords`: a file "dup<LF>" is never committed as
+  "dup"), a rename with its old path (given to git commit only: git add
+  refuses a staged rename's old path). Too long, the answer says which: the
+  message (`message_too_long_for_computer`: shorten it) or those files with
+  it (`commit_too_long`). A cut status never lists a rename whose old path
+  it lost; a word `q()` cannot carry exactly (a trailing line break) is
+  refused, and a script holding a backslash, a `!` or a line break never
+  reaches a login shell (`viaPosixShell` throws). One branch read is one script
+  (one round trip after the folder probe), and git there takes no optional
+  lock (`GIT_OPTIONAL_LOCKS=0`: no index.lock while the bot commits); the
+  panel reads again only the rows of the conversation the bot just worked
+  in. The folder is probed in one round trip (where the bot ran git, else
+  another folder it ran git in there) and used by the real path of its
+  repository's top folder (status names paths from there: a commit from a
+  folder inside it missed them). A pull request read there runs nothing
+  (`{ pull: null }`, and the panel does not ask). Only the viewer's own
+  cloud computer and desktop are ever reached, never the bot owner's. Else
+  the thread's own folder (`task.cwd`) when it is a git repository on this
+  server. A branch no channel reaches (no computer of the person's, a tool
+  no channel names, Boat cloud computers) reads `place: "elsewhere"`; an
+  offline computer, an unknown folder, Windows or an unknown OS read as
+  such, and a computer busy with other work (`busy`, 503) fails the read
+  (also a read again over an earlier one: the row keeps its place and
+  counts, and the menu never acts on that earlier read).
+  In each of those the menu says why in plain words and what to do
+  (outside the menu, which it describes), "Try again" first where reading
+  it again can help (the computer was off or busy, its OS not known yet:
+  the row then acts, or says why not), and each action becomes one click
+  that asks the bot to do it ("Ask <bot> to do it", the request sent as
+  the person's message in the branch's own conversation; a delete asks to
+  confirm first). Never a silent grey menu, never "this server".
 - Who: the thread must pass `thread.post` for the viewer (not theirs reads
   as 404). Their own branch asks no approval. Push and pull requests use
   their own credentials: on a solo server the host's git and gh are theirs;
@@ -7724,7 +8107,20 @@ Rules, none optional (`server/routes/bot-code-branches.ts`, git in
   `GH_TOKEN` and an empty config; without it the action is refused
   (`github_not_connected`), never done with the server's or the
   organization's tokens. The token rides the push call only (and the
-  remote HEAD read with it), never status, add, commit or diff. On an
+  remote HEAD read with it), never status, add, commit or diff. The
+  viewer's cloud computer holds only their own credentials too: their
+  GitHub connection signs a push to `https://github.com/<repo>.git` and
+  gh, through the exec's `SAGAX_GH_TOKEN` variable (never a command line);
+  without a connection, or for a remote elsewhere than GitHub, that
+  environment's own sign-in, which only they made there (Sagax puts
+  nothing but their connection there, `github-connect.ts`), and a refusal
+  says to connect GitHub (`github_not_connected`). A commit there is
+  authored by them (their profile's name and email) when known, else by
+  that environment's identity (none: `no_author`). Their own computer, its
+  Local VM and a client's computer use that computer's own sign-in and
+  identity (none: `no_git_identity`, which says to set git's name and
+  email there, never the profile): no token is ever sent there (a push or
+  pull request on a client's computer asks to confirm). On an
   organization server: a request with no person is refused (`no_person`),
   never run as the server; git and gh get no `HOME`, ssh agent or config
   folder of the server's (`isolated`); a commit needs the person's name and
@@ -7760,8 +8156,21 @@ Rules, none optional (`server/routes/bot-code-branches.ts`, git in
   branches yet; the card and a subset of actions (Push, PR, Archive) are
   for later.
 - Tests: `server/routes/bot-code-branches.e2e.test.ts` (real git, a bare
-  local remote), `src/components/bot-settings/CodeBranchList.test.ts`,
-  `ActivitySection.test.ts`, `server/activity/activity-code-work.test.ts`.
+  local remote; each computer kind, each action through the remote path,
+  the credential rule), `server/remote-support/branch-place.test.ts`,
+  `branch-channels.test.ts` (framing, and a branch read, committed and
+  pushed through a login shell that is sh, bash, zsh, dash, ksh, csh or
+  tcsh; the solo Local VM's clip; one desktop job at a time; reach per
+  kind; five rows read at once against sandboxd's four-command gate; a
+  long job holding the real desktop bridge; a remote session's cut mark
+  and 8,000 characters, a message too long for it; a solo Local VM's frame
+  cutting a rename refactor; each channel's length, in bytes where Linux
+  caps one argument), `remote-code-branches.test.ts` (a rename a cut split,
+  a picked rename committed as a move, every change with every file kept,
+  one command per commit, a name ending in a line break),
+  `src/components/bot-settings/CodeBranchList.test.ts`,
+  `CodeBranchList.ask.test.ts` (the ask click, Try again), `ActivitySection.test.ts`,
+  `server/activity/activity-code-work.test.ts`.
   Screenshots: `node scripts/capture/bot-panel-coding.mjs` (headless, the
   gallery `src/gallery/bot-panel-coding.html`).
 
@@ -9031,10 +9440,11 @@ the rule: no card, the turn continues at once.
   the reset plus `AFTER_RESET_MS` goes back to the engine the thread started
   on, with one line. A thread someone moved since is left alone.
 - No backup: the line says the message is sent again at the reset, and it
-  is, once. A routine run is run again on the backup (`runNow`, once per
-  run), else at the reset (at most once per 12 h per routine). Other turns
-  (delegations, webhooks) only block the engine: their next turn starts on a
-  backup before it is refused (`beforeTurn` in `startTurn`).
+  is, once. A routine run, a webhook run or a proactive wake goes on at once
+  on the backup, else waits for a reset under 12 h or fails with the
+  engine's reset (2026-11-02, "A refused run goes on elsewhere" above).
+  Delegations only block the engine: their next turn starts on a backup
+  before it is refused (`beforeTurn` in `startTurn`).
 - Auto threads are left to Auto. Off with `SAGAX_LIMIT_FAILOVER=0`. Tests:
   `server/usage/limit-reset-time.test.ts`, `server/usage/limit-failover.test.ts`,
   `server/usage/limit-failover-host.test.ts`, `src/lib/limit-failover.test.ts`,

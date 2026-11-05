@@ -17,6 +17,7 @@ import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { StoreProvider, useStore, type Bot, type Message, type Task } from "../state/store";
 import { applyPresenceList } from "../lib/presence";
 import { Sidebar } from "../components/Sidebar";
+import { ConfirmProvider } from "../components/ConfirmProvider";
 import { TaskPicker } from "../components/TaskPicker";
 import { MASCOT_CHARACTERS, type MascotLook } from "../../shared/mascot-look";
 import "../styles.css";
@@ -131,6 +132,36 @@ if (characterParam && (MASCOT_CHARACTERS as readonly string[]).includes(characte
   for (const member of team) member.mascotLook = look;
 }
 
+// ?threadlist=1: Atlas holds a long list of threads, some opened by a bot,
+// for the thread menu over a scrolled list and the nested row indent
+// (scripts/capture/sidebar-thread-list.mjs, 2026-11-04)
+if (params.get("threadlist") === "1") {
+  const atlas = team.find((entry) => entry.id === "atlas");
+  const titles = ["Fetch Outlook messages for review", "Can you update this routine so it runs at noon", "Archive Outlook folders older than a year", "Mail client", "Fetch exact Outlook counts by folder", "Fetch exact Outlook senders", "Fetch exact Outlook threads", "Quarterly ticket report", "Printer queue cleanup", "License renewal summary", "Backup check for the file server", "Weekly status note"];
+  if (atlas) atlas.tasks = [task("t-atlas", "Général", minutes(8)), ...titles.map((title, i) => task(`t-atlas-l${i}`, title, minutes(20 + i * 40),
+    i % 3 === 1 ? {} : { openedBy: { botId: "atlas", name: "Atlas", at: minutes(20 + i * 40) } }))];
+}
+
+// ?flood=1: Atlas as a busy bot's record reads on a live server (unified
+// chat, 2026-11-05): a few conversations of the person among dozens of
+// threads it opened on itself, teammates' "@Iris · work" hand-offs, an AI
+// client's send_prompt conversations and routine runs
+// (scripts/capture/background-threads.mjs).
+if (params.get("flood") === "1") {
+  const atlas = team.find((entry) => entry.id === "atlas");
+  const iris = team.find((entry) => entry.id === "iris");
+  if (atlas && iris) {
+    const own = ["Général", "Rapport mensuel des billets", "Migration Exchange"].map((title, i) => task(i ? `t-atlas-own${i}` : "t-atlas", title, minutes(8 + i * 90), i === 0 ? {} : { personWrote: true }));
+    const selfOpened = ["Fetch exact Outlook webhook message", "Read Outlook webhook email", "Fetch Outlook webhook email", "Read webhook Outlook message", "Silent Outlook seat-upgrade check", "Facturation watch (read-only)", "Archive Outlook message", "Read-only Outlook rehearsal"]
+      .flatMap((title, i) => [0, 1, 2].map((n) => task(`t-atlas-self${i}-${n}`, title, minutes(15 + (i * 3 + n) * 25), { openedBy: { botId: "atlas", name: "Atlas", at: minutes(15 + (i * 3 + n) * 25) } })));
+    const work = Array.from({ length: 6 }, (_, i) => task(`t-atlas-work${i}`, "@Iris · work", minutes(12 + i * 55), { openedBy: { botId: "iris", name: "Iris", kind: "work", at: minutes(12 + i * 55) } }));
+    const agent = Array.from({ length: 3 }, (_, i) => task(`t-atlas-agent${i}`, `Résumé Outlook ${i + 1}`, minutes(30 + i * 70), { openedBy: { botId: "agent:claude", name: "Claude", kind: "agent", at: minutes(30 + i * 70) } }));
+    const runs = Array.from({ length: 10 }, (_, i) => task(`t-atlas-run${i}`, "Veille facturation", minutes(5 + i * 60), { routineRunId: `run-${i}` }));
+    atlas.tasks = [...own, ...selfOpened, ...work, ...agent, ...runs];
+    iris.tasks = [task("t-iris", "Général", minutes(42)), ...Array.from({ length: 5 }, (_, i) => task(`t-iris-work${i}`, "@Atlas · work", minutes(20 + i * 50), { openedBy: { botId: "atlas", name: "Atlas", kind: "work", at: minutes(20 + i * 50) } }))];
+  }
+}
+
 // ?many=N adds N pinned bots, to check the rail's vertical scroll
 for (let i = 0; i < Number(params.get("many") ?? 0); i += 1) {
   team.push(bot(`extra${i}`, `Bot ${i + 1}`, { color: "blue", mascotBody: "circle", pinned: true }, "Bonjour.", minutes(400 + i)));
@@ -221,7 +252,7 @@ function Gallery() {
       <SelectAtlas />
       <div className="flex">
         <div data-gallery className={`flex h-[1015px] ${params.get("rail") === "1" ? "w-[80px]" : "w-[368px]"} overflow-hidden bg-app text-ink`}>
-          <Sidebar open onClose={() => {}} />
+          <ConfirmProvider><Sidebar open onClose={() => {}} /></ConfirmProvider>
         </div>
         {/* the chat header's thread control, for the mode captures */}
         <div data-gallery-header className="flex h-[52px] w-[360px] items-center gap-2 border-b border-hairline/40 bg-app px-4 text-ink">

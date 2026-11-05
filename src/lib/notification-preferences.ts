@@ -189,6 +189,9 @@ export const dockBadge = localSwitch("omb-dock-badge");
 export const nudgeShake = localSwitch("omb-nudge-shake");
 /** A soft chime when a new approval arrives on the open Approvals screen. */
 export const approvalChime = localSwitch("omb-approval-chime");
+/** #2013: the calm notice while the server updates or cannot be reached, or
+ * the Perspicax connector is unreachable (src/lib/connection-notice.ts). */
+export const connectionNotices = localSwitch("omb-connection-notices");
 
 /** Everything the attention rules read, as this computer has it now. */
 export interface AttentionSettings {

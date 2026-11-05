@@ -2,6 +2,7 @@ import type { RoutineRequirements, RoutineReadinessCheck } from "../../shared/ro
 import type { GroupGoalRunStatus } from "../../shared/group-goal-run.ts";
 import type { ProactiveMode } from "../../shared/proactive-mode.ts";
 import type { RoutineAccess, RoutineRetryCause, RoutineRunHandoff } from "../../shared/routines.ts";
+import type { RoutineUsageLimit } from "./routine-limit-words.ts";
 /** `cloud` runs the agent itself inside the bot's Boat VM. `maus` keeps
  * using the provider selected on the MAUS and only borrows its configured
  * computer tools, if any. */
@@ -47,6 +48,9 @@ export interface RoutineRun {
   /** 2026-11-04: snapshot of the routine's model (shared/routine-model.ts).
    * Absent: the turn runs on the bot's model. */
   model?: string;
+  /** 2026-11-05: snapshot of the routine's "Au nom de" role
+   * (shared/routine-act-as.ts); "" is "Moi". Absent: not chosen. */
+  actAs?: string;
   /** Snapshot of the optional active-work safety cap. */
   timeoutMinutes?: number;
   attachments?: RoutineContextAttachment[];
@@ -76,10 +80,29 @@ export interface RoutineRun {
   /** When the one-per-run deferral notice was raised, so restarts and repeat
    * ticks stay quiet. */
   deferredNoticeAt?: number;
-  /** Set when the run used its one automatic second start, and why. */
+  /** Set when the run used its one automatic second start, and why; also when a limit's takeover started it again
+   * (takeoverRetried: that second start is then still unused). Its next start's note reads it (retryNote). */
   retried?: RoutineRetryCause;
   /** A queued run starts no earlier than this. */
   retryAt?: number;
+  /** How many times a limit sent this run on at once to another model (at most ROUTINE_LIMIT_TAKEOVERS of them by
+   * another engine: routine-recovery.ts engineTakeovers). */
+  limitTakeovers?: number;
+  /** One of limitTakeovers went on on the conversation's own model, after a limit refused only Sagax's quick model of
+   * that same engine: no other engine took it, so it is not counted against ROUTINE_LIMIT_TAKEOVERS. */
+  limitModelRetry?: true;
+  /** The model this run's next start runs on: the one that took it over when a limit refused its turn
+   * (server/routines/routine-recovery.ts takeOver, read by startTurn). Absent: the bot's own, or Auto's pick. */
+  limitTakeover?: RoutineUsageLimit["selection"];
+  /** When the run's conversation goes back to its own model after limitTakeover moved it off: the reset of the limit
+   * that refused that model (server/usage/limit-failover-host.ts takeOver records the return). */
+  limitTakeoverUntil?: number;
+  /** limitTakeoverUntil is Sagax's estimate: the engine that refused named no reset. */
+  limitTakeoverEstimated?: true;
+  /** `retried` was set by a limit's takeover (the note its start carries), not by the run's one automatic second
+   * start, which is still unused (routine-recovery.ts usedRetry): a stall on the engine that took the run over, or a
+   * wait for a reset after it, still gets it. */
+  takeoverRetried?: true;
   /** When its current wait began; read only while the run is waiting. */
   waitingSince?: number;
   /** Times a restart cut this run and the next start resumed it in place

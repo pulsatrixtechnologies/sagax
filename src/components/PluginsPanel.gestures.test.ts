@@ -87,6 +87,7 @@ vi.mock("@/state/store", async () => {
 });
 // Browse Bots' pane: what the Bots tab hands it
 let paneProps: { tabLabel?: string; focus?: { key: string } | null; sources?: unknown } | null = null;
+// 1dc046846: the pane moved into its own lazy module to break the cycle.
 vi.mock("./lazy-bot-catalog", async () => {
   const { createElement: h } = await import("react");
   return {

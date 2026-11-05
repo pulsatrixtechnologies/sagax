@@ -75,7 +75,7 @@ enum DesktopChatParity {
         switch screen {
         // the desktop's composer has no approval control any more: the
         // approval-mode and model-picker surfaces are the + menu (2026-11-03)
-        case .chatApprovalMode, .chatModelPicker: .plus
+        case .chatApprovalMode: .plus
         default: nil
         }
     }
@@ -200,7 +200,7 @@ extension ChatView {
             func target() -> TranscriptRow? {
                 if let live = self.rows.first(where: matches) { return live }
                 for topic in earlierTopics.prefix(earlierTopicsShown) {
-                    let rows = transcriptRows(session.state.visibleTranscript(forThread: topic.threadId), detail: toolCalls.detail, showThreads: false, threadBotId: current.id)
+                    let rows = transcriptRows(session.state.visibleTranscript(forThread: topic.threadId), detail: toolCalls.detail, showThreads: false, threadBotId: current.id, hidesPreSendRefusals: current.isBot)
                     if let hit = rows.first(where: matches) { return hit }
                 }
                 return nil
@@ -236,6 +236,10 @@ extension ChatView {
             draft = "Brouillon de remplacement : vérifie la sauvegarde de dimanche\net envoie le résumé à l'équipe."
         case .chatComposerSlash:
             draft = "/"
+        case .chatModelPicker:
+            // surfaces.mjs opens the model window on Ara (ModelWindowHost):
+            // the composer has no model control left
+            desktopChat?.openModelPicker()
         case .chatFind:
             openFind()
             finder.query = "sauvegarde"

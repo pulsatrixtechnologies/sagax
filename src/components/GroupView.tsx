@@ -62,7 +62,7 @@ import { openSettings } from "@/lib/settings-link";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { CHAT_COLUMN_CLASS } from "@/lib/chat-bubble-width";
 import { VideoPlayerWidget } from "./video/VideoPlayerWidget";
-import { FailedTurnRow, MessageBoundary, type SideChat } from "./ChatView";
+import { FailedTurnRow, MessageBoundary, PreSendRefusalLine, type SideChat } from "./ChatView";
 import { StepBoundary, stepFallbackText } from "./MessageBoundary";
 import { MESSAGE_ROW, MessageActions, messageActionClass } from "./MessageActions";
 import { personModerationMenu, useBotMessageMenu, userMessageMenu, type PinAction } from "./message-menu";
@@ -77,7 +77,7 @@ import { useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import { CancelledTurnRow } from "./CancelledTurnRow";
 import { isCancelledTranscriptRow } from "../../shared/client-cancel";
 import { roomRetryRequest } from "@/lib/room-retry";
-import { botEngine, failedTurnCause } from "@/lib/failed-turn";
+import { botEngine, failedTurnCause, isEngineLimitFailure, isPreSendRefusal } from "@/lib/failed-turn";
 import { CitationSelectionToolbar, SentCitations } from "./CitationUI";
 import { Composer } from "./Composer";
 import { ChatErrorBanner, ChatNotice, ChatReconnectBanner, ChatStaleBanner } from "./ChatErrorBanner";
@@ -182,6 +182,8 @@ export function RoomToolChip({ message, roomId }: { message: Message; roomId?: s
   if (message.inputRequest) return <InputRequestCard message={message} />;
   if (message.threadRef) return <ThreadChip message={message} />;
   if (failedTurnCause(tool.name) !== null) {
+    // #2013: refused before any prompt went out: a quiet line, not a red card
+    if (isPreSendRefusal(tool) && !isEngineLimitFailure(tool)) return <PreSendRefusalLine tool={tool} />;
     const roomThreadId = roomId ? storeGroups.find((group) => group.id === roomId)?.threadId : undefined;
     return <FailedTurnRow tool={tool} engine={botEngine(storeBots.find((b) => b.id === message.from?.botId), instances)} botId={message.from?.botId} threadId={roomThreadId} />;
   }
@@ -908,6 +910,8 @@ export const Transcript = memo(function Transcript({
             <div className="flex justify-start">
               <RoutineRunCard
                 message={m}
+                bot={state.bots.find((candidate) => candidate.id === m.from?.botId)}
+                botOf={(id) => state.bots.find((candidate) => candidate.id === id)}
                 onOpen={routineRunRef
                   ? () => openRoutineRun(dispatch, { runId: routineRunRef.runId, routineId: routineRunRef.routineId })
                   : undefined}
@@ -1599,7 +1603,7 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
         const onResume = paused && !paused.enabled && paused.canEdit !== false
           ? () => { close(); dispatch({ type: "updateRoutine", routineId: paused.id, patch: { enabled: true } }); }
           : undefined;
-        return <RoutineRunCard message={m} onResume={onResume} onOpen={runRef ? () => { close(); openRoutineRun(dispatch, { runId: runRef.runId, routineId: runRef.routineId }); } : undefined} />;
+        return <RoutineRunCard message={m} bot={state.bots.find((candidate) => candidate.id === m.from?.botId)} botOf={(id) => state.bots.find((candidate) => candidate.id === id)} onResume={onResume} onOpen={runRef ? () => { close(); openRoutineRun(dispatch, { runId: runRef.runId, routineId: runRef.routineId }); } : undefined} />;
       }} />
       {!pane && <ChatStaleBanner />}
       {!remoteClient && <><GroupCostNotice group={group} />{!pane && <WeeklyLimitNotice />}</>}

@@ -93,7 +93,8 @@ afterEach(() => vi.unstubAllGlobals());
 describe("the sidebar's bot menu", () => {
   it("lists every action in one menu, in Owner's order", () => {
     const { html } = render();
-    expect(items(html)).toEqual(["new-thread", "pin", "move", "rename", "edit", "put-on-desktop", "hide", "archive", "delete"]);
+    // the maintainer, 2026-11-04: Archive all threads and Delete all threads, their own group
+    expect(items(html)).toEqual(["new-thread", "pin", "move", "rename", "edit", "put-on-desktop", "archive-all-threads", "delete-all-threads", "hide", "archive", "delete"]);
     for (const label of [">New thread<", ">Pin<", ">Move to<", ">Rename the bot<", ">Edit bot<", ">Hide from sidebar<", ">Archive<"]) expect(html).toContain(label);
     expect(html).not.toContain("Rename Bot");
   });
@@ -108,9 +109,9 @@ describe("the sidebar's bot menu", () => {
     expect(html).not.toContain("data-bot-menu-page");
   });
 
-  it("sets the groups apart: three separators, Delete last", () => {
+  it("sets the groups apart: four separators, Delete last", () => {
     const { html } = render();
-    expect(html.match(/h-\[0\.5px\] bg-border/g)).toHaveLength(3);
+    expect(html.match(/h-\[0\.5px\] bg-border/g)).toHaveLength(4);
     expect(items(html).at(-1)).toBe("delete");
   });
 
@@ -169,7 +170,7 @@ describe("Share in the sidebar's bot menu", () => {
   it("sits after Edit bot and opens the bot's Sharing page, for any member", () => {
     fixture.state = organization;
     const { html } = render();
-    expect(items(html)).toEqual(["new-thread", "pin", "move", "rename", "edit", "share", "put-on-desktop", "hide", "archive", "delete"]);
+    expect(items(html)).toEqual(["new-thread", "pin", "move", "rename", "edit", "share", "put-on-desktop", "archive-all-threads", "delete-all-threads", "hide", "archive", "delete"]);
     expect(html).toContain(">Share<");
     buttons().get("share")!.props.onClick();
     expect(fixture.dispatched).toEqual([{ type: "toggleSettings", open: true, botId: bot.id, section: "sharing" }]);

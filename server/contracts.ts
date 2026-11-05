@@ -160,6 +160,10 @@ export interface CompactPromptInput {
 
 export interface SendTurnInput {
   threadId: ThreadId;
+  /** The person this turn acts for, independent of its payer. Pooled
+   * processes must not cross this boundary, including on an org key and
+   * with every tool disabled. Absent for older isolated adapter callers. */
+  principalId?: string;
   /** #1276: compact tool list for this turn (Claude Code). Absent: the
    * full tools/list, as before. */
   compactPrompt?: CompactPromptInput;

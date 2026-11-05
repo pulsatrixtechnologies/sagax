@@ -23,7 +23,7 @@ const dropUnusedMcp = () => {
   mcpConfigPath = null;
 };
 const switches = turnSwitches(mcpServers);
-if (!turn.sessionReset && live && !live.turn && !live.closing && live.child.exitCode === null && live.argsKey === argsKey && switchesCover(live.switches, switches) && (!sessionId || sessionId === live.sessionId)) {
+if (!turn.sessionReset && live && !live.turn && !live.closing && live.child.exitCode === null && live.argsKey === argsKey && switchesCover(live.switches, switches) && (!sessionId || sessionId === live.sessionId) && (live.budget?.active() ?? true)) {
   if (live.idleTimer) clearTimeout(live.idleTimer);
   // A second warm of the same call keeps the process and writes nothing.
   if (turn.warmOnly === true) {

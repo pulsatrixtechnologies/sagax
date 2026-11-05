@@ -6,6 +6,7 @@ import { canUseMcpServer } from "../../../shared/tool-scope.ts";
 import { gateServer, mcpStdioServer } from "../../mcp/mcp-gate-config.ts";
 import { compactGateSearch } from "../../mcp/mcp-gate-search.ts";
 import { codexConfigMcpServerNames, mountedMcpServerName } from "../codex-mcp-names.ts";
+import { codexHomeOf, learnedAmbientMcp } from "./ambient-mcp.ts";
 import { codexHostToolArgs } from "../host-tools.ts";
 import { codexLocalProviderArgs } from "../local-inject.ts";
 import { networkProxyEnvironment } from "../network-proxy.ts";
@@ -38,6 +39,8 @@ import {
 import type { CodexConfig } from "./config.ts";
 import type { PreparedCodexLaunch } from "./turn-types.ts";
 import type { SendTurnInput } from "../../contracts.ts";
+import { turnSwitches, warmCommsEnv, warmPerspicaxEnv, withoutTurnTokens } from "../spawn-contract.ts";
+import { CodexSessions, codexAccountFiles, codexContractKey, codexFileContract } from "./sessions.ts";
 
 export type PrepareLaunchDeps = {
   childEnv: () => Record<string, string | undefined>;
@@ -48,12 +51,29 @@ export type PrepareLaunchDeps = {
   config: CodexConfig;
   withholdHostTools: boolean;
   waitForLaunchSlot: (attempt: number) => Promise<(() => void) | null>;
+  sessions: CodexSessions;
+  stopRequested: boolean;
+  approvalMode: string;
 };
 
 export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: number): Promise<PreparedCodexLaunch | null> {
-  const { childEnv, chatgptTurn, planToken, turn, plan, config, withholdHostTools, waitForLaunchSlot } = deps;
+  const { childEnv, chatgptTurn, planToken, plan, config, withholdHostTools, waitForLaunchSlot, sessions } = deps;
+  let turn = deps.turn;
+  // Retire another principal's process before writing any shared turn file.
+  const identity = codexContractKey({ bot: turn.botId, person: turn.principalId, access: turn.access, env: childEnv(),
+    principal: turn.integrations?.agents?.env.SAGAX_MCP_PRINCIPAL,
+    claims: turn.integrations?.agents?.env.SAGAX_CLAIMS,
+  });
+  await sessions.isolate(turn.threadId, identity);
+  if (deps.stopRequested) return null;
+  if (turn.integrations) {
+    const integrations = { ...turn.integrations };
+    if (integrations.agents) integrations.agents = { ...integrations.agents, env: warmCommsEnv(turn.threadId, turn.botId, integrations.agents.env) };
+    integrations.custom = Object.fromEntries(Object.entries(integrations.custom ?? {}).map(([name, server]) =>
+      [name, !("url" in server) && isSagaxPerspicaxBridge(server) ? { ...server, env: warmPerspicaxEnv(turn.threadId, turn.botId, server.env) } : server]));
+    turn = { ...turn, integrations };
+  }
   const env = childEnv();
-  const launchedLogin = chatgptTurn ? (storedCodexLogin(env) ?? null) : null;
   if (planToken) env.SAGAX_CHATGPT_TOKEN = planToken;
   // Desktop bridge: this turn's network traffic leaves through the
   // person's computer (never the model traffic: NO_PROXY).
@@ -61,6 +81,7 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
   // An organization owner key (codexAccessLaunch) wins over a ChatGPT
   // plan sign-in, which wins over a managed or local provider.
   const launch = codexAccessLaunch(env, turn.access);
+  const launchedLogin = chatgptTurn ? (storedCodexLogin(env) ?? null) : null;
   const appServerArgs = ["app-server", ...(launch.ownerKey ? ownerKeyCodexArgs() : plan ? chatgptPlanCodexArgs() : config.managed ? managedCodexArgs(config.managed) : codexLocalProviderArgs(env, turn.model)), ...codexToolSurfaceArgs(),
     // Native snapshots can restore inherited variables after the shell
     // policy has filtered them. Scoped MCP gate settings must stay private.
@@ -81,6 +102,8 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
   const directoryMounts = new Set<string>();
   /** Each mount's settings that are not secret (mountMcpServer's literalEnv). */
   const literalEnvs = new Map<string, Record<string, string>>();
+  /** A selected mount's own `env` table, as Codex reports it back (#2013). */
+  const selectedLiterals = new Map<string, Record<string, string>>();
   const scopedServer = (name: string, mountName: string, server: McpServerSpec): StdioMcpSpec | null => {
     if (!canUseMcpServer(turn.toolScope, name)) return null;
     // Codex 0.166 no longer has the old feature-gated hosted tool_search;
@@ -181,11 +204,26 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
   // model is asked. Such a server mounts under a name of its own.
   const declaredInCodexConfig = codexConfigMcpServerNames(env);
   if (turn.toolScope !== undefined) {
-    for (const name of declaredInCodexConfig) appServerArgs.push("-c", `mcp_servers.${name}.enabled=false`);
+    // #2013: also every server an earlier launch of this account and folder
+    // reported from another layer (ambient-mcp.ts), so the selection holds
+    // without the person editing anything.
+    const ambient = new Set([...declaredInCodexConfig, ...learnedAmbientMcp(codexHomeOf(env), turn.cwd ?? homedir())]);
+    for (const name of ambient) appServerArgs.push("-c", `mcp_servers.${name}.enabled=false`);
   }
   for (const [name, server] of Object.entries(turn.integrations?.custom ?? {})) {
     if (!("url" in server) && isSagaxWorkplaceProxy(name, server)) {
-      mountSagaxWorkplaceProxy(appServerArgs, env, name, server, mountedNames);
+      const mounted = mountSagaxWorkplaceProxy(appServerArgs, env, name, server, mountedNames);
+      // #2013: the person's own environment is Sagax's mount, not an ambient
+      // server. Under a tool selection it is expected as mounted, with its
+      // literal env table, so the selection check accepts it.
+      if (turn.toolScope !== undefined) {
+        // Every call asks Sagax, which answers by the person's approval
+        // level, as for the bot's data mount.
+        selectedMcp.set(name, mounted.server);
+        selectedApprovals.set(name, "prompt");
+        selectedLiterals.set(name, mounted.literal);
+        appServerArgs.push("-c", `mcp_servers.${name}.default_tools_approval_mode="prompt"`);
+      }
       continue;
     }
     const mountName = mountedMcpServerName(name, declaredInCodexConfig);
@@ -253,13 +291,39 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
 
   const selectionConfig: { config?: Record<string, unknown> } = turn.toolScope === undefined ? {} : { config: { mcp_servers: Object.fromEntries(
     [...selectedMcp].map(([name, server]) => [name, {
-      command: server.command, args: server.args, env_vars: Object.keys(server.env), env: {}, default_tools_approval_mode: selectedApprovals.get(name) ?? "prompt",
+      command: server.command, args: server.args, env_vars: Object.keys(server.env), env: selectedLiterals.get(name) ?? {}, default_tools_approval_mode: selectedApprovals.get(name) ?? "prompt",
     }]),
   ) } };
 
   const commandCwd = permissionLaunchCwd(turn.cwd ?? homedir()) ?? (turn.cwd ?? homedir());
+  const key = codexContractKey({
+    cli: config.cli, args: appServerArgs, env: Object.fromEntries(baseEnv),
+    files: codexFileContract(codexAccountFiles(env, turn.cwd ?? homedir())),
+    integrations: { ...turn.integrations, ...withoutTurnTokens({
+      ...turn.integrations,
+      custom: undefined,
+    }), custom: withoutTurnTokens(turn.integrations?.custom ?? {}) },
+    bot: turn.botId, person: turn.principalId, identity: turn.access, model: turn.model, effort: turn.effort,
+    switches: turnSwitches(turn.integrations ?? {}),
+    cwd: turn.cwd ?? homedir(), approval: deps.approvalMode, scope: turn.toolScope,
+    commandEnvironment: turn.commandEnvironment,
+    // A loaded native thread ignores thread/resume instruction overrides
+    // (Codex 0.166). Only a new process reasserts the persistent developer
+    // slot. The volatile context still rides user input without a restart.
+    instructions: typeof turn.systemStable === "string" && typeof turn.systemVolatile === "string"
+      ? turn.systemStable : turn.system ?? "",
+  });
+  const process = await sessions.take(turn.threadId, key, turn.sessionReset === true || attempt > 0);
+  if (deps.stopRequested) return null;
+  const previous = process?.session;
+  if (previous) return {
+    env, launchedLogin, appServerArgs, privateEnv, provenPrivateEnv, selectedMcp, selectedApprovals, selectedLiterals,
+    directoryMounts, selectionConfig, commandCwd, releaseSlot: () => {}, child: previous.child,
+    process: process!, previous,
+  };
   const releaseSlot = tryCodexLaunchSlot() ?? await waitForLaunchSlot(attempt);
   if (!releaseSlot) return null;
+  if (deps.stopRequested) { releaseSlot(); return null; }
   const child = spawnHoldingSlot(releaseSlot, () => spawnCli(...codexLaunch(config.cli, appServerArgs), {
     cwd: turn.cwd ?? homedir(),
     env,
@@ -274,10 +338,12 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
     provenPrivateEnv,
     selectedMcp,
     selectedApprovals,
+    selectedLiterals,
     directoryMounts,
     selectionConfig,
     commandCwd,
     releaseSlot,
     child,
+    process: { key, identity, initialized: false },
   };
 }

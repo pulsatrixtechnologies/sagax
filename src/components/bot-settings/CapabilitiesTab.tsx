@@ -197,21 +197,21 @@ function CapabilityRow({ item, expanded, onExpand, switchable, busy, locked, onT
   const name = capabilityName(item);
   const tone = stateTone(item.state);
   const source = [formWord(item.form), item.source.label, item.source.version ? `v${item.source.version}` : null].filter(Boolean).join(" · ");
-  const reason = reasonText(item.reason);
+  const reason = item.supersededBy ? t("capabilities.installed.supersededByFlow", item.supersededBy) : reasonText(item.reason);
   const brings = item.brings;
   return (
     <li data-capability={item.form} data-capability-scope={item.scope} data-capability-state={item.state} className="border-b border-hairline-weak last:border-b-0">
-      <div className="flex min-w-0 items-center gap-2 px-2.5 py-1.5">
+      <div className={cn("flex min-w-0 items-center gap-2 px-2.5 py-1.5", item.supersededBy && "flex-wrap")}>
         <button type="button" aria-expanded={expanded} onClick={onExpand}
           aria-label={t("capabilities.row.openAria", { name })}
-          className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">
+          className={cn("flex min-w-0 flex-1 items-center gap-1.5 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60", item.supersededBy && "basis-full sm:basis-0")}>
           {expanded ? <ChevronDown size={13} className="shrink-0 text-ink-tertiary" aria-hidden="true" /> : <ChevronRight size={13} className="shrink-0 text-ink-tertiary" aria-hidden="true" />}
           <span className="min-w-0 flex-1">
             <span className="block break-words text-[13px] text-ink" title={name}>{name}</span>
             <span className="block truncate text-[11.5px] text-ink-secondary" title={source}>{source}</span>
           </span>
         </button>
-        <span className="flex max-w-[50%] shrink-0 flex-wrap justify-end gap-1">
+        <span className={cn("flex max-w-[50%] shrink-0 flex-wrap justify-end gap-1", item.supersededBy && "ml-auto")}>
           <span className={cn(CHIP, TONE.muted)} data-capability-scope-chip="">{scopeWord(item.scope)}</span>
           {tone && <span className={cn(CHIP, TONE[tone])} data-capability-state-chip="" title={reason ?? undefined}>{stateWord(item.state)}</span>}
         </span>
@@ -223,6 +223,9 @@ function CapabilityRow({ item, expanded, onExpand, switchable, busy, locked, onT
         ) : null}
         {actions}
       </div>
+      {item.supersededBy && <p data-capability-superseded="" className="px-8 pb-2.5 text-[12px] leading-[17px] text-ink-secondary">
+        {reason}
+      </p>}
       {expanded && (
         <dl data-capability-detail="" className="grid grid-cols-[minmax(80px,auto)_1fr] gap-x-3 gap-y-1 px-8 pb-2.5 text-[12px] leading-[17px]">
           {item.description && <Detail label={t("capabilities.detail.about")} value={item.description} />}

@@ -73,6 +73,9 @@ export interface InstalledViewProps {
   /** lot 4: the person's own switch of an offered organization capability
    * (their Me state, all their bots). Absent: no switch. */
   onToggleOrganization?: (item: Capability, next: boolean) => void;
+  /** Removes only this bot's obsolete copy, directly, leaving Flow in place. */
+  onRemoveSuperseded?: (item: Capability) => void;
+  removingSuperseded?: string | null;
   /** Connect apps > Mac: native apps on this person's Mac (Messages…). */
   macApps?: ReactNode;
 }
@@ -86,7 +89,7 @@ function EmptyLine({ children, action }: { children: ReactNode; action?: ReactNo
   );
 }
 
-export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, onAddServer, onPasteConfig, addDisabled, onNewSkill, forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization, macApps }: InstalledViewProps) {
+export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, onAddServer, onPasteConfig, addDisabled, onNewSkill, forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization, onRemoveSuperseded, removingSuperseded = null, macApps }: InstalledViewProps) {
   const tools = onAddServer || onPasteConfig || onNewSkill;
   return (
     <div data-plugins-installed-tab>
@@ -116,16 +119,23 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
         onToggle={(item, next) => onToggleOrganization?.(item, next)}
         rowActions={(item) => {
           const plugin = botPluginKey(item);
+          const remove = plugin && item.supersededBy && item.canToggle && onRemoveSuperseded ? (
+            <button type="button" data-remove-superseded="" disabled={removingSuperseded !== null}
+              onClick={() => onRemoveSuperseded(item)}
+              className="shrink-0 rounded-lg px-2 py-1 text-[12px] font-medium text-danger hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-40">
+              {t("connectApps.entry.remove")}
+            </button>
+          ) : null;
           const server = installationServerName(item);
           const entry = entries.find((candidate) => candidate.members.some((member) =>
             plugin ? member.kind === "plugin" && member.id === plugin : Boolean(server && member.kind === "mcp" && member.id === server)));
-          if (!entry) return null;
+          if (!entry) return remove;
           return <>
             <button type="button" onClick={() => onOpenEntry(entry)} className="ui-icon-button"
               aria-label={t("connectApps.openAria", { name: capabilityName(item) })}>
               <Settings2 size={14} aria-hidden="true" />
             </button>
-            <EntryMenu name={capabilityName(item)} actions={entryActions(entry)} updateWaiting={entry.updateAvailable} />
+            {remove ?? <EntryMenu name={capabilityName(item)} actions={entryActions(entry)} updateWaiting={entry.updateAvailable} />}
           </>;
         }} />}
       {resolved === undefined && entries.length === 0 && skills.length === 0 && organization.length === 0 && !loading && (

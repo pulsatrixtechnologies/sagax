@@ -115,8 +115,8 @@ private struct DesktopGeneralMainSettings: View {
             // the desktop's guided tours (GuidedToursRow) play in its window;
             // on the iPad the row says so behind its help
             DesktopCompactRow(Text("Guided tours"), identifier: "tours") {
-                DesktopTourButton(title: Text("App tour"), identifier: "desktop-settings.app-tour")
-                DesktopTourButton(title: Text("Welcome tour"), identifier: "desktop-settings.welcome-tour")
+                DesktopTourButton(title: Text("App tour"), identifier: "desktop-settings.app-tour", replay: .desktopReplayTour)
+                DesktopTourButton(title: Text("Welcome tour"), identifier: "desktop-settings.welcome-tour", replay: .desktopReplayFirstRun)
             }
             if mode.advanced {
                 DesktopSubPageRowBare(title: Text("Advanced"), summary: Text("People's tool access, conversation cleanup, diagnostics"),
@@ -133,24 +133,18 @@ private struct DesktopGeneralMainSettings: View {
     }
 }
 
-/// A guided tour's button (GuidedToursRow): the tours play in the desktop's
-/// window, so on the iPad the button says where to find them.
+/// A guided tour's button (GuidedToursRow): the App tour replays the
+/// 9-step tour, the Welcome tour the first-run setup, both played by the
+/// iPad shell as the desktop's window plays them (DesktopOnboarding).
 struct DesktopTourButton: View {
     let title: Text
     let identifier: String
-    @State private var showing = false
+    let replay: Notification.Name
 
     var body: some View {
-        Button { showing = true } label: { title }
-            .buttonStyle(DesktopButtonStyle(kind: .control))
+        Button { NotificationCenter.default.post(name: replay, object: nil) } label: { title }
+            .buttonStyle(DesktopPillButtonStyle())
             .accessibilityIdentifier(identifier)
-            .popover(isPresented: $showing) {
-                DesktopText("The app tour and the welcome tour play in Sagax on your computer.", size: 12, line: 17, color: \.inkSecondary)
-                    .frame(width: 232, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(12)
-                    .desktopPopoverOnCompact()
-            }
     }
 }
 
@@ -260,7 +254,7 @@ private struct DesktopGeneralAdvancedSettings: View {
                             color: \.inkSecondary)
                 if config?.automaticRecovery?.enabled == true {
                     Button("Turn off") { Task { _ = await model.apply(.automaticRecoveryOff, key: "recovery") } }
-                        .buttonStyle(DesktopButtonStyle(kind: .control))
+                        .buttonStyle(DesktopPillButtonStyle())
                         .disabled(saving)
                         .accessibilityIdentifier("desktop-settings.recovery-off")
                 } else {
@@ -423,7 +417,8 @@ struct DesktopProfileCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.top, 14)
+        .padding(.bottom, 10)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("settings-card.general.account")
         .onAppear(perform: seed)
@@ -814,14 +809,18 @@ struct DesktopUsageSettings: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
     @StateObject private var personal = PersonalUsageModel()
+    @State private var spendCap: PersonalSpendCap?
 
     var body: some View {
         DesktopSettingsGroup(Text("Cost"), identifier: "cost") {
             AnyView(cost).padding(.horizontal, 14).padding(.vertical, 10)
         }
-        .task(id: session.connection?.id) { await personal.load(session.settingsClient) }
+        .task(id: session.connection?.id) {
+            await personal.load(session.settingsClient)
+            spendCap = try? await session.settingsClient?.spendCap()
+        }
         // UsageLayout: `flex-col gap-6` between Cost, the limit, Plan and the traces
-        if personal.usage != nil { AnyView(DesktopSpendCapGroup()).padding(.top, 12) }
+        if personal.usage != nil, spendCap?.supported == true { AnyView(DesktopSpendCapGroup(data: $spendCap)).padding(.top, 12) }
         AnyView(DesktopPlanUsageCard()).padding(.top, 12)
         AnyView(DesktopUsageTraces()).padding(.top, 12)
         if let usage = personal.usage, !usage.isEmpty {
@@ -872,7 +871,7 @@ struct DesktopUsageSettings: View {
 struct DesktopSpendCapGroup: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
-    @State private var data: PersonalSpendCap?
+    @Binding var data: PersonalSpendCap?
     @State private var text = ""
     @State private var busy = false
     @State private var failed: String?
@@ -888,7 +887,7 @@ struct DesktopSpendCapGroup: View {
                             Button(confirmRemove ? "Confirm removal" : "Remove limit") {
                                 if confirmRemove { Task { await save(nil) } } else { confirmRemove = true }
                             }
-                            .buttonStyle(DesktopButtonStyle(kind: .control))
+                            .buttonStyle(DesktopPillButtonStyle())
                             .disabled(busy)
                         }
                     }
@@ -902,7 +901,7 @@ struct DesktopSpendCapGroup: View {
                             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
                             .accessibilityIdentifier("desktop-settings.spend-cap")
                         Button(data.cap == nil ? "Set limit" : "Change limit") { if let parsed { Task { await save(parsed) } } }
-                            .buttonStyle(DesktopButtonStyle(kind: .accent))
+                            .buttonStyle(DesktopPillButtonStyle(primary: true))
                             .disabled(busy || parsed == nil)
                             .accessibilityIdentifier("desktop-settings.spend-cap-save")
                     }
@@ -921,8 +920,6 @@ struct DesktopSpendCapGroup: View {
                 }
             }
         }
-        Color.clear.frame(height: 0)
-            .task { data = try? await session.settingsClient?.spendCap() }
     }
 
     private func description(_ data: PersonalSpendCap) -> Text {
@@ -1120,16 +1117,20 @@ struct DesktopBackupsSettings: View {
             AppStrings.localized("Saved account credentials and connections are not included. Reconnect your accounts on a new machine; existing credentials on the destination stay unchanged. External CLI sign-ins and remote VM disks are not included."),
             AppStrings.localized("Chats, drafts, and user files are not automatically redacted and may contain pasted secrets. Keep this backup private and save its password safely; it cannot be recovered."),
         ].joined(separator: "\n\n")))), identifier: "backups") {
-            DesktopDescribedRow(Text("Export a backup"), description: Text("An encrypted copy of your bots, conversations and files, to restore here or on another computer."), identifier: "backupExport") {
-                Button("Export") { open = open == "export" ? nil : "export" }
-                    .buttonStyle(DesktopButtonStyle(kind: .control))
-                    .accessibilityIdentifier("desktop-settings.backup-export-open")
-            } below: {
-                if open == "export" { exportForm.padding(.top, 8) }
-            }
+            {
+                var row = DesktopDescribedRow(Text("Export a backup"), description: Text("An encrypted copy of your bots, conversations and files, to restore here or on another computer."), identifier: "backupExport") {
+                    Button("Export") { open = open == "export" ? nil : "export" }
+                        .buttonStyle(DesktopPillButtonStyle())
+                        .accessibilityIdentifier("desktop-settings.backup-export-open")
+                } below: {
+                    if open == "export" { exportForm.padding(.top, 8) }
+                }
+                row.descriptionWidth = 440
+                return row
+            }()
             DesktopDescribedRow(Text("Restore a backup"), description: Text("Replaces everything here, once the file is checked."), identifier: "backupRestore") {
                 Button("Restore") { open = open == "import" ? nil : "import" }
-                    .buttonStyle(DesktopButtonStyle(kind: .control))
+                    .buttonStyle(DesktopPillButtonStyle())
                     .accessibilityIdentifier("desktop-settings.backup-restore-open")
             } below: {
                 if open == "import" { restoreForm.padding(.top, 8) }
@@ -1159,7 +1160,7 @@ struct DesktopBackupsSettings: View {
                         Text(exporting ? "Creating encrypted backup…" : "Export full backup")
                     }
                 }
-                .buttonStyle(DesktopButtonStyle(kind: .accent))
+                .buttonStyle(DesktopPillButtonStyle(primary: true))
                 .disabled(!ready)
                 .accessibilityIdentifier("desktop-settings.backup-export")
             }
@@ -1172,7 +1173,7 @@ struct DesktopBackupsSettings: View {
             HStack(spacing: 8) {
                 DesktopText(Text("Backup file"), size: 12, color: \.inkSecondary)
                 Button(file?.lastPathComponent ?? AppStrings.localized("Choose a file")) { choosing = true }
-                    .buttonStyle(DesktopButtonStyle(kind: .control))
+                    .buttonStyle(DesktopPillButtonStyle())
                     .accessibilityIdentifier("desktop-settings.backup-file")
             }
             if let preview {
@@ -1216,7 +1217,7 @@ struct DesktopBackupsSettings: View {
                 HStack {
                     Spacer(minLength: 0)
                     Button("Validate backup") { Task { await check() } }
-                        .buttonStyle(DesktopButtonStyle(kind: .accent))
+                        .buttonStyle(DesktopPillButtonStyle(primary: true))
                         .disabled(restoring || file == nil || importPassword.isEmpty)
                         .accessibilityIdentifier("desktop-settings.backup-check")
                 }

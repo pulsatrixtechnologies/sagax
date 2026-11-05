@@ -25,6 +25,8 @@ const ALWAYS_LOADED = [
   "delegate_bot", "check_delegation", "wait_delegation",
   "react_to_message", "show_widget", "update_widget", "check_widget", "attach_file", "select_computer", "request_credential",
   "memory_update", "memory_log", "session_search", "tool_result_read", "answer_approval", "act",
+  // #1989: every bot that owns a routine can list and check/run without ToolSearch
+  "list_routines", "run_routine",
 ];
 
 async function listTools(env: Record<string, string>): Promise<Array<{ name: string; _meta?: Record<string, unknown> }>> {
@@ -79,5 +81,20 @@ describe("deferred rare agents tools", () => {
     expect(claude.map((tool) => tool.name)).toEqual(plain.map((tool) => tool.name));
     expect(claude.find((tool) => tool.name === "propose_routine")?._meta).toEqual({ "anthropic/alwaysLoad": false });
     expect(claude.find((tool) => tool.name === "coordinate_bots" || tool.name === "ask_bot")?._meta).toBeUndefined();
+  }, 30_000);
+
+  // #1989: tool availability rules per bot — list/run stay always loaded so a
+  // Claude turn (deferred rare tools + merged families) still offers them by
+  // name; propose stays deferred behind ToolSearch.
+  it("keeps list_routines and run_routine always loaded for every bot (#1989)", async () => {
+    const claude = await listTools({ ...EVERYTHING, SAGAX_DEFER_RARE_TOOLS: "1", SAGAX_MERGED_TOOLS: "1" });
+    const names = claude.map((tool) => tool.name);
+    expect(names).toContain("list_routines");
+    expect(names).toContain("run_routine");
+    expect(names).toContain("routines");
+    expect(claude.find((tool) => tool.name === "list_routines")?._meta?.["anthropic/alwaysLoad"]).toBeUndefined();
+    expect(claude.find((tool) => tool.name === "run_routine")?._meta?.["anthropic/alwaysLoad"]).toBeUndefined();
+    expect(claude.find((tool) => tool.name === "routines")?._meta).toEqual({ "anthropic/alwaysLoad": false });
+    expect(claude.find((tool) => tool.name === "list_routines" || tool.name === "run_routine")).toBeDefined();
   }, 30_000);
 });

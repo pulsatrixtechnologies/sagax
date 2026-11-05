@@ -106,6 +106,9 @@ export interface Capability {
   /** the person looking may switch it on or off for this bot */
   canToggle: boolean;
   updateAvailable?: boolean;
+  /** An older bot tenant copy displaced by the installed signed Flow pack.
+   * The installed tenant version, never the product or advertised version. */
+  supersededBy?: { tenant: string; version: string };
   promptIndex?: CapabilityPromptIndex;
   brings?: { skills: string[]; commands: string[]; agents: string[]; mcpServers: string[] };
   engine: EngineReceipt;

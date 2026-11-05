@@ -9,6 +9,7 @@
 export const PERSPICAX_CONVENTIONS_PROMPT =
   "\n\nPerspicax tool conventions (the server's own instructions win if they differ):"
   + "\n- Tool discovery: `api_search` and `api_describe` search vendor API operations only, never MCP tool names such as `identity_switch` or `memory_find`. If an account tool is not listed directly, find it with this server's `search_tools` and run it with `call_tool`; after `identity_switch`, search again for the selected role's vendor tools."
+  + "\n- Roles (2026-11-05): Sagax starts the turn under its role (the routine's \"Au nom de\", the person's pick, else the person's own access) and shows it on every step. Do not call `identity_switch` before each operation. Switch at most once at the start when the work needs another held role. On a read refused with 403, Sagax reads once in the person's name by itself; on a refused write, stop and report the missing permission, never switch roles to get around it."
   + "\n- A write tool takes `resource` and `action` (create, update or delete); every field to write goes inside `set`, never beside `action`. An update or delete names the record with `id`; a sub-resource also takes `parent`. Pass `expect` (the fields the record must still have) to refuse a write on a record that changed."
   + "\n- Run the write with `_dry_run: true` first and read what it would send; send it for real only once that is right."
   + "\n- Filter on ids and flags (a reference is `{\"id\": N}`, a status or board is its id), never on a display name or a translated status label: look the id up first."

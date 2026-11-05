@@ -18,6 +18,19 @@ afterEach(() => vi.unstubAllGlobals());
 
 const sse = (body: string) => new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
 
+/** #1982: driver unit tests have no index.ts harness. Auto-allow permission
+ * cards so Full turns that now open request.opened can still finish. */
+function allowOpenedPermissions(
+  instance: { adapter: { onEvent(listener: (event: RuntimeEvent) => void): void; respondToRequest(threadId: string, requestId: string, decision: { behavior: "allow" | "deny" }): unknown } },
+  threadId: string,
+) {
+  instance.adapter.onEvent((event) => {
+    if (event.type === "request.opened" && event.requestType === "permission" && event.requestId) {
+      void instance.adapter.respondToRequest(threadId, event.requestId, { behavior: "allow" });
+    }
+  });
+}
+
 /** `body` is the stream every request gets, or a factory for each chat
  * completion request (the model catalog fetch then gets a 404). */
 async function runTurn(body: string | (() => Response), driver: "openai-compat" | "minimax" = "openai-compat") {
@@ -166,12 +179,14 @@ describe("createOpenAIChatRuntime tool approvals", () => {
       : driver === "mistral" ? await MistralDriver.create({ ...common, config: MistralDriver.defaultConfig() })
       : await MinimaxDriver.create({ ...common, config: MinimaxDriver.defaultConfig() });
     const events: RuntimeEvent[] = []; instance.adapter.onEvent((event) => events.push(event));
+    allowOpenedPermissions(instance, "scoped-api");
     try {
       await instance.adapter.sendTurn({ threadId: "scoped-api", text: "Use only the selected tool.", approvalMode: "full", toolScope: { allow: ["mcp:fx:write"] }, integrations: { custom: { fx: toolServer(receipt) } } });
       await vi.waitFor(() => expect(bodies.length).toBeGreaterThan(0), { timeout: 10_000 });
       expect(bodies[0].tools.map((tool: any) => tool.function.name)).toEqual(["fx_write"]);
       await vi.waitFor(() => expect(events.some((event) => event.type === "turn.completed")).toBe(true), { timeout: 10_000 });
-      expect(events.filter((event) => event.type === "request.opened")).toEqual([]);
+      // #1982: Full MCP asks open the gate; this fixture answers allow.
+      expect(events.some((event) => event.type === "request.opened" && event.requestType === "permission")).toBe(true);
       expect(readFileSync(receipt, "utf8")).toBe("write\n");
       const withheld = bodies[1].messages.find((message: any) => message.role === "tool" && message.tool_call_id === "withheld");
       expect(JSON.parse(withheld.content)).toMatchObject({ ok: false });
@@ -237,8 +252,11 @@ describe("createOpenAIChatRuntime tool approvals", () => {
     expect(await cardRaisedFor("ask")).toBe(true);
   }, 20_000);
 
-  it("answers for the person under Full access, so no card is raised", async () => {
-    expect(await cardRaisedFor("full")).toBe(false);
+  // #1982: Full no longer short-circuits MCP asks in the driver. The ask
+  // reaches Sagax's gate (request.opened); index.ts Full-approves unless a
+  // hold applies. Driver unit tests have no harness, so the card stays open.
+  it("hands an MCP tool approval to Sagax's gate at Full (#1982)", async () => {
+    expect(await cardRaisedFor("full")).toBe(true);
   }, 20_000);
 
   it("still holds an ask_user card for a person under Full access and returns the reply verbatim", async () => {
@@ -332,6 +350,7 @@ describe("createOpenAIChatRuntime tool approvals", () => {
     });
     const events: RuntimeEvent[] = [];
     instance.adapter.onEvent((event) => events.push(event));
+    allowOpenedPermissions(instance, "toolerr");
     try {
       await instance.adapter.sendTurn({
         threadId: "toolerr", text: "Use the tool, then answer.", approvalMode: "full",
@@ -373,6 +392,7 @@ describe("createOpenAIChatRuntime tool approvals", () => {
       });
       const events: RuntimeEvent[] = [];
       instance.adapter.onEvent((event) => events.push(event));
+      allowOpenedPermissions(instance, "corrective");
       try {
         await instance.adapter.sendTurn({
           threadId: "corrective", text: "Use the tool, then answer.", approvalMode: "full",
@@ -680,6 +700,7 @@ describe("createOpenAIChatRuntime mid-turn steer", () => {
     });
     const events: RuntimeEvent[] = [];
     instance.adapter.onEvent((event) => events.push(event));
+    allowOpenedPermissions(instance, "t");
     await instance.adapter.sendTurn({
       threadId: "t", text: "hi", approvalMode: "full",
       integrations: { custom: { fx: toolServer() } },
@@ -739,6 +760,7 @@ describe("createOpenAIChatRuntime mid-turn steer", () => {
     });
     const events: RuntimeEvent[] = [];
     instance.adapter.onEvent((event) => events.push(event));
+    allowOpenedPermissions(instance, "t");
     await instance.adapter.sendTurn({
       threadId: "t", text: "hi", approvalMode: "full",
       integrations: { custom: { fx: toolServer() } },
@@ -1096,4 +1118,162 @@ describe("interruptTurn duplex cap", () => {
     expect(instance.adapter.hasSession("thread")).toBe(true);
     await instance.dispose();
   }, 15_000);
+});
+
+describe("HTTP MCP prewarm on warmOnly (#1975)", () => {
+  const dirs: string[] = [];
+  afterEach(() => {
+    for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+    vi.unstubAllGlobals();
+  });
+
+  const agentsServer = (launches: string) => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-http-prewarm-"));
+    dirs.push(dir);
+    const script = join(dir, "agents.mjs");
+    writeFileSync(script, `#!/usr/bin/env node
+      import { appendFileSync } from "node:fs";
+      appendFileSync(${JSON.stringify(launches)}, "spawn\\n");
+      const send = (m) => process.stdout.write(JSON.stringify(m) + "\\n");
+      let buffer = "";
+      process.stdin.setEncoding("utf8");
+      process.stdin.on("data", (chunk) => {
+        buffer += chunk;
+        let nl;
+        while ((nl = buffer.indexOf("\\n")) !== -1) {
+          const line = buffer.slice(0, nl); buffer = buffer.slice(nl + 1);
+          const m = JSON.parse(line);
+          if (m.method === "initialize") send({jsonrpc:"2.0",id:m.id,result:{protocolVersion:"2024-11-05",capabilities:{tools:{}}}});
+          else if (m.method === "tools/list") send({jsonrpc:"2.0",id:m.id,result:{tools:[{name:"ping",description:"ping",inputSchema:{type:"object",properties:{}}}]}});
+          else if (m.method === "tools/call") send({jsonrpc:"2.0",id:m.id,result:{content:[{type:"text",text:"pong"}]}});
+        }
+      });
+    `);
+    chmodSync(script, 0o755);
+    return {
+      command: script,
+      args: [] as string[],
+      env: { SAGAX_COMMS_TOKEN: "prewarm-tok", SAGAX_TURN_DEPTH: "0", SAGAX_BOT_ID: "bot-prewarm" },
+    };
+  };
+
+  it("warmOnly mounts once; the first real turn reuses that mount", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-http-prewarm-count-"));
+    dirs.push(dir);
+    const launches = join(dir, "launches.txt");
+    writeFileSync(launches, "");
+    const agents = agentsServer(launches);
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      if (String(url).endsWith("/models")) return new Response(JSON.stringify({ data: [{ id: "fixture" }] }), { status: 200 });
+      return sse(`data: ${JSON.stringify({ choices: [{ delta: { content: "ok" }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`);
+    }));
+    const instance = await OpenAICompatDriver.create({
+      instanceId: "openaiCompat",
+      displayName: "Other",
+      enabled: true,
+      config: OpenAICompatDriver.decodeConfig({ url: "https://api.example.test/v1", apiKeyEnv: "K", model: "fixture" }),
+      environment: { K: "secret" },
+    });
+    expect(instance.adapter.capabilities.warmSession).toBe(true);
+    const events: RuntimeEvent[] = [];
+    instance.adapter.onEvent((event) => events.push(event));
+    const controller = new AbortController();
+    const integrations = { agents };
+    try {
+      await instance.adapter.sendTurn({
+        threadId: "prewarm-thread",
+        botId: "bot-prewarm",
+        text: "",
+        warmOnly: true,
+        warmSignal: controller.signal,
+        integrations,
+      });
+      await vi.waitFor(() => expect(readFileSync(launches, "utf8").trim().split("\n").filter(Boolean).length).toBe(1), { timeout: 10_000 });
+      await instance.adapter.sendTurn({
+        threadId: "prewarm-thread",
+        botId: "bot-prewarm",
+        text: "hello",
+        integrations,
+      });
+      await vi.waitFor(() => expect(events.some((event) => event.type === "turn.completed")).toBe(true), { timeout: 15_000 });
+      // Still one spawn: the real turn reused the prewarmed mount.
+      expect(readFileSync(launches, "utf8").trim().split("\n").filter(Boolean)).toEqual(["spawn"]);
+    } finally {
+      controller.abort();
+      await instance.dispose();
+    }
+  }, 30_000);
+
+  it("idle abort drops the unused prewarmed mount", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-http-prewarm-idle-"));
+    dirs.push(dir);
+    const launches = join(dir, "launches.txt");
+    writeFileSync(launches, "");
+    const agents = agentsServer(launches);
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      if (String(url).endsWith("/models")) return new Response(JSON.stringify({ data: [{ id: "fixture" }] }), { status: 200 });
+      return sse(`data: ${JSON.stringify({ choices: [{ delta: { content: "ok" }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`);
+    }));
+    const instance = await OpenAICompatDriver.create({
+      instanceId: "openaiCompat",
+      displayName: "Other",
+      enabled: true,
+      config: OpenAICompatDriver.decodeConfig({ url: "https://api.example.test/v1", apiKeyEnv: "K", model: "fixture" }),
+      environment: { K: "secret" },
+    });
+
+    const controller = new AbortController();
+    try {
+      await instance.adapter.sendTurn({
+        threadId: "idle-prewarm",
+        botId: "bot-prewarm",
+        text: "",
+        warmOnly: true,
+        warmSignal: controller.signal,
+        integrations: { agents },
+      });
+      await vi.waitFor(() => expect(readFileSync(launches, "utf8").includes("spawn")).toBe(true), { timeout: 10_000 });
+      controller.abort();
+      // After idle drop, the next turn must mount again (second spawn).
+      const events: RuntimeEvent[] = [];
+      instance.adapter.onEvent((event) => events.push(event));
+      await instance.adapter.sendTurn({
+        threadId: "idle-prewarm",
+        botId: "bot-prewarm",
+        text: "hello",
+        integrations: { agents },
+      });
+      await vi.waitFor(() => expect(events.some((event) => event.type === "turn.completed")).toBe(true), { timeout: 15_000 });
+      expect(readFileSync(launches, "utf8").trim().split("\n").filter(Boolean)).toEqual(["spawn", "spawn"]);
+    } finally {
+      await instance.dispose();
+    }
+  }, 30_000);
+  it("an old warm signal cannot close MCP tools already serving a real turn", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-http-active-warm-")); dirs.push(dir);
+    const launches = join(dir, "launches.txt"); writeFileSync(launches, "");
+    const agents = agentsServer(launches);
+    let finish!: (response: Response) => void;
+    let requests = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      if (String(url).endsWith("/models")) return Response.json({ data: [{ id: "fixture" }] });
+      if (++requests === 1) return new Promise<Response>(resolve => { finish = resolve; });
+      return sse(`data: ${JSON.stringify({ choices: [{ delta: { content: "Fixture done" }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`);
+    }));
+    const instance = await OpenAICompatDriver.create({ instanceId: "openaiCompat", displayName: "Osprey", enabled: true,
+      config: OpenAICompatDriver.decodeConfig({ url: "https://api.example.test/v1", apiKeyEnv: "K", model: "fixture" }), environment: { K: "fixture-only" } });
+    const controller = new AbortController(); const events: RuntimeEvent[] = [];
+    instance.adapter.onEvent(event => events.push(event));
+    try {
+      const input = { threadId: "active-warm", botId: "bot-osprey", principalId: "osprey", text: "Fixture reply", integrations: { agents } };
+      await instance.adapter.sendTurn({ ...input, warmOnly: true, warmSignal: controller.signal });
+      const { turnId } = await instance.adapter.sendTurn(input);
+      await vi.waitFor(() => expect(finish).toBeTypeOf("function")); controller.abort();
+      finish(sse(`data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: "fixture-call", type: "function", function: { name: "agents_ping", arguments: "{}" } }] }, finish_reason: "tool_calls" }] })}\n\ndata: [DONE]\n\n`));
+      await vi.waitFor(() => expect(events.find(event => event.type === "turn.completed" && event.turnId === turnId)).toBeDefined(), { timeout: 10_000 });
+      expect(events.find(event => event.type === "turn.completed" && event.turnId === turnId), JSON.stringify(events)).toMatchObject({ ok: true });
+      expect(readFileSync(launches, "utf8").trim().split("\n").filter(Boolean)).toHaveLength(1);
+    } finally { controller.abort(); await instance.dispose(); }
+  });
+
 });

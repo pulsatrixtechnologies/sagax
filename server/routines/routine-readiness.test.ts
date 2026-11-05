@@ -233,6 +233,13 @@ describe("routine readiness", () => {
     expect((await checkRoutineReadiness({ ...routine, requires: { computer: true } }, run, check)).ok).toBe(false);
     expect((await checkRoutineReadiness(routine, run, deps({ computers: () => [{ name: "Cloud computer", online: false, needed: true }] }))).ok).toBe(false);
   });
+  it("keeps the selected computer's specific refusal instead of calling an unsupported model offline", async () => {
+    const detail = "Wren model can't use a computer. Choose a model that can.";
+    const answer = await checkRoutineReadiness(routine, run, deps({ computers: () => [{ name: "Cloud computer", online: false, needed: true, detail }] }));
+    expect(answer.ok).toBe(false);
+    expect(answer.checks[0]).toMatchObject({ kind: "computer", ok: false, code: "computer_offline", line: detail });
+  });
+
   it("caches facts for 60 seconds per bot, engine and person, while each prompt's requirements stay live", async () => {
     let now = 0;
     let selection = "engine-a";

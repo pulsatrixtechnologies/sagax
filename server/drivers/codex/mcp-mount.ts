@@ -71,7 +71,7 @@ export function mountSagaxWorkplaceProxy(
   server: StdioMcpSpec,
   /** Collects every variable name this mount writes into `env`. */
   written: Set<string> = new Set(),
-): void {
+): { server: StdioMcpSpec; literal: Record<string, string> } {
   const prefix = `mcp_servers.${name}`;
   const stem = `SAGAX_MCP_ENV_${name.toUpperCase().replace(/[^A-Z0-9]/g, "_")}__`;
   const forwarded: string[] = [];
@@ -88,6 +88,9 @@ export function mountSagaxWorkplaceProxy(
     "-c", `${prefix}.env=${tomlInlineTable(literal)}`,
     "-c", `${prefix}.env_vars=${JSON.stringify(forwarded)}`,
   );
+  // What Codex should report back for this mount (#2013: a tool selection
+  // checks every server Codex loads against what Sagax mounted).
+  return { server: { command: server.command, args: server.args, env: Object.fromEntries(forwarded.map((key) => [key, env[key] ?? ""])) }, literal };
 }
 
 /** Codex's default for one MCP server's tools (codex-rs #17843): "auto"

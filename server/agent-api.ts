@@ -401,6 +401,10 @@ export interface AgentApiDeps {
   interrupt(agentId: string, threadId: string): Promise<void>;
   /** Async mode: tell the caller the turn ended (a bot is woken with the reply). */
   notify?(caller: AgentCaller, agent: AgentSummary, result: TurnResult): void;
+  /** A finished turn's reply was handed to the caller: its conversation, when
+   * it is an AI client's own, is archived (never deleted; continuing it by
+   * thread_id still works). */
+  collected?(agentId: string, threadId: string): void;
   audit(caller: AgentCaller, entry: AuditEntry): void;
   /** The securable tool layer (server/tools/tool-guard.ts): grants and the speaker.
    * Absent, or mode "off", skips it; "shadow" records the decision only. */
@@ -932,6 +936,9 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
       if (state === "idle" && read.sawAnchor) {
         idleLooks += 1;
         if (read.reply || idleLooks >= IDLE_LOOKS_DONE) {
+          // the reply is collected: an AI client's conversation leaves the
+          // person's list (server/threads/background-sweep.ts)
+          deps.collected?.(body.a, body.t);
           return { handle, agent_id: body.a, thread_id: body.t, finished: true, status: "finished", reply: read.reply };
         }
       } else if (state === "idle") {

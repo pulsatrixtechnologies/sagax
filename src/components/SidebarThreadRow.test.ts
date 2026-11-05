@@ -340,7 +340,8 @@ describe("thread title direction", () => {
     const withByline = titleSpan(row("QA PR 245", { botId: "scout", name: "Scout", at: 1 }), "QA PR 245");
     for (const classes of [arabicClass, englishClass, withByline]) {
       expect(classes).toContain("min-w-0");
-      expect(classes).toContain("flex-1");
+      // flex-auto: the title starts at its own width, so the byline gives way first (2026-11-04)
+      expect(classes).toContain("flex-auto");
       expect(classes).toContain("max-w-max");
       expect(classes).toContain("truncate");
     }

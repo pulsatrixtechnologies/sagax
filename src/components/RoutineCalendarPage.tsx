@@ -79,6 +79,8 @@ import { CronRunDates } from "@/components/routines/CronScheduleFields";
 import { PANEL_INPUT, PANEL_LABEL, PANEL_TEXT_ACTION, PanelChip, PanelRow, PanelRows, PanelSelect, PanelToggle, PanelValue } from "@/components/routines/PanelRows";
 import { ChatMarkdown } from "@/components/ChatMarkdown";
 import { RoutineWebhookPanel } from "@/components/routines/RoutineWebhookPanel";
+import { actAsToSave, RoutineActAsField, useRoutineRoleCoverage } from "@/components/routines/RoutineActAsField";
+import { useRoutineReadiness } from "@/components/routines/RoutineReadiness";
 import { personLabel } from "@/lib/human-label";
 import { everyMinutesOf, keptScheduleValue, personTimeZone, PICKER_FREQUENCIES, savedPatternSchedule, scheduleDraftFor, scheduleEditorValue, type ScheduleDraft } from "@/components/routines/schedule-editor";
 import { defaultScheduleModel, timeZoneCity, type ScheduleFrequency } from "../../shared/schedule-model";
@@ -579,6 +581,10 @@ function EventEditorBody({
   const [mailAlias, setMailAlias] = useState(template?.mailAlias ?? "");
   // 2026-11-04 (shared/routine-model.ts): its runs' model; "" is the bot's.
   const [routineModel, setRoutineModel] = useState(template?.model ?? "");
+  // 2026-11-05 (shared/routine-act-as.ts): "Au nom de", the Perspicax role
+  // its runs act as. Undefined: not chosen here (a saved routine keeps its
+  // own; a duplicate starts from its source's).
+  const [actAs, setActAs] = useState<string | undefined>(existingRoutine ? undefined : template?.actAs);
   const [recurrence, setRecurrence] = useState<RecurrenceChoice>(seed.limitReset ? "limit_reset" : recurrenceFor(schedule, initialAt, (routinesOnly ? "routine" : seed.kind) === "routine"));
   const [limitReset, setLimitReset] = useState<LimitResetChoice>(
     schedule.type === "limit_reset" ? { engine: schedule.engine, repeat: schedule.repeat } : { engine: seed.limitReset?.engine ?? "", repeat: "once" },
@@ -639,6 +645,8 @@ function EventEditorBody({
   const selectedRoom = rooms.find((group) => group.id === groupId);
   const roomMembers = activeRoomMembers(selectedRoom, state.bots);
   const isRoomGoal = kind === "routine" && routineTarget === "room-goal";
+  const roleCoverage = useRoutineRoleCoverage({ botId: lockedBotId ?? botIds[0], routineId: existingRoutine?.id, prompt: description, enabled: (kind === "routine" || routinesOnly) && routineTarget === "bot" });
+  const roleReadiness = useRoutineReadiness(existingRoutine?.id ?? "");
   // A watch checks on a repeating schedule, for one bot.
   // Started by a webhook or an email, not the clock. Limit-reset waits on usage, not the clock.
   const triggered = recurrence === "webhook" || recurrence === "email";
@@ -823,6 +831,9 @@ function EventEditorBody({
           deleteWhenFinished: (recurrence === "none" || (recurrence === "interval" && intervalEndsAt != null)) && deleteWhenFinished,
           mailAlias: routineTarget === "bot" ? (mailAlias.trim() || null) : null,
           model: routineTarget === "bot" ? (routineModel || null) : null,
+          // The person's choice; else, nothing chosen yet and the coverage
+          // known, the minimal covering role (never over an explicit one).
+          ...(() => { const role = routineTarget === "bot" ? actAsToSave(existingRoutine?.actAs, actAs, roleCoverage.answer) : undefined; return role !== undefined ? { actAs: role } : {}; })(),
           // Sent when on, or to remove a watch the routine had.
           ...(watchAllowed && watchBuilt.watch ? { precheck: watchBuilt.watch } : existingWatch ? { precheck: null } : {}),
           attachments: routineTarget === "room-goal" ? [] : attachments as RoutineContextAttachment[],
@@ -951,7 +962,7 @@ function EventEditorBody({
     setMoreOpen(open);
     rememberRoutineEditorMoreOpen(open);
   };
-  const editorSnapshot = JSON.stringify([requiredSkills, requiredMcp, requiresComputer, kind, name, description, recurrence, limitReset, scheduleDraft, date, startTime, weekdays, durationMinutes, timeoutMinutes, overlap, autoPauseAfter, continuity, onlyWhenPresent, deleteWhenFinished, watchDraft, postResults, mailAlias, routineModel, timingMode, earlyMinutes, lateMinutes, intervalMinutes, intervalDays, intervalWeekdays, intervalWindow, intervalWindowStart, intervalWindowEnd, intervalEnd, intervalEndDate, botIds, routineTarget, groupId, runOn, attachments.map((attachment) => attachment.id), runAs]);
+  const editorSnapshot = JSON.stringify([requiredSkills, requiredMcp, requiresComputer, kind, name, description, recurrence, limitReset, scheduleDraft, date, startTime, weekdays, durationMinutes, timeoutMinutes, overlap, autoPauseAfter, continuity, onlyWhenPresent, deleteWhenFinished, watchDraft, postResults, mailAlias, routineModel, actAs, timingMode, earlyMinutes, lateMinutes, intervalMinutes, intervalDays, intervalWeekdays, intervalWindow, intervalWindowStart, intervalWindowEnd, intervalEnd, intervalEndDate, botIds, routineTarget, groupId, runOn, attachments.map((attachment) => attachment.id), runAs]);
   const openedSnapshot = useRef(editorSnapshot);
   const dirty = editorSnapshot !== openedSnapshot.current;
   const requestClose = async () => {
@@ -1264,6 +1275,8 @@ function EventEditorBody({
                 return <PanelSelect data-routine-model="" label={t("routines.model.label")} hint={t("routineEditor.hint.model")} viewing={viewing} value={routineModel} onChange={setRoutineModel}
                   options={[{ value: "", label: t("routines.model.botDefault") }, ...choices]} />;
               })()}
+              {!isRoomGoal && <RoutineActAsField coverage={roleCoverage} value={actAs ?? existingRoutine?.actAs} onChange={setActAs} viewing={viewing} savedOnly={existingRoutine?.actAs}
+                {...(existingRoutine && (existingRoutine.canEdit !== false) ? { readiness: roleReadiness } : {})} />}
               {!isRoomGoal && <PanelToggle data-routine-post-results="" label={t("routines.postResults.label")} hint={t("routines.postResults.hint")} help={t("routines.postResults.help")} viewing={viewing} checked={postResults} onChange={setPostResults} />}
               {isRoomGoal ? (
                 <PanelRow data-routine-attachments="" label={t("routineEditor.attachments")} help={t("routineCalendar.noGoalAttachments")}><PanelValue muted>{t("routineCalendar.sharedContext")}</PanelValue></PanelRow>

@@ -14,6 +14,7 @@ import { loadRoutinePrecheck, parseRoutinePrecheck } from "./routine-precheck.ts
 import type { RoutineWatchPrecheck } from "../../shared/routine-watch.ts";
 import { cleanRoutineFolder, ROUTINE_FOLDER_MAX } from "../../shared/routine-folders.ts";
 import { parseRoutineModel } from "../../shared/routine-model.ts";
+import { parseRoutineActAs } from "../../shared/routine-act-as.ts";
 import { describeCondition } from "./routine-watch.ts";
 import { parseJson, schemaIssue, type JsonObject, type JsonValue } from "../schema.ts";
 import {
@@ -128,6 +129,8 @@ const routineToolFieldsSchema = z.object({
   deleteWhenFinished: z.boolean().optional(),
   /** 2026-11-04: the model its runs use; null in an update goes back to the bot's. */
   model: z.string().max(200).nullable().optional(),
+  /** 2026-11-05: the Perspicax role its runs act as ("" = Moi); null in an update clears it. */
+  actAs: z.string().max(120).nullable().optional(),
   /** Create only: true starts the routine live, false paused; absent
    * follows `routines.newPaused`. A webhook or email trigger follows the
    * same rule. Pause and resume are actions of their own. */
@@ -297,9 +300,10 @@ const storedDefinitionSchema = z.object({
   folder: z.string().min(1).max(ROUTINE_FOLDER_MAX).optional(),
   deleteWhenFinished: z.boolean().optional(),
   model: z.string().min(1).max(200).optional(),
+  actAs: z.string().max(120).optional(),
 }).strict();
 const storedChangesSchema = storedDefinitionSchema
-  .omit({ schedule: true, timeoutMinutes: true, watch: true, folder: true, model: true })
+  .omit({ schedule: true, timeoutMinutes: true, watch: true, folder: true, model: true, actAs: true })
   .partial()
   .extend({
     schedule: storedScheduleChangesSchema.optional(),
@@ -307,6 +311,7 @@ const storedChangesSchema = storedDefinitionSchema
     watch: z.custom<RoutineWatchPrecheck | null>((value) => value === null || loadRoutinePrecheck(value)?.kind === "watch").optional(),
     folder: z.string().min(1).max(ROUTINE_FOLDER_MAX).nullable().optional(),
     model: z.string().min(1).max(200).nullable().optional(),
+    actAs: z.string().max(120).nullable().optional(),
   })
   .strict()
   .refine(
@@ -770,6 +775,13 @@ function modelInput(value: unknown): string | undefined {
   return parsed.model;
 }
 
+/** A routine tool's `actAs`: a role slug, "" for "Moi", undefined for none. */
+function actAsInput(value: unknown): string | undefined {
+  const parsed = parseRoutineActAs(value);
+  if (!parsed.ok) throw new RoutineRequestError(parsed.error);
+  return parsed.actAs;
+}
+
 /** A routine tool's `watch`: a watch pre-check, or null to remove one. */
 function watchInput(value: unknown): RoutineWatchPrecheck | null {
   if (value === null) return null;
@@ -801,6 +813,7 @@ function normalizeDefinition(input: RoutineToolDefinitionInput, now: number): Ro
     ...(cleanRoutineFolder(input.folder) ? { folder: cleanRoutineFolder(input.folder)! } : {}),
     ...(input.deleteWhenFinished === true ? { deleteWhenFinished: true } : {}),
     ...(modelInput(input.model) ? { model: modelInput(input.model)! } : {}),
+    ...(actAsInput(input.actAs) !== undefined ? { actAs: actAsInput(input.actAs)! } : {}),
   };
 }
 
@@ -822,6 +835,7 @@ function normalizeChanges(
   if (input.folder !== undefined) changes.folder = cleanRoutineFolder(input.folder) ?? null;
   if (input.deleteWhenFinished !== undefined) changes.deleteWhenFinished = input.deleteWhenFinished === true;
   if (input.model !== undefined) changes.model = modelInput(input.model) ?? null;
+  if (input.actAs !== undefined) changes.actAs = actAsInput(input.actAs) ?? null;
   return changes;
 }
 
@@ -1118,9 +1132,10 @@ function effectiveDefinition(operation: RoutineRequestOperation, manager: Routin
     ...(existing.folder ? { folder: existing.folder } : {}),
     ...(existing.deleteWhenFinished ? { deleteWhenFinished: true } : {}),
     ...(existing.model ? { model: existing.model } : {}),
+    ...(existing.actAs !== undefined ? { actAs: existing.actAs } : {}),
   };
   if (operation.action !== "update") return base;
-  const { schedule, timeoutMinutes, watch, folder, model, ...changes } = operation.changes;
+  const { schedule, timeoutMinutes, watch, folder, model, actAs, ...changes } = operation.changes;
   const merged: RoutineRequestDefinition = {
     ...base,
     ...changes,
@@ -1134,6 +1149,8 @@ function effectiveDefinition(operation: RoutineRequestOperation, manager: Routin
   else if (folder !== undefined) merged.folder = folder;
   if (model === null) delete merged.model;
   else if (model !== undefined) merged.model = model;
+  if (actAs === null) delete merged.actAs;
+  else if (actAs !== undefined) merged.actAs = actAs;
   return merged;
 }
 
@@ -1233,6 +1250,7 @@ function cardCopy(
       ...(definition.folder ? [`Folder: ${redactSecretsInText(definition.folder)}`] : []),
       ...(definition.deleteWhenFinished ? ["Delete once finished: yes"] : []),
       ...(definition.model ? [`Model: ${redactSecretsInText(definition.model)} (the bot's engine; chat keeps the bot's model)`] : []),
+      ...(definition.actAs !== undefined ? [`Acts as: ${definition.actAs ? redactSecretsInText(definition.actAs) : "the person's own access"} (Perspicax role)`] : []),
       // Last before the instructions: the one sentence that says what
       // confirming actually does, in the reader's terms.
       ...(operation.action === "create" || operation.action === "update"
@@ -1265,6 +1283,7 @@ function inputFromDefinition(definition: RoutineRequestDefinition, botId: string
     ...(definition.folder ? { folder: definition.folder } : {}),
     ...(definition.deleteWhenFinished ? { deleteWhenFinished: true } : {}),
     ...(definition.model ? { model: definition.model } : {}),
+    ...(definition.actAs !== undefined ? { actAs: definition.actAs } : {}),
   };
 }
 
@@ -1286,6 +1305,7 @@ function updateFromChanges(
   if (changes.folder !== undefined) patch.folder = changes.folder;
   if (changes.deleteWhenFinished !== undefined) patch.deleteWhenFinished = changes.deleteWhenFinished;
   if (changes.model !== undefined) patch.model = changes.model;
+  if (changes.actAs !== undefined) patch.actAs = changes.actAs;
   return patch;
 }
 
@@ -1366,6 +1386,7 @@ function revalidateOperation(operation: RoutineRequestOperation, manager: Routin
         || (routine.overlap ?? "skip") !== (definition.overlap ?? "skip")
         || Boolean(routine.deleteWhenFinished) !== Boolean(definition.deleteWhenFinished)
         || (routine.model ?? "") !== (definition.model ?? "")
+        || routine.actAs !== definition.actAs
         || !isDeepStrictEqual(routine.precheck?.kind === "watch" ? routine.precheck : undefined, definition.watch)
         || (routine.attachments?.length ?? 0) > 0) return false;
       // An omitted start means "every N minutes", not a new phase each time
@@ -1458,6 +1479,7 @@ function routineSnapshot(routine: Routine): RoutineRequestSnapshot | undefined {
     ...(routine.precheck ? { precheck: structuredClone(routine.precheck) } : {}),
     ...(routine.folder ? { folder: routine.folder } : {}),
     ...(routine.model ? { model: routine.model } : {}),
+    ...(routine.actAs !== undefined ? { actAs: routine.actAs } : {}),
     enabled: routine.enabled,
     ...(routine.target === "room-goal" ? { target: "room-goal" as const } : {}),
     ...(routine.groupId ? { groupId: routine.groupId } : {}),
@@ -1484,6 +1506,7 @@ function restorePatch(before: RoutineRequestSnapshot, now: number): Partial<Rout
     precheck: before.precheck === undefined ? null : structuredClone(before.precheck) as RoutineInput["precheck"],
     folder: before.folder ?? null,
     model: before.model ?? null,
+    actAs: before.actAs ?? null,
   };
 }
 

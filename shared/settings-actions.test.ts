@@ -47,6 +47,18 @@ describe("the settings registry", () => {
     }
   });
 
+  // #1992: get must hit the capabilities list (GET), never the add-server POST route.
+  it("reads connections.mcpServer from GET /api/me/capabilities (#1992)", () => {
+    for (const key of ["connections.mcpServer", "connections.mcpServerEnabled"] as const) {
+      const read = settingSpec(key)!.read!({});
+      expect(read, key).toMatchObject({ path: "/api/me/capabilities", field: "servers" });
+      expect(read.method, key).toBeUndefined();
+      expect(read.path, key).not.toBe("/api/me/mcp/servers");
+    }
+    expect(settingSpec("connections.mcpServer")!.write!({}, { name: "notes", url: "https://notes.example.test" }))
+      .toMatchObject({ method: "POST", path: "/api/me/mcp/servers" });
+  });
+
   it("classes a secret, another person, a deletion and the organization as such", () => {
     const classes = (key: string, organization = false) => settingSpec(key)!.classes?.(null, { organization }) ?? ["own"];
     expect(classes("credentials.item")).toContain("secret");

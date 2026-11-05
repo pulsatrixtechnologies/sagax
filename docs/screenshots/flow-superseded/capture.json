@@ -1,0 +1,161 @@
+{
+  "fixture": "member, synthetic local API",
+  "checks": [
+    {
+      "lang": "en",
+      "scheme": "light",
+      "width": 1100,
+      "geometry": {
+        "overflow": false,
+        "noteVisible": true,
+        "actionVisible": true
+      },
+      "removed": true,
+      "flowRetained": true,
+      "pageErrors": []
+    },
+    {
+      "lang": "en",
+      "scheme": "light",
+      "width": 700,
+      "geometry": {
+        "overflow": false,
+        "noteVisible": true,
+        "actionVisible": true
+      },
+      "removed": true,
+      "flowRetained": true,
+      "pageErrors": []
+    },
+    {
+      "lang": "en",
+      "scheme": "light",
+      "width": 390,
+      "geometry": {
+        "overflow": false,
+        "noteVisible": true,
+        "actionVisible": true
+      },
+      "removed": true,
+      "flowRetained": true,
+      "pageErrors": []
+    },
+    {
+      "lang": "en",
+      "scheme": "dark",
+      "width": 1100,
+      "geometry": {
+        "overflow": false,
+        "noteVisible": true,
+        "actionVisible": true
+      },
+      "removed": true,
+      "flowRetained": true,
+      "pageErrors": []
+    },
+    {
+      "lang": "en",
+      "scheme": "dark",
+      "width": 700,
+      "geometry": {
+        "overflow": false,
+        "noteVisible": true,
+        "actionVisible": true
+      },
+      "removed": true,
+      "flowRetained": true,
+      "pageErrors": []
+    },
+    {
+      "lang": "en",
+      "scheme": "dark",
+      "width": 390,
+      "geometry": {
+        "overflow": false,
+        "noteVisible": true,
+        "actionVisible": true
+      },
+      "removed": true,
+      "flowRetained": true,
+      "pageErrors": []
+    },
+    {
+      "lang": "fr",
+      "scheme": "light",
+      "width": 1100,
+      "geometry": {
+        "overflow": false,
+        "noteVisible": true,
+        "actionVisible": true
+      },
+      "removed": true,
+      "flowRetained": true,
+      "pageErrors": []
+    },
+    {
+      "lang": "fr",
+      "scheme": "light",
+      "width": 700,
+      "geometry": {
+        "overflow": false,
+        "noteVisible": true,
+        "actionVisible": true
+      },
+      "removed": true,
+      "flowRetained": true,
+      "pageErrors": []
+    },
+    {
+      "lang": "fr",
+      "scheme": "light",
+      "width": 390,
+      "geometry": {
+        "overflow": false,
+        "noteVisible": true,
+        "actionVisible": true
+      },
+      "removed": true,
+      "flowRetained": true,
+      "pageErrors": []
+    },
+    {
+      "lang": "fr",
+      "scheme": "dark",
+      "width": 1100,
+      "geometry": {
+        "overflow": false,
+        "noteVisible": true,
+        "actionVisible": true
+      },
+      "removed": true,
+      "flowRetained": true,
+      "pageErrors": []
+    },
+    {
+      "lang": "fr",
+      "scheme": "dark",
+      "width": 700,
+      "geometry": {
+        "overflow": false,
+        "noteVisible": true,
+        "actionVisible": true
+      },
+      "removed": true,
+      "flowRetained": true,
+      "pageErrors": []
+    },
+    {
+      "lang": "fr",
+      "scheme": "dark",
+      "width": 390,
+      "geometry": {
+        "overflow": false,
+        "noteVisible": true,
+        "actionVisible": true
+      },
+      "removed": true,
+      "flowRetained": true,
+      "pageErrors": []
+    }
+  ]
+}

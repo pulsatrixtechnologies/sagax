@@ -203,6 +203,9 @@ export interface Routine {
   /** 2026-11-04 (shared/routine-model.ts): the model its runs use, on the
    * bot's own engine. Absent: the bot's model. */
   model?: string;
+  /** 2026-11-05 (shared/routine-act-as.ts): the Perspicax role its runs act
+   * as ("Au nom de"); "" is "Moi". Absent: not chosen yet. */
+  actAs?: string;
   nextRunAt: number | null;
   /** Scheduled slot a flexible routine advances from. Absent for exact timing. */
   nominalRunAt?: number;
@@ -285,6 +288,11 @@ export interface RoutineRun {
   error?: string;
   /** Set when the run used its one automatic second start, and why. */
   retried?: RoutineRetryCause;
+  /** 2026-11-02: how many times a limit sent this run on at once to another
+   * model: another engine's, or its conversation's own after only Sagax's
+   * quick model was refused (server/routines/routine-recovery.ts takeOver);
+   * it never waited for a reset. */
+  limitTakeovers?: number;
   /** A queued run starts no earlier than this. */
   retryAt?: number;
   /** Concise, redacted question or approval reason while status is waiting,
@@ -307,6 +315,8 @@ export interface RoutineRun {
   access?: RoutineAccess;
   /** Snapshot of the routine's model for this run. */
   model?: string;
+  /** Snapshot of the routine's "Au nom de" role for this run ("" = Moi). */
+  actAs?: string;
   /** Items its routine's checks handed this run, so they are kept or released once it ends. */
   checkKey?: string;
 }
@@ -352,6 +362,9 @@ export interface RoutineInput {
   /** The model its runs use; null or "" goes back to the bot's model,
    * omission preserves it on updates. */
   model?: string | null;
+  /** The role its runs act as on Perspicax ("" = Moi); null clears the
+   * choice, omission preserves it on updates. */
+  actAs?: string | null;
 }
 
 /** True when the schedule has a known last occurrence: a one-time run, or

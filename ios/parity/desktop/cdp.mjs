@@ -37,6 +37,9 @@ export async function launchChrome({ port = 0, binary = findChrome() } = {}) {
     "--no-first-run",
     "--no-default-browser-check",
     "--hide-scrollbars",
+    // larger than any viewport at 2x: a repainted shot (screenshot's
+    // `repaint`) draws only what the window itself covers
+    "--window-size=2800,2800",
     "--force-color-profile=srgb",
     "--disable-background-timer-throttling",
     "--disable-renderer-backgrounding",
@@ -139,8 +142,12 @@ export class Page {
     }
   }
 
-  async screenshot() {
-    const r = await this.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false, fromSurface: true });
+  /** `repaint`: draw the page anew for the shot (a resting pointer's
+   * :hover shows only that way in headless Chrome; the surface copy is a
+   * frame from before it), clipped to the whole viewport at the page's scale. */
+  async screenshot({ repaint } = {}) {
+    const extra = repaint ? { fromSurface: false, captureBeyondViewport: true, clip: { x: 0, y: 0, width: repaint.width, height: repaint.height, scale: 1 } } : { fromSurface: true, captureBeyondViewport: false };
+    const r = await this.send("Page.captureScreenshot", { format: "png", ...extra });
     return Buffer.from(r.data, "base64");
   }
 

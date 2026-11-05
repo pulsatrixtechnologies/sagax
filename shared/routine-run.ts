@@ -30,4 +30,7 @@ export interface RoutineRunCardData {
   attention?: string;
   /** 2026-11-03: the teammates the run handed work to, linked from the card. */
   handedTo?: Array<{ botId: string; threadId: string; name?: string; status: string }>;
+  /** 2026-11-04: when the run started, so a running card shows how long it
+   * has been going. */
+  startedAt?: number;
 }

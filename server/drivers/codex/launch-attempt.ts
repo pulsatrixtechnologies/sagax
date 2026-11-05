@@ -15,7 +15,7 @@ export type LaunchAttemptDeps = PrepareLaunchDeps & Omit<CodexSession,
   "stop" | "settle" | "relaunch" | "renewContext" | "steerActiveTurn" | "controlsHost" |
   "handleServerRequest" | "handleNotification" | "reviewWarning" | "timedOutReview" | "seenReviews" |
   "reviewNotice" | "turnError" | "retryLoginRace" | "buf" | "stderr" | "stderrSinceOutput" |
-  "runLaunchAttempt" | "attempt" | "input"
+  "runLaunchAttempt" | "attempt" | "input" | "detachStream" | "lastUsage"
 > & {
   input: CodexSession["input"];
   runLaunchAttempt: (attempt: number) => Promise<void>;
@@ -23,7 +23,13 @@ export type LaunchAttemptDeps = PrepareLaunchDeps & Omit<CodexSession,
 
 export async function runLaunchAttempt(deps: LaunchAttemptDeps, attempt: number): Promise<void> {
   const prepared = await prepareCodexLaunch(deps, attempt);
-  if (!prepared) return;
+  if (!prepared) {
+    if (deps.active.get(deps.threadId)?.turnId === deps.turnId) {
+      deps.active.delete(deps.threadId);
+      deps.emit({ ...deps.base(deps.threadId, deps.turnId), type: "turn.completed", ok: false, stopReason: "interrupted", cost: null });
+    }
+    return;
+  }
 
   // Keep deps accessors (loginRaceRetried, promptSubmitted, inTurnRenewal, …)
   // on the prototype so phase writes reach sendTurn's outer lets. A plain
@@ -62,5 +68,8 @@ export async function runLaunchAttempt(deps: LaunchAttemptDeps, attempt: number)
   wireCodexSession(s);
   attachCodexTools(s);
   attachCodexStream(s);
+  s.previous = undefined;
+  s.process.session = s;
+  s.sessions.put(s.threadId, s.process);
   await finishCodexLaunch(s);
 }

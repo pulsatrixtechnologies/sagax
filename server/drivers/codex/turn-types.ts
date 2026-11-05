@@ -3,6 +3,8 @@ import type { ChildProcess } from "node:child_process";
 import type { SendTurnInput, StdioMcpSpec } from "../../contracts.ts";
 import type { RenewalStep } from "../../context/context-renewal.ts";
 import type { McpApprovalMode } from "./mcp-mount.ts";
+import type { CodexProcess } from "./sessions.ts";
+import type { CodexSession } from "./session-types.ts";
 
 /** Mutable turn-level state owned by sendTurn / launchAttempt. */
 export type CodexTurnMutable = {
@@ -26,9 +28,13 @@ export type PreparedCodexLaunch = {
   provenPrivateEnv: boolean;
   selectedMcp: Map<string, StdioMcpSpec>;
   selectedApprovals: Map<string, McpApprovalMode>;
+  /** A selected mount's own `env` table (the person's environment proxy). */
+  selectedLiterals: Map<string, Record<string, string>>;
   directoryMounts: Set<string>;
   selectionConfig: { config?: Record<string, unknown> };
   commandCwd: string;
   releaseSlot: () => void;
   child: ChildProcess;
+  process: CodexProcess;
+  previous?: CodexSession;
 };

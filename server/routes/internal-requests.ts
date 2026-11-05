@@ -56,6 +56,8 @@ export interface InternalRequestsRoutine {
   folder?: string;
   /** 2026-11-04: the routine's model (shared/routine-model.ts). */
   model?: string;
+  /** 2026-11-05: the routine's "Au nom de" role (shared/routine-act-as.ts). */
+  actAs?: string;
   enabled: boolean;
   runOn: string;
   durationMinutes: number;
@@ -259,6 +261,7 @@ function agentRoutine(routine: InternalRequestsRoutine, latestRun?: InternalRequ
     name: safeName,
     ...(routine.folder ? { folder: redactSecretsInText(routine.folder) } : {}),
     ...(routine.model ? { model: routine.model } : {}),
+    ...(routine.actAs !== undefined ? { actAs: routine.actAs } : {}),
     instructions: safeInstructions.slice(0, 2_000),
     instructionsTruncated: safeInstructions.length > 2_000,
     continuity: routine.continuity === true,

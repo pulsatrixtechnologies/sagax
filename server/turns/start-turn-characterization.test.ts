@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const startTurnSrc = readFileSync(join(here, "start-turn.ts"), "utf8");
@@ -103,10 +103,26 @@ describe("startTurn characterization (#1388 w4 step 3)", () => {
 
   it("warm finally always settles onWarmSettled and clears the warm dispatch claim", () => {
     expect(finishSrc).toMatch(/if \(state\.warmOnly\)/);
-    expect(finishSrc).toMatch(/state\.opts\?\.onWarmSettled\?\.\(state\.warmOk\)/);
+    expect(finishSrc).toMatch(/state\.opts\?\.onWarmSettled\?\.\(state\.warmOk, state\.instance\?\.driverKind\)/);
     expect(finishSrc).toMatch(/clearDirectTurnDispatch\(state\.threadId, state\.dispatchClaimId\)/);
     expect(finishSrc).toMatch(/handoffs\.abandon\(state\.threadId, state\.dispatchClaimId\)/);
     expect(finishSrc).toMatch(/drainQueuedSends\(\)/);
+  });
+
+  it("settles a warm with the actual driver when Auto selected another engine", async () => {
+    const { createFinishStartTurn } = await import("./start-turn-finish.ts");
+    const { createTurnState } = await import("./start-turn-state.ts");
+    const settled = vi.fn();
+    const state = createTurnState({ botId: "b1", text: "", startTurn: async () => undefined, opts: { onWarmSettled: settled } });
+    Object.assign(state, { warmOnly: true, warmOk: true, threadId: "t1", dispatchClaimId: "g1", bot: { modelSelection: { instanceId: "claude" } }, instance: { driverKind: "codex" } });
+    const host = {
+      clearDirectTurnDispatch: vi.fn(), revokeInternalCapabilityGeneration: vi.fn(), releaseTurnResources: vi.fn(),
+      directTurnGenerationByThread: new Map(), runningTurnEngines: new Map(), directTurnBots: new Map(),
+      directRequestOwners: new Map(), computerSelectionTurns: new Map(), handoffs: { abandon: vi.fn() }, drainQueuedSends: vi.fn(),
+    };
+    const { finishFinally } = createFinishStartTurn(host as unknown as import("./start-turn-types.ts").StartTurnHost);
+    await finishFinally(state);
+    expect(settled).toHaveBeenCalledExactlyOnceWith(true, "codex");
   });
 
   it("declares TurnState with warmOk and dispatch up front (no TDZ across try/finally)", async () => {

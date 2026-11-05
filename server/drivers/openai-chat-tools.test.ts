@@ -146,9 +146,20 @@ async function fixture(script: Script, provider: Provider = "openai-compat", api
     : [];
   return {
     instance, recorder, requests, threadId, directory, integrations, effects, rpcStarted,
-    start: (input: Partial<SendTurnInput> = {}) => instance.adapter.sendTurn({
-      threadId, text: "Store the synthetic receipt.", model: "fixture-model", integrations, ...input,
-    }),
+    start: (input: Partial<SendTurnInput> = {}) => {
+      // #1982: Full MCP asks reach Sagax's gate. Driver unit tests have no
+      // index.ts harness, so answer allow here the way the harness would.
+      if (input.approvalMode === "full") {
+        instance.adapter.onEvent((event) => {
+          if (event.type === "request.opened" && event.requestType === "permission" && event.requestId) {
+            void instance.adapter.respondToRequest(threadId, event.requestId, { behavior: "allow" });
+          }
+        });
+      }
+      return instance.adapter.sendTurn({
+        threadId, text: "Store the synthetic receipt.", model: "fixture-model", integrations, ...input,
+      });
+    },
     completed: () => recorder.until((event) => event.type === "turn.completed"),
     async decide(behavior: "allow" | "deny" = "allow") {
       const event = await recorder.until((value) => value.type === "request.opened");
@@ -1047,7 +1058,7 @@ describe("structured tool execution boundaries", () => {
     ]);
   });
 
-  it("keeps Full access across router model changes without per-tool approvals", async () => {
+  it("keeps Full access across router model changes; MCP asks still reach Sagax's gate (#1982)", async () => {
     const f = await fixture((_body, response, round) => sse(response, [{
       model: `router-backend-${round}`,
       ...chunk(round <= 2
@@ -1058,7 +1069,8 @@ describe("structured tool execution boundaries", () => {
     expect(await f.completed()).toMatchObject({ ok: true });
     expect(f.effects()).toHaveLength(2);
     expect(f.requests).toHaveLength(3);
-    expect(f.recorder.events.some((event) => event.type === "request.opened")).toBe(false);
+    // Gate opened for each write; the fixture answered allow (harness role).
+    expect(f.recorder.events.filter((event) => event.type === "request.opened" && event.requestType === "permission")).toHaveLength(2);
   });
 
   it("aggregates model usage across execution and continuation", async () => {

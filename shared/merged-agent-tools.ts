@@ -17,7 +17,10 @@ export const MERGED_AGENT_TOOLS: Readonly<Record<string, readonly string[]>> = {
     "cloud_agent_transcript", "list_cloud_agent_artifacts", "archive_cloud_agent", "cancel_cloud_agent",
   ],
   artifacts: ["save_artifact", "update_artifact", "list_artifacts", "delete_artifact"],
-  routines: ["propose_routine", "propose_routine_action", "list_routines", "run_routine"],
+  // #1989: list_routines and run_routine stay listed by their own names and
+  // always load (agents-catalog DEFERRED), so a bot that owns a routine can
+  // check it without ToolSearch finding a merged family under another name.
+  routines: ["propose_routine", "propose_routine_action"],
   conversation_history: ["session_search", "session_read"],
   workspace_files: ["workspace_read", "workspace_search"],
   rooms: ["create_room", "list_rooms", "post_to_room"],
@@ -31,7 +34,7 @@ export const MERGED_AGENT_TOOLS: Readonly<Record<string, readonly string[]>> = {
 export const MERGED_AGENT_TOOL_INTROS: Readonly<Record<string, string>> = {
   cloud_agents: "Cloud coding agents on external providers.",
   artifacts: "The person's artifacts (saved widgets).",
-  routines: "Routines: propose, change, list and run.",
+  routines: "Routines: propose and change. Use list_routines and run_routine by name to list or run.",
   conversation_history: "Earlier conversations: search and read.",
   workspace_files: "The bot's workspace files: read and search.",
   rooms: "Rooms: create, list and post.",

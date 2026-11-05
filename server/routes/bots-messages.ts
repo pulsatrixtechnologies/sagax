@@ -50,6 +50,7 @@ import {
   builtInBrowserEnabled,
 } from "../config.ts";
 import { parseDataContext } from "../data-context.ts";
+import { perspicaxRoleOf } from "./perspicax-held-roles.ts";
 import { parseDevPods } from "../dev-pods-prompt.ts";
 import {
   typedCommandForTurn,
@@ -396,6 +397,14 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
         confirmStop(threadId, stoppedTurnId);
         return json(res, 200, { ok: true, threadId, stopped: true, message });
       }
+      // 2026-11-05 (visible roles, batch 3): the role the person picked in
+      // the composer, for the next turn of this thread only ("" = Moi). A
+      // turn already running keeps its role; the pick waits for the next one,
+      // and only the person who made it can use it (roleJournal.takePick).
+      if (!guarded && !pressed) {
+        const pickedRole = perspicaxRoleOf(body);
+        if (pickedRole !== undefined) deps.pickPerspicaxRole?.(bot, threadId, auth, pickedRole);
+      }
       if (pressKey) widgetPressesInFlight.set(pressKey, sendId);
       // #1372: the goal starts only now, after every refusal above; a send
       // refused below puts back what was there. A person writing again in a
@@ -609,6 +618,8 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
               });
               // Written here, as the words that start a turn are (startTurn).
               store.setTaskAskedAt(bot.id, threadId, message.at);
+              // background-sweep.ts: what the server archived is theirs again
+              if (store.taskByThread(bot.id, threadId)?.openedBy?.kind !== "agent") store.restoreAutoArchived(bot.id, threadId);
               // Durable while the engine process holds them: a crash or stop can
               // resume them once (held-steers.ts).
               try {

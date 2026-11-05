@@ -37,6 +37,7 @@ import { startFakeHttpMcp, type FakeHttpMcp } from "../testing/fake-http-mcp-ser
 import * as procs from "../procs.ts";
 import { autoVerdict } from "../approvals/auto-approve.ts";
 import { codexFullApprovalPolicy } from "./codex/approvals.ts";
+import { perspicaxTokenFile } from "./spawn-contract.ts";
 
 /** #1977: Full access on Codex lets MCP tool approvals reach Sagax's gate. */
 const CODEX_FULL_POLICY = codexFullApprovalPolicy();
@@ -218,6 +219,34 @@ describe("CodexDriver turns (fake app-server)", () => {
     const seen = existsSync(dump) ? JSON.parse(readFileSync(dump, "utf8")) : { calls: [] };
     expect(seen.calls.some((call: { method: string }) => call.method === "turn/start")).toBe(false);
     expect(recorder.events.some((event) => event.type === "runtime.error" && /outside the selected configuration/.test(event.message))).toBe(true);
+  });
+
+  // #2013: Sagax turns the account's own servers off instead of asking the person.
+  it("disables an ambient MCP server from another config layer by itself, then sends the scoped prompt", async () => {
+    const dump = join(scratch, "scope-ambient-fixed.json"); process.env.FAKE_CODEX_DUMP = dump;
+    await create({ environment: { HOME: scratch, CODEX_HOME: join(scratch, ".codex"), FAKE_CODEX_MCP_OVERRIDES: "1",
+      FAKE_CODEX_MCP_AMBIENT: JSON.stringify({ project_tool: { command: "project-tool", args: [] } }) } });
+    const { turnId } = await instance.adapter.sendTurn({ threadId: "scope-ambient-fixed", text: "Fixture", toolScope: { allow: ["native:*"] } });
+    const completed = await recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId);
+    expect(completed).toMatchObject({ ok: true });
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.argv).toContain("mcp_servers.project_tool.enabled=false");
+    expect(seen.calls.filter((call: { method: string }) => call.method === "turn/start")).toHaveLength(1);
+    expect(recorder.events.some((event) => event.type === "runtime.error")).toBe(false);
+  });
+
+  it("accepts the person's own environment mount under a tool selection", async () => {
+    const dump = join(scratch, "scope-workplace.json"); process.env.FAKE_CODEX_DUMP = dump;
+    await create({ environment: { HOME: scratch, CODEX_HOME: join(scratch, ".codex"), FAKE_CODEX_MCP_OVERRIDES: "1" } });
+    const { turnId } = await instance.adapter.sendTurn({ threadId: "scope-workplace", text: "Fixture", toolScope: { allow: ["native:*"] },
+      integrations: { custom: { "sagax-environment": { command: process.execPath, args: ["/fixture/user-sandbox-proxy.js"], env: { SAGAX_SANDBOX_TOKEN: "synthetic-fixture-token", ELECTRON_RUN_AS_NODE: "1" } } } } });
+    const completed = await recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId);
+    expect(completed).toMatchObject({ ok: true });
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.calls.filter((call: { method: string }) => call.method === "turn/start")).toHaveLength(1);
+    const thread = seen.calls.find((call: { method: string }) => call.method === "thread/start");
+    expect(thread.params.config.mcp_servers["sagax-environment"].env).toMatchObject({ ELECTRON_RUN_AS_NODE: "1" });
+    expect(JSON.stringify({ argv: seen.argv, calls: seen.calls })).not.toContain("synthetic-fixture-token");
   });
 
   it.each(["ask", "custom", "full"] as const)("preserves shell exclusions for scoped %s turns on new and resumed threads", async (approvalMode) => {
@@ -705,7 +734,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(recorder.events.at(-1)).toMatchObject({ type: "turn.completed", ok: true, usage: { input: 7, output: 3, cachedInput: 4 } });
 
     const seen = JSON.parse(readFileSync(dump, "utf8"));
-    expect(processIsAlive(seen.pid)).toBe(false);
+    expect(processIsAlive(seen.pid)).toBe(true);
     expect(seen.env.OPENAI_API_KEY).toBeUndefined();
     expect(seen.env.BOX_TOKEN).toBeUndefined();
     expect(seen.env.SAGAX_TTS_KEY).toBeUndefined();
@@ -1440,7 +1469,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(seen.calls.find((call: { method: string }) => call.method === "thread/start").params.config["shell_environment_policy.exclude"]).toEqual([
       "USER_SECRET_*", "SAGAX_REMOTE_MCP_CONFIG_*",
       // sorted: the Sagax names sort after OVERRIDDEN (upstream's SAGAX_ names sorted before it)
-      "ELECTRON_RUN_AS_NODE", "GITHUB_PERSONAL_ACCESS_TOKEN", "OVERRIDDEN", "SAGAX_COMMS_TOKEN",
+      "ELECTRON_RUN_AS_NODE", "GITHUB_PERSONAL_ACCESS_TOKEN", "OVERRIDDEN", "SAGAX_COMMS_TOKEN", "SAGAX_COMMS_TOKEN_FILE",
       // the agents mount asks for the tools merged by family (#1604)
       "SAGAX_MERGED_TOOLS", "SAGAX_PHONE_TOKEN",
     ]);
@@ -1745,7 +1774,11 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     await create();
     const dump = join(scratch, "perspicax-bridge.json");
     process.env.FAKE_CODEX_DUMP = dump;
-    const tokenFile = join(scratch, "px-main-token");
+    // Launch may name any path; warmPerspicaxEnv rewrites each turn to the
+    // shared comms-tokens file so a kept process can reread the capability.
+    // This sendTurn has no botId, so the warm path is keyed on the thread alone.
+    const launchTokenFile = join(scratch, "px-main-token");
+    const warmTokenFile = perspicaxTokenFile("t-px-bridge", undefined);
     await instance.adapter.sendTurn({
       threadId: "t-px-bridge",
       text: "go",
@@ -1758,7 +1791,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
               ELECTRON_RUN_AS_NODE: "1",
               SAGAX_HARNESS_URL: "http://127.0.0.1:8799",
               SAGAX_PERSPICAX_TOKEN: "token-main",
-              SAGAX_PERSPICAX_TOKEN_FILE: tokenFile,
+              SAGAX_PERSPICAX_TOKEN_FILE: launchTokenFile,
               SAGAX_BOT_ID: "bot1",
               SAGAX_THREAD_ID: "t-px-bridge",
             },
@@ -1777,7 +1810,8 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     const gate = JSON.parse(seen.env[record]);
     const upstream = JSON.parse(gate.SAGAX_GATE_UPSTREAM);
     expect(upstream.env.SAGAX_PERSPICAX_TOKEN).toBe("token-main");
-    expect(upstream.env.SAGAX_PERSPICAX_TOKEN_FILE).toBe(tokenFile);
+    expect(upstream.env.SAGAX_PERSPICAX_TOKEN_FILE).toBe(warmTokenFile);
+    expect(readFileSync(warmTokenFile, "utf8")).toBe("token-main");
     expect(JSON.parse(gate.SAGAX_GATE_SEARCH)).toMatchObject({
       pinned: expect.arrayContaining(["api_list", "flow_run", "identity_switch", "memory_find"]),
       pinnedSuffixes: ["_action", "_query", "_write"],
@@ -2033,6 +2067,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     process.env.FAKE_CODEX_DUMP = dump;
     const pids = new Set<number>();
     for (const [index, [model, expectedModel, modelProvider]] of selections.entries()) {
+      if (index) await instance.adapter.interruptTurn("t-model-provider-resume");
       const { turnId } = await instance.adapter.sendTurn({
         threadId: "t-model-provider-resume", text: "Continue", model,
         ...(index ? { resumeCursor: "codex-thread-1" } : {}),
@@ -2237,12 +2272,12 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(recorder.events.filter((e) => e.type === "session.started")).toMatchObject([{ sessionId: "codex-thread-1", rebuilt: true }]);
   });
 
-  it("completes a turn whose process exit could not be confirmed without waiting for the stall watchdog", async () => {
-    await create();
+  it("settles a failed turn whose process exit could not be confirmed without waiting for the stall watchdog", async () => {
+    await create({ mode: "legacy-error" });
     vi.stubEnv("FAKE_CODEX_STOP_RETRY_MS", "50");
     const stopping = vi.spyOn(procs, "killCliTree").mockResolvedValueOnce(false);
     await instance.adapter.sendTurn({ threadId: "t-stop-unconfirmed", text: "hi" });
-    await expect(recorder.until((e) => e.type === "turn.completed", 10_000)).resolves.toMatchObject({ ok: true, stopReason: null });
+    await expect(recorder.until((e) => e.type === "turn.completed", 10_000)).resolves.toMatchObject({ ok: false });
     expect(recorder.events.some((e) => e.type === "runtime.error" && e.message.includes("did not shut down"))).toBe(true);
     expect(stopping.mock.calls.length).toBeGreaterThan(1);
     expect(instance.adapter.hasSession("t-stop-unconfirmed")).toBe(false);
@@ -2250,7 +2285,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     recorder.events.length = 0;
     stopping.mockResolvedValue(false);
     await instance.adapter.sendTurn({ threadId: "t-stop-never", text: "hi" });
-    await expect(recorder.until((e) => e.type === "turn.completed", 10_000)).resolves.toMatchObject({ ok: true });
+    await expect(recorder.until((e) => e.type === "turn.completed", 10_000)).resolves.toMatchObject({ ok: false });
     expect(instance.adapter.hasSession("t-stop-never")).toBe(false);
   });
 
@@ -2516,13 +2551,19 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     process.env.FAKE_CODEX_DUMP = dump;
     mkdirSync(NATIVE_DIR, { recursive: true });
     const threadId = `t-native-instructions-${approvalMode}`;
+    let previousCalls = 0;
+    let previousPid: number | undefined;
     for (const [index, system] of ["Bot rules.", "", undefined].entries()) {
       const { turnId } = await instance.adapter.sendTurn({
         threadId, text: `message-${index}`, system, approvalMode,
         ...(index > 0 ? { resumeCursor: "codex-thread-1" } : {}),
       });
       await expect(recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId)).resolves.toMatchObject({ ok: true });
-      const calls = JSON.parse(readFileSync(dump, "utf8")).calls;
+      const current = JSON.parse(readFileSync(dump, "utf8"));
+      const allCalls = current.calls;
+      const calls = allCalls.slice(current.pid === previousPid ? previousCalls : 0);
+      previousPid = current.pid;
+      previousCalls = allCalls.length;
       const threadCall = calls.find((call: { method: string }) => call.method === (index ? "thread/resume" : "thread/start"));
       expect(threadCall.params.developerInstructions).toBe(`${system || "No Sagax bot-specific instructions remain."}\n\nPrivate native rules.`);
       expect(calls.filter((call: { method: string }) => call.method === "thread/inject_items")).toHaveLength(index === 1 ? 1 : 0);
@@ -3004,7 +3045,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     await instance.adapter.respondToRequest("t-codex-steer", opened.requestId!, { behavior: "deny" });
     await expect(recorder.until((e) => e.type === "turn.completed")).resolves.toMatchObject({ ok: true });
     expect(recorder.events.some((e) => e.type === "runtime.error")).toBe(false);
-    await expect.poll(() => processIsAlive(snapshot.pid), { timeout: 5_000 }).toBe(false);
+    expect(processIsAlive(snapshot.pid)).toBe(true);
   }, 20_000);
 
   it("says the running turn took a steer in once turn/steer accepts it, so the next turn does not offer it again", async () => {
@@ -3066,14 +3107,11 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(processIsAlive(turnPid)).toBe(true);
     await instance.adapter.respondToRequest("t-codex-queue-nokill", opened.requestId!, { behavior: "deny" });
     await expect(recorder.until((e) => e.type === "turn.completed")).resolves.toMatchObject({ ok: true });
-    // the drained queue runs as its own turn: fresh child, still no mid-turn kill
-    await instance.adapter.sendTurn({ threadId: "t-codex-queue-nokill", text: "queued words" });
-    await recorder.until((e) => e.type === "turn.started");
-    // the fresh app-server writes its dump pid only once it serves a message.
-    // Take the pid from inside the wait: a second, un-polled read here raced
-    // the fake's next rewrite of the dump and blew up on Windows.
-    let drainPid = turnPid;
-    await expect.poll(() => (drainPid = JSON.parse(readFileSync(dump, "utf8")).pid), { timeout: 5_000 }).not.toBe(turnPid);
+    // The drained queue is a distinct turn on the retained child.
+    const { turnId: drainTurn } = await instance.adapter.sendTurn({ threadId: "t-codex-queue-nokill", text: "queued words" });
+    await recorder.until((e) => e.type === "request.opened" && e.turnId === drainTurn);
+    const drainPid = JSON.parse(readFileSync(dump, "utf8")).pid;
+    expect(drainPid).toBe(turnPid);
     expect(killed(drainPid)).toBe(false);
     expect(processIsAlive(drainPid)).toBe(true);
     expect(recorder.events.some((e) => e.type === "runtime.error")).toBe(false);
@@ -3140,7 +3178,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
   }, 20_000);
 
   it.each([false, true])("keeps ownership after an uncertain stop even when root close arrives (before failure: %s)", async (closeFirst) => {
-    await create();
+    await create({ mode: "legacy-error" });
     const stopping = vi.spyOn(procs, "killCliTree").mockImplementation(async (child) => {
       if (closeFirst && child.exitCode === null && child.signalCode === null) {
         const closed = once(child, "close");
@@ -3634,7 +3672,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
       delete process.env.FAKE_CODEX_RETRY_SCALE;
     }
   }, 20_000);
-  it("never replays a turn after turn/start was acknowledged, even for a transient-looking exit", async () => {
+  it("bounds an acknowledged crash continuation to one replacement", async () => {
     const ackGate = join(scratch, "ack-crash-gate");
     process.env.FAKE_CODEX_ACK_CRASH = ackGate;
     // The fake holds its crash until the test confirms the driver parsed
@@ -3654,11 +3692,11 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
       return child;
     });
     try {
-      await create();
+      await create({ mode: "resume" });
       await instance.adapter.sendTurn({ threadId: "t-codex-ack-crash", text: "hi" });
       const done = await recorder.until((e) => e.type === "turn.completed" && e.ok === false);
       expect(done).toMatchObject({ stopReason: "exit_before_result" });
-      expect(recorder.events.some((e) => e.type === "turn.retrying")).toBe(false);
+      expect(recorder.events.filter((e) => e.type === "turn.retrying")).toHaveLength(1);
       const error = recorder.events.find((e) => e.type === "runtime.error");
       expect(error?.message).toContain("connection reset");
     } finally {
@@ -3687,13 +3725,13 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
       return child;
     });
     try {
-      await create();
+      await create({ mode: "resume" });
       await instance.adapter.sendTurn({ threadId: "t-codex-exit-mid-turn", text: "hi" });
       await recorder.until((e) => e.type === "content.delta" && e.streamKind === "reasoning_text");
       writeFileSync(killGate, "");
       const done = await recorder.until((e) => e.type === "turn.completed" && e.ok === false);
       expect(done).toMatchObject({ stopReason: "exit_before_result" });
-      expect(recorder.events.some((e) => e.type === "turn.retrying")).toBe(false);
+      expect(recorder.events.filter((e) => e.type === "turn.retrying")).toHaveLength(1);
       const error = recorder.events.find((e) => e.type === "runtime.error");
       // Windows has no signals: the kill lands as TerminateProcess, so the
       // close event carries exit code 1 and signal null. The invariants —
@@ -3713,37 +3751,35 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
   // 1, signal null), so a signal close event cannot be produced there at
   // all. The silent-exit test below covers the classification path win32
   // can reach, and the mid-turn test splits its wording by platform.
-  (process.platform === "win32" ? it.skip : it)("treats a signal-killed app-server as terminal even with transient stderr", async () => {
+  (process.platform === "win32" ? it.skip : it)("recovers once after a signal-killed app-server", async () => {
     process.env.FAKE_CODEX_LAUNCH_KILLS = "1";
     const stateFile = join(scratch, "launch-kills.json");
     process.env.FAKE_CODEX_STATE = stateFile;
     try {
       await create();
       await instance.adapter.sendTurn({ threadId: "t-codex-launch-kill", text: "hi" });
-      const done = await recorder.until((e) => e.type === "turn.completed" && e.ok === false);
-      expect(done).toMatchObject({ stopReason: "exit_before_result" });
-      expect(recorder.events.some((e) => e.type === "turn.retrying")).toBe(false);
-      const error = recorder.events.find((e) => e.type === "runtime.error");
-      expect(error?.message).toContain("signal SIGKILL");
-      expect(readFileSync(stateFile, "utf8")).toBe("1");
+      const done = await recorder.until((e) => e.type === "turn.completed" && e.ok === true);
+      expect(done).toMatchObject({ ok: true });
+      expect(recorder.events.filter((e) => e.type === "turn.retrying")).toHaveLength(1);
+      expect(recorder.events.filter((e) => e.type === "runtime.error")).toHaveLength(0);
+      expect(readFileSync(stateFile, "utf8")).toBe("2");
     } finally {
       delete process.env.FAKE_CODEX_LAUNCH_KILLS;
       delete process.env.FAKE_CODEX_STATE;
     }
   }, 20_000);
-  it("treats a silent pre-ack exit as terminal instead of retrying off lifetime stderr", async () => {
+  it("recovers once after a silent pre-ack exit", async () => {
     process.env.FAKE_CODEX_LAUNCH_SILENT = "1";
     const stateFile = join(scratch, "launch-silent.json");
     process.env.FAKE_CODEX_STATE = stateFile;
     try {
       await create();
       await instance.adapter.sendTurn({ threadId: "t-codex-launch-silent", text: "hi" });
-      const done = await recorder.until((e) => e.type === "turn.completed" && e.ok === false);
-      expect(done).toMatchObject({ stopReason: "exit_before_result" });
-      expect(recorder.events.some((e) => e.type === "turn.retrying")).toBe(false);
-      const error = recorder.events.find((e) => e.type === "runtime.error");
-      expect(error?.message).toContain("codex exited 1 before turn/completed");
-      expect(readFileSync(stateFile, "utf8")).toBe("1");
+      const done = await recorder.until((e) => e.type === "turn.completed" && e.ok === true);
+      expect(done).toMatchObject({ ok: true });
+      expect(recorder.events.filter((e) => e.type === "turn.retrying")).toHaveLength(1);
+      expect(recorder.events.filter((e) => e.type === "runtime.error")).toHaveLength(0);
+      expect(readFileSync(stateFile, "utf8")).toBe("2");
     } finally {
       delete process.env.FAKE_CODEX_LAUNCH_SILENT;
       delete process.env.FAKE_CODEX_STATE;

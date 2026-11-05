@@ -27,6 +27,14 @@ import {
 } from "./session-types.ts";
 import type { ClaudeTurnCtx } from "./turn-ctx.ts";
 
+/** A failed call the engine sent no words for at all (2026-11-05: an
+ * empty is_error tool_result): said in plain words, naming the tool, so
+ * the card and the routine's problems never read "no error message". */
+export function emptyFailureNote(toolName: string | undefined): string {
+  const name = toolName ? toolName.replace(/^mcp__[^_]+(?:_[^_]+)*?__/, "") : "the tool";
+  return `${name} failed, and Claude Code passed on no error text for it (an empty error result). If this repeats, the tool's own server returned the failure without a message.`;
+}
+
 export function handleClaudeContent(ctx: ClaudeTurnCtx, o: any): void {
   const {
     session, threadId, emit, base, reachLimit, currentTurnId,
@@ -233,7 +241,13 @@ case "user": {
       const toolName = typeof b.tool_use_id === "string" ? session.toolNames.get(b.tool_use_id) : undefined;
       const step = session.turn?.steps?.find((entry) => entry.id === b.tool_use_id);
       // a failed call's own words, not its content envelope (shared/tool-failure-text.ts)
-      const preview = b.is_error ? toolFailurePreview(b.content) : toolDetailPreview(b.content);
+      // 2026-11-05: a failure whose content block is empty may still carry
+      // its words in the message's own `tool_use_result` (Claude Code puts
+      // a native tool's structured error there); with none at all, the card
+      // says what is known instead of "returned no error message".
+      const preview = b.is_error
+        ? toolFailurePreview(b.content) ?? toolFailurePreview(o.tool_use_result ?? o.toolUseResult) ?? emptyFailureNote(toolName)
+        : toolDetailPreview(b.content);
       if (step) {
         step.ok = !b.is_error;
         if (!isPhoneToolCallName(toolName)) step.output = preview?.slice(0, 400);

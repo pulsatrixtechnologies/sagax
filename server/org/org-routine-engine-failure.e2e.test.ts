@@ -25,6 +25,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
 import { freePortBlock } from "../testing/ports.ts";
+import { waitForServerReady } from "../testing/server-ready.ts";
 
 const SERVER_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
@@ -96,7 +97,7 @@ async function runNow(auth: Auth, routineId: string): Promise<Run> {
   const started = await api("POST", `/api/routines/${routineId}/run`, auth, {});
   expect(started.status, started.text).toBe(201);
   const id = started.body.run.id as string;
-  return waitFor(async () => (await runsOf(auth, routineId)).find((r) => r.id === id && ["completed", "failed", "cancelled"].includes(r.status)), 60_000);
+  return waitFor(async () => (await runsOf(auth, routineId)).find((r) => r.id === id && ["completed", "failed", "blocked", "cancelled"].includes(r.status)), 60_000);
 }
 async function messagesOf(auth: Auth, threadId: string): Promise<Message[]> {
   return ((await api("GET", `/api/threads/${threadId}/messages`, auth)).body.messages ?? []) as Message[];
@@ -128,16 +129,7 @@ async function start() {
   });
   child.stdout!.on("data", (c) => (log += c));
   child.stderr!.on("data", (c) => (log += c));
-  const deadline = Date.now() + 20_000;
-  for (;;) {
-    try {
-      if ((await fetch(`${BASE}/api/health`)).ok) return;
-    } catch {
-      /* not up yet */
-    }
-    if (Date.now() > deadline) throw new Error(`server never came up:\n${log}`);
-    await sleep(150);
-  }
+  await waitForServerReady(child, BASE, () => log);
 }
 
 posixOnly("Perspicax organization: a routine whose engine fails says why", () => {
@@ -212,7 +204,8 @@ posixOnly("Perspicax organization: a routine whose engine fails says why", () =>
   it("Run now by the owner reaches the engine, and a provider refusal reads as words, not rpc_error", async () => {
     writeFileSync(failureFile, JSON.stringify(GROK_402));
     const run = await runNow(alice, routineId);
-    expect(run.status, log.slice(-3000)).toBe("failed");
+    // 63eff44d1c records provider-credit refusals as terminal blockers.
+    expect(run.status, log.slice(-3000)).toBe("blocked");
     expect(run.error).not.toBe("rpc_error");
     expect(run.error).toMatch(/^Grok refused this turn/);
     expect(run.error).toContain("usage balance");
@@ -224,8 +217,17 @@ posixOnly("Perspicax organization: a routine whose engine fails says why", () =>
     expect(log).not.toMatch(/admin approval|member tool scope/i);
   }, 90_000);
 
-  it("the same Run now completes once the engine answers", async () => {
+  it("a successful direct turn clears the account refusal and Run now completes", async () => {
+    // 87b1f3c98 keeps credit refusals for 30 minutes. An ordinary successful
+    // turn proves this same account recovered; a sign-in alone cannot do that.
+    const stillBlocked = await runNow(alice, routineId);
+    expect(stillBlocked.status).toBe("blocked");
+    expect(stillBlocked.error).toContain("out of credit");
     rmSync(failureFile, { force: true });
+    const before = (await messagesOf(alice, orion.threadId)).length;
+    const sent = await api("POST", `/api/bots/${orion.id}/messages`, alice, { text: "Verify the account answers now.", threadId: orion.threadId });
+    expect(sent.status, sent.text).toBe(202);
+    await waitFor(async () => (await messagesOf(alice, orion.threadId)).slice(before).some(message => message.role === "bot" && message.kind === "text"));
     const run = await runNow(alice, routineId);
     expect(run.status, `${run.error ?? ""}\n${log.slice(-3000)}`).toBe("completed");
   }, 90_000);
@@ -248,7 +250,7 @@ posixOnly("Perspicax organization: a routine whose engine fails says why", () =>
     const before = (await messagesOf(alice, incidents.threadId)).length;
     writeFileSync(failureFile, JSON.stringify(GROK_402));
     const run = await runNow(alice, routineId);
-    expect(run.status).toBe("failed");
+    expect(run.status).toBe("blocked");
     const notice = await waitFor(async () => (await messagesOf(alice, incidents.threadId)).slice(before)
       .find((message) => message.kind === "activity" && message.tool?.name.startsWith("notice: This thread's model") === true), 30_000);
     expect(notice.tool!.name).toContain("cannot run on this server");

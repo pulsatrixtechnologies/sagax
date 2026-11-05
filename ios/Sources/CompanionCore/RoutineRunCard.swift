@@ -11,6 +11,7 @@ import Foundation
 public struct RoutineRunCard: Codable, Hashable, Sendable {
     public enum Status: String, Sendable {
         case queued, running, waiting, completed, failed, cancelled, missed
+        case nothingToReport = "nothing_to_report"
     }
 
     public enum Tone: Sendable {
@@ -33,12 +34,31 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
     /// This failure paused the routine after this many failed runs in a row
     /// (RoutineAutoPause); the passing notice offers Resume.
     public var autoPausedAfter: Int?
+    /// 2026-11-01: completed, but not all of it went right (RoutineRun.problems).
+    public var problems: String?
+    /// 2026-11-04: the teammates this run handed work to, each with the
+    /// thread that work runs in (shared/routine-run.ts handedTo).
+    public var handedTo: [Handoff]
+
+    /// One teammate a run handed work to.
+    public struct Handoff: Codable, Hashable, Sendable {
+        public var botId: String
+        public var threadId: String
+        public var name: String?
+        public var status: String
+        public init(botId: String, threadId: String, name: String? = nil, status: String) {
+            self.botId = botId
+            self.threadId = threadId
+            self.name = name
+            self.status = status
+        }
+    }
 
     public init(
         runId: String, routineId: String, routineName: String, status: String,
         scheduledFor: Double? = nil, deferredAt: Double? = nil, goalStatus: String? = nil,
         executionThreadId: String? = nil, summary: String? = nil, error: String? = nil,
-        autoPausedAfter: Int? = nil
+        autoPausedAfter: Int? = nil, problems: String? = nil, handedTo: [Handoff] = []
     ) {
         self.runId = runId
         self.routineId = routineId
@@ -51,11 +71,13 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
         self.summary = summary
         self.error = error
         self.autoPausedAfter = autoPausedAfter
+        self.problems = problems
+        self.handedTo = handedTo
     }
 
     private enum CodingKeys: String, CodingKey {
         case runId, routineId, routineName, scheduledFor, status, deferredAt
-        case goalStatus, executionThreadId, summary, error, autoPausedAfter
+        case goalStatus, executionThreadId, summary, error, autoPausedAfter, problems, handedTo
     }
 
     /// Field by field and forgiving: a card is a decoration on a message the
@@ -75,12 +97,18 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
         summary = try? c.decodeIfPresent(String.self, forKey: .summary)
         error = try? c.decodeIfPresent(String.self, forKey: .error)
         autoPausedAfter = (try? c.decodeIfPresent(Int.self, forKey: .autoPausedAfter)).flatMap { $0 > 0 ? $0 : nil }
+        let rawProblems = try? c.decodeIfPresent(String.self, forKey: .problems)
+        problems = rawProblems.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+        handedTo = ((try? c.decodeIfPresent([Handoff].self, forKey: .handedTo)) ?? nil) ?? []
     }
 
     /// "Paused after 5 failures in a row" when this failure paused its routine.
     public var autoPausedText: String? { autoPausedAfter.map(RoutineAutoPause.pausedText) }
 
     public var knownStatus: Status? { Status(rawValue: status) }
+
+    /// Completed, but not all of it went right (desktop WITH_PROBLEMS).
+    public var hasProblems: Bool { problems != nil }
 
     /// Still moving: the card will be patched again.
     public var isInFlight: Bool {
@@ -107,17 +135,51 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
         case .failed: return "failed"
         case .cancelled: return "was cancelled"
         case .missed: return "was missed"
+        case .nothingToReport: return "had nothing to report"
         case .queued: return deferredAt != nil ? "deferred: target busy" : "queued"
         case .running: return "running"
         case nil: return status
         }
     }
 
-    /// The state as a label rather than the tail of a sentence.
+    /// The state as a pill label. 2026-11-04 / #2008: the desktop card's
+    /// words (`routines.status.*`, `routines.goal.*`, `routineRun.card.done`),
+    /// resolved through Localizable.xcstrings en + fr.
     public var stateLabel: String {
-        let text = stateText
-        guard let first = text.first else { return "" }
-        return first.uppercased() + text.dropFirst()
+        if let goal = goalStatus, !goal.isEmpty {
+            switch goal {
+            case "completed": return String(localized: "Done")
+            case "needs-input": return String(localized: "Needs your input")
+            case "blocked": return String(localized: "Blocked")
+            case "limit-reached": return String(localized: "Turn limit reached")
+            case "paused": return String(localized: "Paused")
+            case "stopped": return String(localized: "Stopped")
+            case "failed": return String(localized: "Failed")
+            default: break
+            }
+        }
+        // Desktop: problems win over plain completed when there is no goal outcome.
+        if hasProblems, knownStatus == .completed || status == "completed" {
+            return String(localized: "Completed with problems")
+        }
+        if knownStatus == .queued, deferredAt != nil {
+            return String(localized: "Deferred: target busy")
+        }
+        switch knownStatus {
+        case .queued: return String(localized: "Queued")
+        case .running: return String(localized: "Running")
+        case .waiting: return String(localized: "Waiting")
+        case .completed: return String(localized: "Done")
+        case .failed: return String(localized: "Failed")
+        case .cancelled: return String(localized: "Cancelled")
+        case .missed: return String(localized: "Missed")
+        case .nothingToReport: return String(localized: "Nothing to report")
+        case nil:
+            // A status added after this build: show it as written, title-cased.
+            let text = status.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let first = text.first else { return "" }
+            return String(first).uppercased() + text.dropFirst()
+        }
     }
 
     public var tone: Tone {
@@ -127,12 +189,13 @@ public struct RoutineRunCard: Codable, Hashable, Sendable {
         case "completed", "stopped": return .neutral
         default: break
         }
+        if hasProblems, knownStatus == .completed || status == "completed" { return .attention }
         switch knownStatus {
         case .running: return .active
         case .waiting: return .attention
         case .queued: return deferredAt != nil ? .attention : .neutral
         case .failed, .missed: return .danger
-        case .completed, .cancelled, nil: return .neutral
+        case .completed, .cancelled, .nothingToReport, nil: return .neutral
         }
     }
 

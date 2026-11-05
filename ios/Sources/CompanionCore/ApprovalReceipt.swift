@@ -194,9 +194,12 @@ public enum ApprovalReceiptRules {
     /// A tool ask stays in the chat while it waits and, once a person
     /// answered it or it expired, as its receipt (`approvalCardStaysInChat`).
     /// One the engine closed on its own (nobody could answer it) or one
-    /// put away leaves the transcript.
+    /// put away leaves the transcript. A change that applied without a
+    /// person (#1982) stays as its Undo receipt even when dismissed so it
+    /// leaves the pending dock.
     public static func staysInChat(_ card: OptionCard) -> Bool {
         guard card.requestId != nil, card.tool != nil else { return false }
+        if card.autoApplied == true, card.answered == "allow", card.held == nil { return true }
         if card.expired == true { return true }
         return card.dismissed != true && card.answered != "unavailable"
     }

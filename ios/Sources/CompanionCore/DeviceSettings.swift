@@ -39,6 +39,20 @@ public struct DeviceSettingAnswer: Encodable, Sendable, Equatable {
     public static func failed(_ reason: String) -> DeviceSettingAnswer { DeviceSettingAnswer(error: String(reason.prefix(300))) }
 }
 
+/// Settings > Notifications > Connection notices (#2013): on by default,
+/// kept on this device only (no settings sync for it).
+public enum ConnectionNoticePrefs {
+    /// Where this app keeps it (UserDefaults, the screens' @AppStorage).
+    public static let key = "companion.prefs.connectionNotices"
+    /// The server's key for it (shared/device-settings.ts).
+    public static let serverKey = "omb-connection-notices"
+    public static let defaultValue = true
+
+    public static func isEnabled(_ defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: key) as? Bool ?? defaultValue
+    }
+}
+
 public enum DeviceSettings {
     enum Kind: Equatable {
         case bool(defaultValue: Bool)
@@ -56,6 +70,8 @@ public enum DeviceSettings {
         "omb-nudge-sound": ("companion.prefs.nudgeSound", .bool(defaultValue: true)),
         "omb-dock-badge": ("companion.prefs.appBadge", .bool(defaultValue: true)),
         "omb-show-run-card": ("companion.prefs.showRunCard", .bool(defaultValue: true)),
+        // #2013: the connection notice at the top of the chat, per device
+        ConnectionNoticePrefs.serverKey: (ConnectionNoticePrefs.key, .bool(defaultValue: true)),
         "omb-language": ("companion.prefs.language", .language),
         "sagax.notificationSound.v1": ("companion.prefs.notificationSoundChoice", .soundChoice),
     ]

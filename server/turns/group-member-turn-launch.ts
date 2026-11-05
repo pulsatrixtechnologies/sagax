@@ -1119,6 +1119,7 @@ const sendRoomTurn = async (roomTurnAccess: TurnAccess | undefined) => {
       return instance.adapter.sendTurn({
         threadId,
         botId: readyBot.id,
+        principalId: orgSpeakerPrincipal(readyBot, roomSpeaker),
         ...(roomCompactPrompt ? { compactPrompt: roomCompactPrompt } : {}),
         ...(roomTurnAccess ? { access: roomTurnAccess } : {}),
         text: engineCommand ? engineCommand.engineText : withRecalled(roomRecalled, text),

@@ -289,7 +289,7 @@ async function benchClaude(): Promise<EngineReport> {
   }
 }
 
-async function startGrokServer(paths: { launchCount: string; rpcLog: string; wrapper: string; dataDir: string }): Promise<{ url: string; child: ChildProcess; log: () => string; close: () => Promise<void> }> {
+async function startGrokServer(paths: { launchCount: string; launchTrace: string; rpcLog: string; wrapper: string; dataDir: string }): Promise<{ url: string; child: ChildProcess; log: () => string; close: () => Promise<void> }> {
   const port = await freePortBlock([0, 1]);
   const fake = join(ROOT, "server", "testing", "fake-acp-cli.ts");
   writeFileSync(paths.wrapper, [
@@ -300,18 +300,24 @@ async function startGrokServer(paths: { launchCount: string; rpcLog: string; wra
     `process.env.FAKE_ACP_FIRST_TOKEN_MS = ${JSON.stringify(String(FIRST_TOKEN_MS))};`,
     `process.env.FAKE_ACP_TOKEN_MS = ${JSON.stringify(String(TOKEN_MS))};`,
     `process.env.FAKE_ACP_LAUNCH_COUNT_FILE = ${JSON.stringify(paths.launchCount)};`,
+    `process.env.FAKE_ACP_LAUNCH_TRACE_FILE = ${JSON.stringify(paths.launchTrace)};`,
     `process.env.FAKE_ACP_RPC_APPEND_FILE = ${JSON.stringify(paths.rpcLog)};`,
     `process.env.FAKE_ACP_VOICE_REPLY = "Warm path reply from the fake Grok ACP CLI.";`,
     `await import(${JSON.stringify(pathToFileURL(fake).href)});`,
   ].join("\n"), { mode: 0o700 });
   writeFileSync(join(paths.dataDir, "config.json"), JSON.stringify({
+    // Long quiet so memory upkeep never fires mid-bench; the fake CLI also
+    // ignores background one-shots in FAKE_ACP_LAUNCH_COUNT_FILE (#1970).
+    memory: { captureQuietMs: 3_600_000 },
     instances: { grok: { driver: "grokAgent", displayName: "Bench Grok", config: { cli: paths.wrapper, fullAuto: false } } },
   }));
   writeFileSync(paths.launchCount, "0");
   writeFileSync(paths.rpcLog, "");
+  writeFileSync(paths.launchTrace, "");
   const childEnv = {
     ...verificationServerEnvironment({ ...process.env, SAGAX_TURN_TRACE: "1" }, paths.dataDir, port),
     SAGAX_TURN_TRACE: "1",
+    ...(process.env.SAGAX_ACP_REUSE_DIAG ? { SAGAX_ACP_REUSE_DIAG: process.env.SAGAX_ACP_REUSE_DIAG } : {}),
   };
   let log = "";
   const child = spawn(process.execPath, ["--experimental-strip-types", join(ROOT, "server", "index.ts")], {
@@ -341,6 +347,7 @@ async function benchGrok(): Promise<EngineReport> {
   mkdirSync(join(dataDir, "tmp"), { recursive: true });
   const paths = {
     launchCount: join(dataDir, "launches.txt"),
+    launchTrace: join(dataDir, "launch-trace.jsonl"),
     rpcLog: join(dataDir, "rpc.jsonl"),
     wrapper: join(dataDir, "grok-wrapper.mjs"),
     dataDir,
@@ -348,11 +355,27 @@ async function benchGrok(): Promise<EngineReport> {
   const server = await startGrokServer(paths);
   let events: SseTap | null = null;
   try {
-    // Default bot is Claude-less: create a Grok bot via API.
+    // Default bot is Claude-less: create a Grok bot via API. Memory upkeep
+    // off so a quiet Primary bot cannot spawn side ACP children that used
+    // to inflate FAKE_ACP_LAUNCH_COUNT_FILE during warm turns (#1970).
+    const headers = { "content-type": "application/json", origin: server.url };
+    const listed = await fetch(`${server.url}/api/bots`, { headers });
+    const existing = listed.ok ? await listed.json() as { bots?: Array<{ id: string }> } : {};
+    for (const row of existing.bots ?? []) {
+      await fetch(`${server.url}/api/bots/${row.id}`, {
+        method: "PATCH", headers,
+        body: JSON.stringify({ memoryUpkeep: false, memoryEnabled: false }),
+      }).catch(() => undefined);
+    }
     const created = await fetch(`${server.url}/api/bots`, {
       method: "POST",
-      headers: { "content-type": "application/json", origin: server.url },
-      body: JSON.stringify({ name: "WarmGrok", modelSelection: { instanceId: "grok", model: "grok-4-fast-non-reasoning" } }),
+      headers,
+      body: JSON.stringify({
+        name: "WarmGrok",
+        modelSelection: { instanceId: "grok", model: "grok-4-fast-non-reasoning" },
+        memoryUpkeep: false,
+        memoryEnabled: false,
+      }),
     });
     const body = await created.json() as { bot?: { id: string; threadId?: string; activeTaskId?: string } };
     if (!body.bot) throw new Error(`create bot ${created.status}: ${JSON.stringify(body)}`);
@@ -373,8 +396,13 @@ async function benchGrok(): Promise<EngineReport> {
     for (let i = 0; i < COLD; i++) {
       const again = await fetch(`${server.url}/api/bots`, {
         method: "POST",
-        headers: { "content-type": "application/json", origin: server.url },
-        body: JSON.stringify({ name: `ColdGrok${i}`, modelSelection: { instanceId: "grok", model: "grok-4-fast-non-reasoning" } }),
+        headers,
+        body: JSON.stringify({
+          name: `ColdGrok${i}`,
+          modelSelection: { instanceId: "grok", model: "grok-4-fast-non-reasoning" },
+          memoryUpkeep: false,
+          memoryEnabled: false,
+        }),
       });
       const coldBot = (await again.json() as { bot: { id: string; threadId?: string; activeTaskId?: string } }).bot;
       const coldThread = coldBot.threadId ?? coldBot.activeTaskId!;
@@ -390,11 +418,37 @@ async function benchGrok(): Promise<EngineReport> {
     const establish = methods.filter((m) => m === "session/new" || m === "session/load" || m === "session/resume");
     const prompts = methods.filter((m) => m === "session/prompt").length;
     const lists = methods.filter((m) => m === "_x.ai/mcp/list").length;
+    const allLog = server.log().split("\n");
+    const diag = allLog.filter((line) => line.includes("[acp-reuse-diag]") || line.includes("[turn-trace]") || line.includes("session.started") || line.includes("[turn-latency]"));
+    if (diag.length) console.error(diag.join("\n"));
+    let launchTrace = "";
+    try { launchTrace = readFileSync(paths.launchTrace, "utf8"); } catch { /* none */ }
+    if (launchTrace.trim()) {
+      console.error("[bench-engine-warm] launch-trace:");
+      console.error(launchTrace.trim());
+      try { writeFileSync("/tmp/bench-engine-warm-launch-trace.jsonl", launchTrace); } catch { /* best effort */ }
+    }
+    const latencyPaths = allLog
+      .filter((line) => line.includes("[turn-latency]"))
+      .map((line) => {
+        const m = /thread=(\S+)\s+path=(\S+)/.exec(line);
+        return m ? { thread: m[1], path: m[2] } : null;
+      })
+      .filter((row): row is { thread: string; path: string } => Boolean(row));
+    const warmThread = threadId.slice(0, 8);
+    const warmPaths = latencyPaths.filter((row) => row.thread === warmThread);
+    const warmPooled = warmPaths.filter((row) => row.path === "pooled").length;
+    const warmSpawn = warmPaths.filter((row) => row.path === "spawn").length;
     return summarize("grok", warm, cold, readLaunchCountFile(paths.launchCount), idle.idleMs, [
+      // Primary proof for #1970: the warm thread's own [turn-latency] path,
+      // not the process-wide launch counter (memory/version/reach side spawns).
+      `warm thread path pooled=${warmPooled}/${Math.max(0, warmPaths.length - warmSpawn)} after first (thread=${warmThread} spawn=${warmSpawn})`,
       `warm reused launches=${warm.filter((t) => !t.launched).length}/${warm.length}`,
       `session establish RPCs (new/load/resume)=${establish.length}`,
       `session/prompt=${prompts} _x.ai/mcp/list=${lists}`,
       `SAGAX_ACP_SESSION_IDLE_MS default=${idle.idleMs}`,
+      ...(diag.length ? [`reuse-diag lines=${diag.length}`] : []),
+      ...(launchTrace.trim() ? [`launch-trace lines=${launchTrace.trim().split("\n").length}`] : []),
     ], methods.slice(0, 80));
   } finally {
     events?.close();
@@ -406,6 +460,12 @@ async function benchCodex(): Promise<EngineReport> {
   const dataHint = mkdtempSync(join(tmpdir(), "bench-codex-"));
   const startupLog = join(dataHint, "codex-startup.jsonl");
   writeFileSync(startupLog, "");
+  const launches = () => {
+    if (!existsSync(startupLog)) return 0;
+    const rows = readFileSync(startupLog, "utf8").trim().split("\n").filter(Boolean)
+      .map(line => JSON.parse(line) as { event: string; pid: number });
+    return new Set(rows.filter(row => row.event === "initialize").map(row => row.pid)).size;
+  };
   const delayMs = String(Math.min(COLD_MS, 800));
   const fixture = await launchVerificationServer(
     { ...process.env, SAGAX_TURN_TRACE: "1" },
@@ -443,10 +503,10 @@ async function benchCodex(): Promise<EngineReport> {
     events = await openEvents(url);
     const warm: TurnSample[] = [];
     for (let i = 0; i < WARM; i++) {
-      const before = countLaunches(startupLog);
+      const before = launches();
       warm.push(await sendAndMeasure({
         url, botId, threadId, text: `warm turn ${i + 1}`, events, log,
-        launchesBefore: before, launchesAfter: () => countLaunches(startupLog), kind: "warm",
+        launchesBefore: before, launchesAfter: launches, kind: "warm",
       }));
     }
     const cold: TurnSample[] = [];
@@ -457,22 +517,22 @@ async function benchCodex(): Promise<EngineReport> {
       const coldThread = created.bot.threadId ?? created.bot.activeTaskId;
       if (!coldThread) throw new Error(`cold bot has no thread: ${JSON.stringify(created.bot)}`);
       await runControlOmb(["set-model", "--bot", created.bot.id, "--instance", "codex", "--model", "gpt-fake-default"], { env });
-      const before = countLaunches(startupLog);
+      const before = launches();
       cold.push(await sendAndMeasure({
         url, botId: created.bot.id, threadId: coldThread, text: `cold turn ${i + 1}`, events, log,
-        launchesBefore: before, launchesAfter: () => countLaunches(startupLog), kind: "cold",
+        launchesBefore: before, launchesAfter: launches, kind: "cold",
       }));
     }
     const inits = countLaunches(startupLog);
     const initEvents = existsSync(startupLog)
       ? readFileSync(startupLog, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l) as { event: string; pid: number })
       : [];
-    const pids = new Set(initEvents.map((e) => e.pid));
-    return summarize("codex", warm, cold, pids.size, undefined, [
-      `startup log lines=${inits} distinct pids=${pids.size}`,
-      `initialize events=${initEvents.filter((e) => e.event === "initialize").length}`,
+    const pids = new Set(initEvents.filter(e => e.event === "turn/start").map(e => e.pid));
+    return summarize("codex", warm, cold, pids.size, sessionIdlePolicy("CODEX").idleMs, [
+      `startup log lines=${inits} turn process pids=${pids.size}`,
+      `initialize events (including account probes)=${initEvents.filter((e) => e.event === "initialize").length}`,
       `turn/start events=${initEvents.filter((e) => e.event === "turn/start").length}`,
-      "today each Codex turn launches a new app-server (finish.ts)",
+      "one app-server per unchanged thread and execution identity (#1969)",
     ]);
   } finally {
     events?.close();

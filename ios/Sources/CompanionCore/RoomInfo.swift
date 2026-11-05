@@ -532,11 +532,15 @@ public struct RoomPatch: Encodable, Hashable, Sendable {
     public var memberIds: [String]?
     public var humanIds: [String]?
     public var defaultResponder: GroupResponder?
+    /// `@all` notifies everyone (the panel's Advanced > Mentions).
+    public var mentionAll: Bool?
 
     public init(
         name: String? = nil, bulletin: String? = nil, section: String? = nil,
-        memberIds: [String]? = nil, humanIds: [String]? = nil, defaultResponder: GroupResponder? = nil
+        memberIds: [String]? = nil, humanIds: [String]? = nil, defaultResponder: GroupResponder? = nil,
+        mentionAll: Bool? = nil
     ) {
+        self.mentionAll = mentionAll
         self.name = name
         self.bulletin = bulletin
         self.section = section

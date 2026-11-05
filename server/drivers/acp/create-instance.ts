@@ -145,7 +145,9 @@ export async function createAcpInstance(
   const closeSession = (threadId: string, why: string) => {
     const session = sessions.get(threadId);
     if (!session || session.closing) return;
+    if (process.env.SAGAX_ACP_REUSE_DIAG === "1") console.error(`[acp-reuse-diag] closeSession thread=${threadId.slice(0, 8)} why=${why}`);
     session.closing = true;
+    session.budget?.retiring();
     if (session.idleTimer) clearTimeout(session.idleTimer);
     appendNative(threadId, { dir: "out", source: SOURCE, msg: { close: why } });
     // a new turn must never adopt a closing session
@@ -170,6 +172,7 @@ export async function createAcpInstance(
     if (session.idleTimer) clearTimeout(session.idleTimer);
     session.idleTimer = setTimeout(() => closeSession(threadId, "idle"), SESSION_IDLE_MS);
     session.idleTimer.unref?.();
+    session.budget?.idle();
   };
   // "Always allow this session", remembered by the driver when the agent
   // offered no `allow_always` of its own: the exact operations (kind,

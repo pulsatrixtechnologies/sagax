@@ -46,6 +46,7 @@ import { codexNativeIncomingLogMessage } from "./codex/native-log.ts";
 export { codexNativeIncomingLogMessage };
 import { runLaunchAttempt as runCodexLaunchAttempt } from "./codex/launch-attempt.ts";
 import { buildCodexInstanceApi } from "./codex/instance-api.ts";
+import { CodexSessions } from "./codex/sessions.ts";
 
 export { codexNamedApprovalParams } from "./codex/approvals.ts";
 
@@ -112,6 +113,7 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
     let planGeneration = 0;
     let planSigningOut = false;
     let disposed = false;
+    const sessions = new CodexSessions();
     let planWarning: string | undefined;
     let models = plan ? { default: "", options: [] } : config.managed ? { default: config.managed.models[0], options: config.managed.models.map(id => ({ id, label: id })) } : STATIC_CODEX_MODELS;
     const refreshModels = async (preserveExisting = false) => {
@@ -189,7 +191,7 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
       cli: config.cli,
       environment: childEnv,
       signInRejected: loginRejected,
-      onAuthenticated: async () => { loginAccepted(); await refreshModels(); },
+      onAuthenticated: async () => { await sessions.closeAll(); loginAccepted(); await refreshModels(); },
     });
     const listeners = new Set<RuntimeEventListener>();
     interface Turn {
@@ -232,7 +234,7 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
       const generation = planGeneration;
       const assertPlanCurrent = () => {
         if (disposed) throw new Error("This provider was removed. Select a connected account and send again.");
-        if (planAuth && (planSigningOut || generation !== planGeneration)) throw new Error("The ChatGPT account changed while this message was preparing. Select a connected account and send again.");
+        if (planSigningOut || generation !== planGeneration) throw new Error("The Codex account changed while this message was preparing. Select a connected account and send again.");
       };
       assertPlanCurrent();
       if (planUnavailable) throw new Error(planUnavailable);
@@ -267,6 +269,7 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
       let stopRequested = false;
       let promptSubmitted = false;
       let recoveredMissingSession = false;
+      let recoveredCrash = false;
       // Wakes a retry backoff the moment Stop arrives, so the turn settles
       // now rather than after the full wait.
       let loginRaceRetried = false;
@@ -307,10 +310,16 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
         emit({ ...base(threadId, turnId), type: "turn.completed", ok: false, stopReason: "auth_required", cost: null });
         return { turnId };
       }
+      active.set(threadId, { turnId, asks: new Map(), stop: async () => {
+        stopRequested = true;
+        stopSignal.abort();
+        return true;
+      } });
       // a retry relaunches the whole app-server; the backoff is scaled down in
       // tests so a fake's transient failures don't stall real seconds
       const retryScale = Number(process.env.FAKE_CODEX_RETRY_SCALE ?? "1");
-      let announced = false;
+      let announced = true;
+      emit({ ...base(threadId, turnId), type: "turn.started" });
       // Steps and text kept across an in-turn context renewal (each launchAttempt
       // has its own process state; these outlive it for renewalPrompt).
       const renewalSteps: RenewalStep[] = [];
@@ -320,7 +329,7 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
       const waitForLaunchSlot = async (attempt: number) => {
         const waiting: Turn = { stop: async () => { stopRequested = true; stopSignal.abort(); return true; }, turnId, asks: new Map() };
         active.set(threadId, waiting);
-        if (attempt === 0) emit({ ...base(threadId, turnId), type: "turn.started" });
+        if (attempt === 0 && !announced) emit({ ...base(threadId, turnId), type: "turn.started" });
         announced = true;
         emit({ ...base(threadId, turnId), type: "runtime.notice", message: `Waiting for a free Codex slot: ${codexLaunchesStarting()} Codex runs are starting on this computer. This one starts on its own.` });
         const slot = await codexLaunchSlot(stopSignal.signal);
@@ -332,9 +341,16 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
         }
         return null;
       };
+      const failedLaunch = (error: unknown) => {
+        if (active.get(threadId)?.turnId !== turnId) return;
+        active.delete(threadId);
+        emit({ ...base(threadId, turnId), type: "runtime.error", message: error instanceof Error ? error.message : String(error) });
+        emit({ ...base(threadId, turnId), type: "turn.completed", ok: false, stopReason: "launch_error", cost: null });
+      };
       const launchAttempt = async (attempt: number): Promise<void> => {
         await runCodexLaunchAttempt({
           childEnv,
+          sessions,
           chatgptTurn,
           planToken,
           turn,
@@ -360,6 +376,21 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
           loginRefused,
           loginAccepted,
           ownLogin,
+          recoverCrash: (nativeThreadId: string | null, acknowledged: boolean) => {
+            if (recoveredCrash || stopRequested) return false;
+            recoveredCrash = true;
+            if (acknowledged && nativeThreadId) {
+              turn = { ...turn, resumeCursor: nativeThreadId,
+                text: [
+                  "The Codex process stopped during this request. Continue the same request using the native history.",
+                  "Keep completed work. Check the state of any interrupted action before repeating it.",
+                  `Original request:\n${turn.text}`,
+                  `Steps already received:\n${JSON.stringify(renewalSteps)}`,
+                  ...(renewalLastText ? [`Last response:\n${renewalLastText}`] : []),
+                ].join("\n\n") };
+            }
+            return true;
+          },
           get stopRequested() { return stopRequested; },
           set stopRequested(v: boolean) { stopRequested = v; },
           get promptSubmitted() { return promptSubmitted; },
@@ -376,11 +407,11 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
           set renewalLastText(v: string) { renewalLastText = v; },
           get inTurnRenewal() { return inTurnRenewal; },
           set inTurnRenewal(v: string | null) { inTurnRenewal = v; },
-          runLaunchAttempt: (next: number) => launchAttempt(next),
+          runLaunchAttempt: (next: number) => launchAttempt(next).catch(failedLaunch),
         } as any, attempt);
       };
 
-    void launchAttempt(0).catch(() => {});
+    void launchAttempt(0).catch(failedLaunch);
     return { turnId };
   };
 
@@ -412,6 +443,7 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
       get planGeneration() { return planGeneration; },
       set planGeneration(v) { planGeneration = v; },
       active,
+      sessions,
       listeners,
       sendTurn,
       freshNextTurn,

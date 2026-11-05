@@ -12,6 +12,11 @@ public struct BotWorkspaceEntry: Decodable, Hashable, Identifiable, Sendable {
     public var editable: Bool?
     public var markdown: Bool?
     public var load: String?
+    /// When the file was created and last read by the bot (epoch ms), and
+    /// whether it looks forgotten (no use in 30 days, not loaded every turn).
+    public var createdAt: Double?
+    public var lastUsedAt: Double?
+    public var forgotten: Bool?
     public var id: String { path }
 
     public var name: String { path.split(separator: "/").last.map(String.init) ?? path }
@@ -28,7 +33,13 @@ public struct BotWorkspaceListing: Decodable, Sendable {
         public var path: String?
         public var bytes: Int?
         public var load: String?
+        public var createdAt: Double?
+        public var modifiedAt: Double?
+        public var lastUsedAt: Double?
+        /// SOUL.md's budget (`maxBytes`, its bytes).
+        public var budget: SoulBudget?
     }
+    public struct SoulBudget: Decodable, Sendable { public var maxBytes: Int?; public var bytes: Int? }
 
     public var entries: [BotWorkspaceEntry]
     public var rulesTemplate: String?

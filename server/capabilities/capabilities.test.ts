@@ -158,6 +158,44 @@ describe("personal and complete plugin capabilities", () => {
     input.capabilityPromptIndex = { "plugin:bot:alpha@market": { bytes: 240, maxBytes: 4_000, skills: 0, maxSkills: 30, omitted: 3 } };
     expect(byKey(resolveBotCapabilities(input, { mayChange: true }), "plugin:bot:alpha@market")).toMatchObject({ state: "not_served", engine: { nothing: true }, promptIndex: { omitted: 3 } });
   });
+
+  it.each(ENGINES)("identifies an older bot tenant replaced by the installed signed pack on $kind", (engine) => {
+    const input = inputs(engine);
+    const tenant = { ...input.botPlugins[0]!, key: "pulsatrix-flow-osprey@tenant", name: "pulsatrix-flow-osprey", version: "0.1.21", dir: "/bot/pulsatrix-flow-osprey" };
+    input.botPlugins.push(tenant);
+    input.botPluginDirs.push(tenant.dir);
+    input.orgFlow.declared!.push({ name: tenant.name, version: "0.1.50", tenant: true });
+    input.orgFlow.pack = `sha256:${"b".repeat(64)}`;
+    input.orgFlow.dirOf = (name) => `/org-flow/${name}`;
+    input.orgFlow.versionOf = () => "0.1.41";
+    input.orgFlow.dirsFor = () => ["/org-flow/pulsatrix-flow", `/org-flow/${tenant.name}`];
+    const row = () => byKey(resolveBotCapabilities(input, { mayChange: true }), `plugin:bot:${tenant.key}`);
+    expect(row()).toMatchObject({ state: "off", reason: "name_taken", supersededBy: { tenant: "osprey", version: "0.1.41" }, canToggle: true });
+    // The loaded version wins over a newer advertised declaration.
+    tenant.version = "0.1.41";
+    expect(row()?.supersededBy).toBeUndefined();
+    tenant.version = "0.1.42";
+    expect(row()?.supersededBy).toBeUndefined();
+    tenant.version = "0.1.9";
+    expect(row()?.supersededBy).toEqual({ tenant: "osprey", version: "0.1.41" });
+    tenant.version = "unversioned";
+    expect(row()?.supersededBy).toBeUndefined();
+    tenant.version = "0.1.21";
+    input.orgFlow.pack = undefined;
+    expect(row()?.supersededBy).toBeUndefined();
+    input.orgFlow.pack = `sha256:${"b".repeat(64)}`;
+    input.orgFlow.guarded = false;
+    expect(row()?.supersededBy).toBeUndefined();
+    input.orgFlow.guarded = true;
+    input.orgFlow.member = false;
+    expect(row()?.supersededBy).toBeUndefined();
+    input.orgFlow.member = true;
+    input.orgFlow.dirsFor = () => [];
+    expect(row()?.supersededBy).toBeUndefined();
+    input.orgFlow.dirsFor = () => [`/org-flow/${tenant.name}`];
+    input.orgFlow.versionOf = () => undefined;
+    expect(row()?.supersededBy).toBeUndefined();
+  });
   it("does not claim an omitted instruction kind was received with a smaller included skill", () => {
     const input = inputs({ ...ENGINES[2]!, agentsMcp: true });
     input.capabilityPromptIndex = { "plugin:bot:alpha@market": { bytes: 300, maxBytes: 4_000, skills: 1, maxSkills: 30, omitted: 2, parts: { skills: 1, commands: 0, agents: 0 } } };

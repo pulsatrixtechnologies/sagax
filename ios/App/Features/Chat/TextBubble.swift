@@ -267,6 +267,10 @@ struct TextBubble: View {
                 }
             }
             .modifier(DesktopBubbleCapModifier(cap: desktopCap(mine: mine), mine: mine))
+            // ChatView.tsx's row (`flex items-center`) also holds the message
+            // bar, which always takes its room (24 + 2 + 16 + 2 = 44 pt): a
+            // shorter bubble sits centred in that height
+            .frame(minHeight: desktop != nil && hoverActions != nil ? Self.desktopBarHeight : nil)
 
             if !mine { Spacer(minLength: desktop == nil ? Theme.Chat.bubbleTrailingGap : 0) }
         }
@@ -279,6 +283,10 @@ struct TextBubble: View {
         DesktopFindHighlight.apply(to: &out, needle: needle, theme: desktop)
         return out
     }
+
+    /// MessageBar.tsx: the row of 24 pt buttons, 2 apart from the 16 pt
+    /// time, and its 2 pt `pb-0.5`.
+    static let desktopBarHeight: CGFloat = 44
 
     private var isFindHit: Bool { desktop != nil && findHit?.messageId == message.id }
 

@@ -1,4 +1,5 @@
 /** Claude turn prepare: MCP mounts, env, spawn contract (#1383). */
+import { warmResourceTokenThread } from "../../resources/warm-resources.ts";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -19,6 +20,7 @@ import {
   PERSPICAX_TOKEN_ENV, turnSwitches, warmCommsEnv, warmPerspicaxEnv, withoutTurnTokens,
 } from "../spawn-contract.ts";
 import { COMPACT_DIRECTORY_TOOLS } from "./prepare-constants.ts";
+import { CLAUDE_HOST_TOOLS } from "../host-tools.ts";
 import { DWEB_PROXY_PATH, HOOK_HELPER_PATH, NODE_ENV_FLAG, PERM_PROXY_PATH } from "./helpers.ts";
 import type { ClaudeTurnCtx, ClaudeTurnEarly } from "./turn-ctx.ts";
 
@@ -26,7 +28,7 @@ export async function prepareClaudeTurnMcp(ctx: ClaudeTurnCtx): Promise<ClaudeTu
   const {
     turn, threadId, botId, args, permissionMode, controlsHost, isolated, turnModel,
     injected, turnEnvironment, keepsClaudeAiConnectors, mcpFromUserConfig,
-    config, sessions, environment, support, autoAllowlist, input,
+    config, sessions, environment, support, autoAllowlist, fullAllowlist, input,
   } = ctx;
   const {
     permissionSocketPath,
@@ -87,7 +89,7 @@ if (turn.integrations?.agents) {
   // teammate's reply resuming this turn reuses this process.
   // Never rewritten under a turn still running on this thread's process.
   if (turn.integrations.agents.env?.SAGAX_COMMS_TOKEN && !sessions.get(threadId)?.turn) {
-    mcpServers.agents = { ...turn.integrations.agents, env: warmCommsEnv(threadId, botId, agentsEnv), alwaysLoad: true };
+    mcpServers.agents = { ...turn.integrations.agents, env: warmCommsEnv(warmResourceTokenThread(turn), botId, agentsEnv), alwaysLoad: true };
   }
   allowed.push(...agentsAllowedTools(turn.integrations.agents.env));
   // The finding tools run nothing; call_tool and use_tool ask as the
@@ -162,7 +164,7 @@ for (const [name, server] of Object.entries(turn.integrations?.custom ?? {})) {
   // Never rewritten under a turn still running on this thread's process.
   const serverEnv = (server as { env?: Record<string, string> }).env;
   mcpServers[name] = serverEnv?.[PERSPICAX_TOKEN_ENV] && !sessions.get(threadId)?.turn
-    ? { ...server, env: warmPerspicaxEnv(threadId, botId, serverEnv) }
+    ? { ...server, env: warmPerspicaxEnv(warmResourceTokenThread(turn), botId, serverEnv) }
     : { ...server };
   botOwned.add(name);
 }
@@ -221,9 +223,14 @@ allowed.splice(0, allowed.length, ...allowed.filter((name) => Object.hasOwn(mcpS
 // Approve for me: the built-ins that never need a person (read-only
 // shell lines, a web search, the task list). Deny rules still win, so
 // a withheld host tool stays withheld.
-if (autoAllowlist && !turn.guestConfined) allowed.push(...claudeAutoAllowedTools());
-// Keep ask_user available even in Full access. Native bypass skips
-// permission prompts, not questions requiring a person's answer.
+// #1982 Full: pre-allow host tools so the machine stays Full; custom
+// MCP stays off the allowlist and reaches the broker → Sagax's gate.
+if ((autoAllowlist || fullAllowlist) && !turn.guestConfined) {
+  allowed.push(...claudeAutoAllowedTools());
+  if (fullAllowlist) allowed.push(...CLAUDE_HOST_TOOLS);
+}
+// Keep ask_user available even in Full access. #1982: Full keeps the
+// broker too (no bypassPermissions), so MCP asks reach request.opened.
 // Broker is created in spawnClaudeSession for a new process only.
 const socketPath = permissionSocketPath(threadId, botId);
 if (permissionMode !== "bypassPermissions") {
@@ -373,6 +380,7 @@ const contract = {
   compact: turn.compactPrompt ? { memoryDir: turn.compactPrompt.memoryDir ?? null } : null,
   // Slice 4: another person's credentials never reuse this process.
   access: turn.access?.identity ?? null,
+  person: turn.principalId ?? null,
   // A changed command variable starts a fresh process (a digest only).
   commandEnv: commandVariablesDigest(turn.commandEnvironment),
   // Rotating an account's key/helper must not reuse the old process.

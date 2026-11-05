@@ -102,6 +102,8 @@ struct DesktopComposerPill: View {
                 .strokeBorder(theme.borderStrong, lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
+        // the guided tour's first step (`data-tour="composer"`)
+        .desktopTourAnchor("composer")
         .overlay(alignment: .topLeading) {
             if let popup, menu == nil {
                 // `absolute bottom-full left-2 mb-2 w-[26rem]`: a zero-high
@@ -161,6 +163,7 @@ struct DesktopComposerPill: View {
         .hoverEffect(.highlight)
         .accessibilityLabel(Text("Composer actions"))
         .accessibilityIdentifier("desktop-composer-plus")
+        .desktopTourAnchor("composer-plus")
         .overlay(alignment: .topLeading) {
             if menu == .plus { plusMenu }
         }

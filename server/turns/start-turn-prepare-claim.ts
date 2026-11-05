@@ -81,6 +81,10 @@ export function createPrepareClaimStartTurn(host: StartTurnHost) {
       // from Slack was written there, not in this conversation: the line
       // says so (Message.relayed), also in a turn a computer switch continues.
       if (!state.userMessage.relayed) store.setTaskAskedAt(state.bot.id, state.threadId, state.userMessage.at);
+      // A background thread the server archived on its own is the person's
+      // again once they write in it (server/threads/background-sweep.ts).
+      // An AI client's prompt is not their writing: that thread stays put.
+      if (!state.userMessage.relayed && state.task.openedBy?.kind !== "agent") store.restoreAutoArchived(state.bot.id, state.threadId);
       // Continuing an old run as a normal conversation makes that task
       // visible again; these new replies are not routine report updates.
       if (state.task.routineRunId) store.patchTask(state.bot.id, state.threadId, { routineRunId: undefined });

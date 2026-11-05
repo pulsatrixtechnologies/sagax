@@ -1,12 +1,13 @@
 // Turn runner for createOpenAIChatRuntime (extracted for the #1383 function-size budget).
 import type { SendTurnInput } from "../contracts.ts";
+import { warmResourcePerson } from "../resources/warm-resources.ts";
 import { newId } from "../contracts.ts";
 import { ASK_USER_TOOL, ASK_USER_TOOL_DEFINITION, askQuestionSummary, parseAskQuestions, questionChoices } from "../../shared/ask-question.ts";
 import { allowsTool, parseToolScope } from "../../shared/tool-scope.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { cwToolResult, toolDetailPreview, toolFailurePreview } from "../tools/tool-summary.ts";
 import { isPhoneToolCallName, PHONE_TOOL_OUTPUT_NOT_KEPT } from "../../shared/phone-tools.ts";
-import { ChatToolSessionError, mountChatTools, providerToolLimit, type ChatToolSession, type ChatToolResult } from "./chat-mcp-tools.ts";
+import { ChatToolSessionError, mountChatTools, type ChatToolSession, type ChatToolResult } from "./chat-mcp-tools.ts";
 import { assertImageTransport, chatImageBudget, chatToolImages, type ChatContentPart } from "./chat-images.ts";
 import { createChatToolApproval } from "./chat-tool-approval.ts";
 import { ChatProtocolError, object } from "./openai-chat-protocol.ts";
@@ -17,7 +18,7 @@ import { RequestTooLargeError, sizeChange, smallerResend } from "./chat-size-lim
 import { requestTooLargeMessage } from "../../shared/request-too-large.ts";
 import { providerReplyCutMessage, providerReplyCutReason } from "../../shared/provider-reply-cut.ts";
 import { classifyContinuable, writeTurnHandoff } from "../turns/turn-continuation.ts";
-import { fullAccessActs } from "../approvals/full-access-gate.ts";
+
 import { ModelUnsupportedError, UnsupportedChatToolsError, UnsupportedReasoningReplayError, RejectedToolCallError } from "./openai-chat-completion.ts";
 import type { Completion, RuntimeOptions, Usage } from "./openai-chat-types.ts";
 import type { OpenAIChatMessage } from "./openai-chat-message.ts";
@@ -36,7 +37,7 @@ import {
   stoppedAfter,
 } from "./openai-chat-shared.ts";
 import { turnTrace } from "../turns/turn-trace.ts";
-import { chatToolsFingerprint, withWarmTokens, type WarmToolSessions } from "./openai-chat-tools-warm.ts";
+import { chatToolsFingerprint, chatToolsTurnLimit, withWarmTokens, type WarmToolSessions } from "./openai-chat-tools-warm.ts";
 
 export type OpenAIChatActiveTurn = {
   abort: AbortController;
@@ -76,6 +77,23 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
     if (turn.warmOnly === true) {
       if (!turn.warmSignal?.aborted) {
         if (await pingModels(turn)) rememberWarm(turn.threadId);
+        // #1975: mount MCP now so a cold HTTP thread reuses them on the
+        // first real turn (same fingerprint / warmCommsEnv as #1953).
+        if (options.tools !== false && turn.integrations) {
+          turnTrace(turn.threadId, "tools-prewarm-start");
+          const outcome = await warmToolSessions.prewarm(turn, {
+            computerUse: Boolean(options.computerUse),
+            toolLimit: options.toolLimit,
+            driverKind: options.driverKind,
+            // The speaker is independent of the account paying for the turn.
+            person: warmResourcePerson(turn),
+            signal: turn.warmSignal,
+          });
+          if (outcome === "mounted" || outcome === "kept") {
+            rememberWarm(turn.threadId);
+            turnTrace(turn.threadId, "tools-prewarmed");
+          }
+        }
         turn.warmSignal?.addEventListener("abort", () => releaseWarm(turn.threadId), { once: true });
       }
       return { turnId: newId() };
@@ -131,9 +149,10 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
       // A guest's turn neither uses the owner's grants nor keeps one: its
       // cards offer allow once only (index.ts request.opened).
       granted: turn.guestConfined ? undefined : granted,
-      // below Full only: at Full this runtime answers its own gate
-      // (fullAccessActs below); judged in index.ts otherwise.
-      // full-access: chat-engine
+      // #1982: always emit; Full is answered in index.ts request.opened
+      // (org/person rules, safety, isolation still hold). Never short-
+      // circuit MCP asks in this driver the way Codex #1977 used to.
+      // full-access: engine-bridge
       open: (ask) => emit({
         ...base(turn.threadId, turnId), type: "request.opened", requestType: "permission",
         requestId: ask.id, tool: ask.tool, summary: ask.summary, allowSession: ask.grant !== undefined,
@@ -191,12 +210,21 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
         const questionAllowed = options.tools !== false && allowsTool(scope, { kind: "native", name: ASK_USER_TOOL });
         // Never name more tools than the provider takes: past its limit the
         // session defers the rest behind a search (chat-mcp-tools.ts), and
-        // ask_user, added below, keeps its place within the limit.
-        const toolLimit = (options.toolLimit ?? providerToolLimit(options.driverKind)) - (questionAllowed ? 1 : 0);
+        // ask_user, added below, keeps its place within the limit. Same
+        // formula as warmOnly prewarm (chatToolsTurnLimit) so fingerprints match.
+        const limit = chatToolsTurnLimit({
+          toolsEnabled: options.tools !== false,
+          toolLimit: options.toolLimit,
+          driverKind: options.driverKind,
+          toolScope: turn.toolScope,
+        });
+        if (!limit.ok) throw new Error(limit.error);
+        const toolLimit = limit.toolLimit;
         turnTrace(turn.threadId, "tools-mount-start");
         // Per-turn tokens ride files (spawn-contract warmCommsEnv) so a kept
         // agents MCP process serves the next turn of this thread without a
-        // cold spawn before first token (#1953).
+        // cold spawn before first token (#1953). A warmOnly prewarm (#1975)
+        // lands in the same cache under the same fingerprint.
         const warmTurn = options.tools === false ? turn : withWarmTokens(turn, turn.threadId);
         mountIntegrations = options.tools === false ? undefined : warmTurn.integrations;
         toolsFp = chatToolsFingerprint(mountIntegrations, {
@@ -205,16 +233,21 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
           toolLimit,
           callTimeoutMs: turn.mcpCallTimeoutMs,
         });
-        const cached = mountIntegrations ? warmToolSessions.get(turn.threadId, toolsFp) : undefined;
+        const cached = mountIntegrations ? warmToolSessions.get(turn.threadId, toolsFp, warmResourcePerson(turn)) : undefined;
         if (cached) {
           tools = cached;
+          toolsReused = true;
           // A new generation starts with no selected account role, even
           // when the bridge process and parent account token stay warm.
           await tools.refresh?.(abort.signal);
-          toolsReused = true;
+          warmToolSessions.claim(turn.threadId);
           turnTrace(turn.threadId, "tools-reused");
         } else {
           tools = await mountChatTools(mountIntegrations, abort.signal, options.computerUse, scope, turn.mcpCallTimeoutMs, toolLimit);
+          if (mountIntegrations) {
+            warmToolSessions.set(turn.threadId, toolsFp, tools, { person: warmResourcePerson(turn), active: true });
+            toolsReused = true; // The cache owns cleanup for new mounts too.
+          }
         }
         turnTrace(turn.threadId, "tools-mounted");
         for (const { server, reason } of tools.skipped) {
@@ -487,14 +520,13 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
                 // its catalog reads ask nothing, as listing tools never did.
                 const shown = tools.view(call.function.name, args as Record<string, unknown>);
                 const shownPreview = shown.input === args ? inputPreview : preview(shown.input);
-                // Full access is the person's explicit grant to answer every
-                // prompt. This runtime has no provider reviewer to hand it to,
-                // so it is honoured here: without it every single tool call on
-                // an OpenAI-compatible engine stops for a card, and a Primary Bot's
-                // delegated Full access cannot help either. #1905: read from
-                // the one Full access decision (full-access-gate.ts).
-                // full-access: chat-engine
-                const allowed = fullAccessActs(turn.approvalMode) || !shown.ask
+                // #1982 / #1977: an MCP ask always reaches Sagax's gate
+                // (request.opened). Full is answered there unless an
+                // organization or personal rule, the safety review or
+                // isolation holds it; never auto-accept here with empty
+                // facts (that skipped those holds). Reads with ask:false
+                // still run without a card.
+                const allowed = !shown.ask
                   || await approval.ask(shown.title, shownPreview ?? "This tool has no arguments.", shown.grant, shown.mcpTool);
                 abort.signal.throwIfAborted();
                 emit({ ...base(turn.threadId, turnId), type: "item.started", itemType: "tool", itemId: call.id,
@@ -559,7 +591,7 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
             // token files). An interrupted turn drops it so a half-dead
             // MCP child is never reused.
             if (!abort.signal.aborted && mountIntegrations) {
-              warmToolSessions.keep(turn.threadId, tools, toolsFp);
+              warmToolSessions.keep(turn.threadId, tools, toolsFp, { person: warmResourcePerson(turn), prewarmed: false });
             } else if (toolsReused) {
               await warmToolSessions.release(turn.threadId);
             } else {

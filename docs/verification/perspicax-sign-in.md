@@ -1,5 +1,15 @@
 # Sign in with Pulsatrix (Perspicax OpenID Connect)
 
+Local bot `act` uses a delegated Sagax session, not a Perspicax assertion.
+Calls to `/api/org/admin/*` and `/api/org/member/*` therefore return an
+actionable 400 before replay: use the Perspicax account connection's console tools, or
+the local `/api/bots`, `/api/routines` and `/api/routines/runs` routes for
+the person's own environment. No assertion verification rules change.
+Regression #1993: `pnpm exec vitest run shared/bot-act.test.ts
+server/member-own-act.e2e.test.ts` starts an isolated organization with a
+fake OIDC provider, tests admin and member turns without a mounted profile,
+and confirms that ordinary local reads retain person isolation.
+
 An organization server (`SAGAX_IDENTITY=perspicax`, see
 [self-hosting](../self-hosting.md#sign-in-with-pulsatrix-organization-server))
 signs people in with Perspicax. Two levels of proof, both isolated: nothing

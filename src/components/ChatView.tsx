@@ -117,7 +117,6 @@ import { askText, runSkill, runSteps, runSummary, showRun, skillPrompt } from "@
 import { useShowRunCard } from "@/lib/run-card-preferences";
 import { sendsMessage, useSendKey } from "@/lib/send-key";
 import { ToolActivity, botNames } from "./ToolActivity";
-import { RoleNoticeRow } from "./RoleNoticeRow";
 import { StepRow } from "./StepRow";
 import { stepLabel } from "@/lib/step-label";
 import { DataResultChip } from "./DataResultChip";
@@ -1006,7 +1005,7 @@ function PeerLabel({ peer, autoModel }: { peer: PeerLine; autoModel?: Message["a
 /** A tool run as a quiet step row (StepRow), or a receipt that opens a conversation. */
 const ActivityChip = memo(function ActivityChip({ message, place = "auto" }: { message: Message; place?: EffectivePlace }) {
   "use memo";
-  const { bots, dispatch, botDmIds, botName } = useChatRows();
+  const { bots, dispatch, botDmIds } = useChatRows();
   const tool = message.tool;
   if (!tool) return null;
   if (message.inputRequest) return <InputRequestCard message={message} />;
@@ -1032,8 +1031,8 @@ const ActivityChip = memo(function ActivityChip({ message, place = "auto" }: { m
       </div>
     );
   }
-  // 2026-11-05 (visible roles): a lapsed role, a refused write or read
-  if (tool.roleNotice) return <RoleNoticeRow notice={tool.roleNotice} botName={bots.find((b) => b.id === message.from?.botId)?.name ?? botName} />;
+  // 2026-11-05 (JC): no role notice in the chat (rows saved before stay hidden)
+  if (tool.roleNotice) return null;
   return <ToolActivity tool={tool} place={toolPlace(tool.name, place)} nameOf={botNames(bots)} />;
 });
 

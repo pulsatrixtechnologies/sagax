@@ -11,7 +11,7 @@ import { computerSelectTarget, toolExecutionTarget } from "../../shared/executio
 import { PlaceIcon } from "./PlaceIcon";
 import { StepRow } from "./StepRow";
 import { CustomRuleNoticeLine } from "./CustomRuleNotice";
-import { RoleChip, roleLabel, roleWhy } from "./RoleChip";
+import { roleLabel, roleWhy } from "./RoleChip";
 import { autoApprovalReason, type AutoApprovalReason } from "../../shared/auto-approval-reason";
 import { toolFailureText } from "../../shared/tool-failure-text";
 import type { LocaleKey } from "@/locales";
@@ -71,14 +71,8 @@ export function ToolActivity({ tool, place = null, nameOf, defaultOpen = false }
       {() => <ToolStepDetail tool={tool} status={status} nameOf={nameOf} place={place} />}
     </StepRow>
   );
-  // 2026-11-05 (visible roles): the Perspicax role this step ran under, a
-  // chip beside the row (never inside its button), "why" on click.
-  const line = tool.role ? (
-    <div className="flex min-w-0 max-w-full flex-wrap items-start gap-x-1.5 gap-y-0.5" data-tool-role-line="">
-      {row}
-      <RoleChip role={tool.role} className="pt-[3px]" />
-    </div>
-  ) : row;
+  // 2026-11-05 (JC): no role in the chat, the role lives on Flow routines only
+  const line = row;
   // 2026-10-16: the person's custom rule that answered this with no card.
   // 2026-10-28: an approval stays in the details, never on the line; a rule
   // that refused or held the call keeps its line.

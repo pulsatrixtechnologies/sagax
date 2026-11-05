@@ -14,9 +14,7 @@ import en from "../../src/locales/en.json" with { type: "json" };
 import fr from "../../src/locales/fr.json" with { type: "json" };
 import type { PerspicaxRoleEvent } from "./perspicax-mcp.ts";
 import type { RoleJournal } from "./role-journal.ts";
-import type { RoleNotice, RoleTransitionCard } from "../../shared/wire.ts";
 import type { CwPermission, ToolRole } from "../../shared/perspicax-roles.ts";
-import { matchingRoleRule } from "../../shared/perspicax-roles.ts";
 import type { MissingPermission } from "../../shared/role-graph.ts";
 
 type Catalog = Record<string, string>;
@@ -61,61 +59,6 @@ export function createRoleEvents(deps: RoleEventsDeps) {
     journal.remember(threadId, tool, role);
   }
 
-  function notice(event: PerspicaxRoleEvent, kind: RoleNotice["kind"]): void {
-    const language = deps.language(event.principalId);
-    const role = event.refusedRole ?? { slug: event.role.slug, name: event.role.name };
-    const person = deps.personName(event.principalId);
-    const roleLabel = role.name || roleText(language, "roles.me");
-    const key = kind === "lapsed" ? "roles.notice.lapsed" : kind === "write_refused" ? "roles.notice.writeRefused" : "roles.notice.readRefused";
-    const text = roleText(language, key, { role: roleLabel, permission: permissionLine(event.permission, language), bot: deps.botName(event.botId), person });
-    const roleNotice: RoleNotice = {
-      kind, role, tool: event.tool,
-      ...(event.permission ? { permission: event.permission } : {}),
-      ...(person ? { person } : {}),
-      ...(event.target ? { target: event.target } : {}),
-    };
-    deps.appendRow(event.threadId, { kind: "activity", tool: { name: text, ok: false, roleNotice } });
-  }
-
-  function transitionCard(event: PerspicaxRoleEvent, from: { slug: string; name: string }): void {
-    const to = { slug: event.role.slug, name: event.role.name };
-    const owner = deps.ownerOf(event.botId);
-    const path = event.permission?.path ?? "";
-    // the owner's saved rule answers this transition: the chip says why
-    if (event.role.reason === "rule") return;
-    if (owner && owner === event.principalId && event.role.reason === "switch"
-      && matchingRoleRule(journal.rulesFor(event.botId, owner).filter((rule) => rule.to.slug === to.slug), owner, from.slug, "")) return;
-    const language = deps.language(event.principalId);
-    const person = deps.personName(event.principalId);
-    const bot = deps.botName(event.botId);
-    const me = roleText(language, "roles.me");
-    const fromName = from.name || me;
-    const toName = to.name || me;
-    const subtitle = event.role.reason === "fallback"
-      ? roleText(language, "roles.transition.fallback", { bot, from: fromName, to: toName, tool: event.role.refusedTool ?? event.tool, person })
-      : roleText(language, "roles.transition.switch", { bot, from: fromName, to: toName, person });
-    const card: RoleTransitionCard = {
-      botId: event.botId, botName: bot, person, from, to, reason: event.role.reason,
-      ...(event.role.refusedTool ? { refusedTool: event.role.refusedTool } : {}),
-      ...(path ? { path } : {}),
-      canAlways: Boolean(owner && owner === event.principalId),
-    };
-    // a notice of a role switch the relay already made, the turn never waits on it; full-access: exempt
-    deps.appendRow(event.threadId, {
-      kind: "options",
-      card: {
-        title: roleText(language, "roles.transition.title", { role: toName }),
-        subtitle,
-        options: [
-          roleText(language, "roles.transition.continue"),
-          roleText(language, "roles.transition.stay", { role: fromName }),
-          ...(card.canAlways ? [roleText(language, "roles.transition.always")] : []),
-        ],
-        roleTransition: card,
-      },
-    });
-  }
-
   return {
     /** PerspicaxMcp onRole. */
     onRole(event: PerspicaxRoleEvent): void {
@@ -130,8 +73,7 @@ export function createRoleEvents(deps: RoleEventsDeps) {
       }
       if (event.kind === "lapsed" || event.kind === "write_refused" || event.kind === "read_refused") {
         attach(event.threadId, event.tool, event.role);
-        // a read refused under "Moi" itself is an ordinary tool error
-        if (event.kind !== "read_refused" || event.refusedRole?.slug) notice(event, event.kind);
+        // 2026-11-05 (JC): no role notice in the chat; the journal keeps it
         return;
       }
       const previous = journal.advance(event.threadId, { slug: event.role.slug, name: event.role.name });
@@ -144,7 +86,7 @@ export function createRoleEvents(deps: RoleEventsDeps) {
           from: previous, to: { slug: event.role.slug, name: event.role.name }, reason: event.role.reason,
           ...(event.role.refusedTool ? { refusedTool: event.role.refusedTool } : {}),
         });
-        transitionCard(event, previous);
+        // 2026-11-05 (JC): no "Agit comme" card in the chat; the journal keeps the transition
       }
     },
 

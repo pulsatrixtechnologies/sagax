@@ -33,7 +33,7 @@ import { executionKey, WriteOnce } from "../write-once.ts";
 import { PerspicaxIdentity, identityFailureReason, identityLapsed, identityValue, type IdentityFailure } from "./perspicax-identity.ts";
 import type { RoutineFlowInput } from "../routines/routine-flow-input.ts";
 import type { ReadinessFlow } from "../routines/routine-readiness.ts";
-import { ME_ROLE, cwPermissionFor, heldRolesOf, roleRefusalOf, type CwPermission, type HeldRole, type RoleReason, type ToolRole } from "../../shared/perspicax-roles.ts";
+import { ME_ROLE, actingAsOf, cwPermissionFor, heldRolesOf, roleRefusalOf, type CwPermission, type HeldRole, type RoleReason, type ToolRole } from "../../shared/perspicax-roles.ts";
 
 export type PerspicaxUnavailableReason = "not_held" | "no_session" | "unreachable" | "rate_limited" | "no_delegation" | "unknown_speaker";
 
@@ -320,6 +320,8 @@ interface Entry {
   profileChoiceRestoreFailed?: boolean;
   /** Visible roles (2026-11-05): the held roles this turn's listing named. */
   heldRoles?: HeldRole[];
+  /** slug → profile id learned from act-as token scopes (visible roles) */
+  roleIds?: Map<string, string>;
   /** cw_member:<identifier> (or credential:) behind the acting role. */
   targetIdentity?: string;
   /** Why the current role is the current one. */
@@ -1292,6 +1294,11 @@ export class PerspicaxMcp {
   private noteListing(entry: Entry, value: Json): void {
     const held = heldRolesOf(value);
     if (held.length) entry.heldRoles = held;
+    // a listing that serves no profile id still names the acting one in its
+    // act-as token scope (profile:<id>): the Roles tab joins journal rows by it
+    const actingRole = actingAsOf(value);
+    if (actingRole?.id) (entry.roleIds ??= new Map()).set(actingRole.slug, actingRole.id);
+    if (entry.roleIds && entry.heldRoles) entry.heldRoles = entry.heldRoles.map((role) => role.id || !entry.roleIds!.has(role.slug) ? role : { ...role, id: entry.roleIds!.get(role.slug)! });
     const acting = isObject(value.acting_as) ? value.acting_as : null;
     if (acting && typeof acting.target_identity === "string") entry.targetIdentity = acting.target_identity.slice(0, 200);
   }

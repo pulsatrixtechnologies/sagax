@@ -49,4 +49,14 @@ describe("role journal", () => {
     expect(journal.advance("t", { slug: "", name: "" })).toBeUndefined();
     expect(journal.advance("t", { slug: "service-desk", name: "Service Desk" })).toEqual({ slug: "", name: "" });
   });
+
+  it("keeps each person's held roles and the ids learned, never across people", () => {
+    const journal = new RoleJournal(null);
+    journal.noteRoles("pr_alex", [{ slug: "service-desk", name: "Service Desk", id: "prof-desk" }]);
+    journal.noteRoles("pr_alex", [{ slug: "service-desk", name: "Service Desk" }, { slug: "full-access", name: "Full Access" }]);
+    journal.noteRoles("pr_sam", [{ slug: "full-access", name: "Full Access", id: "prof-full" }]);
+    expect(journal.rolesOf("pr_alex").map((role) => [role.slug, role.id])).toEqual([["service-desk", "prof-desk"], ["full-access", undefined]]);
+    expect(journal.rolesOf("pr_sam").map((role) => role.id)).toEqual(["prof-full"]);
+    expect(journal.rolesOf("pr_nobody")).toEqual([]);
+  });
 });

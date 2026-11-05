@@ -15,6 +15,8 @@ import { PanelRows } from "../components/routines/PanelRows";
 import type { RoutineReadinessControl } from "../components/routines/RoutineReadiness";
 import type { HeldRole } from "../../shared/perspicax-roles";
 import { routineRoleCoverageAnswer } from "../../shared/routine-role-coverage";
+import { RolesTabView } from "../components/bot-settings/RolesTab";
+import type { RolesTabBody } from "../../shared/role-graph";
 import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import type { Message } from "../state/store";
@@ -152,11 +154,53 @@ function RoutineRoles() {
   );
 }
 
+// batch 5: the bot panel's Roles tab (?view=tab), first edge opened
+const AT = Date.UTC(2026, 10, 5, 19, 3);
+const tabBody: RolesTabBody = {
+  journal: "perspicax",
+  nodes: [
+    { slug: "", name: "", calls: 14 },
+    { slug: "service-desk", name: "Service Desk", id: "prof-desk", calls: 41 },
+    { slug: "full-access", name: "Full Access", id: "prof-full", calls: 6 },
+  ],
+  edges: [
+    { from: "service-desk", to: "", count: 4, history: [
+      { at: AT, source: "both", threadId: "th-1", reason: "fallback", refusedTool: "cw_psa_query" },
+      { at: AT - 26 * 3_600_000, source: "both", threadId: "th-2", reason: "rule", refusedTool: "cw_psa_query" },
+      { at: AT - 50 * 3_600_000, source: "perspicax", tool: "cw_psa_find_schedule_entries" },
+    ] },
+    { from: "", to: "service-desk", count: 3, history: [] },
+    { from: "service-desk", to: "full-access", count: 1, history: [{ at: AT - 4 * 3_600_000, source: "sagax", threadId: "th-3", reason: "switch" }] },
+  ],
+  missing: [
+    { id: "r1", role: desk, permission: { module: "Time & Expense", func: "Time Entry", path: "time/entries", operation: "Add" }, kind: "write", member: "nova", tools: ["cw_psa_log_time"], lastAt: AT - 600_000, count: 3 },
+    { id: "r2", role: desk, permission: { module: "Service Desk", func: "Holiday Lists", path: "schedule/holidayLists", operation: "Inquire" }, kind: "read", member: "nova", tools: ["cw_psa_query"], lastAt: AT, count: 4, sentAt: AT + 120_000 },
+    { id: "r3", role: { slug: "full-access", name: "Full Access" }, permission: { module: "Companies", func: "Company Maintenance", path: "company/companies", operation: "Edit" }, kind: "write", tools: ["cw_psa_write"], lastAt: AT - 7_200_000, count: 1 },
+  ],
+};
+
+function OpenFirstEdge() {
+  useEffect(() => {
+    const edge = document.querySelector<SVGGElement>("[data-role-edge]");
+    if (edge && edge.getAttribute("aria-pressed") !== "true") edge.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  }, []);
+  return null;
+}
+
+function Tab() {
+  return (
+    <div className="w-[380px] self-center rounded-2xl border border-hairline bg-panel">
+      <RolesTabView botId="nova" body={tabBody} onOpenThread={() => {}} />
+      <OpenFirstEdge />
+    </div>
+  );
+}
+
 function Gallery() {
   return (
     <div className="min-h-screen bg-app p-8 text-ink">
       <div className="mx-auto flex max-w-xl flex-col gap-5" data-gallery={view}>
-        {view === "picker" ? <Picker /> : view === "routine" ? <RoutineRoles /> : <Thread />}
+        {view === "picker" ? <Picker /> : view === "routine" ? <RoutineRoles /> : view === "tab" ? <Tab /> : <Thread />}
       </div>
     </div>
   );

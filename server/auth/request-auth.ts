@@ -588,6 +588,10 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // the routine editor's "Au nom de" coverage (server/routes/routine-role-coverage.ts):
   // the run-as person's live roles; the handler checks the routine
   { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/roles\/routine-coverage$/ },
+  // batch 5: the bot panel's Roles tab (the person's own graph and refusals)
+  // and "Envoyer à l'admin" (a Sagax message to the admins, never a CW write)
+  { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/roles$/ },
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/roles\/missing\/send$/ },
   // pre-warm the engine of a conversation the person opened (server/threads/thread-prewarm.ts)
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/warm$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/active-branch$/ },

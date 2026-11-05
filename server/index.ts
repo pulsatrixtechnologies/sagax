@@ -744,10 +744,12 @@ import {
 import { createCustomRuleRoutes } from "./routes/custom-rules.ts";
 import { createAutoApprovalNotes, type ToolAutoApproval } from "./approvals/tool-auto-approval.ts";
 import { RoleJournal } from "./perspicax/role-journal.ts";
-import { createRoleEvents, meWriteSummary } from "./perspicax/role-events.ts";
+import { createRoleEvents, meWriteSummary, missingRoleMessage } from "./perspicax/role-events.ts";
 import { createPerspicaxRoleRoutes } from "./routes/perspicax-roles.ts";
 import { createHeldRolesRoute } from "./routes/perspicax-held-roles.ts";
 import { routineRoleCoverageRoute } from "./routes/routine-role-coverage.ts";
+import { chainRoleRoutes, createRoleTabRoutes } from "./routes/perspicax-roles-tab.ts";
+import type { MissingPermission } from "../shared/role-graph.ts";
 import { createEmailDraftRoutes } from "./routes/email-drafts.ts";
 import { createThreadWarmRoutes, warmBotAccessRefusal } from "./routes/thread-warm.ts";
 import { createEmailSendPasses, emailSendCard, sendWithMailer } from "./mail/email-draft-send.ts";
@@ -25922,13 +25924,51 @@ ROUTES.push(createPerspicaxRoleRoutes({
   answerTransition: (input) => answerRoleTransition(input),
   rules: ({ botId, actor }) => ({ status: 200, body: { rules: roleJournal.rulesFor(botId, actor) } }),
   removeRule: ({ botId, actor, id }) => roleJournal.removeRule(botId, actor, id) ? { status: 200, body: { ok: true } } : { status: 404, body: { error: "no such rule" } },
-  // 2026-11-05: the composer picker (batch 3), then the routine coverage (batch 4)
-  more: async (ctx, input) => {
-    const held = await heldRolesRoute(ctx, input);
-    if (held !== PASS) return held;
-    return routineCoverageRoute(ctx, input);
-  },
+  // 2026-11-05: picker (batch 3), routine coverage (batch 4), Roles tab (batch 5)
+  more: chainRoleRoutes(
+    (ctx, input) => heldRolesRoute(ctx, input),
+    (ctx, input) => routineCoverageRoute(ctx, input),
+    createRoleTabRoutes({
+      journal: roleJournal,
+      perspicaxGet: async (principalId, path) => {
+        const answer = await roleJournalClient.call(principalId, "GET", path, undefined, { timeoutMs: 8_000 });
+        return answer.ok ? { ok: true, body: answer.body } : { ok: false };
+      },
+      sendToAdmins: (input) => sendMissingRoleToAdmins(input),
+    }),
+  ),
 }));
+
+/** 2026-11-05 (visible roles, batch 5): the person's own Perspicax journal
+ * rows, read with their own sign-in bearer (as the memory notes are). */
+const roleJournalClient = new PerspicaxMemoryNotesClient({
+  baseUrl: () => perspicaxBase(),
+  accessToken: (principalId) => perspicaxAccessToken(principalId),
+});
+
+/** "Envoyer à l'admin": a Sagax message from the person to each of the
+ * organization's admins, in the conversation between those two people
+ * (created as a people DM when there is none). Never a ConnectWise write. */
+function sendMissingRoleToAdmins(input: { actor: string; botId: string; missing: MissingPermission }): number {
+  if (IDENTITY.kind !== "perspicax") return 0;
+  const from = input.actor.toLowerCase();
+  const fromName = personDisplayName(principals.byId(from)) || "";
+  const botName = store.bot(input.botId)?.name ?? "";
+  const admins = principals.list()
+    .filter((person) => person.orgRole === "admin" && person.subject && person.disabledAt === undefined && !person.mergedInto && person.id.toLowerCase() !== from)
+    .slice(0, 10);
+  let reached = 0;
+  for (const admin of admins) {
+    const to = admin.id.toLowerCase();
+    const text = missingRoleMessage(languageOfPerson(to), { person: fromName, bot: botName, missing: input.missing });
+    const group = findPeopleDm(store.groups, from, to)
+      ?? store.createGroup(`${fromName}, ${personDisplayName(admin) || admin.login || ""}`, [], false, undefined, { defaultResponder: { kind: "mentions" } }, [from, to], { peopleDm: true, createdBy: from });
+    store.appendMessage(group.threadId, { role: "user", kind: "text", text, ...(fromName ? { sender: { name: fromName, id: from } } : {}) });
+    store.patchGroup(group.id, peopleDmThreadUnreadPatch(group, to, true, group.threadId));
+    reached += 1;
+  }
+  return reached;
+}
 
 // Whether an oldest thread is someone else's (frozenResultsThread) is known
 // only now: an earlier key of the owner's is theirs once settled.

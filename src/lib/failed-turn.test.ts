@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Bot, InstanceInfo } from "@/state/store";
 
 vi.hoisted(() => vi.stubGlobal("window", {}));
-const { activityPreview, botEngine, failedTurnCause, signedOutEngine } = await import("./failed-turn");
+const { activityPreview, botEngine, failedTurnCause, isEngineLimitFailure, signedOutEngine } = await import("./failed-turn");
 
 const engine = (patch: Partial<InstanceInfo> = {}, snapshot: Partial<InstanceInfo["snapshot"]> = {}): InstanceInfo => ({
   instanceId: "claude", driverKind: "claudeAgent", displayName: "Claude",
@@ -95,5 +95,16 @@ describe("a turn that only reacted", () => {
     expect(activityPreview({ name: "mcp__agents__react_to_message", ok: true, input: "{\"emoji\":\"✅\"}" }, engine())).toBe("Reacted to a message ✅");
     expect(activityPreview({ name: "agents_react_to_message", ok: true }, engine())).toBe("Reacted to a message");
     expect(activityPreview({ name: "Bash", ok: true }, engine())).toBe("Bash");
+  });
+});
+
+// The maintainer, 2026-11-04: an engine account's limit or credit writes no card in the chat.
+describe("isEngineLimitFailure", () => {
+  it("knows a usage limit, a credit refusal and a stored reset, and nothing else", () => {
+    expect(isEngineLimitFailure({ name: "error: This Claude account has reached its 5-hour limit, which resets Nov 4, 9:30 PM (UTC)." })).toBe(true);
+    expect(isEngineLimitFailure({ name: "error: HTTP 402 Payment Required" })).toBe(true);
+    expect(isEngineLimitFailure({ name: "error: something else", limitResetsAt: 1 })).toBe(true);
+    expect(isEngineLimitFailure({ name: "error: the engine stalled" })).toBe(false);
+    expect(isEngineLimitFailure({ name: "Read file" })).toBe(false);
   });
 });

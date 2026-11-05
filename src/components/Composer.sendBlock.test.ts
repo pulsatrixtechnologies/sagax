@@ -34,6 +34,8 @@ vi.mock("./DesktopCapabilities", async (importOriginal) => ({
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => true, setAdvancedMode: vi.fn() }));
 vi.mock("./ModelPicker", () => ({ ModelPicker: (_props: ComponentProps<typeof ModelPicker>) => createElement("span") }));
+const modelWindow = vi.hoisted(() => ({ open: vi.fn() }));
+vi.mock("@/lib/model-window", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/model-window")>(), openModelWindow: modelWindow.open }));
 
 const { Composer } = await import("./Composer");
 const { setLocale } = await import("@/lib/i18n");
@@ -136,5 +138,41 @@ describe("composer while the bot cannot answer", () => {
     render(createElement(Composer, { bot: { ...bot, modelSelection: { instanceId: "pi", model: "other" } } }));
     await settle();
     expect($("[data-composer-send-block]")).toBeNull();
+  });
+
+  // The maintainer, 2026-11-04: an engine at its limit or out of credit takes nothing:
+  // no typing, no send, one line with the reset in local time and a switch.
+  it("locks the whole composer while the engine is at its limit, and says when it is back", async () => {
+    const resetsAt = Date.now() + 2 * 3_600_000;
+    fixture.sendState = { block: { reason: "engine_limit", name: "Claude", message: "Claude limit reached.", action: { kind: "switch_engine" }, limit: { cause: "usage_limit", resetsAt } } };
+    render(createElement(Composer, { bot }));
+    await settle();
+    const line = $("[data-composer-send-block]")!;
+    expect(line.getAttribute("data-composer-send-block")).toBe("engine_limit");
+    const local = new Date(resetsAt).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" });
+    expect(line.textContent).toContain(`Claude limit reached, back at ${local}`);
+    expect(line.textContent).not.toMatch(/UTC/);
+    expect(textarea().disabled).toBe(true);
+    pressEnter();
+    expect(sent()).toEqual([]);
+    expect($("[data-composer-send]")).toBeNull();
+    expect($("[data-composer-cta]")).toBeNull();
+    flushSync(() => $<HTMLButtonElement>('[data-composer-send-block-action="switch_engine"]')!.click());
+    expect(modelWindow.open).toHaveBeenCalledWith("bot");
+  });
+
+  it("comes back once the bot moves to another engine", async () => {
+    fixture.sendState = { block: { reason: "engine_limit", name: "Claude", message: "Claude is out of credit.", action: { kind: "switch_engine" }, limit: { cause: "credits" } } };
+    render(createElement(Composer, { bot }));
+    await settle();
+    expect($("[data-composer-send-block]")!.textContent).toContain("Claude is out of credit");
+    expect(textarea().disabled).toBe(true);
+    fixture.sendState = { block: null };
+    // the model window moves this conversation (and the bot) to another engine
+    const grok = { instanceId: "grok", model: "grok-4" };
+    render(createElement(Composer, { bot: { ...bot, modelSelection: grok, tasks: bot.tasks!.map((task) => ({ ...task, modelSelection: grok })) } }));
+    await settle();
+    expect($("[data-composer-send-block]")).toBeNull();
+    expect(textarea().disabled).toBe(false);
   });
 });

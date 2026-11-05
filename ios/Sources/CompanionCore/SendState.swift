@@ -13,6 +13,10 @@ public struct SendBlock: Equatable, Sendable {
         case computerOffline = "computer_offline"
         case localServerOffline = "local_server_offline"
         case ownerComputerOffline = "owner_computer_offline"
+        /// The engine account is at its usage limit or out of credit
+        /// (the maintainer, 2026-11-04): the composer locks whole until it resets or
+        /// the bot moves to another engine or account.
+        case engineLimit = "engine_limit"
     }
 
     public enum Action: Equatable, Sendable {
@@ -20,6 +24,8 @@ public struct SendBlock: Equatable, Sendable {
         case connect(instanceId: String, engine: String)
         /// Nothing to change here: ask again once the computer or server is back.
         case retry
+        /// Move the bot to another engine or account (the model menu).
+        case switchEngine
     }
 
     /// The wire reason. A reason this build does not know still blocks, and
@@ -30,13 +36,22 @@ public struct SendBlock: Equatable, Sendable {
     public var action: Action
     /// The engine's display name, or the owner's for owner_computer_offline.
     public var name: String?
+    /// engine_limit: "usage_limit" or "credits".
+    public var limitCause: String?
+    /// engine_limit: when the limit resets, when the provider said.
+    public var resetsAt: Date?
 
-    public init(reasonCode: String, message: String, action: Action, name: String? = nil) {
+    public init(reasonCode: String, message: String, action: Action, name: String? = nil, limitCause: String? = nil, resetsAt: Date? = nil) {
         self.reasonCode = reasonCode
         self.message = message
         self.action = action
         self.name = name
+        self.limitCause = limitCause
+        self.resetsAt = resetsAt
     }
+
+    /// No typing, no send, no action in the chat while this shows.
+    public var locksComposer: Bool { reason == .engineLimit }
 
     public var reason: Reason? { Reason(rawValue: reasonCode) }
 
@@ -65,6 +80,8 @@ public struct SendBlock: Equatable, Sendable {
         switch kind {
         case "retry":
             parsed = .retry
+        case "switch_engine":
+            parsed = .switchEngine
         case "connect":
             guard let instanceId = action["instanceId"] as? String,
                   let engine = action["engine"] as? String else { return nil }
@@ -73,7 +90,10 @@ public struct SendBlock: Equatable, Sendable {
             return nil
         }
         let name = (block["name"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-        return SendBlock(reasonCode: reason, message: message, action: parsed, name: name)
+        let limit = block["limit"] as? [String: Any]
+        let cause = limit?["cause"] as? String
+        let resetsAt = (limit?["resetsAt"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue / 1000) }
+        return SendBlock(reasonCode: reason, message: message, action: parsed, name: name, limitCause: cause, resetsAt: resetsAt)
     }
 }
 

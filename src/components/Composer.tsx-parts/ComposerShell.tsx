@@ -1,4 +1,6 @@
 import { t } from "@/lib/i18n";
+import { sendBlockLocks } from "@/lib/send-state";
+import { openModelWindow } from "@/lib/model-window";
 import { effectivePlace } from "@/lib/place";
 import { changeDraftAttachmentPending } from "@/lib/drafts";
 import { retryAttachmentUpload } from "@/lib/attachment-uploads";
@@ -167,11 +169,12 @@ export function ComposerShell({
           }}
           onEdit={locked ? undefined : editQueued}
         />
-        {sendBlock && !locked && (
+        {sendBlock && (!locked || sendBlockLocks(sendBlock)) && (
           <ComposerSendBlock
             block={sendBlock}
             onConnect={() => dispatch({ type: "toggleAppSettings", open: true, section: "providers" })}
             onRetry={sendState.recheck}
+            onSwitchEngine={bot ? () => openModelWindow(bot.id) : undefined}
           />
         )}
         <ComposerEditor

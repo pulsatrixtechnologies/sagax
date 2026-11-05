@@ -132,6 +132,8 @@ struct ChatView: View {
     @State var sendBlockTick = 0
     /// "Connect <engine>" on a phone: the settings sheet.
     @State var showingEngineSettings = false
+    /// "Switch engine" on a composer locked by an engine's limit or credit.
+    @State var choosingEngineForLimit = false
     @State var attachmentError: String?
     @State var openingFileName: String?
     @State var fileOpenError: String?
@@ -521,6 +523,11 @@ struct ChatView: View {
         // Can this bot answer the person now? Asked on opening, on a bot,
         // thread or model change, then every 15 s while it cannot.
         .task(id: sendBlockTaskKey) { await runSendStateChecks() }
+        .sheet(isPresented: $choosingEngineForLimit) {
+            if case let .bot(bot) = current {
+                NavigationStack { ModelMenuSheet(bot: bot, close: { choosingEngineForLimit = false }) }
+            }
+        }
         .fullScreenCover(isPresented: $showingEngineSettings) {
             SettingsView(close: { showingEngineSettings = false })
                 .background(Theme.bg.ignoresSafeArea())

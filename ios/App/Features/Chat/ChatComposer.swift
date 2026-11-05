@@ -187,6 +187,8 @@ extension ChatView {
                         .padding(.top, 12.35)
                         .padding(.bottom, 13.65)
                         .focused($composerFocused)
+                        // an engine at its limit or out of credit: nothing to type (SendState.swift)
+                        .disabled(activeSendBlock?.locksComposer == true)
                         .accessibilityIdentifier("message-input")
                         // Partial transcripts rebuild from a frozen base;
                         // prevent competing edits without dimming the text.

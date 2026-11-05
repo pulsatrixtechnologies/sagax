@@ -322,12 +322,14 @@ export const SidebarThreadRow = memo(function SidebarThreadRow({ task, ownerId, 
         className={cn("flex min-w-0 flex-1 items-center gap-2 rounded-lg pl-6 pr-1 text-left text-[13px] font-medium outline-none focus-visible:ring-1 focus-visible:ring-accent/60", compact ? "min-h-7 py-1" : "min-h-8 py-1.5", current ? "font-semibold text-sidebar-ink" : "text-sidebar-ink-secondary hover:text-sidebar-ink")}>
         <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
           {/* dir=auto keeps an Arabic title's start and ellipsizes its end.
-              max-w-max keeps flex-1 from pushing a byline off a short English title. */}
-          <span dir="auto" className={cn("min-w-0 flex-1 max-w-max truncate", task.unread && "font-semibold text-sidebar-ink", (closed || archived || snoozed) && !current && "text-sidebar-ink-secondary/70")}>{task.title}</span>
+              max-w-max keeps flex-auto from pushing a byline off a short English title.
+              Both start at their own width and the byline gives way first
+              (shrink-[4]) down to a short "opened…": the title keeps the room. */}
+          <span dir="auto" className={cn("min-w-0 flex-auto max-w-max truncate", task.unread && "font-semibold text-sidebar-ink", (closed || archived || snoozed) && !current && "text-sidebar-ink-secondary/70")}>{task.title}</span>
           {byline && (
             // the same line and size as the title, only quieter: a second
             // line per thread made the list twice as tall as it needs to be
-            <span className="min-w-0 max-w-[45%] shrink truncate font-normal text-sidebar-ink-secondary/80">{byline}</span>
+            <span data-thread-byline="" className="min-w-[4.5rem] max-w-[45%] shrink-[4] truncate font-normal text-sidebar-ink-secondary/80">{byline}</span>
           )}
         </span>
         {task.unread && <span className="sr-only">{t("task.unread")}</span>}

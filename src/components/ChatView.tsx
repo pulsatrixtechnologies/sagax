@@ -80,7 +80,7 @@ import { CODEX_USAGE_URL, codexUsageLimitReached } from "../../shared/codex-usag
 import { ClaudeUpdatePrompt } from "./ClaudeUpdatePrompt";
 import { MacCuaRecoveryActions } from "./MacCuaRecoveryActions";
 import { macCuaPermissionMessage, missingMacCuaPermissions } from "@/lib/mac-cua-permissions";
-import { failedTurnCause, signedOutEngine } from "@/lib/failed-turn";
+import { failedTurnCause, isEngineLimitFailure, signedOutEngine } from "@/lib/failed-turn";
 import { localizedEngineCause } from "@/lib/engine-error-text";
 import { plainErrorLine, readableError } from "@/lib/plain-error";
 import { openPlaceAction, placeRowViewFor, usePlaceSeat, worksOnSimpleLabel } from "@/lib/place-view";
@@ -478,6 +478,8 @@ export function FailedTurnRow({ tool, engine, onRetry, botId, threadId }: {
   "use memo";
   const config = useStoreSelector((current) => current.config);
   const resume = useLimitResetContinue(botId, threadId, tool.limitResetsAt);
+  // An engine at its limit or out of credit: the composer says so, not the chat.
+  if (isEngineLimitFailure(tool)) return null;
   if (tool.place && botId) return <PlaceFailedRow place={tool.place} botId={botId} threadId={threadId} onRetry={onRetry} />;
   const signedOut = signedOutEngine(tool, engine);
   // A signed-out engine: its sign-in card is the whole answer, no error row or
@@ -1483,6 +1485,7 @@ const MessagesList = memo(function MessagesList({
               // plain tool runs stay out unless Settings → Tool calls is on.
               if (isTurnStoppedNotice(m)) return null;
               if (m.tool && failedTurnCause(m.tool.name) !== null) {
+                if (isEngineLimitFailure(m.tool)) return null;
                 return (
                   <FailedTurnRow
                     tool={m.tool}

@@ -117,6 +117,7 @@ export function createStoreDispatch(ctx: StoreDispatchCtx): (action: Action) => 
           }).catch(() => {});
         }
       });
+      return promise;
     };
 
     /** Resolve every bot whose execution context belongs to this thread. A

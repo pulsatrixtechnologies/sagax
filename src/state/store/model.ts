@@ -1647,10 +1647,10 @@ export type Action =
   | { type: "renameGroupTask"; groupId: string; threadId: string; title: string }
   | { type: "pinGroupTask"; groupId: string; threadId: string; pinned: boolean; title: string }
   | { type: "setConversationTurnLimit"; groupId: string; threadId: string; minutes: number | null; dm: boolean }
-  | { type: "deleteGroupTask"; groupId: string; threadId: string }
+  | { type: "deleteGroupTask"; groupId: string; threadId: string; /** Called once the server answered (Archive all / Delete all wait on it, src/lib/bulk-threads.ts). */ onSettled?: (ok: boolean) => void }
   /** Archive, snooze, pin or file one thread of a person conversation (the
    * same fields as a bot thread's updateTask). */
-  | { type: "updateGroupTask"; groupId: string; threadId: string; patch: GroupTaskUpdatePatch }
+  | { type: "updateGroupTask"; groupId: string; threadId: string; patch: GroupTaskUpdatePatch; /** Called once the server answered (Archive all / Delete all wait on it, src/lib/bulk-threads.ts). */ onSettled?: (ok: boolean) => void }
   | { type: "interruptGroup"; groupId: string; threadId?: string; onError?: () => void }
   | { type: "instances"; instances: InstanceInfo[] }
   | { type: "configStatus"; config: ConfigStatus }
@@ -1739,10 +1739,10 @@ export type Action =
   | { type: "renameTask"; botId: string; threadId: string; title: string }
   /** Name the thread again from its conversation; the new title arrives with the bot event. */
   | { type: "regenerateTaskTitle"; botId: string; threadId: string; onSettled?: (ok: boolean) => void }
-  | { type: "deleteTask"; botId: string; threadId: string }
+  | { type: "deleteTask"; botId: string; threadId: string; /** Called once the server answered (Archive all / Delete all wait on it, src/lib/bulk-threads.ts). */ onSettled?: (ok: boolean) => void }
   | { type: "newBot"; role?: BotRole; visibility?: BotVisibility; section?: string; settings?: Record<string, unknown>; preserveSelection?: boolean; onCreated?: (bot: Bot) => void; onError?: (message: string) => void }
   | { type: "botCreationPending"; on: boolean }
-  | { type: "updateTask"; botId: string; threadId: string; patch: TaskUpdatePatch }
+  | { type: "updateTask"; botId: string; threadId: string; patch: TaskUpdatePatch; /** Called once the server answered (Archive all / Delete all wait on it, src/lib/bulk-threads.ts). */ onSettled?: (ok: boolean) => void }
   /** The server confirmed a thread is now confidential. */
   | { type: "taskMadeConfidential"; botId: string; threadId: string }
   | { type: "refreshTaskPermissions"; botId: string; threadId: string; acknowledgeLocalAuto?: boolean }

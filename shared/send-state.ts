@@ -7,13 +7,20 @@
 // knows; the clients ask again while blocked, so the composer comes back on
 // its own once the cause is fixed.
 
-export type SendBlockReason = "engine_not_connected" | "computer_offline" | "local_server_offline" | "owner_computer_offline";
+export type SendBlockReason = "engine_not_connected" | "computer_offline" | "local_server_offline" | "owner_computer_offline"
+  /** The engine account refused the last turn: its usage limit (Claude's
+   * 5-hour or weekly window) or its credit (a 402, out of credits). The maintainer,
+   * 2026-11-04: no message goes out and nothing can be done in the chat
+   * until it resets or the bot moves to another engine or account. */
+  | "engine_limit";
 
 export type SendBlockAction =
   /** Connect this engine (Settings > Engines). */
   | { kind: "connect"; instanceId: string; engine: string }
   /** Nothing to change here: try again once the computer or server is back. */
-  | { kind: "retry" };
+  | { kind: "retry" }
+  /** Move the bot to another engine or account (the model window). */
+  | { kind: "switch_engine" };
 
 export interface SendBlock {
   reason: SendBlockReason;
@@ -22,6 +29,9 @@ export interface SendBlock {
   action: SendBlockAction;
   /** The engine's display name, or the owner's for owner_computer_offline. */
   name?: string;
+  /** engine_limit: what refused, and the epoch ms of its reset when the
+   * provider said. The client words the reset in the reader's own clock. */
+  limit?: { cause: "usage_limit" | "credits"; resetsAt?: number };
 }
 
 /** How the computer-shared model behind a bot is doing, as the server last
@@ -38,6 +48,10 @@ export interface SendStateInput {
   /** The owner pays and the model is on the owner's computer, offline now. */
   ownerComputerOffline?: { ownerName: string } | null;
   local: LocalReach;
+  /** The engine account refused this person's last turn and holds that
+   * refusal now (server/engines/engine-refusals.ts), with no backup engine
+   * to take the message. */
+  limited?: { cause: "usage_limit" | "credits"; resetsAt?: number } | null;
 }
 
 export function sendBlockFor(input: SendStateInput): SendBlock | null {
@@ -62,6 +76,19 @@ export function sendBlockFor(input: SendStateInput): SendBlock | null {
       reason: "local_server_offline",
       message: "The local model is not responding: its server on that computer is stopped. Start it, then try again.",
       action: { kind: "retry" },
+    };
+  }
+  if (input.limited) {
+    const { name } = input.engine;
+    const { cause, resetsAt } = input.limited;
+    const at = typeof resetsAt === "number" && Number.isFinite(resetsAt) ? resetsAt : undefined;
+    return {
+      reason: "engine_limit", name,
+      message: cause === "credits"
+        ? `${name} is out of credit. Switch this bot to another engine or account.`
+        : `${name} limit reached. Switch this bot to another engine or account, or wait for the reset.`,
+      action: { kind: "switch_engine" },
+      limit: { cause, ...(at !== undefined ? { resetsAt: at } : {}) },
     };
   }
   if (input.accessRefused) {

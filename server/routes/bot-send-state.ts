@@ -13,7 +13,7 @@ import { PASS, type RouteHandler } from "./table.ts";
 export interface BotSendStateRouteDeps<B> {
   /** The bot (and thread) the request names; throws like the other bot routes when there is none. */
   requestedTaskBot: (botId: string, threadId?: string) => B;
-  sendStateFor: (bot: B, auth: RequestAuth) => SendBlock | null;
+  sendStateFor: (bot: B, auth: RequestAuth) => SendBlock | null | Promise<SendBlock | null>;
 }
 
 const ROUTE = /^\/api\/bots\/([\w-]+)\/send-state$/;
@@ -24,6 +24,6 @@ export function createBotSendStateRoutes<B>(deps: BotSendStateRouteDeps<B>): Rou
     if (!m || method !== "GET") return PASS;
     res.setHeader("cache-control", "no-store");
     const bot = deps.requestedTaskBot(m[1]!, url.searchParams.get("threadId") ?? undefined);
-    return json(res, 200, { block: deps.sendStateFor(bot, auth) });
+    return json(res, 200, { block: await deps.sendStateFor(bot, auth) });
   };
 }

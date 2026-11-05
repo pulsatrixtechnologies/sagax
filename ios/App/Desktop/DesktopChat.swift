@@ -267,7 +267,8 @@ extension ChatView {
                 blocked: activeSendBlock != nil,
                 busy: preparingAttachments || sendingMessage,
                 listening: dictation.isListening,
-                inputLocked: dictation.isListening || dictation.isStarting || preparingAttachments || sendingMessage,
+                inputLocked: dictation.isListening || dictation.isStarting || preparingAttachments || sendingMessage
+                    || activeSendBlock?.locksComposer == true,
                 bot: current.isBot ? session.state.bot(current.id)?.projected(forThread: threadId) : nil,
                 room: { if case let .room(room) = current, room.dm != true { return room } else { return nil } }(),
                 popup: desktopComposerPopup,

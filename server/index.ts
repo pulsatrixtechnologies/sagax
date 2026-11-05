@@ -1,6 +1,6 @@
 import { checkRoutineReadiness, routineEngineRefusal, routineFlowSkills, type RoutineReadinessDeps, type ReadinessRoutine, type ReadinessRun, type ReadinessComputer } from "./routines/routine-readiness.ts";
 import { routineFlowInput } from "./routines/routine-flow-input.ts";
-import { noteEngineRefusal, clearEngineRefusal } from "./engines/engine-refusals.ts";
+import { noteEngineRefusal, clearEngineRefusal, activeEngineRefusal } from "./engines/engine-refusals.ts";
 import { classifyRoutineFailure as readinessFailureClass } from "./routines/routine-recovery.ts";
 import { canUseMcpServer } from "../shared/tool-scope.ts";
 import { createBotAvatarGenerateRoutes } from "./routes/bot-avatar-generate.ts";
@@ -20392,6 +20392,11 @@ bus.subscribe((event: RuntimeEvent) => {
       console.info(`[notice] ${event.threadId}: ${redactSecretsInText(event.message.slice(0, 240))}`);
       break;
     case "runtime.error": {
+      // The maintainer, 2026-11-04: an engine account at its usage limit or out of
+      // credit writes no error card in the chat; the composer locks instead
+      // (sendStateLimit, shared/send-state.ts engine_limit) until the reset
+      // or a switch to another engine or account.
+      let engineLimited = false;
       if (bot) {
         const instance = registry.get(event.providerInstanceId ?? bot.modelSelection.instanceId);
         const access = turnAccessByThread.get(event.threadId);
@@ -20399,6 +20404,8 @@ bus.subscribe((event: RuntimeEvent) => {
         if (instance && verdict.kind === "owner" && verdict.cause !== "setup") noteEngineRefusal({ engine: instance.instanceId,
           account: refusalAccount(access?.via ?? "server", access?.payerPrincipalId, turnSlotFor(bot, instance)), cause: verdict.cause,
           resetsAt: verdict.resetsAt, at: Date.now() });
+        engineLimited = Boolean(instance) && verdict.kind === "owner" && (verdict.cause === "credits"
+          || (verdict.cause === "usage_limit" && limitFailover.refusalHoldsEngine(event.threadId, event.limitScope === "model" ? "model" : undefined)));
       }
 
       // A stop the person asked for is not a row in the chat.
@@ -20463,7 +20470,7 @@ bus.subscribe((event: RuntimeEvent) => {
         }
       } else {
         const tool = failedTurnTool(event.message, event);
-        if (!repeatsShownFailure(store.messagesFor(event.threadId), { role: "bot", kind: "activity", tool, from: failureFrom }, bot?.id ?? "")) {
+        if (!engineLimited && !repeatsShownFailure(store.messagesFor(event.threadId), { role: "bot", kind: "activity", tool, from: failureFrom }, bot?.id ?? "")) {
           pushMessage({ role: "bot", kind: "activity", tool });
         }
       }
@@ -29843,7 +29850,7 @@ function ownerModelOfflineRefusal(bot: BotRecord, instance: { instanceId: string
 }
 /** The composer's send state for this person (shared/send-state.ts). Any
  * doubt, or a failure to judge, is no block: the message sends as before. */
-function sendStateFor(bot: BotRecord, speaker: TurnSpeaker): SendBlock | null {
+async function sendStateFor(bot: BotRecord, speaker: TurnSpeaker): Promise<SendBlock | null> {
   try {
     const selection = bot.modelSelection;
     const instance = registry.get(selection.instanceId);
@@ -29855,12 +29862,28 @@ function sendStateFor(bot: BotRecord, speaker: TurnSpeaker): SendBlock | null {
     return sendBlockFor({
       auto: false, engine, accessRefused: refused,
       ownerComputerOffline: ownerOffline ? { ownerName: ownerOffline.ownerName ?? "" } : null,
-      local: desktopLocalModels.reach(selection.model)
+      local: desktopLocalModels.reach(selection.model),
+      limited: await sendStateLimit(bot, speaker)
     });
   } catch (error) {
     console.warn(`[send-state] ${bot.id}: ${error instanceof Error ? error.message : String(error)}`);
     return null;
   }
+}
+/** The maintainer, 2026-11-04: the engine account this person's message would run on is
+ * at its usage limit or out of credit (the refusal the last turn left,
+ * server/engines/engine-refusals.ts), and no backup engine would take the
+ * message (limit failover): the composer locks until the reset, or until
+ * the bot moves to another engine or account. A sign-out is not this: its
+ * own card asks to sign in. */
+async function sendStateLimit(bot: BotRecord, speaker: TurnSpeaker): Promise<{ cause: "usage_limit" | "credits"; resetsAt?: number } | null> {
+  const engine = routineEngineForBot(bot, speaker);
+  if (!engine) return null;
+  const refusal = activeEngineRefusal(engine.engine, engine.account, Date.now());
+  if (!refusal || refusal.cause === "signed_out") return null;
+  const backup = await limitFailover.backupFor(bot.id, bot.threadId, speaker, engine.engine).catch(() => null);
+  if (backup) return null;
+  return { cause: refusal.cause, ...(refusal.resetsAt !== undefined ? { resetsAt: refusal.resetsAt } : {}) };
 }
 /** #1154: the model ids the session that pays for this turn on this engine
  * offers, when they are known without starting the engine: the payer's own

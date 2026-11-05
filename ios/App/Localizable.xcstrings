@@ -20660,6 +20660,70 @@
         }
       }
     },
+    "%@ is out of credit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is out of credit"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ n'a plus de crédit"
+          }
+        }
+      }
+    },
+    "%@ limit reached": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ limit reached"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limite de %@ atteinte"
+          }
+        }
+      }
+    },
+    "%@ limit reached, back at %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ limit reached, back at %2$@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limite de %1$@ atteinte, de retour à %2$@"
+          }
+        }
+      }
+    },
+    "Switch engine": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch engine"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changer de moteur"
+          }
+        }
+      }
+    },
     "Connect %@": {
       "localizations": {
         "en": {

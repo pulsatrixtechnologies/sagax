@@ -55,7 +55,12 @@ extension ChatView {
             ComposerSendBlockLine(
                 block: block,
                 connect: { connectSendBlockEngine() },
-                retry: { sendBlockTick += 1 }
+                retry: { sendBlockTick += 1 },
+                switchEngine: {
+                    dictation.stop()
+                    composerFocused = false
+                    choosingEngineForLimit = true
+                }
             )
             .transition(.opacity)
         }
@@ -66,6 +71,7 @@ struct ComposerSendBlockLine: View {
     let block: SendBlock
     let connect: () -> Void
     let retry: () -> Void
+    var switchEngine: () -> Void = {}
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -80,7 +86,11 @@ struct ComposerSendBlockLine: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button(Self.actionLabel(block)) {
                 Haptics.selection()
-                if case .connect = block.action { connect() } else { retry() }
+                switch block.action {
+                case .connect: connect()
+                case .switchEngine: switchEngine()
+                case .retry: retry()
+                }
             }
             .font(.system(size: 13, weight: .semibold))
             .buttonStyle(.borderless)
@@ -107,6 +117,17 @@ struct ComposerSendBlockLine: View {
                 return String(localized: "\(owner)'s computer, which serves this bot's model, is offline. Try again once it is back.")
             }
             return String(localized: "The bot owner's computer, which serves this bot's model, is offline. Try again once it is back.")
+        case .engineLimit?:
+            let engine = block.engineName
+            if block.limitCause == "credits" {
+                return String(localized: "\(engine) is out of credit")
+            }
+            if let resetsAt = block.resetsAt, resetsAt > Date() {
+                // the reader's own clock and time zone, never UTC
+                let time = resetsAt.formatted(date: Calendar.current.isDateInToday(resetsAt) ? .omitted : .abbreviated, time: .shortened)
+                return String(localized: "\(engine) limit reached, back at \(time)")
+            }
+            return String(localized: "\(engine) limit reached")
         case nil:
             return block.message
         }
@@ -116,6 +137,9 @@ struct ComposerSendBlockLine: View {
     static func actionLabel(_ block: SendBlock) -> String {
         if case let .connect(_, engine) = block.action {
             return String(localized: "Connect \(engine)")
+        }
+        if case .switchEngine = block.action {
+            return String(localized: "Switch engine")
         }
         return String(localized: "Try again")
     }

@@ -144,7 +144,8 @@ import { appendComposerDraft } from "@/lib/drafts";
 import { focusComposer } from "@/lib/composer-focus";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { shallowEqual, useStoreDispatch, useStoreSelector } from "@/state/store-selector";
-import { viewerCanCreateBots } from "@/lib/viewer";
+import { preferredRoomLead } from "@/lib/group-routing";
+import { viewerActorId, viewerCanCreateBots } from "@/lib/viewer";
 import { createAnswerErrorMessage, recoverCreatedRoutineAfterLostAnswer } from "@/lib/routine-save-recovery";
 import { RoutineScheduleNote } from "./RoutineScheduleNote";
 import { readTiming, RoutineTimingFields, withRoutineTiming } from "./routines/RoutineTimingFields";
@@ -222,14 +223,7 @@ function roomCanRunGoal(group: Group): boolean {
   return !group.dm;
 }
 
-function preferredRoomLead(group: Group | undefined, bots: Bot[], preferredId?: string): Bot | undefined {
-  const members = activeRoomMembers(group, bots);
-  const explicitLeadId = group?.defaultResponder.kind === "member" ? group.defaultResponder.botId : undefined;
-  return members.find((bot) => bot.id === preferredId)
-    ?? members.find((bot) => bot.id === explicitLeadId)
-    ?? members.find((bot) => bot.chiefOfStaff)
-    ?? members[0];
-}
+
 
 function nextHour(): number {
   const date = new Date(Date.now() + 60 * 60_000);
@@ -745,14 +739,14 @@ function EventEditorBody({
     setAttachmentNotice("");
     const room = selectedRoom ?? rooms[0];
     setGroupId(room?.id ?? "");
-    const lead = preferredRoomLead(room, state.bots, botIds[0]);
+    const lead = preferredRoomLead(room, state.bots, { preferredId: botIds[0], viewerId: viewerActorId(state.config) });
     selectBots(lead ? [lead.id] : []);
   };
 
   const selectRoom = (nextGroupId: string) => {
     const room = rooms.find((candidate) => candidate.id === nextGroupId);
     setGroupId(nextGroupId);
-    const lead = preferredRoomLead(room, state.bots, botIds[0]);
+    const lead = preferredRoomLead(room, state.bots, { preferredId: botIds[0], viewerId: viewerActorId(state.config) });
     selectBots(lead ? [lead.id] : []);
   };
 

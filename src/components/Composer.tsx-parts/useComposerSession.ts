@@ -111,10 +111,12 @@ export function useComposerSession({
       candidate &&
         instances.find((i) => i.instanceId === candidate.modelSelection.instanceId)?.capabilities?.images,
     );
+  const perspicaxOrg = usePerspicaxOrg();
+  const viewerId = config?.viewer?.principalId ?? null;
   const imageTargetsSupport = (message: string, mode: "chat" | "goal") => {
     if (!group) return botSupportsImages(bot);
     if (mode === "goal") {
-      return botSupportsImages(goalCoordinatorForComposer(message, members ?? [], group) ?? undefined);
+      return botSupportsImages(goalCoordinatorForComposer(message, members ?? [], group, viewerId ?? undefined) ?? undefined);
     }
     const responders = roomRespondersForComposer(message, members ?? [], group);
     return roomTakesImages(group, responders, botSupportsImages);
@@ -124,8 +126,6 @@ export function useComposerSession({
   const trustedThreadAccess = Boolean(!remoteClient && window.ogb?.approvals && capabilities.host.packaged);
   // Organization server: the bot's owner grants Full over HTTP while the
   // organization allows it (src/lib/full-access.ts, server/org/org-full-access.ts).
-  const perspicaxOrg = usePerspicaxOrg();
-  const viewerId = config?.viewer?.principalId ?? null;
   const orgFullAccess = orgFullAccessFor(perspicaxOrg, modeBot, viewerId);
   const fullAccessAvailable = trustedThreadAccess || orgFullAccess === "allowed";
 

@@ -87,3 +87,11 @@ describe("role notice", () => {
     expect(view.textContent).toContain("Rôle de sécurité de nova");
   });
 });
+
+describe("owner role rules", async () => {
+  const { roleRuleText } = await import("./bot-settings/RoleRulesCard");
+  it("reads a saved rule in plain words", () => {
+    expect(roleRuleText({ id: "r", ownerId: "o", createdAt: 0, from: { slug: "service-desk", name: "Service Desk" }, to: { slug: "", name: "" }, path: "schedule/holidayLists" }))
+      .toBe("Quand Service Desk est refusé en lecture sur schedule/holidayLists, lire comme Moi.");
+  });
+});

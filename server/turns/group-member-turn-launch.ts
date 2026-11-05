@@ -893,9 +893,14 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     engine: parseLocalPromptMode(process.env.SAGAX_LOCAL_PROMPT)
   };
   const roomStable = usesStablePrompt(roomPromptMode);
-  const roomCompactPrompt = usesCompactPrompt({ ...roomPromptMode, driverKind: instance.driverKind, model: roomModel })
+  const roomWantsCompact = usesCompactPrompt({ ...roomPromptMode, driverKind: instance.driverKind, model: roomModel });
+  // #2037: Claude with localPrompt full still needs agents use for deferral.
+  const roomNeedsAgentsUse = roomWantsCompact || instance.driverKind === "claudeAgent";
+  const roomCompactForBot = roomNeedsAgentsUse
     ? compactPromptFor(readyBot, roomSpeakerId || effectiveBotOwner(readyBot))
     : undefined;
+  const roomCompactPrompt = roomWantsCompact ? roomCompactForBot : undefined;
+  const roomAgentsKnownUse = !roomCompactPrompt && roomCompactForBot?.agents.core === "used" ? roomCompactForBot.agents : undefined;
   const roomPromptLevel = roomTurnApprovalMode(readyBot, threadId, orchestration);
   // 2026-11-02 (production): no server path for an engine without file
   // tools on the Sagax server (server/server-path-prompt.ts)
@@ -1121,6 +1126,7 @@ const sendRoomTurn = async (roomTurnAccess: TurnAccess | undefined) => {
         botId: readyBot.id,
         principalId: orgSpeakerPrincipal(readyBot, roomSpeaker),
         ...(roomCompactPrompt ? { compactPrompt: roomCompactPrompt } : {}),
+        ...(roomAgentsKnownUse ? { agentsKnownUse: roomAgentsKnownUse } : {}),
         ...(roomTurnAccess ? { access: roomTurnAccess } : {}),
         text: engineCommand ? engineCommand.engineText : withRecalled(roomRecalled, text),
         ...(roomRecalled && !engineCommand ? { recalled: roomRecalled } : {}),

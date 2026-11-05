@@ -162,6 +162,11 @@ export interface SendTurnInput {
   /** #1276: compact tool list for this turn (Claude Code). Absent: the
    * full tools/list, as before. */
   compactPrompt?: CompactPromptInput;
+  /** #2037: when native tool search is on (no compactPrompt) and the bot's
+   * agents use is known, the Claude driver passes this so the agents proxy
+   * defers every tool outside the core and these pins. Absent or core
+   * "default": the current DEFERRED_AGENT_TOOL_NAMES list. */
+  agentsKnownUse?: CompactPromptInput["agents"];
   /** 2026-11-02: how long a permission this turn asks waits for its person
    * before the engine hears a refusal. A routine run's turn waits longer
    * than a live chat's 15 minutes: nobody is watching it ask. */

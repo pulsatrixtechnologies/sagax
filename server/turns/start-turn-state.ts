@@ -155,6 +155,8 @@ export type TurnState = {
   voiceView: any;
   integrations: any;
   compactPrompt: any;
+  /** #2037: agents pins for native tool-search deferral when not compact. */
+  agentsKnownUse: any;
   recalled: any;
   transcript: any;
   wants: any;
@@ -318,6 +320,7 @@ export function createTurnState(init: {
     voiceView: undefined,
     integrations: undefined,
     compactPrompt: undefined,
+    agentsKnownUse: undefined,
     recalled: undefined,
     transcript: undefined,
     wants: undefined,

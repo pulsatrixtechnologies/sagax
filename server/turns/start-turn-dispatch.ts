@@ -137,6 +137,7 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       botId: state.bot.id,
       principalId: orgSpeakerPrincipal(state.bot, state.speaker),
       ...(state.compactPrompt ? { compactPrompt: state.compactPrompt } : {}),
+      ...(state.agentsKnownUse ? { agentsKnownUse: state.agentsKnownUse } : {}),
       // the per-turn latency line's queue stage (drivers/acp/turn-latency.ts)
       ...(!state.warmOnly && typeof state.userMessage.at === "number" ? { receivedAt: state.userMessage.at } : {}),
       ...(turnAccess ? { access: turnAccess } : {}),

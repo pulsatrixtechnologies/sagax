@@ -204,10 +204,12 @@ per-input cache. Tests: `perspicax-flow-readiness.test.ts`,
 
 Routine pre-flight uses `limitFailover.backupFor` to check the same backup
 order and access rules as dispatch. Account refusals stay live outside the
-probe cache. `RoutineManager.prepareTurn` applies the failover before
-capturing the run's engine account, so a backup's success never clears the
-primary's refusal. Credits keep the 30-minute refusal TTL, including in the
-failover store; a thread returns through the existing reset path.
+probe cache. When a backup is ready, the engine check passes with a clear
+note naming the refused primary and the backup that will run. `RoutineManager.prepareTurn`
+applies the failover before capturing the run's engine account, so a
+backup's success never clears the primary's refusal. Credits keep the
+30-minute refusal TTL, including in the failover store; a thread returns
+through the existing reset path.
 Tests: `routine-readiness.test.ts`, `routine-reliability.test.ts`,
 `limit-failover-host.test.ts`.
 

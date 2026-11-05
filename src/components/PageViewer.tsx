@@ -10,7 +10,8 @@
 //   - top centre, the title pill: a click turns it into a field (pencil),
 //     Enter renames, Escape cancels;
 //   - top right, « ⋯ » (versions, annotate, present, edit, comments,
-//     decline a proposed version) and Share;
+//     decline a proposed version, Always on top in an own desktop window)
+//     and Share;
 //   - the page itself, whole and interactive, in the app's theme.
 // Earlier lots (Grok Bot parity R8, chat rows 31 to 34) are all still here:
 // rename, versions, the person's own edit, comments, the annotation mode
@@ -27,7 +28,7 @@
 // frame, and its fields are plain text (parseAnnotationMessage). Nothing
 // reaches a bot until the person presses Send.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { Check, Ellipsis, Globe, Highlighter, History, Loader2, MessageSquare, Pencil, Play, Save, Send, Share, Trash2, X, XCircle } from "lucide-react";
+import { Check, Ellipsis, Globe, Highlighter, History, Loader2, MessageSquare, Pencil, Pin, Play, Save, Send, Share, Trash2, X, XCircle } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -251,6 +252,24 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
   // the person's skin goes with the theme: the page's default theme takes it
   const skin = useMemo(() => encodeSkinTokens(look.tokens), [look]);
 
+  // own desktop window only: always-on-top via the narrow preload (#2046)
+  const windowSelf = typeof window !== "undefined" ? window.artifactWindowSelf : undefined;
+  const [alwaysOnTop, setAlwaysOnTop] = useState(false);
+  useEffect(() => {
+    if (!follow || !windowSelf) return;
+    let live = true;
+    void windowSelf.isAlwaysOnTop().then((on) => { if (live) setAlwaysOnTop(on === true); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [follow, windowSelf]);
+  const toggleAlwaysOnTop = useCallback(() => {
+    if (!windowSelf) return;
+    const next = !alwaysOnTop;
+    setAlwaysOnTop(next);
+    void windowSelf.setAlwaysOnTop(next).then((ok) => {
+      if (!ok) setAlwaysOnTop(!next);
+    }).catch(() => setAlwaysOnTop(!next));
+  }, [alwaysOnTop, windowSelf]);
+
   // the caller's handler may change on every render: read it from a ref, so
   // loading the page never runs again because of it
   const onChangeRef = useRef(onChange);
@@ -432,6 +451,15 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
                       close();
                       void call<{ page: PublishedPageSummary }>("/decline", { method: "POST", body: JSON.stringify({ version: shown.n }) }).then((answer) => { if (answer) update(answer.page); });
                     }} />
+                  )}
+                  {follow && windowSelf && (
+                    <MenuItem
+                      icon={<Pin size={14} />}
+                      label={t("pages.alwaysOnTop")}
+                      checked={alwaysOnTop}
+                      data-page-always-on-top=""
+                      onClick={() => { close(); toggleAlwaysOnTop(); }}
+                    />
                   )}
                   {moreItems?.(close)}
                 </>

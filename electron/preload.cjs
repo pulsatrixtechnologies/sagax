@@ -669,8 +669,12 @@ const bridge = {
       // a screen point to open at (a panel dragged out of the app)
       ...(Number.isFinite(request?.x) && Number.isFinite(request?.y) ? { x: Number(request.x), y: Number(request.y) } : {}),
       ...(request?.focus === false ? { focus: false } : {}),
+      ...(typeof request?.alwaysOnTop === "boolean" ? { alwaysOnTop: request.alwaysOnTop } : {}),
     }),
     close: (artifactId) => ipcRenderer.invoke("artifact-window:close", { artifactId: String(artifactId ?? "") }),
+    /** Keep a page or artifact window above other apps (#2046). */
+    setAlwaysOnTop: (artifactId, on) => ipcRenderer.invoke("artifact-window:set-top", { artifactId: String(artifactId ?? ""), on: on === true }),
+    isAlwaysOnTop: (artifactId) => ipcRenderer.invoke("artifact-window:get-top", { artifactId: String(artifactId ?? "") }),
     /** A claude.ai artifact (#2018) on claude.ai itself, in a window whose
      * persistent session keeps the person's claude.ai sign-in. */
     openClaudeAi: (url) => ipcRenderer.invoke("artifact-window:open-claude-ai", { url: String(url ?? "") }),

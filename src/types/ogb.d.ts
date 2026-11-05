@@ -122,6 +122,11 @@ const __BASE_VERSION__: string;
     retroAssistantWindow?: import("../components/retro-assistant/detached-protocol").AssistantWindowBridge;
     /** Only in a floating bot's window (electron/floating-bot-preload.cjs). */
     floatingBotWindow?: import("../components/floating-bots/protocol").FloatingWindowBridge;
+    /** Only in a page/artifact own-window (electron/artifact-window-preload.cjs). Always-on-top (#2046). */
+    artifactWindowSelf?: {
+      isAlwaysOnTop(): Promise<boolean>;
+      setAlwaysOnTop(on: boolean): Promise<boolean>;
+    };
     ogb?: {
       platform: NodeJS.Platform;
       /** This Mac only: open the app when the person signs in. Unset until they choose. */
@@ -385,9 +390,13 @@ const __BASE_VERSION__: string;
       artifactWindow?: {
         /** `x`, `y`: a screen point to open at; `focus: false` opens or
          * keeps it without taking the focus. An `artifactId` of
-         * `page:<pageId>` is a page window, not an artifact. */
-        open(request: { botId: string; artifactId: string; title: string; width?: number; height?: number; x?: number; y?: number; focus?: boolean }): Promise<"created" | "focused" | "refused">;
+         * `page:<pageId>` is a page window, not an artifact.
+         * `alwaysOnTop` keeps it above other apps (#2046). */
+        open(request: { botId: string; artifactId: string; title: string; width?: number; height?: number; x?: number; y?: number; focus?: boolean; alwaysOnTop?: boolean }): Promise<"created" | "focused" | "refused">;
         close(artifactId: string): Promise<boolean>;
+        /** Keep a page or artifact window above other apps (#2046). */
+        setAlwaysOnTop?(artifactId: string, on: boolean): Promise<boolean>;
+        isAlwaysOnTop?(artifactId: string): Promise<boolean>;
         /** A claude.ai artifact URL on claude.ai, in a window with the
          * persistent `persist:claude-ai` session (absent on an older app). */
         openClaudeAi?(url: string): Promise<"created" | "focused" | "refused">;

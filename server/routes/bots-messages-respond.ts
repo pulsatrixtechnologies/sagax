@@ -32,6 +32,11 @@ async function handleBotRespond(deps: BotsMessagesRouteDeps, ctx: RouteContext):
     const body = await readBody(req);
     const selected = requestedTaskBot(m[1], body.threadId);
     const bot = botForThread(selected.id, selected.threadId)!;
+    const source = deps.originApprovals?.sourceFor(bot.threadId, String(body.requestId));
+    if (source === false) return json(res, 409, { error: "This approval is no longer available in this conversation." });
+    if (source) {
+      return handleThreadRespond(deps, { ...ctx, path: `/api/threads/${source.threadId}/respond`, readBody: async () => ({ ...body, requestId: source.requestId }) });
+    }
     const behavior = requestBehavior(body.behavior);
     const reviewedSha256 = typeof body.reviewedSha256 === "string" ? body.reviewedSha256 : undefined;
     if (!behavior) return json(res, 400, { error: "behavior must be allow, deny, or answer" });
@@ -180,6 +185,11 @@ async function handleThreadRespond(deps: BotsMessagesRouteDeps, ctx: RouteContex
   if (m && method === "POST") {
     const threadId = m[1];
     const body = await readBody(req);
+    const source = deps.originApprovals?.sourceFor(threadId, String(body.requestId));
+    if (source === false) return json(res, 409, { error: "This approval is no longer available in this conversation." });
+    if (source) {
+      return handleThreadRespond(deps, { ...ctx, path: `/api/threads/${source.threadId}/respond`, readBody: async () => ({ ...body, requestId: source.requestId }) });
+    }
     const behavior = requestBehavior(body.behavior);
     const reviewedSha256 = typeof body.reviewedSha256 === "string" ? body.reviewedSha256 : undefined;
     if (!behavior) return json(res, 400, { error: "behavior must be allow, deny, or answer" });

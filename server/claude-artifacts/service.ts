@@ -219,6 +219,6 @@ export class ArtifactSummaryCache {
   }
 
   invalidate(url: string): void {
-    for (const key of [...this.rows.keys()]) if (key.endsWith(`\n${url}`)) this.rows.delete(key);
+    for (const key of Array.from(this.rows.keys())) if (key.endsWith(`\n${url}`)) this.rows.delete(key);
   }
 }

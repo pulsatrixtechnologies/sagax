@@ -40609,7 +40609,7 @@ async function personClaudeArtifactCall(
   }
   const account = claudeAccountForPrincipal(principalId);
   if ("unavailable" in account) return { ok: false, unavailable: account.unavailable };
-  return runClaudeArtifact({ account: { cli: account.cli, env: account.env }, tool, input, ...(page ?? {}) });
+  return runClaudeArtifact({ account: { cli: account.cli, env: account.env }, tool, input, ...page });
 }
 let claudeArtifactSummaries: ArtifactSummaryCache | undefined;
 function claudeArtifactSummaryCache(): ArtifactSummaryCache {

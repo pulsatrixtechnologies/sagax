@@ -16,6 +16,11 @@ display keeps Cua's native overlay.
 - Overlay host: `electron/agent-cursor-overlay.mjs`
 - Wired from `electron/main.mjs` on Cua connection and display changes
 
+Coordinates are global DIP (Electron `display.bounds`, including negative
+origins). `scaleFactor` converts screenshot physical pixels on a display into
+that DIP space; overlay `setBounds` stays in DIP so mixed-DPI layouts place
+correctly.
+
 ## Proofs
 
 Schematic before/after (headless; live multi-display OS overlay needs a real

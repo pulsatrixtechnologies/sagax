@@ -1,13 +1,84 @@
 // Pure placement for the agent cursor when the desktop spans several displays.
 // Cua Driver's macOS overlay still covers only NSScreen.mainScreen (trycua/cua#5336);
 // Sagax draws a secondary overlay on the display that actually contains the point.
+//
+// Coordinate space: Electron display.bounds and Cua get_cursor_position share global
+// DIP / top-left points (negative origins allowed). scaleFactor converts screenshot
+// physical pixels on a given display into that DIP space; overlay window bounds stay
+// in DIP so mixed-DPI layouts place correctly.
 
-/** @typedef {{ id: number, bounds: { x: number, y: number, width: number, height: number } }} CursorDisplay */
-/** @typedef {{ x: number, y: number }} CursorPoint */
+/**
+ * @typedef {{ x: number, y: number, width: number, height: number }} CursorBounds
+ * @typedef {{ id: number, bounds: CursorBounds, scaleFactor?: number }} CursorDisplay
+ * @typedef {{ x: number, y: number }} CursorPoint
+ */
 
 export const SECONDARY_CURSOR_SIZE = 48;
 /** Hotspot of the drawn arrow, in local overlay pixels (tip near top-left). */
 export const SECONDARY_CURSOR_HOTSPOT = Object.freeze({ x: 6, y: 4 });
+
+/** Safe scale factor for a display (missing or non-positive → 1). */
+export function displayScale(display) {
+  const scale = Number(display?.scaleFactor);
+  return Number.isFinite(scale) && scale > 0 ? scale : 1;
+}
+
+/** Strip Electron display objects down to id, DIP bounds and scaleFactor. */
+export function normalizeCursorDisplays(displays) {
+  if (!Array.isArray(displays)) return [];
+  const out = [];
+  for (const display of displays) {
+    const bounds = display?.bounds;
+    if (!bounds) continue;
+    const { x, y, width, height } = bounds;
+    if (![x, y, width, height].every(Number.isFinite)) continue;
+    const id = Number(display.id);
+    if (!Number.isFinite(id)) continue;
+    out.push({
+      id,
+      bounds: { x, y, width, height },
+      scaleFactor: displayScale(display),
+    });
+  }
+  return out;
+}
+
+/** Axis-aligned union of display DIP bounds (for a spanning overlay). */
+export function unionDisplayBounds(displays) {
+  if (!Array.isArray(displays) || displays.length === 0) return null;
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  let any = false;
+  for (const display of displays) {
+    const bounds = display?.bounds;
+    if (!bounds) continue;
+    const { x, y, width, height } = bounds;
+    if (![x, y, width, height].every(Number.isFinite)) continue;
+    any = true;
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x + width);
+    maxY = Math.max(maxY, y + height);
+  }
+  if (!any) return null;
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+/**
+ * Convert a screenshot pixel on one display into global DIP.
+ * Screenshot buffers are physical pixels; Electron placement uses DIP.
+ */
+export function screenshotPixelToGlobalDip(pixel, display) {
+  if (!pixel || !display?.bounds) return null;
+  if (![pixel.x, pixel.y, display.bounds.x, display.bounds.y].every(Number.isFinite)) return null;
+  const scale = displayScale(display);
+  return {
+    x: display.bounds.x + pixel.x / scale,
+    y: display.bounds.y + pixel.y / scale,
+  };
+}
 
 export function pointInBounds(point, bounds) {
   if (!point || !bounds) return false;
@@ -42,13 +113,14 @@ export function localPointOnDisplay(point, bounds) {
 
 /**
  * Decide whether Sagax must draw its own cursor (secondary display) and where.
- * Primary stays with Cua Driver's native overlay.
+ * Primary stays with Cua Driver's native overlay. `point` is global DIP.
  */
 export function planSecondaryAgentCursor(point, displays, primaryDisplayId) {
   const empty = {
     show: false,
     suppressNativeOnPrimaryEdge: false,
     displayId: null,
+    scaleFactor: null,
     local: null,
     windowBounds: null,
   };
@@ -82,6 +154,7 @@ export function planSecondaryAgentCursor(point, displays, primaryDisplayId) {
     // when the real point is past the right or bottom of the primary display.
     suppressNativeOnPrimaryEdge: true,
     displayId: host.id,
+    scaleFactor: displayScale(host),
     local,
     windowBounds,
   };

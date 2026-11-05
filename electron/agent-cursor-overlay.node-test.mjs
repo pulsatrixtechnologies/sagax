@@ -2,12 +2,18 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createAgentCursorOverlay, readCursorPoint } from "./agent-cursor-overlay.mjs";
 
-const PRIMARY = { id: 1, bounds: { x: 0, y: 0, width: 1728, height: 1117 } };
-const RIGHT = { id: 2, bounds: { x: 1728, y: 0, width: 3008, height: 1692 } };
+const PRIMARY = { id: 1, bounds: { x: 0, y: 0, width: 1728, height: 1117 }, scaleFactor: 2 };
+const RIGHT = { id: 2, bounds: { x: 1728, y: 0, width: 3008, height: 1692 }, scaleFactor: 1 };
+const LEFT = { id: 4, bounds: { x: -1920, y: 0, width: 1920, height: 1080 }, scaleFactor: 1 };
 
 function fakeScreen(displays, primaryId = displays[0]?.id) {
   return {
-    getAllDisplays: () => displays.map((display) => ({ ...display, bounds: { ...display.bounds } })),
+    getAllDisplays: () =>
+      displays.map((display) => ({
+        ...display,
+        bounds: { ...display.bounds },
+        scaleFactor: display.scaleFactor ?? 1,
+      })),
     getPrimaryDisplay: () => displays.find((display) => display.id === primaryId) ?? displays[0],
   };
 }
@@ -133,4 +139,23 @@ test("overlay tears down when the cua connection drops", async () => {
   assert.equal(created[0].visible, true);
   overlay.sync({ mode: "unavailable", reason: "stopped" });
   assert.equal(created[0].destroyed, true);
+});
+
+test("overlay places in DIP on a negative-origin secondary with mixed scale factors", async () => {
+  const { BrowserWindow, created } = fakeBrowserWindow();
+  const point = { x: -100, y: 40 };
+  const overlay = createAgentCursorOverlay({
+    BrowserWindow,
+    screen: fakeScreen([PRIMARY, LEFT], PRIMARY.id),
+    platform: "darwin",
+    pollMs: 60_000,
+    request: async () => ({ ok: true, result: point }),
+  });
+  overlay.sync({ mode: "embedded", socketPath: "/tmp/fixture-cua.sock" });
+  await overlay._tick();
+  assert.equal(created.length, 1);
+  assert.equal(created[0].visible, true);
+  assert.equal(created[0].bounds.x, point.x - 6);
+  assert.equal(created[0].bounds.y, point.y - 4);
+  overlay.stop();
 });

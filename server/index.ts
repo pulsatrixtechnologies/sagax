@@ -21464,6 +21464,7 @@ const personAttentionDeps: AttentionRelayDeps<BotRecord> = {
   task: (botId, threadId) => store.taskByThread(botId, threadId) ?? undefined,
   messages: (threadId) => store.activePath(threadId),
   append: (threadId, message) => store.appendMessage(threadId, message),
+  patch: (threadId, messageId, patch) => { store.patchMessage(threadId, messageId, patch); },
   markUnread: (botId, threadId) => store.patchTask(botId, threadId, { unread: true }),
   conversation: (bot, threadId) => conversationOrStart(bot, attentionPerson(bot, threadId)),
   // an outside agent's conversation, or an AI client's hidden one (#291):

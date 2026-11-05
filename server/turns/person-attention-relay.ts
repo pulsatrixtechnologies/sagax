@@ -37,6 +37,8 @@ export interface AttentionRelayDeps<B extends AttentionBot> {
   task(botId: string, threadId: string): Pick<WireTask, "threadId" | "title" | "confidential" | "openedBy" | "routineRunId" | "archivedAt"> | undefined;
   messages(threadId: string): readonly WireMessage[];
   append(threadId: string, message: Omit<WireMessage, "id" | "at">): WireMessage | undefined | null | void;
+  /** Patch a row in place (a routine run's card takes the items). */
+  patch(threadId: string, messageId: string, patch: Partial<WireMessage>): void;
   markUnread(botId: string, threadId: string): void;
   /** The person's own conversation with the bot (started when they have none). */
   conversation(bot: B, threadId: string): string | undefined;
@@ -72,7 +74,7 @@ export function turnWords(messages: readonly WireMessage[], turnId: string | und
 
 /** What happened (for tests and the log): the card's thread, or why not. */
 export type AttentionRelayOutcome =
-  | { posted: true; threadId: string; card: PersonAttentionCard }
+  | { posted: true; threadId: string; card: PersonAttentionCard; onRunCard?: true }
   | { posted: false; reason: "failed" | "no-task" | "confidential" | "agent" | "no-signal" | "run-reports" | "own-conversation" | "no-conversation" | "already" };
 
 export function relayPersonAttention<B extends AttentionBot>(
@@ -94,8 +96,21 @@ export function relayPersonAttention<B extends AttentionBot>(
   const target = deps.conversation(bot, threadId);
   if (!target) return { posted: false, reason: "no-conversation" };
   if (target === threadId) return { posted: false, reason: "own-conversation" };
-  if (deps.messages(target).some((message) => message.attention?.sourceMessageId === last.id)) return { posted: false, reason: "already" };
+  const rows = deps.messages(target);
+  if (rows.some((message) => message.attention?.sourceMessageId === last.id)) return { posted: false, reason: "already" };
   const card = attentionCard(bot, threadId, task, last.id, found, run, deps);
+  // 2026-11-05 (review: the same items twice): a run whose card is already
+  // in the person's chat gets the items on that card, never a second card.
+  // It rings once: only when the card had none yet.
+  const runCard = run ? rows.findLast((message) => message.kind === "routine.run" && message.routineRun?.runId === run.id) : undefined;
+  if (runCard) {
+    if (runCard.attention) return { posted: false, reason: "already" };
+    deps.patch(target, runCard.id, { attention: card });
+    deps.markUnread(bot.id, target);
+    deps.notify(bot, target, card.kind === "question" ? `${bot.name} has a question for you` : `${bot.name} needs you`,
+      card.items.map((entry) => entry.text.replace(/\*\*|__|`/g, "").replace(/\s+/g, " ")).join("\n"));
+    return { posted: true, threadId: target, card, onRunCard: true };
+  }
   deps.append(target, {
     role: "bot", kind: "text", text: personAttentionText(card), attention: card,
     threadRef: { botId: bot.id, threadId, title: task.title },

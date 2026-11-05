@@ -2,7 +2,7 @@
  * (2026-11-05): what a bot's turn elsewhere (a hand-off, a thread another bot
  * opened, a routine run) left for the person, drawn in their conversation
  * with that bot through the chat's own rows and the real store: the card
- * from a hand-off, and a routine run's card carrying the same items.
+ * from a hand-off that reached no card, and a routine run's own card with its items.
  * Neutral fictional bots, clients and tickets. Not shipped in the app.
  * ?width=<px>&height=<px>&skin=<id>&lang=<en|fr> */
 import { StrictMode, useEffect } from "react";
@@ -33,15 +33,23 @@ const atlas = makeBot("atlas", "Atlas", "blue");
 const nova = makeBot("nova", "Nova", "pink");
 const link = (id: number) => `https://cw.example.com/v4_6_release/services/system_io/router/openrecord.rails?recordType=ServiceFv&recid=${id}&companyName=example`;
 
+// Two different results, one card each (never the same items twice): a
+// hand-off Nova gave Atlas, which reached no card in the person's chat, and
+// a routine run whose own card carries its items.
 const handoff: PersonAttentionCard = {
   kind: "human", botId: "atlas", botName: "Atlas", threadId: "atlas-work", threadTitle: "@Nova · work", sourceMessageId: "src-1",
   openedBy: { botId: "nova", name: "Nova" },
+  items: [
+    { text: "**100305** (board 24, Initech) : the client asks for an on-site visit this week. Pick the day; no technician is free before Thursday.", ticketId: 100305, ticketUrl: link(100305) },
+  ],
+};
+const runCard: PersonAttentionCard = {
+  kind: "human", botId: "atlas", botName: "Atlas", sourceMessageId: "run:r1", routineRunId: "run-1", routineName: "Hourly new tickets", threadId: "atlas-run", threadTitle: "Hourly new tickets",
   items: [
     { text: "**100201** (board 1, Acme) : security notice forwarded by a teammate, still New and held \"To sort\". Decide which client it belongs to and whether patching is needed.", ticketId: 100201, ticketUrl: link(100201) },
     { text: "**100202** (board 1, Globex) : third advertising reminder. The close was refused without a reason, so set it to Completed by hand.", ticketId: 100202, ticketUrl: link(100202) },
   ],
 };
-const runCard: PersonAttentionCard = { ...handoff, sourceMessageId: "run:r1", openedBy: undefined, routineRunId: "run-1", routineName: "Hourly new tickets", threadId: "atlas-run", threadTitle: "Hourly new tickets" };
 
 const messages: Message[] = [
   { id: "ask", role: "user", kind: "text", at: NOW - 30 * M, text: "Import the dispatch routines." } as Message,

@@ -30,6 +30,11 @@ function world(opts: { run?: { id: string; routineName: string; status: string }
       threads.set(threadId, list);
       return row;
     },
+    patch: (threadId, messageId, patch) => {
+      const list = threads.get(threadId) ?? [];
+      const at = list.findIndex((row) => row.id === messageId);
+      if (at >= 0) list[at] = { ...list[at]!, ...patch };
+    },
     markUnread: (_botId, threadId) => { unread.push(threadId); },
     conversation: () => "main",
     agentConversation: () => false,
@@ -111,5 +116,24 @@ describe("mirrorLateRunReply", () => {
     const quiet = world({ run: { id: "run-1", routineName: "Hourly pass", status: "completed" } });
     quiet.say("run", "NOTHING_TO_REPORT");
     expect(mirrorLateRunReply({ bot: ATLAS, threadId: "run", turnId: "turn-1", ok: true }, quiet.deps)).toBe(false);
+  });
+});
+
+describe("a run with [HUMAIN] items gives one card, not two", () => {
+  it("puts the items on the run's own card already in the chat, and rings once", () => {
+    const w = world({ run: { id: "run-1", routineName: "Hourly pass", status: "completed" } });
+    w.threads.set("main", [{ id: "run-card", at: 1, role: "bot", kind: "routine.run", text: "Hourly pass", routineRun: { runId: "run-1", routineId: "r1", routineName: "Hourly pass", status: "completed" } } as unknown as WireMessage]);
+    w.say("run", REPORT, "turn-late");
+    const outcome = relayPersonAttention({ bot: ATLAS, threadId: "run", turnId: "turn-late", ok: true }, w.deps);
+    expect(outcome).toMatchObject({ posted: true, onRunCard: true });
+    const main = w.threads.get("main")!;
+    expect(main).toHaveLength(1);
+    expect(main[0]!.attention?.items.map((item) => item.ticketId)).toEqual([100201, 100202]);
+    expect(w.notified).toHaveLength(1);
+    // the same run's card that already carries items: nothing more, no ring
+    w.say("run", REPORT, "turn-later");
+    expect(relayPersonAttention({ bot: ATLAS, threadId: "run", turnId: "turn-later", ok: true }, w.deps)).toEqual({ posted: false, reason: "already" });
+    expect(w.threads.get("main")!.filter((row) => row.attention)).toHaveLength(1);
+    expect(w.notified).toHaveLength(1);
   });
 });

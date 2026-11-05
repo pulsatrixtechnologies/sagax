@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
  * Headless captures of the "needs you" card (2026-11-05):
- * src/gallery/needs-you-card.html, the card from a hand-off and a routine
- * run's card carrying the same items, dark and light, English and French.
+ * src/gallery/needs-you-card.html, the card from a hand-off that reached no
+ * card in the chat and a routine run's own card with its items (one card per
+ * result, never the same items twice), dark and light, English and French.
  * Headless Chromium only: no window opens. Its own Vite port (never 5173).
  * Usage: node scripts/capture/needs-you-card.mjs [--out DIR] [--port N]
  */
@@ -55,7 +56,8 @@ try {
       await page.locator("[data-gallery-sample='needs-you-card']").screenshot({ path: file });
       const tickets = await page.locator("[data-attention-ticket]").count();
       console.log(`${file} (${tickets} ticket buttons)${errors.length ? ` ERRORS: ${errors.join(" | ")}` : ""}`);
-      if (errors.length || tickets < 4) failed = true;
+      // one card per result: 1 hand-off item + 2 run items, never repeated
+      if (errors.length || tickets !== 3) failed = true;
       await page.close();
     }
   }

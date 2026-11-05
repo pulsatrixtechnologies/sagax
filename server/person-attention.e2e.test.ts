@@ -70,3 +70,26 @@ it("carries a teammate's [HUMAIN] items from coordinated work to the person's ch
 it("carries them from a one-way send too, where nothing goes back to the sender", () => fixture(async (f) => {
   await handOff(f, { tool: "send_to_bot", arguments: { bot_id: f.atlas.id, title: "Hourly dispatch", message: "Run the hourly dispatch pass." } });
 }), 60_000);
+
+it("a run with [HUMAIN] items gives one card, not two, and rings once", () => fixture(async (f) => {
+  const stream = await openSse(`${f.session.info.url}/api/events`);
+  try {
+    f.plan[f.atlas.id] = { reply: REPORT };
+    f.save();
+    // postResults off: items for the person post all the same
+    const { routine } = await f.api("/api/routines", {
+      name: "Hourly new tickets", prompt: "Run the hourly dispatch pass.", botId: f.atlas.id, enabled: false, postResults: false,
+      schedule: { type: "interval", everyMinutes: 60, anchorAt: Date.now() + 3_600_000 },
+    });
+    const { run } = await f.api(`/api/routines/${routine.id}/run`, {});
+    const runState = async () => (await f.api("/api/routines", undefined, "GET")).runs.find((entry: any) => entry.id === run.id);
+    await expect.poll(async () => (await runState())?.status, { timeout: 30_000 }).toBe("completed");
+    await stream.until((frame) => frame.kind === "notify" && frame.notification?.kind === "needs-you", 15_000);
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    const carried = (await f.messages(f.atlas.activeTaskId)).filter((message: any) => message.attention);
+    // the run's own card is the card
+    expect(carried).toHaveLength(1);
+    expect(carried[0]).toMatchObject({ kind: "routine.run", routineRun: { runId: run.id }, attention: { items: [{ ticketId: 100201 }, { ticketId: 100202 }] } });
+    expect(stream.frames.filter((frame) => frame.kind === "notify" && frame.notification?.kind === "needs-you")).toHaveLength(1);
+  } finally { stream.close(); }
+}), 60_000);

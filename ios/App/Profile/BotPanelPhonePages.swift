@@ -366,9 +366,7 @@ struct BotPermissionsSection: View {
                 .disabled(current.busy == true)
                 .accessibilityIdentifier("permissions-page-target")
             } footer: {
-                Text(current.pageTargetDefault.map { PageTargetDefaultChoice.label(for: $0) }
-                     .map { "Always \($0)." }
-                     ?? "Ask each time when several targets are available.")
+                Text(PageTargetDefaultChoice.summary(for: current.pageTargetDefault))
             }
         }
         if !canEdit {

@@ -131,6 +131,8 @@ const routineToolFieldsSchema = z.object({
   deleteWhenFinished: z.boolean().optional(),
   /** 2026-11-04: the model its runs use; null in an update goes back to the bot's. */
   model: z.string().max(200).nullable().optional(),
+  /** #2038: Claude sub-agent model; null in an update clears it. */
+  subagentModel: z.string().max(200).nullable().optional(),
   /** 2026-11-05: the Perspicax role its runs act as ("" = Moi); null in an update clears it. */
   actAs: z.string().max(120).nullable().optional(),
   /** #1996: the routine needs its bot's computer online (Automations >
@@ -306,12 +308,13 @@ const storedDefinitionSchema = z.object({
   folder: z.string().min(1).max(ROUTINE_FOLDER_MAX).optional(),
   deleteWhenFinished: z.boolean().optional(),
   model: z.string().min(1).max(200).optional(),
+  subagentModel: z.string().min(1).max(200).optional(),
   actAs: z.string().max(120).optional(),
   requiresComputer: z.boolean().optional(),
   effort: z.enum(EFFORT_LEVELS).optional(),
 }).strict();
 const storedChangesSchema = storedDefinitionSchema
-  .omit({ schedule: true, timeoutMinutes: true, watch: true, folder: true, model: true, actAs: true, effort: true })
+  .omit({ schedule: true, timeoutMinutes: true, watch: true, folder: true, model: true, subagentModel: true, actAs: true, effort: true })
   .partial()
   .extend({
     schedule: storedScheduleChangesSchema.optional(),
@@ -319,6 +322,7 @@ const storedChangesSchema = storedDefinitionSchema
     watch: z.custom<RoutineWatchPrecheck | null>((value) => value === null || loadRoutinePrecheck(value)?.kind === "watch").optional(),
     folder: z.string().min(1).max(ROUTINE_FOLDER_MAX).nullable().optional(),
     model: z.string().min(1).max(200).nullable().optional(),
+    subagentModel: z.string().min(1).max(200).nullable().optional(),
     actAs: z.string().max(120).nullable().optional(),
     effort: z.enum(EFFORT_LEVELS).nullable().optional(),
   })
@@ -822,6 +826,7 @@ function normalizeDefinition(input: RoutineToolDefinitionInput, now: number): Ro
     ...(cleanRoutineFolder(input.folder) ? { folder: cleanRoutineFolder(input.folder)! } : {}),
     ...(input.deleteWhenFinished === true ? { deleteWhenFinished: true } : {}),
     ...(modelInput(input.model) ? { model: modelInput(input.model)! } : {}),
+    ...(modelInput(input.subagentModel) ? { subagentModel: modelInput(input.subagentModel)! } : {}),
     ...(actAsInput(input.actAs) !== undefined ? { actAs: actAsInput(input.actAs)! } : {}),
     ...(input.requiresComputer === true ? { requiresComputer: true } : {}),
     ...(input.effort ? { effort: input.effort } : {}),
@@ -846,6 +851,7 @@ function normalizeChanges(
   if (input.folder !== undefined) changes.folder = cleanRoutineFolder(input.folder) ?? null;
   if (input.deleteWhenFinished !== undefined) changes.deleteWhenFinished = input.deleteWhenFinished === true;
   if (input.model !== undefined) changes.model = modelInput(input.model) ?? null;
+  if (input.subagentModel !== undefined) changes.subagentModel = modelInput(input.subagentModel) ?? null;
   if (input.actAs !== undefined) changes.actAs = actAsInput(input.actAs) ?? null;
   if (input.requiresComputer !== undefined) changes.requiresComputer = input.requiresComputer === true;
   if (input.effort !== undefined) changes.effort = input.effort || null;
@@ -1145,12 +1151,13 @@ function effectiveDefinition(operation: RoutineRequestOperation, manager: Routin
     ...(existing.folder ? { folder: existing.folder } : {}),
     ...(existing.deleteWhenFinished ? { deleteWhenFinished: true } : {}),
     ...(existing.model ? { model: existing.model } : {}),
+    ...(existing.subagentModel ? { subagentModel: existing.subagentModel } : {}),
     ...(existing.actAs !== undefined ? { actAs: existing.actAs } : {}),
     ...(existing.requires?.computer ? { requiresComputer: true } : {}),
     ...(existing.effort ? { effort: existing.effort } : {}),
   };
   if (operation.action !== "update") return base;
-  const { schedule, timeoutMinutes, watch, folder, model, actAs, effort, ...changes } = operation.changes;
+  const { schedule, timeoutMinutes, watch, folder, model, subagentModel, actAs, effort, ...changes } = operation.changes;
   const merged: RoutineRequestDefinition = {
     ...base,
     ...changes,
@@ -1164,6 +1171,8 @@ function effectiveDefinition(operation: RoutineRequestOperation, manager: Routin
   else if (folder !== undefined) merged.folder = folder;
   if (model === null) delete merged.model;
   else if (model !== undefined) merged.model = model;
+  if (subagentModel === null) delete merged.subagentModel;
+  else if (subagentModel !== undefined) merged.subagentModel = subagentModel;
   if (actAs === null) delete merged.actAs;
   else if (actAs !== undefined) merged.actAs = actAs;
   if (effort === null) delete merged.effort;
@@ -1267,6 +1276,7 @@ function cardCopy(
       ...(definition.folder ? [`Folder: ${redactSecretsInText(definition.folder)}`] : []),
       ...(definition.deleteWhenFinished ? ["Delete once finished: yes"] : []),
       ...(definition.model ? [`Model: ${redactSecretsInText(definition.model)} (the bot's engine; chat keeps the bot's model)`] : []),
+      ...(definition.subagentModel ? [`Sub-agent model: ${redactSecretsInText(definition.subagentModel)} (Claude Agent / Flow workers; main model unchanged)`] : []),
       ...(definition.actAs !== undefined ? [`Acts as: ${definition.actAs ? redactSecretsInText(definition.actAs) : "the person's own access"} (Perspicax role)`] : []),
       ...(definition.requiresComputer ? ["Needs its computer: yes (the pre-run check waits for the bot's computer to be online)"] : []),
       ...(definition.effort ? [`Effort: ${definition.effort} (chat keeps the bot's effort)`] : []),
@@ -1302,6 +1312,7 @@ function inputFromDefinition(definition: RoutineRequestDefinition, botId: string
     ...(definition.folder ? { folder: definition.folder } : {}),
     ...(definition.deleteWhenFinished ? { deleteWhenFinished: true } : {}),
     ...(definition.model ? { model: definition.model } : {}),
+    ...(definition.subagentModel ? { subagentModel: definition.subagentModel } : {}),
     ...(definition.actAs !== undefined ? { actAs: definition.actAs } : {}),
     ...(definition.requiresComputer ? { requires: { computer: true } } : {}),
     ...(definition.effort ? { effort: definition.effort } : {}),
@@ -1327,6 +1338,7 @@ function updateFromChanges(
   if (changes.folder !== undefined) patch.folder = changes.folder;
   if (changes.deleteWhenFinished !== undefined) patch.deleteWhenFinished = changes.deleteWhenFinished;
   if (changes.model !== undefined) patch.model = changes.model;
+  if (changes.subagentModel !== undefined) patch.subagentModel = changes.subagentModel;
   if (changes.actAs !== undefined) patch.actAs = changes.actAs;
   if (changes.requiresComputer !== undefined) patch.requires = withRequiredComputer(currentRequires, changes.requiresComputer);
   if (changes.effort !== undefined) patch.effort = changes.effort;

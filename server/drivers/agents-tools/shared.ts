@@ -174,7 +174,12 @@ export const ROUTINE_FIELDS_SCHEMA = {
   model: {
     type: ["string", "null"],
     maxLength: 200,
-    description: "Model id for runs/sub-agents on this bot's engine; chat unchanged. null resets.",
+    description: "Model id for runs on this bot's engine; chat unchanged. null resets. Claude sub-agents follow subagent_model, else this, else the bot's fast model.",
+  },
+  subagent_model: {
+    type: ["string", "null"],
+    maxLength: 200,
+    description: "Claude sub-agent model (Agent tool / Flow workers) on this bot's engine; main model unchanged. null clears (falls back to model or the bot's fast model).",
   },
   act_as: {
     type: ["string", "null"],
@@ -554,6 +559,16 @@ export function routineFields(args: Json): { fields: Json; error?: string } {
   if (args.model !== undefined) {
     if (args.model !== null && typeof args.model !== "string") return { fields, error: "model must be a model id, or null for the bot's model." };
     fields.model = args.model;
+  }
+  // #2038: Claude sub-agent model override (shared/claude-subagent-model.ts).
+  // null clears; ?? would drop null, so read the key the caller set.
+  if (args.subagent_model !== undefined || args.subagentModel !== undefined) {
+    if (args.subagent_model != null && args.subagentModel != null && args.subagent_model !== args.subagentModel) {
+      return { fields, error: "Choose one subagent_model value; subagent_model and subagentModel disagree." };
+    }
+    const subagentModel = args.subagent_model !== undefined ? args.subagent_model : args.subagentModel;
+    if (subagentModel !== null && typeof subagentModel !== "string") return { fields, error: "subagent_model must be a model id, or null to clear." };
+    fields.subagentModel = subagentModel;
   }
   // #1996: the "needs its computer" requirement (Routine.requires.computer).
   const requiresComputer = args.requires_computer ?? args.requiresComputer;

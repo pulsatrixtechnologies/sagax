@@ -13,6 +13,15 @@ describe("routine effort tools", () => {
     expect(invalid?.isError).toBe(true);
     expect(api).toHaveBeenCalledTimes(2);
   });
+
+  it("forwards subagent_model on create and a null reset on update (#2038)", async () => {
+    const api = vi.fn(async (_path: string, _options?: { body?: string }) => ({ state: "applied" }));
+    const context = { botId: "bot", threadId: "thread", client: { api } } as unknown as ToolCallContext;
+    await callRoutinesTool("propose_routine", { name: "Workers", instructions: "Spawn agents", schedule: { type: "interval", every_minutes: 60 }, subagent_model: "haiku-fast" }, context);
+    expect(JSON.parse(api.mock.calls[0]![1]!.body as string).routine.subagentModel).toBe("haiku-fast");
+    await callRoutinesTool("propose_routine_action", { routine_id: "r1", action: "update", changes: { subagent_model: null } }, context);
+    expect(JSON.parse(api.mock.calls[1]![1]!.body as string).changes).toEqual({ subagentModel: null });
+  });
 });
 
 describe("run_routine readiness", () => {

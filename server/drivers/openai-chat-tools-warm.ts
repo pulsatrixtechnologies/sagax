@@ -250,10 +250,14 @@ export function createWarmToolSessions(options?: { maxPerPerson?: number; budget
       }
       if (person) {
         const waiting = prewarmedFor(person);
-        if (waiting.length >= maxPerPerson && !waiting.includes(turn.threadId)) {
-          // Drop the oldest waiting prewarm of this person so a new open can mount.
-          const oldest = waiting[0]!;
-          await evict(oldest);
+        // Thread switch (#1975): drop every other waiting prewarm of this
+        // person so only the open conversation keeps an MCP mount.
+        for (const id of waiting) {
+          if (id !== turn.threadId) await evict(id);
+        }
+        // Hard ceiling if the same thread races a remount.
+        if (prewarmedFor(person).filter((id) => id !== turn.threadId).length >= maxPerPerson) {
+          return "limited";
         }
       }
       try {

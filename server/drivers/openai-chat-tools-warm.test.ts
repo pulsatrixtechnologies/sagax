@@ -273,7 +273,7 @@ rl.on("line", (line) => {
     cleanup();
   });
 
-  it("caps concurrent waiting prewarms per person", async () => {
+  it("a new prewarm cancels other waiting mounts of the same person (thread switch)", async () => {
     cleanup();
     const cache = createWarmToolSessions({ maxPerPerson: 2 });
     const mk = (n: number) => {
@@ -295,13 +295,14 @@ rl.on("line", (line) => {
     const t3 = mk(3);
     expect(await cache.prewarm(t1 as never, { computerUse: false, driverKind: "openai-compat", person: "osprey" })).toBe("mounted");
     expect(await cache.prewarm(t2 as never, { computerUse: false, driverKind: "openai-compat", person: "osprey" })).toBe("mounted");
-    expect(cache.prewarmedCount("osprey")).toBe(2);
-    // A third waiting prewarm evicts the oldest of this person.
-    expect(await cache.prewarm(t3 as never, { computerUse: false, driverKind: "openai-compat", person: "osprey" })).toBe("mounted");
+    // Thread switch: only the newest waiting prewarm remains.
     expect(cache.has(t1.threadId)).toBe(false);
     expect(cache.has(t2.threadId)).toBe(true);
+    expect(cache.prewarmedCount("osprey")).toBe(1);
+    expect(await cache.prewarm(t3 as never, { computerUse: false, driverKind: "openai-compat", person: "osprey" })).toBe("mounted");
+    expect(cache.has(t2.threadId)).toBe(false);
     expect(cache.has(t3.threadId)).toBe(true);
-    expect(cache.prewarmedCount("osprey")).toBe(2);
+    expect(cache.prewarmedCount("osprey")).toBe(1);
     await cache.releaseAll();
     cleanup();
   });

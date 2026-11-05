@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { startCua, stopCua, registerCuaIpc, setCuaStateListener, currentCuaConnection } from "./cua.mjs";
+import { createAgentCursorOverlay } from "./agent-cursor-overlay.mjs";
 import { createLocalComputerGrant } from "./local-computer-grant.mjs";
 import { createHostScreenLease } from "./host-screen-lease.mjs";
 import { createAndroidDeviceController } from "./android-device.mjs";
@@ -5424,18 +5425,36 @@ async function broadcastDesktopCapabilities() {
   }
 }
 
+// Cua Driver's macOS overlay covers only the primary display (trycua/cua#5336).
+// When the agent point is on another display, Sagax paints a click-through cursor there.
+const agentCursorOverlay = createAgentCursorOverlay({ BrowserWindow, screen });
+
 setCuaStateListener((connection) => {
   cuaReady = Promise.resolve(connection);
   localComputerGrant.changed(connection);
+  agentCursorOverlay.sync(connection);
   void broadcastDesktopCapabilities().catch((error) => {
     console.error("[desktop] capability broadcast failed:", error);
   });
 });
 
+const resyncAgentCursorOverlay = () => {
+  try {
+    agentCursorOverlay.sync(currentCuaConnection());
+  } catch (error) {
+    console.error("[desktop] agent cursor overlay sync failed:", error);
+  }
+};
+
 app.whenReady().then(async () => {
   // First thing once ready: no session but the app window's reaches the server.
   serverSessionGuard = { defaultSession: session.defaultSession, serverPort: () => SERVER_PORT };
   installSessionBlock(session.defaultSession, (line) => slog(`network: ${line}`));
+  // screen is only safe after ready; keep the secondary cursor in sync with layout changes.
+  screen.on("display-added", resyncAgentCursorOverlay);
+  screen.on("display-removed", resyncAgentCursorOverlay);
+  screen.on("display-metrics-changed", resyncAgentCursorOverlay);
+  resyncAgentCursorOverlay();
   // Cached-before-the-fix attachment responses outlive `no-store`: entries
   // stored under the old one-year immutable policy can replay to a second
   // identity in this profile without the visibility gate re-running. The
@@ -5852,6 +5871,9 @@ app.on("before-quit", (e) => {
   // a live dictation session runs its own helper child that holds the mic —
   // stop it here so quitting never orphans a recording process
   if (nativeActions.appleSpeech) stopSpeech();
+  try {
+    agentCursorOverlay.stop();
+  } catch {}
   const ownedHelperCleanup = Promise.race([
     Promise.all([
       stopCua().catch(() => {}),

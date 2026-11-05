@@ -204,10 +204,12 @@ per-input cache. Tests: `perspicax-flow-readiness.test.ts`,
 
 Routine pre-flight uses `limitFailover.backupFor` to check the same backup
 order and access rules as dispatch. Account refusals stay live outside the
-probe cache. `RoutineManager.prepareTurn` applies the failover before
-capturing the run's engine account, so a backup's success never clears the
-primary's refusal. Credits keep the 30-minute refusal TTL, including in the
-failover store; a thread returns through the existing reset path.
+probe cache. When a backup is ready, the engine check passes with a clear
+note naming the refused primary and the backup that will run. `RoutineManager.prepareTurn`
+applies the failover before capturing the run's engine account, so a
+backup's success never clears the primary's refusal. Credits keep the
+30-minute refusal TTL, including in the failover store; a thread returns
+through the existing reset path.
 Tests: `routine-readiness.test.ts`, `routine-reliability.test.ts`,
 `limit-failover-host.test.ts`.
 
@@ -216,12 +218,13 @@ Tests: `routine-readiness.test.ts`, `routine-reliability.test.ts`,
 Real turns project the scoped inventory into their private task folder's
 native skill directories (`server/skills/turn-skill-links.ts`), including
 organization Flow, personal and bot plugins on a limit backup. Claude keeps
-its native plugin loader; other file engines retain the same prompt paths
-alongside native discovery. Organization turns await the selected plugin
-copies in the person's environment before dispatch, on every engine.
-Readiness resolves the thread override and Auto choice for both the engine
-and skill probes (`server/routines/routine-readiness-target.ts`). Previews
-and receipts remain reads. Regressions: `turn-skill-links.test.ts` and
+its native plugin loader; other file engines project the same selected
+plugin files even when rows were marked native under a Claude primary.
+Organization turns await the selected plugin copies in the person's
+environment before dispatch, on every engine. Readiness resolves the thread
+override and Auto choice for both the engine and skill probes
+(`server/routines/routine-readiness-target.ts`). Previews and receipts
+remain reads. Regressions: `turn-skill-links.test.ts` and
 `start-turn-computer-workspace.test.ts` (temporary files and fake dispatch).
 
 ## Native Claude artifact tools (#1990, 2026-11-04)

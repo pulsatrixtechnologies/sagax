@@ -178,7 +178,10 @@ describe("routine readiness", () => {
     const answer = await checkRoutineReadiness(routine, run, deps({ now: () => now,
       engine: () => ({ engine, name: "Primary" }), backup }));
     expect(answer.ok).toBe(true);
-    expect(answer.checks.find(check => check.kind === "engine")).toMatchObject({ ok: true, code: "ready" });
+    expect(answer.checks.find(check => check.kind === "engine")).toMatchObject({
+      ok: true, code: "ready",
+      detail: "Primary cannot run this turn; Backup is ready and will run it.",
+    });
     expect(backup).toHaveBeenCalledOnce();
   });
   it.each(["missing", "credits", "usage_limit", "signed_out"] as const)("keeps the primary reason when its backup is %s (#1986)", async (cause) => {

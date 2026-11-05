@@ -11,8 +11,9 @@ import type { DiscoveredSkill } from "./skill-discovery.ts";
 export interface TurnSkillLink { name: string; file: string }
 const NATIVE_DIRS = [".claude/skills", ".agents/skills", ".grok/skills"];
 
-/** Use the active instance's inventory. Claude's plugin rows are already
- * native; every other file driver gets the same selected plugin files. */
+/** Use the active instance's inventory. Claude keeps its native plugin
+ * loader; every other file driver gets the same selected plugin files,
+ * including rows marked native under a Claude primary before failover. */
 export function prepareTurnSkillLinks(input: {
   driverKind: string;
   workspace: string;
@@ -24,7 +25,7 @@ export function prepareTurnSkillLinks(input: {
 }): void {
   if (!engineWorksInFiles(input.driverKind)) return;
   const rank = { organization: 0, person: 1, library: 2, bot: 3 };
-  const skills = input.rows.filter((row) => row.enabled && row.kind === "skill" && !row.native)
+  const skills = input.rows.filter((row) => row.enabled && row.kind === "skill" && !(row.native && input.driverKind === "claudeAgent"))
     .sort((a, b) => rank[a.scope] - rank[b.scope]).flatMap((row) => {
       let file: string | undefined;
       if (row.path?.startsWith("plugins/")) {

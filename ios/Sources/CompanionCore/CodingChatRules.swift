@@ -1,55 +1,57 @@
 // Coding chat sheet decisions: footer actions, header copy, Changes band.
 // Presentation-free twin of `src/components/coding/CodingChat.tsx` /
-// Android `CodingChatRules`.
+// Android `CodingChatRules`. User-visible strings live in Localizable.xcstrings.
 import Foundation
 
 public enum CodingChatRules {
     public static let pollSeconds: TimeInterval = 3
     public static let followSeconds: TimeInterval = 30
 
-    public static let continueLabel = "Continue"
-    public static let stopLabel = "Stop"
-    public static let closeLabel = "Close chat"
-    public static let sendLabel = "Send"
-    public static let loadOlder = "Show earlier messages"
-    public static let loadingOlder = "Loading earlier messages"
-    public static let empty = "Nothing to show for this task yet."
-    public static let starting = "Starting the task"
-    public static let working = "Working"
-    public static let read = "Read"
-    public static let changesNone = "No file changed yet"
-    public static let editFailed = "This edit did not apply."
-    public static let followUpError = "Couldn't send. Try again."
-    public static let loadError = "Couldn't load this task."
-    public static let retry = "Try again"
-    public static let botFallback = "Bot"
+    public static var continueLabel: String { String(localized: "Continue") }
+    public static var stopLabel: String { String(localized: "Stop") }
+    public static var closeLabel: String { String(localized: "Close chat") }
+    public static var sendLabel: String { String(localized: "Send") }
+    public static var loadOlder: String { String(localized: "Show earlier messages") }
+    public static var loadingOlder: String { String(localized: "Loading earlier messages") }
+    public static var empty: String { String(localized: "Nothing to show for this task yet.") }
+    public static var starting: String { String(localized: "Starting the task") }
+    public static var working: String { String(localized: "Working") }
+    public static var read: String { String(localized: "Read") }
+    public static var changesNone: String { String(localized: "No file changed yet") }
+    public static var editFailed: String { String(localized: "This edit did not apply.") }
+    public static var followUpError: String { String(localized: "Couldn't send. Try again.") }
+    public static var loadError: String { String(localized: "Couldn't load this task.") }
+    public static var retry: String { String(localized: "Try again") }
+    public static var botFallback: String { String(localized: "Bot") }
+    public static var cancelLabel: String { String(localized: "Cancel") }
 
     public static func followUpPlaceholder(botName: String) -> String {
-        "Ask \(botName) to continue"
+        String(localized: "Ask \(botName) to continue")
     }
 
     public static func aria(title: String) -> String {
-        "Coding task: \(title)"
+        String(localized: "Coding task: \(title)")
     }
 
     public static func statusLabel(_ status: BotActivityStatus) -> String {
         switch status {
-        case .running: return "Running"
-        case .waiting: return "Waiting for approval"
-        case .queued: return "Queued"
-        case .finished: return "Finished"
-        case .failed: return "Failed"
-        case .stopped: return "Stopped"
+        case .running: return String(localized: "Running")
+        case .waiting: return String(localized: "Waiting for approval")
+        case .queued: return String(localized: "Queued")
+        case .finished: return String(localized: "Finished")
+        case .failed: return String(localized: "Failed")
+        case .stopped: return String(localized: "Stopped")
         }
     }
 
     public static func changesFilesLabel(_ count: Int) -> String {
-        count == 1 ? "1 file changed" : "\(count) files changed"
+        if count == 1 { return String(localized: "1 file changed") }
+        return String(localized: "\(count) files changed")
     }
 
     public static func editFailedWhy(_ why: String) -> String {
         let first = why.split(separator: "\n", omittingEmptySubsequences: false).first.map(String.init) ?? ""
-        return "This edit did not apply: \(String(first.prefix(200)))"
+        return String(localized: "This edit did not apply: \(String(first.prefix(200)))")
     }
 
     public static func isLive(item: BotActivityItem, detail: BotActivityDetail?) -> Bool {
@@ -85,7 +87,25 @@ public enum CodingChatRules {
     }
 
     public static func pullLabel(number: Int?) -> String {
-        if let number { return "Pull request #\(number)" }
-        return "Pull request"
+        if let number { return String(localized: "Pull request #\(number)") }
+        return String(localized: "Pull request")
+    }
+
+    public static func testsPassedLabel(_ count: Int) -> String {
+        String(localized: "\(count) passed")
+    }
+
+    public static func testsFailedLabel(_ count: Int) -> String {
+        String(localized: "\(count) failed")
+    }
+
+    public static func testsSkippedLabel(_ count: Int) -> String {
+        String(localized: "\(count) skipped")
+    }
+
+    public static var binaryFile: String { String(localized: "Binary file") }
+    public static var noLineChanges: String { String(localized: "No line changes shown.") }
+    public static func unchangedLines(_ count: Int) -> String {
+        String(localized: "… \(count) unchanged lines")
     }
 }

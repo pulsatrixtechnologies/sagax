@@ -21,7 +21,7 @@
 // both through one short cache so repeated opens do not hammer ConnectWise.
 // The snapshot is written back to the bot's document (docs/dispatch-kpi.md,
 // same shape as before) only when its numbers change.
-import type { ToolAnswer } from "./artifact-sources.ts";
+import type { ToolAnswer } from "./artifact-source-types.ts";
 
 export const DISPATCH_KPI_TOOL = "dispatch_kpi";
 export const DISPATCH_KPI_CACHE_MS = 3 * 60_000;

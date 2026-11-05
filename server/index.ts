@@ -747,6 +747,7 @@ import { RoleJournal } from "./perspicax/role-journal.ts";
 import { createRoleEvents, meWriteSummary } from "./perspicax/role-events.ts";
 import { createPerspicaxRoleRoutes } from "./routes/perspicax-roles.ts";
 import { createHeldRolesRoute } from "./routes/perspicax-held-roles.ts";
+import { routineRoleCoverageRoute } from "./routes/routine-role-coverage.ts";
 import { createEmailDraftRoutes } from "./routes/email-drafts.ts";
 import { createThreadWarmRoutes, warmBotAccessRefusal } from "./routes/thread-warm.ts";
 import { createEmailSendPasses, emailSendCard, sendWithMailer } from "./mail/email-draft-send.ts";
@@ -21524,15 +21525,16 @@ const personAttentionDeps: AttentionRelayDeps<BotRecord> = {
 };
 /** 2026-11-05 (visible roles): the role a Perspicax turn starts under. The
  * person's composer pick for this thread's next turn (theirs only), else a
- * routine run's "Au nom de" role. Undefined: the default surface ("Moi"). */
+ * routine run's "Au nom de" role (the run's snapshot, else the routine's).
+ * Undefined: the default surface ("Moi"). */
 function perspicaxTurnRole(turn: { threadId: string; botId: string; principalId: string; routine: boolean }): { slug: string; reason: "person" | "routine" } | undefined {
   const picked = roleJournal.takePick(turn.threadId, turn.principalId);
   if (picked !== undefined) return { slug: picked, reason: "person" };
   if (!turn.routine) return undefined;
   const run = activeRoutineRunForThread(turn.threadId);
-  const routine = run ? routines?.getRoutine(run.routineId) : null;
-  const actAs = routine && typeof (routine as { actAs?: unknown }).actAs === "string" ? (routine as { actAs?: string }).actAs : undefined;
-  return actAs !== undefined && routine?.botId === turn.botId ? { slug: actAs, reason: "routine" } : undefined;
+  if (!run || run.botId !== turn.botId) return undefined;
+  const actAs = run.actAs ?? routines?.getRoutine(run.routineId)?.actAs;
+  return actAs !== undefined ? { slug: actAs, reason: "routine" } : undefined;
 }
 
 function activeRoutineRunForThread(threadId: string): RoutineRun | null {
@@ -25870,6 +25872,24 @@ ROUTES.push(createProactiveProposalRoutes({ answer: answerProactiveProposal }));
 /** 2026-11-05 (visible roles, batch 3): the composer's role picker. The
  * signed-in person's own held roles, live; the principal is the one a turn
  * of theirs would carry (orgSpeakerPrincipal), so a pick matches its turn. */
+// 2026-11-05 (batch 4): the routine editor's "Au nom de" coverage preview.
+const routineCoverageRoute = routineRoleCoverageRoute({
+  routine: (auth, id) => {
+    const routine = routines?.getRoutine(id);
+    if (!routine) return undefined;
+    const viewerId = channelFilterViewerId(auth);
+    if (!routineVisible(routine, visibleTo(viewerFor(auth, "/api/routines"))) || (viewerId && !routineSeenBy(routine, viewerId))) return undefined;
+    return routine;
+  },
+  mayCheck: (auth, routine) => !routineNeedsRun(auth, routine.botId) && mayRunRoutineNow(auth, routine as Routine),
+  runAsOf: (routine) => effectiveRunAs(routine),
+  recipeOf: (prompt) => routineFlowInput(prompt).routine,
+  probe: async (principalId, botId, recipe, signal) => {
+    if (IDENTITY.kind !== "perspicax" || !perspicaxMcp) throw new Error("Perspicax roles are unavailable on this server.");
+    return perspicaxMcp.probeRoutineRoles(principalId, botId, recipe, signal);
+  },
+  refusals: (principalId, botId) => roleJournal.refusalsFor(principalId, botId).map((entry) => ({ role: entry.role.slug, path: entry.permission.path, operation: entry.permission.operation })),
+});
 const heldRolesRoute = createHeldRolesRoute({
   principal: (auth, botId) => {
     const bot = store.bot(botId);
@@ -25902,7 +25922,12 @@ ROUTES.push(createPerspicaxRoleRoutes({
   answerTransition: (input) => answerRoleTransition(input),
   rules: ({ botId, actor }) => ({ status: 200, body: { rules: roleJournal.rulesFor(botId, actor) } }),
   removeRule: ({ botId, actor, id }) => roleJournal.removeRule(botId, actor, id) ? { status: 200, body: { ok: true } } : { status: 404, body: { error: "no such rule" } },
-  more: (ctx, input) => heldRolesRoute(ctx, input),
+  // 2026-11-05: the composer picker (batch 3), then the routine coverage (batch 4)
+  more: async (ctx, input) => {
+    const held = await heldRolesRoute(ctx, input);
+    if (held !== PASS) return held;
+    return routineCoverageRoute(ctx, input);
+  },
 }));
 
 // Whether an oldest thread is someone else's (frozenResultsThread) is known

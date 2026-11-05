@@ -48,6 +48,9 @@ export interface RoutineRun {
   /** 2026-11-04: snapshot of the routine's model (shared/routine-model.ts).
    * Absent: the turn runs on the bot's model. */
   model?: string;
+  /** 2026-11-05: snapshot of the routine's "Au nom de" role
+   * (shared/routine-act-as.ts); "" is "Moi". Absent: not chosen. */
+  actAs?: string;
   /** Snapshot of the optional active-work safety cap. */
   timeoutMinutes?: number;
   attachments?: RoutineContextAttachment[];

@@ -17,6 +17,7 @@ import { BotAvatar } from "@/components/Avatar";
 import { CronSchedulePreview } from "./CronScheduleFields";
 import { RoutineOwnerBadge } from "./RoutineScopeBar";
 import { RoutineWebhookPanel } from "./RoutineWebhookPanel";
+import { actAsLabel } from "./RoutineActAsField";
 
 const LABEL = "text-[12px] font-medium text-ink-secondary";
 const VALUE = "mt-1 text-[13px] leading-relaxed text-ink";
@@ -70,6 +71,7 @@ export function RoutineConfiguration({ routine, run, bots, groups = [], viewerPr
         <Row label={t("routines.drawer.runLimit")}>{limit == null ? t("routineCalendar.noTimeLimit") : t("routineCalendar.stopsAfter", { duration: durationLabel(limit) })}</Row>
         {runOn && <Row label={t("routines.drawer.runsOn")}>{runOn === "cloud" ? t("routines.runsOn.boat") : t("routines.runsOn.local")}</Row>}
         {routine?.runAs && <Row label={t("routines.runAsField.label")} data-routine-config-run-as="">{personLabel(routine.runAs.name, routine.runAs.principalId)}</Row>}
+        {!roomGoal && (run?.actAs ?? routine?.actAs) !== undefined && <Row label={t("routineRole.label")} data-routine-config-act-as="">{actAsLabel(run?.actAs ?? routine?.actAs ?? "")}</Row>}
         {otherOwner && <Row label={t("routines.scope.owner")} data-routine-config-owner=""><RoutineOwnerBadge owner={otherOwner} size={18} className="text-[13px] text-ink" />{(routine?.canEdit === false || routine?.redacted) && <div className="mt-1 text-[12px] text-ink-secondary">{routine.redacted ? t("routines.scope.redacted") : t("routines.scope.readOnly")}</div>}</Row>}
         {routine && <Row label={t("routineDetail.options")} data-routine-config-options="">
           <ul className="space-y-0.5">

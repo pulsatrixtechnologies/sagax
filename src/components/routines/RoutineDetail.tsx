@@ -27,6 +27,7 @@ import { PILL, PRIMARY_PILL } from "../SettingsPrimitives";
 import { runActivityStatus } from "./RoutineRunDetail";
 import { PanelRow, PanelRows, PanelToggle, PanelValue } from "./PanelRows";
 import { RunAsField, useRunAsOptions } from "./RunAsField";
+import { RoutineActAsField, useRoutineRoleCoverage } from "./RoutineActAsField";
 import { TriggerPopover } from "./TriggerPopover";
 import type { RoutineScheduleInput } from "@/lib/routines";
 import { api } from "@/state/store";
@@ -80,7 +81,7 @@ export async function clearRoutineRuns(
   dispatch({ type: "routineRunsRemoved", ids: Array.isArray(removed) ? removed : [] });
 }
 
-export type RoutinePatch = { schedule?: RoutineScheduleInput; precheck?: Routine["precheck"] | null; runAs?: string };
+export type RoutinePatch = { schedule?: RoutineScheduleInput; precheck?: Routine["precheck"] | null; runAs?: string; actAs?: string | null };
 
 /** Who the routine runs as, changed in place (its own row since 2026-11-03). */
 function RunAsRow({ routine, editable, onPatch }: { routine: Routine; editable: boolean; onPatch?: (patch: RoutinePatch) => Promise<void> }) {
@@ -88,6 +89,16 @@ function RunAsRow({ routine, editable, onPatch }: { routine: Routine; editable: 
   const [value, setValue] = useState<string | undefined>(undefined);
   if (!options || (!options.canChoose && !options.current)) return null;
   return <RunAsField compact viewing={!editable || !onPatch} options={options} value={value} onChange={(principalId) => { setValue(principalId); void onPatch?.({ runAs: principalId }); }} />;
+}
+
+/** "Au nom de" (2026-11-05): the role its runs act as, changed in place,
+ * with its coverage preview and "Tester la couverture". */
+function ActAsRow({ routine, editable, onPatch, readiness }: { routine: Routine; editable: boolean; onPatch?: (patch: RoutinePatch) => Promise<void>; readiness?: RoutineReadinessControl }) {
+  const coverage = useRoutineRoleCoverage({ botId: routine.botId, routineId: routine.id, enabled: routine.target !== "room-goal" && !routine.redacted });
+  const [value, setValue] = useState<string | undefined>(undefined);
+  if (routine.target === "room-goal") return null;
+  const change = editable && onPatch ? (slug: string) => { setValue(slug); void onPatch({ actAs: slug }); } : undefined;
+  return <RoutineActAsField coverage={coverage} value={value ?? routine.actAs} onChange={change} viewing={!change} savedOnly={routine.actAs} readiness={readiness} testResult={false} />;
 }
 
 /** The Trigger row: its sentence, a button that opens the trigger popover. */
@@ -156,6 +167,7 @@ export function RoutineDetail({ routine, runs, bots, groups = [], now = Date.now
           <PanelRows data-routine-summary="">
             <TriggerRow routine={routine} bot={bot} editable={editable} onPatch={onPatch} />
             <RunAsRow routine={routine} editable={editable} onPatch={onPatch} />
+            <ActAsRow routine={routine} editable={editable} onPatch={onPatch} {...(canRun ? { readiness } : {})} />
             <PanelToggle data-routine-active="" label={t("routineDetail.active")} hint={state.tone === "info" ? state.label : state.tone === "warning" ? state.label : undefined} viewing={!editable || !onToggle} checked={routine.enabled} disabled={working} onChange={() => onToggle?.()} />
             <PanelRow label={t("routineDetail.nextRun")}><PanelValue><span data-routine-next>{routineNextText(routine, now)}</span></PanelValue></PanelRow>
             {routine.weekRuns && <PanelRow label={t("routineDetail.week")}><PanelValue><span data-routine-week-runs>{routineWeekRunsText(routine.weekRuns)}</span></PanelValue></PanelRow>}

@@ -585,6 +585,9 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["GET", "DELETE"], path: /^\/api\/bots\/[\w-]+\/roles\/rules$/ },
   // the composer's role picker: the signed-in person's own held roles (live identity_switch)
   { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/roles\/held$/ },
+  // the routine editor's "Au nom de" coverage (server/routes/routine-role-coverage.ts):
+  // the run-as person's live roles; the handler checks the routine
+  { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/roles\/routine-coverage$/ },
   // pre-warm the engine of a conversation the person opened (server/threads/thread-prewarm.ts)
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/warm$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/active-branch$/ },

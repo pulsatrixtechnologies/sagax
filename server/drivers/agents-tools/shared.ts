@@ -181,6 +181,11 @@ export const ROUTINE_FIELDS_SCHEMA = {
     maxLength: 200,
     description: "Only if asked: a model id of this bot's engine for its runs and sub-agents; chat keeps the bot's. null resets.",
   },
+  act_as: {
+    type: ["string", "null"],
+    maxLength: 120,
+    description: "Only if asked: the Perspicax role slug its runs act as (\"Au nom de\"), one the run-as person holds; \"\" is their own access; null resets.",
+  },
   delete_when_finished: {
     type: "boolean",
     description: "Delete this routine automatically once its schedule has no more runs and the last run has settled (completed, failed, cancelled or missed). Only for a one-time routine or an interval with an end date. Defaults to false. Past runs stay in the calendar and the run log. Set false in an update to keep it listed after it ends.",
@@ -545,6 +550,11 @@ export function routineFields(args: Json): { fields: Json; error?: string } {
   if (args.model !== undefined) {
     if (args.model !== null && typeof args.model !== "string") return { fields, error: "model must be a model id, or null for the bot's model." };
     fields.model = args.model;
+  }
+  // 2026-11-05: the routine's "Au nom de" role (shared/routine-act-as.ts).
+  if (args.act_as !== undefined) {
+    if (args.act_as !== null && typeof args.act_as !== "string") return { fields, error: "act_as must be a role slug, \"\" for the person's own access, or null." };
+    fields.actAs = args.act_as;
   }
   return { fields };
 }

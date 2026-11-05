@@ -1040,6 +1040,54 @@ export class PerspicaxMcp {
     }
   }
 
+
+  /** 2026-11-05 (visible roles, routine "Au nom de"): the roles the run-as
+   * person holds now (`identity_switch` without argument, a read) and, for
+   * a Flow recipe, its card (`flow` describe: standing_mandate and
+   * server_profiles), on a private short-lived account connection backed by
+   * that person's routine delegation. It never switches a role. */
+  async probeRoutineRoles(principalId: string, botId: string, recipe: string | undefined, signal: AbortSignal): Promise<{ held: HeldRole[]; card?: unknown; flowError?: string }> {
+    const link = this.options.link();
+    const subject = this.options.subjectOf(principalId);
+    if (!link || !subject || subject.disabled || subject.iss !== this.options.issuer) throw new Error("Perspicax routine access is unavailable.");
+    signal.throwIfAborted();
+    const source = await this.subjectFor("delegation", principalId, subject);
+    if (!source.ok) throw new Error("Perspicax routine delegation is unavailable.");
+    const exchanged = await link.exchangeToken(source.token);
+    if (!exchanged.ok) throw new Error(`Perspicax routine account exchange failed: ${exchanged.error}`);
+    let session: string | null = null;
+    const rpc = async (method: string, params: Json): Promise<Json> => {
+      signal.throwIfAborted();
+      const id = `sagax-role-coverage-${++this.nativeCalls}`;
+      const response = await this.fetcher(link.mcpEndpoint(), { method: "POST", redirect: "error", signal,
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: `Bearer ${exchanged.token}`, ...(session ? { "mcp-session-id": session } : {}) },
+        body: JSON.stringify({ jsonrpc: "2.0", ...(method === "notifications/initialized" ? {} : { id }), method, params }) });
+      session = response.headers.get("mcp-session-id") ?? session;
+      const text = await response.text();
+      if (!response.ok) throw new Error(`Perspicax role coverage HTTP ${response.status}`);
+      if (method === "notifications/initialized") return {};
+      const body = parseMcpBody(text, id);
+      if (!isObject(body)) throw new Error("Perspicax role coverage returned an invalid MCP response.");
+      return body;
+    };
+    try {
+      await rpc("initialize", { protocolVersion: PERSPICAX_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: `Sagax role coverage (${botId}; ${recipe ?? "no recipe"}; ${randomUUID()})`, version: this.options.version } });
+      await rpc("notifications/initialized", {});
+      const listed = await rpc("tools/list", {});
+      const names = new Set(isObject(listed.result) && Array.isArray(listed.result.tools) ? listed.result.tools.filter(isObject).map((tool) => String(tool.name)) : []);
+      const held = names.has("identity_switch") ? heldRolesOf(identityValue(await rpc("tools/call", { name: "identity_switch", arguments: {} }))) : [];
+      if (!recipe) return { held };
+      const describe = names.has("flow") ? "flow" : names.has("flow_run") ? "flow_run" : undefined;
+      if (!describe) return { held, flowError: "flow is not available on this account connection." };
+      const body = await rpc("tools/call", { name: describe, arguments: { command: "describe", args: { name: recipe } } });
+      if (isObject(body.error) || (isObject(body.result) && body.result.isError === true)) return { held, flowError: `Flow could not describe ${recipe}.` };
+      return { held, card: identityValue(body) };
+    } finally {
+      if (session) await this.fetcher(link.mcpEndpoint(), { method: "DELETE", redirect: "error", signal: AbortSignal.timeout(200), headers: { authorization: `Bearer ${exchanged.token}`, "mcp-session-id": session } }).then(response => response.body?.cancel()).catch(() => {});
+      void link.revokeExchanged(exchanged.token).catch(() => {});
+    }
+  }
+
   /** Exchange the speaker's access for the account's one main connection
    * before the engine starts. Never throws and never chooses a role. */
   async prepareTurn(input: {

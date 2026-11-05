@@ -10,6 +10,11 @@ import { RoleTransitionCard } from "../components/RoleTransitionCard";
 import { RoleNoticeRow } from "../components/RoleNoticeRow";
 import { RolePicker, type HeldRolesAnswer } from "../components/RolePicker";
 import { pickRole } from "../lib/role-pick";
+import { RoutineActAsField } from "../components/routines/RoutineActAsField";
+import { PanelRows } from "../components/routines/PanelRows";
+import type { RoutineReadinessControl } from "../components/routines/RoutineReadiness";
+import type { HeldRole } from "../../shared/perspicax-roles";
+import { routineRoleCoverageAnswer } from "../../shared/routine-role-coverage";
 import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import type { Message } from "../state/store";
@@ -113,11 +118,45 @@ function Picker() {
   );
 }
 
+// Batch 4: the routine editor's "Au nom de" field and its coverage preview.
+const heldRoles: HeldRole[] = [
+  { slug: "reader", name: "Lecture", readOnly: true, explicitOnly: false, reachable: true, can: { read: true, write: false } },
+  { ...desk, readOnly: false, explicitOnly: false, reachable: true, can: { read: true, write: true, flow: true } },
+  { slug: "full-access", name: "Full Access", readOnly: false, explicitOnly: true, reachable: true, can: { read: true, write: true, routines_run: true, approvals_answer: true, flow: true, sagax: true } },
+];
+const coverageOf = (refusals: Parameters<typeof routineRoleCoverageAnswer>[0]["refusals"] = [], mandate = ["schedule_create", "status_change", "client_note"]) => ({
+  answer: routineRoleCoverageAnswer({ held: heldRoles, mandate, serverProfiles: ["service-desk", "full-access"], refusals, recipe: "morning-pass" }),
+});
+const tested: RoutineReadinessControl = {
+  id: "r1", check: async () => {},
+  answer: { ok: true, checkedAt: Date.UTC(2026, 10, 5, 13, 30), checks: [
+    { kind: "perspicax", ok: true, code: "ready", line: "" },
+    { kind: "flow", ok: true, code: "ready", line: "", params: { kind: "flow" } },
+  ] } as RoutineReadinessControl["answer"],
+};
+const idle: RoutineReadinessControl = { id: "r1", check: async () => {} };
+
+function RoutineRoles() {
+  return (
+    <>
+      <Section title="Au nom de : couverture complète">
+        <PanelRows data-gallery-act-as="ok"><RoutineActAsField coverage={coverageOf()} value="service-desk" onChange={() => {}} readiness={tested} /></PanelRows>
+      </Section>
+      <Section title="Au nom de : couverture partielle">
+        <PanelRows data-gallery-act-as="partial"><RoutineActAsField coverage={coverageOf([{ role: "reader", path: "schedule/holidayLists", operation: "Inquire" }], ["schedule_create", "status_change", "custom_step"])} value="reader" onChange={() => {}} readiness={idle} /></PanelRows>
+      </Section>
+      <Section title="Non choisi : suggestion">
+        <PanelRows data-gallery-act-as="suggested"><RoutineActAsField coverage={coverageOf()} value={undefined} onChange={() => {}} /></PanelRows>
+      </Section>
+    </>
+  );
+}
+
 function Gallery() {
   return (
     <div className="min-h-screen bg-app p-8 text-ink">
       <div className="mx-auto flex max-w-xl flex-col gap-5" data-gallery={view}>
-        {view === "picker" ? <Picker /> : <Thread />}
+        {view === "picker" ? <Picker /> : view === "routine" ? <RoutineRoles /> : <Thread />}
       </div>
     </div>
   );

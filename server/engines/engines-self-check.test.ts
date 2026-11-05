@@ -25,7 +25,7 @@ const MANIFEST: EngineManifest = {
   engineSet: "all",
   arch: "arm64",
   installed: [
-    { id: "claude", name: "Claude Code", drivers: ["claudeAgent"], kind: "npm", version: "2.1.288", bin: "claude" },
+    { id: "claude", name: "Claude Code", drivers: ["claudeAgent"], kind: "npm", version: "2.1.318", bin: "claude" },
     { id: "grok", name: "Grok Build", drivers: ["grokAgent"], kind: "native", version: "1.0.46", bin: "grok" },
     { id: "hermes", name: "Hermes Agent", drivers: ["hermesAgent"], kind: "python", version: "0.21.5", bin: "hermes" },
   ],
@@ -65,12 +65,12 @@ describe("runEngineSelfCheck", () => {
       probe: async (path) => {
         probed.push(path);
         if (path.endsWith("/grok")) throw new Error("exec format error\nmore");
-        return "2.1.288 (Claude Code)";
+        return "2.1.318 (Claude Code)";
       },
       log: (line) => lines.push(line),
     });
     expect(probed.sort()).toEqual(["/usr/local/bin/claude", "/usr/local/bin/grok"]);
-    expect(check.forInstance("claudeAgent", "claude")).toMatchObject({ ok: true, version: "2.1.288 (Claude Code)", pinned: "2.1.288" });
+    expect(check.forInstance("claudeAgent", "claude")).toMatchObject({ ok: true, version: "2.1.318 (Claude Code)", pinned: "2.1.318" });
     expect(check.forInstance("grokAgent", "grok")).toMatchObject({ ok: false, error: "exec format error" });
     expect(check.forInstance("hermesAgent", "hermes")).toMatchObject({ ok: false, error: "`hermes` is not on this server's PATH" });
     // an instance with its own command is probed as before
@@ -78,7 +78,7 @@ describe("runEngineSelfCheck", () => {
     expect(check.forInstance("codex", "codex")).toBeNull();
     expect(check.notAvailableReason("antigravityAgent")).toBe("too big");
     expect(check.notAvailableReason("claudeAgent")).toBeUndefined();
-    expect(lines.join("\n")).toContain("[engines] claude: 2.1.288 (Claude Code) (pinned 2.1.288, /usr/local/bin/claude)");
+    expect(lines.join("\n")).toContain("[engines] claude: 2.1.318 (Claude Code) (pinned 2.1.318, /usr/local/bin/claude)");
     expect(lines.join("\n")).toContain("[engines] grok: FAILED, exec format error (pinned 1.0.46)");
     expect(lines.join("\n")).toContain("[engines] antigravity: not preinstalled, too big");
     expect(lines.join("\n")).not.toContain("minimax-cli");
@@ -137,7 +137,7 @@ describe("runEngineSelfCheck", () => {
     expect(check.forInstance("claudeAgent", "claude")).toMatchObject({ ok: true, version: "claude 1.2.3", path: "/usr/local/bin/claude" });
     expect(check.forInstance("grokAgent", "grok")).toMatchObject({ ok: true, version: "grok 1.2.3" });
     expect(check.forInstance("hermesAgent", "hermes")).toMatchObject({ ok: false, error: "`hermes` is not on this server's PATH" });
-    expect(lines.join("\n")).toContain("[engines] claude: claude 1.2.3 (pinned 2.1.288, /usr/local/bin/claude)");
+    expect(lines.join("\n")).toContain("[engines] claude: claude 1.2.3 (pinned 2.1.318, /usr/local/bin/claude)");
     expect(lines.join("\n")).toContain("[engines] hermes: FAILED, `hermes` is not on this server's PATH");
     expect(lines.at(-1)).toBe("[engines] self-check: 2/3 preinstalled engine(s) start (image set all)");
   });

@@ -18,7 +18,7 @@ describe("selectEngines", () => {
   it("all: every engine of the lock, pinned, and says what it leaves out", () => {
     const selection = selectEngines(lock, { engineSet: "all", arch: "amd64" });
     expect(ids(selection)).toEqual(lock.engines.map((engine) => engine.id));
-    expect(selection.install.find((engine) => engine.id === "claude").spec).toBe("@anthropic-ai/claude-code@2.1.288");
+    expect(selection.install.find((engine) => engine.id === "claude").spec).toBe("@anthropic-ai/claude-code@2.1.318");
     expect(selection.install.find((engine) => engine.id === "grok").spec).toBeUndefined();
     expect(selection.unavailable.map((entry) => entry.id)).toEqual(lock.notPreinstalled.map((entry) => entry.id));
   });
@@ -42,7 +42,7 @@ describe("selectEngines", () => {
   it("keeps an exact locked ENGINES override and refuses an unknown package or a changed version", () => {
     const legacy = selectEngines(lock, {
       engineSet: "none",
-      engines: "@anthropic-ai/claude-code@2.1.288 @openai/codex@0.160.0",
+      engines: "@anthropic-ai/claude-code@2.1.318 @openai/codex@0.160.0",
       nativeEngines: "grok",
       arch: "arm64",
     });

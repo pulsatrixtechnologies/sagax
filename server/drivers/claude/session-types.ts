@@ -108,6 +108,11 @@ export type ClaudeSession = {
   replaysUserMessages: boolean;
   /** tool_use id → name, so an Artifact result can become a page card */
   toolNames: Map<string, string>;
+  /** the CLI's config folder (CLAUDE_CONFIG_DIR) the process runs on, so a
+   * wrong-account artifact card can name the account it is signed in to */
+  configDir?: string | null;
+  /** tool_use id → the claude.ai artifact an Artifact* call names */
+  artifactUrls?: Map<string, string>;
   /** the running turn, or null between turns */
   turn: {
     turnId: string;

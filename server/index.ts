@@ -1266,7 +1266,7 @@ import type { RoutineScopeCaller, RoutineScopeDeps, RoutineScopeFacts } from "./
 import { recordRoutineChange, recordRoutineToggle, routineToggleForViewer } from "./routines/routine-chat-events.ts";
 import { botReplyQuoteId } from "./turns/reply-to-turn.ts";
 import { isTriggerSchedule } from "../shared/routines.ts";
-import { routineTurnModel } from "../shared/routine-model.ts";
+import { routineTurnModel, subagentTurnModel } from "../shared/routine-model.ts";
 import {
   nextOccurrence,
   PREWARM_ENGINE_LEAD_MS,
@@ -21608,18 +21608,40 @@ const routineModelNoticed = new Set<string>();
 /** The routine model this turn runs on: the run's model on the bot's own
  * engine, unless a limit takeover moved the thread. A model that cannot
  * apply is ignored with one line in the run, once. */
-function routineModelForTurn(botId: string, threadId: string, instance: { instanceId: string; models: { default?: string; options: Array<{ id: string }> } }): { model: string } | null {
-  const run = activeRoutineRunForThread(threadId);
-  if (!run?.model || run.botId !== botId) return null;
+function routineModelForTurn(botId: string, threadId: string, instance: { instanceId: string; models: { default?: string; options: Array<{ id: string }> } }): { model?: string; subagentModel?: string } | null {
   const bot = store.bot(botId);
   if (!bot) return null;
+  const run = activeRoutineRunForThread(threadId);
+  const ownRun = run && run.botId === botId ? run : undefined;
+  const takenOver = Boolean(limitFailoverStore.failover(botId, threadId));
+  const payer = effectiveBotOwner(bot);
+  // #2038: the model of the turn's Claude sub-agents. The routine's own
+  // sub-agent model, then the routine model, then the bot's fast model on
+  // this engine; the main turn's model is never touched.
+  const decidedModel = ownRun?.model ? routineModelDecision(ownRun, bot, threadId, instance, takenOver) : null;
+  const applied = decidedModel && "model" in decidedModel ? decidedModel.model : undefined;
+  const subagentModel = subagentTurnModel({
+    routineSubagentModel: ownRun?.subagentModel,
+    routineModel: applied,
+    fast: bot.modelSelection.fast,
+    turnInstanceId: instance.instanceId,
+    botInstanceId: bot.modelSelection.instanceId,
+    takenOver,
+    offered: engineModelIds(instance),
+    refusal: (model) => modelSwitchRefusal(instance.instanceId, model, payer),
+  });
+  if (!applied && !subagentModel) return null;
+  return { ...(applied ? { model: applied } : {}), ...(subagentModel ? { subagentModel } : {}) };
+}
+
+function routineModelDecision(run: { id: string; model?: string }, bot: BotRecord, threadId: string, instance: { instanceId: string; models: { default?: string; options: Array<{ id: string }> } }, takenOver: boolean): { model: string } | null {
   const decided = routineTurnModel({
     model: run.model,
     botInstanceId: bot.modelSelection.instanceId,
     turnInstanceId: instance.instanceId,
-    takenOver: Boolean(limitFailoverStore.failover(botId, threadId)),
+    takenOver,
     offered: engineModelIds(instance),
-    refusal: modelSwitchRefusal(instance.instanceId, run.model, effectiveBotOwner(bot)),
+    refusal: modelSwitchRefusal(instance.instanceId, run.model!, effectiveBotOwner(bot)),
   });
   if (decided && "ignored" in decided) {
     if (!routineModelNoticed.has(run.id)) {

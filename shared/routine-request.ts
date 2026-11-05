@@ -75,12 +75,14 @@ export interface RoutineRequestDefinition {
   deleteWhenFinished?: boolean;
   /** 2026-11-04 (shared/routine-model.ts): the model its runs use. */
   model?: string;
+  /** #2038: the model its runs' sub-agents use (Claude). */
+  subagentModel?: string;
   /** 2026-11-05 (shared/routine-act-as.ts): the role its runs act as ("" = Moi). */
   actAs?: string;
 }
 
 export type RoutineRequestChanges =
-  & Omit<Partial<RoutineRequestDefinition>, "schedule" | "timeoutMinutes" | "watch" | "folder" | "model" | "actAs">
+  & Omit<Partial<RoutineRequestDefinition>, "schedule" | "timeoutMinutes" | "watch" | "folder" | "model" | "subagentModel" | "actAs">
   & {
     schedule?: RoutineRequestScheduleChanges;
     /** `null` removes an existing safety cap. */
@@ -91,6 +93,7 @@ export type RoutineRequestChanges =
     folder?: string | null;
     /** `null` goes back to the bot's model. */
     model?: string | null;
+    subagentModel?: string | null;
     /** `null` clears the "Au nom de" choice; "" is "Moi". */
     actAs?: string | null;
   };

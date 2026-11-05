@@ -416,15 +416,48 @@ export function compactToolsFromEnv(env: Record<string, string | undefined>): { 
  * threads prompt presents it as the way to hand a teammate a job. */
 const DEFERRED_WHEN_COORDINATING: ReadonlySet<string> = new Set(["start_thread"]);
 
+/** #2037: SAGAX_DEFER_KNOWN_USE, set by the Claude driver when native tool
+ * search is on and the bot's agents use is known (KNOWN_USE_CALLS). Only
+ * `core: "used"` widens deferral; absent or "default" keeps DEFERRED_AGENT_TOOL_NAMES. */
+export function knownUseFromEnv(env: Record<string, string | undefined>): { core: "used"; pinned: ReadonlySet<string> } | undefined {
+  const raw = env.SAGAX_DEFER_KNOWN_USE;
+  if (!raw) return undefined;
+  try {
+    const value = JSON.parse(raw) as { core?: unknown; pinned?: unknown };
+    if (value.core !== "used") return undefined;
+    const pinned = Array.isArray(value.pinned)
+      ? value.pinned.filter((name): name is string => typeof name === "string" && name.length > 0 && name.length <= 100)
+      : [];
+    return { core: "used", pinned: new Set(pinned) };
+  } catch {
+    return undefined;
+  }
+}
+
 /** The tools/list a Claude Code engine is served: the same tools, with the
  * rare ones marked `_meta["anthropic/alwaysLoad"] = false` so the CLI defers
  * them behind tool search although the server is always loaded (the CLI's
  * per-tool override of a server's alwaysLoad). Other engines never get the
- * marker (SAGAX_DEFER_RARE_TOOLS is set by the Claude driver only). */
-export function withDeferredRareTools<T extends { name: string }>(tools: readonly T[], profile: { coordinating: boolean }): Array<T & { _meta?: Record<string, unknown> }> {
-  return tools.map((tool) => DEFERRED_AGENT_TOOL_NAMES.has(tool.name) || (profile.coordinating && DEFERRED_WHEN_COORDINATING.has(tool.name))
-    ? { ...tool, _meta: { ...(tool as { _meta?: Record<string, unknown> })._meta, "anthropic/alwaysLoad": false } }
-    : tool);
+ * marker (SAGAX_DEFER_RARE_TOOLS is set by the Claude driver only).
+ * #2037: when `knownUse.core` is "used", every tool outside the chat-turn
+ * core and the bot's own pinned tools is deferred the same way; every name
+ * stays listed and callable. A bot with little recorded use omits knownUse
+ * and keeps DEFERRED_AGENT_TOOL_NAMES. */
+export function withDeferredRareTools<T extends { name: string }>(
+  tools: readonly T[],
+  profile: { coordinating: boolean; knownUse?: { core: "default" | "used"; pinned: ReadonlySet<string> } },
+): Array<T & { _meta?: Record<string, unknown> }> {
+  const known = profile.knownUse?.core === "used"
+    ? { core: "used" as const, pinned: profile.knownUse.pinned, coordinating: profile.coordinating }
+    : undefined;
+  return tools.map((tool) => {
+    const defer = known
+      ? !compactListed(tool.name, known)
+      : DEFERRED_AGENT_TOOL_NAMES.has(tool.name) || (profile.coordinating && DEFERRED_WHEN_COORDINATING.has(tool.name));
+    return defer
+      ? { ...tool, _meta: { ...(tool as { _meta?: Record<string, unknown> })._meta, "anthropic/alwaysLoad": false } }
+      : tool;
+  });
 }
 
 /** A description names only tools its turn is shown: a sentence that steers

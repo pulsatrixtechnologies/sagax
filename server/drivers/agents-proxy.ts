@@ -21,7 +21,7 @@
 // other three into it, so a packaged build still ships one agents-proxy.js.
 import readline from "node:readline";
 
-import { availableTools, catalogProfileFromEnv, compactListed, compactToolsFromEnv, withDeferredRareTools } from "./agents-catalog.ts";
+import { availableTools, catalogProfileFromEnv, compactListed, compactToolsFromEnv, knownUseFromEnv, withDeferredRareTools } from "./agents-catalog.ts";
 import { applyCatalogGroups, catalogGroupsOn, routeGroupCall } from "./agents-catalog-budget.ts";
 import { catalogBridgeDefinitions, catalogBridgeOn, resolveCatalogUse, routeBridgeCall } from "./catalog-bridge.ts";
 import { mergeByAction } from "./agents-merged.ts";
@@ -41,6 +41,9 @@ const AVAILABLE_TOOLS = availableTools(PROFILE);
 // approvals as a direct call, and every layer outside this process reads it
 // as that tool (shared/searched-tool-call.ts). No catalog tool is removed.
 // Claude Code only (SAGAX_DEFER_RARE_TOOLS=1): rare tools wait for tool search.
+// #2037: with SAGAX_DEFER_KNOWN_USE (core "used"), every tool outside the
+// chat-turn core and the bot's pinned tools is deferred the same way; every
+// name stays listed. A bot with little recorded use keeps DEFERRED_AGENT_TOOL_NAMES.
 // #1276, a compact prompt (Claude Code, local or cloud, SAGAX_COMPACT_TOOLS):
 // the core of a chat turn and the bot's own most used tools are listed whole;
 // every other tool is found with search_tools and run with call_tool, through
@@ -51,6 +54,7 @@ const AVAILABLE_TOOLS = availableTools(PROFILE);
 // reachable by group. Off by default so Grok, Codex and Pi keep the full
 // list (#1314). Prefer this when a profile approaches the soft ceiling.
 const COMPACT = compactToolsFromEnv(process.env);
+const KNOWN_USE = knownUseFromEnv(process.env);
 const BRIDGE = catalogBridgeOn(process.env);
 const GROUPS = catalogGroupsOn(process.env) && !BRIDGE && !COMPACT;
 const SEARCHED = COMPACT && !BRIDGE
@@ -81,7 +85,7 @@ const LISTED_TOOLS = BRIDGE
     ...AVAILABLE_TOOLS.filter((tool) => compactListed(tool.name, { ...COMPACT, coordinating: PROFILE.coordinating })),
     ...(SEARCHED!.tools.length ? SEARCHED!.listed({ server: "agents", title: "Sagax", instructions: "Sagax's own tools: teammates, rooms, routines, settings, artifacts, transcripts, cloud agents, skills and the person's phone." }) : []),
   ]
-  : mergedListing(process.env.SAGAX_DEFER_RARE_TOOLS === "1" ? withDeferredRareTools(AVAILABLE_TOOLS, PROFILE) : AVAILABLE_TOOLS);
+  : mergedListing(process.env.SAGAX_DEFER_RARE_TOOLS === "1" ? withDeferredRareTools(AVAILABLE_TOOLS, { ...PROFILE, knownUse: KNOWN_USE }) : AVAILABLE_TOOLS);
 /** SAGAX_MERGED_TOOLS=1, set by a driver whose engine is shown the whole
  * catalog and reads a family call as the tool it runs: each family of tools
  * is listed as one tool (agents-merged.ts, shared/merged-agent-tools.ts). */

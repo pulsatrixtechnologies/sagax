@@ -76,6 +76,8 @@ export interface RoutineRequestDefinition {
   deleteWhenFinished?: boolean;
   /** 2026-11-04 (shared/routine-model.ts): the model its runs use. */
   model?: string;
+  /** #2038: Claude sub-agent model for its runs. */
+  subagentModel?: string;
   /** 2026-11-05 (shared/routine-act-as.ts): the role its runs act as ("" = Moi). */
   actAs?: string;
   /** #1996: the routine needs its bot's computer online (Routine.requires.computer). */
@@ -85,7 +87,7 @@ export interface RoutineRequestDefinition {
 }
 
 export type RoutineRequestChanges =
-  & Omit<Partial<RoutineRequestDefinition>, "schedule" | "timeoutMinutes" | "watch" | "folder" | "model" | "actAs" | "effort">
+  & Omit<Partial<RoutineRequestDefinition>, "schedule" | "timeoutMinutes" | "watch" | "folder" | "model" | "subagentModel" | "actAs" | "effort">
   & {
     schedule?: RoutineRequestScheduleChanges;
     /** `null` removes an existing safety cap. */
@@ -96,6 +98,8 @@ export type RoutineRequestChanges =
     folder?: string | null;
     /** `null` goes back to the bot's model. */
     model?: string | null;
+    /** `null` clears the Claude sub-agent override. */
+    subagentModel?: string | null;
     /** `null` clears the "Au nom de" choice; "" is "Moi". */
     actAs?: string | null;
     /** null resets to the bot; omission preserves it on updates. */

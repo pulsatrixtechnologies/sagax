@@ -40,6 +40,8 @@ export type TurnState = {
   model: any;
   /** 2026-11-04: the routine's model this turn runs on (shared/routine-model.ts), else undefined. */
   routineModel: any;
+  /** #2038: per-routine Claude sub-agent model override (RoutineRun.subagentModel). */
+  routineSubagentModel: any;
   routineEffort: any;
   notice: any;
   onCall: any;
@@ -210,6 +212,7 @@ export function createTurnState(init: {
     maySelectComputer: undefined,
     model: undefined,
     routineModel: undefined,
+    routineSubagentModel: undefined,
     routineEffort: undefined,
     notice: undefined,
     onCall: undefined,

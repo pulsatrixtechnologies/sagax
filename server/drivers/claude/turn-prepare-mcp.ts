@@ -357,8 +357,9 @@ if (authSettingsPath) args.push("--settings", authSettingsPath);
 // boundary. Native background workers cannot outlive that boundary;
 // parallel bot work must use the harness's durable delegate_bot path.
 env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS = "1";
-// 2026-11-04: a routine turn's sub-agents (Agent tool, Flow workers) run on
-// the routine's model, never the CLI's default (Opus on a subscription).
+// #2038: sub-agents (Agent tool, Flow workers) run on turn.subagentModel
+// (routine override, routine model, or the bot's fast model), never the
+// CLI's default (Opus on a subscription) when one was resolved upstream.
 const subagentModel = turn.subagentModel ? (turn.subagentModel === turn.model ? injected.model ?? turn.subagentModel : turn.subagentModel) : null;
 if (subagentModel) env.CLAUDE_CODE_SUBAGENT_MODEL = subagentModel;
 // Native sub-agents inherit this turn's routine effort.

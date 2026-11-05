@@ -3022,6 +3022,21 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(JSON.parse(readFileSync(dump, "utf8")).env.CLAUDE_CODE_SUBAGENT_MODEL).toBeUndefined();
   });
 
+  it("sets CLAUDE_CODE_SUBAGENT_MODEL from a per-routine override that differs from the main model (#2038)", async () => {
+    const dump = join(scratch, "subagent-override.json");
+    await create(undefined, { FAKE_CLAUDE_DUMP: dump });
+    const turn = await instance.adapter.sendTurn({
+      threadId: "t-subagent-override",
+      text: "hi",
+      model: "opus-main",
+      subagentModel: "haiku-fast",
+    });
+    await recorder.until((e) => e.type === "turn.completed" && e.turnId === turn.turnId);
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.env.CLAUDE_CODE_SUBAGENT_MODEL).toBe("haiku-fast");
+    expect(seen.argv[seen.argv.indexOf("--model") + 1]).toBe("opus-main");
+  });
+
   it("lets a Bash call ask for up to ten minutes, unless the person set their own cap", async () => {
     const dump = join(scratch, "bash-timeout.json");
     await create(undefined, { FAKE_CLAUDE_DUMP: dump });

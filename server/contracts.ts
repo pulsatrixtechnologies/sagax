@@ -214,8 +214,9 @@ export interface SendTurnInput {
    * context, while a fresh replay retains the visible attachment marker. */
   images?: TurnImageInput[];
   model?: string;
-  /** 2026-11-04: a routine turn's model for the sub-agents the engine
-   * starts itself (Claude: CLAUDE_CODE_SUBAGENT_MODEL). Part of the
+  /** #2038: model for the sub-agents the engine starts itself (Claude:
+   * CLAUDE_CODE_SUBAGENT_MODEL). From a per-routine override, else the
+   * routine model, else the bot's fast model on this engine. Part of the
    * process contract, so a chat turn never reuses a routine's process. */
   subagentModel?: string;
   /** Routine effort inherited by native sub-agents; part of the spawn contract. */

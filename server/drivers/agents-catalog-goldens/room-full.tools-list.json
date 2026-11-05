@@ -2159,7 +2159,15 @@
               "null"
             ],
             "maxLength": 200,
-            "description": "Model id for runs/sub-agents on this bot's engine; chat unchanged. null resets."
+            "description": "Model id for runs on this bot's engine; chat unchanged. null resets. Claude sub-agents follow subagent_model, else this, else the bot's fast model."
+          },
+          "subagent_model": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200,
+            "description": "Claude sub-agent model (Agent tool / Flow workers) on this bot's engine; main model unchanged. null clears (falls back to model or the bot's fast model)."
           },
           "act_as": {
             "type": [
@@ -2446,7 +2454,15 @@
                   "null"
                 ],
                 "maxLength": 200,
-                "description": "Model id for runs/sub-agents on this bot's engine; chat unchanged. null resets."
+                "description": "Model id for runs on this bot's engine; chat unchanged. null resets. Claude sub-agents follow subagent_model, else this, else the bot's fast model."
+              },
+              "subagent_model": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200,
+                "description": "Claude sub-agent model (Agent tool / Flow workers) on this bot's engine; main model unchanged. null clears (falls back to model or the bot's fast model)."
               },
               "act_as": {
                 "type": [

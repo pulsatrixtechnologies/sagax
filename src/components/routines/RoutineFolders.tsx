@@ -100,9 +100,10 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
   /** The Automations list (grouped by bot, 2026-11-03): a folder icon before
    * each folder's name, as sub-groups of the bot's section. */
   folderIcon?: boolean;
-  /** The bot panel's Upcoming card (#2125): rows past N behind Show more. */
+  /** The bot panel's Upcoming card (#2125 / #2174): rows past N behind Show more. */
   collapseAfter?: number;
-  /** A clock before each row's name. */
+  /** Bot panel Upcoming: one flat card (folder as `[Category]` title prefix),
+   * no folder headers. Calendar and the Routines page keep the grouped list. */
   leadingClock?: boolean;
 }) {
   const { state, dispatch } = useStore();
@@ -317,7 +318,9 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
   // "Running" on a row opens that run's chat where the chat is (JC
   // 2026-11-03), never the Automations page.
   const openRunning = (routine: Routine, run: RoutineRun) => openRoutineRun(dispatch, { runId: run.id, routineId: routine.id, botId: run.botId ?? routine.botId });
-  const canDrag = editable && supported && folders.length > 0;
+  // Flat Upcoming keeps Move to folder in the row menu; pointer drag needs
+  // the folder headers, so it stays off here (#2174).
+  const canDrag = !leadingClock && editable && supported && folders.length > 0;
   const list = (items: Routine[], label?: string) => <RoutineList
     routines={items}
     viewerPrincipalId={viewerPrincipalId}
@@ -335,6 +338,58 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
     {...rename}
   />;
 
+  const notices = <>
+    {serverNote && <div data-routine-folder-server-note="" role="status" className="mb-1 flex items-center gap-2 rounded-lg bg-inset px-3 py-2 text-[12px] leading-4 text-ink-secondary">
+      <FolderInput size={14} className="shrink-0" aria-hidden="true" />
+      <span className="min-w-0 flex-1">{t("serverRoute.needsUpdate")}</span>
+      <button type="button" aria-label={t("common.close")} title={t("common.close")} onClick={() => setServerNote(false)} className="flex size-6 shrink-0 items-center justify-center rounded-md text-ink-tertiary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><X size={13} /></button>
+    </div>}
+    {notice && <div data-routine-folder-notice="" role="status" className="mb-1 flex items-center gap-2 rounded-lg bg-inset px-3 py-2 text-[12px] leading-4 text-ink-secondary">
+      <Check size={14} className="shrink-0 text-success" aria-hidden="true" />
+      <span className="min-w-0 flex-1">{notice.text}</span>
+      <button type="button" data-routine-folder-undo="" disabled={busy} onClick={() => void undo()} className="shrink-0 rounded-md px-1.5 py-0.5 font-medium text-accent hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-50">{t("routineFolders.undo")}</button>
+      <button type="button" aria-label={t("common.close")} title={t("common.close")} onClick={() => setNotice(null)} className="flex size-6 shrink-0 items-center justify-center rounded-md text-ink-tertiary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><X size={13} /></button>
+    </div>}
+  </>;
+
+  const menus = menu && <RoutineMenuPortal x={menu.x} y={menu.y} kind={menu.kind} label={menu.kind === "row" ? menu.routine.name : menu.kind === "folder" ? menu.folder : t("computer.tab.routines")} onClose={closeMenu}>
+      {menu.kind === "section" ? (menu.naming
+        ? <FolderNameInput label={t("routineFolders.newFolderLabel")} onCancel={() => closeMenu()} onSave={async (name) => { const answer = await act({ action: "create", botId: bot.id, name }); if (answer) closeMenu(); }} />
+        : <>
+          {supported && <button type="button" role="menuitem" autoFocus data-routine-new-folder="" className={MENU_ITEM} onClick={() => setMenu({ ...menu, naming: true })}>
+            <FolderPlus size={14} aria-hidden="true" />{t("routineFolders.newFolder")}
+          </button>}
+          {showSortAction && <SortByPrefixItem autoFocus={!supported} onSelect={() => { closeMenu(); void sortByPrefix(); }} />}
+        </>)
+        : menu.kind === "row" ? <RoutineRowMenuItems routine={menu.routine} actions={routineRowActions({
+          routine: menu.routine, bot, state, dispatch, close: closeMenu,
+          onOpen: () => onOpen(menu.routine),
+          onDuplicate: onDuplicate ? () => onDuplicate(menu.routine) : undefined,
+          onRename: () => setRenamingRoutine(menu.routine.id),
+        })} />
+        : <FolderMenuItems
+          canMoveUp={folders.indexOf(menu.folder) > 0}
+          canMoveDown={folders.indexOf(menu.folder) < folders.length - 1}
+          anyOn={botRoutines.some((routine) => routine.folder && routineFolderKey(routine.folder) === routineFolderKey(menu.folder) && routine.enabled)}
+          anyRoutine={botRoutines.some((routine) => routine.folder && routineFolderKey(routine.folder) === routineFolderKey(menu.folder))}
+          onRename={() => { closeMenu(false); setRenaming(menu.folder); }}
+          onMove={(direction) => { closeMenu(); reorder(menu.folder, direction); }}
+          onSetEnabled={(enabled) => { closeMenu(); setFolderEnabled(menu.folder, enabled); }}
+          canSortByPrefix={showSortAction}
+          onSortByPrefix={() => { closeMenu(); void sortByPrefix(); }}
+          onDelete={() => { closeMenu(false); void removeFolder(menu.folder); }} />}
+  </RoutineMenuPortal>;
+
+  // Bot panel Upcoming (#2174): one flat card, category as `[Folder]` prefix,
+  // five rows then Show more. Folder headers stay on the Routines page.
+  if (leadingClock) {
+    return <div className="flex flex-col gap-1" data-routine-folders="" data-routine-upcoming-flat="">
+      {notices}
+      {list(routines)}
+      {menus}
+    </div>;
+  }
+
   const loose = groups[0]!;
   return <div className="flex flex-col gap-1" data-routine-folders="">
     {drag && createPortal(<div data-routine-drag-preview="" aria-hidden="true"
@@ -348,17 +403,7 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
       <button type="button" data-routine-prefix-sort="" disabled={busy} onClick={() => void sortByPrefix()} className="shrink-0 rounded-md px-1.5 py-0.5 font-medium text-accent hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-50">{t("routineFolders.offerSort")}</button>
       <button type="button" aria-label={t("routineFolders.offerDismiss")} title={t("routineFolders.offerDismiss")} onClick={() => { answerRoutinePrefixOffer(bot.id); setOfferAnswered(true); }} className="flex size-6 shrink-0 items-center justify-center rounded-md text-ink-tertiary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><X size={13} /></button>
     </div>}
-    {serverNote && <div data-routine-folder-server-note="" role="status" className="mb-1 flex items-center gap-2 rounded-lg bg-inset px-3 py-2 text-[12px] leading-4 text-ink-secondary">
-      <FolderInput size={14} className="shrink-0" aria-hidden="true" />
-      <span className="min-w-0 flex-1">{t("serverRoute.needsUpdate")}</span>
-      <button type="button" aria-label={t("common.close")} title={t("common.close")} onClick={() => setServerNote(false)} className="flex size-6 shrink-0 items-center justify-center rounded-md text-ink-tertiary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><X size={13} /></button>
-    </div>}
-    {notice && <div data-routine-folder-notice="" role="status" className="mb-1 flex items-center gap-2 rounded-lg bg-inset px-3 py-2 text-[12px] leading-4 text-ink-secondary">
-      <Check size={14} className="shrink-0 text-success" aria-hidden="true" />
-      <span className="min-w-0 flex-1">{notice.text}</span>
-      <button type="button" data-routine-folder-undo="" disabled={busy} onClick={() => void undo()} className="shrink-0 rounded-md px-1.5 py-0.5 font-medium text-accent hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-50">{t("routineFolders.undo")}</button>
-      <button type="button" aria-label={t("common.close")} title={t("common.close")} onClick={() => setNotice(null)} className="flex size-6 shrink-0 items-center justify-center rounded-md text-ink-tertiary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><X size={13} /></button>
-    </div>}
+    {notices}
 
     {(loose.routines.length > 0 || folders.length === 0 || loading || error) ? (
       <div data-routine-folder-section="" className={cn("rounded-xl", dropTarget === "" && "ring-1 ring-accent/50")}>
@@ -418,33 +463,7 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
       </div>;
     })}
 
-    {menu && <RoutineMenuPortal x={menu.x} y={menu.y} kind={menu.kind} label={menu.kind === "row" ? menu.routine.name : menu.kind === "folder" ? menu.folder : t("computer.tab.routines")} onClose={closeMenu}>
-        {menu.kind === "section" ? (menu.naming
-          ? <FolderNameInput label={t("routineFolders.newFolderLabel")} onCancel={() => closeMenu()} onSave={async (name) => { const answer = await act({ action: "create", botId: bot.id, name }); if (answer) closeMenu(); }} />
-          : <>
-            {supported && <button type="button" role="menuitem" autoFocus data-routine-new-folder="" className={MENU_ITEM} onClick={() => setMenu({ ...menu, naming: true })}>
-              <FolderPlus size={14} aria-hidden="true" />{t("routineFolders.newFolder")}
-            </button>}
-            {showSortAction && <SortByPrefixItem autoFocus={!supported} onSelect={() => { closeMenu(); void sortByPrefix(); }} />}
-          </>)
-          : menu.kind === "row" ? <RoutineRowMenuItems routine={menu.routine} actions={routineRowActions({
-            routine: menu.routine, bot, state, dispatch, close: closeMenu,
-            onOpen: () => onOpen(menu.routine),
-            onDuplicate: onDuplicate ? () => onDuplicate(menu.routine) : undefined,
-            onRename: () => setRenamingRoutine(menu.routine.id),
-          })} />
-          : <FolderMenuItems
-            canMoveUp={folders.indexOf(menu.folder) > 0}
-            canMoveDown={folders.indexOf(menu.folder) < folders.length - 1}
-            anyOn={botRoutines.some((routine) => routine.folder && routineFolderKey(routine.folder) === routineFolderKey(menu.folder) && routine.enabled)}
-            anyRoutine={botRoutines.some((routine) => routine.folder && routineFolderKey(routine.folder) === routineFolderKey(menu.folder))}
-            onRename={() => { closeMenu(false); setRenaming(menu.folder); }}
-            onMove={(direction) => { closeMenu(); reorder(menu.folder, direction); }}
-            onSetEnabled={(enabled) => { closeMenu(); setFolderEnabled(menu.folder, enabled); }}
-            canSortByPrefix={showSortAction}
-            onSortByPrefix={() => { closeMenu(); void sortByPrefix(); }}
-            onDelete={() => { closeMenu(false); void removeFolder(menu.folder); }} />}
-    </RoutineMenuPortal>}
+    {menus}
   </div>;
 }
 

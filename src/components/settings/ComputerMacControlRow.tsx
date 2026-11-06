@@ -7,7 +7,7 @@ import { MacCuaRecoveryActions } from "../MacCuaRecoveryActions";
 import { t } from "@/lib/i18n";
 import { readableError } from "@/lib/plain-error";
 import { useStore } from "@/state/store";
-import { DescribedRow, PILL } from "../SettingsPrimitives";
+import { DescribedRow, InlineFold, PILL } from "../SettingsPrimitives";
 
 /** Settings > Computer > Your computer: Mac screen/accessibility row. */
 export function ComputerMacControlRow() {
@@ -80,10 +80,9 @@ export function ComputerMacControlRow() {
           <div className="mt-2 flex flex-col gap-2 text-[12.5px] text-ink-secondary">
             <p>{permissionMessage ?? t("computer.mac.permission.generic")}</p>
             {reason && (
-              <details>
-                <summary className="cursor-pointer">{t("computer.mac.permission.driverDetail")}</summary>
+              <InlineFold label={t("computer.mac.permission.driverDetail")}>
                 <p className="mt-1 break-words">{reason}</p>
-              </details>
+              </InlineFold>
             )}
             {error && (
               <div className="flex gap-1.5 text-danger">

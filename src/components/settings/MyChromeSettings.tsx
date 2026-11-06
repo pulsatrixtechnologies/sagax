@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import { t } from "@/lib/i18n";
 import { announceMyChrome, MY_CHROME_CHANGED, myChromeCall, tabOrigin, type MyChromeStatus } from "@/lib/my-chrome";
-import { DescribedRow, Switch } from "../SettingsPrimitives";
+import { DescribedRow, InlineFold, Switch } from "../SettingsPrimitives";
 
 export function MyChromeSettings() {
   const [status, setStatus] = useState<MyChromeStatus | null>(null);
@@ -80,15 +80,14 @@ export function MyChromeSettings() {
                 <button type="submit" className={buttonClass} disabled={busy || !site.trim()}>{t("settings.myChrome.add")}</button>
               </form>
             </div>
-            <details className="min-w-0">
-              <summary className="cursor-pointer text-[12px] font-medium text-ink-secondary hover:text-ink">{t("settings.myChrome.address")}</summary>
+            <InlineFold label={t("settings.myChrome.address")} className="min-w-0">
               <form className="mt-2 flex flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); void run("address", { address }); }}>
                 <label htmlFor="my-chrome-address" className="sr-only">{t("settings.myChrome.address")}</label>
                 <input id="my-chrome-address" value={address} onChange={(event) => setAddress(event.target.value)} placeholder="9222" maxLength={300} disabled={busy} className={inputClass} />
                 <button type="submit" className={buttonClass} disabled={busy}>{t("common.save")}</button>
               </form>
               <p className="mt-1 text-[11px] leading-relaxed text-ink-secondary">{t("settings.myChrome.addressHint")}</p>
-            </details>
+            </InlineFold>
             {error ? <p role="alert" className="text-[12px] text-danger">{error}</p> : null}
           </div>
         ) : error ? <p role="alert" className="mt-1 text-[12px] text-danger">{error}</p> : undefined}

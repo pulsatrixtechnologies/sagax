@@ -17,7 +17,7 @@ import { useBotEditor } from "./BotEditorContext";
 import { skillAuthoringEnabled, skillsLibraryEnabled } from "@/lib/feature-flags";
 import { skillSourceLabel } from "@/lib/skills-ui";
 import { viewerBotsReadOnly } from "@/lib/viewer";
-import { PILL, PillSelect, PRIMARY_PILL, Switch } from "../SettingsPrimitives";
+import { InlineFold, PILL, PillSelect, PRIMARY_PILL, Switch } from "../SettingsPrimitives";
 import { inputCls } from "./field";
 import { cn } from "@/lib/cn";
 import { PaneEmpty, PaneSection } from "./PaneSection";
@@ -569,12 +569,11 @@ export function SkillsSection({ bot }: { bot: Bot }) {
                   )}
                 </div>
                 {skill.source && (
-                  <details className="mt-1 text-[10.5px] text-ink-secondary" data-skill-source={skill.name}>
-                    <summary className="cursor-pointer select-none">
-                      {t("botPanel.skills.sourceLabel", { label: skillSourceLabel(skill.source) })}
-                    </summary>
-                    <p className="mt-0.5 break-all font-mono text-[10px]" title={skill.source}>{skill.source}</p>
-                  </details>
+                  <div className="mt-1" data-skill-source={skill.name}>
+                    <InlineFold label={t("botPanel.skills.sourceLabel", { label: skillSourceLabel(skill.source) })}>
+                      <p className="break-all font-mono text-[10px] text-ink-secondary" title={skill.source}>{skill.source}</p>
+                    </InlineFold>
+                  </div>
                 )}
                 {libraryOn && (skill.origin === "me" || skill.origin === "library") && skill.assignedBots && skill.assignedBots.length > 0 && (
                   <div className="mt-1 text-[10.5px] text-ink-secondary">

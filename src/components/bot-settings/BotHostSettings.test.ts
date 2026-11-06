@@ -27,7 +27,8 @@ describe("where a bot runs", () => {
     expect(markup).toContain('data-bot-host="fleet"');
     expect(markup).toContain('data-bot-host="laptop"');
     expect(markup).toContain("pi · Qwen");
-    expect(markup).toContain("pi · Other");
+    // The other models sit in the PillSelect list, rendered when it opens.
+    expect(markup).toContain('aria-label="Models on this computer"');
     expect(markup).not.toContain("pr_morgan");
   });
 

@@ -80,9 +80,11 @@ describe("Connect GitHub (#2109)", () => {
     flushSync(() => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Add an MCP server")!.click());
     const preset = [...host.querySelectorAll<HTMLButtonElement>("[data-add-personal-server] button")].find((button) => /GitHub/.test(button.textContent ?? ""))!;
     flushSync(() => preset.click());
-    const select = $<HTMLSelectElement>("[data-add-personal-server] select")!;
-    expect(select.value).toBe("github");
-    expect(select.querySelector<HTMLOptionElement>("option[value=github]")!.disabled).toBe(false);
+    const pill = $<HTMLButtonElement>("[data-add-personal-server] [data-pill-select]")!;
+    expect(pill.textContent).toBe("My GitHub account");
+    flushSync(() => pill.click());
+    const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((item) => item.textContent?.includes("My GitHub account"))!;
+    expect(option.getAttribute("aria-disabled")).toBeNull();
     expect($("[data-github-auth-hint]")).not.toBeNull();
     expect($("[data-add-personal-server] input[type=password]")).toBeNull();
   });

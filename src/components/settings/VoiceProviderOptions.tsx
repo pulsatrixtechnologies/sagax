@@ -5,7 +5,7 @@ import { api, useStore, type ConfigStatus } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { DescribedRow, FoldRow, PILL, PillSelect, SettingsGroup } from "../SettingsPrimitives";
-import { ExternalLinkPill } from "./SettingsPatterns";
+import { ExternalLinkPill, StatusText } from "./SettingsPatterns";
 
 const FISH_MODELS = [
   { value: "s2.1-pro", label: "voice.fish.modelPro" },
@@ -63,13 +63,13 @@ export function VoiceProviderOptions({ installation = false, children }: { insta
   if (!installation) return null;
 
   return (
-    // #2080 (L1): one Advanced card after Audio, every row folded: the
-    // voice engines (Fish, Chatterbox) and, as children, Live calls.
+    // #2080: one Advanced card after Audio, one row per setting: the Fish
+    // model as a pill menu, the Chatterbox server folded (its form opens on
+    // demand) and, as children, Live calls.
     <div data-settings-card="connections.voice" data-voice-section="">
       <SettingsGroup title={t("voiceMode.call.advanced")} groupId="voice-options">
         {tts && (
-        <FoldRow cardId="voice.options" label={t("voice.options.title")} description={t("voice.options.help")} icon={<AudioLines size={14} />}>
-        <div className="-mx-3.5 flex flex-col" data-voice-options="">
+        <div className="flex flex-col" data-voice-options="">
         <DescribedRow label={t("voice.fish.model")} help={t("voice.fish.modelHint")} rowId="fishModel">
           <PillSelect
             value={(tts.fishModel ?? "s2.1-pro") as FishModel}
@@ -80,17 +80,14 @@ export function VoiceProviderOptions({ installation = false, children }: { insta
           />
         </DescribedRow>
 
-        <DescribedRow
+        <FoldRow
+          cardId="voice.chatterbox"
           label={t("voice.engine.server")}
-          rowId="chatterbox"
-          description={(
-            <span className="flex items-center gap-1.5">
-              <span className={cn("size-1.5 rounded-full", configured ? "bg-accent" : "bg-raised-hover")} aria-hidden="true" />
-              {configured ? t("voice.engine.saved") : t("voice.engine.serverHint")}
-            </span>
-          )}
-          below={(
-            <div className="mt-2 flex flex-col gap-2">
+          icon={<AudioLines size={14} />}
+          help={t("voice.engine.serverHint")}
+          description={configured ? <StatusText tone="success">{t("voice.engine.saved")}</StatusText> : t("voice.engine.notSaved")}
+        >
+            <div className="flex flex-col gap-2" data-settings-row="chatterbox">
               <ExternalLinkPill href="https://github.com/resemble-ai/chatterbox" className="w-fit">{t("voice.engine.serverDocs")}</ExternalLinkPill>
               <div className="flex gap-2">
                 <input
@@ -125,12 +122,10 @@ export function VoiceProviderOptions({ installation = false, children }: { insta
                 className={INPUT_CLASS}
               />
             </div>
-          )}
-        />
+        </FoldRow>
 
       {error && <div role="alert" className="px-3.5 pb-2 text-[12px] text-danger">{error}</div>}
         </div>
-        </FoldRow>
         )}
         {children}
       </SettingsGroup>

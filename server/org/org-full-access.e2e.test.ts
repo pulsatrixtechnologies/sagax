@@ -147,8 +147,8 @@ posixOnly("organization Full access", () => {
     erinId = (await api("GET", "/api/auth/session", erin)).body.principalId;
     const created = await api("POST", "/api/bots", erin, { name: "Zed" });
     expect(created.status, created.text).toBe(201);
-    // #1098: no policy saved, so a new bot of the organization starts on
-    // Approve for me, as on a solo server
+    // #1098 / this fixture: no org New-bot policy saved, so a new bot starts
+    // on Approve for me. Full still comes only from the owner's own grant.
     expect(created.body.bot.approvalMode).toBe("auto");
     const patched = await api("PATCH", `/api/bots/${created.body.bot.id}`, erin, { modelSelection: { instanceId: "claude", model: "fake-model" } });
     expect(patched.status, patched.text).toBe(200);
@@ -190,7 +190,8 @@ posixOnly("organization Full access", () => {
     expect(sent.status, sent.text).toBe(202);
     await waitFor(async () => existsSync(dump), 20_000);
     const argv = (JSON.parse(readFileSync(dump, "utf8")) as { argv: string[] }).argv;
-    expect(argv[argv.indexOf("--permission-mode") + 1]).toBe("bypassPermissions");
+    // Sagax #1982: Full keeps acceptEdits + the broker (no bypassPermissions).
+    expect(argv[argv.indexOf("--permission-mode") + 1]).toBe("acceptEdits");
     const denied = argv[argv.indexOf("--disallowedTools") + 1]!.split(",");
     for (const tool of CLAUDE_HOST_TOOLS) expect(denied).toContain(tool);
     await waitFor(async () => (await auditRows(alice, "approval")).some((row) => row.action === "approval.full_access_turn"));

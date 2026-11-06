@@ -2688,7 +2688,8 @@ describe("harness HTTP API", () => {
     const [chief, peer, second, excluded, foreign] = bots;
     const roomIds: string[] = [];
     try {
-      expect((await api("PATCH", `/api/bots/${chief.id}`, { chiefOfStaff: true, peers: [peer.id, second.id] })).status).toBe(200);
+      // Ask so peer-approval cards still open (Full skips them; omb #2808).
+      expect((await api("PATCH", `/api/bots/${chief.id}`, { chiefOfStaff: true, peers: [peer.id, second.id], approvalMode: "ask" })).status).toBe(200);
       const token = await mintTestCapability(BASE, chief.id, chief.threadId);
       const create = (body: unknown) => chiefRoomRequest(BASE, token, "create-room", body);
       const managed = await create({ name: "Managed room", memberIds: [peer.id, peer.id], bulletin: "A short brief." });
@@ -2855,7 +2856,8 @@ describe("harness HTTP API", () => {
     const chief = (await api("POST", "/api/bots")).body.bot;
     let createdId: string | undefined;
     try {
-      expect((await api("PATCH", `/api/bots/${chief.id}`, { chiefOfStaff: true })).status).toBe(200);
+      // Below Full access create_bot stays on its card (omb #2808 defaults to Full).
+      expect((await api("PATCH", `/api/bots/${chief.id}`, { chiefOfStaff: true, approvalMode: "ask" })).status).toBe(200);
       const token = await mintTestCapability(BASE, chief.id, chief.threadId);
       const create = async (name: string, cwd: unknown) => {
         const response = await fetch(`${BASE}/api/internal/create-bot`, {
@@ -2894,7 +2896,7 @@ describe("harness HTTP API", () => {
   it("keeps create_bot on its review card below Full Access, whatever the Chief always allows", async () => {
     const chief = (await api("POST", "/api/bots")).body.bot;
     try {
-      expect((await api("PATCH", `/api/bots/${chief.id}`, { chiefOfStaff: true })).status).toBe(200);
+      expect((await api("PATCH", `/api/bots/${chief.id}`, { chiefOfStaff: true, approvalMode: "ask" })).status).toBe(200);
       // Every key a standing grant could plausibly carry for this tool.
       const grants = ["create_bot", "mcp__agents__create_bot", "mcp__openmausbot__create_bot", "propose_team_setup", "set_up_team"];
       expect((await api("PATCH", `/api/bots/${chief.id}`, { alwaysAllow: grants })).status).toBe(200);
@@ -3021,7 +3023,8 @@ describe("harness HTTP API", () => {
     const bot = (await api("POST", "/api/bots", { name: "Pending Chief", section: "Pending room" })).body.bot;
     // a teammate of another person: a change for it keeps its card (#1138)
     const peer = await foreignTeammate("test-foreign-room", { name: "Pending peer", section: "Pending room" });
-    await api("PATCH", `/api/bots/${bot.id}`, { chiefOfStaff: true });
+    // Ask so Full does not auto-apply the foreign profile change (omb #2808).
+    await api("PATCH", `/api/bots/${bot.id}`, { chiefOfStaff: true, approvalMode: "ask" });
     const room = (await api("POST", "/api/groups", { name: "Pending room", memberIds: [bot.id], section: "Pending room" })).body.group;
     try {
       const roomToken = await mintTestCapability(BASE, bot.id, room.threadId);
@@ -4511,7 +4514,8 @@ describe("harness HTTP API", () => {
     const target = (await api("POST", "/api/bots", { name: "Deletion Target", section: "Deletion race" })).body.bot;
     let targetDeleted = false;
     try {
-      expect((await api("PATCH", `/api/bots/${chief.id}`, { chiefOfStaff: true })).status).toBe(200);
+      // Ask so deletion stays on its review card (Full applies at once; omb #2808).
+      expect((await api("PATCH", `/api/bots/${chief.id}`, { chiefOfStaff: true, approvalMode: "ask" })).status).toBe(200);
       expect((await api("PUT", "/api/config", { box: { token: "box_route" } })).status).toBe(200);
       managedBoatRows = [{
         id: "bx_456789ab",
@@ -6047,8 +6051,8 @@ describe("harness HTTP API", () => {
         requiredApps: [{ slug: "reddit", label: "Reddit" }],
       },
     });
-    // The package sets no approval: the bot starts at the new-bot default, Approve for me (51647a630).
-    expect(scout).toMatchObject({ approvalMode: "auto", autoApprove: true });
+    // The package sets no approval: the bot starts at the new-bot default, Full access (omb #2808).
+    expect(scout).toMatchObject({ approvalMode: "full", autoApprove: false });
     const importedSkills = await api("GET", `/api/bots/${scout.id}/skills`);
     expect(importedSkills.body.skills).toMatchObject([{
       name: "source-check",
@@ -6189,8 +6193,8 @@ describe("harness HTTP API", () => {
     expect(impostor.threadId).not.toBe(trusted.threadId);
     expect(impostor.name).toBe("Mira 2");
     // EVERY privilege-bearing field lands at its safe default
-    // approval is the new-bot default, Approve for me (51647a630), never the claimed "full"
-    expect(impostor).toMatchObject({ approvalMode: "auto", autoApprove: true });
+    // approval is the new-bot default, Full access (omb #2808); claimed elevation is dropped
+    expect(impostor).toMatchObject({ approvalMode: "full", autoApprove: false });
     expect(impostor.alwaysAllow).toBeUndefined();
     expect(impostor.chiefOfStaff).toBeUndefined();
     expect(impostor.approvePeerComms).toBeUndefined();
@@ -7601,7 +7605,7 @@ describe("harness HTTP API", () => {
     await api("DELETE", `/api/bots/${bot.id}`);
   });
 
-  it("stores safe approval levels and refuses trusted modes over HTTP", async () => {
+  it("stores safe approval levels and Full over HTTP, and keeps Custom on the desktop", async () => {
     const bot = (await api("POST", "/api/bots", {
       modelSelection: { instanceId: "codex", model: "fixture-codex-model" },
     })).body.bot;
@@ -7618,18 +7622,23 @@ describe("harness HTTP API", () => {
       expect(ask.status).toBe(200);
       expect(ask.body.bot).toMatchObject({ approvalMode: "ask", autoApprove: false });
 
-      // Both modes are equivalent to native Codex configuration grants. A
-      // tool can call this loopback route, so even a forged renderer-only
-      // acknowledgement must not cross the trusted desktop boundary.
-      for (const approvalMode of ["full", "custom"]) {
-        for (const body of [
-          { approvalMode },
-          { approvalMode, acknowledgeFullAccess: true },
-        ]) {
-          const rejected = await api("PATCH", `/api/bots/${bot.id}`, body);
-          expect(rejected.status, JSON.stringify(body)).toBe(403);
-          expect(rejected.body.error).toMatch(/desktop app/i);
-        }
+      // Full needs no desktop channel and no consent field (omb #2701): any
+      // client that can reach this API turns it on.
+      const full = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "full" });
+      expect(full.status).toBe(200);
+      expect(full.body.bot).toMatchObject({ approvalMode: "full", autoApprove: false });
+      expect((await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "ask" })).status).toBe(200);
+
+      // Custom still crosses only the desktop's private channel: a tool can
+      // call this loopback route, and even a forged acknowledgement must not
+      // get it past the trusted desktop boundary.
+      for (const body of [
+        { approvalMode: "custom" },
+        { approvalMode: "custom", acknowledgeFullAccess: true },
+      ]) {
+        const rejected = await api("PATCH", `/api/bots/${bot.id}`, body);
+        expect(rejected.status, JSON.stringify(body)).toBe(403);
+        expect(rejected.body.error).toMatch(/desktop app/i);
       }
 
       const stored = (await api("GET", "/api/bots")).body.bots.find(
@@ -7641,23 +7650,27 @@ describe("harness HTTP API", () => {
     }
   });
 
-  it("requires private desktop consent for Claude Full and rejects Codex-only Custom", async () => {
+  it("turns Claude Full on over HTTP and still rejects Codex-only Custom", async () => {
     const bot = (await api("POST", "/api/bots", {
       modelSelection: { instanceId: "claude", model: "fixture-claude-model" },
     })).body.bot;
     try {
-      for (const approvalMode of ["full", "custom"]) {
-        const rejected = await api("PATCH", `/api/bots/${bot.id}`, {
-          approvalMode,
-          acknowledgeFullAccess: true,
-        });
-        expect(rejected.status, approvalMode).toBe(approvalMode === "full" ? 403 : 400);
-        expect(rejected.body.error).toMatch(approvalMode === "full" ? /desktop app/i : /does not support/i);
-      }
+      const full = await api("PATCH", `/api/bots/${bot.id}`, {
+        approvalMode: "full",
+        acknowledgeFullAccess: true,
+      });
+      expect(full.status).toBe(200);
+      expect(full.body.bot).toMatchObject({ approvalMode: "full", autoApprove: false });
+      const rejected = await api("PATCH", `/api/bots/${bot.id}`, {
+        approvalMode: "custom",
+        acknowledgeFullAccess: true,
+      });
+      expect(rejected.status).toBe(400);
+      expect(rejected.body.error).toMatch(/does not support/i);
       const stored = (await api("GET", "/api/bots")).body.bots.find(
         (candidate: { id: string }) => candidate.id === bot.id,
       );
-      expect(stored.approvalMode).toBe("auto");
+      expect(stored.approvalMode).toBe("full");
     } finally {
       await api("DELETE", `/api/bots/${bot.id}`);
     }
@@ -7818,15 +7831,18 @@ describe("harness HTTP API", () => {
       modelSelection: { instanceId: "ghost", model: "fixture-ghost-model" },
     })).body.bot;
     try {
-      // An engine without a Full mapping: the bot-level PATCH must refuse
-      // Full before the trusted-desktop transition.
-      const refused = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "full" });
+      // Full runs on every engine (omb #2808). Custom stays Codex-only and
+      // still refuses here before any store write.
+      const full = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "full" });
+      expect(full.status).toBe(200);
+      expect(full.body.bot).toMatchObject({ approvalMode: "full", autoApprove: false });
+      const refused = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "custom" });
       expect(refused.status).toBe(400);
       expect(refused.body.error).toMatch(/does not support the selected approval level, or changing providers requires choosing Ask first/);
       const stored = (await api("GET", "/api/bots")).body.bots.find(
         (candidate: { id: string }) => candidate.id === bot.id,
       );
-      expect(stored.approvalMode).toBe("auto");
+      expect(stored.approvalMode).toBe("full");
     } finally {
       await api("DELETE", `/api/bots/${bot.id}`);
     }
@@ -7844,7 +7860,7 @@ describe("harness HTTP API", () => {
     await api("DELETE", `/api/bots/${bot.id}`);
   });
 
-  it("refuses approval-level changes while a bot is working", async () => {
+  it("saves an approval-level change while a bot is working", async () => {
     const instances = (await api("GET", "/api/instances")).body.instances;
     const claude = instances.find((instance: { instanceId: string }) => instance.instanceId === "claude");
     const bot = (await api("POST", "/api/bots", {
@@ -7858,16 +7874,18 @@ describe("harness HTTP API", () => {
         return state.bots.find((candidate: { id: string }) => candidate.id === bot.id)?.busy;
       }, { timeout: 5_000 }).toBe(true);
 
+      // omb #3627: Auto and Full both save while the turn runs; the next
+      // Sagax decision reads the saved level through liveApprovalMode.
       const changed = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "auto" });
-      expect(changed.status).toBe(200);
+      expect(changed.status, JSON.stringify(changed.body)).toBe(200);
       const stored = (await api("GET", "/api/bots?messages=0")).body.bots.find(
         (candidate: { id: string }) => candidate.id === bot.id,
       );
       expect(stored.busy).toBe(true);
       expect(stored.approvalMode).toBe("auto");
-      const blocked = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "full" });
-      expect(blocked.status).toBe(409);
-      expect(blocked.body.error).toMatch(/stop this bot's turn before changing its approval level|does not support|trusted desktop/i);
+      const full = await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "full" });
+      expect(full.status, JSON.stringify(full.body)).toBe(200);
+      expect(full.body.bot).toMatchObject({ approvalMode: "full", autoApprove: false });
     } finally {
       await api("POST", `/api/bots/${bot.id}/interrupt`, {}).catch(() => undefined);
       await expect.poll(async () => {
@@ -8722,11 +8740,11 @@ describe("harness HTTP API", () => {
       expect(filed.status, isolatedStderr.slice(-2000)).toBe(201);
       expect(await filed.json()).toMatchObject({ name: "botfull", enabled: true, transport: "command" });
       expect(readInstallationMcpServers(isolatedData).botfull.enabled).toBe(true);
-      // Ask is not a block: the person's bot files its server switched on too.
+      // Ask/Edits keep the server off until the person turns it on (#1098).
       const below = await file(ask, "botask");
       expect(below.status).toBe(201);
-      expect(await below.json()).toMatchObject({ name: "botask", enabled: true, transport: "command" });
-      expect(readInstallationMcpServers(isolatedData).botask.enabled).toBe(true);
+      expect(await below.json()).toMatchObject({ name: "botask", enabled: false, transport: "command" });
+      expect(readInstallationMcpServers(isolatedData).botask.enabled).toBe(false);
     } finally {
       await waitForExit(isolatedChild, { signal: "SIGTERM" });
       await removeTempDir(isolatedHome);
@@ -10710,7 +10728,8 @@ describe("harness HTTP API", () => {
   it("applies a bot's own chat-created routine at once and keeps a teammate's behind its card", async () => {
     // (2026-10-26, #1138: "a teammate" is a bot of another person; a bot of
     // the same person applies at once, checked below)
-    const bot = (await api("POST", "/api/bots", {})).body.bot;
+    // Ask so the receipt is appliedBy self (omb #2808 defaults new bots to Full).
+    const bot = (await api("POST", "/api/bots", { settings: { approvalMode: "ask" } })).body.bot;
     let routineId = "";
     let orphanRoutineId = "";
     let legacyRoutineId = "";
@@ -11178,7 +11197,8 @@ describe("harness HTTP API", () => {
   });
 
   it("gates targeted routine actions like creation and re-checks the target at confirm", async () => {
-    const chief = (await api("POST", "/api/bots", { name: "Acting chief" })).body.bot;
+    // Ask so foreign teammate routine actions keep their card (omb #2808).
+    const chief = (await api("POST", "/api/bots", { name: "Acting chief", settings: { approvalMode: "ask" } })).body.bot;
     let teammateId = "";
     let outsiderId = "";
     try {
@@ -11296,7 +11316,8 @@ describe("harness HTTP API", () => {
   });
 
   it("lets a bot change its own routines while 8 cards for a teammate are open", async () => {
-    const bot = (await api("POST", "/api/bots", {})).body.bot;
+    // Ask so foreign teammate proposals stay on cards (omb #2808).
+    const bot = (await api("POST", "/api/bots", { settings: { approvalMode: "ask" } })).body.bot;
     // a teammate of another person, whose routines keep a card (#1138)
     const teammate = await foreignTeammate("test-foreign-budget");
     try {
@@ -11335,7 +11356,8 @@ describe("harness HTTP API", () => {
 
   it("applies a bot's own profile change at once, records history, and undoes it from its receipt", async () => {
     const soulFileOf = (botId: string) => join(home, ".sagax", "bots", botId, "SOUL.md");
-    const bot = (await api("POST", "/api/bots", { name: "Scout" })).body.bot;
+    // Ask so the receipt is appliedBy self (omb #2808 defaults new bots to Full).
+    const bot = (await api("POST", "/api/bots", { name: "Scout", settings: { approvalMode: "ask" } })).body.bot;
     try {
       await api("PATCH", `/api/bots/${bot.id}`, { modelSelection: { instanceId: "claude", model: "claude-sonnet-5" } });
 
@@ -11452,8 +11474,9 @@ describe("harness HTTP API", () => {
       expect(refused.status).toBe(403);
       expect(await botTitle(b.id)).toBe("");
 
-      // (b) Promote A to Chief of Staff: the same proposal now stages a card.
-      expect((await api("PATCH", `/api/bots/${a.id}`, { chiefOfStaff: true })).status).toBe(200);
+      // (b) Promote A to Chief of Staff at Ask: the same proposal stages a card
+      // (Full would apply a foreign peer change at once; omb #2808).
+      expect((await api("PATCH", `/api/bots/${a.id}`, { chiefOfStaff: true, approvalMode: "ask" })).status).toBe(200);
       const proposedResponse = await fetch(`${BASE}/api/internal/profile-requests`, {
         method: "POST",
         headers: internalHeaders,
@@ -11545,7 +11568,8 @@ describe("harness HTTP API", () => {
   });
 
   it("applies a bot's own learned skill at once and undoes it from its receipt", async () => {
-    const bot = (await api("POST", "/api/bots", {})).body.bot;
+    // Ask so decisions log auto-approved:self (omb #2808 defaults new bots to Full).
+    const bot = (await api("POST", "/api/bots", { settings: { approvalMode: "ask" } })).body.bot;
     try {
       expect((await api("PATCH", `/api/bots/${bot.id}`, {
         modelSelection: { instanceId: "claude", model: "claude-sonnet-5" },

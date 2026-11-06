@@ -47593,6 +47593,7 @@ ROUTES.push(createBotsMutateRoutes({
   isTeamMemorySharing,
   limitFailover,
   liveApprovalChange,
+  localPrincipalId,
   lockedLookRefusal,
   maySetBotHost,
   mcpServerNameError,

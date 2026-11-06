@@ -3,6 +3,7 @@
 // free of React so slice reducers can import it without cycles.
 
 import { appendDraftAttachments } from "@/lib/drafts";
+import { withoutLeakedTokens } from "@/lib/leaked-tokens";
 import { citationAttachment, CITATION_MAX_QUOTE_LENGTH } from "@/lib/citations";
 import type { AppSettingsSection, BotSettingsSection } from "../settings-section";
 import type { BotUpdatePatch } from "../bot-patch-queue";
@@ -927,6 +928,10 @@ export function openedUnreadDivider(state: AppState, threadId: string, unread: b
 /** The visible conversation: walk parentId links from the active leaf back
  * to the root. Falls back to the flat list for pre-branching payloads. */
 export function visibleMessages(bot: Pick<Bot, "messages" | "activeLeafId">): Message[] {
+  return withoutLeakedTokens(activeBranch(bot));
+}
+
+function activeBranch(bot: Pick<Bot, "messages" | "activeLeafId">): Message[] {
   const leafId = bot.activeLeafId;
   if (!leafId) return bot.messages;
   const byId = new Map(bot.messages.map((m) => [m.id, m]));

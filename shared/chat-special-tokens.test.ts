@@ -21,6 +21,12 @@ describe("stripChatSpecialTokens", () => {
     expect(stripChatSpecialTokens("a <b> tag and x < y")).toBe("a <b> tag and x < y");
     expect(stripChatSpecialTokens("  untouched  ")).toBe("  untouched  ");
   });
+
+  it("leaves a token inside a code block as written", () => {
+    const block = "Le jeton de fin :\n```\n<|eos|>\n```";
+    expect(stripChatSpecialTokens(block)).toBe(block);
+    expect(stripChatSpecialTokens("```text\nfin <|im_end|>\n```<|eos|>")).toBe("```text\nfin <|im_end|>\n```");
+  });
 });
 
 describe("ChatSpecialTokenStream", () => {

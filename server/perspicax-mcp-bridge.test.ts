@@ -162,6 +162,48 @@ describe("Perspicax MCP bridge", () => {
     }]);
   });
 
+  it("keeps two mount prefixes isolated when both sit in one parent environment (#1895)", async () => {
+    const received: Array<{ authorization?: string; botId?: string | null }> = [];
+    const harness = await listen((request, response) => {
+      const url = new URL(request.url ?? "", "http://127.0.0.1");
+      request.resume();
+      request.on("end", () => {
+        received.push({
+          authorization: request.headers.authorization,
+          botId: url.searchParams.get("botId"),
+        });
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({ jsonrpc: "2.0", id: 1, result: {} }));
+      });
+    });
+    const alpha = "SAGAX_MCP_ENV_ALPHA__";
+    const beta = "SAGAX_MCP_ENV_BETA__";
+    // Codex parent env holds every mount's prefixed variables together.
+    const parent = {
+      [`${alpha}SAGAX_HARNESS_URL`]: harness,
+      [`${alpha}SAGAX_PERSPICAX_TOKEN`]: "alpha-capability",
+      [`${alpha}SAGAX_BOT_ID`]: "bot-alpha",
+      [`${alpha}SAGAX_THREAD_ID`]: "th-alpha",
+      [`${beta}SAGAX_HARNESS_URL`]: harness,
+      [`${beta}SAGAX_PERSPICAX_TOKEN`]: "beta-capability",
+      [`${beta}SAGAX_BOT_ID`]: "bot-beta",
+      [`${beta}SAGAX_THREAD_ID`]: "th-beta",
+      SAGAX_PERSPICAX_TOKEN: "plain-must-not-win",
+    };
+    const first = start({ ...parent, SAGAX_PROXY_ENV_PREFIX: alpha });
+    child!.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" })}\n`);
+    await nextJson(first);
+    child!.kill("SIGKILL");
+    child = null;
+    const second = start({ ...parent, SAGAX_PROXY_ENV_PREFIX: beta });
+    child!.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" })}\n`);
+    await nextJson(second);
+    expect(received).toEqual([
+      { authorization: "Bearer alpha-capability", botId: "bot-alpha" },
+      { authorization: "Bearer beta-capability", botId: "bot-beta" },
+    ]);
+  });
+
   it("answers Perspicax is unavailable when the harness refuses or cannot be reached", async () => {
     const harness = await listen((request, response) => {
       request.resume();

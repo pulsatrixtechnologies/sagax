@@ -10,6 +10,7 @@ import { BellRing } from "lucide-react";
 
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
+import { SECONDARY_CIRCLE } from "./ComposerControls";
 import { onNudgeSent } from "@/lib/desktop-nudge";
 import { nudgeWaitLabel } from "@/lib/nudge-wait";
 import { ApiError, api } from "@/state/store";
@@ -106,11 +107,11 @@ export function NudgeButtonFace({
         title={tip ? undefined : tooltip}
         onClick={onClick}
         className={cn(
-          "flex size-7 shrink-0 items-center justify-center rounded-full text-ink-secondary hover:bg-raised hover:text-ink",
-          cooling && "cursor-not-allowed text-ink-tertiary opacity-40 hover:bg-transparent hover:text-ink-tertiary",
+          SECONDARY_CIRCLE,
+          cooling && "cursor-not-allowed opacity-40 hover:bg-ink/[0.06] hover:text-ink-tertiary",
         )}
       >
-        <BellRing size={16} strokeWidth={1.75} />
+        <BellRing size={15} strokeWidth={2.25} aria-hidden="true" />
       </button>
       {tip && (
         <span

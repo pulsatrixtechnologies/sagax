@@ -5,7 +5,6 @@ import { sendBlockLocks, sendBlockStops, type SendBlock } from "@/lib/send-state
 import type { Bot, Group } from "@/state/store";
 import { ModelPicker, type ComposerModelMenuControl } from "../ModelPicker";
 import { CallButton } from "../CallView";
-import { GroupCallButton } from "../GroupCallView";
 import { NudgeButton } from "../NudgeButton";
 import {
   ComposerCtaSeat,
@@ -23,7 +22,6 @@ type DictationEngine = "native" | "xai" | null;
 export function ComposerActionBar({
   bot,
   group,
-  members,
   remoteClient,
   locked,
   threadId,
@@ -56,7 +54,6 @@ export function ComposerActionBar({
 }: {
   bot?: Bot;
   group?: Group;
-  members?: Bot[];
   remoteClient: boolean;
   locked: boolean;
   threadId: string;
@@ -191,7 +188,8 @@ export function ComposerActionBar({
       if (sendBlockLocks(sendBlock as SendBlock | null)) return null;
       return <ComposerCtaSeat typed={typed} send={sendButton} voice={<CallButton bot={bot} tone={ctaTone} />} />;
     }
-    if (group) return typed ? sendButton : <GroupCallButton group={group} members={members ?? []} />;
+    // voice mode cannot start in a group chat: no waveform button there
+    if (group) return typed ? sendButton : null;
     return typed ? sendButton : null;
   })()}
     {nudgePeer && <NudgeButton principalId={nudgePeer.id} name={nudgePeer.name} threadId={nudgePeer.threadId} />}

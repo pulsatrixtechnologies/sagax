@@ -10039,7 +10039,6 @@
   "codingChat.title.collapse": "Réduire le texte de la tâche",
   "codingChat.title.expand": "Afficher toute la tâche",
   "codingChat.working": "Au travail",
-  "codingChat.workingOn": "Au travail : {step}",
   "code.error": "Une erreur est survenue. Réessayez.",
   "code.timeline.tools.one": "1 appel d'outil",
   "code.commits.count.one": "1 commit",

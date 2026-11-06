@@ -10039,7 +10039,6 @@
   "codingChat.title.collapse": "Show less of the task",
   "codingChat.title.expand": "Show the full task",
   "codingChat.working": "Working",
-  "codingChat.workingOn": "Working: {step}",
   "code.error": "Something went wrong. Try again.",
   "code.timeline.tools.one": "1 tool call",
   "code.commits.count.one": "1 commit",

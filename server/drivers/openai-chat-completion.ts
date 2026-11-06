@@ -11,6 +11,7 @@ import { noteKeyAccepted, noteKeyRejected, rejectsKey } from "../key-rejections.
 import type { EffortLevel } from "../../shared/model-selection.ts";
 import { refusedResponsesOption, refusesModel, refusesResponsesEndpoint, responsesEffort, responsesInput, ResponsesReader, responsesTools } from "./openai-responses.ts";
 import type { Completion, CompletionJson, RuntimeOptions, Usage } from "./openai-chat-types.ts";
+import { ChatSpecialTokenStream, stripChatSpecialTokens } from "../../shared/chat-special-tokens.ts";
 
 /** Optional per-step TTFT markers (SAGAX_TURN_TRACE=1). No secrets. */
 function httpTrace(step: string): void {
@@ -275,7 +276,34 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
 
   /** One reply: /responses for the models this endpoint serves there, with
    * one resend without a refused optional part, else /chat/completions. */
+  /** A reply without the chat-template tokens a local server can leak as
+   * text (`<|eos|>`, `<|im_end|>`...), streamed and whole. */
   const complete = async (
+    messages: OpenAIChatMessage[],
+    model: string,
+    stream: boolean,
+    signal?: AbortSignal,
+    onDelta?: (delta: string, kind: "assistant_text" | "reasoning_text") => void,
+    tools: ChatToolDefinition[] = [],
+    onUsage?: TextGenerationOptions["onUsage"],
+    maxTokens?: number,
+    apiKey = "",
+    effort?: EffortLevel,
+  ): Promise<Completion> => {
+    const streams = { assistant_text: new ChatSpecialTokenStream(), reasoning_text: new ChatSpecialTokenStream() };
+    const forward = onDelta && ((delta: string, kind: "assistant_text" | "reasoning_text") => {
+      const shown = streams[kind].feed(delta);
+      if (shown) onDelta(shown, kind);
+    });
+    const completion = await completeRaw(messages, model, stream, signal, forward, tools, onUsage, maxTokens, apiKey, effort);
+    if (onDelta) for (const kind of ["reasoning_text", "assistant_text"] as const) {
+      const shown = streams[kind].finish();
+      if (shown) onDelta(shown, kind);
+    }
+    return { ...completion, text: stripChatSpecialTokens(completion.text), reasoning: stripChatSpecialTokens(completion.reasoning) };
+  };
+
+  const completeRaw = async (
     messages: OpenAIChatMessage[],
     model: string,
     stream: boolean,

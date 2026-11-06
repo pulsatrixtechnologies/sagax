@@ -26,7 +26,7 @@ import {
   PAGE_COLUMN,
   PAGE_FIELD_LABEL,
   PAGE_FILTER_RESET,
-  PAGE_HEADER_BUTTON,
+  PAGE_ACTION_BUTTON,
   PAGE_INDICATOR,
   PAGE_MENU_COUNT,
   PAGE_POPOVER,
@@ -152,7 +152,7 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
               <PageMenuItem icon={CheckCheck} onClick={() => { closeNavMenu(); dispatch({ type: "markAllRoutineRunsSeen" }); }}>{t("routines.markAllSeen")}</PageMenuItem>
           </PageMenu>
           <details ref={newMenuRef} className="group relative">
-            <summary role="button" data-automations-create aria-label={t("routineCalendar.createAutomation")} title={t("routineCalendar.createAutomation")} className={cn(PAGE_HEADER_BUTTON, "h-9 w-auto gap-1.5 border-transparent bg-accent px-3 text-[12px] font-medium text-white hover:bg-accent/90")}>
+            <summary role="button" data-automations-create aria-label={t("routineCalendar.createAutomation")} title={t("routineCalendar.createAutomation")} className={PAGE_ACTION_BUTTON}>
               <Plus size={15} aria-hidden="true" /><span className="@max-[30rem]/page-header:sr-only">{t("sidebar.new")}</span>
             </summary>
             <div role="group" aria-label={t("routineCalendar.newAutomation")} className={cn(PAGE_POPOVER, "w-[280px] min-w-[200px] gap-0.5 p-1.5")}>
@@ -180,6 +180,9 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
         icon={CalendarDays}
         title={t("sidebar.nav.automations")}
         section={sectionName}
+        onRoot={() => setSection("calendar")}
+        count={scopedRoutines.length === 1 ? t("routineCalendar.countOne") : t("routineCalendar.count", { count: scopedRoutines.length })}
+        subtitle={t("routineCalendar.subtitle")}
         titleProps={{ "data-tour": "automations-page" }}
         {...(fill ? dragProps : {})}
         topbar={fill}
@@ -187,12 +190,12 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
         style={embedded ? undefined : fill ? dragProps.style : windowDragStyle}
         primaryStyle={noDragStyle ?? windowNoDragStyle}
         actionsStyle={{ ...(noDragStyle ?? windowNoDragStyle), ...controlsShiftStyle }}
-        primary={section === "calendar" && <>
-            <PageSegment label={t("routines.view.label")} value={scheduleView} onChange={setScheduleView} options={[
+        primary={(section === "calendar" || filtersMenu) && <>
+            {section === "calendar" && <PageSegment label={t("routines.view.label")} value={scheduleView} onChange={setScheduleView} options={[
               { value: "list", label: t("routines.view.list"), icon: List },
               { value: "calendar", label: t("connectApps.capabilities.calendar"), icon: CalendarDays },
-            ]} />
-            {scheduleView === "calendar" && <>
+            ]} />}
+            {section === "calendar" && scheduleView === "calendar" && <>
               <div className="flex shrink-0 items-center">
                 <button type="button" onClick={() => setAnchor((current) => addDays(current, -viewDays))} className="rounded-md p-1.5 text-ink-secondary hover:bg-raised hover:text-ink" aria-label={t("routines.previous")} title={t("routines.previous")}><ChevronLeft size={16} /></button>
                 <button type="button" onClick={goToday} className="rounded-md border border-hairline/50 px-2.5 py-1 text-[12px] font-medium text-ink hover:bg-raised">{t("routines.today")}</button>
@@ -200,11 +203,11 @@ export function RoutinesPageView(m: RoutinesPageModel, chrome: RoutinesPageChrom
               </div>
               <div data-automations-range className="min-w-0 truncate text-[14px] font-medium text-ink">{calendarRangeLabel(rangeStart, viewDays)}</div>
             </>}
+            {filtersMenu && <div className="ml-auto">{filtersMenu}</div>}
           </>}
         actions={<>
             {section !== "webhooks" && running > 0 && <span role="status" data-automations-running title={t("routineCalendar.activeCount", { count: running })} aria-label={t("routineCalendar.activeCount", { count: running })} className={cn(PAGE_INDICATOR, "text-accent")}><Loader2 size={13} className="animate-spin" aria-hidden="true" />{running}</span>}
             {unseenFailures > 0 && <button type="button" data-automations-problems onClick={() => dispatch({ type: "showRoutines", section: "logs", runStatus: "problems" })} className="flex h-9 items-center gap-1 rounded-lg px-2 text-[12px] font-medium text-danger hover:bg-danger/10" title={t("routineCalendar.openProblemLogs")} aria-label={t("routineCalendar.openProblemLogs")}><CircleAlert size={14} aria-hidden="true" />{unseenFailures}</button>}
-            {filtersMenu}
             {automationActions}
           </>}
         below={<>

@@ -41,6 +41,7 @@ window.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.pathname : input.url;
   if (url.endsWith("/api/me/achievements")) return new Response(JSON.stringify(snapshot), { headers: { "content-type": "application/json" } });
   if (url.includes("/api/me/achievements/")) return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
+  if (url.includes("/api/routines")) return new Response(JSON.stringify({ routines: [], runs: [] }), { headers: { "content-type": "application/json" } });
   return original(input, init);
 };
 

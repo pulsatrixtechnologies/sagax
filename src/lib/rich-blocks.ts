@@ -689,6 +689,38 @@ export function unclosedFenceOffset(text: string): number {
   return -1;
 }
 
+/** End offset (exclusive) of the fence that opens at `open`, or -1 when that
+ * fence never closes. `open` is an index returned by unclosedFenceOffset on a
+ * prefix of `text`. */
+export function fenceCloseOffset(text: string, open: number): number {
+  if (open < 0 || open >= text.length) return -1;
+  const rest = text.slice(open);
+  const opener = /^(?: {0,3}>[ \t]?)* {0,3}((`{3,})[^`\r\n]*|(~{3,})[^\r\n]*)(?:\r?\n|$)/.exec(rest);
+  if (!opener) return -1;
+  const fence = opener[2] ?? opener[3]!;
+  const closer = new RegExp(`(^|\\r?\\n)(?: {0,3}>[ \\t]?)* {0,3}${fence[0]}{${fence.length},}[ \\t]*(?=\\r?\\n|$)`);
+  const closing = closer.exec(rest.slice(opener[0].length));
+  if (!closing) return -1;
+  return open + opener[0].length + closing.index + closing[0].length;
+}
+
+/** Clip markdown so a character cap never splits a fenced block. When the cut
+ * would fall inside a fence, keep the whole fence if it ends by `hardMax`;
+ * otherwise end before that fence. A report must never ship a half widget. */
+export function clipMarkdownPreservingFences(text: string, max: number, hardMax = Math.max(max * 5, max)): string {
+  if (max <= 0) return "";
+  if (text.length <= max) return text;
+  const open = unclosedFenceOffset(text.slice(0, max));
+  if (open < 0) return text.slice(0, max);
+  const close = fenceCloseOffset(text, open);
+  if (close >= 0 && close <= hardMax) return text.slice(0, close);
+  if (open > 0) return text.slice(0, open).replace(/\s+$/u, "");
+  // Fence from the start of the window, never closed within hardMax: keep the
+  // hard cap. Callers that render with ChatMarkdown still treat the open fence
+  // as a pending widget, never as raw code.
+  return text.slice(0, Math.min(text.length, hardMax));
+}
+
 const WIDE_FENCE = /(^|\n) {0,3}(?:`{3,}|~{3,})[ \t]*(?:email|mail|eml|widget|html-widget|artifact|chart|csv|tsv|mermaid|cw)\b/i;
 const TABLE_RULE = /(^|\n)\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*(\n|$)/;
 const ANT_ARTIFACT = /<antArtifact\b/i;

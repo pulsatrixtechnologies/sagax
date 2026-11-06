@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { routineRunCard, routineRunFallbackText } from "./routine-run-card.ts";
+import { unclosedFenceOffset } from "../../src/lib/rich-blocks.ts";
+import { pickRoutineFullReport, routineRunCard, routineRunFallbackText, ROUTINE_REPORT_POST_MAX } from "./routine-run-card.ts";
 import type { RoutineRun } from "./routines.ts";
 
 const REPORT = "Le suivi de 14 h 50 n'a rien écrit dans ConnectWise. J'ai libéré le verrou dispatch.";
@@ -21,9 +22,32 @@ describe("routineRunCard", () => {
     const whole = `${"Draft. ".repeat(600)}End.`;
     const card = routineRunCard(run({ output: whole.slice(0, 2_000) }), "main", whole);
     expect(card.summary).toBe(whole);
-    expect(routineRunCard(run(), "main", "x".repeat(30_000)).summary).toHaveLength(20_000);
+    expect(routineRunCard(run(), "main", "x".repeat(30_000)).summary).toHaveLength(ROUTINE_REPORT_POST_MAX);
     // a wait keeps its short line
     expect(routineRunCard(run({ status: "waiting", attention: "Approve" }), "main", whole).summary).toBe("Approve");
+  });
+
+  // 2026-11-06 (#2186): a long report with a widget stays whole; a cut never
+  // opens a fence without closing it.
+  it("keeps a long widget fence whole in the posted summary", () => {
+    const css = `#dgx .fold summary::-webkit-details-marker{display:none}`.repeat(800);
+    const widget = `\`\`\`widget-imperfect\n<style>${css}</style>\n<div id=dgx>ok</div>\n\`\`\``;
+    const whole = `Dispatch finished.\n\n${widget}`;
+    expect(whole.length).toBeGreaterThan(ROUTINE_REPORT_POST_MAX);
+    const card = routineRunCard(run({ output: whole.slice(0, 2_000) }), "main", whole);
+    expect(card.summary).toBe(whole);
+    expect(unclosedFenceOffset(card.summary!)).toBe(-1);
+    expect(card.summary).toContain("webkit-details-marker");
+    expect(card.summary!.trimEnd().endsWith("```")).toBe(true);
+  });
+
+  it("picks the task's full report when the run record ends inside a fence", () => {
+    const whole = "Checked the board.\n\n```widget-imperfect\n<style>#dgx .fold summary::-webkit-details-marker{display:none}</style>\n<div>ok</div>\n```";
+    const cut = whole.slice(0, whole.indexOf("webkit") + 10);
+    expect(unclosedFenceOffset(cut)).toBeGreaterThanOrEqual(0);
+    expect(pickRoutineFullReport(cut, whole)).toBe(whole);
+    expect(pickRoutineFullReport(whole.slice(0, 40), whole)).toBe(whole);
+    expect(pickRoutineFullReport(whole, whole)).toBeUndefined();
   });
 
   // 2026-11-04: a running card shows how long the run has been going.

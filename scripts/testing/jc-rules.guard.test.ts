@@ -24,6 +24,12 @@
 //    shell, send, connector or delete is kept from Always by caution.
 // 4. No admin gate on the person's own space: `{admin &&` and
 //    `memberHidesSection` only where the thing is the whole organization's.
+//
+// Unified chat static scans (#2086): Open thread / Go to conversation locale
+// keys and hard-coded strings stay gated or allowlisted; SideThreadPanel sits
+// behind showThreads; no new "· Results" thread titles outside the Cloud-guest
+// fallback. French catalog values carry no em-dash or en-dash; UI locale
+// strings embed no raw UUID.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,12 +47,15 @@ import { parseGoMessage } from "../../server/perspicax/go-message.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SRC = join(ROOT, "src");
-const SKIP = /\.(?:test|e2e|dom\.test)\.tsx?$|\.d\.ts$|\/testing\/|\/self-knowledge\//;
+const SKIP = /\.(?:test|e2e|dom\.test)\.tsx?$|\.d\.ts$|\/testing\/|\/self-knowledge\/|\/locales\//;
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
-    if (entry.isDirectory()) return sourceFiles(path);
+    if (entry.isDirectory()) {
+      if (entry.name === "node_modules" || entry.name === "testing" || entry.name === "self-knowledge" || entry.name === "locales") return [];
+      return sourceFiles(path);
+    }
     return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [path] : [];
   });
 }
@@ -578,5 +587,153 @@ describe("JC unified chat guards (#2106)", () => {
     const picker = readRoot("src/components/ModelPicker.tsx");
     expect(picker).toMatch(/updateBotDefault:\s*true/);
     expect(picker).not.toMatch(/confirm.*model|toast.*model|warn.*model/i);
+  });
+});
+
+// ── #2086 static scans ──────────────────────────────────────────────────────
+
+/** Locale keys whose English value is an "Open thread" / side-thread entry.
+ * A component that calls t(key) must gate on showThreads / onOpenThread, or
+ * sit on UNIFIED_THREAD_KEY_ALLOWLIST with a comment. */
+const UNIFIED_THREAD_KEYS = [
+  "needsYou.openThread",
+  "routineRun.openTeammateThread",
+  "botPanel.activity.openThread",
+  "floatingBots.menu.openThread",
+  "chat.openThread",
+  "chat.openThreadOn",
+  "chat.goToConversation",
+  "chat.goToConversationWith",
+] as const;
+
+/** Code that still names a thread key, with why it is safe or which follow-up
+ * owns the product fix. Prefer a showThreads / onOpenThread gate over a new row. */
+const UNIFIED_THREAD_KEY_ALLOWLIST: ReadonlyArray<{ file: string; why: string }> = [
+  // gated: optional onOpenThread; ChatView only passes it when showThreads
+  { file: "src/components/AttentionCard.tsx", why: "renders needsYou.openThread only when onOpenThread is passed (ChatView gates it)" },
+  { file: "src/components/RoutineRunCard.tsx", why: "renders openTeammateThread only when onOpenThread is passed (ChatView gates it)" },
+  { file: "src/components/ThreadChip.tsx", why: "returns null when !useShowThreads()" },
+  { file: "src/components/ThreadRefs.tsx", why: "openThread(..., showThreads) and chat.openThread titles on a threads-shown ref chip" },
+  { file: "src/components/bot-settings/RolePermissionsSection.tsx", why: "passes onOpenThread only when showThreads" },
+  // in-place exchange sheet / goto chip primitives (not SideThreadPanel)
+  { file: "src/components/ConversationLink.tsx", why: "follow-up #2081: Go to conversation line opens an in-place exchange sheet; ChatView still shows bot-to-bot lines in unified mode" },
+  { file: "src/components/BotExchangeChip.tsx", why: "follow-up #2081: uses ConversationLink for an in-place sheet" },
+  { file: "src/components/BotConversations.tsx", why: "follow-up #2081: uses ConversationLink for an in-place sheet" },
+  { file: "src/components/GotoGroupChip.tsx", why: "follow-up #2081: folds Go to conversation lines; opens sheet or selects target" },
+];
+
+/** Hard-coded English strings that must not appear in shipped UI source unless
+ * the file is gated or allowlisted. */
+const UNIFIED_FORBIDDEN_STRINGS: ReadonlyArray<{ pattern: RegExp; label: string }> = [
+  { pattern: /["'`]Open thread["'`]/, label: "Open thread" },
+  { pattern: /["'`]Open \{name\}'s thread["'`]/, label: "Open <bot>'s thread" },
+  { pattern: /["'`]Go to conversation["'`]/, label: "Go to conversation" },
+  { pattern: /["'`]Go to conversation with/, label: "Go to conversation with" },
+];
+
+/** Side-thread panel entry: must sit behind showThreads. */
+const SIDE_PANEL_FILES = ["src/App.tsx-parts/ShellLayout.tsx"];
+
+describe("#2086 unified chat: no thread entry points when threads are off", () => {
+  it("SideThreadPanel is only mounted behind showThreads", () => {
+    for (const file of SIDE_PANEL_FILES) {
+      const text = readRoot(file);
+      expect(text, file).toContain("{showThreads && <SideThreadPanel />}");
+      expect(text, file).toContain("useShowThreads()");
+    }
+    const offenders: string[] = [];
+    for (const dir of ["src", "server", "shared"]) {
+      for (const file of walkSources(join(ROOT, dir), /\.tsx?$/)) {
+        const text = readFileSync(file, "utf8");
+        if (!/<SideThreadPanel\b/.test(text)) continue;
+        const path = rel(file);
+        if (SIDE_PANEL_FILES.includes(path)) continue;
+        // gallery previews mount the panel on purpose
+        if (path.startsWith("src/gallery/")) continue;
+        offenders.push(path);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("Open thread / Go to conversation locale keys are only used in gated or allowlisted files", () => {
+    const keyPattern = new RegExp(`t\\(\\s*["'](${UNIFIED_THREAD_KEYS.join("|")})["']`);
+    const offenders: string[] = [];
+    for (const file of walkSources(join(ROOT, "src"), /\.tsx?$/)) {
+      const text = readFileSync(file, "utf8");
+      if (!keyPattern.test(text)) continue;
+      const path = rel(file);
+      if (UNIFIED_THREAD_KEY_ALLOWLIST.some((row) => row.file === path)) continue;
+      offenders.push(path);
+    }
+    expect(offenders, "gate with showThreads / onOpenThread, or add an allowlist row with a comment").toEqual([]);
+    for (const row of UNIFIED_THREAD_KEY_ALLOWLIST) {
+      expect(keyPattern.test(readRoot(row.file)) || /openThread|goToConversation/.test(readRoot(row.file)), `${row.file}: no longer uses a thread key; drop it from UNIFIED_THREAD_KEY_ALLOWLIST`).toBe(true);
+    }
+  });
+
+  it("no hard-coded Open thread / Go to conversation strings in shipped source outside allowlisted files", () => {
+    const allow = new Set(UNIFIED_THREAD_KEY_ALLOWLIST.map((row) => row.file));
+    const offenders: string[] = [];
+    for (const dir of ["src", "server", "shared"]) {
+      for (const file of walkSources(join(ROOT, dir), /\.tsx?$/)) {
+        const path = rel(file);
+        if (allow.has(path) || path.startsWith("src/gallery/")) continue;
+        // comments may name the rule; only code and string literals count
+        const text = readFileSync(file, "utf8")
+          .replace(/\/\*[\s\S]*?\*\//g, "")
+          .split("\n")
+          .filter((line) => !/^\s*\/\//.test(line))
+          .join("\n");
+        for (const row of UNIFIED_FORBIDDEN_STRINGS) {
+          if (row.pattern.test(text)) offenders.push(`${path}: ${row.label}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("no new automatic \"· Results\" thread titles outside the Cloud-guest fallback", () => {
+    // resolveResultsThread still opens a results task when the person has no
+    // main conversation (Cloud guest). Everywhere else reports into the one
+    // conversation. A second createTask with " · Results" fails here.
+    const offenders: string[] = [];
+    for (const file of walkSources(join(ROOT, "server"), /\.ts$/)) {
+      const text = readFileSync(file, "utf8");
+      const matches = text.matchAll(/createTask\([^)]*· Results/g);
+      for (const match of matches) {
+        const path = rel(file);
+        // the one guest fallback in index.ts
+        if (path === "server/index.ts" && /\$\{routine\.name\} · Results/.test(match[0]!)) continue;
+        offenders.push(`${path}: ${match[0]}`);
+      }
+    }
+    // title helpers that only recognize legacy threads stay
+    expect(offenders).toEqual([]);
+    const index = readRoot("server/index.ts");
+    expect(index).toMatch(/\$\{routine\.name\} · Results/);
+    expect(index).toMatch(/routineResults: true/);
+  });
+});
+
+const DASH = /[\u2013\u2014]/;
+const UUID = /\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/;
+
+describe("#2086 no em/en dash in fr.json and no raw UUID in UI locale strings", () => {
+  it("French catalog values have no em-dash or en-dash", () => {
+    const fr = JSON.parse(readRoot("src/locales/fr.json")) as Record<string, string>;
+    const offending = Object.entries(fr).filter(([, value]) => typeof value === "string" && DASH.test(value)).map(([key]) => key);
+    expect(offending).toEqual([]);
+  });
+
+  it("English and French catalog values embed no raw UUID", () => {
+    const offending: string[] = [];
+    for (const name of ["src/locales/en.json", "src/locales/fr.json"]) {
+      const catalog = JSON.parse(readRoot(name)) as Record<string, string>;
+      for (const [key, value] of Object.entries(catalog)) {
+        if (typeof value === "string" && UUID.test(value)) offending.push(`${name}: ${key}`);
+      }
+    }
+    expect(offending).toEqual([]);
   });
 });

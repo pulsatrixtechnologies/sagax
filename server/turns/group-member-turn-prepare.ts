@@ -232,8 +232,9 @@ export function createPrepareGroupMemberTurn(host: GroupMemberTurnHost) {
   // reached one of them. Callers wait for a busy member before getting here
   // (waitForChatRoomMember / the goal wait), so this is the last-line guard
   // for the narrow window in which a 1:1 re-claims the bot between that wait
-  // settling and this turn starting.
-  if (bot.busy) {
+  // settling and this turn starting. #2382: the same test as that wait, so a
+  // conversation only waiting on a person's answer never skips the member.
+  if (store.busyForRoom(bot.id)) {
     if (orchestration) {
       orchestration.result.outcome = "busy";
       return { kind: "return", value: true };

@@ -1467,6 +1467,7 @@ import { createRelayEnginesFor } from "./index-leaves/relayEnginesFor.ts";
 import { createPrewarmThread } from "./index-leaves/prewarmThread.ts";
 import { createPerformBotActRoute } from "./index-leaves/performBotActRoute.ts";
 import { createWaitForGroupMemberBot } from "./index-leaves/waitForGroupMemberBot.ts";
+import { roomMemberAvailability, type GroupMemberBotAvailability } from "./room-member-availability.ts";
 import { createStreamOpenedHttpFile } from "./index-leaves/streamOpenedHttpFile.ts";
 import { createSettleParallelTask } from "./index-leaves/settleParallelTask.ts";
 import { createScopedSkillsPrompt } from "./index-leaves/scopedSkillsPrompt.ts";
@@ -8431,14 +8432,10 @@ const finishGroupGoalRun = createFinishGroupGoalRun(getLeafHost);
 
 const updateGroupGoalRunProgress = createUpdateGroupGoalRunProgress(getLeafHost);
 
-type GroupMemberBotAvailability = "ready" | "busy" | "unavailable" | "cancelled" | "timed_out";
-
+/** #2382: a conversation waiting on a person never keeps a room waiting
+ * (server/room-member-availability.ts). */
 function groupMemberBotAvailability(botId: string, operation: GroupTurnOperation): GroupMemberBotAvailability {
-  if (operation.cancelled || operation.cancellation.signal.aborted) return "cancelled";
-  const bot = store.bot(botId);
-  if (!bot || bot.hidden) return "unavailable";
-  if (bot.busy || roomMemberLock.heldElsewhere(botId, operation.threadId)) return "busy";
-  return "ready";
+  return roomMemberAvailability(store, roomMemberLock, botId, operation);
 }
 
 

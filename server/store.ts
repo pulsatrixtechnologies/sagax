@@ -2949,6 +2949,23 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     bot.busy = busy;
   }
 
+  /** #2382: whether a room must wait for this bot before its turn. A room
+   * turn already holding it (the room slot) does, and so does a
+   * conversation of its own where a turn is at work. A conversation that
+   * only waits on a person's answer does not: nothing runs there, and that
+   * answer can take hours (or never come), so the whole-bot `bot.busy` fold
+   * left every room the bot was in saying it was finishing another
+   * conversation until the wait cap skipped it. Routine runs stay out, as in
+   * the fold. */
+  busyForRoom(botId: string): boolean {
+    const bot = this.bot(botId);
+    if (!bot) return false;
+    const room = this.legacyActivities.get(botId);
+    if (room && ACTIVITY_BUSY.has(room)) return true;
+    return (bot.tasks ?? []).some((task) =>
+      !task.routineRunId && task.busy === true && task.activity !== "waiting-on-you");
+  }
+
   /** The bot-wide activity (the same fold as `bot.activity`/`bot.busy`)
    * over the threads `include` keeps, plus the bot's room activity. An
    * organization viewer gets it over their own threads only

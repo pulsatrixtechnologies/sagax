@@ -13354,8 +13354,6 @@
   "botModels.bulk.setModelFor": "Choisir le modèle de {count} bots",
   "botModels.bulk.setModelForOne": "Choisir le modèle de 1 bot",
   "botModels.defaults.perspicax": "Choisi dans Perspicax",
-  "botModels.activeModels": "{count} désactivés · Modèles actifs",
-  "botModels.activeModelsNone": "Modèles actifs",
   "pages.alwaysOnTop": "Toujours au-dessus",
   "botAccess.tools.native": "Outils du moteur",
   "botAccess.tools.groupAll": "Tous les outils",

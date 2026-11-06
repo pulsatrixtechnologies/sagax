@@ -64,7 +64,8 @@ export function ParallelTaskCard({ message, botId }: { message: Message; botId: 
   const task = owner?.tasks?.find((candidate) => candidate.threadId === ref?.threadId);
   const status = ref ? parallelCardState(message, task) : "queued";
   const live = status === "running" || status === "waiting" || status === "queued";
-  const questions = useInlineQuestions(ref?.threadId, !showThreads && status === "waiting", task?.updatedAt);
+  const asked = useInlineQuestions(ref?.threadId, status === "waiting", task?.updatedAt);
+  const questions = showThreads ? [] : asked;
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!live) return;
@@ -86,7 +87,7 @@ export function ParallelTaskCard({ message, botId }: { message: Message; botId: 
         <div className="min-w-0">
           <div className="truncate font-medium text-ink">{t("chat.parallel.title", { title: ref.title })}</div>
           <div className="text-[11px] text-ink-secondary">
-            {STATE_LABEL[status]()}
+            {status === "waiting" && asked.length > 0 ? t("chat.parallel.state.waitingAnswer") : STATE_LABEL[status]()}
             {status !== "queued" && elapsed > 0 ? ` · ${formatElapsed(elapsed)}` : ""}
           </div>
         </div>

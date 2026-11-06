@@ -5073,6 +5073,7 @@
       "chat.parallel.state.running": "f4ccae29e1bb0c20a124570a1b43f4347ea94bba9f84ffdfddd9c7445b126128",
       "chat.parallel.state.stopped": "1a4f630ac1b69fd00728fa8a672ded71d0eae8516cb23e78f94529113399b79b",
       "chat.parallel.state.waiting": "af7a94b91a7493faa5d5226a2ddbb38b57df3d30f426deb82d9cd9c64547d122",
+      "chat.parallel.state.waitingAnswer": "8e4b72ca2511e0bcdbb24cfba59f203972522cc440bfee2e8d9b7b0f7bebfd84",
       "chat.parallel.stop": "3b3af700475a0a476431788284968ea3fa2b784cf4f004a73bfbf789cac76038",
       "chat.parallel.title": "123d5997ea56c272d4de5e7299de069c55291dd4d7069eb116fd7f41d2df394c",
       "chat.pinHint": "fffe2725a73f2c8634a208ab20aef638247ea4728f32630ca56d699d8e18f6e2",

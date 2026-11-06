@@ -421,7 +421,7 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
         }
         : null;
       const customReview = customCall && asker
-        ? reviewCustomRules(host.customRules.rulesOf(cardAnswerer, asker.id, { ownSandbox: ownSandboxCall }), customCall, asker.id, serverHome(), { ...ruleProductsOf(asker.id), startedBy: host.turnStartFor(event.threadId) })
+        ? reviewCustomRules(host.customRules.rulesOf(cardAnswerer, asker.id, { ownSandbox: ownSandboxCall }), customCall, asker.id, serverHome(), { ...host.ruleProductsOf(asker.id), startedBy: host.turnStartFor(event.threadId) })
         : null;
       const customDecision = customReview?.decision.kind === "allow"
         && (strictCard || guestDriven || safetyEffect?.kind === "hold" || event.requiresExplicitApproval === true)

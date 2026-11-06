@@ -2410,6 +2410,16 @@ async function interruptHeldMember(groupId: string, botId: string): Promise<void
   }
 }
 
+const heldInterrupts = new Set<string>();
+function roomThreadIds(group: GroupRecord): string[] {
+  return [...new Set([group.threadId, ...(group.dm ? [] : store.groupTasks(group.id).map((task) => task.threadId))])];
+}
+
+function strictRuleOwnerName(personId: string): string {
+  const person = principals.byId(personId.trim().toLowerCase());
+  return person?.name?.trim() || person?.email?.trim() || "an admin";
+}
+
 // #1388: bindings the leaves read through the host bag. Getters stay lazy
 // (no TDZ at boot); the drain flags and stand-in roots are leaf-owned state.
 for (const [name, read] of Object.entries({

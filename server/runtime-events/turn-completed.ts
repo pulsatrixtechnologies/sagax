@@ -44,7 +44,7 @@ export function handleTurnCompleted(event: any, ctx: any, host: any): void {
         ? generated
         : generated.filter((attachment) => attachment.kind !== "audio");
       if (settled.length) {
-        const response = [...store.messagesFor(event.threadId)].reverse().find(
+        const response = [...host.store.messagesFor(event.threadId)].reverse().find(
           (message) =>
             message.role === "bot" &&
             message.kind === "text" &&

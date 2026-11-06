@@ -73,11 +73,12 @@ try {
         if (/Bad Gateway|\b502\b/.test(text)) raw.push(`${role}-${scheme}-${name}`);
         await page.locator('[role="dialog"]').first().screenshot({ path: join(outDir, `${prefix}-${role}-${name}-${scheme}.png`) });
       };
-      for (const tab of ["sources", "providers"]) {
+      // #2104: the engine accounts live on Installed (no Providers tab, no service pills)
+      for (const tab of ["sources", "installed"]) {
         if (!await page.locator(`[data-plugins-tab="${tab}"]`).count()) continue;
         await page.click(`[data-plugins-tab="${tab}"]`);
         await page.waitForSelector(`[data-plugins-manage="${tab}"]`);
-        if (tab === "providers" && await page.locator('[data-accounts-service-pill="github"]').count()) await page.click('[data-accounts-service-pill="github"]');
+        if (tab === "installed") await page.locator("[data-plugins-providers]").first().scrollIntoViewIfNeeded().catch(() => undefined);
         // with --fail: past the asks again (1.5 + 3 + 6 s), what stays on screen
         if (fail) await page.waitForTimeout(12_000);
         await shot(tab);

@@ -53,7 +53,7 @@ try {
       const page = await browser.newPage({ viewport: { width, height: 820 }, deviceScaleFactor: 2, colorScheme: scheme });
       page.on("pageerror", (error) => console.error("page error:", error.stack));
       await page.goto(`${base}?view=manage&skin=${skin}&lang=en`, { waitUntil: "networkidle" });
-      await page.waitForSelector('[data-plugins-manage="discover"]', { timeout: 30_000 });
+      await page.waitForSelector('[data-plugins-manage="installed"]', { timeout: 30_000 });
       const dialog = page.locator('[role="dialog"]').first();
       const shot = async (name) => {
         await page.waitForTimeout(700);
@@ -61,12 +61,12 @@ try {
         await dialog.screenshot({ path: file });
         console.log("shot", file);
       };
-      await shot("discover");
+      await shot("installed");
       const tabs = await page.locator("[data-plugins-tab]").evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-plugins-tab")));
       console.log(JSON.stringify({ label, scheme, tabs, browseBots: await page.locator("[data-plugins-browse-bots]").count() }));
-      await page.click('[data-plugins-tab="installed"]');
-      await page.waitForSelector('[data-plugins-manage="installed"]');
-      await shot("installed");
+      await page.click('[data-plugins-tab="discover"]');
+      await page.waitForSelector('[data-plugins-manage="discover"]');
+      await shot("discover");
       const providers = page.locator("[data-plugins-providers]");
       if (await providers.count()) {
         await providers.first().scrollIntoViewIfNeeded();

@@ -1,6 +1,7 @@
 /** Isolated gallery for Playwright screenshots of Connect apps and Browse
  * bots in their window (no server). Not shipped in the app.
  * ?view=manage|org-settings|bots|bots-in-apps&skin=<id>&lang=<code>&role=member|admin&app=none
+ *   &page=bots|pages opens that pane alone (#2104: a link to Bots or Pages)
  * manage: the real Connect apps panel (PluginsPanel) on a stand-in /api
  * shaped like an organization member's (2026-10-26): GitHub added by hand
  * and again by a marketplace plugin, five plugins, the person's Claude
@@ -149,6 +150,7 @@ const MANAGE_API: Record<string, unknown> = {
     { name: "Google Calendar", status: "connected" },
     { name: "Canva", status: "needs_auth" },
   ] }, codex: { available: false } },
+  "/api/me/org-capabilities": { owner: "perspicax", items: [] },
   "/api/pages": { pages: [
     { id: "pg-kpi", title: "Weekly KPIs", status: "published", access: "org", expiresAt: null, currentVersion: 2, botId: "bot-a", threadId: "t1", createdAt: 1_761_600_000_000, updatedAt: 1_761_650_000_000, expired: false, url: "https://sagax.example/p/pg-kpi", reachable: true, versions: [
       { n: 1, kind: "html", title: "Weekly KPIs", createdAt: 1_761_600_000_000, state: "published", bytes: 4200, botId: "bot-a" },
@@ -307,12 +309,17 @@ if (["manage", "org-settings", "settings-subpage"].includes(params.get("view") ?
   }) as typeof window.fetch;
 }
 
+const standalonePage = params.get("page") === "bots" || params.get("page") === "pages" ? params.get("page") as "bots" | "pages" : null;
+
 function Manage() {
   const { state, dispatch } = useStore();
   const ready = state.bots.some((bot) => bot.id === "bot-a");
   useEffect(() => {
     if (superseded && ready) dispatch({ type: "togglePlugins", open: true, surface: "mcp", botId: "bot-a" });
   }, [ready, dispatch]);
+  useEffect(() => {
+    if (standalonePage) dispatch({ type: "togglePlugins", open: true, page: standalonePage });
+  }, [dispatch]);
   if (superseded && (!ready || state.pluginsBotId !== "bot-a")) return <Frame>{null}</Frame>;
   return (
     <Frame>

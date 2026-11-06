@@ -459,7 +459,8 @@ describe("Coding, code work only", () => {
     const draw = (items: BotActivityItem[]) => renderToStaticMarkup(createElement(PanelSections, { list: { items, subagents: [] }, live: liveOf(items), actions: { onOpen: () => {}, now: NOW }, onOpenHistory: () => {} }));
     const live = draw([running]);
     expect(live).toContain('data-bot-settings-section="coding"');
-    expect(live).toContain("data-activity-where");
+    expect(live).not.toContain("data-activity-where");
+    // where it works stays in the tooltip, not on the row
     expect(live).toContain("parser · main");
     // #2148: a finished job stays 24 h, then only its pull request is listed
     const done = draw([shipped]);

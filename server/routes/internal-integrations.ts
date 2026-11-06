@@ -83,6 +83,8 @@ export interface InternalIntegrationsDeps {
   githubDeviceFlowAvailable(): boolean;
   githubStartDeviceFlow(principalId: string): Promise<{ userCode: string; verificationUri: string; expiresAt: number }>;
   githubTokenKind(token: string | undefined): string;
+  /** #2109: post (or reuse) the GitHub sign-in card in this chat; its id. */
+  githubPostCard?(principalId: string, threadId: string, start: { userCode: string; verificationUri: string; expiresAt: number }, from?: Record<string, unknown>): string | undefined;
   credentialConfigured(credentialId: CredentialTargetId): boolean;
   appendMessage(threadId: string, message: Record<string, unknown>): { id: string };
   activePath(threadId: string): ReadonlyArray<{
@@ -258,7 +260,8 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
       const body = await readBody();
       const owner = deps.ownsThread(sender.id, capability.threadId);
       if (!owner) return json(res, 403, { error: "source conversation does not belong to sender" });
-      if (owner.group) return json(res, 200, { state: "group" });
+      // #2109 (JC 2026-11-05): from any chat, a group included; the card
+      // binds the code to the person who asked, never to the group.
       // Only a person's own turn: never a routine, an automation or another
       // bot's hop (whose speaker falls back to the bot's owner), so a code
       // is never bound to someone who did not ask for it.
@@ -271,11 +274,8 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
       const speaker = turnSpeaker.principalId || (!deps.isPerspicax() ? deps.localPrincipalId() : "");
       if (!speaker) return json(res, 403, { error: "GitHub is connected by a signed-in person." });
       const principalId = speaker.trim().toLowerCase();
-      // The same door as Capabilities (ownIntegrationsRefusal): a person
-      // without `apps.ownIntegrations` does not bind a GitHub account here either.
-      if (deps.isPerspicax() && !deps.principalCan(principalId, "apps.ownIntegrations")) {
-        return json(res, 200, { state: "admin_only" });
-      }
+      // No admin door (#2109, JC 2026-11-05): a person connects their own
+      // GitHub account for their own environment.
       const current = deps.personGithub(principalId);
       const status = await deps.githubProbeStatus(principalId, current);
       const orgAccessUrl = status.state === "connected" ? status.orgAccessUrl : undefined;
@@ -293,22 +293,18 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
       }
       // A sign-in already waiting: the same code again, never a second one
       // (reconnect included, unless it is about to expire).
-      if (status.state === "pending" && (status.expiresAt ?? 0) - Date.now() > 60_000) {
-        return json(res, 200, {
-          state: "pending",
-          userCode: status.userCode,
-          verificationUri: status.verificationUri,
-          expiresAt: status.expiresAt,
-        });
+      // The code and link go into this chat as a card (Copy code, Open link)
+      // that turns into "GitHub connected as @login" once approved.
+      const pending = (start: { userCode: string; verificationUri: string; expiresAt: number }) => {
+        const from = owner.group ? { botId: sender.id, name: sender.name, color: sender.color } : undefined;
+        const cardId = deps.githubPostCard?.(principalId, capability.threadId, start, from);
+        return json(res, 200, { state: "pending", userCode: start.userCode, verificationUri: start.verificationUri, expiresAt: start.expiresAt, ...(cardId ? { card: true } : {}) });
+      };
+      if (status.state === "pending" && status.userCode && status.verificationUri && (status.expiresAt ?? 0) - Date.now() > 60_000) {
+        return pending({ userCode: status.userCode, verificationUri: status.verificationUri, expiresAt: status.expiresAt ?? 0 });
       }
       try {
-        const started = await deps.githubStartDeviceFlow(principalId);
-        return json(res, 200, {
-          state: "pending",
-          userCode: started.userCode,
-          verificationUri: started.verificationUri,
-          expiresAt: started.expiresAt,
-        });
+        return pending(await deps.githubStartDeviceFlow(principalId));
       } catch (error) {
         return json(res, 200, {
           state: "error",

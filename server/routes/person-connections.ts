@@ -6,6 +6,7 @@
 //          { github: GithubStatus, servers: [listing + auth], sandbox: boolean }
 //   POST   /api/me/github/device              start the device flow: { userCode, verificationUri, expiresAt }
 //   POST   /api/me/github/token  { token }    connect with a pasted token
+//   GET    /api/me/github                     { github: GithubStatus } (the device flow's poll)
 //   DELETE /api/me/github                     forget it (here and in the server environment)
 //   POST   /api/me/mcp/servers   { name, url, auth?, token?, headerName? } | { name, command, args?, env? }
 //   PATCH  /api/me/mcp/servers/:name { enabled }
@@ -15,7 +16,8 @@
 //
 // A person without the Sagax permission `apps.ownIntegrations` gets that
 // 403 on every change, except signing in again to a server they already
-// have (`oauth/start`), so a token can be refreshed.
+// have (`oauth/start`), so a token can be refreshed, and their own GitHub
+// account (#2109, JC 2026-11-05: no admin door on a person's own GitHub).
 //
 // Only a signed-in person, only for themselves (the session's principal,
 // never an id from the request), only on an organization server. Member
@@ -97,7 +99,8 @@ export function createPersonConnectionRoutes(deps: PersonConnectionRouteDeps): R
       }
       // Everything below changes the person's connections. Signing in again
       // to a server they already have keeps it working.
-      const integrationsRefusal = deps.ownIntegrationsRefusal?.(auth) ?? null;
+      const ownGithub = path === "/api/me/github" || path.startsWith("/api/me/github/");
+      const integrationsRefusal = ownGithub ? null : deps.ownIntegrationsRefusal?.(auth) ?? null;
       if (integrationsRefusal && !(method === "POST" && path.endsWith("/oauth/start"))) return json(res, 403, integrationsRefusal);
       if (path === "/api/me/github/device") {
         if (method !== "POST") return json(res, 405, { error: "POST only" });
@@ -110,7 +113,8 @@ export function createPersonConnectionRoutes(deps: PersonConnectionRouteDeps): R
         return json(res, 200, { github: await deps.github.connectToken(principalId, body.token) });
       }
       if (path === "/api/me/github") {
-        if (method !== "DELETE") return json(res, 405, { error: "DELETE only" });
+        if (method === "GET") return json(res, 200, { github: await deps.github.status(principalId) });
+        if (method !== "DELETE") return json(res, 405, { error: "GET or DELETE" });
         await deps.github.disconnect(principalId);
         return json(res, 200, { github: await deps.github.status(principalId) });
       }

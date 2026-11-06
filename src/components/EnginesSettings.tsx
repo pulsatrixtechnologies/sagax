@@ -11,7 +11,7 @@ import { api, useStore, type ConfigStatus, type InstanceInfo } from "@/state/sto
 import { EngineCard, engineReady } from "./EngineLibrary";
 import { cn } from "@/lib/cn";
 import { useMenuMotion } from "./MenuMotion";
-import { t } from "@/lib/i18n";
+import { activeLocale, t } from "@/lib/i18n";
 import { ApiKeyEngineManage, EngineSetup, EngineUpdateNotice, EngineWarningNotice } from "./EngineSetup";
 import { AddClaudeAccount, ClaudeAccountSettings } from "./ClaudeAccountSettings";
 import { AddProviderAccount, CodexAccountSettings } from "./CodexAccountSettings";
@@ -21,13 +21,14 @@ import { EngineConnect, paysWithText } from "./EngineConnect";
 import { EngineConnectorsLine } from "./plugins/EngineCapabilities";
 import { reloadMyEngines, usePerspicaxOrg, type MyEngine } from "@/lib/perspicax-org";
 import { perspicaxConsoleUrl } from "./PerspicaxOrgSettings";
-import { ExternalLink } from "lucide-react";
+import { ExternalLinkPill } from "./settings/SettingsPatterns";
+import { setVoiceDashes, useVoiceDashes } from "@/lib/voice-dashes-preference";
 import { myTurnsReady } from "../../shared/org-engine-readiness";
 import { canEditConfig, canManageKeys, viewerCan, viewerIsOrgMember } from "@/lib/viewer";
 import { viewerIsOrgAdmin } from "@/lib/group-owner";
 import { boatComputerEnabled, vpsComputerEnabled } from "@/lib/feature-flags";
 import { OrgHostToolsNote, orgRefusesEngine } from "./OrgHostToolsNote";
-import { DescribedRow, FIELD, FoldRow, PILL, PillSelect, SettingsGroup } from "./SettingsPrimitives";
+import { DescribedRow, FIELD, FoldRow, PILL, PillSelect, SettingsGroup, Switch } from "./SettingsPrimitives";
 import { AutoModelSettings } from "./settings/AutoModelSettings";
 import { BotModelsSettings } from "./settings/BotModelsSettings";
 import { CacheKeepWarmSettings } from "./CacheKeepWarmSettings";
@@ -473,6 +474,7 @@ export function EnginesSettings() {
   const { installation, org } = useModelsVoiceAccess();
   const issuer = org?.org.identity.issuer;
   const keepWarm = state.config?.cacheKeepWarm;
+  const noDashes = useVoiceDashes(activeLocale());
 
   return (
     <div className="flex min-w-0 flex-col gap-6 pb-2" data-models-voice="" data-models-page="">
@@ -483,6 +485,12 @@ export function EnginesSettings() {
           <FoldRow cardId="models.advanced" label={t("models.advanced.title")} description={t("models.advanced.help")}>
             <div className="-mx-3.5 flex flex-col gap-4 pt-1" data-models-advanced="">
               <ModelSwitchesSettings />
+              {/* #2080 (L1): out of Voice, it changes every reply's text */}
+              <SettingsGroup title={t("models.replies.title")} groupId="models-replies">
+                <DescribedRow label={t("voice.noDashes.title")} description={t("voice.noDashes.short")} rowId="voiceNoDashes">
+                  <Switch checked={noDashes} aria-label={t("voice.noDashes.title")} onClick={() => setVoiceDashes(!noDashes)} />
+                </DescribedRow>
+              </SettingsGroup>
               <SettingsGroup title={t("models.autoNow.title")} groupId="models-auto">
                 <div data-auto-model-explainer=""><AutoModelSettings /></div>
               </SettingsGroup>
@@ -491,10 +499,7 @@ export function EnginesSettings() {
                 <SettingsGroup title={t("settings.keepWarm.title")} groupId="models-keep-warm">
                   <DescribedRow label={t("settings.keepWarm.enable")} description={keepWarm.enabled ? t("settings.keepWarm.hours", { hours: Math.round(keepWarm.windowMinutes / 60) }) : t("models.keepWarm.off")} rowId="models.keepWarm">
                     {org && issuer && (
-                      <a href={perspicaxConsoleUrl(issuer)} target="_blank" rel="noreferrer noopener" data-perspicax-link="keepWarm" className="inline-flex items-center gap-1.5 text-[12px] font-medium text-accent-text hover:underline">
-                        {t("providers.setInPerspicax")}
-                        <ExternalLink size={12} aria-hidden="true" />
-                      </a>
+                      <span data-perspicax-link="keepWarm"><ExternalLinkPill href={perspicaxConsoleUrl(issuer)}>{t("providers.setInPerspicax")}</ExternalLinkPill></span>
                     )}
                   </DescribedRow>
                 </SettingsGroup>

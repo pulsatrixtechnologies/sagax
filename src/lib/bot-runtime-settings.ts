@@ -51,6 +51,34 @@ export function botRecovery(bot: RuntimeBot, config: RuntimeConfig): BotRecovery
   return bot.automaticRecovery ?? config?.automaticRecovery ?? { enabled: false };
 }
 
+type Backup = NonNullable<Bot["fallback"]>[number];
+
+export type EffectiveBackups = {
+  /** The ordered backups that apply now. */
+  chain: Backup[];
+  /** "bot": the bot's own list or single backup; "org": the server default
+   * (the organization's, or the solo server's); "none": nothing. */
+  source: "bot" | "org" | "none";
+};
+
+/** The one answer to "what takes over if this bot's model fails", shared by
+ * Settings > Models and Bot > Model: the bot's ordered backups, else its own
+ * single backup, else the server default. `keep` drops entries the viewer
+ * may no longer use (an engine the organization stopped offering). */
+export function effectiveBackups(
+  bot: Pick<Bot, "fallback" | "automaticRecovery">,
+  config: RuntimeConfig,
+  keep: (entry: Backup) => boolean = () => true,
+): EffectiveBackups {
+  const own = (bot.fallback ?? []).filter(keep);
+  if (own.length > 0) return { chain: own, source: "bot" };
+  const single = bot.automaticRecovery?.backup;
+  if (single && keep(single)) return { chain: [single], source: "bot" };
+  const server = bot.automaticRecovery ? undefined : config?.automaticRecovery?.backup;
+  if (server && keep(server)) return { chain: [server], source: "org" };
+  return { chain: [], source: "none" };
+}
+
 export function botRuntimeSettingsPath(botId: string): string {
   return `/api/bots/${encodeURIComponent(botId)}/runtime-settings`;
 }

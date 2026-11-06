@@ -163,6 +163,15 @@ afterEach(() => {
   setLocale("en");
 });
 
+// "Edit several" mode: the checkboxes and the selection bar appear only then.
+function editSeveral() {
+  act(() => { (container.querySelector("[data-bot-models-edit-several]") as HTMLButtonElement).click(); });
+}
+const bar = () => container.querySelector("[data-selection-bar]");
+const barButton = (label: string) =>
+  [...(bar()?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find((button) => button.textContent?.includes(label)) ?? null;
+const bulkChange = () => bar()?.querySelector<HTMLButtonElement>(".ui-button-primary") ?? null;
+
 describe("BotModelsSettings page", () => {
   it("lists the person's bots by sidebar section and hides other people's", async () => {
     act(() => root.render(createElement(BotModelsSettings)));
@@ -178,7 +187,9 @@ describe("BotModelsSettings page", () => {
     // One shared list (legacy data-bot-models-table marker kept for captures).
     expect(container.querySelectorAll("[data-bot-models-table]")).toHaveLength(1);
     expect(container.querySelectorAll("[data-bot-models-list]")).toHaveLength(1);
-    expect(container.querySelectorAll("[data-bot-models-col]")).toHaveLength(4);
+    // Bot, Model · effort, Backup (a bot has one); no checkbox column outside Edit several.
+    expect(container.querySelectorAll("[data-bot-models-col]")).toHaveLength(3);
+    expect(container.querySelector("[data-bot-models-select]")).toBeNull();
     expect(container.querySelector('[data-bot-models-row="bot-scout"]')?.getAttribute("data-bot-models-section-of")).toBe("Clients");
     expect(container.querySelector('[data-bot-models-row="bot-lab"]')?.getAttribute("data-bot-models-section-of")).toBe("unassigned");
     // Solo: the Defaults card is editable (no admin gate), no Perspicax link.
@@ -193,20 +204,20 @@ describe("BotModelsSettings page", () => {
     expect(container.querySelector('[data-bot-models-effort="bot-scout"]')).toBeNull();
     expect(container.querySelector('[data-bot-models-payer-cell="bot-scout"]')).toBeNull();
     expect(container.querySelector('[data-bot-models-controls="bot-scout"]')).not.toBeNull();
-    // The link to the Advanced fold (Active models) under the table.
-    expect(container.querySelector('[data-link-row="models.activeModels"]')?.textContent).toContain("Active models");
+    // No "Active models" link under the table (the selector holds it).
+    expect(container.querySelector('[data-link-row="models.activeModels"]')).toBeNull();
   });
 
   it("draws a table: visible column headers, one-line model chips, bulk bar under the table", async () => {
     act(() => root.render(createElement(BotModelsSettings)));
     await flush();
     const headers = container.querySelector("[data-bot-models-cols]");
-    expect(headers?.textContent).toContain("All bots");
+    expect(headers?.textContent).toContain("Bot");
+    expect(headers?.textContent).not.toContain("All bots");
     expect(headers?.textContent).toContain("Model · effort");
     expect(headers?.textContent).toContain("Backup");
     expect(headers?.textContent).not.toContain("Account");
-    // The select column keeps its grid slot (an sr-only span would leave the flow).
-    expect(headers?.querySelector('[data-bot-models-col="select"]')?.classList.contains("sr-only")).toBe(false);
+    expect(headers?.querySelector('[data-bot-models-col="select"]')).toBeNull();
     // Section headings use the Settings group heading type, no band.
     const section = container.querySelector('[data-bot-models-section="Clients"]');
     expect(section?.querySelector("h3")?.className).toContain("text-[13px]");
@@ -221,25 +232,33 @@ describe("BotModelsSettings page", () => {
     expect(label?.textContent).toContain("Grok 4");
     expect(label?.textContent).toContain("High");
     expect(chip!.title).toContain(label?.textContent ?? "");
-    // Selecting shows the bulk bar outside the table card, with one filled action.
+    // Edit several shows the checkboxes; selecting shows the shared
+    // selection bar outside the table card, with one filled action.
+    editSeveral();
+    await flush();
+    expect(container.querySelector("[data-bot-models-edit-several]")?.textContent).toContain("Done");
+    expect(headers?.querySelector('[data-bot-models-col="select"]')).not.toBeNull();
+    expect(bar()).toBeNull();
     act(() => {
       (container.querySelector('[data-bot-models-select="bot-scout"]') as HTMLInputElement).click();
     });
     await flush();
-    const bar = container.querySelector("[data-bot-models-bulk-bar]");
-    expect(bar).not.toBeNull();
-    expect(bar?.closest('[data-settings-group="bot-models-table"]')).toBeNull();
-    expect(bar?.querySelectorAll(".ui-button-primary")).toHaveLength(1);
-    expect(bar?.querySelector(".ui-button-primary")?.hasAttribute("data-bot-models-bulk-change")).toBe(true);
-    expect(bar?.querySelector("[data-bot-models-bulk-change]")?.textContent).toContain("Set model for 1 bot");
-    expect(bar?.querySelector("[data-bot-models-bulk-backup]")).not.toBeNull();
-    // the old separate effort / Auto buttons are gone: the selector holds both
-    expect(bar?.querySelector("[data-bot-models-bulk-effort]")).toBeNull();
-    expect(bar?.querySelector("[data-bot-models-bulk-auto]")).toBeNull();
+    expect(bar()).not.toBeNull();
+    expect(bar()?.closest('[data-settings-group="bot-models-table"]')).toBeNull();
+    expect(bar()?.querySelectorAll(".ui-button-primary")).toHaveLength(1);
+    expect(bulkChange()?.textContent).toContain("Set model for 1 bot");
+    expect(barButton("Set backup")).not.toBeNull();
+    // Escape closes the mode: no checkbox, no bar.
+    act(() => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); });
+    await flush();
+    expect(bar()).toBeNull();
+    expect(container.querySelector("[data-bot-models-select]")).toBeNull();
   });
 
   it("selects every bot with the All bots checkbox and shows it indeterminate for a partial selection", async () => {
     act(() => root.render(createElement(BotModelsSettings)));
+    await flush();
+    editSeveral();
     await flush();
     const all = container.querySelector('[data-bot-models-select-all]') as HTMLInputElement;
     expect(all.getAttribute("aria-label")).toBe("All bots");
@@ -251,11 +270,11 @@ describe("BotModelsSettings page", () => {
     act(() => { all.click(); });
     await flush();
     expect([...container.querySelectorAll<HTMLInputElement>("[data-bot-models-select]")].every((box) => box.checked)).toBe(true);
-    expect(container.querySelector("[data-bot-models-bulk-change]")?.textContent).toContain("Set model for 3 bots");
+    expect(bulkChange()?.textContent).toContain("Set model for 3 bots");
     act(() => { all.click(); });
     await flush();
     expect(container.querySelectorAll<HTMLInputElement>("[data-bot-models-select]:checked")).toHaveLength(0);
-    expect(container.querySelector("[data-bot-models-bulk-bar]")).toBeNull();
+    expect(bar()).toBeNull();
   });
 
   it("in an organization, shows Defaults for new bots read-only with the current choice and a Perspicax link", async () => {
@@ -266,10 +285,43 @@ describe("BotModelsSettings page", () => {
     const row = container.querySelector('[data-settings-row="models.newBotDefaults"]');
     expect(row).not.toBeNull();
     expect(row?.textContent).toContain("Chosen in Perspicax");
-    expect(row?.querySelector<HTMLAnchorElement>('[data-perspicax-link="newBotDefaults"]')?.href).toBe("https://px.example.test/console/");
+    expect(row?.querySelector<HTMLAnchorElement>('[data-perspicax-link="newBotDefaults"] a')?.href).toBe("https://px.example.test/console/");
     expect(row?.textContent).toContain("Change");
-    // the table itself stays the person's: rows and checkboxes are there
-    expect(container.querySelector('[data-bot-models-select="bot-scout"]')).not.toBeNull();
+    // read-only in an organization: the card is an Advanced one (folded in Simple mode)
+    expect(container.querySelector('[data-settings-group="bot-models-defaults"]')?.hasAttribute("data-settings-advanced")).toBe(true);
+    // the table itself stays the person's: rows and Edit several are there
+    expect(container.querySelector('[data-bot-models-row="bot-scout"]')).not.toBeNull();
+    expect(container.querySelector("[data-bot-models-edit-several]")).not.toBeNull();
+  });
+
+  it("shows the effective backup: the server default is marked, the column hides when no bot has one", async () => {
+    const scout = fixture.state.bots[0] as { fallback?: unknown };
+    const savedFallback = scout.fallback;
+    const config = fixture.state.config as Record<string, unknown>;
+    try {
+      // no bot backup, a server default: every row shows it, marked "default"
+      scout.fallback = undefined;
+      config.automaticRecovery = { enabled: true, backup: { instanceId: "claude", model: "sonnet" } };
+      act(() => root.render(createElement(BotModelsSettings)));
+      await flush();
+      expect(container.querySelector('[data-bot-models-backup="bot-lab"]')?.textContent).toContain("default");
+      expect(container.querySelector('[data-link-row="models.addBackup"]')).toBeNull();
+      // nothing anywhere: no Backup column, no "None", one "Add a backup" row
+      delete config.automaticRecovery;
+      act(() => root.render(createElement(BotModelsSettings, { key: "none" })));
+      await flush();
+      expect(container.querySelector('[data-bot-models-col="backup"]')).toBeNull();
+      expect(container.querySelector("[data-bot-models-backup-cell]")).toBeNull();
+      expect(container.textContent).not.toContain("None");
+      const add = container.querySelector<HTMLElement>('[data-link-row="models.addBackup"]');
+      expect(add?.textContent).toContain("Add a backup");
+      act(() => { (add?.querySelector("button") ?? add)!.click(); });
+      await flush();
+      expect(document.querySelector("[data-bot-models-bulk-backup-picker]")).not.toBeNull();
+    } finally {
+      scout.fallback = savedFallback;
+      delete config.automaticRecovery;
+    }
   });
 
   it("warns when a bot's engine is signed out", async () => {
@@ -283,12 +335,14 @@ describe("BotModelsSettings page", () => {
   it("opens the two-pane selector from Set model for n bots and applies the pick to every selected bot", async () => {
     act(() => root.render(createElement(BotModelsSettings)));
     await flush();
+    editSeveral();
+    await flush();
     act(() => {
       (container.querySelector('[data-bot-models-select="bot-scout"]') as HTMLInputElement).click();
       (container.querySelector('[data-bot-models-select="bot-lab"]') as HTMLInputElement).click();
     });
     await flush();
-    const change = container.querySelector("[data-bot-models-bulk-change]") as HTMLButtonElement;
+    const change = bulkChange() as HTMLButtonElement;
     expect(change.textContent).toContain("Set model for 2 bots");
     // no chip for the batch picker: only the menu, opened by the button
     expect(container.querySelector("[data-bot-models-bulk-dock] [data-model-list-chip]")).toBeNull();
@@ -307,15 +361,17 @@ describe("BotModelsSettings page", () => {
     expect(actions.map((action) => action.botId).sort()).toEqual(["bot-lab", "bot-scout"]);
     expect(actions.every((action) => action.updateBotDefault === true && action.selection.model === "grok-4")).toBe(true);
     // the selection stays so the person can set a backup next
-    expect(container.querySelector("[data-bot-models-bulk-bar]")).not.toBeNull();
+    expect(bar()).not.toBeNull();
   });
 
   it("offers the Active models link inside the selector, opening the Advanced fold", async () => {
     act(() => root.render(createElement(BotModelsSettings)));
     await flush();
+    editSeveral();
+    await flush();
     act(() => { (container.querySelector('[data-bot-models-select="bot-lab"]') as HTMLInputElement).click(); });
     await flush();
-    act(() => { (container.querySelector("[data-bot-models-bulk-change]") as HTMLButtonElement).click(); });
+    act(() => { bulkChange()!.click(); });
     await flush();
     const link = document.querySelector<HTMLElement>("[data-model-menu] [data-model-active-models]");
     expect(link?.textContent).toContain("Active models");
@@ -327,12 +383,14 @@ describe("BotModelsSettings page", () => {
   it("sets a backup for every selected bot from the bulk bar", async () => {
     act(() => root.render(createElement(BotModelsSettings)));
     await flush();
+    editSeveral();
+    await flush();
     act(() => {
       (container.querySelector('[data-bot-models-select="bot-scout"]') as HTMLInputElement).click();
       (container.querySelector('[data-bot-models-select="bot-lab"]') as HTMLInputElement).click();
     });
     await flush();
-    act(() => { (container.querySelector("[data-bot-models-bulk-backup]") as HTMLButtonElement).click(); });
+    act(() => { barButton("Set backup")!.click(); });
     await flush();
     const picker = document.querySelector("[data-bot-models-bulk-backup-picker]");
     expect(picker).not.toBeNull();

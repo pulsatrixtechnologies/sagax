@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { Check, Loader2 } from "lucide-react";
 
 import { api, useStore, type ConfigStatus } from "@/state/store";
-import { activeLocale, t } from "@/lib/i18n";
-import { setVoiceDashes, useVoiceDashes } from "@/lib/voice-dashes-preference";
+import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
-import { DescribedRow, PILL, PillSelect, SettingsGroup, Switch } from "../SettingsPrimitives";
+import { DescribedRow, PILL, PillSelect, SettingsGroup } from "../SettingsPrimitives";
+import { ExternalLinkPill } from "./SettingsPatterns";
 
 const FISH_MODELS = [
   { value: "s2.1-pro", label: "voice.fish.modelPro" },
@@ -27,7 +27,6 @@ export function VoiceProviderOptions({ installation = false }: { installation?: 
   const [error, setError] = useState<string | null>(null);
 
   const configured = Boolean(tts?.baseUrl);
-  const noDashes = useVoiceDashes(activeLocale());
 
   useEffect(() => {
     setServerUrl(tts?.baseUrl ?? "");
@@ -59,12 +58,13 @@ export function VoiceProviderOptions({ installation = false }: { installation?: 
       .finally(() => setSavingFishModel(false));
   };
 
-  if (!tts) return null;
+  // #2080 (L1): "No long dashes" moved to Models > Advanced; what is left
+  // writes the installation.
+  if (!tts || !installation) return null;
 
   return (
     <div data-settings-card="voice.options">
       <SettingsGroup title={t("voiceMode.call.advanced")} groupId="voice-options">
-      {installation && (
         <DescribedRow label={t("voice.fish.model")} help={t("voice.fish.modelHint")} rowId="fishModel">
           <PillSelect
             value={(tts.fishModel ?? "s2.1-pro") as FishModel}
@@ -74,9 +74,7 @@ export function VoiceProviderOptions({ installation = false }: { installation?: 
             options={FISH_MODELS.map((option) => ({ value: option.value, label: t(option.label) }))}
           />
         </DescribedRow>
-      )}
 
-      {installation && (
         <DescribedRow
           label={t("voice.engine.server")}
           rowId="chatterbox"
@@ -84,14 +82,11 @@ export function VoiceProviderOptions({ installation = false }: { installation?: 
             <span className="flex items-center gap-1.5">
               <span className={cn("size-1.5 rounded-full", configured ? "bg-accent" : "bg-raised-hover")} aria-hidden="true" />
               {configured ? t("voice.engine.saved") : t("voice.engine.serverHint")}
-              {" "}
-              <a href="https://github.com/resemble-ai/chatterbox" target="_blank" rel="noopener noreferrer" className="font-medium text-accent-text hover:underline">
-                {t("voice.engine.serverDocs")}
-              </a>
             </span>
           )}
           below={(
             <div className="mt-2 flex flex-col gap-2">
+              <ExternalLinkPill href="https://github.com/resemble-ai/chatterbox" className="w-fit">{t("voice.engine.serverDocs")}</ExternalLinkPill>
               <div className="flex gap-2">
                 <input
                   type="url"
@@ -127,11 +122,6 @@ export function VoiceProviderOptions({ installation = false }: { installation?: 
             </div>
           )}
         />
-      )}
-
-      <DescribedRow label={t("voice.noDashes.title")} description={t("voice.noDashes.short")} rowId="voiceNoDashes">
-        <Switch checked={noDashes} aria-label={t("voice.noDashes.title")} onClick={() => setVoiceDashes(!noDashes)} />
-      </DescribedRow>
 
       {error && <div role="alert" className="px-3.5 pb-2 text-[12px] text-danger">{error}</div>}
       </SettingsGroup>

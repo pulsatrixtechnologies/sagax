@@ -64,18 +64,20 @@ beforeEach(() => {
 });
 
 describe("DecisionModelSettings", () => {
-  it("explains itself, then the switch, the key, and what it decides", () => {
+  it("is Fast decisions: one switch with its state, then a Details fold with the key and what it decides", () => {
     const view = render();
-    const order = ["A fast decision model that picks things for your bots", "Use Jev for fast decisions", "Jev API key", "What it decides", "Who answers in rooms"]
+    const order = ["Fast decisions", "A fast decision model that picks things for your bots", "Let a fast model pick for your bots", "Details", "Jev API key", "Who answers in rooms"]
       .map((text) => view.html.indexOf(text));
     expect(order.every((at) => at >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
-    expect(view.html).toContain("Not connected");
     expect(view.html).toContain('href="https://typesafe.ai"');
+    expect(view.html).toContain("data-external-link-pill");
+    // no key yet: the fold opens by itself, since the switch needs one
+    expect(view.html).toContain('data-settings-card="engines.decisionModel.details" data-open="true"');
     // the switch stays off, and cannot be turned on, while no key is saved
     expect(view.master.props.checked).toBe(false);
     expect(view.master.props.disabled).toBe(true);
-    expect(view.html).toContain("Save a key below to turn this on.");
+    expect(view.html).toContain("Add a key under Details to turn this on.");
   });
 
   it("lists the coming-soon jobs with no switch", () => {
@@ -137,8 +139,7 @@ describe("DecisionModelSettings", () => {
     const view = render();
     expect(view.html).toContain("Included with your Cloud plan");
     expect(view.html).not.toContain("Connected");
-    expect(view.html).not.toContain("Not connected");
-    expect(view.html).not.toContain("Save a key below to turn this on.");
+        expect(view.html).not.toContain("Add a key under Details to turn this on.");
     expect(view.master.props.checked).toBe(true);
     expect(view.master.props.disabled).toBe(false);
     expect(view.job.props.checked).toBe(true);

@@ -150,6 +150,8 @@ describe("Settings > Models and voice", () => {
     // link to Providers and image generation left the page (Providers > Other services)
     expect(models).toContain('data-settings-card="models.advanced"');
     expect(models).toContain("data-auto-model-explainer");
+    // #2080 (L1): "No long dashes" changes every reply: Models > Advanced, not Voice
+    expect(models).toContain('data-settings-row="voiceNoDashes"');
     expect(models).not.toContain("data-open-providers");
     expect(models).not.toContain('data-settings-card="connections.image"');
     for (const retired of ["data-engines-list", "data-keys-section", "data-legacy-toggle", "data-provider-key="]) expect(models).not.toContain(retired);
@@ -159,6 +161,7 @@ describe("Settings > Models and voice", () => {
     expect(voice).toContain('data-settings-card="voice.advanced"');
     expect(voice).toContain('aria-label="Fish Audio model"');
     expect(voice).toContain('aria-label="Chatterbox server address"');
+    expect(voice).not.toContain('data-settings-row="voiceNoDashes"');
     for (const retired of ['aria-label="Voice engine"', "data-personal-voice-keys", 'type="password"']) expect(voice).not.toContain(retired);
   });
 

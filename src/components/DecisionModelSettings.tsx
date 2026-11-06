@@ -1,4 +1,4 @@
-// Settings → Decision model. One master switch, the Jev key (write-only:
+// Settings > Models > Fast decisions (was "Decision model"). One master switch, the Jev key (write-only:
 // the server reports configured-or-not, never the value), and one switch per
 // thing it decides. Saving a key turns it on; there is no confirm step. The
 // packaged desktop keeps the key in its OS-encrypted store; elsewhere it goes
@@ -6,12 +6,13 @@
 // Pro home Jev is included: it works with no key, there is nothing to clear,
 // and a key pasted here replaces it.
 import { useState } from "react";
-import { Check, ExternalLink, Loader2 } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import { api, useStore, type ConfigStatus } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
-import { CompactRow, DescribedRow, HelpTip, PILL, SettingsGroup, Switch } from "./SettingsPrimitives";
+import { CompactRow, DescribedRow, FoldRow, HelpTip, PILL, SettingsGroup, Switch } from "./SettingsPrimitives";
+import { ExternalLinkPill, StatusText } from "./settings/SettingsPatterns";
 import { readableError } from "@/lib/plain-error";
 
 const KEY_URL = "https://typesafe.ai";
@@ -121,16 +122,22 @@ export function DecisionModelSettings() {
     }
   };
 
-  // 0.5.6: two groups as the reference design's settings pages draw them, grey heading
-  // outside rounded cards, compact rows; what Jev is behind the info button.
+  // #2080 (L1): "Jev" becomes "Fast decisions": one switch with its state
+  // in grey, the key, the test and what it decides in a Details fold that
+  // opens by itself while no key is saved (the switch needs one).
+  const state_ = included ? t("keys.includedWithCloudPro") : configured ? t("decider.status.connected") : t("decider.masterNeedsKey");
   return (
-    <div className="flex flex-col gap-6" data-settings-card="engines.decisionModel">
+    <div data-settings-card="engines.decisionModel">
       <SettingsGroup
         title={t("settings.section.decisionModel")}
         groupId="decisionModel"
         accessory={<HelpTip label={t("settings.moreAbout", { title: t("settings.section.decisionModel") })}>{t("decider.intro")}</HelpTip>}
       >
-        <DescribedRow label={t("decider.master")} description={configured ? undefined : t("decider.masterNeedsKey")} rowId="deciderMaster">
+        <DescribedRow
+          label={t("decider.master")}
+          description={<span role="status"><StatusText tone={configured ? "success" : "neutral"}>{state_}</StatusText></span>}
+          rowId="deciderMaster"
+        >
           <Switch
             data-testid="decider-master"
             aria-label={t("decider.master")}
@@ -140,86 +147,66 @@ export function DecisionModelSettings() {
             className="cursor-pointer"
           />
         </DescribedRow>
-        <DescribedRow
-          label={t("decider.key.label")}
-          rowId="deciderKey"
-          description={(
-            <span role="status" className="flex items-center gap-1.5">
-              <span className={cn("size-1.5 rounded-full", configured ? "bg-accent" : "bg-raised-hover")} aria-hidden="true" />
-              <span className={configured ? "text-accent-text" : undefined}>
-                {included ? t("keys.includedWithCloudPro") : configured ? t("decider.status.connected") : t("decider.status.notConnected")}
-              </span>
-            </span>
-          )}
-          below={(
-            <div className="mt-2 flex flex-col gap-1.5">
-              <div className="flex gap-2">
-                <input
-                  type="password"
-                  value={value}
-                  onChange={(event) => { setVerdict(null); setError(null); setValue(event.target.value); }}
-                  onKeyDown={(event) => event.key === "Enter" && void save()}
-                  disabled={saving}
-                  placeholder={ownKey ? t("keys.replace") : t("decider.key.placeholder")}
-                  aria-label={t("decider.key.label")}
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="w-full min-w-0 rounded-lg border border-hairline/40 bg-inset px-3 py-1.5 text-[13px] text-ink placeholder:text-ink-secondary focus:outline-none"
-                />
-                <button
-                  type="button"
-                  data-testid="decider-save"
-                  onClick={() => void save()}
-                  disabled={saving || (!draft && !ownKey)}
-                  title={clearing ? t("keys.removeKey") : t("common.save")}
-                  className={cn(PILL, "shrink-0 cursor-pointer disabled:cursor-not-allowed", clearing && "text-danger")}
-                >
-                  {saving ? <Loader2 size={13} className="animate-spin" /> : clearing ? t("keys.clear") : <><Check size={13} />{t("common.save")}</>}
-                </button>
-                <button
-                  type="button"
-                  data-testid="decider-test"
-                  onClick={() => void test()}
-                  disabled={testing || saving || (!draft && !configured)}
-                  className={cn(PILL, "shrink-0 cursor-pointer disabled:cursor-not-allowed")}
-                >
-                  {testing ? t("keys.testing") : t("keys.test")}
-                </button>
-              </div>
-              {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
-              {verdict && <p role="status" className={cn("text-[12px]", verdict.ok ? "text-success" : "text-danger")}>{verdict.text}</p>}
-              <a
-                href={KEY_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex w-fit cursor-pointer items-center gap-1 text-[12px] text-accent-text hover:underline"
+        <FoldRow cardId="engines.decisionModel.details" defaultOpen={!configured} label={t("decider.details")} description={t("decider.detailsHelp")}>
+          <div className="flex flex-col gap-1.5" data-decider-details="">
+            <span className="text-[12px] font-medium text-ink-secondary">{t("decider.key.label")}</span>
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={value}
+                onChange={(event) => { setVerdict(null); setError(null); setValue(event.target.value); }}
+                onKeyDown={(event) => event.key === "Enter" && void save()}
+                disabled={saving}
+                placeholder={ownKey ? t("keys.replace") : t("decider.key.placeholder")}
+                aria-label={t("decider.key.label")}
+                autoComplete="off"
+                spellCheck={false}
+                className="w-full min-w-0 rounded-lg border border-hairline/40 bg-inset px-3 py-1.5 text-[13px] text-ink placeholder:text-ink-secondary focus:outline-none"
+              />
+              <button
+                type="button"
+                data-testid="decider-save"
+                onClick={() => void save()}
+                disabled={saving || (!draft && !ownKey)}
+                title={clearing ? t("keys.removeKey") : t("common.save")}
+                className={cn(PILL, "shrink-0 cursor-pointer disabled:cursor-not-allowed", clearing && "text-danger")}
               >
-                {t("decider.key.getKey")}
-                <ExternalLink size={11} aria-hidden="true" />
-              </a>
+                {saving ? <Loader2 size={13} className="animate-spin" /> : clearing ? t("keys.clear") : <><Check size={13} />{t("common.save")}</>}
+              </button>
+              <button
+                type="button"
+                data-testid="decider-test"
+                onClick={() => void test()}
+                disabled={testing || saving || (!draft && !configured)}
+                className={cn(PILL, "shrink-0 cursor-pointer disabled:cursor-not-allowed")}
+              >
+                {testing ? t("keys.testing") : t("keys.test")}
+              </button>
             </div>
-          )}
-        />
-      </SettingsGroup>
-
-      <SettingsGroup title={t("decider.jobs.title")} groupId="decisionJobs">
-        <DescribedRow label={t("decider.jobs.roomRouting")} help={t("decider.jobs.roomRoutingDetail")} rowId="roomRouting">
-          <Switch
-            data-testid="decider-job-roomRouting"
-            aria-label={t("decider.jobs.roomRouting")}
-            checked={enabled && roomRouting}
-            disabled={!enabled || switching}
-            onClick={() => void patch({ jobs: { roomRouting: !roomRouting } })}
-            className="cursor-pointer"
-          />
-        </DescribedRow>
-        {COMING_SOON.map((label) => (
-          <div key={label} data-testid="decider-coming-soon" aria-disabled="true">
-            <CompactRow label={t(label)} className="opacity-60">
-              <span className="text-[12px] text-ink-secondary">{t("decider.jobs.comingSoon")}</span>
-            </CompactRow>
+            {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
+            {verdict && <p role="status" className={cn("text-[12px]", verdict.ok ? "text-success" : "text-danger")}>{verdict.text}</p>}
+            <ExternalLinkPill href={KEY_URL} className="w-fit">{t("decider.key.getKey")}</ExternalLinkPill>
+            <div className="-mx-3.5 mt-2 flex flex-col">
+              <DescribedRow label={t("decider.jobs.roomRouting")} help={t("decider.jobs.roomRoutingDetail")} rowId="roomRouting">
+                <Switch
+                  data-testid="decider-job-roomRouting"
+                  aria-label={t("decider.jobs.roomRouting")}
+                  checked={enabled && roomRouting}
+                  disabled={!enabled || switching}
+                  onClick={() => void patch({ jobs: { roomRouting: !roomRouting } })}
+                  className="cursor-pointer"
+                />
+              </DescribedRow>
+              {COMING_SOON.map((label) => (
+                <div key={label} data-testid="decider-coming-soon" aria-disabled="true">
+                  <CompactRow label={t(label)} className="opacity-60">
+                    <span className="text-[12px] text-ink-secondary">{t("decider.jobs.comingSoon")}</span>
+                  </CompactRow>
+                </div>
+              ))}
+            </div>
           </div>
-        ))}
+        </FoldRow>
       </SettingsGroup>
     </div>
   );

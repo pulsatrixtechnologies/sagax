@@ -1919,6 +1919,7 @@
   "chat.parallel.state.running": "Running",
   "chat.parallel.state.stopped": "Stopped",
   "chat.parallel.state.waiting": "Waiting for your approval",
+  "chat.parallel.state.waitingAnswer": "Waiting for your answer",
   "chat.parallel.stop": "Stop this task",
   "chat.parallel.title": "Parallel task · {title}",
   "chat.peer.asked": "asked via ask_bot",

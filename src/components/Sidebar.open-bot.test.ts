@@ -28,6 +28,8 @@ vi.mock("react", async (original) => ({
     return fixture.values[index];
   },
   useCallback: (callback: unknown) => callback,
+  useMemo: (factory: () => unknown) => factory(),
+  useContext: () => undefined,
   useSyncExternalStore: (_subscribe: unknown, snapshot: () => unknown) => snapshot(),
   useEffect: (effect: EffectCallback) => { fixture.effects.push(effect); },
   useLayoutEffect: () => {},

@@ -89,7 +89,7 @@ final class DesktopShellModel: ObservableObject {
     /// opened from the sidebar takes the column back.
     @Published var page: DesktopPage?
     @Published var panelOpen = false
-    @Published var panelTab: BotPanelTab = .details
+    @Published var panelTab: BotPanelTab = .activity
     /// The Edit bot window over the shell (PersonaEditorWindow.swift).
     @Published var personaOpen = false
     /// The section a deep link asked for (kept for the panel's callers).

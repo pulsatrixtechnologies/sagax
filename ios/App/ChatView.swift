@@ -79,7 +79,7 @@ struct ChatView: View {
     @State var showingDevPods = false
     /// Edit rule opens the panel on Access; cleared when the panel closes.
     @State var panelSection: DesktopPanelSection?
-    @State var panelTab: DesktopPanelTab = .details
+    @State var panelTab: DesktopPanelTab = .activity
     /// The live call (the composer's white capsule): the desktop's voice mode.
     @ObservedObject var call = CallController.shared
     /// The card under the call bar: its settings, its transcript, or none.

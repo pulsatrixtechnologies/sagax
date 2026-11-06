@@ -295,12 +295,13 @@ enum IPadParityScreen: String, CaseIterable {
     /// The panel's tab on a panel surface.
     var panelTab: DesktopPanelTab? {
         switch self {
-        case .panelDetails, .panelAvatarEditor: .details
+        case .panelDetails, .panelAvatarEditor: .activity
         case .panelLibrary: .library
-        case .panelComputer: .computer
-        // the persona editor opens over Details, as on the desktop
-        case .panelMore: .details
-        default: panelSection != nil ? .details : nil
+        // Computer deep link opens Activity (Computer card lives there).
+        case .panelComputer: .activity
+        // the persona editor opens over Activity, as on the desktop
+        case .panelMore: .activity
+        default: panelSection != nil ? .activity : nil
         }
     }
 

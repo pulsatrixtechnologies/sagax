@@ -49,16 +49,24 @@ describe("Settings > Organization without Sharing in the organization", () => {
         expect(html, `${locale} ${role}`).not.toContain("<a ");
         expect(html, `${locale} ${role}`).not.toContain("data-external-link-pill");
         expect(html, `${locale} ${role}`).not.toContain("/console");
-        expect(html, `${locale} ${role}`).not.toContain('role="switch"');
         expect(html, `${locale} ${role}`).not.toContain('data-settings-card="organization.sharing"');
         expect(html, `${locale} ${role}`).not.toContain("data-org-sharing");
       }
-      // the GitHub OAuth App's client id, a server setting, is the admin's only input
+      // #2193: admins keep the Grok bridge kill switch; members stay read-only
+      expect(admin, locale).toContain('data-settings-card="organization.grokBridge"');
+      expect(admin, locale).toContain('role="switch"');
+      expect(member, locale).not.toContain('data-settings-card="organization.grokBridge"');
+      expect(member, locale).not.toContain('role="switch"');
+      // the GitHub OAuth App's client id, a server setting, is an admin input
       expect(admin, locale).toContain("data-org-github-app");
       expect(member, locale).not.toContain("data-org-github-app");
       expect(member, locale).not.toContain("<input");
-      // the rules are the same for both roles
-      const rules = (html: string) => html.slice(html.indexOf('data-settings-group="organizationRules"'), html.indexOf('data-settings-group="organizationBots"'));
+      // the read-only rules block is the same for both roles
+      const rules = (html: string) => {
+        const start = html.indexOf('data-settings-group="organizationRules"');
+        const end = html.indexOf("</section>", start) + "</section>".length;
+        return html.slice(start, end);
+      };
       expect(rules(admin), locale).toBe(rules(member));
     }
   });

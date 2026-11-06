@@ -26,7 +26,7 @@
 // change says why (botSectionLock); nothing is hidden for lack of a
 // permission. The page itself carries no gear: the bot's settings live here
 // and in the right-hand bot panel.
-import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { BellRing, Brain, ChevronDown, ChevronRight, Cpu, LayoutDashboard, Lock, Mail, MessageCircle, Palette, Plug, Search, Star, Users } from "lucide-react";
 
 import { useStore, type Bot, type BotSettingsSection } from "@/state/store";
@@ -460,6 +460,13 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
   }, []);
 
   const privateBot = notShared;
+  // The banner is a wash of the mascot's colour (#2173, back after #2313):
+  // its hex goes to the stylesheet as a variable; a neutral mascot keeps a
+  // visible grey there. The top bar carries the wash's top colour so the
+  // bar and the banner read as one coloured header.
+  const bannerColor = MAUS_COLORS[bot.color] ?? MAUS_COLORS.green;
+  const bannerStyle = { "--bot-profile-banner-color": bannerColor } as CSSProperties;
+  const bannerPalette = mascotColorGroup(bot.color);
 
   // The top bar (#2313): X and Private / Shared never scroll away, on the
   // sidebar head's centre line with its circles' size. The sidebar's head
@@ -606,9 +613,10 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
       {insetStrip && <div aria-hidden="true" data-bot-profile-inset-strip="" className="content-topbar-strip h-9 shrink-0 bg-app" {...dragProps} />}
       <div
         data-bot-profile-topbar=""
+        data-bot-profile-banner-palette={bannerPalette}
         {...dragProps}
-        style={{ ...dragStyle, minHeight: 0 }}
-        className={cn("content-topbar relative z-10 flex shrink-0 items-center justify-between gap-2 bg-app px-3", titleBarHead ? "h-12" : "h-14")}
+        style={{ ...dragStyle, ...bannerStyle, minHeight: 0 }}
+        className={cn("content-topbar bot-profile-banner-top relative z-10 flex shrink-0 items-center justify-between gap-2 px-3", titleBarHead ? "h-12" : "h-14")}
       >
         <WindowCloseButton onClose={onClose} place="relative max-sm:ml-11" />
         <span
@@ -621,6 +629,14 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
         </span>
       </div>
       <div data-bot-profile-scroll="" className="content-card-body min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+        {/* Banner in the mascot's colour under the bar, the hero card over its lower edge. */}
+        <div
+          aria-hidden="true"
+          data-bot-profile-banner=""
+          data-bot-profile-banner-palette={bannerPalette}
+          style={bannerStyle}
+          className="bot-profile-banner h-[96px] w-full shrink-0"
+        />
         {/* One centred column, 1100px wide at most, a 16px gutter on a phone. */}
         <div data-bot-profile-column="" className="mx-auto flex w-full max-w-[1100px] flex-col px-4 pb-10 sm:px-6">
           {/* The header: the mascot hero card with the bot's name and label,
@@ -653,7 +669,7 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
               }}
               title={t("botPanel.avatar.dropOrPaste")}
               data-avatar-dropping={heroDropping ? "" : undefined}
-              className={cn("@container mt-1 rounded-[18px]", heroDropping && "ring-2 ring-accent")}
+              className={cn("@container relative -mt-[40px] rounded-[18px]", heroDropping && "ring-2 ring-accent")}
             >
               <div ref={setHeroTarget} data-bot-profile-hero-slot="" className={heroClaimed ? undefined : "hidden"} />
               {!heroClaimed && (

@@ -1,9 +1,8 @@
 // The parallel task card (feature parity TH8, ParallelTaskCard.tsx): a task
-// the bot runs on its own beside this conversation. Its name, where it
-// stands (the recorded end state, else the task's live state: running,
-// waiting for an approval, waiting for a slot), how long it has run, Stop
-// while it can still be stopped and Open to read or steer it in its own
-// thread. Its approvals live in that thread and join this conversation's
+// the bot runs on its own beside this conversation. A coding job (#2148)
+// stays here as CodingJobCardView (never a thread). Otherwise: its name,
+// where it stands, how long it has run, Stop while it can still be stopped
+// and Open when threads are shown. Its approvals join this conversation's
 // approval dock.
 import SwiftUI
 import CompanionCore
@@ -31,18 +30,28 @@ struct ParallelTaskCardView: View {
     var body: some View {
         if let ownerId {
             let status = ParallelCardState.of(ref, task: task)
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                row(status: status, ownerId: ownerId, now: context.date)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(status == .waiting ? Theme.warning.opacity(0.06) : Theme.card)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(status == .waiting ? Theme.warning.opacity(0.5) : Theme.hairline, lineWidth: 1)
+            // #2148: a coding job stays in the chat as a coding card (never a thread).
+            CodingJobCardLoader(
+                ownerId: ownerId,
+                threadId: ref.threadId,
+                hint: task.map { "\($0.busy == true):\($0.activity ?? ""):\($0.updatedAt ?? 0)" },
+                onStop: {
+                    Task { await session.stopParallelTask(botId: ownerId, threadId: ref.threadId) }
+                }
+            ) {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    row(status: status, ownerId: ownerId, now: context.date)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(status == .waiting ? Theme.warning.opacity(0.06) : Theme.card)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(status == .waiting ? Theme.warning.opacity(0.5) : Theme.hairline, lineWidth: 1)
+                }
             }
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("parallel-card-\(ref.threadId)")

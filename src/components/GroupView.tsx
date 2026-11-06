@@ -60,6 +60,7 @@ import { GroupRoomTranscriptPane } from "./GroupView.tsx-parts/GroupRoomTranscri
 import { groupRoomIdentity } from "./GroupView.tsx-parts/groupRoomIdentity";
 import { RoomHoldsBanner } from "./GroupView.tsx-parts/RoomHoldsBanner";
 import { ChatHeaderBar } from "@/components/ChatHeaderBar";
+import { withoutLeakedTokens } from "@/lib/leaked-tokens";
 
 export { RoomToolChip, Transcript, RoutedByLine, DefaultResponderSelect, RoomWorkingFolder, roomFolderEditable, RoomHoldsBanner };
 
@@ -133,6 +134,8 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
     speakersElsewhere, threadSpeaker,
   } = useGroupLiveTail(group, members);
 
+  // A reply stored as only `<|eos|>` does not show (src/lib/leaked-tokens.ts).
+  const shownMessages = useMemo(() => withoutLeakedTokens(group.messages), [group.messages]);
   // Only a tail of the room mounts; working dots above stay on the FULL list.
   const {
     scrollRef,
@@ -150,7 +153,7 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
   } = useTranscriptViewport({
     ownerId: group.id,
     threadId: group.threadId,
-    messages: group.messages,
+    messages: shownMessages,
     pinOn: [group.busyBotId, group.working, composerDock.pad],
     hasMore: group.hasMore,
     ...(pane?.loadOlder ? { onLoadOlder: pane.loadOlder, loadingOlder: pane.loadingOlder } : {}),

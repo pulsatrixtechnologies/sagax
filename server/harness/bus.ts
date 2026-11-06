@@ -23,6 +23,7 @@ import { batchSaves } from "../save-batch.ts";
 import { capThreadLog, currentThreadLogCap } from "../threads/thread-log-rotation.ts";
 import { newId, type ProviderInstance, type RuntimeEvent, type RuntimeEventListener } from "../contracts.ts";
 import { reportBackgroundError } from "../background-error.ts";
+import { SpecialTokenFilter } from "./special-token-filter.ts";
 
 const INCOMPLETE_LOG_MESSAGE =
   "Canonical event history is incomplete: Sagax could not write one or more events to disk. Live updates will continue.";
@@ -157,7 +158,14 @@ export class EventBus {
     this.gate = gate;
   }
 
+  /** Control tokens a model wrote as text never reach a listener. */
+  private specialTokens = new SpecialTokenFilter();
+
   publish(event: RuntimeEvent) {
+    for (const clean of this.specialTokens.filter(event)) this.publishClean(clean);
+  }
+
+  private publishClean(event: RuntimeEvent) {
     // only the gate sets screenApp: whatever an adapter wrote there is dropped
     if (event.type === "request.opened" && "screenApp" in event) {
       const { screenApp: _dropped, ...clean } = event;
@@ -183,7 +191,7 @@ export class EventBus {
         if (this.held.get(event.threadId) !== queue) return;
         this.held.delete(event.threadId);
         this.publishNow(resolved);
-        for (const next of queue) this.publish(next);
+        for (const next of queue) this.publishClean(next);
       };
       // never longer than GATE_MAX_MS: past it the event goes as it was
       const timer = setTimeout(() => release(event), GATE_MAX_MS);

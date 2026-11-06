@@ -150,6 +150,14 @@ describe("bot profile page shell", () => {
     expect(html).toContain('aria-label="Close"');
   });
 
+  it("draws a quiet grey banner and a 590px content column, like Grok Bot (#2141)", () => {
+    const html = render("overview");
+    expect(html).toMatch(/data-bot-profile-banner="" class="bot-profile-banner /);
+    expect(html).not.toMatch(/data-bot-profile-banner="" style=/);
+    // 590px of content: 622 - 2 x 16, 670 - 2 x 40, 730 - 2 x 70
+    expect(html).toMatch(/data-bot-profile-column="" class="[^"]*max-w-\[622px\][^"]*px-4[^"]*sm:max-w-\[670px\] sm:px-10 lg:max-w-\[730px\] lg:px-\[70px\]/);
+  });
+
   it("names the tabs and channels in French", () => {
     setLocale("fr");
     const html = render("overview");

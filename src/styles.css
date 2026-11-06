@@ -1980,6 +1980,13 @@ body {
   outline: none;
 }
 
+/* The profile banner is a quiet grey gradient like Grok Bot (#2141), not
+   the mascot's colour: #3a3a3a to #2a2a2a on a dark skin, its pale echo on
+   a light one (the skin's color-scheme picks the pair). */
+.bot-profile-banner {
+  background-image: linear-gradient(180deg, light-dark(#ececec, #3a3a3a) 0%, light-dark(#e0e0e0, #2a2a2a) 100%);
+}
+
 /* A sidebar group header focused by a click, or handed focus back after its
    right-click menu, shows no frame; Tab and arrow keys still draw it. */
 [data-sidebar-section-header][data-pointer-focus]:focus-visible {

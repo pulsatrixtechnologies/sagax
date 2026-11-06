@@ -18,14 +18,13 @@
 // for opens its tab, unfolds and scrolls into view. A section this viewer may
 // not change says why (botSectionLock); nothing is hidden for lack of a
 // permission.
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { BellRing, Brain, ChevronDown, ChevronRight, Cpu, LayoutDashboard, Lock, Mail, MessageCircle, Plug, Search, Star, Users, X } from "lucide-react";
 
 import { useStore, type Bot, type BotSettingsSection } from "@/state/store";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { cn } from "@/lib/cn";
-import { MAUS_COLORS } from "@/lib/mascot";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { simpleHidesBotSection } from "@/lib/interface-visibility";
 import { canEditBotField } from "@/lib/bot-capabilities";
@@ -435,10 +434,6 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
     };
   }, []);
 
-  const tint = MAUS_COLORS[bot.color] ?? MAUS_COLORS.blue;
-  const bannerStyle: CSSProperties = {
-    backgroundImage: `linear-gradient(180deg, color-mix(in srgb, ${tint} 62%, var(--color-app)) 0%, color-mix(in srgb, ${tint} 34%, var(--color-app)) 100%)`,
-  };
   const privateBot = notShared;
 
   return (
@@ -462,7 +457,7 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
       <div data-bot-profile-scroll="" className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
         {/* Banner in the mascot's color, the close button and who sees it
             on it, the mascot over its lower edge. */}
-        <div data-bot-profile-banner="" style={bannerStyle} className="relative h-[90px] w-full shrink-0">
+        <div data-bot-profile-banner="" className="bot-profile-banner relative h-[90px] w-full shrink-0">
           <button
             type="button"
             onClick={onClose}
@@ -482,7 +477,7 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
             {privateBot ? t("botProfile.private") : t("botProfile.shared")}
           </span>
         </div>
-        <div className="mx-auto flex w-full max-w-[1040px] flex-col px-4 pb-10 sm:px-10 lg:px-[70px]">
+        <div data-bot-profile-column="" className="mx-auto flex w-full max-w-[622px] flex-col px-4 pb-10 sm:max-w-[670px] sm:px-10 lg:max-w-[730px] lg:px-[70px]">
           <div className="-mt-[40px] w-fit">
             <BotProfileAvatarCard
               bot={bot}

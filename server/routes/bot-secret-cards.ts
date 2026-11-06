@@ -4,7 +4,6 @@ import type { AppConfig } from "../config.ts";
 import type { Message } from "../store.ts";
 import { PHONE_SECRET_PROTOCOL_VERSION, type PhoneSecretContext } from "../phone/phone-secret.ts";
 import {
-  CUSTOM_SECRET_TARGET,
   credentialIsConfigured,
   credentialResumeOutcome,
   isCredentialTargetId,
@@ -88,7 +87,7 @@ export function createBotSecretCardRoutes(deps: BotSecretCardRouteDeps): RouteHa
       }
       const parsed = phoneSecretEnvelopeSchema.safeParse(await readBody(req, 16_384));
       // Custom secrets from a phone need a sealed open path not wired here yet; only allowlisted keys.
-      if (!parsed.success || !isCredentialTargetId(parsed.data?.target) || parsed.data.target === CUSTOM_SECRET_TARGET) {
+      if (!parsed.success || !isCredentialTargetId(parsed.data?.target)) {
         json(res, 400, { error: "The encrypted credential request is invalid" });
         return;
       }

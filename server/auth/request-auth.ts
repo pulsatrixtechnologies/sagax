@@ -435,6 +435,9 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // the live view and capture of a bot's own cloud computer: the handler
   // lets only that bot's owner (or this computer's own person) through
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/computer\/(?:join|screenshot)$/ },
+  // the bot panel's Computer row thumbnail: the handler keeps a person's own
+  // capture to them and the bot's computer captures to who may see it
+  { methods: ["GET", "PUT"], path: /^\/api\/bots\/[\w-]+\/computer\/thumbnail$/ },
   // Computer tab: attach enrolled unattended hosts to a bot the person edits.
   // Handler enforces person isolation (own hosts only) in remote-bot-hosts.ts.
   { methods: ["GET", "POST"], path: /^\/api\/bots\/[\w-]{1,80}\/remote-hosts$/ },

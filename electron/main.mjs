@@ -15,6 +15,7 @@ import { createHostScreenLease } from "./host-screen-lease.mjs";
 import { createAndroidDeviceController } from "./android-device.mjs";
 import { finishSpeech, startSpeech, stopSpeech } from "./speech.mjs";
 import { openBlankTerminal } from "./terminal-launch.mjs";
+import { captureScreenThumbnail } from "./screen-thumbnail.mjs";
 import { pasteMenuItem } from "./paste-menu-item.mjs";
 import { blockPageFrameNavigation } from "./page-frame-guard.mjs";
 import { installPageFrameWatch } from "./page-frames.mjs";
@@ -4196,6 +4197,18 @@ ipcMain.handle("screen:frame", localOnly("screen:frame", async () => {
   // whose data URL is a blank "data:image/png;base64,": that is no frame.
   const thumbnail = sources[0]?.thumbnail;
   return thumbnail && !thumbnail.isEmpty() ? thumbnail.toDataURL() : null;
+}));
+
+// The bot panel's Computer row thumbnail of this computer: a 320x200 JPEG,
+// only once Screen Recording is granted (never the capture that prompts).
+ipcMain.handle("screen:thumbnail", desktopUiOnly("screen:thumbnail", async () => {
+  const screenStatus = process.platform === "darwin" ? systemPreferences.getMediaAccessStatus("screen") : undefined;
+  return captureScreenThumbnail({
+    platform: process.platform,
+    screenStatus,
+    getSources: (options) => desktopCapturer.getSources(options),
+    hostName: os.hostname(),
+  }).catch(() => null);
 }));
 
 // Onboarding permission checks. Status reads are free; the mic request

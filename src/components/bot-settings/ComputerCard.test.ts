@@ -24,6 +24,16 @@ vi.mock("@/lib/desktop-bridge", async (importOriginal) => {
 
 vi.mock("@/lib/perspicax-org", () => ({ usePerspicaxOrg: () => null }));
 
+// The thumbnail endpoint: the capture time of each computer (null: none yet).
+const captures = vi.hoisted(() => ({ at: {} as Record<string, number | null>, calls: [] as string[] }));
+vi.mock("@/state/store/api", () => ({
+  api: vi.fn(async (url: string) => {
+    captures.calls.push(url);
+    const computer = new URL(url, "http://localhost").searchParams.get("computer") ?? "";
+    return { computer, at: captures.at[computer] ?? null, mime: "image/png" };
+  }),
+}));
+
 vi.mock("../computer/SandboxDesktopModal", () => ({
   SandboxDesktopModal: (props: { title: string; onClose: () => void }) =>
     createElement("div", { "data-sandbox-takeover": "", "data-title": props.title },
@@ -46,6 +56,8 @@ let root: Root | null = null;
 let host: HTMLDivElement | null = null;
 
 beforeEach(() => {
+  captures.at = {};
+  captures.calls = [];
   host = document.createElement("div");
   document.body.appendChild(host);
   root = createRoot(host);
@@ -161,5 +173,56 @@ describe("ComputerCard", () => {
     const row = host!.querySelector<HTMLButtonElement>("[data-computer-card]")!;
     act(() => { row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })); });
     expect(document.querySelector("[data-computer-card-menu]")).toBeNull();
+  });
+
+  it("shows a capture of the selected computer from the thumbnail endpoint", async () => {
+    const at = Date.now() - 5_000;
+    captures.at = { cloud: at };
+    await act(async () => { root!.render(createElement(ComputerCard, { bot, onPatch: vi.fn() })); });
+    const thumb = host!.querySelector<HTMLButtonElement>("[data-computer-thumb]")!;
+    expect(thumb.dataset.computerThumb).toBe("screen");
+    const img = thumb.querySelector("img")!;
+    expect(img.getAttribute("src")).toBe(`/api/bots/bot-1/computer/thumbnail?computer=cloud&v=${at}`);
+    expect(thumb.title.length).toBeGreaterThan(0);
+    expect(thumb.dataset.computerThumbStale).toBeUndefined();
+    expect(img.className).not.toContain("grayscale");
+  });
+
+  it("falls back to the wallpaper while the computer has no capture", async () => {
+    await act(async () => { root!.render(createElement(ComputerCard, { bot, onPatch: vi.fn() })); });
+    const thumb = host!.querySelector<HTMLButtonElement>("[data-computer-thumb]")!;
+    expect(thumb.dataset.computerThumb).toBe("wallpaper");
+    expect(thumb.querySelector("img")).toBeNull();
+    expect(thumb.style.background).toContain("gradient");
+  });
+
+  it("switches the picture at once when the bot moves to another computer", async () => {
+    captures.at = { cloud: Date.now() - 5_000, vm: Date.now() - 1_000 };
+    await act(async () => { root!.render(createElement(ComputerCard, { bot, onPatch: vi.fn() })); });
+    expect(host!.querySelector("[data-computer-thumb] img")!.getAttribute("src")).toContain("computer=cloud");
+    // Rendered with the new computer before its answer: never the old picture.
+    act(() => root!.render(createElement(ComputerCard, { bot: { ...bot, computer: "vm" } as Bot, onPatch: vi.fn() })));
+    expect(host!.querySelector("[data-computer-thumb] img")?.getAttribute("src") ?? "").not.toContain("computer=cloud");
+    await act(async () => { await Promise.resolve(); });
+    expect(host!.querySelector("[data-computer-thumb] img")!.getAttribute("src")).toBe(`/api/bots/bot-1/computer/thumbnail?computer=vm&v=${captures.at.vm}`);
+    expect(captures.calls.some((call) => call.includes("computer=vm"))).toBe(true);
+  });
+
+  it("greys out an old capture and opens it larger in the viewer", async () => {
+    captures.at = { cloud: Date.now() - 60 * 60_000 };
+    await act(async () => { root!.render(createElement(ComputerCard, { bot, onPatch: vi.fn() })); });
+    const thumb = host!.querySelector<HTMLButtonElement>("[data-computer-thumb]")!;
+    expect(thumb.dataset.computerThumbStale).toBe("");
+    expect(thumb.querySelector("img")!.className).toContain("grayscale");
+    act(() => thumb.click());
+    const full = document.querySelector<HTMLImageElement>("[data-computer-thumb-full]")!;
+    expect(full.getAttribute("src")).toBe(`/api/bots/bot-1/computer/thumbnail?computer=cloud&v=${captures.at.cloud}&size=full`);
+    expect(document.querySelector("[data-sandbox-takeover]")).toBeNull();
+  });
+
+  it("asks for no picture when the bot has no computer", async () => {
+    await act(async () => { root!.render(createElement(ComputerCard, { bot: { ...bot, computer: "off" } as Bot, onPatch: vi.fn() })); });
+    expect(captures.calls).toEqual([]);
+    expect(host!.querySelector<HTMLElement>("[data-computer-thumb]")!.dataset.computerThumb).toBe("wallpaper");
   });
 });

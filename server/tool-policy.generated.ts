@@ -139,6 +139,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"POST","kind":"exact","route":"/api/internal/phone-call","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},
   {"method":"POST","kind":"exact","route":"/api/internal/phone-call/dtmf","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},
   {"method":"POST","kind":"exact","route":"/api/internal/phone-call/hangup","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},
+  {"method":"POST","kind":"exact","route":"/api/internal/phone-call/owner","tier":"admin","readOnly":false,"scope":"internal:admin","defaultEnabled":false},
   {"method":"POST","kind":"exact","route":"/api/internal/phone-call/transfer","tier":"admin","readOnly":false,"scope":"internal:admin","defaultEnabled":false},
   {"method":"ANY","kind":"exact","route":"/api/internal/phone/claim","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},
   {"method":"POST","kind":"exact","route":"/api/internal/phone/claim","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},

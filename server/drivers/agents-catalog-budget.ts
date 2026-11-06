@@ -174,7 +174,7 @@ export const AGENT_TOOL_GROUPS: readonly AgentToolGroup[] = [
   {
     id: "phone",
     title: "Phone, meetings and outbound calls",
-    tools: ["phone_tool", "place_phone_call", "place_call", "send_dtmf", "transfer", "hang_up", "join_meeting", "end_call"],
+    tools: ["phone_tool", "place_phone_call", "phone_call_owner", "phone_line_contact", "place_call", "send_dtmf", "transfer", "hang_up", "join_meeting", "end_call"],
   },
   {
     id: "rooms",

@@ -1408,7 +1408,7 @@ import {
 import { OutboundCounts } from "./outbound/outbound-counts.ts";
 import { OutboundRequestService } from "./outbound/outbound-requests.ts";
 import { isOutboundTool, normalizeOutboundPolicy } from "../shared/outbound.ts";
-import { normalizeAllowedRecipients, sendRecipientsAllowed } from "../shared/allowed-recipients.ts";
+import { normalizeAllowedRecipients, normalizePhone, sendRecipientsAllowed } from "../shared/allowed-recipients.ts";
 import { ORG_ALWAYS_ALLOW_OFF, standingGrantsAllowed } from "./rules/custom-rules-org.ts";
 import { bindThreadLogCapProvider } from "./threads/thread-log-rotation.ts";
 import { listenWebhookIngress, resolveWebhookPublicUrl, type WebhookIngress } from "./triggers/webhook-ingress.ts";
@@ -2034,6 +2034,7 @@ import {
   senderDomain
 } from "./mail/bot-inbound-mail.ts";
 import { TELEPHONY_ASSERTION_ACTORS, createBotInboundTelephonyRoute } from "./bots/bot-inbound-telephony.ts";
+import { createPhoneLineContactInternalRoute, PhoneLineContactsStore } from "./phone/phone-line-contacts.ts";
 import { SmsConversation } from "./sms-conversation.ts";
 import { BotMailAddresses } from "./mail/bot-mail-addresses.ts";
 import { createBotPresetRoutes } from "./routes/bot-presets.ts";
@@ -9207,7 +9208,17 @@ const outbound = outboundWiring({
     const mode = task?.approvalMode || bot?.approvalMode;
     return typeof mode === "string" ? mode : undefined;
   },
+  // phone_call_owner (#2194): late-bound after reachMeSettings exists below
+  ownerSmsNumber: (principalId, botId) => ownerCallLookup.smsNumber?.(principalId, botId),
+  voiceLine: (turn) => ownerCallLookup.voiceLine
+    ? ownerCallLookup.voiceLine(turn)
+    : Promise.resolve({ ok: false as const, error: "Perspicax Voice is not ready yet" }),
 });
+/** Filled once reach-me settings exist (created later in this file). */
+const ownerCallLookup: {
+  smsNumber?: (principalId: string, botId: string) => string | undefined;
+  voiceLine?: (turn: { threadId: string; generation: string; botId: string }) => Promise<{ ok: true; value: unknown } | { ok: false; error: string }>;
+} = {};
 // a conversation call's transcript leaves its card 30 days after the call
 setInterval(() => { try { outbound.sweepTranscripts(); } catch { /* the next sweep tries again */ } }, 60 * 60_000).unref?.();
 // 2026-10-29: a recorded order is checked again until delivered
@@ -33104,6 +33115,8 @@ ROUTES.push(createArtifactRoutes({
     return !artifact.ownerPrincipalId || artifact.ownerPrincipalId === viewerId;
   }
 }));
+// #2194: per-person allowlisted SMS contact personas (numbers on Perspicax).
+const phoneLineContacts = new PhoneLineContactsStore(DATA_DIR);
 const INTERNAL_ROUTES: InternalRouteHandler[] = [
   // recall_topic (server/routes/recall-topic-internal.ts, server/streams/single-stream.ts)
   createRecallTopicInternalRoutes({
@@ -33133,6 +33146,12 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     ownsThread: (botId, threadId) => Boolean(connectorThread(botId, threadId)),
     principalForThread: vaultPrincipalForThread,
     inRoom: (threadId) => Boolean(store.groupByThread(threadId))
+  }),
+  // phone_line_contact (#2194): allowlisted SMS persona in the person's Sagax profile
+  createPhoneLineContactInternalRoute({
+    store: phoneLineContacts,
+    ownsThread: (botId, threadId) => Boolean(connectorThread(botId, threadId)),
+    principalForThread: vaultPrincipalForThread,
   }),
   // request_login and vault_http_request (server/routes/credential-vault-internal.ts)
   createCredentialVaultInternalRoutes({
@@ -34135,7 +34154,7 @@ function smsReplyAfter(threadId: string, messageId: string): string {
     .join("\n\n");
 }
 const smsConversation = new SmsConversation({
-  send: async ({ person, sub, botId, text, label }) => {
+  send: async ({ person, sub, botId, text, label, via }) => {
     const bot = store.bot(botId);
     if (!bot) return { ok: false, error: "no such bot" };
     const directoryName = personDisplayName(principals.byId(person)) || "";
@@ -34152,9 +34171,10 @@ const smsConversation = new SmsConversation({
     const messageId = message?.id;
     if (typeof messageId === "string") {
       const existingId = typeof message?.sender?.id === "string" ? message.sender.id : person;
+      const viaLabel = via === "call" ? "via call" : "via text message";
       store.patchMessage(threadId, messageId, {
-        via: "sms",
-        sender: { name: label.trim() || directoryName || "via text message", id: existingId },
+        via,
+        sender: { name: label.trim() || directoryName || viaLabel, id: existingId },
       });
     }
     return { ok: true, threadId, messageId: typeof messageId === "string" ? messageId : "" };
@@ -34193,7 +34213,8 @@ const inboundTelephony = createBotInboundTelephonyRoute({
     lines: input.progress.lines,
     events: input.progress.events,
   }),
-  // 2026-10-29: the person texting their own bot (server/sms-conversation.ts)
+  // 2026-10-29 / #2194: the person texting or speaking to their own bot
+  // (server/sms-conversation.ts) lands in the unified chat.
   ownText: (input) => smsConversation.start({
     person: input.ownerPrincipalId.trim().toLowerCase(),
     sub: input.sub,
@@ -34201,7 +34222,25 @@ const inboundTelephony = createBotInboundTelephonyRoute({
     from: input.from,
     text: input.text,
     label: input.label,
+    via: input.via,
   }),
+  // #2194: allowlisted SMS contact persona + owner notices in the unified chat.
+  allowlistedContact: (ownerPrincipalId, from) => {
+    const number = normalizePhone(from);
+    return number ? phoneLineContacts.get(ownerPrincipalId, number) : null;
+  },
+  noticeUnknown: (ownerPrincipalId) => phoneLineContacts.settings(ownerPrincipalId).noticeUnknown,
+  ownerNotice: ({ ownerPrincipalId, botId, text }) => {
+    try {
+      const bot = store.bot(botId);
+      if (!bot) return;
+      const threadId = conversationOrStart(bot, ownerPrincipalId);
+      if (!threadId || store.isConfidentialThread(threadId)) return;
+      store.appendMessage(threadId, { role: "bot", kind: "text", text });
+    } catch (error) {
+      console.warn(`[telephony-inbound] owner notice failed (${error instanceof Error ? error.name : "error"})`);
+    }
+  },
   record: (row) => appendAdminAction(DATA_DIR, {
     category: "webhook",
     action: row.notice ? "bot-phone.notice" : "bot-phone.delivered",
@@ -40968,6 +41007,15 @@ async function reachMeVoice(person: string, botId: string, tool: "voice_line" | 
   return { ok: false, error: last.slice(0, 200) };
 }
 const reachMeSettings = createReachMeStore(DATA_DIR);
+// phone_call_owner (#2194): resolve the person's verified number from Reach me
+ownerCallLookup.smsNumber = (principalId, botId) => reachMeSettings.effective(principalId, botId).smsNumber;
+ownerCallLookup.voiceLine = async (turn) => {
+  if (!perspicaxMcp) return { ok: false, error: "Perspicax is not linked on this server" };
+  const answer = await perspicaxMcp.callTool({ ...turn, name: "voice_line", args: {} });
+  if (!answer.ok) return { ok: false, error: answer.error };
+  if (answer.isError) return { ok: false, error: typeof answer.value === "string" ? answer.value : "voice_line refused" };
+  return { ok: true, value: answer.value };
+};
 const reachMeCodes = createReachCodeStore(DATA_DIR);
 const reachMeSecrets = new ReachMeSecrets(DATA_DIR, vaultKeySource);
 // Per-person Grok bridge (#2193): sealed key, outbound queue, unified chat.

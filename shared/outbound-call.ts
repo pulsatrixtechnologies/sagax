@@ -14,6 +14,13 @@
 import { normalizePhone } from "./allowed-recipients.ts";
 
 export const PLACE_PHONE_CALL_TOOL = "place_phone_call";
+/** Call the speaking person's own verified number with structured questions
+ * (#2194). Resolves to a conversation `place_phone_call` on Perspicax Voice;
+ * never a separate telephony stack. */
+export const PHONE_CALL_OWNER_TOOL = "phone_call_owner";
+
+/** Owner-call questions: short, one at a time on the line. */
+export const OWNER_CALL_LIMITS = { questions: 8, question: 200, context: 600, defaultMinutes: 5 } as const;
 
 /** Canadian area codes (R10: Canada only in the first version). Toll-free
  * and non-geographic codes are left out: they are not Canada's alone. */
@@ -251,7 +258,7 @@ export function voiceCallArgs(request: OutboundCallRequest, input: { botName: st
 export const PLACE_PHONE_CALL_TOOL_SPEC = {
   name: PLACE_PHONE_CALL_TOOL,
   description:
-    "Place a phone call for the person to a Canadian number. Two modes. message (default): through their Twilio profile on Perspicax, a fixed opening (an automated call from you, an AI assistant, for the person), then your purpose and your message, said twice, then it hangs up; needs purpose and message, and from (a Twilio number of their profile) or nothing (their own Perspicax Voice line). conversation: from the person's own Perspicax Voice line, the line first says \"Hello, this is <you>, an AI assistant calling on behalf of <the person>\", then you talk with the person you call in real time, pursue the objective, follow the instructions, and hang up politely when the objective is reached, when asked, or at max_minutes (5 by default, 20 at most); a voicemail gets your short voicemail message; a callee who asks not to be called again is never called again for this person; needs objective. Either way the first call shows the person an approval card (number, objective or words, maximum duration; a dry run checks it; nothing is placed). After they choose Call, call place_phone_call again with the very same arguments to place it. One approval places one call; any change asks again. A conversation's result (status, duration, summary points, commitments, transcript) comes back to you in a new turn when the call ends, as a card in the conversation: end your turn after placing it, then give the person the summary they asked for. Never call twilio_api_write Calls or voice_call yourself: Sagax turns a voice_call into this tool, with its card.",
+    "Place a phone call for the person to a Canadian number. Two modes. message (default): through their Twilio profile on Perspicax, a fixed opening (an automated call from you, an AI assistant, for the person), then your purpose and your message, said twice, then it hangs up; needs purpose and message, and from (a Twilio number of their profile) or nothing (their own Perspicax Voice line). conversation: from the person's own Perspicax Voice line, the line first says \"Hello, this is <you>, an AI assistant calling on behalf of <the person>\", then you talk with the person you call in real time, pursue the objective, follow the instructions, and hang up politely when the objective is reached, when asked, or at max_minutes (5 by default, 20 at most); a voicemail gets your short voicemail message; a callee who asks not to be called again is never called again for this person; needs objective. Either way the first call shows the person an approval card (number, objective or words, maximum duration; a dry run checks it; nothing is placed). After they choose Call, call place_phone_call again with the very same arguments to place it. One approval places one call; any change asks again. A conversation's result (status, duration, summary points, commitments, transcript) comes back to you in a new turn when the call ends, as a card in the conversation: end your turn after placing it, then give the person the summary they asked for. Never call twilio_api_write Calls or voice_call yourself: Sagax turns a voice_call into this tool, with its card. To call the person themself with structured questions, prefer phone_call_owner.",
   inputSchema: {
     type: "object",
     additionalProperties: false,
@@ -271,6 +278,83 @@ export const PLACE_PHONE_CALL_TOOL_SPEC = {
     required: ["to"],
   },
 } as const;
+
+export const PHONE_CALL_OWNER_TOOL_SPEC = {
+  name: PHONE_CALL_OWNER_TOOL,
+  description:
+    "Call the person themself on their own verified Perspicax Voice number with structured questions (#2194). Goes out through place_phone_call conversation mode on their line (Perspicax voice_call): one short opening, then one question at a time, then hang up. Answers come back as the conversation call_result (points, commitments, transcript) in this same chat. Needs questions (1 to 8 short ones). Optional context is extra brief for the call. Optional to is their E.164 number; when left out, Sagax uses the number they set under Reach me by text, after voice_line confirms it is verified on their line. Same approval card as place_phone_call (one yes places one call; Always call and Auto still apply). Never invent a second phone stack, and never call voice_call yourself.",
+  inputSchema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      questions: {
+        type: "array",
+        minItems: 1,
+        maxItems: OWNER_CALL_LIMITS.questions,
+        items: { type: "string", description: `One short question, at most ${OWNER_CALL_LIMITS.question} characters.` },
+        description: "The questions to ask, one at a time, in order.",
+      },
+      context: { type: "string", description: `Optional brief for the call (why you call, what you already know), at most ${OWNER_CALL_LIMITS.context} characters.` },
+      to: { type: "string", description: "Optional: the person's own verified number to call. When left out, uses their Reach me SMS number once voice_line verifies it." },
+      language: { type: "string", enum: ["fr", "en"], description: "The call's language. Defaults to the person's." },
+      max_minutes: { type: "integer", minimum: 1, maximum: 20, description: `At most how long the call may last, in minutes (${OWNER_CALL_LIMITS.defaultMinutes} when left out).` },
+    },
+    required: ["questions"],
+  },
+} as const;
+
+/** Build the place_phone_call conversation args for an owner questions call.
+ * `to` must already be a Canadian E.164 of the person. A string is the
+ * refusal for the bot. */
+export function ownerCallToPlaceArgs(
+  args: unknown,
+  fallbackLanguage: CallLanguage = "fr",
+): { to: string; mode: "conversation"; objective: string; instructions: string; language: CallLanguage; max_minutes: number } | string {
+  const row = args && typeof args === "object" && !Array.isArray(args) ? args as Record<string, unknown> : null;
+  if (!row) return "phone_call_owner needs questions (an array of short questions).";
+  const rawQuestions = Array.isArray(row.questions) ? row.questions : null;
+  if (!rawQuestions || rawQuestions.length < 1) return "questions: at least one short question.";
+  if (rawQuestions.length > OWNER_CALL_LIMITS.questions) return `questions: at most ${OWNER_CALL_LIMITS.questions}.`;
+  const questions: string[] = [];
+  for (const item of rawQuestions) {
+    const text = clean(item, OWNER_CALL_LIMITS.question);
+    if (!text) return `each question: one short sentence, at most ${OWNER_CALL_LIMITS.question} characters.`;
+    questions.push(text);
+  }
+  const context = optional(row.context, OWNER_CALL_LIMITS.context);
+  if (context === null) return `context: at most ${OWNER_CALL_LIMITS.context} characters.`;
+  const to = typeof row.to === "string" ? normalizePhone(row.to) : null;
+  if (row.to !== undefined && row.to !== null && row.to !== "" && !to) return "to must be the person's own phone number, such as +1 514 555 0142.";
+  if (to && !canadianNumber(to)) return "Only Canadian numbers can be called for now. Nothing was placed.";
+  const minutes = row.max_minutes ?? row.maxMinutes;
+  if (minutes !== undefined && (typeof minutes !== "number" || !Number.isInteger(minutes) || minutes < 1 || minutes > CONVERSATION_LIMITS.maxMinutes)) {
+    return `max_minutes: a whole number of minutes from 1 to ${CONVERSATION_LIMITS.maxMinutes} (${OWNER_CALL_LIMITS.defaultMinutes} when left out).`;
+  }
+  const language = row.language === "en" || row.language === "fr" ? row.language : fallbackLanguage;
+  const objective = questions[0]!.length <= CONVERSATION_LIMITS.objective
+    ? questions[0]!
+    : questions[0]!.slice(0, CONVERSATION_LIMITS.objective);
+  const numbered = questions.map((q, i) => `${i + 1}. ${q}`).join("\n");
+  const instructions = [
+    language === "fr"
+      ? "Tu appelles la personne elle-même. Une seule ouverture courte (\"petite question pour toi\"), puis une question à la fois, dans l'ordre. Après chaque réponse, redis ce que tu as noté, puis passe à la suivante. Quand toutes sont répondues, raccroche poliment. Jamais de ton centre d'appels."
+      : "You are calling the person themself. Say one short opening once (\"quick question for you\"), then ask one question at a time, in order. After each answer, read back what you recorded, then move on. When every question is answered, hang up politely. Never help-desk phrasing.",
+    language === "fr" ? "Questions :" : "Questions:",
+    numbered,
+    ...(context ? [language === "fr" ? `Contexte : ${context}` : `Context: ${context}`] : []),
+  ].join("\n");
+  if (instructions.length > CONVERSATION_LIMITS.instructions) {
+    return `questions and context together are too long for the call (at most ${CONVERSATION_LIMITS.instructions} characters of guidance). Shorten them.`;
+  }
+  return {
+    to: to ?? "",
+    mode: "conversation",
+    objective,
+    instructions,
+    language,
+    max_minutes: typeof minutes === "number" ? minutes : OWNER_CALL_LIMITS.defaultMinutes,
+  };
+}
 
 /** The Perspicax Voice tools a bot never calls itself (2026-10-28): every
  * call goes through place_phone_call (its card, the AI disclosure, the

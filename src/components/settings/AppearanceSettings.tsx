@@ -211,22 +211,7 @@ function BotAccentRow() {
   );
 }
 
-/** HD mascots switch only (kept for HdMascotsGroup.test.ts). */
-export function HdMascotsGroup({ characters = HD_CHARACTERS }: { characters?: readonly string[] }) {
-  const enabled = useHdMascots();
-  if (characters.length === 0) return null;
-  return (
-    <div data-settings-card="appearance.mascots-hd">
-      <SettingsGroup title={t("settings.group.mascots")} groupId="mascots">
-        <DescribedRow label={t("settings.hdMascots.title")} description={t("settings.hdMascots.subtitle")} rowId="hdMascots">
-          <Switch checked={enabled} aria-label={t("settings.hdMascots.title")} onClick={() => setHdMascotsEnabled(!enabled)} />
-        </DescribedRow>
-      </SettingsGroup>
-    </div>
-  );
-}
-
-function HdMascotsRow({ characters = HD_CHARACTERS }: { characters?: readonly string[] }) {
+export function HdMascotsRow({ characters = HD_CHARACTERS }: { characters?: readonly string[] }) {
   const enabled = useHdMascots();
   if (characters.length === 0) return null;
   return (

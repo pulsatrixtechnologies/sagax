@@ -38,14 +38,14 @@ export function SettingsText({
 }
 
 /** The browser-engine sentence. When the server can install it, the
- * Experimental section is a link. Other reasons stay plain text. */
+ * Computer section is a link. Other reasons stay plain text. */
 export function BrowserUnavailableNote({ config }: { config: FeatureFlagConfig | null | undefined }) {
   const engine = config?.browserEngine;
   if (engine?.kind === "unavailable" && engine.installable) {
     return (
       <SettingsText
         text={t("browser.notInstalled")}
-        links={{ settings: { section: "experimental", cardId: "experimental.features" } }}
+        links={{ settings: { section: "computer", cardId: "computer.browser" } }}
       />
     );
   }

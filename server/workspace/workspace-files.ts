@@ -19,6 +19,7 @@ import { readAtRestSync } from "../encryption/content-at-rest.ts";
 import { READABLE_HIDDEN_SEGMENTS } from "../../shared/readable-hidden.ts";
 
 import { RULE_SETS_DIR, RULES_FILE, RULES_MAX_BYTES, RULES_MAX_LINES, effectiveRulesText, listRuleSets } from "../rules/rule-sets.ts";
+import { dirFingerprint, mtimeCached } from "./mtime-prompt-cache.ts";
 import {
   DOCS_DIR,
   MEMORY_MAX_BYTES,
@@ -109,17 +110,21 @@ export function formatSize(bytes: number): string {
 /** The per-turn documents index: never the documents themselves. Empty when
  * docs/ is missing or empty. `tools` says how this turn can read them. */
 export function docsIndexPrompt(botId: string, opts: { tools: "agents" | "files" | "none" }): string {
-  const docs = listDocs(botId);
-  if (!docs.length) return "";
-  const shown = docs.slice(0, DOCS_INDEX_MAX);
-  const lines = shown.map((doc) => `- ${doc.path}: ${doc.summary || "(no heading)"} (${formatSize(doc.bytes)})`);
-  const more = docs.length > shown.length ? `\n…and ${docs.length - shown.length} more; find them with ${opts.tools === "agents" ? "workspace_search" : "your file tools"}.` : "";
-  const how = opts.tools === "agents"
-    ? "read one with workspace_read before relying on it, find a passage with workspace_search, and change one with docs_update when the person asks"
-    : opts.tools === "files"
-      ? `read one with your file tools (the folder is ${JSON.stringify(join(workspaceDir(botId), DOCS_DIR))}) before relying on it`
-      : "this turn cannot open them; say so if one is needed";
-  return `\n\nDocuments available (reference material in your workspace, not loaded; ${how}):\n${lines.join("\n")}${more}`;
+  const docsDir = join(workspaceDir(botId), DOCS_DIR);
+  // #1950: reuse the rendered index while docs/ mtimes and sizes stay put.
+  return mtimeCached("docs-index", botId, opts.tools, dirFingerprint(docsDir, isMemoryTopicName), () => {
+    const docs = listDocs(botId);
+    if (!docs.length) return "";
+    const shown = docs.slice(0, DOCS_INDEX_MAX);
+    const lines = shown.map((doc) => `- ${doc.path}: ${doc.summary || "(no heading)"} (${formatSize(doc.bytes)})`);
+    const more = docs.length > shown.length ? `\n…and ${docs.length - shown.length} more; find them with ${opts.tools === "agents" ? "workspace_search" : "your file tools"}.` : "";
+    const how = opts.tools === "agents"
+      ? "read one with workspace_read before relying on it, find a passage with workspace_search, and change one with docs_update when the person asks"
+      : opts.tools === "files"
+        ? `read one with your file tools (the folder is ${JSON.stringify(docsDir)}) before relying on it`
+        : "this turn cannot open them; say so if one is needed";
+    return `\n\nDocuments available (reference material in your workspace, not loaded; ${how}):\n${lines.join("\n")}${more}`;
+  });
 }
 
 // ── safe paths ────────────────────────────────────────────────────────

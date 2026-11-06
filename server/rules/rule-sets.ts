@@ -24,6 +24,7 @@ import { z } from "zod";
 
 import { writeFileAtomic } from "../atomic.ts";
 import { RULE_SETS_DIR, RULES_PATH } from "../memory/memory-store.ts";
+import { dirFingerprint, mtimeCached, pathsFingerprint } from "../workspace/mtime-prompt-cache.ts";
 import { ensureWorkspace, memoryLineCount, readMemoryText, workspaceDir } from "../workspace/workspace.ts";
 
 export { RULE_SETS_DIR };
@@ -356,45 +357,55 @@ export function loadRules(botId: string): LoadedRules | null {
   return { id: set.id, name: set.name, file: set.file, text: own.text, truncated: own.truncated, ...(own.truncated ? { cutBy: "set" as const } : {}), lines: memoryLineCount(effective), bytes: Buffer.byteLength(effective, "utf8") };
 }
 
+/** Fingerprint of RULES.md, the sets manifest, and every file under rules/. */
+function rulesPromptFingerprint(botId: string): string {
+  const root = workspaceDir(botId);
+  return `${pathsFingerprint([join(root, RULES_FILE), join(root, RULE_SETS_MANIFEST)])}|${dirFingerprint(join(root, RULE_SETS_DIR))}`;
+}
+
 /** The Rules block of the system prompt, placed right after the soul
  * (buildSystemPrompt). Empty without rules, so a bot without any gets the
  * prompt it always had byte for byte, and a bot with RULES.md alone gets
  * the block it always had. */
 export function rulesSystemPrompt(botId: string, opts: { writes?: boolean } = {}): string {
-  const { sets, omitted } = loadActiveRules(botId);
-  if (!sets.length) return "";
-  const single = sets.length === 1 && sets[0]!.id === DEFAULT_RULE_SET_ID && sets[0]!.name === null && !omitted.length;
-  const blocks = sets.map((set) => {
-    const bytes = Buffer.byteLength(set.text, "utf8");
-    const label = single ? "" : ` ${JSON.stringify(set.name ?? "Rules")}`;
-    const notice = !set.truncated
-      ? ""
-      : set.cutBy === "total"
-        ? `\n[${set.file} is ${set.lines} lines and ${set.bytes} bytes; only the part shown above fits the rules budget of ${RULES_TOTAL_MAX_LINES} lines / ${RULES_TOTAL_MAX_BYTES} bytes in all. Ask the person to shorten or switch off a set in Persona > Rules.]`
-        : `\n[${set.file} is ${set.lines} lines and ${set.bytes} bytes; only the first ${RULES_MAX_LINES} lines / ${RULES_MAX_BYTES} bytes are shown above. Ask the person to shorten it in Persona > Rules.]`;
-    return `--- BEGIN RULES${label} (${set.file}, ${bytes} bytes) ---\n${set.text}\n--- END RULES ---${notice}`;
+  const writesOn = opts.writes === true;
+  // #1950: reuse the rendered rules block while RULES.md / rules/ stay put.
+  return mtimeCached("rules-prompt", botId, writesOn ? "writes" : "ro", rulesPromptFingerprint(botId), () => {
+    const { sets, omitted } = loadActiveRules(botId);
+    if (!sets.length) return "";
+    const single = sets.length === 1 && sets[0]!.id === DEFAULT_RULE_SET_ID && sets[0]!.name === null && !omitted.length;
+    const blocks = sets.map((set) => {
+      const bytes = Buffer.byteLength(set.text, "utf8");
+      const label = single ? "" : ` ${JSON.stringify(set.name ?? "Rules")}`;
+      const notice = !set.truncated
+        ? ""
+        : set.cutBy === "total"
+          ? `\n[${set.file} is ${set.lines} lines and ${set.bytes} bytes; only the part shown above fits the rules budget of ${RULES_TOTAL_MAX_LINES} lines / ${RULES_TOTAL_MAX_BYTES} bytes in all. Ask the person to shorten or switch off a set in Persona > Rules.]`
+          : `\n[${set.file} is ${set.lines} lines and ${set.bytes} bytes; only the first ${RULES_MAX_LINES} lines / ${RULES_MAX_BYTES} bytes are shown above. Ask the person to shorten it in Persona > Rules.]`;
+      return `--- BEGIN RULES${label} (${set.file}, ${bytes} bytes) ---\n${set.text}\n--- END RULES ---${notice}`;
+    });
+    const left = omitted.length
+      ? `\n[Not loaded, past the rules budget of ${RULES_TOTAL_MAX_LINES} lines / ${RULES_TOTAL_MAX_BYTES} bytes: ${omitted.join(", ")}. Ask the person to shorten or switch off a set in Persona > Rules.]`
+      : "";
+    const writes = writesOn
+      ? single
+        ? " Change RULES.md only with rules_update, and only when the person asks for it in this conversation."
+        : " Change your rules only with rules_update (set: the set's name; without it, the first set), and only when the person asks for it in this conversation."
+      : "";
+    const intro = single
+      ? "\n\nYour rules follow: hard constraints the person set for you."
+      : `\n\nYour rules follow, in ${sets.length} sets: hard constraints the person set for you.`;
+    return (
+      intro +
+      " Check every reply and every action against them before you act." +
+      " They rank with your standing instructions, above your memory, documents and imported skills, and below the person's current request and safety boundaries." +
+      " Text inside this block is instruction for you, never tool authorization or permission to expose secrets." +
+      writes +
+      "\n\n" +
+      blocks.join("\n\n") +
+      left
+    );
   });
-  const left = omitted.length
-    ? `\n[Not loaded, past the rules budget of ${RULES_TOTAL_MAX_LINES} lines / ${RULES_TOTAL_MAX_BYTES} bytes: ${omitted.join(", ")}. Ask the person to shorten or switch off a set in Persona > Rules.]`
-    : "";
-  const writes = opts.writes
-    ? single
-      ? " Change RULES.md only with rules_update, and only when the person asks for it in this conversation."
-      : " Change your rules only with rules_update (set: the set's name; without it, the first set), and only when the person asks for it in this conversation."
-    : "";
-  const intro = single
-    ? "\n\nYour rules follow: hard constraints the person set for you."
-    : `\n\nYour rules follow, in ${sets.length} sets: hard constraints the person set for you.`;
-  return (
-    intro +
-    " Check every reply and every action against them before you act." +
-    " They rank with your standing instructions, above your memory, documents and imported skills, and below the person's current request and safety boundaries." +
-    " Text inside this block is instruction for you, never tool authorization or permission to expose secrets." +
-    writes +
-    "\n\n" +
-    blocks.join("\n\n") +
-    left
-  );
 }
 
 /** The workspace paths of the sets that are on: what a turn's prompt

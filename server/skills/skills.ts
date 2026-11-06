@@ -56,7 +56,8 @@ import {
   type GitHubSkillOrigin, type SkillFolderFile,
 } from "./skill-folder.ts";
 import { LEARN_SOURCE_PREFIX } from "./skill-learn.ts";
-import { librarySkillFilePath, listLibrarySkills, readLibrarySkillFile, type LibrarySkillListing } from "./skill-library.ts";
+import { librarySkillFilePath, listLibrarySkills, readLibrarySkillFile, skillsLibraryRoot, type LibrarySkillListing } from "./skill-library.ts";
+import { dirFingerprint, mtimeCached, pathsFingerprint } from "../workspace/mtime-prompt-cache.ts";
 import { workspaceDir } from "../workspace/workspace.ts";
 import { isSkillName, parseSkillMd, scanSkillText, SKILL_FILE_MAX_BYTES, type ParsedSkill } from "../../shared/skill-md.ts";
 import { parseSkillCommand, skillCommandTurnText, skillMentions } from "../../shared/skill-command.ts";
@@ -1514,34 +1515,54 @@ export function skillsSystemPrompt(botId: string, assignedLibrary?: readonly str
   return composeSkillsSystemPrompt(botId, assignedLibrary, excludeNames);
 }
 
+function skillsPromptFingerprint(botId: string, assignedLibrary: readonly string[] | undefined): string {
+  const state = skillStateDir(botId);
+  return [
+    dirFingerprint(state),
+    dirFingerprint(skillsDir(botId)),
+    dirFingerprint(skillsLibraryRoot()),
+    pathsFingerprint([manifestPath(botId), managedLinksPath(botId)]),
+    (assignedLibrary ?? []).slice().sort().join(","),
+  ].join("||");
+}
+
 function composeSkillsSystemPrompt(botId: string, assignedLibrary: readonly string[] | undefined, excludeNames?: ReadonlySet<string>): string {
-  // Reconcile links on every turn. If the workspace copy changed since its
-  // review, integrity filtering below removes it from native discovery too.
-  syncSkillLinks(botId, { excludeNames });
-  const index = skillsIndexFor(botId, assignedLibrary, excludeNames);
-  if (!index.enabled.length) {
-    loggedIndexOmissions.delete(botId);
-    return "";
-  }
-  const { lines, omitted, truncated } = index;
-  if (omitted.length || truncated) {
-    const signature = JSON.stringify([
-      omitted.length ? indexCapReason(lines.length) : "truncated",
-      omitted.map((skill) => skill.name),
-      truncated,
-    ]);
-    if (loggedIndexOmissions.get(botId) !== signature) {
-      if (omitted.length) {
-        console.warn(`Skills index for bot ${botId}: ${omitted.length} enabled skills omitted by ${indexCapReason(lines.length)}: ${omitted.map((skill) => skill.name).join(", ")}`);
-      } else {
-        console.warn(`Skills index for bot ${botId}: ${truncated} skill description${truncated === 1 ? "" : "s"} shortened to fit the ${INDEX_MAX_BYTES}-byte cap`);
-      }
-      loggedIndexOmissions.set(botId, signature);
+  const excludeKey = excludeNames && excludeNames.size
+    ? [...excludeNames].sort().join(",")
+    : "";
+  const variant = `${(assignedLibrary ?? []).slice().sort().join(",")}|${excludeKey}`;
+  // #1950: skip the skills scan and index rebuild while skill-state, the
+  // workspace skills folder and the library root stay put.
+  return mtimeCached("skills-prompt", botId, variant, skillsPromptFingerprint(botId, assignedLibrary), () => {
+    // Reconcile links when the fingerprint moved. If the workspace copy
+    // changed since its review, integrity filtering below removes it from
+    // native discovery too.
+    syncSkillLinks(botId, { excludeNames });
+    const index = skillsIndexFor(botId, assignedLibrary, excludeNames);
+    if (!index.enabled.length) {
+      loggedIndexOmissions.delete(botId);
+      return "";
     }
-  } else {
-    loggedIndexOmissions.delete(botId);
-  }
-  return index.text;
+    const { lines, omitted, truncated } = index;
+    if (omitted.length || truncated) {
+      const signature = JSON.stringify([
+        omitted.length ? indexCapReason(lines.length) : "truncated",
+        omitted.map((skill) => skill.name),
+        truncated,
+      ]);
+      if (loggedIndexOmissions.get(botId) !== signature) {
+        if (omitted.length) {
+          console.warn(`Skills index for bot ${botId}: ${omitted.length} enabled skills omitted by ${indexCapReason(lines.length)}: ${omitted.map((skill) => skill.name).join(", ")}`);
+        } else {
+          console.warn(`Skills index for bot ${botId}: ${truncated} skill description${truncated === 1 ? "" : "s"} shortened to fit the ${INDEX_MAX_BYTES}-byte cap`);
+        }
+        loggedIndexOmissions.set(botId, signature);
+      }
+    } else {
+      loggedIndexOmissions.delete(botId);
+    }
+    return index.text;
+  });
 }
 
 const indexCapReason = (included: number) => included === INDEX_MAX_SKILLS ? `${INDEX_MAX_SKILLS}-skill cap` : `${INDEX_MAX_BYTES}-byte cap`;

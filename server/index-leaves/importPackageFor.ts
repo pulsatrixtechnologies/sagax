@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** importPackageFor (#1388). Pure move from server/index.ts. */
+import { PackageImportError } from "../packages/package-import.ts";
 import { importPackageDocument } from "../packages/package-import.ts";
 export type Host = Record<string, any>;
 

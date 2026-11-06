@@ -2177,6 +2177,17 @@ import { createResolveSectionId } from "./index-leaves/resolveSectionId.ts";
 // getHost runs per call (after module init), never at create*() time.
 const leafHostBindings: Record<string, any> = Object.create(null);
 function getLeafHost(): Record<string, any> { return leafHostBindings; }
+// Lost in the #1388 split: leaves reach them through the host bag (hoisted).
+function modelName(selection: ModelSelection): string {
+  const instance = registry.get(selection.instanceId);
+  const label = instance?.models.options.find((option) => option.id === selection.model)?.label ?? selection.model;
+  return instance ? `${instance.displayName || instance.driverKind} · ${label}` : label;
+}
+function stderrOf(err: unknown): string {
+  const s = (err as { stderr?: unknown }).stderr;
+  return typeof s === "string" ? s : Buffer.isBuffer(s) ? s.toString("utf8") : "";
+}
+Object.assign(leafHostBindings, { modelName, stderrOf });
 const PORT = Number(process.env.SAGAX_PORT || process.env.OGB_PORT || 8799);
 /** Capabilities lot 4: the organization's declarations as last broadcast
  * (public fields): a change tells every open screen to read its

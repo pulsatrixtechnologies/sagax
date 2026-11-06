@@ -16,7 +16,7 @@ function currentBrowserSession(botId: string, requestedProfile: string | undefin
     }
     return session;
   }
-  if (profile === MY_CHROME_PROFILE) return browserSessionId(botId, `${MY_CHROME_SESSION_PREFIX}${botId}`);
+  if (profile === MY_CHROME_PROFILE) return browserSessionId(botId, `${host.MY_CHROME_SESSION_PREFIX}${botId}`);
   if (profile === "guest") {
     let session = host.temporaryBrowserSessions.get(botId);
     if (!session) {

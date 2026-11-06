@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** describeActForRule (#1388). Pure move from server/index.ts. */
+import { createBotActService } from "../bots/bot-act.ts";
 export type Host = Record<string, any>;
 
 export function createDescribeActForRule(getHost: () => Host): any {

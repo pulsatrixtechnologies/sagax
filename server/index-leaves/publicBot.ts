@@ -3,7 +3,7 @@
 export type Host = Record<string, any>;
 
 export function createPublicBot(getHost: () => Host): any {
-function publicBot(bot: NonNullable<ReturnType<typeof store.bot>>, viewer?: ApprovalViewer) {
+function publicBot(bot: NonNullable<ReturnType<typeof host.store.bot>>, viewer?: ApprovalViewer) {
   const host = getHost();
   const { DEFAULT_PAGE, wireBot } = host;
   const coordinated = host.threadsWithActiveCoordination();

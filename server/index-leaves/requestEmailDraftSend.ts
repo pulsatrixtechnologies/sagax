@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** requestEmailDraftSend (#1388). Pure move from server/index.ts. */
+import { emailSendCard } from "../mail/email-draft-send.ts";
 import { emailDraftKey, emailDraftsEnabled, emailSendSummary, normalizeDraftForSend } from "../../shared/email-draft-send.ts";
 export type Host = Record<string, any>;
 

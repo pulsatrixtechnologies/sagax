@@ -6,7 +6,7 @@ export type Host = Record<string, any>;
 export function createSendSkillResolution(getHost: () => Host): any {
 function sendSkillResolution(
   res: ServerResponse,
-  result: ReturnType<typeof resolveSkillRequest>,
+  result: ReturnType<typeof host.resolveSkillRequest>,
 ): boolean {
   const host = getHost();
   if (!result.claimed) return false;

@@ -1,9 +1,10 @@
 // @ts-nocheck
 /** holdDirectMachineTurn (#1388). Pure move from server/index.ts. */
+import { randomUUID } from "node:crypto";
 export type Host = Record<string, any>;
 
 export function createHoldDirectMachineTurn(getHost: () => Host): any {
-function holdDirectMachineTurn(bot: BotRecord, threadId: string, text: string, opts: Parameters<typeof startTurn>[2]) {
+function holdDirectMachineTurn(bot: BotRecord, threadId: string, text: string, opts: Parameters<typeof host.startTurn>[2]) {
   const host = getHost();
   const { directMachinePlan, enqueueOfflineTurn } = host;
 

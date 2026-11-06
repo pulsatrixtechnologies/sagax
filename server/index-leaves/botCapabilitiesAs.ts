@@ -14,7 +14,7 @@ export type Host = Record<string, any>;
 
 export function createBotCapabilitiesAs(getHost: () => Host): any {
 function botCapabilitiesAs(
-  bot: NonNullable<ReturnType<typeof store.bot>>,
+  bot: NonNullable<ReturnType<typeof host.store.bot>>,
   engineId: string | undefined,
   viewer: { principal?: string; mayChange: boolean; marketplace: MarketplaceViewer; computedFor?: { principalId: string; name: string } },
 ): BotCapabilitiesAnswer {

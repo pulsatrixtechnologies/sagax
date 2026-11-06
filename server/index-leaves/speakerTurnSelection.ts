@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** speakerTurnSelection (#1388). Pure move from server/index.ts. */
+import { concreteSelection } from "../models/model-auto.ts";
 import { pickEquivalentModel, tierOfModel } from "../models/model-auto.ts";
 import { starredModelSelections } from "../models/default-model-selection.ts";
 export type Host = Record<string, any>;

@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** allowCwAction (#1388). Pure move from server/index.ts. */
+import { parseCwAction } from "../../shared/cw-widgets/actions.ts";
 import { cwActionInstruction } from "../../shared/cw-widgets/actions.ts";
 import { cwActionLanguage } from "../widgets/cw-widget-actions.ts";
 export type Host = Record<string, any>;

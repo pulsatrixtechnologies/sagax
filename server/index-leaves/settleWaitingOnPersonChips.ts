@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** settleWaitingOnPersonChips (#1388). Pure move from server/index.ts. */
+import { settledChipLabel } from "../waits/waiting-chip.ts";
 export type Host = Record<string, any>;
 
 export function createSettleWaitingOnPersonChips(getHost: () => Host): any {

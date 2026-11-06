@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** resumeHeldSteersAfterCrash (#1388). Pure move from server/index.ts. */
+import { takeHeldSteersForThread } from "../turns/held-steers.ts";
 import { failedTurnTool } from "../../shared/failed-turn.ts";
 import { DATA_DIR } from "../config.ts";
 import { takeRemainingHeldSteers, joinHeldSteerTexts } from "../turns/held-steers.ts";

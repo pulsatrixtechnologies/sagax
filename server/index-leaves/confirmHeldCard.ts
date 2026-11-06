@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** confirmHeldCard (#1388). Pure move from server/index.ts. */
+import { randomUUID } from "node:crypto";
 import { wholeCallDigest } from "../approvals/owner-approval.ts";
 import { openSafetyHold } from "../safety/safety-review.ts";
 import { HELD_NOTE } from "../approvals/auto-approve.ts";

@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** applyOrgEngineAllowList (#1388). Pure move from server/index.ts. */
+import { orgEngineMoveLine } from "../../shared/offered-engines.ts";
 export type Host = Record<string, any>;
 
 export function createApplyOrgEngineAllowList(getHost: () => Host): any {

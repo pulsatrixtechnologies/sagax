@@ -68,7 +68,7 @@ function ingestEngineHook(capability: InternalCapability, body: unknown): { ok: 
     const file = join(dir, `${safeId}.txt`);
     const redacted = host.redactSecretsInText(text);
     const bounded = redacted.length > host.TOOL_RESULT_SPILL_MAX
-      ? `${redacted.slice(0, TOOL_RESULT_SPILL_MAX)}\n[… ${redacted.length - TOOL_RESULT_SPILL_MAX} more characters omitted]`
+      ? `${redacted.slice(0, host.TOOL_RESULT_SPILL_MAX)}\n[… ${redacted.length - host.TOOL_RESULT_SPILL_MAX} more characters omitted]`
       : redacted;
     host.writeFileAtomic(file, bounded, { mode: 0o600 });
     host.store.patchMessage(threadId, row.id, { tool: { ...row.tool, fullResult: redacted.length <= host.TOOL_RESULT_SPILL_MAX } }, { kind: "hook.ingest", key });

@@ -15,7 +15,7 @@ function applyDelegatedLevel(from: BotRecord, fromThreadId: string, target: BotR
     host.store.appendMessage(threadId, {
       role: "bot",
       kind: "activity",
-      tool: { name: `${DELEGATED_LEVEL_NAMES[level] ?? level} not passed on by ${from.name}: automatic levels are off for members' bots in this organization`, ok: false }
+      tool: { name: `${host.DELEGATED_LEVEL_NAMES[level] ?? level} not passed on by ${from.name}: automatic levels are off for members' bots in this organization`, ok: false }
     });
     return;
   }

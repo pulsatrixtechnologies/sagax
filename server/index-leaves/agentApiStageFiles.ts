@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** agentApiStageFiles (#1388). Pure move from server/index.ts. */
+import { AGENT_SEND_FILE_MAX_BYTES } from "../agent-api.ts";
 import { mkdirSync, existsSync, writeFileSync } from "node:fs";
 import { join, basename } from "node:path";
 export type Host = Record<string, any>;

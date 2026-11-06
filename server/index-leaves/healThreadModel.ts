@@ -11,7 +11,7 @@ function healThreadModel(botId: string, threadId: string) {
   if (!bot || !own || bot.approvalGrant || host.threadBusy(botId, threadId)) return;
   if (!host.store.followBotModel(botId, [threadId], (from, to) => host.hostedModels?.resetTask(from, to) ?? {}).length) return;
   host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: {
-    name: `notice: This thread's model (${modelName(own)}) isn't available, so it now uses ${bot.name}'s model (${modelName(bot.modelSelection)}).`,
+    name: `notice: This thread's model (${host.modelName(own)}) isn't available, so it now uses ${bot.name}'s model (${host.modelName(bot.modelSelection)}).`,
     ok: true
   } });
 

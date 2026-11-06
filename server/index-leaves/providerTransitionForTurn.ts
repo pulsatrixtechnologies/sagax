@@ -3,7 +3,7 @@
 export type Host = Record<string, any>;
 
 export function createProviderTransitionForTurn(getHost: () => Host): any {
-function providerTransitionForTurn(   bot: NonNullable<ReturnType<typeof store.bot>>,   runOn?: RoutineRunOn,   threadId?: string, ) {
+function providerTransitionForTurn(   bot: NonNullable<ReturnType<typeof host.store.bot>>,   runOn?: RoutineRunOn,   threadId?: string, ) {
   const host = getHost();
 
   const provider = host.turnProvider(bot, runOn, threadId);

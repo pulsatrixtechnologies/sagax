@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** configForPerson (#1388). Pure move from server/index.ts. */
+import { configForViewer } from "../people/viewer-identity.ts";
 export type Host = Record<string, any>;
 
 export function createConfigForPerson(getHost: () => Host): any {

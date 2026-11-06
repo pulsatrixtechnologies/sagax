@@ -37,7 +37,7 @@ function botReaction(input: { bot: { id: string; name: string }; threadId: strin
     return { ok: false, status: 409, code: "reaction_one", error: `You already reacted ${mine.join(" ")} to this message: one reaction per message. Use remove_reaction first only if it no longer fits.` };
   }
   if (input.spent >= host.MAX_BOT_REACTIONS_PER_TURN) {
-    return { ok: false, status: 429, code: "reaction_budget", error: `You already added ${MAX_BOT_REACTIONS_PER_TURN} reactions this turn. Reply in words instead.` };
+    return { ok: false, status: 429, code: "reaction_budget", error: `You already added ${host.MAX_BOT_REACTIONS_PER_TURN} reactions this turn. Reply in words instead.` };
   }
   const result = host.store.reactToMessage(input.threadId, target.id, emoji, actor, { mode: "add", legacyUser: host.legacyReactionUser() });
   if (!result) return { ok: false, status: 404, code: "reaction_message", error: "That message is gone." };

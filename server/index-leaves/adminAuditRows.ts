@@ -1,10 +1,11 @@
 // @ts-nocheck
 /** adminAuditRows (#1388). Pure move from server/index.ts. */
+import { botChangeRows } from "../activity/admin-activity.ts";
 import { parsedBodyOf } from "../harness/http.ts";
 export type Host = Record<string, any>;
 
 export function createAdminAuditRows(getHost: () => Host): any {
-function adminAuditRows(   plan: AuditPlan,   req: IncomingMessage,   path: string,   before: { bot: Record<string, unknown> | null; botName?: string; hook?: WebhookTrigger; session?: ReturnType<typeof sessions.list>[number]; roomFloor?: unknown },   answered: unknown, ) {
+function adminAuditRows(   plan: AuditPlan,   req: IncomingMessage,   path: string,   before: { bot: Record<string, unknown> | null; botName?: string; hook?: WebhookTrigger; session?: ReturnType<typeof host.sessions.list>[number]; roomFloor?: unknown },   answered: unknown, ) {
   const host = getHost();
 
   const rows: Array<Omit<AdminActionRow, "at" | "actor">> = [];

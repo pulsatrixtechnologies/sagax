@@ -4,7 +4,7 @@ import { noteTurnReach, reachContributions, reachSummaryPrompt } from "../turns/
 export type Host = Record<string, any>;
 
 export function createTurnReachPrompt(getHost: () => Host): any {
-function turnReachPrompt(bot: BotRecord, instance: Parameters<typeof withholdHostToolsFor>[0] & { instanceId: string }, speaker: TurnSpeaker, threadId: string,   integrations: NonNullable<SendTurnInput["integrations"]>, computer: boolean) {
+function turnReachPrompt(bot: BotRecord, instance: Parameters<typeof host.withholdHostToolsFor>[0] & { instanceId: string }, speaker: TurnSpeaker, threadId: string,   integrations: NonNullable<SendTurnInput["integrations"]>, computer: boolean) {
   const host = getHost();
   const { claudeAiConnectorsForTurn } = host;
 

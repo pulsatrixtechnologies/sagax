@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** markTaskContextExternallyUpdated (#1388). Pure move from server/index.ts. */
+import { randomUUID } from "node:crypto";
 export type Host = Record<string, any>;
 
 export function createMarkTaskContextExternallyUpdated(getHost: () => Host): any {
@@ -23,7 +24,7 @@ function markTaskContextExternallyUpdated(bot: BotRecord, threadId: string, mark
   }
   host.store.patchTask(bot.id, threadId, {
     resumeCursors: {},
-    lastInstanceId: `${EXTERNAL_CONTEXT_MARKER_PREFIX}${randomUUID()}`,
+    lastInstanceId: `${host.EXTERNAL_CONTEXT_MARKER_PREFIX}${randomUUID()}`,
     ...(markUnread ? { unread: true } : {})
   });
 

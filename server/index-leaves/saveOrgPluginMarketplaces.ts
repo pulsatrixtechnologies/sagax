@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** saveOrgPluginMarketplaces (#1388). Pure move from server/index.ts. */
+import { normalizePolicyEntry } from "../bots/bot-plugins.ts";
 export type Host = Record<string, any>;
 
 export function createSaveOrgPluginMarketplaces(getHost: () => Host): any {

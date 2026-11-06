@@ -38,7 +38,7 @@ async function testCliBinary(
               ? host.describeSpawnFailure(e, cli).message
               : e.killed
               ? "CLI test timed out after 10s"
-              : `CLI exited with error ${String(e.code)}: ${(stderrOf(err) || "").slice(0, 200) || err.message.split("\n")[0]}`;
+              : `CLI exited with error ${String(e.code)}: ${(host.stderrOf(err) || "").slice(0, 200) || err.message.split("\n")[0]}`;
           resolve({ ok: false, message, ...(driver?.install && isSpawnError ? { install: driver.install } : {}) });
           return;
         }

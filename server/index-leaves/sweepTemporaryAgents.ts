@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** sweepTemporaryAgents (#1388). Pure move from server/index.ts. */
+import { temporaryExpired, temporaryPurgeDue } from "../temporary-agents.ts";
 export type Host = Record<string, any>;
 
 export function createSweepTemporaryAgents(getHost: () => Host): any {

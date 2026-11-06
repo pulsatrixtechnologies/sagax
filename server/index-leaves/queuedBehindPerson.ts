@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** queuedBehindPerson (#1388). Pure move from server/index.ts. */
+import { privateThreadOwner } from "../threads/thread-privacy.ts";
 export type Host = Record<string, any>;
 
 export function createQueuedBehindPerson(getHost: () => Host): any {

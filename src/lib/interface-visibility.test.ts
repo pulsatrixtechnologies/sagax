@@ -6,12 +6,13 @@ import {
 } from "./interface-visibility";
 
 describe("simple visibility", () => {
-  it("hides technical settings sections and keeps the ones a person needs", () => {
-    for (const id of ["experimental", "connections", "decisionModel", "engines", "computer", "mail", "activity", "backups", "workspaces", "people"] as const) {
+  // #2080 (L0): Simple hides no rail page but Experimental (the rest are old
+  // aliases); a page's technical cards fold under "Advanced" instead
+  it("hides Experimental and the old aliases, keeps every page of the rail", () => {
+    for (const id of ["experimental", "connections", "decisionModel", "mail", "activity", "workspaces", "people"] as const) {
       expect(simpleHidesSettingsSection(id), id).toBe(true);
     }
-    // 2026-10-15: Usage is the person's own plan and cost, shown in Simple too
-    for (const id of ["general", "appearance", "organization", "companion", "usage"] as const) {
+    for (const id of ["general", "appearance", "organization", "companion", "usage", "engines", "computer", "backups", "providers", "voice", "about"] as const) {
       expect(simpleHidesSettingsSection(id), id).toBe(false);
     }
   });

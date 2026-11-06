@@ -28,7 +28,10 @@ describe("settings links", () => {
     expect(settingsSectionLabel("credentials")).toBe("Vault");
     expect(settingsSectionLabel("pages")).toBe("Capabilities");
     expect(settingsSectionLabel("experimental")).toBe("Experimental");
-    expect(settingsSectionLabel("about")).toBe("About");
+    // #2080 (L0): About is the App page; Updates and Import live in App and Backups
+    expect(settingsSectionLabel("about")).toBe("App");
+    expect(settingsSectionLabel("updates")).toBe("App");
+    expect(settingsSectionLabel("import")).toBe("Backups and import");
     setLocale("fr");
     expect(settingsSectionLabel("engines")).toBe("Modèles");
     expect(settingsSectionLabel("voice")).toBe("Voix");
@@ -36,7 +39,7 @@ describe("settings links", () => {
     expect(settingsSectionLabel("credentials")).toBe("Coffre");
     expect(settingsSectionLabel("privacy")).toBe("Notifications");
     expect(settingsSectionLabel("memory")).toBe("Organisation");
-    expect(settingsSectionLabel("about")).toBe("À propos");
+    expect(settingsSectionLabel("about")).toBe("Application");
     setLocale("en");
   });
 

@@ -19,7 +19,7 @@ import { useStore } from "@/state/store";
 import { filterVaultItems, resolveVaultFilterTab, vaultTabCounts, type VaultFilterTab } from "@/lib/vault-filter";
 import { methodKey } from "../../../shared/payments-settings";
 import { VAULT_INJECTION_MODES, type VaultApiInjection, type VaultInjectionMode, type VaultItemKind } from "../../../shared/credential-vault";
-import { EditorBox, EditorField, FIELD, PILL, PillSelect, PRIMARY_PILL, SettingsGroup, SettingsIntro, SettingsNotice, SettingsTextRow, Switch, SwitchRow, peekRequestedSettingsCard } from "../SettingsPrimitives";
+import { EditorBox, EditorField, FIELD, PILL, PillSelect, PRIMARY_PILL, SettingsGroup, SettingsNotice, SettingsTextRow, Switch, SwitchRow, peekRequestedSettingsCard } from "../SettingsPrimitives";
 import { ExportPanel, ImportPanel, importOutcomeText } from "./CredentialsTransfer";
 import { PhoneCardScanButton, scannedCardFields } from "./PhoneCardScanButton";
 import { botLabel } from "@/lib/human-label";
@@ -158,7 +158,7 @@ export function CredentialsSettings() {
   if (!data) {
     return error
       ? <SettingsNotice tone="danger">{error}</SettingsNotice>
-      : <SettingsIntro>{t("vault.settings.loading")}</SettingsIntro>;
+      : <p role="status" className="px-1 text-[13px] leading-[18px] text-ink-secondary">{t("vault.settings.loading")}</p>;
   }
 
   const counts = vaultTabCounts({
@@ -176,7 +176,6 @@ export function CredentialsSettings() {
 
   return (
     <div className="flex min-w-0 flex-col gap-3" data-credentials-settings data-vault-tab={tab}>
-      <SettingsIntro>{t("vault.settings.intro")}</SettingsIntro>
       {data.unavailable && <SettingsNotice tone="danger">{t("vault.settings.unavailable")}</SettingsNotice>}
       {error && <SettingsNotice tone="danger">{error}</SettingsNotice>}
       <div className={CATEGORY_MODAL.chips} role="toolbar" aria-label={t("vault.payments.title")} data-vault-filters="">

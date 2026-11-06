@@ -1797,6 +1797,19 @@ body {
   .ui-button-primary:enabled:hover {
     background: color-mix(in srgb, var(--color-ink) 60%, transparent);
   }
+  /* #2080: under a red-family tint the accent reads as danger, so the one
+     primary action of a page stays ink, whatever a skin gives it. */
+  [data-skin-tint="red"] .ui-button-primary,
+  [data-skin-tint="pink"] .ui-button-primary,
+  [data-skin-tint="rose"] .ui-button-primary {
+    background: var(--color-ink);
+    color: var(--color-app);
+  }
+  [data-skin-tint="red"] .ui-button-primary:enabled:hover,
+  [data-skin-tint="pink"] .ui-button-primary:enabled:hover,
+  [data-skin-tint="rose"] .ui-button-primary:enabled:hover {
+    background: color-mix(in srgb, var(--color-ink) 60%, transparent);
+  }
   .ui-icon-button:enabled:hover {
     background: var(--color-hover);
     color: var(--color-ink);

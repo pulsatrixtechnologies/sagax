@@ -90,7 +90,8 @@ describe("Settings > Models and voice", () => {
     expect(sectionMatches(page, typed.trim().toLowerCase())).toBe(true);
   });
 
-  it.each(["voice", "voix", "ElevenLabs", "microphone", "live calls", "appels en direct", "moteur de voix"])("finds Voice by searching for %s", async (typed) => {
+  // #2080 (L0): one word, one page; ElevenLabs is a provider, found on Providers
+  it.each(["voice", "voix", "microphone", "live calls", "appels en direct", "moteur de voix"])("finds Voice by searching for %s", async (typed) => {
     const { SECTIONS, sectionMatches } = await import("./SettingsModal");
     const page = SECTIONS.find((entry) => entry.id === "voice")!;
     expect(sectionMatches(page, typed.trim().toLowerCase())).toBe(true);
@@ -102,7 +103,12 @@ describe("Settings > Models and voice", () => {
     const models = SECTIONS.find((entry) => entry.id === "engines")!;
     const voice = SECTIONS.find((entry) => entry.id === "voice")!;
     const usage = SECTIONS.find((entry) => entry.id === "usage")!;
-    for (const typed of ["modèle auto", "fournisseur d'images", "recherche web"]) expect(sectionMatches(models, typed), typed).toBe(true);
+    expect(sectionMatches(models, "modèle auto")).toBe(true);
+    // #2080 (L0): image and web search providers are found on Providers only
+    for (const typed of ["fournisseur d'images", "recherche web"]) {
+      expect(sectionMatches(SECTIONS.find((entry) => entry.id === "providers")!, typed), typed).toBe(true);
+      expect(sectionMatches(models, typed), typed).toBe(false);
+    }
     expect(sectionMatches(SECTIONS.find((entry) => entry.id === "providers")!, "à configurer")).toBe(true);
     for (const typed of ["moteur de voix", "appels en direct", "micro"]) {
       expect(sectionMatches(voice, typed), typed).toBe(true);

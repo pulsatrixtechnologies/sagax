@@ -15,7 +15,7 @@ import { useUpdaterState } from "@/lib/updater";
 import { openUpdatePrompt, requestUpdateCheck } from "@/lib/update-prompt";
 import { DecisionModelSettings } from "./DecisionModelSettings";
 import { GeneralAdvancedSettings, generalAdvancedShown, isSoloDesktop } from "./settings/AdvancedSettings";
-import { CompactRow, PillSelect, type PillOption, SettingRow, SettingsGroup, Switch } from "./SettingsPrimitives";
+import { CompactRow, GROUP_CARD, LinkRow, PillSelect, type PillOption, SettingRow, SettingsAdvancedScope, SettingsGroup, Switch } from "./SettingsPrimitives";
 import { OrganizationSettings } from "./OrganizationSettings";
 import { OrgMemorySettings } from "./OrgMemorySettings";
 import { NotificationSettings } from "./NotificationSettings";
@@ -263,7 +263,7 @@ export function SettingsModal() {
     state, dispatch, advanced, retroSkin, remoteActive, dialogRef, paneRef,
     searchLabels, closeSettings, openAbout, query, setQuery, q, editConfig,
     lockedServer, allowed, memoryShown, availableSections, section, visibleSections,
-    pagesHit, sectionLabelKey, subPageId, subPage, openSubPage, closeSubPage,
+    pagesHit, sectionLabelKey, sectionIntroKey, subPageId, subPage, openSubPage, closeSubPage,
   } = useSettingsModal();
 
   return (
@@ -313,9 +313,9 @@ export function SettingsModal() {
               groups its own (you, AI, the workspace, this app last). A
               heading shows while one of its entries does, a search too. */}
           {NAV_GROUPS.map((group) => {
-            // 2026-11-02 (JC): About is not a row of this menu; it opens from
-            // the app menu and the sidebar, and a search still finds it.
-            const entries = visibleSections.filter((entry) => entry.group === group.id && entry.id !== "about");
+            // #2080 (L0): App (id "about") is a page of the rail; the About
+            // window still opens from the app menu, the sidebar and that page.
+            const entries = visibleSections.filter((entry) => entry.group === group.id);
             if (entries.length === 0) return null;
             const headingId = `app-settings-nav-${group.id}`;
             return (
@@ -326,7 +326,7 @@ export function SettingsModal() {
                 {entries.map(({ id, labelKey, icon: Icon }) => (
                   <div key={id} className="flex min-w-0 flex-col">
                     <button
-                      onClick={() => (id === "about" ? openAbout() : dispatch({ type: "toggleAppSettings", open: true, section: id }))}
+                      onClick={() => dispatch({ type: "toggleAppSettings", open: true, section: id })}
                       aria-current={section === id ? "page" : undefined}
                       className={cn(
                         "flex items-center gap-[9px] rounded-lg px-[9px] py-[7px] text-left text-[13px] leading-[18px] text-ink transition-colors motion-reduce:transition-none",
@@ -390,13 +390,12 @@ export function SettingsModal() {
               onChange={(event) => {
                 setQuery("");
                 const next = event.target.value as AppSettingsSection;
-                if (next === "about") openAbout();
-                else dispatch({ type: "toggleAppSettings", open: true, section: next });
+                dispatch({ type: "toggleAppSettings", open: true, section: next });
               }}
               className="w-full min-w-0 rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink focus:border-border-strong focus:outline-none sm:hidden"
             >
               {NAV_GROUPS.map((group) => {
-                const entries = availableSections.filter((entry) => entry.group === group.id && entry.id !== "about");
+                const entries = availableSections.filter((entry) => entry.group === group.id);
                 return entries.length === 0 ? null : (
                   <optgroup key={group.id} label={t(group.labelKey)}>
                     {entries.map(({ id, labelKey }) => (
@@ -419,10 +418,18 @@ export function SettingsModal() {
             </SettingsSubPage>
           ) : (
           <div ref={paneRef} data-settings-pane="" className="flex flex-1 flex-col overflow-y-auto">
-            <h2 className="hidden px-8 pb-1 pt-6 text-[17px] font-semibold leading-6 tracking-[-0.008em] text-ink sm:block">
-              {sectionLabelKey ? t(sectionLabelKey) : null}
-            </h2>
+            {/* #2080: the page title at 20px and, under it, the page's one
+                sentence (introKey), on every page; the pages draw no intro. */}
+            <div data-settings-page-header="" className="px-4 pt-2 sm:px-8 sm:pt-6">
+              <h2 className="hidden text-[20px] font-semibold leading-7 tracking-[-0.012em] text-ink sm:block">
+                {sectionLabelKey ? t(sectionLabelKey) : null}
+              </h2>
+              {sectionIntroKey && (
+                <p data-settings-intro="" className="mt-0.5 text-[13px] leading-[18px] text-ink-secondary">{t(sectionIntroKey)}</p>
+              )}
+            </div>
             <div className="flex flex-col gap-3 px-4 pb-6 pt-4 sm:px-8">
+            <SettingsAdvancedScope key={section} pageId={section} fold={!advanced} searching={Boolean(q)}>
             {/* 0.5.6: the reference design's layout (OrganizationSettings): grey
                 headings over cards of rows. Memory and, from General >
                 Advanced (2026-10-15), routines in the conversation, group
@@ -511,15 +518,24 @@ export function SettingsModal() {
               </div>
             )}
 
-            {section === "updates" && (
-              <div data-settings-card="updates">
-                {/* 2026-10-16: a titled card, as every other page's */}
-                <SettingsGroup title={t("settings.updates.group")} groupId="updates">
-                  <UpdatesRow />
-                  <PrereleaseRow />
-                  <AutoInstallAwayRow />
-                </SettingsGroup>
-              </div>
+            {/* App (id "about", #2080): the version and updates first (the
+                former Updates page, where the desktop app answers), then the
+                About window (version, license, documentation). */}
+            {section === "about" && (
+              <>
+                {window.ogb?.updater && (
+                  <div data-settings-card="about.updates">
+                    <SettingsGroup title={t("settings.updates.group")} groupId="updates">
+                      <UpdatesRow />
+                      <PrereleaseRow />
+                      <AutoInstallAwayRow />
+                    </SettingsGroup>
+                  </div>
+                )}
+                <div data-settings-card="about.about" className={GROUP_CARD}>
+                  <LinkRow rowId="about" label={t("settings.app.openAbout")} onClick={openAbout} />
+                </div>
+              </>
             )}
 
             {section === "appearance" && <AppearanceSettings />}
@@ -541,14 +557,22 @@ export function SettingsModal() {
             {/* Voice (2026-10-28, out of Models and voice) */}
             {section === "voice" && <VoiceSettingsPage />}
 
-            {section === "backups" && <WorkspaceBackupSettings />}
-            {section === "import" && <ImportSettings />}
+            {/* Backups and import (#2080): Import is a card of this page. */}
+            {section === "backups" && (
+              <>
+                <WorkspaceBackupSettings />
+                <div data-settings-card="backups.import">
+                  <ImportSettings />
+                </div>
+              </>
+            )}
 
             {section === "computer" && <LocalComputerSection />}
 
             {section === "usage" && <UsageSection />}
             {/* Privacy (2026-10-14): a group of Notifications on an organization server. */}
             {section === "notifications" && <NotificationSettings privacy={allowed("privacy")} />}
+            </SettingsAdvancedScope>
             </div>
           </div>
           )}

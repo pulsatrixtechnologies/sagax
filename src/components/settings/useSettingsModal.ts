@@ -42,7 +42,7 @@ export function useSettingsModal() {
   // 2026-10-14, so it lands on Appearance.
   const current = currentSettingsSection(state.appSettingsSection);
   const requested: AppSettingsSection =
-    remoteActive && current !== "appearance" && current !== "organization" && current !== "notifications" && current !== "updates"
+    remoteActive && current !== "appearance" && current !== "organization" && current !== "notifications" && current !== "about"
       ? "appearance"
       : current;
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -76,8 +76,6 @@ export function useSettingsModal() {
   const allowed = (id: AppSettingsSection): boolean => {
     // a remote client shows the pages that are about this desktop
     if (remoteActive && !["appearance", "organization", "privacy", "notifications", "memory", "updates", "about"].includes(id)) return false;
-    // this app's own updates: where the desktop app answers
-    if (id === "updates" && !window.ogb?.updater) return false;
     // the organization memory's local cache is the desktop app's (main
     // process), set up by itself on an organization server signed in with
     // Perspicax: nothing to show anywhere else
@@ -131,6 +129,8 @@ export function useSettingsModal() {
   const visibleSections = availableSections.filter((entry) => sectionMatches(entry, q, soloDesktop && entry.id === "account" ? ORGANIZATION_ADVANCED_KEYWORDS : []));
   const pagesHit = Boolean(q) && publishedPagesMatch(q);
   const sectionLabelKey = SECTIONS.find((entry) => entry.id === section)?.labelKey;
+  // #2080: every page has its one sentence under the title, drawn by the modal.
+  const sectionIntroKey = SECTIONS.find((entry) => entry.id === section)?.introKey;
   const subPageId = state.appSettingsSubPage;
   const subPage = subPageId && SUB_PAGES[subPageId]?.section === section ? SUB_PAGES[subPageId] : null;
   const openSubPage = (id: string) => dispatch({ type: "toggleAppSettings", open: true, section: SUB_PAGES[id].section, subPage: id });
@@ -161,12 +161,6 @@ export function useSettingsModal() {
     // rendered results instead of a second filter with stale effect inputs.
     if (nextVisibleSection) dispatch({ type: "toggleAppSettings", open: true, section: nextVisibleSection });
   }, [dispatch, nextVisibleSection]);
-
-  // About is a Settings rail entry that opens the centred modal (not a pane).
-  useEffect(() => {
-    if (!state.appSettingsOpen || section !== "about") return;
-    openAbout();
-  }, [state.appSettingsOpen, section, openAbout]);
 
   // The open page hides the rows that do not match and scrolls to the first
   // one. A disclosure that opens later is filtered again, without jumping.
@@ -266,6 +260,7 @@ export function useSettingsModal() {
     visibleSections,
     pagesHit,
     sectionLabelKey,
+    sectionIntroKey,
     subPageId,
     subPage,
     openSubPage,

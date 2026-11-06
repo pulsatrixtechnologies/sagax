@@ -102,8 +102,14 @@ describe("Settings search", () => {
   it("finds the moved rows in French and English", async () => {
     const { SECTIONS, sectionMatches, cardsMatching } = await import("./SettingsModal");
     const section = (id: string) => SECTIONS.find((entry) => entry.id === id)!;
-    for (const query of ["accès complet", "full access", "approbations", "invitation", "cet ordinateur"]) expect(sectionMatches(section("organization"), query), query).toBe(true);
-    for (const query of ["sauvegarde", "restaurer", "mot de passe"]) expect(sectionMatches(section("backups"), query), query).toBe(true);
+    for (const query of ["accès complet", "full access", "invitation"]) expect(sectionMatches(section("organization"), query), query).toBe(true);
+    expect(sectionMatches(section("computer"), "cet ordinateur")).toBe(true);
+    // #2080 (L0): one word, one page; approvals are found on Security
+    expect(sectionMatches(section("security"), "approbations")).toBe(true);
+    expect(sectionMatches(section("organization"), "approbations")).toBe(false);
+    for (const query of ["sauvegarde", "restaurer"]) expect(sectionMatches(section("backups"), query), query).toBe(true);
+    // #2080 (L0): one word, one page; a password is found on the Vault
+    expect(sectionMatches(section("credentials"), "mot de passe")).toBe(true);
     for (const query of ["nettoyage", "journaux", "diagnostic"]) expect(sectionMatches(section("account"), query), query).toBe(true);
     // 2026-10-26: no Full access card any more
     expect(cardsMatching("accès complet")).not.toContain("organization.fullAccess");

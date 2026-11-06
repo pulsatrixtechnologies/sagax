@@ -22,7 +22,7 @@ import { api } from "@/state/store";
 import type { LocaleKey } from "@/locales";
 import { STEP_UP_CLASSES, type SecurityKeysState, type StepUpClass } from "../../shared/step-up";
 import { cn } from "@/lib/cn";
-import { DescribedRow, FIELD, PILL, PRIMARY_PILL, SettingsGroup, SettingsIntro, SettingsNotice, SettingsTextRow, Switch } from "./SettingsPrimitives";
+import { DescribedRow, FIELD, PILL, PRIMARY_PILL, SettingsGroup, SettingsNotice, SettingsTextRow, Switch } from "./SettingsPrimitives";
 import { readableError } from "@/lib/plain-error";
 
 const CLASS_LABEL: Record<StepUpClass, LocaleKey> = {
@@ -149,7 +149,6 @@ export function SecurityKeySettings() {
 
   return (
     <div className="flex min-w-0 flex-col gap-3" data-settings-card="security">
-      <SettingsIntro>{t("security.intro")}</SettingsIntro>
       {error && <SettingsNotice tone="danger">{error}</SettingsNotice>}
       {state?.unreadable && <SettingsNotice tone="danger">{t("security.unreadable")}</SettingsNotice>}
       {notice && <SettingsNotice tone="success">{notice}</SettingsNotice>}

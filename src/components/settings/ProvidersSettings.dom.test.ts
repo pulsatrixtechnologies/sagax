@@ -95,10 +95,11 @@ describe("providerAction: one action per row", () => {
 });
 
 describe("Settings > Providers, solo", () => {
-  it("draws the intro, the list, Other services (web search, image generation) and the Advanced fold, no organization band", async () => {
+  it("draws the list, Other services (web search, image generation) and the Advanced fold, no organization band", async () => {
     fixture.instances = [instance("mistral", "mistral", "Mistral")];
     await render();
-    expect(host.querySelector("[data-settings-intro]")?.textContent).toContain("Where models and services come from");
+    // #2080 (L0): the page header draws the intro, not the page
+    expect(host.querySelector("[data-settings-intro]")).toBeNull();
     expect(host.querySelector("[data-providers-org-band]")).toBeNull();
     expect(host.querySelector('[data-settings-card="providers.list"]')).not.toBeNull();
     const services = host.querySelector('[data-settings-card="providers.services"]')!;

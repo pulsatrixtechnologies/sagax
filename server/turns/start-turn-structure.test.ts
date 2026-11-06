@@ -21,6 +21,19 @@ describe("startTurn leaf modules (#1388 w4 step 3)", () => {
     expect(src).not.toMatch(/from ["'].*\/index\.ts["']/);
   });
 
+  it("defers the Connectors card bots save past dispatched (#1950 leftover on #1971)", () => {
+    const prompt = readFileSync(join(here, "start-turn-prompt.ts"), "utf8");
+    const dispatch = readFileSync(join(here, "start-turn-dispatch.ts"), "utf8");
+    expect(prompt).not.toMatch(/connectors:\s*turnConnectorsFor/);
+    expect(prompt).not.toMatch(/connectors-patched/);
+    expect(dispatch).toMatch(/deferConnectorsPatch\(/);
+    expect(dispatch).toMatch(/connectors-patched/);
+    const dispatchedAt = dispatch.indexOf('turnTrace(state.threadId, "dispatched")');
+    const deferAt = dispatch.indexOf("deferConnectorsPatch(");
+    expect(dispatchedAt).toBeGreaterThan(-1);
+    expect(deferAt).toBeGreaterThan(dispatchedAt);
+  });
+
   it("starts Perspicax prepare beside compact and awaits it before mounts (#1955)", () => {
     const setup = readFileSync(join(here, "start-turn-setup.ts"), "utf8");
     expect(setup).toMatch(/perspicaxTurnPrepare\(/);

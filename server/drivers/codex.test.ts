@@ -1298,10 +1298,15 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     const seen = JSON.parse(readFileSync(dump, "utf8"));
     const argv = seen.argv.join(" ");
     expect(argv).toContain("mcp_servers.notes.command");
-    // env value stays in the child env; argv carries names only
-    expect(argv).toContain("NOTES_TOKEN");
+    // #2189: agents is mounted, so notes goes through the gate (withhold of agents' bare names).
+    // The token stays in the gate record, never on argv.
+    expect(argv).toContain("SAGAX_GATE_CONFIG_");
+    expect(argv).toContain("mcp-gate.ts");
     expect(argv).not.toContain("tok-notes");
-    expect(seen.env.NOTES_TOKEN).toBe("tok-notes");
+    expect(argv).not.toContain("NOTES_TOKEN");
+    const gateKey = Object.keys(seen.env).find((name) => name.startsWith("SAGAX_GATE_CONFIG_"));
+    expect(gateKey).toBeTruthy();
+    expect(JSON.parse(JSON.parse(seen.env[gateKey!]).SAGAX_GATE_UPSTREAM).env.NOTES_TOKEN).toBe("tok-notes");
   });
 
   it("mounts a custom server under its own name when the user's config.toml already has one by that name", async () => {
@@ -1523,10 +1528,12 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(await recorder.until((event) => event.type === "turn.completed")).toMatchObject({ ok: true });
     const seen = JSON.parse(readFileSync(dump, "utf8"));
     expect(seen.argv).toContain("features.shell_snapshot=false");
+    // #2189: agents is mounted, so custom notes and the URL docs server both go through the gate;
+    // their secrets (GITHUB_PERSONAL_ACCESS_TOKEN, OVERRIDDEN, docs Authorization) stay inside
+    // SAGAX_GATE_CONFIG_* records and never appear as separate shell exclusions.
     expect(seen.calls.find((call: { method: string }) => call.method === "thread/start").params.config["shell_environment_policy.exclude"]).toEqual([
-      "USER_SECRET_*", "SAGAX_REMOTE_MCP_CONFIG_*",
-      // sorted: the Sagax names sort after OVERRIDDEN (upstream's SAGAX_ names sorted before it)
-      "ELECTRON_RUN_AS_NODE", "GITHUB_PERSONAL_ACCESS_TOKEN", "OVERRIDDEN", "SAGAX_COMMS_TOKEN", "SAGAX_COMMS_TOKEN_FILE",
+      "USER_SECRET_*", "SAGAX_GATE_CONFIG_*",
+      "ELECTRON_RUN_AS_NODE", "SAGAX_COMMS_TOKEN", "SAGAX_COMMS_TOKEN_FILE",
       // the agents mount asks for the tools merged by family (#1604)
       "SAGAX_MERGED_TOOLS", "SAGAX_PHONE_TOKEN",
     ]);

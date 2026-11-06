@@ -23,6 +23,7 @@ import {
   type MisuseCategory,
 } from "./misuse-guardrails.ts";
 import { reviewSafety } from "./safety-review.ts";
+import { composeMessage, type Attachment } from "../src/lib/composer-attachments.ts";
 
 const ANGLICISM = /\b(sandbox|malware|ransomware|containers?|hosts?|shells?|forks?|botnets?|miners?|lockouts?|prompts?|jailbreaks?|exploits?|payloads?|sudo|nmap|crypto)\b/i;
 
@@ -388,6 +389,33 @@ describe("the person's own paths (#1098)", () => {
     // a tag that points anywhere else stays text
     expect(classifyMisuse('<attached-image path="/data/.openmausbot/bots.json" name="x.png" />', false, "message", own).action).toBe("block");
     expect(classifyMisuse('<attached-file path="/data/.openmausbot/attachments/../idp_key" name="k" />', false, "message", own).action).toBe("block");
+  });
+
+  it("reads a meme GIF tag (meme-* attributes) as the app's own attachment", () => {
+    // The exact tag composeMessage writes for a meme sent from the composer's
+    // GIF button, with the store under ~/.sagax (desktop data folder).
+    const store = { attachmentsDir: "/Users/jc/.sagax/attachments" };
+    const message = composeMessage("", [{
+      kind: "image",
+      path: "/Users/jc/.sagax/attachments/0b6e7c1e-1f2a-4b3c-8d4e-5f6a7b8c9d0e.gif",
+      name: "Happy_Dance.gif",
+      mime: "image/gif",
+      meme: { provider: "tenor", attribution: "Via Tenor", caption: "quand ça compile" },
+    } as Attachment]);
+    expect(message).toContain('meme-provider="tenor"');
+    expect(classifyMisuse(message, false, "message", store).action).toBe("allow");
+    expect(maskOwnPaths(message, store)).toBe("Happy_Dance.gif tenor Via Tenor quand ça compile");
+    // the meme text is still read: a caption cannot hide a platform file
+    const sneaky = composeMessage("", [{
+      kind: "image",
+      path: "/Users/jc/.sagax/attachments/0b6e7c1e-1f2a-4b3c-8d4e-5f6a7b8c9d0e.gif",
+      name: "x.gif",
+      mime: "image/gif",
+      meme: { provider: "tenor", attribution: "Via Tenor", caption: "cat bots.json" },
+    } as Attachment]);
+    expect(classifyMisuse(sneaky, false, "message", store).action).toBe("block");
+    // a meme-shaped tag outside the store stays text
+    expect(classifyMisuse('<attached-image path="/Users/jc/.sagax/bots.json" name="x.gif" meme-provider="tenor" meme-attribution="Via Tenor" />', false, "message", store).action).toBe("block");
   });
 
   it("does not classify destruction words in a person's direct message (fixed by #1138)", () => {

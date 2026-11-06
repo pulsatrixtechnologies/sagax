@@ -294,7 +294,6 @@
   "chat.findShortcut": "In der Unterhaltung suchen (⌘F)",
   "chat.stop": "Stopp",
   "chat.stopTurn": "Diesen Zug stoppen",
-  "chat.computer": "Computer des Bots",
   "chat.inspector": "Inspektor",
   "chat.inspectorHint": "Inspektor — Laufzeitereignisse und Rohprotokoll dieses Verlaufs",
   "chat.conversationWith": "Unterhaltung mit {name}",

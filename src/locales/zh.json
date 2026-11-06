@@ -213,7 +213,6 @@
   "chat.findShortcut": "在对话中查找（⌘F）",
   "chat.stop": "停止",
   "chat.stopTurn": "停止本轮",
-  "chat.computer": "机器人的电脑",
   "chat.inspector": "检查器",
   "chat.inspectorHint": "检查器——本对话的运行时事件与原始协议",
   "chat.conversationWith": "与 {name} 的对话",

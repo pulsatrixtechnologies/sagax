@@ -213,7 +213,6 @@
   "chat.findShortcut": "बातचीत में खोजें (⌘F)",
   "chat.stop": "रोकें",
   "chat.stopTurn": "यह बारी रोकें",
-  "chat.computer": "बॉट का कंप्यूटर",
   "chat.inspector": "इंस्पेक्टर",
   "chat.inspectorHint": "इंस्पेक्टर — इस बातचीत के रनटाइम इवेंट और कच्चा प्रोटोकॉल",
   "chat.conversationWith": "{name} के साथ बातचीत",

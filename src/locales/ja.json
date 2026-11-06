@@ -213,7 +213,6 @@
   "chat.findShortcut": "会話内を検索（⌘F）",
   "chat.stop": "停止",
   "chat.stopTurn": "このターンを停止",
-  "chat.computer": "ボットのコンピューター",
   "chat.inspector": "インスペクター",
   "chat.inspectorHint": "インスペクター — このスレッドの実行イベントと生のプロトコル",
   "chat.conversationWith": "{name} との会話",

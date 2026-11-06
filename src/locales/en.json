@@ -1841,7 +1841,6 @@
   "chat.cloudGuest.notYours": "You can only write in conversations you started on this Cloud.",
   "chat.compactionHint": "Your full conversation is still here. The agent uses this summary and recent messages when continuing.",
   "chat.compactionTitle": "Earlier context summarized",
-  "chat.computer": "Bot's computer",
   "chat.computerStarting": "Starting {name}'s cloud computer. The first start takes about a minute.",
   "chat.computerWaking": "Waking {name}'s cloud computer…",
   "chat.conversationWith": "Conversation with {name}",

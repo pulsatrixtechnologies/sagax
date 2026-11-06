@@ -59,7 +59,8 @@ export interface InstalledAccounts {
 type InstalledLine =
   | { kind: "entry"; key: string; entry: InstalledEntry }
   | { kind: "account"; key: string; row: AccountConnectorRow }
-  | { kind: "notice"; key: string; group: HarnessConnectorGroup };
+  | { kind: "notice"; key: string; group: HarnessConnectorGroup }
+  | { kind: "custom"; key: string; node: ReactNode };
 
 export interface InstalledViewProps {
   entries: InstalledEntry[];
@@ -79,6 +80,8 @@ export interface InstalledViewProps {
   /** the person's own MCP servers and Claude Code (AccountsView): a section
    * after the entries and the skills */
   providers?: ReactNode;
+  /** rows listed with the installed ones (Me: the person's own MCP servers) */
+  personal?: ReadonlyArray<{ key: string; node: ReactNode }>;
   /** the engine accounts' connectors, folded into the Installed list */
   accounts?: InstalledAccounts;
   /** a bot's scope: its organization Flow and Perspicax Roles, from the
@@ -159,7 +162,7 @@ function EmptyLine({ children, action }: { children: ReactNode; action?: ReactNo
   );
 }
 
-export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, add = [], forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization, onRemoveSuperseded, removingSuperseded = null, macApps, addInTitle = false, organizationAdmin, accounts }: InstalledViewProps) {
+export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, add = [], forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization, onRemoveSuperseded, removingSuperseded = null, macApps, addInTitle = false, organizationAdmin, accounts, personal = [] }: InstalledViewProps) {
   const [all, setAll] = useState(false);
   // connected account rows first, then the notices, the ones to finish, the unverifiable
   const accountLines: InstalledLine[] = (accounts?.sections ?? []).flatMap(({ group, rows }) => [
@@ -168,12 +171,14 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
   ]).sort((a, b) => lineRank(a) - lineRank(b));
   const lines: InstalledLine[] = [
     ...(resolved === undefined ? entries.map((entry) => ({ kind: "entry" as const, key: entry.key, entry })) : []),
+    ...personal.map((row) => ({ kind: "custom" as const, key: `personal:${row.key}`, node: row.node })),
     ...accountLines,
   ];
   const shownLines = all ? lines : lines.slice(0, INSTALLED_PREVIEW);
   const accountRowCount = accountLines.filter((line) => line.kind === "account").length;
   const renderLine = (line: InstalledLine) => {
     if (line.kind === "entry") return <InstalledRow entry={line.entry} onOpen={() => onOpenEntry(line.entry)} actions={entryActions(line.entry)} />;
+    if (line.kind === "custom") return line.node;
     if (line.kind === "notice") return <AccountNoticeRow group={line.group} refreshing={accounts?.refreshing} onRefresh={accounts?.onRefresh} onSetUp={accounts?.onSetUp} />;
     return <AccountInstalledRow row={line.row} onOpen={accounts?.onOpen?.(line.row)} />;
   };
@@ -209,7 +214,7 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
             {remove ?? <EntryMenu name={capabilityName(item)} actions={entryActions(entry)} updateWaiting={entry.updateAvailable} />}
           </>;
         }} />}
-      {resolved === undefined && entries.length === 0 && accountRowCount === 0 && skills.length === 0 && organization.length === 0 && !loading && (
+      {resolved === undefined && entries.length === 0 && personal.length === 0 && accountRowCount === 0 && skills.length === 0 && organization.length === 0 && !loading && (
         <EmptyLine action={onDiscover ? (
           <button type="button" data-plugins-go-discover onClick={onDiscover} className="text-[12.5px] font-medium text-accent-text hover:underline">{t("connectApps.manage.tab.discover")}</button>
         ) : undefined}>
@@ -324,7 +329,7 @@ export function AccountInstalledRow({ row, onOpen }: { row: AccountConnectorRow;
   );
 }
 
-function EntryMenu({ name, actions, updateWaiting, hoverOnly = false }: { name: string; actions: EntryActions; updateWaiting: boolean; hoverOnly?: boolean }) {
+export function EntryMenu({ name, actions, updateWaiting, hoverOnly = false }: { name: string; actions: EntryActions; updateWaiting: boolean; hoverOnly?: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {

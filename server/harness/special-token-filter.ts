@@ -1,6 +1,6 @@
 // Chat-template control tokens (`<|eos|>`, `<|im_end|>`, `</s>`...) a model
 // wrote as text, taken out of every engine's reply where all of them meet:
-// the event bus. #2350 cleaned the OpenAI-compatible driver only; a Grok bot
+// the event bus. #2350 cleaned the OpenAI-compatible driver only; a bot
 // on another engine still posted a bubble that read "<|eos|>" (2026-11-06),
 // and so did its bot to bot messages. A reply that is nothing but tokens is
 // no reply: its item.completed is dropped, so no bubble, notification or

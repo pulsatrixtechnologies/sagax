@@ -27,7 +27,7 @@ interface ChatRequest {
     reasoning_content?: string;
     reasoning_details?: unknown[];
     tool_call_id?: string;
-    tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }>;
+    tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string }; extra_content?: Record<string, unknown> }>;
   }>;
   tools?: Array<{ type: string; function: { name: string; parameters: unknown } }>;
 }
@@ -1325,6 +1325,25 @@ describe("structured tool execution boundaries", () => {
     const pending = f.recorder.events.find((event) => event.type === "request.opened");
     if (pending) expect(await f.instance.adapter.respondToRequest(f.threadId, pending.requestId!, { behavior: "allow" })).toBe("unavailable");
     expect(f.recorder.events.filter((event) => event.type === "turn.completed")).toHaveLength(1);
+  });
+});
+
+describe("a provider that streams Gemini thought signatures", () => {
+  it("sends Gemini's thought signature back with its call on the next round", async () => {
+    const signed = { google: { thought_signature: "c2lnbmF0dXJl" } };
+    const f = await fixture((_body, response, round) => {
+      if (round === 1) sse(response, [chunk({ tool_calls: [
+        { ...toolCall("audit_write", '{"name":"first","value":"done"}', "function-call-1"), extra_content: signed },
+      ] }, "tool_calls")]);
+      else answer(response);
+    });
+    await f.start();
+    await f.decide();
+    expect(await f.completed()).toMatchObject({ ok: true });
+    const replayed = f.requests[1].messages.find((message) => message.role === "assistant");
+    expect(replayed?.tool_calls).toEqual([
+      { id: "function-call-1", type: "function", function: { name: "audit_write", arguments: '{"name":"first","value":"done"}' }, extra_content: signed },
+    ]);
   });
 });
 

@@ -396,7 +396,6 @@ export function SettingsModal() {
                       onOpen={() => openSubPage("general.aboutMe")}
                     />
                   )}
-                  <LinkedGrokBotSettings />
                 </SettingsGroup>
                 <SettingsGroup title={t("settings.group.languageRegion")} groupId="languageRegion">
                   <LanguageRow />
@@ -465,7 +464,13 @@ export function SettingsModal() {
             {section === "experimental" && <ExperimentalSettings />}
 
             {/* Providers (2026-10-30) */}
-            {section === "providers" && <ProvidersSettings />}
+            {section === "providers" && (
+              <>
+                <ProvidersSettings />
+                {/* Linked Grok is a provider link, not identity (JC 2026-11-06). */}
+                <LinkedGrokBotSettings />
+              </>
+            )}
 
             {section === "engines" && (
               <div className="flex min-w-0 flex-col gap-6">

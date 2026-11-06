@@ -130,8 +130,6 @@ describe("bot chat header, like Grok Bot (#2141)", () => {
     return renderToStaticMarkup(createElement(BotChatHeader, {
       name: "Pepper",
       label: "Research",
-      audience: "Private",
-      shared: false,
       panelOpen: false,
       onToggle: () => {},
       avatar: createElement("span", { "data-test-avatar": "" }),
@@ -139,14 +137,12 @@ describe("bot chat header, like Grok Bot (#2141)", () => {
     }));
   }
 
-  it("shows the name pill, then who sees it, then the gear", () => {
+  it("shows only the name pill: no sharing pill, no gear (JC 2026-11-06)", () => {
     const html = header();
-    const pill = html.indexOf("data-bot-header-pill");
-    const audience = html.indexOf("data-bot-header-audience");
-    const gear = html.indexOf("data-bot-header-gear");
-    expect(pill).toBeGreaterThan(-1);
-    expect(pill).toBeLessThan(audience);
-    expect(audience).toBeLessThan(gear);
+    expect(html).toContain("data-bot-header-pill");
+    expect(html).not.toContain("data-bot-header-audience");
+    expect(html).not.toContain("data-bot-header-gear");
+    expect(html).not.toContain("Shared with");
     expect(html).toContain("Pepper");
     expect(html).toContain(" · Research");
     expect(html).toContain("text-[14px] font-normal");
@@ -157,8 +153,8 @@ describe("bot chat header, like Grok Bot (#2141)", () => {
     expect(header({ label: "  " })).not.toContain("data-bot-header-label");
   });
 
-  it("says the gear state for the panel", () => {
-    expect(header()).toContain('aria-pressed="false"');
-    expect(header({ panelOpen: true })).toContain('aria-pressed="true"');
+  it("says the panel state on the name pill", () => {
+    expect(header()).toContain('aria-expanded="false"');
+    expect(header({ panelOpen: true })).toContain('aria-expanded="true"');
   });
 });

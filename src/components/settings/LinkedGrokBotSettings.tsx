@@ -1,4 +1,4 @@
-// Settings > Account > Linked Grok (#2193): the person's own webhook URL
+// Settings > Providers > Linked Grok (#2193, moved from Account 2026-11-06): the person's own webhook URL
 // and sealed key. Their Sagax bots reach only this link. Never shows the key
 // after save. Test sends a signed envelope. Phone opt-ins for owner call/text.
 import { useCallback, useEffect, useState } from "react";

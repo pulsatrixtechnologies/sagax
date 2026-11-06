@@ -32,6 +32,7 @@ import { callTool, capResult, toolCallContextFromEnv } from "./agents-call.ts";
 import { perspicaxToolElsewhere } from "./agents-tools/perspicax.ts";
 import { harnessClientFromEnv, type Json } from "./agents-client.ts";
 import { auditSampleFromEnv, deniedResourcesFromEnv, guardToolCall, learnCreatedBot, permissionModeFromEnv, principalFromEnv, scopeOwnersFromEnv } from "../mcp/mcp-permissions.ts";
+import { resolvedServerLog } from "../mcp/agents-tool-priority.ts";
 
 const PROFILE = catalogProfileFromEnv(process.env);
 const AVAILABLE_TOOLS = availableTools(PROFILE);
@@ -202,6 +203,7 @@ async function handle(msg: Json) {
         return rpcErr(id, -32602, `Unknown tool: ${name}`);
       }
       try {
+        process.stderr.write(resolvedServerLog("agents", name));
         const { text, isError, passthrough } = await guardToolCall(GUARD, name, args, () => callTool(name, args, CONTEXT)) as Awaited<ReturnType<typeof callTool>>;
         // 2026-10-27 (#1098): a bot the person just created is theirs for
         // the rest of this process (its spawn list predates it)

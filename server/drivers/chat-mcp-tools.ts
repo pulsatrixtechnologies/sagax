@@ -15,6 +15,7 @@ import { CALL_TOOL, bm25Ranker, directoryCallTarget, inputSignature, isDirectory
 import { mcpStdioServer } from "../mcp/mcp-gate-config.ts";
 import { REMOTE_MCP_STARTUP_MS, remoteMcpSpec } from "../mcp/mcp-http.ts";
 import { compileToolSchema } from "../mcp/mcp-schema-validator.ts";
+import { agentsPreferredToolNames, filterToolsPreferringAgents, resolvedServerLog } from "../mcp/agents-tool-priority.ts";
 import { allowsTool, canUseMcpServer, parseToolScope, type ToolScope } from "../../shared/tool-scope.ts";
 import { openApiWriteToolNames } from "../mcp/openapi-tools.ts";
 
@@ -439,13 +440,21 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
   const catalogs = new Map<string, CatalogMount>();
   const includeTool = (server: string, tool: unknown) => scope === undefined || (object(tool) && typeof tool.name === "string"
     && ((searchable.has(server) && isDirectoryTool(tool.name)) || allowsTool(scope, { kind: "mcp", server, name: tool.name })));
+  // #2189: agents bare names win over the same name on a connector.
+  const agentsPreferred = new Set(integrations?.agents ? agentsPreferredToolNames((integrations.agents as { env?: Record<string, string> }).env) : []);
   const registerCatalog = (mount: CatalogMount) => {
-    const { name: server, client, launch, builtInBrowser, agents, data, tools } = mount;
+    const { name: server, client, launch, builtInBrowser, agents, data, tools: advertised } = mount;
     const hostTool = builtInBrowser || mount.computer;
+    const listed = server === "agents" || !agentsPreferred.size
+      ? advertised
+      : filterToolsPreferringAgents(
+        advertised.filter((tool): tool is Record<string, unknown> & { name: string } => object(tool) && typeof tool.name === "string" && Boolean(tool.name.trim())),
+        agentsPreferred,
+      ).tools;
     // Staged so a server that fails halfway leaves none of its tools behind.
     const staged: Array<{ tool: RegisteredTool; candidate: { definition: ChatToolDefinition; tier: number } }> = [];
     const originalNames = new Set<string>();
-    for (const tool of tools) {
+    for (const tool of listed) {
       if (!object(tool) || typeof tool.name !== "string" || !tool.name.trim() || originalNames.has(tool.name)) throw new Error("MCP server advertised an invalid or duplicate tool name");
       originalNames.add(tool.name);
       if (!object(tool.inputSchema) || tool.inputSchema.type !== "object") throw new Error("MCP tools require an object input schema");
@@ -727,6 +736,7 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
       if (callSignal.aborted) { await close(); throw aborted(); }
       const tool = registered.get(name)!;
       try {
+        process.stderr.write(resolvedServerLog(tool.server, tool.name));
         const result = await tool.client.call("tools/call", { name: tool.name, arguments: args }, AbortSignal.any([signal, callSignal]), callTimeoutMs);
         if (signal.aborted || callSignal.aborted) throw aborted();
         if (!object(result) || !Array.isArray(result.content) || (result.isError !== undefined && typeof result.isError !== "boolean")) throw new Error("MCP tool returned an invalid result; execution outcome may be uncertain");

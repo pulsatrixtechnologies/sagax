@@ -5,6 +5,7 @@ import type { McpServerSpec, StdioMcpSpec } from "../../contracts.ts";
 import { canUseMcpServer } from "../../../shared/tool-scope.ts";
 import { gateServer, mcpStdioServer } from "../../mcp/mcp-gate-config.ts";
 import { compactGateSearch } from "../../mcp/mcp-gate-search.ts";
+import { agentsPreferredToolNames, withholdForConnector } from "../../mcp/agents-tool-priority.ts";
 import { codexConfigMcpServerNames, mountedMcpServerName } from "../codex-mcp-names.ts";
 import { codexHomeOf, learnedAmbientMcp } from "./ambient-mcp.ts";
 import { codexHostToolArgs } from "../host-tools.ts";
@@ -104,6 +105,8 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
   const literalEnvs = new Map<string, Record<string, string>>();
   /** A selected mount's own `env` table, as Codex reports it back (#2013). */
   const selectedLiterals = new Map<string, Record<string, string>>();
+  // #2189: agents bare names win over the same name on a connector.
+  const agentsPreferred = turn.integrations?.agents ? agentsPreferredToolNames(turn.integrations.agents.env) : [];
   const scopedServer = (name: string, mountName: string, server: McpServerSpec): StdioMcpSpec | null => {
     if (!canUseMcpServer(turn.toolScope, name)) return null;
     // Codex 0.166 no longer has the old feature-gated hosted tool_search;
@@ -112,6 +115,7 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
     // role's vendor tools reachable through search_tools/call_tool. The
     // gate invalidates that directory when identity_switch changes tools.
     const search = isSagaxPerspicaxBridge(server) ? compactGateSearch([], true) : undefined;
+    const withhold = withholdForConnector(name, agentsPreferred);
     // Every URL server is reached through Sagax's remote proxy,
     // on every Codex login, never by Codex's own MCP client: the proxy
     // opens the connection with the same minimal handshake as Settings
@@ -126,17 +130,17 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
     // servers are also searched through the proxy's tool directory.
     // Other own-login and Company catalogs pass through whole.
     const directory = plan && "url" in server;
-    if (turn.toolScope === undefined && !("url" in server) && !search) return server;
+    if (turn.toolScope === undefined && !("url" in server) && !search && !withhold.length) return server;
     const hash = createHash("sha256").update(mountName).digest("hex");
     // A proxy's network settings come from the environment Codex runs
     // with: Codex itself starts MCP children with only a few names.
     const proxy = turn.toolScope === undefined
-      ? search
+      ? search || withhold.length
         ? gateServer({ name, server, threadId: turn.threadId, budget: 0, nodeEnv: { ELECTRON_RUN_AS_NODE: "1" },
-          configEnvName: `SAGAX_GATE_CONFIG_${hash}`, search, sourceEnv: env })
+          configEnvName: `SAGAX_GATE_CONFIG_${hash}`, ...(search ? { search } : {}), ...(withhold.length ? { withhold } : {}), sourceEnv: env })
         : mcpStdioServer(server, { nodeEnv: { ELECTRON_RUN_AS_NODE: "1" }, ...(directory ? { directory: { name } } : {}), configEnvName: `SAGAX_REMOTE_MCP_CONFIG_${hash}`, sourceEnv: env })
       : gateServer({ name, server, threadId: turn.threadId, budget: 0, toolScope: turn.toolScope, nodeEnv: { ELECTRON_RUN_AS_NODE: "1" },
-        configEnvName: `SAGAX_GATE_CONFIG_${hash}`, directory, ...(search ? { search } : {}), sourceEnv: env });
+        configEnvName: `SAGAX_GATE_CONFIG_${hash}`, directory, ...(search ? { search } : {}), ...(withhold.length ? { withhold } : {}), sourceEnv: env });
     if (proxy && (directory || search)) directoryMounts.add(mountName);
     if (!proxy) return null;
     // The proxy's own network switches go in its env table, so the

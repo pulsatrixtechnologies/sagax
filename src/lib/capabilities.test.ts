@@ -4,9 +4,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import {
   botPluginKey, capabilityName, enginesLine, engineGetsNothing, indexCut, installationServerName, orderedCapabilities,
-  organizationRows, receivedGroups, receiptWords, skillName,
+  organizationRows, receivedGroups, receiptWords, skillName, visibleCapabilities,
 } from "./capabilities";
 import { capabilityFixture } from "./capabilities.fixture";
+import type { Capability } from "../../shared/capabilities";
 
 beforeEach(() => setLocale("en"));
 
@@ -69,5 +70,25 @@ describe("capabilities (desktop)", () => {
     expect(indexCut({ bytes: 1_000, maxBytes: 4_000, skills: 3, maxSkills: 30, omitted: 0 })).toBe(false);
     expect(indexCut(undefined)).toBe(false);
     expect(indexCut({ bytes: 100, maxBytes: 4_000, skills: 0, maxSkills: 30, omitted: 0, incomplete: true })).toBe(true);
+  });
+
+  it("hides a name_taken plugin when another row already shows the same name (#2189)", () => {
+    const winner: Capability = {
+      key: "plugin:organization:github@market", form: "plugin", name: "GitHub",
+      source: { kind: "marketplace", label: "market" }, scope: "organization", state: "on",
+      enabled: true, canToggle: false, engine: { skills: "native", nothing: false },
+    };
+    const taken: Capability = {
+      key: "plugin:bot:github@market", form: "plugin", name: "GitHub",
+      source: { kind: "marketplace", label: "market" }, scope: "bot", state: "off", reason: "name_taken",
+      enabled: true, canToggle: true, engine: { skills: "none", nothing: true },
+    };
+    const alone: Capability = {
+      key: "plugin:bot:packing@market", form: "plugin", name: "Packing",
+      source: { kind: "marketplace", label: "market" }, scope: "bot", state: "off", reason: "name_taken",
+      enabled: true, canToggle: true, engine: { skills: "none", nothing: true },
+    };
+    const shown = visibleCapabilities([taken, winner, alone]).map((item) => item.key);
+    expect(shown).toEqual(["plugin:organization:github@market", "plugin:bot:packing@market"]);
   });
 });

@@ -10,6 +10,7 @@ import type { SendTurnInput } from "../../contracts.ts";
 import { takeSafetyNote } from "../../safety/safety-review.ts";
 import { canUseMcpServer } from "../../../shared/tool-scope.ts";
 import { gateServer, mcpStdioServer } from "../../mcp/mcp-gate-config.ts";
+import { agentsPreferredToolNames, withholdForConnector } from "../../mcp/agents-tool-priority.ts";
 import type { GateAnswer, GateAsk } from "../../approvals/mcp-gate-approval.ts";
 import type { AcpAskFinish, AcpSession, AcpSupport } from "./types.ts";
 
@@ -218,14 +219,18 @@ export function createAcpMcp(deps: AcpMcpDeps) {
       // servers) can name them anything, so those ride the gate.
       const toolNames = support.mcpToolNames;
       const renames = (server: AcpMcpServer) => Boolean(toolNames) && custom.has(server.name);
-      if (turn.toolScope === undefined && !servers.some(renames) && !approvalGated) return servers;
+      // #2189: agents bare names win over the same name on a connector.
+      const agentsPreferred = turn.integrations?.agents ? agentsPreferredToolNames(turn.integrations.agents.env) : [];
+      const needsWithhold = (server: AcpMcpServer) => withholdForConnector(server.name, agentsPreferred).length > 0;
+      if (turn.toolScope === undefined && !servers.some(renames) && !approvalGated && !servers.some(needsWithhold)) return servers;
       return servers.filter((server) => turn.toolScope === undefined || canUseMcpServer(turn.toolScope, server.name)).map((server) => {
-        if (turn.toolScope === undefined && !renames(server) && !approvalGated) return server;
+        const withhold = withholdForConnector(server.name, agentsPreferred);
+        if (turn.toolScope === undefined && !renames(server) && !approvalGated && !withhold.length) return server;
         const original = { command: server.command, args: server.args, env: Object.fromEntries(server.env.map(({ name, value }) => [name, value])) };
         const gated = gateServer({ name: server.name, server: original, threadId: turn.threadId, budget: 0,
           toolScope: turn.toolScope, nodeEnv: { ELECTRON_RUN_AS_NODE: "1" }, ...(toolNames && renames(server) ? { toolNames } : {}),
-          ...(approvalGated ? { approval: approvalFor(server) } : {}) });
-        if (!gated) throw new Error(turn.toolScope === undefined && !approvalGated ? "Tool names require an MCP gate." : "Tool selection requires an MCP gate.");
+          ...(approvalGated ? { approval: approvalFor(server) } : {}), ...(withhold.length ? { withhold } : {}) });
+        if (!gated) throw new Error(turn.toolScope === undefined && !approvalGated && !withhold.length ? "Tool names require an MCP gate." : "Tool selection requires an MCP gate.");
         return { name: server.name, command: gated.command, args: gated.args, env: acpEnv(gated.env) };
       });
     };

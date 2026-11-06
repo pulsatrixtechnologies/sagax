@@ -3,7 +3,7 @@ import { approvalCardOutcome } from "../ApprovalCard";
 import { peerLine } from "@/lib/peer-message";
 import { activityPreview, botEngine } from "@/lib/failed-turn";
 import { t } from "@/lib/i18n";
-import { lastNonReceipt } from "@/lib/receipts";
+import { lastSpokenLine } from "@/lib/receipts";
 import { citationPreviewText } from "@/lib/citations";
 import { plainPreviewText } from "@/lib/plain-preview";
 import { isClientCancellation } from "../../../shared/client-cancel";
@@ -18,8 +18,15 @@ export function preview(bot: Bot, visible: Message[], instances: InstanceInfo[])
   // the visible branch's tail — bot.messages holds every fork, so its last
   // entry can belong to a version the user switched away from — read past
   // the harness's receipts (digest, compaction) to the reply a person reads
-  const last = lastNonReceipt(visible);
+  // (#2081) and past a run receipt with nothing to read: the preview is the
+  // bot's last words, never "Routine ... failed"
+  const last = lastSpokenLine(visible);
   if (!last) return "";
+  // a finished run's report is the bot's message (#2081): its first line
+  if (last.kind === "routine.run" && last.routineRun?.summary) return plainPreviewText(citationPreviewText(last.routineRun.summary));
+  // what the bot left for the person reads as the bot's own words, never
+  // "<bot> has a question for you:" (#2081)
+  if (last.attention?.items.length) return plainPreviewText(last.attention.items[0]!.text);
   // a settled approval card says what happened, as the card itself does;
   // its title is the question it asked, which nobody is waiting on now
   if (last.kind === "options" && last.card) {

@@ -12,7 +12,6 @@ const open: AppState = {
   inspectorOpen: true,
   activityOpen: true,
   appSettingsOpen: true,
-  routineRunSheet: {runId: "run-1"},
 };
 
 const pages: Action[] = [
@@ -34,7 +33,6 @@ function expectClosed(next: AppState | undefined) {
     inspectorOpen: false,
     activityOpen: false,
     appSettingsOpen: false,
-    routineRunSheet: null,
   });
 }
 

@@ -1292,7 +1292,6 @@
   "routines.results.help": "每次執行都會以全新的脈絡開始。附有日期的結果會收集在這裡；完整的執行細節則留在「執行紀錄」中。專用的結果對話會在每次執行時重複使用，並可移入資料夾。",
   "routines.results.back": "返回結果",
   "routines.results.showReport": "顯示報告",
-  "routines.executionDetails": "執行詳細資料 · {name}",
   "routines.logsFor": "{name} 的執行紀錄",
   "routines.logsHint": "各個機器人最近已儲存的執行紀錄。開啟某次執行即可查看其結果、錯誤與執行的對話。",
   "routines.activeSchedule": "啟用中",

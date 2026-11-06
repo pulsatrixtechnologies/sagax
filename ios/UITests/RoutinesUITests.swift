@@ -389,19 +389,19 @@ final class RoutinesUITests: XCTestCase {
         add(attachment)
     }
 
-    /// 2026-10-29: a run's Continue in the conversation opens the bot's one
-    /// conversation (Aurora's chat), never a separate results thread.
+    /// 2026-11-05 (#2098): a run in the Runs list opens the bot's one
+    /// conversation (Aurora's chat) at the run's message, never a run
+    /// detail with Continue in the conversation.
     @MainActor
-    func testRunContinuesInTheConversation() throws {
+    func testRunOpensInTheChat() throws {
         let app = openRoutines()
         showLogs(app)
         let row = element("routine-run-row.lab-run-done", in: app)
         XCTAssertTrue(row.waitForExistence(timeout: 10))
         row.tap()
-        XCTAssertFalse(element("routine-run-open-results", in: app).exists, "no Open results thread")
-        let open = element("routine-run-open-thread", in: app)
-        XCTAssertTrue(open.waitForExistence(timeout: 10))
-        open.tap()
         XCTAssertTrue(app.staticTexts["Aurora"].firstMatch.waitForExistence(timeout: 15), "Aurora's chat opens")
+        XCTAssertFalse(element("routine-run-open-thread", in: app).exists, "no run detail between the list and the chat")
+        XCTAssertFalse(element("routine-run-open-results", in: app).exists, "no Open results thread")
+        XCTAssertTrue(element("routine-run-report", in: app).waitForExistence(timeout: 10), "the run's report, as the bot's message")
     }
 }

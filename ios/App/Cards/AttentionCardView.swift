@@ -4,15 +4,28 @@ import SwiftUI
 /// What a bot's turn elsewhere left for the person (2026-11-05): a
 /// hand-off, a thread another bot opened or a routine run ended with items
 /// only the person can do. The desktop's `src/components/AttentionCard.tsx`,
-/// for a phone: who needs you, where it came from, each item with its
-/// ticket, and Open ticket, Open thread and Open run.
+/// for a phone.
+///
+/// 2026-11-05 (#2081, the owner: "there is a unified chat mode and you keep
+/// putting threads everywhere"): it reads as the bot's own message, in the
+/// bot's bubble, each item with its ticket; where it comes from is one small
+/// grey line under it. With one conversation the person answers right here
+/// (`reply`), their words going into the thread the bot asked in. "Open
+/// thread" exists only with threads shown (`openThread` non-nil).
 struct AttentionCardView: View {
     @Environment(\.themePalette) var themePalette
-    @Environment(\.openURL) private var openURL
     let card: PersonAttentionCard
     let tint: Color
+    /// Threads shown only: the thread the bot said it in.
     var openThread: ((ThreadRef) -> Void)? = nil
     var openRun: (() -> Void)? = nil
+    /// One conversation: the person's answer, sent into the bot's thread.
+    var reply: ((String) async throws -> Void)? = nil
+
+    @State private var answer = ""
+    @State private var sending = false
+    @State private var sent = false
+    @State private var sendError: String?
 
     private var title: String {
         switch card.kind {
@@ -29,61 +42,141 @@ struct AttentionCardView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Image(systemName: "hand.raised.fill")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Theme.warning)
-                    Text(verbatim: title)
-                        .font(.system(size: 15, weight: .semibold))
-                        .lineLimit(2)
-                    Spacer(minLength: 4)
-                }
-                Text(verbatim: origin)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.textSecondary)
-                    .lineLimit(1)
-            }
-            .accessibilityElement(children: .combine)
-
+        VStack(alignment: .leading, spacing: 4) {
+            // the bot's own bubble, as its replies are drawn
             AttentionItemsView(items: card.items)
+                .padding(.horizontal, Theme.Chat.bubblePaddingH)
+                .padding(.vertical, Theme.Chat.bubblePaddingV)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: Theme.Metric.bubbleRadius, style: .continuous).fill(BubbleColor.theirs)
+                )
+                .accessibilityIdentifier("attention-bubble")
 
-            HStack(spacing: 14) {
-                if let openThread {
-                    Button {
-                        Haptics.selection()
-                        openThread(card.threadRef)
-                    } label: {
-                        Label(String(localized: "Open thread"), systemImage: "arrow.right")
-                    }
-                    .accessibilityIdentifier("attention-open-thread")
-                }
-                if card.routineRunId != nil, let openRun {
-                    Button {
-                        Haptics.selection()
-                        openRun()
-                    } label: {
-                        Label(String(localized: "Open run"), systemImage: "arrow.right")
-                    }
-                    .accessibilityIdentifier("attention-open-run")
-                }
+            provenance
+
+            if reply != nil, !sent {
+                replyBox
+            } else if sent {
+                Text(String(localized: "Answered"))
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(Theme.textSecondary)
+                    .padding(.leading, 2)
+                    .accessibilityIdentifier("attention-answered")
             }
-            .labelStyle(.titleAndIcon)
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(Theme.readable(tint))
-            .buttonStyle(.plain)
         }
-        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Theme.card))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Theme.warning.opacity(0.4), lineWidth: 1))
         .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text(verbatim: title))
         .accessibilityIdentifier("attention-card")
+    }
+
+    /// The small grey line: where it comes from · Open thread (threads shown) · Open run.
+    private var provenance: some View {
+        HStack(spacing: 6) {
+            Text(verbatim: origin)
+                .lineLimit(1)
+            if card.items.count > 1 {
+                dot
+                Text(String(localized: "\(card.items.count) items"))
+            }
+            if let openThread {
+                dot
+                Button {
+                    Haptics.selection()
+                    openThread(card.threadRef)
+                } label: {
+                    HStack(spacing: 2) {
+                        Text(String(localized: "Open thread"))
+                        Image(systemName: "arrow.right").font(.system(size: 9, weight: .semibold))
+                    }
+                    .foregroundStyle(Theme.readable(tint))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("attention-open-thread")
+            }
+            if card.routineRunId != nil, let openRun {
+                dot
+                Button {
+                    Haptics.selection()
+                    openRun()
+                } label: {
+                    HStack(spacing: 2) {
+                        Text(String(localized: "Open run"))
+                        Image(systemName: "arrow.right").font(.system(size: 9, weight: .semibold))
+                    }
+                    .foregroundStyle(Theme.readable(tint))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("attention-open-run")
+            }
+            Spacer(minLength: 0)
+        }
+        .font(.system(size: 11.5, weight: .medium))
+        .foregroundStyle(Theme.textSecondary)
+        .padding(.leading, 2)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("attention-provenance")
+    }
+
+    private var dot: some View {
+        Text(verbatim: "·").accessibilityHidden(true)
+    }
+
+    /// The answer box under the message, one conversation: the person's words
+    /// go into the thread the bot asked in.
+    private var replyBox: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .bottom, spacing: 8) {
+                TextField(String(localized: "Your answer"), text: $answer, axis: .vertical)
+                    .lineLimit(1...6)
+                    .font(.system(size: 15))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.inset))
+                    .disabled(sending)
+                    .accessibilityIdentifier("attention-reply-field")
+                Button {
+                    Task { await send() }
+                } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(Theme.readable(tint))
+                        .frame(width: 34, height: 34)
+                        .background(Circle().fill(tint.opacity(0.18)))
+                }
+                .buttonStyle(.plain)
+                .disabled(answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sending)
+                .accessibilityLabel(Text("Send"))
+                .accessibilityIdentifier("attention-reply-send")
+            }
+            if let sendError {
+                Text(verbatim: sendError)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.danger)
+            }
+        }
+        .padding(.top, 4)
+        .accessibilityIdentifier("attention-reply")
+    }
+
+    private func send() async {
+        let text = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !sending, let reply else { return }
+        sending = true
+        sendError = nil
+        defer { sending = false }
+        do {
+            try await reply(text)
+            sent = true
+        } catch {
+            sendError = error.localizedDescription
+        }
     }
 }
 
-/// The items, each with its ticket (shared with the routine run row).
+/// The items, each with its ticket (shared with the routine run row): a
+/// plain list inside the bot's bubble, never a card per item.
 struct AttentionItemsView: View {
     @Environment(\.openURL) private var openURL
     let items: [PersonAttentionItem]
@@ -91,22 +184,29 @@ struct AttentionItemsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(LocalizedStringKey(item.text))
-                        .font(.system(size: 14.5))
-                        .foregroundStyle(Theme.textPrimary)
+                HStack(alignment: .top, spacing: 8) {
+                    MarkdownText(source: item.text, inert: true)
+                        .foregroundStyle(BubbleColor.theirsText)
+                        .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     if let ticket = item.ticketId {
                         if let url = item.safeTicketURL {
                             Button {
                                 Haptics.selection()
                                 openURL(url)
                             } label: {
-                                Label(String(localized: "Open ticket \(String(ticket))"), systemImage: "arrow.up.right.square")
-                                    .font(.system(size: 13, weight: .semibold))
+                                HStack(spacing: 3) {
+                                    Text(String(localized: "Open ticket \(String(ticket))"))
+                                    Image(systemName: "arrow.up.right.square").font(.system(size: 10, weight: .semibold))
+                                }
+                                .font(.system(size: 11.5, weight: .medium))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Capsule().strokeBorder(Theme.textSecondary.opacity(0.4), lineWidth: 0.5))
                             }
                             .buttonStyle(.plain)
-                            .foregroundStyle(Theme.warning)
+                            .foregroundStyle(BubbleColor.theirsText)
                             .accessibilityIdentifier("attention-ticket-\(ticket)")
                         } else {
                             Text(verbatim: "#\(ticket)")
@@ -115,10 +215,6 @@ struct AttentionItemsView: View {
                         }
                     }
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.warning.opacity(0.08)))
             }
         }
     }

@@ -74,8 +74,6 @@ import { RunAsField, useRunAsOptions } from "@/components/routines/RunAsField";
 import { WatchFields, draftFromWatch, watchFromDraft } from "@/components/routines/WatchFields";
 import { RoutineAwayBanner } from "@/components/routines/RoutineAwayBanner";
 import { clearRoutineRuns, RoutineDetail } from "@/components/routines/RoutineDetail";
-import { RoutineRunExchange } from "@/components/routines/RoutineRunExchange";
-import { getExchangeColumnHost } from "@/lib/exchange-column-host";
 import { canRunRoutineNow, routineRunInFlight } from "@/components/routines/RunNowButton";
 import { AdvancedScheduleFields, HumanScheduleFields, scheduleTimeLabel, timeZoneLabel } from "@/components/routines/HumanScheduleFields";
 import { CronRunDates } from "@/components/routines/CronScheduleFields";
@@ -139,7 +137,7 @@ import {
   type RoutineScheduleInput,
   type RoutineTarget,
 } from "@/lib/routines";
-import { api, openBotThread, useStore, type AppState, type Bot, type Group } from "@/state/store";
+import { api, openBotThread, openRoutineRun, useStore, type AppState, type Bot, type Group } from "@/state/store";
 import { appendComposerDraft } from "@/lib/drafts";
 import { focusComposer } from "@/lib/composer-focus";
 import { useShowThreads } from "@/lib/thread-preferences";
@@ -2356,17 +2354,15 @@ export function EventDetails({
   const [starting, setStarting] = useState(false);
   // undefined preserves the selected historical run; null clears it for a new attempt.
   const [submittedRun, setSubmittedRun] = useState<RoutineRun | null | undefined>(undefined);
-  // 2026-10-29: a routine's page lists its runs; one opens in place, and
-  // Back returns. A run opened from the logs reaches its routine's page the
-  // same way, in the other direction.
-  const [openedRun, setOpenedRun] = useState<RoutineRun | null>(null);
+  // 2026-11-05 (#2098): a routine's page lists its runs; one opens in the
+  // chat, at its message. Nothing opens a run here any more.
   const [showRoutinePage, setShowRoutinePage] = useState(false);
   const [error, setError] = useState("");
   const isCall = item.kind === "call";
   const routine = item.kind === "routine" ? item.routine : null;
   const liveRun = (candidate: RoutineRun | null | undefined) => candidate ? state.routineRuns.find((entry) => entry.id === candidate.id) ?? candidate : candidate ?? null;
   const run = submittedRun === undefined
-    ? openedRun ? liveRun(openedRun) : showRoutinePage ? null : item.kind === "routine" ? item.run : null
+    ? showRoutinePage ? null : item.kind === "routine" ? item.run : null
     : liveRun(submittedRun);
   const call = item.kind === "call" ? item.call : null;
   const isRoomGoal = !isCall && (run?.target ?? routine?.target) === "room-goal";
@@ -2384,8 +2380,22 @@ export function EventDetails({
   const attachments = call?.attachments ?? [];
   const roomId = call?.botIds.length === 1 ? primary?.id : undefined;
   const showingRun = Boolean(run) && !isCall;
-  const canGoBack = !isCall && ((openedRun && routine) || (showRoutinePage && item.kind === "routine" && item.run));
-  const goBack = () => { setOpenedRun(null); setShowRoutinePage(false); setSubmittedRun(undefined); };
+  // 2026-11-05 (#2098, the operator: "C'EST INNACEPTABLE"): a run never opens here; it
+  // opens in the chat, at its message in the bot's conversation, from every
+  // entry point (the grid, the Runs list, Run now, a notification). The
+  // entry points route synchronously; this effect only catches an item that
+  // still arrived with a run.
+  const openRunInChat = (opened: RoutineRun) => {
+    openRoutineRun(dispatch, { runId: opened.id, routineId: opened.routineId, botId: opened.botId });
+    if (["failed", "missed"].includes(opened.status) && !opened.seenAt && !opened.redacted) dispatch({ type: "markRoutineRunSeen", runId: opened.id });
+  };
+  useEffect(() => {
+    if (!showingRun || !run) return;
+    openRunInChat(run);
+    onClose();
+  }, [showingRun, run?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const canGoBack = !isCall && showRoutinePage && item.kind === "routine" && Boolean(item.run);
+  const goBack = () => { setShowRoutinePage(false); setSubmittedRun(undefined); };
 
   const invoke = async (path: string, method = "POST", body?: unknown) => {
     setWorking(true);
@@ -2413,7 +2423,6 @@ export function EventDetails({
     if (!routine || working || routineInFlight || runNowPending.current) return;
     runNowPending.current = true;
     setStarting(true);
-    setOpenedRun(null);
     setShowRoutinePage(false);
     setSubmittedRun(null);
     setWorking(true);
@@ -2425,7 +2434,8 @@ export function EventDetails({
       type: "runRoutine",
       routineId: routine.id,
       // Prefer subsequent SSE records over this response, which may already be stale.
-      onStarted: setSubmittedRun,
+      // The run it started opens in the chat (#2098); the routine stays here.
+      onStarted: (started) => { setSubmittedRun(undefined); openRunInChat(started); },
       onError: (cause) => setError(readableError(cause)),
       onSettled: () => {
         runNowPending.current = false;
@@ -2479,25 +2489,10 @@ export function EventDetails({
   };
   const toggleRoutine = () => { if (routine) void invoke(`/api/routines/${routine.id}`, "PATCH", { enabled: !routine.enabled }); };
 
-  // 2026-11-01 (no modals): a routine, its run and a calendar call all open
-  // in the right detail panel (DetailPanel.tsx), the calendar usable beside it.
-  if (showingRun && run) {
-    const exchange = (
-      <RoutineRunExchange
-        run={run}
-        routine={routine}
-        bots={state.bots}
-        working={working || starting}
-        onClose={canGoBack ? goBack : onClose}
-        onStop={() => void invoke(`/api/routine-runs/${run.id}/cancel`)}
-        onOpenRoom={onOpenRoom}
-      />
-    );
-    // Chat column host present: portal into it like Wren <-> Osprey.
-    // Automations alone: the detail panel holds it.
-    if (getExchangeColumnHost()) return exchange;
-    return <DetailPanel bare label={t("routineCalendar.eventDetails")} onClose={onClose} data-event-details="run">{exchange}</DetailPanel>;
-  }
+  // 2026-11-01 (no modals): a routine and a calendar call open in the right
+  // detail panel (DetailPanel.tsx), the calendar usable beside it. A run
+  // (#2098) is on its way to the chat: nothing to draw.
+  if (showingRun && run) return null;
 
   const leading = canGoBack
     ? <button type="button" data-event-back onClick={goBack} aria-label={t("routineRun.back")} title={t("routineRun.back")} className="-ml-1.5 flex size-7 shrink-0 items-center justify-center rounded-full text-ink-secondary hover:bg-raised hover:text-ink"><ChevronLeft size={16} /></button>
@@ -2555,7 +2550,7 @@ export function EventDetails({
           starting={starting}
           working={working}
           error={error}
-          onOpenRun={(opened) => { setSubmittedRun(undefined); setOpenedRun(opened); if (["failed", "missed"].includes(opened.status) && !opened.seenAt && !opened.redacted) dispatch({ type: "markRoutineRunSeen", runId: opened.id }); }}
+          onOpenRun={(opened) => { setSubmittedRun(undefined); openRunInChat(opened); }}
           onRunNow={runRoutineNow}
           onToggle={toggleRoutine}
           onEdit={() => onEdit("edit")}
@@ -2882,8 +2877,9 @@ export const RoutinesPage = memo(function RoutinesPage({ onBack: _onBack, onOpen
     openRoutine(routine);
   };
   const openLogs = (routine: Routine) => { setRoutineFilter(routine.id); setSection("logs"); };
+  // 2026-11-05 (#2098): a run opens in the chat, at its message.
   const openRun = (run: RoutineRun) => {
-    setSelected({ kind: "routine", id: run.id, at: run.scheduledFor, durationMinutes: run.durationMinutes ?? 30, routine: scopedRoutines.find((routine) => routine.id === run.routineId) ?? null, run });
+    openRoutineRun(dispatch, { runId: run.id, routineId: run.routineId, botId: run.botId });
     if (["failed", "missed"].includes(run.status) && !run.seenAt && !run.redacted) dispatch({ type: "markRoutineRunSeen", runId: run.id });
   };
   // 2026-10-28: "Running" on a bot panel row lands on that run, open.
@@ -3123,7 +3119,16 @@ export const RoutinesPage = memo(function RoutinesPage({ onBack: _onBack, onOpen
   const sectionName = section === "logs" ? t("routines.logs") : section === "webhooks" ? t("routines.webhooks") : null;
   // The calendar's handlers keep their identity, so the memoized grid, its
   // cards and the side panel skip a render that changes none of their data.
-  const openGridItem = useStableHandler((item: CalendarEventItem) => { setSelected(item); if (item.kind === "routine" && item.run && ["failed", "missed"].includes(item.run.status) && !item.run.seenAt && !item.run.redacted) dispatch({ type: "markRoutineRunSeen", runId: item.run.id }); });
+  // 2026-11-05 (#2098): a run on the grid opens in the chat, at its message;
+  // a routine or a call opens its details beside the calendar.
+  const openGridItem = useStableHandler((item: CalendarEventItem) => {
+    if (item.kind === "routine" && item.run) {
+      openRoutineRun(dispatch, { runId: item.run.id, routineId: item.run.routineId, botId: item.run.botId });
+      if (["failed", "missed"].includes(item.run.status) && !item.run.seenAt && !item.run.redacted) dispatch({ type: "markRoutineRunSeen", runId: item.run.id });
+      return;
+    }
+    setSelected(item);
+  });
   const moveGridItem = useStableHandler((item: { kind: EventKind; id: string; at: number }, at: number) => void moveEvent(item, at));
   const resizeGridItem = useStableHandler((item: CalendarEventItem, duration: number) => void resizeEvent(item, duration));
   const dropGridReset = useStableHandler((drop: ResetDrop, marker: ResetMarker) => void dropOnReset(drop, marker));

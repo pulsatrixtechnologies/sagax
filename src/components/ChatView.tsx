@@ -184,7 +184,6 @@ import { collapseBotExchanges, exchangeJumpStays, startsNewStretch, visibleEdge,
 import { foldCollapsedEntry, voiceCallPlan, voiceCallVisibleSpan } from "@/lib/voice-call-transcript";
 import { VoiceCallCard } from "./VoiceCallCard";
 import { BotExchangeChip, ExchangeColumnProvider, TranscriptDate, useExchangeColumn } from "./BotExchangeChip";
-import { RoutineRunExchange } from "./routines/RoutineRunExchange";
 import { CodingChat } from "./coding/CodingChat";
 import { GotoGroupChip } from "./GotoGroupChip";
 import { JumpToLatestPill } from "./JumpToLatestPill";
@@ -1051,8 +1050,13 @@ export function AttentionRow({ message }: { message: Message }) {
     <AttentionCard
       card={card}
       bot={owner}
-      onOpenThread={(botId, threadId) => { openThread(dispatch, { botId, threadId }, getState(), showThreads); }}
+      // one conversation (#2081): no thread is a destination; the person answers in place
+      onOpenThread={showThreads ? (botId, threadId) => { openThread(dispatch, { botId, threadId }, getState(), showThreads); } : undefined}
       onOpenRun={(runId) => openRoutineRun(dispatch, { runId })}
+      // the answer is the person's own message into the thread the bot asked in (coordinator.answer)
+      onReply={showThreads ? undefined : async (text) => {
+        await api(`/api/bots/${card.botId}/messages`, { method: "POST", body: JSON.stringify({ text, threadId: card.threadId, sendId: crypto.randomUUID() }) });
+      }}
     />
   );
 }
@@ -1081,8 +1085,11 @@ export function RoutineRunRow({ message, botId, onResume }: { message: Message; 
       botOf={(id) => bots.find((candidate) => candidate.id === id)}
       onResume={onResume}
       onOpen={run?.runId ? () => openRoutineRun(dispatch, { runId: run.runId, routineId: run.routineId }) : undefined}
-      // 2026-11-03: a run that handed work to a teammate links that thread.
-      onOpenThread={(botId, threadId) => { openThread(dispatch, { botId, threadId }, getState(), showThreads); }}
+      // 2026-11-05 (#2096): Stop on the running card itself; the card shows it while the run is live.
+      onStop={run?.runId ? () => dispatch({ type: "cancelRoutineRun", runId: run.runId }) : undefined}
+      // 2026-11-03: a run that handed work to a teammate links that thread;
+      // threads shown only (#2081): one conversation names the teammate, no link.
+      onOpenThread={showThreads ? (botId, threadId) => { openThread(dispatch, { botId, threadId }, getState(), showThreads); } : undefined}
     />
   );
 }
@@ -2047,7 +2054,6 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
     inspectorOpen: current.inspectorOpen,
     notice: current.notice,
     panelOwner: current.panelOwner,
-    routineRunSheet: current.routineRunSheet,
     settingsOpen: current.settingsOpen,
   }), shallowEqual);
   const storeBots = useStoreSelector(peerBots, equalRows);
@@ -2056,12 +2062,6 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   const mascotMotion = useStoreSelector((current) => current.mascotMotion?.botId === bot.id ? current.mascotMotion : null);
   const pendingQueued = useStoreSelector((current) => Object.fromEntries([bot.threadId, ...(bot.tasks ?? []).map((task) => task.threadId)].map((id) => [id, current.pendingQueued[id]])), shallowEqual);
   const focus = useStoreSelector((current) => current.focusMessage?.threadId === bot.threadId ? current.focusMessage : null);
-  const sheetRun = useStoreSelector((current) => current.routineRuns.find((run) => run.id === current.routineRunSheet?.runId));
-  const sheetRoutine = useStoreSelector((current) => {
-    const sheet = current.routineRunSheet;
-    const routineId = sheet?.routineId ?? current.routineRuns.find((run) => run.id === sheet?.runId)?.routineId;
-    return current.routines.find((routine) => routine.id === routineId) ?? null;
-  });
   const showThreads = useShowThreads();
   const remoteClient = useRemoteClient();
   // 2026-10-26: the failure that paused its routine offers Resume, and its
@@ -2944,20 +2944,6 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
         </div>
       )}
     </Root>
-    {state.routineRunSheet && (() => {
-      const run = sheetRun;
-      if (!run) return null;
-      const routine = sheetRoutine;
-      return (
-        <RoutineRunExchange
-          run={run}
-          routine={routine}
-          bots={storeBots}
-          onClose={() => dispatch({ type: "closeRoutineRunSheet" })}
-          onStop={["queued", "running", "waiting"].includes(run.status) ? () => dispatch({ type: "cancelRoutineRun", runId: run.id }) : undefined}
-        />
-      );
-    })()}
     {!side && state.codingChat && (
       <CodingChat
         key={`${state.codingChat.botId}:${state.codingChat.itemId}`}

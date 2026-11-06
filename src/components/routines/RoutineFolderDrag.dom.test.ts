@@ -177,7 +177,7 @@ describe("the row's state word (2026-10-28)", () => {
     expect(row("r2").querySelector("[data-routine-running]")).toBeNull();
     act(() => { (line.closest("button") as HTMLButtonElement).click(); });
     // The run opens as its chat where the chat is, not the Automations page.
-    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "openRoutineRunSheet", runId: "run-9", routineId: "r1", botId: "bot-1" });
+    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "openRoutineRunInChat", runId: "run-9", routineId: "r1", botId: "bot-1" });
   });
 
   it("shows Running instead of the last result: no Completed and no age of the old run", async () => {

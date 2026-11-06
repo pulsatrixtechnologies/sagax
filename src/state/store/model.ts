@@ -42,7 +42,6 @@ import type { ComputerStart } from "@/lib/computer-start";
 import { type NotificationTarget } from "@/lib/notify";
 import { singleStreamTurnField } from "@/lib/thread-preferences";
 import { isEarlierSegment, isStreamSegment, opensBesideConversation, streamHomeThread, streamUnreadReadWith } from "@/lib/single-stream";
-import { openSideThread } from "@/lib/side-thread";
 import { freshTopicLanding, noteNewChatTopic, onScreenBot } from "@/lib/fresh-topic";
 import { type BotRole } from "@/lib/bot-roles";
 import type { OnboardingStatus } from "@/lib/onboarding";
@@ -1353,7 +1352,6 @@ export interface AppState {
   routineFocus: { botId: string; routineId: string } | null;
   /** 2026-11-01: a routine run open as an exchange sheet over the chat
    * column (same place as Wren <-> Osprey). ChatView renders it. */
-  routineRunSheet: { runId: string; routineId?: string } | null;
   /** 2026-11-03: a coding task of the bot panel's Coding list open as a chat
    * over the chat column (src/components/coding/CodingChat.tsx), where a
    * routine run opens. ChatView renders it. */
@@ -1812,8 +1810,9 @@ export type Action =
   | { type: "toggleSettings"; open?: boolean; section?: BotSettingsSection; botId?: string; owner?: PanelOwner | null }
   | { type: "openRoutine"; botId: string; routineId: string }
   | { type: "routineFocused" }
-  | { type: "openRoutineRunSheet"; runId: string; routineId?: string; botId?: string }
-  | { type: "closeRoutineRunSheet" }
+  /** 2026-11-05 (#2098): a run opens in the chat, at its message in the
+   * bot's conversation. There is no run view beside the chat any more. */
+  | { type: "openRoutineRunInChat"; runId: string; routineId?: string; botId?: string }
   | { type: "openCodingChat"; target: import("../../lib/coding-chat").CodingChatTarget }
   | { type: "closeCodingChat" }
   | { type: "openPersonPanel"; personId: string | null }
@@ -1894,16 +1893,18 @@ interface NotificationRoutingState {
   routineRuns?: ReadonlyArray<{ id: string }>;
 }
 
-/** 2026-11-01: a routine run opens as an exchange sheet over the chat
- * column (header "<routine> <-> <bot>", bubbles, header close), the same
- * place as a bot-to-bot exchange. Continue in the conversation stays a
- * footer action on that sheet. */
+/** 2026-11-05 (#2098, the operator: "a run ALWAYS opens in the main chat area, at
+ * the run's message in the bot's unified chat"): every entry point (a
+ * routine's Runs list, View run, a notification, the Routines page) lands
+ * on the bot's conversation and scrolls to the run's message. The run
+ * sheet beside the chat (Continue in the conversation, Close Chat) is
+ * gone. */
 export function openRoutineRun(
   dispatch: (action: Action) => void,
   run: { runId: string; routineId?: string; botId?: string },
 ) {
   dispatch({
-    type: "openRoutineRunSheet",
+    type: "openRoutineRunInChat",
     runId: run.runId,
     ...(run.routineId ? { routineId: run.routineId } : {}),
     ...(run.botId ? { botId: run.botId } : {}),
@@ -1987,9 +1988,10 @@ export function openNotificationTarget(
     dispatch({ type: "openBotActivity", botId: target.botId, itemId: `run:${target.routineRunId}` });
     return;
   }
-  // 2026-10-29: a run's notification, or a link to a run's own execution
-  // thread (an Inbox entry, an activity line), opens the run detail, never
-  // a conversation beside the chat. openThread asks for the thread itself.
+  // 2026-10-29, then #2098 (2026-11-05): a run's notification, or a link to
+  // a run's own execution thread (an Inbox entry, an activity line), opens
+  // the run's message in the bot's chat, never a view beside the chat.
+  // openThread asks for the thread itself.
   if (options.runDetail !== false) {
     const runId = target.routineRunId ?? routineRunOfThread(state, target.threadId);
     if (runId && (!state.routineRuns || state.routineRuns.some((run) => run.id === runId))) {
@@ -2181,8 +2183,8 @@ export function openBotThread(
   // - An earlier segment is part of the one conversation: the bot opens at
   //   its newest segment and the timeline scrolls back to that topic.
   // - A thread outside the stream (a parallel task's detail, a bot's job, a
-  //   run, a confidential thread) opens in the side column beside the
-  //   conversation (SideThreadPanel); Close or Escape is the way back.
+  //   run, a confidential thread) is no destination: the conversation is
+  //   shown, and what the thread holds for the person is already in it.
   // - The conversation itself, or a bot with no conversation: shown.
   if (!threadsShown) {
     // an earlier topic, even the one this window was left on: the
@@ -2206,9 +2208,15 @@ export function openBotThread(
       openBotThread(dispatch, bot, home, false);
       return;
     }
+    // 2026-11-05 (#2081, owner: "there is a unified chat mode and you keep
+    // putting threads everywhere"): with one conversation, a thread outside
+    // the stream (a parallel task's detail, a bot's job, a hand-off, a
+    // confidential thread) is no destination and opens no column beside the
+    // conversation either. What it holds for the person reaches the
+    // conversation on its own (a parallel task's question under its card, a
+    // run's report, an attention card), so the conversation is shown.
     if (threadId !== bot.threadId && opensBesideStream(bot, threadId)) {
       openBot(dispatch, bot, false, { landing: false });
-      openSideThread({ botId: bot.id, threadId });
       return;
     }
   }
@@ -2515,7 +2523,6 @@ export const initialState: AppState = {
   pluginsBotId: null,
   pluginsFocusApps: null,
   routineFocus: null,
-  routineRunSheet: null,
   codingChat: null,
   pluginsPage: null,
   triggersOpen: false,

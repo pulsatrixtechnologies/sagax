@@ -2,10 +2,8 @@
 /**
  * Headless screenshots of the coding chat (src/gallery/coding-chat.html),
  * running and finished, light and dark, wide (960), 700 and 390 px, with the
- * Changes list open and a jump to a diff; the bot panel's Coding section
- * (src/gallery/bot-panel-coding.html); and the routine run
- * sheet (src/gallery/routine-run-exchange.html) at the same sizes, to compare
- * the two sheets of the same family. Headless Chromium only: no window opens.
+ * Changes list open and the follow-up composer open. Headless Chromium only:
+ * no window opens.
  * Usage: node scripts/capture/coding-chat.mjs [--out DIR] [--port N]
  *   (SAGAX_VERIFY_BROWSER_CHROME=<chromium> to use an installed browser)
  */
@@ -91,14 +89,6 @@ try {
         await settle();
         await shot(`coding-${status}-${width}-${label}.png`);
       }
-    }
-    // the routine run sheet, same sizes: one family
-    for (const status of ["running", "completed"]) {
-      await page.setViewportSize({ width: 960, height: 900 });
-      await page.goto(`${base}/routine-run-exchange.html?skin=${id}&lang=en&status=${status}`, { waitUntil: "load" });
-      await page.waitForSelector("[data-testid=routine-run-exchange]");
-      await page.waitForTimeout(400);
-      await shot(`routine-${status}-960-${label}.png`);
     }
   }
   await browser.close();

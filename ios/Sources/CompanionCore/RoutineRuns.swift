@@ -268,6 +268,13 @@ public enum RoutineResults {
         return NotificationTarget(botId: bot.id, threadId: SingleStream.home(of: bot) ?? bot.threadId)
     }
 
+    /// 2026-11-05 (#2098, "a run opens ALWAYS in the main chat"): the run's
+    /// message in the bot's unified conversation, when this client holds it
+    /// (desktop `openRoutineRunInChat`): the row every way into a run lands on.
+    public static func reportMessage(for run: RoutineRun, in messages: [Message]) -> Message? {
+        messages.first { $0.kind == .routineRun && $0.routineRun?.runId == run.id }
+    }
+
     /// What Continue in the conversation does (desktop
     /// `continueRoutineRunInConversation`): open the conversation, quote the
     /// report in that conversation's composer, and focus the report when this
@@ -291,7 +298,7 @@ public enum RoutineResults {
         else { return nil }
         let home = SingleStream.home(of: bot) ?? bot.threadId
         let composerThreadId = threadsShown ? target.threadId : home
-        let report = messages.first { $0.kind == .routineRun && $0.routineRun?.runId == run.id }
+        let report = reportMessage(for: run, in: messages)
         let raw = (report?.routineRun?.summary ?? run.output ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let quote: String = {

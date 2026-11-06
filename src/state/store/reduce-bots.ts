@@ -19,7 +19,6 @@ export function reduceBots(state: AppState, action: Action, reduce: ReduceFn): A
       const switching = action.id !== state.selectedId;
       const base = {
         ...(leaving ? { ...state, threadReturn: null } : state),
-        ...(switching && state.routineRunSheet ? { routineRunSheet: null } : {}),
         ...(switching && state.codingChat ? { codingChat: null } : {}),
       };
       const room = base.groups.find((g) => g.id === action.id);

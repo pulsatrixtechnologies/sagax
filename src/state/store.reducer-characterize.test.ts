@@ -305,11 +305,6 @@ describe("focus, tour, launch, welcome", () => {
     });
   });
 
-  it("closeRoutineRunSheet clears the sheet when present", () => {
-    const open = { ...base(), routineRunSheet: { runId: "run-1" } };
-    expect(reducer(open, { type: "closeRoutineRunSheet" }).routineRunSheet).toBeNull();
-    expect(reducer(base(), { type: "closeRoutineRunSheet" })).toEqual(base());
-  });
 });
 
 describe("tasks, groups, and data with thin coverage", () => {

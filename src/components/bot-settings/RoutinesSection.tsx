@@ -5,7 +5,7 @@ import { useRoutineReadiness, type RoutineReadinessControl } from "../routines/R
 import { ClipboardCheck, CalendarClock, CirclePlay, MoreHorizontal, Pause, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useServerFeature } from "@/lib/server-features";
-import { api, useStore, type Bot } from "@/state/store";
+import { api, openRoutineRun, useStore, type Bot } from "@/state/store";
 import type { Routine, RoutineRun, RoutineRunOn } from "@/lib/routines";
 import { t } from "@/lib/i18n";
 import { RoutineEditor } from "../RoutinesPage";
@@ -14,7 +14,6 @@ import { ACTION_LABEL_MAIN, ActionBar, ActionButton, actionButtonClass } from ".
 import { canRunRoutineNow, routineRunInFlight, RunNowButton } from "../routines/RunNowButton";
 import { clearRoutineRuns, RoutineDetail } from "../routines/RoutineDetail";
 import { useConfirm } from "../ConfirmProvider";
-import { RoutineRunExchange } from "../routines/RoutineRunExchange";
 import { PanelPageHeader as RoutineDetailHeader } from "./PanelPage";
 
 export { RoutineDetailHeader };
@@ -27,8 +26,9 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
   const [editMode, setEditMode] = useState<"view" | "edit">("view");
   const openEditor = (routine: Routine, mode: "view" | "edit") => { setEditMode(mode); setEditing(routine); };
   const closePanel = () => { setEditing(null); dispatch({ type: "toggleSettings", open: false }); dispatch({ type: "toggleComputer", open: false }); };
-  const [openedRun, setOpenedRun] = useState<RoutineRun | null>(null);
-  const [working, setWorking] = useState(false);
+  // 2026-11-05 (#2098, the operator): a run opens in the chat, at its message; no run
+  // sheet beside the chat from here (or from anywhere).
+  const openRun = (run: RoutineRun) => openRoutineRun(dispatch, { runId: run.id, routineId: run.routineId, botId: run.botId ?? bot.id });
   // 2026-10-28: a folder's + makes the new routine in that folder.
   const [newFolder, setNewFolder] = useState<string | undefined>(undefined);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -38,40 +38,13 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
   const readiness = useRoutineReadiness(detailId ?? "");
   const detail = routines.find((routine) => routine.id === detailId) ?? null;
   const toggle = (routine: Routine) => dispatch({ type: "updateRoutine", routineId: routine.id, patch: { enabled: !routine.enabled } });
-  const cancelRun = async (runId: string) => {
-    setWorking(true);
-    try {
-      const response = await api(`/api/routine-runs/${runId}/cancel`, { method: "POST" });
-      if (response.run) dispatch({ type: "routineRunPatched", run: response.run });
-    } catch { /* the run keeps its state */ } finally { setWorking(false); }
-  };
   // A routine line in the conversation asked for this routine's page.
   const focus = state.routineFocus;
   useEffect(() => {
     if (!focus || focus.botId !== bot.id || !routines.some((routine) => routine.id === focus.routineId)) return;
     setDetailId(focus.routineId);
-    setOpenedRun(null);
     dispatch({ type: "routineFocused" });
   }, [focus, bot.id, routines, dispatch]);
-
-  // 2026-11-01: a run opened from the routine's history (or Run now) opens
-  // as an exchange sheet over the chat column (same place as Wren <->
-  // Osprey), not as a modal over the app.
-  let runSheet: React.ReactNode = null;
-  if (detail && openedRun) {
-    const run = state.routineRuns.find((candidate) => candidate.id === openedRun.id) ?? openedRun;
-    const live = ["queued", "running", "waiting"].includes(run.status);
-    runSheet = (
-      <RoutineRunExchange
-        run={run}
-        routine={detail}
-        bots={[bot]}
-        working={working}
-        onClose={() => setOpenedRun(null)}
-        onStop={live ? () => void cancelRun(run.id) : undefined}
-      />
-    );
-  }
 
   if (detail) {
     const canRun = canRunRoutineNow(state.config, detail, bot);
@@ -95,7 +68,7 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
         editable={detail.canEdit !== false}
         canRun={canRun}
         inFlight={inFlight}
-        onOpenRun={(run) => { setOpenedRun(run); if (["failed", "missed"].includes(run.status) && !run.seenAt && !run.redacted) dispatch({ type: "markRoutineRunSeen", runId: run.id }); }}
+        onOpenRun={(run) => { openRun(run); if (["failed", "missed"].includes(run.status) && !run.seenAt && !run.redacted) dispatch({ type: "markRoutineRunSeen", runId: run.id }); }}
         onToggle={() => toggle(detail)}
         onPatch={async (patch) => { const response = await api(`/api/routines/${detail.id}`, { method: "PATCH", body: JSON.stringify(patch) }); if (response.routine) dispatch({ type: "routinePatched", routine: response.routine }); }}
         onClearRuns={() => void clearRoutineRuns(detail, confirm, dispatch).catch(() => { /* the runs stay listed */ })}
@@ -104,7 +77,7 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
         readiness={readiness}
         routine={detail}
         bot={bot}
-        onStarted={(run) => setOpenedRun(run)}
+        onStarted={openRun}
         onToggle={() => toggle(detail)}
         onEdit={() => openEditor(detail, "edit")}
         onDelete={async () => {
@@ -113,7 +86,6 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
           setDetailId(null);
         }}
       />
-      {runSheet}
       {editing && editing !== "new" && !("copyOf" in editing) && <RoutineEditor key={detail.id} routine={detail} mode={editMode} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} presentation="panel" onClose={() => setEditing(null)} onDismiss={closePanel} onDeleted={() => { setEditing(null); setDetailId(null); }} onDuplicate={(routine) => setEditing({ copyOf: routine })} />}
       {editing && editing !== "new" && "copyOf" in editing && <RoutineEditor key={`${detail.id}-copy`} copyOf={editing.copyOf} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} folder={detail.folder} presentation="panel" onClose={() => setEditing(null)} onDismiss={closePanel} />}
     </div>;

@@ -35,6 +35,8 @@ export interface RoutineFailureFacts {
   /** The limit as the limit failover host read it from the turn it saw dispatched: which engine refused, its reset,
    * and who takes the run over now, if anyone (server/limit-failover-host.ts routineLimit). */
   limit?: RoutineUsageLimit;
+  /** The next run a recurring routine's schedule starts, when this run was started by that schedule, and one interval of the schedule. */
+  nextScheduled?: { at: number; interval: number };
 }
 
 /** A run a limit refused goes on another engine at most this many times (A, then B, then C). */
@@ -189,14 +191,19 @@ function takeOver(run: RoutineRun, limit: RoutineUsageLimit & { to: string }, no
 /** Past this, a reset is not waited for (LIMIT_WAIT_MS), and an estimate never is: when the run starts again after a
  * limit nothing took it over from, and on which engine. The engine that refused was standing in for the bot's own
  * (`home`): the earlier of the two real resets, the bot's own engine on a tie; else the refused engine's. */
-function limitWait(limit: RoutineUsageLimit, now: number): { at: number; home: boolean; on: string } | null {
+function limitWait(limit: RoutineUsageLimit, now: number): { at: number; reset: number; home: boolean; on: string } | null {
   const resets = [
     ...(limit.home && !limit.home.estimated ? [{ reset: limit.home.resetsAt, home: true, on: limit.home.name }] : []),
     ...(!limit.estimated ? [{ reset: limit.resetsAt, home: false, on: limit.from }] : []),
   ].filter(({ reset }) => reset + AFTER_RESET_MS > now && reset - now <= LIMIT_WAIT_MS)
     .sort((left, right) => left.reset - right.reset || Number(right.home) - Number(left.home));
   const first = resets[0];
-  return first ? { at: first.reset + AFTER_RESET_MS, home: first.home, on: first.on } : null;
+  return first ? { at: first.reset + AFTER_RESET_MS, reset: first.reset, home: first.home, on: first.on } : null;
+}
+
+/** The next scheduled run falls within one interval after this reset, so a replay at the reset would repeat that run. */
+function nextCovers(reset: number | undefined, next: RoutineFailureFacts["nextScheduled"]): boolean {
+  return reset !== undefined && next !== undefined && next.at <= reset + next.interval;
 }
 
 /** The second start's own line, so a run that already did part of its work does not do it twice. */
@@ -244,7 +251,8 @@ export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailu
       // The engine's own reset (the host also reads it from the engine's words), never an estimate passed off as one;
       // the bot's own engine's when the one that refused stood in for it and comes back first.
       const wait = limitWait(limit, now);
-      if (wait) {
+      // The next scheduled run, due within one interval after the reset, does this work: no replay at the reset.
+      if (wait && !nextCovers(wait.reset, facts.nextScheduled)) {
         const text = routineLimitWaitingText(limit, wait.at, said, wait.on);
         if (requeueOnce(run, "usage_limit", failure, now, wait.at, text)) {
           // Back on the bot's own engine, never on the backup that refused: its conversation goes back there at the
@@ -262,7 +270,7 @@ export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailu
       return { queued: false, error: text, alert: first ? { detail: text } : null };
     }
     const reset = verdict.resetsAt;
-    if (reset && reset > now && reset - now <= LIMIT_WAIT_MS) {
+    if (reset && !nextCovers(reset, facts.nextScheduled) && reset > now && reset - now <= LIMIT_WAIT_MS) {
       const at = reset + AFTER_RESET_MS;
       const text = routineLimitUnknownEngineText(said, at);
       if (requeueOnce(run, "usage_limit", failure, now, at, text)) return { queued: true, ...(first ? { alert: { detail: text } } : {}) };

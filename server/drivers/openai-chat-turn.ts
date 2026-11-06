@@ -3,7 +3,7 @@ import type { SendTurnInput } from "../contracts.ts";
 import { warmResourcePerson } from "../resources/warm-resources.ts";
 import { newId } from "../contracts.ts";
 import { ASK_USER_TOOL, ASK_USER_TOOL_DEFINITION, askQuestionSummary, parseAskQuestions, questionChoices } from "../../shared/ask-question.ts";
-import { allowsTool, parseToolScope } from "../../shared/tool-scope.ts";
+import { allowsTool, parseToolScope, type ToolScope } from "../../shared/tool-scope.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { cwToolResult, toolDetailPreview, toolFailurePreview } from "../tools/tool-summary.ts";
 import { isPhoneToolCallName, PHONE_TOOL_OUTPUT_NOT_KEPT } from "../../shared/phone-tools.ts";
@@ -257,7 +257,7 @@ async function finalizeOpenAIChatTurn(ctx: OpenAIChatTurnCtx, state: OpenAIChatT
 
 async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
   const { turn, turnId, apiKey, abort, approval, turnEntry, requested, messages, secrets, triedModels, request, retainImages, preview, native, safeText } = ctx;
-  const { options, nextModel, emit, base, complete, reasoningReplayRejected, refuseModel, seesImages, warmToolSessions } = ctx.deps;
+  const { options, nextModel, emit, base, complete, reasoningReplayRejected, refuseModel, seesImages } = ctx.deps;
   let model = ctx.model;
   let tools: ChatToolSession | undefined;
   let mountIntegrations: SendTurnInput["integrations"] | undefined;
@@ -613,7 +613,7 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
 }
 
 export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Config>, turn: SendTurnInput) {
-  const { resolveKey, options, pingModels, rememberWarm, releaseWarm, active, warmThreads, warmToolSessions, messagesFor, unsupportedModels, nextModel, sessionGrants, emit, base, complete, reasoningReplayRejected, refuseModel, seesImages } = deps;
+  const { resolveKey, options, pingModels, rememberWarm, releaseWarm, active, warmThreads, warmToolSessions, messagesFor, unsupportedModels, nextModel, sessionGrants, emit, base } = deps;
     const apiKey = resolveKey(turn);
     if (!apiKey && !options.allowNoKey) throw new Error(options.missingKeyError);
     if (turn.warmOnly === true) {

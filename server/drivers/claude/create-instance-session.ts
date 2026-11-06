@@ -6,7 +6,7 @@ import type { ClaudeSession } from "./session-types.ts";
 import { createSessionHelpers } from "./sessions.ts";
 
 export function createClaudeSessionRuntime(input: {
-  environment: Record<string, string>;
+  environment: (model?: string | null, access?: any) => NodeJS.ProcessEnv | Record<string, string | undefined>;
   active: Map<string, { stop: () => void; turnId: string; broker?: any }>;
 }) {
   // One live CLI process per thread, kept across turns. Under

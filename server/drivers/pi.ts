@@ -1025,33 +1025,6 @@ function decodeConfig(raw: unknown): PiConfig {
 
 const EMPTY: ModelCatalog = { default: "", options: [] };
 
-/** The parsed pi RPC event we branch on — only the fields this driver reads. */
-interface PiEvent {
-  type: string;
-  // response
-  command?: string;
-  success?: boolean;
-  data?: unknown;
-  // message_update
-  assistantMessageEvent?: { type?: string; delta?: string };
-  // tool_execution_*
-  toolCallId?: string;
-  toolName?: string;
-  args?: unknown;
-  result?: unknown;
-  isError?: boolean;
-  // turn_end / message_end
-  message?: { stopReason?: string; errorMessage?: string; usage?: { input?: number; output?: number } };
-  usage?: { input?: number; output?: number };
-  // agent_end / agent_settled
-  isTerminal?: boolean;
-  willRetry?: boolean;
-  // extension_ui_request
-  id?: string;
-  method?: string;
-  options?: unknown[];
-  title?: string;
-}
 
 function piEnvironment(source: Record<string, string | undefined>): Record<string, string | undefined> {
   const env: Record<string, string | undefined> = { ...source, PATH: augmentedPath() };

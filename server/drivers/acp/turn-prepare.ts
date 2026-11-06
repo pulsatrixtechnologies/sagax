@@ -1,5 +1,4 @@
 /** ACP turn prepare + warm phase. */
-import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { DATA_DIR } from "../../config.ts";
 import { applyStoredEngineEnv } from "../../engines/engine-api-keys.ts";
@@ -18,10 +17,8 @@ import {
 } from "./constants.ts";
 import { skipSubscriptionAuthForLocalInject } from "./helpers.ts";
 import { newTurnLatency } from "./turn-latency.ts";
-import type { AcpSession } from "./types.ts";
 import type { SendTurnDeps } from "./turn-deps.ts";
-import { MiB, warmResourcePerson, warmResourceTokenThread, warmResources } from "../../resources/warm-resources.ts";
-import { killCliTree } from "../../procs.ts";
+import { warmResourceTokenThread } from "../../resources/warm-resources.ts";
 import { turnTrace } from "../../turns/turn-trace.ts";
 import { prepareAcpSpawn } from "./turn-prepare-spawn.ts";
 
@@ -201,7 +198,7 @@ export async function prepareAcpTurn(deps: SendTurnDeps, turn: SendTurnInput): P
       openSession, threadId, active, warming, sessions, closeSession, sessionAllows, sessionServersKey,
     });
     const {
-      spawnArgs, spawnEnv, launchEnv, launchModel, contractKey, sessionKey, launchSession,
+      spawnEnv, launchEnv, sessionKey, launchSession,
       cursor, reused, sessionRef,
     } = spawned;
     let session = spawned.session;

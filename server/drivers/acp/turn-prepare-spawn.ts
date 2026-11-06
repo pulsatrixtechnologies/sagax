@@ -14,7 +14,7 @@ export type AcpSpawnDeps = {
   launch: any;
   env: Record<string, string | undefined>;
   cwd: string | undefined;
-  accountModels: Set<string> | null | undefined;
+  accountModels: ReadonlySet<string> | null | undefined;
   openSession: (...args: any[]) => AcpSession;
   threadId: string;
   active: Map<string, unknown>;

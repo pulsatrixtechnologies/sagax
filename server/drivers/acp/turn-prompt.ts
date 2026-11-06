@@ -2,11 +2,11 @@
 import { fitPromptBytes } from "./prompt-fit.ts";
 import { joinCachePrime } from "../../voice/voice-first-sentence.ts";
 import {
-  deletePromptSplitReceipt, promptHalves, readPromptSplitReceipt, splitSessionPrompt, writePromptSplitReceipt,
+  deletePromptSplitReceipt, writePromptSplitReceipt,
 } from "../prompt-split.ts";
 import { lastSeenPhrase } from "./quiet-status.ts";
 import {
-  ACP_PROMPT_RE_ANCHOR_TURNS, formatQuietLimit, promptIdleTimeoutMs,
+  formatQuietLimit, promptIdleTimeoutMs,
 } from "./constants.ts";
 import {
   acpVariantOption, isReasoningOnlyEmpty, lowerReasoningEffort, readAcpImageBlocks, reasoningContinueMax,
@@ -18,7 +18,7 @@ import { composeAcpPromptInput } from "./turn-prompt-build.ts";
 
 export async function promptAcpTurn(ctx: AcpTurnCtx): Promise<void> {
   const {
-    support, DRIVER_KIND, turn, turnId, threadId, turnConfig, cwd, spawnEnv, mcpServers,
+    support, DRIVER_KIND, turn, turnId, threadId, turnConfig, cwd, spawnEnv,
     sessionKey, cursor, renewedFromChat, launchedThisTurn, reused, latency, controlsHost,
     retiring, retireChild, closeSession, sessions, sessionAllows, emit, base,
     request, initialize, authenticateOnce, sessionInputs, launchSession, settle,
@@ -80,8 +80,6 @@ export async function promptAcpTurn(ctx: AcpTurnCtx): Promise<void> {
   };
 
   const composedPrompt = composeAcpPromptInput(ctx);
-  let halves = composedPrompt.halves;
-  let volatileSections = composedPrompt.volatileSections;
   let promptInput = composedPrompt.promptInput;
   promptTurn = composedPrompt.promptTurn;
   pendingSplitReceipt = composedPrompt.pendingSplitReceipt;

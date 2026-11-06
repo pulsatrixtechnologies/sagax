@@ -1,7 +1,7 @@
 // @ts-nocheck
 /** observeAchievementFrame (#1388). Pure move from server/index.ts. */
-import { activityEvents, routineRunEvents } from "../achievements.ts";
-import { modelFamily } from "../achievements-mastery.ts";
+import { activityEvents, routineRunEvents } from "../achievements/achievements.ts";
+import { modelFamily } from "../achievements/achievements-mastery.ts";
 export type Host = Record<string, any>;
 
 export function createObserveAchievementFrame(getHost: () => Host): any {

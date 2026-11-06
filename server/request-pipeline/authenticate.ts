@@ -1,7 +1,7 @@
 // @ts-nocheck
 /** authenticate (#1388). Pure move from server/index.ts. */
-import { masteryRequestFacts } from "../achievements-mastery.ts";
-import { achievementRequestEvents, roomPeopleCount } from "../achievements.ts";
+import { masteryRequestFacts } from "../achievements/achievements-mastery.ts";
+import { achievementRequestEvents, roomPeopleCount } from "../achievements/achievements.ts";
 import { canOnBot } from "../auth/authz.ts";
 import { IDP_REFRESH_WAIT_MS, settledWithin } from "../auth/idp-session.ts";
 import { isAccountEmail } from "../auth/principals.ts";

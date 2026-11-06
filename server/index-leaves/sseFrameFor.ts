@@ -4,7 +4,7 @@ import { voiceOpenerFrameAllowed } from "../voice/voice-first-sentence.ts";
 import { phoneToolsFrameAllowed } from "../../shared/phone-tools.ts";
 import { liveFramesNeedChannelFilter, sseFrameProjection } from "../rooms/channel-visibility.ts";
 import { botActFrameAllowed } from "../../shared/bot-act.ts";
-import { achievementFrameAllowed } from "../achievements.ts";
+import { achievementFrameAllowed } from "../achievements/achievements.ts";
 import { encodeSseDataFrame } from "../streams/sse-fanout.ts";
 import { dataFrameAllowed } from "../data/scope.ts";
 import { screenVisibleToPrincipal } from "../sandbox/user-sandbox-routing.ts";

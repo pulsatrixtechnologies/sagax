@@ -1518,7 +1518,7 @@ export class Store {
     const rooms = this.groups.filter((group) => {
       if (!sameTeamLink(group, link)) return false;
       const bots = group.memberIds.map((id) => this.bot(id)).filter((bot): bot is BotRecord => Boolean(bot));
-      return bots.length === 0 || bots.every((bot) => this.botOwnerKey(bot) === owner);
+      return bots.every((bot) => this.botOwnerKey(bot) === owner);
     });
     const managedHit = (bot: BotRecord) => Boolean(bot.managedSections?.some((entry) => {
       const value = sectionKey(entry);
@@ -1581,7 +1581,7 @@ export class Store {
     const rooms = this.groups.filter((group) => {
       if (!sameTeamLink(group, link)) return false;
       const bots = group.memberIds.map((id) => this.bot(id)).filter((bot): bot is BotRecord => Boolean(bot));
-      return bots.length === 0 || bots.every((bot) => this.botOwnerKey(bot) === owner);
+      return bots.every((bot) => this.botOwnerKey(bot) === owner);
     });
     if (members.some((bot) => bot.busy || bot.tasks?.some((task) => task.busy)) || rooms.some((group) => group.busyBotId)) {
       return "Stop this team's active work before deleting the team";

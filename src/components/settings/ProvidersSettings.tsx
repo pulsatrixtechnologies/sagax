@@ -1,12 +1,11 @@
-// Settings > Providers (2026-10-30, "Providers, models and voice", lot 1):
-// one list of the accounts, keys, servers and models of this computer that
-// pay for a turn or a voice, read from the stores as they are today
-// (src/lib/provider-rows.ts). Each row says who pays, where its key lives,
-// its state and what it brings; a click opens its detail in place, where it
-// is managed exactly as before (the engine's sign-in, the key's dialog, the
-// server's form). "Add a provider" is one flow: an account, a key or a
-// server. An admin of an organization can view the page as a member does.
-// The former Engines and Keys groups stay on Models, under "Former view".
+// Settings > Providers (2026-10-30, "Providers, models and voice", lot 1;
+// #2080): one list of the accounts, keys, servers and models of this
+// computer that pay for a turn or a voice, read from the stores as they
+// are today (src/lib/provider-rows.ts). One row per provider, its accounts
+// inside; each account says who pays and its state, one action. "Add a
+// provider" is the last row of the card (one flow: an account, a key or a
+// server). An organization band and the rows the organization pays for
+// stay out of sight.
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChevronDown, Copy, Cpu, KeyRound, Plus, Server, UserRound } from "lucide-react";
 
@@ -94,7 +93,8 @@ export function providerBrings(row: ProviderRow, nameOf: (instanceId: string) =>
 }
 
 /** The grey line under an account's name (#2080): who pays · what it brings.
- * Its state follows, coloured alone (StatusText). */
+ * Never where the key lives ("Signed-in session"): that jargon repeated on
+ * every row. Its state follows, coloured alone (StatusText). */
 export function providerLine(row: ProviderRow, nameOf: (instanceId: string) => string): string {
   return [t(PAYER_KEY[row.payer]), providerBrings(row, nameOf)].filter(Boolean).join(" · ");
 }
@@ -547,20 +547,8 @@ export function ProvidersSettings() {
         <SettingsGroup
           title={t("providers.title")}
           groupId="providers"
-          accessory={(
-            <span className="flex items-center gap-2">
-              <HelpTip label={t("settings.moreAbout", { title: t("providers.title") })}>{t("providers.help")}</HelpTip>
-              {!adding && (
-                <button type="button" data-add-provider-open="" onClick={() => setAdding(true)} className={cn(PRIMARY_PILL, "inline-flex items-center gap-1.5")}>
-                  <Plus size={14} aria-hidden="true" className="shrink-0" />
-                  {t("providers.add.title")}
-                </button>
-              )}
-            </span>
-          )}
+          accessory={<HelpTip label={t("settings.moreAbout", { title: t("providers.title") })}>{t("providers.help")}</HelpTip>}
         >
-          {/* the page's one primary action, at the top of its card: it covers every provider not connected yet */}
-          {adding && <AddProvider toConnect={splitProviderRows(rows).toConnect} onPick={pick} onClose={() => setAdding(false)} organization={organization} manageKeys={keys} issuer={issuer} nameOf={nameOf} />}
           {groups.length > 0
             ? <ul className="flex flex-col" data-providers-active="">{groups.map(group)}</ul>
             : <div data-providers-empty=""><SettingsEmpty icon={KeyRound}>{t("providers.empty")}</SettingsEmpty></div>}
@@ -583,6 +571,18 @@ export function ProvidersSettings() {
               {openGroup === "local" && <div className="flex min-w-0 flex-col px-3.5 pb-2 sm:pl-[52px]"><LocalModelsSettings bare /></div>}
             </li>
           </ul>
+          {/* #2080: the card's one primary action, last row (never red at the top).
+              It covers every provider not connected yet. */}
+          {adding
+            ? <AddProvider toConnect={splitProviderRows(rows).toConnect} onPick={pick} onClose={() => setAdding(false)} organization={organization} manageKeys={keys} issuer={issuer} nameOf={nameOf} />
+            : (
+              <div data-add-provider-row="" className="mx-1.5 mt-1 border-t border-hairline/40 pt-1.5">
+                <button type="button" data-add-provider-open="" onClick={() => setAdding(true)} className={cn(PRIMARY_PILL, "inline-flex w-full items-center justify-center gap-1.5")}>
+                  <Plus size={14} aria-hidden="true" className="shrink-0" />
+                  {t("providers.add.title")}
+                </button>
+              </div>
+            )}
         </SettingsGroup>
       </div>
       {/* Other services (from Models, 2026-11-05): web search (the person's own key) and image generation */}

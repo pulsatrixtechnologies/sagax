@@ -2,7 +2,7 @@
 // Settings > Providers after #2080 (JC 2026-11-05): one row per provider,
 // its accounts inside; no filters, no organization band, no row the
 // organization manages in Perspicax, nothing turned off or waiting to be
-// connected (Add a provider, at the top, covers it). Who pays and the models
+// connected (Add a provider, last row, covers it). Who pays and the models
 // count behind each row, Other services and the Advanced fold.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -50,7 +50,7 @@ vi.mock("@/lib/desktop-local-models", async (importOriginal) => ({
 vi.mock("../DesktopCapabilities", () => ({ useDesktopCapabilities: () => ({ capabilities: {} }) }));
 vi.mock("../HarnessConnectorsSection", () => ({ HarnessConnectorsSection: () => createElement("div", { "data-harness-connectors": "" }) }));
 
-const { ProvidersSettings, providerAction } = await import("./ProvidersSettings");
+const { ProvidersSettings, providerAction, providerLine } = await import("./ProvidersSettings");
 
 let host: HTMLDivElement;
 let root: Root;
@@ -99,6 +99,18 @@ describe("providerAction: one action per row", () => {
   });
 });
 
+describe("providerLine: who pays, never where the key lives", () => {
+  it("names the payer and what the row brings, never Signed-in session", () => {
+    const line = providerLine({
+      id: "account:claude", kind: "account", name: "alex_admin@example.com", payer: "me",
+      keyWhere: "session", state: "connected", instanceIds: ["claude"], brings: [], manage: true,
+    }, () => "Claude");
+    expect(line.startsWith("Me")).toBe(true);
+    expect(line.toLowerCase()).not.toContain("signed");
+    expect(line.toLowerCase()).not.toContain("session");
+  });
+});
+
 describe("Settings > Providers, solo", () => {
   it("draws the list, Other services (web search, image generation) and the Advanced fold, no organization band", async () => {
     fixture.instances = [instance("mistral", "mistral", "Mistral")];
@@ -118,11 +130,30 @@ describe("Settings > Providers, solo", () => {
     expect(row.querySelector("[data-provider-state]")?.getAttribute("data-provider-state")).toBe("connected");
     expect(row.querySelector("[data-provider-action]"), "connected: the whole row opens, a chevron").toBeNull();
     expect(row.querySelector("[data-provider-open-perspicax]")).toBeNull();
-    // no filter chips; Add a provider is the card's one primary action, at its top
+    // no filter chips; Add a provider is the card's one primary action, last row
     expect(host.querySelector("[data-provider-filter]")).toBeNull();
-    expect(host.querySelector('[data-settings-card="providers.list"] [data-add-provider-open]')).not.toBeNull();
-    // this computer's model servers are one provider of their own, at the bottom
-    expect(host.querySelector('[data-provider-group="local"]')?.textContent).toContain("Off");
+    const addRow = host.querySelector<HTMLElement>('[data-settings-card="providers.list"] [data-add-provider-row]');
+    const add = addRow?.querySelector<HTMLElement>("[data-add-provider-open]");
+    expect(add).not.toBeNull();
+    expect(add!.className).toContain("ui-button-primary");
+    // this computer's model servers are one provider of their own; Add follows them
+    const local = host.querySelector('[data-provider-group="local"]')!;
+    expect(local.textContent).toContain("Off");
+    expect(local.compareDocumentPosition(addRow!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("shows who pays on the grey line, never Signed-in session, and one action (chevron) when connected", async () => {
+    fixture.instances = [instance("claude", "claudeAgent", "Claude", { access: "subscription" })];
+    await render();
+    const row = host.querySelector<HTMLElement>('[data-provider-row="account:claude"]')!;
+    expect(row).not.toBeNull();
+    // The grey line's title carries who pays · what it brings (state is a sibling).
+    const grey = row.querySelector("button[aria-expanded] [title]")?.getAttribute("title") ?? "";
+    expect(grey).toContain("Me");
+    expect(grey.toLowerCase()).not.toContain("signed");
+    expect(grey.toLowerCase()).not.toContain("session");
+    expect(row.querySelector("[data-provider-action]")).toBeNull();
+    expect(row.querySelectorAll(":scope > button")).toHaveLength(1);
   });
 
   it("groups several accounts of one provider in one row: N accounts, their state, each account inside", async () => {

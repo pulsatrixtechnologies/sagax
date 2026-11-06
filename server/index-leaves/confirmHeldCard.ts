@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** confirmHeldCard (#1388). Pure move from server/index.ts. */
+import { wholeCallDigest } from "../approvals/owner-approval.ts";
+
 export type Host = Record<string, any>;
 
 export function createConfirmHeldCard(getHost: () => Host): any {

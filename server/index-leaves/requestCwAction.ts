@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** requestCwAction (#1388). Pure move from server/index.ts. */
+import { ruleCandidateFor, scopeKeepable, WHOLE_CALL_KEY, wholeCallDigest } from "../approvals/owner-approval.ts";
+
 export type Host = Record<string, any>;
 
 export function createRequestCwAction(getHost: () => Host): any {

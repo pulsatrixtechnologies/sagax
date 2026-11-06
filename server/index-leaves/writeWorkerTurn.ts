@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** writeWorkerTurn (#1388). Pure move from server/index.ts. */
+import { parseTurnWrite, workerOwns } from "../workers.ts";
+
 export type Host = Record<string, any>;
 
 export function createWriteWorkerTurn(getHost: () => Host): any {

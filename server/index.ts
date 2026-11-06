@@ -384,20 +384,7 @@ import { ComputerAppReader } from "./computer/computer-app.ts";
 import { appRuleOffered } from "../shared/computer-app.ts";
 import { proposalReplacements } from "./proposal-budget.ts";
 import { memberTeamSetupRefusal, TEAM_SETUP_DESKTOP_MESSAGE, TEAM_SETUP_DESKTOP_ONLY } from "./team/team-setup-review.ts";
-import {
-  cardRuleCandidate,
-  folderRuleCandidate,
-  matchOwnerRule,
-  ownerDecision,
-  ownerVerdictOver,
-  ruleCandidateFor,
-  ruleCoversExactScope,
-  ruleInputFor,
-  scopeKeepable,
-  WHOLE_CALL_KEY,
-  wholeCallDigest,
-  type OwnerRule
-} from "./approvals/owner-approval.ts";
+import { matchOwnerRule, ruleCoversExactScope, type OwnerRule } from "./approvals/owner-approval.ts";
 import { OwnerApprovalStore } from "./approvals/owner-approval-store.ts";
 import { CustomRuleStore, registeredCustomRuleStore } from "./rules/custom-rules-store.ts";
 import {
@@ -532,23 +519,9 @@ import { holdIncludedServices, voiceCredential } from "./included-services.ts";
 import type { ProviderInstance, RemoteMcpSpec } from "./contracts.ts";
 import { createModelAccessRefusals, personPayer, type RefusalPayer } from "./models/model-access-refusals.ts";
 import { MODEL_ACCESS_DISABLED_MESSAGE } from "../shared/model-access-disabled.ts";
-import {
-  instancesForPerson,
-  memberNewBotSelection,
-  readyToRun,
-  starredModelSelections,
-  selectDefaultModelSelection,
-  withInstanceConfig,
-  withNewBotEffort,
-  type SelectableInstance
-} from "./models/default-model-selection.ts";
-import { threadModelFallback, type ThreadEngine } from "./threads/thread-model.ts";
-import {
-  NO_ENGINE_PERSON,
-  engineProblem,
-  namesEngine,
-  noEngineError
-} from "./bots/bot-engine.ts";
+import { withInstanceConfig, withNewBotEffort, type SelectableInstance } from "./models/default-model-selection.ts";
+import { threadModelFallback } from "./threads/thread-model.ts";
+import { engineProblem, namesEngine, noEngineError } from "./bots/bot-engine.ts";
 import { sameModelSelection } from "../shared/thread-model.ts";
 import { allowedFallbackSelection, engineAllowed } from "../shared/org-allowed-engines.ts";
 import { offeredEngines } from "../shared/offered-engines.ts";
@@ -933,9 +906,7 @@ import {
   createSectionChannelRoutes,
   isGeneralName,
   migrationOwner,
-  recordAccess,
   SectionChannels,
-  sectionShareGrants,
   validSectionName,
 } from "./rooms/section-channels.ts";
 import { createBotGrantRoutes, visibleGrants, wireGrants } from "./bots/bot-grants.ts";
@@ -1260,14 +1231,7 @@ import { directoryIntervalMs, PerspicaxDirectory, type ModelProvider } from "./p
 import { duplicateNote, PerspicaxMemory } from "./memory/perspicax-memory.ts";
 import { knownAgentToolName, PERSPICAX_TOOL_NAMES } from "./drivers/agents-catalog.ts";
 import { measureContextBuckets, toolDefinitionBytes } from "./context/context-buckets.ts";
-import {
-  PERSPICAX_PROTOCOL_VERSION,
-  PERSPICAX_UNAVAILABLE_WHY,
-  PerspicaxMcp,
-  perspicaxUnavailableRow,
-  perspicaxUnavailableWhy,
-  type PerspicaxUnavailableReason
-} from "./perspicax/perspicax-mcp.ts";
+import { PerspicaxMcp, perspicaxUnavailableWhy } from "./perspicax/perspicax-mcp.ts";
 import { parseGoMessage } from "./perspicax/go-message.ts";
 import { withClaimsFlag } from "./perspicax/perspicax-claims.ts";
 import { createPerspicaxClaimsInternalRoutes } from "./routes/perspicax-claims-internal.ts";

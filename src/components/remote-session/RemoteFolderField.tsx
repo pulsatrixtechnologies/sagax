@@ -22,7 +22,7 @@ export function browsableSession(rows: RemoteSessionView[]): RemoteSessionView |
 
 type FieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "className">;
 
-export function RemoteFolderField({ botId, value, onChange, inputClassName = FIELD, inputRef, view, solo, ...inputProps }: FieldProps & {
+export function RemoteFolderField({ botId, value, onChange, inputClassName = FIELD, inputRef, view, solo, plainWithoutComputer, ...inputProps }: FieldProps & {
   botId: string;
   value: string;
   onChange: (path: string) => void;
@@ -32,6 +32,10 @@ export function RemoteFolderField({ botId, value, onChange, inputClassName = FIE
   view?: RemoteSessionView;
   /** A solo server (no Perspicax): no remote computer to browse, a plain field. */
   solo?: boolean;
+  /** No computer connected: a plain field, without the disabled Browse
+   * button nor its reason (#2092: the bot's working folder, which then
+   * lives in the server environment). */
+  plainWithoutComputer?: boolean;
 }) {
   const polled = useRemoteSessions(view ? undefined : botId).rows;
   const session = view ?? browsableSession(polled);
@@ -79,7 +83,7 @@ export function RemoteFolderField({ botId, value, onChange, inputClassName = FIE
   const here = listing?.path ?? "";
   const sensitive = here ? sensitiveRemoteDir(here, os) : false;
   const canChoose = Boolean(listing) && !loading && !error && !sensitive;
-  if (solo) return <input {...inputProps} ref={inputRef} value={value} onChange={(event) => onChange(event.target.value)} className={inputClassName} />;
+  if (solo || (plainWithoutComputer && !session)) return <input {...inputProps} ref={inputRef} value={value} onChange={(event) => onChange(event.target.value)} className={inputClassName} />;
   const reason = session ? t("remoteFolder.browse") : t("remoteFolder.noComputer");
   const row = "flex min-h-[40px] w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-ink hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-45 md:min-h-0";
 

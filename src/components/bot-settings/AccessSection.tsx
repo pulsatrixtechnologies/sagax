@@ -16,6 +16,7 @@ import { cn } from "@/lib/cn";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { t } from "@/lib/i18n";
 import { readableOr } from "../../../shared/human-id";
+import { readableName } from "../../../shared/readable-name";
 import { mcpAccountFor, mcpServersForBot, useMcpServers, withMcpAccount } from "@/lib/mcp-servers";
 import { cloudComputersOffered } from "@/lib/place";
 import { shortPath } from "@/lib/short-path";
@@ -25,7 +26,7 @@ import { CloudBackendPicker } from "../CloudBackendPicker";
 import { RemoteFolderField } from "../remote-session/RemoteFolderField";
 import { PILL, PillSelect, Switch } from "../SettingsPrimitives";
 import { ProposalStatus } from "./ProposalStatus";
-import { ToolSelectionCard } from "./ToolSelectionCard";
+import { ToolSelectionCard, toolLabel } from "./ToolSelectionCard";
 import { inputCls } from "./field";
 import { PaneEmpty, PaneSection } from "./PaneSection";
 import { BotWebhooks } from "./BotWebhooks";
@@ -47,9 +48,9 @@ function WorkingFolder({ bot }: { bot: Bot }) {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const canPick = Boolean(window.ogb?.pickFolder);
-  const task = bot.tasks?.find((t) => t.threadId === bot.threadId);
-  const pinned = task?.cwd; // undefined = not yet, null = legacy home, string = folder
-  const pinnedElsewhere = pinned !== undefined && (pinned ?? undefined) !== bot.cwd;
+  // #2092: the field shows the folder in use, the server's default when
+  // the bot has none of its own (/workspace/bots/<slug>)
+  const shown = bot.cwd ?? bot.workFolder ?? "";
 
   const save = async (cwd: string | null) => {
     setSaving(true);
@@ -89,29 +90,32 @@ function WorkingFolder({ bot }: { bot: Bot }) {
           className="flex items-center gap-2"
           onSubmit={(e) => {
             e.preventDefault();
-            // an emptied field clears the folder: the server wants null
-            void save((draft ?? bot.cwd ?? "").trim() || null);
+            // an emptied field, or the default itself, clears the folder: the server wants null
+            const next = (draft ?? shown).trim();
+            void save(next && !(next === bot.workFolder && !bot.cwd) ? next : null);
           }}
         >
           <RemoteFolderField
             botId={bot.id}
             solo={solo}
+            plainWithoutComputer
             inputClassName={cn(inputCls, "font-mono text-[12.5px]")}
             placeholder={t("botPanel.access.placeholder")}
-            value={draft ?? bot.cwd ?? ""}
+            value={draft ?? shown}
             onChange={setDraft}
           />
-          <button type="submit" disabled={saving || draft === null} className={cn(PILL, "shrink-0")}>
-            {t("common.save")}
-          </button>
+          {draft !== null ? (
+            <button type="submit" disabled={saving} className={cn(PILL, "shrink-0")}>
+              {t("common.save")}
+            </button>
+          ) : bot.cwd && bot.workFolder ? (
+            <button type="button" onClick={() => void save(null)} disabled={saving} className={cn(PILL, "shrink-0")}>
+              {t("botPanel.access.clear")}
+            </button>
+          ) : null}
         </form>
       )}
       {error && <div className="mt-2 text-[12px] text-danger">{error}</div>}
-      {pinnedElsewhere && (
-        <div className="mt-2 text-[12px] text-ink-secondary">
-          {t("botPanel.access.pinnedBefore")} {pinned ? <span className="font-mono">{shortPath(pinned, home)}</span> : t("botPanel.access.home")}. {t("botPanel.access.pinnedAfter")}
-        </div>
-      )}
     </PaneSection>
   );
 }
@@ -136,6 +140,15 @@ function ManageInConnectApps({ surface }: { surface: "apps" | "mcp" }) {
       {t("botAccess.manageInConnectApps")} <ArrowUpRight size={13} aria-hidden="true" />
     </button>
   );
+}
+
+/** An Always allow key in words ("mcp:mail:read_notes" reads "Mail · Read
+ * notes"); anything else (a command) stays as written. */
+function alwaysLabel(entry: string): string | null {
+  const mcp = /^mcp:([^:]+):(.+)$/.exec(entry);
+  if (mcp) return `${readableName(mcp[1])} · ${toolLabel(mcp[2])}`;
+  const native = /^native:(.+)$/.exec(entry);
+  return native ? toolLabel(native[1]) : null;
 }
 
 function McpServersCard({ bot, patch }: {
@@ -168,7 +181,7 @@ function McpServersCard({ bot, patch }: {
           {servers.map((server) => (
             <div key={server.name} className="flex min-h-[44px] items-center justify-between gap-3 px-3.5 py-2">
               <div className="min-w-0 flex-1">
-                <div className="truncate font-mono text-[12.5px] text-ink">{server.name}</div>
+                <div title={server.name} className="truncate text-[13px] text-ink">{readableName(server.name)}</div>
                 {!server.enabled && <div className="text-[11.5px] text-ink-secondary">{t("botAccess.mcpDisabled")}</div>}
               </div>
               {server.accounts && mounted.has(server.name) && (
@@ -177,7 +190,7 @@ function McpServersCard({ bot, patch }: {
                     value={mcpAccountFor(server, bot.mcpAccounts)}
                     disabled={!!error}
                     onChange={(account) => patch({ mcpAccounts: withMcpAccount(bot.mcpAccounts, server.name, account) })}
-                    ariaLabel={t("botAccess.mcpAccountAria", { name: server.name })}
+                    ariaLabel={t("botAccess.mcpAccountAria", { name: readableName(server.name) })}
                     options={server.accounts.map((account, index) => ({
                       value: account.id,
                       label: (account.id === "default" ? t("botAccess.mcpAccountFirst") : readableOr(account.label ?? account.id, t("ids.accountN", { n: index + 1 })))
@@ -189,7 +202,7 @@ function McpServersCard({ bot, patch }: {
               <Switch
                 checked={mounted.has(server.name)}
                 disabled={!server.enabled || !!bot.busy || error}
-                aria-label={t("botAccess.mcpAllow", { name: server.name })}
+                aria-label={t("botAccess.mcpAllow", { name: readableName(server.name) })}
                 onClick={() => toggle(server.name)}
                 className="disabled:cursor-not-allowed"
               />
@@ -332,7 +345,7 @@ export function AccessSection({
             <div className="-mx-3.5 -my-1 divide-y divide-hairline/40">
               {alwaysAllow.map((entry) => (
                 <div key={entry} className="flex min-h-[44px] items-center justify-between gap-3 px-3.5 py-2">
-                  <span className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-ink">{entry}</span>
+                  <span title={entry} className={cn("min-w-0 flex-1 truncate text-ink", alwaysLabel(entry) ? "text-[13px]" : "font-mono text-[12.5px]")}>{alwaysLabel(entry) ?? entry}</span>
                   <button
                     type="button"
                     aria-label={t("botPanel.access.removeAlways", { entry })}

@@ -48,7 +48,7 @@ describe("ComposeToPicker people", () => {
   it("offers active persons other than oneself, matched by the query", () => {
     expect(composePeople(people, "pr_alice", "").map((p) => p.principalId)).toEqual(["pr_bob"]);
     expect(composePeople(people, "pr_alice", "zz")).toEqual([]);
-    expect(composeRows("browse", [], true, [people[1]!]).map((row) => row.kind)).toEqual(["create-bot", "create-bot-wizard", "create-group", "person"]);
+    expect(composeRows("browse", [], true, [people[1]!]).map((row) => row.kind)).toEqual(["create-bot", "create-group", "person"]);
     expect(composeRows("group", [], true, [people[1]!]).map((row) => row.kind)).toEqual(["create-group", "person"]);
   });
 

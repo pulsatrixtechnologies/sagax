@@ -91,10 +91,13 @@ describe("an organization member", () => {
 
 describe("owner tool selection status", () => {
   it("distinguishes the legacy catalog from an explicit no-tools selection", () => {
-    expect(render(makeBot())).toContain("All current tools");
+    // #2092: one row per group with a readable status
+    const legacy = render(makeBot());
+    expect(legacy).toContain("Engine tools");
+    expect(legacy).toMatch(/Engine tools<\/span><span[^>]*>All tools</);
     const empty = render(makeBot({ toolScope: { allow: [] } } as Partial<Bot>));
     expect(empty).toContain("No tools selected");
-    expect(empty).not.toContain("All current tools</p>");
+    expect(empty).toMatch(/Engine tools<\/span><span[^>]*>Off</);
     expect(empty).toContain("Existing approvals still apply");
   });
 
@@ -114,8 +117,8 @@ describe("owner tool selection status", () => {
 
   it("keeps the selection editor disabled while a task is active", () => {
     const markup = render(makeBot({ busy: true }));
-    // the mode is a pill menu: its trigger is disabled
-    expect(markup).toMatch(/aria-label="Tool selection"[^>]* disabled=""/);
+    // each group switch is disabled
+    expect(markup).toMatch(/disabled=""[^>]*aria-label="Allow the tools of Engine tools"/);
     expect(markup).toContain("Wait until this bot finishes all active tasks before changing its tool selection.");
   });
 });
@@ -124,14 +127,14 @@ describe("AccessSection always-allowed list", () => {
   it("keeps per-bot MCP changes disabled while any task is active", () => {
     fixture.servers = [{ name: "notes", enabled: true }, { name: "offline", enabled: false }];
     const markup = render(makeBot({ busy: true, mcpServers: ["notes"] }));
-    expect(markup).toContain('disabled="" aria-label="Let this bot use notes"');
-    expect(markup).toContain('disabled="" aria-label="Let this bot use offline"');
+    expect(markup).toContain('disabled="" aria-label="Let this bot use Notes"');
+    expect(markup).toContain('disabled="" aria-label="Let this bot use Offline"');
     expect(markup).toMatch(/<button type="button" disabled=""[^>]*>Use every enabled server<\/button>/);
     expect(markup).toContain("finishes all active tasks");
     expect(markup).toContain("Individual tool approvals depend on the model provider and approval mode.");
     const idle = render(makeBot({ mcpServers: ["notes"] }));
-    expect(idle).not.toContain('disabled="" aria-label="Let this bot use notes"');
-    expect(idle).toContain('disabled="" aria-label="Let this bot use offline"');
+    expect(idle).not.toContain('disabled="" aria-label="Let this bot use Notes"');
+    expect(idle).toContain('disabled="" aria-label="Let this bot use Offline"');
     expect(idle).not.toContain("finishes all active tasks");
   });
 
@@ -142,7 +145,7 @@ describe("AccessSection always-allowed list", () => {
     expect(markup).toContain("Could not refresh MCP servers.");
     expect(markup).toContain("Retry");
     expect(markup).toContain('role="alert"');
-    expect(markup).toContain('disabled="" aria-label="Let this bot use notes"');
+    expect(markup).toContain('disabled="" aria-label="Let this bot use Notes"');
   });
 
   it("shows a placeholder when nothing is standing yet", () => {

@@ -41,10 +41,18 @@ interface SavedBot { id: string; name: string; toolScope?: { allow?: string[]; d
       const button = [...document.querySelectorAll('main > div button')].find(button => button.textContent.trim().endsWith(': ' + ${JSON.stringify(name)}));
       if (!button) throw new Error('Missing fixture bot'); button.click(); return true;
     })()`);
+    // #2092: the raw lists live behind Advanced; "custom" is the allow-list switch there,
+    // "all" is its reset button.
     const mode = (value: "all" | "custom") => evaluate(`(() => {
-      const select = document.querySelector('select[aria-label="Tool selection"]');
-      if (!select || select.disabled) throw new Error('Selection is unavailable');
-      select.value = ${JSON.stringify(value)}; select.dispatchEvent(new Event('change', { bubbles: true })); return true;
+      const fold = document.querySelector('details[data-tool-advanced]');
+      if (!fold) throw new Error('Selection is unavailable'); fold.open = true;
+      if (${JSON.stringify(value)} === 'all') {
+        const reset = [...fold.querySelectorAll('button')].find(b => b.textContent.trim() === 'All current tools');
+        if (reset) reset.click(); return true;
+      }
+      const toggle = fold.querySelector('[role="switch"]');
+      if (!toggle || toggle.disabled) throw new Error('Selection is unavailable');
+      if (toggle.getAttribute('aria-checked') !== 'true') toggle.click(); return true;
     })()`);
     const fill = async (name: string, text: string) => {
       // Use the native setter for a deterministic React change, as in the
@@ -58,14 +66,15 @@ interface SavedBot { id: string; name: string; toolScope?: { allow?: string[]; d
     };
     const scope = async (id = first.id) => (await bots()).find(bot => bot.id === id)?.toolScope;
     await selectBot(first.name); await click("Open settings"); await click("Access");
-    expect(await snapshot()).toContain("All current tools");
+    await evaluate("document.querySelectorAll('details[data-advanced-fold]').forEach(d => { d.open = true; }); true");
+    expect(await snapshot()).toContain("Engine tools");
     await mode("custom");
     await fill("Allow (one per line)", "native:*\nmcp:mail:read_notes");
     await fill("Exclude (one per line)", "mcp:mail:send");
     await click("Save tool selection");
     const selected = { allow: ["native:*", "mcp:mail:read_notes"], deny: ["mcp:mail:send"] };
     await expect.poll(() => scope()).toEqual(selected);
-    expect(await snapshot()).toContain("Custom selection saved");
+    expect(await snapshot()).toContain("Exceptions: 2");
 
     await fill("Allow (one per line)", "native:read*");
     expect(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Save tool selection')?.disabled")).toBe(true);
@@ -112,7 +121,7 @@ interface SavedBot { id: string; name: string; toolScope?: { allow?: string[]; d
     await expect.poll(snapshot).toContain("Saving tool selection…");
     await selectBot(second.name);
     await click("Open settings"); await click("Access");
-    await expect.poll(snapshot).toContain("All current tools");
+    await expect.poll(snapshot).toContain("Engine tools");
     await evaluate("window.rejectSelection(); true");
     expect(await snapshot()).not.toContain("Late first-bot error");
     expect(await scope(second.id)).toBeUndefined();

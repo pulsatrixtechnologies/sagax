@@ -187,6 +187,7 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   pinnedMessageId: "conversations",
   unread: { drop: "this server's read state" },
   busy: { drop: "live state" },
+  workFolder: { drop: "derived from the server sandbox" },
   activity: { drop: "live state" },
   waitingForTeammates: { drop: "live state" },
   waitingApprovals: { drop: "derived from the bot's threads" },

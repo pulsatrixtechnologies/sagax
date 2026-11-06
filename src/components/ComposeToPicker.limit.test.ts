@@ -50,7 +50,7 @@ describe("ComposeToPicker result limit", () => {
   it("keeps the two create rows first and at most six results after them", () => {
     expect(COMPOSE_RESULT_LIMIT).toBe(6);
     const rows = composeRows("browse", bots, true, people);
-    expect(rows.map(label)).toEqual(["create-bot", "create-bot-wizard", "create-group", "koda", "rocket", "pr_felix", "pr_gaby", "pr_mallory", "pr_morgan"]);
+    expect(rows.map(label)).toEqual(["create-bot", "create-group", "koda", "rocket", "pr_felix", "pr_gaby", "pr_mallory", "pr_morgan"]);
     expect(composeRows("browse", bots, false, people).map(label)).toEqual(["create-group", "koda", "rocket", "pr_felix", "pr_gaby", "pr_mallory", "pr_morgan"]);
     const many = Array.from({ length: 9 }, (_, i) => bot(`b${i}`, `Bot ${i}`));
     expect(composeRows("group", many).map(label)).toEqual(["create-group", "b0", "b1", "b2", "b3", "b4", "b5"]);
@@ -59,17 +59,17 @@ describe("ComposeToPicker result limit", () => {
   it("filters among everyone, then shows the six best matches", () => {
     // "ma" matches Mallory and Marc by their first name, the bot Puma only inside.
     const matching = [...people].filter((p) => `${p.name} ${p.login}`.toLowerCase().includes("ma"));
-    expect(composeRows("browse", [bot("puma", "Puma")], true, matching, "ma").map(label)).toEqual(["create-bot", "create-bot-wizard", "create-group", "pr_mallory", "pr_marc", "puma"]);
+    expect(composeRows("browse", [bot("puma", "Puma")], true, matching, "ma").map(label)).toEqual(["create-bot", "create-group", "pr_mallory", "pr_marc", "puma"]);
     // Name prefix beats a word prefix, which beats a match inside a word.
     const ro = [bot("aurora", "Aurora"), bot("rocket", "Rocket")];
     const roPeople = [person("pr_marc", "Marc Roy")];
-    expect(composeRows("browse", ro, true, roPeople, "ro").map(label)).toEqual(["create-bot", "create-bot-wizard", "create-group", "rocket", "pr_marc", "aurora"]);
+    expect(composeRows("browse", ro, true, roPeople, "ro").map(label)).toEqual(["create-bot", "create-group", "rocket", "pr_marc", "aurora"]);
     // A long match list is still cut at six.
     const many = Array.from({ length: 10 }, (_, i) => person(`pr_${i}`, `Alex ${i}`));
     expect(composeRows("browse", [], true, many, "alex").filter((row) => row.kind === "person")).toHaveLength(6);
   });
 
-  it("renders six results and numbers the shortcuts 1 to 9 with no gap", () => {
+  it("renders six results and numbers the shortcuts 1 to 8 with no gap", () => {
     fixture.bots = bots;
     fixture.people = new Map(people.map((p) => [p.principalId, p]));
     const html = renderToStaticMarkup(createElement(() => ComposeToPicker({ onClose: vi.fn() })));
@@ -78,6 +78,6 @@ describe("ComposeToPicker result limit", () => {
     expect(html).not.toContain("Marc Roy");
     expect(html).not.toContain("Julie Tremblay");
     const keys = [...html.matchAll(/<kbd[^>]*>.*?<span>(\d)<\/span><\/kbd>/g)].map((m) => Number(m[1]));
-    expect(keys).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(keys).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
   });
 });

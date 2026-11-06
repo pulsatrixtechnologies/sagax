@@ -10794,6 +10794,8 @@ const wireBot = (bot: BotRecord): WireBot => {
     ...(waitingApprovals.length ? { waitingApprovals } : {}),
     ...(botConversations.length ? { botConversations } : {}),
     mainThreadId: botMainThread(bot.id),
+    // #2092: the folder the settings show when the bot has none of its own
+    ...(userSandbox ? { workFolder: sandboxBotFolders.peekFolderFor(bot.id, bot.name) } : {}),
     ...(IDENTITY.kind === "perspicax" ? { turnPayerDefault: defaultTurnPayerFor(bot) } : {}),
     avatarUrl: visible.avatarUrl ?? null, ...(lead ? { instructionsLead: lead } : {}), ...(tasks ? { tasks: tasks.map((task) => wireTask(task, bot.modelSelection, coordinated)) } : {}) };
 };

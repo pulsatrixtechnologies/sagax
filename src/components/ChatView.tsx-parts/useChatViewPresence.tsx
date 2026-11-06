@@ -171,6 +171,7 @@ export function useChatViewPresence({
   const botPill = (
     <BotHeaderPill
       name={bot.name}
+      label={bot.title}
       panelOpen={panelPillOpen}
       onToggle={togglePanelFromPill}
       avatar={

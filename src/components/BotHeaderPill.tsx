@@ -61,12 +61,29 @@ export function WindowHeaderPill({ children, label }: { children: ReactNode; lab
 }
 
 /**
- * The chat header's bot pill: mascot, name, then a small chevron that says
- * it opens something. A native button, so Enter and Space toggle it and
- * focus stays on it; aria-expanded follows the panel.
+ * The pill's text, like Grok Bot ("Cryptic · Chief of Staff"): the name in
+ * the ink color and " · Title" in secondary grey on the SAME line, one
+ * ellipsis for the whole line when it is too long (JC 2026-11-06: one line,
+ * never the title stacked under the name).
  */
-export function BotHeaderPill({ name, panelOpen, onToggle, avatar }: {
+function PillName({ name, label, weight }: { name: string; label?: string; weight: string }) {
+  const tag = label?.trim();
+  return (
+    <span data-bot-header-text="" className={cn("min-w-0 truncate whitespace-nowrap text-[15px]", weight, "leading-5")}>
+      <span data-bot-header-name="" className="text-ink">{name}</span>
+      {tag && <span data-bot-header-label="" className="text-ink-secondary"> · {tag}</span>}
+    </span>
+  );
+}
+
+/**
+ * The chat header's bot pill: mascot, "Name · Title" on one line, then a
+ * small chevron that says it opens something. A native button, so Enter and
+ * Space toggle it and focus stays on it; aria-expanded follows the panel.
+ */
+export function BotHeaderPill({ name, label, panelOpen, onToggle, avatar }: {
   name: string;
+  label?: string;
   panelOpen: boolean;
   onToggle: () => void;
   avatar: ReactNode;
@@ -82,7 +99,7 @@ export function BotHeaderPill({ name, panelOpen, onToggle, avatar }: {
       aria-expanded={panelOpen}
     >
       {avatar}
-      <span className="truncate text-[15px] font-medium leading-5 text-ink">{name}</span>
+      <PillName name={name} label={label} weight="font-medium" />
       <ChevronRight
         data-bot-header-chevron=""
         size={14}
@@ -99,9 +116,8 @@ export function BotHeaderPill({ name, panelOpen, onToggle, avatar }: {
 
 /**
  * The bot chat's header, like Grok Bot (#2141): the name pill alone, 40px
- * high (#2298: mascot about 22px, then the name in 15px regular with the
- * title under it,
- * smaller and secondary), which opens and closes
+ * high (#2298: mascot about 22px, then "Name · Title" on one line, the name
+ * in 15px regular and " · Title" in secondary grey), which opens and closes
  * the bot panel. No sharing pill and no gear above the chat (JC 2026-11-06):
  * sharing lives in the bot panel, the pill already toggles it.
  */
@@ -112,28 +128,19 @@ export function BotChatHeader({ name, label, panelOpen, onToggle, avatar }: {
   onToggle: () => void;
   avatar: ReactNode;
 }) {
-  const tag = label?.trim();
   return (
     <div data-bot-chat-header="" className="flex min-w-0 items-center gap-2">
       <button
         type="button"
         onClick={onToggle}
         data-bot-header-pill=""
-        className={cn(
-          "flex min-w-0 items-center gap-2 rounded-full border-[0.5px] border-hairline-weak bg-elevated pl-2 pr-3.5 transition-colors duration-[120ms] hover:bg-elevated-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-          tag ? "min-h-10 py-1" : "h-10",
-        )}
+        className="flex h-10 min-w-0 items-center gap-2 rounded-full border-[0.5px] border-hairline-weak bg-elevated pl-2 pr-3.5 transition-colors duration-[120ms] hover:bg-elevated-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
         title={panelOpen ? t("chat.closePanel") : t("chat.openPanel")}
         aria-label={panelOpen ? t("chat.closePanelAria", { name }) : t("chat.openPanelAria", { name })}
         aria-expanded={panelOpen}
       >
         <span className="flex shrink-0 items-center">{avatar}</span>
-        {/* The name on its own line, the title under it, smaller and
-            secondary (JC 2026-11-06: never "Name · Title" on one line). */}
-        <span className="flex min-w-0 flex-col items-start text-left">
-          <span data-bot-header-name="" className="max-w-full truncate text-[15px] font-normal leading-5 text-ink">{name}</span>
-          {tag && <span data-bot-header-label="" className="max-w-full truncate text-[12px] leading-4 text-ink-secondary">{tag}</span>}
-        </span>
+        <PillName name={name} label={label} weight="font-normal" />
       </button>
     </div>
   );

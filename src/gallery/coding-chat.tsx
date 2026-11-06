@@ -56,7 +56,7 @@ const ROOT = "/workspace/bots/osprey/dispatch-board";
 const NOW = Date.now();
 const at = (minutesAgo: number) => NOW - minutesAgo * 60_000;
 const pretty = (value: unknown) => JSON.stringify(value, null, 2);
-const bot = { id: "osprey", threadId: "main", name: "Osprey", color: "green", tasks: [], messages: [], modelSelection: { instanceId: "t", model: "t" } } as unknown as Bot;
+const bot = { id: "osprey", threadId: "main", name: "Osprey", title: "Chief of Staff", color: "green", tasks: [], messages: [], modelSelection: { instanceId: "t", model: "t" } } as unknown as Bot;
 
 let seq = 0;
 const say = (role: "user" | "bot", text: string, minutesAgo: number, extra: Partial<Message> = {}): Message => ({

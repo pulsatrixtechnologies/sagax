@@ -122,7 +122,7 @@ describe("composer controls (Grok Bot's prompt bar)", () => {
     expect($("[data-composer-voice]")!.getAttribute("style") ?? "").not.toContain("--cta-fill");
   });
 
-  it("opens a + menu with only Attach files and Teach a task, as in the reference design", () => {
+  it("opens a + menu with Attach files, GIF and Teach a task, as in the reference design", () => {
     fixture.instances = [{ instanceId: "test", driverKind: "claude", displayName: "Claude", capabilities: { agentsMcp: true } } as unknown as InstanceInfo];
     render(createElement(Composer, { bot: bot("teal") }));
     click($("[data-composer-plus]"));
@@ -130,15 +130,25 @@ describe("composer controls (Grok Bot's prompt bar)", () => {
     expect(menu.getAttribute("role")).toBe("menu");
     const items = [...menu.querySelectorAll<HTMLElement>("[data-composer-plus-item]")];
     expect(items.map((item) => [item.dataset.composerPlusGroup, item.dataset.composerPlusItem])).toEqual([
-      ["add", "attach"], ["add", "teach"],
+      ["add", "attach"], ["add", "gif"], ["add", "teach"],
     ]);
     const labels = items.map((item) => item.querySelector(".truncate")?.textContent);
-    expect(labels).toEqual(["Attach files", "Teach a task"]);
+    expect(labels).toEqual(["Attach files", "GIF", "Teach a task"]);
     // no voice note, setup, model or approval rows, and no separators
     expect(menu.querySelectorAll('[role="separator"]').length).toBe(0);
     expect(menu.querySelector("[data-composer-plus-row]")).toBeNull();
     click(menu.querySelector('[data-composer-plus-item="teach"]'));
     expect(textarea().value).toBe("/learn ");
+    expect($("[data-composer-plus]")!.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("has no stand-alone GIF button in the bar; the + menu's GIF row opens the picker on the +", () => {
+    render(createElement(Composer, { bot: bot("teal") }));
+    expect($("[data-composer-memes]")).toBeNull();
+    expect($("[data-meme-picker]")).toBeNull();
+    click($("[data-composer-plus]"));
+    click($('[data-composer-plus-item="gif"]'));
+    expect($("[data-meme-picker]") ?? document.querySelector("[data-meme-picker]")).not.toBeNull();
     expect($("[data-composer-plus]")!.getAttribute("aria-expanded")).toBe("false");
   });
 

@@ -1,7 +1,7 @@
-import { useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import { useState, type ClipboardEvent, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import type { DictationEngine } from "@/lib/composer-dictation";
 import type { ConfigStatus } from "@/state/store";
-import { Target } from "lucide-react";
+import { ImagePlay, Target } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { composerPlaceholder } from "@/lib/composer-placeholder";
@@ -12,7 +12,7 @@ import type { RoomMentionPerson } from "@/lib/person-mentions";
 import { MentionTextarea } from "../MentionTextarea";
 import { ComposerReplyStrip } from "../ReplyQuote";
 import { ComposerPlusMenu, type PlusMenuItem } from "../ComposerControls";
-import { MemePicker, MemePickerButton, type MemeAttachmentPick } from "../MemePicker";
+import { MemePicker, type MemeAttachmentPick } from "../MemePicker";
 import { TeachChooserDialog, TeachStepsDialog } from "../TeachStepsDialog";
 import { MyChromeRecordDialog } from "../MyChromeRecordDialog";
 import type { MyChromeRecordingResult } from "@/lib/my-chrome";
@@ -116,7 +116,22 @@ export function ComposerEditor({
   children?: ReactNode;
 }) {
   const [memesOpen, setMemesOpen] = useState(false);
-  const memesBtnRef = useRef<HTMLButtonElement>(null);
+  // The GIF picker opens from the + menu's GIF row and anchors on the +.
+  const plusAnchorRef = {
+    get current() { return composerRowRef.current?.querySelector<HTMLElement>("[data-composer-plus]") ?? null; },
+  };
+  const items: PlusMenuItem[] = onSendMeme
+    ? plusItems.flatMap((item) => item.id === "attach"
+      ? [item, {
+        id: "gif",
+        group: "add" as const,
+        label: t("composer.plus.gif"),
+        icon: <ImagePlay size={16} aria-hidden="true" />,
+        disabled: attachmentPending || locked,
+        onSelect: () => setMemesOpen(true),
+      }]
+      : [item])
+    : plusItems;
   return (
     <div className="relative">
       {/* App-ground from the pill midline down, full-bleed. Bubbles may
@@ -160,19 +175,13 @@ export function ComposerEditor({
               (goal, setup), then this conversation's model and approval
               level as rows that open beside it (2026-10-15/16; the
               model since 2026-10-18, no workspace row since #743). */}
-          <ComposerPlusMenu items={plusItems} />
+          <ComposerPlusMenu items={items} />
           {onSendMeme && (
             <>
-              <MemePickerButton
-                open={memesOpen}
-                onToggle={() => setMemesOpen((v) => !v)}
-                buttonRef={memesBtnRef}
-                disabled={attachmentPending || locked}
-              />
               <MemePicker
                 open={memesOpen}
                 onClose={() => setMemesOpen(false)}
-                anchorRef={memesBtnRef}
+                anchorRef={plusAnchorRef}
                 onPick={onSendMeme}
                 onUploadLocal={() => fileInput.current?.click()}
               />

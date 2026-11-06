@@ -484,7 +484,15 @@ export function ProvidersSettings() {
   }), [organization, offered, member, mine, state.instances, state.config, keys, accounts.view, local]);
   // #2080: one row per provider, its accounts inside. The local model
   // servers of this computer are one provider of their own, at the bottom.
-  const groups = useMemo(() => providerGroups(visibleProviderRows(rows).filter((row) => row.kind !== "local"), state.instances), [rows, state.instances]);
+  // An account picked from Add stays listed while it connects, else its
+  // sign-in has no row to show in.
+  const [picked, setPicked] = useState<readonly string[]>([]);
+  const groups = useMemo(() => {
+    const visible = visibleProviderRows(rows);
+    const shown = new Set(visible.map((row) => row.id));
+    const listed = [...visible, ...rows.filter((row) => picked.includes(row.id) && !shown.has(row.id))];
+    return providerGroups(listed.filter((row) => row.kind !== "local"), state.instances);
+  }, [rows, picked, state.instances]);
   const reveal = (row: ProviderRow) => { setOpenGroup(providerGroupKey(row, state.instances)); setOpenRow(row.id); };
   const keyInline = (row: ProviderRow) => Boolean(
     openRow === row.id && editingKey && row.keyRow === editingKey && row.manage && !row.voiceKey && !row.accountProvider,
@@ -521,6 +529,7 @@ export function ProvidersSettings() {
   };
   const pick = (rowId: string) => {
     setAdding(false);
+    setPicked((prev) => prev.includes(rowId) ? prev : [...prev, rowId]);
     const row = rows.find((entry) => entry.id === rowId);
     if (row) reveal(row);
     if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => {

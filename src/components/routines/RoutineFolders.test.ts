@@ -75,4 +75,31 @@ describe("RoutineFolderList", () => {
     expect(html).not.toContain("data-routine-folder-header");
     expect(html).not.toContain("data-routine-prefix-offer");
   });
+
+  // #2174: the bot panel's Upcoming card is one flat list (folder as title
+  // prefix), never the folding category cards of the Routines page.
+  it("with leadingClock flattens folders into one card with category prefixes", () => {
+    store.routineFolders = { "bot-1": ["Home lab", "Security"] };
+    const html = renderToStaticMarkup(createElement(RoutineFolderList, {
+      bot, routines: [
+        routine("a", "Nightly check", "Home lab"),
+        routine("b", "Port scan", "Security"),
+        routine("c", "Loose one"),
+        routine("d", "Backup", "Home lab"),
+        routine("e", "Patch", "Security"),
+        routine("f", "Digest", "Home lab"),
+      ], runs: [], grouped: true, viewerPrincipalId: null, onOpen: () => {}, onCreateIn: () => {},
+      leadingClock: true, collapseAfter: 5,
+    }));
+    expect(html).toContain("data-routine-upcoming-flat");
+    expect(html).not.toContain("data-routine-folder-header");
+    expect(html).not.toContain("data-routine-prefix-offer");
+    expect(html).toContain("[Home lab] Nightly check");
+    expect(html).toContain("[Security] Patch");
+    expect(html).toContain("Loose one");
+    // Port scan sorts after the fifth row; Show more holds it.
+    expect(html).not.toContain("[Security] Port scan");
+    expect(html.match(/data-routine-row[ =>]/g)).toHaveLength(5);
+    expect(html).toContain("Show more");
+  });
 });

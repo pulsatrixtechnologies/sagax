@@ -17,7 +17,7 @@ export function createSendTurn(deps: SendTurnDeps) {
   const {
     support, DRIVER_KIND,
     sessions, active, freshNextTurn, sessionAllows, threadNotices,
-    retiring, retireChild, closeSession, settle, emit, base,
+    retiring, retireChild, closeSession, endUncancelled, settle, emit, base,
     startQuietWatch,
   } = deps;
   const prepareAcpTurn = createPrepareTurn(deps);
@@ -104,9 +104,11 @@ export function createSendTurn(deps: SendTurnDeps) {
             session.acp.send({ jsonrpc: "2.0", method: "session/cancel", params: { sessionId: session.sessionId } });
             if (current.interruptTimer) clearTimeout(current.interruptTimer);
             current.interruptTimer = setTimeout(() => {
-              // an agent that ignores session/cancel must not stay pooled
-              closeSession(threadId, "cancel-timeout");
-              settle(threadId, session, true, "cancelled");
+              // an agent that ignores session/cancel must not stay pooled;
+              // await process end so a failed kill is stop_failed, not cancelled
+              state.cancelling = true;
+              void endUncancelled(threadId, session).then((ended) =>
+                settle(threadId, session, ended, ended ? "cancelled" : "stop_failed"));
             }, ACP_CANCEL_GRACE_MS);
             current.interruptTimer.unref?.();
           } else {

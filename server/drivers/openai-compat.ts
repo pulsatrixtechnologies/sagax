@@ -346,6 +346,7 @@ export const OpenAICompatDriver: ProviderDriver<OpenAICompatConfig> = {
       ...(config.protocol === "anthropic" ? { chatRequest: anthropicTransport(apiUrl) } : {}),
       ...(azure ? { authHeaders: azureHeaders } : {}),
       tools: config.tools,
+      nudgeAnnouncedAction: true,
       computerUse: true,
       // #1975: honour warmOnly so POST /api/bots/:id/warm mounts MCP ahead
       // of the first HTTP turn (same path CLI engines already use).

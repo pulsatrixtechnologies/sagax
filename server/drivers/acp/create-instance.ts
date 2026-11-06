@@ -236,6 +236,23 @@ export async function createAcpInstance(
     createdAt: new Date().toISOString(),
   });
 
+  // A session that ignores session/cancel keeps working, and EOF on stdin
+  // does not stop it either. Only the end of its process stops it. Await
+  // that before settling so a failed kill is stop_failed, not a clean cancel.
+  const endUncancelled = async (threadId: string, session: AcpSession): Promise<boolean> => {
+    const { child } = session;
+    const turnId = session.current?.turnId;
+    closeSession(threadId, "cancel-timeout");
+    const ended = await retireChild(threadId, child).catch(() => false);
+    if (ended) return true;
+    if (turnId) {
+      emit({
+        ...base(threadId, turnId), type: "runtime.error",
+        message: `${support.displayName} ignored Stop and its process could not be ended`,
+      });
+    }
+    return false;
+  };
 
   const { acpMcpServers } = createAcpMcp({
     support, DENY_TIMEOUT_NOTE, sessions, emit, base,
@@ -254,7 +271,7 @@ export async function createAcpInstance(
     childEnv, requireRunning,
     getStartupModelRefresh: () => startupModelRefresh,
     sessions, warming, active, freshNextTurn, sessionAllows, threadNotices,
-    retiring, retireChild, openSession, closeSession, armIdle, settle, emit, base,
+    retiring, retireChild, openSession, closeSession, endUncancelled, armIdle, settle, emit, base,
     acpMcpServers, startQuietWatch,
     getModels: () => models,
     getAccountModels: () => accountModels,

@@ -1236,6 +1236,33 @@ describe("structured tool execution boundaries", () => {
     })]);
   });
 
+  it.each([
+    ["a failed tool call", "audit_fail", "The operation is complete.", "tool_error"],
+    ["an announced action", "audit_write", "I'll write the next receipt.", "incomplete_action"],
+  ])("ends on %s in the last allowed step without asking for another step", async (_, lastTool, text, stopReason) => {
+    const f = await fixture((_body, response, round) => round < 64
+      ? sse(response, [chunk({ tool_calls: [toolCall(round === 63 ? lastTool : "audit_write", `{"name":"step","value":"${round}"}`, `call_${round}`)] }, "tool_calls")])
+      : answer(response, text));
+    await f.start({ approvalMode: "full", toolErrorCorrectiveRounds: 1 });
+    expect(await f.completed()).toMatchObject({ ok: false, stopReason });
+    expect(f.requests).toHaveLength(64);
+  });
+
+  it.each([
+    ["a steer", "The receipt is stored."],
+    ["an announcement nudge", "I'll write the receipt now."],
+  ])("keeps reasoning_content on an answer resent after %s", async (kind, text) => {
+    const first = deferred<ServerResponse>();
+    const f = await fixture((_body, response, round) => round === 1 ? first.resolve(response) : answer(response));
+    await f.start({ approvalMode: "full" });
+    const response = await first.promise;
+    if (kind === "a steer") await expect(f.instance.adapter.steer!(f.threadId, "One more thing.")).resolves.toBe("steered");
+    sse(response, [chunk({ reasoning: "Synthetic reasoning." }), chunk({ content: text }, "stop")]);
+    expect(await f.completed()).toMatchObject({ ok: true });
+    expect(f.requests[1].messages.find((message) => message.role === "assistant"))
+      .toMatchObject({ content: text, reasoning_content: "Synthetic reasoning." });
+  });
+
   it("stops at 200 tool calls in one turn without running the batch that crosses it", async () => {
     // The turn's total is separate from the 32-per-reply bound.
     const f = await fixture((_body, response, round) => sse(response, [chunk({

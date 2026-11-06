@@ -334,6 +334,8 @@ export function createOpenSession(deps: OpenSessionDeps) {
       session.dead = true;
       session.acp.failAll(new Error(`${DRIVER_KIND} exited ${code} before the prompt result${session.stderr ? `: ${session.stderr.trim().slice(-300)}` : ""}`));
       const current = session.current;
+      // Cancel-timeout owns settle (cancelled or stop_failed) after it awaits the kill.
+      if (current?.state.cancelling) return;
       if (current) {
         emit({
           ...base(threadId, current.turnId),

@@ -16,6 +16,8 @@
 //   FAKE_ACP_CACHED_LIVE_LOAD  acknowledge session/load of a live session but
 //                       keep its original MCP credentials, matching Qwen.
 //   FAKE_ACP_TEXT_REPLY  answer every session/prompt with only this text.
+//   FAKE_ACP_IGNORE_CANCEL=1  session/cancel is ignored: a hanging prompt
+//                       keeps running so cancel-timeout must end the process
 //   FAKE_ACP_MODE   happy (default) | image | empty-reply | reasoning-only | reasoning-only-error | exit-early | fail-after-text | hang | hang-initialize | stall-after-text | stall-first-prompt | unkeyed-tool | no-auth | auth-required | permission | question
 //                   | ask-question (send a vendor question request mid-prompt:
 //                     FAKE_ACP_ASK_METHOD, default cursor/ask_question, with
@@ -397,6 +399,7 @@ const dumpEnv = Object.fromEntries(
     "TMP",
     "SystemRoot",
     "FAKE_ACP_MODE",
+    "FAKE_ACP_IGNORE_CANCEL",
     "FAKE_ACP_RPC_DUMP",
     "FAKE_ACP_IMAGE_CAPABILITY",
     "FAKE_ACP_DUMP_PROMPT",
@@ -1841,6 +1844,9 @@ function handle(msg: any) {
         cancelGated = null;
         cancel();
       }
+      // FAKE_ACP_IGNORE_CANCEL=1: keep a hanging prompt running so the
+      // driver's cancel-timeout path must end the process itself.
+      if (process.env.FAKE_ACP_IGNORE_CANCEL === "1") break;
       // the interrupted prompt resolves as cancelled. FAKE_ACP_CANCEL_REPLY
       // = "error" rejects it instead, any other value is the stopReason the
       // agent answers with (agents differ on how a cancel settles).

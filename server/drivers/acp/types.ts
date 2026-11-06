@@ -67,6 +67,8 @@ export interface AcpTurn {
     settled: boolean; promptSent: boolean; text: string; producedItem: boolean;
     /** A reply or an image went out (not only tool calls): a nudge could repeat it. */
     producedReply?: boolean; startupActivity: boolean; stopped: boolean;
+    /** Stop's cancel-timeout is ending the process; child close must not settle as exit_before_result. */
+    cancelling?: boolean;
     /** Compaction detection: peak and last reported context size, and
      * whether a report collapsed below the peak. */
     usagePeak: number | null;

@@ -26,6 +26,8 @@ export type SendTurnDeps = {
     contractKey: string,
   ) => AcpSession;
   closeSession: (threadId: string, why: string) => void;
+  /** Close a cancel-timeout session and await process end; false when kill fails. */
+  endUncancelled: (threadId: string, session: AcpSession) => Promise<boolean>;
   armIdle: (threadId: string) => void;
   settle: (threadId: string, session: AcpSession, ok: boolean, stopReason: string | null) => void;
   emit: (event: any) => void;

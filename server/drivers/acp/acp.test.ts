@@ -266,6 +266,7 @@ describe("ACP turns (fake CLI)", () => {
     delete process.env.FAKE_ACP_ASK_ANSWER;
     delete process.env.FAKE_ACP_ASK_TIMING;
     delete process.env.FAKE_ACP_CANCEL_REPLY;
+    delete process.env.FAKE_ACP_IGNORE_CANCEL;
     delete process.env.FAKE_ACP_DUMP;
     delete process.env.FAKE_ACP_RPC_DUMP;
     delete process.env.FAKE_ACP_RPC_APPEND_FILE;
@@ -2310,6 +2311,48 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     await instance.adapter.interruptTurn("t-int");
     const done = await recorder.until((e) => e.type === "turn.completed");
     expect(done).toMatchObject({ type: "turn.completed" });
+  });
+
+  it("fails the turn when Stop could not end the process", async () => {
+    const dump = join(scratch, "stop-failed-dump.json");
+    const appendFile = join(scratch, "stop-failed-rpc.jsonl");
+    process.env.FAKE_ACP_MODE = "hang";
+    process.env.FAKE_ACP_IGNORE_CANCEL = "1";
+    process.env.FAKE_ACP_DUMP = dump;
+    process.env.FAKE_ACP_RPC_APPEND_FILE = appendFile;
+    const spawn = procs.spawnCli;
+    let child: ReturnType<typeof procs.spawnCli> | undefined;
+    vi.spyOn(procs, "spawnCli").mockImplementation((...args) => {
+      child = spawn(...args);
+      return child;
+    });
+    instance = await GrokAgentDriver.create({
+      instanceId: "acp-test", displayName: "ACP Test", enabled: true,
+      environment: {
+        FAKE_ACP_MODE: "hang", FAKE_ACP_IGNORE_CANCEL: "1",
+        FAKE_ACP_DUMP: dump, FAKE_ACP_RPC_APPEND_FILE: appendFile,
+      },
+      config: { cli: FAKE_CLI, fullAuto: false },
+    });
+    recorder = recordEvents(instance.adapter);
+    await instance.adapter.sendTurn({ threadId: "t-stop-failed", text: "go" });
+    // Wait until the hanging prompt is in flight; interrupting earlier only
+    // throws "turn stopped" before cancel-timeout owns the settle.
+    await vi.waitFor(() => {
+      expect(existsSync(appendFile) && readFileSync(appendFile, "utf8")).toMatch(/session\/prompt/);
+    }, { timeout: 10_000 });
+    expect(JSON.parse(readFileSync(dump, "utf8")).env.FAKE_ACP_IGNORE_CANCEL).toBe("1");
+    const kill = procs.killCliTree;
+    let refused = false;
+    vi.spyOn(procs, "killCliTree").mockImplementation(async (target, timeout) => {
+      if (target !== child || refused) return kill(target, timeout);
+      refused = true;
+      return false;
+    });
+    await instance.adapter.interruptTurn("t-stop-failed");
+    const done = await recorder.until((e) => e.type === "turn.completed");
+    expect(done).toMatchObject({ ok: false, stopReason: "stop_failed" });
+    expect(recorder.events.some((e) => e.type === "runtime.error" && /could not be ended/.test(e.message))).toBe(true);
   });
 
   it.each(["error", "refusal"])("a stop during the prompt leaves no error row when the agent answers the cancel with %s", async (reply) => {

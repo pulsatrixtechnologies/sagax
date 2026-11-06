@@ -294,7 +294,22 @@ describe("BotModelsSettings page", () => {
     expect(container.querySelector("[data-bot-models-edit-several]")).not.toBeNull();
   });
 
-  it("shows the effective backup: the server default is marked, the column hides when no bot has one", async () => {
+  it("keeps Backup model choosable on a bot that already has a fallback engine", async () => {
+    act(() => root.render(createElement(BotModelsSettings)));
+    await flush();
+    const cell = container.querySelector<HTMLElement>('[data-bot-models-backup-cell="bot-scout"]');
+    expect(cell).not.toBeNull();
+    const trigger = cell!.querySelector<HTMLElement>('[data-bot-models-backup="bot-scout"] [data-pill-select]');
+    expect(trigger?.textContent).toMatch(/Claude|Sonnet/i);
+    act(() => { trigger!.click(); });
+    await flush();
+    const panel = document.querySelector('[role="dialog"][aria-label="Backup"]');
+    expect(panel).not.toBeNull();
+    expect(panel?.querySelector('[aria-label="Backup model"]')).not.toBeNull();
+    expect(panel?.querySelector('[aria-label="Add a fallback engine"]')).not.toBeNull();
+  });
+
+  it("always shows the Backup column: server default marked, empty cell says None and opens the engine/model editor", async () => {
     const scout = fixture.state.bots[0] as { fallback?: unknown };
     const savedFallback = scout.fallback;
     const config = fixture.state.config as Record<string, unknown>;
@@ -304,20 +319,24 @@ describe("BotModelsSettings page", () => {
       config.automaticRecovery = { enabled: true, backup: { instanceId: "claude", model: "sonnet" } };
       act(() => root.render(createElement(BotModelsSettings)));
       await flush();
+      expect(container.querySelector('[data-bot-models-col="backup"]')).not.toBeNull();
       expect(container.querySelector('[data-bot-models-backup="bot-lab"]')?.textContent).toContain("default");
       expect(container.querySelector('[data-link-row="models.addBackup"]')).toBeNull();
-      // nothing anywhere: no Backup column, no "None", one "Add a backup" row
+      // nothing anywhere: Backup column stays, empty cells say None, per-bot editor opens
       delete config.automaticRecovery;
       act(() => root.render(createElement(BotModelsSettings, { key: "none" })));
       await flush();
-      expect(container.querySelector('[data-bot-models-col="backup"]')).toBeNull();
-      expect(container.querySelector("[data-bot-models-backup-cell]")).toBeNull();
-      expect(container.textContent).not.toContain("None");
-      const add = container.querySelector<HTMLElement>('[data-link-row="models.addBackup"]');
-      expect(add?.textContent).toContain("Add a backup");
-      act(() => { (add?.querySelector("button") ?? add)!.click(); });
+      expect(container.querySelector('[data-bot-models-col="backup"]')).not.toBeNull();
+      const cell = container.querySelector<HTMLElement>('[data-bot-models-backup-cell="bot-lab"]');
+      expect(cell).not.toBeNull();
+      const trigger = cell!.querySelector<HTMLElement>('[data-bot-models-backup="bot-lab"] [data-pill-select]');
+      expect(trigger?.textContent).toContain("None");
+      act(() => { trigger!.click(); });
       await flush();
-      expect(document.querySelector("[data-bot-models-bulk-backup-picker]")).not.toBeNull();
+      const panel = document.querySelector('[role="dialog"][aria-label="Backup"]');
+      expect(panel).not.toBeNull();
+      expect(panel?.textContent).toContain("No backup yet");
+      expect(panel?.querySelector('[aria-label="Add a fallback engine"]')).not.toBeNull();
     } finally {
       scout.fallback = savedFallback;
       delete config.automaticRecovery;

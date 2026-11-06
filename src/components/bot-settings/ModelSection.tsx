@@ -5,7 +5,8 @@
 // effective backups (effectiveBackups, the same answer as Settings >
 // Models): the bot's ordered list (bot.fallback, up to 5, which keeps the
 // single backup of automaticRecovery in step as its first entry), else
-// the server default, labelled and copied into the bot by "Customize".
+// the server default, labelled; the Backup model picker stays editable and
+// "Customize" copies the chain into the bot without changing it.
 // "Advanced", a closed fold: the prompt cache.
 import { ModelPicker } from "../ModelPicker";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
@@ -186,9 +187,11 @@ function IfItFailsCard({ bot, canSwitch, canOrder }: { bot: Bot; canSwitch: bool
     return offer === "offered" || (offer === "notGiven" && mine?.find((row) => row.instanceId === entry.instanceId)?.orgNotAllowed !== true);
   };
   const { chain, source } = effectiveBackups({ fallback: bot.fallback, automaticRecovery: shown.automaticRecovery }, state.config, keep);
-  // the server default is shown, not edited: "Customize" copies it into the bot
+  // Server / org default is labelled; the person can still pick the backup
+  // model (and reorder) in place. "Customize" copies the chain into the bot
+  // without changing it.
   const fromServer = source === "org";
-  const editable = canOrder && !fromServer;
+  const editable = canOrder;
   // only engines offered to this person (src/lib/offered-instances.ts)
   const available = offered.filter(
     (instance) =>

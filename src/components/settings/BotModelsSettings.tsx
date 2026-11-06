@@ -6,11 +6,11 @@
 // grouped by sidebar section: Bot / Model · effort / Backup. The Model cell
 // is the two-pane model selector (ModelPicker `panes`), the same one the
 // "Set model for n bots" button and Bot > Model open. #2080: the checkboxes
-// show only in "Edit several" mode (SelectionBar); the Backup column reads
-// the effective backups (effectiveBackups, shared with Bot > Model) and is
-// hidden while no bot has one. "Defaults for new bots" is read-only in an
-// organization (set there, folded under Advanced; no shortcut to Perspicax
-// since 2026-11-05), editable solo.
+// show only in "Edit several" mode (SelectionBar); the Backup column always
+// shows (effectiveBackups, shared with Bot > Model) so a person can pick the
+// engine and the backup model per bot even before any bot has one.
+// "Defaults for new bots" is read-only in an organization (set there, folded
+// under Advanced; no shortcut to Perspicax since 2026-11-05), editable solo.
 import { Fragment, useCallback, useMemo, useRef, useState, useId, type ReactNode } from "react";
 import { ChevronDown, TriangleAlert, X } from "lucide-react";
 
@@ -42,20 +42,17 @@ import { engineOffer } from "../../../shared/offered-engines";
 import { AnchoredPopover, enclosingWindowBounds, useAnchoredDismissRoot } from "../AnchoredPopover";
 import { ModelPicker, type ComposerModelMenuControl } from "../ModelPicker";
 import { DefaultBotSettings, newBotDefaultsSummary } from "../NewBotDialog";
-import { DescribedRow, DialogFrame, DialogLayer, HelpTip, LinkRow, PILL, PillSelect, SettingsGroup, TABLE_CELL_CONTROL } from "../SettingsPrimitives";
+import { DescribedRow, DialogFrame, DialogLayer, HelpTip, PILL, PillSelect, SettingsGroup, TABLE_CELL_CONTROL } from "../SettingsPrimitives";
 import { SelectionBar } from "./SettingsPatterns";
 
 // One grid for the column headers, the section headers and every row, so
-// the checkbox (Edit several only), Model · effort and Backup (only when a
-// bot has one) line up down the table. Under 36rem of table width the row
-// stacks: name on top, then the controls side by side, each with its
-// column name above it.
+// the checkbox (Edit several only), Model · effort and Backup line up down
+// the table. Under 36rem of table width the row stacks: name on top, then
+// the two controls side by side, each with its column name above it.
 // (Class names spelled out whole: Tailwind finds them in the source.)
 const ROW_GRIDS = {
   selectBackup: "grid grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-x-2.5 px-3 @min-[36rem]:grid-cols-[1.25rem_minmax(8rem,1fr)_minmax(12rem,2fr)_minmax(7rem,1fr)]",
-  select: "grid grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-x-2.5 px-3 @min-[36rem]:grid-cols-[1.25rem_minmax(8rem,1fr)_minmax(12rem,2fr)]",
   backup: "grid grid-cols-[minmax(0,1fr)] items-center gap-x-2.5 px-3 @min-[36rem]:grid-cols-[minmax(8rem,1fr)_minmax(12rem,2fr)_minmax(7rem,1fr)]",
-  plain: "grid grid-cols-[minmax(0,1fr)] items-center gap-x-2.5 px-3 @min-[36rem]:grid-cols-[minmax(8rem,1fr)_minmax(12rem,2fr)]",
 } as const;
 type Backup = NonNullable<Bot["fallback"]>[number];
 
@@ -129,7 +126,7 @@ function BotBackupCell({ bot, disabled }: { bot: Bot; disabled: boolean }) {
       instance.instanceId !== bot.modelSelection.instanceId &&
       !chain.some((entry) => entry.instanceId === instance.instanceId),
   );
-  const label = backupsText(bot, state.config, keep, state.instances);
+  const label = backupsText(bot, state.config, keep, state.instances) || t("botModels.backup.none");
   const nameOf = (instanceId: string) =>
     state.instances.find((instance) => instance.instanceId === instanceId)?.displayName ?? instanceId;
   const onChange = (fallback: Bot["fallback"]) => {
@@ -146,7 +143,7 @@ function BotBackupCell({ bot, disabled }: { bot: Bot; disabled: boolean }) {
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
-        title={label || undefined}
+        title={label}
         data-pill-select=""
         onClick={() => setOpen((next) => !next)}
         className={TABLE_CELL_CONTROL}
@@ -330,8 +327,8 @@ export function BotModelsSettings() {
   // while it is on (Escape or Done closes it).
   const [editing, setEditing] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
-  // "all": the "Add a backup" row, for every bot; "selected": the bar.
-  const [pickingBackup, setPickingBackup] = useState<"all" | "selected" | null>(null);
+  // Bulk "Set backup" from the Edit several bar.
+  const [pickingBackup, setPickingBackup] = useState(false);
   const bulkMenu = useRef<ComposerModelMenuControl | null>(null);
   const pageRef = useRef<HTMLDivElement>(null);
 
@@ -350,10 +347,8 @@ export function BotModelsSettings() {
   const bulkIds = useMemo(() => selectedFull.map((bot) => bot.id), [selectedFull]);
   const allOn = allIds.length > 0 && allIds.every((id) => selected.has(id));
   const anyOn = allIds.some((id) => selected.has(id));
-  // The Backup column shows only when at least one bot has a backup.
-  const showBackup = fullBots.some((bot) => effectiveBackups(bot, state.config, keep).chain.length > 0);
-  const grid = ROW_GRIDS[editing ? (showBackup ? "selectBackup" : "select") : showBackup ? "backup" : "plain"];
-  const headingSpan = editing ? (showBackup ? "@min-[36rem]:col-span-3" : "@min-[36rem]:col-span-2") : "col-span-full";
+  const grid = ROW_GRIDS[editing ? "selectBackup" : "backup"];
+  const headingSpan = editing ? "@min-[36rem]:col-span-3" : "col-span-full";
 
   const stopEditing = useCallback(() => {
     setEditing(false);
@@ -361,16 +356,15 @@ export function BotModelsSettings() {
   }, []);
 
   const applyBulkBackup = (fallback: Bot["fallback"]) => {
-    const targets = pickingBackup === "all" ? fullBots : selectedFull;
-    for (const bot of targets) {
+    for (const bot of selectedFull) {
       if (bot.busy) continue;
       if (!viewerOwnsBot(state.config, bot) || !canEditBotField(state.config, bot, "fallback")) continue;
       // Skip a backup that matches the bot's own engine (same as the row editor).
       const next = (fallback ?? []).filter((entry) => entry.instanceId !== bot.modelSelection.instanceId);
       dispatch({ type: "updateBot", botId: bot.id, patch: { fallback: next } });
     }
-    if (pickingBackup === "selected") stopEditing();
-    setPickingBackup(null);
+    stopEditing();
+    setPickingBackup(false);
   };
 
   const title = t("botModels.title");
@@ -423,7 +417,7 @@ export function BotModelsSettings() {
               )}
               <span data-bot-models-col="bot" className="truncate">{editing ? t("botModels.selectAll") : t("botModels.col.bot")}</span>
               <span data-bot-models-col="model" className="hidden truncate px-2 @min-[36rem]:block" title={t("botModels.col.model")}>{t("botModels.col.modelEffort")}</span>
-              {showBackup && <span data-bot-models-col="backup" className="hidden truncate px-2 @min-[36rem]:block">{t("botModels.col.backup")}</span>}
+              <span data-bot-models-col="backup" className="hidden truncate px-2 @min-[36rem]:block">{t("botModels.col.backup")}</span>
             </div>
             {groups.map((group) => {
               const ids = group.bots.map((bot) => bot.id);
@@ -494,9 +488,8 @@ export function BotModelsSettings() {
                         <div
                           data-bot-models-controls={row.id}
                           className={cn(
-                            "grid min-w-0 gap-x-2 gap-y-2 @min-[36rem]:contents",
+                            "grid min-w-0 grid-cols-2 gap-x-2 gap-y-2 @min-[36rem]:contents",
                             editing ? "col-start-2" : "col-start-1",
-                            showBackup ? "grid-cols-2" : "grid-cols-1",
                           )}
                         >
                           <Cell label={t("botModels.col.modelEffort")} data-bot-models-model={row.id}>
@@ -506,17 +499,15 @@ export function BotModelsSettings() {
                               <span className={READ_ONLY_CELL} title={modelName}>{modelName}</span>
                             )}
                           </Cell>
-                          {showBackup && (
-                            <Cell label={t("botModels.col.backup")} data-bot-models-backup-cell={row.id}>
-                              {mayBackup ? (
-                                <BotBackupCell bot={full} disabled={Boolean(full.busy)} />
-                              ) : (
-                                <span data-bot-models-backup={row.id} className={READ_ONLY_CELL} title={backups || undefined}>
-                                  {backups}
-                                </span>
-                              )}
-                            </Cell>
-                          )}
+                          <Cell label={t("botModels.col.backup")} data-bot-models-backup-cell={row.id}>
+                            {mayBackup ? (
+                              <BotBackupCell bot={full} disabled={Boolean(full.busy)} />
+                            ) : (
+                              <span data-bot-models-backup={row.id} className={READ_ONLY_CELL} title={backups || undefined}>
+                                {backups || t("botModels.backup.none")}
+                              </span>
+                            )}
+                          </Cell>
                         </div>
                       </div>
                     );
@@ -525,11 +516,6 @@ export function BotModelsSettings() {
               );
             })}
           </div>
-        )}
-        {/* No bot has a backup yet: the column is hidden, this row sets one
-            for every bot at once (each bot's own cell takes over after). */}
-        {groups.length > 0 && !showBackup && (
-          <LinkRow rowId="models.addBackup" label={t("botModels.backup.add")} onClick={() => setPickingBackup("all")} />
         )}
       </SettingsGroup>
 
@@ -543,7 +529,7 @@ export function BotModelsSettings() {
             onClear={() => setSelected(new Set())}
             onDone={stopEditing}
             actions={[
-              { label: t("botModels.bulk.setBackup"), onClick: () => setPickingBackup("selected") },
+              { label: t("botModels.bulk.setBackup"), onClick: () => setPickingBackup(true) },
               {
                 label: selected.size === 1 ? t("botModels.bulk.setModelForOne") : t("botModels.bulk.setModelFor", { count: selected.size }),
                 onClick: () => bulkMenu.current?.toggle(null),
@@ -570,8 +556,8 @@ export function BotModelsSettings() {
 
       {pickingBackup && (
         <BulkBackupChoice
-          bots={pickingBackup === "all" ? fullBots : selectedFull}
-          onCancel={() => setPickingBackup(null)}
+          bots={selectedFull}
+          onCancel={() => setPickingBackup(false)}
           onChosen={applyBulkBackup}
         />
       )}

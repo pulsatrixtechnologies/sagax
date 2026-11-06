@@ -151,6 +151,7 @@ export class RuntimeCoordinator implements Coordinator {
   private readonly log: (line: string) => void;
   private readonly confidentialThreads: (() => Iterable<string>) | undefined;
   private opened = false;
+  private imported = false;
   /** A host turn that continues an earlier turn's root (continueRoot): its
    * generation, then the root it runs as. In memory: a restart cuts that
    * turn, and the restart policy reconciles the root it ran as. */
@@ -174,12 +175,13 @@ export class RuntimeCoordinator implements Coordinator {
     });
   }
 
-  /** Restart reconciliation runs on the first use, not at construction:
-   * reconciling calls the host (park, changed) and the host is still
-   * initialising while this is built. The first tick or read comes after. */
-  private ready(): void {
-    if (this.opened) return;
-    this.opened = true;
+  /** Imports the legacy room-handoff file and delegation ledger once. Reads
+   * only the files and the store, never the host, so the routine manager may
+   * ask awaitsTeammates while the server is still being built and still see
+   * the rows a restart carries over. */
+  private importLegacy(): void {
+    if (this.imported) return;
+    this.imported = true;
     // A tree the room-handoff file left behind comes over once, then the
     // file is renamed; the restart policy below then treats its cut turns
     // like any other (docs/runtime-contract.md §5).
@@ -202,6 +204,15 @@ export class RuntimeCoordinator implements Coordinator {
         this.log(`delegations.json not imported: ${String(error)}`);
       }
     }
+  }
+
+  /** Restart reconciliation runs on the first use, not at construction:
+   * reconciling calls the host (park, changed) and the host is still
+   * initialising while this is built. The first tick or read comes after. */
+  private ready(): void {
+    if (this.opened) return;
+    this.opened = true;
+    this.importLegacy();
     // A thread that turned confidential under an older release kept its
     // teammate work: forgotten before the runtime reads anything.
     if (this.confidentialThreads) {
@@ -543,6 +554,7 @@ export class RuntimeCoordinator implements Coordinator {
     // while the server is still being built, before the runtime may call the
     // host. A turn a restart cut is still "running" then, with the work it
     // handed out, so the answer is the same before and after reconciling.
+    this.importLegacy();
     return this.live().some(n => !n.parentId && n.assignee.destination.groupId === undefined && n.assignee.destination.threadId === threadId &&
       (n.status !== "running" || childrenSince(this.store, n).some(c => c.reply !== "none")));
   }

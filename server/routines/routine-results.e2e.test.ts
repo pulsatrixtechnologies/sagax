@@ -28,6 +28,8 @@ it("reports every run into the bot's main thread while fresh executions, approva
   try {
     expect((await control(["doctor"]) as any).ok).toBe(true);
     const { bot } = await control(["new-bot", "--name", "Results fixture"]) as any;
+    // A new bot starts at Full access (#2111), which never raises the approval card this test reads; pin Ask.
+    await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "ask" });
     const originalThread = (await api("GET", "/api/bots")).bots.find((candidate: any) => candidate.id === bot.id).threadId;
     const { routine } = await api("POST", "/api/routines", {
       name: "Persistent report", prompt: "Report this run's state.", botId: bot.id, enabled: false, postResults: true,
@@ -65,7 +67,7 @@ it("reports every run into the bot's main thread while fresh executions, approva
     expect(savedBot.tasks.some((task: any) => task.title.endsWith("· Results"))).toBe(false);
     expect(savedBot.tasks.find((task: any) => task.threadId === destination).unread).toBe(true);
     // #1207: a run keeps no copy of the level; it runs at the bot's, live
-    expect(savedBot).toMatchObject({ autoApprove: true, approvalMode: "auto" });
+    expect(savedBot).toMatchObject({ autoApprove: false, approvalMode: "ask" });
     for (const run of completed) {
       const runTask = savedBot.tasks.find((task: any) => task.threadId === run.threadId);
       expect(runTask).toMatchObject({ routineRunId: run.id, unread: false });

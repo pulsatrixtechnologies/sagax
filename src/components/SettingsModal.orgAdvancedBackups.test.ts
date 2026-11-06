@@ -79,11 +79,11 @@ describe("Settings > Organization (Perspicax)", () => {
   });
 });
 
-describe("App > Advanced and Help", () => {
-  it("draws event log cleanup and diagnostics as rows under grey headings", async () => {
+describe("Help and about", () => {
+  it("draws diagnostics as rows under the Help heading", async () => {
     vi.stubGlobal("window", { ogb: { exportDiagnostics: async () => null } });
-    const { AppPageExtras } = await import("./settings/AppPage");
-    const html = renderToStaticMarkup(createElement(AppPageExtras, { remoteActive: false }));
+    const { AboutPage } = await import("./settings/AppPage");
+    const html = renderToStaticMarkup(createElement(AboutPage, { remoteActive: false, openAbout: () => {} }));
     expect(html).toContain('data-settings-card="about.help"');
     expect(html).toContain('data-settings-group="appHelp"');
     expect(html).not.toContain('type="checkbox"');
@@ -113,7 +113,10 @@ describe("Settings search", () => {
     }
     // #2080 (L0): one word, one page; a password is found on the Vault
     expect(sectionMatches(section("credentials"), "mot de passe")).toBe(true);
-    for (const query of ["nettoyage", "journaux", "diagnostic"]) expect(sectionMatches(section("about"), query), query).toBe(true);
+    for (const query of ["journaux", "diagnostic"]) expect(sectionMatches(section("about"), query), query).toBe(true);
+    // JC 2026-11-06: cleanup is found on Backups and storage, not on Help and about
+    expect(sectionMatches(section("backups"), "nettoyage")).toBe(true);
+    expect(sectionMatches(section("about"), "nettoyage")).toBe(false);
     // 2026-10-26: no Full access card any more
     expect(cardsMatching("accès complet")).not.toContain("organization.fullAccess");
     // #2090: Grok Bot / preferences import card is gone; restore stays a section keyword.

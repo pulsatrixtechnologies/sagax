@@ -165,13 +165,19 @@ describe("Settings > Account and App Advanced (#2080 L2)", () => {
     expect(fixture.dispatch).not.toHaveBeenCalled();
   });
 
-  it("mounts cleanup and diagnostics on App; routines, group turns and MCP stay on Organization when it shows", async () => {
+  it("mounts system rows on General, cleanup on Backups and diagnostics on Help; routines, group turns and MCP stay on Organization when it shows", async () => {
     fixture.features = { routinesInConversation: true };
+    fixture.section = "general";
+    const general = await render();
+    expect(general).toContain('data-settings-card="general.system"');
+    expect(general).not.toContain('data-settings-card="general.threadCleanup"');
+    expect(general).not.toContain('data-settings-card="about.help"');
+    fixture.section = "backups";
+    expect(await render()).toContain('data-settings-card="general.threadCleanup"');
     fixture.section = "about";
     const html = await render();
-    expect(html).toContain('data-settings-card="about.holding"');
-    expect(html).toContain('data-settings-card="general.threadCleanup"');
     expect(html).toContain('data-settings-card="about.help"');
+    expect(html).not.toContain('data-settings-card="general.threadCleanup"');
     for (const card of ["general.toolAccess", "general.threads", "general.recovery"]) expect(html, card).not.toContain(`data-settings-card="${card}"`);
     expect(html).not.toContain("Routines in the conversation");
     expect(html).not.toContain('data-settings-card="organization.roomTurns"');
@@ -203,11 +209,12 @@ describe("Settings > Organization (cards from General > Advanced, 2026-10-15)", 
     vi.stubGlobal("window", { ogb: { remoteClient: { active: false }, environments: {}, orgJoin: {} } });
     const { isSoloDesktop } = await import("./SettingsModal");
     expect(isSoloDesktop({} as never)).toBe(true);
-    fixture.section = "about";
+    fixture.section = "general";
     const html = await render();
     expect(html).toContain('data-settings-card="organization.roomTurns"');
     expect(html).toContain('data-settings-card="organization.mcpCalls"');
-    expect(html).toContain('data-settings-card="general.threadCleanup"');
+    fixture.section = "backups";
+    expect(await render()).toContain('data-settings-card="general.threadCleanup"');
   });
 
   it("finds them by search and opens them from old and new links", async () => {
@@ -225,6 +232,6 @@ describe("Settings > Organization (cards from General > Advanced, 2026-10-15)", 
     expect(currentSettingsSection("general", "organization.roomTurns")).toBe("organization");
     expect(currentSettingsCard("general.roomTurns")).toBe("organization.roomTurns");
     expect(isMovedOrganizationCard("general.threadCleanup")).toBe(false);
-    expect(currentSettingsSection("general", "general.threadCleanup")).toBe("about");
+    expect(currentSettingsSection("general", "general.threadCleanup")).toBe("backups");
   });
 });

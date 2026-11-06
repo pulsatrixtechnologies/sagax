@@ -12,9 +12,12 @@ import { requestReleaseNotes } from "@/lib/release-notes-ui";
 import { useUpdaterState } from "@/lib/updater";
 import { openUpdatePrompt, requestUpdateCheck } from "@/lib/update-prompt";
 import { generalAdvancedShown, isSoloDesktop } from "./settings/AdvancedSettings";
-import { CompactRow, GROUP_CARD, LinkRow, PillSelect, type PillOption, SettingRow, SettingsAdvancedScope, SettingsGroup, Switch } from "./SettingsPrimitives";
+import { CompactRow, LinkRow, PillSelect, type PillOption, SettingRow, SettingsAdvancedScope, SettingsGroup, Switch } from "./SettingsPrimitives";
 import { TimeZoneRows } from "./settings/TimeZoneSettings";
-import { AppPageExtras } from "./settings/AppPage";
+import { AboutPage, GeneralPage } from "./settings/AppPage";
+import { UsageMeterRow } from "./settings/UsageMeterRow";
+import { ThreadCleanupSettings } from "./ThreadCleanupSettings";
+import { PeopleToolAccessSettings } from "./ToolAccessSettings";
 import {
   AppearanceSettings,
   CredentialsSettings,
@@ -200,6 +203,7 @@ export function SettingsModal() {
     searchLabels, closeSettings, openAbout, query, setQuery, q,
     lockedServer, allowed, memoryShown, availableSections, section, visibleSections,
     pagesHit, sectionLabelKey, sectionIntroKey, subPageId, subPage, openSubPage, closeSubPage,
+    editConfig,
   } = useSettingsModal();
 
   return (
@@ -412,6 +416,8 @@ export function SettingsModal() {
                 <MyApprovalRules />
                 {/* the person's own tool access, theirs without an admin (2026-10-26) */}
                 <MyToolGrants />
+                {/* everyone's tool access, for whoever edits the installation (JC 2026-11-06, out of App) */}
+                {editConfig && <PeopleToolAccessSettings />}
               </div>
             )}
 
@@ -447,15 +453,11 @@ export function SettingsModal() {
               </>
             )}
 
-            {/* #2080 L2: App keeps startup, help, holding; About window opens from the link. */}
-            {section === "about" && (
-              <>
-                <AppPageExtras remoteActive={remoteActive} />
-                <div data-settings-card="about.about" className={GROUP_CARD}>
-                  <LinkRow rowId="about" label={t("settings.app.openAbout")} onClick={openAbout} />
-                </div>
-              </>
-            )}
+            {/* General (JC 2026-11-06): System, Keyboard and typing, Advanced mode. */}
+            {section === "general" && <GeneralPage remoteActive={remoteActive} />}
+
+            {/* Help and about (JC 2026-11-06): the About window, tours, help rows. */}
+            {section === "about" && <AboutPage remoteActive={remoteActive} openAbout={openAbout} />}
 
             {section === "appearance" && <AppearanceSettings />}
 
@@ -480,11 +482,25 @@ export function SettingsModal() {
             {section === "voice" && <VoiceSettingsPage />}
 
             {/* Backups (#2080): export and restore only. Grok Bot / primary-bot preference import left this page (JC 2026-11-06). Updates stay on their own page (#2090). */}
-            {section === "backups" && <WorkspaceBackupSettings />}
+            {section === "backups" && (
+              <>
+                <WorkspaceBackupSettings />
+                {/* event log cleanup and retention (JC 2026-11-06, out of App) */}
+                {editConfig && <ThreadCleanupSettings />}
+              </>
+            )}
 
             {section === "computer" && <LocalComputerSection />}
 
-            {section === "usage" && <UsageSection />}
+            {section === "usage" && (
+              <>
+                <UsageSection />
+                {/* the usage meter in the chat (JC 2026-11-06, out of App) */}
+                <SettingsGroup advanced title={t("settings.usage.title")} groupId="usageMeter">
+                  <UsageMeterRow />
+                </SettingsGroup>
+              </>
+            )}
             {/* Privacy (2026-10-14): a group of Notifications on an organization server. */}
             {section === "notifications" && <NotificationSettings privacy={allowed("privacy")} />}
             </SettingsAdvancedScope>

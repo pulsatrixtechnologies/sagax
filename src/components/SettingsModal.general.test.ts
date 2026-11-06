@@ -72,7 +72,7 @@ describe("Settings > General, the reference design's layout", () => {
     expect(html).not.toContain("Only part of the interface is translated");
   });
 
-  it("Guided tours live on App > Help, with two buttons and no tour paragraphs", () => {
+  it("Guided tours live on Help and about, with two buttons and no tour paragraphs", () => {
     expect(render()).not.toContain('data-settings-row="tours"');
     fixture.section = "about";
     const html = render();
@@ -107,7 +107,7 @@ describe("Settings > General, the reference design's layout", () => {
     expect(page).toContain("Update channel");
   });
 
-  it("keeps Account identity-only; Advanced rows live on App (#2080 L2)", () => {
+  it("keeps Account identity-only; system rows live on General, help on Help and about", () => {
     const html = render();
     expect(html).toContain('data-settings-group="languageRegion"');
     expect(html).not.toContain('data-settings-card="general.advanced"');
@@ -115,10 +115,16 @@ describe("Settings > General, the reference design's layout", () => {
     fixture.section = "about";
     const app = render();
     expect(app).toContain('data-settings-card="about.help"');
-    expect(app).toContain('data-settings-card="about.holding"');
-    // a member who cannot edit the installation, in a browser: no holding card
+    expect(app).toContain('data-settings-card="about.about"');
+    expect(app).not.toContain('data-settings-card="general.system"');
+    fixture.section = "general";
+    const general = render();
+    expect(general).toContain('data-settings-card="general.system"');
+    expect(general).toContain('data-settings-card="general.input"');
+    expect(general).toContain('data-settings-card="general.loopGuard"');
+    // a member who cannot edit the installation, in a browser: no loop guard
     fixture.config = { rooms: { turnTimeoutMinutes: 5 }, viewer: { operator: false, role: "member" } };
-    expect(render()).not.toContain('data-settings-card="about.holding"');
+    expect(render()).not.toContain('data-settings-card="general.loopGuard"');
   });
 
   it("reads in French", () => {
@@ -131,7 +137,9 @@ describe("Settings > General, the reference design's layout", () => {
     // #2080 L2: tours live on App, not Account. #2090: Updates is its own page.
     expect(html).not.toContain(">Visites guidées</div>");
     expect(html).toContain('<option value="updates">Mises à jour</option>');
-    expect(html).toContain('<option value="about">Application</option>');
+    expect(html).toContain('<option value="general">Général</option>');
+    expect(html).toContain('<option value="about">Aide et à propos</option>');
+    expect(html).not.toContain(">Application</option>");
     expect(html).not.toMatch(/[–—]/);
   });
 });
@@ -162,9 +170,14 @@ describe("Settings search after the move", () => {
     for (const query of ["language", "langue", "account", "copy email"]) {
       expect(sectionMatches(section("account"), query), query).toBe(true);
     }
-    for (const query of ["tour", "diagnostic", "open at login", "help"]) {
+    for (const query of ["tour", "diagnostic", "help", "feedback", "logs"]) {
       expect(sectionMatches(section("about"), query), query).toBe(true);
       expect(sectionMatches(section("account"), query), query).toBe(false);
+      expect(sectionMatches(section("general"), query), query).toBe(false);
+    }
+    for (const query of ["open at login", "hotkey", "send key", "spellcheck", "advanced mode", "hardware acceleration", "app icon"]) {
+      expect(sectionMatches(section("general"), query), query).toBe(true);
+      expect(sectionMatches(section("about"), query), query).toBe(false);
     }
   });
 });

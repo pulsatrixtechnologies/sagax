@@ -1,4 +1,4 @@
-// A person's own achievements (server/achievements.ts). Member scope
+// A person's own achievements (server/achievements/achievements.ts). Member scope
 // (request-auth.ts CLIENT_ALLOW): everyone reads and feeds only their own,
 // keyed by the session's person (organization server) or the local operator
 // (solo server). Nobody reads another person's record, an admin included;
@@ -10,7 +10,7 @@
 //   POST /api/me/achievements/events    { events: [{ type, key?, value? }] } client events only
 //   PUT  /api/me/achievements/settings  { settings: { showPoints, toasts, native, public, title, tzOffset } }
 //   GET  /api/achievements/public?ids=  { points: { <person>: { points, level, title?, unlocked } } }
-import type { AchievementEvent, AchievementStore, AchievementUnlock } from "../achievements.ts";
+import type { AchievementEvent, AchievementStore, AchievementUnlock } from "../achievements/achievements.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

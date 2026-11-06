@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { modelFamily } from "../achievements-mastery.ts";
+import { modelFamily } from "../achievements/achievements-mastery.ts";
 import { claudeActivityEvents, claudeTide, isClaudeComputerTool } from "./claude-activity.ts";
 
 describe("claudeTide", () => {

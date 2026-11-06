@@ -608,3 +608,7 @@ server/avatar-image.test.ts -> server/media/avatar-image.test.ts
 server/avatar-image.ts -> server/media/avatar-image.ts
 server/generated-image.test.ts -> server/media/generated-image.test.ts
 server/generated-image.ts -> server/media/generated-image.ts
+server/achievements-mastery.test.ts -> server/achievements/achievements-mastery.test.ts
+server/achievements-mastery.ts -> server/achievements/achievements-mastery.ts
+server/achievements.test.ts -> server/achievements/achievements.test.ts
+server/achievements.ts -> server/achievements/achievements.ts

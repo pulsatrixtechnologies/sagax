@@ -1,4 +1,4 @@
-// The achievement engine (server/achievements.ts) and its routes
+// The achievement engine (server/achievements/achievements.ts) and its routes
 // (server/routes/achievements.ts): idempotent unlocks, progress, anti-spam,
 // grandfathering, the Trombi command, privacy.
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -16,9 +16,9 @@ import {
   routineRunEvents,
   slashCommandName,
 } from "./achievements.ts";
-import { ACHIEVEMENTS_PATH, createAchievementRoutes } from "./routes/achievements.ts";
-import { PASS } from "./routes/table.ts";
-import { CLIENT_ALLOW } from "./auth/request-auth.ts";
+import { ACHIEVEMENTS_PATH, createAchievementRoutes } from "../routes/achievements.ts";
+import { PASS } from "../routes/table.ts";
+import { CLIENT_ALLOW } from "../auth/request-auth.ts";
 
 const ADA = "pr_11111111-1111-4111-8111-111111111111";
 const BOB = "pr_22222222-2222-4222-8222-222222222222";

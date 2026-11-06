@@ -1745,7 +1745,7 @@ export type ServerFrame =
    * table loaded). Whole sheet each time: see shared/data-surface.ts. */
   | DataBroadcast
   | { kind: "bot.deleted"; botId: string }
-  /** A person's own unlocks (server/achievements.ts), to their streams only. */
+  /** A person's own unlocks (server/achievements/achievements.ts), to their streams only. */
   | { kind: "achievements"; audience: string; unlocked: Array<{ id: string; points: number; unlockedAt: number }> }
   /** A person's preferences after a save on any of their devices
    * (server/people/user-preferences.ts), to that person's streams only. */

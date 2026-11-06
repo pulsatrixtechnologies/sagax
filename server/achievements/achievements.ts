@@ -18,8 +18,8 @@
 // (the person's own choice, for everyone who looks). Locked ids stay off it.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ACHIEVEMENTS } from "../shared/achievements-catalog.ts";
-import { applyMasteryFact, cleanMasteryState, emptyMasteryState, reconcileMastery, type MasteryFact } from "../shared/achievements-mastery.ts";
+import { ACHIEVEMENTS } from "../../shared/achievements-catalog.ts";
+import { applyMasteryFact, cleanMasteryState, emptyMasteryState, reconcileMastery, type MasteryFact } from "../../shared/achievements-mastery.ts";
 import {
   ACHIEVEMENT_EVENTS,
   currentStreak,
@@ -45,10 +45,10 @@ import {
   type AchievementSnapshot,
   type AchievementUnlock,
   type PublicAchievementCard,
-} from "../shared/achievements.ts";
+} from "../../shared/achievements.ts";
 
 export type { AchievementItemState, AchievementSettings, AchievementSnapshot, AchievementUnlock, PublicAchievementCard };
-import { writeFileAtomic } from "./atomic.ts";
+import { writeFileAtomic } from "../atomic.ts";
 
 export interface AchievementEvent {
   type: AchievementEventType;

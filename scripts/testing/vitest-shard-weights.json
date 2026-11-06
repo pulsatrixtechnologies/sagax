@@ -33,7 +33,7 @@
   "scripts/testing/web-app-ui.e2e.test.ts": 1,
   "scripts/testing/workspace-backup-ui.e2e.test.ts": 1,
   "scripts/voice-benchmark/run.test.ts": 29,
-  "server/achievements.test.ts": 12,
+  "server/achievements/achievements.test.ts": 12,
   "server/acp-recovery.e2e.test.ts": 22,
   "server/activity/admin-activity.e2e.test.ts": 1,
   "server/agent-api.e2e.test.ts": 5,

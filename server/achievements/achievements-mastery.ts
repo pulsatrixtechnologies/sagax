@@ -3,9 +3,9 @@
 // passes each live frame and each successful request here with a few lookups
 // (whose thread, which bot, what model) and records the facts that come back
 // for their person. Nothing here reads the store or the clock.
-import type { MasteryFact } from "../shared/achievements-mastery.ts";
-import { looksFrench } from "../shared/achievements-mastery.ts";
-import { isMasteryCharacter, masteryLock } from "../shared/mascot-unlocks.ts";
+import type { MasteryFact } from "../../shared/achievements-mastery.ts";
+import { looksFrench } from "../../shared/achievements-mastery.ts";
+import { isMasteryCharacter, masteryLock } from "../../shared/mascot-unlocks.ts";
 
 /** A fact for one person; `id` makes it count once. */
 export interface PersonFact {

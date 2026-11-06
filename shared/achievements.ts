@@ -1,6 +1,6 @@
 // Achievements: the types, the rules and the pure engine. The catalog itself
 // is data (shared/achievements-catalog.ts); the server keeps each person's
-// progress (server/achievements.ts) and the app draws it (src/lib/achievements.ts).
+// progress (server/achievements/achievements.ts) and the app draws it (src/lib/achievements.ts).
 //
 // An achievement is unlocked by events. A server event is one the server saw
 // happen (a message sent, a routine that ran); a client event is one only the

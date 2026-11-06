@@ -19,8 +19,8 @@ import { isStopIntent } from "../../shared/stop-intent.ts";
 import {
   masterySendFacts,
   modelFamily,
-} from "../achievements-mastery.ts";
-import { achievementSendEvents } from "../achievements.ts";
+} from "../achievements/achievements-mastery.ts";
+import { achievementSendEvents } from "../achievements/achievements.ts";
 import { admit } from "../admission.ts";
 import {
   classifyWithoutSteer,

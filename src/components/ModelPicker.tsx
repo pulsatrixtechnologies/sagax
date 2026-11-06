@@ -402,7 +402,9 @@ export function ModelPicker({
     active,
     showActiveAccount,
     selectedVariantLabel,
-    advanced,
+    // #2080: the two-pane chip always reads "Model · Effort" (Bot > Model
+    // has no Effort row of its own any more)
+    advanced: advanced || panes,
   });
 
   const portal = (node: ReactNode) => (typeof document === "undefined" ? node : createPortal(node, document.body));

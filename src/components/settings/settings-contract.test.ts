@@ -47,7 +47,6 @@ const NOT_MIGRATED: Record<Rule, string[]> = {
     "settings/LinkedGrokBotSettings.tsx",
     "settings/MyConnectionsSettings.tsx",
     "settings/OrgSharing.tsx",
-    "settings/LinkedGrokBotSettings.tsx",
     "CacheKeepWarmSettings.tsx",
     "ComputerSharingSettings.tsx",
     "ConnectedWorkspacesSettings.tsx",

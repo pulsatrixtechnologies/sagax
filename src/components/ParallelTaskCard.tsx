@@ -21,6 +21,8 @@ import { t } from "@/lib/i18n";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { cn } from "@/lib/cn";
 import { formatElapsed } from "@/lib/working-time";
+import { codingJobView, isCodingJob } from "@/lib/coding-job-card";
+import { CodingJobCard, useCodingJob } from "./CodingJobCard";
 
 type CardState = ParallelTaskState | "waiting";
 
@@ -76,7 +78,27 @@ export function ParallelTaskCard({ message, botId }: { message: Message; botId: 
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(timer);
   }, [live]);
+  // #2148: a coding job stays in the chat as a coding card (never a thread).
+  const coding = useCodingJob(owner?.id, ref?.threadId, status);
   if (!ref || !owner) return null;
+  if (coding && isCodingJob(coding.detail)) {
+    const job = codingJobView(coding.detail, coding.result);
+    return (
+      <div className="flex w-full flex-col items-start gap-2" data-parallel-card={ref.threadId} data-parallel-state={status}>
+        <CodingJobCard
+          job={job}
+          threadId={ref.threadId}
+          now={now}
+          onStop={() => dispatch({ type: "stopParallelTask", botId: owner.id, threadId: ref.threadId })}
+        />
+        {questions.map((question) => (
+          <div key={question.id} className="w-full" data-parallel-inline-question={ref.threadId}>
+            <QuestionCard threadId={ref.threadId} bot={{ id: owner.id, name: owner.name }} message={question} />
+          </div>
+        ))}
+      </div>
+    );
+  }
   const started = task?.turnStartedAt ?? ref.startedAt ?? message.at;
   const elapsed = live ? now - started : (ref.endedAt ?? now) - started;
   if (!showThreads) {

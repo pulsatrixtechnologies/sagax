@@ -16,8 +16,8 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
-  Archive, ArchiveRestore, ExternalLink, FileDiff, FolderOpen, GitBranch, GitCommitHorizontal, GitMerge, GitPullRequest,
-  GitPullRequestClosed, Loader2, Monitor, MoreHorizontal, RefreshCw, Trash2, Upload,
+  Archive, ArchiveRestore, EyeOff, ExternalLink, FileDiff, FolderOpen, GitBranch, GitCommitHorizontal, GitMerge, GitPullRequest,
+  GitPullRequestClosed, Link2, Loader2, Monitor, MoreHorizontal, RefreshCw, Trash2, Upload,
 } from "lucide-react";
 
 import { ApiError, useStore } from "@/state/store";
@@ -25,13 +25,15 @@ import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { cn } from "@/lib/cn";
 import { openExternalLink } from "@/lib/app-links";
+import { copyText } from "@/lib/copy-text";
 import { writeComputerPanelView } from "@/lib/computer-panel-view";
 import { GROUPED_CARD, GROUPED_ROW } from "@/lib/grouped-card";
 import {
   branchAction, branchActions, branchAskText, branchAway, branchCanReadAgain, branchCounts, branchStatus, branchUnavailable, branchWhere, codingBranchKey, deleteNeedsSecondConfirm, loadBranchDiff, loadBranchInfo, loadBranchPull, remoteActionNeedsConfirm,
   type BotBranchDiff, type BotBranchInfo, type BotBranchPull, type BranchAskAction, type BranchTone, type CodingBranch,
 } from "@/lib/code-branches";
-import { codeWorkWhen } from "@/lib/bot-activity";
+import { codeWorkWhen, ignoredBranchKey } from "@/lib/bot-activity";
+import { shortRepoName } from "@/lib/coding-job-card";
 import { useHeldMenuMotion } from "../MenuMotion";
 import { navigateThreadMenu } from "../BotProjects";
 import { ConfirmDialog } from "../ConfirmDialog";
@@ -105,6 +107,15 @@ export interface BranchListActions {
   onArchive: (key: string, archived: boolean) => Promise<void>;
   /** Refresh the Coding list after a change. */
   onChanged?: () => void;
+  /** Ignore one branch (by `ignoredBranchKey`): it leaves the Coding list
+   * now and stays out. The git branch itself stays. */
+  onIgnore?: (key: string) => void;
+}
+
+/** What the row no longer shows (machine, counts, when), for the menu's
+ * label line and the row's tooltip. */
+export function branchDetails(branch: CodingBranch, info: BotBranchInfo | undefined, now: number): string {
+  return [branchWhere(info), ...branchCounts(info?.state), codeWorkWhen(branch.at, now)].filter(Boolean).join(" · ");
 }
 
 /** One branch row: icon, name, status pill, where and when, the "..." menu,
@@ -126,8 +137,11 @@ export function BranchRow({ branch, now, info, pull, busy, note, archived = fals
   const status = branchStatus(branch, info?.state, pull);
   const tone = TONE_ICON[status.tone];
   const Icon = tone.icon;
-  const subtitle = [branch.repo ?? info?.repo ?? info?.folderName, branchWhere(info), ...branchCounts(info?.state), codeWorkWhen(branch.at, now)].filter(Boolean).join(" · ");
+  const repo = branch.repo ?? info?.repo ?? info?.folderName;
+  const subtitle = shortRepoName(repo);
+  const details = branchDetails(branch, info, now);
   const url = branch.url;
+  const tooltip = [repo, details, url].filter(Boolean).join("\n");
   const body = (
     <>
       <Icon size={16} strokeWidth={1.9} aria-hidden="true" className={cn("shrink-0", tone.className)} />
@@ -136,7 +150,7 @@ export function BranchRow({ branch, now, info, pull, busy, note, archived = fals
           <span className={cn("min-w-0 flex-1 truncate text-[13px] leading-[18px]", status.tone === "gone" ? "text-ink-secondary line-through" : "text-ink")}>{branch.name}</span>
           <span data-branch-status={status.tone} className={cn("shrink-0 rounded-md px-1.5 text-[11px] leading-[16px]", TONE_PILL[status.tone])}>{status.label}</span>
         </span>
-        <span className="block truncate text-[12px] leading-[17px] text-ink-secondary">{subtitle}</span>
+        {subtitle && <span data-branch-repo="" className="block truncate text-[12px] leading-[17px] text-ink-secondary">{subtitle}</span>}
       </span>
     </>
   );
@@ -149,16 +163,16 @@ export function BranchRow({ branch, now, info, pull, busy, note, archived = fals
             data-code-link={url}
             onClick={() => void openExternalLink(url)}
             aria-label={t("botPanel.code.openAria", { name: branch.name })}
-            title={url}
+            title={tooltip}
             className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
           >
             {body}
           </button>
-        ) : <div className="flex min-w-0 flex-1 items-center gap-3">{body}</div>}
+        ) : <div title={tooltip || undefined} className="flex min-w-0 flex-1 items-center gap-3">{body}</div>}
         {actions && onAct && (
           busy
             ? <span role="status" aria-label={t("botPanel.branch.working")} className="flex size-7 shrink-0 items-center justify-center text-ink-secondary"><Loader2 size={14} className="animate-spin" aria-hidden="true" /></span>
-            : <BranchMenu branch={branch} info={info} pull={pull} archived={archived} botName={actions.botName} readFailed={readFailed} onAct={onAct} />
+            : <BranchMenu branch={branch} info={info} pull={pull} archived={archived} botName={actions.botName} readFailed={readFailed} details={details} canIgnore={Boolean(actions.onIgnore)} onAct={onAct} />
         )}
       </div>
       {note && (
@@ -170,7 +184,7 @@ export function BranchRow({ branch, now, info, pull, busy, note, archived = fals
   );
 }
 
-export type BranchMenuAction = "retry" | "commit" | "push" | "pr" | "openPr" | "diff" | "reveal" | "computer" | "archive" | "unarchive" | "delete";
+export type BranchMenuAction = "retry" | "commit" | "push" | "pr" | "openPr" | "diff" | "reveal" | "computer" | "archive" | "unarchive" | "github" | "copyLink" | "ignore" | "delete";
 
 function revealBridge(): ((path: string) => Promise<"shown" | "missing" | "invalid">) | undefined {
   const ogb = typeof window === "undefined" ? undefined : window.ogb;
@@ -178,13 +192,15 @@ function revealBridge(): ((path: string) => Promise<"shown" | "missing" | "inval
 }
 
 /** The "..." button and its menu (portalled: the grouped card clips). */
-export function BranchMenu({ branch, info, pull, archived, botName, readFailed = false, onAct }: {
+export function BranchMenu({ branch, info, pull, archived, botName, readFailed = false, details, canIgnore = false, onAct }: {
   branch: CodingBranch;
   info?: BotBranchInfo;
   pull?: BotBranchPull | null;
   archived: boolean;
   botName: string;
   readFailed?: boolean;
+  details?: string;
+  canIgnore?: boolean;
   onAct: (action: BranchMenuAction) => void;
 }) {
   const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
@@ -249,7 +265,7 @@ export function BranchMenu({ branch, info, pull, archived, botName, readFailed =
           className={cn("fixed z-[60] flex max-h-[calc(100dvh-16px)] w-[260px] max-w-[calc(100vw-16px)] flex-col overflow-y-auto overscroll-contain rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 text-[13px] leading-[18px]", motion.className)}
           {...motion.exitProps}
         >
-          <BranchMenuPanel branch={branch} info={info} pull={pull} archived={archived} botName={botName} readFailed={readFailed} onPick={(action) => { close(); onAct(action); }} />
+          <BranchMenuPanel branch={branch} info={info} pull={pull} archived={archived} botName={botName} readFailed={readFailed} details={details} canIgnore={canIgnore} onPick={(action) => { close(); onAct(action); }} />
         </div>,
         document.body,
       )}
@@ -267,19 +283,27 @@ function menuAwayKey(info: BotBranchInfo | undefined, branch: CodingBranch, read
  * plain reason first (what is wrong and what to do), outside the menu that
  * it describes (aria-describedby: a menu holds only its items), then the
  * menu. */
-export function BranchMenuPanel({ branch, info, pull, archived, botName, readFailed = false, onPick }: {
+export function BranchMenuPanel({ branch, info, pull, archived, botName, readFailed = false, details, canIgnore = false, onPick }: {
   branch: CodingBranch;
   info?: BotBranchInfo;
   pull?: BotBranchPull | null;
   archived: boolean;
   botName: string;
   readFailed?: boolean;
+  /** Machine, counts and when: a grey label line above the items. */
+  details?: string;
+  canIgnore?: boolean;
   onPick: (action: BranchMenuAction) => void;
 }) {
   const reasonId = useId();
   const awayKey = menuAwayKey(info, branch, readFailed);
   return (
     <>
+      {details && (
+        <p data-branch-details="" className="break-words px-2 pb-1 pt-0.5 text-[11.5px] leading-4 text-ink-secondary" title={details}>
+          {details}
+        </p>
+      )}
       {awayKey && (
         <p id={reasonId} data-branch-away={awayKey} className="px-2 pb-1.5 pt-0.5 text-[12px] leading-[17px] text-ink-secondary">
           {t(awayKey, { bot: botName })}
@@ -292,7 +316,7 @@ export function BranchMenuPanel({ branch, info, pull, archived, botName, readFai
         onKeyDown={navigateThreadMenu}
         className="flex flex-col gap-0.5"
       >
-        <BranchMenuItems branch={branch} info={info} pull={pull} archived={archived} botName={botName} readFailed={readFailed} onPick={onPick} />
+        <BranchMenuItems branch={branch} info={info} pull={pull} archived={archived} botName={botName} readFailed={readFailed} canIgnore={canIgnore} onPick={onPick} />
       </div>
     </>
   );
@@ -303,13 +327,15 @@ export function BranchMenuPanel({ branch, info, pull, archived, botName, readFai
  * "Try again" first where reading it again can help, then each action as
  * one click that asks the bot to do it. While the branch is read: the
  * actions wait, saying so. */
-export function BranchMenuItems({ branch, info, pull, archived, botName, readFailed = false, onPick }: {
+export function BranchMenuItems({ branch, info, pull, archived, botName, readFailed = false, canIgnore = false, onPick }: {
   branch: CodingBranch;
   info?: BotBranchInfo;
   pull?: BotBranchPull | null;
   archived: boolean;
   botName: string;
   readFailed?: boolean;
+  /** Offer "Ignore" (the list can hide a branch). */
+  canIgnore?: boolean;
   onPick: (action: BranchMenuAction) => void;
 }) {
   const can = branchActions(info, pull, branch);
@@ -373,7 +399,10 @@ export function BranchMenuItems({ branch, info, pull, archived, botName, readFai
       {divider("places")}
       {canReveal && item("reveal", <FolderOpen />, t("botPanel.branch.reveal"))}
       {item("computer", <Monitor />, t("botPanel.branch.openIn", { tab: t("botPanel.tab.computer") }))}
+      {branch.url && item("github", <ExternalLink />, t("botPanel.branch.openGithub"))}
+      {branch.url && item("copyLink", <Link2 />, t("botPanel.branch.copyLink"))}
       {divider("list")}
+      {canIgnore && item("ignore", <EyeOff />, t("botPanel.branch.ignore"))}
       {archived
         ? item("unarchive", <ArchiveRestore />, t("botPanel.branch.unarchive"))
         : item("archive", <Archive />, t("botPanel.branch.archive"))}
@@ -475,8 +504,9 @@ export function CodeBranchList({ branches, archivedBranches = [], now, actions, 
   const runPush = (branch: CodingBranch) => {
     if (!botId) return;
     void run(branch, async () => {
-      const result = await branchAction(botId, "push", { threadId: branch.threadId ?? "", branch: branch.name });
-      return t("botPanel.branch.done.push", { remote: result.remote ?? "origin" });
+      await branchAction(botId, "push", { threadId: branch.threadId ?? "", branch: branch.name });
+      // the status pill already says Pushed: no extra line under the row
+      return undefined;
     });
   };
   const runPr = (branch: CodingBranch) => {
@@ -567,6 +597,20 @@ export function CodeBranchList({ branches, archivedBranches = [], now, actions, 
       case "pr":
         if (remoteActionNeedsConfirm(row?.info, "pr")) { setConfirming({ branch, action: "pr" }); return; }
         runPr(branch);
+        return;
+      case "github":
+        if (branch.url) void openExternalLink(branch.url);
+        return;
+      case "copyLink": {
+        const url = branch.url;
+        if (!url) return;
+        void copyText(url).then((result) => patch(key, result === "copied"
+          ? { note: { tone: "ok", text: t("botPanel.branch.done.copyLink") } }
+          : { note: { tone: "error", text: t("botPanel.branch.error.copyLink") } }));
+        return;
+      }
+      case "ignore":
+        actions.onIgnore?.(ignoredBranchKey(key));
         return;
       case "archive":
       case "unarchive":

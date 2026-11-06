@@ -103,4 +103,13 @@ describe("AgentRows", () => {
     flushSync(() => root.render(createElement(AgentRows, { items: [], onOpen: vi.fn() })));
     expect(host.querySelector("[data-agent-rows]")).toBeNull();
   });
+
+  it("offers Ignore on a finished row only, without confirmation (#2148)", () => {
+    const onIgnore = vi.fn();
+    flushSync(() => root.render(createElement(AgentRows, { items: [item("a1", "Fix the lexer", "finished", { endedAt: NOW - M }), item("a2", "Split the parser", "running")], onOpen: vi.fn(), onIgnore, now: NOW })));
+    const buttons = [...host.querySelectorAll<HTMLButtonElement>("[data-agent-ignore]")];
+    expect(buttons.map((b) => b.dataset.agentIgnore)).toEqual(["thread:a1"]);
+    flushSync(() => buttons[0].click());
+    expect(onIgnore).toHaveBeenCalledWith("thread:a1");
+  });
 });

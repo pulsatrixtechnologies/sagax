@@ -122,6 +122,38 @@ export function codingLive(items: readonly BotActivityItem[], live: LiveView = S
     .sort(newestRunningFirst);
 }
 
+/** #2148 (JC, 2026-11-06): a finished coding job stays in Details > Coding
+ * this long after it ended, or until the person picks Ignore. */
+export const CODING_RETAIN_MS = 24 * 60 * 60_000;
+
+/** The person's Ignore choices ride on the branch archive store (per person
+ * and bot, on the server) under their own prefixes: a coding job by its
+ * entry id, a branch by its codingBranchKey. Neither deletes anything. */
+export function ignoredJobKey(id: string): string {
+  return `job|${id}`;
+}
+
+export function ignoredBranchKey(branchKey: string): string {
+  return `ignore|${branchKey}`;
+}
+
+/** Kept in Details > Coding: running, or ended less than CODING_RETAIN_MS
+ * ago, and not ignored. */
+export function codingKept(item: { id: string; status: BotActivityStatus; endedAt?: number; updatedAt: number }, now: number, hidden?: ReadonlySet<string>): boolean {
+  if (hidden?.has(ignoredJobKey(item.id))) return false;
+  if (activityStatusActive(item.status)) return true;
+  return now - (item.endedAt ?? item.updatedAt) < CODING_RETAIN_MS;
+}
+
+/** Details > Coding (#2148): the coding jobs running or finished within the
+ * last CODING_RETAIN_MS that the person did not ignore, running first. It
+ * replaces the old rule (a finished job left after FINISHED_LINGER_MS). */
+export function codingRetained(items: readonly BotActivityItem[], now: number, hidden?: ReadonlySet<string>): BotActivityItem[] {
+  return items
+    .filter((item) => item.coding && item.kind !== "subagent" && codingKept(item, now, hidden))
+    .sort(newestRunningFirst);
+}
+
 /** Work running beside the conversation, for Details > Activity: a routine
  * run, work another bot handed over, a sub-agent, a parallel task, a job the
  * bot opened on itself (start_thread). A conversation's own turn is the chat
@@ -192,8 +224,11 @@ export function codingWork(items: readonly BotActivityItem[], archived?: Readonl
     return pull ? { ...branch, pull } : branch;
   });
   const isArchived = (branch: CodingBranch) => Boolean(archived?.has(branchArchiveKey(branch.repo ?? branch.folder, branch.name)));
-  const listed = newest(linked.filter((branch) => !isArchived(branch)));
-  const archivedBranches = linked.filter(isArchived).sort((a, b) => b.at - a.at);
+  // #2148: an ignored branch leaves the Coding list, archived ones included.
+  const isIgnored = (branch: CodingBranch) => Boolean(archived?.has(ignoredBranchKey(branchArchiveKey(branch.repo ?? branch.folder, branch.name))));
+  const kept = linked.filter((branch) => !isIgnored(branch));
+  const listed = newest(kept.filter((branch) => !isArchived(branch)));
+  const archivedBranches = kept.filter(isArchived).sort((a, b) => b.at - a.at);
   return {
     pullRequests: newest(pulls.values()),
     branches: listed,

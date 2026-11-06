@@ -11,7 +11,7 @@
 // runs. Past five rows, "↓ N more" shows the rest. A click opens the task in
 // the chat column (the coding chat): never a side panel.
 import { useState } from "react";
-import { Loader2, Square } from "lucide-react";
+import { Loader2, Square, X } from "lucide-react";
 
 import type { TaskUsage } from "@/state/store";
 import { activityStatusActive, activityStatusLabel, activityTitle, codingWhere, formatActivityDuration, type BotActivityItem, type BotLaunchedAgentItem } from "@/lib/bot-activity";
@@ -40,6 +40,25 @@ export interface AgentRowsProps {
   usageOf?: (threadId: string) => TaskUsage | undefined;
   /** Rows before "↓ N more" (tests). */
   shown?: number;
+  /** #2148: Ignore on a finished row (by its id): it leaves the list at
+   * once and stays gone; the work itself is kept. */
+  onIgnore?: (id: string) => void;
+}
+
+/** Ignore on a finished row: no confirmation, it only hides the row. */
+function IgnoreButton({ id, title, onIgnore }: { id: string; title: string; onIgnore: (id: string) => void }) {
+  return (
+    <button
+      type="button"
+      data-agent-ignore={id}
+      onClick={() => onIgnore(id)}
+      aria-label={t("botPanel.coding.ignoreAria", { title })}
+      title={t("botPanel.coding.ignore")}
+      className="flex size-6 shrink-0 items-center justify-center rounded-full text-ink-tertiary opacity-0 transition-opacity hover:bg-raised hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+    >
+      <X size={12} aria-hidden="true" />
+    </button>
+  );
 }
 
 function glyphFor(status: RowStatus): { glyph: string; className: string } {
@@ -105,7 +124,7 @@ function Shell({ status, tag, title, line, right, onOpen, openAria, stop, childr
   );
 }
 
-function ItemRow({ item, now, onOpen, onStop, stopping, usageOf }: { item: BotActivityItem; now: number; onOpen: (item: BotActivityItem) => void; onStop?: (item: BotActivityItem) => void; stopping?: ReadonlySet<string>; usageOf?: (threadId: string) => TaskUsage | undefined }) {
+function ItemRow({ item, now, onOpen, onStop, stopping, usageOf, onIgnore }: { item: BotActivityItem; now: number; onOpen: (item: BotActivityItem) => void; onStop?: (item: BotActivityItem) => void; stopping?: ReadonlySet<string>; usageOf?: (threadId: string) => TaskUsage | undefined; onIgnore?: (id: string) => void }) {
   const live = activityStatusActive(item.status);
   const usage = item.threadId ? usageOf?.(item.threadId) : undefined;
   const elapsed = formatActivityDuration((item.endedAt ?? now) - item.startedAt);
@@ -125,7 +144,7 @@ function ItemRow({ item, now, onOpen, onStop, stopping, usageOf }: { item: BotAc
       onOpen={() => onOpen(item)}
       openAria={t("botPanel.coding.openAria", { title: activityTitle(item) })}
       attrs={{ "data-activity-card": item.id, "data-activity-status": item.status }}
-      stop={canStop && (
+      stop={!live && onIgnore ? <IgnoreButton id={item.id} title={activityTitle(item)} onIgnore={onIgnore} /> : canStop && (
         <button
           type="button"
           data-activity-stop={item.id}
@@ -142,7 +161,7 @@ function ItemRow({ item, now, onOpen, onStop, stopping, usageOf }: { item: BotAc
   );
 }
 
-function LaunchedRow({ item, now, onOpen, usageOf }: { item: BotLaunchedAgentItem; now: number; onOpen?: (item: BotLaunchedAgentItem) => void; usageOf?: (threadId: string) => TaskUsage | undefined }) {
+function LaunchedRow({ item, now, onOpen, usageOf, onIgnore }: { item: BotLaunchedAgentItem; now: number; onOpen?: (item: BotLaunchedAgentItem) => void; usageOf?: (threadId: string) => TaskUsage | undefined; onIgnore?: (id: string) => void }) {
   const usage = item.threadId ? usageOf?.(item.threadId) : undefined;
   const ended = item.status === "running" || item.status === "queued" || item.status === "waiting" ? now : item.updatedAt;
   const elapsed = formatActivityDuration(Math.max(0, ended - item.startedAt));
@@ -169,15 +188,16 @@ function LaunchedRow({ item, now, onOpen, usageOf }: { item: BotLaunchedAgentIte
       onOpen={openable ? () => onOpen!(item) : undefined}
       openAria={t("botPanel.coding.openAria", { title: item.title })}
       attrs={{ "data-launched-agent": item.id, "data-launched-status": item.status }}
+      stop={onIgnore && item.status !== "running" && item.status !== "queued" && item.status !== "waiting" ? <IgnoreButton id={item.id} title={item.title} onIgnore={onIgnore} /> : undefined}
     />
   );
 }
 
-export function AgentRows({ items, launched = [], onOpen, onOpenLaunched, onStop, stopping, now = Date.now(), usageOf, shown = AGENT_ROWS_SHOWN }: AgentRowsProps) {
+export function AgentRows({ items, launched = [], onOpen, onOpenLaunched, onStop, stopping, now = Date.now(), usageOf, shown = AGENT_ROWS_SHOWN, onIgnore }: AgentRowsProps) {
   const [all, setAll] = useState(false);
   const rows: Array<{ key: string; node: React.ReactNode }> = [
-    ...launched.map((item) => ({ key: `launched:${item.id}`, node: <LaunchedRow key={`launched:${item.id}`} item={item} now={now} onOpen={onOpenLaunched} usageOf={usageOf} /> })),
-    ...items.map((item) => ({ key: item.id, node: <ItemRow key={item.id} item={item} now={now} onOpen={onOpen} onStop={onStop} stopping={stopping} usageOf={usageOf} /> })),
+    ...launched.map((item) => ({ key: `launched:${item.id}`, node: <LaunchedRow key={`launched:${item.id}`} item={item} now={now} onOpen={onOpenLaunched} usageOf={usageOf} onIgnore={onIgnore} /> })),
+    ...items.map((item) => ({ key: item.id, node: <ItemRow key={item.id} item={item} now={now} onOpen={onOpen} onStop={onStop} stopping={stopping} usageOf={usageOf} onIgnore={onIgnore} /> })),
   ];
   if (rows.length === 0) return null;
   const hidden = all ? 0 : Math.max(0, rows.length - shown);

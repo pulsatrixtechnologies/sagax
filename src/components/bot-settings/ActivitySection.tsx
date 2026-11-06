@@ -38,7 +38,9 @@ import { useAdvancedMode } from "@/lib/interface-mode";
 import {
   activityLive,
   codeWorkWhen,
-  codingLive,
+  codingKept,
+  codingRetained,
+  ignoredJobKey,
   codingWork,
   codingWorkEmpty,
   pullActionLabel,
@@ -192,14 +194,16 @@ export function CodeWorkList({ work, now, branchActions }: { work: CodingWork; n
 /** What Details shows for Coding and Activity, given the loaded list:
  * each section's entries, and whether it is drawn at all. Nothing loaded
  * yet (or a failed first load) draws neither. */
-export function panelSections(list: BotActivityList | null, live?: LiveView, advanced = true, archived?: ReadonlySet<string>) {
-  const coding = list ? codingLive(list.items, live) : [];
+export function panelSections(list: BotActivityList | null, live?: LiveView, advanced = true, archived?: ReadonlySet<string>, now = Date.now()) {
+  // #2148 (JC, 2026-11-06): a finished coding job stays 24 h, or until the
+  // person picks Ignore (`archived` holds the ignored keys too).
+  const coding = list ? codingRetained(list.items, now, archived) : [];
   // The pull requests, branches and commits are for Advanced mode only.
   const work: CodingWork = list && advanced ? codingWork(list.items, archived) : { pullRequests: [], branches: [], commits: [] };
   // Launched agents split by their work: code under Coding, the rest (a
   // dispatch run, bot-to-bot work) under Activity.
   const launchedAll = list?.launchedAgents ?? [];
-  const launched = launchedAll.filter((item) => item.coding === true);
+  const launched = launchedAll.filter((item) => item.coding === true && codingKept(item, now, archived));
   const launchedOther = launchedAll.filter((item) => item.coding !== true);
   const other = list ? activityLive(list.items, list.subagents, live) : [];
   return {
@@ -240,7 +244,7 @@ export function SectionHeader({ icon, title, name, onOpenHistory }: { icon: Reac
  * keeps the history one click away. A first load that failed
  * is one quiet line; a later failed refresh keeps the last list. Split out so
  * it renders without the fetching. */
-export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunched, error = false, advanced = true, archived, branchActions, showAllHistory = true, usageOf }: {
+export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunched, error = false, advanced = true, archived, branchActions, showAllHistory = true, usageOf, onIgnore }: {
   list: BotActivityList | null;
   live?: LiveView;
   actions: CardActions;
@@ -258,8 +262,10 @@ export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunch
   showAllHistory?: boolean;
   /** A task's usage by thread, for the agent rows' tokens (#2099). */
   usageOf?: (threadId: string) => TaskUsage | undefined;
+  /** #2148: Ignore on a finished coding job (by its ignoredJobKey). */
+  onIgnore?: (key: string) => void;
 }) {
-  const { coding, work, launched, showCoding } = panelSections(list, live, advanced, archived);
+  const { coding, work, launched, showCoding } = panelSections(list, live, advanced, archived, actions.now);
   if (list === null) {
     return error ? <p role="status" data-activity-error className="px-0.5 text-[12.5px] text-ink-tertiary">{t("botPanel.coding.error")}</p> : null;
   }
@@ -277,7 +283,7 @@ export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunch
           />
           {/* #2099 (JC, 2026-11-05): Claude Code's agent list, one row each; a
               click opens the task in the chat column, never a side panel. */}
-          <AgentRows items={coding} launched={onOpenLaunched ? launched : []} onOpen={actions.onOpen} onOpenLaunched={onOpenLaunched} onStop={actions.onStop} stopping={actions.stopping} now={actions.now} usageOf={usageOf} />
+          <AgentRows items={coding} launched={onOpenLaunched ? launched : []} onOpen={actions.onOpen} onOpenLaunched={onOpenLaunched} onStop={actions.onStop} stopping={actions.stopping} now={actions.now} usageOf={usageOf} onIgnore={onIgnore ? (id) => onIgnore(ignoredJobKey(id)) : undefined} />
           <CodeWorkList work={work} now={actions.now ?? Date.now()} branchActions={branchActions} />
         </section>
       )}
@@ -324,16 +330,22 @@ export function ActivitySection({ bot }: { bot: Bot }) {
   // The branches this person archived from their Coding list (kept on the
   // server per person and bot; the branches themselves stay).
   const [archived, setArchived] = useState<ReadonlySet<string>>(() => new Set());
+  // #2148: loaded in Simple mode too, it holds the jobs the person ignored.
   useEffect(() => {
-    if (!advanced) return;
     let live = true;
     loadArchivedBranches(bot.id).then((keys) => { if (live) setArchived(new Set(keys)); }).catch(() => {});
     return () => { live = false; };
-  }, [bot.id, advanced]);
+  }, [bot.id]);
+  // Ignore: gone at once, kept gone on the server; nothing is deleted.
+  const ignore = useCallback((key: string) => {
+    setArchived((current) => new Set(current).add(key));
+    setBranchArchived(bot.id, key, true).then((keys) => setArchived(new Set(keys))).catch(() => {});
+  }, [bot.id]);
   const branchActions: BranchListActions = {
     botId: bot.id,
     botName: bot.name,
     onArchive: async (key, value) => setArchived(new Set(await setBranchArchived(bot.id, key, value))),
+    onIgnore: ignore,
     onChanged: () => { void feed.refresh(); },
   };
 
@@ -359,7 +371,7 @@ export function ActivitySection({ bot }: { bot: Bot }) {
 
   return (
     <>
-      <PanelSections list={list} live={feed.live} actions={actions} onOpenHistory={setAll} onOpenLaunched={openLaunched} error={error} advanced={advanced} archived={archived} branchActions={branchActions} showAllHistory={showAllHistory} usageOf={usageOf} />
+      <PanelSections list={list} live={feed.live} actions={actions} onOpenHistory={setAll} onOpenLaunched={openLaunched} error={error} advanced={advanced} archived={archived} branchActions={branchActions} showAllHistory={showAllHistory} usageOf={usageOf} onIgnore={ignore} />
       {all && (
         <ActivityListModal
           botId={bot.id}

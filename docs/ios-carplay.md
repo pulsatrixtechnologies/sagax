@@ -29,6 +29,9 @@ Apple requires examples for every supported intent and locale
 ([QA1950](https://developer.apple.com/library/archive/qa/qa1950/_index.html),
 [Intent Phrases](https://developer.apple.com/documentation/sirikit/intent-phrases));
 omitting them produces ITMS-90626 after a successful upload.
+`node scripts/check-ios-app-intent-vocabulary.mjs` fails when a required
+locale or intent example is missing from source (#1895). Clearing the
+App Store Connect warnings still needs the next uploaded iOS binary.
 
 Who a name is (`CarDirectory.resolve`): the same name first, then a name
 that starts with what was said, then one that contains it; case, accents and

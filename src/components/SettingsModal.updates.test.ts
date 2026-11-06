@@ -22,7 +22,10 @@ it("says nothing about updates on a page the desktop app doesn't answer, such as
 });
 
 it("shows this app's update where the desktop app answers, with no Download step", () => {
-  expect(render({ status: "idle" })).toContain("Check for updates");
+  const idle = render({ status: "idle" });
+  expect(idle).toContain("Check for updates");
+  expect(idle).toContain("Up to date");
+  expect(idle).toMatch(/Sagax\s/);
   const downloading = render({ status: "downloading", version: "0.2.0", percent: 40 });
   expect(downloading).toContain("Downloading 40%");
   expect(downloading).toContain("disabled");

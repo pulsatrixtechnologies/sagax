@@ -121,7 +121,6 @@
   "settings.updates.ready": "{version} bereit — zum Anwenden neu starten",
   "settings.updates.failed": "Update fehlgeschlagen: {message}",
   "settings.updates.unknownError": "unbekannter Fehler",
-  "settings.updates.latest": "Du hast die neueste uns bekannte Version.",
   "settings.updates.restart": "Neu starten und installieren",
   "settings.updates.check": "Nach Updates suchen",
   "settings.diagnostics.title": "Diagnose",

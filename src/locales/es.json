@@ -41,7 +41,6 @@
   "settings.updates.ready": "{version} lista: reinicia para aplicarla",
   "settings.updates.failed": "La actualización falló: {message}",
   "settings.updates.unknownError": "error desconocido",
-  "settings.updates.latest": "Tienes la versión más reciente que conocemos.",
   "settings.updates.restart": "Reiniciar e instalar",
   "settings.updates.check": "Buscar actualizaciones",
   "settings.diagnostics.title": "Diagnóstico",

@@ -134,7 +134,6 @@
   "settings.updates.ready": "{version} готова — перезапустіть, щоб застосувати",
   "settings.updates.failed": "Помилка оновлення: {message}",
   "settings.updates.unknownError": "невідома помилка",
-  "settings.updates.latest": "У вас найновіша відома нам версія.",
   "settings.updates.restart": "Перезапустити й встановити",
   "settings.updates.check": "Перевірити оновлення",
   "settings.diagnostics.title": "Діагностика",

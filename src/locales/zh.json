@@ -41,7 +41,6 @@
   "settings.updates.ready": "{version} 已就绪——重启后生效",
   "settings.updates.failed": "更新失败：{message}",
   "settings.updates.unknownError": "未知错误",
-  "settings.updates.latest": "你已是我们已知的最新版本。",
   "settings.updates.restart": "重启并安装",
   "settings.updates.check": "检查更新",
   "settings.diagnostics.title": "诊断信息",

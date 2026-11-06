@@ -35,6 +35,7 @@ import { ModelSwitchesSettings } from "./settings/ModelSwitchesSettings";
 import { VoiceProviderSettings } from "./settings/VoiceProviderSettings";
 import { VoiceProviderOptions } from "./settings/VoiceProviderOptions";
 import { MicrophonePermissionRow, MicrophoneSettings } from "./settings/MicrophoneSettings";
+import { PhoneCallsCard } from "./settings/PhoneCallsCard";
 import { LiveCallInstallationSettings } from "./LiveCallSettings";
 import { ApiKeyRow, VpsConnection } from "./ApiKeys";
 
@@ -537,6 +538,8 @@ export function VoiceSettingsPage() {
           </FoldRow>
         </VoiceProviderOptions>
       ) : org ? <OrgLiveCallsRow /> : null}
+      {/* #2080: org phone calls, same read-only card for every member */}
+      <PhoneCallsCard />
     </div>
   );
 }

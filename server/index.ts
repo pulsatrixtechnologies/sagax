@@ -16832,6 +16832,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     handleMessagesMcp,
     appendMessage: (threadId, message) => store.appendMessage(threadId, message as never),
     bindImessageMessage,
+    keptCardRule: (bot, threadId, candidate) => keptCardRule(bot as unknown as BotRecord, threadId, candidate),
     workspaceDir,
     taskWorkspacesDir: () => TASK_WORKSPACES_DIR,
     sharedComputerPrincipal: (capability) => sharedComputerPrincipal(capability as InternalCapability),

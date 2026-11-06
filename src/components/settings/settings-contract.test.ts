@@ -42,7 +42,6 @@ type Rule = keyof typeof RULES;
 const NOT_MIGRATED: Record<Rule, string[]> = {
   accentLink: [],
   cardImport: [
-    "settings/MyConnectionsSettings.tsx",
     "settings/OrgSharing.tsx",
     "ComputerSharingSettings.tsx",
     "ConnectedWorkspacesSettings.tsx",

@@ -2,12 +2,14 @@
 /** migrateSectionSharesToBotGrants (#1388). Pure move from server/index.ts. */
 import { levelRank } from "../auth/authz.ts";
 import { SectionChannels, sectionShareGrants } from "../rooms/section-channels.ts";
+// Imported, not read from the host: this runs at start, before the host binds sectionKey.
+import { sectionKey } from "../store.ts";
 export type Host = Record<string, any>;
 
 export function createMigrateSectionSharesToBotGrants(getHost: () => Host): any {
 function migrateSectionSharesToBotGrants(channels: SectionChannels) {
   const host = getHost();
-  const { botGrants, sectionKey } = host;
+  const { botGrants } = host;
   if (channels.botSharesMigrated()) return;
   const wanted = sectionShareGrants(channels, host.store.bots.map((bot) => ({ id: bot.id, section: sectionKey(bot.section) || undefined, ownerPrincipalId: host.effectiveBotOwner(bot) })));
   const sections = new Set(wanted.map((grant) => grant.section));

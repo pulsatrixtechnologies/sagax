@@ -161,6 +161,17 @@ describe("VisibleSet", () => {
     expect(ada.sections(["Ops", "People"])).toEqual(["Ops", "People"]);
   });
 
+  it("opens a room to the people it lists, whatever its bots' audience (#2418)", () => {
+    const rooms = [...groups, { id: "room-shared", threadId: "t-room-shared", memberIds: ["adm", "hr"], humanIds: ["pr_bob", "pr_owner"] }];
+    const bob = new VisibleSet(bots, rooms, { kind: "member", email: "bob@example.test", personId: "pr_bob" });
+    expect([bob.group("room-shared"), bob.thread("t-room-shared"), bob.bot("adm"), bob.bot("hr")]).toEqual([true, true, false, false]);
+    // listed nowhere: the bots still decide
+    expect(bob.group("room-mixed")).toBe(false);
+    const stranger = new VisibleSet(bots, rooms, { kind: "member", email: "eve@example.test", personId: "pr_eve" });
+    expect([stranger.group("room-shared"), stranger.thread("t-room-shared")]).toEqual([false, false]);
+    expect(new VisibleSet(bots, rooms, BOB).group("room-shared")).toBe(false);
+  });
+
   it("refuses an attachment only when everything that uses it is hidden", () => {
     const bob = new VisibleSet(bots, groups, BOB);
     const refs: Record<string, string[]> = { "in-hr.png": ["t-hr"], "shared.png": ["t-hr", "t-pub"], "fresh.png": [] };

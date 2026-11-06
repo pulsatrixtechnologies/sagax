@@ -3521,7 +3521,9 @@ const answeringCardAs = createAnsweringCardAs(getLeafHost);
 function viewerFor(auth: RequestAuth, path?: string): Viewer {
   if (serviceViewerClosed(auth, path, privateThreads())) return SEES_NOTHING;
   if (auth.kind === "loopback" || auth.scopes.includes("admin")) return SEES_EVERYTHING;
-  return { kind: "member", ...(auth.session.email ? { email: auth.session.email } : {}) };
+  // The person behind the session, so a room that lists them opens to them (#2418).
+  const personId = auth.session.principalId?.trim();
+  return { kind: "member", ...(auth.session.email ? { email: auth.session.email } : {}), ...(personId ? { personId } : {}) };
 }
 
 /** Thread → the bot or room that owns it, and one VisibleSet per viewer,
@@ -20783,6 +20785,8 @@ if (sectionChannels) {
   // private record (no member): nothing is shared without someone's action.
   const created = sectionChannels.migrate(store.sections, sectionMigrationOwner);
   if (created) console.log(`sections: ${created} existing section(s) became private channels`);
+  // The leaf host is filled further down: bind what this boot-time migration reads now.
+  Object.assign(leafHostBindings, { effectiveBotOwner, botGrants });
   migrateSectionSharesToBotGrants(sectionChannels);
   // #2045: team instructions and memory move from name keys to owner/id.
   // Skip a display name that more than one person holds: do not attach the

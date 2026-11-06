@@ -61,7 +61,6 @@ export function useChatViewSession(stored: Bot, side?: SideChat) {
     inspectorOpen: current.inspectorOpen,
     notice: current.notice,
     panelOwner: current.panelOwner,
-    routineRunSheet: current.routineRunSheet,
     settingsOpen: current.settingsOpen,
   }), shallowEqual);
   const storeBots = useStoreSelector(peerBots, equalRows);
@@ -70,12 +69,6 @@ export function useChatViewSession(stored: Bot, side?: SideChat) {
   const mascotMotion = useStoreSelector((current) => current.mascotMotion?.botId === bot.id ? current.mascotMotion : null);
   const pendingQueued = useStoreSelector((current) => Object.fromEntries([bot.threadId, ...(bot.tasks ?? []).map((task) => task.threadId)].map((id) => [id, current.pendingQueued[id]])), shallowEqual);
   const focus = useStoreSelector((current) => current.focusMessage?.threadId === bot.threadId ? current.focusMessage : null);
-  const sheetRun = useStoreSelector((current) => current.routineRuns.find((run) => run.id === current.routineRunSheet?.runId));
-  const sheetRoutine = useStoreSelector((current) => {
-    const sheet = current.routineRunSheet;
-    const routineId = sheet?.routineId ?? current.routineRuns.find((run) => run.id === sheet?.runId)?.routineId;
-    return current.routines.find((routine) => routine.id === routineId) ?? null;
-  });
   const showThreads = useShowThreads();
   const remoteClient = useRemoteClient();
   // 2026-10-26: the failure that paused its routine offers Resume, and its
@@ -181,7 +174,7 @@ export function useChatViewSession(stored: Bot, side?: SideChat) {
   return {
     showInspector, advanced, preview, profile, bot, dataItem, dispatch, state,
     storeBots, engine, computerStart, mascotMotion, pendingQueued, focus,
-    sheetRun, sheetRoutine, showThreads, remoteClient, routinesNow, autoPauseSettled, resumeAutoPaused,
+    showThreads, remoteClient, routinesNow, autoPauseSettled, resumeAutoPaused,
     headerDragProps, headerNoDragStyle, controlsShiftStyle, macInset, browser,
     panelOpen, pillPanelOpen, perspicaxOrg, confidential, privateHint,
     exchangeColumnNode, exchangeColumnRef, pageHostRef, pageChatWide,

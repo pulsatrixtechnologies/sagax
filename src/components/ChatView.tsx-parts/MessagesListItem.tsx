@@ -1,4 +1,4 @@
-import { StepBoundary, stepFallbackText, stepIdOf } from "../MessageBoundary";
+import { StepBoundary, stepFallbackText } from "../MessageBoundary";
 import type { ReactNode } from "react";
 import { openBot, openThread, type Action, type Bot, type ConfigStatus, type Group, type InstanceInfo, type Message } from "@/state/store";
 import { isCancelledTranscriptRow } from "../../../shared/client-cancel";

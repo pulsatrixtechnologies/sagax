@@ -95,7 +95,8 @@ export function ChatViewPagePanel({
           <>
             <MenuItem icon={<AppWindow size={14} />} label={t("pages.openWindow")} onClick={() => {
               close();
-              void openPageAt({ pageId: openPage.pageId, botId: openPage.botId!, threadId: openPage.threadId!, title: openPage.title }, "window");
+              if (!openPage.botId || !openPage.threadId) return;
+              void openPageAt({ pageId: openPage.pageId, botId: openPage.botId, threadId: openPage.threadId, title: openPage.title ?? "" }, "window");
             }} />
             {/* Sagax richer control: optional side transcript (Grok canvas
                 chat-pane analogue). Default remains measured stage. */}

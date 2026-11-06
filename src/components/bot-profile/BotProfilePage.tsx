@@ -22,7 +22,7 @@
 // change says why (botSectionLock); nothing is hidden for lack of a
 // permission. The page itself carries no gear: the bot's settings live here
 // and in the right-hand bot panel.
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject, type SetStateAction } from "react";
 import { BellRing, Brain, ChevronDown, ChevronRight, Cpu, LayoutDashboard, Lock, Mail, MessageCircle, Plug, Search, Star, Users, X } from "lucide-react";
 
 import { useStore, type Bot, type BotSettingsSection } from "@/state/store";
@@ -509,6 +509,114 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
   const bannerStyle = { "--bot-profile-banner-color": bannerColor } as CSSProperties;
 
   return (
+    <BotProfilePageFrame
+      rootRef={rootRef}
+      bot={bot}
+      tab={tab}
+      onClose={onClose}
+      onCloseRef={onCloseRef}
+      noDragStyle={noDragStyle}
+      controlsShiftStyle={controlsShiftStyle}
+      privateBot={privateBot}
+      derived={derived}
+      goTo={goTo}
+      canName={canName}
+      canLabel={canLabel}
+      audience={audience}
+      isPrimary={isPrimary}
+      visibleTab={visibleTab}
+      chooseTab={chooseTab}
+      slackUrl={slackUrl}
+      channel={channel}
+      setChannel={setChannel}
+      settingsOpen={settingsOpen}
+      toggleSettings={toggleSettings}
+      searchRef={searchRef}
+      query={query}
+      setQuery={setQuery}
+      onSearchKey={onSearchKey}
+      q={q}
+      results={results}
+      searchHit={searchHit}
+      fold={fold}
+      shown={shown}
+      open={open}
+      dispatch={dispatch}
+      dialogs={dialogs}
+    />
+  );
+}
+
+function BotProfilePageFrame({
+  rootRef,
+  bot,
+  tab,
+  onClose,
+  onCloseRef,
+  noDragStyle,
+  controlsShiftStyle,
+  privateBot,
+  derived,
+  goTo,
+  canName,
+  canLabel,
+  audience,
+  isPrimary,
+  visibleTab,
+  chooseTab,
+  slackUrl,
+  channel,
+  setChannel,
+  settingsOpen,
+  toggleSettings,
+  searchRef,
+  query,
+  setQuery,
+  onSearchKey,
+  q,
+  results,
+  searchHit,
+  fold,
+  shown,
+  open,
+  dispatch,
+  dialogs,
+}: {
+  rootRef: RefObject<HTMLElement | null>;
+  bot: Bot;
+  tab: BotProfileTab;
+  onClose: () => void;
+  onCloseRef: RefObject<() => void>;
+  noDragStyle: CSSProperties | undefined;
+  controlsShiftStyle: CSSProperties | undefined;
+  privateBot: boolean;
+  derived: ReturnType<typeof useBotSectionContent>["derived"];
+  goTo: (id: BotSettingsSection) => void;
+  canName: boolean;
+  canLabel: boolean;
+  audience: string;
+  isPrimary: boolean;
+  visibleTab: VisibleTab;
+  chooseTab: (id: VisibleTab) => void;
+  slackUrl: string | null | undefined;
+  channel: Channel | null;
+  setChannel: Dispatch<SetStateAction<Channel | null>>;
+  settingsOpen: boolean;
+  toggleSettings: () => void;
+  searchRef: RefObject<HTMLInputElement | null>;
+  query: string;
+  setQuery: Dispatch<SetStateAction<string>>;
+  onSearchKey: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
+  q: string;
+  results: PersonaCategory[];
+  searchHit: PersonaCategory | null;
+  fold: (id: PersonaCategory, forceOpen?: boolean) => ReactNode;
+  shown: (id: PersonaCategory) => boolean;
+  open: ReadonlySet<PersonaCategory>;
+  dispatch: ReturnType<typeof useStore>["dispatch"];
+  dialogs: ReactNode;
+}) {
+  return (
     <main
       ref={rootRef}
       tabIndex={-1}
@@ -738,6 +846,7 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
     </main>
   );
 }
+
 
 /** A card of the page: a grey label (and its accessory) over a borderless
  * surface a step lighter than the page (Grok Bot). */

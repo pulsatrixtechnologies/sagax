@@ -1,3 +1,4 @@
+import type { OrgDirectoryPerson } from "@/lib/perspicax-org";
 import { useEffect, useRef, useState } from "react";
 import { t, activeLocale } from "@/lib/i18n";
 import { formatTime, useStore, type Bot, type Group, type Message } from "@/state/store";

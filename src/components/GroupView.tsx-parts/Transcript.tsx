@@ -1,4 +1,3 @@
-import { viewerOwnsBot } from "@/lib/bot-capabilities";
 import { memo, useCallback, useMemo } from "react";
 import { t } from "@/lib/i18n";
 import { useShowThreads } from "@/lib/thread-preferences";

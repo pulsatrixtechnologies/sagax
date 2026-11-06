@@ -294,7 +294,7 @@ function EntryMenu({ name, actions, updateWaiting, hoverOnly = false }: { name: 
         aria-expanded={open}
         aria-label={t("connectApps.entry.menuAria", { name })}
         onClick={() => setOpen((value) => !value)}
-        className={cn("ui-icon-button relative", hoverOnly && !open && "opacity-0 focus-visible:opacity-100 group-hover:opacity-100")}
+        className={cn("ui-icon-button relative", hoverOnly && !open && "opacity-0 focus-visible:opacity-100 group-hover:opacity-100 touch:opacity-100")}
       >
         <MoreHorizontal size={16} />
         {updateWaiting && actions.update && <span data-entry-update-dot className="absolute right-1 top-1 size-1.5 rounded-full bg-accent" aria-hidden="true" />}

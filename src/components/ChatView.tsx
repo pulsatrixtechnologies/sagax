@@ -8,7 +8,7 @@ import {
   PreSendRefusalLine,
 } from "./ChatView.tsx-parts/ErrorRows";
 import { StepBoundary } from "./MessageBoundary";
-import { RoutineRunRow } from "./ChatView.tsx-parts/chips";
+import { AttentionRow, RoutineRunRow } from "./ChatView.tsx-parts/chips";
 import { PreviousTopicsLine } from "./ChatView.tsx-parts/stream";
 import { STREAM_ANCHOR_BAND } from "./ChatView.tsx-parts/useStreamAnchor";
 import { NewConversationInstead } from "./ChatView.tsx-parts/NewConversationInstead";
@@ -26,6 +26,7 @@ export {
   claudeUpdateTarget,
   FailedTurnRow,
   PreSendRefusalLine,
+  AttentionRow,
   RoutineRunRow,
   PreviousTopicsLine,
   STREAM_ANCHOR_BAND,

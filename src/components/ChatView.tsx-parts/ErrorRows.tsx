@@ -5,7 +5,7 @@ import { CODEX_USAGE_URL, codexUsageLimitReached } from "../../../shared/codex-u
 import { ClaudeUpdatePrompt } from "../ClaudeUpdatePrompt";
 import { MacCuaRecoveryActions } from "../MacCuaRecoveryActions";
 import { macCuaPermissionMessage, missingMacCuaPermissions } from "@/lib/mac-cua-permissions";
-import { failedTurnCause, isEngineLimitFailure, isPreSendRefusal, signedOutEngine } from "@/lib/failed-turn";
+import { failedTurnCause, isEngineLimitFailure, signedOutEngine } from "@/lib/failed-turn";
 import { localizedEngineCause } from "@/lib/engine-error-text";
 import { plainErrorLine } from "@/lib/plain-error";
 import { openPlaceAction, placeRowViewFor, usePlaceSeat, worksOnSimpleLabel } from "@/lib/place-view";

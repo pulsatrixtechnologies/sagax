@@ -45,7 +45,7 @@ export function ChatViewShell(m: Record<string, any>) {
     backgroundEffect, canWrite, computerStarting, findOpen, setFindOpen,
     replyTo, clearReply, consumeReply, restoreReply, selectReply,
     autoPauseSettled, resumeAutoPaused,
-    headerDragProps, headerNoDragStyle, controlsShiftStyle, macInset, browser, panelOpen, dataItem, computerStart,
+    headerDragProps, headerNoDragStyle, controlsShiftStyle, macInset, browser, panelOpen, dataItem,
     messages, lookups, seenRow, recordedRun, canSaveRun, setRunDismissed, lastRunStep,
     scrollRef, transcriptRef, topSentinelRef, transcriptKey, following, followRef,
     windowedMessages, hiddenCount, laterCount, olderPending, showLater, jumpToLatest, scrollHandlers,
@@ -356,7 +356,6 @@ export function ChatViewShell(m: Record<string, any>) {
         />
       )}
     </Root>
-    </ChatWindowProvider>
     <ChatViewSheets
       side={side}
       state={state}
@@ -366,6 +365,7 @@ export function ChatViewShell(m: Record<string, any>) {
       dispatch={dispatch}
     />
     </ExchangeColumnProvider>
+    </ChatWindowProvider>
     </ThreadLinkContext>
   );
 }

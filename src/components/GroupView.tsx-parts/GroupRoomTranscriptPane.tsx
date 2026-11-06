@@ -83,7 +83,7 @@ export function GroupRoomTranscriptPane({
   transcriptRef: RefObject<HTMLDivElement | null>;
   topSentinelRef: RefObject<HTMLDivElement | null>;
   scrollHandlers: Record<string, unknown>;
-  composerDockPad: number;
+  composerDockPad: string;
   olderPending: boolean;
   hiddenCount: number;
   laterCount: number;
@@ -103,8 +103,8 @@ export function GroupRoomTranscriptPane({
   composerDockHeight: number;
   replyTo: Message | null;
   clearReply: () => void;
-  consumeReply: () => Message | null | undefined;
-  restoreReply: (message: Message | null) => void;
+  consumeReply: () => void;
+  restoreReply: (message: Message, targetThreadId: string) => void;
   peer: Peer | null | undefined;
   roomNudge: Nudge;
   stateConfig: ConfigStatus | null | undefined;

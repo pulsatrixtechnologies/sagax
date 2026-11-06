@@ -1888,8 +1888,6 @@
       "approvalMode.trustedLocalOnly": "f6a8857f9bd7855d0b5ffa3d70c1b4959a519254ca5a390e5d715ba25a404deb",
       "computer.askedHands": "71c6fa899d222c70124b61c365f6e17a2e844d7ee3abd0783ba4e08b02d75a36",
       "computer.dismiss": "48845bff334a50a59aaecf499f28a7a24c3b4b891b8b18a9f1169ad8e8a6b261",
-      "botPanel.skills.importedMany": "917bfaa9247dce6d01ee51fd0988a0565d9e60a87ba303d6fd2ce2cb4daa2b3e",
-      "botPanel.skills.importedOne": "31021160f1f765055802faaa599230502252d4a219d9d0269ed476afb13a332a",
       "settings.experimental.browserWindows": "4ce8fe862b894f7cecdb508792d9a017ea4d325eb8421badbd3e36b4b046aee2"
     },
     "es": {
@@ -3761,8 +3759,6 @@
       "approvalMode.trustedLocalOnly": "f6a8857f9bd7855d0b5ffa3d70c1b4959a519254ca5a390e5d715ba25a404deb",
       "computer.askedHands": "71c6fa899d222c70124b61c365f6e17a2e844d7ee3abd0783ba4e08b02d75a36",
       "computer.dismiss": "48845bff334a50a59aaecf499f28a7a24c3b4b891b8b18a9f1169ad8e8a6b261",
-      "botPanel.skills.importedMany": "917bfaa9247dce6d01ee51fd0988a0565d9e60a87ba303d6fd2ce2cb4daa2b3e",
-      "botPanel.skills.importedOne": "31021160f1f765055802faaa599230502252d4a219d9d0269ed476afb13a332a",
       "settings.experimental.browserWindows": "4ce8fe862b894f7cecdb508792d9a017ea4d325eb8421badbd3e36b4b046aee2"
     },
     "fr": {
@@ -6819,7 +6815,6 @@
       "myConnections.github.tokenHint": "86a60aae38e775d0be60d389f64b198925a47e6f6f54aef6bcf12619ace86d4f",
       "myConnections.github.tokenLabel": "2ddc96639d79f923c6152d60a3b40dfcab9d5a049e472da22831b47f2322a620",
       "myConnections.github.typeCode": "96cdbe707e8edb060dd01b39b118dd15924ebd5107289842f6bd243684a16c46",
-      "myConnections.github.useToken": "5086a4ff33881a8d5d3111e23d998e9f203bff100a7ae208fa781ae6f8e4fa44",
       "myConnections.github.waiting": "d3f403f422558993f263cde9d1b28dc4a17ae0529dda96d6a0c22f0498f7c3a2",
       "myConnections.github.fineGrained": "d77392e062398bdbf3d1729effac641aad4c038017bb04e9b9620955c95b7d7e",
       "myConnections.github.orgAccess": "4a79958c7b6df3204a89c396f2b4ad0ff1bcb76293487b31092e93a26e73ec32",
@@ -17562,7 +17557,6 @@
       "myConnections.add.githubHint": "f56060ce45cd83c2ac3844d97f838f720f1ac39f8140386ae1465e6b7165980c",
       "myConnections.github.advanced": "a9d156df9f4ea2bce29baa488e906cbb8571937b57c72b82fa7d049fb93ff814",
       "myConnections.github.noDeviceFlow": "375a640807c32c2e867c4a819e67a0479b7b65067a0d3a6e97c6691e9784d9ac",
-      "routineRun.details": "45989de49fb7f66dfe17a8fc26f3a02c7abcd74f7e8e6cf9f39fa0e3775780df",
       "sources.github.advanced": "26c62de690eb0e65a490517ce2538df54bddd32b2f755147fdbe67f86d8e13ef"
     },
     "hi": {
@@ -19424,8 +19418,6 @@
       "approvalMode.trustedLocalOnly": "f6a8857f9bd7855d0b5ffa3d70c1b4959a519254ca5a390e5d715ba25a404deb",
       "computer.askedHands": "71c6fa899d222c70124b61c365f6e17a2e844d7ee3abd0783ba4e08b02d75a36",
       "computer.dismiss": "48845bff334a50a59aaecf499f28a7a24c3b4b891b8b18a9f1169ad8e8a6b261",
-      "botPanel.skills.importedMany": "917bfaa9247dce6d01ee51fd0988a0565d9e60a87ba303d6fd2ce2cb4daa2b3e",
-      "botPanel.skills.importedOne": "31021160f1f765055802faaa599230502252d4a219d9d0269ed476afb13a332a",
       "settings.experimental.browserWindows": "4ce8fe862b894f7cecdb508792d9a017ea4d325eb8421badbd3e36b4b046aee2"
     },
     "ja": {
@@ -23170,8 +23162,6 @@
       "approvalMode.trustedLocalOnly": "f6a8857f9bd7855d0b5ffa3d70c1b4959a519254ca5a390e5d715ba25a404deb",
       "computer.askedHands": "71c6fa899d222c70124b61c365f6e17a2e844d7ee3abd0783ba4e08b02d75a36",
       "computer.dismiss": "48845bff334a50a59aaecf499f28a7a24c3b4b891b8b18a9f1169ad8e8a6b261",
-      "botPanel.skills.importedMany": "917bfaa9247dce6d01ee51fd0988a0565d9e60a87ba303d6fd2ce2cb4daa2b3e",
-      "botPanel.skills.importedOne": "31021160f1f765055802faaa599230502252d4a219d9d0269ed476afb13a332a",
       "settings.experimental.browserWindows": "4ce8fe862b894f7cecdb508792d9a017ea4d325eb8421badbd3e36b4b046aee2",
       "settings.experimental.skillAuthoring": "7d774e81e2158dbe9f8be68d2239900626280faa0f784be0a067068e0a873d67"
     },
@@ -25841,8 +25831,6 @@
       "approvalMode.trustedLocalOnly": "f6a8857f9bd7855d0b5ffa3d70c1b4959a519254ca5a390e5d715ba25a404deb",
       "computer.askedHands": "71c6fa899d222c70124b61c365f6e17a2e844d7ee3abd0783ba4e08b02d75a36",
       "computer.dismiss": "48845bff334a50a59aaecf499f28a7a24c3b4b891b8b18a9f1169ad8e8a6b261",
-      "botPanel.skills.importedMany": "917bfaa9247dce6d01ee51fd0988a0565d9e60a87ba303d6fd2ce2cb4daa2b3e",
-      "botPanel.skills.importedOne": "31021160f1f765055802faaa599230502252d4a219d9d0269ed476afb13a332a",
       "settings.experimental.browserWindows": "4ce8fe862b894f7cecdb508792d9a017ea4d325eb8421badbd3e36b4b046aee2"
     },
     "uk": {
@@ -28206,8 +28194,6 @@
       "approvalMode.trustedLocalOnly": "f6a8857f9bd7855d0b5ffa3d70c1b4959a519254ca5a390e5d715ba25a404deb",
       "computer.askedHands": "71c6fa899d222c70124b61c365f6e17a2e844d7ee3abd0783ba4e08b02d75a36",
       "computer.dismiss": "48845bff334a50a59aaecf499f28a7a24c3b4b891b8b18a9f1169ad8e8a6b261",
-      "botPanel.skills.importedMany": "917bfaa9247dce6d01ee51fd0988a0565d9e60a87ba303d6fd2ce2cb4daa2b3e",
-      "botPanel.skills.importedOne": "31021160f1f765055802faaa599230502252d4a219d9d0269ed476afb13a332a",
       "settings.experimental.browserWindows": "4ce8fe862b894f7cecdb508792d9a017ea4d325eb8421badbd3e36b4b046aee2",
       "settings.experimental.skillAuthoring": "7d774e81e2158dbe9f8be68d2239900626280faa0f784be0a067068e0a873d67"
     },
@@ -30838,8 +30824,6 @@
       "approvalMode.trustedLocalOnly": "f6a8857f9bd7855d0b5ffa3d70c1b4959a519254ca5a390e5d715ba25a404deb",
       "computer.askedHands": "71c6fa899d222c70124b61c365f6e17a2e844d7ee3abd0783ba4e08b02d75a36",
       "computer.dismiss": "48845bff334a50a59aaecf499f28a7a24c3b4b891b8b18a9f1169ad8e8a6b261",
-      "botPanel.skills.importedMany": "917bfaa9247dce6d01ee51fd0988a0565d9e60a87ba303d6fd2ce2cb4daa2b3e",
-      "botPanel.skills.importedOne": "31021160f1f765055802faaa599230502252d4a219d9d0269ed476afb13a332a",
       "settings.experimental.browserWindows": "4ce8fe862b894f7cecdb508792d9a017ea4d325eb8421badbd3e36b4b046aee2",
       "settings.experimental.skillAuthoring": "7d774e81e2158dbe9f8be68d2239900626280faa0f784be0a067068e0a873d67"
     },
@@ -34470,8 +34454,6 @@
       "approvalMode.trustedLocalOnly": "f6a8857f9bd7855d0b5ffa3d70c1b4959a519254ca5a390e5d715ba25a404deb",
       "computer.askedHands": "71c6fa899d222c70124b61c365f6e17a2e844d7ee3abd0783ba4e08b02d75a36",
       "computer.dismiss": "48845bff334a50a59aaecf499f28a7a24c3b4b891b8b18a9f1169ad8e8a6b261",
-      "botPanel.skills.importedMany": "917bfaa9247dce6d01ee51fd0988a0565d9e60a87ba303d6fd2ce2cb4daa2b3e",
-      "botPanel.skills.importedOne": "31021160f1f765055802faaa599230502252d4a219d9d0269ed476afb13a332a",
       "settings.experimental.browserWindows": "4ce8fe862b894f7cecdb508792d9a017ea4d325eb8421badbd3e36b4b046aee2",
       "settings.experimental.skillAuthoring": "7d774e81e2158dbe9f8be68d2239900626280faa0f784be0a067068e0a873d67"
     }

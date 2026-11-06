@@ -509,37 +509,43 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
   const bannerStyle = { "--bot-profile-banner-color": bannerColor } as CSSProperties;
 
   return (
-    <BotProfilePageFrame
+    <BotProfilePageView
       rootRef={rootRef}
       bot={bot}
       tab={tab}
+      setTab={setTab}
       onClose={onClose}
       onCloseRef={onCloseRef}
       noDragStyle={noDragStyle}
       controlsShiftStyle={controlsShiftStyle}
       privateBot={privateBot}
+      bannerStyle={bannerStyle}
       derived={derived}
       goTo={goTo}
       canName={canName}
       canLabel={canLabel}
       audience={audience}
       isPrimary={isPrimary}
-      visibleTab={visibleTab}
-      chooseTab={chooseTab}
+      tabs={tabs}
+      tabLabel={tabLabel}
+      tabsRef={tabsRef}
+      searching={searching}
+      matching={matching}
+      lockOf={lockOf}
+      searchRef={searchRef}
+      query={query}
+      changeQuery={changeQuery}
+      onSearchKey={onSearchKey}
+      closeSearch={closeSearch}
+      openSearch={openSearch}
+      q={q}
+      results={results}
       slackUrl={slackUrl}
       channel={channel}
       setChannel={setChannel}
-      settingsOpen={settingsOpen}
-      toggleSettings={toggleSettings}
-      searchRef={searchRef}
-      query={query}
-      setQuery={setQuery}
-      onSearchKey={onSearchKey}
-      q={q}
-      results={results}
-      searchHit={searchHit}
       fold={fold}
       shown={shown}
+      body={body}
       open={open}
       dispatch={dispatch}
       dialogs={dialogs}
@@ -547,37 +553,43 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
   );
 }
 
-function BotProfilePageFrame({
+function BotProfilePageView({
   rootRef,
   bot,
   tab,
+  setTab,
   onClose,
   onCloseRef,
   noDragStyle,
   controlsShiftStyle,
   privateBot,
+  bannerStyle,
   derived,
   goTo,
   canName,
   canLabel,
   audience,
   isPrimary,
-  visibleTab,
-  chooseTab,
+  tabs,
+  tabLabel,
+  tabsRef,
+  searching,
+  matching,
+  lockOf,
+  searchRef,
+  query,
+  changeQuery,
+  onSearchKey,
+  closeSearch,
+  openSearch,
+  q,
+  results,
   slackUrl,
   channel,
   setChannel,
-  settingsOpen,
-  toggleSettings,
-  searchRef,
-  query,
-  setQuery,
-  onSearchKey,
-  q,
-  results,
-  searchHit,
   fold,
   shown,
+  body,
   open,
   dispatch,
   dialogs,
@@ -585,39 +597,45 @@ function BotProfilePageFrame({
   rootRef: RefObject<HTMLElement | null>;
   bot: Bot;
   tab: BotProfileTab;
+  setTab: Dispatch<SetStateAction<BotProfileTab>>;
   onClose: () => void;
   onCloseRef: RefObject<() => void>;
   noDragStyle: CSSProperties | undefined;
   controlsShiftStyle: CSSProperties | undefined;
   privateBot: boolean;
+  bannerStyle: CSSProperties;
   derived: ReturnType<typeof useBotSectionContent>["derived"];
   goTo: (id: BotSettingsSection) => void;
   canName: boolean;
   canLabel: boolean;
   audience: string;
   isPrimary: boolean;
-  visibleTab: VisibleTab;
-  chooseTab: (id: VisibleTab) => void;
+  tabs: readonly BotProfileTab[];
+  tabLabel: (id: BotProfileTab) => string;
+  tabsRef: RefObject<HTMLDivElement | null>;
+  searching: boolean;
+  matching: Set<BotProfileTab>;
+  lockOf: (id: BotSettingsSection) => LocaleKey | null;
+  searchRef: RefObject<HTMLInputElement | null>;
+  query: string;
+  changeQuery: (value: string) => void;
+  onSearchKey: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
+  closeSearch: () => void;
+  openSearch: () => void;
+  q: string;
+  results: PersonaCategory[];
   slackUrl: string | null | undefined;
   channel: Channel | null;
   setChannel: Dispatch<SetStateAction<Channel | null>>;
-  settingsOpen: boolean;
-  toggleSettings: () => void;
-  searchRef: RefObject<HTMLInputElement | null>;
-  query: string;
-  setQuery: Dispatch<SetStateAction<string>>;
-  onSearchKey: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
-  q: string;
-  results: PersonaCategory[];
-  searchHit: PersonaCategory | null;
-  fold: (id: PersonaCategory, forceOpen?: boolean) => ReactNode;
+  fold: (id: PersonaCategory) => ReactNode;
   shown: (id: PersonaCategory) => boolean;
+  body: (id: PersonaCategory) => ReactNode;
   open: ReadonlySet<PersonaCategory>;
   dispatch: ReturnType<typeof useStore>["dispatch"];
   dialogs: ReactNode;
 }) {
   return (
-    <main
+<main
       ref={rootRef}
       tabIndex={-1}
       aria-label={`${t("persona.title")}: ${bot.name}`}

@@ -453,7 +453,7 @@ async function mintDesktopUrl(cfg: AppConfig, boxId: string, { vncBudgetMs = 60_
   assertBoatNotDeleting(boxId);
   const t0 = Date.now();
   // Fixed 3 s retries used to hammer a provisioning Boat; grow the wait
-  // (1 s, 2 s, 4 s … capped at 10 s) inside the same overall budget.
+  // (1 s, 2 s, 4 s, capped at 10 s) inside the same overall budget.
   for (let attempt = 0; Date.now() - t0 < vncBudgetMs; attempt++) {
     assertBoatNotDeleting(boxId);
     const { body } = await boatJson(cfg, `/boxes/${boxId}/desktop?vnc=1`, { method: "POST" });

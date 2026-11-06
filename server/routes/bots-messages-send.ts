@@ -168,8 +168,12 @@ async function runSequencedBotSend(input: {
   }
 
   // Resolve first-run setup before reading admission/guarded-send
-  // preconditions. Provider discovery yields; transcript reservation
-  // after those checks must remain synchronous.
+  // preconditions. Provider discovery yields, and reads a thread's own model's
+  // engines at start before it may give way; transcript reservation after
+  // those checks must remain synchronous.
+  const ownModel = store.taskByThread(bot.id, threadId)?.modelSelection;
+  const ownModelRead = ownModel && registry.engineRead?.(ownModel.instanceId, store.bot(bot.id)?.modelSelection.instanceId);
+  if (ownModelRead) await ownModelRead;
   const profile = store.bot(bot.id);
   if (profile && !profile.modelSelection.instanceId && !profile.modelSelection.model) {
     if (enginesRead) await enginesRead;

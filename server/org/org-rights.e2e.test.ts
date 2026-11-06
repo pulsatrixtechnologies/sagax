@@ -512,7 +512,12 @@ posixOnly("Perspicax organization, slice 4: rights, teams, owner keys, sections"
       expect(list).toContain("Equipe B");
       expect(list).not.toContain("Equipe A");
     }
-    expect((await api("GET", "/api/bots", bob)).body.bots.map((b: { id: string }) => b.id)).toContain(a2.id);
+    const bobBots = (await api("GET", "/api/bots", bob)).body.bots as Array<{ id: string; section?: string; sectionId?: string }>;
+    expect(bobBots.map((b) => b.id)).toContain(a2.id);
+    // #2045: Alice's team name and id never ride on the shared bot wire
+    const shared = bobBots.find((b) => b.id === a2.id)!;
+    expect(shared.section).toBeUndefined();
+    expect(shared.sectionId).toBeUndefined();
     // the other person's team is neither joined, renamed nor deleted by guessing its name:
     // the same display name is a separate team of his own (per-person names)
     expect((await api("POST", "/api/sidebar-sections", bob, { name: "Equipe A", botIds: [b2.id] })).status).toBe(200);

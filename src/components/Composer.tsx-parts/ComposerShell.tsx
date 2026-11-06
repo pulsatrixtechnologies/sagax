@@ -58,7 +58,7 @@ export function ComposerShell({
   onRetryLast?: () => void;
 }) {
   const { bot, locked, dispatch, storeBots, config, remoteClient, threadId,
-    sendState, sendBlock, busy, canSteer, composerTask, parallelQuestions,
+    sendState, sendBlock, busy, canSteer, composerTask,
     approvals, approval, openQuestions, approvalBotFor, modeBot,
     perspicaxOrg, fullAccessAvailable } = session;
   const { draftId: draftIdValue, text, attachments, attachmentPending, failedSends, channelMode,
@@ -140,7 +140,6 @@ export function ComposerShell({
         )}
         <ComposerPendingStrip
           bot={bot}
-          parallelQuestions={parallelQuestions}
           approval={approval}
           approvals={approvals}
           threadId={threadId}

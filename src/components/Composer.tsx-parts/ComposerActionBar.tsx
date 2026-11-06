@@ -103,8 +103,9 @@ export function ComposerActionBar({
   return (
     <div data-composer-actions className="composer-band flex items-center gap-1 @max-[30rem]/composer:ml-auto">
     {bot && !group && !remoteClient && (
-      // no chip: the mascot's model chip opens its menu
-      <ModelPicker inComposer headless key={bot.threadId} bot={bot} threadId={threadId}
+      // #2106: compact model + effort chip in the chat bar; picking writes
+      // the bot's model for every thread. menuControl still serves the + menu.
+      <ModelPicker inComposer key={bot.threadId} bot={bot} threadId={threadId}
         menuControl={modelMenu}
         fallbackAnchor={() => composerRowRef.current?.querySelector<HTMLElement>("[data-composer-plus]") ?? null} />
     )}

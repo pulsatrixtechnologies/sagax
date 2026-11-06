@@ -139,7 +139,15 @@ export async function buildBotPatchProfile(env: BotsMutateEnv, state: BotPatchSt
       return true;
     }
   }
-  if (section !== undefined) patch.section = section ?? undefined;
+  if (section !== undefined) {
+    patch.section = section ?? undefined;
+    // #2045: keep the stable team link beside the displayed name.
+    if (typeof env.resolveSectionId === "function") {
+      patch.sectionId = section
+        ? env.resolveSectionId(section, env.auth, existingBot ?? undefined)
+        : undefined;
+    }
+  }
   if (body.chiefOfStaff === false) patch.chiefOfStaff = false;
   // where a task carries on when this engine is unavailable, in order
   if (body.fallback !== undefined) {

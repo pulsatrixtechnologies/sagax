@@ -4,7 +4,8 @@
 // loaded, after a failed read and when no provider answered, so any of those
 // erased it. It is now always drawn under Cost, with the 5-hour session and
 // the week each on their own gauge, for an admin and a member, in an
-// organization and solo.
+// organization and solo. Since #2080 (2026-11-05) it is a folded row of
+// Detail, under the headline.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -77,18 +78,19 @@ const roles = [
   { name: "admin solo", org: null, config: { viewer: { role: "owner" } } },
 ];
 
-describe("Réglages > Utilisation : la carte Forfait sous Coût", () => {
+describe("Réglages > Utilisation : Forfait dans Détail, sous la carte de tête", () => {
   for (const role of roles) {
     it(`${role.name} : Forfait avec la session de 5 heures et la semaine`, async () => {
       scene.org = role.org;
       scene.config = role.config;
       const page = await mount();
       const html = page.innerHTML;
-      const cost = html.indexOf('data-settings-card="usage.cost"');
-      const plan = html.indexOf('data-settings-card="usage.plan"');
-      expect(cost).toBeGreaterThanOrEqual(0);
-      expect(plan).toBeGreaterThan(cost);
-      const card = page.querySelector('[data-settings-card="usage.plan"]')!;
+      const head = html.indexOf('data-settings-card="usage.headline"');
+      const plan = html.indexOf('data-settings-card="usage.planDetail"');
+      expect(head).toBeGreaterThanOrEqual(0);
+      expect(plan).toBeGreaterThan(head);
+      expect(page.querySelector("[data-usage-cost]")?.textContent).toContain("12,00");
+      const card = page.querySelector('[data-settings-card="usage.planDetail"]')!;
       expect(card.textContent).toContain("Forfait");
       expect(card.querySelector('[data-plan-row="claude"]')).not.toBeNull();
       expect(card.querySelector('[data-plan-window-kind="fiveHour"]')?.textContent).toContain("Session de 5 heures");
@@ -98,6 +100,7 @@ describe("Réglages > Utilisation : la carte Forfait sous Coût", () => {
       expect(card.textContent).toContain("40 % utilisé");
       expect(card.textContent).toContain("60 % restant");
       expect(card.querySelectorAll('[role="meter"]')).toHaveLength(2);
+      expect(page.querySelector('[data-usage-unavailable]')).toBeNull();
     });
   }
 

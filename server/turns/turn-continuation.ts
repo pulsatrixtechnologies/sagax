@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import type { RuntimeEvent } from "../contracts.ts";
 import type { Store } from "../store.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 /**
  * Automatic continuity: when a turn ends without a final answer and the work
@@ -194,6 +195,6 @@ export function makeCapContinuationSubscriber(deps: CapContinuationDeps): (event
           });
         } catch { /* the escalation message itself failed; nothing else to do */ }
       }
-    })();
+    })().catch(reportBackgroundError);
   };
 }

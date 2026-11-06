@@ -79,12 +79,11 @@ export function useComposerSession({
   // the VISIBLE branch only — an approval left on a branch you edited away
   // from must not keep blocking the composer
   // this conversation's own, then those its parallel tasks wait on
-  // #1145: with threads hidden, every parallel task of the one conversation,
-  // its questions included: the person never leaves it to answer
+  // #1145: with threads hidden, every parallel task of the one conversation.
+  // #2082: approvals only; their questions stay inline in their own thread
   const showThreadsHere = useShowThreads();
   const parallelCards = useParallelCards(group ? undefined : bot, !showThreadsHere);
   const parallelApprovals = parallelCards.pendings;
-  const parallelQuestions = parallelCards.questions;
   const approvals = [...pendingApprovals(group ? group.messages : bot ? visibleMessages(bot) : []), ...parallelApprovals];
   const approval = approvals[0];
   // A bot's question waits in the chat; the composer stays free. Writing
@@ -157,7 +156,6 @@ export function useComposerSession({
     showThreadsHere,
     parallelCards,
     parallelApprovals,
-    parallelQuestions,
     approvals,
     approval,
     openQuestions,

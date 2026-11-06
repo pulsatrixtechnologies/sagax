@@ -1,5 +1,6 @@
 /** Claude sendTurn orchestration across prepare/reuse/spawn/wire/stream/finish (#1383). */
 import type { SendTurnInput } from "../../contracts.ts";
+import { turnTrace } from "../../turns/turn-trace.ts";
 import { attachClaudeFinish } from "./finish.ts";
 import { attachClaudeStream } from "./stream.ts";
 import { prepareClaudeTurnArgs } from "./turn-prepare-args.ts";
@@ -8,6 +9,7 @@ import { tryReuseClaudeSession } from "./turn-reuse.ts";
 import { spawnClaudeSession } from "./turn-spawn.ts";
 import type { ClaudeTurnCtx, ClaudeTurnEarly } from "./turn-ctx.ts";
 import type { SendTurnDeps } from "./turn-deps.ts";
+import { waitClaudePrewarmed } from "./warm-ready.ts";
 import { attachClaudeWire } from "./wire.ts";
 import { claudeUserMessage, volatileTurnMessage, withVolatileNote } from "./messages.ts";
 
@@ -50,6 +52,10 @@ export function createSendTurn(deps: SendTurnDeps & { authRecovery: any }) {
     };
     if (turn.warmOnly === true) {
       holdWarm(threadId, session, turnId, turn.warmSignal);
+      // Pay cold boot (init) before the warm returns, so the first real turn
+      // is a bare prompt on a ready process (#1971 / #2055 pattern).
+      await waitClaudePrewarmed(session, turn.warmSignal);
+      turnTrace(threadId, "claude-prewarmed");
       return { turnId };
     }
     active.set(threadId, { stop, turnId, broker });

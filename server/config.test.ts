@@ -788,6 +788,29 @@ describe("a config.json saved with a byte order mark", () => {
   });
 });
 
+describe("loadConfig between changes", () => {
+  it("hands every caller its own copy, and sees a save or an edit made outside the app", () => {
+    const path = join(DATA_DIR, "config.json");
+    mkdirSync(DATA_DIR, { recursive: true });
+    const settle = () => { const past = new Date(Date.now() - 60_000); utimesSync(path, past, past); };
+    writeFileSync(path, JSON.stringify({ budgets: { monthlyUsd: 10, warnAtPercent: 50 } }));
+    settle();
+    try {
+      const first = loadConfig();
+      first.budgets!.monthlyUsd = 999;
+      expect(loadConfig().budgets).toEqual({ monthlyUsd: 10, warnAtPercent: 50 });
+      saveConfig({ budgets: { monthlyUsd: 20, warnAtPercent: 50 } });
+      settle();
+      expect(loadConfig().budgets).toEqual({ monthlyUsd: 20, warnAtPercent: 50 });
+      writeFileSync(path, JSON.stringify({ budgets: { monthlyUsd: 30, warnAtPercent: 50 } }));
+      settle();
+      expect(loadConfig().budgets).toEqual({ monthlyUsd: 30, warnAtPercent: 50 });
+    } finally {
+      rmSync(path, { force: true });
+    }
+  });
+});
+
 describe("saving the newer sections", () => {
   it("persists routines.newPaused across later saves", () => {
     const path = join(DATA_DIR, "config.json");
@@ -2226,6 +2249,16 @@ describe("customMcpServers", () => {
       }),
     );
     expect(Object.keys(out)).toEqual(["keeper"]);
+  });
+
+  it("starts a bot-owned server only for that bot", () => {
+    const all = cfg({
+      blender: { command: "python3", args: ["/w/iris/s.py"], bot: "iris" },
+      notes: { command: "npx", args: ["-y", "notes"] },
+    });
+    expect(Object.keys(customMcpServers(all, undefined, "iris")).sort()).toEqual(["blender", "notes"]);
+    expect(Object.keys(customMcpServers(all, undefined, "paul"))).toEqual(["notes"]);
+    expect(Object.keys(customMcpServers(all))).toEqual(["notes"]);
   });
 });
 

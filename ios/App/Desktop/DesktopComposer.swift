@@ -5,10 +5,10 @@
 // field (13/20, 4 pt in), dictation (28, the same circle; hidden once there
 // is text) and the call button (28, filled with the bot's colour), which
 // becomes send while there is text. 4 pt between. The + opens the menu of
-// the reference design: Attach files, then the Model row (the composer has
-// no model chip and no approval control since 2026-10-18: the approval
-// level lives in the bot's settings). The + menu and the "/" menu float
-// above it, as the desktop's popovers do.
+// the reference design: Attach files and Teach a task in the + menu. #2106
+// puts the model choice back on a compact chip in the chat bar (same store
+// as Settings > Models); the approval level stays in the bot's settings.
+// The + menu and the "/" menu float above it, as the desktop's popovers do.
 import SwiftUI
 import UIKit
 import CompanionCore
@@ -128,6 +128,9 @@ struct DesktopComposerPill: View {
     @ViewBuilder
     private var chips: some View {
         plusButton
+        // #2106: compact model + effort chip; picking writes the bot's model
+        // for every thread (ModelMenuSheet). Keep it out of the + menu.
+        if modelLabel != nil { modelChip }
     }
 
     @ViewBuilder
@@ -167,6 +170,32 @@ struct DesktopComposerPill: View {
         .overlay(alignment: .topLeading) {
             if menu == .plus { plusMenu }
         }
+    }
+
+    /// #2106: compact model label in the chat bar (web `data-tour="model"`).
+    /// Opens ModelMenuSheet; a pick writes the bot default for every thread.
+    private var modelChip: some View {
+        Button {
+            menu = nil
+            if bot != nil { modelMenuOpen = true } else { openModel() }
+        } label: {
+            HStack(spacing: 4) {
+                Text(verbatim: modelLabel ?? "")
+                    .font(theme.font(13))
+                    .foregroundStyle(theme.inkSecondary)
+                    .lineLimit(1)
+                DesktopLucideGlyph(paths: DesktopLucide.chevronDown, size: 14)
+                    .foregroundStyle(theme.inkTertiary)
+            }
+            .padding(.horizontal, 6)
+            .frame(height: 28)
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(busy || modelLabel == nil)
+        .hoverEffect(.highlight)
+        .accessibilityLabel(Text("Model: \(modelLabel ?? "")"))
+        .accessibilityIdentifier("desktop-composer-model-chip")
         .popover(isPresented: $modelMenuOpen) {
             if let bot {
                 ModelMenuSheet(bot: bot, close: { modelMenuOpen = false })

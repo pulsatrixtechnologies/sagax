@@ -757,9 +757,11 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(cold.reused).toBeUndefined();
     expect(coldMs).toBeGreaterThanOrEqual(350);
 
+    // warmOnly waits for boot init (#1971); no extra sleep before the spoken turn.
+    const prewarmStarted = Date.now();
     const warmed = await instance.adapter.sendTurn({ threadId: "t-warmed", text: "", keepWarm: true, warmOnly: true });
     expect(warmed.reused).toBeUndefined();
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(Date.now() - prewarmStarted).toBeGreaterThanOrEqual(350);
     const warmStarted = Date.now();
     const spoken = await instance.adapter.sendTurn({ threadId: "t-warmed", text: "hello", keepWarm: true });
     await recorder.until((event) => event.type === "content.delta" && event.turnId === spoken.turnId);

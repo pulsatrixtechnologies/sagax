@@ -5,7 +5,7 @@ import { StrictMode, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 
 import { MessagesSetupView } from "../components/plugins/MessagesSetupView";
-import { MacAppsView } from "../components/plugins/MacAppsView";
+import { MacAppsInstalledSection } from "../components/plugins/MacAppsView";
 import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import "../styles.css";
@@ -105,13 +105,8 @@ function App() {
   if (view === "mac") {
     return (
       <Frame>
-        <MacAppsView
-          onBack={() => {}}
-          trail={[{ label: t("connectApps.title"), onSelect: () => {} }]}
-          onOpenMessages={() => {}}
-          messagesEnabled={status.useMessages}
-          messagesAvailable={status.available}
-        />
+        {/* the Mac page went with #2104: its one row sits in Installed */}
+        <MacAppsInstalledSection onOpenMessages={() => {}} messagesEnabled={status.useMessages} />
       </Frame>
     );
   }

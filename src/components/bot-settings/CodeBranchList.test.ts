@@ -75,7 +75,10 @@ describe("Coding branches: the card", () => {
     expect(html).toContain("feat/it-tools-widgets");
     expect(html).toContain('data-branch-status="local"');
     expect(html).toContain(">Not pushed<");
-    expect(html).toContain("acme/web · 2 commits ahead · 2 changed files · 15 h ago");
+    // #2148: one grey sub-line with the short repo name; the rest in the tooltip
+    expect(html).toMatch(/data-branch-repo=""[^>]*>web</);
+    expect(html).not.toContain("acme/web · 2 commits ahead");
+    expect(html).toContain("2 commits ahead · 2 changed files · 15 h ago");
     expect(html).toContain('data-branch-menu-button="feat/it-tools-widgets"');
     expect(html).toContain('aria-label="Actions for feat/it-tools-widgets"');
     // busy: a spinner instead of the menu; a note under the row
@@ -248,7 +251,7 @@ describe("Coding branches: the card", () => {
   });
 
   it("words a refusal by its code, else the server's message", () => {
-    expect(branchErrorText(new ApiError("x", 403, { code: "github_not_connected" }))).toBe("Connect your own GitHub account on the GitHub plugin's page (Capabilities > Sources > GitHub connection)");
+    expect(branchErrorText(new ApiError("x", 403, { code: "github_not_connected" }))).toBe("Connect your own GitHub account on the GitHub plugin's page (Plugins > Sources > GitHub connection)");
     expect(branchErrorText(new ApiError("x", 409, { code: "rejected" }))).toContain("nothing is forced");
     expect(branchErrorText(new ApiError("Something else", 500, { code: "odd" }))).toBe("Something else");
     // the computer is there but busy, in plain words; no "bot's computer" for the person's own
@@ -261,7 +264,7 @@ describe("Coding branches: the card", () => {
     // the message is what does not fit: said so, never "fewer files"
     expect(branchErrorText(new ApiError("x", 413, { code: "message_too_long_for_computer" }))).toBe("That commit message is too long for that computer. Shorten it, or ask the bot to commit.");
     expect(en["botPanel.branch.error.messageTooLong"]).not.toMatch(/files/i);
-    expect((fr as Record<string, string>)["botPanel.branch.error.messageTooLong"]).toBe("Ce message de commit est trop long pour cet ordinateur. Raccourcissez-le, ou demandez au bot de faire le commit.");
+    expect((fr as Record<string, string>)["botPanel.branch.error.messageTooLong"]).toBe("Ce message de commit est trop long pour cet ordinateur. Raccourcis-le, ou demande au bot de faire le commit.");
     expect((fr as Record<string, string>)["botPanel.branch.error.tooLong"]).not.toMatch(/fichiers/);
     // that computer's own git identity, not the person's profile
     expect(branchErrorText(new ApiError("x", 409, { code: "no_git_identity" }))).toBe("Git has no name and email on that computer to sign the commit. Set them there (git config --global user.name and user.email), then try again, or ask the bot to commit.");
@@ -289,7 +292,7 @@ describe("Coding branches: the card", () => {
   it("asks the bot to do this action, naming it, and never says the bot's computer where it is the person's", () => {
     for (const key of Object.keys(en).filter((entry) => entry.startsWith("botPanel.branch.away.")) as Array<keyof typeof en>) {
       expect(en[key], key).toMatch(/ask \{bot\} to do this action/i);
-      expect((fr as Record<string, string>)[key], key).toMatch(/demandez à \{bot\} de faire cette action/i);
+      expect((fr as Record<string, string>)[key], key).toMatch(/demande à \{bot\} de faire cette action/i);
       expect(en[key], key).not.toMatch(/\{bot\}'s computer|bot's computer/);
     }
     // a computer that is off: ask once it is back (the bot cannot reach it either)
@@ -300,5 +303,27 @@ describe("Coding branches: the card", () => {
       expect(en[key], key).not.toMatch(/bot's computer/);
       expect((fr as Record<string, string>)[key], key).not.toMatch(/ordinateur du bot/);
     }
+  });
+
+  it("keeps what the row no longer shows behind the menu: details, GitHub, copy link, and Ignore (#2148)", () => {
+    const pushed: CodingBranch = { ...local, pushed: true, url: "https://github.com/acme/web/tree/feat/it-tools-widgets" };
+    const html = renderToStaticMarkup(createElement(BranchMenuPanel, { branch: pushed, info: info(), archived: false, botName: "Scout", details: "2 commits ahead · 15 h ago", canIgnore: true, onPick: () => {} }));
+    expect(html).toContain("data-branch-details");
+    expect(html).toContain("2 commits ahead · 15 h ago");
+    expect(html).toContain('data-menu-item="github"');
+    expect(html).toContain('data-menu-item="copyLink"');
+    expect(html).toContain('data-menu-item="ignore"');
+    expect(html).toContain(">Ignore<");
+    // no link: no GitHub nor copy; no handler: no Ignore
+    const bare = renderToStaticMarkup(createElement(BranchMenuItems, { branch: local, info: info(), archived: false, botName: "Scout", onPick: () => {} }));
+    expect(bare).not.toContain('data-menu-item="github"');
+    expect(bare).not.toContain('data-menu-item="ignore"');
+    // the row no longer says "Pushed to <URL>" nor where the computer is
+    const row = renderToStaticMarkup(createElement(BranchRow, { branch: pushed, now: NOW, info: info({}, { place: "remote", computer: "desktop" }), actions: { botId: "pepper", botName: "Pepper", onArchive: async () => {}, onIgnore: () => {} }, onAct: () => {} }));
+    expect(row).not.toMatch(/Pushed to/i);
+    expect(row).not.toMatch(/>[^<]*on your computer[^<]*</i);
+    expect(row).toMatch(/title="[^"]*github\.com\/acme\/web\/tree/);
+    expect(en["botPanel.branch.ignore"]).toBe("Ignore");
+    expect(fr["botPanel.branch.ignore"]).toBe("Ignorer");
   });
 });

@@ -47,8 +47,6 @@ struct ChatListView: View {
     @State private var showingNewSection = false
     /// WP10: the Automations page (AU1), from a long press on "+".
     @State private var showingAutomations = false
-    /// A routine-run push: the run's detail over the roster (#1700).
-    @State private var openedNotificationRun: OpenedRoutineRun?
     /// A widget `open_routine` press: the routine's page over the roster.
     @State private var openedWidgetRoutine: Routine?
     /// WP15: the Team map (TM1), from a long press on "+".
@@ -116,15 +114,12 @@ struct ChatListView: View {
             }
             .onValueChange(of: session.notificationChat) { chat in
                 guard let chat else { return }
+                // a run opened from the Automations page or a routine's page
+                // lands in the chat (#2098): those close
                 showingAutomations = false
+                openedWidgetRoutine = nil
                 path.append(chat)
                 session.consumeNotificationChat()
-            }
-            .onValueChange(of: session.notificationRoutineRun) { opened in
-                guard let opened else { return }
-                showingAutomations = false
-                openedNotificationRun = opened
-                session.consumeNotificationRoutineRun()
             }
             .onValueChange(of: session.pendingChat) { chat in
                 guard let chat else { return }
@@ -141,10 +136,6 @@ struct ChatListView: View {
                 session.consumePendingWidgetDestination()
                 Task { await openWidgetDestination(destination) }
             }
-            .routineRunDetail(item: $openedNotificationRun) { opened in
-                RoutineRunDetailView(run: opened.run, routine: opened.routine)
-                    .environmentObject(session)
-            }
             .sheet(item: $openedWidgetRoutine) { routine in
                 NavigationStack {
                     RoutineDetailView(routine: routine)
@@ -160,10 +151,6 @@ struct ChatListView: View {
                 if let chat = session.notificationChat {
                     path.append(chat)
                     session.consumeNotificationChat()
-                }
-                if let opened = session.notificationRoutineRun {
-                    openedNotificationRun = opened
-                    session.consumeNotificationRoutineRun()
                 }
                 if let chat = session.pendingChat {
                     path.append(chat)
@@ -898,13 +885,11 @@ struct ChatListView: View {
             } else {
                 showingAutomations = true
             }
-        case let .run(runId, routineId):
+        case let .run(runId, _):
+            // #2098: the run's message in the bot's chat
             let listing = await session.loadRoutines()
             if let run = listing.runs.first(where: { $0.id == runId }) {
-                openedNotificationRun = OpenedRoutineRun(
-                    run: run,
-                    routine: listing.routines.first { $0.id == (routineId ?? run.routineId) }
-                )
+                await session.openRoutineRunInChat(run)
             } else {
                 showingAutomations = true
             }

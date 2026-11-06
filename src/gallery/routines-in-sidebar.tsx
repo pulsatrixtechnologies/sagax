@@ -1,13 +1,12 @@
 /** Isolated gallery for headless screenshots of routines in the side panel
- * (JC, 2026-11-01): routine detail, panel edit, and run-as-exchange. Mocked
- * API; no server. Not shipped in the app.
- * ?view=detail|edit|run&width=<px>&height=<px>&lang=<code>&skin=<id> */
+ * (the operator, 2026-11-01): routine detail and panel edit. A run opens in the chat
+ * (#2098), so there is no run scene here. Mocked API; no server. Not shipped
+ * in the app.
+ * ?view=detail|edit&width=<px>&height=<px>&lang=<code>&skin=<id> */
 import { StrictMode, useEffect, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { RoutineEditor } from "../components/RoutineCalendarPage";
 import { RoutinesSection } from "../components/bot-settings/RoutinesSection";
-import { ExchangeColumnProvider, useExchangeColumn } from "../components/BotExchangeChip";
-import { RoutineRunExchange } from "../components/routines/RoutineRunExchange";
 import { loadLocale } from "../lib/i18n";
 import type { Routine, RoutineRun } from "../lib/routines";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
@@ -123,39 +122,10 @@ function PanelShell({ children }: { children: ReactNode }) {
   );
 }
 
-function RunShell() {
-  const column = useExchangeColumn();
-  const chatWidth = width >= 1100 ? Math.min(560, Math.round(width * 0.42)) : Math.min(width, 700);
-  return (
-    <div data-gallery-sample={view} className="flex overflow-hidden bg-app text-ink" style={{ width, height }}>
-      <div className="relative min-h-0 min-w-0 flex-1 bg-inset/30 p-5">
-        <div className="text-[13px] font-medium text-ink">Automations</div>
-        <div className="mt-2 text-[12px] text-ink-secondary">Routine list stays usable while the run opens in the chat column.</div>
-      </div>
-      <div ref={column.ref} style={{ width: chatWidth }} className="relative h-full border-l border-border bg-app">
-        <ExchangeColumnProvider node={column.node}>
-          {column.node && (
-            <RoutineRunExchange
-              run={run}
-              routine={routine}
-              bots={[bot]}
-              onClose={() => {}}
-            />
-          )}
-        </ExchangeColumnProvider>
-      </div>
-    </div>
-  );
-}
-
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <StoreProvider>
-      {view === "run" ? (
-        <Seed>
-          <RunShell />
-        </Seed>
-      ) : view === "edit" ? (
+      {view === "edit" ? (
         <Seed openDetail>
           <PanelShell>
             <RoutineEditor routine={routine} bots={[bot]} lockedBotId={bot.id} presentation="panel" onClose={() => {}} />

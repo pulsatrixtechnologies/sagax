@@ -453,6 +453,18 @@ describe("EventBus streamed text", () => {
     await bus.flush();
   });
 
+  it("flushPendingText publishes held deltas at once without waiting for the merge timer (#1971)", async () => {
+    const bus = new EventBus();
+    const seen: RuntimeEvent[] = [];
+    bus.subscribe((event) => seen.push(event));
+    bus.publish(delta("Hel", { eventId: "d1" }));
+    bus.publish(delta("lo", { eventId: "d2" }));
+    expect(seen).toHaveLength(1);
+    bus.flushPendingText();
+    expect(summary(seen)).toEqual(["thread-1:assistant_text:Hel", "thread-1:assistant_text:lo"]);
+    await bus.flush();
+  });
+
   it("publishes the text that resumes after another event at once", async () => {
     const bus = new EventBus();
     const seen: RuntimeEvent[] = [];

@@ -134,6 +134,9 @@ export interface ThreadsHttpRouteDeps {
   replayBuffer: { covers(since: number, last: number): boolean; [Symbol.iterator](): Iterator<{ seq: number; kind: string; payload: unknown; frame: string | null; clientFrame: string | null }> };
   wants(client: any, kind: string): boolean;
   sseFrameFor(client: any, seq: number, payload: unknown, frame: string | null, clientFrame: string | null): string | null;
+  /** Flush bus merge + SSE coalesce windows into the replay buffer before
+   * honouring Last-Event-ID, so a reconnect does not lose in-flight deltas. */
+  flushPendingStreamDeltas?: () => void;
 }
 
 export function createThreadsHttpRoutes(deps: ThreadsHttpRouteDeps): RouteHandler {
@@ -262,6 +265,9 @@ export function createThreadsHttpRoutes(deps: ThreadsHttpRouteDeps): RouteHandle
       // reconnect carries a newer Last-Event-ID even though the original
       // URL may still contain an older manual `since` cursor. Prefer the
       // valid browser cursor or the stale query would replay forever.
+      // Flush merge windows first so pending content.delta text is in the
+      // replay buffer before we judge coverage (#1971 lost-reply on reconnect).
+      deps.flushPendingStreamDeltas?.();
       const since =
         cursorSeq(req.headers["last-event-id"]) ??
         cursorSeq(url.searchParams.get("since") ?? undefined);

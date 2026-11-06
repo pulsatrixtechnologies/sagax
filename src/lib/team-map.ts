@@ -6,6 +6,10 @@ export interface TeamMapBot {
   name: string;
   hidden?: boolean;
   section?: string;
+  /** #2045 / #2083: stable team id from the server. Columns follow the
+   * displayed `section` name; the id only splits a column when two teams
+   * share that name in the same view. */
+  sectionId?: string;
   chiefOfStaff?: boolean;
   ownerUserId?: string;
   busy?: boolean;
@@ -56,22 +60,44 @@ export function buildTeamMapSections<T extends TeamMapBot>(bots: T[], names: str
   // The Primary Bot heads a team for its own person only (#2045): another
   // person's Primary Bot shared with the viewer is a member here.
   const chief = (bot: T) => options.viewerId === undefined ? Boolean(bot.chiefOfStaff) : isViewersPrimaryBot(bot, options.viewerId);
-  const sections = new Map<string, T[]>();
+  // Columns follow the display name so the sidebar, Team map and sub-teams
+  // share one key. A stable sectionId only splits a column when the same
+  // display name points at two different teams in the same view (#2083).
+  const byName = new Map<string, T[]>();
   // Unassigned holds what has no section; the sidebar asks for it when only a
   // room is there (someone with no bot of their own, added to a group).
-  if (options.general) sections.set("", []);
+  if (options.general) byName.set("", []);
   for (const bot of bots) {
     if (bot.hidden) continue;
-    const key = bot.section?.trim() || "";
-    sections.set(key, [...(sections.get(key) ?? []), bot]);
+    const name = bot.section?.trim() || "";
+    byName.set(name, [...(byName.get(name) ?? []), bot]);
   }
   for (const name of names) {
     const key = name.trim();
-    if (key && !sections.has(key)) sections.set(key, []);
+    if (!key || byName.has(key)) continue;
+    byName.set(key, []);
   }
-  return [...sections].map(([key, sectionBots]) => ({
+  const sections: Array<[string, T[]]> = [];
+  for (const [name, list] of byName) {
+    if (!name) {
+      sections.push(["", list]);
+      continue;
+    }
+    const stamps = new Set(list.map((bot) => bot.sectionId?.trim()).filter(Boolean) as string[]);
+    if (stamps.size <= 1) {
+      sections.push([name, list]);
+      continue;
+    }
+    const buckets = new Map<string, T[]>();
+    for (const bot of list) {
+      const id = bot.sectionId?.trim() || name;
+      buckets.set(id, [...(buckets.get(id) ?? []), bot]);
+    }
+    for (const [id, bucket] of buckets) sections.push([id, bucket]);
+  }
+  return sections.map(([key, sectionBots]) => ({
     key,
-    name: key || "Unassigned",
+    name: sectionBots[0]?.section?.trim() || key || "Unassigned",
     chiefs: sectionBots.filter(chief),
     members: sectionBots.filter((bot) => !chief(bot)),
   }));

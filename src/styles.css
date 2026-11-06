@@ -425,6 +425,8 @@
   /* ink carried by the user's own bubble. A hex rather than the ink token so
      the contrast check can measure it; every dark skin repeats its ink here. */
   --color-bubble-user-ink: #fcfcfc;
+  /* Reading width for prose beside a chat table (.chat-wide). Sagax bubbles do not use the width modes. */
+  --chat-prose-max: 44rem;
   --color-success-ink: #072114;
   --color-scrollbar: #3d3d3d;
   /* second speed line of the mascot — contrasts against the app ground */
@@ -1336,6 +1338,11 @@
   --color-popover-border: #7f8882;   /* field and popover outline: 3:1 on both */
 }
 
+/* A reply with a table is as wide as the message; its prose keeps the reading width. */
+.chat-wide .chat-md > :not(.chat-table) {
+  max-width: var(--chat-prose-max);
+}
+
 /* Shiki emits both palettes so cached blocks follow the nearest skin without
    re-tokenizing. Scope the scheme to code; native controls keep their styling. */
 .chat-md .shiki {
@@ -1797,6 +1804,19 @@ body {
   .ui-button-primary:enabled:hover {
     background: color-mix(in srgb, var(--color-ink) 60%, transparent);
   }
+  /* #2080: under a red-family tint the accent reads as danger, so the one
+     primary action of a page stays ink, whatever a skin gives it. */
+  [data-skin-tint="red"] .ui-button-primary,
+  [data-skin-tint="pink"] .ui-button-primary,
+  [data-skin-tint="rose"] .ui-button-primary {
+    background: var(--color-ink);
+    color: var(--color-app);
+  }
+  [data-skin-tint="red"] .ui-button-primary:enabled:hover,
+  [data-skin-tint="pink"] .ui-button-primary:enabled:hover,
+  [data-skin-tint="rose"] .ui-button-primary:enabled:hover {
+    background: color-mix(in srgb, var(--color-ink) 60%, transparent);
+  }
   .ui-icon-button:enabled:hover {
     background: var(--color-hover);
     color: var(--color-ink);
@@ -1958,6 +1978,20 @@ body {
 :focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
+}
+
+/* The bot profile page takes focus as a whole when it opens (so Escape and
+   Tab start inside it); a ring around the entire main panel says nothing,
+   its controls keep their own rings (#2136). */
+[data-bot-profile-page]:focus-visible {
+  outline: none;
+}
+
+/* The profile banner is a quiet grey gradient like Grok Bot (#2141), not
+   the mascot's colour: #3a3a3a to #2a2a2a on a dark skin, its pale echo on
+   a light one (the skin's color-scheme picks the pair). */
+.bot-profile-banner {
+  background-image: linear-gradient(180deg, light-dark(#ececec, #3a3a3a) 0%, light-dark(#e0e0e0, #2a2a2a) 100%);
 }
 
 /* A sidebar group header focused by a click, or handed focus back after its
@@ -2236,10 +2270,22 @@ button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
   animation-duration: 0.28s;
   animation-timing-function: var(--ease-out-quint);
 }
-/* "Thinking…" label sheen while the model reasons */
+/* Legacy background-position sheen (RoutineRunCard bar and similar). */
 @keyframes shimmer {
   from { background-position: 200% 50%; }
   to { background-position: -200% 50%; }
+}
+/* "Thinking…" label sheen while the model reasons. The band crosses the phrase while the brighter copy inside it
+   crosses back, so the letters hold still and only the light moves. It moves by transform, in a dozen steps, and
+   rests between sweeps: a smooth sweep (or a background-position one) draws the whole page every display frame for
+   as long as a turn runs. */
+@keyframes sheen-band {
+  from { transform: translateX(-70%); animation-timing-function: steps(12, jump-none); }
+  35%, to { transform: translateX(70%); }
+}
+@keyframes sheen-letters {
+  from { transform: translateX(70%); animation-timing-function: steps(12, jump-none); }
+  35%, to { transform: translateX(-70%); }
 }
 @keyframes reduced-loader-pulse {
   0%, 100% { opacity: 0.45; }
@@ -2254,17 +2300,37 @@ button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
   60% { opacity: 0.25; }
 }
 .thinking-shimmer {
-  background: linear-gradient(90deg, var(--color-ink-secondary) 40%, var(--color-ink) 50%, var(--color-ink-secondary) 60%);
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  /* background-clip:text only paints glyphs inside the background box. A
-     tight line box (leading-none) is shorter than ascenders, descenders and
-     arabic marks, so they were cut. Pad the box past the glyphs and pull the
-     margins back so the layout doesn't move. */
+  position: relative;
+  color: var(--color-ink-secondary);
+  /* A truncated phrase clips to its box, and a tight line box (leading-none)
+     is shorter than ascenders, descenders and arabic marks. Pad the box past
+     the glyphs and pull the margins back so the layout doesn't move. */
   padding: 0.35em 0.12em;
   margin: -0.35em -0.12em;
+}
+.thinking-sheen {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+.thinking-sheen > span {
+  position: absolute;
+  inset: 0;
+  -webkit-mask-image: linear-gradient(90deg, transparent 30%, #000 50%, transparent 70%);
+  mask-image: linear-gradient(90deg, transparent 30%, #000 50%, transparent 70%);
+  animation: sheen-band var(--sheen-period) linear var(--sheen-delay) infinite;
+}
+.thinking-sheen > span::before {
+  content: attr(data-text) / "";
+  position: absolute;
+  inset: 0;
+  padding: 0.35em 0.12em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-ink);
+  animation: sheen-letters var(--sheen-period) linear var(--sheen-delay) infinite;
 }
 
 /* Ultracode effort: Claude-console purple, theme-aware and subdued in every skin. */
@@ -2295,16 +2361,10 @@ button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
   color: var(--color-ultracode-ink);
 }
 .ultracode-shimmer {
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--color-ultracode) 55%, var(--color-ink-secondary)) 35%,
-    var(--color-ultracode-ink) 50%,
-    color-mix(in srgb, var(--color-ultracode) 55%, var(--color-ink-secondary)) 65%
-  );
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: color-mix(in srgb, var(--color-ultracode) 55%, var(--color-ink-secondary));
+}
+.ultracode-shimmer .thinking-sheen > span::before {
+  color: var(--color-ultracode-ink);
 }
 .ultracode-sidebar-dot {
   background: var(--color-ultracode);
@@ -2340,15 +2400,17 @@ button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
 .bot-activity-wave > span:nth-child(2) { animation-delay: 0.2s; }
 .bot-activity-wave > span:nth-child(3) { animation-delay: 0.4s; }
 :root[data-reduced-motion="true"] .bot-activity-wave > span { animation: none; }
-:root[data-reduced-motion="true"] .bot-activity .thinking-shimmer { animation: none; background: none; color: var(--color-ink-secondary); }
+:root[data-reduced-motion="true"] .bot-activity .thinking-sheen { display: none; }
+:root[data-reduced-motion="true"] .bot-activity .thinking-shimmer { color: var(--color-ink-secondary); }
 @media (prefers-reduced-motion: reduce) {
   .bot-activity-wave > span { animation: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .animate-caret, .animate-msg-in, .animate-shimmer, .animate-pop-in, .animate-pop-out, .animate-call-dock-in, .animate-card-fade-in, .animate-card-fade-out { animation: none; }
   .animate-status-pulse { animation: none; opacity: 0.6; }
-  .thinking-shimmer { background: none; color: var(--color-ink-secondary); }
-  .ultracode-shimmer { background: none; color: var(--color-ultracode-ink); }
+  .thinking-sheen { display: none; }
+  .thinking-shimmer { color: var(--color-ink-secondary); }
+  .ultracode-shimmer { color: var(--color-ultracode-ink); }
   .ultracode-sidebar-dot { animation: none; opacity: 0.85; }
   .turn-presence.ultracode-active .bot-activity-dots,
   .turn-presence.ultracode-active [data-presence-mascot] { filter: none; }
@@ -3836,4 +3898,20 @@ select optgroup {
 }
 @media (prefers-reduced-motion: reduce) {
   .connection-notice { animation: none; }
+}
+
+/* The bot panel (#2125, reference design): its own surface and flat cards.
+   The dark Pulsatrix skin takes the reference tones; every other skin keeps
+   its app and card colors. */
+[data-panel-bot] {
+  --bot-panel-bg: var(--color-app);
+  --bot-panel-card: var(--color-card);
+  --bot-panel-switch-off: var(--color-switch-off);
+  --bot-panel-pill-border: var(--color-hairline);
+}
+[data-skin="pulsatrix"] [data-panel-bot] {
+  --bot-panel-bg: #161616;
+  --bot-panel-card: #1f1f1f;
+  --bot-panel-switch-off: #3a3a3a;
+  --bot-panel-pill-border: #3a3a3a;
 }

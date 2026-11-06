@@ -2,27 +2,21 @@ import { describe, expect, it } from "vitest";
 
 import en from "@/locales/en.json";
 import fr from "@/locales/fr.json";
-import { PANEL_TABS, visiblePanelTabs } from "./panel-tabs";
+import { PANEL_TABS } from "./panel-tabs";
 
 describe("bot panel tabs", () => {
-  it("run Details, Library, Roles, Computer in that order, with no Capabilities or More tab", () => {
-    expect(PANEL_TABS).toEqual(["details", "library", "roles", "computer"]);
-  });
-
-  it("show Roles in Advanced on an organization server only; Simple hides it with Computer", () => {
-    expect(visiblePanelTabs({ advanced: true, computerOff: false, rolesOff: false })).toEqual(["details", "library", "roles", "computer"]);
-    expect(visiblePanelTabs({ advanced: true, computerOff: false, rolesOff: true })).toEqual(["details", "library", "computer"]);
-    expect(visiblePanelTabs({ advanced: true, computerOff: false })).toEqual(["details", "library", "computer"]);
-    expect(visiblePanelTabs({ advanced: false, computerOff: false, rolesOff: false })).toEqual(["details", "library"]);
+  it("run Activity then Library, with no Capabilities, More or Roles tab", () => {
+    expect(PANEL_TABS).toEqual(["activity", "library"]);
   });
 
   it("are labelled in English and French, with no Routines or More tab", () => {
     const labels = (catalog: Record<string, string>) => PANEL_TABS.map((id) => catalog[`botPanel.tab.${id}`]);
-    expect(labels(en)).toEqual(["Details", "Library", "Roles", "Computer"]);
-    expect(labels(fr)).toEqual(["Détails", "Bibliothèque", "Rôles", "Ordinateur"]);
+    expect(labels(en)).toEqual(["Activity", "Library"]);
+    expect(labels(fr)).toEqual(["Activité", "Bibliothèque"]);
     for (const catalog of [en, fr]) {
       expect(catalog).not.toHaveProperty("botPanel.tab.routines");
       expect(catalog).not.toHaveProperty("botPanel.tab.more");
+      expect(catalog).not.toHaveProperty("botPanel.tab.roles");
       expect(catalog).not.toHaveProperty("botPanel.tab.capabilities");
     }
   });

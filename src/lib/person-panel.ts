@@ -43,20 +43,6 @@ export function personSharedBots<B extends { id: string; ownerUserId?: string; h
   return bots.filter((bot) => !bot.hidden && norm(bot.ownerUserId) === id);
 }
 
-/** "Gérer dans Perspicax": only for an organization admin, only when the
- * server sent the person's console page (it sends it to admins only). */
-export function personManageUrl(person: Pick<OrgDirectoryPerson, "manageUrl"> | null, viewerRole: "admin" | "member" | null | undefined): string | null {
-  if (viewerRole !== "admin") return null;
-  const url = person?.manageUrl;
-  if (!url) return null;
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.toString() : null;
-  } catch {
-    return null;
-  }
-}
-
 /** Whether the viewer may write to this person: an active person, not a
  * service account, not themselves. */
 export function canMessagePerson(person: Pick<OrgDirectoryPerson, "principalId" | "disabled" | "service"> | null, viewerId: string): boolean {

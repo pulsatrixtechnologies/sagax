@@ -5,12 +5,11 @@ import CompanionCore
 import SwiftUI
 
 enum PanelRoutinePreview {
-    /// Routines listed in a compact preview before "Show all".
-    static let limit = 6
+    /// Routines listed in Upcoming before "Show more" (Grok Bot, #2127).
+    static let limit = 5
 }
 
-/// Details, Library and Computer as centred labels on a quiet capsule.
-/// Unused on the phone profile after Lot 4 (overview rows instead).
+/// Activity and Library as centred labels on a quiet capsule (Grok Bot).
 struct PanelTabBar: View {
     @Environment(\.themePalette) var themePalette
     let tabs: [DesktopPanelTab]
@@ -27,7 +26,7 @@ struct PanelTabBar: View {
                     Text(Self.title(tab))
                         .font(Theme.Font.body)
                         .foregroundStyle(on ? Theme.textPrimary : Theme.textSecondary)
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, 14)
                         .frame(height: 32)
                         .background(Capsule().fill(on ? Theme.cardRaised : Color.clear))
                         .contentShape(Capsule())
@@ -37,6 +36,8 @@ struct PanelTabBar: View {
                 .accessibilityIdentifier("panel-tab.\(tab.rawValue)")
             }
         }
+        .padding(4)
+        .background(Theme.card.opacity(0.55), in: Capsule())
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("panel-tabs")
@@ -44,7 +45,7 @@ struct PanelTabBar: View {
 
     static func title(_ tab: DesktopPanelTab) -> LocalizedStringKey {
         switch tab {
-        case .details: "Details"
+        case .activity: "Activity"
         case .library: "Library"
         case .computer: "Computer"
         }

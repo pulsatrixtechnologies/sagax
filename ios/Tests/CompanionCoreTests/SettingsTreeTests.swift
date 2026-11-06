@@ -89,7 +89,10 @@ final class DesktopSettingsNavGroupTests: XCTestCase {
         XCTAssertEqual(Set(grouped.flatMap(\.sections)), Set(sections), "no section lost")
         XCTAssertEqual(grouped.map(\.group), [.personal, .ai, .installation, .app])
         XCTAssertEqual(grouped.first?.sections, [.general, .security, .vault, .appearance, .notifications])
-        XCTAssertEqual(grouped.last?.sections, [.experimental, .updates, .about])
+        // #2080 (L0): Usage under AI; App holds Updates as a card.
+        XCTAssertEqual(grouped.first { $0.group == .ai }?.sections.suffix(2), [.voice, .usage])
+        XCTAssertEqual(grouped.first { $0.group == .installation }?.sections, [.organization, .computer, .backups])
+        XCTAssertEqual(grouped.last?.sections, [.experimental, .about])
     }
 
     func testMemberSections() {

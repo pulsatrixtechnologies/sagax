@@ -162,6 +162,10 @@ function snapshotBoatConfig(cfg: AppConfig): AppConfig {
   return { box: cfg.box ? { token: cfg.box.token } : undefined };
 }
 
+/** Default bound for a Boat HTTP call that did not bring its own signal.
+ * Callers with a longer budget (create, waitReady) pass AbortSignal.timeout. */
+export const BOAT_HTTP_TIMEOUT_MS = 20_000;
+
 /** The base URL follows the credential in use (included-services.ts): an own
  * token goes to Boat (SAGAX_BOX_API points it at a stub in tests), Cloud Pro's
  * included token only to its relay. */
@@ -169,6 +173,9 @@ function boatFetch(cfg: AppConfig, path: string, opts: RequestInit = {}) {
   const account = boatAccount(cfg);
   return fetch(`${account?.api ?? boatProviderApi()}${path}`, {
     ...opts,
+    // A missing signal used to hang forever on a stalled relay; keep an
+    // explicit caller signal as the only deadline when one is set.
+    signal: opts.signal ?? AbortSignal.timeout(BOAT_HTTP_TIMEOUT_MS),
     headers: {
       authorization: `Bearer ${account?.token}`,
       "content-type": "application/json",
@@ -445,13 +452,18 @@ export async function runCommand(cfg: AppConfig, boxId: string, command: string,
 async function mintDesktopUrl(cfg: AppConfig, boxId: string, { vncBudgetMs = 60_000 } = {}) {
   assertBoatNotDeleting(boxId);
   const t0 = Date.now();
-  while (Date.now() - t0 < vncBudgetMs) {
+  // Fixed 3 s retries used to hammer a provisioning Boat; grow the wait
+  // (1 s, 2 s, 4 s, capped at 10 s) inside the same overall budget.
+  for (let attempt = 0; Date.now() - t0 < vncBudgetMs; attempt++) {
     assertBoatNotDeleting(boxId);
     const { body } = await boatJson(cfg, `/boxes/${boxId}/desktop?vnc=1`, { method: "POST" });
     const url = body?.desktopUrl ?? body?.url;
     if (url) return url;
     if (!body?.provisioning) break;
-    await new Promise((r) => setTimeout(r, 3000));
+    const waitMs = Math.min(10_000, 1_000 * 2 ** Math.min(attempt, 4));
+    const remaining = vncBudgetMs - (Date.now() - t0);
+    if (remaining <= 0) break;
+    await new Promise((r) => setTimeout(r, Math.min(waitMs, remaining)));
   }
   const { body } = await boatJson(cfg, `/boxes/${boxId}/desktop`, { method: "POST" });
   return body?.desktopUrl ?? body?.url ?? null;

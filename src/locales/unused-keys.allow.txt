@@ -380,6 +380,7 @@ people.portal.subtitle
 personLabel.mine
 personLabel.mineHint
 persona.action.rename
+persona.categories
 persona.files.new
 persona.overview.actions
 persona.rules.editorLabel
@@ -508,7 +509,6 @@ settings.servers.connectTitle
 settings.sidebarHidden.kind.bot
 settings.sidebarHidden.kind.group
 settings.sidebarHidden.kind.person
-settings.theme.title
 settings.threadDisplay.short
 settings.threadDisplay.show
 settings.threadDisplay.title

@@ -1,4 +1,4 @@
-import { Fragment, useId, useRef, useState, useSyncExternalStore, type ComponentProps } from "react";
+import { createContext, Fragment, useCallback, useContext, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentProps } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, ChevronRight, CircleHelp, Copy, ExternalLink, X } from "lucide-react";
 import { activeLocale, t } from "@/lib/i18n";
@@ -348,6 +348,16 @@ export function CommandLine({ command, copyLabel = "Copy command" }: { command: 
   );
 }
 
+type AdvancedFold = {
+  /** Where the folded cards are drawn (the fold's body), once it is mounted. */
+  target: HTMLElement | null;
+  register: (title: string) => () => void;
+};
+
+/** Set by SettingsAdvancedScope while Simple mode folds a page's `advanced`
+ * cards under "Advanced" (#2080). Without it the cards draw in place. */
+const AdvancedFoldContext = createContext<AdvancedFold | null>(null);
+
 /** A titled group of settings, as the reference design's settings pages draw them: a
  * grey heading outside the card (Account, Appearance, System), then one
  * rounded card of compact rows. An empty group draws nothing. */
@@ -356,9 +366,11 @@ export function SettingsGroup({
   groupId,
   accessory,
   plain,
+  advanced,
   children,
 }: {
-  title: string;
+  /** The grey heading; a group without one is its card alone. */
+  title?: string;
   /** `data-settings-group`, for tests and deep links */
   groupId: string;
   /** Shown after the heading, as the reference design's "Your computer · <name>". */
@@ -366,17 +378,71 @@ export function SettingsGroup({
   /** The children are cards of their own (forms with several fields): the
    * heading only, no card around them. */
   plain?: boolean;
+  /** A technical card: in Simple mode it moves into the page's "Advanced"
+   * fold (SettingsAdvancedScope) instead of being hidden (#2080). */
+  advanced?: boolean;
   children: React.ReactNode;
 }) {
   const headingId = useId();
-  return (
-    <section aria-labelledby={headingId} data-settings-group={groupId} className="flex flex-col gap-2 has-[>div:empty]:hidden">
-      <div className="flex min-w-0 items-center gap-1.5 px-1">
-        <h3 id={headingId} className="shrink-0 text-[13px] font-normal leading-[18px] text-ink-secondary">{title}</h3>
-        {accessory}
-      </div>
+  const fold = useContext(AdvancedFoldContext);
+  const folded = Boolean(advanced && fold);
+  const register = fold?.register;
+  const foldTitle = title ?? groupId;
+  useLayoutEffect(() => (folded && register ? register(foldTitle) : undefined), [folded, register, foldTitle]);
+  const section = (
+    <section aria-labelledby={title ? headingId : undefined} data-settings-group={groupId} data-settings-advanced={advanced ? "" : undefined} className="flex flex-col gap-2 has-[>div:empty]:hidden">
+      {(title || accessory) && (
+        <div className="flex min-w-0 items-center gap-1.5 px-1">
+          {title && <h3 id={headingId} className="shrink-0 text-[13px] font-normal leading-[18px] text-ink-secondary">{title}</h3>}
+          {accessory}
+        </div>
+      )}
       <div className={plain ? "flex flex-col gap-2 empty:hidden" : "flex flex-col rounded-xl border-[0.5px] border-border bg-elevated py-1.5 empty:hidden"}>{children}</div>
     </section>
+  );
+  if (!folded) return section;
+  return fold?.target ? createPortal(section, fold.target) : null;
+}
+
+/** A page's "Advanced" fold (#2080). In Simple mode (`fold`), every
+ * `SettingsGroup advanced` inside moves into one fold at the bottom of the
+ * page: a row whose grey line names what it holds and whose count pill opens
+ * it, remembered per page. A search opens it. In Advanced mode, or with no
+ * such card, it draws its children alone. */
+export function SettingsAdvancedScope({ pageId, fold, searching, children }: {
+  pageId: string;
+  fold: boolean;
+  /** A search is on: the folded cards show, so a match can be found. */
+  searching?: boolean;
+  children: React.ReactNode;
+}) {
+  const [target, setTarget] = useState<HTMLElement | null>(null);
+  const [titles, setTitles] = useState<Array<{ key: number; title: string }>>([]);
+  const nextKey = useRef(0);
+  const register = useCallback((title: string) => {
+    const key = nextKey.current++;
+    setTitles((prev) => [...prev, { key, title }]);
+    return () => setTitles((prev) => prev.filter((entry) => entry.key !== key));
+  }, []);
+  const value = useMemo<AdvancedFold>(() => ({ target, register }), [target, register]);
+  // not `${pageId}.advanced`: some pages (Providers) already hold a card of that id
+  const cardId = `${pageId}.advancedFold`;
+  const [chosenOpen, toggle] = useCardOpen(cardId, false);
+  const open = chosenOpen || Boolean(searching);
+  const bodyId = useId();
+  if (!fold) return <>{children}</>;
+  return (
+    <AdvancedFoldContext.Provider value={value}>
+      {children}
+      <section data-settings-group="advanced" data-settings-card={cardId} data-open={open ? "true" : "false"} hidden={titles.length === 0} className="flex flex-col gap-2">
+        <div className={GROUP_CARD}>
+          <DescribedRow label={t("settings.advanced.title")} description={titles.map((entry) => entry.title).join(", ")} rowId="advanced">
+            <CountPill open={open} onToggle={toggle} label={t("settings.advanced.title")} count={titles.length} controls={bodyId} />
+          </DescribedRow>
+        </div>
+        <div id={bodyId} ref={setTarget} hidden={!open} className="flex flex-col gap-3" />
+      </section>
+    </AdvancedFoldContext.Provider>
   );
 }
 
@@ -539,6 +605,7 @@ export function PillSelect<T extends string>({
   mixed = false,
   mixedLabel,
   fill = false,
+  bordered = false,
 }: {
   value: T | undefined;
   options: ReadonlyArray<PillOption<T>>;
@@ -551,6 +618,8 @@ export function PillSelect<T extends string>({
   /** Fill a table cell (Settings > Models): the value at the left, the
    * chevron at the cell's right edge, the same width on every row. */
   fill?: boolean;
+  /** The bot panel's Voice chat (#2125): a thin border around a compact pill. */
+  bordered?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -605,7 +674,7 @@ export function PillSelect<T extends string>({
         }}
         data-pill-select=""
         data-pill-mixed={mixed || value === undefined ? "" : undefined}
-        className={fill ? TABLE_CELL_CONTROL : "inline-flex h-7 max-w-[240px] items-center gap-1 rounded-full px-2.5 text-[13px] leading-[18px] text-ink transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-50 aria-expanded:bg-hover motion-reduce:transition-none"}
+        className={fill ? TABLE_CELL_CONTROL : cn("inline-flex h-7 max-w-[240px] items-center gap-1 rounded-full px-2.5 text-[13px] leading-[18px] text-ink transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-50 aria-expanded:bg-hover motion-reduce:transition-none", bordered && "h-6 border border-[var(--bot-panel-pill-border)] px-2")}
       >
         <span className={cn("min-w-0 truncate", fill && "flex-1 text-left", (mixed || value === undefined) && "text-ink-secondary")}>{shown}</span>
         <ChevronDown size={13} aria-hidden="true" className="shrink-0 text-ink-secondary" />
@@ -1053,3 +1122,7 @@ export function ConfirmPill({ label, confirmLabel, ariaLabel, title, onConfirm, 
     </button>
   );
 }
+
+// #2080 (L0): the shared Settings patterns, one import for every page.
+export { ExternalLinkPill, StatusText, OrgManagedRow, OrgBand, FilterChips, SelectionBar, SettingsEmpty } from "./settings/SettingsPatterns";
+export type { FilterChip } from "./settings/SettingsPatterns";

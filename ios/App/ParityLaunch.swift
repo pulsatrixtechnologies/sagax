@@ -169,7 +169,6 @@ enum IPadParityScreen: String, CaseIterable {
     case panelMoreVoice = "panel-more-voice"
     case panelMoreVisibility = "panel-more-visibility"
     case panelMoreSharing = "panel-more-sharing"
-    case panelMorePerspicax = "panel-more-perspicax"
     case panelMoreHistory = "panel-more-history"
     case panelMoreUsage = "panel-more-usage"
     case routinesCalendar = "routines-calendar"
@@ -212,7 +211,6 @@ enum IPadParityScreen: String, CaseIterable {
     case personaModel = "persona-model"
     case personaPermissions = "persona-permissions"
     case personaVoice = "persona-voice"
-    case personaPerspicax = "persona-perspicax"
     case personaHistory = "persona-history"
     case personaUsage = "persona-usage"
     case orgPersonaOverview = "org-persona-overview"
@@ -226,7 +224,6 @@ enum IPadParityScreen: String, CaseIterable {
     case orgPersonaModel = "org-persona-model"
     case orgPersonaPermissions = "org-persona-permissions"
     case orgPersonaVoice = "org-persona-voice"
-    case orgPersonaPerspicax = "org-persona-perspicax"
     case orgPersonaHistory = "org-persona-history"
     case orgPersonaUsage = "org-persona-usage"
     case settingsMemory = "settings-memory"
@@ -298,12 +295,13 @@ enum IPadParityScreen: String, CaseIterable {
     /// The panel's tab on a panel surface.
     var panelTab: DesktopPanelTab? {
         switch self {
-        case .panelDetails, .panelAvatarEditor: .details
+        case .panelDetails, .panelAvatarEditor: .activity
         case .panelLibrary: .library
-        case .panelComputer: .computer
-        // the persona editor opens over Details, as on the desktop
-        case .panelMore: .details
-        default: panelSection != nil ? .details : nil
+        // Computer deep link opens Activity (Computer card lives there).
+        case .panelComputer: .activity
+        // the persona editor opens over Activity, as on the desktop
+        case .panelMore: .activity
+        default: panelSection != nil ? .activity : nil
         }
     }
 

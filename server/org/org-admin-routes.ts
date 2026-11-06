@@ -5,8 +5,9 @@ export type { ConsoleRole, OrgAdminViewer, AdminBotReach } from "./org-admin-typ
 //
 //   GET  /api/org/admin/bots                     manager, admin
 //   GET  /api/org/admin/usage?from&to            manager, admin
-//   GET  /api/org/admin/approvals                any role
-//   POST /api/org/admin/approvals/{t}/{r}        any role, { decision }
+//   GET  /api/org/admin/approvals                any role; { approvals, alwaysAllow? }
+//   POST /api/org/admin/approvals/{t}/{r}        any role, { decision } or
+//                                               { decision: "allow", rule: "allow" }
 //   GET  /api/org/admin/audit?from&to&limit&before  admin
 //   GET  /api/org/admin/files/{bot}/roots|list|stat|read|download
 //                                                manager, admin (org-admin-files.ts)
@@ -49,6 +50,7 @@ import {
   type ConsoleContext,
   type ConsoleRoute,
 } from "./org-admin-console.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export const ORG_ADMIN_PREFIX = "/api/org/admin/";
 export const ORG_ADMIN_JTI_MAX = 10_000;
@@ -62,8 +64,10 @@ const MAX_BODY_BYTES = 16 * 1024;
  * of 2026-10-09 (`permissions`, `permissionGroups`, `permissionsVersion`),
  * 4 the engine list of the same day (`engines`), 5 the bots' look and
  * persona with the mascot catalogue of 2026-10-11 (`mascots`), 6 the bots'
- * `approvalMode` and the bulk `approvalMode` action of 2026-10-16. */
-export const ORG_ADMIN_API_VERSION = 6;
+ * `approvalMode` and the bulk `approvalMode` action of 2026-10-16, 7 the
+ * console Always allow body (`rule: "allow"`) and the member-readable
+ * org alwaysAllow policy signal of 2026-11-05 (#2100). */
+export const ORG_ADMIN_API_VERSION = 7;
 
 /** One engine (model provider) of this server, as `GET capabilities` lists
  * it: grouped Cloud or Local as the model picker's provider column groups it
@@ -167,7 +171,7 @@ export interface AdminApproval {
 
 export type ApprovalAnswer =
   | { ok: true }
-  | { ok: false; status: 400 | 403 | 404 | 409; code: "bad_request" | "not_found" | "card_not_pending" | "not_decidable" | "forbidden"; message: string };
+  | { ok: false; status: 400 | 403 | 404 | 409; code: "bad_request" | "not_found" | "card_not_pending" | "not_decidable" | "forbidden" | "org_always_allow_off"; message: string };
 
 export interface OrgAdminRouteDeps {
   /** Solo servers answer 403 identity_perspicax to everything here. */
@@ -187,7 +191,12 @@ export interface OrgAdminRouteDeps {
   bots(): Array<{ bot: AdminBot; reach: AdminBotReach }>;
   usageRows(range: { from: Date; to: Date }): UsageRow[];
   approvalsFor(viewer: OrgAdminViewer): AdminApproval[];
-  answer(viewer: OrgAdminViewer, threadId: string, requestId: string, decision: "allow" | "deny"): Promise<ApprovalAnswer>;
+  /** Answer one card; `rule` "allow" also keeps that card's own Always allow
+   * (same as bulk Approvals, 2026-10-19 / #2100). */
+  answer(viewer: OrgAdminViewer, threadId: string, requestId: string, decision: "allow" | "deny", rule?: "allow"): Promise<ApprovalAnswer>;
+  /** #2100: org Always allow switch, for GET approvals (any role) so the
+   * console can explain a disabled Always allow without an admin route. */
+  orgAlwaysAllow?: () => boolean;
   audit(input: { from?: number; to?: number; limit: number; before?: string | null; categories?: readonly string[]; target?: string }): { rows: IdentifiedAdminAction[]; next: string | null };
   /** The categories `GET audit?category=` accepts. */
   auditCategories?: readonly string[];
@@ -622,7 +631,7 @@ export function createOrgAdminRoutes(deps: OrgAdminRouteDeps): (req: IncomingMes
       const status = enumParam(params, "status", ["active", "archived"] as const);
       if (isAnswer(page) || isAnswer(status)) {
         const reply = isAnswer(page) ? page : status as ConsoleAnswer;
-        void answer(res, reply);
+        void answer(res, reply).catch(reportBackgroundError);
         return true;
       }
       const engine = params.get("engine") || null;
@@ -655,19 +664,30 @@ export function createOrgAdminRoutes(deps: OrgAdminRouteDeps): (req: IncomingMes
     }
     if (route.name === "approvals") {
       const approvals = deps.approvalsFor(viewer).sort((a, b) => a.at - b.at).slice(0, ORG_ADMIN_MAX_APPROVALS);
-      send(res, 200, { approvals });
+      // #2100: alwaysAllow is readable by every role (same signal as
+      // GET org-approvals/policy), so the console can hide Always allow
+      // when the org turned it off without an admin call.
+      send(res, 200, {
+        approvals,
+        ...(deps.orgAlwaysAllow ? { alwaysAllow: deps.orgAlwaysAllow() } : {}),
+      });
       return true;
     }
     if (route.name === "answer") {
       const body = await readSmallJson(req);
-      const decision = body && typeof body === "object" && !Array.isArray(body) && Object.keys(body).length === 1
-        ? (body as { decision?: unknown }).decision
-        : undefined;
-      if (decision !== "allow" && decision !== "deny") {
-        refuse(res, 400, "bad_request", "Send { \"decision\": \"allow\" } or { \"decision\": \"deny\" }.");
+      const record = body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : null;
+      const decision = record?.decision;
+      // Same contract as bulk Approvals: Allow once, Deny, or Allow with
+      // that card's own Always allow (`rule: "allow"`). Nothing else.
+      const ruleOk = record?.rule === undefined || (record.rule === "allow" && decision === "allow");
+      const keys = record ? Object.keys(record) : [];
+      const allowedKeys = record?.rule === undefined ? keys.length === 1 && keys[0] === "decision" : keys.length === 2 && keys.includes("decision") && keys.includes("rule");
+      if ((decision !== "allow" && decision !== "deny") || !ruleOk || !allowedKeys) {
+        refuse(res, 400, "bad_request", "Send { \"decision\": \"allow\" } or { \"decision\": \"deny\" }, or { \"decision\": \"allow\", \"rule\": \"allow\" } for Always allow.");
         return true;
       }
-      const outcome = await deps.answer(viewer, answerMatch![1]!, answerMatch![2]!, decision);
+      const rule = record!.rule === "allow" ? "allow" as const : undefined;
+      const outcome = await deps.answer(viewer, answerMatch![1]!, answerMatch![2]!, decision, rule);
       if (!outcome.ok) {
         refuse(res, outcome.status, outcome.code, outcome.message);
         return true;

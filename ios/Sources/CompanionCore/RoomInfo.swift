@@ -77,13 +77,20 @@ public enum RoomOwnership {
     }
 
     /// Listed in their own name, or the recorded owner (server/groups/group-leave.ts).
+    /// #2119: the sole remaining person cannot leave (bots and teams do not
+    /// count); Delete is offered instead.
     public static func mayLeave(_ room: Room, viewer: RoomViewer) -> Bool {
-        if isListed(room, viewer: viewer) { return true }
-        guard let raw = room.ownerId, let owner = RoomViewer.norm(raw), !owner.isEmpty else { return false }
-        return owner == viewer.actorId || viewer.normalizedEmail == owner
+        let listed: Bool = {
+            if isListed(room, viewer: viewer) { return true }
+            guard let raw = room.ownerId, let owner = RoomViewer.norm(raw), !owner.isEmpty else { return false }
+            return owner == viewer.actorId || viewer.normalizedEmail == owner
+        }()
+        guard listed else { return false }
+        return leaveOutcome(room, viewer: viewer) != .last
     }
 
-    /// What leaving does (src/lib/group-leave.ts `leaveOutcome`).
+    /// What leaving does (src/lib/group-leave.ts `leaveOutcome`). `.last`
+    /// means leave is refused (#2119).
     public enum LeaveOutcome: Equatable, Sendable { case member, owner, last }
 
     public static func leaveOutcome(_ room: Room, viewer: RoomViewer) -> LeaveOutcome {

@@ -9,6 +9,7 @@ import { isSameOrigin, type RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 import { isDesktopTunnelPath } from "../desktop/desktop-bridge-routes.ts";
 import { bridgeWebSocketToStream, websocketAccept } from "../streams/ws-bridge.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 // `sandbox/me` is the signed-in person's own server environment desktop
 // (organization mode): there is no id that names another person's.
@@ -101,7 +102,7 @@ export function createDesktopViewer(deps: {
       void handle(req, res).catch(() => {
         if (!res.headersSent) res.writeHead(500).end();
         else socket.destroy();
-      }).finally(() => clearTimeout(timeout));
+      }).finally(() => clearTimeout(timeout)).catch(reportBackgroundError);
     });
   }
 

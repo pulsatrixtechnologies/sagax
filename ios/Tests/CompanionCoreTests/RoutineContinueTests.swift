@@ -47,6 +47,18 @@ final class RoutineContinueTests: XCTestCase {
         return message
     }
 
+    /// #2098: a run opens at its own message in the chat, never in a side
+    /// view; a run this phone has no message for lands on the chat alone.
+    func testReportMessageIsTheRunsRowInTheChat() throws {
+        var other = reportMessage()
+        other.id = "other"
+        other.routineRun?.runId = "run-9"
+        let plain = Message(id: "plain", role: .bot, kind: .text, at: 1)
+        let report = RoutineResults.reportMessage(for: try run(results: "chat"), in: [plain, other, reportMessage()])
+        XCTAssertEqual(report?.id, "report")
+        XCTAssertNil(RoutineResults.reportMessage(for: try run(results: "chat"), in: [plain, other]))
+    }
+
     func testContinueOpensTheTopicTheReportWentTo() throws {
         let target = RoutineResults.conversationTarget(for: try run(results: "old"), bots: [try bot()])
         XCTAssertEqual(target?.threadId, "old")

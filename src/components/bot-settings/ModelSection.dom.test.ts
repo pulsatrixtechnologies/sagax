@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
-// Bot > Model after the 2026-11-05 redesign (#2050): the Model card with the
-// effort in Simple too, the "If it fails" card merging automatic recovery
-// and the ordered backups (the switch, add, reorder, remove, the single
-// backup kept in step as the first entry, seeding from an older single
-// backup), and the closed Advanced fold with Who pays and Keep warm.
+// Bot > Model after the 2026-11-05 redesign (#2050, #2080): the Model card
+// with the chip and Who pays in grey under it, the "If it fails" card merging
+// automatic recovery and the ordered backups (the switch, add, reorder,
+// remove, the single backup kept in step as the first entry, seeding from an
+// older single backup, the server default labelled and copied by Customize),
+// and the closed Advanced fold with Keep warm.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -30,7 +31,6 @@ vi.mock("@/state/store", async (importOriginal) => {
 });
 vi.mock("../ModelPicker", () => ({
   ModelPicker: () => createElement("div", { "data-model-picker": "" }, "Default model"),
-  EffortRow: () => createElement("div", { "data-effort-row": "" }, "Effort"),
 }));
 vi.mock("@/lib/perspicax-org", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/perspicax-org")>(),
@@ -122,10 +122,16 @@ describe("recoveryFor: the single backup follows the ordered list", () => {
 });
 
 describe("Bot > Model, solo", () => {
-  it("draws the Model card with the effort, If it fails with its switch waiting for a backup, and the closed Advanced fold", async () => {
+  it("draws the Model card with Who pays under the chip, If it fails with its switch waiting for a backup, and the closed Advanced fold", async () => {
     await render(bot());
     expect($("[data-model-picker]")?.textContent).toBe("Default model");
-    expect($("[data-effort-row]"), "effort shown without the global Advanced mode").not.toBeNull();
+    // the effort rides the chip (picked in its menu): no row of its own
+    expect(host.textContent).not.toContain("How hard it thinks");
+    const model = $('[data-settings-group="botModel"]') ?? host;
+    const payer = model.querySelector<HTMLElement>('[data-settings-row="botPayerMode"]')!;
+    expect(payer, "who pays sits in the Model card, outside Advanced").not.toBeNull();
+    expect(payer.closest('[data-settings-card="botModel.advanced"]')).toBeNull();
+    expect(payer.querySelector("[data-bot-payer-label]")?.textContent).toBe("Paid by: The owner");
     const card = recoveryCard()!;
     expect(card.dataset.botRecovery).toBe("off");
     expect(card.textContent).toContain("If it fails");
@@ -138,7 +144,7 @@ describe("Bot > Model, solo", () => {
     expect(host.textContent).not.toContain("Backup models for this bot");
     const advanced = $('[data-settings-card="botModel.advanced"][data-open]')!;
     expect(advanced.dataset.open, "closed by default").toBe("false");
-    expect(advanced.querySelector('[data-settings-row="botPayerMode"]')?.textContent).toContain("Who pays for replies");
+    expect(advanced.querySelector('[data-settings-row="botPayerMode"]')).toBeNull();
     expect(advanced.querySelector('[data-settings-row="botKeepWarm"]')?.textContent).toContain("Keep prompt cache warm");
     expect($("[data-bot-keep-warm]")?.dataset.botKeepWarm).toBe("follow");
   });
@@ -203,6 +209,20 @@ describe("Bot > Model, solo", () => {
     expect(fixture.dispatch, "shown, not written, until the list changes").not.toHaveBeenCalled();
   });
 
+  it("shows the server default labelled, read-only, and Customize copies it into the bot", async () => {
+    fixture.config = { ...fixture.config!, automaticRecovery: { enabled: true, backup: { instanceId: "spare", model: "s" } } } as ConfigStatus;
+    await render(bot());
+    expect(recoveryCard()!.dataset.botRecovery).toBe("on");
+    expect($('[data-settings-row="botBackup.1"]')?.textContent).toContain("1. Spare");
+    expect($('[data-settings-row="botBackup.1"]')?.textContent).toContain("Spare model");
+    expect($('[data-settings-row="botBackup.1"] [data-backup-remove]'), "not edited in place").toBeNull();
+    expect($('[data-settings-row="botBackup.add"]')).toBeNull();
+    expect($('[data-settings-row="botBackup.default"]')?.textContent).toContain("Server default");
+    await click($("[data-backup-customize]"));
+    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "updateBot", botId: "bot-1", patch: { fallback: [{ instanceId: "spare", model: "s" }] } });
+    expect(patched()).toEqual([["/api/bots/bot-1/runtime-settings", { automaticRecovery: { enabled: true, backup: { instanceId: "spare", model: "s" } } }]]);
+  });
+
   it("surfaces a failed save on the card", async () => {
     fixture.api = vi.fn(async () => { throw new Error("Fixture save failed"); });
     await render(bot({ fallback: [{ instanceId: "spare", model: "s" }] }));
@@ -240,7 +260,7 @@ describe("Bot > Model, rights and drafts", () => {
   it("a bot on a machine keeps only the Advanced fold beside its host", async () => {
     await render(bot({ host: { kind: "machine", deviceId: "dev-1" } } as Partial<Bot>));
     expect($("[data-model-picker]")).toBeNull();
-    expect($("[data-effort-row]")).toBeNull();
+    expect($('[data-settings-row="botPayerMode"]')).toBeNull();
     expect(recoveryCard()).toBeNull();
     expect($('[data-settings-row="botKeepWarm"]')).not.toBeNull();
   });

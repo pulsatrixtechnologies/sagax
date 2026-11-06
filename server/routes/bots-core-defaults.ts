@@ -13,8 +13,7 @@ import { botSkillTemplateSchema, newBotDefaultsSchema } from "../bots/new-bot-de
 import { orgXaiRefusal } from "../org/org-xai-media.ts";
 import { sessionPrincipal } from "../auth/request-auth.ts";
 import { fetchSkillFromSource } from "../skills/skill-fetch.ts";
-
-import { parseSkillMd, scanSkillText } from "../../shared/skill-md.ts";
+import { prepareSkillFolder } from "../skills/skill-folder.ts";
 
 import type { BotsCoreRouteDeps } from "./bots-core-deps.ts";
 import { PASS, type RouteHandler } from "./table.ts";
@@ -58,14 +57,16 @@ export function createBotsCoreDefaultsRoutes(deps: BotsCoreRouteDeps): RouteHand
       if ("error" in fetched) return json(res, 422, { error: fetched.error });
       const skills = [];
       for (const skill of fetched.skills) {
-        const file = skill.files.find(file => file.path === "SKILL.md" || file.path.endsWith("/SKILL.md"));
-        if (!file) continue;
-        const parsed = parseSkillMd(file.content);
-        if ("error" in parsed) return json(res, 422, { error: parsed.error });
-        const skippedWarnings = skill.files.filter(candidate => candidate !== file)
-          .map(candidate => `skipped supporting file "${candidate.path}" — v1 imports only SKILL.md`);
-        const template = botSkillTemplateSchema.safeParse({ name: parsed.name, description: parsed.description, source: skill.source, text: file.content,
-          enabled: false, warnings: [...scanSkillText(file.content), ...skippedWarnings] });
+        const prepared = prepareSkillFolder(skill.files);
+        if ("error" in prepared) return json(res, 422, { error: prepared.error });
+        const template = botSkillTemplateSchema.safeParse({
+          name: prepared.parsed.name,
+          description: prepared.parsed.description,
+          source: skill.source,
+          text: prepared.skillMd,
+          enabled: false,
+          warnings: prepared.warnings,
+        });
         if (!template.success) return json(res, 422, { error: template.error.message });
         skills.push(template.data);
       }

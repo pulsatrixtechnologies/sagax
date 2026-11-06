@@ -1,3 +1,4 @@
+import { reportBackgroundError } from "../background-error.ts";
 // Whether this organization server reaches its Perspicax connector (the MCP
 // gateway), as the people of the organization should hear it (#2013): a calm
 // notice in their app while it is unreachable, then "Reconnected".
@@ -117,7 +118,7 @@ export class PerspicaxReachability {
 
   private schedule(ms: number): void {
     if (this.timer) clearTimeout(this.timer);
-    this.timer = setTimeout(() => { this.timer = null; void this.probeNow(); }, ms);
+    this.timer = setTimeout(() => { this.timer = null; void this.probeNow().catch(reportBackgroundError); }, ms);
     this.timer.unref?.();
   }
 
@@ -156,7 +157,7 @@ export function gatewayProbe(endpoint: () => string | null, fetcher: typeof fetc
     try { origin = new URL(url).origin; } catch { return true; }
     try {
       const response = await fetcher(`${origin}/healthz`, { method: "GET", redirect: "manual", signal: AbortSignal.timeout(5_000) });
-      void response.body?.cancel().catch(() => {});
+      void response.body?.cancel().catch(reportBackgroundError);
       return gatewayAnswered(response.status);
     } catch {
       return false;

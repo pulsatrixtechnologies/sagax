@@ -27,6 +27,7 @@ import {
   type UnattendedHostRow,
 } from "../../shared/remote-unattended-host.ts";
 import { handleRemoteSupportCall, openUnattendedSession, type RemoteSupportContext } from "./remote-support-local.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 /** Perspicax tools this page calls (names frozen with Perspicax, contract
  * docs/inscription-hote.md). A server without them reads as "not available". */
@@ -142,7 +143,7 @@ export function createUnattendedHosts(deps: {
     try {
       return await work(seat);
     } finally {
-      await seat.end().catch(() => {});
+      await seat.end().catch(reportBackgroundError);
     }
   }
 
@@ -159,7 +160,7 @@ export function createUnattendedHosts(deps: {
         if (finished(answer.text)) return;
       }
     } finally {
-      await seat.end().catch(() => {});
+      await seat.end().catch(reportBackgroundError);
     }
   }
 
@@ -224,7 +225,7 @@ export function createUnattendedHosts(deps: {
         post: seat.call,
       }).catch(() => ({ ok: false as const, error: "Perspicax could not be reached." }));
       if (!out.ok) {
-        await seat.end().catch(() => {});
+        await seat.end().catch(reportBackgroundError);
         auditOpen(false, seat.botId);
         return { ok: false, error: "refused", message: out.error };
       }
@@ -233,7 +234,7 @@ export function createUnattendedHosts(deps: {
       ids.add(out.session);
       openedFor.set(hostId, ids);
       auditOpen(true, seat.botId);
-      void follow(seat, local, hostId, out.code);
+      void follow(seat, local, hostId, out.code).catch(reportBackgroundError);
       return { ok: true, code: out.code, botId: seat.botId, threadId: seat.threadId };
     },
 

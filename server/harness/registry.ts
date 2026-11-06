@@ -16,6 +16,7 @@ import type {
   ProviderInstance,
   ProviderSnapshot,
 } from "../contracts.ts";
+import { engineStatusFile, snapshotFrom } from "./engine-status-file.ts";
 
 export interface ShadowInstance {
   instanceId: InstanceId;
@@ -74,6 +75,26 @@ function withinDeadline(read: () => Promise<ProviderSnapshot>): Promise<Provider
   ]).finally(() => clearTimeout(deadline));
 }
 
+/** How long the start-up read waits on one CLI before probing the next, so a stuck CLI holds back no other for long. */
+export const START_READ_STEP_MS = 5_000;
+
+function settledOrAfter(read: Promise<void>, ms: number): Promise<void> {
+  let timer: NodeJS.Timeout | undefined;
+  return Promise.race([read, new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, ms);
+    timer.unref?.();
+  })]).finally(() => clearTimeout(timer));
+}
+
+/** The engines these selections name, the most named first, so the start-up read reaches the likeliest next turn's engine first. */
+export function enginesByUse(selections: ReadonlyArray<{ instanceId: InstanceId } | undefined>): InstanceId[] {
+  const uses = new Map<InstanceId, number>();
+  for (const selection of selections) {
+    if (selection?.instanceId) uses.set(selection.instanceId, (uses.get(selection.instanceId) ?? 0) + 1);
+  }
+  return [...uses].sort((a, b) => b[1] - a[1]).map(([instanceId]) => instanceId);
+}
+
 type SharedRead = { generation: number; settledAt?: number; read: Promise<ProviderSnapshot> };
 
 export class ProviderRegistry {
@@ -84,6 +105,10 @@ export class ProviderRegistry {
   /** What describe() last read of each live instance. A turn's start checks
    * a thread's own engine against it without waiting on that engine's CLI. */
   private lastSnapshots = new Map<InstanceId, ProviderSnapshot>();
+  private seeds = new Map<InstanceId, ProviderSnapshot>();
+  private seedObjects = new WeakSet<ProviderSnapshot>();
+  /** Engines the start-up read has not probed yet; null outside that read. */
+  private unread: Set<InstanceId> | null = null;
   private snapshotGeneration = 0;
   private driversByKind: Map<string, AnyProviderDriver>;
   /** Where Settings-driven npm installs go; the data directory by default. */
@@ -91,10 +116,12 @@ export class ProviderRegistry {
   /** Whether npm is on this machine; injectable because the PATH scan also
    * looks in standard install locations, which tests cannot empty. */
   private readonly npmPresent: () => boolean;
+  private readonly status: ReturnType<typeof engineStatusFile> | null;
 
-  constructor(drivers: readonly AnyProviderDriver[], options: { enginesBaseDir?: string; npmAvailable?: () => boolean } = {}) {
+  constructor(drivers: readonly AnyProviderDriver[], options: { enginesBaseDir?: string; npmAvailable?: () => boolean; statusFile?: string } = {}) {
     this.enginesBaseDir = options.enginesBaseDir;
     this.npmPresent = options.npmAvailable ?? npmAvailable;
+    this.status = options.statusFile ? engineStatusFile(options.statusFile) : null;
     this.driversByKind = new Map(drivers.map((d) => [d.driverKind, d]));
   }
 
@@ -200,6 +227,66 @@ export class ProviderRegistry {
   /** Every engine's next status read probes its CLI again: an install, update, sign-in or key change may alter what it reports. */
   forgetSnapshots(): void {
     this.snapshotGeneration += 1;
+    this.seeds.clear();
+  }
+
+  /**
+   * The start-up read on an existing store. Engines that run a CLI are probed one at a time, the most used first, so
+   * each CLI is read from a cold disk with no other in the way; `afterFirst` runs once the first has answered; engines
+   * without a CLI are read at once. An engine the last run saw available that a probe now finds unavailable is probed
+   * once more, warm, before the read ends. Until the read reaches an engine, a turn on it probes that engine itself
+   * (`engineRead`) and `describe({ known: true })` answers it from the last run's status.
+   */
+  async readAtStart(first: readonly InstanceId[] = [], afterFirst: () => void = () => {}) {
+    const live = this.instances().map((instance) => instance.instanceId);
+    for (const [instanceId, snapshot] of this.status?.read((id) => this.byId.get(id)?.live ? this.cliTarget(id) : null) ?? []) {
+      this.seeds.set(instanceId, snapshot);
+      this.seedObjects.add(snapshot);
+    }
+    const seeded = new Map(this.seeds);
+    this.unread = new Set(live);
+    try {
+      const withCli = new Set(live.filter((id) => this.cliTarget(id)?.cli));
+      const withoutCli = this.engineRead(...live.filter((id) => !withCli.has(id)));
+      for (const instanceId of new Set([...first.filter((id) => withCli.has(id)), ...withCli])) {
+        const read = this.engineRead(instanceId);
+        if (read) await settledOrAfter(read, START_READ_STEP_MS);
+        afterFirst();
+      }
+      afterFirst();
+      await Promise.all([withoutCli, this.engineRead(...live)]);
+      const gone = [...seeded].filter(([id, seed]) => seed.state === "available" && this.lastSnapshots.get(id)?.state === "unavailable");
+      if (gone.length) {
+        this.forgetSnapshots();
+        for (const [id] of gone) this.unread?.add(id);
+        await this.engineRead(...gone.map(([id]) => id));
+      }
+    } finally {
+      afterFirst();
+      this.unread = null;
+      this.seeds.clear();
+    }
+    const changed = [...seeded].some(([id, seed]) => JSON.stringify(snapshotFrom(this.lastSnapshots.get(id))) !== JSON.stringify(seed));
+    return { engines: await this.describeWith(async (instance) => this.lastSnapshots.get(instance.instanceId) ?? this.read(instance)), changed };
+  }
+
+  /** Null unless the start-up read has yet to probe one of these engines; otherwise those engines' probes, shared with other readers. */
+  engineRead(...instanceIds: Array<InstanceId | undefined>): Promise<void> | null {
+    const reads = [...new Set(instanceIds)].flatMap((instanceId) => {
+      const instance = instanceId ? this.get(instanceId) : null;
+      return instance && this.unread?.has(instance.instanceId) ? [this.read(instance)] : [];
+    });
+    return reads.length ? Promise.all(reads).then(() => undefined) : null;
+  }
+
+  /** While the start-up read runs, or for engines described from the last run's status, a choice made from them would rest on that older status. */
+  provisional(described?: ReadonlyArray<{ snapshot: ProviderSnapshot }>): boolean {
+    return this.unread !== null || Boolean(described?.some((instance) => this.seedObjects.has(instance.snapshot)));
+  }
+
+  /** The status probed here, else the one the last run recorded: for reports, never for choosing where a turn runs. */
+  knownSnapshot(instanceId: InstanceId): ProviderSnapshot | undefined {
+    return this.lastSnapshot(instanceId) ?? (this.byId.get(instanceId)?.live ? this.seeds.get(instanceId) : undefined);
   }
 
   get(instanceId: InstanceId): ProviderInstance | null {
@@ -298,7 +385,37 @@ export class ProviderRegistry {
   }
 
   /** instance snapshots for the model picker: id, driver, models, health */
-  async describe() {
+  describe(options: { known?: boolean } = {}) {
+    return this.describeWith((instance) => {
+      const seed = options.known && this.unread?.has(instance.instanceId) ? this.seeds.get(instance.instanceId) : undefined;
+      return seed ? Promise.resolve(seed) : this.read(instance);
+    });
+  }
+
+  private async read(instance: ProviderInstance): Promise<ProviderSnapshot> {
+    let snapshot: ProviderSnapshot;
+    try {
+      snapshot = await instance.snapshot();
+    } catch (e) {
+      snapshot = { state: "unavailable", reason: e instanceof Error ? e.message : String(e) };
+    }
+    // Only while this is still the live instance: a reload may have replaced it during the read.
+    if (this.byId.get(instance.instanceId)?.live === instance) {
+      this.lastSnapshots.set(instance.instanceId, snapshot);
+      this.unread?.delete(instance.instanceId);
+      this.saveStatus();
+    }
+    return snapshot;
+  }
+
+  private saveStatus(): void {
+    this.status?.save(this.instances().flatMap(({ instanceId, driverKind }) => {
+      const snapshot = this.lastSnapshots.get(instanceId) ?? this.seeds.get(instanceId);
+      return snapshot ? [{ instanceId, driverKind, cli: this.cliTarget(instanceId)?.cli ?? null, snapshot }] : [];
+    }));
+  }
+
+  private async describeWith(statusOf: (instance: ProviderInstance) => Promise<ProviderSnapshot>) {
     // Multiple instances may share a driver. Scan each default binary once
     // per response instead of repeating filesystem work for every row.
     const candidatesByName = new Map<string, string[]>();
@@ -334,15 +451,7 @@ export class ProviderRegistry {
           };
         }
         const inst = entry.live;
-        let snapshot: ProviderSnapshot;
-        try {
-          snapshot = await inst.snapshot();
-        } catch (e) {
-          snapshot = { state: "unavailable", reason: e instanceof Error ? e.message : String(e) };
-        }
-        // Only while this is still the live instance: a reload may have
-        // replaced it during the read.
-        if (this.byId.get(inst.instanceId)?.live === inst) this.lastSnapshots.set(inst.instanceId, snapshot);
+        const snapshot = await statusOf(inst);
         return {
           instanceId: inst.instanceId,
           driverKind: inst.driverKind,
@@ -391,6 +500,7 @@ export class ProviderRegistry {
     this.byId.clear();
     this.cliByInstance.clear();
     this.lastSnapshots.clear();
+    this.seeds.clear();
   }
 
   async dispose(instanceId: InstanceId) {
@@ -398,6 +508,7 @@ export class ProviderRegistry {
     this.byId.delete(instanceId);
     this.cliByInstance.delete(instanceId);
     this.lastSnapshots.delete(instanceId);
+    this.seeds.delete(instanceId);
     await entry?.live?.dispose();
   }
 }

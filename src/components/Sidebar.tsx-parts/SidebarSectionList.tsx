@@ -171,9 +171,9 @@ export function SidebarSectionList({
         <div className="px-3 py-6 text-center text-[13px] text-sidebar-ink-secondary">{t("sidebar.noMatch", { query: q })}</div>
       )}
       {sectionIds.map((id, index) => {
-        const team = teamMap.find((item) => (item.key ? userSectionId(item.key) : GENERAL_SECTION_ID) === id);
-        const sectionName = team?.key || userSectionName(id);
-        const sectionDisplayName = team?.key && !isMyTeamSectionName(team.key) ? team.key : sectionLabel(id);
+        const team = teamMap.find((item) => (item.key ? userSectionId(item.name) : GENERAL_SECTION_ID) === id);
+        const sectionName = team?.name || userSectionName(id);
+        const sectionDisplayName = team?.key && !isMyTeamSectionName(team.name) ? team.name : sectionLabel(id);
         const sectionChiefItems = (team?.chiefs ?? []).filter((bot) => !inTopGrid(bot));
         const sectionGroupItems =
           id === BOT_CHATS_SECTION_ID
@@ -181,7 +181,7 @@ export function SidebarSectionList({
             : id === PEOPLE_SECTION_ID
               ? peopleDms
               : team
-                ? (team.key ? sectionedRooms.filter((group) => group.section === team.key) : unsectionedRooms)
+                ? (team.key ? sectionedRooms.filter((group) => group.section === team.name) : unsectionedRooms)
                 : [];
         const sectionBotItems = (team?.members ?? []).filter((bot) => !inTopGrid(bot));
         // A sub-team (#2045) sits under its parent, one step in, and folds
@@ -189,7 +189,7 @@ export function SidebarSectionList({
         let ancestor = team?.parent;
         for (let hops = 0; ancestor && hops < 8; hops += 1) {
           if (sectionCollapsed(userSectionId(ancestor))) return null;
-          ancestor = teamMap.find((item) => item.key === ancestor)?.parent;
+          ancestor = teamMap.find((item) => item.name === ancestor)?.parent;
         }
         const depth = density !== "icons" ? team?.depth ?? 0 : 0;
         const collapsed = sectionCollapsed(id);

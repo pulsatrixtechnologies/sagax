@@ -35,6 +35,7 @@ import {
 } from "./memory-store.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { appendLog, LogReader, registerSealedLog, sealLogLine } from "../encryption/content-at-rest.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 /** "upkeep" is the harness itself: background capture and the tidy-up
  * (server/memory/memory-upkeep.ts) for a bot with Memory upkeep switched on. */
@@ -233,7 +234,7 @@ function enqueue(botId: string, entry: MemoryJournalEntry): void {
   writeQueues.set(botId, queued);
   void queued.finally(() => {
     if (writeQueues.get(botId) === queued) writeQueues.delete(botId);
-  });
+  }).catch(reportBackgroundError);
 }
 
 /** Test/route seam: a GET right after a write must see the row. */

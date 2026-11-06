@@ -15,8 +15,12 @@ import { cn } from "@/lib/cn";
 import { canEditConfig } from "@/lib/viewer";
 import { FONT_IDS, applyFont, readFont, type FontId } from "@/lib/fonts";
 import { setAdvancedMode, useAdvancedMode } from "@/lib/interface-mode";
+import { useSidebarHidden } from "@/lib/sidebar-hidden";
+import { hiddenSidebarRows } from "@/lib/sidebar-hidden-entries";
+import { useOrgPeople } from "@/lib/perspicax-org";
+import { viewerActorId } from "@/lib/viewer";
 import { setShowAllHistory, setShowSuggestions, useShowAllHistory, useShowSuggestions } from "@/lib/panel-visibility";
-import { setShowThreads, setThreadsLocation, useShowThreadsChoice, useThreadsLocationChoice, type ThreadsLocation } from "@/lib/thread-preferences";
+import { chooseThreadsView, useShowThreadsChoice, useThreadsLocationChoice, type ThreadsView } from "@/lib/thread-preferences";
 import { FRESH_TOPIC_AFTER_CHOICES, useFreshTopicAfter, writeFreshTopicAfter, type FreshTopicAfterHours } from "@/lib/fresh-topic";
 import { parseSidebarDensity, setSidebarDensity, SIDEBAR_DENSITIES, useSidebarDensity, type SidebarDensity } from "@/lib/sidebar-preferences";
 import { setShowRunCard, useShowRunCard } from "@/lib/run-card-preferences";
@@ -67,7 +71,8 @@ function SwitchLine({ label, checked, onChange, rowId, ariaLabel }: { label: str
   );
 }
 
-function InterfaceModeRow() {
+/** Moved to App > Advanced (#2080 L2). Exported for AppPage. */
+export function InterfaceModeRow() {
   const advanced = useAdvancedMode();
   // The one grey line kept: switching back to Simple loses nothing.
   return (
@@ -94,9 +99,9 @@ function FontRow() {
   );
 }
 
-/** Which keys send a message, on this device only. The grey line says the
- * one thing a Japanese-input user needs: the other choice still sends. */
-function SendKeyRow() {
+/** Which keys send a message, on this device only. Moved to App > Input
+ * (#2080 L2). The grey line says the other choice still sends. */
+export function SendKeyRow() {
   const sendKey = useSendKey();
   return (
     <DescribedRow label={t("settings.sendKey.title")} description={t("settings.sendKey.short", { key: sendKeyLabel("mod-enter") })} rowId="sendKey">
@@ -151,17 +156,7 @@ function ChatWidthRow() {
 }
 
 
-type ThreadsView = "hidden" | ThreadsLocation;
-
-/** Hidden keeps the last place, for when threads come back. */
-export function chooseThreadsView(next: ThreadsView): void {
-  if (next === "hidden") {
-    setShowThreads(false);
-    return;
-  }
-  setThreadsLocation(next);
-  setShowThreads(true);
-}
+export { chooseThreadsView, type ThreadsView };
 
 /** One choice for whether and where conversation threads show. Both stored
  * values stay: hiding keeps the last place for when they return. */
@@ -216,9 +211,7 @@ function BotAccentRow() {
   );
 }
 
-/** HD mascots (src/lib/hd-mascots-preference.ts): painted art for the
- * characters that ship it, or the classic vector look everywhere. Shown only
- * while at least one character has HD art. */
+/** HD mascots switch only (kept for HdMascotsGroup.test.ts). */
 export function HdMascotsGroup({ characters = HD_CHARACTERS }: { characters?: readonly string[] }) {
   const enabled = useHdMascots();
   if (characters.length === 0) return null;
@@ -230,6 +223,16 @@ export function HdMascotsGroup({ characters = HD_CHARACTERS }: { characters?: re
         </DescribedRow>
       </SettingsGroup>
     </div>
+  );
+}
+
+function HdMascotsRow({ characters = HD_CHARACTERS }: { characters?: readonly string[] }) {
+  const enabled = useHdMascots();
+  if (characters.length === 0) return null;
+  return (
+    <DescribedRow label={t("settings.hdMascots.title")} description={t("settings.hdMascots.subtitle")} rowId="hdMascots">
+      <Switch checked={enabled} aria-label={t("settings.hdMascots.title")} onClick={() => setHdMascotsEnabled(!enabled)} />
+    </DescribedRow>
   );
 }
 
@@ -286,8 +289,8 @@ export function ToolCallsRow() {
   );
 }
 
-/** Desktop > App icon: the picker opens under its row. */
-function AppIconRow() {
+/** App icon: the picker opens under its row. Moved to App > Startup (#2080 L2). */
+export function AppIconRow() {
   const [open, setOpen] = useState(false);
   if (!appIconAvailable()) return null;
   return (
@@ -304,50 +307,54 @@ function AppIconRow() {
   );
 }
 
-/** Desktop > Desktop mascots: five settings folded under one row (they were
- * a third of the page). Folded, every value set here still applies. */
-function MascotsRow() {
+/** Desktop mascots: Behavior folds fly-away, liveliness, bark, hotkey, captions. */
+function DesktopMascotsRows() {
   const [open, setOpen] = useState(false);
   const prefs = useSyncExternalStore(subscribeFloatingBots, floatingBotPrefs, floatingBotPrefs);
   const call = useCallSettings();
   const captions = call.captions !== false;
-  // the desktop app only: a browser has no global keys
   const hotkeyServed = typeof window !== "undefined" && Boolean((window.ogb?.floatingBots as { hotkey?: unknown } | undefined)?.hotkey);
   const mac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform || navigator.userAgent);
+  const onDesktop = typeof window !== "undefined" && Boolean(window.ogb?.floatingBots);
+  if (!onDesktop) return null;
   return (
     <div data-settings-card="appearance.mascots" data-open={open ? "true" : "false"}>
-      <CompactRow label={t("settings.mascotsCard.title")} rowId="mascots">
-        <DisclosurePill open={open} onToggle={() => setOpen((value) => !value)} label={t("settings.mascotsCard.title")}>
+      <DescribedRow
+        label={t("settings.mascots.behavior")}
+        description={t("settings.mascotsCard.title")}
+        rowId="mascotsBehavior"
+        below={open && (
+          <div className="mt-2 flex flex-col" data-mascot-rows="">
+            <SwitchLine label={t("settings.floatingBots.flyAway.title")} checked={prefs.flyAway} onChange={setFloatingFlyAway} />
+            <CompactRow label={t("settings.floatingBots.liveliness.title")}>
+              <PillSelect<FloatingLiveliness>
+                value={prefs.liveliness}
+                ariaLabel={t("settings.floatingBots.liveliness.title")}
+                onChange={setFloatingLiveliness}
+                options={FLOATING_LIVELINESS.map((level) => ({ value: level, label: t(`settings.floatingBots.liveliness.${level}`) }))}
+              />
+            </CompactRow>
+            <SwitchLine label={t("settings.floatingBots.barkSound.title")} checked={prefs.barkSound} onChange={setFloatingBarkSound} />
+            {hotkeyServed && (
+              <CompactRow label={t("settings.floatingBots.hotkey.title")}>
+                <PillSelect<HotkeyChoice>
+                  value={prefs.hotkeyKeys}
+                  disabled={!prefs.hotkey}
+                  ariaLabel={t("settings.floatingBots.hotkey.keys")}
+                  onChange={(keys) => setFloatingHotkey({ keys })}
+                  options={HOTKEY_CHOICES.map((keys) => ({ value: keys, label: hotkeyLabel(keys, mac) }))}
+                />
+                <Switch checked={prefs.hotkey} aria-label={t("settings.floatingBots.hotkey.title")} onClick={() => setFloatingHotkey({ on: !prefs.hotkey })} />
+              </CompactRow>
+            )}
+            <SwitchLine label={t("settings.floatingBots.captions.title")} checked={captions} onChange={(next) => writeCallSettings({ captions: next })} />
+          </div>
+        )}
+      >
+        <DisclosurePill open={open} onToggle={() => setOpen((value) => !value)} label={t("settings.mascots.behavior")}>
           {t(open ? "settings.appearance.hide" : "settings.appearance.show")}
         </DisclosurePill>
-      </CompactRow>
-      {open && (
-        <div className="ml-3.5 border-l-[0.5px] border-border" data-mascot-rows="">
-          <SwitchLine label={t("settings.floatingBots.flyAway.title")} checked={prefs.flyAway} onChange={setFloatingFlyAway} />
-          <CompactRow label={t("settings.floatingBots.liveliness.title")}>
-            <PillSelect<FloatingLiveliness>
-              value={prefs.liveliness}
-              ariaLabel={t("settings.floatingBots.liveliness.title")}
-              onChange={setFloatingLiveliness}
-              options={FLOATING_LIVELINESS.map((level) => ({ value: level, label: t(`settings.floatingBots.liveliness.${level}`) }))}
-            />
-          </CompactRow>
-          <SwitchLine label={t("settings.floatingBots.barkSound.title")} checked={prefs.barkSound} onChange={setFloatingBarkSound} />
-          {hotkeyServed && (
-            <CompactRow label={t("settings.floatingBots.hotkey.title")}>
-              <PillSelect<HotkeyChoice>
-                value={prefs.hotkeyKeys}
-                disabled={!prefs.hotkey}
-                ariaLabel={t("settings.floatingBots.hotkey.keys")}
-                onChange={(keys) => setFloatingHotkey({ keys })}
-                options={HOTKEY_CHOICES.map((keys) => ({ value: keys, label: hotkeyLabel(keys, mac) }))}
-              />
-              <Switch checked={prefs.hotkey} aria-label={t("settings.floatingBots.hotkey.title")} onClick={() => setFloatingHotkey({ on: !prefs.hotkey })} />
-            </CompactRow>
-          )}
-          <SwitchLine label={t("settings.floatingBots.captions.title")} checked={captions} onChange={(next) => writeCallSettings({ captions: next })} />
-        </div>
-      )}
+      </DescribedRow>
     </div>
   );
 }
@@ -391,28 +398,37 @@ export function AccessibilityGroup() {
   );
 }
 
-/** The two choices only the desktop shell honours (hardware acceleration
- * needs a restart; the spell checker is applied as the shell allows). */
-function DesktopShellRows() {
-  const acceleration = hardwareAccelerationChoice.use() === "true";
+/** Spell check: App > Input (#2080 L2). */
+export function SpellcheckRow() {
   const spelling = spellcheckChoice.use() === "true";
+  if (!hasDesktopShellPreferences()) return null;
+  return <SwitchLine label={t("settings.spellcheck.title")} checked={spelling} onChange={(next) => spellcheckChoice.set(next ? "true" : "false")} rowId="spellcheck" />;
+}
+
+/** GPU acceleration: App > Advanced (#2080 L2). */
+export function HardwareAccelerationRow() {
+  const acceleration = hardwareAccelerationChoice.use() === "true";
+  if (!hasDesktopShellPreferences()) return null;
+  return (
+    <DescribedRow label={t("settings.hardwareAcceleration.title")} description={t("settings.hardwareAcceleration.note")} rowId="hardwareAcceleration">
+      <Switch checked={acceleration} aria-label={t("settings.hardwareAcceleration.title")} onClick={() => hardwareAccelerationChoice.set(acceleration ? "false" : "true")} />
+    </DescribedRow>
+  );
+}
+
+/** Global bot hotkeys: App > Startup (#2080 L2). */
+export function BotHotkeysRows() {
   const hotkeys = botHotkeysChoice.use() === "true";
   const chord = botHotkeyModifierChoice.use();
   if (!hasDesktopShellPreferences()) return null;
-  // the bots' global shortcuts exist with the macOS menu bar list
   const menuBar = window.ogb?.platform === "darwin";
+  if (!menuBar) return null;
   return (
     <>
-      <DescribedRow label={t("settings.hardwareAcceleration.title")} description={t("settings.hardwareAcceleration.note")} rowId="hardwareAcceleration">
-        <Switch checked={acceleration} aria-label={t("settings.hardwareAcceleration.title")} onClick={() => hardwareAccelerationChoice.set(acceleration ? "false" : "true")} />
+      <DescribedRow label={t("settings.botHotkeys.title")} description={t("settings.botHotkeys.note")} rowId="botHotkeys">
+        <Switch checked={hotkeys} aria-label={t("settings.botHotkeys.title")} onClick={() => botHotkeysChoice.set(hotkeys ? "false" : "true")} />
       </DescribedRow>
-      <SwitchLine label={t("settings.spellcheck.title")} checked={spelling} onChange={(next) => spellcheckChoice.set(next ? "true" : "false")} rowId="spellcheck" />
-      {menuBar && (
-        <DescribedRow label={t("settings.botHotkeys.title")} description={t("settings.botHotkeys.note")} rowId="botHotkeys">
-          <Switch checked={hotkeys} aria-label={t("settings.botHotkeys.title")} onClick={() => botHotkeysChoice.set(hotkeys ? "false" : "true")} />
-        </DescribedRow>
-      )}
-      {menuBar && hotkeys && (
+      {hotkeys && (
         <CompactRow label={t("settings.botHotkeys.chord")} rowId="botHotkeyChord">
           <PillSelect
             value={chord}
@@ -426,9 +442,63 @@ function DesktopShellRows() {
   );
 }
 
+function ThemeCustomizeRows() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <DescribedRow
+        label={t("settings.theme.customize")}
+        description={t("settings.theme.customizeSummary")}
+        rowId="themeCustomize"
+        below={open ? <div className="mt-2"><SkinPicker modeFirst={false} showFamilies={false} customizeOpen /><FontRow /></div> : null}
+      >
+        <DisclosurePill open={open} onToggle={() => setOpen((value) => !value)} label={t("settings.theme.customize")}>
+          {t(open ? "settings.appearance.hide" : "settings.appearance.show")}
+        </DisclosurePill>
+      </DescribedRow>
+    </>
+  );
+}
+
+function BackgroundChooseRow() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div data-settings-card="appearance.backgroundEffects">
+      <DescribedRow
+        label={t("settings.backgroundEffects.title")}
+        rowId="backgroundEffects"
+        below={open ? <div className="mt-2"><BackgroundEffectsPicker /></div> : null}
+      >
+        <DisclosurePill open={open} onToggle={() => setOpen((value) => !value)} label={t("settings.backgroundEffects.title")}>
+          {t(open ? "settings.appearance.hide" : "settings.background.choose")}
+        </DisclosurePill>
+      </DescribedRow>
+    </div>
+  );
+}
+
+function SidebarHiddenFold() {
+  const [open, setOpen] = useState(false);
+  const { state } = useStore();
+  const hidden = useSidebarHidden();
+  const people = useOrgPeople();
+  const count = hiddenSidebarRows(hidden.items, { bots: state.bots, groups: state.groups, viewerId: viewerActorId(state.config), people }).length;
+  return (
+    <DescribedRow
+      label={t("settings.sidebarHidden.title")}
+      description={t("settings.sidebar.hiddenSummary", { count })}
+      rowId="sidebarHiddenFold"
+      below={open ? <div className="mt-2"><SidebarHiddenSettings /></div> : null}
+    >
+      <DisclosurePill open={open} onToggle={() => setOpen((value) => !value)} label={t("settings.sidebarHidden.title")}>
+        {t(open ? "settings.appearance.hide" : "settings.appearance.show")}
+      </DisclosurePill>
+    </DescribedRow>
+  );
+}
+
 export function AppearanceSettings() {
   const { state } = useStore();
-  const advanced = useAdvancedMode();
   const remoteActive = typeof window !== "undefined" && window.ogb?.remoteClient?.active === true;
   const editConfig = canEditConfig(state.config);
   // #1098: on an organization server Show tool calls is each person's own.
@@ -444,51 +514,44 @@ export function AppearanceSettings() {
   const streamReplies = useStreamReplies();
   return (
     <>
-      <SettingsGroup title={t("settings.group.interface")} groupId="interface">
-        <InterfaceModeRow />
-        <FontRow />
-      </SettingsGroup>
       <div data-settings-card="appearance.skin">
-        <SettingsGroup title={t("settings.skin.title")} groupId="skin">
-          <SkinPicker />
+        <SettingsGroup title={t("settings.theme.title")} groupId="theme">
+          <SkinPicker modeFirst customizeOpen={false} />
           <BotAccentRow />
-        </SettingsGroup>
-      </div>
-      {/* the effect behind the conversation, chosen as the skins are (the
-          "Glyph ripple on click" switch of 0.5.15 became one of them) */}
-      <div data-settings-card="appearance.backgroundEffects">
-        <SettingsGroup title={t("settings.backgroundEffects.title")} groupId="backgroundEffects">
-          <BackgroundEffectsPicker />
+          <ThemeCustomizeRows />
+          <BackgroundChooseRow />
         </SettingsGroup>
       </div>
       <SettingsGroup title={t("settings.group.conversation")} groupId="conversation">
         <ChatWidthRow />
         <ThreadsViewRow />
         <FreshTopicRow />
-        <SendKeyRow />
         <SwitchLine label={t("settings.streamReplies.title")} ariaLabel={t("settings.streamReplies.show")} checked={streamReplies} onChange={setStreamReplies} rowId="streamReplies" />
-        {advanced && (personalSettings || (!remoteActive && editConfig)) && <ToolCallsRow />}
-        {advanced && <SwitchLine label={t("settings.runCard.title")} ariaLabel={t("settings.runCard.show")} checked={runCard} onChange={setShowRunCard} rowId="runCard" />}
-        {advanced && <SwitchLine label={t("settings.inspectorButton.title")} ariaLabel={t("settings.inspectorButton.show")} checked={inspector} onChange={setShowInspectorButton} rowId="inspectorButton" />}
-        {advanced && <SwitchLine label={t("settings.turnTiming.title")} ariaLabel={t("settings.turnTiming.show")} checked={turnTiming} onChange={setShowTurnTiming} rowId="turnTiming" />}
+        {(personalSettings || (!remoteActive && editConfig)) && <ToolCallsRow />}
+      </SettingsGroup>
+      <SettingsGroup title={[t("settings.runCard.title"), t("settings.inspectorButton.title"), t("settings.turnTiming.title")].join(", ")} groupId="conversationAdvanced" advanced>
+        <SwitchLine label={t("settings.runCard.title")} ariaLabel={t("settings.runCard.show")} checked={runCard} onChange={setShowRunCard} rowId="runCard" />
+        <SwitchLine label={t("settings.inspectorButton.title")} ariaLabel={t("settings.inspectorButton.show")} checked={inspector} onChange={setShowInspectorButton} rowId="inspectorButton" />
+        <SwitchLine label={t("settings.turnTiming.title")} ariaLabel={t("settings.turnTiming.show")} checked={turnTiming} onChange={setShowTurnTiming} rowId="turnTiming" />
       </SettingsGroup>
       <SettingsGroup title={t("settings.group.sidebar")} groupId="sidebar">
         <SidebarDensityRow />
         <SwitchLine label={t("settings.sidebarPeopleApart.title")} ariaLabel={t("settings.sidebarPeopleApart.show")} checked={peopleApart} onChange={setSidebarPeopleApart} rowId="sidebarPeopleApart" />
-        {advanced && <SwitchLine label={t("settings.sidebarLogo.title")} ariaLabel={t("settings.sidebarLogo.show")} checked={logo} onChange={setShowSidebarLogo} rowId="sidebarLogo" />}
-        {advanced && <SwitchLine label={t("settings.routinesBadge.title")} ariaLabel={t("settings.routinesBadge.show")} checked={routinesBadge} onChange={setShowRoutinesBadge} rowId="routinesBadge" />}
         <SwitchLine label={t("settings.showSuggestions.title")} ariaLabel={t("settings.showSuggestions.show")} checked={suggestions} onChange={setShowSuggestions} rowId="showSuggestions" />
         <SwitchLine label={t("settings.allHistory.title")} ariaLabel={t("settings.allHistory.show")} checked={allHistory} onChange={setShowAllHistory} rowId="allHistory" />
-        {/* Simple: the sidebar's own "Hidden (N)" row brings entries back. */}
-        {advanced && <SidebarHiddenSettings />}
+        <SidebarHiddenFold />
       </SettingsGroup>
-      <HdMascotsGroup />
+      <SettingsGroup title={[t("settings.sidebarLogo.title"), t("settings.routinesBadge.title")].join(", ")} groupId="sidebarAdvanced" advanced>
+        <SwitchLine label={t("settings.sidebarLogo.title")} ariaLabel={t("settings.sidebarLogo.show")} checked={logo} onChange={setShowSidebarLogo} rowId="sidebarLogo" />
+        <SwitchLine label={t("settings.routinesBadge.title")} ariaLabel={t("settings.routinesBadge.show")} checked={routinesBadge} onChange={setShowRoutinesBadge} rowId="routinesBadge" />
+      </SettingsGroup>
+      <div data-settings-card="appearance.mascots-hd">
+        <SettingsGroup title={t("settings.group.mascots")} groupId="mascots">
+          <HdMascotsRow />
+          <DesktopMascotsRows />
+        </SettingsGroup>
+      </div>
       <AccessibilityGroup />
-      <SettingsGroup title={t("settings.group.desktop")} groupId="desktop">
-        <AppIconRow />
-        <MascotsRow />
-        <DesktopShellRows />
-      </SettingsGroup>
     </>
   );
 }

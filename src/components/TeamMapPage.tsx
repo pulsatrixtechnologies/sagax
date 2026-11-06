@@ -287,13 +287,18 @@ export function TeamMapPage() {
       : [...new Set([...(state.sections ?? []), ...state.groups.flatMap((group) => group.section ? [group.section] : [])])];
     const rows = orderSectionTree(names, sectionParents);
     const place = new Map(rows.map((row, index) => [row.name, { index, row }]));
-    const order = (key: string) => key === "" ? -1 : place.get(key)?.index ?? rows.length;
+    // Nest and sort by the displayed team name. A collision split may use a
+    // sectionId as `key` (#2083); the parent tree still names teams by label.
+    const order = (section: { key: string; name: string }) => {
+      if (!section.key) return -1;
+      return place.get(section.name)?.index ?? place.get(section.key)?.index ?? rows.length;
+    };
     return buildTeamMapSections(bots, names, { viewerId: orgMode ? viewerId : undefined })
       .map((section) => {
-        const row = place.get(section.key)?.row;
+        const row = place.get(section.name)?.row ?? place.get(section.key)?.row;
         return row && row.depth > 0 ? { ...section, depth: row.depth, parent: row.parent } : section;
       })
-      .sort((a, b) => order(a.key) - order(b.key));
+      .sort((a, b) => order(a) - order(b));
   }, [bots, personal, sectionParents, state.sections, state.groups, viewerId, orgMode]);
   const writeContext: TeamWriteContext = { orgMode, dispatch, viewerId, bots: state.bots, serverSections: state.sections ?? [] };
   const edges = useMemo(() => buildTeamMapEdges(bots, snapshot), [bots, snapshot]);

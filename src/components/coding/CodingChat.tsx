@@ -1,29 +1,38 @@
 // A coding task opened as a chat where the chat is (JC, 2026-11-03): the bot
 // panel's Coding list is the entry point, a row opens this sheet over the
-// chat column, the way a routine run opens (RoutineRunExchange in the
-// ExchangeSheet shell), but drawn for development.
+// chat column (ExchangeSheet shell), drawn for development. A routine run
+// no longer opens a sheet: it opens in the chat (#2098).
 //
-// - Header: the bot's pill, the task's title, its folder (name only) and
-//   branch, its state with the elapsed time, Stop while it runs.
+// Drawn like the Claude Code terminal (JC, 2026-11-05, #2099):
+// - Header (#2149, JC 2026-11-06): the X of a page Sagax opens (same icon,
+//   same place as the bot's profile page; it brings the chat back), the
+//   bot's pill (a click closes or reopens the right panel, like the chat's),
+//   the </> button of the dev pods, the task's title, its folder (name only) and branch, and the
+//   status ONCE: state · elapsed · the current step as a sentence, Stop beside
+//   it while it runs.
 // - Transcript: the task's own thread (useSideTranscript: the newest page,
-//   older pages on demand, then the live frames), words as bubbles, tool
-//   calls as coding steps (src/lib/coding-chat.ts): a command is a terminal
-//   block, an edit a diff per file, reads a line of file chips, anything else
-//   the transcript's tool chip. A task the viewer may not read the thread of
-//   shows its steps (the activity entry's).
-// - Changes band, above the footer: files changed with their counts (a click
-//   jumps to the file's newest diff), the newest test run, and the branch,
-//   commit and pull request its own calls made.
-// - Footer, like the routine sheet's: Continue (an inline composer: the
-//   follow-up goes to the task's thread, joining the turn while it runs),
-//   Stop while it runs, then Close Chat.
+//   older pages on demand, then the live frames). A person's words are a
+//   highlighted row with "›", the bot's plain text; every tool call is one
+//   ToolLine (`● Bash(pnpm vitest run …)` then `⎿` the first lines of its
+//   result and "… +N lines"; an edit `⎿ +2 -0` with its diff folded). A task
+//   the viewer may not read the thread of shows its steps (the activity
+//   entry's).
+// - Changes band, above the composer: files changed with their counts (a
+//   click jumps to the file's diff and opens it), the newest test run, the
+//   commit and pull request its own calls made (the branch is in the header).
+// - Footer: the chat's own composer ("Message <bot>", with +, the microphone
+//   and voice), always there like Claude Code's prompt; a message goes to the
+//   task's thread, joining the turn while it runs. No Continue, no Close
+//   Chat, no Open thread.
+// - The dev pods (</>: Environment, Connectors, Context, Changes) live here
+//   only, never in the plain chat (#2149).
 //
 // The activity entry is polled every 3 s while the task runs (and a while
 // after a follow-up, until the new turn shows); a reload keeps what is on
 // screen, so a status change never blanks the sheet.
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ArrowUp, ChevronDown, ChevronUp, FileText, Folder, GitBranch, GitCommitHorizontal, GitPullRequest, Loader2, MessageSquareText, Square } from "lucide-react";
+import { ArrowUp, ChevronDown, ChevronUp, Folder, GitBranch, GitCommitHorizontal, GitPullRequest, Loader2, Square } from "lucide-react";
 
 import { api, useStore, type Bot, type Message } from "@/state/store";
 import {
@@ -40,6 +49,7 @@ import {
   codingPlace,
   codingRoot,
   codingRows,
+  humanStep,
   latestTests,
   stepMessages,
   type ChangedFile,
@@ -51,21 +61,20 @@ import { useWaitingCards } from "@/lib/use-waiting-cards";
 import { waitingSources } from "@/lib/activity-waiting-sources";
 import { openExternalLink } from "@/lib/app-links";
 import { useChatColumnClass } from "@/lib/chat-bubble-width";
-import { MAUS_COLORS, mausInk } from "@/lib/mascot";
-import { botBubbleVars } from "@/lib/bubble-colors";
+import { mausInk } from "@/lib/mascot";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { avatarBot, useExchangePortalHost } from "../BotExchangeChip";
+import { WindowHeaderPill } from "../BotHeaderPill";
+import { Composer } from "../Composer";
+import { DevPods, DevPodsToggle } from "../dev-pods/DevPods";
+import { WindowCloseButton } from "../WindowCloseButton";
 import { ChatMarkdown } from "../ChatMarkdown";
-import { ClusterLabel } from "../ClusterLabel";
 import { MessageBoundary } from "../MessageBoundary";
 import { PartyAvatar } from "../PartyAvatar";
-import { PILL, PRIMARY_PILL } from "../SettingsPrimitives";
-import { ToolActivity, botNames } from "../ToolActivity";
 import { WaitingOnYou } from "../task/WaitingOnYou";
 import { ActivityStatusIcon } from "../bot-settings/ActivityCard";
-import { CodingDiff } from "./CodingDiff";
-import { CodingTerminal, TestCounts } from "./CodingTerminal";
+import { TestCounts, ToolLine } from "./ToolLine";
 
 const POLL_MS = 3_000;
 /** After a follow-up, keep reading the entry this long so the new turn shows. */
@@ -75,71 +84,39 @@ export type { CodingChatTarget };
 
 type Reveal = { rowId: string; path: string; nonce: number };
 
-function FileChips({ paths, running }: { paths: readonly string[]; running: boolean }) {
-  return (
-    <div data-coding-reads className="flex min-w-0 flex-wrap items-center gap-1.5 ps-1 text-[12px] text-ink-secondary">
-      <span className="inline-flex items-center gap-1.5">
-        {running ? <Loader2 size={13} aria-hidden="true" className="animate-spin motion-reduce:animate-none" /> : <FileText size={13} aria-hidden="true" />}
-        {t("codingChat.read")}
-      </span>
-      {paths.map((path) => (
-        <span key={path} data-coding-file-chip title={path} className="inline-flex max-w-[16rem] items-center rounded-md bg-control px-1.5 py-0.5 font-mono text-[11.5px] text-ink-secondary">
-          <span className="truncate">{path.split("/").at(-1)}</span>
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function Line({ message, bot, bots, joinsAbove }: { message: Message; bot: { name: string; color: string } & Partial<Bot>; bots: readonly Bot[]; joinsAbove: boolean }) {
+/** A person's words: a quietly highlighted row with "›" (the terminal's
+ * prompt). The bot's words: plain text between the tool lines. */
+function Line({ message, bot, bots }: { message: Message; bot: { name: string; color: string } & Partial<Bot>; bots: readonly Bot[] }) {
   const mine = message.role === "user";
   const speaker = mine ? null : message.from?.botId ? avatarBot({ id: message.from.botId, name: message.from.name ?? bot.name, color: message.from.color }, bots) : bot;
   const text = message.text ?? "";
-  return (
-    <div className="contents">
-      {!mine && !joinsAbove && speaker && <ClusterLabel bot={speaker as Bot} name={speaker.name} color={speaker.color} />}
-      <div data-mid={message.id} data-side={mine ? "end" : "start"} className={cn("flex w-full", mine ? "justify-end" : "justify-start", joinsAbove && "-mt-1")}>
-        <div
-          data-chat-bubble
-          className={cn("max-w-[min(100%,42rem)] rounded-[18px] px-3 py-[7px] text-[13px] leading-5", mine ? "bg-bubble-user" : "bg-bubble-bot text-ink")}
-          style={mine ? undefined : (botBubbleVars(MAUS_COLORS[(speaker?.color ?? "blue") as keyof typeof MAUS_COLORS]) as CSSProperties)}
-        >
-          <MessageBoundary fallbackText={text}>
-            <ChatMarkdown text={text} botId={mine ? undefined : speaker?.id} />
-          </MessageBoundary>
+  if (mine) {
+    return (
+      <div data-mid={message.id} data-coding-line="user" className="flex gap-2 rounded-lg bg-raised/60 px-3 py-1.5 text-[13px] leading-5 text-ink">
+        <span aria-hidden="true" className="shrink-0 select-none font-mono text-ink-tertiary">›</span>
+        <div className="min-w-0 flex-1">
+          <MessageBoundary fallbackText={text}><ChatMarkdown text={text} /></MessageBoundary>
         </div>
       </div>
+    );
+  }
+  return (
+    <div data-mid={message.id} data-coding-line="bot" className="px-1 text-[13px] leading-5 text-ink">
+      <MessageBoundary fallbackText={text}>
+        <ChatMarkdown text={text} botId={speaker?.id} />
+      </MessageBoundary>
     </div>
   );
 }
 
-function Row({ row, previous, bot, bots, reveal }: { row: CodingRow; previous?: CodingRow; bot: { name: string; color: string } & Partial<Bot>; bots: readonly Bot[]; reveal?: Reveal }) {
-  if (row.kind === "line") {
-    const joinsAbove = previous?.kind === "line" && previous.message.role === row.message.role && row.message.role === "bot";
-    return <Line message={row.message} bot={bot} bots={bots} joinsAbove={joinsAbove} />;
-  }
-  if (row.kind === "reads") return <div data-coding-row={row.id}><FileChips paths={row.paths} running={row.running} /></div>;
-  const step = row.step;
-  return (
-    <div data-coding-row={row.id} data-coding-step={step.kind}>
-      {step.kind === "command" && <CodingTerminal step={step} />}
-      {step.kind === "edit" && (
-        <div className="flex flex-col gap-1.5">
-          <CodingDiff files={step.files} reveal={reveal?.rowId === row.id ? { path: reveal.path, nonce: reveal.nonce } : undefined} />
-          {step.ok === false && <p data-coding-edit-failed className="ps-1 text-[12px] text-danger">{step.error ? t("codingChat.edit.failedWhy", { why: step.error.split("\n")[0]!.slice(0, 200) }) : t("codingChat.edit.failed")}</p>}
-        </div>
-      )}
-      {step.kind === "tool" && (
-        <div className={cn("ps-1", step.tool.ok === false && "rounded-lg bg-danger/10 py-1")}>
-          <ToolActivity tool={step.tool} nameOf={botNames(bots)} defaultOpen={step.tool.ok === false} />
-        </div>
-      )}
-    </div>
-  );
+function Row({ row, bot, bots, reveal }: { row: CodingRow; bot: { name: string; color: string } & Partial<Bot>; bots: readonly Bot[]; reveal?: Reveal }) {
+  if (row.kind === "line") return <Line message={row.message} bot={bot} bots={bots} />;
+  return <ToolLine row={row} reveal={reveal?.rowId === row.id ? { path: reveal.path, nonce: reveal.nonce } : undefined} />;
 }
 
 /** The band above the footer: what changed, the newest tests, and where it
- * went (branch, commit, pull request). Drawn only when there is something. */
+ * went (commit, pull request; the branch is in the header). Drawn only when
+ * there is something. */
 export function ChangesBand({ files, tests, place, onJump }: {
   files: readonly ChangedFile[];
   tests?: ReturnType<typeof latestTests>;
@@ -173,7 +150,6 @@ export function ChangesBand({ files, tests, place, onJump }: {
           ) : <span className="px-1 text-[12.5px] text-ink-secondary">{t("codingChat.changes.none")}</span>}
           {tests && <TestCounts tests={tests} />}
           <span className="ms-auto flex min-w-0 flex-wrap items-center justify-end gap-1">
-            {place.branch && <span data-coding-branch className={chip} title={place.branch}><GitBranch size={12} aria-hidden="true" className="shrink-0" /><span className="truncate font-mono">{place.branch}</span></span>}
             {commit && (
               commit.url
                 ? <button type="button" data-coding-commit onClick={() => void openExternalLink(commit.url!)} title={commit.message ?? commit.sha.slice(0, 7)} className={cn(chip, "hover:bg-hover hover:text-ink")}><GitCommitHorizontal size={12} aria-hidden="true" className="shrink-0" /><span className="font-mono">{commit.sha.slice(0, 7)}</span></button>
@@ -209,13 +185,12 @@ export function ChangesBand({ files, tests, place, onJump }: {
   );
 }
 
-/** The follow-up composer, inline in the footer: Enter sends, Shift+Enter a
- * new line, Escape folds it (and does not close the sheet). */
-function FollowUp({ botName, onSend, onCancel }: { botName: string; onSend: (text: string) => Promise<void>; onCancel: () => void }) {
+/** The composer, always in the footer like Claude Code's prompt: Enter sends,
+ * Shift+Enter a new line. */
+function FollowUp({ botName, onSend }: { botName: string; onSend: (text: string) => Promise<void> }) {
   const [text, setText] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "error">("idle");
   const field = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => { field.current?.focus(); }, []);
   const submit = async () => {
     const words = text.trim();
     if (!words || state === "sending") return;
@@ -237,7 +212,6 @@ function FollowUp({ botName, onSend, onCancel }: { botName: string; onSend: (tex
           value={text}
           onChange={(event) => { setText(event.target.value); if (state === "error") setState("idle"); }}
           onKeyDown={(event) => {
-            if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onCancel(); return; }
             if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(); }
           }}
           placeholder={t("codingChat.followUp.placeholder", { name: botName })}
@@ -282,12 +256,17 @@ export interface CodingChatSheetProps {
   onSend?: (text: string) => Promise<void>;
   /** What the task waits on from the person, drawn above the footer. */
   waiting?: ReactNode;
-  /** Start with the follow-up composer open (tests, galleries). */
-  composing?: boolean;
+  /** The chat's composer aimed at the task's thread (CodingChat); the plain
+   * follow-up field stands in without it (tests, galleries). */
+  composer?: ReactNode;
+  /** The dev pods' rail, anchored in the transcript pane. */
+  pods?: ReactNode;
+  /** Controls at the header's right end (the </> button). */
+  headerTools?: ReactNode;
 }
 
 /** The sheet, without fetching: tests and galleries draw it with fixed data. */
-export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMore = false, loadingOlder = false, onLoadOlder, onRetry, now, bot, bots, onClose, onStop, stopping = false, onSend, waiting, composing = false }: CodingChatSheetProps) {
+export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMore = false, loadingOlder = false, onLoadOlder, onRetry, now, bot, bots, onClose, onStop, stopping = false, onSend, waiting, composer, pods, headerTools }: CodingChatSheetProps) {
   const chatColumnClassName = useChatColumnClass();
   const column = useExchangePortalHost();
   const shown = detail ?? item;
@@ -299,7 +278,6 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
   const tests = useMemo(() => latestTests(rows), [rows]);
   const place = codingPlace(detail ?? item, root);
   const party = avatarBot({ id: bot?.id ?? shown.botId, name: bot?.name ?? shown.botName ?? t("codingChat.bot"), color: bot?.color }, bots);
-  const [compose, setCompose] = useState(composing);
   const [reveal, setReveal] = useState<Reveal | undefined>();
   const scroller = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
@@ -317,10 +295,15 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
   }, [onClose]);
 
   // Follow the bottom while the person is there; a scroll up holds.
+  // A message the person just sent (from the composer) brings the end back.
+  const mine = useMemo(() => messages.filter((message) => message.role === "user").length, [messages]);
+  const mineSeen = useRef(mine);
   useLayoutEffect(() => {
     const node = scroller.current;
+    if (mine > mineSeen.current) pinned.current = true;
+    mineSeen.current = mine;
     if (node && pinned.current) node.scrollTop = node.scrollHeight;
-  }, [rows]);
+  }, [rows, mine]);
   const onScroll = () => {
     const node = scroller.current;
     if (node) pinned.current = node.scrollHeight - node.scrollTop - node.clientHeight < 48;
@@ -337,7 +320,7 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
 
   const elapsed = formatActivityDuration((shown.endedAt ?? now) - shown.startedAt);
   const folderText = place.folder ?? place.repo;
-  const quietStop = "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-[12.5px] text-danger hover:bg-danger/10 disabled:opacity-50";
+  const step = live ? humanStep(shown.currentStep) : undefined;
 
   const sheet = (
     <div
@@ -349,10 +332,12 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
       data-coding-status={shown.status}
     >
       <header className="relative flex shrink-0 flex-col items-center gap-1.5 px-12 pb-2 pt-6">
-        <div className="flex items-center gap-1.5 rounded-full bg-elevated px-3 py-1.5">
+        <WindowCloseButton onClose={onClose} data-testid="bot-exchange-close" data-coding-close="" />
+        {headerTools && <div data-coding-tools className="absolute right-3 top-3 flex items-center gap-1">{headerTools}</div>}
+        <WindowHeaderPill label={party.name}>
           <PartyAvatar id={party.id} bot={party} size={18} />
           <span className="text-[13px] font-medium" style={{ color: mausInk(party.color) }}>{party.name}</span>
-        </div>
+        </WindowHeaderPill>
         <h2 data-coding-title dir="auto" className="line-clamp-2 max-w-[min(92%,40rem)] text-center text-[14px] font-medium leading-5 text-ink">{activityTitle(shown)}</h2>
         <div data-coding-meta className="flex max-w-[min(92%,40rem)] flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[12px] text-ink-secondary">
           {folderText && (
@@ -367,17 +352,26 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
               <span className="truncate font-mono text-[11.5px]">{place.branch}</span>
             </span>
           )}
-          <span data-coding-state={shown.status} className="inline-flex items-center gap-1.5">
+          <span data-coding-state={shown.status} className="inline-flex min-w-0 items-center gap-1.5">
             <ActivityStatusIcon status={shown.status} size={13} />
             <span>{activityStatusLabel(shown.status)}</span>
             <span aria-hidden="true">·</span>
             <span data-coding-elapsed className="tabular-nums">{elapsed}</span>
+            {step && <span aria-hidden="true">·</span>}
+            {step && <span data-coding-step-now className="truncate text-ink" title={shown.currentStep}>{step}</span>}
           </span>
+          {canStop && (
+            <button type="button" data-coding-stop onClick={onStop} disabled={stopping} className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[12px] text-danger hover:bg-danger/10 disabled:opacity-50">
+              {stopping ? <Loader2 size={11} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Square size={10} fill="currentColor" aria-hidden="true" />}
+              {t("routineRun.stop")}
+            </button>
+          )}
         </div>
       </header>
 
+      <div data-coding-pane className="relative flex min-h-0 flex-1 flex-col">
       <div ref={scroller} onScroll={onScroll} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-5" data-testid="coding-chat-scroll">
-        <div className={cn(chatColumnClassName, "flex flex-col gap-3 py-6")} role="log" aria-live="off">
+        <div className={cn(chatColumnClassName, "flex flex-col gap-2 py-6")} role="log" aria-live="off">
           {hasMore && onLoadOlder && (
             <button type="button" data-coding-older onClick={onLoadOlder} disabled={loadingOlder} className="self-center rounded-full bg-raised px-3 py-1 text-[12.5px] text-ink-secondary hover:bg-raised-hover disabled:opacity-60">
               {loadingOlder ? t("codingChat.loadingOlder") : t("codingChat.loadOlder")}
@@ -396,55 +390,46 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
           ) : rows.length === 0 ? (
             <p role="status" data-coding-empty className="py-8 text-center text-[13px] text-ink-secondary">{live ? t("codingChat.starting") : t("codingChat.empty")}</p>
           ) : null}
-          {rows.map((row, index) => <Row key={row.id} row={row} previous={rows[index - 1]} bot={party} bots={bots} reveal={reveal} />)}
-          {live && rows.length > 0 && (
-            <p data-coding-working className="flex items-center gap-1.5 ps-1 text-[12px] text-ink-secondary">
-              <Loader2 size={13} aria-hidden="true" className="animate-spin text-accent-text motion-reduce:animate-none" />
-              {shown.currentStep ? t("codingChat.workingOn", { step: shown.currentStep.length > 80 ? `${shown.currentStep.slice(0, 80)}…` : shown.currentStep }) : t("codingChat.working")}
-            </p>
-          )}
+          {rows.map((row) => <Row key={row.id} row={row} bot={party} bots={bots} reveal={reveal} />)}
         </div>
+      </div>
+      {pods}
       </div>
 
       {waiting && <div className="max-h-[40%] shrink-0 overflow-y-auto overscroll-contain px-5 pb-2"><div className={chatColumnClassName}>{waiting}</div></div>}
 
       <ChangesBand files={files} tests={tests} place={place} onJump={jump} />
 
-      <div data-exchange-footer="" data-coding-actions className="flex shrink-0 flex-wrap items-center justify-center gap-2 bg-app px-4 py-3">
-        {compose && onSend ? (
+      {composer ? (
+        <div data-exchange-footer="" data-coding-actions data-coding-composer className="relative shrink-0 bg-app">
+          {composer}
+        </div>
+      ) : onSend && (
+        <div data-exchange-footer="" data-coding-actions className="flex shrink-0 justify-center bg-app px-4 py-3">
           <FollowUp
             botName={party.name}
-            onCancel={() => setCompose(false)}
             onSend={async (text) => {
               await onSend(text);
               pinned.current = true;
-              setCompose(false);
             }}
           />
-        ) : onSend && (
-          <button type="button" data-coding-continue onClick={() => setCompose(true)} className={cn(PRIMARY_PILL, "gap-1.5")}>
-            <MessageSquareText size={13} aria-hidden="true" />
-            {t("codingChat.continue")}
-          </button>
-        )}
-        {canStop && (
-          <button type="button" data-coding-stop onClick={onStop} disabled={stopping} className={quietStop}>
-            {stopping ? <Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Square size={12} fill="currentColor" aria-hidden="true" />}
-            {t("routineRun.stop")}
-          </button>
-        )}
-        <button type="button" data-testid="bot-exchange-close" data-coding-close onClick={onClose} className={PILL}>
-          {t("chat.exchange.closeChat")}
-        </button>
-      </div>
+        </div>
+      )}
     </div>
   );
   return column ? createPortal(sheet, column) : sheet;
 }
 
 /** The task's thread, read and followed (a child so the hook runs only with a thread). */
-function ThreadTranscript({ threadId, children }: { threadId: string; children: (transcript: ReturnType<typeof useSideTranscript>) => ReactNode }) {
+function ThreadTranscript({ threadId, onGrow, children }: { threadId: string; onGrow: () => void; children: (transcript: ReturnType<typeof useSideTranscript>) => ReactNode }) {
   const transcript = useSideTranscript(threadId);
+  // A message sent from the composer: keep reading the entry so the new turn shows.
+  const count = transcript.messages.length;
+  const seen = useRef(count);
+  useEffect(() => {
+    if (count > seen.current) onGrow();
+    seen.current = count;
+  }, [count, onGrow]);
   return <>{children(transcript)}</>;
 }
 
@@ -507,6 +492,17 @@ export function CodingChat({ target, onClose }: { target: CodingChatTarget; onCl
     ? <WaitingOnYou items={waitingCards} threadId={threadId} botFor={botFor} onCancel={stop} />
     : undefined;
 
+  const follow = useCallback(() => setFollowUntil(Date.now() + FOLLOW_MS), []);
+  const computerStart = state.computerStarts[target.botId];
+  const taskBot = bot && threadId ? { ...bot, threadId } : undefined;
+  const headerTools = taskBot ? <DevPodsToggle bot={taskBot} /> : undefined;
+  const pods = (messages: readonly Message[]) => taskBot
+    ? <DevPods bot={taskBot} messages={messages} composerHeight={0} headerHeight={0} computerStart={computerStart} dispatch={dispatch} forced />
+    : undefined;
+  // The chat's own composer ("Message <bot>", +, microphone, voice) aimed at
+  // the task's thread; a person who may not write there keeps the plain field.
+  const composer = taskBot ? <Composer key={threadId} bot={{ ...taskBot, busy: live }} /> : undefined;
+
   const common = {
     item,
     detail,
@@ -518,15 +514,18 @@ export function CodingChat({ target, onClose }: { target: CodingChatTarget; onCl
     stopping,
     onSend: send,
     waiting,
+    headerTools,
   };
   if (!threadId) {
     const messages = detail ? stepMessages(detail.steps, item.botId, bot?.name ?? item.botName ?? "") : [];
     return <CodingChatSheet {...common} messages={messages} loaded={detail !== null} failed={error} onRetry={() => void load()} />;
   }
   return (
-    <ThreadTranscript threadId={threadId}>{(transcript) => (
+    <ThreadTranscript threadId={threadId} onGrow={follow}>{(transcript) => (
       <CodingChatSheet
         {...common}
+        composer={composer}
+        pods={pods(transcript.messages)}
         messages={transcript.messages}
         loaded={transcript.loaded}
         failed={transcript.failed}

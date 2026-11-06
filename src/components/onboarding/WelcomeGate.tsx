@@ -15,45 +15,16 @@
 import { useEffect, useState } from "react";
 import { emailGateDone } from "@/lib/analytics";
 import { launchBridges, launchDue, serverModeBridge } from "@/lib/launch";
-import { hostedMember, LOCAL_VIEWER, welcomeDue, welcomeViewer, type WelcomeViewer } from "@/lib/onboarding";
+import { hostedMember, welcomeDue, type WelcomeViewer } from "@/lib/onboarding";
 import type { FirstRunStep } from "@/lib/first-run";
-import { api, useStore } from "@/state/store";
+import { useStore } from "@/state/store";
 import { OrgEngineSetupGate } from "@/components/OrgEngineSetup";
 import { GuidedFirstRun } from "./GuidedFirstRun";
 import { LaunchScreen } from "./LaunchScreen";
 import { SharedWorkspaceHint } from "./SharedWorkspaceHint";
 import { WelcomeFlow } from "./WelcomeFlow";
 
-/** Only the desktop app's own pages get the full bridge; `remoteClient` is
- * part of it. A remote page the desktop app loads (Server → Connect hosted
- * workspace…) gets a reduced, still truthy `window.ogb` without it, and is
- * no more the owner than a browser is. */
-export function localDesktopPage(): boolean {
-  return window.ogb?.remoteClient !== undefined;
-}
-
-/** Null while the answer is on its way. The desktop app's own page knows at
- * once: its own server's owner, or a remote client, which never gets a
- * first-run surface anyway. A failed answer keeps the old behaviour. */
-export function useWelcomeViewer(): WelcomeViewer | null {
-  const local = localDesktopPage();
-  const [viewer, setViewer] = useState<WelcomeViewer | null>(local ? LOCAL_VIEWER : null);
-  useEffect(() => {
-    if (local) return;
-    let active = true;
-    void api("/api/auth/session", { timeoutMs: 10_000 })
-      .then((session) => {
-        if (active) setViewer(welcomeViewer(session));
-      })
-      .catch(() => {
-        if (active) setViewer(LOCAL_VIEWER);
-      });
-    return () => {
-      active = false;
-    };
-  }, [local]);
-  return viewer;
-}
+export { localDesktopPage, useWelcomeViewer } from "./welcome-viewer";
 
 /** Opens the welcome flow on a fresh workspace (the server's onboarding
  * record says so) or on request from Settings. The decision waits for the

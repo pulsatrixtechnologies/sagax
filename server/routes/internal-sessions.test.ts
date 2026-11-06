@@ -71,6 +71,19 @@ function baseDeps(over: Partial<InternalSessionsDeps> = {}): InternalSessionsDep
     recordSkillLearned: () => undefined,
     keptCardRule: () => undefined,
     appendSkillRequestCard: () => ({ requestId: "req-1", summary: "Enable skill" }),
+    applyOwnStagedSkill: () => ({
+      result: {
+        name: "demo",
+        description: "",
+        enabled: true,
+        editable: false,
+        source: "learned",
+        sha256: "0".repeat(64),
+        importedAt: new Date(0).toISOString(),
+        warnings: [],
+        skippedFiles: [],
+      },
+    }),
     appendDecision: () => undefined,
     ...over,
   };

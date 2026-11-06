@@ -70,6 +70,21 @@ describe("OutboundCard, conversation call", () => {
     expect(text).not.toContain("call_0123456789abcdef");
   });
 
+  it("offers Always call this number once the number is confirmed, and sends always (#2091)", async () => {
+    vi.mocked(api).mockResolvedValue({} as never);
+    const host = mount(base);
+    const always = host.querySelector<HTMLButtonElement>("[data-outbound-always]")!;
+    expect(always.textContent).toContain("Always call this number");
+    expect(always.disabled).toBe(true);
+    act(() => host.querySelector<HTMLInputElement>("[data-outbound-confirm]")!.click());
+    expect(always.disabled).toBe(false);
+    await act(async () => { always.click(); });
+    expect(vi.mocked(api)).toHaveBeenCalledWith(
+      "/api/me/phone-calls/call_0123456789abcdef/answer",
+      expect.objectContaining({ body: JSON.stringify({ decision: "always", confirmed: true, confirmedTo: "+1 514 555 0142" }) }),
+    );
+  });
+
   it("shows the live phase chip, waiting line and End call while it has no result", () => {
     expect(isLiveConversationCall({ ...base, status: "done" })).toBe(true);
     const host = mount({

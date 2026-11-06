@@ -17,6 +17,7 @@ import { join } from "node:path";
 import { boundRetentionDays, pruneMonthFiles } from "../decision-log.ts";
 import { monthKey } from "../usage/usage-ledger.ts";
 import type { DeciderFailure, DeciderProvider, DeciderSeam } from "./types.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export const DECIDER_LOG_DIR = "decider-log";
 const PRUNE_EVERY_MS = 60 * 60_000;
@@ -75,7 +76,7 @@ export function appendDeciderLog(dataDir: string, row: DeciderLogRow): void {
   writeQueues.set(dataDir, queued);
   void queued.finally(() => {
     if (writeQueues.get(dataDir) === queued) writeQueues.delete(dataDir);
-  });
+  }).catch(reportBackgroundError);
 }
 
 /** Test seam: wait until every queued row for this directory is on disk. */

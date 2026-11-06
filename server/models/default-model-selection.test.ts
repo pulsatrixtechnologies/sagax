@@ -3,7 +3,7 @@ import { transpileTs } from "../testing/transpile.ts";
 import { describe, expect, it, vi } from "vitest";
 
 import type { EngineAccess, ModelCatalog, ModelSelection, ProviderSnapshot } from "../contracts.ts";
-import { autoNewBotSelection, instancesForPerson, memberNewBotSelection, readyToRun, selectDefaultModelSelection, starredModelSelections, withNewBotEffort, type SelectableInstance } from "./default-model-selection.ts";
+import { autoNewBotSelection, instancesForPerson, memberNewBotSelection, readyToRun, selectDefaultModelSelection, starredModelSelections, withInstanceConfig, withNewBotEffort, type SelectableInstance } from "./default-model-selection.ts";
 import { ManagedDesktopPolicy } from "../managed-policy.ts";
 
 const codex = {
@@ -220,11 +220,11 @@ describe("new bot default model selection wiring in index.ts", () => {
       computers: { thisComputer: true, localVm: true, box: true, vps: true }, remoteAccess: true });
     const managedDesktop = { owns: (instanceId: string) => enrolled && instanceId.startsWith("company.") };
     const describe = vi.fn(async () => instances);
-    const defaultSelection = new Function("hostedModels", "cfg", "registry", "managedDesktop", "managedPolicy", "BUILT_IN_DRIVERS", "selectDefaultModelSelection", "orgEngineAllowRefusal", "providerConfigs",
+    const defaultSelection = new Function("hostedModels", "cfg", "registry", "managedDesktop", "managedPolicy", "BUILT_IN_DRIVERS", "selectDefaultModelSelection", "orgEngineAllowRefusal", "providerConfigs", "withInstanceConfig",
       `${code}; return defaultSelection;`)(undefined, { defaultModelSelection: saved }, { describe }, managedDesktop, managedPolicy,
       [{ driverKind: "claudeAgent", metadata: { displayName: "Claude" } }], selectDefaultModelSelection,
       // the organization's engine allow-list (orgEngineAllowRefusal, org policy) has its own tests; here every engine is allowed
-      () => undefined, () => configs) as (saved?: ModelSelection | null, instances?: readonly SelectableInstance[]) => Promise<ModelSelection>;
+      () => undefined, () => configs, withInstanceConfig) as (saved?: ModelSelection | null, instances?: readonly SelectableInstance[]) => Promise<ModelSelection>;
     return { defaultSelection, describe, close: () => managedPolicy.close() };
   }
 

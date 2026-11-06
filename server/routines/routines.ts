@@ -81,6 +81,7 @@ import {
 } from "./routine-recovery.ts";
 import type { RoutineUsageLimit } from "./routine-limit-words.ts";
 import { ROUTINE_DEFERRAL_NOTICE_MS, ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED, ROUTINE_SUPERSEDED_BY_NEW_RUN, ROUTINE_TURN_LOST, ROUTINE_TURN_LOST_MS, skipNeedsNotice, supersededBy } from "./routine-execution.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export type { RoutineAccess };
 
@@ -1277,6 +1278,19 @@ export function nextOccurrence(schedule: RoutineSchedule, after: number, zone?: 
   return null;
 }
 
+/** Next scheduled occurrence and one interval of its schedule, for a run that schedule started.
+ * None for any other trigger (manual, startup, webhook, proactive), and none for a one-time, trigger, or limit-reset routine. */
+export function nextScheduledRun(run: Pick<RoutineRun, "routineId" | "triggerSource" | "manual">, routines: readonly Pick<Routine, "id" | "enabled" | "nextRunAt" | "schedule">[]): RoutineFailureFacts["nextScheduled"] {
+  if ((run.triggerSource ?? (run.manual ? "manual" : "schedule")) !== "schedule") return undefined;
+  const routine = routines.find((candidate) => candidate.id === run.routineId);
+  if (!routine?.enabled || routine.nextRunAt == null) return undefined;
+  const { schedule, nextRunAt: at } = routine;
+  const following = schedule.type === "cron" ? nextOccurrence(schedule, at) : null;
+  const interval = schedule.type === "interval" ? schedule.everyMinutes * 60_000 : schedule.type === "daily" ? LOCAL_DAY_MS
+    : following !== null ? following - at : null;
+  return interval === null ? undefined : { at, interval };
+}
+
 function latestIntervalOccurrence(
   schedule: RoutineIntervalSchedule,
   at: number,
@@ -2442,9 +2456,9 @@ export class RoutineManager {
       this.emitRun(run);
       if (run.threadId) {
         if (run.target === "room-goal" && run.groupId) {
-          void this.options.interruptGoal?.(run.groupId, run.threadId).catch(() => {});
+          void this.options.interruptGoal?.(run.groupId, run.threadId).catch(reportBackgroundError);
         } else {
-          void this.options.interruptTurn?.(run.botId, run.threadId).catch(() => {});
+          void this.options.interruptTurn?.(run.botId, run.threadId).catch(reportBackgroundError);
         }
       }
       changed = true;
@@ -2476,7 +2490,7 @@ export class RoutineManager {
       run.error = "The assigned room was deleted";
       this.emitRun(run);
       if (run.threadId) {
-        void this.options.interruptGoal?.(groupId, run.threadId).catch(() => {});
+        void this.options.interruptGoal?.(groupId, run.threadId).catch(reportBackgroundError);
       }
       changed = true;
     }
@@ -2746,9 +2760,9 @@ export class RoutineManager {
     this.emitRun(run);
     if (run.threadId) {
       if (run.target === "room-goal" && run.groupId) {
-        await this.options.interruptGoal?.(run.groupId, run.threadId).catch(() => {});
+        await this.options.interruptGoal?.(run.groupId, run.threadId).catch(reportBackgroundError);
       } else {
-        await this.options.interruptTurn?.(run.botId, run.threadId).catch(() => {});
+        await this.options.interruptTurn?.(run.botId, run.threadId).catch(reportBackgroundError);
       }
     }
     queueMicrotask(() => this.tickInBackground());
@@ -3029,7 +3043,7 @@ export class RoutineManager {
       if (this.warmReadiness.get(routine.id) !== entry) return;
       entry.result = result;
       this.tickInBackground();
-    });
+    }).catch(reportBackgroundError);
     return false;
   }
 
@@ -3082,7 +3096,7 @@ export class RoutineManager {
       this.watchSettled.set(run.id, settled);
       if (this.ticking) this.passAgain = true;
       else this.tickInBackground();
-    });
+    }).catch(reportBackgroundError);
   }
 
   async tick(): Promise<void> {
@@ -3109,9 +3123,9 @@ export class RoutineManager {
           await this.options.interruptGoal?.(run.groupId, threadId, {
             status: "limit-reached",
             detail,
-          }).catch(() => {});
+          }).catch(reportBackgroundError);
         } else {
-          await this.options.interruptTurn?.(run.botId, threadId).catch(() => {});
+          await this.options.interruptTurn?.(run.botId, threadId).catch(reportBackgroundError);
         }
       }
       this.settleStrandedWaits();
@@ -3887,7 +3901,9 @@ export class RoutineManager {
     const who = { botId: run.botId, ...(run.runAs ? { runAs: run.runAs } : {}) };
     const language = this.options.languageFor?.(who);
     const timeZone = this.options.timeZoneFor?.(who);
-    const recovery = recoverRun(run, said, limit ? { ...facts, limit } : facts, this.now(), this.ownerNotices, {
+    const recovery = recoverRun(run, said, {
+      ...(limit ? { ...facts, limit } : facts), nextScheduled: nextScheduledRun(run, this.routines),
+    }, this.now(), this.ownerNotices, {
       ...(language ? { language } : {}), ...(timeZone ? { timeZone } : {}),
     });
     if ("waiting" in recovery && recovery.waiting) {
@@ -4117,9 +4133,9 @@ export class RoutineManager {
       this.emitRun(run);
       if (run.threadId) {
         if (run.target === "room-goal" && run.groupId) {
-          void this.options.interruptGoal?.(run.groupId, run.threadId).catch(() => {});
+          void this.options.interruptGoal?.(run.groupId, run.threadId).catch(reportBackgroundError);
         } else {
-          void this.options.interruptTurn?.(run.botId, run.threadId).catch(() => {});
+          void this.options.interruptTurn?.(run.botId, run.threadId).catch(reportBackgroundError);
         }
       }
     }
@@ -4243,7 +4259,7 @@ export class RoutineManager {
       if (run.status !== "queued") return;
       this.readinessSettled.set(run.id, result);
       this.tickInBackground();
-    });
+    }).catch(reportBackgroundError);
   }
 
   private async precheckRun(routine: Routine, precheck: RoutinePrecheck): Promise<

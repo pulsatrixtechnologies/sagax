@@ -157,8 +157,16 @@ export function reduceUiSurfaces(
       return {
         ...state,
         personaEditor: { botId: action.botId, section: action.section ?? "overview" },
+        // The profile page takes the main panel in place of the chat
+        // (#2136): the right panel closes while it is open.
+        settingsOpen: false,
+        panelOwner: null,
+        computerOpen: false,
+        inspectorOpen: false,
+        activityOpen: false,
+        personPanelId: null,
         botWizard: null,
-        activeView: state.activeView === "apps" ? "chat" : state.activeView,
+        activeView: "chat",
         appSettingsOpen: false,
         appSettingsSubPage: null,
         pluginsOpen: false,

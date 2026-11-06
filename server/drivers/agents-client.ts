@@ -26,6 +26,7 @@ export function createHarnessClient(baseUrl: string, token: string | (() => stri
   async function apiResponse(path: string, init?: RequestInit): Promise<{ ok: boolean; status: number; body: Json }> {
     const res = await fetch(baseUrl + path, {
       ...init,
+      signal: init?.signal ?? AbortSignal.timeout(120_000),
       headers: { "content-type": "application/json", authorization: `Bearer ${typeof token === "function" ? token() : token}`, ...init?.headers },
     });
     const body = (await res.json().catch(() => ({}))) as Json;

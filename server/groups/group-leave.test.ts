@@ -16,7 +16,7 @@ const room = { createdBy: "p-own", humanIds: ["p-own", "p-ann", "p-bob"], member
 describe("planGroupLeave (#1480)", () => {
   it("a member leaves: out of the people, their private bots with them, the owner stays", () => {
     const plan = planGroupLeave(room, ann, deps);
-    expect(plan).toEqual({ ok: true, humanIds: ["p-own", "p-bob"], memberIds: ["shared", "theirs"], archive: false, removedBotIds: ["mine"] });
+    expect(plan).toEqual({ ok: true, humanIds: ["p-own", "p-bob"], memberIds: ["shared", "theirs"], removedBotIds: ["mine"] });
   });
 
   it("leaves under every id they are listed by (an older group lists the email)", () => {
@@ -26,7 +26,7 @@ describe("planGroupLeave (#1480)", () => {
 
   it("the owner leaving hands the group to the person listed longest", () => {
     const plan = planGroupLeave({ ...room, createdBy: "p-ann", humanIds: ["team:sales", "p-ann", "p-bob", "p-own"] }, ann, deps);
-    expect(plan).toMatchObject({ ok: true, createdBy: "p-bob", archive: false, humanIds: ["team:sales", "p-bob", "p-own"] });
+    expect(plan).toMatchObject({ ok: true, createdBy: "p-bob", humanIds: ["team:sales", "p-bob", "p-own"] });
   });
 
   it("an older group with no createdBy: its first person is the owner", () => {
@@ -34,9 +34,16 @@ describe("planGroupLeave (#1480)", () => {
     expect(plan).toMatchObject({ ok: true, createdBy: "p-bob" });
   });
 
-  it("the last person leaving archives the group (a team left alone does not keep it)", () => {
-    expect(planGroupLeave({ createdBy: "p-ann", humanIds: ["p-ann"], memberIds: ["theirs"] }, ann, deps)).toMatchObject({ ok: true, archive: true, humanIds: [] });
-    expect(planGroupLeave({ createdBy: "p-ann", humanIds: ["p-ann", "team:sales"], memberIds: [] }, ann, deps)).toMatchObject({ ok: true, archive: true });
+  it("refuses leave when the person is alone (bots and teams do not count) (#2119)", () => {
+    expect(planGroupLeave({ createdBy: "p-ann", humanIds: ["p-ann"], memberIds: ["theirs"] }, ann, deps)).toMatchObject({
+      ok: false,
+      status: 409,
+      code: "sole_member",
+    });
+    expect(planGroupLeave({ createdBy: "p-ann", humanIds: ["p-ann", "team:sales"], memberIds: [] }, ann, deps)).toMatchObject({
+      ok: false,
+      code: "sole_member",
+    });
   });
 
   it("refuses someone not listed in their own name, a two-person or bot conversation, an archived group", () => {

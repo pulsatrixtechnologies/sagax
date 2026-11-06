@@ -340,11 +340,16 @@ export class DeviceRegistry {
   /** Take a phone's access away. False when there was no such device — a
    * revoke that quietly matched nothing would read as success on the page. */
   revoke(id: string): boolean {
-    const before = this.devices.length;
-    this.devices = this.devices.filter((d) => d.id !== id);
-    if (this.devices.length === before) return false;
+    const previous = this.devices;
+    this.devices = previous.filter((d) => d.id !== id);
+    if (this.devices.length === previous.length) return false;
+    try {
+      this.persist();
+    } catch (error) {
+      this.devices = previous;
+      throw error;
+    }
     this.lastSeenWrites.delete(id);
-    this.persist();
     return true;
   }
 

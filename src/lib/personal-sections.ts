@@ -184,13 +184,19 @@ export function seedPersonalSections(input: { bots: readonly SeedBot[]; groups: 
 }
 
 /** The sidebar's view: each bot and group carries the viewer's own section
- * (undefined: Unassigned), whatever the server says. */
-export function withPersonalSections<B extends { id: string; section?: string | undefined }, G extends { id: string; section?: string | undefined }>(bots: readonly B[], groups: readonly G[], prefs: PersonalSections): { bots: B[]; groups: G[] } {
+ * (undefined: Unassigned), whatever the server says. Personal folders are
+ * name-only (#2045): a leftover server `sectionId` would pull the bot back
+ * into the owner's team column after #2083, so the overlay clears it. */
+export function withPersonalSections<
+  B extends { id: string; section?: string | undefined; sectionId?: string | undefined },
+  G extends { id: string; section?: string | undefined; sectionId?: string | undefined },
+>(bots: readonly B[], groups: readonly G[], prefs: PersonalSections): { bots: B[]; groups: G[] } {
   const where = new Map<string, string>();
   for (const section of prefs.sections) for (const key of section.items) where.set(key, section.name);
-  const place = <T extends { id: string; section?: string | undefined }>(item: T, kind: SectionItemKind): T => {
+  const place = <T extends { id: string; section?: string | undefined; sectionId?: string | undefined }>(item: T, kind: SectionItemKind): T => {
     const section = where.get(itemKey(kind, item.id));
-    return item.section === section ? item : { ...item, section };
+    if (item.section === section && item.sectionId === undefined) return item;
+    return { ...item, section, sectionId: undefined };
   };
   return { bots: bots.map((bot) => place(bot, "bot")), groups: groups.map((group) => place(group, "group")) };
 }

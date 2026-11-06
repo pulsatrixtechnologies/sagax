@@ -78,9 +78,11 @@ describe("section context", () => {
     changeEmptySection("Draft", "__proto__");
     expect(readSectionContext("__proto__")).toEqual({ text: "Exact briefing", updatedAt: 7 });
     expect(readSectionContext("Draft")).toBeNull();
-    expect(() => changeEmptySection("__proto__", "Other")).toThrow("already exists");
-    changeEmptySection("__proto__", null);
+    // #2045: another person may already hold the display name; the old label
+    // is dropped and the existing entry (and its brief) stays untouched.
+    expect(() => changeEmptySection("__proto__", "Other")).not.toThrow();
     expect(readSections()).toEqual(["Other"]);
+    expect(readSectionContext("__proto__")).toBeNull();
     expect(readSectionContext("Other")?.text).toBe("Keep this");
   });
 });

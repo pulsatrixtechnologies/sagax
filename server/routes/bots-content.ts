@@ -12,6 +12,7 @@ import { githubSkillFetch } from "../github/github-access.ts";
 import { botSkillTemplateSchema } from "../bots/new-bot-defaults.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { fetchSkillFromSource } from "../skills/skill-fetch.ts";
+import { skillImportSummary } from "../skills/skill-folder.ts";
 import type { LibrarySkillListing } from "../skills/skill-library.ts";
 import {
   acceptBotSkillReview,
@@ -189,11 +190,12 @@ export function createBotsContentRoutes(deps: BotsContentRouteDeps): RouteHandle
       if (!parsed.success) return json(res, 400, { error: "source must be a GitHub or skills.sh URL, or owner/repo" });
       const fetched = await fetchSkillFromSource(parsed.data.source, githubSkillFetch(githubCredentialsFor(sessionPrincipal(auth))));
       if ("error" in fetched) return json(res, 422, { error: fetched.error });
-      const results = fetched.skills.map((skill) => installSkill(m![1]!, skill.source, skill.files));
-      const installed = results.filter((entry): entry is Exclude<typeof entry, { error: string }> => !("error" in entry));
-      const errors = results.flatMap((entry) => ("error" in entry ? [entry.error] : []));
-      if (!installed.length) return json(res, 422, { error: errors.join("; ") || "nothing importable found" });
-      return json(res, 201, { installed, errors });
+      const results = fetched.skills.map((skill) => ({ skill, result: installSkill(m![1]!, skill.source, skill.files, skill.github) }));
+      const errors = results.flatMap(({ result }) => ("error" in result ? [result.error] : []));
+      const done = results.flatMap(({ skill, result }) => ("error" in result ? [] : [{ skill, installed: result }]));
+      if (!done.length) return json(res, 422, { error: errors.join("; ") || "nothing importable found" });
+      const imported = done.map(({ skill, installed }) => skillImportSummary(installed.name, skill.files, skill.skipped));
+      return json(res, 201, { installed: done.map(({ installed }) => installed), imported, errors });
     }
 
     m = path.match(/^\/api\/bots\/([\w-]+)\/skills\/([a-z0-9-]+)\/review$/);

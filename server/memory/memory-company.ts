@@ -10,6 +10,7 @@
 import { factIdentity } from "./memory-entries.ts";
 import { COMPANY_TOPIC, memoryAudience } from "./memory-dream.ts";
 import { MEMORY_MAX_BYTES, MEMORY_MAX_LINES } from "../workspace/workspace.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 /** The company block's own budget, the same as MEMORY.md's. */
 export const COMPANY_MAX_LINES = MEMORY_MAX_LINES;
@@ -76,14 +77,14 @@ export class CompanyMemoryCache {
 
   get(botId: string): string | null {
     const entry = this.entries.get(botId);
-    if (!entry || this.now() - entry.at >= this.refreshMs) void this.load(botId);
+    if (!entry || this.now() - entry.at >= this.refreshMs) void this.load(botId).catch(reportBackgroundError);
     return entry?.text ?? null;
   }
 
   /** A server-side write of `name` for this bot: company.md is read again,
    * and that read wins over one already running. */
   written(botId: string, name: string): void {
-    if (name === COMPANY_TOPIC) void this.load(botId, true);
+    if (name === COMPANY_TOPIC) void this.load(botId, true).catch(reportBackgroundError);
   }
 
   forget(botId: string): void {

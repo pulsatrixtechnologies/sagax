@@ -28,6 +28,23 @@ describe("named team computer ownership", () => {
     expect(new TeamComputers(file, environmentId).forSection("Studio")).toMatchObject({ id: a.id, name: a.name });
     expect(registry.forSection("Delivery")?.id).toBe(b.id);
   });
+
+  it("keeps two same-named teams on distinct section ids (#2045)", () => {
+    const { registry, file, environmentId } = fixture();
+    const aliceId = "sec_00000000-0000-4000-8000-0000000000a1";
+    const bobId = "sec_00000000-0000-4000-8000-0000000000b2";
+    const a = registry.create("Alice desktop");
+    const b = registry.create("Bob desktop");
+    registry.assign(a.id, "Ops", aliceId);
+    registry.assign(b.id, "Ops", bobId);
+    expect(registry.forSection("Ops", aliceId)?.id).toBe(a.id);
+    expect(registry.forSection("Ops", bobId)?.id).toBe(b.id);
+    expect(registry.renameSection("Ops", "Launch", aliceId)).toBe(true);
+    expect(registry.forSection("Launch", aliceId)).toMatchObject({ id: a.id, sectionId: aliceId });
+    expect(registry.forSection("Ops", bobId)).toMatchObject({ id: b.id, sectionId: bobId });
+    expect(new TeamComputers(file, environmentId).forBot({ section: "Launch", sectionId: aliceId })?.id).toBe(a.id);
+    expect(new TeamComputers(file, environmentId).forBot({ section: "Ops", sectionId: bobId })?.id).toBe(b.id);
+  });
   it("persists unassigned identities before provisioning and retries without a second owner", () => {
     const { registry, file, environmentId } = fixture();
     const requestId = randomUUID();

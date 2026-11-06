@@ -33,6 +33,8 @@ interface CardLike {
   requestId?: string;
   tool?: string;
   meetingRequest?: MeetingRequestCardData;
+  ownerRule?: { tool: string; scope: Record<string, string>; description: string };
+  ruleSaved?: { id: string; behavior: "allow" | "ask" | "deny"; description: string };
 }
 
 export interface MeetingStore {
@@ -65,6 +67,9 @@ export interface MeetingServiceDeps {
   enabled?: () => boolean;
   /** Test hook: the session factory. */
   session?(options: ConstructorParameters<typeof MeetingSession>[0]): Pick<MeetingSession, "run" | "requestLeave">;
+  /** #2091 (decided 2026-11-05): the Always allow the person kept for meetings of
+   * this provider (index.ts keptCardRule); kept, the bot joins at once as them. */
+  keptRule?(botId: string, threadId: string, candidate: { tool: string; scope: Record<string, string>; description: string }): { id: string; ownerId: string; behavior: "allow" | "ask" | "deny"; description: string } | undefined;
 }
 
 export type MeetingResolveResult =
@@ -158,7 +163,7 @@ export function createMeetingService(deps: MeetingServiceDeps) {
     }
   }
 
-  return {
+  const service = {
     /** Cards left live by a server that stopped mid-meeting: say so. */
     recoverInterrupted(): number {
       if (!existsSync(liveIndex)) return 0;
@@ -188,6 +193,7 @@ export function createMeetingService(deps: MeetingServiceDeps) {
         if (liveFor(args.botId)) return { error: "You are already in a meeting. Wait for it to end, or ask the person to press Leave on its card." };
       }
       const requestId = randomUUID();
+      const meetingRule = { tool: "sagax:meeting", scope: { provider: link.provider }, description: `Join ${MEETING_PROVIDER_LABELS[link.provider]} meetings as a notetaker` };
       const data: MeetingRequestCardData = {
         requestId,
         botId: bot.id,
@@ -214,9 +220,16 @@ export function createMeetingService(deps: MeetingServiceDeps) {
           requestId,
           tool: "join_meeting",
           meetingRequest: data,
+          // #2091: what Always allow keeps on this card
+          ownerRule: meetingRule,
         },
       });
       deps.audit?.({ kind: "meeting.requested", botId: bot.id, threadId: args.threadId, requestId, detail: `${link.provider} ${link.code}` });
+      const kept = supported ? deps.keptRule?.(bot.id, args.threadId, meetingRule) : undefined;
+      if (kept?.behavior === "allow") {
+        patch(args.threadId, requestId, {}, { ruleSaved: { id: kept.id, behavior: kept.behavior, description: kept.description } });
+        void service.resolve({ threadId: args.threadId, requestId, behavior: "allow", principalId: kept.ownerId, speaker: { principalId: kept.ownerId } });
+      }
       return { requestId, messageId: message.id, supported, provider: link.provider };
     },
 
@@ -319,6 +332,7 @@ export function createMeetingService(deps: MeetingServiceDeps) {
       return Boolean(find(threadId, requestId));
     },
   };
+  return service;
 }
 
 export type MeetingService = ReturnType<typeof createMeetingService>;

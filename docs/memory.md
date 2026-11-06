@@ -224,12 +224,13 @@ off. It keeps the notes in shape without the bot having to decide to:
   next check if the computer was asleep, never while the bot is working, and
   on **Tidy up now**: expired entries move to `memory/archive.md` (from
   `MEMORY.md` and topic files); of two entries with exactly the same fact the
-  newer stays; and in `MEMORY.md` one model call looks for pairs that cannot
+  newer stays; and in `MEMORY.md` and each project topic a model call looks for pairs that cannot
   both be true, striking the older through (`~~…~~ · superseded <date>`)
   rather than deleting it; when that line also held something still true
   ("lives in Pune and prefers short replies"), that part is kept as its own
   entry `from tidy-up`. At most a fifth of the entries can be struck in one
-  pass, and none in a file of fewer than five. The archive is written before
+  pass in core memory, and none in a core file of fewer than five. Topic files
+  may reconcile one pair even with two entries; writes recheck for concurrent edits. The archive is written before
   the file it came from, so undoing the newest change never loses a line.
 
 "Exactly the same fact" is narrow on purpose: spacing, a bullet and a final
@@ -395,3 +396,7 @@ free form, or one you rewrite by hand, works the same.
 | `POST` | `/api/profile/learned/:id/remove` | Takes that line out of About me; the fact is never added again. |
 
 All of them need the owner (admin) session, like the other bot-settings routes.
+
+Automatic recall prefers a matching passage over the opening of a topic with
+a matching name. Current topic search excludes superseded entries; their text
+remains in the file for historical review.

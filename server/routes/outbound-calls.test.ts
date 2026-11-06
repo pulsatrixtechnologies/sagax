@@ -58,7 +58,8 @@ describe("phone call routes", () => {
     const { call, answered, audits, id } = await serve();
     const listed = await call("/api/me/phone-calls");
     expect(listed.body.calls).toEqual([expect.objectContaining({ destination: "+1 514 555 0142", purpose: "Rendez-vous" })]);
-    expect(await call(`/api/me/phone-calls/${id}/answer`, { decision: "always" })).toMatchObject({ status: 400 });
+    // Always, like Call, wants the number confirmed on the card (#2091)
+    expect(await call(`/api/me/phone-calls/${id}/answer`, { decision: "always" })).toMatchObject({ status: 400, body: { code: "confirm_number" } });
     expect(await call(`/api/me/phone-calls/${id}/answer`, { decision: "call", confirmed: true, confirmedTo: "+1 514 555 0142" })).toEqual({ status: 200, body: { status: "approved" } });
     expect(answered.map((row) => row.status)).toEqual(["approved"]);
     expect(JSON.stringify(audits)).not.toContain("5145550142");

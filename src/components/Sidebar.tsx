@@ -69,12 +69,13 @@ import { useAdvancedMode } from "@/lib/interface-mode";
 import { SidebarMascotAvatar, SidebarMascotProvider } from "./SidebarMascotAvatar";
 import { stateForBot } from "@/lib/mascot";
 import { mascotRowAnimated } from "@/lib/mascot-animate";
+import { useBotUnread } from "./unread-notice";
 import { cn } from "@/lib/cn";
 import { SIDEBAR_CIRCLE_BUTTON } from "@/lib/circle-button";
 import { searchMatchesThreads, useSearchDisclosure } from "@/lib/search-disclosure";
 import { useHeldMenuMotion } from "./MenuMotion";
 import { navigate } from "@/lib/view-transitions";
-import { lastNonReceipt } from "@/lib/receipts";
+import { lastSpokenLine } from "@/lib/receipts";
 import { activityPreview, botEngine } from "@/lib/failed-turn";
 import { activeLocale, t } from "@/lib/i18n";
 import { copyText } from "@/lib/copy-text";
@@ -148,7 +149,7 @@ import { SidebarFoot, SidebarRailFoot } from "./SidebarFoot";
 import { useShowThreads, useThreadsMode } from "@/lib/thread-preferences";
 import { openBotConversationActions } from "./thread-home";
 import { useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
-import { botShowsUnread, iconUnreadDotPosition } from "@/lib/bot-unread";
+import { iconUnreadDotPosition } from "@/lib/bot-unread";
 import { sidebarBotActivityTasks } from "./SidebarBotActivity";
 import { citationPreviewText } from "@/lib/citations";
 import { groupMemberBots } from "@/lib/group-members";
@@ -187,6 +188,7 @@ import { SidebarOverlays } from "./Sidebar.tsx-parts/SidebarOverlays";
 import { SidebarResizeHandle } from "./Sidebar.tsx-parts/SidebarResizeHandle";
 import { SidebarUnreadPillAbove, SidebarUnreadPillBelow } from "./Sidebar.tsx-parts/SidebarUnreadPills";
 import { hiddenSidebarRows } from "@/lib/sidebar-hidden-entries";
+import { routineRunsWaiting } from "./parallel-approvals";
 
 export type { MenuState, BotConfirmKind };
 export { parseItemDrag, currentArchivableBot, botConfirmCopy, roomDeleteCopy, sidebarListedBots, TeamMenuItems };
@@ -240,7 +242,8 @@ export function groupPreview(group: Group, bots: Bot[], config: ConfigStatus | n
     });
   }
   if (group.working) return t("sidebar.preview.teamWorking");
-  const last = lastNonReceipt(group.messages);
+  // the bot's last words, never a silent run receipt (#2081)
+  const last = lastSpokenLine(group.messages);
   if (!last) return t("sidebar.preview.noMessages");
   if (last.kind === "nudge" && last.nudge) return nudgeLineText(last.nudge, viewerId);
   if (last.kind === "text" && last.role !== "user" && isClientCancellation(last.text ?? "")) {
@@ -251,7 +254,11 @@ export function groupPreview(group: Group, bots: Bot[], config: ConfigStatus | n
     ? activityPreview(last.tool, botEngine(bots.find((bot) => bot.id === last.from?.botId), instances), last.dataResult)
     : last.kind === "goal.run" && last.goalRun
       ? sidebarGoalRunPreview(last.goalRun)
-      : (last.text ?? "");
+      : last.kind === "routine.run" && last.routineRun?.summary
+        ? last.routineRun.summary
+        : last.attention?.items.length
+          ? last.attention.items[0]!.text
+          : (last.text ?? "");
   const readable = plainPreviewText(citationPreviewText(text));
   if (last.role === "user") {
     // Someone else's words (src/lib/viewer.ts): a direct conversation's row
@@ -1690,6 +1697,7 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
   bot: Bot; selected: boolean; density?: SidebarDensity; query?: string; hidden?: boolean;
 }) {
   const dispatch = useStoreDispatch();
+  const showThreads = useShowThreads();
   const pendingQueued = useStoreSelector((current) => current.pendingQueued);
   const generatedTitles = useStoreSelector((current) => llmThreadTitlesEnabled(current.config));
   // The person's own conversations (shared/background-threads.ts): a
@@ -1732,7 +1740,8 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
       onPin: (task: Row, pinned: boolean) => patch(task, { pinned }),
       onSnooze: (task: Row, snoozedUntil: number | null) => patch(task, { snoozedUntil }),
       onLink: (task: Row, link: string | null) => patch(task, { link }),
-      onOpenAside: (task: Row) => openSideThread({ botId, threadId: task.threadId }),
+      // Open beside is a threads-shown way in; one conversation has no side column (#2081).
+      onOpenAside: showThreads ? (task: Row) => openSideThread({ botId, threadId: task.threadId }) : undefined,
       onMakeConfidential: (task: Row) => dispatch({ type: "makeTaskConfidential", botId, threadId: task.threadId }),
       onRefreshPermissions: (task: Row) => {
         const current = latest.current;
@@ -1907,7 +1916,11 @@ export function BotListItem({
     (selected && !threadsListed) || selection?.selected ? "bg-sidebar-selected" : "hover:bg-sidebar-hover",
   );
   const activityTasks = sidebarBotActivityTasks(bot, pendingQueued);
-  const waiting = bot.activity === "waiting-on-you" || activityTasks.some((task) => task.activity === "waiting-on-you");
+  // #2082: a routine run (a proactive wake included) that waits on the
+  // person counts too: its question lives in the run, not over the chat,
+  // and the bot-wide activity leaves runs out.
+  const waiting = bot.activity === "waiting-on-you" || activityTasks.some((task) => task.activity === "waiting-on-you")
+    || routineRunsWaiting(bot).length > 0;
   // Real work in a sibling still outranks an idle coordination wait.
   const working = !waiting && (Boolean(bot.busy) || activityTasks.some((task) => task.busy || task.activity === "working"));
   // A routine run is shown in Automations, not in the sidebar: while the bot's
@@ -1918,7 +1931,7 @@ export function BotListItem({
   const lineWorking = working && !routineOnlyWork;
   const teammateWait = !waiting && !working && (Boolean(bot.waitingForTeammates) || activityTasks.some((task) => Boolean(task.waitingForTeammates)));
   const queued = activityTasks.some((task) => task.queued);
-  const unread = botShowsUnread(bot);
+  const { unread, noticing } = useBotUnread(bot);
   // quiet rows drop the last-message preview but keep a line that reports
   // something happening now; an idle bot is just its name
   const statusLine = deleting || lineWorking || waiting || teammateWait || queued;
@@ -1946,7 +1959,7 @@ export function BotListItem({
           size={avatarSize}
           motion={mascotMotion?.kind ?? "none"}
           motionKey={mascotMotion?.nonce ?? 0}
-          animated={mascotRowAnimated(bot, pendingQueued, mascotMotion?.kind)}
+          animated={mascotRowAnimated(bot, pendingQueued, mascotMotion?.kind, noticing)}
         />
         {/* status dot (StatusDot, the same one a person's presence wears):
             green while the bot is working, ringed in the row's ground so it

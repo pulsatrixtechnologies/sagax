@@ -39,6 +39,7 @@ import { orgRoleForRole, scopesForRole } from "./oidc-login.ts";
 import type { OidcIdentity, RefreshOutcome } from "./oidc-rp.ts";
 import type { Principal } from "./principals.ts";
 import type { Scope, SessionEndCode, SessionRecord } from "./sessions.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export const IDP_VAULT_FILE = "idp-grants.enc";
 export const IDP_KEY_FILE = "idp-grants.key";
@@ -698,7 +699,7 @@ export class IdpSessionManager {
     for (const grant of this.safeList()) {
       if (!isSessionGrant(grant) || grant.refreshStartedAt === undefined || !grant.sessionId) continue;
       resumed += 1;
-      void this.startRefresh(grant.grantRef);
+      void this.startRefresh(grant.grantRef).catch(reportBackgroundError);
     }
     if (resumed) this.log(`idp: resuming ${resumed} sign-in refresh(es) a stop interrupted`);
     return resumed;
@@ -866,7 +867,7 @@ export class IdpSessionManager {
         } catch {
           return;
         }
-        if (still && isSessionGrant(still)) void this.startRefresh(ref);
+        if (still && isSessionGrant(still)) void this.startRefresh(ref).catch(reportBackgroundError);
       }, wait);
     }
     this.log(`idp: refresh deferred (${outcome.error}); the session stays, retry in ${Math.ceil(wait / 1000)} s`);

@@ -1,20 +1,11 @@
-// Connect Apps: one page (2026-10-27, the owner: one place per subject). The
-// title, the install scope, the one search (2026-10-29: it looks everywhere,
-// ConnectAppsSearch.tsx), then the tabs: Discover (the catalog; the view a
-// person lands on, first since 2026-10-28), Bots (Browse Bots, a tab of its
-// own right after Discover since 2026-10-29), Installed (which also lists
-// the Providers, the engine accounts Claude, Codex, Grok, once "My
-// accounts", a tab of their own until 2026-10-29), Pages (the published
-// pages, which used to sit under My accounts) and Sources (with the organization's
-// part for an admin). The "N connected" button is gone (2026-10-28): its
-// count sits on Installed and Providers, which list them with their logos. No sub-page repeats a tab: "Manage plugins and skills" and
-// a section opened alone are gone, View all filters Discover in place.
-// A page opened from a tab (a plugin's detail, a skill, "For which bots")
-// opens inside that tab's panel, under the same title, scope and tabs, as a
-// Settings sub-page does: a back row, then the page (2026-10-28).
-// The shared row parts (pills, section titles, PluginRow) live here too.
-import type { ReactNode } from "react";
-import { RefreshCw } from "lucide-react";
+// Plugins (#2104, JC 2026-11-06): a copy of Grok Bot's Connect Apps. The
+// home (Discover) lists what can be added under one round search; Manage
+// (Installed) lists what is here; Bots, Pages and Sources are views reached
+// from the home ("Bot templates") and from Manage. A page opened from a view
+// (a plugin, a skill, a custom connector) takes the whole pane under its own
+// bar. The shared row parts (pills, section titles, PluginRow) live here too.
+import { useState, type ReactNode } from "react";
+import { ArrowUpRight, Bot, Check, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -29,8 +20,8 @@ import {
   type PluginTypeFilter,
 } from "@/lib/plugins-model";
 import { BackButton } from "../Breadcrumb";
-import { CATEGORY_MODAL } from "../category-modal";
 import { PluginIcon, PluginStatusLabel } from "./PluginParts";
+import { PLUGINS } from "./plugins-style";
 
 /** The pills: All, then each category in the section order (only those with
  * a row, and the chosen one). Kinds and sources are not pills. */
@@ -114,9 +105,15 @@ export function normalizeConnectAppsTab(value: string | null | undefined): Conne
   if (value === "browseBots" || value === "browse-bots" || value === "botCatalog" || value === "templates") return "bots";
   return value === "installed" || value === "discover" || value === "bots" || value === "pages" || value === "sources" ? value : null;
 }
-/** Discover first (2026-10-28, the owner): it is where Connect Apps opens,
- * unless a link asks for another tab. Bots right after it (2026-10-29). */
-export const CONNECT_APPS_TABS: readonly ConnectAppsTab[] = ["discover", "bots", "installed", "pages", "sources"];
+/** Plugins (#2104, 2026-11-05, JC's review): five visible tabs, Installed
+ * first (what a person has), Discover (the catalog), Bots (Browse Bots),
+ * Pages (the published pages) and Sources (where plugins come from), as the
+ * Grok Bot reference lays them out (docs/design 2.8). A deep link selects
+ * its tab; the tab row never hides. The install scope is drawn only where
+ * it applies (SCOPELESS_TABS do not depend on it); the one search covers
+ * every tab. */
+export const CONNECT_APPS_TABS: readonly ConnectAppsTab[] = ["installed", "discover", "bots", "pages", "sources"];
+export const SCOPELESS_TABS: readonly ConnectAppsTab[] = ["bots", "pages"];
 
 const TAB_KEY = {
   installed: "connectApps.manage.tab.installed",
@@ -148,151 +145,230 @@ export interface ConnectAppsViewProps {
   onTab: (tab: ConnectAppsTab) => void;
   /** Leave the Connect apps view (content frame back). */
   onBack?: () => void;
-  /** tabs with nothing to show are left out (Sources when nothing reads
-   * or changes a source) */
+  /** views with something to show (Sources only when a source is reachable):
+   * Manage links to the ones past Installed */
   tabs?: readonly ConnectAppsTab[];
-  /** connected things per tab (connectedCounts): a counter beside its name */
+  /** connected things per view (connectedCounts) */
   counts?: Partial<Record<ConnectAppsTab, number>>;
-  /** the install scope (everyone, or one bot), under the title on every tab
-   * (Pages and Bots show it turned off, with why): the title and the tabs
-   * never move from one tab to another. The one search sits on its right. */
+  /** the home's "N connected": the count and a few icons, opens Manage */
+  connected?: { count: number; icons: readonly PluginItem[] };
+  /** the install scope (everyone, me, one bot): in Manage's title row */
   scope?: ReactNode;
-  /** the line under the scope and the search: what the scope does here */
+  /** what the scope does here, under Manage's title */
   scopeNote?: ReactNode;
-  /** a page opened from the open tab (a plugin's detail, a skill): shown in
-   * the tab's panel, the title, scope and tabs kept above it */
+  /** a line under the home's search while a scope other than the default is on */
+  homeNote?: ReactNode;
+  /** Manage's "+ Add" menu, beside the refresh */
+  manageActions?: ReactNode;
+  /** a page opened from a view (a plugin's detail, a skill): the whole pane */
   page?: ReactNode;
-  /** the one search (ConnectAppsSearch), under the scope on every tab */
+  /** the one search (ConnectAppsSearch), on the home's sticky row */
   search?: ReactNode;
-  /** what the search found: shown in place of the open tab's list while
-   * the search has text (a page opened from a result stays on top) */
+  /** what the search found: in place of the home's sections */
   results?: ReactNode;
-  /** notices between the tabs and the panel */
+  /** notices over the open view */
   notices?: ReactNode;
   refreshing: boolean;
   onRefresh: () => void;
   installed?: ReactNode;
   discover?: ReactNode;
-  /** Browse Bots (2026-10-29): a pane with its own pages and scroll */
+  /** Browse Bots: a pane with its own pages and scroll */
   bots?: ReactNode;
   pages?: ReactNode;
   sources?: ReactNode;
 }
 
+const BIG_TITLE_KEY = {
+  installed: "connectApps.manage.title",
+  discover: "connectApps.title",
+  bots: "connectApps.manage.tab.bots",
+  pages: "connectApps.manage.tab.pages",
+  sources: "connectApps.manage.tab.sources",
+} as const satisfies Record<ConnectAppsTab, LocaleKey>;
+
+/** Plugins (#2104, JC 2026-11-06: identical to Grok Bot's Connect Apps).
+ * Home (Discover): the title and "N connected" on one line, then the round
+ * search and "Bot templates" on a row that sticks to the top when the list
+ * scrolls (the X joins it there), then the pills and the sections. Manage
+ * (Installed) and the other views: "< Connect Apps", a big title, the list.
+ * A page (a plugin, a skill, a custom connector) takes the whole pane under
+ * its own bar. */
 export function ConnectAppsView(props: ConnectAppsViewProps) {
-  const { tab, onTab, onBack, tabs = CONNECT_APPS_TABS, counts = {}, scope, scopeNote, search, results, page, notices, refreshing, onRefresh } = props;
+  const { tab, onTab, onBack, tabs = CONNECT_APPS_TABS, connected, scope, scopeNote, homeNote, manageActions, search, results, page, notices, refreshing, onRefresh } = props;
   const shown = tabs.includes(tab) ? tab : tabs.includes("discover") ? "discover" : tabs[0] ?? "discover";
-  // Bots is a pane of its own (its list scrolls, its pages have a back row),
-  // laid out as a page opened from a tab
-  const pane = !results && (page !== undefined || shown === "bots");
-  const titleBlock = (
-    <>
-      <h2 id="plugins-title" className={CATEGORY_MODAL.title}>{t("connectApps.title")}</h2>
-      {/* the scope and the one search share a line (2026-10-29, the owner):
-          the search, compact, on the scope's right; narrow, it wraps under it */}
-      {(scope || search) && (
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2" data-plugins-scope-row>
-          {/* on every tab, so nothing below it moves (Pages and Bots turn it off) */}
-          {scope && <div className="shrink-0" data-plugins-scope-slot>{scope}</div>}
-          {search && <div className="min-w-[200px] flex-1 sm:ml-auto sm:max-w-[320px]" data-plugins-search-slot>{search}</div>}
+  const [stuck, setStuck] = useState(false);
+
+  if (page !== undefined && !results) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col" data-plugins-main={shown} data-plugins-manage={shown} data-plugins-subpage="">
+        <h2 id="plugins-title" className="sr-only">{t("connectApps.title")}</h2>
+        {notices}
+        {page}
+      </div>
+    );
+  }
+
+  if (shown === "discover") {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col" data-plugins-main="discover">
+        <div
+          className="min-h-0 flex-1 overflow-y-auto outline-none"
+          onScroll={(event) => setStuck(event.currentTarget.scrollTop > 4)}
+          tabIndex={-1}
+          data-plugins-list=""
+          data-plugins-manage="discover"
+          data-plugins-results={results ? "" : undefined}
+        >
+          <header className={cn(PLUGINS.gutter, "flex items-center gap-3 pb-[9px] pt-[50px] pr-14")}>
+            {onBack && <BackButton onBack={onBack} data={{ "data-apps-back": "" }} />}
+            <h2 id="plugins-title" className={cn(PLUGINS.title, "min-w-0 flex-1 truncate")}>{t("connectApps.title")}</h2>
+            {/* with nothing connected it still leads to Manage (scope, pages, sources) */}
+            {connected && (
+              <button
+                type="button"
+                onClick={() => onTab("installed")}
+                className="-mr-1 flex shrink-0 items-center gap-2 rounded-full py-1 pl-1 pr-1.5 text-[13px] text-ink-secondary hover:bg-hover hover:text-ink"
+                data-plugins-connected={connected.count}
+              >
+                <span className="flex -space-x-1.5" aria-hidden="true">
+                  {connected.icons.slice(0, 4).map((item) => (
+                    <PluginIcon key={item.key} item={item} className="size-[22px] rounded-[7px] ring-2 ring-(--color-inset)" />
+                  ))}
+                </span>
+                <span>{connected.count > 0 ? t("connectApps.connectedCount", { count: connected.count }) : t("connectApps.manageLink")}</span>
+                <ChevronRight size={16} aria-hidden="true" />
+              </button>
+            )}
+          </header>
+          <div
+            className={cn(
+              PLUGINS.gutter,
+              "sticky top-0 z-10 flex items-center gap-3 bg-inset py-2 transition-[padding] motion-reduce:transition-none",
+              stuck && "border-b border-hairline-weak sm:pr-14",
+            )}
+            data-plugins-search-row
+            data-plugins-stuck={stuck ? "" : undefined}
+          >
+            {search && <div className="min-w-0 flex-1" data-plugins-search-slot>{search}</div>}
+            <button type="button" onClick={() => onTab("bots")} className={PLUGINS.textLink} data-plugins-bot-templates>
+              <span className="flex size-[18px] items-center justify-center rounded-full bg-ink text-app" aria-hidden="true"><Bot size={12} /></span>
+              {t("connectApps.botTemplates")}
+              <ArrowUpRight size={14} className="text-ink-secondary" aria-hidden="true" />
+            </button>
+          </div>
+          {homeNote && <div className={PLUGINS.gutter}>{homeNote}</div>}
+          {notices}
+          <div className={cn(PLUGINS.gutter, "pb-8 pt-3")}>{results ?? props.discover}</div>
         </div>
-      )}
-      {scopeNote}
-    </>
+      </div>
+    );
+  }
+
+  const extraViews = tabs.filter((id) => id === "pages" || id === "sources");
+  const backBar = (
+    <div className="flex h-12 shrink-0 items-center px-3 pr-14" data-plugins-manage-bar>
+      <button
+        type="button"
+        onClick={() => onTab("discover")}
+        className="-ml-0.5 flex h-8 items-center gap-1 rounded-full pl-1 pr-2.5 text-[13px] text-ink hover:bg-hover"
+        data-plugins-home=""
+        data-breadcrumb-back=""
+      >
+        <ChevronLeft size={18} aria-hidden="true" />
+        {t("connectApps.title")}
+      </button>
+    </div>
   );
+  if (shown === "bots") {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col" data-plugins-main="bots" data-plugins-manage="bots">
+        <h2 id="plugins-title" className="sr-only">{t(BIG_TITLE_KEY.bots)}</h2>
+        {backBar}
+        {notices}
+        <div className="flex min-h-0 flex-1 flex-col">{props.bots}</div>
+      </div>
+    );
+  }
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-plugins-main={shown}>
-      <header className={cn(CATEGORY_MODAL.titleBar, onBack && "flex items-start gap-2")}>
-        {onBack ? (
-          <>
-            <BackButton onBack={onBack} data={{ "data-apps-back": "" }} />
-            <div className="min-w-0 flex-1">{titleBlock}</div>
-          </>
-        ) : titleBlock}
-      </header>
-      <div className="flex shrink-0 items-end gap-2 border-b border-hairline-weak px-4 sm:px-8" data-plugins-manage-bar>
-        <div role="tablist" aria-label={t("connectApps.tabsAria")} className="flex min-w-0 flex-1 gap-5 overflow-x-auto" data-plugins-manage-tabs>
-          {tabs.map((id) => {
-            const count = counts[id] ?? 0;
-            return (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                id={`plugins-tab-${id}`}
-                aria-selected={shown === id}
-                // a page is open: its tab stays marked, a click goes back to the tab
-                aria-current={page && shown === id ? "page" : undefined}
-                aria-controls={`plugins-tabpanel-${id}`}
-                aria-label={count > 0 ? t("connectApps.tabCountAria", { tab: connectAppsTabLabel(id), count }) : undefined}
-                data-plugins-tab={id}
-                onClick={() => onTab(id)}
-                className={cn(
-                  "-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-0.5 pb-2 pt-1 text-[13px] leading-[18px] transition-colors motion-reduce:transition-none",
-                  shown === id ? "border-ink font-medium text-ink" : "border-transparent text-ink-secondary hover:text-ink",
-                )}
-              >
-                <span data-plugins-tab-label>{connectAppsTabLabel(id)}</span>
-                {count > 0 && (
-                  <span data-plugins-tab-count={count} aria-hidden="true" className="min-w-[18px] rounded-full bg-hover px-1.5 text-center text-[11px] font-medium leading-[16px] text-ink-secondary tabular-nums">
-                    {count}
-                  </span>
-                )}
+      {backBar}
+      <div className="min-h-0 flex-1 overflow-y-auto outline-none" tabIndex={-1} data-plugins-list="" data-plugins-manage={shown}>
+        <div className={cn(PLUGINS.gutter, "pb-8 pt-3")}>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+            <h2 id="plugins-title" className={cn(PLUGINS.bigTitle, "min-w-0 flex-1")}>{t(BIG_TITLE_KEY[shown])}</h2>
+            {shown !== "pages" && scope && <div className="shrink-0" data-plugins-scope-slot>{scope}</div>}
+            {shown !== "pages" && (
+              <button type="button" onClick={onRefresh} disabled={refreshing} className={cn(PLUGINS.quietPill, "w-7 px-0")} aria-label={t("connectors.refreshTitle")} title={t("connectors.refreshTitle")}>
+                <RefreshCw size={13} className={cn(refreshing && "animate-spin")} />
               </button>
-            );
-          })}
-        </div>
-        <button type="button" onClick={onRefresh} disabled={refreshing} className="ui-icon-button mb-1 disabled:opacity-50" aria-label={t("connectors.refreshTitle")} title={t("connectors.refreshTitle")}>
-          <RefreshCw size={15} className={cn(refreshing && "animate-spin")} />
-        </button>
-      </div>
-      {notices}
-      <div
-        role="tabpanel"
-        id={`plugins-tabpanel-${shown}`}
-        aria-labelledby={`plugins-tab-${shown}`}
-        tabIndex={-1}
-        className={pane ? "flex min-h-0 flex-1 flex-col outline-none" : `${CATEGORY_MODAL.pane} ${CATEGORY_MODAL.list} outline-none`}
-        data-plugins-list={pane ? undefined : ""}
-        data-plugins-manage={shown}
-        data-plugins-subpage={page && !results ? "" : undefined}
-        data-plugins-results={results ? "" : undefined}
-      >
-        {results ?? page ?? (
-          <>
+            )}
+            {shown === "installed" && manageActions}
+          </div>
+          {shown !== "pages" && scopeNote}
+          {notices}
+          <div className="mt-6">
             {shown === "installed" && props.installed}
-            {shown === "discover" && props.discover}
-            {shown === "bots" && props.bots}
             {shown === "pages" && props.pages}
             {shown === "sources" && props.sources}
-          </>
-        )}
+          </div>
+          {shown === "installed" && extraViews.length > 0 && (
+            <div className="mt-8" data-plugins-more-views>
+              <h3 className={cn(PLUGINS.label, "mb-1")}>{t("connectApps.manage.more")}</h3>
+              {extraViews.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => onTab(id)}
+                  className="-mx-2 flex w-[calc(100%+16px)] items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-hover"
+                  data-plugins-view-link={id}
+                >
+                  <span className={cn(PLUGINS.rowName, "flex-1")}>{connectAppsTabLabel(id)}</span>
+                  <ChevronRight size={16} className="text-ink-secondary" aria-hidden="true" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-/** One row: icon, name, one line, and Add / Connect or the status. An
- * installed row opens its detail page. */
-export function PluginRow({ item, onOpen, action, below }: { item: PluginItem; onOpen: (item: PluginItem) => void; action: ReactNode; below?: ReactNode }) {
+/** "✓ Installed" on Discover / app-store rows: gray check and gray words
+ * (Grok Bot Connect Apps; Accounts keep a green Connected elsewhere). */
+export function ConnectedMark() {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 text-[13px] text-ink-secondary" data-plugin-status="installed">
+      <Check size={15} className="text-ink-secondary" aria-hidden="true" />
+      {t("connectApps.status.installed")}
+    </span>
+  );
+}
+
+/** One row: icon, name, one line, and Connect or the status. An installed
+ * row opens its page. */
+export function PluginRow({ item, onOpen, action, below, meta }: { item: PluginItem; onOpen: (item: PluginItem) => void; action: ReactNode; below?: ReactNode; meta?: ReactNode }) {
   const opens = item.installed;
   return (
-    <div data-plugin-row={item.key} className="rounded-2xl p-2.5 hover:bg-ink/5">
+    <div data-plugin-row={item.key} className="py-[13px]">
       <div className="flex items-center gap-3">
         <button
           type="button"
           disabled={!opens}
           onClick={() => onOpen(item)}
-          className="flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-default"
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left disabled:cursor-default"
           aria-label={opens ? t("connectApps.openAria", { name: item.name }) : undefined}
         >
-          <PluginIcon item={item} className="size-11" />
+          <PluginIcon item={item} className="size-10 rounded-[10px]" />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] font-medium leading-[18px] text-ink">{item.name}</span>
-            <span className="block truncate text-[12px] leading-[18px] text-ink-secondary" title={item.description}>{item.description}</span>
+            <span className={PLUGINS.rowName}>{item.name}</span>
+            <span className={cn(PLUGINS.rowSub, "flex items-center gap-1.5")} title={item.description}>
+              {meta}
+              <span className="truncate">{item.description}</span>
+            </span>
           </span>
         </button>
-        {action ?? (item.installed ? <PluginStatusLabel status={item.status} /> : null)}
+        {action ?? (item.installed ? (item.status === "connected" ? <ConnectedMark /> : <PluginStatusLabel status={item.status} className="text-[13px] font-normal" />) : null)}
       </div>
       {below}
     </div>

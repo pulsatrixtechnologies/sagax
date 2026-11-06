@@ -45,6 +45,9 @@ import { useMyEngines, usePerspicaxOrg } from "@/lib/perspicax-org";
 import { useOfferedInstances } from "@/lib/offered-instances";
 import { openModelKeysSettings } from "@/lib/settings-link";
 import { readableError } from "@/lib/plain-error";
+import { EMPTY_PERSONAL_SECTIONS, personalSectionNames, usePersonalSections } from "@/lib/personal-sections";
+import { viewerActorId } from "@/lib/viewer";
+import { viewerOwnTeamNames } from "@/lib/viewer-teams";
 
 // New bot is one page (2026-10-14): where to start from, the avatar, the
 // name, the description and the team. Every other setting sits under More
@@ -468,19 +471,34 @@ export function DraftPage({ draft, defaultsMode, moreOpen, onToggleMore, onImpor
   // each control still follows its field (canEditBotField).
   const sections = SECTIONS;
   const choosesTeam = canEditBotField(state.config, {}, "section", { draft: true });
-  const teams = [...new Set([...(state.sections ?? []), ...state.bots.map(existing => existing.section ?? ""), bot.section ?? ""])].filter(Boolean);
+  // #2045: Create bot offers only this person's teams. A shared bot's
+  // section name from someone else must not appear in the picker.
+  const orgMode = usePerspicaxOrg() !== null;
+  const personal = usePersonalSections();
+  const viewerId = viewerActorId(state.config);
+  const teams = viewerOwnTeamNames({
+    orgMode,
+    viewerId,
+    personalNames: orgMode ? personalSectionNames(personal ?? EMPTY_PERSONAL_SECTIONS) : undefined,
+    serverSections: state.sections ?? [],
+    bots: state.bots,
+    groups: state.groups,
+  });
+  const teamChoices = bot.section?.trim() && !teams.includes(bot.section.trim())
+    ? [...teams, bot.section.trim()]
+    : teams;
   // Start from and Team are one card of compact rows, as Settings draws
   // them; the avatar, name and description follow; More options is the
   // last row, folded.
   return <div className="flex flex-col gap-5">
     <div className={GROUP_CARD}>
       <StartingRole draft={draft} defaultsMode={defaultsMode} onImported={onImported} />
-      {choosesTeam && teams.length > 0 && <div data-new-bot-team>
+      {choosesTeam && teamChoices.length > 0 && <div data-new-bot-team>
         <CompactRow label={t("newBot.team")}>
           <PillSelect
             value={bot.section ?? ""}
             ariaLabel={t("newBot.team")}
-            options={[{ value: "", label: t("sidebar.section.general") }, ...teams.map(name => ({ value: name, label: name }))]}
+            options={[{ value: "", label: t("sidebar.section.general") }, ...teamChoices.map(name => ({ value: name, label: name }))]}
             onChange={section => draft.patch({ section })}
           />
         </CompactRow>

@@ -22,6 +22,7 @@ import { z } from "zod";
 import { normalizePermissions, type PermissionKey } from "../../shared/permissions.ts";
 import type { Principal } from "../auth/principals.ts";
 import { parseModelServers, type ModelServer } from "../drivers/pi-model-servers.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export const LINK_FILE_MAX_BYTES = 4 * 1024;
 export const DIRECTORY_MAX_BYTES = 4 * 1024 * 1024;
@@ -503,7 +504,7 @@ async function readLimitedBytes(response: Response, max: number): Promise<Buffer
     if (done) break;
     size += value.byteLength;
     if (size > max) {
-      await reader.cancel().catch(() => {});
+      await reader.cancel().catch(reportBackgroundError);
       return null;
     }
     chunks.push(value);
@@ -521,7 +522,7 @@ async function readLimited(response: Response, max: number): Promise<string | nu
     if (done) break;
     size += value.byteLength;
     if (size > max) {
-      await reader.cancel().catch(() => {});
+      await reader.cancel().catch(reportBackgroundError);
       return null;
     }
     chunks.push(value);
@@ -787,13 +788,13 @@ export class PerspicaxDirectory {
     try {
       response = await call(link);
       if (response.status === 401) {
-        void response.body?.cancel().catch(() => {});
+        void response.body?.cancel().catch(reportBackgroundError);
         const again = this.readLink();
         if (!again) return { ok: false, error: "link" };
         link = again;
         response = await call(link);
         if (response.status === 401) {
-          void response.body?.cancel().catch(() => {});
+          void response.body?.cancel().catch(reportBackgroundError);
           return { ok: false, error: "link" };
         }
       }
@@ -801,7 +802,7 @@ export class PerspicaxDirectory {
       return { ok: false, error: "unreachable" };
     }
     if (response.status === 429) {
-      void response.body?.cancel().catch(() => {});
+      void response.body?.cancel().catch(reportBackgroundError);
       return { ok: false, error: "rate_limited" };
     }
     let text: string | null;
@@ -863,13 +864,13 @@ export class PerspicaxDirectory {
     try {
       response = await call(link);
       if (response.status === 401) {
-        void response.body?.cancel().catch(() => {});
+        void response.body?.cancel().catch(reportBackgroundError);
         const again = this.readLink();
         if (!again) return { ok: false, error: "link" };
         link = again;
         response = await call(link);
         if (response.status === 401) {
-          void response.body?.cancel().catch(() => {});
+          void response.body?.cancel().catch(reportBackgroundError);
           return { ok: false, error: "link" };
         }
       }
@@ -878,7 +879,7 @@ export class PerspicaxDirectory {
     }
     if (response.status === 429) {
       const seconds = Number(response.headers.get("retry-after"));
-      void response.body?.cancel().catch(() => {});
+      void response.body?.cancel().catch(reportBackgroundError);
       return { ok: false, error: "rate_limited", ...(Number.isFinite(seconds) && seconds > 0 ? { retryAfterMs: Math.min(seconds, 600) * 1000 } : {}) };
     }
     let text: string | null;
@@ -908,7 +909,7 @@ export class PerspicaxDirectory {
     const scope = typeof parsed.scope === "string" ? parsed.scope.split(" ") : [];
     if (!scope.includes("pulsabot:routines")) {
       // A refresh token without the marker is not a delegation: it must not live on.
-      void this.revokeRefresh(refreshToken, link);
+      void this.revokeRefresh(refreshToken, link).catch(reportBackgroundError);
       return { ok: false, error: "unsupported" };
     }
     const seconds = typeof parsed.expires_in === "number" && Number.isFinite(parsed.expires_in) && parsed.expires_in > 0 ? parsed.expires_in : 0;
@@ -929,7 +930,7 @@ export class PerspicaxDirectory {
         headers: { "content-type": "application/x-www-form-urlencoded", authorization: this.basic(link) },
         body: new URLSearchParams({ token, token_type_hint: "refresh_token" }).toString(),
       });
-      void response.body?.cancel().catch(() => {});
+      void response.body?.cancel().catch(reportBackgroundError);
     } catch {
       /* best effort */
     }
@@ -948,7 +949,7 @@ export class PerspicaxDirectory {
         headers: { accept: "application/json", "content-type": "application/x-www-form-urlencoded", authorization: this.basic(link) },
         body: new URLSearchParams({ token, token_type_hint: "access_token" }).toString(),
       });
-      void response.body?.cancel().catch(() => {});
+      void response.body?.cancel().catch(reportBackgroundError);
       if (!response.ok) this.log(`perspicax: revoking an exchanged MCP token answered ${response.status}; it expires on its own`);
       return response.ok;
     } catch (error) {
@@ -1018,7 +1019,7 @@ export class PerspicaxDirectory {
     try {
       response = await call(link.linkToken);
       if (response.status === 401) {
-        void response.body?.cancel().catch(() => {});
+        void response.body?.cancel().catch(reportBackgroundError);
         const again = this.readLink();
         if (!again) return { ok: false, error: "link" };
         link = again;
@@ -1028,15 +1029,15 @@ export class PerspicaxDirectory {
       return { ok: false, error: "unreachable" };
     }
     if (response.status === 401 || response.status === 403) {
-      void response.body?.cancel().catch(() => {});
+      void response.body?.cancel().catch(reportBackgroundError);
       return { ok: false, error: "link" };
     }
     if (response.status === 404 || response.status === 409) {
-      void response.body?.cancel().catch(() => {});
+      void response.body?.cancel().catch(reportBackgroundError);
       return { ok: false, error: response.status === 404 ? "no_key" : "user_inactive" };
     }
     if (response.status !== 200) {
-      void response.body?.cancel().catch(() => {});
+      void response.body?.cancel().catch(reportBackgroundError);
       return { ok: false, error: "unreachable" };
     }
     let text: string | null;
@@ -1084,7 +1085,7 @@ export class PerspicaxDirectory {
     try {
       response = await call(link.linkToken);
       if (response.status === 401) {
-        void response.body?.cancel().catch(() => {});
+        void response.body?.cancel().catch(reportBackgroundError);
         const again = this.readLink();
         if (!again) return { ok: false, error: "link" };
         link = again;
@@ -1094,7 +1095,7 @@ export class PerspicaxDirectory {
       return { ok: false, error: "unreachable" };
     }
     if (response.status === 401) {
-      void response.body?.cancel().catch(() => {});
+      void response.body?.cancel().catch(reportBackgroundError);
       return { ok: false, error: "link", status: response.status };
     }
     if (response.status === 403) {
@@ -1151,7 +1152,7 @@ export class PerspicaxDirectory {
     try {
       response = await call(link.linkToken);
       if (response.status === 401) {
-        void response.body?.cancel().catch(() => {});
+        void response.body?.cancel().catch(reportBackgroundError);
         const again = this.readLink();
         if (!again) return { ok: false, error: "link" };
         link = again;
@@ -1161,7 +1162,7 @@ export class PerspicaxDirectory {
       return { ok: false, error: "unreachable" };
     }
     if (response.status === 401) {
-      void response.body?.cancel().catch(() => {});
+      void response.body?.cancel().catch(reportBackgroundError);
       return { ok: false, error: "link", status: 401 };
     }
     let text: string | null;
@@ -1210,7 +1211,7 @@ export class PerspicaxDirectory {
     try {
       response = await call(link.linkToken);
       if (response.status === 401) {
-        void response.body?.cancel().catch(() => {});
+        void response.body?.cancel().catch(reportBackgroundError);
         const again = this.readLink();
         if (!again) return null;
         link = again;
@@ -1220,7 +1221,7 @@ export class PerspicaxDirectory {
       return null;
     }
     if (response.status !== 200) {
-      void response.body?.cancel().catch(() => {});
+      void response.body?.cancel().catch(reportBackgroundError);
       return null;
     }
     let bytes: Buffer | null;
@@ -1277,7 +1278,7 @@ export class PerspicaxDirectory {
     try {
       response = await call(link.linkToken);
       if (response.status === 401) {
-        void response.body?.cancel().catch(() => {});
+        void response.body?.cancel().catch(reportBackgroundError);
         const again = this.readLink();
         if (!again) return { ok: false, error: "link" };
         link = again;
@@ -1348,7 +1349,7 @@ export class PerspicaxDirectory {
     try {
       response = await call(link.linkToken);
       if (response.status === 401) {
-        void response.body?.cancel().catch(() => {});
+        void response.body?.cancel().catch(reportBackgroundError);
         const again = this.readLink();
         if (!again) return { ok: false, error: "link" };
         link = again;
@@ -1360,11 +1361,11 @@ export class PerspicaxDirectory {
     const status = response.status;
     const marked = response.headers.get(ACCOUNT_ERASURE_HEADER) === "1";
     if (status === 401) {
-      void response.body?.cancel().catch(() => {});
+      void response.body?.cancel().catch(reportBackgroundError);
       return { ok: false, error: "link", status };
     }
     if (!marked && (status === 404 || status === 405)) {
-      void response.body?.cancel().catch(() => {});
+      void response.body?.cancel().catch(reportBackgroundError);
       return { ok: false, error: "unsupported", status };
     }
     let text: string | null;
@@ -1422,7 +1423,7 @@ export class PerspicaxDirectory {
     try {
       response = await call(link.linkToken);
       if (response.status === 401) {
-        void response.body?.cancel().catch(() => {});
+        void response.body?.cancel().catch(reportBackgroundError);
         const again = this.readLink();
         if (!again) return { ok: false, error: "link" };
         link = again;
@@ -1433,7 +1434,7 @@ export class PerspicaxDirectory {
     }
     const status = response.status;
     if (status === 204 || status === 200) {
-      void response.body?.cancel().catch(() => {});
+      void response.body?.cancel().catch(reportBackgroundError);
       return { ok: true };
     }
     let parsed: Record<string, unknown> = {};
@@ -1456,8 +1457,8 @@ export class PerspicaxDirectory {
 
   start(intervalMs: number): void {
     this.stop();
-    void this.refresh("boot");
-    this.timer = setInterval(() => void this.refresh("poll"), intervalMs);
+    void this.refresh("boot").catch(reportBackgroundError);
+    this.timer = setInterval(() => void this.refresh("poll").catch(reportBackgroundError), intervalMs);
     this.timer.unref?.();
   }
 
@@ -1537,7 +1538,7 @@ export class PerspicaxDirectory {
     try {
       response = await this.call(link);
       if (response.status === 401 || response.status === 403) {
-        void response.body?.cancel().catch(() => {});
+        void response.body?.cancel().catch(reportBackgroundError);
         // The token was rotated (or the file rewritten): read it again and
         // try once more with what it holds now.
         const before = link.linkToken;
@@ -1550,7 +1551,7 @@ export class PerspicaxDirectory {
         link = again;
         response = await this.call(link);
         if (response.status === 401 || response.status === 403) {
-          void response.body?.cancel().catch(() => {});
+          void response.body?.cancel().catch(reportBackgroundError);
           this.fail("link_refused", `the directory answered ${response.status} after re-reading the link file`);
           return this.state();
         }
@@ -1560,7 +1561,7 @@ export class PerspicaxDirectory {
       return this.state();
     }
     if (response.status === 304) {
-      void response.body?.cancel().catch(() => {});
+      void response.body?.cancel().catch(reportBackgroundError);
       if (!this.data) {
         // A 304 with nothing cached cannot be applied: ask again in full.
         this.etag = null;
@@ -1574,7 +1575,7 @@ export class PerspicaxDirectory {
       return this.state();
     }
     if (response.status !== 200) {
-      void response.body?.cancel().catch(() => {});
+      void response.body?.cancel().catch(reportBackgroundError);
       this.fail(`http_${response.status}`, `the directory answered ${response.status}`);
       return this.state();
     }

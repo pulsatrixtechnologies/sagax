@@ -2475,33 +2475,53 @@ function accountIdForOrigin(origin) {
   return environmentsState.environments.find((entry) => entry.origin === origin)?.id ?? null;
 }
 
+/** Deliver a notification click or inline reply to the account that posted it. */
+function deliverNotificationToPage(channel, id, ...payload) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const origin = notificationAccounts.get(id) ?? null;
+  if (channel === "desktop:notification-click") notificationAccounts.delete(id);
+  const account = accountIdForOrigin(origin);
+  if (!origin || account === null) {
+    mainPage()?.send(channel, id, ...payload);
+    return;
+  }
+  void workspaceMenuAction(async () => {
+    if (pageContexts?.activeOrigin() !== origin) await switchEnvironment(account);
+    const page = pageContexts?.contentsFor(origin);
+    if (!page || page !== mainPage()) return;
+    const send = () => { if (!page.isDestroyed()) page.send(channel, id, ...payload); };
+    if (page.isLoadingMainFrame()) page.once("did-stop-loading", send);
+    else send();
+  });
+}
+
+/** macOS: read Notification Center authorization when Electron exposes it.
+ * Showing a banner still prompts on first need when status is not-determined. */
+function ensureMacNotificationAuthorized() {
+  if (process.platform !== "darwin") return true;
+  try {
+    const settings = systemPreferences.getNotificationSettings?.();
+    const status = settings?.authorizationStatus ?? settings?.authStatus;
+    if (status === "denied") {
+      console.warn("[desktop] Notification Center authorization is denied for Sagax");
+      return false;
+    }
+  } catch { /* older Electron: show() prompts */ }
+  return true;
+}
+
 // Native notifications, the Dock bounce and the taskbar flash
 // (electron/desktop-attention.mjs). A click brings the window forward and
-// tells the page which conversation to open.
+// tells the page which conversation to open. An inline reply (macOS/Windows)
+// sends the text into that chat.
 const desktopAttention = createDesktopAttention({
   platform: process.platform,
   app,
   Notification,
   getWindow: () => mainWindow,
-  onClick: (id, target) => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    // The account that posted it comes on screen, then its page opens the conversation.
-    const origin = notificationAccounts.get(id) ?? null;
-    notificationAccounts.delete(id);
-    const account = accountIdForOrigin(origin);
-    if (!origin || account === null) {
-      mainPage()?.send("desktop:notification-click", id, target);
-      return;
-    }
-    void workspaceMenuAction(async () => {
-      if (pageContexts?.activeOrigin() !== origin) await switchEnvironment(account);
-      // that account's page, opened again when it was closed meanwhile
-      const page = pageContexts?.contentsFor(origin);
-      if (!page || page !== mainPage()) return;
-      if (page.isLoadingMainFrame()) page.once("did-stop-loading", () => { if (!page.isDestroyed()) page.send("desktop:notification-click", id, target); });
-      else page.send("desktop:notification-click", id, target);
-    });
-  },
+  ensureAuthorized: ensureMacNotificationAuthorized,
+  onClick: (id, target) => deliverNotificationToPage("desktop:notification-click", id, target),
+  onReply: (id, reply, target) => deliverNotificationToPage("desktop:notification-reply", id, reply, target),
 });
 
 // A nudge on this computer, received or sent: bring the window to the very

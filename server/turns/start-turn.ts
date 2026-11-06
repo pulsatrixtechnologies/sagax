@@ -13,6 +13,7 @@ import { createSetupStartTurn } from "./start-turn-setup.ts";
 import { createComputerWorkspaceStartTurn } from "./start-turn-computer-workspace.ts";
 import { createComputerHelpersStartTurn } from "./start-turn-computer-helpers.ts";
 import { createComputerMountStartTurn } from "./start-turn-computer-mount.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export type { StartTurnHost };
 
@@ -68,7 +69,7 @@ export function createStartTurn(host: StartTurnHost) {
     } finally {
       await finishFinally(state);
     }
-  })();
+  })().catch(reportBackgroundError);
   return state.userMessage;
 };
 

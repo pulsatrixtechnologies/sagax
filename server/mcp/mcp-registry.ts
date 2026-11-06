@@ -16,6 +16,9 @@ export interface StoredStdioMcpServer extends StdioMcpSpec {
   disabledTools?: string[];
   /** The marketplace it was added from (Plugins); absent: added by hand. */
   source?: string;
+  /** The id of the bot whose own server this is: its program or files are in
+   * that bot's folder, so it starts only for that bot. Absent: every bot's. */
+  bot?: string;
 }
 /** An app registered in advance with the server's authorization server,
  * for servers that do not let apps register themselves. The secret is a
@@ -45,6 +48,7 @@ export interface StdioMcpServerListing {
   resultBudget?: number;
   disabledTools?: string[];
   source?: string;
+  bot?: string;
 }
 export interface RemoteMcpServerListing {
   name: string;
@@ -64,6 +68,11 @@ export type McpServerListing = StdioMcpServerListing | RemoteMcpServerListing;
  * client's config: a remote server has a `url`, a local one a `command`. */
 export function isRemoteMcpServer(server: McpServerSpec): server is RemoteMcpSpec {
   return "url" in server;
+}
+
+/** Whether `botId` may start this server: every bot may start one that is no bot's own. */
+export function mcpServerServes(server: McpServerSpec & { bot?: string }, botId: string | undefined): boolean {
+  return !server.bot || server.bot === botId;
 }
 
 export const MAX_MCP_SERVERS = 20;
@@ -155,6 +164,8 @@ function urlError(value: string): string | null {
 // The reserved names: one rule for the installation's servers, a person's
 // own servers and the turn's Connectors record (shared/mcp-reserved-names.ts).
 
+const BOT_ID = /^[A-Za-z0-9_-]{1,128}$/u;
+
 const stdioEntrySchema = z.object({
   command: z.string().trim().min(1).max(1_024),
   args: z.array(z.string().max(4_096)).max(MAX_ARGS).optional(),
@@ -163,8 +174,10 @@ const stdioEntrySchema = z.object({
   resultBudget: resultBudgetSchema.optional(),
   disabledTools: disabledToolsSchema.optional(),
   source: sourceSchema.optional(),
+  bot: z.string().regex(BOT_ID).optional(),
 }).strict();
 
+/** Left out, an edit keeps the bot it is for. */
 const stdioMutationSchema = stdioEntrySchema.extend({
   env: z.record(z.string(), z.union([z.string().max(16_384), z.literal(true)])).optional(),
 });
@@ -356,8 +369,14 @@ function parseStdio(raw: unknown, mutation: boolean, existing?: StoredMcpServer)
       ...(parsed.data.resultBudget !== undefined ? { resultBudget: parsed.data.resultBudget } : {}),
       ...disabledToolsFor(parsed.data.disabledTools, existing),
       ...sourceFor(parsed.data.source, existing),
+      ...botFor(parsed.data.bot, mutation, existing),
     },
   };
+}
+
+function botFor(value: string | undefined, mutation: boolean, existing?: StoredMcpServer): { bot?: string } {
+  const bot = value ?? (mutation && existing && !isRemoteMcpServer(existing) ? existing.bot : undefined);
+  return bot ? { bot } : {};
 }
 
 function parseRemote(raw: unknown, mutation: boolean, existing?: StoredMcpServer): Parsed {
@@ -496,7 +515,8 @@ export function listMcpServers(raw: Record<string, unknown> | undefined): McpSer
       enabled: server.enabled,
       ...(server.resultBudget !== undefined ? { resultBudget: server.resultBudget } : {}),
       ...(server.disabledTools?.length ? { disabledTools: server.disabledTools } : {}),
-        ...(server.source ? { source: server.source } : {}),
+      ...(server.source ? { source: server.source } : {}),
+      ...(server.bot ? { bot: server.bot } : {}),
     }];
   });
 }

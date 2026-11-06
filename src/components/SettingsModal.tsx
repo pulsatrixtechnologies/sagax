@@ -2,32 +2,30 @@
 // Per-bot settings (persona, model, computer) live in BotSettingsDialog: this
 // is the stuff shared by every bot: who you are, your keys, and the
 // machine your bots can borrow.
-import { useState } from "react";
 import { FileText, Search, X } from "lucide-react";
-import { api, useStore, type AppSettingsSection } from "@/state/store";
+import { useStore, type AppSettingsSection } from "@/state/store";
 import { localeChoices } from "@/locales";
 import { t } from "@/lib/i18n";
-import { withTourReset } from "@/lib/guided-tour";
-import { completionPatch } from "@/lib/onboarding";
-import { launchBridges } from "@/lib/launch";
 import { brand } from "@/lib/brand";
 import { useUpdaterState } from "@/lib/updater";
 import { openUpdatePrompt, requestUpdateCheck } from "@/lib/update-prompt";
-import { DecisionModelSettings } from "./DecisionModelSettings";
 import { GeneralAdvancedSettings, generalAdvancedShown, isSoloDesktop } from "./settings/AdvancedSettings";
-import { CompactRow, PillSelect, type PillOption, SettingRow, SettingsGroup, Switch } from "./SettingsPrimitives";
-import { OrganizationSettings } from "./OrganizationSettings";
-import { OrgMemorySettings } from "./OrgMemorySettings";
-import { NotificationSettings } from "./NotificationSettings";
+import { CompactRow, GROUP_CARD, LinkRow, PillSelect, type PillOption, SettingRow, SettingsAdvancedScope, SettingsGroup, Switch } from "./SettingsPrimitives";
 import { TimeZoneRows } from "./settings/TimeZoneSettings";
+import { AppPageExtras } from "./settings/AppPage";
 import {
   AppearanceSettings,
   CredentialsSettings,
+  DecisionModelSettings,
   EnginesSettings,
   ExperimentalSettings,
   ImportSettings,
   LocalComputerSection,
+  NotificationSettings,
+  OrganizationSettings,
+  OrgMemorySettings,
   ProvidersSettings,
+  SecurityKeySettings,
   UsageSection,
   VoiceSettingsPage,
   WorkspaceBackupSettings,
@@ -37,8 +35,6 @@ import { shortcutLabel } from "./ShortcutHint";
 import { aboutMeFirstLine } from "./AboutMeSettings";
 import { SettingsSubPage, SettingsSubPageRow } from "./SettingsSubPage";
 import { AccountCard } from "./settings/AccountCard";
-import { OpenAtLoginRow } from "./OpenAtLoginOffer";
-import { SecurityKeySettings } from "./SecurityKeySettings";
 import { MyApprovalRules } from "./settings/MyApprovalRules";
 import { MyToolGrants } from "./settings/MyToolGrants";
 import { cn } from "@/lib/cn";
@@ -48,7 +44,9 @@ import { useSettingsModal } from "./settings/useSettingsModal";
 import { NAV_GROUPS } from "./settings/settings-nav";
 
 // The threads choice moved with Appearance (0.5.6); old imports still work.
-export { chooseThreadsView } from "./settings/AppearanceSettings";
+// Re-exported from the thin preference module so this shell chunk does not
+// pull AppearanceSettings.tsx (Refs #1971).
+export { chooseThreadsView } from "@/lib/thread-preferences";
 
 export { GeneralAdvancedSettings, generalAdvancedShown, isSoloDesktop };
 
@@ -179,67 +177,6 @@ function AutoInstallAwayRow() {
   );
 }
 
-/** General > System > Guided tours: the app tour (cleared and opened
- * again on the live interface) and the welcome flow, one row with two
- * buttons (0.5.6, they were two rows with a paragraph each). */
-function GuidedToursRow() {
-  const { state, dispatch } = useStore();
-  const [saving, setSaving] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const replayAppTour = () => {
-    setSaving(true);
-    setFailed(false);
-    void api("/api/config", {
-      method: "PUT",
-      body: JSON.stringify({ onboarding: {
-        // Upgraded users may have completed only the legacy browser gate.
-        ...(!state.config?.onboarding?.completedAt ? completionPatch().onboarding : {}),
-        hintsSeen: withTourReset(state.config?.onboarding),
-      } }),
-      signal: AbortSignal.timeout(10_000),
-    })
-      .then((config) => {
-        dispatch({ type: "configStatus", config });
-        dispatch({ type: "toggleTour", open: true });
-      })
-      .catch(() => setFailed(true))
-      .finally(() => setSaving(false));
-  };
-  return (
-    <>
-      <CompactRow label={t("settings.tours.title")} rowId="tours">
-        <button type="button" disabled={saving} onClick={replayAppTour} className="ui-button">
-          {t("settings.appTour.title")}
-        </button>
-        <button type="button" onClick={() => dispatch({ type: "toggleWelcome", open: true })} className="ui-button">
-          {t("settings.welcome.title")}
-        </button>
-      </CompactRow>
-      {failed && <p role="alert" className="px-3.5 pb-2 text-[12px] text-danger">{t("onboarding.tour.error")}</p>}
-    </>
-  );
-}
-
-/** General > System > Server: the launch screen (no server, or an
- * organization server). What the current choice means is one hover away. */
-function ServerRow() {
-  const { state, dispatch } = useStore();
-  const launchMode = state.config?.onboarding?.launchMode ?? "solo";
-  if (!launchBridges(window.ogb)) return null;
-  return (
-    <CompactRow label={t("settings.launch.title")} rowId="server">
-      <button
-        type="button"
-        title={t(launchMode === "server" ? "settings.launch.server" : "settings.launch.solo")}
-        onClick={() => dispatch({ type: "toggleLaunch", open: true, mode: launchMode })}
-        className="ui-button"
-      >
-        {t("settings.launch.change")}
-      </button>
-    </CompactRow>
-  );
-}
-
 function LanguageRow() {
   const { state } = useStore();
   // Follows the account: anyone can switch, including a chat-only teammate,
@@ -261,9 +198,9 @@ function LanguageRow() {
 export function SettingsModal() {
   const {
     state, dispatch, advanced, retroSkin, remoteActive, dialogRef, paneRef,
-    searchLabels, closeSettings, openAbout, query, setQuery, q, editConfig,
+    searchLabels, closeSettings, openAbout, query, setQuery, q,
     lockedServer, allowed, memoryShown, availableSections, section, visibleSections,
-    pagesHit, sectionLabelKey, subPageId, subPage, openSubPage, closeSubPage,
+    pagesHit, sectionLabelKey, sectionIntroKey, subPageId, subPage, openSubPage, closeSubPage,
   } = useSettingsModal();
 
   return (
@@ -313,9 +250,9 @@ export function SettingsModal() {
               groups its own (you, AI, the workspace, this app last). A
               heading shows while one of its entries does, a search too. */}
           {NAV_GROUPS.map((group) => {
-            // 2026-11-02 (JC): About is not a row of this menu; it opens from
-            // the app menu and the sidebar, and a search still finds it.
-            const entries = visibleSections.filter((entry) => entry.group === group.id && entry.id !== "about");
+            // #2080 (L0): App (id "about") is a page of the rail; the About
+            // window still opens from the app menu, the sidebar and that page.
+            const entries = visibleSections.filter((entry) => entry.group === group.id);
             if (entries.length === 0) return null;
             const headingId = `app-settings-nav-${group.id}`;
             return (
@@ -326,7 +263,7 @@ export function SettingsModal() {
                 {entries.map(({ id, labelKey, icon: Icon }) => (
                   <div key={id} className="flex min-w-0 flex-col">
                     <button
-                      onClick={() => (id === "about" ? openAbout() : dispatch({ type: "toggleAppSettings", open: true, section: id }))}
+                      onClick={() => dispatch({ type: "toggleAppSettings", open: true, section: id })}
                       aria-current={section === id ? "page" : undefined}
                       className={cn(
                         "flex items-center gap-[9px] rounded-lg px-[9px] py-[7px] text-left text-[13px] leading-[18px] text-ink transition-colors motion-reduce:transition-none",
@@ -390,13 +327,12 @@ export function SettingsModal() {
               onChange={(event) => {
                 setQuery("");
                 const next = event.target.value as AppSettingsSection;
-                if (next === "about") openAbout();
-                else dispatch({ type: "toggleAppSettings", open: true, section: next });
+                dispatch({ type: "toggleAppSettings", open: true, section: next });
               }}
               className="w-full min-w-0 rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink focus:border-border-strong focus:outline-none sm:hidden"
             >
               {NAV_GROUPS.map((group) => {
-                const entries = availableSections.filter((entry) => entry.group === group.id && entry.id !== "about");
+                const entries = availableSections.filter((entry) => entry.group === group.id);
                 return entries.length === 0 ? null : (
                   <optgroup key={group.id} label={t(group.labelKey)}>
                     {entries.map(({ id, labelKey }) => (
@@ -419,10 +355,18 @@ export function SettingsModal() {
             </SettingsSubPage>
           ) : (
           <div ref={paneRef} data-settings-pane="" className="flex flex-1 flex-col overflow-y-auto">
-            <h2 className="hidden px-8 pb-1 pt-6 text-[17px] font-semibold leading-6 tracking-[-0.008em] text-ink sm:block">
-              {sectionLabelKey ? t(sectionLabelKey) : null}
-            </h2>
+            {/* #2080: the page title at 20px and, under it, the page's one
+                sentence (introKey), on every page; the pages draw no intro. */}
+            <div data-settings-page-header="" className="px-4 pt-2 sm:px-8 sm:pt-6">
+              <h2 className="hidden text-[20px] font-semibold leading-7 tracking-[-0.012em] text-ink sm:block">
+                {sectionLabelKey ? t(sectionLabelKey) : null}
+              </h2>
+              {sectionIntroKey && (
+                <p data-settings-intro="" className="mt-0.5 text-[13px] leading-[18px] text-ink-secondary">{t(sectionIntroKey)}</p>
+              )}
+            </div>
             <div className="flex flex-col gap-3 px-4 pb-6 pt-4 sm:px-8">
+            <SettingsAdvancedScope key={section} pageId={section} fold={!advanced} searching={Boolean(q)}>
             {/* 0.5.6: the reference design's layout (OrganizationSettings): grey
                 headings over cards of rows. Memory and, from General >
                 Advanced (2026-10-15), routines in the conversation, group
@@ -438,15 +382,10 @@ export function SettingsModal() {
             )}
             {section === "account" && (
               <>
-                {/* The account first; then the person's language and time zone
-                    (2026-10-26). What General held (server, default bot,
-                    guided tours, Advanced) is at the bottom. Security keys,
-                    the approval rules, tool access and the vault are pages
-                    of their own since 2026-10-28; the microphone is in Voice. */}
-                <SettingsGroup title={t("settings.group.account")} groupId="account">
-                  {/* 2026-10-15: one account row (who, label, Sign out) */}
+                {/* #2080 L2: identity and region only. Open at login, tours,
+                    diagnostics and the former Advanced rows live on App. */}
+                <SettingsGroup groupId="account">
                   <AccountCard lockedServer={lockedServer} />
-                  <OpenAtLoginRow />
                   {(!state.config?.viewer || state.config.viewer.operator) && (
                     <SettingsSubPageRow
                       bare
@@ -458,34 +397,10 @@ export function SettingsModal() {
                     />
                   )}
                 </SettingsGroup>
-                <SettingsGroup title={t("settings.group.appearance")} groupId="appearance">
+                <SettingsGroup title={t("settings.group.languageRegion")} groupId="languageRegion">
                   <LanguageRow />
-                  {/* the person's own time zone (parity 2E) */}
                   <TimeZoneRows />
                 </SettingsGroup>
-                <SettingsGroup title={t("settings.group.system")} groupId="system">
-                  {!remoteActive && <ServerRow />}
-                  {/* Defaults for new bots live on Settings > Models > Bot models (#1675). */}
-                  {!remoteActive && <GuidedToursRow />}
-                  {/* General > Advanced: people's tool access, conversation
-                      cleanup and diagnostics on one sub-page (tool access,
-                      parallel conversations and recovery are each bot's own
-                      since #546; routines, group turns and MCP calls went to
-                      Organization; pre-releases to Updates). Shown when it
-                      holds something for this viewer. A search that names
-                      one of them shows them here. */}
-                  {advanced && !q && generalAdvancedShown(state.config) && (
-                    <SettingsSubPageRow
-                      bare
-                      cardId="general.advanced"
-                      title={t("settings.advancedPage.title")}
-                      summary={editConfig ? t("settings.advancedPage.summary") : t("settings.diagnostics.title")}
-                      actionLabel={t("settings.advancedPage.open")}
-                      onOpen={() => openSubPage("general.advanced")}
-                    />
-                  )}
-                </SettingsGroup>
-                {advanced && q && generalAdvancedShown(state.config) && <GeneralAdvancedSettings />}
               </>
             )}
 
@@ -511,15 +426,25 @@ export function SettingsModal() {
               </div>
             )}
 
-            {section === "updates" && (
-              <div data-settings-card="updates">
-                {/* 2026-10-16: a titled card, as every other page's */}
-                <SettingsGroup title={t("settings.updates.group")} groupId="updates">
-                  <UpdatesRow />
-                  <PrereleaseRow />
-                  <AutoInstallAwayRow />
-                </SettingsGroup>
-              </div>
+            {/* App (id "about", #2080): the version and updates first (the
+                former Updates page, where the desktop app answers), then the
+                About window (version, license, documentation). */}
+            {section === "about" && (
+              <>
+                {window.ogb?.updater && (
+                  <div data-settings-card="about.updates">
+                    <SettingsGroup title={t("settings.updates.group")} groupId="updates">
+                      <UpdatesRow />
+                      <PrereleaseRow />
+                      <AutoInstallAwayRow />
+                    </SettingsGroup>
+                  </div>
+                )}
+                <AppPageExtras remoteActive={remoteActive} />
+                <div data-settings-card="about.about" className={GROUP_CARD}>
+                  <LinkRow rowId="about" label={t("settings.app.openAbout")} onClick={openAbout} />
+                </div>
+              </>
             )}
 
             {section === "appearance" && <AppearanceSettings />}
@@ -541,14 +466,22 @@ export function SettingsModal() {
             {/* Voice (2026-10-28, out of Models and voice) */}
             {section === "voice" && <VoiceSettingsPage />}
 
-            {section === "backups" && <WorkspaceBackupSettings />}
-            {section === "import" && <ImportSettings />}
+            {/* Backups and import (#2080): Import is a card of this page. */}
+            {section === "backups" && (
+              <>
+                <WorkspaceBackupSettings />
+                <div data-settings-card="backups.import">
+                  <ImportSettings />
+                </div>
+              </>
+            )}
 
             {section === "computer" && <LocalComputerSection />}
 
             {section === "usage" && <UsageSection />}
             {/* Privacy (2026-10-14): a group of Notifications on an organization server. */}
             {section === "notifications" && <NotificationSettings privacy={allowed("privacy")} />}
+            </SettingsAdvancedScope>
             </div>
           </div>
           )}

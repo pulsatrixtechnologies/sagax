@@ -34,6 +34,7 @@
 import { randomUUID } from "node:crypto";
 
 import { spokenConsent } from "../../shared/call-consent.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 /** xAI's Voice Agent API. Tests point SAGAX_XAI_REALTIME_URL at a loopback fake. */
 export const XAI_REALTIME_URL = "wss://api.x.ai/v1/realtime";
@@ -515,7 +516,7 @@ export class RealtimeCallBridge {
         } else {
           this.output(first, JSON.stringify({ error: "It did not work. Say so in one sentence and what they can do next; never the technical cause." }));
         }
-      });
+      }).catch(reportBackgroundError);
   }
 
   private onPermission(callId: string): void {
@@ -537,8 +538,8 @@ export class RealtimeCallBridge {
         : { error: "The permission could not be recorded. Say so briefly." }));
       if (!ok || decision !== "allow") return;
       this.deps.sendText({ type: "working", busy: true });
-      void card.next().catch((): RealtimeWorkResult => ({ kind: "failed", reason: "error" })).then((result) => this.later(result));
-    });
+      void card.next().catch((): RealtimeWorkResult => ({ kind: "failed", reason: "error" })).then((result) => this.later(result)).catch(reportBackgroundError);
+    }).catch(reportBackgroundError);
   }
 
   /** The rest of a piece of work, after the person allowed it: said as a

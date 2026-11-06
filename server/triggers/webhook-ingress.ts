@@ -230,7 +230,12 @@ export function createWebhookIngressHandler(
   };
 
   return async (req: IncomingMessage, res: ServerResponse) => {
-    const url = new URL(req.url ?? "/", "http://localhost");
+    let url: URL;
+    try {
+      url = new URL(req.url ?? "/", "http://localhost");
+    } catch {
+      return json(res, 400, { error: "Invalid request URL" });
+    }
     if (req.method === "GET" && url.pathname === "/health") {
       return json(res, 200, { app: "openmausbot-webhooks", ready: true });
     }
@@ -343,7 +348,14 @@ export async function listenWebhookIngress(
 ): Promise<WebhookIngress> {
   const host = options.host ?? "127.0.0.1";
   const advertised = options.publicBaseUrl === undefined ? undefined : advertisedWebhookBase(options.publicBaseUrl);
-  const server = createServer(createWebhookIngressHandler(manager, options.claimRequest, options.limiter, options.receivers));
+  const handle = createWebhookIngressHandler(manager, options.claimRequest, options.limiter, options.receivers);
+  const server = createServer((req, res) => {
+    handle(req, res).catch((error: unknown) => {
+      console.error("webhooks: receiver failed", error);
+      if (res.headersSent) res.destroy();
+      else json(res, 500, { error: "Webhook receiver failed" });
+    });
+  });
   await new Promise<void>((resolve, reject) => {
     const onError = (error: Error) => reject(error);
     server.once("error", onError);

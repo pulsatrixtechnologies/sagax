@@ -12,7 +12,7 @@ export type PluginCategory = (typeof MAIN_CATEGORIES)[number] | (typeof MORE_CAT
 /** A category chip of the main view: everything or one category. */
 export type PluginFilter = "all" | PluginCategory;
 /** The small type filter at the end of the chip row: a kind or a source. */
-export type PluginTypeFilter = "any" | "apps" | "mcp" | "skills" | `source:${string}`;
+export type PluginTypeFilter = "any" | "apps" | "mcp" | "skills" | "recommended" | `source:${string}`;
 export type PluginStatus = "connected" | "needs_auth" | "pending" | "off" | "available";
 
 export interface PluginItem {
@@ -449,6 +449,7 @@ export function matchesType(item: PluginItem, type: PluginTypeFilter): boolean {
   if (type === "apps") return item.kind === "app" || item.key === WHOP_KEY || item.key === TAILSCALE_KEY;
   if (type === "mcp") return item.kind === "mcp" || (item.kind === "featured" && item.key !== WHOP_KEY && item.key !== TAILSCALE_KEY);
   if (type === "skills") return item.kind === "skill";
+  if (type === "recommended") return Boolean(item.recommended) && !item.installed;
   return item.source === type.slice("source:".length) && !item.parent;
 }
 
@@ -496,7 +497,7 @@ export function mainSections(items: readonly PluginItem[], query: string, filter
     const needed = wanted.flatMap((slug) => visible.filter((item) => item.kind === "app" && item.id.toLowerCase() === slug));
     if (needed.length) sections.push({ id: "needed", filter: null, items: needed, total: needed.length });
   }
-  preview("recommended", null, visible.filter((item) => item.recommended && !item.installed));
+  preview("recommended", { type: "recommended" }, visible.filter((item) => item.recommended && !item.installed));
   for (const source of extraSources) {
     preview(`source:${source}`, { type: `source:${source}` }, visible.filter((item) => item.source === source && !item.parent).sort(byInstalledThenName));
   }

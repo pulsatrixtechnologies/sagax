@@ -49,8 +49,11 @@ export interface BotActionsMenuAnchor {
   alignRight?: boolean;
 }
 
-export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data }: {
+export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data, trigger = true }: {
   bot: Bot;
+  /** false: no "..." button; the menu opens only at a right click (the bot
+   * panel, whose header holds only the gear and the X, #2125). */
+  trigger?: boolean;
   /** The open menu's position, or null when it is closed. */
   anchor: BotActionsMenuAnchor | null;
   onAnchor: (anchor: BotActionsMenuAnchor | null) => void;
@@ -239,7 +242,7 @@ export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data }: {
 
   return (
     <>
-      <button
+      {trigger && <button
         ref={buttonRef}
         type="button"
         data-bot-actions-button=""
@@ -255,7 +258,7 @@ export function BotActionsMenu({ bot, anchor, onAnchor, onRename, data }: {
         className={cn(CIRCLE_BUTTON, anchor && "bg-elevated-hover")}
       >
         <MoreHorizontal size={18} strokeWidth={1.75} />
-      </button>
+      </button>}
       {motion.shown && shown && createPortal(
         <div
           ref={menuRef}

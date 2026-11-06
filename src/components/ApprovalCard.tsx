@@ -283,18 +283,25 @@ export function toolApprovalView(card: OptionCardData, botName?: string): ToolAp
   // A held outbound action reads as what it sends and where, the way the
   // phones show it, not as the slug the bot happened to call.
   const outbound = outboundSummary(card);
+  // #2091: a Flow GO's subtitle is already the human line (what is written,
+  // where, why) while `toolInput` holds the raw arguments: the line reads
+  // under the title and the arguments fold once below, never the same text
+  // twice
+  const humanSubtitle = shown && card.toolInput !== undefined && card.toolInput !== card.subtitle ? shown : undefined;
   return {
     // 2026-10-20 (after the reference design): one plain line, "Ottoline wants to
     // run a command on your cloud computer", never a question to parse
     title: outbound ? outbound.headline : botName?.trim()
       ? t("approval.card.namedWantsTo", { name: botName.trim(), action: words.action })
       : t("approval.card.wantsTo", { action: words.action }),
-    summary: outbound?.summary || described.summary || (words.line !== shown ? words.line : undefined),
+    summary: outbound?.summary || humanSubtitle || described.summary || (words.line !== shown ? words.line : undefined),
     risk: described.risk,
-    plain: shown,
+    plain: humanSubtitle ? undefined : shown,
     server: described.server,
     tool: described.tool ?? tool,
-    args: described.argsJson ?? (technical ? card.subtitle : undefined),
+    // #2091: a Flow GO carries its arguments once, in the folded row, even
+    // when the guard truncated them past valid JSON
+    args: described.argsJson ?? (technical ? card.subtitle : card.toolInput && isTechnicalText(card.toolInput) ? card.toolInput : undefined),
   };
 }
 

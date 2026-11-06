@@ -16,7 +16,7 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
     case "openPersonPanel": {
       const personId = action.personId?.trim() || null;
       if (!personId) return state.personPanelId === null ? state : { ...state, personPanelId: null };
-      return { ...state, personPanelId: personId, settingsOpen: false, computerOpen: false, inspectorOpen: false, appSettingsOpen: false };
+      return { ...state, personPanelId: personId, settingsOpen: false, computerOpen: false, inspectorOpen: false, appSettingsOpen: false, personaEditor: null };
     }
     case "toggleSettings": {
       // Only Details (and Routines) live in the bot panel. A deep link to any
@@ -45,8 +45,13 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
       const open = action.open ?? (action.botId !== undefined || !state.settingsOpen);
       const freshOpen = open && !state.settingsOpen;
       const named = action.section !== undefined;
+      const expand = open ? named || (freshOpen && state.botSettingsSectionStored) : false;
       return {
         ...state,
+        // #2149: a fresh opening, or one that expands a row, lands on Activity
+        // (restoreBotPanel then puts the closed tab back).
+        botPanelTab: open && (freshOpen || expand) ? null : state.botPanelTab,
+        botPanelRestored: false,
         selectedId,
         settingsOpen: open,
         panelOwner: open ? owner : null,
@@ -56,7 +61,7 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         botSettingsSection: action.section ?? state.botSettingsSection,
         // A bare fresh open re-expands the section this device last viewed;
         // a deep link expands the row it names.
-        botSettingsExpandAccordion: open ? named || (freshOpen && state.botSettingsSectionStored) : false,
+        botSettingsExpandAccordion: expand,
         // Only an opening that expanded the remembered row sets this; a deep
         // link forces the full view for sections Simple skips.
         botSettingsExpandRemembered: open ? !named && freshOpen && state.botSettingsSectionStored : false,
@@ -68,6 +73,8 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         inspectorOpen: open ? false : state.inspectorOpen,
         appSettingsOpen: open ? false : state.appSettingsOpen,
         memoryManagerOpen: open ? false : state.memoryManagerOpen,
+        // The bot's profile page is a right panel too: one at a time.
+        personaEditor: open ? null : state.personaEditor,
       };
     }
     case "openRoutine": {
@@ -77,14 +84,16 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
     }
     case "routineFocused":
       return state.routineFocus ? { ...state, routineFocus: null } : state;
-    case "openRoutineRunSheet": {
+    case "openRoutineRunInChat": {
+      // 2026-11-05 (#2098): the run's message in the bot's conversation,
+      // on screen; never a run view beside the chat.
       const known = state.routineRuns.find((candidate) => candidate.id === action.runId);
       const botId = action.botId ?? known?.botId;
       const bot = botId ? state.bots.find((candidate) => candidate.id === botId) : undefined;
+      const report = bot?.messages.find((message) => message.kind === "routine.run" && message.routineRun?.runId === action.runId);
       const next: AppState = {
         ...state,
         activeView: "chat",
-        routineRunSheet: { runId: action.runId, ...(action.routineId ?? known?.routineId ? { routineId: action.routineId ?? known?.routineId } : {}) },
         codingChat: null,
         // Keep the bot panel if it was already open; otherwise land on chat.
         personPanelId: null,
@@ -92,14 +101,15 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         pluginsOpen: false,
         triggersOpen: false,
         memoryManagerOpen: false,
+        ...(bot && state.selectedId !== bot.id ? { selectedId: bot.id } : {}),
       };
-      if (bot && state.selectedId !== bot.id) {
-        return { ...next, selectedId: bot.id };
-      }
-      return next;
+      if (!bot || !report) return next;
+      return {
+        ...next,
+        freshTopic: withoutFreshTopicFor(next, bot.threadId),
+        focusMessage: { threadId: bot.threadId, messageId: report.id, nonce: (state.focusMessage?.nonce ?? 0) + 1, consumed: false },
+      };
     }
-    case "closeRoutineRunSheet":
-      return state.routineRunSheet ? { ...state, routineRunSheet: null } : state;
     // 2026-11-03: a coding task opens as a chat where the chat is, never in
     // the side panel (the panel stays open as it was, its Coding list the
     // entry point).
@@ -108,7 +118,6 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         ...state,
         activeView: "chat",
         codingChat: action.target,
-        routineRunSheet: null,
         personPanelId: null,
         appSettingsOpen: false,
         pluginsOpen: false,
@@ -167,12 +176,55 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
       const open = action.open ?? !state.computerOpen;
       return {
         ...state,
+        botPanelRestored: false,
         computerOpen: open,
         personPanelId: open ? null : state.personPanelId,
         settingsOpen: open ? false : state.settingsOpen,
         inspectorOpen: open ? false : state.inspectorOpen,
         activityOpen: open ? false : state.activityOpen,
         appSettingsOpen: open ? false : state.appSettingsOpen,
+        personaEditor: open ? null : state.personaEditor,
+      };
+    }
+    case "pickBotPanelTab":
+      return state.botPanelTab?.botId === action.botId && state.botPanelTab.tab === action.tab
+        ? state
+        : { ...state, botPanelTab: { botId: action.botId, tab: action.tab } };
+    case "rememberBotPanel": {
+      // #2149 (JC 2026-11-06): the header pill closes the panel; its next
+      // click reopens exactly this one.
+      const botId = state.panelOwner?.botId ?? state.selectedId;
+      if (!botId || !(state.settingsOpen || state.computerOpen)) return state;
+      return {
+        ...state,
+        lastBotPanel: {
+          botId,
+          computer: state.computerOpen,
+          tab: state.botPanelTab?.botId === botId ? state.botPanelTab.tab : "activity",
+          section: state.botSettingsSection,
+          expand: state.botSettingsExpandAccordion,
+        },
+      };
+    }
+    case "restoreBotPanel": {
+      const botId = action.botId ?? state.panelOwner?.botId ?? state.selectedId;
+      const last = state.lastBotPanel;
+      if (!last || !botId || last.botId !== botId) {
+        return reduce(state, { type: "toggleSettings", open: true, ...(action.botId ? { botId: action.botId } : {}) });
+      }
+      if (last.computer) {
+        const opened = reduce(state, { type: "toggleComputer", open: true });
+        return { ...opened, botPanelTab: { botId, tab: last.tab }, botPanelRestored: true };
+      }
+      const opened = reduce(state, { type: "toggleSettings", open: true, ...(action.botId ? { botId: action.botId } : {}) });
+      if (opened === state) return state;
+      return {
+        ...opened,
+        botSettingsSection: last.section,
+        botSettingsExpandAccordion: last.expand,
+        botSettingsExpandRemembered: false,
+        botPanelTab: { botId, tab: last.tab },
+        botPanelRestored: true,
       };
     }
     case "toggleInspector": {

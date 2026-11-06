@@ -4,6 +4,7 @@ import { useStore, type Message } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { dataWindowEnabled } from "@/lib/feature-flags";
 import { openDataWindow } from "@/lib/data-window";
+import { InlineDataChart } from "./data/InlineDataChart";
 
 /** The query is a receipt of what ran, not the viewer's mutable SQL draft. */
 export function DataResultChip({ message }: { message: Message }) {
@@ -12,7 +13,8 @@ export function DataResultChip({ message }: { message: Message }) {
   const queryId = useId();
   const result = message.dataResult;
   if (!result) return null;
-  const Icon = result.kind === "chart" ? ChartNoAxesCombined : Table2;
+  const chart = result.kind === "chart";
+  const Icon = chart ? ChartNoAxesCombined : Table2;
   const companion = window.ogb?.remoteClient?.active === true;
   const owner = state.bots.find((bot) => bot.id === result.botId);
   // The result opens in its bot's Data window (experimental): off, there is
@@ -35,7 +37,7 @@ export function DataResultChip({ message }: { message: Message }) {
           onClick={() => {
             if (owner) void openDataWindow({ botId: owner.id, title: t("dataWindow.title", { name: owner.name }), cardId: result.cardId });
           }}
-          className="ml-auto flex shrink-0 items-center gap-1 text-xs text-accent hover:underline disabled:opacity-40"
+          className={`ml-auto flex shrink-0 items-center gap-1 text-xs hover:underline disabled:opacity-40 ${chart ? "text-ink-tertiary hover:text-accent" : "text-accent"}`}
         >
           {t("data.openResult")}<ArrowUpRight size={13} aria-hidden="true" />
         </button>
@@ -44,6 +46,7 @@ export function DataResultChip({ message }: { message: Message }) {
         <div className="mb-1 text-[11px] font-medium text-ink-secondary">{t("data.card.sql")}</div>
         <pre dir="ltr" className="max-h-64 overflow-auto rounded-lg bg-inset p-2.5 font-mono text-xs whitespace-pre-wrap break-words text-ink"><code>{result.sql}</code></pre>
       </div>}
+      {chart && <InlineDataChart botId={result.botId} cardId={result.cardId} title={result.title} />}
     </div>
   );
 }

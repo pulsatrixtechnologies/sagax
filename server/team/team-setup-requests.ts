@@ -129,8 +129,10 @@ interface SetupStore {
 
 interface Options {
   store: SetupStore;
-  teams(): string[];
-  canAccessTeam(from: BotRecord, target?: string): boolean;
+  /** #2045: teams of this owner only (display names). Another person's
+   * same name must not block or authorize a proposal. */
+  teams(ownerKey: string): string[];
+  canAccessTeam(from: BotRecord, target?: string, targetSectionId?: string): boolean;
   /** 2026-10-20: a Primary Bot covers every bot of its person whatever the
    * team (peer-roster.ts primaryCovers); their teams are in its scope too. */
   covers?(from: BotRecord, target: BotRecord): boolean;
@@ -144,6 +146,9 @@ interface Options {
    * 2026-10-26, Approve for me on the person's own turn when every bot it
    * touches is theirs). A suggestion never reaches it. */
   autoApply?(botId: string, threadId: string, request: TeamSetupRequest): boolean;
+  /** #2091 (decided 2026-11-05): the Always allow the person kept for this kind
+   * of team setup (index.ts keptCardRule); kept, the request applies at once. */
+  keptRule?(botId: string, threadId: string, candidate: { tool: string; scope: Record<string, string>; description: string }): { id: string; behavior: "allow" | "ask" | "deny"; description: string } | undefined;
   /** Per-driver capability resolver for engine-switch warnings on the card. */
   driverCapabilities?(instanceId: string): DriverCapabilities | undefined;
   validateChange?(before: BotRecord, fields: TeamSetupFields): void;
@@ -157,6 +162,14 @@ interface Options {
 }
 
 type RequestFrom = { botId: string; name: string; color: string };
+
+/** #2091: what Always allow keeps on a team-setup card: this kind of
+ * change (set up, suggested specialist, deletion) for this bot. */
+export function teamSetupRuleCandidate(request: Pick<TeamSetupRequest, "deletion" | "suggestion">): { tool: string; scope: Record<string, string>; description: string } {
+  if (request.deletion) return { tool: "sagax:delete_bot", scope: { action: "delete" }, description: "Delete bots of the team" };
+  if (request.suggestion) return { tool: "sagax:team_setup", scope: { action: "suggest" }, description: "Add the specialists it suggests" };
+  return { tool: "sagax:team_setup", scope: { action: "setup" }, description: "Set up and change the team" };
+}
 type SetupArgs = { botId: string; threadId: string; plan: unknown; from?: RequestFrom; suggestion?: boolean };
 type DeletionArgs = { botId: string; threadId: string; targetBotId: string; reason: string; from?: RequestFrom };
 /** Server-only invocation lease. Never saved on a request or approval card. */
@@ -232,14 +245,16 @@ export class TeamSetupRequestService {
     if (immediate && (request.suggestion || !this.options.autoApply?.(request.botId, request.threadId, request))) throw new TeamSetupError("This conversation's approval level no longer applies this setup directly", 409);
     if (confirming && !immediate && !this.options.store.messagesFor(request.threadId).some((message) => message.card?.requestId === request.requestId && !message.card.answered && !message.card.dismissed)) throw new TeamSetupError("This setup card is no longer pending", 409);
     if (confirming && teamSetupRevision(chief, this.requesterScope(request)) !== request.requesterRevision) throw new TeamSetupError("The Primary Bot's settings changed. This setup was cancelled; review a new proposal.", 409);
-    const existingTeams = new Set(this.options.teams().map(section));
+    // #2045: "exists" means this Primary Bot's person already has that team.
+    // Another person's same display name must not block the proposal.
+    const ownerOf = (bot: BotRecord) => this.options.store.botOwnerKey?.(bot) ?? (bot.ownerUserId?.trim().toLowerCase() || "");
+    const existingTeams = new Set(this.options.teams(ownerOf(chief)).map(section));
     if (new Set([...(chief.managedSections ?? []), ...request.newTeams]).size > 100) throw new TeamSetupError("A Primary Bot may coordinate at most 100 additional teams", 409);
     for (const name of request.newTeams) if (existingTeams.has(name)) throw new TeamSetupError(`Team ${JSON.stringify(name)} now exists. Review a new proposal.`, 409);
-    const covered = (bot: BotRecord) => this.options.canAccessTeam(chief, bot.section) || Boolean(this.options.covers?.(chief, bot));
+    const covered = (bot: BotRecord) => this.options.canAccessTeam(chief, bot.section, bot.sectionId) || Boolean(this.options.covers?.(chief, bot));
     const coveredTeams = new Set(this.options.store.bots.filter((bot) => !bot.hidden && this.options.covers?.(chief, bot)).map((bot) => section(bot.section)));
     const allowed = (name?: string) => request.newTeams.includes(section(name)) || this.options.canAccessTeam(chief, name) || coveredTeams.has(section(name));
     const targets = new Set<string>();
-    const ownerOf = (bot: BotRecord) => this.options.store.botOwnerKey?.(bot) ?? (bot.ownerUserId?.trim().toLowerCase() || "");
     const projected = this.options.store.bots.map((bot) => ({ id: bot.id, name: bot.name, section: section(bot.section), chiefOfStaff: bot.chiefOfStaff, hidden: bot.hidden, owner: ownerOf(bot) }));
     for (const operation of request.operations) {
       if (targets.has(operation.botId)) throw new TeamSetupError("A bot appears twice in the prepared setup");
@@ -267,7 +282,8 @@ export class TeamSetupRequestService {
     for (const name of request.newTeams) if (!request.operations.some((op) => section(op.fields.section) === name)) throw new TeamSetupError(`New team ${JSON.stringify(name)} needs a specialist in this setup`);
     for (const operation of request.operations) {
       const candidate = projected.find((bot) => bot.id === operation.botId)!;
-      if (projected.some((bot) => bot.id !== candidate.id && !bot.hidden && bot.section === candidate.section && bot.name.trim().toLowerCase() === candidate.name.trim().toLowerCase())) throw new TeamSetupError(`@${candidate.name} already exists in that team`, 409);
+      // #2045: bot names are unique per (owner, team), not per display name alone.
+      if (projected.some((bot) => bot.id !== candidate.id && !bot.hidden && bot.owner === candidate.owner && bot.section === candidate.section && bot.name.trim().toLowerCase() === candidate.name.trim().toLowerCase())) throw new TeamSetupError(`@${candidate.name} already exists in that team`, 409);
       // One Primary Bot per person (a solo server has one person): a plan
       // that appoints another must also step the current one down.
       if (candidate.chiefOfStaff && projected.some((bot) => bot.id !== candidate.id && bot.chiefOfStaff && bot.owner === candidate.owner)) throw new TeamSetupError("A person has one Primary Bot. Include the current Primary Bot's step-down in this plan.", 409);
@@ -331,6 +347,8 @@ export class TeamSetupRequestService {
   async submit(args: SetupArgs & SubmitAuthority) {
     const request = this.prepare(args);
     if (!request.suggestion && this.options.autoApply?.(args.botId, args.threadId, request)) return this.applyImmediately(request, args.from, args.canCommit);
+    const kept = !request.suggestion ? this.options.keptRule?.(args.botId, args.threadId, teamSetupRuleCandidate(request)) : undefined;
+    if (kept?.behavior === "allow") return this.applyImmediately(request, args.from, args.canCommit, kept);
     return { ...this.card(request, args.from), applied: false, state: "pending" as const };
   }
 
@@ -354,6 +372,8 @@ export class TeamSetupRequestService {
   async submitDeletion(args: DeletionArgs & SubmitAuthority) {
     const request = this.prepareDeletion(args);
     if (this.options.autoApply?.(args.botId, args.threadId, request)) return this.applyImmediately(request, args.from, args.canCommit);
+    const kept = this.options.keptRule?.(args.botId, args.threadId, teamSetupRuleCandidate(request));
+    if (kept?.behavior === "allow") return this.applyImmediately(request, args.from, args.canCommit, kept);
     return { ...this.card(request, args.from), applied: false, state: "pending" as const };
   }
 
@@ -419,6 +439,8 @@ export class TeamSetupRequestService {
     return {
       title, subtitle: detail, options: request.deletion ? ["Delete bot", "Cancel"] : request.suggestion ? ["Add bot", "Not now"] : ["Apply setup", "Cancel"], requestId: request.requestId,
       tool: request.deletion ? "delete_bot" : "set_up_team", teamSetupRequest: request,
+      // #2091: what Always allow keeps on this card
+      ownerRule: teamSetupRuleCandidate(request),
     };
   }
 
@@ -453,7 +475,7 @@ export class TeamSetupRequestService {
     }
   }
 
-  private async applyImmediately(request: TeamSetupRequest, from?: RequestFrom, canCommit?: () => boolean) {
+  private async applyImmediately(request: TeamSetupRequest, from?: RequestFrom, canCommit?: () => boolean, byRule?: { id: string; behavior: "allow" | "ask" | "deny"; description: string }) {
     // Capture the before/after description before applying. Only a settled
     // receipt is published, so no interactive card or second turn can start.
     const card = this.cardData(request, true);
@@ -464,6 +486,7 @@ export class TeamSetupRequestService {
       // the settled receipt of an applied or expired proposal; full-access: exempt
       messageId = this.options.store.appendMessage(request.threadId, { role: "bot", kind: "options", ...(from ? { from } : {}), card: {
         ...card, title, options: [], ...(result.state === "applied" ? { answered: "allow" as const } : { expired: true }), held: result.error,
+        ...(byRule ? { ruleSaved: byRule } : {}),
         teamSetupRequest: { ...request, result, resumed: true },
       } }).id;
     } catch (error) {

@@ -626,6 +626,10 @@ const runningCost: { total: number; modelUsage: Record<string, FakeModelUsage> }
 })();
 let stdinEnded = false;
 let steerGateArmed = false;
+/** Voice boot herald: one init after cold start so warmOnly can wait for
+ * readiness without writing a prompt (#1971). Skipped once a turn owns the
+ * process; playVoiceTurn still re-announces init on every turn. */
+let bootInitEmitted = false;
 
 // Ownership-race fixture: after accepting the first prompt, stop consuming
 // stdin until the test creates this file. A large second write then leaves
@@ -1085,6 +1089,7 @@ const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, Math.
  * The cold start already began at process boot (voiceBoot). */
 async function playVoiceTurn(prompt: JsonValue): Promise<void> {
   await voiceBoot;
+  bootInitEmitted = true;
   out({ type: "system", subtype: "init", session_id: sessionId, model, permissionMode, tools });
   replay(prompt);
   await pause(Number(process.env.FAKE_CLAUDE_FIRST_TOKEN_MS) || 0);
@@ -1459,6 +1464,23 @@ const playReply = (prompt: JsonValue, mcpNote: string) => {
     finish();
   }
 };
+
+// Announce init once with no prompt so a composer prewarm (warmOnly) can
+// wait for readiness the way ACP waits on acp-prewarmed. Voice waits for
+// cold boot; other stream-json modes defer one tick so the parent can
+// attach stdout first. A turn already in flight skips this; it re-announces.
+const emitBootInit = () => {
+  if (bootInitEmitted || turnRunning || lateTurnWaiting) return;
+  bootInitEmitted = true;
+  out({ type: "system", subtype: "init", session_id: sessionId, model, permissionMode, tools });
+};
+if (mode === "voice") {
+  void voiceBoot.then(emitBootInit);
+} else if (process.env.FAKE_CLAUDE_WARM_BOOT_INIT === "1" && argv.includes("--input-format")) {
+  // Only warmOnly launches set this (turn-spawn). A normal turn must not
+  // get an early init or session.started counts drift.
+  setImmediate(emitBootInit);
+}
 
 let buf = "";
 process.stdin.on("data", (c) => {

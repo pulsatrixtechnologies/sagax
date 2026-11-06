@@ -173,3 +173,17 @@ describe("mascotLook", () => {
     }
   });
 });
+
+describe("parseBotProfilePatch voice chat (#2125)", () => {
+  it("takes the bot's voice chat speed and language", () => {
+    const result = parseBotProfilePatch({ voiceSpeed: 1.25, voiceLanguage: "fr" } as never, true);
+    expect(result).toEqual({ ok: true, patch: { voiceSpeed: 1.25, voiceLanguage: "fr" } });
+    expect(parseBotProfilePatch({ voiceLanguage: "auto" } as never, true).ok).toBe(true);
+  });
+
+  it("refuses a speed out of range and an unknown language", () => {
+    expect(parseBotProfilePatch({ voiceSpeed: 3 } as never, true).ok).toBe(false);
+    expect(parseBotProfilePatch({ voiceSpeed: 0.1 } as never, true).ok).toBe(false);
+    expect(parseBotProfilePatch({ voiceLanguage: "klingon" } as never, true).ok).toBe(false);
+  });
+});

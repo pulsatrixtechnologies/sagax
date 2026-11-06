@@ -27,6 +27,10 @@ export interface BotPaymentAllowance {
   perMonthLimit?: string;
   /** Optional merchant hostnames (example.test). Empty or absent: any. */
   merchants?: string[];
+  /** Merchants where this bot's purchases are allowed without a card: the
+   * person's Always allow on a purchase card (#2091). Absent: each
+   * purchase asks. */
+  alwaysMerchants?: string[];
 }
 
 export interface PaymentsSettings {
@@ -108,7 +112,26 @@ export function parseBotPaymentAllowance(input: unknown): BotPaymentAllowance | 
     }
     out.merchants = hosts;
   }
+  if (row.alwaysMerchants !== undefined) {
+    if (!Array.isArray(row.alwaysMerchants) || row.alwaysMerchants.length > 50) return "alwaysMerchants is a list of at most 50 hostnames.";
+    const hosts: string[] = [];
+    for (const entry of row.alwaysMerchants) {
+      const host = cleanHost(entry);
+      if (!host) return "Each merchant is a hostname, such as shop.example.test.";
+      if (!hosts.includes(host)) hosts.push(host);
+    }
+    out.alwaysMerchants = hosts;
+  }
   return out;
+}
+
+/** The person's standing Always allow for this bot's purchases on this
+ * site (#2091): the merchant, or null when each purchase asks. */
+export function standingPurchaseMerchant(settings: PaymentsSettings | undefined, botId: string, domain: string): string | null {
+  const list = settings?.bots?.[botId]?.alwaysMerchants;
+  if (!list || list.length === 0) return null;
+  const host = domain.trim().toLowerCase();
+  return list.find((entry) => host === entry || host.endsWith(`.${entry}`)) ?? null;
 }
 
 export function parsePaymentsSettings(input: unknown): PaymentsSettings | string {

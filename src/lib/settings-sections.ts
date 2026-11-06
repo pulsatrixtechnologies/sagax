@@ -16,6 +16,10 @@ const MERGED: Partial<Record<AppSettingsSection, { section: AppSettingsSection; 
   decisionModel: { section: "engines", cardId: "engines.decisionModel" },
   privacy: { section: "notifications", cardId: "notifications.privacy" },
   memory: { section: "organization", cardId: "organization.memory" },
+  // #2080 (L0): Import is a card of Backups and import, Updates the first
+  // card of App (id "about").
+  import: { section: "backups", cardId: "backups.import" },
+  updates: { section: "about", cardId: "about.updates" },
   // 2026-10-26 to 2026-10-28 Security keys and the vault were cards of
   // Account; since 2026-10-28 Security ("security") and Vault
   // ("credentials") are pages again (CARD_HOME below sends the old links).
@@ -62,6 +66,16 @@ export const CARD_HOME: Readonly<Record<string, AppSettingsSection>> = {
   // what stays on Models: online computers, Decision model
   "connections.integrations": "engines",
   "engines.decisionModel": "engines",
+  // #2080 L2: Account Advanced rows live on App until L1 / L3 take them
+  "general.threadCleanup": "about",
+  "general.diagnostics": "about",
+  "general.logs": "about",
+  "general.feedback": "about",
+  "general.loopGuard": "about",
+  "general.usage": "about",
+  "about.startup": "about",
+  "about.help": "about",
+  "about.holding": "about",
 };
 
 /** Sections hidden from the app since 2026-10-14 (managing several

@@ -3,7 +3,7 @@
 // organization server); on any other server, a browser or companion mode,
 // while that server runs.
 import { t } from "@/lib/i18n";
-import { localDesktopPage } from "./onboarding/WelcomeGate";
+import { localDesktopPage } from "./onboarding/welcome-viewer";
 
 export type SchedulePlace = { kind: "server" } | { kind: "local" };
 

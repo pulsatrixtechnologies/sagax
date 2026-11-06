@@ -48,7 +48,7 @@ describe("a routine run's approval on the desktop", () => {
     expect(shown).toHaveLength(1);
     expect(shown[0]).toMatchObject({ title: "Allow Scout to fetch a web page?", body: "https://example.com/report" });
     shown[0]!.onclick?.();
-    expect(opened).toContainEqual(expect.objectContaining({ type: "openRoutineRunSheet", runId: "run-1" }));
+    expect(opened).toContainEqual(expect.objectContaining({ type: "openRoutineRunInChat", runId: "run-1" }));
   });
 
   it("counts on the Approvals dot with the other waiting conversations of visible bots", () => {

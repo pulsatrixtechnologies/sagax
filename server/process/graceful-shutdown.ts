@@ -1,3 +1,4 @@
+import { reportBackgroundError } from "../background-error.ts";
 export interface GracefulShutdownOptions {
   /** Runs first, alone, bounded by drainTimeoutMs: the turns in progress
    * finish while nothing new starts. Its failure or timeout never blocks
@@ -39,7 +40,7 @@ export function createGracefulShutdown({
       runCleanup(cleanup, exit, timeoutMs);
       return;
     }
-    void bounded(Promise.resolve().then(drain), drainTimeoutMs).then(() => runCleanup(cleanup, exit, timeoutMs));
+    void bounded(Promise.resolve().then(drain), drainTimeoutMs).then(() => runCleanup(cleanup, exit, timeoutMs)).catch(reportBackgroundError);
   };
 }
 
@@ -55,5 +56,5 @@ function runCleanup(cleanup: GracefulShutdownOptions["cleanup"], exit: (code: nu
   void Promise.race([settled, deadline]).finally(() => {
     if (timer) clearTimeout(timer);
     exit(0);
-  });
+  }).catch(reportBackgroundError);
 }

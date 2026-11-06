@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
-// Edit bot search (2026-10-29): a box under "Edit bot" in the rail, with the
-// mechanism of Settings' search. A word leads to the page that holds it (French
-// or English), the page hides the rows that do not match, and the keys work:
-// slash or Command-F to the field, Escape clears, arrows choose, Enter scrolls.
+// Bot profile search (#2126): the Settings tab of the bot's profile page keeps
+// the editor's search. A word keeps the sections that hold it (French or
+// English) and opens the first, that section hides the rows that do not match,
+// and the keys work: slash or Command-F to the field from any tab, Escape
+// clears, then lets Escape close the page.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -24,6 +25,22 @@ vi.mock("@/lib/perspicax-org", async (importOriginal) => ({
   useOrgPeople: () => new Map(),
 }));
 vi.mock("../bot-settings/useSlackManagement", () => ({ useSlackManagementUrl: () => null }));
+vi.mock("@/lib/capabilities", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/capabilities")>()),
+  useBotCapabilities: () => ({ data: null, error: null, loading: true, reload: vi.fn() }),
+}));
+vi.mock("@/lib/bot-inbound-mail", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/bot-inbound-mail")>()),
+  useBotInboundMailState: () => [null, vi.fn()],
+}));
+vi.mock("@/lib/reach-me", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/reach-me")>()),
+  useReachMe: () => [null, vi.fn()],
+}));
+vi.mock("@/lib/mac-messages-setup", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/mac-messages-setup")>()),
+  loadMessagesSetup: async () => null,
+}));
 vi.mock("../bot-settings/useBotSettingsDerived", () => ({
   useBotSettingsDerived: () => ({ botRoutines: [], patch: vi.fn(), activeState: "idle", mascotMotion: null }),
 }));
@@ -62,7 +79,7 @@ vi.mock("@/state/store", async (importOriginal) => {
       }, []);
       const bot = { id: "pepper", threadId: "t", name: "Pepper", title: "R", description: "", notifications: true, color: "green", unread: false, messages: [], tasks: [], soul: "x", modelSelection: { instanceId: "claude", model: "opus" } } as unknown as Bot;
       return {
-        state: { ...original.initialState, bots: [bot], personaEditor: { botId: "pepper", section: fixture.section } } as unknown as AppState,
+        state: { ...original.initialState, bots: [bot], selectedId: "pepper", personaEditor: { botId: "pepper", section: fixture.section } } as unknown as AppState,
         dispatch: fixture.dispatch,
         flushBotPatches: vi.fn(async () => null),
       };
@@ -72,11 +89,15 @@ vi.mock("@/state/store", async (importOriginal) => {
 
 const { PersonaEditorModal } = await import("./PersonaEditorModal");
 
+const actions: string[] = [];
 let host: HTMLElement;
 let root: Root;
 const input = () => host.querySelector<HTMLInputElement>("[data-persona-search]")!;
-const pagesInRail = () => [...host.querySelectorAll("[data-persona-page]")].map((el) => el.getAttribute("data-persona-page"));
-const currentPage = () => host.querySelector("[data-persona-pane]")!.getAttribute("data-persona-current");
+// Settings unfolds under General's cards (#2136): the page says which it shows.
+const selectedTab = () => host.querySelector("[data-bot-profile-tab-current]")!.getAttribute("data-bot-profile-tab-current");
+const shownTab = () => host.querySelector('[data-bot-profile-tab][aria-selected="true"]')!.getAttribute("data-bot-profile-tab");
+const listed = () => [...host.querySelectorAll("#bot-profile-panel-settings [data-bot-profile-section]")].map((el) => el.getAttribute("data-bot-profile-section"));
+const opened = () => [...host.querySelectorAll("#bot-profile-panel-settings [data-bot-profile-section][data-open]")].map((el) => el.getAttribute("data-bot-profile-section"));
 
 function type(value: string) {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
@@ -90,13 +111,18 @@ function key(target: Element | Window, k: string, init: KeyboardEventInit = {}) 
   act(() => void target.dispatchEvent(event));
   return event;
 }
+async function frame() {
+  await act(async () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+}
 
 beforeEach(() => {
   setLocale("en");
-  fixture.section = "overview";
+  fixture.section = "appearance";
   fixture.listeners.clear();
+  actions.length = 0;
   fixture.dispatch = (action) => {
     const a = action as { type: string; section?: string };
+    actions.push(a.type);
     if (a.type === "personaEditorSection" && a.section) {
       fixture.section = a.section;
       for (const listener of fixture.listeners) listener();
@@ -111,93 +137,62 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   host.remove();
+  setLocale("en");
 });
 
-describe("Edit bot search", () => {
-  it("sits under the title and lists every page when empty", () => {
-    expect(host.querySelector("#persona-modal-title")!.textContent).toContain("Edit bot");
-    const nav = host.querySelector("[data-persona-nav]")!;
-    expect(nav.querySelector("[data-persona-search]")).toBe(input());
-    expect(pagesInRail().length).toBeGreaterThan(10);
+describe("bot profile settings search", () => {
+  it("sits at the top of Settings, unfolded under General, and lists every section when empty", () => {
+    expect(selectedTab()).toBe("settings");
+    expect(shownTab()).toBe("general");
+    expect(host.querySelector("[data-bot-profile-settings-toggle]")!.getAttribute("aria-expanded")).toBe("true");
+    expect(host.querySelector("#bot-profile-panel-settings [data-persona-search]")).toBe(input());
+    expect(listed().length).toBeGreaterThan(5);
   });
-
-  it("leads a word to its page, in English and in French", () => {
+  it("keeps the sections that hold a word, in English and in French, and opens the first", () => {
     type("mascot");
-    expect(pagesInRail()).toEqual(["appearance"]);
-    expect(currentPage()).toBe("appearance");
-    type("mascotte");
-    expect(pagesInRail()).toEqual(["appearance"]);
-    type("moteur");
-    expect(pagesInRail()[0]).toBe("model");
-    expect(pagesInRail()).not.toContain("overview");
-    expect(currentPage()).toBe("model");
-    type("engine");
-    expect(pagesInRail()[0]).toBe("model");
-    expect(pagesInRail()).not.toContain("overview");
-    expect(currentPage()).toBe("model");
-    type("approbation");
-    expect(currentPage()).toBe("permissions");
-    type("MCP");
-    expect(pagesInRail()).toEqual(["access"]);
-    type("voix");
-    expect(currentPage()).toBe("voice");
-    type("horaire");
-    expect(pagesInRail()).toEqual(expect.arrayContaining(["voice", "permissions"]));
-  });
-
-  it("hides the rows that do not match on the open page and marks the first", () => {
+    expect(listed()).toEqual(["appearance"]);
+    expect(opened()).toEqual(["appearance"]);
     type("effort");
-    const rows = [...host.querySelectorAll("[data-persona-section=model] [data-settings-row]")];
+    expect(listed()[0]).toBe("model");
+    expect(opened()).toContain("model");
+    act(() => setLocale("fr"));
+    act(() => root.render(createElement(PersonaEditorModal)));
+    type("modèle");
+    expect(listed()[0]).toBe("model");
+  });
+  it("hides the rows that do not match in the open section and marks the first", () => {
+    type("effort");
+    const rows = [...host.querySelectorAll('[data-bot-profile-section="model"] [data-settings-row]')];
     expect(rows.map((row) => row.hasAttribute("data-settings-search-miss"))).toEqual([false, true]);
     expect(rows[0]!.hasAttribute("data-settings-search-hit")).toBe(true);
-    expect(host.querySelector("[data-settings-search-hits]")!.textContent).toContain("Effort");
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
     type("");
     expect(host.querySelector("[data-settings-search-miss]")).toBeNull();
   });
-
   it("says so when nothing matches", () => {
     type("zzzxq");
-    expect(pagesInRail()).toEqual([]);
+    expect(listed()).toEqual([]);
     expect(host.querySelector("[data-persona-no-match]")!.textContent).toBe("Nothing matches “zzzxq”");
-    setLocale("fr");
-    act(() => root.render(createElement(PersonaEditorModal)));
-    expect(host.querySelector("[data-persona-no-match]")!.textContent).toBe("Rien ne correspond à « zzzxq »");
   });
-
-  it("goes to the field with a slash or Command-F, but not while typing", () => {
-    const outside = document.createElement("div");
-    key(host.querySelector("[data-persona-modal]")!, "/");
-    expect(document.activeElement).toBe(input());
-    outside.remove();
-    input().blur();
-    key(host.querySelector("[data-persona-modal]")!, "f", { metaKey: true });
+  it("goes to the field with a slash or Command-F from another tab, but not while typing", async () => {
+    act(() => host.querySelector<HTMLElement>('[data-bot-profile-tab="knowledge"]')!.click());
+    expect(selectedTab()).toBe("knowledge");
+    const event = key(document.body, "f", { metaKey: true });
+    expect(event.defaultPrevented).toBe(true);
+    await frame();
+    expect(selectedTab()).toBe("settings");
+    expect(shownTab()).toBe("general");
     expect(document.activeElement).toBe(input());
     const slash = key(input(), "/");
     expect(slash.defaultPrevented).toBe(false);
   });
-
-  it("clears with Escape, then lets Escape close the editor", () => {
-    type("voix");
+  it("clears with Escape, then lets Escape close the page", () => {
+    type("effort");
     const first = key(input(), "Escape");
     expect(input().value).toBe("");
     expect(first.cancelBubble).toBe(true);
-    const second = key(input(), "Escape");
-    expect(second.cancelBubble).toBe(false);
-  });
-
-  it("chooses a result with the arrows and scrolls to the match with Enter", () => {
-    type("horaire");
-    const results = pagesInRail();
-    expect(results.length).toBeGreaterThan(1);
-    const start = currentPage();
-    key(input(), "ArrowDown");
-    expect(currentPage()).toBe(results[(results.indexOf(start) + 1) % results.length]);
-    key(input(), "ArrowUp");
-    expect(currentPage()).toBe(start);
-    // An exact row match scrolls into view with Enter.
-    type("effort");
-    (Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>).mockClear();
-    key(input(), "Enter");
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    expect(actions).not.toContain("closePersonaEditor");
+    key(input(), "Escape");
+    expect(actions).toContain("closePersonaEditor");
   });
 });

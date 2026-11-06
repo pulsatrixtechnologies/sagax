@@ -27,6 +27,7 @@ import { engineStartGate } from "./engines/engine-start-gate.ts";
 import { markOomVictim, memoryGuardSettings } from "./memory/engine-memory-guard.ts";
 import { resolveCliSpawn, splitCliString, type ResolvedSpawn } from "./env-path.ts";
 import { noteEngineGroupEnded, noteEngineGroupStarted } from "./engines/engine-groups.ts";
+import { reportBackgroundError } from "./background-error.ts";
 
 export function resolveCli(cli: string, args: string[] = [], env?: NodeJS.ProcessEnv): ResolvedSpawn {
   return resolveCliSpawn(cli, args, env);
@@ -306,7 +307,7 @@ function reapGroupAfterExit(child: ChildProcess): void {
   if (!pid) return;
   child.once("exit", () => {
     const timer = setTimeout(() => {
-      void killCliTree(child, REAP_GRACE_MS).then((gone) => { if (gone) noteEngineGroupEnded(pid); }, () => {});
+      void killCliTree(child, REAP_GRACE_MS).then((gone) => { if (gone) noteEngineGroupEnded(pid); }, () => {}).catch(reportBackgroundError);
     }, REAP_AFTER_EXIT_MS);
     timer.unref?.();
   });
@@ -337,7 +338,7 @@ export function execCli(
     // Node calls back only once the child exits, and a CLI wrapper that traps SIGTERM outlives the timeout's signal.
     // Only the child is stopped: execFile starts no process group, so a grandchild that ignores SIGTERM can outlive it.
     if (opts.timeout) {
-      escalate = setTimeout(() => void killCliTree(child, 0), opts.timeout + EXEC_KILL_GRACE_MS);
+      escalate = setTimeout(() => void killCliTree(child, 0).catch(reportBackgroundError), opts.timeout + EXEC_KILL_GRACE_MS);
       escalate.unref?.();
     }
   };
@@ -355,7 +356,7 @@ export function execCli(
       slot.release();
       cb(error instanceof Error ? error : new Error(String(error)), "", "");
     }
-  });
+  }).catch(reportBackgroundError);
 }
 
 /** Concurrent probes on a busy machine can outlast the timeout, so a CLI that answered before keeps its last version. */
@@ -424,7 +425,7 @@ export function killCliTree(child: ChildProcess, timeoutMs = 5_000): Promise<boo
   stopping.set(child, run);
   // A failed attempt may be retried. Remember success so a delayed caller
   // cannot signal a reused PID/group after this child's group disappeared.
-  void run.then((stopped) => { if (!stopped) stopping.delete(child); });
+  void run.then((stopped) => { if (!stopped) stopping.delete(child); }).catch(reportBackgroundError);
   return run;
 }
 

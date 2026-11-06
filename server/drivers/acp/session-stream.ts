@@ -1,5 +1,6 @@
 /** ACP session/update stream: assistant text, tools, usage. */
 import { isCwTool } from "../../../shared/cw-widgets/tool-call.ts";
+import { isMailboxTool } from "../../../shared/mailbox-user.ts";
 import { readUseToolCall } from "../../../shared/mcp-gateway-call.ts";
 import { cwToolResult, commandSummary, toolDetailPreview } from "../../tools/tool-summary.ts";
 import { acpWrittenFiles, filesField } from "../../threads/thread-files.ts";
@@ -61,6 +62,22 @@ export function createStreamHandlers(deps: StreamHandlerDeps) {
           if (!current || !current.state.promptSent) return;
           const u = p.update ?? {};
           const finished = u.status === "completed" || u.status === "failed";
+          // A mail call's name and arguments, kept until it ends, so a vendor
+          // 403 on another mailbox can say to retry on /me (#1943).
+          const noteMailboxCall = () => {
+            if (typeof u.toolCallId !== "string" || !u.toolCallId) return;
+            const previous = current.mailboxCalls?.get(u.toolCallId);
+            const rawInput = u.rawInput !== undefined ? u.rawInput : previous?.input;
+            const title = typeof u.title === "string" ? u.title : undefined;
+            const useTool = readUseToolCall(rawInput, { title: title ?? previous?.tool, meta: u._meta });
+            const tool = useTool?.id ?? title ?? previous?.tool;
+            if (!isMailboxTool(tool)) return;
+            const input = useTool ? useTool.args : rawInput;
+            (current.mailboxCalls ??= new Map()).set(u.toolCallId, {
+              tool,
+              input: input !== undefined ? input : previous?.input,
+            });
+          };
           // Ends one tool item once: its bookkeeping, its completion and the images its result carries.
           const toolEnded = (itemId: string | undefined) => {
             current.state.producedItem = true;
@@ -75,7 +92,9 @@ export function createStreamHandlers(deps: StreamHandlerDeps) {
             }
             const fields = u.status === "completed" && keyed ? cwToolResult(current.cwToolNames?.get(keyed), u.rawOutput ?? u.content) : {};
             if (keyed) current.cwToolNames?.delete(keyed);
-            for (const event of acpToolEndEvents(u, itemId, current.endedToolIds, fields)) emit({ ...base(threadId, current.turnId), ...event });
+            const mailbox = keyed ? current.mailboxCalls?.get(keyed) : undefined;
+            if (keyed) current.mailboxCalls?.delete(keyed);
+            for (const event of acpToolEndEvents(u, itemId, current.endedToolIds, fields, mailbox)) emit({ ...base(threadId, current.turnId), ...event });
           };
           switch (u.sessionUpdate) {
             case "agent_message_chunk": {
@@ -112,6 +131,7 @@ export function createStreamHandlers(deps: StreamHandlerDeps) {
             }
             case "tool_call": {
               current.flushAssistantText();
+              noteMailboxCall();
               trackRunningTool(current, u, "pending");
               if (support.onToolCompleted && typeof u.toolCallId === "string" && u.rawInput !== undefined) {
                 (current.toolInputs ??= new Map()).set(u.toolCallId, u.rawInput);
@@ -140,6 +160,7 @@ export function createStreamHandlers(deps: StreamHandlerDeps) {
               break;
             }
             case "tool_call_update": {
+              noteMailboxCall();
               trackRunningTool(current, u);
               // grok 1.0.62 sends use_tool's arguments on a later update: keep
               // them for the permission ask that may follow (#1931)

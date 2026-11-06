@@ -15,7 +15,6 @@ export const closedRightPanels = {
   inspectorOpen: false,
   activityOpen: false,
   appSettingsOpen: false,
-  routineRunSheet: null,
   codingChat: null,
 } satisfies Partial<AppState>;
 

@@ -32,6 +32,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     drainSecretResumes,
     drainTeamSetupResumes,
     engineIsFresh,
+    engineRead,
     expandLearnTurnText,
     expandSetupTurnText,
     expandSkillCommandTurnText,
@@ -41,6 +42,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     latestCompaction,
     localPrincipalId,
     mcpServersAsPerson,
+    prepareMcpServers,
     messagesIntegration,
     messagesWanted,
     orgSpeakerPrincipal,
@@ -85,9 +87,10 @@ export function createSetupStartTurn(host: StartTurnHost) {
       state.instance.adapter.releaseWarmSession?.(state.threadId);
       return { kind: "return" };
     }
-    if (state.enginesRead) {
-      await state.enginesRead;
-      if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) throw new DirectTurnSetupCancelled("turn stopped while the engines were read");
+    const ownEngineRead = typeof engineRead === "function" ? engineRead(state.instance.instanceId) : (state.enginesRead ? state.enginesRead : null);
+    if (ownEngineRead) {
+      await ownEngineRead;
+      if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) throw new DirectTurnSetupCancelled("turn stopped while the engine was read");
     }
     // Perspicax token exchange, session open/verify and tools/list do not
     // need custom mount names. Start them beside
@@ -390,6 +393,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     if (state.instance.adapter.capabilities.customMcp === true) {
       await refreshMcpOAuth(state.bot);
       if (!state.warmOnly) turnTrace(state.threadId, "oauth-refreshed");
+      await prepareMcpServers(state.bot);
       const mounted = mcpServersAsPerson(state.bot, orgSpeakerPrincipal(state.bot, state.speaker), state.threadId);
       attachCustomMcp(state.integrations, mounted.servers, cfg);
       state.githubWithheld = mounted.githubWithheld;

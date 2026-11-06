@@ -3,8 +3,9 @@
 // <product>") in the tense of its state, never the raw tool id. The
 // id stays in the row's detail for whoever needs it.
 //
-// Three phases, three forms: running ("Reading a file"), done ("Read a
-// file") and failed ("Could not read a file"). Tools served by an MCP
+// Four phases: running ("Reading a file"), done ("Read a file"), failed
+// ("Could not read a file"), and unverified (a historical incomplete
+// receipt after a restart: past tense, no shimmer). Tools served by an MCP
 // product reuse the approval reading (shared/approval-describe.ts) for the
 // verb, the resource and the product, with the step's own verb forms.
 // The product's name is the one the server declared for the tool at run
@@ -18,7 +19,7 @@ import { readMcpGatewayCall, readUseToolCall, type McpGatewayCall } from "../../
 import { humanPath } from "@/lib/short-path";
 import { gatewayToolId, toolDisplayName } from "../../shared/tool-display-name";
 
-export type StepPhase = "running" | "done" | "failed";
+export type StepPhase = "running" | "done" | "failed" | "unverified";
 
 export type StepTool = {
   name: string;
@@ -37,8 +38,17 @@ export type StepTool = {
 /** A teammate's display name from the id a coordination tool was given. */
 export type StepNameOf = (id: string) => string | undefined;
 
-export function stepPhase(tool: Pick<StepTool, "ok">): StepPhase {
-  return tool.ok === undefined ? "running" : tool.ok ? "done" : "failed";
+/** Verb tense for labels: unverified reuses done (the call already happened). */
+function labelTense(phase: StepPhase): "running" | "done" | "failed" {
+  return phase === "unverified" ? "done" : phase;
+}
+
+/** `live === false` marks a historical incomplete receipt as unverified.
+ * Omitted `live` keeps the running tense for live-activity callers that
+ * only know the tool chip. */
+export function stepPhase(tool: Pick<StepTool, "ok">, live?: boolean): StepPhase {
+  if (tool.ok === undefined) return live === false ? "unverified" : "running";
+  return tool.ok ? "done" : "failed";
 }
 
 type Kind =
@@ -222,17 +232,18 @@ function teammates(args: Record<string, unknown> | undefined, nameOf?: StepNameO
 }
 
 function kindLabel(kind: Kind, phase: StepPhase, args: Record<string, unknown> | undefined, nameOf?: StepNameOf): string {
+  const tense = labelTense(phase);
   if (kind === "coordinate" || kind === "ask" || kind === "delegate" || kind === "sendTo") {
     const who = teammates(args, nameOf);
-    if (who) return t(`step.${kind}.${phase}` as LocaleKey, { names: who });
-    return t(`step.${kind}.bare.${phase}` as LocaleKey);
+    if (who) return t(`step.${kind}.${tense}` as LocaleKey, { names: who });
+    return t(`step.${kind}.bare.${tense}` as LocaleKey);
   }
   if (kind === "subagent") {
     const about = str(args, "description", "subagent_type");
-    if (about) return t(`step.subagent.${phase}` as LocaleKey, { description: oneLine(about, 60) });
-    return t(`step.subagent.bare.${phase}` as LocaleKey);
+    if (about) return t(`step.subagent.${tense}` as LocaleKey, { description: oneLine(about, 60) });
+    return t(`step.subagent.bare.${tense}` as LocaleKey);
   }
-  return t(`step.${kind}.${phase}` as LocaleKey);
+  return t(`step.${kind}.${tense}` as LocaleKey);
 }
 
 /** What the step acted on: quiet target words, and an optional title when
@@ -286,6 +297,7 @@ function kindAim(kind: Kind, args: Record<string, unknown> | undefined, tool: St
 function mcpLabel(tool: StepTool, phase: StepPhase): { label: string; target?: string } | undefined {
   const parsed = parseToolId(tool.name);
   if (!parsed.server) return undefined;
+  const tense = labelTense(phase);
   // a gateway tool (`<gateway>__<product>__query`) reads as its product's
   // own, named as the server declared it (shared/approval-describe.ts)
   const declared = tool.product?.trim() || undefined;
@@ -294,8 +306,8 @@ function mcpLabel(tool: StepTool, phase: StepPhase): { label: string; target?: s
     locale: activeLocale(),
     t: (key, vars) => {
       // the approval reads "view tickets"; a step reads "Viewed tickets"
-      if (key.startsWith("approval.verb.")) return t(`step.verb.${key.slice("approval.verb.".length)}.${phase}` as LocaleKey, vars);
-      if (key === "approval.tool.runCommand") return t(`step.runCommand.${phase}` as LocaleKey, vars);
+      if (key.startsWith("approval.verb.")) return t(`step.verb.${key.slice("approval.verb.".length)}.${tense}` as LocaleKey, vars);
+      if (key === "approval.tool.runCommand") return t(`step.runCommand.${tense}` as LocaleKey, vars);
       return t(key as LocaleKey, vars);
     },
   };
@@ -312,7 +324,7 @@ function mcpLabel(tool: StepTool, phase: StepPhase): { label: string; target?: s
   // "Used Acme", not "Used query in Acme".
   if (!reading.action || reading.verbless) {
     const name = product ?? (reading.action ?? parsed.name).replace(/_+/g, " ").trim();
-    return { label: capitalize(t(`step.use.${phase}` as LocaleKey, { name })), target: reading.summary };
+    return { label: capitalize(t(`step.use.${tense}` as LocaleKey, { name })), target: reading.summary };
   }
   const action = reading.action;
   const label = product ? t("approval.phrase.inProduct", { action, product }) : action;
@@ -327,9 +339,10 @@ function serverName(server: string): string {
 
 /** pi-mcp-adapter's `mcp` gateway housekeeping, read as what it did. */
 function gatewayLabel(call: Extract<McpGatewayCall, { kind: "admin" }>, phase: StepPhase): StepReading {
-  if (call.action === "search") return { label: t(`step.mcp.search.${phase}` as LocaleKey), target: call.query ? oneLine(call.query) : undefined };
-  if (call.server) return { label: t(`step.mcp.${call.action}.${phase}` as LocaleKey, { server: serverName(call.server) }) };
-  return { label: t(`step.mcp.${call.action}.bare.${phase}` as LocaleKey) };
+  const tense = labelTense(phase);
+  if (call.action === "search") return { label: t(`step.mcp.search.${tense}` as LocaleKey), target: call.query ? oneLine(call.query) : undefined };
+  if (call.server) return { label: t(`step.mcp.${call.action}.${tense}` as LocaleKey, { server: serverName(call.server) }) };
+  return { label: t(`step.mcp.${call.action}.bare.${tense}` as LocaleKey) };
 }
 
 function capitalize(text: string): string {
@@ -395,14 +408,15 @@ export function stuckNoticeKey(name: string): string | undefined {
  * a search_tool as looking for a tool, never "Used use tool". */
 function grokMetaTool(tool: StepTool, phase: StepPhase): StepReading | undefined {
   const meta = tool.name.trim().toLowerCase().replace(/\s+/g, "_");
+  const tense = labelTense(phase);
   if (meta === "search_tool") {
     const args = parseArgs(tool.input) ?? parseArgs(tool.summary);
-    return { label: t(`step.toolSearch.${phase}` as LocaleKey), target: oneLine(str(args, "query", "q") ?? "") || undefined };
+    return { label: t(`step.toolSearch.${tense}` as LocaleKey), target: oneLine(str(args, "query", "q") ?? "") || undefined };
   }
   if (meta !== "use_tool") return undefined;
   const call = readUseToolCall(tool.input ?? tool.summary, { title: "use_tool" });
   const named = call ? mcpLabel({ ...tool, name: call.id, input: JSON.stringify(call.args), summary: undefined }, phase) : undefined;
-  return named ?? { label: t(`step.useTool.${phase}` as LocaleKey) };
+  return named ?? { label: t(`step.useTool.${tense}` as LocaleKey) };
 }
 
 /** True when the name is already a sentence (a server row), not a tool id. */
@@ -410,13 +424,14 @@ function isSentence(name: string): boolean {
   return /\s/.test(name.trim());
 }
 
-/** The words for one step. `nameOf` turns a teammate id into its name. */
-export function readStep(tool: StepTool, nameOf?: StepNameOf): StepReading {
+/** The words for one step. `nameOf` turns a teammate id into its name.
+ * Pass `live: false` for a historical incomplete receipt (past tense). */
+export function readStep(tool: StepTool, nameOf?: StepNameOf, live?: boolean): StepReading {
   // a gateway title without its gateway part (`user-Outlook-get_5fmail_5fmessage___12`)
   // reads as the connector it is, never "Get 5fmail 5fmessage" (2026-11-03)
   const gatewayId = gatewayToolId(tool.name);
   if (gatewayId && gatewayId !== tool.name.trim()) tool = { ...tool, name: gatewayId };
-  const phase = stepPhase(tool);
+  const phase = stepPhase(tool, live);
   const name = tool.name.trim();
   const meta = grokMetaTool(tool, phase);
   if (meta) return meta;
@@ -442,7 +457,7 @@ export function readStep(tool: StepTool, nameOf?: StepNameOf): StepReading {
   if (mcp) return mcp;
   const display = name.replace(/_+/g, " ");
   const summary = tool.summary && tool.summary !== tool.name && !/^[[{]/.test(tool.summary.trim()) ? oneLine(tool.summary) : undefined;
-  return { label: t(`step.use.${phase}` as LocaleKey, { name: display }), target: summary };
+  return { label: t(`step.use.${labelTense(phase)}` as LocaleKey, { name: display }), target: summary };
 }
 
 /** 2026-11-02: what a tool is called in an opened step, never its raw id
@@ -476,8 +491,8 @@ export function stepToolName(tool: Pick<StepTool, "name" | "product">): string {
 }
 
 /** The label alone, for callers that only need the sentence. */
-export function stepLabel(tool: StepTool, nameOf?: StepNameOf): string {
-  return readStep(tool, nameOf).label;
+export function stepLabel(tool: StepTool, nameOf?: StepNameOf, live?: boolean): string {
+  return readStep(tool, nameOf, live).label;
 }
 
 /** A quiet duration: "2s", "1m 05s"; under a second reads "<1s". */

@@ -60,9 +60,11 @@ export interface LiveEventsHandlers {
   retryMaxMs?: number;
 }
 
-export function liveEventsUrl(options?: { since?: string | null }): string {
+/** `screens: false` asks the server to leave out live screen frames. */
+export function liveEventsUrl(options?: { since?: string | null; screens?: boolean }): string {
   const params = new URLSearchParams();
   if (options?.since) params.set("since", options.since);
+  if (options?.screens === false) params.set("screens", "off");
   const query = params.toString();
   return query ? `${LIVE_EVENTS_PATH}?${query}` : LIVE_EVENTS_PATH;
 }
@@ -77,15 +79,30 @@ export interface LiveFrameListener {
   onFrame: (frame: ServerFrame) => void;
   /** The stream lost frames it could not replay: reload what you keep. */
   onMissedFrames?: () => void;
+  /** Draws live screens: while a listener with this is registered the stream carries screen frames; with none it does not. */
+  screens?: boolean;
 }
 
 const liveFrameListeners = new Set<LiveFrameListener>();
+const screenWishListeners = new Set<() => void>();
+const screensWanted = () => [...liveFrameListeners].some((listener) => listener.screens);
 
 export function listenLiveFrames(listener: LiveFrameListener): () => void {
+  const before = screensWanted();
   liveFrameListeners.add(listener);
+  if (screensWanted() !== before) for (const changed of screenWishListeners) changed();
   return () => {
+    const wanted = screensWanted();
     liveFrameListeners.delete(listener);
+    if (screensWanted() !== wanted) for (const changed of screenWishListeners) changed();
   };
+}
+
+/** A frame kept for later (before the first snapshot is drawn) needs no pixels: viewers saw them as it arrived. */
+export function withoutScreenPixels(frame: ServerFrame): ServerFrame {
+  if (frame.kind !== "screen") return frame;
+  const { png: _png, ...rest } = frame;
+  return { ...rest, png: "" };
 }
 
 export function publishLiveFrame(frame: ServerFrame): void {
@@ -227,6 +244,7 @@ export function openLiveEvents(
 
   let stopped = false;
   let source: LiveEventSourceLike | null = null;
+  let sourceScreens = screensWanted();
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let retryAttempt = 0;
   let cursor: string | null = null;
@@ -283,9 +301,8 @@ export function openLiveEvents(
     if (stopped || source || !platform.isOnline()) return;
     let current: LiveEventSourceLike;
     try {
-      current = platform.createEventSource(
-        liveEventsUrl({ since: cursor }),
-      );
+      sourceScreens = screensWanted();
+      current = platform.createEventSource(liveEventsUrl({ since: cursor, screens: sourceScreens }));
     } catch {
       handlers.onError?.();
       scheduleReconnect();
@@ -355,6 +372,7 @@ export function openLiveEvents(
             // hello boundary when no application frame arrived meanwhile.
             cursor = pending.newestFrameCursor ?? pending.boundaryCursor;
             pendingSnapshot = null;
+            onScreenWish();
           })();
         }
       } else if (event.lastEventId) {
@@ -397,6 +415,10 @@ export function openLiveEvents(
     if (platform.isVisible()) recover();
   };
 
+  const onScreenWish = () => queueMicrotask(() => {
+    if (source && cursor && !pendingSnapshot && screensWanted() !== sourceScreens) reconnectNow(false);
+  });
+  screenWishListeners.add(onScreenWish);
   connect();
   const staleTimer = setInterval(recover, staleCheckMs);
   platform.windowTarget?.addEventListener("online", onOnline);
@@ -406,6 +428,7 @@ export function openLiveEvents(
   return () => {
     if (stopped) return;
     stopped = true;
+    screenWishListeners.delete(onScreenWish);
     clearInterval(staleTimer);
     clearRetry();
     closeSource();

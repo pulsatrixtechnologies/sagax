@@ -5,6 +5,7 @@ import type { AutoModelRecord } from "../../../shared/auto-model";
 import { effortLabel } from "@/lib/effort-label";
 import { t } from "@/lib/i18n";
 import { modelLabel, modelProvider } from "./helpers";
+import { autoOptimizeOf } from "../../../shared/model-auto-optimize";
 
 export function modelPickerSummary(opts: {
   autoOn: boolean;
@@ -29,8 +30,9 @@ export function modelPickerComposerLabel(opts: {
   selection: ModelSelection;
   selectedVariantLabel: string | undefined;
 }): string {
-  const { autoOn, autoRecord, active, selection, selectedVariantLabel } = opts;
-  if (autoOn) return autoChipLabel(autoRecord);
+  const { autoOn, active, selection, selectedVariantLabel } = opts;
+  // #2106: "Auto Balance" / "Claude Fable 5.1 High" in the chat bar.
+  if (autoOn) return `Auto ${t(`model.auto.optimize.${autoOptimizeOf(selection.autoOptimize)}`)}`;
   return [
     modelLabel(active, selection.model),
     selectedVariantLabel,

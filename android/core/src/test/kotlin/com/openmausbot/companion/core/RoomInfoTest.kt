@@ -182,6 +182,16 @@ class RoomInfoTest {
             RoomOwnership.LeaveOutcome.LAST,
             RoomOwnership.leaveOutcome(room(ownerId = "p-me", humanIds = listOf("p-me", "team:ops")), me),
         )
+        // #2119: sole remaining person cannot leave (bots and teams do not count)
+        assertFalse(RoomOwnership.mayLeave(room(ownerId = "p-me", humanIds = listOf("p-me", "team:ops")), me))
+        assertFalse(
+            RoomInfoAccess(
+                room = room(ownerId = "p-me", humanIds = listOf("p-me")),
+                gate = gate,
+                viewer = me,
+                bots = emptyList(),
+            ).canLeave,
+        )
         assertEquals(
             RoomOwnership.LeaveOutcome.MEMBER,
             RoomOwnership.leaveOutcome(room(ownerId = "boss", humanIds = listOf("boss", "p-me")), me),

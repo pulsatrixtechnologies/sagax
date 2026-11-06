@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Capabilities opens as a centred modal (decided exception like Settings).
+// Plugins (Capabilities before #2104) opens as a centred modal (decided exception like Settings).
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -133,7 +133,14 @@ describe("PluginsPanel modal", () => {
     host.remove();
   });
 
-  it("opens Capabilities as a centred modal dialog", async () => {
+  // the panel opens on its home; "N connected" (or Manage) leads to Manage (#2104)
+  const toManage = async () => {
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    const link = host.querySelector<HTMLButtonElement>("[data-plugins-connected]");
+    if (link) await act(async () => { link.click(); });
+  };
+
+  it("opens Plugins as a centred modal dialog", async () => {
     await act(async () => {
       root.render(createElement(PluginsPanel));
     });
@@ -145,7 +152,7 @@ describe("PluginsPanel modal", () => {
     expect(dialog?.className).toContain(CATEGORY_MODAL.frame.split(" ")[0]!);
     expect(host.querySelector("[data-tour=\"apps-close\"]")).not.toBeNull();
     expect(host.querySelector("[data-apps-back]")).toBeNull();
-    expect(host.textContent).toMatch(/Capabilities|Connect/);
+    expect(host.textContent).toMatch(/Plugins/);
   });
 
   it.each(["en", "fr"])("a member removes only the obsolete bot copy in one click (%s)", async (lang) => {
@@ -153,6 +160,7 @@ describe("PluginsPanel modal", () => {
     owner = false;
     resolved = flowSupersededFixture();
     await act(async () => { root.render(createElement(PluginsPanel)); });
+    await toManage();
     const note = host.querySelector("[data-capability-superseded]");
     expect(note?.textContent).toBe(lang === "fr"
       ? "Remplacé par le pack Flow de l'organisation (osprey 0.1.41)"
@@ -178,6 +186,7 @@ describe("PluginsPanel modal", () => {
     resolved = flowSupersededFixture();
     removeError = true;
     await act(async () => { root.render(createElement(PluginsPanel)); });
+    await toManage();
     await act(async () => { host.querySelector<HTMLButtonElement>("[data-remove-superseded]")!.click(); });
     expect(host.querySelector('[role="alert"]')?.textContent).toContain("Removal failed");
     expect(host.querySelector<HTMLButtonElement>("[data-remove-superseded]")!.disabled).toBe(false);
@@ -186,6 +195,7 @@ describe("PluginsPanel modal", () => {
     await act(async () => { root.unmount(); });
     root = createRoot(host);
     await act(async () => { root.render(createElement(PluginsPanel)); });
+    await toManage();
     expect(host.querySelector("[data-capability-superseded]")).not.toBeNull();
     expect(host.querySelector("[data-remove-superseded]")).toBeNull();
   });

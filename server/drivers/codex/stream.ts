@@ -3,6 +3,7 @@ import { describeSpawnFailure } from "../../procs.ts";
 import { appendNative } from "../native.ts";
 import { classifyError } from "../retry.ts";
 import { commandSummary, cwToolResult, inputPreviewMax, toolDetailPreview, toolFailurePreview, toolFailureSource } from "../../tools/tool-summary.ts";
+import { foreignMailboxAccessDenied } from "../../../shared/mailbox-user.ts";
 import { isPhoneToolCallName, PHONE_TOOL_OUTPUT_NOT_KEPT } from "../../../shared/phone-tools.ts";
 import { filesField, writtenFilesFromToolInput } from "../../threads/thread-files.ts";
 import { extractMcpImages } from "../../mcp/mcp-tool-images.ts";
@@ -13,6 +14,7 @@ import type { CodexSession } from "./session-types.ts";
 import { homedir } from "node:os";
 import { forgetCodexVolatile } from "../codex-instructions.ts";
 import { CodexRpcError } from "./rpc.ts";
+import { reportBackgroundError } from "../../background-error.ts";
 
 export function attachCodexStream(s: CodexSession): void {
   const turn = s.input;
@@ -42,7 +44,7 @@ s.handleNotification = (msg: any) => {
       // bounded prefix, then filter against the authoritative response.
       if (s.startingNativeTurn) {
         if (s.earlyNotifications.length >= 1024) {
-          void s.settle(false, "too_many_events_before_turn_start");
+          void s.settle(false, "too_many_events_before_turn_start").catch(reportBackgroundError);
         } else {
           s.earlyNotifications.push(msg);
         }
@@ -163,10 +165,17 @@ s.handleNotification = (msg: any) => {
         }
       } else if (["commandExecution", "fileChange", "mcpToolCall", "webSearch"].includes(item.type)) {
         const ok = item.status !== "failed" && item.status !== "declined";
-        const output = item.type === "mcpToolCall" && isPhoneToolCallName(typeof item.tool === "string" ? item.tool : undefined)
+        const mailboxTool = item.type === "mcpToolCall"
+          ? (typeof item.server === "string" && typeof item.tool === "string" ? `${item.server}__${item.tool}` : typeof item.tool === "string" ? item.tool : undefined)
+          : undefined;
+        const mailboxInput = item.type === "mcpToolCall" ? item.arguments : undefined;
+        const mailboxVendor = item.type === "mcpToolCall" ? toolFailureSource(item.error, item.result) : undefined;
+        const vendorDenied = !ok ? foreignMailboxAccessDenied(mailboxTool, mailboxInput, mailboxVendor) : null;
+        const output = vendorDenied
+          ?? (item.type === "mcpToolCall" && isPhoneToolCallName(typeof item.tool === "string" ? item.tool : undefined)
           ? PHONE_TOOL_OUTPUT_NOT_KEPT
           // a failed call's own words (shared/tool-failure-text.ts), else its preview
-          : (ok ? toolDetailPreview : toolFailurePreview)(item.type === "commandExecution" ? { output: item.aggregatedOutput, exitCode: item.exitCode } : item.type === "mcpToolCall" ? toolFailureSource(item.error, item.result) : item.type === "fileChange" ? item.changes : item.action);
+          : (ok ? toolDetailPreview : toolFailurePreview)(item.type === "commandExecution" ? { output: item.aggregatedOutput, exitCode: item.exitCode } : item.type === "mcpToolCall" ? toolFailureSource(item.error, item.result) : item.type === "fileChange" ? item.changes : item.action));
         if (typeof item.id === "string") {
           const step = s.renewalSteps.find((entry) => entry.id === item.id);
           if (step) {
@@ -256,7 +265,7 @@ s.handleNotification = (msg: any) => {
       void s.settle(t.status === "completed", t.status === "completed" ? null :
         (s.state.contextFullStop ? "context_full"
           : classifyError({ text: s.state.lastError }).reason === "provider_safety" ? "provider_safety"
-            : (s.state.lastError || t.status || "failed")));
+            : (s.state.lastError || t.status || "failed"))).catch(reportBackgroundError);
       break;
     }
     case "error": {
@@ -350,7 +359,7 @@ s.child.stderr!.on("data", stderr);
 const error = (e: Error) => {
   if (s.abandoned) return;
   s.emit({ ...s.base(s.threadId, s.turnId), type: "runtime.error", ...describeSpawnFailure(e, s.config.cli, turn.cwd ?? homedir()) });
-  void s.settle(false, "spawn_error");
+  void s.settle(false, "spawn_error").catch(reportBackgroundError);
 };
 s.child.on("error", error);
 const close = (code: number | null, signal: NodeJS.Signals | null) => {
@@ -359,14 +368,14 @@ const close = (code: number | null, signal: NodeJS.Signals | null) => {
   if (s.state.settled) {
     // Root exit alone cannot release a turn after an uncertain stop.
     // Recheck its group; an explicit later Stop can also retry this.
-    void s.stop();
+    void s.stop().catch(reportBackgroundError);
     return;
   }
   // An intentional stop killed (or outlived) the child before the
   // turn acknowledged its own end. That is the stop doing its job, not
   // a crash: settle quietly so Stop never reports the raw signal.
   if (s.stopRequested) {
-    void s.settle(false, "interrupted");
+    void s.settle(false, "interrupted").catch(reportBackgroundError);
     return;
   }
   // The child died before the turn completed. Attribute the exit
@@ -383,11 +392,11 @@ const close = (code: number | null, signal: NodeJS.Signals | null) => {
   // After acknowledgement or native output, resume history with a continuation
   // and the received steps; never replay the original request as a new root.
   if (s.recoverCrash(s.codexThreadId, s.codexTurnId !== null || s.earlyNotifications.length > 0)) {
-    void s.relaunch("app_server_exit", exitMessage, "exit_before_result").catch(() => {});
+    void s.relaunch("app_server_exit", exitMessage, "exit_before_result").catch(reportBackgroundError);
     return;
   }
   s.emit({ ...s.base(s.threadId, s.turnId), type: "runtime.error", message: exitMessage });
-  void s.settle(false, "exit_before_result");
+  void s.settle(false, "exit_before_result").catch(reportBackgroundError);
 };
 s.child.on("close", close);
 s.detachStream = () => {

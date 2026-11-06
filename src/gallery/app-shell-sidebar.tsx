@@ -9,6 +9,7 @@ import { createRoot } from "react-dom/client";
 
 import { AppSidebar } from "../components/AppSidebar";
 import { ChatView } from "../components/ChatView";
+import { BotSettingsDialog } from "../components/BotSettingsDialog";
 import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { BotEditorStore, initialState, reducer, type Action, type AppState, type Bot, type InstanceInfo, type Message } from "../state/store";
@@ -86,6 +87,8 @@ const start: AppState = {
   config: { profile: { name: "Alex Gagnon" } } as AppState["config"],
   bots: team,
   sections: ["My team"],
+  // ?panel=1 opens the bot panel beside the chat, as App.tsx docks it (#2141).
+  settingsOpen: params.get("panel") === "1",
   instances: [{ instanceId: "gallery", driverKind: "codex", displayName: "Gallery", snapshot: { state: "available" }, models: { options: [{ id: "m", label: "Gallery model" }] } } as unknown as InstanceInfo],
 } as AppState;
 
@@ -112,6 +115,7 @@ function Gallery() {
           <div className="app-content-frame relative flex h-full min-w-0 flex-1 flex-col" data-sidebar-follower="">
             <ChatView bot={selected} />
           </div>
+          {state.settingsOpen && <BotSettingsDialog bot={selected} />}
         </div>
       </div>
     </BotEditorStore>

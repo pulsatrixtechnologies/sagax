@@ -89,12 +89,12 @@ final class DesktopShellModel: ObservableObject {
     /// opened from the sidebar takes the column back.
     @Published var page: DesktopPage?
     @Published var panelOpen = false
-    @Published var panelTab: BotPanelTab = .details
-    /// The Edit bot window over the shell (PersonaEditorWindow.swift).
+    @Published var panelTab: BotPanelTab = .activity
+    /// The bot's profile page fills the main column (#2136 / #1939).
     @Published var personaOpen = false
     /// The section a deep link asked for (kept for the panel's callers).
     @Published var panelSection: DesktopPanelSection?
-    /// The Edit bot window's open page.
+    /// Deep-link page inside the profile host (Appearance, Access, …).
     @Published var personaPage: DesktopPersonaPage = .overview
     /// A move the editor asks the panel's owl to play.
     @Published var avatarMove: OwlWingMove?
@@ -227,12 +227,15 @@ final class DesktopShellModel: ObservableObject {
     func open(_ chat: Chat) {
         selected = chat
         page = nil
+        // Leaving the bot's profile page for its chat (#2136).
+        if personaOpen { personaOpen = false; panelSection = nil }
     }
 
     /// A sidebar place: its page in the main column.
     func show(_ page: DesktopPage) {
         menu = nil
         self.page = page
+        if personaOpen { personaOpen = false; panelSection = nil }
     }
 
     func togglePanel() {
@@ -245,19 +248,30 @@ final class DesktopShellModel: ObservableObject {
         if !panelOpen { togglePanel() }
     }
 
-    /// Opens the persona editor over the panel, on its list or on a section
-    /// (a deep link such as the allowlist's Permissions).
+    /// Opens the bot's profile page in the main column (#2136), on its root
+    /// or on a section (a deep link such as the allowlist's Permissions).
+    /// The right panel closes so the page fills the chat's place.
     func showPersona(_ section: DesktopPanelSection? = nil) {
         panelSection = section
         personaPage = DesktopPersonaPage(section: section)
-        if !panelOpen { togglePanel() }
+        page = nil
+        if panelOpen {
+            withAnimation(.easeOut(duration: 0.2)) { panelOpen = false }
+        }
         personaOpen = true
     }
 
     /// A click on the bot's avatar: Edit bot on Appearance (`openPersonaEditor`).
+    /// Set the page before opening so the host does not land on the profile
+    /// root for one frame (#1939).
     func showAppearance() {
-        showPersona()
+        panelSection = nil
         personaPage = .appearance
+        page = nil
+        if panelOpen {
+            withAnimation(.easeOut(duration: 0.2)) { panelOpen = false }
+        }
+        personaOpen = true
     }
 
     /// The panel's Inspector button (`toggleInspector`): the Inspector takes
@@ -506,12 +520,7 @@ struct DesktopShell: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .transition(.opacity)
             }
-            // Edit bot, the desktop's centred window (PersonaEditorModal.tsx)
-            if model.personaOpen, let bot = selectedBot {
-                AnyView(PersonaEditorWindow(bot: bot) { model.personaOpen = false; model.panelSection = nil })
-                    .transition(.opacity)
-                    .zIndex(4)
-            }
+            // Edit bot / profile fills the main column (#2136), not a centred window.
             // lot 6: the bot's computer window where no second scene exists
             if let botId = model.computerWindow {
                 AnyView(DesktopComputerWindowView(botId: botId, floating: true) { model.computerWindow = nil })
@@ -595,12 +604,23 @@ struct DesktopShell: View {
 struct DesktopContent: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var model: DesktopShellModel
+    @EnvironmentObject private var session: Session
+
+    private var selectedBot: Bot? {
+        guard case let .bot(bot) = model.selected else { return nil }
+        return session.state.bot(bot.id) ?? bot
+    }
 
     var body: some View {
         if model.modal == .plugins {
             // App.tsx `mainIsApps`: Capabilities takes the main column's
             // place, the chat is not drawn behind its window
             theme.app
+        } else if model.personaOpen, let bot = selectedBot {
+            // The bot's profile page fills the main panel in place of the chat
+            // (#2136); X or Escape goes back to the bot's chat.
+            AnyView(DesktopBotProfileHost(bot: bot))
+                .id("profile-\(bot.id)")
         } else if let page = model.page {
             switch page {
             case .teamMap: AnyView(DesktopTeamMapPage())
@@ -674,20 +694,18 @@ private struct DesktopShellRouting: ViewModifier {
     @ObservedObject var model: DesktopShellModel
     @EnvironmentObject private var session: Session
     @ObservedObject private var sidebarPrefs = SidebarPrefsModel.shared
-    @State private var openedNotificationRun: OpenedRoutineRun?
     @State private var openedWidgetRoutine: Routine?
 
     func body(content: Content) -> some View {
         content
             .onValueChange(of: session.notificationChat) { chat in
                 guard let chat else { return }
+                // a run opened from Automations or a routine's page lands in
+                // the chat (#2098): those close
+                if model.modal == .automations { model.modal = nil }
+                openedWidgetRoutine = nil
                 model.open(chat)
                 session.consumeNotificationChat()
-            }
-            .onValueChange(of: session.notificationRoutineRun) { opened in
-                guard let opened else { return }
-                openedNotificationRun = opened
-                session.consumeNotificationRoutineRun()
             }
             .onValueChange(of: session.pendingChat) { chat in
                 guard let chat else { return }
@@ -698,10 +716,6 @@ private struct DesktopShellRouting: ViewModifier {
                 guard let destination else { return }
                 session.consumePendingWidgetDestination()
                 Task { await openWidgetDestination(destination) }
-            }
-            .routineRunDetail(item: $openedNotificationRun) { opened in
-                RoutineRunDetailView(run: opened.run, routine: opened.routine)
-                    .environmentObject(session)
             }
             .sheet(item: $openedWidgetRoutine) { routine in
                 NavigationStack {
@@ -728,10 +742,6 @@ private struct DesktopShellRouting: ViewModifier {
                 if let chat = session.notificationChat {
                     model.open(chat)
                     session.consumeNotificationChat()
-                }
-                if let opened = session.notificationRoutineRun {
-                    openedNotificationRun = opened
-                    session.consumeNotificationRoutineRun()
                 }
                 if let chat = session.pendingChat {
                     model.open(chat)
@@ -778,13 +788,11 @@ private struct DesktopShellRouting: ViewModifier {
             } else {
                 model.modal = .automations
             }
-        case let .run(runId, routineId):
+        case let .run(runId, _):
+            // #2098: the run's message in the bot's chat
             let listing = await session.loadRoutines()
             if let run = listing.runs.first(where: { $0.id == runId }) {
-                openedNotificationRun = OpenedRoutineRun(
-                    run: run,
-                    routine: listing.routines.first { $0.id == (routineId ?? run.routineId) }
-                )
+                await session.openRoutineRunInChat(run)
             } else {
                 model.modal = .automations
             }

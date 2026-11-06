@@ -24,6 +24,7 @@ import {
   type SectionEditResult,
 } from "./personal-sections";
 import { editSectionParents, removeFromSectionTree, renameInSectionTree, setSectionParent, type SectionParentError } from "./section-tree";
+import { viewerOwnsBot } from "./primary-bot";
 import { t } from "./i18n";
 
 export interface TeamWriteContext {
@@ -44,7 +45,9 @@ function applied(context: TeamWriteContext, answer: ServerAnswer): void {
 }
 
 function ownBotIds(context: TeamWriteContext, ids: readonly string[]): string[] {
-  const own = new Set(context.bots.filter((bot) => (bot.ownerUserId ?? "").trim().toLowerCase() === context.viewerId).map((bot) => bot.id));
+  // Match viewerOwnsBot: empty / local-owner counts as the viewer's on a
+  // solo path; another person's id never echoes into the server membership.
+  const own = new Set(context.bots.filter((bot) => viewerOwnsBot(bot, context.viewerId)).map((bot) => bot.id));
   return ids.filter((id) => own.has(id));
 }
 

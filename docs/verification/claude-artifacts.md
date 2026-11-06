@@ -68,7 +68,10 @@ artifact database transaction.
 Plan lots 2 to 8 ship the Sagax surface. Lot 1 (republish the dispatch viewer
 mirror under the bot's Claude account, then update tenant references) is an
 operational step after this code is live on the server. See Lot 1 runbook
-below.
+below. The in-repo Lot 1 path is covered: a foreign `other_account` result
+tells the bot to publish from workspace HTML (or a paste) and return the new
+URL (`claudeArtifactOtherAccountGuidance` / `claudeArtifactCopyPrompt`); the
+internal publish-from-file route notes the new owned URL.
 
 ### Surface
 

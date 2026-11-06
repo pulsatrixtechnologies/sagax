@@ -33,6 +33,7 @@ import { composeReachText, reachAckText, type ReachChannel, type ReachOutbound, 
 import type { ReachMeSecrets } from "./secrets.ts";
 import type { ReachReplyOutcome } from "./service.ts";
 import type { ReachMeStore, ReachWhatsAppLink, ReachWhatsAppTemplateCheck, ReachWhatsAppTemplateState } from "./store.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export const WHATSAPP_GRAPH = "https://graph.facebook.com/v21.0";
 /** The code that proves the person's number lives this long. */
@@ -552,7 +553,7 @@ export class ReachWhatsApp {
   private track(work: Promise<unknown>): void {
     const run = work.catch((error) => this.log(`reach-me: a WhatsApp message could not be read (${error instanceof Error ? error.name : "error"})`));
     this.inflight.add(run);
-    void run.finally(() => this.inflight.delete(run));
+    void run.finally(() => this.inflight.delete(run)).catch(reportBackgroundError);
   }
 
   /** Waits for every message read so far (tests, shutdown). */

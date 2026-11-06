@@ -38,6 +38,7 @@ import {
 } from "./semantic-encoder.ts";
 import type { SemanticHit, SemanticIndex, SemanticScope } from "./semantic-recall.ts";
 import { listMemoryTopics, memoryDate, readMemoryTopic, workspaceDir } from "../workspace/workspace.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 /** Characters of a message one passage holds. */
 export const MESSAGE_PASSAGE_CHARS = 480;
@@ -362,7 +363,7 @@ export class LocalSemanticIndex implements SemanticIndex {
     } catch (error) {
       console.warn(`semantic index: ${(error as Error).message}`);
     }
-    if (!this.embedding && this.embedQueue.size) void this.embedSome();
+    if (!this.embedding && this.embedQueue.size) void this.embedSome().catch(reportBackgroundError);
   }
 
   /** Catch one thread up to its newest message. True when it is current. */

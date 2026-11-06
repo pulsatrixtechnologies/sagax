@@ -25,6 +25,7 @@ import { botPluginKey, engineGetsNothing, enginesLine } from "@/lib/capabilities
 import type { CapabilityForm, EngineParts } from "../../../shared/capabilities";
 import { WhopAction, WhopBelow } from "../McpServersPanel";
 import { cardActionClass } from "../category-modal";
+import { pluginActionClass } from "../plugins/plugins-style";
 import { GithubAccountSection } from "../plugins/GithubAccountSection";
 import { MyGithubConnection } from "../settings/MyConnectionsSettings";
 import { BotPluginCard } from "../plugins/BotPluginCard";
@@ -235,8 +236,9 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
     );
   };
   /** A marketplace plugin's page header (2026-10-28): where it is installed
-   * (for everyone, on the bot in reach) and its main action beside the name:
-   * Install for <bot> in that bot's scope, else Update when one waits. */
+   * (for everyone, on the bot in reach) and Install for <bot> beside the name
+   * when that bot still needs it. Update lives in the Details card (Grok Bot
+   * shows no Update pill in the header). */
   const detailHead = (item: PluginItem): Pick<PluginDetailProps, "installState" | "primaryAction"> => {
     if (item.kind !== "plugin") return {};
     const [plugin, marketplace] = [item.id.slice(0, item.id.lastIndexOf("@")), item.id.slice(item.id.lastIndexOf("@") + 1)];
@@ -257,13 +259,6 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
         <button type="button" data-plugins-detail-primary="install-bot" disabled={botBusy !== null} onClick={() => installForBot(item.id)} className={cn(cardActionClass("primary"), "gap-1.5")}>
           {busy && <Loader2 size={13} className="animate-spin" aria-hidden="true" />}
           {busy ? t("plugins.installing") : (scope === "me" ? t("connectApps.mePlugin.install") : t("connectApps.botPlugin.install", { name: scopedPluginName }))}
-        </button>
-      );
-    } else if (scope === "workspace" && item.installed && item.updateAvailable) {
-      primaryAction = (
-        <button type="button" data-plugins-detail-primary="update" disabled={installing !== null} onClick={() => void updatePlugin(item)} className={cn(cardActionClass("primary"), "gap-1.5")}>
-          {installing === item.id && <Loader2 size={13} className="animate-spin" aria-hidden="true" />}
-          {t("connectApps.plugin.update")}
         </button>
       );
     }
@@ -374,7 +369,7 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
           type="button"
           data-tailscale-connect
           onClick={() => openItem(item)}
-          className={cn(cardActionClass("quiet"), "min-w-[76px]")}
+          className={pluginActionClass()}
         >
           {t("connectApps.action.connect")}
         </button>
@@ -386,7 +381,7 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
         // switch and install date stay, server/bots/bot-plugins.ts)
         if (!scopedPluginView?.canChange || (item.installed && !item.updateAvailable)) return null;
         return (
-          <button type="button" {...(item.installed ? { "data-bot-plugin-update": item.id } : { "data-bot-plugin-add": item.id })} disabled={botBusy !== null} onClick={() => installForBot(item.id)} className={cn(cardActionClass(item.installed ? "secondary" : "quiet"), "min-w-[76px]")}>
+          <button type="button" {...(item.installed ? { "data-bot-plugin-update": item.id } : { "data-bot-plugin-add": item.id })} disabled={botBusy !== null} onClick={() => installForBot(item.id)} className={pluginActionClass(item.installed ? "outline" : "fill")}>
             {botBusy === `install:${item.id}` ? <Loader2 size={13} className="mx-auto animate-spin" /> : t(item.installed ? "connectApps.plugin.update" : "connectApps.action.add")}
           </button>
         );
@@ -394,20 +389,20 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
       if (item.installed && !item.updateAvailable) return null;
       if (item.installed) {
         return (
-          <button type="button" disabled={installing !== null} onClick={() => void updatePlugin(item)} className={cn(cardActionClass("secondary"), "min-w-[76px]")} data-plugin-update>
+          <button type="button" disabled={installing !== null} onClick={() => void updatePlugin(item)} className={pluginActionClass("outline")} data-plugin-update>
             {installing === item.id ? <Loader2 size={13} className="mx-auto animate-spin" /> : t("connectApps.plugin.update")}
           </button>
         );
       }
       return (
-        <button type="button" disabled={installing !== null} onClick={() => void installPlugin(item)} className={cn(cardActionClass("quiet"), "min-w-[76px]")}>
+        <button type="button" disabled={installing !== null} onClick={() => void installPlugin(item)} className={pluginActionClass()}>
           {installing === item.id ? <Loader2 size={13} className="mx-auto animate-spin" /> : t("connectApps.action.add")}
         </button>
       );
     }
     if (item.kind === "featured") {
       return (
-        <button type="button" disabled={installing !== null} onClick={(event) => void installFeatured(item, undefined, event.currentTarget)} className={cn(cardActionClass("quiet"), "min-w-[76px]")}>
+        <button type="button" disabled={installing !== null} onClick={(event) => void installFeatured(item, undefined, event.currentTarget)} className={pluginActionClass()}>
           {installing === item.id ? <Loader2 size={13} className="mx-auto animate-spin" /> : t(item.action === "connect" ? "connectApps.action.connect" : "connectApps.action.add")}
         </button>
       );

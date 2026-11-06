@@ -29,6 +29,7 @@ import type { RevocationHint, RevokeAttempt } from "./idp-revoke-types.ts";
 
 export type { RevocationHint, RevocationSink, RevokeAttempt } from "./idp-revoke-types.ts";
 import type { RevocationSink } from "./idp-revoke-types.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export const IDP_REVOCATIONS_FILE = "idp-revocations.enc";
 const REVOCATIONS_AAD = "pulsa-bot idp-revocations v1";
@@ -44,7 +45,7 @@ export function immediateRevocations(revoke: (token: string, hint: RevocationHin
     enqueue(token, hint, why) {
       void revoke(token, hint).then((ok) => {
         if (!ok) log(`${prefix}: revoking a grant (${why}) at the provider did not succeed; it expires on its own`);
-      }, () => {});
+      }, () => {}).catch(reportBackgroundError);
     },
   };
 }
@@ -131,7 +132,7 @@ export class RevocationQueue implements RevocationSink {
       void this.send(token, hint).then((result) => {
         if (result.kind === "rate_limited") this.pacer.noteRateLimited(result.retryAfterMs);
         if (result.kind !== "done" && result.kind !== "drop") this.log(`idp revocations: the one attempt (${entry.why}) did not succeed; the token expires on its own`);
-      }, () => {});
+      }, () => {}).catch(reportBackgroundError);
       return;
     }
     this.entries = [...this.entries, entry];
@@ -230,7 +231,7 @@ export class RevocationQueue implements RevocationSink {
     }
     this.cancelTimer = this.schedule(() => {
       this.cancelTimer = null;
-      void this.pump();
+      void this.pump().catch(reportBackgroundError);
     }, delay);
   }
 

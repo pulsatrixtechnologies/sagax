@@ -33,6 +33,7 @@ import {
 } from "./protocol.ts";
 import { EventRelay, terminalEvents, truncateUtf8 } from "./relay.ts";
 import { SecretStore } from "./secrets.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 /** The largest bundle Perspicax accepts (its API body limit). */
 export const MAX_BUNDLE_BYTES = 64 * 1024 * 1024;
@@ -599,7 +600,7 @@ class Runner {
       const timer = setTimeout(() => { killGroup("SIGTERM"); setTimeout(() => killGroup("SIGKILL"), 5_000).unref?.(); }, options.timeoutMs);
       let settled = false;
       const onStop = () => { if (!settled) killGroup("SIGTERM"); };
-      void this.stopped.promise.then(onStop);
+      void this.stopped.promise.then(onStop).catch(reportBackgroundError);
       const done = (code: number | null) => {
         if (settled) return;
         settled = true;

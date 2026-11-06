@@ -95,7 +95,9 @@ final class DesktopPersonaFolderAccessUITests: XCTestCase {
         _ = try api("PATCH", "/api/bots/\(id)", ["memoryEnabled": true])
 
         let app = launch("panel-more-memory")
+        XCTAssertTrue(element(app, "desktop-bot-profile-host").waitForExistence(timeout: 30), "folder page fills the main column")
         XCTAssertTrue(element(app, "desktop-persona-window.page.files").waitForExistence(timeout: 30), "the Bot folder page")
+        XCTAssertFalse(element(app, "desktop-persona-window").exists, "no centred Edit bot window")
         XCTAssertTrue(element(app, "persona-folder").waitForExistence(timeout: 10), "the desktop's folder page, not the phone's list")
         XCTAssertFalse(app.buttons["Done"].exists, "no phone Done button")
         XCTAssertTrue(element(app, "persona-folder.memory-switch").exists, "Use memory")
@@ -143,7 +145,9 @@ final class DesktopPersonaFolderAccessUITests: XCTestCase {
     @MainActor
     func testAccessDrawsMcpTheBriefAndMoreOptions() throws {
         let app = launch("panel-more-access")
+        XCTAssertTrue(element(app, "desktop-bot-profile-host").waitForExistence(timeout: 30), "Access fills the main column")
         XCTAssertTrue(element(app, "desktop-persona-window.page.access").waitForExistence(timeout: 30), "the Access page")
+        XCTAssertFalse(element(app, "desktop-persona-window").exists, "no centred Edit bot window")
         XCTAssertTrue(element(app, "persona-access.mcp").waitForExistence(timeout: 10), "MCP servers")
         XCTAssertTrue(element(app, "persona-access.manage-mcp").exists, "Manage in Capabilities")
         XCTAssertTrue(element(app, "persona-access.brief").exists, "Background brief")

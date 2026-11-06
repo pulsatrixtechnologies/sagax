@@ -1147,13 +1147,20 @@ struct PersonaGrid: Layout {
     var minimum: CGFloat
     var spacing: CGFloat
 
+    /// ScrollView / full-bleed main column can propose infinity or NaN; fall
+    /// back to a finite width so Int conversion never traps (#1939).
+    private func finiteWidth(_ width: CGFloat) -> CGFloat {
+        width.isFinite && width > 0 ? width : minimum * 4
+    }
+
     private func columns(_ width: CGFloat) -> (count: Int, size: CGFloat) {
-        let count = max(1, Int(((width + spacing) / (minimum + spacing)).rounded(.down)))
-        return (count, (width - CGFloat(count - 1) * spacing) / CGFloat(count))
+        let safe = finiteWidth(width)
+        let count = max(1, Int(((safe + spacing) / (minimum + spacing)).rounded(.down)))
+        return (count, (safe - CGFloat(count - 1) * spacing) / CGFloat(count))
     }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? minimum * 4
+        let width = finiteWidth(proposal.width ?? minimum * 4)
         let (count, size) = columns(width)
         var height: CGFloat = 0
         for row in stride(from: 0, to: subviews.count, by: count) {

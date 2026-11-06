@@ -1,6 +1,7 @@
 // Provider credentials are server-wide, but an in-progress login belongs to
 // the admin session that started it. Never put its device code on global SSE.
 import type { ProviderAuthenticationStart, ProviderInstance } from "../contracts.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 type LoginInstance = Pick<ProviderInstance, "instanceId" | "startAuthentication" | "getAuthentication" | "completeAuthentication" | "cancelAuthentication" | "signOut">;
 type Flow = {
@@ -126,9 +127,9 @@ export class ProviderAuthSessions {
       // until it finishes so another browser cannot race into this auth home.
       if (flow.starting) continue;
       flow.busy = true;
-      void Promise.resolve().then(() => flow.instance.cancelAuthentication?.()).catch(() => {}).finally(() => {
+      void Promise.resolve().then(() => flow.instance.cancelAuthentication?.()).catch(reportBackgroundError).finally(() => {
         if (this.flows.get(id) === flow) this.flows.delete(id);
-      });
+      }).catch(reportBackgroundError);
     }
   }
 

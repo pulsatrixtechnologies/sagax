@@ -39,7 +39,6 @@ import {
   X,
   AppWindow,
   MessageSquare,
-  Monitor,
   PanelLeftClose,
 } from "lucide-react";
 import { WorkingDots } from "@/components/WorkingIndicator";
@@ -91,7 +90,8 @@ import { isProviderReplyCut } from "../../shared/provider-reply-cut";
 import { isProviderSafetyBlock, PROVIDER_SAFETY_GUIDANCE, PROVIDER_SAFETY_HELP_URL } from "../../shared/provider-safety";
 import { isCancelledTranscriptRow } from "../../shared/client-cancel";
 import { BotAvatar } from "./Avatar";
-import { BotHeaderPill, botPillActions } from "./BotHeaderPill";
+import { BotChatHeader, BotHeaderPill, ChatWindowProvider, botPillActions, type ChatWindowContextValue } from "./BotHeaderPill";
+import { personaSharingSummary } from "@/lib/bot-sharing";
 import { TurnPresence } from "./TurnPresence";
 import { LiveReply } from "./LiveReply";
 import { ultracodeFromSelection } from "@/lib/ultracode-chrome";
@@ -100,6 +100,7 @@ import { isAppleMobileWebClient, showToolCallRows } from "@/lib/tool-activity-ro
 import { MAUS_COLORS, normalizeState, stateForBot } from "@/lib/mascot";
 import { botBubbleVars } from "@/lib/bubble-colors";
 import { mascotRowAnimated } from "@/lib/mascot-animate";
+import { useBotUnread } from "./unread-notice";
 import { peerLine, peerRequest, type PeerLine } from "@/lib/peer-message";
 import { autoWorkerLine } from "@/lib/auto-model";
 import { showWorkingDots } from "@/lib/turn-tail";
@@ -115,6 +116,7 @@ import { InputRequestCard } from "./InputRequestCard";
 import { withoutDeadThreadChips } from "@/lib/dead-thread-chips";
 import { VerifyCard } from "./VerifyCard";
 import { askText, runSkill, runSteps, runSummary, showRun, skillPrompt } from "@/lib/verify-steps";
+import { liveToolIds } from "@/lib/tool-liveness";
 import { useShowRunCard } from "@/lib/run-card-preferences";
 import { sendsMessage, useSendKey } from "@/lib/send-key";
 import { ToolActivity, botNames } from "./ToolActivity";
@@ -177,26 +179,25 @@ import { t, activeLocale } from "@/lib/i18n";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { showPrivateConversationHint } from "@/lib/private-threads";
 import { viewerActorId, viewerCan } from "@/lib/viewer";
-import { isViewersPrimaryBot } from "@/lib/primary-bot";
+import { isViewersPrimaryBot, viewerOwnsBot } from "@/lib/primary-bot";
 import { repeatedFailureIds } from "../../shared/failure-dedup";
 import { groupTranscript, isHiddenStatusActivity, isStatusActivity, isTurnStoppedNotice, type TranscriptItem } from "@/lib/activity-runs";
 import { collapseBotExchanges, exchangeJumpStays, startsNewStretch, visibleEdge, type ExchangeRun } from "@/lib/bot-exchange";
 import { foldCollapsedEntry, voiceCallPlan, voiceCallVisibleSpan } from "@/lib/voice-call-transcript";
 import { VoiceCallCard } from "./VoiceCallCard";
 import { BotExchangeChip, ExchangeColumnProvider, TranscriptDate, useExchangeColumn } from "./BotExchangeChip";
-import { RoutineRunExchange } from "./routines/RoutineRunExchange";
 import { CodingChat } from "./coding/CodingChat";
 import { GotoGroupChip } from "./GotoGroupChip";
 import { JumpToLatestPill } from "./JumpToLatestPill";
 import { collapseGotoLines, gotoGroupFromConversations, silentChatItem, type GotoGroup, type GotoTarget } from "@/lib/goto-lines";
 import { StatusActivityRow } from "@/components/StatusActivityRow";
 import { CancelledTurnRow } from "./CancelledTurnRow";
-import { DevPods, DevPodsToggle, RailAligned } from "./dev-pods/DevPods";
+import { RailAligned } from "./dev-pods/DevPods";
 import { ActivityRun } from "./ActivityRun";
 import { CwActivityWidgets, CwWidgetView, shownCwWidget } from "./cw/CwWidgetView";
 import { webhookMessageView } from "@/lib/webhook-message";
 import { splitTranscriptAttachments } from "@/lib/composer-attachments";
-import { useComposerDockPad, useMeasuredHeight } from "@/lib/composer-dock";
+import { useComposerDockPad } from "@/lib/composer-dock";
 import { useTranscriptViewport } from "@/hooks/use-transcript-viewport";
 import { offscreenAnchorShift, useOffscreenRowAnchor } from "@/hooks/use-offscreen-row-anchor";
 import { claimMessageEntrance } from "@/lib/message-entrance";
@@ -252,6 +253,8 @@ interface ChatRows {
   localVoice: boolean;
   /** Editing, regenerating and switching versions wait for the turn. */
   busy: boolean;
+  /** Tool activity ids that belong to the live turn (not historical receipts). */
+  liveTools: ReadonlySet<string>;
   /** Older messages remain on the server, beyond the page the thread holds. */
   hasMore: boolean;
   /** Every bot, for who wrote a relayed line or sits across a bot⇄bot chip. */
@@ -1006,7 +1009,7 @@ function PeerLabel({ peer, autoModel }: { peer: PeerLine; autoModel?: Message["a
 /** A tool run as a quiet step row (StepRow), or a receipt that opens a conversation. */
 const ActivityChip = memo(function ActivityChip({ message, place = "auto" }: { message: Message; place?: EffectivePlace }) {
   "use memo";
-  const { bots, dispatch, botDmIds } = useChatRows();
+  const { bots, dispatch, botDmIds, liveTools } = useChatRows();
   const tool = message.tool;
   if (!tool) return null;
   if (message.inputRequest) return <InputRequestCard message={message} />;
@@ -1034,7 +1037,7 @@ const ActivityChip = memo(function ActivityChip({ message, place = "auto" }: { m
   }
   // 2026-11-05 (JC): no role notice in the chat (rows saved before stay hidden)
   if (tool.roleNotice) return null;
-  return <ToolActivity tool={tool} place={toolPlace(tool.name, place)} nameOf={botNames(bots)} />;
+  return <ToolActivity tool={tool} live={liveTools.has(message.id)} place={toolPlace(tool.name, place)} nameOf={botNames(bots)} />;
 });
 
 /** What a bot's turn elsewhere left for the person (2026-11-05): its card,
@@ -1051,8 +1054,13 @@ export function AttentionRow({ message }: { message: Message }) {
     <AttentionCard
       card={card}
       bot={owner}
-      onOpenThread={(botId, threadId) => { openThread(dispatch, { botId, threadId }, getState(), showThreads); }}
+      // one conversation (#2081): no thread is a destination; the person answers in place
+      onOpenThread={showThreads ? (botId, threadId) => { openThread(dispatch, { botId, threadId }, getState(), showThreads); } : undefined}
       onOpenRun={(runId) => openRoutineRun(dispatch, { runId })}
+      // the answer is the person's own message into the thread the bot asked in (coordinator.answer)
+      onReply={showThreads ? undefined : async (text) => {
+        await api(`/api/bots/${card.botId}/messages`, { method: "POST", body: JSON.stringify({ text, threadId: card.threadId, sendId: crypto.randomUUID() }) });
+      }}
     />
   );
 }
@@ -1081,8 +1089,11 @@ export function RoutineRunRow({ message, botId, onResume }: { message: Message; 
       botOf={(id) => bots.find((candidate) => candidate.id === id)}
       onResume={onResume}
       onOpen={run?.runId ? () => openRoutineRun(dispatch, { runId: run.runId, routineId: run.routineId }) : undefined}
-      // 2026-11-03: a run that handed work to a teammate links that thread.
-      onOpenThread={(botId, threadId) => { openThread(dispatch, { botId, threadId }, getState(), showThreads); }}
+      // 2026-11-05 (#2096): Stop on the running card itself; the card shows it while the run is live.
+      onStop={run?.runId ? () => dispatch({ type: "cancelRoutineRun", runId: run.runId }) : undefined}
+      // 2026-11-03: a run that handed work to a teammate links that thread;
+      // threads shown only (#2081): one conversation names the teammate, no link.
+      onOpenThread={showThreads ? (botId, threadId) => { openThread(dispatch, { botId, threadId }, getState(), showThreads); } : undefined}
     />
   );
 }
@@ -2047,21 +2058,15 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
     inspectorOpen: current.inspectorOpen,
     notice: current.notice,
     panelOwner: current.panelOwner,
-    routineRunSheet: current.routineRunSheet,
     settingsOpen: current.settingsOpen,
   }), shallowEqual);
   const storeBots = useStoreSelector(peerBots, equalRows);
   const engine = useStoreSelector((current) => current.instances.find((instance) => instance.instanceId === bot.modelSelection.instanceId));
   const computerStart = useStoreSelector((current) => current.computerStarts[bot.id]);
   const mascotMotion = useStoreSelector((current) => current.mascotMotion?.botId === bot.id ? current.mascotMotion : null);
+  const { noticing } = useBotUnread(bot);
   const pendingQueued = useStoreSelector((current) => Object.fromEntries([bot.threadId, ...(bot.tasks ?? []).map((task) => task.threadId)].map((id) => [id, current.pendingQueued[id]])), shallowEqual);
   const focus = useStoreSelector((current) => current.focusMessage?.threadId === bot.threadId ? current.focusMessage : null);
-  const sheetRun = useStoreSelector((current) => current.routineRuns.find((run) => run.id === current.routineRunSheet?.runId));
-  const sheetRoutine = useStoreSelector((current) => {
-    const sheet = current.routineRunSheet;
-    const routineId = sheet?.routineId ?? current.routineRuns.find((run) => run.id === sheet?.runId)?.routineId;
-    return current.routines.find((routine) => routine.id === routineId) ?? null;
-  });
   const showThreads = useShowThreads();
   const remoteClient = useRemoteClient();
   // 2026-10-26: the failure that paused its routine offers Resume, and its
@@ -2205,14 +2210,16 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   // The bot's run in the current ask — every command it ran, the control-CLI
   // ones verified — for the run card. Saving mirrors the /learn gate: the
   // flag, an engine with the agents tools, and a bot that can take a message
-  // now — plus a run with something to keep.
-  const recordedRun = useMemo(() => runSteps(messages), [messages]);
+  // now — plus a run with something to keep. Incomplete tools only count as
+  // running while they belong to the live turn.
+  const liveTools = useMemo(() => liveToolIds(messages, bot), [messages, bot.busy, bot.turnStartedAt]);
+  const recordedRun = useMemo(() => runSteps(messages, liveTools), [messages, liveTools]);
   const recordedRunCounts = runSummary(recordedRun);
   const engineSupportsAgents = Boolean(
     engine?.capabilities?.agentsMcp,
   );
   const canSaveRun =
-    skillAuthoringEnabled(state.config) && engineSupportsAgents && recordedRunCounts.passed > 0 && recordedRunCounts.running === 0 && !bot.busy;
+    skillAuthoringEnabled(state.config) && engineSupportsAgents && recordedRunCounts.passed > 0 && recordedRunCounts.running === 0 && recordedRunCounts.unverified === 0 && !bot.busy;
   // A dismissal is pinned to the run's last step, per thread: the card comes
   // back when the bot runs another command, not merely when a step settles,
   // and stays away across a switch to another thread and back.
@@ -2252,7 +2259,6 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   const runCardOpen = Boolean(
     lastRunStep && showRun(recordedRun) && showRunCard && runDismissed.get(transcriptKey) !== lastRunStep.id,
   );
-  const runCardHeight = useMeasuredHeight(runOverlayRef, runCardOpen);
   // Rows drawn for the first time above the viewport (.transcript-row) keep
   // the reader still.
   useOffscreenRowAnchor(scrollRef, transcriptRef, followRef, transcriptKey);
@@ -2285,8 +2291,8 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   const dmIds = useStoreSelector((current) => current.groups.filter((group) => group.dm && !group.peopleDm).map((group) => group.id), shallowEqual);
   const botDmIds = useMemo(() => new Set(dmIds), [dmIds]);
   const rows = useMemo<ChatRows>(
-    () => ({ botId: bot.id, threadId: bot.threadId, botName: bot.name, viewerName, voiceId: bot.voice, tts, localVoice, busy, hasMore, bots, mentionPeers, focus, showToolCalls, locale, dispatch, onBranch, reactionSelf, botDmIds }),
-    [bot.id, bot.threadId, bot.name, viewerName, bot.voice, tts, localVoice, busy, hasMore, bots, mentionPeers, focus, showToolCalls, locale, dispatch, onBranch, reactionSelf, botDmIds],
+    () => ({ botId: bot.id, threadId: bot.threadId, botName: bot.name, viewerName, voiceId: bot.voice, tts, localVoice, busy, liveTools, hasMore, bots, mentionPeers, focus, showToolCalls, locale, dispatch, onBranch, reactionSelf, botDmIds }),
+    [bot.id, bot.threadId, bot.name, viewerName, bot.voice, tts, localVoice, busy, liveTools, hasMore, bots, mentionPeers, focus, showToolCalls, locale, dispatch, onBranch, reactionSelf, botDmIds],
   );
   // Where this conversation works, for the place icon on screen and page tools.
   const place = effectivePlace(bot, bot.tasks?.find((task) => task.threadId === bot.threadId));
@@ -2476,11 +2482,42 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   const Root = side ? "section" : "main";
   // The bot pill: mascot, name, chevron. The main chat's opens the panel
   // at the right; a split-view section's opens its own (side.panel).
+  const panelPillOpen = side ? side.panel?.open === true : pillPanelOpen;
+  const togglePanelFromPill = side?.panel ? side.panel.onToggle : () => {
+    if (state.panelOwner) dispatch({ type: "toggleSettings", open: true, owner: null });
+    else for (const action of botPillActions(pillPanelOpen)) dispatch(action);
+  };
   const botPill = (
     <BotHeaderPill
       name={bot.name}
-      panelOpen={side ? side.panel?.open === true : pillPanelOpen}
-      onToggle={side?.panel ? side.panel.onToggle : () => {
+      panelOpen={panelPillOpen}
+      onToggle={togglePanelFromPill}
+      avatar={
+        <BotAvatar
+          bot={bot}
+          primary={isViewersPrimaryBot(bot, viewerActorId(state.config))}
+          primaryRingClassName="ring-elevated"
+          state={stateForBot({ ...bot, messages })}
+          size={24}
+          motion={mascotMotion?.kind ?? "none"}
+          motionKey={mascotMotion?.nonce ?? 0}
+          animated={mascotRowAnimated(bot, pendingQueued, mascotMotion?.kind, noticing)}
+        />
+      }
+    />
+  );
+  // The main chat's header row, like Grok Bot (#2141): name pill, who sees
+  // the bot, then the gear that toggles the same panel as the pill.
+  const sharingLabel = personaSharingSummary(bot);
+  const shared = sharingLabel !== t("botSettings.sharing.empty");
+  const chatHeader = side ? null : (
+    <BotChatHeader
+      name={bot.name}
+      label={bot.title}
+      audience={!shared && viewerOwnsBot(bot, viewerActorId(state.config)) ? t("chat.header.private") : sharingLabel}
+      shared={shared}
+      panelOpen={pillPanelOpen}
+      onToggle={() => {
         if (state.panelOwner) dispatch({ type: "toggleSettings", open: true, owner: null });
         else for (const action of botPillActions(pillPanelOpen)) dispatch(action);
       }}
@@ -2490,7 +2527,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
           primary={isViewersPrimaryBot(bot, viewerActorId(state.config))}
           primaryRingClassName="ring-elevated"
           state={stateForBot({ ...bot, messages })}
-          size={24}
+          size={20}
           motion={mascotMotion?.kind ?? "none"}
           motionKey={mascotMotion?.nonce ?? 0}
           animated={mascotRowAnimated(bot, pendingQueued, mascotMotion?.kind)}
@@ -2501,8 +2538,21 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   // My bubble (and its inline editor) in the bot's colour, whatever the
   // skin's accent (src/lib/bubble-colors.ts, botBubbleVars).
   const bubbleStyle = botBubbleVars(MAUS_COLORS[bot.color]) as React.CSSProperties;
+  // #2149: a window over this chat (coding, a bot-to-bot or routine
+  // conversation) toggles the same panel from its pill, ends above this
+  // composer, and closes when the person sends here.
+  const togglePanelRef = useRef(togglePanelFromPill);
+  togglePanelRef.current = togglePanelFromPill;
+  const windowSentKey = lastUserMessage?.id;
+  const chatWindow = useMemo<ChatWindowContextValue | null>(() => (side && !side.panel ? null : {
+    panelOpen: panelPillOpen,
+    onTogglePanel: () => togglePanelRef.current(),
+    composerInset: pageStage ? 0 : composerDock.height,
+    sentKey: windowSentKey,
+  }), [side, panelPillOpen, pageStage, composerDock.height, windowSentKey]);
   return (
     <ThreadLinkContext value={threadLink}>
+    <ChatWindowProvider value={chatWindow}>
     <ExchangeColumnProvider node={exchangeColumnNode}>
     <Root
       ref={pageHostRef}
@@ -2550,8 +2600,8 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
           "pl-11 sm:pl-5",
         )}
       >
-        <div className="absolute left-1/2 top-1/2 flex max-w-[50%] -translate-x-1/2 -translate-y-1/2 items-center gap-2" style={headerNoDragStyle}>
-          {botPill}
+        <div className="absolute left-1/2 top-1/2 flex max-w-[60%] -translate-x-1/2 -translate-y-1/2 items-center gap-2" style={headerNoDragStyle}>
+          {chatHeader}
         </div>
         <div
           data-chathead-controls
@@ -2561,27 +2611,8 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
           // buttons clear the 26px overlay while the rest of the layout stays.
           style={controlsShiftStyle}
         >
-          {/* Advanced (and a remote client's Simple header) keeps Computer
-              here so the guided tour can point at it (Refs #2000). Simple
-              mode otherwise opens Computer from the bot panel. */}
-          {(advanced || remoteClient) && (
-            <button
-              type="button"
-              data-tour="computer"
-              onClick={() => dispatch({ type: "toggleComputer" })}
-              className={cn(
-                "relative rounded-md p-1.5 hover:bg-raised",
-                state.computerOpen ? "text-accent" : "text-ink-secondary hover:text-ink",
-              )}
-              title={t("chat.computer")}
-              aria-label={t("chat.computer")}
-            >
-              <Monitor size={18} />
-              {busy && place === "browser" && (
-                <span aria-hidden="true" className="absolute right-1 top-1 size-1.5 animate-pulse rounded-full bg-success" data-testid="computer-button-live" />
-              )}
-            </button>
-          )}
+          {/* No Computer button in the header (JC 2026-11-05): Computer
+              opens from the bot panel. */}
           {/* One "..." for the conversation: share and export, then the
               Inspector (Advanced) and Data (Experimental). The pill opens
               the bot's panel; while the panel is open its top bar carries
@@ -2596,7 +2627,6 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
             {...(dataItem ? { data: dataItem } : {})}
             onSplit={(edge) => splitBesideMain(showThreads ? { kind: "bot", botId: bot.id, threadId: bot.threadId } : { kind: "bot", botId: bot.id }, edge)}
           />}
-          <DevPodsToggle bot={bot} />
           {!showThreads && <NewTopicButton bot={bot} />}
           <TaskPicker bot={bot} />
         </div>
@@ -2775,9 +2805,8 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
 
       <TranscriptAnnouncer threadKey={transcriptKey} snapshot={announcement} />
 
-      {/* Dev context pods (Settings > Experimental): an overlay in the
-          pane's top-right corner; the transcript above never moves. */}
-      <DevPods bot={bot} messages={messages} composerHeight={composerDock.height + runCardHeight} computerStart={computerStart} dispatch={dispatch} />
+      {/* #2149: the dev context pods (</>) live only in a coding window
+          (CodingChat), never in the plain chat. */}
 
       {/* Reading scrollback — one tap back to the end, streaming or not.
           Hidden only while a phone page covers the chat; desktop keeps it
@@ -2944,20 +2973,6 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
         </div>
       )}
     </Root>
-    {state.routineRunSheet && (() => {
-      const run = sheetRun;
-      if (!run) return null;
-      const routine = sheetRoutine;
-      return (
-        <RoutineRunExchange
-          run={run}
-          routine={routine}
-          bots={storeBots}
-          onClose={() => dispatch({ type: "closeRoutineRunSheet" })}
-          onStop={["queued", "running", "waiting"].includes(run.status) ? () => dispatch({ type: "cancelRoutineRun", runId: run.id }) : undefined}
-        />
-      );
-    })()}
     {!side && state.codingChat && (
       <CodingChat
         key={`${state.codingChat.botId}:${state.codingChat.itemId}`}
@@ -2966,6 +2981,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
       />
     )}
     </ExchangeColumnProvider>
+    </ChatWindowProvider>
     </ThreadLinkContext>
   );
 }

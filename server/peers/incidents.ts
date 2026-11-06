@@ -22,6 +22,7 @@ export interface IncidentBot {
   id: string;
   name: string;
   section?: string;
+  sectionId?: string;
   chiefOfStaff?: boolean;
   managedSections?: string[];
   hidden?: boolean;
@@ -61,7 +62,7 @@ export function chiefForBot<T extends IncidentBot>(bots: readonly T[], bot: Inci
   // only; its sections are all empty, so the rule below matches anyone's.
   const chiefs = bots.filter((candidate) => candidate.chiefOfStaff && !candidate.hidden && candidate.id !== bot.id && (!onDuty || onDuty(candidate)));
   return chiefs.find((chief) => sectionKey(chief.section) === sectionKey(bot.section))
-    ?? chiefs.find((chief) => canAccessTeam(chief, bot.section))
+    ?? chiefs.find((chief) => canAccessTeam(chief, bot.section, bot.sectionId))
     ?? null;
 }
 

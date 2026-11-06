@@ -19,7 +19,7 @@ vi.mock("@/state/store", async (importOriginal) => ({
   useStore: () => ({ state: { appSettingsSection: fixture.section, appSettingsSubPage: null, instances: [], bots: [], groups: [], config: fixture.config }, dispatch: vi.fn() }),
 }));
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => true, setAdvancedMode: () => {} }));
-vi.mock("@/lib/analytics", () => ({ analyticsEnabled: () => false, setAnalyticsEnabled: () => {} }));
+vi.mock("@/lib/analytics", () => ({ analyticsEnabled: () => false, setAnalyticsEnabled: () => {}, usageMeterEnabled: () => false, setUsageMeterEnabled: () => {} }));
 vi.mock("@/lib/updater", () => ({ useUpdaterState: () => ({ status: "idle", allowPrerelease: false }) }));
 vi.mock("./DesktopCapabilities", () => ({ useDesktopCapabilities: () => ({ capabilities: {} }) }));
 
@@ -47,10 +47,12 @@ describe("Settings nav groups", () => {
     expect(at.every((value) => value >= 0)).toBe(true);
     expect([...at].sort((x, y) => x - y)).toEqual(at);
     expect(SECTIONS.map((entry) => entry.id)).toEqual([
-      "account", "security", "credentials", "appearance", "notifications",
-      "providers", "engines", "voice",
-      "organization", "computer", "usage", "backups", "import",
-      "updates", "experimental", "about",
+      // #2080 (L0): the final rail of 13 pages; Import lives in Backups,
+      // Updates in App (their old ids stay aliases)
+      "account", "appearance", "notifications", "security", "credentials",
+      "providers", "engines", "voice", "usage",
+      "organization", "computer", "backups",
+      "about", "experimental",
     ]);
   });
 
@@ -66,8 +68,9 @@ describe("Settings nav groups", () => {
     for (const page of ["Account", "Security", "Vault", "Appearance", "Notifications"]) expect(you, page).toContain(`>${page}</button>`);
     expect(rail).not.toContain("data-settings-automations");
     const app = rail.slice(rail.indexOf('data-settings-nav-group="app"'));
-    expect(app.indexOf(">Updates</button>")).toBeLessThan(app.indexOf(">Experimental</button>"));
-    // 2026-11-02 (JC): About is not a row of the Settings menu
+    // #2080 (L0): App is a page of its own, Updates is one of its cards
+    expect(app.indexOf(">App</button>")).toBeLessThan(app.indexOf(">Experimental</button>"));
+    expect(app).not.toContain(">Updates</button>");
     expect(app).not.toContain(">About</button>");
     // each group is labelled by its heading for assistive tech
     expect(rail).toMatch(/role="group" aria-labelledby="app-settings-nav-you"/);
@@ -80,7 +83,7 @@ describe("Settings nav groups", () => {
     const rail = nav(html);
     expect(rail).not.toContain(">General</button>");
     expect(html).not.toContain('<option value="general"');
-    const at = [">Account</button>", ">Security</button>", ">Vault</button>", ">Appearance</button>"].map((label) => rail.indexOf(label));
+    const at = [">Account</button>", ">Appearance</button>", ">Security</button>", ">Vault</button>"].map((label) => rail.indexOf(label));
     expect(at.every((value) => value >= 0)).toBe(true);
     expect([...at].sort((x, y) => x - y)).toEqual(at);
     for (const gone of ["Credentials", "Published pages", "Models and voice"]) expect(rail, gone).not.toContain(`>${gone}</button>`);
@@ -110,16 +113,25 @@ describe("Settings nav groups", () => {
       expect(sectionMatches(account, query), query).toBe(false);
     }
     // "tool access" also names People's tool access, an admin card of
-    // Account > Advanced: a search finds both, each in its own place
+    // App > Advanced (#2080 L2): a search finds both, each in its own place
     expect(sectionMatches(security, "tool access")).toBe(true);
-    expect(sectionMatches(account, "people's tool access")).toBe(true);
+    expect(sectionMatches(SECTIONS.find((entry) => entry.id === "about")!, "people's tool access")).toBe(true);
     for (const query of ["vault", "coffre", "identifiants", "1password", "one-time card", "carte à usage unique", "mot de passe"]) {
       expect(sectionMatches(vault, query), query).toBe(true);
       expect(sectionMatches(account, query), query).toBe(false);
     }
-    // what General held is found on Account; the microphone on Voice
-    for (const query of ["language", "langue", "time zone", "fuseau", "server", "serveur", "tour", "diagnostic", "avatar"]) {
+    // what General held: identity and region on Account, the rest on App
+    // (#2080 L2); the microphone on Voice
+    for (const query of ["language", "langue", "time zone", "fuseau", "avatar"]) {
       expect(sectionMatches(account, query), query).toBe(true);
+    }
+    const app = SECTIONS.find((entry) => entry.id === "about")!;
+    for (const query of ["tour", "diagnostic"]) {
+      expect(sectionMatches(app, query), query).toBe(true);
+    }
+    // the server choice is Organization's (its launch screen on a desktop with no server)
+    for (const query of ["server", "serveur"]) {
+      expect(sectionMatches(SECTIONS.find((entry) => entry.id === "organization")!, query), query).toBe(true);
     }
     expect(sectionMatches(account, "microphone")).toBe(false);
     expect(sectionMatches(SECTIONS.find((entry) => entry.id === "engines")!, "microphone")).toBe(false);
@@ -130,14 +142,15 @@ describe("Settings nav groups", () => {
   it("groups the small-screen menu the same way", () => {
     const html = render();
     expect(html).toContain('<optgroup label="Personal"><option value="account" selected="">Account</option>');
-    expect(html).toContain('<optgroup label="App"><option value="updates">Updates</option>');
-    expect(html).not.toContain('<option value="about">');
+    expect(html).toContain('<optgroup label="App"><option value="about">App</option>');
+    expect(html).not.toContain('<option value="updates"');
   });
 
-  it("keeps the App group without an updater; About is never a row", () => {
+  it("keeps the App page without an updater; About is never a row", () => {
     vi.stubGlobal("window", {});
     const rail = nav(render());
     expect(rail).toContain('data-settings-nav-group="app"');
+    expect(rail).toContain(">App</button>");
     expect(rail).not.toContain(">Updates</button>");
     expect(rail).not.toContain(">About</button>");
     // a member who cannot edit the installation has no Experimental
@@ -148,12 +161,13 @@ describe("Settings nav groups", () => {
     expect(member).not.toContain(">Experimental</button>");
   });
 
-  it("titles the Updates page's card and no longer nests About there", () => {
-    fixture.section = "updates";
+  it("draws the updates first on App, then the way to About", () => {
+    fixture.section = "about";
     const html = render();
-    expect(html).toContain('data-settings-group="updates"');
+    expect(html).toContain('data-settings-card="about.updates"');
     expect(html).toMatch(/<h3[^>]*>This app<\/h3>/);
     expect(html).toContain("Check for updates");
+    expect(html.indexOf('data-settings-card="about.updates"')).toBeLessThan(html.indexOf('data-settings-card="about.about"'));
     expect(html).not.toContain("data-about-section");
   });
 
@@ -161,7 +175,7 @@ describe("Settings nav groups", () => {
     setLocale("fr");
     const html = render();
     const rail = nav(html);
-    for (const label of ["Personnel", "IA", "Espace de travail", "Application"]) expect(rail, label).toContain(`>${label}</div>`);
+    for (const label of ["Personnel", "IA", "Installation", "Application"]) expect(rail, label).toContain(`>${label}</div>`);
     expect(html).toContain('<optgroup label="Personnel">');
     expect(html).not.toMatch(/[\u2013\u2014]/);
   });

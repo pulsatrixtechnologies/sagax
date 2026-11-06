@@ -237,6 +237,31 @@ describe("createGroupsHttpRoutes", () => {
     });
   });
 
+  it("refuses leave when the caller is the sole remaining person (#2119)", async () => {
+    const alone = {
+      ...room,
+      createdBy: "pr_member",
+      humanIds: ["pr_member"],
+      memberIds: ["b1"],
+    } as unknown as GroupRecord;
+    const result = await call(baseDeps({
+      store: storeStub({ group: (id) => (id === "g1" ? alone : undefined), groups: [alone] }),
+      groupActor: () => ({ id: "pr_member", email: "a@example.test", orgAdmin: false } as never),
+      effectiveBotOwner: () => "pr_member",
+      botGrants: () => [],
+    }), {
+      method: "POST",
+      path: "/api/groups/g1/leave",
+    });
+    expect(result.sent).toEqual({
+      status: 409,
+      body: {
+        error: "you are the only person left in this group; delete it instead of leaving",
+        code: "sole_member",
+      },
+    });
+  });
+
   it("refuses delete without admin when owner rules do not apply", async () => {
     const result = await call(baseDeps({ groupOwnerRuleApplies: () => false }), {
       method: "DELETE",
@@ -246,6 +271,27 @@ describe("createGroupsHttpRoutes", () => {
     expect(result.sent).toEqual({
       status: 403,
       body: { error: "forbidden: deleting a channel needs the admin scope", code: "channel_delete_admin_only" },
+    });
+  });
+
+  it("refuses delete from a non-owner when owner rules apply (#2119)", async () => {
+    const owned = {
+      ...room,
+      createdBy: "pr_owner",
+      humanIds: ["pr_owner", "pr_member"],
+    } as unknown as GroupRecord;
+    const result = await call(baseDeps({
+      store: storeStub({ group: (id) => (id === "g1" ? owned : undefined), groups: [owned] }),
+      groupOwnerRuleApplies: () => true,
+      groupActor: () => ({ id: "pr_member", email: "a@example.test", orgAdmin: false } as never),
+    }), {
+      method: "DELETE",
+      path: "/api/groups/g1",
+      auth: sessionMember,
+    });
+    expect(result.sent).toEqual({
+      status: 403,
+      body: { error: "forbidden: only the group's owner can delete it", code: "not_group_owner" },
     });
   });
 

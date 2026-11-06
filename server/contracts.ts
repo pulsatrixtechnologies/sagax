@@ -352,6 +352,8 @@ export interface SendTurnInput {
     customResultBudgets?: Record<string, number>;
   };
   cwd?: string;
+  /** Engines with no working folder (the chat drivers): where an MCP result too big for the model is saved whole; a folder attach_file can deliver from. */
+  toolResultFolder?: string;
   /** Let the engine also load the MCP servers from the person's own CLI
    * setup (Claude Code's user-scope servers and claude.ai connectors). Off
    * by default: a bot gets the servers its owner gave it, and each extra

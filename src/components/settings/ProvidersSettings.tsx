@@ -8,7 +8,7 @@
 // server. An admin of an organization can view the page as a member does.
 // The former Engines and Keys groups stay on Models, under "Former view".
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ChevronDown, Copy, Cpu, ExternalLink, KeyRound, Plus, Server, UserRound } from "lucide-react";
+import { ChevronDown, Copy, Cpu, KeyRound, Plus, Server, UserRound } from "lucide-react";
 
 import { api, useStore, type InstanceInfo } from "@/state/store";
 import { cn } from "@/lib/cn";
@@ -19,10 +19,12 @@ import { useOfferedInstances } from "@/lib/offered-instances";
 import { perspicaxKeysUrl, useMyEngines } from "@/lib/perspicax-org";
 import type { LocalModelSettings } from "@/lib/desktop-local-models";
 import {
-  filterProviderRows,
+  providerGroupKey,
+  providerGroups,
+  visibleProviderRows,
   providerRows,
   splitProviderRows,
-  type ProviderFilter,
+  type ProviderGroup,
   type ProviderRow,
 } from "@/lib/provider-rows";
 import { PERSONAL_PROVIDER_NAMES, type PersonalProvider } from "../../../shared/provider-accounts";
@@ -53,15 +55,11 @@ import { modelOn } from "../../../shared/offered-models";
 import { perspicaxConsoleUrl } from "../PerspicaxOrgSettings";
 import { ImageGenerationSettings, imageProviderLabel } from "./ImageGenerationSettings";
 import { WebSearchSettings } from "./WebSearchSettings";
-import { DescribedRow, FoldRow, HelpTip, LinkRow, PILL, SettingsGroup, SettingsIntro, Switch, requestSettingsCard } from "../SettingsPrimitives";
+import { DescribedRow, FoldRow, HelpTip, LinkRow, PILL, PRIMARY_PILL, SettingsGroup, Switch, requestSettingsCard } from "../SettingsPrimitives";
+import { ExternalLinkPill, SettingsEmpty, StatusText } from "./SettingsPatterns";
+import { LocalModelsSettings } from "./LocalModelsSettings";
 
 const PAYER_KEY = { me: "providers.payer.me", org: "providers.payer.org", computer: "providers.payer.computer" } as const satisfies Record<ProviderRow["payer"], LocaleKey>;
-const WHERE_KEY = {
-  perspicax: "providers.where.perspicax",
-  server: "providers.where.server",
-  session: "providers.where.session",
-  none: "providers.where.none",
-} as const satisfies Record<ProviderRow["keyWhere"], LocaleKey>;
 const STATE_KEY = {
   connected: "providers.state.connected",
   reconnect: "providers.state.reconnect",
@@ -82,8 +80,6 @@ export function providerAction(row: Pick<ProviderRow, "state" | "kind">, managed
   return "manage";
 }
 
-const FILTER_KEY = { all: "providers.filter.all", mine: "providers.filter.mine", org: "providers.filter.org", computer: "providers.filter.computer" } as const satisfies Record<ProviderFilter, LocaleKey>;
-
 /** What a row brings, in words: its engines, voice, images, a server's models. */
 export function providerBrings(row: ProviderRow, nameOf: (instanceId: string) => string): string {
   const parts: string[] = [];
@@ -97,15 +93,28 @@ export function providerBrings(row: ProviderRow, nameOf: (instanceId: string) =>
   return parts.join(" · ");
 }
 
-/** The grey line under a row's name: who pays · where the key lives · what it brings. */
+/** The grey line under an account's name (#2080): who pays · what it brings.
+ * Its state follows, coloured alone (StatusText). */
 export function providerLine(row: ProviderRow, nameOf: (instanceId: string) => string): string {
-  const brings = providerBrings(row, nameOf);
-  return [t(PAYER_KEY[row.payer]), t(WHERE_KEY[row.keyWhere]), brings].filter(Boolean).join(" · ");
+  return [t(PAYER_KEY[row.payer]), providerBrings(row, nameOf)].filter(Boolean).join(" · ");
 }
 
-function StatePill({ state }: { state: ProviderRow["state"] }) {
-  const tone = state === "connected" ? "text-success" : state === "adminOff" || state === "offline" || state === "available" ? "text-ink-secondary" : "text-warning";
-  return <span data-provider-state={state} className={cn("shrink-0 text-[12px] font-medium", tone)}>{t(STATE_KEY[state])}</span>;
+const STATE_TONE = { connected: "success", reconnect: "warning", keyMissing: "warning", adminOff: "neutral", offline: "neutral", available: "neutral" } as const;
+
+/** A row's state word, coloured alone at the end of its grey line. */
+function StateWord({ state, managed }: { state: ProviderRow["state"]; managed?: boolean }) {
+  if (managed) return <span data-provider-state="managed"><StatusText tone="neutral">{t("settings.org.managed")}</StatusText></span>;
+  return <span data-provider-state={state}><StatusText tone={STATE_TONE[state]}>{t(STATE_KEY[state])}</StatusText></span>;
+}
+
+/** The one action at the right of a row: a verb when the row needs the
+ * person (Reconnect, Enter the key, Start), else the chevron. The whole row
+ * is the button either way. */
+function RowAction({ action, open }: { action: ProviderAction; open: boolean }) {
+  if (action === "reconnect" || action === "enterKey" || action === "start") {
+    return <span data-provider-action={action} className={cn(PILL, "pointer-events-none shrink-0")}>{t(ACTION_KEY[action])}</span>;
+  }
+  return <ChevronDown size={13} aria-hidden="true" className={cn("shrink-0 text-ink-secondary transition-transform motion-reduce:transition-none", open && "rotate-180")} />;
 }
 
 function RowIcon({ row, instance }: { row: ProviderRow; instance?: InstanceInfo }) {
@@ -131,15 +140,19 @@ function CopyId({ id }: { id: string }) {
   );
 }
 
-/** One provider: its line, and its detail in place once opened. */
-function ProviderLine({ row, open, onToggle, nameOf, detail, issuer }: {
+/** One account, key or server (#2080): its name, who pays and its state in
+ * grey, one action; its detail in place once opened. `label` names a
+ * provider's only account by the provider ("Claude"), the account's own
+ * name moving into the grey line. */
+function AccountRow({ row, open, onToggle, nameOf, detail, issuer, label }: {
   row: ProviderRow;
   open: boolean;
   onToggle: () => void;
   nameOf: (instanceId: string) => string;
   detail: ReactNode;
-  /** The organization's console: its providers open there (2026-11-05). */
+  /** The organization's console: its providers are managed there. */
   issuer?: string;
+  label?: string;
 }) {
   const { state } = useStore();
   // Keep a visited detail alive: signing in and editing can outlast the
@@ -147,34 +160,59 @@ function ProviderLine({ row, open, onToggle, nameOf, detail, issuer }: {
   const [visited, setVisited] = useState(open);
   useEffect(() => { if (open) setVisited(true); }, [open]);
   const instance = row.instanceIds.length ? state.instances.find((entry) => entry.instanceId === row.instanceIds[0]) : undefined;
-  const line = providerLine(row, nameOf);
+  const name = label ?? row.name;
+  const line = [label && label !== row.name ? row.name : "", providerLine(row, nameOf)].filter(Boolean).join(" · ");
   // The organization's provider: its key and who pays live in Perspicax.
   const managed = Boolean(issuer) && row.payer === "org" && row.state !== "adminOff";
   const action = providerAction(row, managed);
   return (
     <li data-provider-row={row.id} data-provider-kind={row.kind} data-provider-payer={row.payer} data-open={open ? "true" : "false"} className="min-w-0">
-      <div className="flex min-w-0 items-center">
       <button type="button" onClick={onToggle} aria-expanded={open}
-        className="mx-1.5 flex min-h-[44px] min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-1.5 text-left outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent/70 motion-reduce:transition-none">
+        className="mx-1.5 flex min-h-[44px] w-[calc(100%-12px)] min-w-0 items-center gap-3 rounded-lg px-2 py-1.5 text-left outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent/70 motion-reduce:transition-none">
         <RowIcon row={row} instance={instance} />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] leading-[18px] text-ink">{row.name}</span>
-          <span className="block truncate text-[12px] leading-4 text-ink-secondary" title={line}>{line}</span>
+          <span className="block truncate text-[13px] leading-[18px] text-ink">{name}</span>
+          <span className="block truncate text-[12px] leading-4 text-ink-secondary" title={line}>
+            {line}{line ? " · " : null}<StateWord state={row.state} managed={managed} />
+          </span>
         </span>
-        {managed ? <span data-provider-state="managed" className="shrink-0 text-[12px] font-medium text-ink-secondary">{t("providers.state.managed")}</span> : <StatePill state={row.state} />}
-        {/* one action per row: a managed row's action is the Open link beside it */}
-        {!managed && <span data-provider-action={action} className="hidden shrink-0 text-[12px] text-accent-text sm:inline">{t(ACTION_KEY[action])}</span>}
+        <RowAction action={action} open={open} />
+      </button>
+      {(open || visited) && <div data-provider-detail={row.id} hidden={!open} className={cn("min-w-0 flex-col gap-3 px-3.5 pb-3 pt-2 sm:pl-[52px]", open ? "flex" : "hidden")}>{detail}</div>}
+    </li>
+  );
+}
+
+/** One provider with several accounts (#2080): its name, "N accounts" and
+ * the combined state in grey (connected when one account works), the
+ * chevron; open, its accounts, one sub-row each with its own actions. */
+function ProviderGroupRow({ group, open, onToggle, summary, children }: {
+  group: ProviderGroup;
+  open: boolean;
+  onToggle: () => void;
+  summary: string;
+  children: ReactNode;
+}) {
+  const { state } = useStore();
+  const first = group.rows[0]!;
+  const instance = first.instanceIds.length ? state.instances.find((entry) => entry.instanceId === first.instanceIds[0]) : undefined;
+  const tone = group.state === "connected" ? "success" : group.state === "reconnect" || group.state === "keyMissing" ? "warning" : "neutral";
+  return (
+    <li data-provider-group={group.id} data-open={open ? "true" : "false"} className="min-w-0">
+      <button type="button" onClick={onToggle} aria-expanded={open}
+        className="mx-1.5 flex min-h-[44px] w-[calc(100%-12px)] min-w-0 items-center gap-3 rounded-lg px-2 py-1.5 text-left outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent/70 motion-reduce:transition-none">
+        <RowIcon row={first} instance={instance} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] leading-[18px] text-ink">{group.name}</span>
+          <span className="block truncate text-[12px] leading-4 text-ink-secondary" title={summary}>
+            {summary} · <span data-provider-group-state={group.state}>
+              <StatusText tone={tone}>{t(STATE_KEY[group.state])}</StatusText>
+            </span>
+          </span>
+        </span>
         <ChevronDown size={13} aria-hidden="true" className={cn("shrink-0 text-ink-secondary transition-transform motion-reduce:transition-none", open && "rotate-180")} />
       </button>
-      {managed && issuer && (
-        <a href={perspicaxProvidersUrl(issuer)} target="_blank" rel="noreferrer noopener" data-provider-open-perspicax={row.id} data-provider-action={action} aria-label={`${row.name}: ${t("providers.action.open")}`}
-          className="mr-1.5 inline-flex min-h-[44px] shrink-0 items-center gap-1 px-2 text-[12px] text-accent-text hover:underline">
-          {t("providers.action.open")}
-          <ExternalLink size={12} aria-hidden="true" />
-        </a>
-      )}
-      </div>
-      {(open || visited) && <div data-provider-detail={row.id} hidden={!open} className={cn("min-w-0 flex-col gap-3 px-3.5 pb-3 pt-2 sm:pl-[52px]", open ? "flex" : "hidden")}>{detail}</div>}
+      {open && <ul data-provider-group-rows={group.id} className="ml-6 flex flex-col border-l border-hairline/40">{children}</ul>}
     </li>
   );
 }
@@ -223,10 +261,7 @@ function ProviderDetail({ row, member, issuer, showKey }: { row: ProviderRow; me
       )}
       {/* the person's own key in Perspicax */}
       {row.payer === "me" && row.keyWhere === "perspicax" && issuer && !row.accountProvider && !row.accountServer && (
-        <a href={perspicaxKeysUrl(issuer)} target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1.5 self-start text-[12.5px] font-medium text-accent-text hover:underline">
-          {t("myEngines.manageKeys")}
-          <ExternalLink size={12} aria-hidden="true" />
-        </a>
+        <ExternalLinkPill href={perspicaxKeysUrl(issuer)} className="self-start">{t("myEngines.manageKeys")}</ExternalLinkPill>
       )}
       {row.accountProvider && <PersonalProviderKey provider={row.accountProvider} name={row.name} />}
       {row.accountServer && (editing
@@ -250,24 +285,14 @@ function ProviderDetail({ row, member, issuer, showKey }: { row: ProviderRow; me
             <button type="button" className={PILL} onClick={() => setEditing(true)}>{t("compatServers.edit")}</button>
             <RemoveServer instanceId={server.instanceId} />
           </div>)}
-      {/* a model server of this computer: Settings > Computer keeps the list */}
-      {row.kind === "local" && (
-        <button type="button" className={cn(PILL, "self-start")} onClick={() => dispatch({ type: "toggleAppSettings", open: true, section: "computer" })}>
-          {t("providers.manageLocal")}
-        </button>
-      )}
       {/* who pays (the organization chose it in Perspicax) and this provider's active models */}
       <div className="-mx-3.5 border-t border-hairline/40">
         <DescribedRow label={t("providers.whoPays")} description={t(PAYER_KEY[row.payer])} rowId={`providers.whoPays.${row.id}`}>
           {organization && (
             <span data-provider-who-pays="perspicax" className="flex items-center gap-2 text-[12px] text-ink-secondary">
-              {t("providers.chosenInPerspicax")}
-              {issuer && (
-                <a href={perspicaxProvidersUrl(issuer)} target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1 text-accent-text hover:underline">
-                  {t("providers.change")}
-                  <ExternalLink size={12} aria-hidden="true" />
-                </a>
-              )}
+              {issuer
+                ? <span data-provider-open-perspicax={row.id}><ExternalLinkPill href={perspicaxProvidersUrl(issuer)}>{t("providers.chosenInPerspicax")}</ExternalLinkPill></span>
+                : t("providers.chosenInPerspicax")}
             </span>
           )}
         </DescribedRow>
@@ -389,7 +414,7 @@ function AddProvider({ toConnect, onPick, onClose, organization, manageKeys, nam
                 <button type="button" data-add-provider-key={id} onClick={() => choose(id)} className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left text-[13px] text-ink hover:bg-hover">
                   <KeyRound size={13} aria-hidden="true" className="shrink-0 text-ink-secondary" />
                   <span className="min-w-0 flex-1 truncate">{keyRowName(id)}</span>
-                  {(!organization || forOrg) && keyRowSaved(id, state.config) && <span className="shrink-0 text-[12px] text-accent-text">{t("providerKeys.saved")}</span>}
+                  {(!organization || forOrg) && keyRowSaved(id, state.config) && <span className="shrink-0 text-[12px] text-ink-secondary">{t("providerKeys.saved")}</span>}
                 </button>
               </li>
             ))}
@@ -432,8 +457,8 @@ export function ProvidersSettings() {
   const mine = useMyEngines();
   const accounts = useProviderAccounts();
   const local = useLocalModels();
-  const [filter, setFilter] = useState<ProviderFilter>("all");
   const [openRow, setOpenRow] = useState<string | null>(null);
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const editingKey = useOpenProviderKey();
   const rowRequest = useProviderRowRequest();
@@ -457,8 +482,18 @@ export function ProvidersSettings() {
     local,
     keyName: keyRowName,
   }), [organization, offered, member, mine, state.instances, state.config, keys, accounts.view, local]);
-  const { active, toConnect, off } = splitProviderRows(filterProviderRows(rows, filter));
-  const filters: ProviderFilter[] = organization ? ["all", "mine", "org", "computer"] : ["all", "mine", "computer"];
+  // #2080: one row per provider, its accounts inside. The local model
+  // servers of this computer are one provider of their own, at the bottom.
+  // An account picked from Add stays listed while it connects, else its
+  // sign-in has no row to show in.
+  const [picked, setPicked] = useState<readonly string[]>([]);
+  const groups = useMemo(() => {
+    const visible = visibleProviderRows(rows);
+    const shown = new Set(visible.map((row) => row.id));
+    const listed = [...visible, ...rows.filter((row) => picked.includes(row.id) && !shown.has(row.id))];
+    return providerGroups(listed.filter((row) => row.kind !== "local"), state.instances);
+  }, [rows, picked, state.instances]);
+  const reveal = (row: ProviderRow) => { setOpenGroup(providerGroupKey(row, state.instances)); setOpenRow(row.id); };
   const keyInline = (row: ProviderRow) => Boolean(
     openRow === row.id && editingKey && row.keyRow === editingKey && row.manage && !row.voiceKey && !row.accountProvider,
   );
@@ -467,11 +502,8 @@ export function ProvidersSettings() {
     if (!editingKey) return;
     const match = rows.find((row) => row.keyRow === editingKey);
     if (!match) return;
-    setOpenRow(match.id);
-    const placed = splitProviderRows(rows);
-    if (placed.toConnect.some((row) => row.id === match.id)) requestSettingsCard("providers.toConnect");
-    if (placed.off.some((row) => row.id === match.id)) requestSettingsCard("providers.adminOff");
-  }, [editingKey, rows]);
+    reveal(match);
+  }, [editingKey, rows]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A claude.ai card's "Reconnect the account" opens the Claude engine row.
   useEffect(() => {
@@ -479,20 +511,27 @@ export function ProvidersSettings() {
     const match = rows.find((row) => row.claude);
     if (!match) return;
     takeProviderRow();
-    setOpenRow(match.id);
-    const placed = splitProviderRows(rows);
-    if (placed.toConnect.some((row) => row.id === match.id)) requestSettingsCard("providers.toConnect");
-    if (placed.off.some((row) => row.id === match.id)) requestSettingsCard("providers.adminOff");
-  }, [rowRequest, rows]);
+    reveal(match);
+  }, [rowRequest, rows]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const line = (row: ProviderRow) => (
-    <ProviderLine key={row.id} row={row} open={openRow === row.id} onToggle={() => setOpenRow(openRow === row.id ? null : row.id)} nameOf={nameOf} issuer={issuer}
+  const account = (row: ProviderRow, label?: string) => (
+    <AccountRow key={row.id} row={row} label={label} open={openRow === row.id} onToggle={() => setOpenRow(openRow === row.id ? null : row.id)} nameOf={nameOf} issuer={issuer}
       detail={<ProviderDetail row={row} member={member} issuer={issuer} showKey={keyInline(row)} />} />
   );
+  const group = (entry: ProviderGroup) => {
+    if (entry.rows.length === 1) return account(entry.rows[0]!, entry.name);
+    return (
+      <ProviderGroupRow key={entry.id} group={entry} summary={t("providers.group.accounts", { count: entry.rows.length })} open={openGroup === entry.id}
+        onToggle={() => setOpenGroup(openGroup === entry.id ? null : entry.id)}>
+        {entry.rows.map((row) => account(row))}
+      </ProviderGroupRow>
+    );
+  };
   const pick = (rowId: string) => {
     setAdding(false);
-    setOpenRow(rowId);
-    requestSettingsCard("providers.toConnect");
+    setPicked((prev) => prev.includes(rowId) ? prev : [...prev, rowId]);
+    const row = rows.find((entry) => entry.id === rowId);
+    if (row) reveal(row);
     if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => {
       try { document.querySelector(`[data-provider-row="${CSS.escape(rowId)}"]`)?.scrollIntoView?.({ block: "nearest" }); } catch { /* no document */ }
     });
@@ -502,23 +541,6 @@ export function ProvidersSettings() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6 pb-2" data-providers-page="">
-      <SettingsIntro>{t("providers.intro")}</SettingsIntro>
-      {/* the organization (2026-11-05): same page for everyone, its choices change in Perspicax */}
-      {organization && (
-        <div data-settings-card="providers.organization" data-providers-org-band="">
-          <SettingsGroup title={t("providers.org.title")} groupId="providers-org">
-            <DescribedRow label={org.org.name} description={t("providers.org.body")} rowId="providers.org">
-              {issuer && (
-                <a href={perspicaxProvidersUrl(issuer)} target="_blank" rel="noreferrer noopener" data-providers-org-console="" className={cn(PILL, "inline-flex items-center gap-1.5")}>
-                  {t("providers.org.manage")}
-                  <ExternalLink size={12} aria-hidden="true" />
-                </a>
-              )}
-            </DescribedRow>
-            <p data-providers-same-page="" className="px-3.5 pb-2.5 text-[12px] leading-relaxed text-ink-secondary">{t("providers.org.samePage")}</p>
-          </SettingsGroup>
-        </div>
-      )}
       {accounts.unavailable && <p data-needs-server-update="" className="text-[12px] text-ink-secondary">{accounts.unavailable}</p>}
       {accounts.error && <p role="alert" className="text-[12px] text-danger">{accounts.error}</p>}
       <div data-settings-card="providers.list">
@@ -526,40 +548,41 @@ export function ProvidersSettings() {
           title={t("providers.title")}
           groupId="providers"
           accessory={(
-            <>
+            <span className="flex items-center gap-2">
               <HelpTip label={t("settings.moreAbout", { title: t("providers.title") })}>{t("providers.help")}</HelpTip>
-              <span className="ml-auto flex items-center gap-1" role="group" aria-label={t("providers.filter.label")}>
-                {filters.map((id) => (
-                  <button key={id} type="button" data-provider-filter={id} aria-pressed={filter === id} onClick={() => setFilter(id)}
-                    className={cn("rounded-md px-2 py-1 text-[12px]", filter === id ? "bg-selected text-ink" : "text-ink-secondary hover:bg-hover hover:text-ink")}>
-                    {t(FILTER_KEY[id])}
-                  </button>
-                ))}
-              </span>
-            </>
+              {!adding && (
+                <button type="button" data-add-provider-open="" onClick={() => setAdding(true)} className={cn(PRIMARY_PILL, "inline-flex items-center gap-1.5")}>
+                  <Plus size={14} aria-hidden="true" className="shrink-0" />
+                  {t("providers.add.title")}
+                </button>
+              )}
+            </span>
           )}
         >
-          {adding
-            ? <AddProvider toConnect={splitProviderRows(rows).toConnect} onPick={pick} onClose={() => setAdding(false)} organization={organization} manageKeys={keys} issuer={issuer} nameOf={nameOf} />
-            : (
-              <button type="button" data-add-provider-open="" onClick={() => setAdding(true)}
-                className="mx-1.5 flex min-h-[44px] items-center gap-3 rounded-lg px-2 py-1.5 text-left text-[13px] text-accent-text hover:bg-hover">
-                <Plus size={14} aria-hidden="true" className="shrink-0" />
-                {t("providers.add.title")}
+          {/* the page's one primary action, at the top of its card: it covers every provider not connected yet */}
+          {adding && <AddProvider toConnect={splitProviderRows(rows).toConnect} onPick={pick} onClose={() => setAdding(false)} organization={organization} manageKeys={keys} issuer={issuer} nameOf={nameOf} />}
+          {groups.length > 0
+            ? <ul className="flex flex-col" data-providers-active="">{groups.map(group)}</ul>
+            : <div data-providers-empty=""><SettingsEmpty icon={KeyRound}>{t("providers.empty")}</SettingsEmpty></div>}
+          {/* this computer's model servers: one provider of their own (from Settings > Computer, #2080) */}
+          <ul className="flex flex-col" data-providers-local="">
+            <li data-provider-group="local" data-open={openGroup === "local" ? "true" : "false"} className="min-w-0">
+              <button type="button" onClick={() => setOpenGroup(openGroup === "local" ? null : "local")} aria-expanded={openGroup === "local"}
+                className="mx-1.5 flex min-h-[44px] w-[calc(100%-12px)] min-w-0 items-center gap-3 rounded-lg px-2 py-1.5 text-left outline-none transition-colors hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent/70 motion-reduce:transition-none">
+                <span aria-hidden="true" className="flex size-7 shrink-0 items-center justify-center rounded-lg border-[0.5px] border-border bg-panel text-ink-secondary"><Cpu size={14} /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] leading-[18px] text-ink">{t("localModels.title")}</span>
+                  <span className="block truncate text-[12px] leading-4 text-ink-secondary">
+                    {t("providers.payer.computer")} · {local?.expose
+                      ? <StatusText tone="success">{t("providers.local.on")}</StatusText>
+                      : <StatusText tone="neutral">{t("providers.local.off")}</StatusText>}
+                  </span>
+                </span>
+                <ChevronDown size={13} aria-hidden="true" className={cn("shrink-0 text-ink-secondary transition-transform motion-reduce:transition-none", openGroup === "local" && "rotate-180")} />
               </button>
-            )}
-          {active.length > 0 && <ul className="flex flex-col" data-providers-active="">{active.map(line)}</ul>}
-          {active.length === 0 && <p className="px-3.5 py-2 text-[13px] text-ink-secondary" data-providers-empty="">{t("providers.empty")}</p>}
-          {toConnect.length > 0 && (
-            <FoldRow cardId="providers.toConnect" label={t("providers.toConnect")} count={toConnect.length} defaultOpen={active.length === 0}>
-              <ul className="-mx-3.5 flex flex-col" data-providers-to-connect="">{toConnect.map(line)}</ul>
-            </FoldRow>
-          )}
-          {off.length > 0 && (
-            <FoldRow cardId="providers.adminOff" label={t("providers.state.adminOff")} count={off.length}>
-              <ul className="-mx-3.5 flex flex-col opacity-80" data-providers-off="">{off.map(line)}</ul>
-            </FoldRow>
-          )}
+              {openGroup === "local" && <div className="flex min-w-0 flex-col px-3.5 pb-2 sm:pl-[52px]"><LocalModelsSettings bare /></div>}
+            </li>
+          </ul>
         </SettingsGroup>
       </div>
       {/* Other services (from Models, 2026-11-05): web search (the person's own key) and image generation */}
@@ -571,18 +594,17 @@ export function ProvidersSettings() {
             : (
               <DescribedRow label={t("imageGen.title")} description={imageProviderLabel(imageGen?.provider)} rowId="providers.imageGen">
                 {organization && issuer && (
-                  <a href={perspicaxConsoleUrl(issuer)} target="_blank" rel="noreferrer noopener" data-perspicax-link="imageGen" className="inline-flex items-center gap-1.5 text-[12px] font-medium text-accent-text hover:underline">
-                    {t("providers.setInPerspicax")}
-                    <ExternalLink size={12} aria-hidden="true" />
-                  </a>
+                  <span data-perspicax-link="imageGen" data-href={perspicaxConsoleUrl(issuer)}>
+                    <ExternalLinkPill href={perspicaxConsoleUrl(issuer)}>{t("providers.setInPerspicax")}</ExternalLinkPill>
+                  </span>
                 )}
               </DescribedRow>
             )}
         </SettingsGroup>
       </div>
-      {/* Advanced: the person's cloud agent keys and their claude.ai connectors */}
+      {/* Advanced: the person's cloud agent keys and their claude.ai connectors (one fold, no heading over it) */}
       <div data-settings-card="providers.advanced">
-        <SettingsGroup title={t("providers.advanced.title")} groupId="providers-advanced">
+        <SettingsGroup groupId="providers-advanced">
           <FoldRow cardId="providers.advanced" label={t("providers.advanced.title")} description={t("providers.advanced.help")}>
             <div className="-mx-3.5 flex flex-col gap-3">
               {keys && <CloudAgentKeys />}

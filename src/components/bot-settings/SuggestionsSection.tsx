@@ -1,19 +1,32 @@
-// Details > Suggestions (reference design): next steps for this bot, from
-// its setup checklist (GET /api/bots/:id/overview) and the conversations
-// waiting on the person. Hide turns the card off for every bot (one
-// preference per person, Settings > Appearance brings it back). Nothing to
-// suggest: no card at all.
-import { Sparkles } from "lucide-react";
+// Activity > Suggested (reference design, #2125): next steps for this bot,
+// from its setup checklist (GET /api/bots/:id/overview) and the
+// conversations waiting on the person, then Add to Slack (the Admin link,
+// when the server has one) and Add to meeting (a new routine for the
+// calendar). Each row ends with a chevron. As the reference design, the bot
+// panel's card has no Hide and always shows Add to Slack and Add to meeting;
+// Settings > Appearance still turns the card off. Elsewhere (the group panel)
+// Hide stays, and nothing to suggest means no card at all.
+import { CalendarPlus, ChevronRight, Sparkles } from "lucide-react";
+import type { ComponentType } from "react";
+import { SlackLogo } from "../SlackLogo";
 import { useEffect, useMemo, useState } from "react";
 import { api, openBotThread, useStore, type Bot } from "@/state/store";
 import type { BotOverview } from "@/lib/bot-overview-types";
 import { botSuggestions, type BotSuggestion } from "@/lib/bot-suggestions";
-import { GROUPED_CARD, GROUPED_ROW } from "@/lib/grouped-card";
+import { GROUPED_CARD, GROUPED_ROW, PANEL_CARD, PANEL_LABEL, PANEL_ROW } from "@/lib/grouped-card";
+import { cn } from "@/lib/cn";
 import { setShowSuggestions, useShowSuggestions } from "@/lib/panel-visibility";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { t } from "@/lib/i18n";
 
-export function SuggestionsSection({ bot, routineCount }: { bot: Bot; routineCount: number }) {
+export function SuggestionsSection({ bot, routineCount, slackUrl = null, onAddToMeeting }: {
+  bot: Bot;
+  routineCount: number;
+  /** The Admin link that adds this bot to Slack (useBotSectionAvailability). */
+  slackUrl?: string | null;
+  /** Add to meeting: a new routine in the panel's Upcoming card. */
+  onAddToMeeting?: () => void;
+}) {
   const { dispatch } = useStore();
   const threadsShown = useShowThreads();
   const [setup, setSetup] = useState<BotOverview["setup"] | null>(null);
@@ -34,7 +47,15 @@ export function SuggestionsSection({ bot, routineCount }: { bot: Bot; routineCou
     () => botSuggestions({ setup, tasks: bot.tasks, waitingApprovals: bot.waitingApprovals }),
     [setup, bot.tasks, bot.waitingApprovals],
   );
-  if (!shown || !items.length) return null;
+  const extra: SuggestionRow[] = [
+    // Add to Slack is always there: the Admin link when the server has one,
+    // else the bot's Slack settings.
+    slackUrl
+      ? { id: "slack", title: t("botPanel.suggestions.slack.title"), icon: SlackLogo, href: slackUrl }
+      : { id: "slack", title: t("botPanel.suggestions.slack.title"), icon: SlackLogo, onRun: () => dispatch({ type: "openPersonaEditor", botId: bot.id, section: "slack" }) },
+    ...(onAddToMeeting ? [{ id: "meeting", title: t("botPanel.suggestions.meeting.title"), icon: CalendarPlus, onRun: onAddToMeeting }] : []),
+  ];
+  if (!shown || (!items.length && !extra.length)) return null;
 
   const run = (item: BotSuggestion) => {
     if (item.action.kind === "openThread") openBotThread(dispatch, bot, item.action.threadId, threadsShown);
@@ -44,45 +65,58 @@ export function SuggestionsSection({ bot, routineCount }: { bot: Bot; routineCou
   return (
     <SuggestionsCard
       headingId={`bot-suggestions-${bot.id}`}
-      rows={items.map((item) => ({ id: item.id, title: t(item.titleKey, item.vars), subtitle: t(item.subtitleKey, item.vars), onRun: () => run(item) }))}
+      panel
+      rows={[...items.map((item) => ({ id: item.id, title: t(item.titleKey, item.vars), subtitle: t(item.subtitleKey, item.vars), onRun: () => run(item) })), ...extra]}
     />
   );
 }
 
-/** The Suggestions card itself: its title with Hide, then one grouped card
- * of rows. Shared by the bot panel and the group panel (GroupDetailsTab). */
-export function SuggestionsCard({ headingId, rows }: { headingId: string; rows: ReadonlyArray<{ id: string; title: string; subtitle: string; onRun: () => void }> }) {
+type SuggestionRow = { id: string; title: string; subtitle?: string; icon?: ComponentType<{ size?: number | string; className?: string }>; onRun?: () => void; href?: string };
+
+/** The Suggested card itself: its title with Hide, then one grouped card of
+ * rows, each with a chevron. A row with `href` opens it in a new tab. Shared
+ * by the bot panel and the group panel (GroupDetailsTab). */
+export function SuggestionsCard({ headingId, rows, panel = false }: {
+  headingId: string;
+  rows: ReadonlyArray<SuggestionRow>;
+  /** The bot panel (#2125): flat card, 14px rows, no Hide. */
+  panel?: boolean;
+}) {
   return (
     <section data-bot-settings-section="suggestions" aria-labelledby={headingId} className="flex flex-col gap-2">
-      <div className="flex items-center justify-between px-0.5">
-        <h3 id={headingId} className="text-[12px] leading-[17px] text-ink-tertiary">{t("botPanel.suggestions.title")}</h3>
-        <button
+      <div className={cn("flex items-center justify-between", !panel && "px-0.5")}>
+        <h3 id={headingId} className={panel ? PANEL_LABEL : "text-[12px] leading-[17px] text-ink-tertiary"}>{t("botPanel.suggestions.title")}</h3>
+        {!panel && <button
           type="button"
           data-suggestions-hide
           onClick={() => setShowSuggestions(false)}
           className="rounded px-1 text-[12.5px] text-ink-secondary hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
         >
           {t("botPanel.suggestions.hide")}
-        </button>
+        </button>}
       </div>
-      <ul className={GROUPED_CARD}>
+      <ul className={panel ? PANEL_CARD : GROUPED_CARD}>
         {rows.map((row) => (
-          <li key={row.id} className={GROUPED_ROW}>
-            <button
-              type="button"
-              data-suggestion={row.id}
-              onClick={row.onRun}
-              className="flex w-full min-w-0 items-start gap-2.5 text-left hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60"
-            >
-              <Sparkles size={15} aria-hidden="true" className="mt-0.5 shrink-0 text-ink-secondary" />
-              <span className="flex min-w-0 flex-col">
-                <span className="truncate text-[13px] font-semibold leading-5 text-ink" title={row.title}>{row.title}</span>
-                <span className="line-clamp-2 text-[12px] leading-4 text-ink-secondary">{row.subtitle}</span>
-              </span>
-            </button>
+          <li key={row.id} className={panel ? cn(PANEL_ROW, "hover:bg-hover") : GROUPED_ROW}>
+            <SuggestionRowBody row={row} panel={panel} />
           </li>
         ))}
       </ul>
     </section>
   );
+}
+
+function SuggestionRowBody({ row, panel }: { row: SuggestionRow; panel: boolean }) {
+  const Icon = row.icon ?? Sparkles;
+  const className = "flex w-full min-w-0 items-center gap-2.5 text-left hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60";
+  const body = <>
+    <Icon size={panel ? 16 : 15} className="shrink-0 text-ink-secondary" />
+    <span className="flex min-w-0 flex-1 flex-col">
+      <span className={cn("truncate leading-5 text-ink", panel ? "text-[14px] font-normal" : "text-[13px] font-semibold")} title={row.title}>{row.title}</span>
+      {row.subtitle && <span className="line-clamp-2 text-[12px] leading-4 text-ink-secondary">{row.subtitle}</span>}
+    </span>
+    <ChevronRight size={15} aria-hidden="true" className="shrink-0 text-ink-tertiary" />
+  </>;
+  if (row.href) return <a data-suggestion={row.id} href={row.href} target="_blank" rel="noopener noreferrer" className={className}>{body}</a>;
+  return <button type="button" data-suggestion={row.id} onClick={row.onRun} className={className}>{body}</button>;
 }

@@ -159,12 +159,12 @@ describe("bot setup and tools in the real renderer", () => {
     await click("Close plugins");
     await press("Escape");
     await openPersona("Access");
-    await expect.poll(() => evaluate("document.querySelector('[aria-label=\"Let this bot use fixture\"]')?.getAttribute('aria-checked')"), { timeout: 10_000 }).toBe("true");
-    await click("Let this bot use fixture");
+    await expect.poll(() => evaluate("document.querySelector('[aria-label=\"Let this bot use Fixture\"]')?.getAttribute('aria-checked')"), { timeout: 10_000 }).toBe("true");
+    await click("Let this bot use Fixture");
     await expect.poll(async () => (await bots()).find((bot) => bot.id === created[0].id)?.mcpServers, { timeout: 10_000 }).toEqual([]);
     await press("Escape");
     await openPersona("Access");
-    await expect.poll(() => evaluate("document.querySelector('[aria-label=\"Let this bot use fixture\"]')?.getAttribute('aria-checked')"), { timeout: 10_000 }).toBe("false");
+    await expect.poll(() => evaluate("document.querySelector('[aria-label=\"Let this bot use Fixture\"]')?.getAttribute('aria-checked')"), { timeout: 10_000 }).toBe("false");
 
     await press("Escape");
     await openPersona("Usage");

@@ -466,6 +466,10 @@ export interface WireBot {
   autoStartVps?: boolean;
   /** where NEW tasks run their shell tools; absent = home folder. */
   cwd?: string;
+  /** Where the tools run when cwd is unset: the bot's own folder of the
+   * person's server environment (/workspace/bots/<slug>). Server-derived;
+   * absent without a server environment. */
+  workFolder?: string;
   /** Auto mode: the bot approves its own tool permissions. */
   autoApprove?: boolean;
   /** Canonical approval level. Missing resolves through autoApprove. */
@@ -502,6 +506,10 @@ export interface WireBot {
   finishUntilMaxRounds?: number;
   /** This bot's own voice id, so a room of bots doesn't sound like one person. */
   voice?: string;
+  /** #2125: this bot's voice chat speed (0.7 to 1.5). Absent = 1x. */
+  voiceSpeed?: number;
+  /** #2125: this bot's voice chat language code, or "auto". Absent = auto-detect. */
+  voiceLanguage?: string;
   /** Whether this bot may send voice notes. Absent/true = allowed; false
    * hides the tool and refuses the route even with a voice configured. */
   voiceNotes?: boolean;
@@ -526,6 +534,8 @@ export interface WireBot {
   catalog?: BotCatalogListing;
   /** Optional labeled divider used to organize this bot in the sidebar. */
   section?: string;
+  /** #2045: stable owner-scoped team id (`sec_<uuid>`). Display name stays in `section`. */
+  sectionId?: string;
   /** the one message pinned to the top of this bot's active thread */
   pinnedMessageId?: string;
   /** This is its owner's Primary Bot: their main contact, who coordinates
@@ -1494,6 +1504,8 @@ export interface WireGroup {
   pinnedMessageId?: string;
   /** sidebar section heading this room is filed under. */
   section?: string;
+  /** #2045: stable owner-scoped team id (`sec_<uuid>`). Display name stays in `section`. */
+  sectionId?: string;
   /** Set at creation: rooms have no pending setup step any more. */
   setupCompletedAt?: number | null;
   setupSkippedAt?: number | null;

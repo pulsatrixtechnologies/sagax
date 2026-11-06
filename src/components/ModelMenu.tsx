@@ -27,7 +27,7 @@
 // chosen column entry, each with its star and the check on the current
 // one. The left and right arrows step the column entries. Typing lists
 // every provider's matches flat, as in the other modes.
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { TriangleAlert, Check, ChevronLeft, ChevronRight, Search, Star } from "lucide-react";
 
 import { cn } from "@/lib/cn";
@@ -155,7 +155,7 @@ export function defaultPaneKey(groups: readonly PaneGroup[]): string | undefined
   return (groups.find((group) => group.current) ?? groups.find((group) => group.key === PANE_FAVORITES_KEY && group.count > 0) ?? groups.find((group) => group.key !== PANE_FAVORITES_KEY) ?? groups[0])?.key;
 }
 
-export function ModelSearchList({ sections, onPick, variant, autoFocus = false, onEscape, disabled = false, label, favorites, submenus = false, groupProviders = false, panes = false, onPreview }: {
+export function ModelSearchList({ sections, onPick, variant, autoFocus = false, onEscape, disabled = false, label, favorites, submenus = false, groupProviders = false, panes = false, onPreview, onAutoEdit, after, autoPanel }: {
   sections: ModelMenuSection[];
   onPick: (row: ModelMenuRow) => void;
   onPreview?: (row: ModelMenuRow) => void;
@@ -175,6 +175,15 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
   /** Two columns while the search is empty: Favorites and the providers
    * on the left, the chosen one's models on the right. Wins over `submenus`. */
   panes?: boolean;
+  /** #2106: Edit on the Auto row opens Optimize for Intelligence / Balance / Cost. */
+  onAutoEdit?: () => void;
+  /** #2106: drawn at the end of the flat list, inside the same scrolling
+   * zone (the Auto Optimize choices, the model's settings, the links), and
+   * the list fills the menu's height instead of its own cap. */
+  after?: ReactNode;
+  /** #2106: drawn right under the Auto row of the flat list (its Optimize
+   * choices), so opening Edit shows them where the eye already is. */
+  autoPanel?: ReactNode;
 }) {
   const style = STYLE[variant];
   const [query, setQuery] = useState("");
@@ -350,6 +359,7 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
     disabled,
     nested,
     favorite: favorites ? { on: favorites.keys.includes(row.key), onToggle: () => favorites.onToggle(row) } : undefined,
+    onAutoEdit: row.kind === "auto" ? onAutoEdit : undefined,
     onHover: () => {
       setMoved(key);
       onPreview?.(row);
@@ -360,7 +370,7 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
 
   return (
     <div ref={boxRef} data-model-search-list={variant} data-model-menu-nested={nested || undefined}
-      className={cn("flex flex-col", variant === "popover" ? "min-h-0 min-w-0" : "shrink-0")}>
+      className={cn("flex flex-col", variant === "popover" ? "min-h-0 min-w-0" : "shrink-0", after !== undefined && "flex-1")}>
       <label className={style.field}>
         <Search size={13} aria-hidden="true" className={cn("shrink-0", style.icon)} />
         <input
@@ -489,7 +499,9 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
           {entries!.length === 0 && <div data-model-no-match className={style.empty}>{t("model.noMatch")}</div>}
         </div>
       ) : (
-        <div ref={listRef} id={listboxId} role="listbox" aria-label={label ?? t("model.models")} data-model-list className={style.list}>
+        <div ref={listRef} id={listboxId} role="listbox" aria-label={label ?? t("model.models")} data-model-list
+          data-model-list-scroll={after !== undefined ? "" : undefined}
+          className={after !== undefined ? "min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5 pb-1" : style.list}>
           {shown.length === 0 && <div data-model-no-match className={style.empty}>{t("model.noMatch")}</div>}
           {shown.map((section, index) => (
             <div key={section.key} role="group" aria-label={section.label} data-model-section={section.key}
@@ -500,9 +512,15 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
                   {section.note && <span data-model-section-note className="truncate opacity-80">· {section.note}</span>}
                 </div>
               )}
-              {section.rows.map((row) => <ModelSearchRow key={row.key} {...rowProps(row, row.key)} />)}
+              {section.rows.map((row) => (
+                <Fragment key={row.key}>
+                  <ModelSearchRow {...rowProps(row, row.key)} />
+                  {row.kind === "auto" && autoPanel}
+                </Fragment>
+              ))}
             </div>
           ))}
+          {after !== undefined && <div role="presentation" data-model-list-after className="-mx-1.5">{after}</div>}
         </div>
       )}
       {openSub && openProvider && (
@@ -721,7 +739,7 @@ function ModelSubmenu({ provider, placement, focus, style, disabled, favorites, 
   );
 }
 
-function ModelSearchRow({ row, id, domKey, active, style, disabled, nested = false, submenu = false, favorite, onHover, onPick }: {
+function ModelSearchRow({ row, id, domKey, active, style, disabled, nested = false, submenu = false, favorite, onAutoEdit, onHover, onPick }: {
   row: ModelMenuRow;
   id?: string;
   /** The key this row is drawn under (a favorite repeats a provider's row). */
@@ -734,6 +752,8 @@ function ModelSearchRow({ row, id, domKey, active, style, disabled, nested = fal
   /** In a submenu: the row itself takes the focus. */
   submenu?: boolean;
   favorite?: { on: boolean; onToggle: () => void };
+  /** #2106: Edit on the Auto row. */
+  onAutoEdit?: () => void;
   onHover: () => void;
   onPick: () => void;
 }) {
@@ -782,6 +802,26 @@ function ModelSearchRow({ row, id, domKey, active, style, disabled, nested = fal
       {row.subtext && <span data-model-row-sub className={cn("min-w-0 break-words text-[11.5px]", style.detail)}>{row.subtext}</span>}
       </span>
       <span className="flex shrink-0 items-center gap-1">
+        {onAutoEdit && row.kind === "auto" && (
+          <button
+            type="button"
+            tabIndex={-1}
+            data-model-auto-edit=""
+            aria-label={t("model.auto.edit")}
+            title={t("model.auto.edit")}
+            onMouseDown={submenu ? undefined : (event) => event.preventDefault()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onAutoEdit();
+            }}
+            className={cn(
+              "rounded px-1.5 py-0.5 text-[11.5px] outline-none hover:bg-popover-hover focus-visible:ring-2 focus-visible:ring-focus",
+              style.detail,
+            )}
+          >
+            {t("model.auto.edit")}
+          </button>
+        )}
         {row.current && <Check size={14} aria-hidden="true" className={style.check} />}
         {favorite && row.kind === "model" && (
           <button

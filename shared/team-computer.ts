@@ -4,6 +4,8 @@ export interface TeamComputer {
   id: string;
   name: string;
   section: string | null;
+  /** #2045: stable team id when assigned on an organization server. */
+  sectionId?: string | null;
   state: string;
   held: boolean;
   problem?: string;

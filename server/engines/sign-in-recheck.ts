@@ -9,6 +9,7 @@
 // every person who already carries a marker gets one renew, so an update
 // heals them instead of leaving them out.
 import type { LoginSlot } from "./principal-engine-logins.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 /** Engines whose sign-in Sagax can renew itself (subscription-access.ts). */
 const RENEWABLE = new Set(["claudeAgent", "codex"]);
@@ -137,6 +138,6 @@ export function settleSignInRefusal(recheck: SignInRecheck | null | undefined, i
     return timer;
   });
   setTimer(() => settle(false), input.holdMs ?? SIGN_IN_REFUSAL_HOLD_MS);
-  void recheck.refused(input.principalId, input.driver, slot).then(settle, () => settle(false));
+  void recheck.refused(input.principalId, input.driver, slot).then(settle, () => settle(false)).catch(reportBackgroundError);
   return true;
 }

@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.107",
   "baseVersion": "0.1.107",
-  "forkVersion": "0.8.51",
+  "forkVersion": "0.8.52",
   "description": "Pulsatrix Sagax: a local-first chat app for running a team of AI agents.",
   "homepage": "https://github.com/pulsatrixtechnologies/sagax",
   "repository": {
@@ -57,6 +57,7 @@
     "bench:persistence": "node --experimental-strip-types scripts/bench-persistence.ts",
     "bench:server-hot-paths": "node --experimental-strip-types scripts/bench-server-hot-paths.ts",
     "bench:turn-latency": "node --experimental-strip-types scripts/bench-turn-latency.ts",
+    "bench:ui-hot-paths": "node --experimental-strip-types scripts/bench/ui-hot-paths.ts",
     "bench:turn-context": "node --experimental-strip-types scripts/bench-turn-context.ts",
     "bench:engine-warm": "node --experimental-strip-types scripts/bench-engine-warm.ts",
     "bench:routine-watch": "node --experimental-strip-types --expose-gc scripts/bench-routine-watch.ts",

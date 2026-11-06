@@ -41,10 +41,16 @@ export interface TeamExportImportRouteDeps {
   bots(): readonly BotRecord[];
   groups(): readonly GroupRecord[];
   sections(): readonly string[];
+  /** #2045: teams this caller may export (their own on an organization server). */
+  sectionsFor?(auth: RequestAuth): readonly string[];
   sectionKey(section: string | undefined): string;
   listRoutines(): readonly unknown[];
   mcpServers(): Record<string, unknown>;
   readSectionContext(section: string): { text: string } | null | undefined;
+  /** #2045: team brief for this caller's own section (owner/id key). */
+  readSectionContextFor?(auth: RequestAuth, section: string): { text: string } | null | undefined;
+  /** #2045: whether this bot belongs to the caller (org export packs only theirs). */
+  ownsBot?(bot: BotRecord, auth: RequestAuth): boolean;
   readPublishedLibrary(): unknown;
   writePublishedLibrary(published: unknown): void;
   readPublishedTeam(team: string): unknown;
@@ -148,11 +154,16 @@ export function createTeamExportImportRoutes(deps: TeamExportImportRouteDeps): R
         // One team, whole, except its chat history (package format v2).
         if (typeof body.team !== "string") return json(res, 400, { error: "Choose a team to share." });
         const team = body.team.trim();
-        if (team && !deps.sections().includes(team) && !deps.bots().some((bot) => deps.sectionKey(bot.section) === team)) {
+        // #2045: only this person's teams and bots. Another person's same
+        // display name is invisible here (404), never packed into the file.
+        const listed = deps.sectionsFor?.(auth) ?? deps.sections();
+        const own = (bot: BotRecord) => !deps.ownsBot || deps.ownsBot(bot, auth);
+        const ownBots = deps.bots().filter((bot) => own(bot));
+        if (team && !listed.includes(team) && !ownBots.some((bot) => deps.sectionKey(bot.section) === team)) {
           return json(res, 404, { error: "That team no longer exists." });
         }
         const optional = (value: unknown) => (typeof value === "string" ? value : undefined);
-        const teamBots = deps.bots().filter((bot) => !bot.hidden && deps.sectionKey(bot.section) === team);
+        const teamBots = ownBots.filter((bot) => !bot.hidden && deps.sectionKey(bot.section) === team);
         const skills = deps.collectTeamSkills(teamBots, body.skills);
         if (!skills.ok) return json(res, 400, { error: skills.error, choices: { skills: skills.available } });
         const avatars = body.avatars && typeof body.avatars === "object" && !Array.isArray(body.avatars)
@@ -160,6 +171,15 @@ export function createTeamExportImportRoutes(deps: TeamExportImportRouteDeps): R
           : undefined;
         // Off unless asked: New bot defaults are personal until shared.
         const defaults = body.includeDefaultsPreset === true ? deps.defaultsPresetFor(body, body.includeMemory === true) : null;
+        const ownBotIds = new Set(ownBots.map((bot) => bot.id));
+        const ownGroups = deps.groups().filter((group) =>
+          !group.dm && !group.peopleDm
+          && deps.sectionKey(group.section) === team
+          && (group.memberIds ?? []).every((id) => ownBotIds.has(id)));
+        const ownRoutines = deps.listRoutines().filter((routine) => {
+          const botId = (routine as { botId?: unknown }).botId;
+          return typeof botId === "string" && ownBotIds.has(botId);
+        });
         try {
           const exported = createTeamPackageExport({
             team,
@@ -169,10 +189,10 @@ export function createTeamExportImportRoutes(deps: TeamExportImportRouteDeps): R
             release: optional(body.release),
             notes: optional(body.notes),
             authorName: profileName,
-            bots: deps.bots() as never,
-            groups: deps.groups() as never,
-            routines: deps.listRoutines() as never,
-            brief: deps.readSectionContext(team)?.text,
+            bots: ownBots as never,
+            groups: ownGroups as never,
+            routines: ownRoutines as never,
+            brief: (deps.readSectionContextFor?.(auth, team) ?? deps.readSectionContext(team))?.text,
             published: deps.readPublishedTeam(team) as never,
             skillsByBot: skills.skillsByBot as never,
             skillSelection: skills.all ? "all" : "chosen",

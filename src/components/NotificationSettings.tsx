@@ -3,8 +3,10 @@
 // shell does it: electron/desktop-attention.mjs). Every switch is on by
 // default and kept on this computer only. Which bots may notify at all is
 // each bot's own setting, on the server.
-// 0.5.6: laid out as the reference design's Notifications group (grey heading,
-// compact rows, a switch each), with Privacy as the last group.
+// #2080 L2: one Alerts card (sound selector with None, nudges folded) and one
+// Privacy card (org rows when hosted, blocked people always, reports for an
+// admin). The page intro carries "on this computer"; no accessory repeat.
+import { useState } from "react";
 import { t } from "@/lib/i18n";
 import {
   dockBadge,
@@ -12,94 +14,138 @@ import {
   approvalChime,
   connectionNotices,
   persistentNotifications,
+  notifyBots,
+  notifyPeople,
+  notifyGroups,
+  notifyApprovals,
+  notifyRoutines,
   setNotificationSounds,
   setNudgeSound,
   useLocalSwitch,
   useNotificationSounds,
   useNudgeSound,
 } from "@/lib/notification-preferences";
-import { NOTIFICATION_SOUND_CHOICES, notificationSoundChoice, playNotificationSound } from "@/lib/notification-sound";
+import { NOTIFICATION_SOUND_CHOICES, notificationSoundChoice, playNotificationSound, type NotificationSound } from "@/lib/notification-sound";
 import { CompactRow, DescribedRow, PillSelect, SettingsGroup, Switch } from "./SettingsPrimitives";
 import { PrivacySettings } from "./PrivacySettings";
 import { NotificationInvite } from "./NotificationInvite";
-import { BlockedPeopleSettings, ReportsSettings } from "./settings/ModerationSettings";
-import { useStoreSelector } from "@/state/store-selector";
-import { viewerIsOrgAdmin } from "@/lib/group-owner";
+import { BlockedPeopleRow, ReportsRow } from "./settings/ModerationSettings";
+import { DisclosurePill } from "./settings/AppearanceSettings";
 
-function ThisComputer() {
-  return <span className="min-w-0 truncate text-[13px] leading-[18px] text-ink-secondary">· {t("settings.notifications.thisComputer")}</span>;
+const SOUND_NONE = "none";
+type SoundSelect = typeof SOUND_NONE | NotificationSound;
+
+function SoundRow() {
+  const sounds = useNotificationSounds();
+  const soundChoice = notificationSoundChoice.use();
+  const value: SoundSelect = sounds ? soundChoice : SOUND_NONE;
+  return (
+    <CompactRow label={t("settings.notificationSound.title")} rowId="notificationSound">
+      <PillSelect
+        value={value}
+        ariaLabel={t("settings.notificationSound.title")}
+        onChange={(next) => {
+          if (next === SOUND_NONE) {
+            setNotificationSounds(false);
+            return;
+          }
+          setNotificationSounds(true);
+          notificationSoundChoice.set(next);
+          playNotificationSound(next);
+        }}
+        options={[
+          { value: SOUND_NONE, label: t("settings.notificationSound.none") },
+          ...NOTIFICATION_SOUND_CHOICES.map((id) => ({ value: id, label: t(`settings.notificationSound.${id}`) })),
+        ]}
+      />
+    </CompactRow>
+  );
+}
+
+/** Nudges fold under one row: sound and window shake stay available. */
+function NudgesRow() {
+  const [open, setOpen] = useState(false);
+  const nudgeSound = useNudgeSound();
+  const shake = useLocalSwitch(nudgeShake);
+  return (
+    <DescribedRow
+      label={t("settings.group.nudges")}
+      description={t("settings.notifications.nudges.summary")}
+      rowId="nudges"
+      below={open ? (
+        <div className="mt-2 flex flex-col" data-nudges-rows="">
+          <CompactRow label={t("settings.nudgeSound.title")} rowId="nudgeSound">
+            <Switch checked={nudgeSound} aria-label={t("settings.nudgeSound.title")} onClick={() => setNudgeSound(!nudgeSound)} />
+          </CompactRow>
+          <CompactRow label={t("settings.nudgeShake.title")} rowId="nudgeShake">
+            <Switch checked={shake} aria-label={t("settings.nudgeShake.title")} onClick={() => nudgeShake.set(!shake)} />
+          </CompactRow>
+        </div>
+      ) : undefined}
+    >
+      <DisclosurePill open={open} onToggle={() => setOpen((value) => !value)} label={t("settings.group.nudges")}>
+        {t(open ? "settings.appearance.hide" : "settings.appearance.show")}
+      </DisclosurePill>
+    </DescribedRow>
+  );
 }
 
 export function NotificationSettings({ privacy = false }: { privacy?: boolean }) {
-  const sounds = useNotificationSounds();
   const persistent = useLocalSwitch(persistentNotifications);
   const badge = useLocalSwitch(dockBadge);
-  const nudgeSound = useNudgeSound();
-  const shake = useLocalSwitch(nudgeShake);
   const chime = useLocalSwitch(approvalChime);
   const connection = useLocalSwitch(connectionNotices);
-  const soundChoice = notificationSoundChoice.use();
-  // App Store 1.2: an admin (a solo server's owner) reads the reports here.
-  const admin = useStoreSelector((current) => viewerIsOrgAdmin(current.config));
+  const bots = useLocalSwitch(notifyBots);
+  const people = useLocalSwitch(notifyPeople);
+  const groups = useLocalSwitch(notifyGroups);
+  const approvals = useLocalSwitch(notifyApprovals);
+  const routines = useLocalSwitch(notifyRoutines);
   return (
     <>
-      <SettingsGroup title={t("settings.group.alerts")} groupId="alerts" accessory={<ThisComputer />}>
-        {/* asks for the browser permission, only while it was never asked */}
+      <SettingsGroup title={t("settings.group.notificationTypes")} groupId="notificationTypes">
+        <CompactRow label={t("settings.notifications.types.bots")} rowId="notifyBots">
+          <Switch checked={bots} aria-label={t("settings.notifications.types.bots")} onClick={() => notifyBots.set(!bots)} />
+        </CompactRow>
+        <CompactRow label={t("settings.notifications.types.people")} rowId="notifyPeople">
+          <Switch checked={people} aria-label={t("settings.notifications.types.people")} onClick={() => notifyPeople.set(!people)} />
+        </CompactRow>
+        <CompactRow label={t("settings.notifications.types.groups")} rowId="notifyGroups">
+          <Switch checked={groups} aria-label={t("settings.notifications.types.groups")} onClick={() => notifyGroups.set(!groups)} />
+        </CompactRow>
+        <CompactRow label={t("settings.notifications.types.approvals")} rowId="notifyApprovals">
+          <Switch checked={approvals} aria-label={t("settings.notifications.types.approvals")} onClick={() => notifyApprovals.set(!approvals)} />
+        </CompactRow>
+        <CompactRow label={t("settings.notifications.types.routines")} rowId="notifyRoutines">
+          <Switch checked={routines} aria-label={t("settings.notifications.types.routines")} onClick={() => notifyRoutines.set(!routines)} />
+        </CompactRow>
+      </SettingsGroup>
+      <SettingsGroup title={t("settings.group.alerts")} groupId="alerts">
         <NotificationInvite />
-        <CompactRow label={t("settings.notificationSounds.title")} rowId="notificationSounds">
-          <Switch checked={sounds} aria-label={t("settings.notificationSounds.play")} onClick={() => setNotificationSounds(!sounds)} />
-        </CompactRow>
-        {/* which sound, previewed when picked (drawn here: src/lib/notification-sound.ts) */}
-        <CompactRow label={t("settings.notificationSound.title")} rowId="notificationSound">
-          <PillSelect
-            value={soundChoice}
-            ariaLabel={t("settings.notificationSound.title")}
-            disabled={!sounds}
-            onChange={(next) => {
-              notificationSoundChoice.set(next);
-              playNotificationSound(next);
-            }}
-            options={NOTIFICATION_SOUND_CHOICES.map((id) => ({ value: id, label: t(`settings.notificationSound.${id}`) }))}
-          />
-        </CompactRow>
-        {/* The one grey line kept: on macOS a Banner slides away whatever this says. */}
+        <SoundRow />
         <DescribedRow label={t("settings.notifications.persistent.title")} description={t("settings.notifications.persistent.mac")} rowId="persistentNotifications">
           <Switch checked={persistent} aria-label={t("settings.notifications.persistent.title")} onClick={() => persistentNotifications.set(!persistent)} />
         </DescribedRow>
         <CompactRow label={t("settings.notifications.badge.title")} rowId="dockBadge">
           <Switch checked={badge} aria-label={t("settings.notifications.badge.title")} onClick={() => dockBadge.set(!badge)} />
         </CompactRow>
-        {/* the Approvals screen's arrival chime: its only switch */}
         <CompactRow label={t("settings.approvalChime.title")} rowId="approvalChime">
           <Switch checked={chime} aria-label={t("settings.approvalChime.title")} onClick={() => approvalChime.set(!chime)} />
         </CompactRow>
-        {/* #2013: the calm notice while the server updates or cannot be reached */}
         <DescribedRow label={t("settings.connectionNotices.title")} description={t("settings.connectionNotices.description")} rowId="connectionNotices">
           <Switch checked={connection} aria-label={t("settings.connectionNotices.title")} onClick={() => connectionNotices.set(!connection)} />
         </DescribedRow>
+        <NudgesRow />
       </SettingsGroup>
-      <SettingsGroup title={t("settings.group.nudges")} groupId="nudges" accessory={<ThisComputer />}>
-        <CompactRow label={t("settings.nudgeSound.title")} rowId="nudgeSound">
-          <Switch checked={nudgeSound} aria-label={t("settings.nudgeSound.title")} onClick={() => setNudgeSound(!nudgeSound)} />
-        </CompactRow>
-        <CompactRow label={t("settings.nudgeShake.title")} rowId="nudgeShake">
-          <Switch checked={shake} aria-label={t("settings.nudgeShake.title")} onClick={() => nudgeShake.set(!shake)} />
-        </CompactRow>
-      </SettingsGroup>
-      {/* Privacy (2026-10-14): what other people of the organization see. */}
-      {privacy && (
-        <div data-settings-card="notifications.privacy">
-          <SettingsGroup title={t("settings.section.privacy")} groupId="privacy">
-            <PrivacySettings />
-          </SettingsGroup>
-        </div>
-      )}
-      {/* App Store 1.2 (2026-10-26): the people this person blocked, for them
-          only, and the reports people sent, for an admin. */}
-      <div data-settings-card="notifications.blockedPeople">
-        <BlockedPeopleSettings />
+      {/* Privacy always hosts blocked people; org read-receipts/presence only when
+          the privacy section is allowed (organization server). ReportsRow hides
+          itself when the viewer is not an admin (#2080). */}
+      <div data-settings-card="notifications.privacy">
+        <SettingsGroup title={t("settings.section.privacy")} groupId="privacy">
+          {privacy && <PrivacySettings />}
+          <BlockedPeopleRow />
+          <ReportsRow />
+        </SettingsGroup>
       </div>
-      {admin && <ReportsSettings />}
     </>
   );
 }

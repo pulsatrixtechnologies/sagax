@@ -1,6 +1,7 @@
-// Settings > Usage (2026-10-14): the signed-in person's own usage. Cost then
-// Plan on top (2026-10-15), one folded breakdown by bot and model, nothing about other
-// people. Every figure is asked of GET /api/me/usage (2026-10-15: open to every member).
+// Settings > Usage (2026-10-14): the signed-in person's own usage. Since
+// #2080 (2026-11-05): one headline card (the month's cost, its renewal, one
+// bar, the limit, Manage usage), then a Detail group of folded rows, nothing
+// about other people. Every figure is asked of GET /api/me/usage (2026-10-15: open to every member).
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,8 +16,8 @@ vi.mock("@/state/store", async (importOriginal) => ({
 }));
 
 import { ApiError } from "@/state/store";
-import { CostCard, loadCycleDetail, loadPersonalUsage, PersonalUsageUnavailable, SpendCapCard, planUsageShown, UsageLayout, type PersonalUsage } from "./UsageSection";
-import { PlanUsageView, renewalDate } from "./PlanUsage";
+import { loadCycleDetail, loadPersonalUsage, PersonalUsageUnavailable, planUsageShown, renewalDay, SpendCapRow, UsageDetail, UsageHeadline, type PersonalUsage } from "./UsageSection";
+import { headlineMeter, PlanUsageView, renewalDate } from "./PlanUsage";
 
 const NOW = new Date("2026-10-14T15:00:00Z");
 const summary = (cost: number, turns: number, groups: PersonalUsageSummary["groups"] = []): PersonalUsageSummary => ({
@@ -91,20 +92,20 @@ describe("what Settings > Usage asks the server", () => {
 });
 
 describe("the page's order", () => {
-  it("puts the Cost card on top, above the Plan card", () => {
-    const html = renderToStaticMarkup(createElement(UsageLayout, {
-      cost: createElement(CostCard, { usage: null, error: null }),
-      plan: createElement(PlanUsageView, {
-        report: { providers: [{ id: "claude", name: "Claude", driver: "claude", plan: null, ok: true, error: null, state: "no-windows" }] },
-        loading: false, now: NOW.getTime(), onRefresh: () => {}, myEngines: null, onOpenEngines: () => {}, issuer: "",
-      }),
-      rest: createElement("div", { "data-rest": "" }),
-    }));
-    const cost = html.indexOf('data-settings-card="usage.cost"');
-    const plan = html.indexOf('data-settings-card="usage.plan"');
-    expect(cost).toBeGreaterThanOrEqual(0);
-    expect(plan).toBeGreaterThan(cost);
-    expect(html.indexOf("data-rest")).toBeGreaterThan(plan);
+  it("keeps the headline above Detail, and Detail holds the breakdown, the plan and the traces, all folded", () => {
+    const usage: PersonalUsage = { month: summary(3, 1), previous: summary(1, 1), days30: summary(3, 1), byBot: summary(3, 1), byModel: summary(3, 1) };
+    const html = renderToStaticMarkup(createElement("div", null,
+      createElement(UsageHeadline, { usage, error: null, now: NOW.getTime() }),
+      createElement(UsageDetail, { usage, plan: createElement("div", { "data-plan": "" }), planCount: 1, onOpenTraces: () => {} }),
+    ));
+    const head = html.indexOf('data-settings-card="usage.headline"');
+    const detail = html.indexOf('data-settings-card="usage.detail"');
+    expect(head).toBeGreaterThanOrEqual(0);
+    expect(detail).toBeGreaterThan(head);
+    expect(html).toMatch(/data-settings-card="usage.breakdown" data-open="false"/);
+    expect(html).toMatch(/data-settings-card="usage.planDetail" data-open="false"/);
+    expect(html.indexOf("usage.planDetail")).toBeGreaterThan(html.indexOf("usage.breakdown"));
+    expect(html.indexOf('data-settings-card="usage.traces"')).toBeGreaterThan(html.indexOf("usage.planDetail"));
   });
 });
 
@@ -147,7 +148,7 @@ describe("cost helpers", () => {
   });
 });
 
-describe("Cost card", () => {
+describe("the headline", () => {
   const usage = (month: number, previous: number): PersonalUsage => ({
     month: summary(month, 4),
     previous: summary(previous, 3),
@@ -156,29 +157,57 @@ describe("Cost card", () => {
     byModel: summary(month, 4),
   });
 
-  it("shows this month's cost, the trend and a 30-day sparkline", () => {
-    const html = renderToStaticMarkup(createElement(CostCard, { usage: usage(12, 10), error: null }));
-    expect(html).toContain("data-usage-cost");
-    expect(html).toContain("$12.00");
-    expect(html).toContain("20% more than last month");
-    expect(html).toContain("data-usage-sparkline");
+  it("says this month's cost and when it renews, in one line", () => {
+    const html = renderToStaticMarkup(createElement(UsageHeadline, { usage: usage(12, 10), error: null, now: NOW.getTime() }));
+    expect(html).toContain("$12.00 this month");
+    expect(html).toContain("Renews Nov");
+    expect(html).not.toContain("data-usage-bar");
     expect(html).not.toMatch(/[–—]/);
   });
 
-  it("says honestly that an older server has no per-person cost, instead of try again later", () => {
+  it("writes the renewal day the Quebec way", () => {
     setLocale("fr");
-    const html = renderToStaticMarkup(createElement(CostCard, { usage: null, error: "unavailable" }));
-    expect(html).toContain("data-usage-unavailable");
-    expect(html).toContain("Ce serveur ne fournit pas encore le coût par personne.");
-    expect(html).not.toContain("Réessayez plus tard");
-    expect(renderToStaticMarkup(createElement(CostCard, { usage: null, error: "failed" }))).toContain("Réessayez plus tard");
+    expect(renewalDay(NOW)).toMatch(/^1er\u00a0nov/);
+    const html = renderToStaticMarkup(createElement(UsageHeadline, { usage: usage(12, 10), error: null, now: NOW.getTime() }));
+    expect(html).toContain("ce mois-ci");
+    expect(html).toContain("Se renouvelle le 1er");
   });
 
-  it("says so plainly when nothing was spent, in French", () => {
+  it("with no cost and no plan, says so once with Try again instead of a card per missing figure", () => {
     setLocale("fr");
-    const html = renderToStaticMarkup(createElement(CostCard, { usage: { ...usage(0, 0), month: summary(0, 0), days30: summary(0, 0) }, error: null }));
-    expect(html).toContain("data-usage-empty");
-    expect(html).toContain("Rien de dépensé pour l&#x27;instant.");
+    const html = renderToStaticMarkup(createElement(UsageHeadline, { usage: null, error: "unavailable", onRetry: () => {} }));
+    expect(html).toContain("data-usage-unavailable");
+    expect(html).toContain("Ce serveur ne rapporte pas encore le coût ni le forfait.");
+    expect(html).toContain("data-usage-retry");
+    expect(html).not.toContain("data-usage-cost");
+    // a plan still loading waits instead of saying nothing is there
+    expect(renderToStaticMarkup(createElement(UsageHeadline, { usage: null, error: "failed", planLoading: true }))).not.toContain("data-usage-unavailable");
+  });
+
+  it("falls back to the plan's tightest window when the server has no cost", () => {
+    const report = { providers: [{ id: "claude", name: "Claude", driver: "claude", plan: "Max", ok: true, error: null, state: "windows" as const, fiveHour: { available: true, remainingPercent: 60, usedPercent: 40, resetsAt: null }, weekly: { available: true, remainingPercent: 30, usedPercent: 70, resetsAt: null } }] };
+    const plan = headlineMeter(report as never);
+    expect(plan?.meter.usedPercent).toBe(70);
+    const html = renderToStaticMarkup(createElement(UsageHeadline, { usage: null, error: "unavailable", plan, now: NOW.getTime() }));
+    expect(html).toContain('data-usage-bar="plan"');
+    expect(html).toContain('aria-valuenow="70"');
+    expect(html).toContain("Claude");
+    expect(html).not.toContain("data-usage-unavailable");
+  });
+
+  it("shows the spending limit as a thin bar and a row, and Manage usage when there is a console", () => {
+    setLocale("fr");
+    const cap = { supported: true, minUsd: 1, cap: { month: "2026-10", monthlyUsd: 50, spentUsd: 12, percent: 24, warn: false, exceeded: false } };
+    const html = renderToStaticMarkup(createElement(UsageHeadline, {
+      usage: usage(12, 10), error: null, now: NOW.getTime(), cap,
+      manage: { href: "https://px.example.test/console", label: "Ouvrir Sagax Business" },
+    }));
+    expect(html).toContain('data-usage-bar="cap"');
+    expect(html).toContain('data-settings-row="cap-state"');
+    expect(html).toContain('data-settings-row="manage"');
+    expect(html).toContain("Gérer l&#x27;utilisation");
+    expect(html).toContain('href="https://px.example.test/console"');
+    expect(renderToStaticMarkup(createElement(UsageHeadline, { usage: usage(1, 1), error: null }))).not.toContain("data-usage-org-link");
   });
 });
 
@@ -239,44 +268,43 @@ describe("Plan card", () => {
 
 // 0.5.6: the reference design's Usage & Billing layout, grey headings outside rounded
 // cards, compact rows, the breakdown folded under a count pill.
-describe("Usage laid out as the reference design's", () => {
+describe("Detail", () => {
   const usage: PersonalUsage = {
     month: summary(12, 4), previous: summary(10, 3), days30: summary(12, 4),
     byBot: summary(12, 4, [{ key: "b1", label: "Hibou", turns: 3, costUsd: 9 }, { key: "b2", label: "Dispatch", turns: 1, costUsd: 3 }]),
     byModel: summary(12, 4),
   };
 
-  it("draws Cost as a group of rows: this month, the last 30 days, the breakdown folded with its count", () => {
+  it("folds the breakdown with its count: the month, the trend, the last 30 days, by bot", () => {
     setLocale("fr");
-    const html = renderToStaticMarkup(createElement(CostCard, { usage, error: null }));
-    expect(html).toContain('data-settings-group="cost"');
-    expect(html).toContain(">Coût<");
+    const html = renderToStaticMarkup(createElement(UsageDetail, { usage }));
+    expect(html).toContain(">Détail<");
     expect(html.indexOf('data-settings-row="month"')).toBeLessThan(html.indexOf('data-settings-row="days30"'));
     expect(html).toMatch(/data-settings-card="usage.breakdown" data-open="false"/);
     expect(html).toMatch(/data-count-pill=""[^>]*>2</);
     // still in the page while folded
     expect(html).toContain("Hibou");
-    expect(html).not.toContain("data-usage-org-link");
+    expect(html).toContain("data-usage-trend");
   });
 
-  it("gives an organization admin a row to the organization's usage", () => {
+  it("opens the per-job traces on their own sub-page", () => {
     setLocale("fr");
-    const html = renderToStaticMarkup(createElement(CostCard, { usage, error: null, consoleUrl: "https://px.example.test/console" }));
-    expect(html).toContain('data-settings-row="organization"');
-    expect(html).toContain("Ouvrir Sagax Business");
-    expect(html).toContain('href="https://px.example.test/console"');
+    const html = renderToStaticMarkup(createElement(UsageDetail, { usage, onOpenTraces: () => {} }));
+    expect(html).toContain('data-settings-card="usage.traces"');
+    expect(html).toContain("Traces par job");
+    expect(html).toContain("Voir");
   });
 
-  it("draws Plan under a grey heading with the refresh by it and the keys link as a row", () => {
+  it("draws the plan inside Detail without its own heading, refresh first, keys link left to Manage usage", () => {
     setLocale("fr");
     const html = renderToStaticMarkup(createElement(PlanUsageView, {
       report: { providers: [{ id: "claude", name: "Claude", driver: "claude", plan: "Max", ok: true, error: null, state: "no-windows" }] },
-      loading: false, now: NOW.getTime(), onRefresh: () => {}, myEngines: null, onOpenEngines: () => {}, issuer: "https://px.example.test",
+      loading: false, now: NOW.getTime(), onRefresh: () => {}, myEngines: null, onOpenEngines: () => {}, issuer: "https://px.example.test", bare: true,
     }));
-    expect(html).toContain('data-settings-group="plan"');
+    expect(html).toContain("data-plan-bare");
+    expect(html).not.toContain('data-settings-group="plan"');
     expect(html.indexOf("data-plan-refresh")).toBeLessThan(html.indexOf('data-plan-row="claude"'));
-    expect(html).toContain('data-settings-row="keys"');
-    expect(html).toContain("Gérer mes clés dans Perspicax");
+    expect(html).not.toContain("data-plan-keys-link");
   });
 });
 
@@ -315,7 +343,7 @@ describe("Cycle précédent and the by-source view", () => {
       byModel: summary(12.5, 6),
       byEngine: summary(12.5, 6, [{ key: "engine:claudeAgent", label: "claudeAgent", turns: 6, costUsd: 12.5 }]),
     };
-    const html = renderToStaticMarkup(createElement(CostCard, { usage, error: null, cycle: "previous", onCycle: () => {}, detail }));
+    const html = renderToStaticMarkup(createElement(UsageDetail, { usage, cycle: "previous", onCycle: () => {}, detail }));
     expect(html).toContain("$12.50");
     expect(html).not.toContain("$9.00");
     expect(html).not.toContain("data-usage-trend");
@@ -327,7 +355,7 @@ describe("Cycle précédent and the by-source view", () => {
 
   it("the current cycle still shows the trend and the sparkline", () => {
     const usage: PersonalUsage = { month: summary(9, 4), previous: summary(3, 2), days30: summary(9, 4), byBot: summary(9, 4), byModel: summary(9, 4) };
-    const html = renderToStaticMarkup(createElement(CostCard, { usage, error: null, onCycle: () => {} }));
+    const html = renderToStaticMarkup(createElement(UsageDetail, { usage, onCycle: () => {} }));
     expect(html).toContain("$9.00");
     expect(html).toContain("data-usage-trend");
     expect(html).toContain("This cycle");
@@ -347,38 +375,47 @@ describe("Limite de dépenses", () => {
     for (const bad of ["", "0", "0.5", "abc", "-4", "1.234", "1e3"]) expect(parseCapInput(bad), bad).toBeNull();
   });
 
+  const never = () => new Promise<never>(() => {});
+
   it("draws nothing where the server has no personal limit (organization or older server)", () => {
-    expect(renderToStaticMarkup(createElement(SpendCapCard, { initial: { supported: false, minUsd: 1, cap: null }, read: () => new Promise<never>(() => {}) }))).toBe("");
-    expect(renderToStaticMarkup(createElement(SpendCapCard, { read: () => new Promise<never>(() => {}) }))).toBe("");
+    expect(renderToStaticMarkup(createElement(SpendCapRow, { data: { supported: false, minUsd: 1, cap: null }, write: never }))).toBe("");
   });
 
-  it("with no limit set, offers to set one", () => {
-    const html = renderToStaticMarkup(createElement(SpendCapCard, { initial: { supported: true, minUsd: 1, cap: null }, read: () => new Promise<never>(() => {}) }));
+  it("with no limit set, says None and one Edit; editing offers to set one", () => {
+    const html = renderToStaticMarkup(createElement(SpendCapRow, { data: { supported: true, minUsd: 1, cap: null }, write: never }));
     expect(html).toContain("Spending limit");
-    expect(html).toContain("No limit is set");
-    expect(html).toContain("Set limit");
-    expect(html).not.toContain("Remove limit");
+    expect(html).toContain("None");
+    expect(html).toContain("data-cap-edit");
+    expect(html).not.toContain("data-cap-input");
+    const editing = renderToStaticMarkup(createElement(SpendCapRow, { data: { supported: true, minUsd: 1, cap: null }, write: never, defaultEditing: true }));
+    expect(editing).toContain("data-cap-input");
+    expect(editing).toContain("Set limit");
+    expect(editing).not.toContain("Remove limit");
+    expect(editing).not.toContain("data-cap-edit");
   });
 
-  it("shows where the month stands, and a reached limit says new turns are refused until raised", () => {
-    const within = renderToStaticMarkup(createElement(SpendCapCard, { initial: cap(), read: () => new Promise<never>(() => {}) }));
-    expect(within).toContain("$12.00 of $50.00 (24%)");
+  it("shows the monthly limit, and a reached limit says new turns are refused until raised", () => {
+    const within = renderToStaticMarkup(createElement(SpendCapRow, { data: cap(), write: never }));
+    expect(within).toContain("$50.00 per month");
     expect(within).toContain('data-cap-status="within"');
-    expect(within).toContain("Change limit");
-    expect(within).toContain("Remove limit");
-    const reached = renderToStaticMarkup(createElement(SpendCapCard, { initial: cap({ spentUsd: 55, percent: 110, warn: true, exceeded: true }), read: () => new Promise<never>(() => {}) }));
+    const editing = renderToStaticMarkup(createElement(SpendCapRow, { data: cap(), write: never, defaultEditing: true }));
+    expect(editing).toContain("Change limit");
+    expect(editing).toContain("Remove limit");
+    const reached = renderToStaticMarkup(createElement(SpendCapRow, { data: cap({ spentUsd: 55, percent: 110, warn: true, exceeded: true }), write: never }));
     expect(reached).toContain('data-cap-status="reached"');
     expect(reached).toContain("next turns are refused until you raise it");
-    const near = renderToStaticMarkup(createElement(SpendCapCard, { initial: cap({ percent: 85, warn: true }), read: () => new Promise<never>(() => {}) }));
+    const near = renderToStaticMarkup(createElement(SpendCapRow, { data: cap({ percent: 85, warn: true }), write: never }));
     expect(near).toContain('data-cap-status="near"');
   });
 
-  it("speaks Quebec French", () => {
+  it("speaks Quebec French, with tu", () => {
     setLocale("fr");
-    const html = renderToStaticMarkup(createElement(SpendCapCard, { initial: cap({ exceeded: true, warn: true, percent: 120, spentUsd: 60 }), read: () => new Promise<never>(() => {}) }));
+    const html = renderToStaticMarkup(createElement(SpendCapRow, { data: cap({ exceeded: true, warn: true, percent: 120, spentUsd: 60 }), write: never, defaultEditing: true }));
     expect(html).toContain("Limite de dépenses");
     expect(html).toContain("Limite atteinte");
+    expect(html).toContain("tu ne la relèves pas");
     expect(html).toContain("Modifier la limite");
+    expect(html).not.toMatch(/vous|Vous/);
     expect(html).not.toMatch(/[\u2013\u2014]/);
   });
 });

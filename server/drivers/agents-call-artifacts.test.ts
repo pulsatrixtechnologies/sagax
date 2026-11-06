@@ -67,6 +67,8 @@ describe("claude_artifact (#2018)", () => {
     const blocked = await callTool("claude_artifact", { tool: "Artifact", input: { action: "read", url: "https://claude.ai/artifact/abc" } }, context);
     expect(blocked.isError).toBe(true);
     expect(blocked.text).toContain("person@example.com");
-    expect(blocked.text).toContain("publish a copy");
+    expect(blocked.text).toContain("cannot Artifact-read");
+    expect(blocked.text).toContain("HTML file");
+    expect(blocked.text).toContain("new URL");
   });
 });

@@ -29,16 +29,8 @@ export function personaModelSummary(bot: Bot, engine: ReturnType<typeof botEngin
   return bot.modelSelection.effort ? `${label} · ${bot.modelSelection.effort}` : label;
 }
 
-/** "Sharing" in the summary: the grants when there are any, else who may
- * see it, else not shared. */
-export function personaSharingSummary(bot: Bot): string {
-  const grants = bot.grants?.length ?? bot.directGrants?.length ?? 0;
-  if (grants > 0) return t("persona.overview.sharedCount", { count: String(grants) });
-  if (bot.visibility === "everyone") return t("botSettings.visibility.everyone");
-  if (bot.visibility === "admins") return t("botSettings.visibility.admins");
-  if (bot.visibility && typeof bot.visibility === "object") return t("botSettings.visibility.people");
-  return t("botSettings.sharing.empty");
-}
+import { personaSharingSummary } from "@/lib/bot-sharing";
+export { personaSharingSummary };
 
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -48,9 +40,12 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-export function PersonaOverview({ bot, derived }: {
+export function PersonaOverview({ bot, derived, identity = true }: {
   bot: Bot;
   derived: ReturnType<typeof useBotSettingsDerived>;
+  /** The mascot, name, label and primary badge; the profile page shows them
+   * in its header (#2126) and leaves them out here. */
+  identity?: boolean;
 }) {
   const { state } = useStore();
   const people = useOrgPeople();
@@ -68,7 +63,7 @@ export function PersonaOverview({ bot, derived }: {
 
   return (
     <div className="flex flex-col gap-5" data-persona-overview="">
-      <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+      {identity && <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
         <div className="-mt-6 shrink-0">
           <BotProfileAvatarCard bot={bot} activeState={derived.activeState} mascotMotion={derived.mascotMotion} onPatch={derived.patch} />
         </div>
@@ -96,7 +91,7 @@ export function PersonaOverview({ bot, derived }: {
             </span>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* Settings' layout (2026-10-16): grey headings outside the cards,
           the summary as compact rows (label at the left, value at the right). */}

@@ -34,6 +34,7 @@ import { PerspicaxIdentity, identityFailureReason, identityLapsed, identityValue
 import type { RoutineFlowInput } from "../routines/routine-flow-input.ts";
 import type { ReadinessFlow } from "../routines/routine-readiness.ts";
 import { ME_ROLE, actingAsOf, cwPermissionFor, heldRolesOf, roleRefusalOf, type CwPermission, type HeldRole, type RoleReason, type ToolRole } from "../../shared/perspicax-roles.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export type PerspicaxUnavailableReason = "not_held" | "no_session" | "unreachable" | "rate_limited" | "no_delegation" | "unknown_speaker";
 
@@ -596,7 +597,7 @@ async function readBounded(
     if (done) break;
     size += value.byteLength;
     if (size > max) {
-      await reader.cancel().catch(() => {});
+      await reader.cancel().catch(reportBackgroundError);
       throw new Error("the Perspicax answer is too large");
     }
     text += decoder.decode(value, { stream: true });
@@ -610,7 +611,7 @@ async function readBounded(
       try { frame = JSON.parse(line.slice(5).trim()); } catch { continue; }
       if (!isObject(frame) || typeof frame.method !== "string") continue;
       if (typeof frame.id === "string" || typeof frame.id === "number") {
-        if (onRequest) pending.push(onRequest(frame).catch(() => {}));
+        if (onRequest) pending.push(onRequest(frame).catch(reportBackgroundError));
       } else if (onNotification) {
         onNotification(frame);
       }
@@ -764,7 +765,7 @@ export class PerspicaxMcp {
       if (entry.threadId === threadId) this.disarmKeepAlive(entry);
     }
     if (this.options.keepWarm?.(threadId) === true) return;
-    void this.endWarm(threadId);
+    void this.endWarm(threadId).catch(reportBackgroundError);
   }
 
   /** Engine session is warm again (idle pool): re-arm pings on kept entries. */
@@ -876,8 +877,8 @@ export class PerspicaxMcp {
       return { detail: "Perspicax readiness is unreachable; admission will retry reachability." };
     } finally {
       if (token) {
-        if (session) await this.fetcher(link.mcpEndpoint(), { method: "DELETE", redirect: "error", signal: AbortSignal.timeout(200), headers: { authorization: `Bearer ${token}`, "mcp-session-id": session } }).then(response => response.body?.cancel()).catch(() => {});
-        void link.revokeExchanged(token).catch(() => {});
+        if (session) await this.fetcher(link.mcpEndpoint(), { method: "DELETE", redirect: "error", signal: AbortSignal.timeout(200), headers: { authorization: `Bearer ${token}`, "mcp-session-id": session } }).then(response => response.body?.cancel()).catch(reportBackgroundError);
+        void link.revokeExchanged(token).catch(reportBackgroundError);
       }
     }
   }
@@ -982,8 +983,8 @@ export class PerspicaxMcp {
           if (!result?.error && released) result = released;
         } catch (error) { if (!result?.error) problem ??= error; }
       }
-      if (session) await this.fetcher(link.mcpEndpoint(), { method: "DELETE", redirect: "error", signal: AbortSignal.timeout(200), headers: { authorization: `Bearer ${exchanged.token}`, "mcp-session-id": session } }).then(response => response.body?.cancel()).catch(() => {});
-      void link.revokeExchanged(exchanged.token).catch(() => {});
+      if (session) await this.fetcher(link.mcpEndpoint(), { method: "DELETE", redirect: "error", signal: AbortSignal.timeout(200), headers: { authorization: `Bearer ${exchanged.token}`, "mcp-session-id": session } }).then(response => response.body?.cancel()).catch(reportBackgroundError);
+      void link.revokeExchanged(exchanged.token).catch(reportBackgroundError);
     }
     if (problem) throw problem;
     return result ?? { step: "tools/list", error: "tool_missing flow_run is not available on this account connection." };
@@ -1037,8 +1038,8 @@ export class PerspicaxMcp {
       if (!isObject(body) || isObject(body.error) || (isObject(body.result) && body.result.isError === true)) return { roles: [] };
       return { roles: heldRolesOf(identityValue(body)) };
     } finally {
-      if (session) await this.fetcher(link.mcpEndpoint(), { method: "DELETE", redirect: "error", signal: AbortSignal.timeout(200), headers: { authorization: `Bearer ${exchanged.token}`, "mcp-session-id": session } }).then(response => response.body?.cancel()).catch(() => {});
-      void link.revokeExchanged(exchanged.token).catch(() => {});
+      if (session) await this.fetcher(link.mcpEndpoint(), { method: "DELETE", redirect: "error", signal: AbortSignal.timeout(200), headers: { authorization: `Bearer ${exchanged.token}`, "mcp-session-id": session } }).then(response => response.body?.cancel()).catch(reportBackgroundError);
+      void link.revokeExchanged(exchanged.token).catch(reportBackgroundError);
     }
   }
 
@@ -1085,8 +1086,8 @@ export class PerspicaxMcp {
       if (isObject(body.error) || (isObject(body.result) && body.result.isError === true)) return { held, flowError: `Flow could not describe ${recipe}.` };
       return { held, card: identityValue(body) };
     } finally {
-      if (session) await this.fetcher(link.mcpEndpoint(), { method: "DELETE", redirect: "error", signal: AbortSignal.timeout(200), headers: { authorization: `Bearer ${exchanged.token}`, "mcp-session-id": session } }).then(response => response.body?.cancel()).catch(() => {});
-      void link.revokeExchanged(exchanged.token).catch(() => {});
+      if (session) await this.fetcher(link.mcpEndpoint(), { method: "DELETE", redirect: "error", signal: AbortSignal.timeout(200), headers: { authorization: `Bearer ${exchanged.token}`, "mcp-session-id": session } }).then(response => response.body?.cancel()).catch(reportBackgroundError);
+      void link.revokeExchanged(exchanged.token).catch(reportBackgroundError);
     }
   }
 
@@ -1134,7 +1135,7 @@ export class PerspicaxMcp {
     // state never crosses into this turn; only the account token is reused.
     const stay = this.sessionShouldStay(input.threadId);
     // the call or warm engine ended without saying so: its kept tokens go
-    if (!stay) void this.endWarm(input.threadId);
+    if (!stay) void this.endWarm(input.threadId).catch(reportBackgroundError);
     if (stay) {
       const at = warmKey(input.threadId, principalId, source);
       const kept = this.warm.get(at);
@@ -1143,7 +1144,7 @@ export class PerspicaxMcp {
         this.warm.delete(at);
         kept.generation = input.generation;
         const previous = this.entries.get(key(input.threadId, input.generation));
-        if (previous && previous !== kept) void this.close(previous);
+        if (previous && previous !== kept) void this.close(previous).catch(reportBackgroundError);
         this.entries.set(key(input.threadId, input.generation), kept);
         this.applyTurnRole(kept, source === "delegation");
         plan.mounted.push({ name: "Perspicax" });
@@ -1196,7 +1197,7 @@ export class PerspicaxMcp {
     }
     const at = key(input.threadId, input.generation);
     const previous = this.entries.get(at);
-    if (previous) void this.close(previous);
+    if (previous) void this.close(previous).catch(reportBackgroundError);
     const entry: Entry = {
       threadId: input.threadId,
       generation: input.generation,
@@ -1905,7 +1906,7 @@ export class PerspicaxMcp {
     try {
       response = await this.post(link.mcpEndpoint(), entry, frame);
       if (response.status === 401) {
-        void response.body?.cancel().catch(() => {});
+        void response.body?.cancel().catch(reportBackgroundError);
         if (!(await this.renew(entry))) return "ended";
         if (!identityInternal && frame.id !== undefined && frame.method !== "initialize" && !roleRecoveryFrame(frame)) {
           await entry.identity?.ensure(true);
@@ -1914,7 +1915,7 @@ export class PerspicaxMcp {
         }
         response = await this.post(link.mcpEndpoint(), entry, frame);
         if (response.status === 401) {
-          void response.body?.cancel().catch(() => {});
+          void response.body?.cancel().catch(reportBackgroundError);
           this.end(entry);
           return "ended";
         }
@@ -1991,7 +1992,7 @@ export class PerspicaxMcp {
     if (entry.ended) return;
     try {
       const response = await this.post(link.mcpEndpoint(), entry, frame);
-      void response.body?.cancel().catch(() => {});
+      void response.body?.cancel().catch(reportBackgroundError);
     } catch {
       this.log("perspicax mcp: an answer to Perspicax could not be sent");
     }
@@ -2218,7 +2219,7 @@ export class PerspicaxMcp {
     const result = signIn.ok ? await link.exchangeToken(signIn.token) : null;
     if (entry.source === "delegation" && result && !result.ok && result.error === "subject") this.options.delegationRefused?.(entry.principalId);
     if (entry.ended) {
-      if (result?.ok) void this.revoke(result.token);
+      if (result?.ok) void this.revoke(result.token).catch(reportBackgroundError);
       return false;
     }
     if (!signIn.ok || !result?.ok) {
@@ -2235,7 +2236,7 @@ export class PerspicaxMcp {
       entry.profileChoiceRestoreFailed = false;
     }
     this.clearToolCatalog(entry);
-    void this.revoke(old);
+    void this.revoke(old).catch(reportBackgroundError);
     return true;
   }
 
@@ -2245,7 +2246,7 @@ export class PerspicaxMcp {
     entry.budget?.forget();
     this.disarmKeepAlive(entry);
     void entry.identity?.clear();
-    void this.revoke(entry.token);
+    void Promise.resolve(this.revoke(entry.token)).catch(reportBackgroundError);
   }
 
   private async close(entry: Entry): Promise<void> {
@@ -2274,7 +2275,7 @@ export class PerspicaxMcp {
       redirect: "error",
       signal: AbortSignal.timeout(5_000),
       headers: { authorization: `Bearer ${entry.token}`, "mcp-session-id": session },
-    }).then((response) => { void response.body?.cancel().catch(() => {}); }, () => {});
+    }).then((response) => { void response.body?.cancel().catch(reportBackgroundError); }, () => {});
   }
 
   private async revoke(token: string): Promise<void> {

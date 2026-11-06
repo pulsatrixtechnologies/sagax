@@ -1,6 +1,6 @@
-// Capabilities in a bot's scope: the scope toggle, the "For <bot>" card on a
+// Plugins in a bot's scope: the scope toggle, the "For <bot>" card on a
 // plugin's detail page, the marketplace rows' remove rule, and the bot
-// panel's Library without its old Plugins tab (rerouted to Capabilities).
+// panel's Library without its old Plugins tab (rerouted to Plugins).
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -125,7 +125,7 @@ describe("one marketplace list, two scopes", () => {
 });
 
 describe("bot panel > Library", () => {
-  it("opens Capabilities on that bot's scope", () => {
+  it("opens Plugins on that bot's scope", () => {
     const dispatch = vi.fn();
     openBotPlugins(dispatch, "maya");
     expect(dispatch).toHaveBeenCalledWith({ type: "togglePlugins", open: true, botId: "maya" });

@@ -20,6 +20,7 @@ import { threadLogsForgotten } from "../threads/forgotten-threads.ts";
 import { redactSecrets } from "../redact.ts";
 import { capThreadLog, currentThreadLogCap } from "../threads/thread-log-rotation.ts";
 import { newId, type ProviderInstance, type RuntimeEvent, type RuntimeEventListener } from "../contracts.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 const INCOMPLETE_LOG_MESSAGE =
   "Canonical event history is incomplete: Sagax could not write one or more events to disk. Live updates will continue.";
@@ -219,11 +220,18 @@ export class EventBus {
     this.write(event);
   }
 
+  /** Publish every thread's waiting merged text now (sync). Used before SSE
+   * resume so a reconnecting client does not miss deltas still in the merge
+   * window (#1971). Does not wait for disk. */
+  flushPendingText(): void {
+    for (const threadId of Array.from(this.pendingText.keys())) this.flushThread(threadId);
+  }
+
   /** Publish every thread's waiting text now, and wait until the canonical
    * log has accepted every event already queued. Detach and shutdown call
    * this; a terminal event flushes the same queue. */
   flush(): Promise<void> {
-    for (const threadId of Array.from(this.pendingText.keys())) this.flushThread(threadId);
+    this.flushPendingText();
     return this.flushDisk();
   }
 
@@ -259,7 +267,7 @@ export class EventBus {
     // this one: the log keeps publication order.
     this.enqueue(event);
     this.deliver(event);
-    if (isTerminalEvent(event)) void this.flushDisk();
+    if (isTerminalEvent(event)) void this.flushDisk().catch(reportBackgroundError);
   }
 
   private enqueue(event: RuntimeEvent) {
@@ -308,7 +316,7 @@ export class EventBus {
         this.pumping = false;
         if (this.queued.length > 0) this.kick();
         else this.settleDrain();
-      });
+      }).catch(reportBackgroundError);
     });
   }
 
@@ -417,6 +425,6 @@ export class EventBus {
   detach(instanceId: string) {
     this.unsubscribes.get(instanceId)?.();
     this.unsubscribes.delete(instanceId);
-    void this.flush();
+    void this.flush().catch(reportBackgroundError);
   }
 }

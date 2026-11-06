@@ -38,8 +38,13 @@ const baseConfig = (over: Record<string, unknown> = {}) => ({
 async function page(section?: string): Promise<string> {
   if (section) fixture.section = section;
   const { SettingsModal } = await import("./SettingsModal");
-  const { EnginesSettings, ProvidersSettings, VoiceSettingsPage } = await import("./lazy-settings-sections");
-  await Promise.all([EnginesSettings.preload(), ProvidersSettings.preload(), VoiceSettingsPage.preload()]);
+  const { DecisionModelSettings, EnginesSettings, ProvidersSettings, VoiceSettingsPage } = await import("./lazy-settings-sections");
+  await Promise.all([
+    DecisionModelSettings.preload(),
+    EnginesSettings.preload(),
+    ProvidersSettings.preload(),
+    VoiceSettingsPage.preload(),
+  ]);
   return renderToStaticMarkup(createElement(SettingsModal));
 }
 
@@ -54,7 +59,12 @@ function part(html: string, from: string, to?: string): string {
 beforeAll(async () => {
   // b8333c52c: these pages load on demand; static rendering runs no effects.
   const sections = await import("./lazy-settings-sections");
-  await Promise.all([sections.EnginesSettings.preload(), sections.ProvidersSettings.preload(), sections.VoiceSettingsPage.preload()]);
+  await Promise.all([
+    sections.DecisionModelSettings.preload(),
+    sections.EnginesSettings.preload(),
+    sections.ProvidersSettings.preload(),
+    sections.VoiceSettingsPage.preload(),
+  ]);
 }, 60_000);
 
 beforeEach(async () => {
@@ -90,7 +100,8 @@ describe("Settings > Models and voice", () => {
     expect(sectionMatches(page, typed.trim().toLowerCase())).toBe(true);
   });
 
-  it.each(["voice", "voix", "ElevenLabs", "microphone", "live calls", "appels en direct", "moteur de voix"])("finds Voice by searching for %s", async (typed) => {
+  // #2080 (L0): one word, one page; ElevenLabs is a provider, found on Providers
+  it.each(["voice", "voix", "microphone", "live calls", "appels en direct", "moteur de voix"])("finds Voice by searching for %s", async (typed) => {
     const { SECTIONS, sectionMatches } = await import("./SettingsModal");
     const page = SECTIONS.find((entry) => entry.id === "voice")!;
     expect(sectionMatches(page, typed.trim().toLowerCase())).toBe(true);
@@ -102,7 +113,12 @@ describe("Settings > Models and voice", () => {
     const models = SECTIONS.find((entry) => entry.id === "engines")!;
     const voice = SECTIONS.find((entry) => entry.id === "voice")!;
     const usage = SECTIONS.find((entry) => entry.id === "usage")!;
-    for (const typed of ["modèle auto", "fournisseur d'images", "recherche web"]) expect(sectionMatches(models, typed), typed).toBe(true);
+    expect(sectionMatches(models, "modèle auto")).toBe(true);
+    // #2080 (L0): image and web search providers are found on Providers only
+    for (const typed of ["fournisseur d'images", "recherche web"]) {
+      expect(sectionMatches(SECTIONS.find((entry) => entry.id === "providers")!, typed), typed).toBe(true);
+      expect(sectionMatches(models, typed), typed).toBe(false);
+    }
     expect(sectionMatches(SECTIONS.find((entry) => entry.id === "providers")!, "à configurer")).toBe(true);
     for (const typed of ["moteur de voix", "appels en direct", "micro"]) {
       expect(sectionMatches(voice, typed), typed).toBe(true);
@@ -144,6 +160,8 @@ describe("Settings > Models and voice", () => {
     // link to Providers and image generation left the page (Providers > Other services)
     expect(models).toContain('data-settings-card="models.advanced"');
     expect(models).toContain("data-auto-model-explainer");
+    // #2080 (L1): "No long dashes" changes every reply: Models > Advanced, not Voice
+    expect(models).toContain('data-settings-row="voiceNoDashes"');
     expect(models).not.toContain("data-open-providers");
     expect(models).not.toContain('data-settings-card="connections.image"');
     for (const retired of ["data-engines-list", "data-keys-section", "data-legacy-toggle", "data-provider-key="]) expect(models).not.toContain(retired);
@@ -153,6 +171,7 @@ describe("Settings > Models and voice", () => {
     expect(voice).toContain('data-settings-card="voice.advanced"');
     expect(voice).toContain('aria-label="Fish Audio model"');
     expect(voice).toContain('aria-label="Chatterbox server address"');
+    expect(voice).not.toContain('data-settings-row="voiceNoDashes"');
     for (const retired of ['aria-label="Voice engine"', "data-personal-voice-keys", 'type="password"']) expect(voice).not.toContain(retired);
   });
 

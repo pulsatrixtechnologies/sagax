@@ -31,6 +31,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join, parse, resolve } from "node:path";
 
 import { DATA_DIR } from "./config.ts";
+import { reportBackgroundError } from "./background-error.ts";
 
 export const CHECKPOINTS_DIR = join(DATA_DIR, "checkpoints");
 
@@ -542,7 +543,7 @@ function releaseCollection(shadow: string): void {
   const collect = pendingCollections.get(shadow);
   if (collect === undefined) return;
   pendingCollections.delete(shadow);
-  void serialize(shadow, collect);
+  void serialize(shadow, collect).catch(reportBackgroundError);
 }
 
 /** Throttle for collectObsolete (see GC_EVERY_COMMITS). */

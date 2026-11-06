@@ -3,19 +3,16 @@ export type { SkillPackageStamp } from "./skill-package-stamp.ts";
 // Imported Agent Skills, per bot.
 //
 // A skill is the open agentskills.io format: a folder named after the skill
-// holding SKILL.md (YAML frontmatter: name + description) and, in richer
-// skills, scripts and references. This store implements a deliberately
-// narrow v1 of that spec:
+// holding SKILL.md (YAML frontmatter: name + description) and, for richer
+// skills, the scripts, references and assets that came with it. Imports keep
+// the whole folder within the folder limits; what is left out is named on the
+// review surface.
 //
-//   - SKILL.md only. Registry audits (Snyk "ToxicSkills", Feb 2026) found
-//     confirmed exfiltration payloads in 2-13% of public skills. Supporting
-//     files are outside the v1 review and integrity boundary, so every one is
-//     skipped and named on the review surface.
-//   - imports land DISABLED. The UI shows the full SKILL.md and the scan
-//     warnings; a person enables it after reading. Nothing an import
-//     contains reaches any prompt before that.
-//   - provenance is pinned: source URL and content hash are recorded at
-//     import so "where did this come from" always has an answer.
+//   - imports land DISABLED. The UI shows what arrived and the scan warnings;
+//     a person enables it after reading. Nothing an import contains reaches
+//     any prompt before that.
+//   - provenance is pinned: source URL, content hash, and (when known) the
+//     GitHub folder/commit are recorded at import.
 //
 // Enabled skills reach the bot two ways, mirroring how MEMORY.md works:
 // an index line per skill (name + description, hard budget) rides the
@@ -54,11 +51,15 @@ import { z } from "zod";
 import { writeFileAtomic, writeFileAtomicIfChanged } from "../atomic.ts";
 import { DATA_DIR } from "../config.ts";
 import { redactSecretsInText } from "../redact.ts";
+import {
+  githubSkillOriginSchema, prepareSkillFolder, skillFolderDigest, skillFolderRecordSchema, writeSkillFolder,
+  type GitHubSkillOrigin, type SkillFolderFile,
+} from "./skill-folder.ts";
 import { LEARN_SOURCE_PREFIX } from "./skill-learn.ts";
 import { librarySkillFilePath, listLibrarySkills, readLibrarySkillFile, type LibrarySkillListing } from "./skill-library.ts";
 import { workspaceDir } from "../workspace/workspace.ts";
 import { isSkillName, parseSkillMd, scanSkillText, SKILL_FILE_MAX_BYTES, type ParsedSkill } from "../../shared/skill-md.ts";
-import { parseSkillCommand } from "../../shared/skill-command.ts";
+import { parseSkillCommand, skillCommandTurnText, skillMentions } from "../../shared/skill-command.ts";
 
 // SKILL.md parsing and the static scan live in shared/ so the package
 // format (Admin and the renderer included) validates skills with the exact
@@ -94,6 +95,10 @@ interface SkillManifestEntry {
   compatibility?: string;
   warnings: string[];
   skippedFiles: string[];
+  /** An import's files beside SKILL.md, and skillFolderDigest over them. */
+  files?: string[];
+  filesSha256?: string;
+  github?: GitHubSkillOrigin;
   /** Makes approval replay safe if the process stops after promotion but
    * before the confirmation card is durably settled. Never exposed to agents. */
   appliedStageId?: string;
@@ -119,6 +124,8 @@ const skillManifestEntrySchema = z.object({
   compatibility: z.string().optional(),
   warnings: z.array(z.string()),
   skippedFiles: z.array(z.string()),
+  ...skillFolderRecordSchema,
+  github: githubSkillOriginSchema.optional(),
   appliedStageId: z.string().optional(),
   storageRevision: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   package: z.object({
@@ -551,6 +558,8 @@ export interface SkillListing {
   compatibility?: string;
   warnings: string[];
   skippedFiles: string[];
+  files?: string[];
+  github?: GitHubSkillOrigin;
 }
 
 function skillContentMatches(botId: string, name: string, entry: SkillManifestEntry): boolean {
@@ -559,14 +568,16 @@ function skillContentMatches(botId: string, name: string, entry: SkillManifestEn
     if (!directory) return false;
     const file = join(directory, "SKILL.md");
     if (!lstatSync(file).isFile()) return false;
-    return createHash("sha256").update(readFileSync(file)).digest("hex") === entry.sha256;
+    if (createHash("sha256").update(readFileSync(file)).digest("hex") !== entry.sha256) return false;
+    if (entry.filesSha256 && skillFolderDigest(directory, entry.files ?? []) !== entry.filesSha256) return false;
+    return true;
   } catch {
     return false;
   }
 }
 
 function skillListing(botId: string, name: string, entry: SkillManifestEntry): SkillListing {
-  const { appliedStageId, storageRevision: _storageRevision, package: _package, ...visible } = entry;
+  const { appliedStageId, storageRevision: _storageRevision, package: _package, filesSha256: _filesSha256, ...visible } = entry;
   const intact = skillContentMatches(botId, name, entry);
   return {
     name,
@@ -575,7 +586,7 @@ function skillListing(botId: string, name: string, entry: SkillManifestEntry): S
     editable: entry.source.startsWith(LEARN_SOURCE_PREFIX) && Boolean(appliedStageId),
     warnings: intact
       ? visible.warnings
-      : [...visible.warnings, "stored SKILL.md changed after review — enablement is blocked"],
+      : [...visible.warnings, "stored skill files changed after review — enablement is blocked"],
   };
 }
 
@@ -618,18 +629,24 @@ export function readSkillFile(botId: string, name: string): string | null {
   }
 }
 
-/** Install a fetched skill, DISABLED. The caller has already fetched the
- * files; this validates and scans SKILL.md, records every skipped supporting
- * file, writes only the reviewed bytes, and records provenance. Returns the
- * listing (with warnings) for the review screen. */
+/** The whole folder comes in, within the limits; what is left out is reported in `skippedFiles`. */
 export function installSkill(
   botId: string,
   source: string,
-  files: Array<{ path: string; content: string }>,
+  files: readonly SkillFolderFile[],
+  github?: GitHubSkillOrigin,
 ): SkillListing | { error: string } {
-  const prepared = preparedSkillFiles(files);
-  if ("error" in prepared) return prepared;
-  return installPreparedSkill(botId, source, prepared, { enabled: false });
+  const folder = prepareSkillFolder(files);
+  if ("error" in folder) return folder;
+  const { skillMd: content, parsed, warnings, skipped } = folder;
+  const prepared = {
+    files: [{ path: "SKILL.md", content }],
+    parsed,
+    warnings,
+    skippedFiles: skipped.map((file) => file.path),
+    folder: folder.files,
+  };
+  return installPreparedSkill(botId, source, prepared, { enabled: false, github });
 }
 
 /** The organization library's path: a skill the organization's Admin
@@ -643,7 +660,7 @@ export function installOrgSkill(
   stamp: SkillPackageStamp,
 ): SkillListing | { error: string } {
   if (!source.startsWith("org:")) return { error: "organization skills need an org: source" };
-  const prepared = preparedSkillFiles([{ path: "SKILL.md", content: skillMd }]);
+  const prepared = preparedSkillFiles(skillMd);
   if ("error" in prepared) return prepared;
   if (prepared.parsed.name !== stamp.key) return { error: `the skill is named "${prepared.parsed.name}", not "${stamp.key}"` };
   return installPreparedSkill(botId, source, prepared, { enabled: true, package: { ...stamp } });
@@ -662,7 +679,7 @@ export function setSkillEnabled(botId: string, name: string, enabled: boolean): 
   const entry = manifest[name];
   if (!entry) return { error: `no imported skill named "${name}"` };
   if (enabled && !skillContentMatches(botId, name, entry)) {
-    return { error: "stored SKILL.md changed after review — remove and import or learn it again" };
+    return { error: "stored skill files changed after review — remove and import or learn it again" };
   }
   entry.enabled = enabled;
   writeManifest(botId, manifest);
@@ -950,34 +967,17 @@ interface PreparedSkillFiles {
   parsed: ParsedSkill;
   warnings: string[];
   skippedFiles: string[];
+  /** An import's files beside SKILL.md: kept whole and checked by one hash, not by the learned layout. */
+  folder?: Array<{ path: string; content: Buffer; executable: boolean }>;
 }
 
-function preparedSkillFiles(
-  files: Array<{ path: string; content: string }>,
-): PreparedSkillFiles | { error: string } {
-  const skillMd = files.find((file) => file.path === "SKILL.md" || file.path.endsWith("/SKILL.md"));
-  if (!skillMd) return { error: "no SKILL.md found at that location" };
-  if (Buffer.byteLength(skillMd.content, "utf8") > SKILL_FILE_MAX_BYTES) {
+function preparedSkillFiles(skillMd: string): PreparedSkillFiles | { error: string } {
+  if (Buffer.byteLength(skillMd, "utf8") > SKILL_FILE_MAX_BYTES) {
     return { error: `SKILL.md is larger than ${SKILL_FILE_MAX_BYTES / 1024}KB` };
   }
-  const parsed = parseSkillMd(skillMd.content);
+  const parsed = parseSkillMd(skillMd);
   if ("error" in parsed) return parsed;
-  const prefix = skillMd.path.slice(0, skillMd.path.length - "SKILL.md".length);
-  const skippedFiles = [
-    ...new Set(
-      files
-        .filter((file) => file !== skillMd)
-        .map((file) => {
-          const relative = file.path.startsWith(prefix) ? file.path.slice(prefix.length) : file.path;
-          return relative || file.path;
-        }),
-    ),
-  ];
-  const warnings = [
-    ...scanSkillText(skillMd.content),
-    ...skippedFiles.map((path) => `skipped supporting file "${path}" — v1 imports only SKILL.md`),
-  ];
-  return { files: [{ path: "SKILL.md", content: skillMd.content }], parsed, warnings, skippedFiles };
+  return { files: [{ path: "SKILL.md", content: skillMd }], parsed, warnings: scanSkillText(skillMd), skippedFiles: [] };
 }
 
 function preparedLearnedSkill(
@@ -986,7 +986,7 @@ function preparedLearnedSkill(
   if (files.length !== 1 || files[0]?.path !== "SKILL.md") {
     return { error: "learned skills must contain exactly one SKILL.md" };
   }
-  return preparedSkillFiles(files);
+  return preparedSkillFiles(files[0]!.content);
 }
 
 function learnedSkillDirectoryMatches(directory: string, sha256: string): boolean {
@@ -1113,8 +1113,8 @@ function publishReviewedRevision(
 function commitNewSkillFiles(
   botId: string,
   name: string,
-  files: Array<{ path: string; content: string }>,
-  commitManifest: () => void,
+  files: ReadonlyArray<{ path: string; content: string | Buffer; executable?: boolean }>,
+  commitManifest: (filesSha256: string | null) => void,
 ): void {
   const root = ensureSkillsRoot(botId);
   if (!root) throw new Error("the workspace skills path must be a real directory, not a symlink or file");
@@ -1123,16 +1123,14 @@ function commitNewSkillFiles(
   if (entryExistsWithoutFollowing(target)) throw new Error(`skill path already exists: ${name}`);
   let published = false;
   try {
-    mkdirSync(staged, { mode: 0o700 });
-    for (const file of files) {
-      writeFileSync(join(staged, file.path), file.content, { mode: 0o600 });
-    }
+    writeSkillFolder(staged, files[0]!.content, files.slice(1));
+    const filesSha256 = skillFolderDigest(staged, files.slice(1).map((file) => file.path), { remember: false });
     if (directoryEntryState(root) !== "directory" || entryExistsWithoutFollowing(target)) {
       throw new Error("the workspace skills path changed during installation");
     }
     renameSync(staged, target);
     published = true;
-    commitManifest();
+    commitManifest(filesSha256);
   } catch (error) {
     if (published) rmSync(target, { recursive: true, force: true });
     else rmSync(staged, { recursive: true, force: true });
@@ -1144,7 +1142,7 @@ function installPreparedSkill(
   botId: string,
   source: string,
   prepared: PreparedSkillFiles,
-  options: { enabled: boolean; appliedStageId?: string; package?: SkillPackageStamp },
+  options: { enabled: boolean; appliedStageId?: string; package?: SkillPackageStamp; github?: GitHubSkillOrigin },
 ): SkillListing | { error: string } {
   const name = prepared.parsed.name;
   const manifest = readManifest(botId);
@@ -1173,6 +1171,7 @@ function installPreparedSkill(
     skippedFiles: prepared.skippedFiles,
     appliedStageId: options.appliedStageId,
     ...(options.package ? { package: options.package } : {}),
+    ...(options.github ? { github: options.github } : {}),
   };
   const root = ensureSkillsRoot(botId);
   if (!root) return { error: "the workspace skills path must be a real directory, not a symlink or file" };
@@ -1195,7 +1194,9 @@ function installPreparedSkill(
     }
   }
   try {
-    commitNewSkillFiles(botId, name, prepared.files, () => {
+    commitNewSkillFiles(botId, name, prepared.folder ? [...prepared.files, ...prepared.folder] : prepared.files, (filesSha256) => {
+      if (!filesSha256) throw new Error("the stored skill could not be read back");
+      if (prepared.folder?.length) Object.assign(entry, { files: prepared.folder.map((file) => file.path), filesSha256 });
       manifest[name] = entry;
       writeManifest(botId, manifest);
     });
@@ -1669,7 +1670,19 @@ export function skillsPromptIndex(botId: string, assignedLibrary?: readonly stri
  * copy, or the library file for an assigned library skill. The same path
  * the prompt index names, so a `/name` turn points at exactly that file. */
 export function enabledSkillFile(botId: string, name: string, assignedLibrary?: readonly string[]): string | null {
-  return resolvedSkillFiles(botId, assignedLibrary).find((entry) => entry.name === name)?.file ?? null;
+  return enabledSkillFiles(botId, [name], assignedLibrary).get(name) ?? null;
+}
+
+/** SKILL.md of each named skill that is on for the bot. */
+export function enabledSkillFiles(botId: string, names: readonly string[], assignedLibrary?: readonly string[]): Map<string, string> {
+  if (!names.length) return new Map();
+  const on = new Set(resolveBotSkills(botId, assignedLibrary).filter((skill) => skill.enabled).map((skill) => skill.name));
+  const files = new Map<string, string>();
+  for (const entry of resolvedSkillFiles(botId, assignedLibrary)) {
+    if (!names.includes(entry.name) || !on.has(entry.name) || !entry.file) continue;
+    files.set(entry.name, entry.file);
+  }
+  return files;
 }
 
 /** Verify the selected library once, rather than re-reading and hashing the
@@ -1698,37 +1711,48 @@ export function skillCommandInline(input: { workspaceFiles: boolean; organizatio
   return !input.workspaceFiles || input.organization;
 }
 
-/** The text the engine reads for a `/name` turn (shared/skill-command.ts).
- * Any other message, or a name that is not an enabled skill of this bot,
- * passes through unchanged, so an engine's own slash commands still work.
- * An engine with file tools is pointed at the SKILL.md; one without them
- * (`inline`: Grok, OpenAI-compatible and the other API engines) gets the
- * skill's instructions in the turn itself, since it could not open the file. */
+/** The text the engine reads for each `/name` in a turn (shared/skill-command.ts).
+ * Mentions may start the message or follow a space; several can run at once.
+ * A name that is not an enabled skill of this bot stays plain text, so an
+ * engine's own slash commands still work. An engine with file tools is pointed
+ * at each SKILL.md; one without them (`inline`: Grok, OpenAI-compatible and the
+ * other API engines) gets the skill instructions in the turn itself. */
 export function expandSkillCommandTurnText(
   botId: string,
   text: string,
   assignedLibrary?: readonly string[],
   options: { inline?: boolean; overrides?: readonly { name: string; file: string; text: string }[] } = {},
 ): string {
-  if (!text.trimStart().startsWith("/")) return text;
-  const names = [...(options.overrides ?? []).map((skill) => skill.name), ...resolveBotSkills(botId, assignedLibrary).filter((skill) => skill.enabled).map((skill) => skill.name)];
-  const command = parseSkillCommand(text, names);
-  if (!command) return text;
-  const request = command.request
-    ? ` Where the skill says {input}, use the request.\n\nRequest: ${command.request}`
-    : " There is no further request, so run it as the skill describes.";
-  if (options.inline) {
-    const raw = options.overrides?.find((skill) => skill.name === command.name)?.text ?? enabledSkillText(botId, command.name, assignedLibrary);
-    if (raw === null) return text;
-    const parsed = parseSkillMd(raw);
-    const body = ("error" in parsed ? raw : parsed.body).trim();
-    const lead = `The user ran your ${command.name} skill with /${command.name}. Follow its instructions below for this turn.`;
-    return `${lead}${request}\n\nSkill instructions (${command.name}):\n<skill>\n${body}\n</skill>`;
+  const mentioned = skillMentions(text);
+  if (!mentioned.length) return text;
+  const overrideByName = new Map((options.overrides ?? []).map((skill) => [skill.name, skill]));
+  const files = enabledSkillFiles(botId, mentioned, assignedLibrary);
+  for (const [name, skill] of overrideByName) {
+    if (mentioned.includes(name)) files.set(name, skill.file);
   }
-  const file = options.overrides?.find((skill) => skill.name === command.name)?.file ?? enabledSkillFile(botId, command.name, assignedLibrary);
-  if (!file) return text;
-  const lead = `The user ran your ${command.name} skill with /${command.name}. Read ${JSON.stringify(file)} with your file tools and follow it for this turn.`;
-  return `${lead}${request}`;
+  const names = mentioned.filter((name) => files.has(name) || (options.inline && (overrideByName.has(name) || enabledSkillText(botId, name, assignedLibrary) !== null)));
+  if (!names.length) return text;
+  if (options.inline) {
+    const bodies: string[] = [];
+    for (const name of names) {
+      const raw = overrideByName.get(name)?.text ?? enabledSkillText(botId, name, assignedLibrary);
+      if (raw === null) continue;
+      const parsed = parseSkillMd(raw);
+      const body = ("error" in parsed ? raw : parsed.body).trim();
+      bodies.push(`Skill instructions (${name}):\n<skill>\n${body}\n</skill>`);
+    }
+    if (!bodies.length) return text;
+    const lead = names.length === 1
+      ? `The user ran your ${names[0]} skill with /${names[0]}. Follow its instructions below for this turn.`
+      : `The user ran ${names.length} of your skills with ${names.map((name) => `/${name}`).join(", ")}. Follow each skill's instructions below for this turn.`;
+    const leading = names.length === 1 ? parseSkillCommand(text, names) : null;
+    const requestText = leading ? leading.request : text.trim();
+    const request = requestText
+      ? ` Where ${names.length === 1 ? "the" : "a"} skill says {input}, use the request.\n\nRequest: ${requestText}`
+      : " There is no further request, so run it as the skill describes.";
+    return `${lead}${request}\n\n${bodies.join("\n\n")}`;
+  }
+  return skillCommandTurnText(text, files);
 }
 
 // --- Skills library composition (features.skillsLibrary) ---
@@ -1804,6 +1828,9 @@ export interface MigratableSkillCopy {
   license?: string;
   compatibility?: string;
   package?: SkillPackageStamp;
+  files?: string[];
+  filesSha256?: string;
+  github?: GitHubSkillOrigin;
   intact: boolean;
 }
 
@@ -1819,6 +1846,8 @@ export function listMigratableSkills(botId: string): MigratableSkillCopy[] {
       ...(entry.license ? { license: entry.license } : {}),
       ...(entry.compatibility ? { compatibility: entry.compatibility } : {}),
       ...(entry.package ? { package: { ...entry.package } } : {}),
+      ...(entry.filesSha256 ? { files: [...entry.files ?? []], filesSha256: entry.filesSha256 } : {}),
+      ...(entry.github ? { github: { ...entry.github } } : {}),
       intact: skillContentMatches(botId, name, entry),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));

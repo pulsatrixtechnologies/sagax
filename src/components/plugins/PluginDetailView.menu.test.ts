@@ -1,10 +1,9 @@
 // @vitest-environment happy-dom
-// Connect apps, simplified (2026-10-14): a plugin's Update, Test, Edit and
-// Uninstall sit in one "..." menu. Discover (the view Connect apps opens on
-// since 2026-10-27) filters with Browse Bots' pills (All, then each
-// category, every one on the row) and View all filters it in place; a
-// detail and Browse Bots open in the same window under a breadcrumb, with
-// Escape and Cmd+[ to go back.
+// Connect apps, simplified (2026-10-14): a plugin's Test, Edit and Uninstall
+// sit by the name (Uninstall as its own pill; Test/Edit in "..."). Update
+// waits in the Details card. Discover filters with category pills and View
+// all filters it in place; a detail and Browse Bots open in the same window
+// under a breadcrumb, with Escape and Cmd+[ to go back.
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -13,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import { buildPluginItems, CATEGORY_ORDER } from "@/lib/plugins-model";
 import { PluginDetailView } from "./PluginDetailView";
-import { categoryPills, moreCategoryPills } from "./ConnectAppsView";
+import { categoryPills, filterLabel, moreCategoryPills } from "./ConnectAppsView";
 import { DiscoverView, type DiscoverViewProps } from "./DiscoverView";
 import { Breadcrumb } from "../Breadcrumb";
 import { isBackShortcut, pageKeyAction } from "@/lib/back-shortcut";
@@ -52,14 +51,22 @@ describe("plugin detail menu", () => {
       onUpdate, onTest, onEdit: noop, onUninstall, details: [],
     })));
     expect(host.querySelector('[role="menu"]')).toBeNull();
-    // an update waiting shows as a dot on the button
-    expect(host.querySelector("[data-plugin-update-dot]")).not.toBeNull();
-    click(host.querySelector("[data-plugin-actions]"));
-    const actions = [...host.querySelectorAll("[data-plugin-action]")].map((node) => node.getAttribute("data-plugin-action"));
-    expect(actions).toEqual(["update", "test", "edit", "uninstall"]);
+    // Update lives in Details (no header pill, no menu entry), like Grok Bot
+    expect(host.querySelector('[data-plugins-detail-primary="update"]')).toBeNull();
+    expect(host.querySelector("[data-plugin-update-row]")).not.toBeNull();
+    expect(host.querySelector("[data-plugin-update-dot]")).toBeNull();
+    // Uninstall is the header's own pill, as in Grok Bot's Connect Apps
+    expect(host.querySelector('[role="menu"] [data-plugin-action="uninstall"]')).toBeNull();
     click(host.querySelector('[data-plugin-action="uninstall"]'));
     expect(onUninstall).toHaveBeenCalledTimes(1);
+    click(host.querySelector("[data-plugin-actions]"));
+    const actions = [...host.querySelectorAll('[role="menu"] [data-plugin-action]')].map((node) => node.getAttribute("data-plugin-action"));
+    expect(actions).toEqual(["test", "edit"]);
+    click(host.querySelector('[data-plugin-action="test"]'));
+    expect(onTest).toHaveBeenCalledTimes(1);
     expect(host.querySelector('[role="menu"]')).toBeNull();
+    click(host.querySelector('[data-plugin-action="update-details"]'));
+    expect(onUpdate).toHaveBeenCalledTimes(1);
   });
 
   it("has no menu when the plugin offers no action", () => {
@@ -91,10 +98,17 @@ describe("Category pills", () => {
     expect(onFilter).toHaveBeenCalledWith("design");
   });
 
-  it("puts every category on the row, a chosen one pressed", () => {
+  it("a chosen category stays on the row: pressed on the row, or named and white on More (#2104)", () => {
     flushSync(() => root.render(createElement(DiscoverView, discover({ filter: "finance" }))));
     expect(host.querySelector("[data-plugins-more]")).toBeNull();
-    expect(host.querySelector('[data-plugins-chip="finance"]')?.getAttribute("aria-pressed")).toBe("true");
+    const chip = host.querySelector<HTMLElement>('[data-plugins-chip="finance"]')!;
+    expect(chip).not.toBeNull();
+    if (chip.getAttribute("aria-haspopup") === "menu") {
+      expect(chip.textContent).toContain(filterLabel("finance"));
+      expect(chip.className).toContain("bg-ink");
+    } else {
+      expect(chip.getAttribute("aria-pressed")).toBe("true");
+    }
   });
 });
 
@@ -107,11 +121,25 @@ describe("View all and the breadcrumb", () => {
       })),
     });
     flushSync(() => root.render(createElement(DiscoverView, discover({ items: many, onFilter }))));
-    const viewAll = host.querySelector("[data-plugins-view-all]");
+    const viewAll = host.querySelector("[data-plugins-view-all=\"productivity\"]");
     expect(viewAll).not.toBeNull();
     click(viewAll);
     expect(onFilter).toHaveBeenCalledWith("productivity");
     expect(host.querySelector("[data-breadcrumb]")).toBeNull();
+  });
+
+  it("Recommended has its View all on the right, like Grok Bot's", () => {
+    const onType = vi.fn();
+    const many = buildPluginItems({
+      featured: Array.from({ length: 8 }, (_, index) => ({
+        id: `app${index}`, name: `App ${index}`, description: "", url: `https://mcp${index}.example.net/mcp`, domain: `app${index}.example.net`, auth: "oauth", category: "productivity",
+      })),
+    });
+    flushSync(() => root.render(createElement(DiscoverView, discover({ items: many, onType }))));
+    const viewAll = host.querySelector("[data-plugins-view-all=\"recommended\"]");
+    expect(viewAll).not.toBeNull();
+    click(viewAll);
+    expect(onType).toHaveBeenCalledWith("recommended");
   });
 
   it("the back button and a crumb go back; the current page is not a link", () => {

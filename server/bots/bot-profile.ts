@@ -11,6 +11,7 @@ import { BOT_PROFILE_LIMITS, fitsOnOneLine } from "../../shared/bot-profile.ts";
 import { MASCOT_BODY_IDS, mascotBodySchema } from "../../shared/mascot-bodies.ts";
 import { MASCOT_SKIN_IDS, mascotSkinSchema } from "../../shared/mascot-skins.ts";
 import { MASCOT_CHARACTERS, mascotLookSchema } from "../../shared/mascot-look.ts";
+import { VOICE_MODE_MAX_SPEED, VOICE_MODE_MIN_SPEED, isVoiceModeLanguage } from "../../shared/voice-mode.ts";
 import type { WireBot } from "../../shared/wire.ts";
 
 import { FINISH_UNTIL_MAX, finishUntilText } from "../finish-until.ts";
@@ -35,6 +36,8 @@ export const BOT_PROFILE_PATCH_FIELDS = [
   "mascotSkin",
   "mascotLook",
   "voice",
+  "voiceSpeed",
+  "voiceLanguage",
   "speakReplies",
   "finishUntil",
   "finishUntilMaxRounds",
@@ -79,6 +82,17 @@ export const profilePatchSchema = z.object({
     .string({ error: "voice must be a string" })
     .max(BOT_PROFILE_LIMITS.voice, { error: "voice must be at most 200 characters" })
     .optional(),
+  // #2125: the bot's voice chat speed and language, applied to its spoken replies.
+  voiceSpeed: z
+    .number({ error: `voiceSpeed must be a number from ${VOICE_MODE_MIN_SPEED} to ${VOICE_MODE_MAX_SPEED}` })
+    .finite()
+    .min(VOICE_MODE_MIN_SPEED)
+    .max(VOICE_MODE_MAX_SPEED)
+    .optional(),
+  voiceLanguage: z
+    .string({ error: "voiceLanguage must be a language code or auto" })
+    .refine(isVoiceModeLanguage, { error: "voiceLanguage must be a language code or auto" })
+    .optional(),
   speakReplies: z.boolean({ error: "speakReplies must be true or false" }).optional(),
   finishUntil: z.union([
     z.string({ error: "finishUntil must be one sentence" })
@@ -119,6 +133,8 @@ export type BotProfilePatch = Partial<
       | "mascotSkin"
       | "mascotLook"
       | "voice"
+      | "voiceSpeed"
+      | "voiceLanguage"
       | "speakReplies"
       | "finishUntil"
       | "finishUntilMaxRounds"

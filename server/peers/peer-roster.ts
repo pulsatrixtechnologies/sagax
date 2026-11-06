@@ -6,6 +6,7 @@
 
 import type { BotActivity } from "../../shared/wire.ts";
 import { sameAudience } from "../bots/bot-visibility.ts";
+import { managesTeam } from "../rooms/section-link.ts";
 
 export interface RosterMember {
   id: string;
@@ -15,8 +16,11 @@ export interface RosterMember {
   busy?: boolean;
   hidden?: boolean;
   section?: string;
+  /** #2045: stable team id when the membership link has been migrated. */
+  sectionId?: string;
   chiefOfStaff?: boolean;
-  /** Additional teams explicitly granted by the owner. Never inherited by peers. */
+  /** Additional teams explicitly granted by the owner. Never inherited by peers.
+   * May hold display names or section ids (#2045). */
   managedSections?: string[];
   /** Bot ids this bot is allowed to contact. Unset keeps the original
    * rule — every visible bot in the same section — while an explicit list
@@ -47,30 +51,29 @@ const openTeams = (): boolean => process.env.SAGAX_OPEN_TEAMS === "1";
  * to every bot (openTeams). A title, peer id, imported persona or a room
  * membership is not a grant. Invalid saved grants fail closed. */
 export function canAccessTeam(
-  from: Pick<RosterMember, "section" | "chiefOfStaff" | "managedSections">,
+  from: Pick<RosterMember, "section" | "sectionId" | "chiefOfStaff" | "managedSections">,
   section?: string,
+  sectionId?: string,
+  resolveManagedName?: (name: string) => string | null,
 ): boolean {
   if (openTeams()) return true;
+  const targetId = sectionId?.trim() || undefined;
+  if (targetId && from.sectionId?.trim() === targetId) return true;
   const target = sectionKey(section);
-  return target === sectionKey(from.section) || Boolean(from.chiefOfStaff &&
-    Array.isArray(from.managedSections) && from.managedSections.some(value =>
-      typeof value === "string" && sectionKey(value) === target));
+  // Same home team by display name when either side still lacks an id.
+  if (target === sectionKey(from.section) && (!targetId || !from.sectionId?.trim())) return true;
+  return Boolean(from.chiefOfStaff && managesTeam(from.managedSections, { name: section, id: targetId }, resolveManagedName));
 }
 
 /** Returns whether `coordinator` is an authorized Primary Bot supervising `bot`'s section. */
 export function coordinatorSupervises(
   coordinator: Pick<RosterMember, "chiefOfStaff" | "managedSections"> | null | undefined,
-  bot: Pick<RosterMember, "section"> | null | undefined,
+  bot: Pick<RosterMember, "section" | "sectionId"> | null | undefined,
+  resolveManagedName?: (name: string) => string | null,
 ): boolean {
   if (!coordinator?.chiefOfStaff || !bot) return false;
-  const target = sectionKey(bot.section);
-  if (!target) return false;
-  return Boolean(
-    Array.isArray(coordinator.managedSections) &&
-    coordinator.managedSections.some((value) =>
-      typeof value === "string" && sectionKey(value) === target,
-    ),
-  );
+  if (!sectionKey(bot.section) && !bot.sectionId?.trim()) return false;
+  return managesTeam(coordinator.managedSections, { name: bot.section, id: bot.sectionId }, resolveManagedName);
 }
 
 export type PeerStatus = "available" | "working" | "waiting-on-user" | "not-responding" | "unavailable";
@@ -187,7 +190,7 @@ export function primaryCovers(from: RosterMember, target: RosterMember): boolean
  * Primary Bot covering it. Every route that refuses "a different section"
  * reads this, so list_bots and the comms routes agree. */
 export function canAccessBot(from: RosterMember, target: RosterMember): boolean {
-  return canAccessTeam(from, target.section) || primaryCovers(from, target) || primaryLink(from, target);
+  return canAccessTeam(from, target.section, target.sectionId) || primaryCovers(from, target) || primaryLink(from, target);
 }
 
 /** A temporary agent that was archived (create_agent, then delete_agent or

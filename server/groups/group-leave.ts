@@ -6,8 +6,10 @@
 // - Their private bots (owned by them and shared with nobody) leave with
 //   them; a bot of theirs that others can use stays.
 // - The owner leaving hands the group to the person listed longest (the
-//   first one left in `humanIds`, never a team). With nobody left, the group
-//   is archived: kept, listed to no one.
+//   first one left in `humanIds`, never a team).
+// - #2119: leaving that would leave zero people is refused (a ghost group).
+//   Bots and `team:` seats do not count as people; the sole remaining person
+//   deletes the group instead.
 // - Their past messages stay. They can be added back like anyone.
 // - The others see one neutral line, kind "roster" (WireMessage.roster).
 
@@ -34,11 +36,17 @@ export type GroupLeavePlan =
     memberIds: string[];
     /** The new owner when the owner left; absent when ownership stays. */
     createdBy?: string;
-    /** Nobody is left: archive the group. */
-    archive: boolean;
     /** The private bots that left with the person. */
     removedBotIds: string[];
   };
+
+/** A non-team person seat still listed after a leave. */
+function remainingPeople(humanIds: readonly string[]): boolean {
+  return humanIds.some((entry) => {
+    const id = norm(entry);
+    return Boolean(id) && !id.startsWith("team:");
+  });
+}
 
 const norm = (value: string) => value.trim().toLowerCase();
 
@@ -82,6 +90,15 @@ export function planGroupLeave(
     return { ok: false, status: 409, code: "not_listed", error: "you are not listed in this group in your own name" };
   }
   const humanIds = (group.humanIds ?? []).filter((entry) => !mine.includes(norm(entry)));
+  // #2119: refuse a leave that would leave nobody (bots and teams do not count).
+  if (!remainingPeople(humanIds)) {
+    return {
+      ok: false,
+      status: 409,
+      code: "sole_member",
+      error: "you are the only person left in this group; delete it instead of leaving",
+    };
+  }
   const removedBotIds = group.memberIds.filter((botId) => {
     const owner = bots.ownerOf(botId);
     return owner !== undefined && mine.includes(norm(owner)) && !bots.shared(botId);
@@ -91,13 +108,11 @@ export function planGroupLeave(
   const wasOwner = owner !== null && mine.includes(owner);
   // the person listed longest: humanIds keeps the order people were added
   const successor = wasOwner ? humanIds.find((entry) => entry.trim() && !norm(entry).startsWith("team:")) : undefined;
-  const archive = !humanIds.some((entry) => entry.trim() && !norm(entry).startsWith("team:"));
   return {
     ok: true,
     humanIds,
     memberIds,
     ...(wasOwner && successor ? { createdBy: successor } : {}),
-    archive,
     removedBotIds,
   };
 }

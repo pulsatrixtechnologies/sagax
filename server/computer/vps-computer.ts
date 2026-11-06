@@ -30,6 +30,7 @@ import { killCliTree, spawnCli } from "../procs.ts";
 import { prepareVpsSsh } from "./vps-ssh.ts";
 import { loadEnvironmentId } from "../environment.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export const VPS_IMAGE = CUA_IMAGE;
 export const VPS_MANAGED_LABEL = "com.openmausbot.vps";
@@ -403,7 +404,7 @@ export function defaultRunner(args: string[], options: VpsCommandOptions = {}): 
         child.stderr.destroy();
         settle(() => reject(error));
       };
-      void killCliTree(child, COMMAND_TIMEOUT_TERM_GRACE_MS).then(cleaned, cleaned);
+      void killCliTree(child, COMMAND_TIMEOUT_TERM_GRACE_MS).then(cleaned, cleaned).catch(reportBackgroundError);
     };
     timeout = setTimeout(() => fail(new Error("Docker-over-SSH command timed out")), options.timeoutMs ?? 120_000);
     timeout.unref?.();
@@ -741,7 +742,7 @@ export async function vpsComputerStatus(
     // A capture already checks this exact target. Let it finish instead of
     // opening another six SSH connections while its readiness check is cold.
     const capture = pendingScreenshots.get(key);
-    if (capture) await capture.catch(() => {});
+    if (capture) await capture.catch(reportBackgroundError);
     const cached = statusCache.get(key);
     if (cached && cached.expiresAt > Date.now()) return cached.status;
     const pending = pendingStatuses.get(key);
@@ -1103,7 +1104,7 @@ async function withVpsLifecycleLock<T>(key: string, operation: () => Promise<T>,
       void previous.then(() => {
         release();
         if (lifecycleLocks.get(key) === current) lifecycleLocks.delete(key);
-      });
+      }).catch(reportBackgroundError);
       throw Object.assign(new Error("the VPS is being prepared — try again shortly"), { status: 409 });
     }
   }
@@ -1558,7 +1559,7 @@ export async function vpsComputerScreenshot(
       const cleanupMs = Math.min(5_000, deadline - Date.now() - COMMAND_TIMEOUT_KILL_GRACE_MS);
       if (cleanupMs > 0) await runner(vpsDockerArgs(alias, ["exec", "-u", "cua", containerRef, "rm", "-f", SCREENSHOT_PATH]), {
         timeoutMs: cleanupMs,
-      }).catch(() => {});
+      }).catch(reportBackgroundError);
     }
     // Start the TTL after transfer and cleanup; a slow but healthy frame must
     // not return with its own readiness cache already expired.

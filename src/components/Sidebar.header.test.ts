@@ -166,18 +166,18 @@ describe("sidebar header", () => {
     expect(html).toMatch(/data-sidebar-foot[^>]*class="px-4 pb-4"/);
   });
 
-  it("always draws the Capabilities button, wide or collapsed (no feature flag any more)", () => {
+  it("always draws the Plugins button, wide or collapsed (no feature flag any more)", () => {
     expect(render()).toContain("data-sidebar-connect-apps");
     fixture.density = "icons";
     expect(render()).toContain("data-sidebar-connect-apps");
     expect(render()).toContain("data-sidebar-account-rail");
   });
 
-  it("keeps one Capabilities icon on the collapsed rail", () => {
+  it("keeps one Plugins icon on the collapsed rail", () => {
     fixture.density = "icons";
     const html = render();
-    expect((html.match(/<button[^>]*data-sidebar-connect-apps[^>]*>/g) ?? [])[0]).toContain('aria-label="Capabilities"');
-    // one entry for apps and bots: Browse Bots is a tab of Capabilities
+    expect((html.match(/<button[^>]*data-sidebar-connect-apps[^>]*>/g) ?? [])[0]).toContain('aria-label="Plugins"');
+    // one entry for apps and bots: Browse Bots opens from Plugins
     expect(html).not.toContain('aria-label="Browse Bots"');
     expect(html).not.toContain('data-place-anim="grid"');
     expect(html).toContain("data-sidebar-account-rail");

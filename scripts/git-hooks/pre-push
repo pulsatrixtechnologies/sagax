@@ -85,10 +85,26 @@ if [ -f "$STAMP" ]; then
   exit 0
 fi
 
-echo "pre-push: nice -n 19 pnpm verify:merge (git push --no-verify to skip)"
+# Gate the diff against the branch's real base: SAGAX_VERIFY_BASE, else the
+# candidate (origin/main or an origin/feat/next-*) with the fewest commits of
+# HEAD not on it. Against origin/main a release-train branch drags hundreds of
+# unrelated test files and the queue times out.
+BASE="${SAGAX_VERIFY_BASE:-}"
+if [ -z "$BASE" ]; then
+  best=""
+  for ref in origin/main $(git for-each-ref --format='%(refname:short)' 'refs/remotes/origin/feat/next-*'); do
+    n="$(git rev-list --count "$ref..HEAD" 2>/dev/null)" || continue
+    if [ -z "$best" ] || [ "$n" -lt "$best" ]; then
+      best="$n"
+      BASE="$ref"
+    fi
+  done
+fi
+BASE="${BASE:-origin/main}"
+echo "pre-push: nice -n 19 pnpm verify:merge --base $BASE (git push --no-verify to skip)"
 if command -v nice >/dev/null 2>&1; then
-  nice -n 19 pnpm verify:merge
+  nice -n 19 pnpm verify:merge --base "$BASE"
 else
-  pnpm verify:merge
+  pnpm verify:merge --base "$BASE"
 fi
 # Stamp is written by verify-merge.mjs on OK (shared across worktrees).

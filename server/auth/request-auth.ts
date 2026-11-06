@@ -890,6 +890,8 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // a person's Perspicax avatar (the "You" row, room members, pickers; on a
   // personal computer, its owner's only, server/people/owner-identity.ts)
   { methods: ["GET"], path: /^\/api\/people\/[\w-]{1,80}\/avatar$/ },
+  // a person's panel Library: files of the rooms the viewer shares with them (server/routes/person-library.ts)
+  { methods: ["GET"], path: /^\/api\/people\/[\w-]{1,80}\/library$/ },
   // Organization server, slice 4: a bot's grants (user or team, with a
   // level). server/bots/bot-grants.ts decides who may read and change them (the
   // owner, manage holders, organization admins, team managers).
@@ -1049,6 +1051,10 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // defaults, and keeps a server folder, visibility and a backup restore
   // an admin's. The organization library's Add stays admin.
   { methods: ["POST"], path: /^\/api\/teams\/import$/ },
+  // #2045: a person exports their own team (handler packs only their bots
+  // and section id). Organization library publish stays admin inside the
+  // handler when the body asks for it.
+  { methods: ["POST"], path: /^\/api\/teams\/export$/ },
   // Slice 8: a person copies their own bots from a solo Sagax (the handler
   // checks the session, the caller's right to create bots and the copy).
   { methods: ["POST"], path: /^\/api\/org\/import$/, feature: "orgDirectory" },

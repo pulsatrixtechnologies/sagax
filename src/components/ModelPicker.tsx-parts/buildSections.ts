@@ -17,6 +17,8 @@ import type { InstanceInfo, ModelSelection, Bot } from "@/state/store";
 import type { ModelSwitches } from "../../../shared/offered-models";
 import type { ModelOption } from "./helpers";
 import { modelLabel } from "./helpers";
+import { unifyProviderSections } from "../../../shared/model-provider-unify";
+import { autoOptimizeOf } from "../../../shared/model-auto-optimize";
 
 export type MyEnginesState = readonly MyEngine[] | null | undefined;
 
@@ -40,6 +42,8 @@ export interface ModelPickerSectionsInput {
   health: { orgMode: boolean; myEngines: MyEnginesState };
   myEngines: MyEnginesState;
   ranOnName: (ran: { instanceId: string; actual: string; actualInstanceId?: string }) => string;
+  /** #2106: starred model row keys, shown as a Favorites section in the flat list. */
+  favoriteKeys?: readonly string[];
 }
 
 export interface ModelPickerSections {
@@ -51,7 +55,7 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
   const {
     orgMode, accountModels, selection, switches, autoOn, follows, selectedVariantLabel,
     fallback, instances, selectable, viewerLocal, autoPreview, autoRecord, profile,
-    botModelInstance, botModelName, health, myEngines, ranOnName,
+    botModelInstance, botModelName, health, myEngines, ranOnName, favoriteKeys = [],
   } = input;
 
   // An engine's models under two headings. Local: models on this machine
@@ -165,12 +169,17 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
 
   // The rows above the engines: Auto (the bot's choice; a shared bot's
   // viewer pins their own model, the owner's Auto stays the owner's) and,
-  // in a thread, the bot's own model.
+  // in a thread, the bot's own model. #2106: Auto's detail names the
+  // Optimize preference (Intelligence / Balance / Cost).
   const autoShown = autoPreview ?? autoRecord;
+  const optimize = autoOptimizeOf(selection.autoOptimize);
+  const autoDetail = autoOn
+    ? (autoShown ? `${t(`model.auto.optimize.${optimize}`)} · ${autoShown.modelLabel}` : t(`model.auto.optimize.${optimize}`))
+    : t("model.auto.rowHint");
   const topRows: ModelMenuRow[] = [
     ...(!viewerLocal ? [{
       key: "auto", kind: "auto" as const, label: t("model.auto.label"), current: autoOn,
-      detail: autoOn && autoShown ? autoShown.modelLabel : t("model.auto.rowHint"),
+      detail: autoDetail,
     }] : []),
     ...(follows !== undefined ? [{
       key: "follow", kind: "follow" as const, label: t("model.useBotModel", { name: profile.name }),
@@ -183,10 +192,25 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
   // its own first, then the others the server allows. An engine to install
   // or blocked by a policy stays in the window; on an organization server
   // an engine nothing pays for yet stays there too, unless it is the bot's.
+  // #2106: subscription families use the family name (Claude, OpenAI) so
+  // several accounts collapse to one section; API engines keep their name.
   const engineLabel = (instance: InstanceInfo) => {
+    if (instance.access === "api") return instance.displayName;
     const family = signInFamily(instance);
-    return family && selectable.filter((candidate) => signInFamily(candidate) === family).length === 1
-      ? SIGN_IN_FAMILY_LABEL[family] : instance.displayName;
+    return family ? SIGN_IN_FAMILY_LABEL[family] : instance.displayName;
+  };
+  const sectionAccess = (instance: InstanceInfo): ModelMenuSection["access"] => (
+    instance.access === "api" ? "api" : instance.access === "custom" ? undefined : "subscription"
+  );
+  const sectionFamily = (instance: InstanceInfo): string | undefined => {
+    if (instance.access === "api" || instance.access === "custom") return undefined;
+    return signInFamily(instance);
+  };
+  const accessNote = (instance: InstanceInfo): string | undefined => {
+    if (needsSignIn(instance)) return t("model.signInRequired");
+    if (instance.access === "api") return t("model.access.api");
+    if (instance.access === "custom") return undefined;
+    return t("model.access.account");
   };
   const menuInstances = [
     ...selectable.filter((instance) => instance.instanceId === selection.instanceId),
@@ -229,21 +253,30 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
     const engineSections = menuInstances.map((instance) => {
       const { catalog, cloud, local } = rowsOf(instance, true, fold);
       localRows.push(...local.filter((row) => Boolean(row.modelId && modelOn(switches, instance.instanceId, row.modelId) && modelUsable(instance, row.modelId, health) && !row.unavailable)));
-      return { key: instance.instanceId, label: engineLabel(instance), note: catalog.signInFirst ? t("model.signInRequired") : undefined, rows: cloud };
+      return {
+        key: instance.instanceId,
+        label: engineLabel(instance),
+        note: catalog.signInFirst ? t("model.signInRequired") : accessNote(instance),
+        access: sectionAccess(instance),
+        family: sectionFamily(instance),
+        rows: cloud,
+      };
     }).filter((section) => section.rows.length > 0 || section.note);
-    return [
+    return unifyProviderSections([
       { key: "top", rows: topRows },
       ...engineSections,
       ...(localRows.length > 0 ? [{ key: LOCAL_SECTION_KEY, label: t("model.localGroup"), rows: uniqueLocalRows(localRows) }] : []),
-    ];
+    ]);
   };
   const allSections = sectionsOf(false);
   const flatSections = allSections.map((section) => ({ ...section, rows: section.rows.filter((row) => row.kind !== "model" || Boolean(row.instanceId && row.modelId && modelOn(switches, row.instanceId, row.modelId) && modelUsable(instances.find((instance) => instance.instanceId === row.instanceId)!, row.modelId, health) && !row.unavailable)) })).filter((section) => section.rows.length > 0);
   // The composer's menu lists only the models that can run a turn now
   // (src/lib/model-health.ts, 2026-10-14): a provider left with none
   // goes. The model in use stays, checked, saying it does not respond.
+  // #2106: several Claude accounts collapse to one provider section; Favorites
+  // sit under Auto in the same scrolling list.
   const menuLocalRows: ModelMenuRow[] = [];
-  const menuSections: ModelMenuSection[] = [
+  const rawMenuSections: ModelMenuSection[] = [
     { key: "top", rows: topRows },
     ...[...currentEngineHidden, ...menuInstances].map((instance) => {
       const { cloud, local } = rowsOf(instance, true, true);
@@ -262,11 +295,26 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
       return {
         key: instance.instanceId,
         label: engineLabel(instance),
+        note: accessNote(instance),
+        access: sectionAccess(instance),
+        family: sectionFamily(instance),
         rows: marked.filter((row) => !localKeys.has(row.key)),
       };
     }).filter((section) => section.rows.length > 0),
   ];
-  if (menuLocalRows.length > 0) menuSections.push({ key: LOCAL_SECTION_KEY, label: t("model.localGroup"), rows: uniqueLocalRows(menuLocalRows) });
+  if (menuLocalRows.length > 0) rawMenuSections.push({ key: LOCAL_SECTION_KEY, label: t("model.localGroup"), rows: uniqueLocalRows(menuLocalRows) });
+  const unified = unifyProviderSections(rawMenuSections);
+  const modelRows = unified.flatMap((section) => section.rows.filter((row) => row.kind === "model"));
+  const favoriteRows = favoriteKeys.flatMap((key) => modelRows.filter((row) => row.key === key).slice(0, 1));
+  const menuSections: ModelMenuSection[] = [];
+  for (const section of unified) {
+    if (section.key === "top") {
+      menuSections.push(section);
+      if (favoriteRows.length > 0) menuSections.push({ key: "favorites", label: t("model.favorites"), rows: favoriteRows });
+      continue;
+    }
+    menuSections.push(section);
+  }
 
   return { flatSections, menuSections };
 }

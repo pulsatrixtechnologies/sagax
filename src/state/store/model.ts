@@ -12,6 +12,7 @@ import type { ModelListIssue } from "../../../shared/azure-openai";
 import type { TurnDigest } from "../../../shared/digest";
 import type { MessageReaction } from "../../../shared/reactions";
 import type { AutoModelRecord } from "../../../shared/auto-model";
+import type { PanelTab } from "@/components/bot-settings/panel-tabs";
 import type { BusySendRequest, ParallelTaskRef, TaskParallelOf } from "../../../shared/parallel-tasks";
 import type { ToolScope } from "../../../shared/tool-scope";
 import type { AchievementCategory } from "../../../shared/achievements";
@@ -42,7 +43,6 @@ import type { ComputerStart } from "@/lib/computer-start";
 import { type NotificationTarget } from "@/lib/notify";
 import { singleStreamTurnField } from "@/lib/thread-preferences";
 import { isEarlierSegment, isStreamSegment, opensBesideConversation, streamHomeThread, streamUnreadReadWith } from "@/lib/single-stream";
-import { openSideThread } from "@/lib/side-thread";
 import { freshTopicLanding, noteNewChatTopic, onScreenBot } from "@/lib/fresh-topic";
 import { type BotRole } from "@/lib/bot-roles";
 import type { OnboardingStatus } from "@/lib/onboarding";
@@ -444,6 +444,9 @@ export interface ModelSelection {
   /** Auto (docs/plans/2026-10-08-auto-model.md): each turn picks its model;
    * instanceId and model stay the bot's engine and fallback. */
   auto?: true;
+  /** #2106: when Auto is on, how Auto ranks models (Intelligence / Balance /
+   * Cost). Absent means Balance. Cleared when a model is pinned. */
+  autoOptimize?: "intelligence" | "balance" | "cost";
   fast?: { instanceId: string; model: string };
 }
 
@@ -651,6 +654,9 @@ export interface Bot {
   autoStartVps?: boolean;
   /** where new tasks run their shell tools; absent = the private bot workspace */
   cwd?: string;
+  /** Server-derived: the folder the tools use when cwd is unset, in the
+   * person's server environment (/workspace/bots/<slug>). */
+  workFolder?: string;
   /** auto mode: the bot approves its own tool permissions */
   autoApprove?: boolean;
   /** Explicit approval level; absent records use the legacy autoApprove bit. */
@@ -673,6 +679,10 @@ export interface Bot {
   finishUntilMaxRounds?: number;
   /** this bot's own voice id (falls back to the app-wide one) */
   voice?: string;
+  /** #2125: voice chat speed; absent = 1x */
+  voiceSpeed?: number;
+  /** #2125: voice chat language code or "auto"; absent = auto-detect */
+  voiceLanguage?: string;
   /** whether this bot may send voice notes (on unless switched off) */
   voiceNotes?: boolean;
   /** whether this bot may write email draft cards (on unless switched off) */
@@ -1003,7 +1013,7 @@ export interface ConfigStatus {
   /** UI language override; "" (or absent) follows the system language. */
   language?: string;
   /** Opt-in flags. Absent means off. */
-  features?: { skillAuthoring: boolean; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; llmThreadTitles?: boolean; routinesInConversation?: boolean; connectedApps?: boolean; vpsComputer?: boolean; boatComputer?: boolean; decisionModel?: boolean; dataWindow?: boolean; meetingNotetaker?: boolean; routineGroupSettings?: boolean; skillsLibrary?: boolean; savedSteps?: boolean; autoRecall?: boolean };
+  features?: { skillAuthoring: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; llmThreadTitles?: boolean; routinesInConversation?: boolean; connectedApps?: boolean; vpsComputer?: boolean; boatComputer?: boolean; decisionModel?: boolean; dataWindow?: boolean; meetingNotetaker?: boolean; routineGroupSettings?: boolean; skillsLibrary?: boolean; savedSteps?: boolean; autoRecall?: boolean };
   /** Loop guard: on by default; workspace can turn it off. */
   loopGuard?: { enabled: boolean; steerAt: number; stopAt?: number; correctiveRounds: number };
   /** First-run progress: whether the welcome tour was finished and which
@@ -1274,6 +1284,18 @@ export interface ModelVariantSession {
   variants?: { options: ModelVariantOption[]; currentValue?: string };
 }
 
+/** #2149: the bot panel tabs a person picks (Computer is the computer view). */
+export type BotPanelPickedTab = PanelTab;
+
+/** #2149: what the bot panel showed when the header pill closed it. */
+export interface LastBotPanel {
+  botId: string;
+  computer: boolean;
+  tab: BotPanelPickedTab;
+  section: BotSettingsSection;
+  expand: boolean;
+}
+
 export interface AppState {
   bots: Bot[];
   groups: Group[];
@@ -1350,7 +1372,6 @@ export interface AppState {
   routineFocus: { botId: string; routineId: string } | null;
   /** 2026-11-01: a routine run open as an exchange sheet over the chat
    * column (same place as Wren <-> Osprey). ChatView renders it. */
-  routineRunSheet: { runId: string; routineId?: string } | null;
   /** 2026-11-03: a coding task of the bot panel's Coding list open as a chat
    * over the chat column (src/components/coding/CodingChat.tsx), where a
    * routine run opens. ChatView renders it. */
@@ -1419,6 +1440,15 @@ export interface AppState {
   botSettingsSection: BotSettingsSection;
   /** True only when the open action named a section — accordion expands that row. */
   botSettingsExpandAccordion: boolean;
+  /** #2149: the tab the bot panel shows for that bot (Computer is
+   * computerOpen). Any other bot, or none, shows Details. */
+  botPanelTab: { botId: string; tab: BotPanelPickedTab } | null;
+  /** #2149: the bot panel the chat header pill closed; its next click
+   * reopens exactly that one (same tab, same section). */
+  lastBotPanel: LastBotPanel | null;
+  /** #2149: true on the opening restoreBotPanel made, so the panel puts its
+   * scroll back where it was; any other opening clears it. */
+  botPanelRestored: boolean;
   /** A Coding activity item the bot panel opens once (openBotActivity);
    * cleared by the panel when it shows it. */
   botActivityTarget: { botId: string; itemId: string } | null;
@@ -1809,8 +1839,9 @@ export type Action =
   | { type: "toggleSettings"; open?: boolean; section?: BotSettingsSection; botId?: string; owner?: PanelOwner | null }
   | { type: "openRoutine"; botId: string; routineId: string }
   | { type: "routineFocused" }
-  | { type: "openRoutineRunSheet"; runId: string; routineId?: string; botId?: string }
-  | { type: "closeRoutineRunSheet" }
+  /** 2026-11-05 (#2098): a run opens in the chat, at its message in the
+   * bot's conversation. There is no run view beside the chat any more. */
+  | { type: "openRoutineRunInChat"; runId: string; routineId?: string; botId?: string }
   | { type: "openCodingChat"; target: import("../../lib/coding-chat").CodingChatTarget }
   | { type: "closeCodingChat" }
   | { type: "openPersonPanel"; personId: string | null }
@@ -1826,6 +1857,12 @@ export type Action =
   | { type: "openBotWizard"; botId?: string | null; redo?: boolean }
   | { type: "closeBotWizard" }
   | { type: "toggleComputer"; open?: boolean }
+  /** #2149: the bot panel's Details or Library tab, picked by the person. */
+  | { type: "pickBotPanelTab"; botId: string; tab: BotPanelPickedTab }
+  /** #2149: the header pill closes the panel: note what it showed. */
+  | { type: "rememberBotPanel" }
+  /** #2149: the header pill reopens the panel it closed, as it was. */
+  | { type: "restoreBotPanel"; botId?: string }
   | { type: "toggleInspector"; open?: boolean }
   | { type: "toggleActivity"; open?: boolean }
   | { type: "focusMessage"; threadId: string; messageId: string; matchText?: string; segment?: true }
@@ -1891,16 +1928,18 @@ interface NotificationRoutingState {
   routineRuns?: ReadonlyArray<{ id: string }>;
 }
 
-/** 2026-11-01: a routine run opens as an exchange sheet over the chat
- * column (header "<routine> <-> <bot>", bubbles, header close), the same
- * place as a bot-to-bot exchange. Continue in the conversation stays a
- * footer action on that sheet. */
+/** 2026-11-05 (#2098, the operator: "a run ALWAYS opens in the main chat area, at
+ * the run's message in the bot's unified chat"): every entry point (a
+ * routine's Runs list, View run, a notification, the Routines page) lands
+ * on the bot's conversation and scrolls to the run's message. The run
+ * sheet beside the chat (Continue in the conversation, Close Chat) is
+ * gone. */
 export function openRoutineRun(
   dispatch: (action: Action) => void,
   run: { runId: string; routineId?: string; botId?: string },
 ) {
   dispatch({
-    type: "openRoutineRunSheet",
+    type: "openRoutineRunInChat",
     runId: run.runId,
     ...(run.routineId ? { routineId: run.routineId } : {}),
     ...(run.botId ? { botId: run.botId } : {}),
@@ -1984,9 +2023,11 @@ export function openNotificationTarget(
     dispatch({ type: "openBotActivity", botId: target.botId, itemId: `run:${target.routineRunId}` });
     return;
   }
-  // 2026-10-29: a run's notification, or a link to a run's own execution
-  // thread (an Inbox entry, an activity line), opens the run detail, never
-  // a conversation beside the chat. openThread asks for the thread itself.
+  // 2026-10-29, then #2098 (2026-11-05): a run's notification, or a link to
+  // a run's own execution thread (an Inbox entry, an activity line), opens
+  // the run's message in the bot's chat, never a view beside the chat.
+  // openThread asks for the thread itself. #2120 keeps native banners in the
+  // conversation; the former run sheet is gone.
   if (options.runDetail !== false) {
     const runId = target.routineRunId ?? routineRunOfThread(state, target.threadId);
     if (runId && (!state.routineRuns || state.routineRuns.some((run) => run.id === runId))) {
@@ -2178,8 +2219,8 @@ export function openBotThread(
   // - An earlier segment is part of the one conversation: the bot opens at
   //   its newest segment and the timeline scrolls back to that topic.
   // - A thread outside the stream (a parallel task's detail, a bot's job, a
-  //   run, a confidential thread) opens in the side column beside the
-  //   conversation (SideThreadPanel); Close or Escape is the way back.
+  //   run, a confidential thread) is no destination: the conversation is
+  //   shown, and what the thread holds for the person is already in it.
   // - The conversation itself, or a bot with no conversation: shown.
   if (!threadsShown) {
     // an earlier topic, even the one this window was left on: the
@@ -2203,9 +2244,15 @@ export function openBotThread(
       openBotThread(dispatch, bot, home, false);
       return;
     }
+    // 2026-11-05 (#2081, owner: "there is a unified chat mode and you keep
+    // putting threads everywhere"): with one conversation, a thread outside
+    // the stream (a parallel task's detail, a bot's job, a hand-off, a
+    // confidential thread) is no destination and opens no column beside the
+    // conversation either. What it holds for the person reaches the
+    // conversation on its own (a parallel task's question under its card, a
+    // run's report, an attention card), so the conversation is shown.
     if (threadId !== bot.threadId && opensBesideStream(bot, threadId)) {
       openBot(dispatch, bot, false, { landing: false });
-      openSideThread({ botId: bot.id, threadId });
       return;
     }
   }
@@ -2512,7 +2559,6 @@ export const initialState: AppState = {
   pluginsBotId: null,
   pluginsFocusApps: null,
   routineFocus: null,
-  routineRunSheet: null,
   codingChat: null,
   pluginsPage: null,
   triggersOpen: false,
@@ -2537,6 +2583,9 @@ export const initialState: AppState = {
   tourOpen: false,
   botSettingsSection: "overview",
   botSettingsExpandAccordion: false,
+  botPanelTab: null,
+  lastBotPanel: null,
+  botPanelRestored: false,
   botActivityTarget: null,
   botSettingsSectionStored: false,
   botSettingsExpandRemembered: false,

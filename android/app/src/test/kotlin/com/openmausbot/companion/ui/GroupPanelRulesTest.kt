@@ -32,6 +32,7 @@ class GroupPanelRulesTest {
         members: List<String> = listOf("wren"),
         bulletin: String = "",
         ownerId: String? = "local-owner",
+        humanIds: List<String> = listOf("local-owner"),
     ) = Room(
         id = "g1",
         threadId = "gt1",
@@ -42,7 +43,7 @@ class GroupPanelRulesTest {
         unread = false,
         createdAt = 1.0,
         ownerId = ownerId,
-        humanIds = listOf("local-owner"),
+        humanIds = humanIds,
     )
 
     @Test
@@ -118,7 +119,8 @@ class GroupPanelRulesTest {
 
     @Test
     fun `non-owner on an organization server sees the read-only note`() {
-        val room = room(ownerId = "someone-else")
+        // #2119: leave needs another person still listed (sole member deletes).
+        val room = room(ownerId = "someone-else", humanIds = listOf("someone-else", "local-owner"))
         val access = GroupPanelRules.access(
             room = room,
             bots = listOf(bot("wren", owner = "local-owner")),
@@ -128,6 +130,7 @@ class GroupPanelRulesTest {
         assertTrue(access.readOnlyNote)
         assertFalse(access.editable)
         assertTrue(access.canLeave)
+        assertFalse(access.canDelete)
     }
 
     @Test

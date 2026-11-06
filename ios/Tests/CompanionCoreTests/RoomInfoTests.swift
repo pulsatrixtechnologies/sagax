@@ -195,9 +195,12 @@ final class RoomInfoTests: XCTestCase {
         let mine = room(ownerId: "p-me", humanIds: ["p-me", "p-bob"])
         XCTAssertTrue(RoomInfoAccess(room: mine, gate: gate, viewer: me, bots: []).canLeave)
         XCTAssertEqual(RoomOwnership.leaveOutcome(mine, viewer: me), .owner)
-        // the recorded owner who is not in humanIds still leaves
+        // the recorded owner who is not in humanIds still leaves when others remain
         XCTAssertTrue(RoomOwnership.mayLeave(room(ownerId: "p-me", humanIds: ["p-bob"]), viewer: me))
         XCTAssertEqual(RoomOwnership.leaveOutcome(room(ownerId: "p-me", humanIds: ["p-me", "team:ops"]), viewer: me), .last)
+        // #2119: sole remaining person cannot leave (bots and teams do not count)
+        XCTAssertFalse(RoomOwnership.mayLeave(room(ownerId: "p-me", humanIds: ["p-me", "team:ops"]), viewer: me))
+        XCTAssertFalse(RoomInfoAccess(room: room(ownerId: "p-me", humanIds: ["p-me"]), gate: gate, viewer: me, bots: []).canLeave)
         XCTAssertEqual(RoomOwnership.leaveOutcome(room(ownerId: "boss", humanIds: ["boss", "p-me"]), viewer: me), .member)
         // a solo server has nobody to hand the group to
         XCTAssertFalse(RoomInfoAccess(room: mine, gate: SurfaceGate(scope: .serverAdmin), viewer: me, bots: []).canLeave)

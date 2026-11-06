@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canMessagePerson, findPanelPerson, personDmGroup, personManageUrl, personSharedBots, personTeams, sharedGroups } from "./person-panel";
+import { canMessagePerson, findPanelPerson, personDmGroup, personSharedBots, personTeams, sharedGroups } from "./person-panel";
 
 const ada = { principalId: "pr_ada", name: "Ada Example", login: "ada", email: "ada@example.test", role: "member" as const, disabled: false, teams: [{ id: "t2", manager: true }, { id: "t1", manager: false }, { id: "gone", manager: false }], manageUrl: "https://px.example.test/console/users/u1" };
 const directory = { people: [ada], teams: [{ id: "t1", name: "Support", managers: [], members: [] }, { id: "t2", name: "Projects", managers: [], members: [] }] };
@@ -26,14 +26,6 @@ describe("person panel", () => {
     expect(personDmGroup(groups, "pr_ada")?.id).toBe("dm");
     const bots = [{ id: "a", ownerUserId: "pr_ada" }, { id: "b", ownerUserId: "pr_me" }, { id: "c", ownerUserId: "pr_ada", hidden: true }];
     expect(personSharedBots(bots, "pr_ada").map((bot) => bot.id)).toEqual(["a"]);
-  });
-
-  it("shows Manage in Perspicax to an admin only", () => {
-    expect(personManageUrl(ada, "admin")).toBe("https://px.example.test/console/users/u1");
-    expect(personManageUrl(ada, "member")).toBeNull();
-    expect(personManageUrl(ada, null)).toBeNull();
-    expect(personManageUrl({ manageUrl: "javascript:alert(1)" }, "admin")).toBeNull();
-    expect(personManageUrl({}, "admin")).toBeNull();
   });
 
   it("offers Message for an active person other than you, never a service account", () => {

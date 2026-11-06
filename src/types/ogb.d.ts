@@ -454,11 +454,22 @@ const __BASE_VERSION__: string;
         target?: { botId?: string; threadId?: string; groupId?: string; routineRunId?: string };
         /** Lets withdrawNotification take it down (an approval answered elsewhere). */
         withdrawKey?: string;
+        /** macOS subtitle (group name). */
+        subtitle?: string;
+        /** Stable id the OS replaces under (one banner per chat). */
+        replaceId?: string;
+        groupKey?: string;
+        hasReply?: boolean;
+        replyPlaceholder?: string;
+        /** Local file path for the sender avatar when available. */
+        icon?: string;
       }): void;
       /** Close the shell notifications shown with this withdraw key. */
       withdrawNotification?(withdrawKey: string): void;
       /** The id of a shell notification the person clicked. */
       onNotificationClick?(cb: (id: string, target?: { botId?: string; threadId?: string; groupId?: string; routineRunId?: string } | null) => void): () => void;
+      /** Inline reply from the OS banner: open that chat and send the text. */
+      onNotificationReply?(cb: (id: string, reply: string, target?: { botId?: string; threadId?: string; groupId?: string; routineRunId?: string } | null) => void): () => void;
       /** The menu bar's bot list (electron/system-tray.mjs). */
       setTrayRoster?(roster: Array<{ id: string; name: string; color: string; working: boolean; unread: number }>, labels?: Record<string, string>): void;
       /** A bot chosen in the menu bar list or by its global shortcut. */

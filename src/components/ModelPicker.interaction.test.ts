@@ -93,7 +93,8 @@ function nodes(value: ReactNode): Node[] {
   return Children.toArray(value).flatMap((child) => {
     if (!isValidElement(child)) return [];
     const node = child as Node;
-    return [node, ...nodes(node.props.children)];
+    // #2106: the model list carries the menu's footer in its scrolling zone (`after`)
+    return [node, ...nodes(node.props.children), ...nodes(node.props.after as ReactNode), ...nodes(node.props.autoPanel as ReactNode)];
   });
 }
 
@@ -734,7 +735,7 @@ describe("the flat model picker", () => {
     expect(lists(opened)[0]!.props.sections[0]!.rows[0]!.kind).toBe("auto");
     row(opened, "auto").props.onPick();
     expect(fixture.dispatch).toHaveBeenLastCalledWith({ type: "setModel", botId: "atlas", threadId: "thread-atlas", updateBotDefault: true,
-      selection: { instanceId: "claude", model: "claude-sonnet-5", auto: true } });
+      selection: { instanceId: "claude", model: "claude-sonnet-5", auto: true, autoOptimize: "balance" } });
   });
 
   it("shows Auto's last real pick on the chip; chain status lives in Settings", () => {

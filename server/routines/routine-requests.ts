@@ -4,6 +4,7 @@ import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 
 import { cronScheduleLabel } from "../../shared/cron-label.ts";
+import { plainClock, plainTimeZone, plainWeekdays } from "../../shared/plain-time-zone.ts";
 import { normalizeCronSchedule, nextCronRuns } from "../../shared/routine-schedule.ts";
 import { presentTiming, storedTiming } from "../../shared/routine-timing.ts";
 import { isTriggerSchedule } from "../../shared/routines.ts";
@@ -51,7 +52,6 @@ const WEEKDAY_NUMBER = {
   saturday: 6,
 } as const;
 
-const WEEKDAY_LABEL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const RFC3339_WITH_OFFSET =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/i;
 const TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
@@ -1056,20 +1056,21 @@ export function scheduleText(schedule: RoutineRequestSchedule, timeZone: string)
       ? `Each time the ${schedule.engine} usage limit resets`
       : `When the ${schedule.engine} usage limit resets`;
   }
-  if (schedule.type === "once") return `${formatInstant(schedule.at, timeZone)} (${timeZone})`;
+  const zone = plainTimeZone(timeZone);
+  if (schedule.type === "once") return `${formatInstant(schedule.at, timeZone)} ${zone}`;
   if (schedule.type === "interval") {
     const restricted = intervalHasRestrictions(schedule);
     const cadence = schedule.anchorAt === undefined
       ? restricted
         ? `Every ${schedule.everyMinutes} minutes, cadence starting at confirmation; first run is the next allowed time`
         : `Every ${schedule.everyMinutes} minutes, starting one interval after confirmation`
-      : `Every ${schedule.everyMinutes} minutes, anchored at ${formatInstant(schedule.anchorAt, timeZone)} (${timeZone})`;
+      : `Every ${schedule.everyMinutes} minutes, anchored at ${formatInstant(schedule.anchorAt, timeZone)} ${zone}`;
     const restrictions = [
       schedule.weekdays?.length
-        ? `on ${schedule.weekdays.map((day) => WEEKDAY_LABEL[day]).join(", ")} (${timeZone})`
+        ? `on ${plainWeekdays(schedule.weekdays)} (${zone})`
         : null,
-      schedule.window ? `during ${schedule.window.start}–${schedule.window.end} (${timeZone})` : null,
-      schedule.endsAt !== undefined ? `until ${formatInstant(schedule.endsAt, timeZone)} (${timeZone})` : null,
+      schedule.window ? `during ${plainClock(schedule.window.start)}-${plainClock(schedule.window.end)} ${zone}` : null,
+      schedule.endsAt !== undefined ? `until ${formatInstant(schedule.endsAt, timeZone)} ${zone}` : null,
     ].filter((part): part is string => part !== null);
     const text = restrictions.length ? `${cadence} · ${restrictions.join(" · ")}` : cadence;
     return phrase ? `${text} · around the time${phrase}` : text;
@@ -1080,10 +1081,10 @@ export function scheduleText(schedule: RoutineRequestSchedule, timeZone: string)
   if (schedule.type === "event") {
     return "Trigger: incoming email (the mailbox setup is shown to you after approval)";
   }
-  const days = schedule.weekdays.map((day) => WEEKDAY_LABEL[day]).join(", ");
+  const days = plainWeekdays(schedule.weekdays);
   return phrase
-    ? `${days} around ${schedule.time}${phrase} (${timeZone})`
-    : `${days} at ${schedule.time} (${timeZone})`;
+    ? `${days} around ${plainClock(schedule.time)}${phrase} ${zone}`
+    : `${days} at ${plainClock(schedule.time)} ${zone}`;
 }
 
 /** One plain sentence describing how often a routine will actually run, so
@@ -1103,7 +1104,7 @@ export function consequenceLine(schedule: RoutineRequestSchedule, continuity = f
       ? `Will run each time the ${schedule.engine} usage limit resets; ${session}.`
       : `Will run once when the ${schedule.engine} usage limit resets; that run starts a fresh session.`;
   }
-  if (schedule.type === "cron") return `Will run at matching calendar times in ${schedule.timeZone}; ${session}.${window}`;
+  if (schedule.type === "cron") return `Will run at matching calendar times, ${plainTimeZone(schedule.timeZone)}; ${session}.${window}`;
   if (schedule.type === "once") return "Will run once; that run starts a fresh session.";
   if (schedule.type === "interval") {
     if (intervalHasRestrictions(schedule)) {
@@ -1239,7 +1240,7 @@ function cardCopy(
       ? "None — created paused; resume it when ready"
     : deferredInterval
       ? deferredRestrictedInterval
-        ? `Next allowed time after confirmation (${timeZone})`
+        ? `Next allowed time after confirmation (${plainTimeZone(timeZone)})`
         : "One interval after confirmation"
       : nextRunAt !== null
         ? formatInstant(nextRunAt, scheduleTimeZone)
@@ -1266,7 +1267,7 @@ function cardCopy(
       `Schedule: ${when}`,
       `Next run: ${nextDescription}`,
       ...(definition.schedule.type === "cron" && nextRunAt !== null && operation.action !== "run_now" && !createsPaused
-        ? [`Next 3 runs (${scheduleTimeZone}): ${nextCronRuns(definition.schedule, nextRunAt - 1, 3).map((at) => formatInstant(at, scheduleTimeZone)).join(" · ")}`]
+        ? [`Next 3 runs (${plainTimeZone(scheduleTimeZone)}): ${nextCronRuns(definition.schedule, nextRunAt - 1, 3).map((at) => formatInstant(at, scheduleTimeZone)).join(" · ")}`]
         : []),
       `Runs on: ${destination}`,
       `Run limit: ${definition.timeoutMinutes === undefined ? "No limit" : `${definition.timeoutMinutes} minutes`}`,

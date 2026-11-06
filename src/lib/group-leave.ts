@@ -1,7 +1,8 @@
 // Leaving a group chat you were added to (#1480, server/groups/group-leave.ts): on
 // an organization server, a person listed in a group in their own name may
-// leave it, owner included. The owner hands it to the person listed longest;
-// the last person archives it.
+// leave it, owner included. The owner hands it to the person listed longest.
+// #2119: the sole remaining person cannot leave (bots and teams do not count);
+// the menu offers Delete instead.
 import type { ConfigStatus, Group } from "@/state/store";
 import { viewerActorId } from "./viewer";
 
@@ -26,12 +27,15 @@ export function canLeaveGroup(group: LeavableGroup, config: ConfigStatus | null 
   if (remoteClient || group.dm || group.peopleDm) return false;
   // a solo server sends no owner: there is nobody else to leave the group to
   if (group.ownerId === undefined) return false;
-  return viewerListedInGroup(group, config);
+  if (!viewerListedInGroup(group, config)) return false;
+  // #2119: sole remaining person deletes instead of leaving
+  return leaveOutcome(group, config) !== "last";
 }
 
 export type LeaveOutcome = "member" | "owner" | "last";
 
-/** What leaving does, as the server will decide it. */
+/** What leaving does, as the server will decide it. `"last"` means leave is
+ * refused (#2119); the UI offers Delete instead. */
 export function leaveOutcome(group: LeavableGroup, config: ConfigStatus | null | undefined): LeaveOutcome {
   const mine = viewerIds(config);
   const others = (group.humanIds ?? []).filter((entry) => entry.trim() && !mine.includes(norm(entry)) && !norm(entry).startsWith("team:"));

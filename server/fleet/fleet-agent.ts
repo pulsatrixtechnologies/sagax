@@ -8,6 +8,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { dirname } from "node:path";
 import { defaultFleetDeps, executePlan, loadRegistry, markProvisioningFailed, planFleetAction, type FleetDeps, type FleetInput } from "./fleet-cli.ts";
 import { assertSlug, fleetLayout, fleetUser, openRouterModelIds, workspaceDataDir, type FleetLayout, type FleetWorkspace } from "./fleet.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export interface FleetAgentOptions {
   socketPath: string;
@@ -129,7 +130,7 @@ export function createFleetAgent(options: FleetAgentOptions): Server {
   let mutationTail: Promise<unknown> = Promise.resolve();
   const act = (input: FleetInput) => {
     const result = mutationTail.then(() => runAction(input));
-    mutationTail = result.catch(() => {});
+    mutationTail = result.catch(reportBackgroundError);
     return result;
   };
 
@@ -205,7 +206,7 @@ export function createFleetAgent(options: FleetAgentOptions): Server {
   };
 
   const server = createServer((req, res) => {
-    void handle(req, res);
+    void handle(req, res).catch(reportBackgroundError);
   });
   return server;
 }

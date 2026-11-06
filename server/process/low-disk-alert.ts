@@ -3,6 +3,7 @@
 // notification when it drops under 5 GiB free (or 5% of the disk), then
 // silence until it has recovered; Settings > Computer care shows what can go.
 import { diskSpace } from "./disk-usage.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 const GB = 1024 ** 3;
 export const LOW_DISK_FLOOR_BYTES = 5 * GB;
@@ -46,8 +47,8 @@ export function startLowDiskWatch(options: {
       /* a failed check must never take down the server */
     }
   };
-  const first = setTimeout(() => void run(), options.firstCheckMs ?? 60_000);
-  const every = setInterval(() => void run(), options.intervalMs ?? 30 * 60_000);
+  const first = setTimeout(() => void run().catch(reportBackgroundError), options.firstCheckMs ?? 60_000);
+  const every = setInterval(() => void run().catch(reportBackgroundError), options.intervalMs ?? 30 * 60_000);
   first.unref?.();
   every.unref?.();
   return () => { clearTimeout(first); clearInterval(every); };

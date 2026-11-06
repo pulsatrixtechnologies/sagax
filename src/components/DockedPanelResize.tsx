@@ -22,6 +22,15 @@ const DOCKED_PANEL_BOUNDS: DockedPanelBounds = {
   fallback: DOCKED_PANEL_DEFAULT_WIDTH,
 };
 
+/** The bot panel opens at 308 px like Grok Bot's (#2141); other panels keep 320/360. */
+export const BOT_PANEL_WIDTH_KEY = "omb-bot-panel-width";
+export const BOT_PANEL_BOUNDS: DockedPanelBounds = {
+  key: BOT_PANEL_WIDTH_KEY,
+  min: 308,
+  max: DOCKED_PANEL_MAX_WIDTH,
+  fallback: 308,
+};
+
 export function readDockedPanelWidth(bounds: DockedPanelBounds = DOCKED_PANEL_BOUNDS): number {
   try {
     const stored = Number(localStorage.getItem(bounds.key));

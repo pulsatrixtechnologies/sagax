@@ -6,8 +6,8 @@ import { canLeaveGroup, leaveOutcome, viewerListedInGroup } from "./group-leave"
 const me = { viewer: { principalId: "pr_me", email: "me@example.test" } } as unknown as ConfigStatus;
 const group = (over: Partial<Group>): Pick<Group, "ownerId" | "humanIds" | "dm" | "peopleDm"> => ({ ownerId: "pr_boss", humanIds: ["pr_boss", "pr_me"], ...over });
 
-describe("leaving a group (#1480)", () => {
-  it("a person listed in their own name may leave, owner included", () => {
+describe("leaving a group (#1480, #2119)", () => {
+  it("a person listed in their own name may leave, owner included when others remain", () => {
     expect(canLeaveGroup(group({}), me)).toBe(true);
     expect(canLeaveGroup(group({ ownerId: "pr_me", humanIds: ["pr_me", "pr_bob"] }), me)).toBe(true);
     expect(viewerListedInGroup(group({ ownerId: "pr_me", humanIds: ["pr_bob"] }), me)).toBe(true);
@@ -22,7 +22,13 @@ describe("leaving a group (#1480)", () => {
     expect(canLeaveGroup(group({}), me, true)).toBe(false);
   });
 
-  it("says what leaving does: a member, the owner handing it on, the last person archiving it", () => {
+  it("the sole remaining person cannot leave (bots and teams do not count)", () => {
+    expect(canLeaveGroup(group({ ownerId: "pr_me", humanIds: ["pr_me"] }), me)).toBe(false);
+    expect(canLeaveGroup(group({ ownerId: "pr_me", humanIds: ["pr_me", "team:ops"] }), me)).toBe(false);
+    expect(leaveOutcome(group({ ownerId: "pr_me", humanIds: ["pr_me"] }), me)).toBe("last");
+  });
+
+  it("says what leaving does: a member, the owner handing it on, or sole-member (leave refused)", () => {
     expect(leaveOutcome(group({}), me)).toBe("member");
     expect(leaveOutcome(group({ ownerId: "pr_me", humanIds: ["pr_me", "pr_bob"] }), me)).toBe("owner");
     expect(leaveOutcome(group({ ownerId: "pr_me", humanIds: ["pr_me", "team:ops"] }), me)).toBe("last");

@@ -53,28 +53,30 @@ describe("bot settings caption inset", () => {
 });
 
 describe("bot panel header and tabs", () => {
-  it("keeps the header to round controls: the bot's one \"...\" menu and Close", () => {
+  it("keeps the header to two round controls, the gear and Close, with no \"...\" button (#2125)", () => {
     vi.stubGlobal("window", { ogb: { platform: "darwin" } });
     const html = renderToStaticMarkup(createElement(DesktopCapabilitiesProvider, null, createElement(BotSettingsDialog, { bot })));
     const classOf = (marker: RegExp) => html.match(marker)?.[1] ?? html.match(marker)?.[2];
     const close = classOf(/<button[^>]*aria-label="Close"[^>]*class="([^"]*)"|<button[^>]*class="([^"]*)"[^>]*aria-label="Close"/);
     expect(close).toBe(CIRCLE_BUTTON);
-    const more = html.match(/<button[^>]*data-bot-actions-button=""[^>]*>/)?.[0] ?? "";
-    expect(more).toContain('aria-label="Bot menu"');
-    expect(more).toContain('aria-haspopup="menu"');
+    // the bot's menu opens on a right click on the mascot or the name
+    expect(html).not.toContain("data-bot-actions-button");
     // Export and Inspector moved into the menu; no pencil on the mascot
     expect(html).not.toContain('aria-label="Export conversation"');
     expect(html).not.toContain('aria-label="Inspector"');
     expect(html).not.toContain("data-persona-edit-badge");
     expect(html).not.toContain("data-edit-persona");
-    expect(html.indexOf("data-bot-actions-button")).toBeLessThan(html.indexOf("data-avatar-edit"));
   });
 
-  it("opens the editor from the mascot, with no second persona button", () => {
+  it("opens the profile from the round gear at the top left (#2125), and the mascot keeps its own editor", () => {
     vi.stubGlobal("window", { ogb: { platform: "darwin" } });
     const html = renderToStaticMarkup(createElement(DesktopCapabilitiesProvider, null, createElement(BotSettingsDialog, { bot })));
-    expect(html).toContain('aria-haspopup="dialog"');
-    expect(html).not.toContain('aria-label="Edit persona"');
+    // the mascot opens the profile page, a side panel, not a dialog (#2126)
+    expect(html).toContain("data-avatar-edit");
+    expect(html).not.toContain('aria-haspopup="dialog"');
+    const gear = html.match(/<button[^>]*data-bot-panel-gear=""[^>]*>/)?.[0] ?? "";
+    expect(gear).toContain('aria-label="Edit persona"');
+    expect(gear).toContain(CIRCLE_BUTTON);
     expect(html).not.toContain(">Edit persona<");
     // the name pencil shows only on hover or focus (and on touch screens);
     // the label has none while there is no label
@@ -107,10 +109,19 @@ describe("bot panel header and tabs", () => {
     expect(html).not.toContain('id="bot-instructions-bot-1"');
   });
 
-  it("shows Details, Library, Capabilities and Computer, with Routines on Details and no empty Coding or Activity", () => {
+  it("shows the Activity and Library tabs, moved into the top bar once scrolled, with Upcoming routines first and no empty Coding or Activity", () => {
     const html = panel();
     const tabs = [...html.matchAll(/data-panel-tab="(\w+)"/g)].map((match) => match[1]);
-    expect(tabs).toEqual(["details", "library", "computer"]);
+    expect(tabs).toEqual(["activity", "library"]);
+    // unscrolled: the tabs sit under the name, not yet in the top bar
+    expect(html).toContain("data-bot-panel-tabs");
+    expect(html).not.toContain("data-panel-tabs-compact");
+    // the active tab has a small pill, not bold
+    expect(html.match(/<button[^>]*data-panel-tab="activity"[^>]*>/)?.[0]).toContain("text-[14px] font-normal");
+    // Upcoming, then Suggested, then the Computer card, then Voice chat (#2125)
+    const at = (marker: string) => html.indexOf(marker);
+    expect(at('data-bot-settings-section="routines"')).toBeLessThan(at('data-bot-settings-section="voice-chat"'));
+    expect(html).toContain(">Voice chat<");
     expect(html).not.toContain("Search settings");
     expect(html.indexOf('data-bot-settings-section="routines"')).toBeGreaterThan(-1);
     // nothing running and no code work yet: neither section is drawn

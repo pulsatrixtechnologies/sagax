@@ -3,12 +3,17 @@
  * cards compare side by side (2026-10-19: "le même encadré"). Branches:
  * not pushed, pushed, pull request open, merged, and one archived. The
  * capture script (scripts/capture/bot-panel-coding.mjs) answers /api itself
- * with each branch read now. Not shipped in the app.
+ * with each branch read now. Above the branches, the agent rows (#2099):
+ * Claude Code's agent list, one row each, "↓ N more" past five. Not shipped
+ * in the app.
  * ?skin=<id>&lang=<code> */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { CalendarClock, Plus, SquareTerminal } from "lucide-react";
 import { CodeWorkList, SectionHeader } from "../components/bot-settings/ActivitySection";
+import { AgentRows } from "../components/bot-settings/AgentRows";
+import type { BotActivityItem, BotLaunchedAgentItem } from "../lib/bot-activity";
+import type { TaskUsage } from "../state/store";
 import { RoutineList } from "../components/routines/RoutineList";
 import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
@@ -39,6 +44,24 @@ const work = {
   commits: [{ sha: "1a2b3c4d5e", message: "Add the widgets grid", branch: "feat/it-tools-widgets", repo: "acme/web", pushed: false, at: NOW - 15 * H }],
   archivedBranches: [{ name: "spike/old-parser", repo: "acme/web", pushed: false, at: NOW - 80 * H, threadId: "t1", folder: "/srv/web" }],
 };
+const M = 60_000;
+const item = (id: string, title: string, status: BotActivityItem["status"], startedMinutesAgo: number, currentStep?: string, endedMinutesAgo?: number): BotActivityItem => ({
+  id: `thread:${id}`, kind: "session", botId: "pepper", botName: "Pepper", title, status,
+  startedAt: NOW - startedMinutesAgo * M, updatedAt: NOW, endedAt: endedMinutesAgo === undefined ? undefined : NOW - endedMinutesAgo * M,
+  threadId: id, currentStep, canStop: true,
+} as BotActivityItem);
+const agents: BotActivityItem[] = [
+  item("a1", "Fix the column order", "running", 21, "cd dispatch-board && pnpm vitest run src/board"),
+  item("a2", "Write the release notes", "waiting", 8, "sleep 30; pgrep -f vite"),
+  item("a3", "Review the lexer split", "finished", 95, undefined, 50),
+  item("a4", "Tidy the widgets grid", "failed", 130, undefined, 120),
+  item("a5", "Index the search", "finished", 300, undefined, 280),
+  item("a6", "Spike the old parser", "stopped", 900, undefined, 890),
+];
+const launched: BotLaunchedAgentItem[] = [
+  { id: "l1", targetBotId: "marc", targetBotName: "Marc", title: "work", status: "running", startedAt: NOW - 4 * M, updatedAt: NOW, threadId: "l1" },
+];
+const usage: Record<string, TaskUsage> = { a1: { input: 95_300, output: 6_500, costUsd: null, turns: 12 }, a3: { input: 11_200, output: 1_200, costUsd: null, turns: 3 } };
 const routine = (id: string, name: string, everyMinutes: number): Routine => ({
   id, name, prompt: "", target: "bot", botId: "pepper", runOn: "maus", enabled: true,
   schedule: { type: "interval", everyMinutes, anchorAt: 1 }, durationMinutes: 30, nextRunAt: NOW + H, createdAt: 1, updatedAt: 1,
@@ -50,7 +73,8 @@ function Panel() {
       <div className="flex flex-col gap-6 px-4 pb-6 pt-4">
         <section data-bot-settings-section="coding" className="flex flex-col gap-2">
           <SectionHeader icon={<SquareTerminal size={16} aria-hidden="true" className="text-ink-secondary" />} title={t("botPanel.coding.title")} name="coding" onOpenHistory={() => {}} />
-          <CodeWorkList work={work} now={NOW} branchActions={{ botId: "pepper", botName: "Pepper", onArchive: async () => {} }} />
+          <AgentRows items={agents} launched={launched} onOpen={() => {}} onOpenLaunched={() => {}} onStop={() => {}} now={NOW} usageOf={(threadId) => usage[threadId]} onIgnore={() => {}} />
+          <CodeWorkList work={work} now={NOW} branchActions={{ botId: "pepper", botName: "Pepper", onArchive: async () => {}, onIgnore: () => {} }} />
         </section>
         <section data-bot-settings-section="routines" className="flex flex-col gap-3">
           <div className="flex items-center gap-2">

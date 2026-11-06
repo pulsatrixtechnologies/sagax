@@ -1,8 +1,14 @@
 // Desktop notifications, driven by the harness's {kind:"notify"} frames.
 // The server decides *whether* something is worth an interruption (it owns
-// the per-bot toggle); this only decides how to show it here.
+// the per-bot toggle); this only decides how to show it here (HIG payload,
+// chat grouping, type switches, shell vs browser).
 import type { Notification } from "../../shared/notification";
 import { createNotificationTargets, messageAttention, type MessageAttention } from "./attention";
+import {
+  buildNativeNotificationPayload,
+  notificationGroupKey,
+  type NotificationTypeSettings,
+} from "./native-notification-payload";
 import { attentionSettings } from "./notification-preferences";
 import { notificationSoundPlan, playNotificationSound, toneReady } from "./notification-sound";
 
@@ -17,30 +23,45 @@ export function requestNotificationPermission(): Promise<NotificationPermission>
   return Notification.requestPermission();
 }
 
-/** The identity a notification groups under: one bot, wherever it was
- * working. Keyed by bot rather than thread so a single bot running across
- * tasks and rooms coalesces into one stack instead of stacking banners. */
+/** Identity used for web Notification `tag` / icon. Grouped by chat. */
+export interface NotificationChatIdentity {
+  threadId: string;
+  botId?: string;
+  avatarUrl?: string | null;
+  kind?: NotifyFrame["kind"];
+}
+
+/** Presentation options: one replaced banner per chat (`tag`), plus avatar. */
+export function buildNotificationOptions(chat: NotificationChatIdentity): NotificationOptions {
+  const tag = notificationGroupKey({
+    kind: chat.kind ?? "done",
+    threadId: chat.threadId,
+    botId: chat.botId,
+  });
+  return { tag, icon: chat.avatarUrl ?? undefined };
+}
+
+/** @deprecated Prefer buildNotificationOptions with a thread id. Kept for
+ * older call sites that still key by bot. */
 export interface NotificationBotIdentity {
   id: string;
   avatarUrl?: string | null;
 }
 
-/** Presentation options for one bot's notifications: the stable per-bot
- * coalescing key platforms replace on (`tag`) and its avatar, when the
- * profile has one. Pure so the grouping rule stays testable on its own. */
-export function buildNotificationOptions(bot: NotificationBotIdentity): NotificationOptions {
-  return { tag: `openmausbot:${bot.id}`, icon: bot.avatarUrl ?? undefined };
-}
-
 interface PendingClick {
   open: () => void;
+  reply?: (text: string) => void;
 }
 
 const pendingClicks = createNotificationTargets<PendingClick>();
+/** Pending banner counts per chat group key (replaced, not stacked). */
+const pendingCounts = new Map<string, number>();
 let clicksWired = false;
 /** Opens a target the shell sent back when the page no longer holds the
  * notification id (the page reloaded while the banner waited). */
 let openByTarget: ((target: NotificationTarget) => void) | null = null;
+/** Sends an inline reply into the open chat (wired by the shell effects). */
+let replyByTarget: ((target: NotificationTarget, text: string) => void) | null = null;
 
 function targetFromShell(raw: unknown): NotificationTarget | null {
   if (!raw || typeof raw !== "object") return null;
@@ -52,8 +73,20 @@ function targetFromShell(raw: unknown): NotificationTarget | null {
   return target.threadId || target.routineRunId || target.botId ? target : null;
 }
 
-/** The shell tells the page which of its notifications was clicked; the
- * page knows where that one goes. Wired once, on the first notification. */
+function shellIconPath(avatarUrl?: string | null): string | undefined {
+  if (!avatarUrl) return undefined;
+  // Electron Notification.icon needs a local path or data URL, not /api/...
+  if (avatarUrl.startsWith("data:") || avatarUrl.startsWith("file:") || /^[a-zA-Z]:\\/.test(avatarUrl) || avatarUrl.startsWith("/")) {
+    if (avatarUrl.startsWith("/api/") || avatarUrl.startsWith("/attachments")) return undefined;
+    // Absolute filesystem paths only (macOS /..., Windows C:\...)
+    if (avatarUrl.startsWith("/") && !avatarUrl.startsWith("//") && avatarUrl.includes(".")) return avatarUrl;
+    if (avatarUrl.startsWith("data:") || avatarUrl.startsWith("file:") || /^[a-zA-Z]:\\/.test(avatarUrl)) return avatarUrl;
+  }
+  return undefined;
+}
+
+/** The shell tells the page which of its notifications was clicked or
+ * replied to; the page knows where that one goes. Wired once. */
 function wireDesktopClicks(): void {
   if (clicksWired || typeof window === "undefined") return;
   const listen = window.ogb?.onNotificationClick;
@@ -61,9 +94,29 @@ function wireDesktopClicks(): void {
   clicksWired = true;
   listen((id, target) => {
     const pending = pendingClicks.take(id);
-    if (pending) return pending.open();
+    if (pending) {
+      clearPendingForTarget(targetFromShell(target) ?? undefined);
+      return pending.open();
+    }
     const fallback = targetFromShell(target);
-    if (fallback) openByTarget?.(fallback);
+    if (fallback) {
+      clearPendingForTarget(fallback);
+      openByTarget?.(fallback);
+    }
+  });
+  window.ogb?.onNotificationReply?.((id, reply, target) => {
+    const pending = pendingClicks.take(id);
+    const resolved = targetFromShell(target);
+    if (pending?.reply) {
+      clearPendingForTarget(resolved ?? undefined);
+      pending.reply(reply);
+      return;
+    }
+    if (resolved) {
+      clearPendingForTarget(resolved);
+      openByTarget?.(resolved);
+      replyByTarget?.(resolved, reply);
+    }
   });
 }
 
@@ -73,6 +126,48 @@ function windowFocused(): boolean {
   } catch {
     return false;
   }
+}
+
+function shellPlatform(): string {
+  try {
+    return window.ogb?.platform ?? "web";
+  } catch {
+    return "web";
+  }
+}
+
+function typeSettingsFromAttention(): NotificationTypeSettings {
+  const settings = attentionSettings();
+  return {
+    bots: settings.bots,
+    people: settings.people,
+    groups: settings.groups,
+    approvals: settings.approvals,
+    routines: settings.routines,
+  };
+}
+
+function clearPendingMatching(match: string): void {
+  const drop: string[] = [];
+  for (const key of pendingCounts.keys()) {
+    if (key.includes(match)) drop.push(key);
+  }
+  for (const key of drop) pendingCounts.delete(key);
+}
+
+function clearPendingForTarget(target?: NotificationTarget | null): void {
+  if (!target?.threadId) return;
+  clearPendingMatching(target.threadId);
+}
+
+/** Forget stacked counts when the person opens that chat (test seam). */
+export function clearNotificationPendingCount(threadId: string): void {
+  clearPendingMatching(threadId);
+}
+
+/** Test seam: drop every stacked chat count. */
+export function resetNotificationPendingCounts(): void {
+  pendingCounts.clear();
 }
 
 /** Hand one notification to the desktop shell (it can stay until dismissed,
@@ -88,14 +183,25 @@ export function presentNotification(input: {
   web?: NotificationOptions;
   /** withdrawNotification(key) takes it down again */
   withdrawKey?: string;
+  subtitle?: string;
+  replaceId?: string;
+  groupKey?: string;
+  hasReply?: boolean;
+  replyPlaceholder?: string;
+  icon?: string;
+  onReply?: (text: string) => void;
 }): boolean {
   // Settings > Notifications > Notification sound: a chosen tone is played
   // here and the notification itself is sent silent.
   const plan = notificationSoundPlan(input.attention.sound);
   if (typeof window !== "undefined" && window.ogb?.notify) {
     wireDesktopClicks();
+    const id = pendingClicks.add({
+      open: input.open,
+      ...(input.onReply ? { reply: input.onReply } : {}),
+    });
     window.ogb.notify({
-      id: pendingClicks.add({ open: input.open }),
+      id,
       title: input.title,
       body: input.body,
       sound: plan.platformSound,
@@ -104,6 +210,11 @@ export function presentNotification(input: {
       flash: input.attention.flash,
       ...(input.target ? { target: input.target } : {}),
       ...(input.withdrawKey ? { withdrawKey: input.withdrawKey } : {}),
+      ...(input.subtitle ? { subtitle: input.subtitle } : {}),
+      ...(input.replaceId ? { replaceId: input.replaceId } : {}),
+      ...(input.groupKey ? { groupKey: input.groupKey } : {}),
+      ...(input.hasReply ? { hasReply: true, replyPlaceholder: input.replyPlaceholder ?? "Reply" } : {}),
+      ...(input.icon ? { icon: input.icon } : {}),
     });
     if (plan.tone) playNotificationSound(plan.tone);
     return true;
@@ -150,43 +261,113 @@ export function withdrawNotification(withdrawKey: string): void {
   shownForWithdraw.delete(withdrawKey);
 }
 
+export interface ShowNotificationContext {
+  /** Room name for the macOS subtitle / Windows "Name · Group" title. */
+  groupName?: string | null;
+  /** When set, an inline reply is posted through this callback. */
+  onReply?: (target: NotificationTarget, text: string) => void;
+}
+
 /** Show one unless the exact destination conversation is already visible
- * in a focused window. A focused app may still be showing another task
- * (routine runs are detached), so window focus alone is not proof that the
- * actionable card can be seen. */
+ * in a focused window, or the matching Settings type switch is off. */
 export function showNotification(
   frame: NotifyFrame,
   onOpen: (target: NotificationTarget) => void,
   avatarUrl?: string | null,
   visibleThreadId?: string | null,
+  context?: ShowNotificationContext,
 ) {
+  const settings = attentionSettings();
+  const focused = windowFocused();
+  const activeThreadId = visibleThreadId ?? null;
+  const groupKey = notificationGroupKey({
+    kind: frame.kind,
+    threadId: frame.threadId,
+    groupId: frame.groupId,
+    botId: frame.botId,
+  });
+  const pendingCount = pendingCounts.get(groupKey) ?? 0;
+  const canReply = Boolean(
+    frame.threadId &&
+    frame.kind !== "spend" &&
+    frame.kind !== "report" &&
+    frame.kind !== "admin-action",
+  );
+  // HIG: title is the bot or person name. Server titles like "Scout finished"
+  // stay out of the OS title; the body carries the preview.
+  const senderName = (
+    frame.botName?.trim()
+    || (frame.kind === "message" || frame.kind === "page-comment" ? frame.title : "")
+    || frame.botName
+    || "Sagax"
+  ).trim() || "Sagax";
+  const payload = buildNativeNotificationPayload({
+    kind: frame.kind,
+    senderName,
+    groupName: context?.groupName,
+    body: frame.body || frame.ask || "",
+    threadId: frame.threadId,
+    groupId: frame.groupId,
+    botId: frame.botId,
+    pendingCount,
+    windowFocused: focused,
+    activeThreadId,
+    platform: shellPlatform(),
+    canReply,
+    typeSettings: typeSettingsFromAttention(),
+  });
+  if (!payload.show) return;
+
   const attention = messageAttention({
     kind: frame.kind,
     threadId: frame.threadId,
-    windowFocused: windowFocused(),
-    activeThreadId: visibleThreadId ?? null,
-    settings: attentionSettings(),
+    windowFocused: focused,
+    activeThreadId,
+    settings,
   });
   if (!attention.show) return;
-  const spend = frame.kind === "spend";
+
   openByTarget = onOpen;
+  if (context?.onReply) replyByTarget = context.onReply;
   const target: NotificationTarget = {
     botId: frame.botId,
     threadId: frame.threadId,
     ...(frame.groupId ? { groupId: frame.groupId } : {}),
     ...(frame.routineRunId ? { routineRunId: frame.routineRunId } : {}),
   };
+  pendingCounts.set(groupKey, payload.count);
+  const spend = frame.kind === "spend";
+  const icon = shellIconPath(avatarUrl ?? frame.avatarUrl);
   presentNotification({
     target,
     ...(frame.requestId && frame.threadId ? { withdrawKey: approvalWithdrawKey(frame.threadId, frame.requestId) } : {}),
-    title: frame.title,
-    body: frame.body,
+    title: payload.title,
+    subtitle: payload.subtitle,
+    body: payload.body,
+    replaceId: payload.replaceId,
+    groupKey: payload.groupKey,
+    hasReply: payload.hasReply,
+    replyPlaceholder: "Reply",
+    ...(icon ? { icon } : {}),
     attention,
-    open: () => onOpen(target),
+    open: () => {
+      clearPendingForTarget(target);
+      onOpen(target);
+    },
+    onReply: (text) => {
+      clearPendingForTarget(target);
+      onOpen(target);
+      (context?.onReply ?? replyByTarget)?.(target, text);
+    },
     web: {
-      ...buildNotificationOptions({ id: frame.botId, avatarUrl }),
-      // its own stack, so a bot's next "finished" never replaces it
-      ...(spend ? { tag: "openmausbot:spend", icon: undefined } : {}),
+      ...buildNotificationOptions({
+        threadId: frame.threadId,
+        botId: frame.botId,
+        avatarUrl,
+        kind: frame.kind,
+      }),
+      ...(spend ? { tag: "sagax:spend", icon: undefined } : {}),
+      ...(payload.subtitle ? { /* browsers have no subtitle */ } : {}),
     },
   });
 }

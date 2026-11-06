@@ -1,7 +1,7 @@
 // A collapsed bot-to-bot run: one quiet chip in the transcript, the lines
 // themselves in a sheet that fills the chat column. The messages stay
 // stored; this only changes how they are drawn.
-import { createContext, useCallback, useContext, useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeftRight } from "lucide-react";
 import { formatTime, type Bot } from "@/state/store";
@@ -14,7 +14,8 @@ import { chatBubbleWidth, useChatBubbleWidthClasses, useChatColumnClass } from "
 import { prefersWideBubble } from "@/lib/rich-blocks";
 import { runCorners } from "@/lib/room-authors";
 import { cn } from "@/lib/cn";
-import { PILL } from "./SettingsPrimitives";
+import { useChatWindow, WindowHeaderPill } from "./BotHeaderPill";
+import { WindowCloseButton } from "./WindowCloseButton";
 import { getExchangeColumnHost, setExchangeColumnHost, subscribeExchangeColumnHost } from "@/lib/exchange-column-host";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ClusterLabel } from "./ClusterLabel";
@@ -104,7 +105,6 @@ export function ExchangeSheet({
   meta,
   footer,
   pinned,
-  closeLabel,
   testId = "bot-exchange-sheet",
   ariaLabel,
 }: {
@@ -116,21 +116,28 @@ export function ExchangeSheet({
   onRetry?: () => void;
   /** Quiet status line under the header pill (routine runs). */
   meta?: ReactNode;
-  /** Actions placed in the footer row before Close Chat (routine runs:
-   * Continue, Stop, …); its children are the row's items. */
+  /** Actions in a footer row (routine runs: Continue, Stop, …); its
+   * children are the row's items. No row without them (#2149). */
   footer?: ReactNode;
   /** What waits on the person (a routine run's open approval or question,
    * 2026-11-04): pinned above the footer, answerable there, never more than
    * half the sheet. */
   pinned?: ReactNode;
-  closeLabel?: string;
   testId?: string;
   ariaLabel?: string;
 }) {
   const chatColumnClassName = useChatColumnClass();
   const bubbleWidths = useChatBubbleWidthClasses();
   const column = useExchangePortalHost();
-  const closeText = closeLabel ?? t("chat.exchange.closeChat");
+  // #2149 (JC 2026-11-06): the chat stays reachable under the window, its
+  // composer included; a message sent there brings the chat back.
+  const chatWindow = useChatWindow();
+  const composerInset = chatWindow?.composerInset ?? 0;
+  const sentKey = chatWindow?.sentKey;
+  const openedOn = useRef(sentKey);
+  useEffect(() => {
+    if (sentKey !== openedOn.current) onClose();
+  }, [sentKey, onClose]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
@@ -152,15 +159,18 @@ export function ExchangeSheet({
   });
   const sheet = (
     <div
-      className="absolute inset-0 z-20 flex min-h-0 flex-col bg-app"
+      className="absolute inset-x-0 top-0 z-20 flex min-h-0 flex-col bg-app"
+      style={{ bottom: composerInset }}
       role="dialog"
       aria-modal="false"
       aria-label={ariaLabel ?? t("chat.exchange.open", { count: run.messages.length, name: run.party.name })}
       data-testid={testId}
+      data-chat-window=""
       onClick={onClose}
     >
       <div className="relative flex shrink-0 flex-col items-center gap-1.5 px-12 pt-6" onClick={(event) => event.stopPropagation()}>
-        <div className="flex items-center gap-2 rounded-full bg-elevated px-3 py-1.5">
+        <WindowCloseButton onClose={onClose} data-testid="bot-exchange-close" />
+        <WindowHeaderPill label={run.ends.map((party) => party.name).join(" ⇄ ")}>
           {run.ends.map((party, index) => {
             const bot = avatarBot(party, bots);
             return (
@@ -171,7 +181,7 @@ export function ExchangeSheet({
               </span>
             );
           })}
-        </div>
+        </WindowHeaderPill>
         {meta && <div data-exchange-meta className="max-w-[min(92%,36rem)] px-4 text-center text-[12px] text-ink-secondary">{meta}</div>}
       </div>
       {/* The same pane and column as a 1:1 chat (ChatView): the gutter, the
@@ -265,27 +275,18 @@ export function ExchangeSheet({
           <div className={chatColumnClassName}>{pinned}</div>
         </div>
       )}
-      {/* In place of the composer (Grok Bot): one centered "Close Chat" pill
-          is the close. A routine run puts its actions in the same row, before
-          it (one row, 2026-11-02); narrow widths wrap it in order, centered. */}
-      <div
-        data-exchange-footer={footer ? "" : undefined}
-        className={cn(
-          "flex shrink-0 flex-wrap items-center justify-center gap-2 bg-app px-4",
-          footer ? "border-t border-hairline/40 py-3" : "pb-4 pt-2",
-        )}
-        onClick={(event) => event.stopPropagation()}
-      >
-        {footer}
-        <button
-          type="button"
-          data-testid="bot-exchange-close"
-          onClick={onClose}
-          className={cn(PILL, !footer && "px-4 font-medium")}
+      {/* #2149: the X at the top closes; the chat's composer stays below the
+          window. A routine run's actions keep their row (narrow widths wrap
+          it in order, centered). */}
+      {footer && (
+        <div
+          data-exchange-footer=""
+          className="flex shrink-0 flex-wrap items-center justify-center gap-2 border-t border-hairline/40 bg-app px-4 py-3"
+          onClick={(event) => event.stopPropagation()}
         >
-          {closeText}
-        </button>
-      </div>
+          {footer}
+        </div>
+      )}
     </div>
   );
   // A column host (ChatView, GroupView, or the shared host) is the containing

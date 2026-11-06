@@ -2,7 +2,7 @@
 //   { "xai": {"key":"xai-…"}, "box": {"token":"…"},
 //     "instances": { "<instanceId>": {"driver":"grok", …} } }
 import { DEFAULT_MAX_PARALLEL_PER_PERSON, MAX_PARALLEL_PER_PERSON } from "../shared/parallel-tasks.ts";
-import { readFileSync, mkdirSync, existsSync, renameSync, statSync } from "node:fs";
+import { readFileSync, mkdirSync, existsSync, renameSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
@@ -11,6 +11,7 @@ import { normalizeImageGenerationUrl, type ImageGenerationConfig } from "../shar
 import { stripOpenAiEndpointSuffix } from "../shared/openai-compat-url.ts";
 
 import { writeFileAtomic } from "./atomic.ts";
+import { settledFileCache, settledFileStamp } from "./settled-file.ts";
 import { applyStoredEngineEnv } from "./engines/engine-api-keys.ts";
 import { migrateConfigPlaintextKeys, readOnboardingEngineKey } from "./engines/onboarding-engine-key.ts";
 import { withoutComputerEngine } from "./computer/computer-engine-removal.ts";
@@ -23,7 +24,7 @@ import { DEFAULT_WINDOW_MINUTES, MAX_WINDOW_MINUTES } from "./cache-keepwarm.ts"
 import { PROVIDER_ICON_PRESETS, providerIconError } from "../shared/provider-icon.ts";
 import type { McpServerSpec } from "./contracts.ts";
 import type { MailSettings } from "./mail/mail-config.ts";
-import { isRemoteMcpServer, parseStoredMcpServer, reservedMcpServerLog, reservedMcpServerName } from "./mcp/mcp-registry.ts";
+import { isRemoteMcpServer, mcpServerServes, parseStoredMcpServer, reservedMcpServerLog, reservedMcpServerName } from "./mcp/mcp-registry.ts";
 import { parseJson, schemaIssue, type JsonObject, type JsonValue } from "./schema.ts";
 import { isPersonalBrowserProfileId } from "../shared/person-settings.ts";
 import { browserEgressConfigSchema, type BrowserEgressConfig } from "./browser/egress/policy.ts";
@@ -316,6 +317,13 @@ const featureConfigSchema = z.object({
    * /learn) for your review. On unless explicitly switched off in Settings;
    * every draft still waits for review. */
   skillAuthoring: z.boolean().optional(),
+  /** Learn skills automatically: after enough tool steps in a conversation
+   * the bot's own engine reviews it in the background and may create or
+   * update its learned skills, each shown with Undo (server/skills/skill-review.ts).
+   * Off unless explicitly enabled, and only while skillAuthoring is on. */
+  skillReview: z.boolean().optional(),
+  /** Tool steps in one conversation between automatic reviews. */
+  skillReviewSteps: z.number().int().min(3).max(100).optional(),
   /** Show each tool run in the transcript. Off unless explicitly enabled. */
   showToolCalls: z.boolean().optional(),
   /** Run a routine inside the conversation it reports to, instead of a hidden
@@ -903,7 +911,7 @@ export interface AppConfig {
    * seats shared by all conversations, with per-thread affinity (#1654). */
   localVm?: { mode?: "shared" | "per-bot" | "pool"; maxInstances?: number; idleTimeoutMinutes?: number };
   /** Opt-in product experiments. Every flag defaults to disabled. */
-  features?: { skillAuthoring?: boolean; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; llmThreadTitles?: boolean; autoRecall?: boolean; routinesInConversation?: boolean; templates?: boolean; vpsComputer?: boolean; boatComputer?: boolean; decisionModel?: boolean; dataWindow?: boolean; meetingNotetaker?: boolean; routineGroupSettings?: boolean; skillsLibrary?: boolean; savedSteps?: boolean };
+  features?: { skillAuthoring?: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; llmThreadTitles?: boolean; autoRecall?: boolean; routinesInConversation?: boolean; templates?: boolean; vpsComputer?: boolean; boatComputer?: boolean; decisionModel?: boolean; dataWindow?: boolean; meetingNotetaker?: boolean; routineGroupSettings?: boolean; skillsLibrary?: boolean; savedSteps?: boolean };
   /** First-run progress; see onboardingConfigSchema. */
   onboarding?: { completedAt?: string; version?: number; reelSeen?: boolean; hintsSeen?: string[]; launchMode?: "solo" | "server"; firstTurnAt?: string };
   /** Named browser sessions any bot can be pointed at. */
@@ -1173,6 +1181,25 @@ export function localVmIdleTimeoutMinutes(cfg: AppConfig): number {
  * `skillRecorder: false` carried over at startup) switches it off. */
 export function skillAuthoringEnabled(cfg: AppConfig): boolean {
   return cfg.features?.skillAuthoring !== false;
+}
+
+export const DEFAULT_SKILL_REVIEW_STEPS = 10;
+export const MIN_SKILL_REVIEW_STEPS = 3;
+export const MAX_SKILL_REVIEW_STEPS = 100;
+
+/** Learn skills automatically (server/skills/skill-review.ts). Off unless switched
+ * on: each review sends the conversation to the bot's engine again, and it
+ * changes the bot's skills without being asked. Never on while skill
+ * authoring itself is off. */
+export function skillReviewEnabled(cfg: AppConfig): boolean {
+  return skillAuthoringEnabled(cfg) && cfg.features?.skillReview === true;
+}
+
+/** Tool steps between automatic reviews, clamped to the allowed range. */
+export function skillReviewSteps(cfg: AppConfig): number {
+  const raw = cfg.features?.skillReviewSteps;
+  const value = typeof raw === "number" && Number.isFinite(raw) ? Math.round(raw) : DEFAULT_SKILL_REVIEW_STEPS;
+  return Math.min(MAX_SKILL_REVIEW_STEPS, Math.max(MIN_SKILL_REVIEW_STEPS, value));
 }
 
 /** Automatic recall is read-only, so it is on unless switched off. */
@@ -1515,11 +1542,15 @@ function migrateLegacyNewBotEffort(): void {
 /** The last "config.json is being ignored" warning, so a file that stays
  * broken is reported once rather than on every loadConfig() call. */
 let lastIgnoredConfigWarning = "";
+const storedConfig = settledFileCache(
+  () => join(DATA_DIR, "config.json"),
+  () => parseStoredConfig(parseJson(readFileSync(join(DATA_DIR, "config.json"), "utf8"))),
+);
 
 export function loadConfig(): AppConfig {
   let cfg: AppConfig = {};
   try {
-    cfg = parseStoredConfig(parseJson(readFileSync(join(DATA_DIR, "config.json"), "utf8")));
+    cfg = structuredClone(storedConfig.read());
     lastIgnoredConfigWarning = "";
   } catch (error) {
     // No file yet is a normal first run: env fallbacks below. Any other failure
@@ -1619,14 +1650,7 @@ export function loadConfig(): AppConfig {
 export function cacheUntilConfigChanges<T>(derive: (config: AppConfig) => T): () => T {
   let cached: { stamp: string; value: T } | null = null;
   return () => {
-    let stamp: string | null = null;
-    try {
-      const file = statSync(join(DATA_DIR, "config.json"), { bigint: true });
-      // mode/uid/gid, not ctime: a chmod that leaves ctime alone must still miss.
-      if (Date.now() - Number(file.mtimeMs) >= 2_000) stamp = `${file.ino}:${file.size}:${file.mtimeNs}:${file.ctimeNs}:${file.mode}:${file.uid}:${file.gid}`;
-    } catch {
-      // Missing or out of reach: read it the way loadConfig() always has.
-    }
+    const stamp = settledFileStamp(join(DATA_DIR, "config.json"));
     if (stamp !== null && cached?.stamp === stamp) return cached.value;
     const value = derive(loadConfig());
     // A warning means loadConfig() ignored the file and ran on defaults.
@@ -2058,6 +2082,7 @@ export function saveConfig(
   }
   mkdirSync(DATA_DIR, { recursive: true });
   writeFileAtomic(p, JSON.stringify(disk, null, 2), { mode: 0o600 });
+  storedConfig.forget();
   for (const listener of configSaveListeners) {
     try {
       listener(before, disk);
@@ -2532,7 +2557,7 @@ export function mcpDisabledTools(cfg: AppConfig): Record<string, string[]> {
   return out;
 }
 
-export function customMcpServers(cfg: AppConfig, only?: string[]): Record<string, CustomMcpServer> {
+export function customMcpServers(cfg: AppConfig, only?: string[], botId?: string): Record<string, CustomMcpServer> {
   const out: Record<string, CustomMcpServer> = {};
   for (const [name, raw] of Object.entries(cfg.mcpServers ?? {})) {
     // a bot with its own list gets exactly those names; a bot without one
@@ -2547,7 +2572,8 @@ export function customMcpServers(cfg: AppConfig, only?: string[]): Record<string
       skipMcpEntry(name, `${parsed.error} Expected { "command": "npx", "args": [...], "env": { ... } } or { "type": "http", "url": "https://…", "headers": { ... } }`);
       continue;
     }
-    if (!parsed.server.enabled) continue;
+    // another bot's own server never starts for this bot (or for a turn of no bot)
+    if (!parsed.server.enabled || !mcpServerServes(parsed.server, botId)) continue;
     out[name] = isRemoteMcpServer(parsed.server)
       ? { type: parsed.server.type, url: parsed.server.url, headers: parsed.server.headers }
       : { command: parsed.server.command, args: parsed.server.args, env: parsed.server.env };

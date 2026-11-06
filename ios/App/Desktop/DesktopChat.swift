@@ -863,7 +863,11 @@ struct DesktopRoomBanners: View {
                 draft = room.bulletin
                 editing = true
             } label: {
-                HStack(spacing: 8) {
+                // GroupView bulletin: `flex items-center gap-2` + `py-1.5`
+                // around the 12.5 pt line at 1.5 (18.75). DesktopLineText's
+                // baseline guide keeps the glyphs from sitting ~4 pt high
+                // against the 12 pt pin.
+                HStack(alignment: .center, spacing: 8) {
                     DesktopIconView(icon: .pin, size: 12).foregroundStyle(theme.inkSecondary)
                     Group {
                         if let first = room.bulletin.split(separator: "\n").first, !first.isEmpty {
@@ -876,8 +880,7 @@ struct DesktopRoomBanners: View {
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 8)
-                // `py-1.5` around a 12.5 pt line at 1.5 (18.75)
-                .frame(minHeight: 30.75, maxHeight: 30.75)
+                .frame(minHeight: 30.75, maxHeight: 30.75, alignment: .center)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

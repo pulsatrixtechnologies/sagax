@@ -308,6 +308,8 @@ describe("shared sentences", () => {
     expect(one).toContain("engine's normal approval rules");
     expect(one).not.toContain("each call asks");
     expect(customMcpPrompt(["notes", "linear"])).toContain('MCP servers for you: "notes", "linear".');
+    expect(customMcpPrompt([], [{ name: "broken", error: "closed" }]))
+      .toContain('The MCP server "broken" is off for you because it doesn\'t start for you (closed)');
   });
 
   it("mentionPrompt names every tagged bot with its id, and is empty for none", () => {

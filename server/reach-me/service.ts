@@ -29,6 +29,7 @@ import type { PushMessage } from "../push/payload.ts";
 import { defang } from "../triggers/webhooks.ts";
 import type { ReachChannel, ReachInbound, ReachOutbound } from "./channel.ts";
 import type { ReachCode, ReachCodeStore, ReachMeStore } from "./store.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 /** An open card, as the reach-me message names it. */
 export interface ReachCard {
@@ -290,7 +291,7 @@ export class ReachMe {
   private track(work: Promise<unknown>): void {
     const run = work.catch((error) => this.log(`reach-me: send failed (${error instanceof Error ? error.message : "error"})`));
     this.inflight.add(run);
-    void run.finally(() => this.inflight.delete(run));
+    void run.finally(() => this.inflight.delete(run)).catch(reportBackgroundError);
   }
 
   private async dispatch(message: PushMessage, settings: ReachMeSettings): Promise<void> {

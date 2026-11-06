@@ -114,11 +114,19 @@ struct DesktopSettingsModal: View {
             ScrollViewReader { reader in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    DesktopText(Text(section.label), size: 17, weight: .semibold, line: 24, tracking: -0.136)
-                        .padding(.horizontal, 32)
-                        .padding(.top, 24)
-                        .padding(.bottom, 4)
-                        .accessibilityAddTraits(.isHeader)
+                    // #2080 (L0): page title and the page's one-sentence intro
+                    // (settings.intro.*); the pages draw no intro of their own.
+                    VStack(alignment: .leading, spacing: 2) {
+                        DesktopText(Text(section.label), size: 20, weight: .semibold, line: 28, tracking: -0.24)
+                            .accessibilityAddTraits(.isHeader)
+                        if let intro = section.intro {
+                            DesktopText(Text(intro), size: 13, line: 18, color: \.inkSecondary)
+                                .accessibilityIdentifier("desktop-settings.intro")
+                        }
+                    }
+                    .padding(.horizontal, 32)
+                    .padding(.top, 24)
+                    .padding(.bottom, 4)
                     VStack(alignment: .leading, spacing: 12) {
                         AnyView(DesktopSettingsPage(section: section))
                     }
@@ -163,11 +171,12 @@ extension DesktopSettingsSection {
         case .people: "People"
         case .mail: "Email"
         case .activity: "Activity"
-        case .backups: "Backups"
+        // #2080 (L0): Backups and import; App (id "about").
+        case .backups: "Backups and import"
         case .providers: "Providers"
         case .voice: "Voice"
         case .updates: "Updates"
-        case .about: "About"
+        case .about: "App"
         case .security: "Security"
         case .vault: "Vault"
         case .notifications: "Notifications"
@@ -193,15 +202,38 @@ extension DesktopSettingsSection {
         case .people: AppStrings.localized("People")
         case .mail: AppStrings.localized("Email")
         case .activity: AppStrings.localized("Activity")
-        case .backups: AppStrings.localized("Backups")
+        case .backups: AppStrings.localized("Backups and import")
         case .providers: AppStrings.localized("Providers")
         case .voice: AppStrings.localized("Voice")
         case .updates: AppStrings.localized("Updates")
-        case .about: AppStrings.localized("About")
+        case .about: AppStrings.localized("App")
         case .security: AppStrings.localized("Security")
         case .vault: AppStrings.localized("Vault")
         case .notifications: AppStrings.localized("Notifications")
         case .importBot: AppStrings.localized("Import")
+        }
+    }
+
+    /// The page's one-sentence intro under the title (#2080, settings.intro.*).
+    var intro: LocalizedStringKey? {
+        switch self {
+        case .general: "Your account, your profile, your language and time zone."
+        case .appearance: "How Sagax looks and what it shows."
+        case .notifications: "When and how Sagax lets you know."
+        case .security: "What needs your confirmation before a bot acts."
+        case .vault: "Logins, keys and notes your bots use without seeing them."
+        case .providers: "Where models and services come from."
+        case .engines: "Which model each bot uses."
+        case .voice: "How your bots speak and listen."
+        case .usage: "What your bots used and what it costs."
+        case .organization: "The server you work on and what it shares."
+        case .computer: "The computer your bots work on."
+        case .backups: "Save, restore and bring in your data."
+        case .about: "This app's version, updates and help."
+        case .experimental: "Features still being tried out."
+        case .connections, .myConnections, .decisionModel, .myEngines, .companion,
+             .people, .mail, .activity, .updates, .importBot:
+            nil
         }
     }
 
@@ -283,14 +315,15 @@ struct DesktopSettingsNav: View {
                             .padding(.horizontal, 10)
                             .padding(.vertical, 16)
                     }
-                    // 2026-11-02 (desktop): About is not a row of the rail; it opens
-                    // from the app menu and the sidebar
-                    ForEach(DesktopSettingsNavGroup.grouped(sections.filter { $0 != .about }), id: \.group) { entry in
+                    // #2080 (L0): App (id "about") is a page of the rail; the
+                    // centred About window opens from its "Open About" row.
+                    ForEach(DesktopSettingsNavGroup.grouped(sections), id: \.group) { entry in
                         DesktopText(Text(entry.group.label), size: 11.5, weight: .medium, line: 16, color: \.inkTertiary)
                             .padding(.horizontal, 9)
                             .padding(.top, 12)
                             .padding(.bottom, 4)
                             .accessibilityAddTraits(.isHeader)
+                            .accessibilityIdentifier("desktop-settings.nav-group.\(entry.group.rawValue)")
                         ForEach(entry.sections, id: \.self) { section in
                             navRow(section)
                         }
@@ -318,8 +351,7 @@ struct DesktopSettingsNav: View {
     }
 
     private func navRow(_ section: DesktopSettingsSection) -> some View {
-        // About is the centred About window, as on the desktop
-        Button { if section == .about { shell.modal = .about } else { choose(section) } } label: {
+        Button { choose(section) } label: {
             HStack(spacing: 9) {
                 DesktopSettingsIconView(icon: section.icon, size: 15)
                 DesktopText(Text(section.label))
@@ -397,8 +429,9 @@ struct DesktopSettingsPage: View {
         case .providers: AnyView(DesktopProvidersSettings())
         case .engines: AnyView(DesktopBotModelsPage())
         case .voice: AnyView(DesktopVoiceSettings())
+        // #2080 (L0): Updates is a card of App; Import a card of Backups.
         case .updates: AnyView(DesktopUpdatesSettings())
-        case .about: AnyView(EmptyView())
+        case .about: AnyView(DesktopAppSettings())
         case .security: AnyView(DesktopSecuritySettings())
         case .vault: AnyView(DesktopVaultSettings())
         case .notifications: AnyView(DesktopNotificationsSettings())
@@ -410,7 +443,39 @@ struct DesktopSettingsPage: View {
         case .usage: AnyView(DesktopUsageSettings())
         // not drawn on the iPad yet; `available` never lists them
         case .people, .activity, .mail: AnyView(EmptyView())
-        case .backups: AnyView(DesktopBackupsSettings())
+        case .backups: AnyView(DesktopBackupsAndImportSettings())
+        }
+    }
+}
+
+/// Settings > App (#2080): Updates first (about.updates), then the way to
+/// the centred About window (about.about). The About card has no group
+/// title: one LinkRow, as SettingsModal.tsx draws it.
+struct DesktopAppSettings: View {
+    @EnvironmentObject private var shell: DesktopShellModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            DesktopUpdatesSettings()
+            DesktopSettingsGroup(identifier: "about.about") {
+                DesktopLinkRow(
+                    label: Text("About Sagax: version, license, documentation"),
+                    identifier: "desktop-settings.about.open"
+                ) {
+                    shell.modal = .about
+                }
+            }
+        }
+    }
+}
+
+/// Settings > Backups and import (#2080): the full backup card, then Import
+/// as its second card (backups.import).
+struct DesktopBackupsAndImportSettings: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            DesktopBackupsSettings()
+            DesktopImportSettings()
         }
     }
 }
@@ -468,6 +533,7 @@ extension IPadParityScreen {
         case .settingsAccount: (.settings, .general, nil)
         case .settingsProviders: (.settings, .providers, nil)
         case .settingsVoice: (.settings, .voice, nil)
+        // #2080 (L0): Updates opens App (host); Import opens Backups and import.
         case .settingsUpdates: (.settings, .updates, nil)
         case .settingsAbout: (.about, nil, nil)
         case .settingsSecurity: (.settings, .security, nil)

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Command, Plus, Users, Wand2, X } from "lucide-react";
+import { Check, Command, Plus, Users, X } from "lucide-react";
 import { track } from "@/lib/analytics";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -20,7 +20,7 @@ import { botsReadOnlyText } from "@/lib/permissions";
 import { popoverClosesOnPointer } from "@/hooks/use-popover-dismiss";
 
 type ComposeMode = "browse" | "group";
-type ComposeRow = { kind: "create-bot" } | { kind: "create-bot-wizard" } | { kind: "create-group" } | { kind: "bot"; bot: Bot } | { kind: "person"; person: OrgDirectoryPerson };
+type ComposeRow = { kind: "create-bot" } | { kind: "create-group" } | { kind: "bot"; bot: Bot } | { kind: "person"; person: OrgDirectoryPerson };
 
 function isExternalBot(bot: Bot, viewer: string): boolean {
   const owner = bot.ownerUserId?.trim().toLowerCase();
@@ -91,8 +91,8 @@ export function composeRows(mode: ComposeMode, bots: Bot[], canCreateBots = true
   const shown = ranked.slice(0, COMPOSE_RESULT_LIMIT);
   if (mode === "group") return [{ kind: "create-group" }, ...shown];
   return [
-    // 2026-10-26: the quick creation, then the guided wizard beside it
-    ...(canCreateBots ? [{ kind: "create-bot" } as const, { kind: "create-bot-wizard" } as const] : []),
+    // #2092: the quick creation only; the guided wizard stays in New bot
+    ...(canCreateBots ? [{ kind: "create-bot" } as const] : []),
     { kind: "create-group" },
     ...shown,
   ];
@@ -161,12 +161,6 @@ export function ComposeToPicker({ onClose, startInGroup = false }: { onClose: ()
     if (row.kind === "create-bot") {
       if (state.botCreationPending || !canCreateBots) return;
       dispatch({ type: "newBot" });
-      onCloseRef.current();
-      return;
-    }
-    if (row.kind === "create-bot-wizard") {
-      if (!canCreateBots) return;
-      dispatch({ type: "openBotWizard" });
       onCloseRef.current();
       return;
     }
@@ -377,29 +371,6 @@ export function ComposeToPicker({ onClose, startInGroup = false }: { onClose: ()
                 >
                   <Plus size={16} className="shrink-0 text-ink-secondary" />
                   <span className="flex-1 truncate">{t("compose.createBot")}</span>
-                  {shortcut && <KeyHint n={shortcut} />}
-                </button>
-              );
-            }
-            if (row.kind === "create-bot-wizard") {
-              return (
-                <button
-                  key="create-bot-wizard"
-                  id={`compose-row-${index}`}
-                  ref={selected ? activeRef : undefined}
-                  type="button"
-                  role="option"
-                  aria-selected={selected}
-                  data-compose-action="create-bot-wizard"
-                  onMouseEnter={() => setCursor(index)}
-                  onClick={() => activate(row)}
-                  className={cn(
-                    "flex w-full items-center gap-3 px-3 py-2 text-left text-[14px] text-ink disabled:opacity-40",
-                    selected ? "bg-raised/80" : "hover:bg-raised/60",
-                  )}
-                >
-                  <Wand2 size={16} className="shrink-0 text-ink-secondary" />
-                  <span className="flex-1 truncate">{t("compose.createBotWizard")}</span>
                   {shortcut && <KeyHint n={shortcut} />}
                 </button>
               );

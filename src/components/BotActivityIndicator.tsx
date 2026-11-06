@@ -60,22 +60,41 @@ function useRotatingStep(key: string, count: number, active: boolean): number {
   return step;
 }
 
-// The sheen keeps its place when the phrase changes instead of restarting at
-// the left edge. 2s matches --animate-shimmer; the delay is fixed on mount.
-function Sheen({ text, ultracode, still }: { text: string; ultracode: boolean; still: boolean }) {
-  const [delay] = useState(() => `-${Date.now() % 2000}ms`);
+const SHEEN_PERIOD_MS = 2000;
+
+/** Thinking / typing phrase sheen: transform band in steps, so a long turn
+ * does not redraw the page every display frame. The delay is fixed on mount
+ * so a phrase change keeps the sheen's place. */
+export function ThinkingSheen({
+  text,
+  className,
+  ultracode = false,
+  still = false,
+}: {
+  text: string;
+  className?: string;
+  ultracode?: boolean;
+  still?: boolean;
+}) {
+  const [delay] = useState(() => `-${Date.now() % SHEEN_PERIOD_MS}ms`);
   return (
     <span
       data-presence-phrase=""
       className={cn(
         "whitespace-nowrap text-[13px]",
-        still ? "text-ink-secondary" : cn("thinking-shimmer animate-shimmer", ultracode && "ultracode-shimmer"),
+        still ? "text-ink-secondary" : cn("thinking-shimmer", ultracode && "ultracode-shimmer"),
+        className,
       )}
-      style={still ? undefined : { animationDelay: delay }}
+      style={still ? undefined : ({ "--sheen-period": `${SHEEN_PERIOD_MS}ms`, "--sheen-delay": delay } as CSSProperties)}
     >
       {text}
+      {!still && <span aria-hidden="true" className="thinking-sheen"><span data-text={text} /></span>}
     </span>
   );
+}
+
+function Sheen({ text, ultracode, still }: { text: string; ultracode: boolean; still: boolean }) {
+  return <ThinkingSheen text={text} ultracode={ultracode} still={still} />;
 }
 
 export type BotActivityMode = "thinking" | "typing";

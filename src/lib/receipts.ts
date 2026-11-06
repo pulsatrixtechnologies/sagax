@@ -41,3 +41,28 @@ export function lastNonReceipt<T extends { kind: string }>(messages: readonly T[
   }
   return undefined;
 }
+
+type PreviewableRun = { kind: string; routineRun?: { summary?: string; status?: string } };
+
+/** A routine run's receipt with no report (running, quiet, failed) is no
+ * line a person would read as the bot's last words (#2081: "Routine ...
+ * failed" was the sidebar's preview). A finished run with a report is the
+ * bot's message, so it is one. */
+function isSilentRunReceipt(message: PreviewableRun): boolean {
+  if (message.kind !== "routine.run") return false;
+  const run = message.routineRun;
+  return !(run && run.status === "completed" && run.summary?.trim());
+}
+
+/** What a bot's conversation reads as the bot's last words, for a preview
+ * line: past receipts, stopped notices, hidden workspace lines and silent
+ * run receipts. */
+export function lastSpokenLine<T extends PreviewableRun>(messages: readonly T[] | undefined): T | undefined {
+  if (!messages) return undefined;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i]!;
+    if (isReceipt(message) || isStoppedNotice(message) || isHiddenWorkspaceLine(message) || isSilentRunReceipt(message)) continue;
+    return message;
+  }
+  return undefined;
+}

@@ -25,12 +25,17 @@ import type { ResolvedSender, SteerQueueReason, WireMessage as Message } from ".
 import type { UsageTrigger } from "../usage/usage-ledger.ts";
 import { MessageSearchWorker } from "../message-search-worker.ts";
 import { searchMessagesInDatabase, type SealedKeyMaterial, type SearchHit } from "./message-search-query.ts";
+import { reportBackgroundError } from "../background-error.ts";
+import { ensureMemoryIndex } from "./message-db-memory-index.ts";
 export type { SearchHit } from "./message-search-query.ts";
 
 const DB_FILE = () => join(DATA_DIR, "messages.db");
 
 let handle: DatabaseSync | null = null;
 let handlePath: string | null = null;
+let handleCheckedAt = 0;
+/** SQLite keeps writing to a database file deleted under it without an error, so the file is looked for again this often. */
+const FILE_RECHECK_MS = 1_000;
 let searchWorker: MessageSearchWorker | null = null;
 let closingSearch: Promise<void> = Promise.resolve();
 
@@ -157,56 +162,6 @@ function ensureSealedSchema(db: DatabaseSync): void {
   `);
 }
 
-// The bot's memory files — MEMORY.md, memory/<topic>.md, memory/log/<day>.md
-// — indexed for the same session_search. One row per file, with the size
-// and mtime it was indexed at so a search can notice a file the bot's own
-// file tools rewrote without any filesystem watcher. Kept in this database
-// because FTS5 is already here; the files themselves stay the source of
-// truth on disk and this table is rebuilt from them at any time.
-function ensureMemoryIndex(db: DatabaseSync): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS memory_files (
-      bot_id TEXT NOT NULL,
-      path TEXT NOT NULL,
-      text TEXT NOT NULL,
-      mtime_ms INTEGER NOT NULL,
-      bytes INTEGER NOT NULL,
-      PRIMARY KEY (bot_id, path)
-    );
-    CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
-      text, content='memory_files', content_rowid='rowid', tokenize='unicode61'
-    );
-    CREATE TRIGGER IF NOT EXISTS memory_fts_ai AFTER INSERT ON memory_files BEGIN
-      INSERT INTO memory_fts(rowid, text) VALUES (new.rowid, new.text);
-    END;
-    CREATE TRIGGER IF NOT EXISTS memory_fts_ad AFTER DELETE ON memory_files BEGIN
-      INSERT INTO memory_fts(memory_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
-    END;
-    CREATE TRIGGER IF NOT EXISTS memory_fts_au AFTER UPDATE ON memory_files BEGIN
-      INSERT INTO memory_fts(memory_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
-      INSERT INTO memory_fts(rowid, text) VALUES (new.rowid, new.text);
-    END;
-  `);
-  // Sealed memory rows (docs/content-encryption.md): `text` empty, the text
-  // in `sealed` under the bot's key, its keyed words and prefixes in a
-  // contentless FTS5 table, like the transcripts' blind index.
-  const columns = new Set((db.prepare("PRAGMA table_info(memory_files)").all() as Array<{ name: string }>).map((column) => column.name));
-  if (!columns.has("sealed")) db.exec("ALTER TABLE memory_files ADD COLUMN sealed BLOB");
-  if (!columns.has("key_id")) db.exec("ALTER TABLE memory_files ADD COLUMN key_id TEXT");
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS memory_files_key_id ON memory_files(key_id) WHERE key_id IS NOT NULL;
-    CREATE VIRTUAL TABLE IF NOT EXISTS memory_sealed_fts USING fts5(
-      words, prefixes, content='', contentless_delete=1, detail=column
-    );
-    CREATE TRIGGER IF NOT EXISTS memory_sealed_ad AFTER DELETE ON memory_files WHEN old.key_id IS NOT NULL BEGIN
-      DELETE FROM memory_sealed_fts WHERE rowid = old.rowid;
-    END;
-    CREATE TRIGGER IF NOT EXISTS memory_sealed_au AFTER UPDATE OF sealed, key_id ON memory_files WHEN old.key_id IS NOT NULL BEGIN
-      DELETE FROM memory_sealed_fts WHERE rowid = old.rowid;
-    END;
-  `);
-}
-
 // Ranked recall over transcript text, for the bot's own session_search tool.
 // An external-content FTS5 table over messages.text: the index stores no
 // copy of the text, and three triggers keep it in step with every insert,
@@ -268,16 +223,23 @@ const UPSERT_MESSAGE =
 
 /** The live handle — reopened when the file was removed out from under us
  * (tests wipe DATA_DIR between cases; a fresh Store must get a fresh DB,
- * not a handle onto an unlinked inode). */
+ * not a handle onto an unlinked inode). The file is looked for again at most
+ * once a second: SQLite keeps writing to a deleted inode without error. */
 function db(): DatabaseSync {
-  if (handle && handlePath === DB_FILE() && existsSync(DB_FILE())) return handle;
+  const file = DB_FILE();
+  if (handle && handlePath === file && Date.now() - handleCheckedAt < FILE_RECHECK_MS) return handle;
+  if (handle && handlePath === file && existsSync(file)) {
+    handleCheckedAt = Date.now();
+    return handle;
+  }
   try {
     handle?.close();
   } catch {}
   // a new database: none of the old one's keys, bindings or queued tokens apply
   forgetSealingState();
   handle = open();
-  handlePath = DB_FILE();
+  handlePath = file;
+  handleCheckedAt = Date.now();
   scheduleMigration();
   return handle;
 }
@@ -2112,7 +2074,7 @@ export async function closeMessageSearch(): Promise<void> {
 
 /** Test/shutdown hook — closes the handle so a wiped DATA_DIR starts clean. */
 export function closeMessageDb(): void {
-  void closeMessageSearch();
+  void closeMessageSearch().catch(reportBackgroundError);
   try { if (handle && handlePath === DB_FILE() && existsSync(DB_FILE())) { flushContentIndex(); flushMemoryIndex(); } } catch { /* a closing database: the migration reindexes what has no index row */ }
   if (migration.timer) { clearTimeout(migration.timer); migration.timer = null; }
   if (indexTimer) { clearTimeout(indexTimer); indexTimer = null; }
@@ -2122,4 +2084,5 @@ export function closeMessageDb(): void {
   } catch {}
   handle = null;
   handlePath = null;
+  handleCheckedAt = 0;
 }

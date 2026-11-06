@@ -64,10 +64,8 @@ describe("ComposeToPicker", () => {
     expect(fixture.dispatch).toHaveBeenCalledWith({ type: "newBot" });
     expect(close).toHaveBeenCalled();
     fixture.dispatch.mockReset();
-    // 2026-10-26: the bot creation wizard, beside the quick creation
-    rendered.find((node) => node.props["data-compose-action"] === "create-bot-wizard")?.props.onClick?.();
-    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "openBotWizard" });
-    fixture.dispatch.mockReset();
+    // #2092: no wizard row here any more (the wizard stays in New bot)
+    expect(rendered.some((node) => node.props["data-compose-action"] === "create-bot-wizard")).toBe(false);
     rendered.find((node) => node.props["data-compose-bot"] === "aurora")?.props.onClick?.();
     expect(fixture.dispatch).toHaveBeenCalledWith({ type: "newTask", botId: "aurora" });
     expect(html).toContain("New thread");
@@ -76,15 +74,14 @@ describe("ComposeToPicker", () => {
     expect(fixture.dispatch).not.toHaveBeenCalled();
   });
 
-  it("has no Browse Bots row: the bots follow the three create rows and take shortcuts from 4", () => {
+  it("has no Browse Bots row: the bots follow the two create rows and take shortcuts from 3", () => {
     fixture.bots = [person("aurora", "Aurora")];
     const html = renderToStaticMarkup(createElement(() => ComposeToPicker({ onClose: vi.fn() })));
     expect(html).not.toContain("Browse Bots");
     expect(html.indexOf("Create group chat")).toBeLessThan(html.indexOf("Aurora"));
-    expect(html).toMatch(/Aurora<\/span>.*?<kbd[^>]*>.*?<span>4<\/span><\/kbd>/);
-    // 2026-10-26: the wizard sits right after the quick creation
-    expect(html.indexOf("Create new Bot")).toBeLessThan(html.indexOf("Create a bot with the wizard"));
-    expect(html.indexOf("Create a bot with the wizard")).toBeLessThan(html.indexOf("Create group chat"));
+    expect(html).toMatch(/Aurora<\/span>.*?<kbd[^>]*>.*?<span>3<\/span><\/kbd>/);
+    // #2092: no wizard row; the guided wizard stays in New bot
+    expect(html).not.toContain("wizard");
   });
 
   it("offers New bot only when the server says this viewer may create one, and lists the viewer's own bots by principal", () => {
@@ -161,13 +158,13 @@ describe("ComposeToPicker", () => {
       expect(html).toContain("Create group chat");
       rendered.find((node) => node.props["data-compose-action"] === "create-group")?.props.onClick?.();
       expect(fixture.dispatch).not.toHaveBeenCalled();
-      expect(composeRows("browse", [person("vega", "Vega")]).map((row) => row.kind)).toEqual(["create-bot", "create-bot-wizard", "create-group", "bot"]);
+      expect(composeRows("browse", [person("vega", "Vega")]).map((row) => row.kind)).toEqual(["create-bot", "create-group", "bot"]);
     });
   });
 
   it("puts the group confirm row ahead of the bots", () => {
     const bots = [person("a", "Ara"), person("b", "Liora")];
-    expect(composeRows("browse", bots).map((row) => row.kind === "bot" ? row.bot.id : row.kind)).toEqual(["create-bot", "create-bot-wizard", "create-group", "a", "b"]);
+    expect(composeRows("browse", bots).map((row) => row.kind === "bot" ? row.bot.id : row.kind)).toEqual(["create-bot", "create-group", "a", "b"]);
     expect(composeRows("group", bots).map((row) => row.kind === "bot" ? row.bot.id : row.kind)).toEqual(["create-group", "a", "b"]);
     expect(initialState.newBotOpen).toBe(false);
   });

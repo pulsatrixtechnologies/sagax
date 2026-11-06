@@ -2,6 +2,9 @@
 // #1388 wave 4 step 3: startTurn prepare leaf. Never imports server/index.ts.
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState, PrepareResult } from "./start-turn-state.ts";
+import { resolveModelAccount } from "../models/resolve-model-account.ts";
+import { activeEngineRefusal } from "../engines/engine-refusals.ts";
+import { pluginKey, pluginsNamedIn, type AccountCreditState } from "../../shared/model-account-pool.ts";
 
 export function createPrepareValidateStartTurn(
   host: StartTurnHost,
@@ -369,6 +372,38 @@ export function createPrepareValidateStartTurn(
     const healed = healBotEngine(state.bot);
     if (!namesEngine(healed.modelSelection)) throw noEngineError();
     state.bot = healed;
+  }
+  // #2106: several subscription accounts of one provider offering the same
+  // model collapse in the picker; at turn time pick the account that can
+  // run it (credits from engine-refusals / managed MCP plugins when known).
+  {
+    const selection = state.bot.modelSelection;
+    const home = registry.get(selection.instanceId);
+    if (home && registry.access(selection.instanceId) !== "api") {
+      const now = Date.now();
+      const creditOf = (instanceId: string): AccountCreditState => {
+        const refusal = activeEngineRefusal(instanceId, undefined, now);
+        if (!refusal) return "unknown";
+        if (refusal.cause === "credits") return "out";
+        if (refusal.cause === "usage_limit") return "rate_limited";
+        return "unknown";
+      };
+      const accounts = registry.instances()
+        .filter((inst) => inst.driverKind === home.driverKind && registry.access(inst.instanceId) !== "api")
+        .map((inst) => ({
+          instanceId: inst.instanceId,
+          models: (inst.models?.options ?? []).map((option: { id: string }) => option.id),
+          credit: creditOf(inst.instanceId),
+          // the managed MCP plugins this account holds (claude.ai connectors)
+          managedPlugins: ((host.accountManagedPlugins?.(inst.instanceId) ?? []) as string[]).map(pluginKey),
+        }));
+      // the plugins the person's words name, among those the accounts hold
+      const neededPlugins = pluginsNamedIn(state.text ?? "", accounts.flatMap((account) => account.managedPlugins));
+      const remapped = resolveModelAccount({ selection, accounts, neededPlugins });
+      if (remapped.instanceId !== selection.instanceId) {
+        state.bot = { ...state.bot, modelSelection: remapped };
+      }
+    }
   }
   state.instance = registry.get(state.bot.modelSelection.instanceId);
   if (!state.instance) {

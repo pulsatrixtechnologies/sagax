@@ -129,6 +129,8 @@ export type ClaudeSession = {
   replaysUserMessages: boolean;
   /** tool_use id → name, so an Artifact result can become a page card */
   toolNames: Map<string, string>;
+  /** tool_use id → arguments, so a vendor 403 on another mailbox can say to retry on /me (#1943) */
+  toolInputs?: Map<string, unknown>;
   /** the CLI's config folder (CLAUDE_CONFIG_DIR) the process runs on, so a
    * wrong-account artifact card can name the account it is signed in to */
   configDir?: string | null;

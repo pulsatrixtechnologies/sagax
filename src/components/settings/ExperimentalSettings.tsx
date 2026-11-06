@@ -23,6 +23,7 @@ import { featureMissingOnServer } from "@/lib/server-route";
 import { isPersonalFeature } from "../../../shared/person-settings";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { OrgPhoneCalls } from "./OrgPhoneCalls";
+import { SkillReviewSettings } from "./SkillReviewSettings";
 
 type ExperimentalFeature = "skillAuthoring" | "browser" | "decisionModel" | "dataWindow" | "meetingNotetaker" | "llmThreadTitles";
 
@@ -188,6 +189,7 @@ export function ExperimentalSettings() {
           busy={busy}
           locked={!mayToggle("skillAuthoring")}
           onToggle={() => void toggle("skillAuthoring", !skillAuthoring)}
+          below={<SkillReviewSettings />}
         />
         <FeatureRow
           feature="browser"

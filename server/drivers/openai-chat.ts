@@ -18,6 +18,7 @@ import {
   noModelLeftMessage,
 } from "./openai-chat-shared.ts";
 import { createWarmToolSessions } from "./openai-chat-tools-warm.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export { ModelUnsupportedError } from "./openai-chat-completion.ts";
 
@@ -156,12 +157,15 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
   const auth = (apiKey: string): Record<string, string> =>
     options.authHeaders ? options.authHeaders(apiKey) : { authorization: `Bearer ${apiKey}` };
 
+  /** Keep-alive ping: a stalled /models must not pin the interval forever. */
+  const WARM_PING_TIMEOUT_MS = 5_000;
   const pingModels = async (turn?: SendTurnInput) => {
     const apiKey = resolveKey(turn);
     try {
       const response = await fetch(modelsUrl(), {
         method: "GET",
         headers: auth(apiKey),
+        signal: AbortSignal.timeout(WARM_PING_TIMEOUT_MS),
       });
       // Drain so undici returns the socket to the keep-alive pool.
       await response.arrayBuffer().catch(() => undefined);
@@ -175,7 +179,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
     if (warmPing) return;
     const ms = Number(process.env.FAKE_GROK_WARM_PING_MS ?? "2500");
     if (!Number.isFinite(ms) || ms <= 0) return;
-    warmPing = setInterval(() => { void pingModels(); }, ms);
+    warmPing = setInterval(() => { void pingModels().catch(reportBackgroundError); }, ms);
     warmPing.unref?.();
   };
 
@@ -193,7 +197,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
 
   const releaseWarm = (threadId: string) => {
     warmThreads.delete(threadId);
-    if (!active.has(threadId)) void warmToolSessions.release(threadId);
+    if (!active.has(threadId)) void warmToolSessions.release(threadId).catch(reportBackgroundError);
     if (warmThreads.size === 0) stopWarmPing();
   };
 

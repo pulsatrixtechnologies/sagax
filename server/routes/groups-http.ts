@@ -136,7 +136,7 @@ export interface GroupsHttpDeps {
   companionRequest(req: IncomingMessage, auth: RequestAuth): boolean;
   callerCan(auth: RequestAuth, key: string): boolean;
   roomSectionMoveRefusal(auth: RequestAuth, group: GroupRecord, next: unknown): string | null;
-  recordRoomMove(groupId: string, from: string, to: string): void;
+  recordRoomMove(groupId: string, from: string, to: string, fromId?: string | null, toId?: string | null): void;
   updateChannel(groupId: string, body: unknown): GroupRecord;
   memberFolderRefusal(principal: string | null, folder: string | null | undefined): { error: string; code?: string } | null;
   memberFolderPrincipal(auth: RequestAuth): string | null;
@@ -541,8 +541,12 @@ export function createGroupsHttpRoutes(deps: GroupsHttpDeps): RouteHandler {
         const outside = checkedRoom.ok ? memberFolderRefusal(memberFolderPrincipal(auth), checkedRoom.cwd) : null;
         if (outside) return json(res, 403, { ...outside, field: "cwd" });
       }
+      const fromSectionId = typeof existingGroup?.sectionId === "string" ? existingGroup.sectionId : undefined;
       let group = updateChannel(m[1], body);
-      if (movesSection) recordRoomMove(group.id, fromSection, sectionKey(group.section));
+      if (movesSection) {
+        const toSectionId = typeof group.sectionId === "string" ? group.sectionId : undefined;
+        recordRoomMove(group.id, fromSection, sectionKey(group.section), fromSectionId, toSectionId);
+      }
       // A room marked read by a person reads their @ tag too (server/rooms/room-mentions.ts).
       const reader = groupReaderId(auth);
       if ((body as { unread?: unknown } | null)?.unread === false) {
@@ -582,15 +586,13 @@ export function createGroupsHttpRoutes(deps: GroupsHttpDeps): RouteHandler {
         humanIds: plan.humanIds,
         memberIds: plan.memberIds,
         ...(plan.createdBy ? { createdBy: plan.createdBy } : {}),
-        ...(plan.archive ? { archivedAt: Date.now() } : {}),
       });
       if (!left) return json(res, 404, { error: "no such group" });
       // a turn waiting on a bot that left with them ends, as a roster edit does
       if (turnWasOpen) failTurnIfMemberLeft(left, beforeHumanIds, beforeMemberIds);
-      if (plan.archive) disableRoutinesForGroup(group.id);
       // their own devices drop the group: they no longer see its frames
       broadcast({ kind: "group.left", roomId: group.id, audience: actor.id });
-      return json(res, 200, { ok: true, archived: plan.archive, ...(plan.createdBy ? { owner: plan.createdBy } : {}), removedBotIds: plan.removedBotIds });
+      return json(res, 200, { ok: true, ...(plan.createdBy ? { owner: plan.createdBy } : {}), removedBotIds: plan.removedBotIds });
     }
     m = path.match(/^\/api\/groups\/([\w-]+)\/read$/);
     if (m && method === "POST") {

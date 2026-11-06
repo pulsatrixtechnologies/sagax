@@ -11,6 +11,7 @@ import type { EngineInstall } from "../contracts.ts";
 import { DATA_DIR, stripWorkspaceCredentialEnv } from "../config.ts";
 import { augmentedPath, findCliCandidates, registerPathDir, resetPathCache } from "../env-path.ts";
 import { execCli, killCliTree, spawnCli } from "../procs.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 const MAX_OUTPUT = 64 * 1024;
 const DEFAULT_TIMEOUT_MS = 10 * 60_000;
@@ -166,7 +167,7 @@ function runNpm(args: string[], env: NodeJS.ProcessEnv, cwd: string, timeoutMs: 
         rejectRun(new Error(stopped
           ? "The install took too long and was stopped. Check the server's network connection and try again."
           : "The install took too long, but npm could not be confirmed stopped. Ask the server administrator to stop the install process before trying again."));
-      });
+      }).catch(reportBackgroundError);
     }, timeoutMs);
     timer.unref();
     child.once("error", (error: NodeJS.ErrnoException) => {

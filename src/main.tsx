@@ -22,6 +22,7 @@ import { installConsoleRing } from "./lib/console-ring";
 import { installOverlayScrollbars } from "./lib/overlay-scrollbars";
 import { syncDesktopAppearance } from "./lib/desktop-appearance-sync";
 import { JoinPage, takeInviteTokenFromLocation } from "./pair/JoinPage";
+import { PageBoundary } from "./components/PageBoundary";
 import "./styles.css";
 
 // Before the first paint, not inside a component: stamping the skin during
@@ -147,5 +148,5 @@ async function chooseRoot(): Promise<React.ReactNode> {
 
 // A floating bot's window makes no request of its own: its texts arrive translated from the main page.
 void Promise.all([floatingBot ? undefined : bootstrapBrand(), chooseRoot()]).then(([, root]) => {
-  createRoot(document.getElementById("root")!).render(<StrictMode>{root}</StrictMode>);
+  createRoot(document.getElementById("root")!).render(<StrictMode><PageBoundary>{root}</PageBoundary></StrictMode>);
 });

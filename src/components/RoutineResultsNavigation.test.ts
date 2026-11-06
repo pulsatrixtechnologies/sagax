@@ -60,11 +60,11 @@ const run: RoutineRun = {
   createdAt: 100, finishedAt: 200, status: "completed", manual: false,
 };
 
-// 2026-11-01: a run opens as an exchange sheet in the chat column
-// (RoutineRunExchange): its actions sit in the sheet's footer prop, inside a
-// render prop of ConnectedRunActivity. The routine page sits in the shared
-// right panel (DetailPanel).
-const EXPANDED = new Set(["ConnectedRunActivity", "RoutineRunDetail", "RoutineDetail", "RoutineRunExchange", "RoutineRunExchangeSheet", "DetailPanel"]);
+// 2026-11-05 (#2098): a run opens in the chat, at its message; its actions
+// sit in the routine panel (RoutineRunDetail), inside a render prop of
+// ConnectedRunActivity. The routine page sits in the shared right panel
+// (DetailPanel).
+const EXPANDED = new Set(["ConnectedRunActivity", "RoutineRunDetail", "RoutineDetail", "DetailPanel"]);
 const NO_ACTIVITY = { detail: null, error: false, reload: async () => {}, waiting: [], conversation: () => null };
 type Button = { children?: ReactNode; onClick?: () => void };
 function textOf(node: ReactNode): string {
@@ -125,49 +125,30 @@ describe("routine results navigation", () => {
     expect(details(null).buttons.has("Open results thread")).toBe(false);
   });
 
-  it("with threads hidden, Continue opens the one conversation at the report's topic, never the run's task beside it", () => {
-    fixture.showThreads = false;
-    closeSideThread();
-    const { buttons, onClose } = details();
-    buttons.get("Continue in the conversation")!.onClick!();
-    // "original-source" (where the report went) is an earlier topic of the
-    // stream: the conversation opens and scrolls back to it.
-    expect(navigationCalls()).toEqual([
-      [{ type: "focusMessage", threadId: "original-source", messageId: "", segment: true }],
-      [{ type: "switchTask", botId: bot.id, threadId: "new-results" }],
-    ]);
-    expect(currentSideThread()).toBeNull();
-    expect(navigationCalls().some(([action]) => (action as { threadId?: string }).threadId === "execution")).toBe(false);
-    expect(onClose).toHaveBeenCalledOnce();
+  // 2026-11-05 (#2098, the operator: "C'EST INNACEPTABLE"): a run never opens beside
+  // the chat. The calendar's details draw nothing for a run (no Continue in
+  // the conversation, no Close Chat) and send it to the chat, at its message.
+  it("a run item draws no run view beside the chat, whatever the threads setting", () => {
+    for (const showThreads of [false, true]) {
+      fixture.showThreads = showThreads;
+      const { buttons } = details();
+      expect(buttons.has("Continue in the conversation")).toBe(false);
+      expect(buttons.has("Close Chat")).toBe(false);
+      expect(buttons.size).toBe(0);
+      // Nothing opens a column or a thread beside the chat while it renders.
+      closeSideThread();
+      expect(currentSideThread()).toBeNull();
+      expect(navigationCalls().some(([action]) => (action as { threadId?: string }).threadId === "execution")).toBe(false);
+    }
   });
 
-  it("a report that went to an older version's results thread continues in the conversation", () => {
-    fixture.showThreads = false;
-    closeSideThread();
-    fixture.state!.bots = [{ ...bot, threadId: "new-results", tasks: [...bot.tasks!, { threadId: "legacy-results", title: "Daily report · Results", createdAt: 3, routineResults: true }] }];
-    // The sheet reads the live run from the store, not the receipt passed in.
-    fixture.state!.routineRuns = [{ ...run, resultsThreadId: "legacy-results" }];
-    details({ ...run, resultsThreadId: "legacy-results" }).buttons.get("Continue in the conversation")!.onClick!();
-    expect(navigationCalls()).toEqual([
-      [{ type: "select", id: bot.id }],
-      [{ type: "switchTask", botId: bot.id, threadId: "new-results" }],
-    ]);
-    expect(currentSideThread()).toBeNull();
-  });
-
-  it("with threads shown, Continue opens the thread the report is in, not the run's task", () => {
-    details().buttons.get("Continue in the conversation")!.onClick!();
-    expect(navigationCalls()).toEqual([
-      [{ type: "select", id: bot.id }],
-      [{ type: "switchTask", botId: bot.id, threadId: "original-source" }],
-    ]);
-  });
-
-  it("a team goal still opens its group's thread", () => {
-    const goal = { ...run, target: "room-goal" as const, groupId: group.id, threadId: "current-room-thread" };
-    fixture.state!.routineRuns = [goal];
-    details(goal, { ...routine, target: "room-goal", groupId: group.id }).buttons.get("Open group thread")!.onClick!();
-    expect(navigationCalls()).toContainEqual([{ type: "switchGroupTask", groupId: group.id, threadId: "current-room-thread" }]);
+  it("a team goal's routine page keeps its Open group thread", () => {
+    fixture.state!.routineRuns = [];
+    const goalRoutine = { ...routine, target: "room-goal" as const, groupId: group.id };
+    fixture.state!.routines = [goalRoutine];
+    const { buttons } = details(null, goalRoutine);
+    expect(buttons.size).toBeGreaterThan(0);
+    expect(buttons.has("Continue in the conversation")).toBe(false);
   });
 
   it("shows no Run details bar at the top of an execution's chat", () => {

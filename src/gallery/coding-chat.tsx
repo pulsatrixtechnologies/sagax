@@ -1,10 +1,14 @@
 /** Isolated gallery for the coding chat (2026-11-03): a coding task of the
  * bot panel's Coding list opened over the chat column. Synthetic data only.
- * ?skin=<id>&lang=<code>&status=running|finished&compose=1 */
+ * A coding window (#2149): the X, the bot's own composer, the </> panel.
+ * ?skin=<id>&lang=<code>&status=running|finished&pods=1 (Experimental on) */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { ExchangeColumnProvider, useExchangeColumn } from "../components/BotExchangeChip";
+import { ChatWindowProvider } from "../components/BotHeaderPill";
+import { Composer } from "../components/Composer";
 import { CodingChatSheet } from "../components/coding/CodingChat";
+import { DevPods, DevPodsToggle } from "../components/dev-pods/DevPods";
 import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { StoreProvider, useStore, type Bot, type Message } from "../state/store";
@@ -16,12 +20,39 @@ const skinParam = params.get("skin") as SkinId | null;
 applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? skinParam : readSkin());
 await loadLocale(params.get("lang") ?? "en");
 const live = params.get("status") === "running";
+try {
+  localStorage.setItem("sagax.devPods.v1", JSON.stringify({ enabled: params.get("pods") === "1" }));
+} catch {
+  // the window draws without the pods
+}
+
+// A gallery has no server: the routines and engines listings answer with
+// empty lists and the live stream stays silent.
+const reply = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+const realFetch = window.fetch.bind(window);
+window.fetch = async (input, init) => {
+  const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.href);
+  if (url.pathname === "/api/routines") return reply({ routines: [], runs: [] });
+  if (url.pathname === "/api/instances") return reply({ instances: [] });
+  return realFetch(input, init);
+};
+class SilentEventSource {
+  onmessage = null;
+  onerror = null;
+  onopen = null;
+  readyState = 0;
+  constructor(readonly url: string) {}
+  addEventListener() {}
+  removeEventListener() {}
+  close() {}
+}
+(window as unknown as { EventSource: unknown }).EventSource = SilentEventSource;
 
 const ROOT = "/workspace/bots/osprey/dispatch-board";
 const NOW = Date.now();
 const at = (minutesAgo: number) => NOW - minutesAgo * 60_000;
 const pretty = (value: unknown) => JSON.stringify(value, null, 2);
-const bot = { id: "osprey", threadId: "main", name: "Osprey", color: "green", tasks: [], modelSelection: { instanceId: "t", model: "t" } } as unknown as Bot;
+const bot = { id: "osprey", threadId: "main", name: "Osprey", color: "green", tasks: [], messages: [], modelSelection: { instanceId: "t", model: "t" } } as unknown as Bot;
 
 let seq = 0;
 const say = (role: "user" | "bot", text: string, minutesAgo: number): Message => ({
@@ -89,6 +120,7 @@ function Ready() {
       <div ref={column.ref} className="relative mx-auto h-full max-w-[960px] border-x border-hairline/30">
         <ExchangeColumnProvider node={column.node}>
           {column.node && (
+            <ChatWindowProvider value={{ panelOpen: false, onTogglePanel: () => {}, composerInset: 0 }}>
             <CodingChatSheet
               item={detail}
               detail={detail}
@@ -101,8 +133,11 @@ function Ready() {
               onClose={() => {}}
               onStop={live ? () => {} : undefined}
               onSend={async () => {}}
-              composing={params.get("compose") === "1"}
+              headerTools={<DevPodsToggle bot={bot} />}
+              pods={<DevPods bot={bot} messages={messages} composerHeight={0} headerHeight={0} computerStart={undefined} dispatch={dispatch} forced />}
+              composer={<Composer bot={{ ...bot, busy: live }} />}
             />
+            </ChatWindowProvider>
           )}
         </ExchangeColumnProvider>
       </div>

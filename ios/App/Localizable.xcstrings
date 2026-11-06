@@ -1000,6 +1000,22 @@
         }
       }
     },
+    "%@ has a question for you": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ a une question pour toi"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "value": "%@ has a question for you",
+            "state": "translated"
+          }
+        }
+      }
+    },
     "%@ has its own settings that conflict with this bot's tools. Nothing was sent.": {
       "localizations": {
         "en": {
@@ -1196,6 +1212,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ est sur votre tailnet."
+          }
+        }
+      }
+    },
+    "%@ is out of credit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is out of credit"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ n'a plus de crédit"
           }
         }
       }
@@ -1452,6 +1484,38 @@
         }
       }
     },
+    "%@ limit reached": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ limit reached"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limite de %@ atteinte"
+          }
+        }
+      }
+    },
+    "%@ limit reached, back at %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ limit reached, back at %2$@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limite de %1$@ atteinte, de retour à %2$@"
+          }
+        }
+      }
+    },
     "%@ minutes": {
       "localizations": {
         "fr": {
@@ -1468,6 +1532,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ mouvements"
+          }
+        }
+      }
+    },
+    "%@ needs a decision": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ a besoin d'une décision"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "value": "%@ needs a decision",
+            "state": "translated"
           }
         }
       }
@@ -1490,6 +1570,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$@ precisa da permissão %2$@. Peça a um administrador para adicioná-la no Perspicax."
+          }
+        }
+      }
+    },
+    "%@ needs you": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ a besoin de toi"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "value": "%@ needs you",
+            "state": "translated"
           }
         }
       }
@@ -3118,6 +3214,22 @@
         }
       }
     },
+    "%lld files changed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld files changed"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld fichiers modifiés"
+          }
+        }
+      }
+    },
     "%lld flights purchased · %@": {
       "localizations": {
         "en": {
@@ -3890,6 +4002,22 @@
         }
       }
     },
+    "%lld passed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld passed"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld réussis"
+          }
+        }
+      }
+    },
     "%lld paused routine(s)": {
       "localizations": {
         "en": {
@@ -4230,6 +4358,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld habilidades"
+          }
+        }
+      }
+    },
+    "%lld skipped": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld skipped"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ignorés"
           }
         }
       }
@@ -4926,6 +5070,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "1 simulação"
+          }
+        }
+      }
+    },
+    "1 file changed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 file changed"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 fichier modifié"
           }
         }
       }
@@ -6610,6 +6770,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sobre"
+          }
+        }
+      }
+    },
+    "About Sagax: version, license, documentation": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À propos de Sagax : version, licence, documentation"
           }
         }
       }
@@ -10342,6 +10512,28 @@
         }
       }
     },
+    "Always %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always %@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toujours %@."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sempre %@."
+          }
+        }
+      }
+    },
     "Always allow": {
       "localizations": {
         "en": {
@@ -10586,6 +10778,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sempre o mesmo tema"
+          }
+        }
+      }
+    },
+    "Always use this choice": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always use this choice"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toujours utiliser ce choix"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sempre usar esta escolha"
           }
         }
       }
@@ -12358,6 +12572,22 @@
         }
       }
     },
+    "Ask %@ to continue": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask %@ to continue"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demande à %@ de continuer"
+          }
+        }
+      }
+    },
     "Ask a bot to do something later.": {
       "localizations": {
         "en": {
@@ -12414,6 +12644,50 @@
           "stringUnit": {
             "state": "translated",
             "value": "Peça a um admin."
+          }
+        }
+      }
+    },
+    "Ask each time": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask each time"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demander à chaque fois"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perguntar toda vez"
+          }
+        }
+      }
+    },
+    "Ask each time when several targets are available.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask each time when several targets are available."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demander à chaque fois quand plusieurs cibles sont disponibles."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perguntar toda vez quando vários destinos estiverem disponíveis."
           }
         }
       }
@@ -13800,6 +14074,16 @@
         }
       }
     },
+    "Backups and import": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sauvegardes et import"
+          }
+        }
+      }
+    },
     "Base": {
       "localizations": {
         "en": {
@@ -13940,6 +14224,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Janelas cinza em relevo sobre uma área de trabalho verde-azulada, direto do fim dos anos 90."
+          }
+        }
+      }
+    },
+    "Binary file": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Binary file"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fichier binaire"
           }
         }
       }
@@ -18366,6 +18666,28 @@
         }
       }
     },
+    "Claude artifact": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude artifact"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Artefact Claude"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Artefato Claude"
+          }
+        }
+      }
+    },
     "Claude runs this sub-agent inside the turn: it stops with the turn and takes no message of its own.": {
       "localizations": {
         "en": {
@@ -18894,6 +19216,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fermer et rendre le contrôle (Cmd/Ctrl+Maj+Échap)"
+          }
+        }
+      }
+    },
+    "Close chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close chat"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fermer le chat"
           }
         }
       }
@@ -19444,6 +19782,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Partenaire de code"
+          }
+        }
+      }
+    },
+    "Coding task: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Coding task: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tâche de code : %@"
           }
         }
       }
@@ -20286,6 +20640,22 @@
         }
       }
     },
+    "Completed with problems": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Completed with problems"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminée avec des problèmes"
+          }
+        }
+      }
+    },
     "Completed, waiting, failed, and manually started runs appear here.": {
       "localizations": {
         "fr": {
@@ -20720,182 +21090,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connecter"
-          }
-        }
-      }
-    },
-    "%@ is out of credit": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ is out of credit"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ n'a plus de crédit"
-          }
-        }
-      }
-    },
-    "%@ limit reached": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ limit reached"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Limite de %@ atteinte"
-          }
-        }
-      }
-    },
-    "%@ limit reached, back at %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@ limit reached, back at %2$@"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Limite de %1$@ atteinte, de retour à %2$@"
-          }
-        }
-      }
-    },
-    "Connection notices": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connection notices"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Avis de connexion"
-          }
-        }
-      }
-    },
-    "Fix": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Fix"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Corriger"
-          }
-        }
-      }
-    },
-    "Perspicax is unreachable, retrying…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Perspicax is unreachable, retrying…"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Perspicax est injoignable, nouvel essai…"
-          }
-        }
-      }
-    },
-    "Reconnected": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reconnected"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reconnecté"
-          }
-        }
-      }
-    },
-    "Sagax can't reach the server, retrying…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sagax can't reach the server, retrying…"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sagax ne joint pas le serveur, nouvel essai…"
-          }
-        }
-      }
-    },
-    "Sagax could not fix it. Try again.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sagax could not fix it. Try again."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sagax n'a pas pu corriger le problème. Réessayez."
-          }
-        }
-      }
-    },
-    "Server update in progress, back in a moment": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Server update in progress, back in a moment"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mise à jour du serveur en cours, de retour dans un instant"
-          }
-        }
-      }
-    },
-    "Switch engine": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Switch engine"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Changer de moteur"
           }
         }
       }
@@ -21742,6 +21936,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Detalhes da conexão"
+          }
+        }
+      }
+    },
+    "Connection notices": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection notices"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avis de connexion"
           }
         }
       }
@@ -23344,6 +23554,22 @@
         }
       }
     },
+    "Couldn't load this task.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't load this task."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de charger cette tâche."
+          }
+        }
+      }
+    },
     "Couldn't open link": {
       "localizations": {
         "fr": {
@@ -23480,6 +23706,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Não foi possível enviar esta mensagem. Tente de novo."
+          }
+        }
+      }
+    },
+    "Couldn't send. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't send. Try again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoi impossible. Réessaie."
           }
         }
       }
@@ -25330,6 +25572,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Défauts des nouveaux bots"
+          }
+        }
+      }
+    },
+    "Deferred: target busy": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deferred: target busy"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Différée : cible occupée"
           }
         }
       }
@@ -31142,6 +31400,16 @@
         }
       }
     },
+    "Features still being tried out.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Des fonctions encore à l'essai."
+          }
+        }
+      }
+    },
     "Fields": {
       "localizations": {
         "en": {
@@ -32118,6 +32386,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ajustar à janela (0)"
+          }
+        }
+      }
+    },
+    "Fix": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fix"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Corriger"
           }
         }
       }
@@ -33222,6 +33506,22 @@
         }
       }
     },
+    "From the routine %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "De la routine %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "value": "From the routine %@",
+            "state": "translated"
+          }
+        }
+      }
+    },
     "From the xAI Bot Marketplace": {
       "localizations": {
         "en": {
@@ -33234,6 +33534,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Depuis la xAI Bot Marketplace"
+          }
+        }
+      }
+    },
+    "From work %@ handed over": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du travail confié par %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "value": "From work %@ handed over",
+            "state": "translated"
           }
         }
       }
@@ -36118,6 +36434,16 @@
         }
       }
     },
+    "How Sagax looks and what it shows.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'allure de Sagax et ce qu'il affiche."
+          }
+        }
+      }
+    },
     "How do you want to set up your new bot? You can switch at any time without losing anything.": {
       "localizations": {
         "en": {
@@ -36530,6 +36856,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Como executar um localmente"
+          }
+        }
+      }
+    },
+    "How your bots speak and listen.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comment tes bots parlent et écoutent."
           }
         }
       }
@@ -38255,7 +38591,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Espace de travail"
+            "value": "Installation"
           }
         }
       }
@@ -39882,6 +40218,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mantém estas notas em ordem sem o bot precisar lembrar: percebe fatos que você menciona nas conversas e os arquiva (o essencial aqui, os detalhes em arquivos de tópicos que ele cria) e arruma tudo toda noite: notas expiradas são arquivadas, duplicatas mescladas, notas contraditas riscadas. Fatos sobre você vão para Sobre mim (Ajustes → Geral), onde todo bot os lê e você pode removê-los. Toda alteração aparece abaixo e pode ser desfeita."
+          }
+        }
+      }
+    },
+    "Kept inside Sagax for this person; can refresh itself, no public link.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kept inside Sagax for this person; can refresh itself, no public link."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gardé dans Sagax pour cette personne; peut se rafraîchir seul, sans lien public."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mantido no Sagax para esta pessoa; pode se atualizar sozinho, sem link público."
           }
         }
       }
@@ -41695,7 +42053,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "En service : %@ est connecté sur cet ordinateur. Sagax lui demande une carte à usage unique après votre accord."
+            "value": "En service : %@ est connecté sur cet ordinateur. Sagax lui demande une carte à usage unique après ton accord."
           }
         }
       }
@@ -41930,6 +42288,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Carregando o catálogo…"
+          }
+        }
+      }
+    },
+    "Loading earlier messages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading earlier messages"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chargement des messages précédents"
           }
         }
       }
@@ -42478,6 +42852,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Logins, cartões e contatos que seus bots podem usar"
+          }
+        }
+      }
+    },
+    "Logins, keys and notes your bots use without seeing them.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identifiants, clés et notes que tes bots utilisent sans les voir."
           }
         }
       }
@@ -44215,7 +44599,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mensagem para %@ · %@"
+            "value": "Mensagem para %@: %@"
           }
         }
       }
@@ -48624,6 +49008,22 @@
         }
       }
     },
+    "No file changed yet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No file changed yet"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun fichier modifié pour l'instant"
+          }
+        }
+      }
+    },
     "No files in this chat yet.": {
       "localizations": {
         "en": {
@@ -48898,6 +49298,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aucune limite n'est fixée. Vos bots dépensent sans restriction."
+          }
+        }
+      }
+    },
+    "No line changes shown.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No line changes shown."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun changement de ligne affiché."
           }
         }
       }
@@ -50935,7 +51351,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pas branché. Activez pour utiliser le compte que vous avez déjà. Rien n'est facturé."
+            "value": "Pas branché. Active pour utiliser le compte que tu as déjà. Rien n'est facturé."
           }
         }
       }
@@ -52366,6 +52782,22 @@
         }
       }
     },
+    "Nothing to report": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing to report"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien à signaler"
+          }
+        }
+      }
+    },
     "Nothing to search yet": {
       "localizations": {
         "en": {
@@ -52384,6 +52816,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nada para buscar ainda"
+          }
+        }
+      }
+    },
+    "Nothing to show for this task yet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing to show for this task yet."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien à afficher pour cette tâche pour l'instant."
           }
         }
       }
@@ -53162,6 +53610,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ofensivo ou de ódio"
+          }
+        }
+      }
+    },
+    "Official claude.ai artifact through the person's own Claude account.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Official claude.ai artifact through the person's own Claude account."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Artefact officiel claude.ai via le compte Claude de la personne."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Artefato oficial do claude.ai pela conta Claude da própria pessoa."
           }
         }
       }
@@ -54612,6 +55082,22 @@
         }
       }
     },
+    "Open %@'s thread": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open %@'s thread"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir le fil de %@"
+          }
+        }
+      }
+    },
     "Open API keys": {
       "localizations": {
         "en": {
@@ -55630,6 +56116,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Abrir conversa"
+          }
+        }
+      }
+    },
+    "Open ticket %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir le billet %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "value": "Open ticket %@",
+            "state": "translated"
           }
         }
       }
@@ -58796,6 +59298,22 @@
         }
       }
     },
+    "Perspicax is unreachable, retrying…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perspicax is unreachable, retrying…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perspicax est injoignable, nouvel essai…"
+          }
+        }
+      }
+    },
     "Perspicax keeps no attachments": {
       "localizations": {
         "fr": {
@@ -61134,6 +61652,28 @@
         }
       }
     },
+    "Publish target": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Publish target"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cible de publication"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Destino de publicação"
+          }
+        }
+      }
+    },
     "Published": {
       "localizations": {
         "en": {
@@ -61200,6 +61740,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Publier une page"
+          }
+        }
+      }
+    },
+    "Pull request": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull request"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull request"
+          }
+        }
+      }
+    },
+    "Pull request #%lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull request #%lld"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull request #%lld"
           }
         }
       }
@@ -62990,6 +63562,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Recomendados para você"
+          }
+        }
+      }
+    },
+    "Reconnected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnected"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnecté"
           }
         }
       }
@@ -67898,6 +68486,60 @@
         }
       }
     },
+    "Sagax artifact": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sagax artifact"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Artefact Sagax"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Artefato Sagax"
+          }
+        }
+      }
+    },
+    "Sagax can't reach the server, retrying…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sagax can't reach the server, retrying…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sagax ne joint pas le serveur, nouvel essai…"
+          }
+        }
+      }
+    },
+    "Sagax could not fix it. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sagax could not fix it. Try again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sagax n'a pas pu corriger le problème. Réessayez."
+          }
+        }
+      }
+    },
     "Sagax feedback": {
       "localizations": {
         "en": {
@@ -68002,6 +68644,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sagax ouvre la connexion Pulsatrix de votre organisation. Vos conversations privées, vos clés et vos permissions vous suivent."
+          }
+        }
+      }
+    },
+    "Sagax page": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sagax page"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page Sagax"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Página Sagax"
           }
         }
       }
@@ -68506,6 +69170,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Salvar · 1 bot"
+          }
+        }
+      }
+    },
+    "Save, restore and bring in your data.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sauvegarder, restaurer et importer tes données."
           }
         }
       }
@@ -70962,6 +71636,22 @@
         }
       }
     },
+    "Sent work to %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sent work to %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Travail envoyé à %@"
+          }
+        }
+      }
+    },
     "Sent: the reason, the message id (%@) and the app version. The reply's text is not included.": {
       "localizations": {
         "en": {
@@ -71150,6 +71840,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nome do servidor"
+          }
+        }
+      }
+    },
+    "Server update in progress, back in a moment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server update in progress, back in a moment"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mise à jour du serveur en cours, de retour dans un instant"
           }
         }
       }
@@ -71736,6 +72442,28 @@
         }
       }
     },
+    "Shareable link the person publishes; others can open it outside Sagax.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shareable link the person publishes; others can open it outside Sagax."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lien partageable que la personne publie; d'autres peuvent l'ouvrir hors de Sagax."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link compartilhável que a pessoa publica; outros podem abrir fora do Sagax."
+          }
+        }
+      }
+    },
     "Shared": {
       "localizations": {
         "en": {
@@ -72011,7 +72739,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Shop Pay et Link sont des portefeuilles que vous avez déjà. Sagax demande une carte à usage unique seulement après votre accord, par l'outil en ligne de commande du portefeuille connecté sur cet ordinateur. Le site ne reçoit pas le numéro enregistré, et le bot ne le voit pas."
+            "value": "Shop Pay et Link sont des portefeuilles que tu as déjà. Sagax demande une carte à usage unique seulement après ton accord, par l'outil en ligne de commande du portefeuille connecté sur cet ordinateur. Le site ne reçoit pas le numéro enregistré, et le bot ne le voit pas."
           }
         }
       }
@@ -72510,6 +73238,22 @@
         }
       }
     },
+    "Show earlier messages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show earlier messages"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher les messages précédents"
+          }
+        }
+      }
+    },
     "Show every tool": {
       "localizations": {
         "en": {
@@ -72964,6 +73708,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Afficher les réponses au fur et à mesure"
+          }
+        }
+      }
+    },
+    "Show report": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show report"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher le rapport"
           }
         }
       }
@@ -75964,6 +76724,22 @@
         }
       }
     },
+    "Starting the task": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starting the task"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Démarrage de la tâche"
+          }
+        }
+      }
+    },
     "Starting your bot's computer…": {
       "localizations": {
         "en": {
@@ -77482,6 +78258,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Trocar de conta"
+          }
+        }
+      }
+    },
+    "Switch engine": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch engine"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changer de moteur"
           }
         }
       }
@@ -80376,6 +81168,16 @@
         }
       }
     },
+    "The computer your bots work on.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'ordinateur où tes bots travaillent."
+          }
+        }
+      }
+    },
     "The computer's clipboard is empty.": {
       "localizations": {
         "en": {
@@ -81860,6 +82662,16 @@
         }
       }
     },
+    "The server you work on and what it shares.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le serveur où tu travailles et ce qu'il partage."
+          }
+        }
+      }
+    },
     "The setting could not be saved: %@": {
       "localizations": {
         "en": {
@@ -82892,6 +83704,16 @@
         }
       }
     },
+    "This app's version, updates and help.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La version de l'app, ses mises à jour et l'aide."
+          }
+        }
+      }
+    },
     "This approval needs your security key, and this address cannot use one. Approve it from the desktop app or a browser on https.": {
       "localizations": {
         "fr": {
@@ -83820,6 +84642,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Não foi possível desenhar este diagrama. Aqui está o código."
+          }
+        }
+      }
+    },
+    "This edit did not apply.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This edit did not apply."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette modification n'a pas été appliquée."
+          }
+        }
+      }
+    },
+    "This edit did not apply: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This edit did not apply: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette modification n'a pas été appliquée : %@"
           }
         }
       }
@@ -91950,6 +92804,16 @@
         }
       }
     },
+    "What needs your confirmation before a bot acts.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce qui demande ta confirmation avant qu'un bot agisse."
+          }
+        }
+      }
+    },
     "What should the agent do?": {
       "localizations": {
         "fr": {
@@ -92170,6 +93034,16 @@
         }
       }
     },
+    "What your bots used and what it costs.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce que tes bots ont consommé et ce que ça coûte."
+          }
+        }
+      }
+    },
     "What your own bots may use beyond the defaults. You grant and revoke it yourself.": {
       "localizations": {
         "en": {
@@ -92380,6 +93254,16 @@
         }
       }
     },
+    "When and how Sagax lets you know.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quand et comment Sagax te prévient."
+          }
+        }
+      }
+    },
     "When email arrives": {
       "localizations": {
         "en": {
@@ -92536,6 +93420,28 @@
         }
       }
     },
+    "When this bot is asked to create a page or an artifact and more than one surface is available, which one to use. Ask each time shows a choice card.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When this bot is asked to create a page or an artifact and more than one surface is available, which one to use. Ask each time shows a choice card."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quand on demande à ce bot de créer une page ou un artefact et que plusieurs surfaces sont disponibles, laquelle utiliser. Demander à chaque fois affiche une carte de choix."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quando este bot é pedido para criar uma página ou um artefato e mais de uma superfície está disponível, qual usar. Perguntar toda vez mostra um cartão de escolha."
+          }
+        }
+      }
+    },
     "When this many runs fail in a row, the routine pauses itself and tells you. Resume turns it back on and starts the count again. Failed runs stay in the history.": {
       "localizations": {
         "en": {
@@ -92642,6 +93548,16 @@
         }
       }
     },
+    "Where models and services come from.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "D'où viennent les modèles et les services."
+          }
+        }
+      }
+    },
     "Where results go": {
       "localizations": {
         "en": {
@@ -92660,6 +93576,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Para onde vão os resultados"
+          }
+        }
+      }
+    },
+    "Where should I publish this?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Where should I publish this?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Où dois-je publier ceci ?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Onde devo publicar isto?"
           }
         }
       }
@@ -92812,6 +93750,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Quels bots peuvent payer"
+          }
+        }
+      }
+    },
+    "Which model each bot uses.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quel modèle chaque bot utilise."
           }
         }
       }
@@ -95046,6 +95994,16 @@
         }
       }
     },
+    "Your account, your profile, your language and time zone.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ton compte, ton profil, ta langue et ton fuseau horaire."
+          }
+        }
+      }
+    },
     "Your administrator has not set up a GitHub OAuth App for this server (Settings > Organization). Paste a personal access token instead.": {
       "localizations": {
         "en": {
@@ -96540,6 +97498,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "um visual surpresa"
+          }
+        }
+      }
+    },
+    "a teammate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a teammate"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "un coéquipier"
           }
         }
       }
@@ -98446,6 +99420,310 @@
         }
       }
     },
+    "claudeArtifact.actionFailed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That did not go through. Try again."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ça n'a pas fonctionné. Réessaie."
+          }
+        }
+      }
+    },
+    "claudeArtifact.blocked": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This page belongs to another claude.ai account."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette page appartient à un autre compte claude.ai."
+          }
+        }
+      }
+    },
+    "claudeArtifact.blockedAccount %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This page is not on the account the engine uses (%@)."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette page n'est pas sur le compte que le moteur utilise (%@)."
+          }
+        }
+      }
+    },
+    "claudeArtifact.commentOn %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comment on %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Commentaire sur %@"
+          }
+        }
+      }
+    },
+    "claudeArtifact.copy": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Publish a copy with the bot"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Publier une copie par le bot"
+          }
+        }
+      }
+    },
+    "claudeArtifact.copyAsked": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy requested"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copie demandée"
+          }
+        }
+      }
+    },
+    "claudeArtifact.kind": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude page"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page Claude"
+          }
+        }
+      }
+    },
+    "claudeArtifact.notSignedIn": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in to Claude in My engines to see this page."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecte-toi à Claude dans Mes moteurs pour voir cette page."
+          }
+        }
+      }
+    },
+    "claudeArtifact.open": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir"
+          }
+        }
+      }
+    },
+    "claudeArtifact.ownedOther": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "someone else's"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "à quelqu'un d'autre"
+          }
+        }
+      }
+    },
+    "claudeArtifact.ownedYou": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yours"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "à toi"
+          }
+        }
+      }
+    },
+    "claudeArtifact.reconnect": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnect the account"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnecter le compte"
+          }
+        }
+      }
+    },
+    "claudeArtifact.reply": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reply"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Répondre"
+          }
+        }
+      }
+    },
+    "claudeArtifact.replyPlaceholder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your reply"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ta réponse"
+          }
+        }
+      }
+    },
+    "claudeArtifact.resolve": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resolve"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Résoudre"
+          }
+        }
+      }
+    },
+    "claudeArtifact.send": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoyer"
+          }
+        }
+      }
+    },
+    "claudeArtifact.unavailable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The summary is not available right now."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le résumé n'est pas disponible pour le moment."
+          }
+        }
+      }
+    },
+    "claudeArtifact.untitled": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Untitled page"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Page sans titre"
+          }
+        }
+      }
+    },
+    "claudeArtifact.updated %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updated %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mis à jour %@"
+          }
+        }
+      }
+    },
     "code": {
       "localizations": {
         "fr": {
@@ -99541,7 +100819,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "equivalente, está na sua assinatura, não é cobrado"
+            "value": "equivalente: está na sua assinatura, não é cobrado"
           }
         }
       }
@@ -99924,6 +101202,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "raccroché"
+          }
+        }
+      }
+    },
+    "ids.deletedBot": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleted bot"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bot supprimé"
           }
         }
       }
@@ -104082,6 +105377,516 @@
           "stringUnit": {
             "state": "translated",
             "value": "reinicia em %@"
+          }
+        }
+      }
+    },
+    "roles.chip.aria": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Acts as {role}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agit comme {role}"
+          }
+        }
+      }
+    },
+    "roles.chip.idTooltip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Role id: {id}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identifiant du rôle : {id}"
+          }
+        }
+      }
+    },
+    "roles.chip.meTooltip": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "{person}'s own access"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accès de {person}"
+          }
+        }
+      }
+    },
+    "roles.chip.unnamed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Role"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rôle"
+          }
+        }
+      }
+    },
+    "roles.me": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Me"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moi"
+          }
+        }
+      }
+    },
+    "roles.notice.lapsed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The role {role} lapsed: the call stopped."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le rôle {role} est échu : l'appel s'est arrêté."
+          }
+        }
+      }
+    },
+    "roles.notice.missingLine": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Missing permission: {permission}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permission manquante : {permission}"
+          }
+        }
+      }
+    },
+    "roles.notice.readRefusedShort": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read refused as {role}, no fallback."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lecture refusée sous {role}, sans repli."
+          }
+        }
+      }
+    },
+    "roles.notice.target": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Security role of {member}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rôle de sécurité de {member}"
+          }
+        }
+      }
+    },
+    "roles.notice.writeRefusedShort": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Write refused as {role}. {bot} stopped."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Écriture refusée sous {role}. {bot} s'est arrêté."
+          }
+        }
+      }
+    },
+    "roles.op.add": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter"
+          }
+        }
+      }
+    },
+    "roles.op.delete": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer"
+          }
+        }
+      }
+    },
+    "roles.op.edit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifier"
+          }
+        }
+      }
+    },
+    "roles.op.inquire": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inquire"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Consulter"
+          }
+        }
+      }
+    },
+    "roles.transition.always": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always for this bot"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toujours ainsi pour ce bot"
+          }
+        }
+      }
+    },
+    "roles.transition.answered.always": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved for this bot"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistré pour ce bot"
+          }
+        }
+      }
+    },
+    "roles.transition.answered.continue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continued"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continué"
+          }
+        }
+      }
+    },
+    "roles.transition.answered.stay": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stays as {role}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reste en {role}"
+          }
+        }
+      }
+    },
+    "roles.transition.continue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continuer"
+          }
+        }
+      }
+    },
+    "roles.transition.fallback": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "{bot} switches from {from} to {to}: {tool} is refused (403). On behalf of {person}."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "{bot} passe de {from} à {to} : {tool} est refusé (403). Au nom de {person}."
+          }
+        }
+      }
+    },
+    "roles.transition.stay": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stay as {role}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rester en {role}"
+          }
+        }
+      }
+    },
+    "roles.transition.switch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "{bot} switches from {from} to {to}. On behalf of {person}."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "{bot} passe de {from} à {to}. Au nom de {person}."
+          }
+        }
+      }
+    },
+    "roles.transition.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Acts as {role}"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agit comme {role}"
+          }
+        }
+      }
+    },
+    "roles.why.default": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default in chat: your own access, every role you hold except the on-request ones."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Par défaut en conversation : votre propre accès, tous vos rôles sauf ceux sur demande seulement."
+          }
+        }
+      }
+    },
+    "roles.why.fallback": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "{from} was refused for {tool} (403), so this read ran once on behalf of {person}."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "{from} a été refusé pour {tool} (403) : cette lecture a roulé une fois au nom de {person}."
+          }
+        }
+      }
+    },
+    "roles.why.person": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Picked in the composer for this turn."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisi dans le compositeur pour ce tour."
+          }
+        }
+      }
+    },
+    "roles.why.routine": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The routine runs as this role."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La routine roule sous ce rôle."
+          }
+        }
+      }
+    },
+    "roles.why.rule": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A saved rule: when {from} is refused for this read, read on behalf of {person}."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Règle enregistrée : quand {from} est refusé pour cette lecture, lire au nom de {person}."
+          }
+        }
+      }
+    },
+    "roles.why.switch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The bot switched from {from}."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le bot est passé de {from}."
+          }
+        }
+      }
+    },
+    "roles.why.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Why this role"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pourquoi ce rôle"
           }
         }
       }
@@ -111005,294 +112810,6 @@
         }
       }
     },
-    "Close chat": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Close chat"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Fermer le chat"
-          }
-        }
-      }
-    },
-    "Show earlier messages": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show earlier messages"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Afficher les messages précédents"
-          }
-        }
-      }
-    },
-    "Loading earlier messages": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Loading earlier messages"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chargement des messages précédents"
-          }
-        }
-      }
-    },
-    "Nothing to show for this task yet.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nothing to show for this task yet."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rien à afficher pour cette tâche pour l'instant."
-          }
-        }
-      }
-    },
-    "Starting the task": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Starting the task"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Démarrage de la tâche"
-          }
-        }
-      }
-    },
-    "No file changed yet": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No file changed yet"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aucun fichier modifié pour l'instant"
-          }
-        }
-      }
-    },
-    "This edit did not apply.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This edit did not apply."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cette modification n'a pas été appliquée."
-          }
-        }
-      }
-    },
-    "Couldn't send. Try again.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't send. Try again."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Envoi impossible. Réessaie."
-          }
-        }
-      }
-    },
-    "Couldn't load this task.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't load this task."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Impossible de charger cette tâche."
-          }
-        }
-      }
-    },
-    "Ask %@ to continue": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ask %@ to continue"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Demande à %@ de continuer"
-          }
-        }
-      }
-    },
-    "Coding task: %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Coding task: %@"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tâche de code : %@"
-          }
-        }
-      }
-    },
-    "1 file changed": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "1 file changed"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "1 fichier modifié"
-          }
-        }
-      }
-    },
-    "%lld files changed": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld files changed"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld fichiers modifiés"
-          }
-        }
-      }
-    },
-    "This edit did not apply: %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This edit did not apply: %@"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cette modification n'a pas été appliquée : %@"
-          }
-        }
-      }
-    },
-    "Pull request #%lld": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pull request #%lld"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pull request #%lld"
-          }
-        }
-      }
-    },
-    "Pull request": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pull request"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pull request"
-          }
-        }
-      }
-    },
-    "Binary file": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Binary file"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Fichier binaire"
-          }
-        }
-      }
-    },
-    "No line changes shown.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No line changes shown."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aucun changement de ligne affiché."
-          }
-        }
-      }
-    },
     "… %lld unchanged lines": {
       "localizations": {
         "en": {
@@ -111305,1363 +112822,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "… %lld lignes inchangées"
-          }
-        }
-      }
-    },
-    "%lld passed": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld passed"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld réussis"
-          }
-        }
-      }
-    },
-    "%lld skipped": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld skipped"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld ignorés"
-          }
-        }
-      }
-    },
-    "%@ has a question for you": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ a une question pour toi"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "value": "%@ has a question for you",
-            "state": "translated"
-          }
-        }
-      }
-    },
-    "%@ needs a decision": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ a besoin d'une décision"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "value": "%@ needs a decision",
-            "state": "translated"
-          }
-        }
-      }
-    },
-    "%@ needs you": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ a besoin de toi"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "value": "%@ needs you",
-            "state": "translated"
-          }
-        }
-      }
-    },
-    "From the routine %@": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "De la routine %@"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "value": "From the routine %@",
-            "state": "translated"
-          }
-        }
-      }
-    },
-    "From work %@ handed over": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Du travail confié par %@"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "value": "From work %@ handed over",
-            "state": "translated"
-          }
-        }
-      }
-    },
-    "Open ticket %@": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ouvrir le billet %@"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "value": "Open ticket %@",
-            "state": "translated"
-          }
-        }
-      }
-    },
-    "Nothing to report": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nothing to report"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rien à signaler"
-          }
-        }
-      }
-    },
-    "Open %@'s thread": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open %@'s thread"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ouvrir le fil de %@"
-          }
-        }
-      }
-    },
-    "Sent work to %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sent work to %@"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Travail envoyé à %@"
-          }
-        }
-      }
-    },
-    "Show report": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show report"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Afficher le rapport"
-          }
-        }
-      }
-    },
-    "a teammate": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "a teammate"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "un coéquipier"
-          }
-        }
-      }
-    },
-    "Completed with problems": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Completed with problems"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Terminée avec des problèmes"
-          }
-        }
-      }
-    },
-    "Deferred: target busy": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Deferred: target busy"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Différée : cible occupée"
-          }
-        }
-      }
-    },
-    "ids.deletedBot": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Deleted bot"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bot supprimé"
-          }
-        }
-      }
-    },
-    "roles.me": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Me"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Moi"
-          }
-        }
-      }
-    },
-    "roles.chip.aria": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Acts as {role}"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Agit comme {role}"
-          }
-        }
-      }
-    },
-    "roles.chip.meTooltip": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "{person}'s own access"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Accès de {person}"
-          }
-        }
-      }
-    },
-    "roles.chip.idTooltip": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Role id: {id}"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Identifiant du rôle : {id}"
-          }
-        }
-      }
-    },
-    "roles.chip.unnamed": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Role"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rôle"
-          }
-        }
-      }
-    },
-    "roles.why.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Why this role"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pourquoi ce rôle"
-          }
-        }
-      }
-    },
-    "roles.why.default": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Default in chat: your own access, every role you hold except the on-request ones."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Par défaut en conversation : votre propre accès, tous vos rôles sauf ceux sur demande seulement."
-          }
-        }
-      }
-    },
-    "roles.why.routine": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The routine runs as this role."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "La routine roule sous ce rôle."
-          }
-        }
-      }
-    },
-    "roles.why.person": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Picked in the composer for this turn."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Choisi dans le compositeur pour ce tour."
-          }
-        }
-      }
-    },
-    "roles.why.switch": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The bot switched from {from}."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Le bot est passé de {from}."
-          }
-        }
-      }
-    },
-    "roles.why.fallback": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "{from} was refused for {tool} (403), so this read ran once on behalf of {person}."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "{from} a été refusé pour {tool} (403) : cette lecture a roulé une fois au nom de {person}."
-          }
-        }
-      }
-    },
-    "roles.why.rule": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "A saved rule: when {from} is refused for this read, read on behalf of {person}."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Règle enregistrée : quand {from} est refusé pour cette lecture, lire au nom de {person}."
-          }
-        }
-      }
-    },
-    "roles.notice.lapsed": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The role {role} lapsed: the call stopped."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Le rôle {role} est échu : l'appel s'est arrêté."
-          }
-        }
-      }
-    },
-    "roles.notice.writeRefusedShort": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Write refused as {role}. {bot} stopped."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Écriture refusée sous {role}. {bot} s'est arrêté."
-          }
-        }
-      }
-    },
-    "roles.notice.readRefusedShort": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Read refused as {role}, no fallback."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Lecture refusée sous {role}, sans repli."
-          }
-        }
-      }
-    },
-    "roles.notice.missingLine": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Missing permission: {permission}"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Permission manquante : {permission}"
-          }
-        }
-      }
-    },
-    "roles.notice.target": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Security role of {member}"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rôle de sécurité de {member}"
-          }
-        }
-      }
-    },
-    "roles.op.inquire": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Inquire"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Consulter"
-          }
-        }
-      }
-    },
-    "roles.op.add": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Add"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ajouter"
-          }
-        }
-      }
-    },
-    "roles.op.edit": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Edit"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Modifier"
-          }
-        }
-      }
-    },
-    "roles.op.delete": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Delete"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Supprimer"
-          }
-        }
-      }
-    },
-    "roles.transition.title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Acts as {role}"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Agit comme {role}"
-          }
-        }
-      }
-    },
-    "roles.transition.fallback": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "{bot} switches from {from} to {to}: {tool} is refused (403). On behalf of {person}."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "{bot} passe de {from} à {to} : {tool} est refusé (403). Au nom de {person}."
-          }
-        }
-      }
-    },
-    "roles.transition.switch": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "{bot} switches from {from} to {to}. On behalf of {person}."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "{bot} passe de {from} à {to}. Au nom de {person}."
-          }
-        }
-      }
-    },
-    "roles.transition.continue": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Continue"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Continuer"
-          }
-        }
-      }
-    },
-    "roles.transition.stay": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Stay as {role}"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rester en {role}"
-          }
-        }
-      }
-    },
-    "roles.transition.always": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Always for this bot"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Toujours ainsi pour ce bot"
-          }
-        }
-      }
-    },
-    "roles.transition.answered.continue": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Continued"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Continué"
-          }
-        }
-      }
-    },
-    "roles.transition.answered.stay": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Stays as {role}"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reste en {role}"
-          }
-        }
-      }
-    },
-    "roles.transition.answered.always": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Saved for this bot"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Enregistré pour ce bot"
-          }
-        }
-      }
-    },
-    "claudeArtifact.untitled": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Untitled page"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Page sans titre"
-          }
-        }
-      }
-    },
-    "claudeArtifact.kind": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claude page"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Page Claude"
-          }
-        }
-      }
-    },
-    "claudeArtifact.ownedYou": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "yours"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "à toi"
-          }
-        }
-      }
-    },
-    "claudeArtifact.ownedOther": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "someone else's"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "à quelqu'un d'autre"
-          }
-        }
-      }
-    },
-    "claudeArtifact.updated %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Updated %@"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mis à jour %@"
-          }
-        }
-      }
-    },
-    "claudeArtifact.open": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ouvrir"
-          }
-        }
-      }
-    },
-    "claudeArtifact.notSignedIn": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sign in to Claude in My engines to see this page."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connecte-toi à Claude dans Mes moteurs pour voir cette page."
-          }
-        }
-      }
-    },
-    "claudeArtifact.unavailable": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The summary is not available right now."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Le résumé n'est pas disponible pour le moment."
-          }
-        }
-      }
-    },
-    "claudeArtifact.blocked": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This page belongs to another claude.ai account."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cette page appartient à un autre compte claude.ai."
-          }
-        }
-      }
-    },
-    "claudeArtifact.blockedAccount %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This page is not on the account the engine uses (%@)."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cette page n'est pas sur le compte que le moteur utilise (%@)."
-          }
-        }
-      }
-    },
-    "claudeArtifact.copy": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Publish a copy with the bot"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Publier une copie par le bot"
-          }
-        }
-      }
-    },
-    "claudeArtifact.copyAsked": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Copy requested"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Copie demandée"
-          }
-        }
-      }
-    },
-    "claudeArtifact.reconnect": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reconnect the account"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reconnecter le compte"
-          }
-        }
-      }
-    },
-    "claudeArtifact.commentOn %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Comment on %@"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Commentaire sur %@"
-          }
-        }
-      }
-    },
-    "claudeArtifact.reply": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reply"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Répondre"
-          }
-        }
-      }
-    },
-    "claudeArtifact.send": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Send"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Envoyer"
-          }
-        }
-      }
-    },
-    "claudeArtifact.resolve": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Resolve"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Résoudre"
-          }
-        }
-      }
-    },
-    "claudeArtifact.replyPlaceholder": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your reply"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ta réponse"
-          }
-        }
-      }
-    },
-    "claudeArtifact.actionFailed": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "That did not go through. Try again."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ça n'a pas fonctionné. Réessaie."
-          }
-        }
-      }
-    },
-    "Always use this choice": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Always use this choice"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Toujours utiliser ce choix"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sempre usar esta escolha"
-          }
-        }
-      }
-    },
-    "Publish target": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Publish target"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cible de publication"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Destino de publicação"
-          }
-        }
-      }
-    },
-    "Ask each time": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ask each time"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Demander à chaque fois"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Perguntar toda vez"
-          }
-        }
-      }
-    },
-    "Ask each time when several targets are available.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ask each time when several targets are available."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Demander à chaque fois quand plusieurs cibles sont disponibles."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Perguntar toda vez quando vários destinos estiverem disponíveis."
-          }
-        }
-      }
-    },
-    "Always %@.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Always %@."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Toujours %@."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sempre %@."
-          }
-        }
-      }
-    },
-    "Sagax page": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sagax page"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Page Sagax"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Página Sagax"
-          }
-        }
-      }
-    },
-    "Sagax artifact": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sagax artifact"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Artefact Sagax"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Artefato Sagax"
-          }
-        }
-      }
-    },
-    "Claude artifact": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Claude artifact"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Artefact Claude"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Artefato Claude"
-          }
-        }
-      }
-    },
-    "Where should I publish this?": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Where should I publish this?"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Où dois-je publier ceci ?"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Onde devo publicar isto?"
-          }
-        }
-      }
-    },
-    "Shareable link the person publishes; others can open it outside Sagax.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Shareable link the person publishes; others can open it outside Sagax."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Lien partageable que la personne publie; d'autres peuvent l'ouvrir hors de Sagax."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Link compartilhável que a pessoa publica; outros podem abrir fora do Sagax."
-          }
-        }
-      }
-    },
-    "Kept inside Sagax for this person; can refresh itself, no public link.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kept inside Sagax for this person; can refresh itself, no public link."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gardé dans Sagax pour cette personne; peut se rafraîchir seul, sans lien public."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mantido no Sagax para esta pessoa; pode se atualizar sozinho, sem link público."
-          }
-        }
-      }
-    },
-    "Official claude.ai artifact through the person's own Claude account.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Official claude.ai artifact through the person's own Claude account."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Artefact officiel claude.ai via le compte Claude de la personne."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Artefato oficial do claude.ai pela conta Claude da própria pessoa."
-          }
-        }
-      }
-    },
-    "When this bot is asked to create a page or an artifact and more than one surface is available, which one to use. Ask each time shows a choice card.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "When this bot is asked to create a page or an artifact and more than one surface is available, which one to use. Ask each time shows a choice card."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Quand on demande à ce bot de créer une page ou un artefact et que plusieurs surfaces sont disponibles, laquelle utiliser. Demander à chaque fois affiche une carte de choix."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Quando este bot é pedido para criar uma página ou um artefato e mais de uma superfície está disponível, qual usar. Perguntar toda vez mostra um cartão de escolha."
           }
         }
       }

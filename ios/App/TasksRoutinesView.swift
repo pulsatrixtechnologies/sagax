@@ -23,7 +23,6 @@ struct TasksRoutinesView: View {
     /// the one duplicated (the editor on a copy).
     @State private var renaming: Routine?
     @State private var duplicating: Routine?
-    @State private var openRun: RoutineRun?
     @State private var loading = true
     @State private var section: RoutinesSection = .routines
     @State private var botFilter = RoutineBotFilter()
@@ -569,7 +568,7 @@ struct TasksRoutinesView: View {
                 }
                 VStack(spacing: 8) {
                     ForEach(shown.prefix(logLimit)) { run in
-                        Button { openRun = run } label: {
+                        Button { open(run) } label: {
                             RoutineLogRow(run: run, bot: session.state.bot(run.botId), showsUnseen: seenAllowed)
                                 .padding(16)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -635,7 +634,7 @@ struct TasksRoutinesView: View {
                     routine: routine, runs: runs,
                     close: { panelRoutine = nil },
                     changed: { await reload() },
-                    openRun: { openRun = $0 },
+                    openRun: { open($0) },
                     openEditor: { editor = .edit($0) },
                     duplicate: { duplicating = $0 }
                 )
@@ -786,11 +785,6 @@ struct TasksRoutinesView: View {
         }
         .sheet(item: $rescheduling) { item in
             AutomationsRescheduleSheet(item: item) { await reload() }
-        }
-        .routineRunDetail(item: $openRun) { run in
-            RoutineRunDetailView(run: run, routine: routines.first { $0.id == run.routineId }) { updated in
-                runs = RoutineRunLog.replacing(runs, with: [updated])
-            }
         }
         .confirmationDialog(
             "Delete \(deleting?.name ?? "this routine")?",
@@ -1287,15 +1281,15 @@ struct TasksRoutinesView: View {
                     .accessibilityIdentifier("routines-logs-empty")
             }
             ForEach(shown.prefix(logLimit)) { run in
-                Button { openRun = run } label: {
+                Button { open(run) } label: {
                     RoutineLogRow(run: run, bot: session.state.bot(run.botId), showsUnseen: seenAllowed)
                 }
                 .buttonStyle(.plain)
                 .contextMenu {
                     if let target = NotificationTarget(botId: run.botId, threadId: run.executionThreadId ?? run.threadId) {
                         Button("Open thread", systemImage: "arrow.up.right.square") {
-                            // the execution thread itself, not the run detail again
-                            Task { await session.openNotification(target, runDetail: false) }
+                            // the execution thread itself
+                            Task { await session.openNotification(target) }
                         }
                     }
                     if run.isActive && session.surfaceGate.allows(.routineRunCancel) {
@@ -1437,11 +1431,17 @@ struct TasksRoutinesView: View {
         }
     }
 
+    /// #2098: a run opens ALWAYS in the bot's chat, at its message, from the
+    /// Runs list, the calendar and a routine's panel alike.
+    private func open(_ run: RoutineRun) {
+        Task { await session.openRoutineRunInChat(run) }
+    }
+
     /// An event's tap or long-press choice on the calendar.
     private func handle(_ action: AutomationsEventAction, _ item: RoutineCalendarItem) {
         switch action {
         case .open:
-            if let run = item.run { openRun = run }
+            if let run = item.run { open(run) }
             else if let routine = item.routine {
                 if desktop { panelRoutine = routine } else if routine.mayEdit { editor = .edit(routine) } else { showLogs(of: routine) }
             }

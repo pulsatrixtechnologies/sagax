@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { X } from "lucide-react";
+import { BookOpen, ClipboardPaste, KeyRound, X } from "lucide-react";
 
 import { confirmAsync } from "@/components/ConfirmProvider";
 import { api } from "@/state/store";
@@ -8,7 +8,8 @@ import { t } from "@/lib/i18n";
 import { readableError } from "@/lib/plain-error";
 import { canEditBotField } from "@/lib/bot-capabilities";
 import { canEditConfig } from "@/lib/viewer";
-import { discoverItems, installedEntries, privateSkills, type InstalledEntry } from "@/lib/installed-model";
+import { discoverItems, entryIcon, installedEntries, privateSkills, type InstalledEntry } from "@/lib/installed-model";
+import { connectedSummary } from "@/lib/plugins-model";
 import { organizationRows } from "@/lib/capabilities";
 import { openSettings } from "@/lib/settings-link";
 import { setMine } from "@/lib/org-capabilities";
@@ -28,8 +29,9 @@ import { catalogSections, type CatalogItem } from "@/lib/bot-catalog";
 import { searchConnectApps, visibleResults, type SearchPage, type SearchResult, type SearchSource } from "@/lib/connect-apps-search";
 import { ConnectAppsSearchField, ConnectAppsSearchResults } from "../plugins/ConnectAppsSearch";
 import type { PublishedPageSummary } from "../../../shared/published-pages";
-import { InstalledView, type EntryActions } from "../plugins/InstalledView";
-import { DiscoverView } from "../plugins/DiscoverView";
+import { AddMenu, bringsLabel, InstalledView, type EntryActions } from "../plugins/InstalledView";
+import { PLUGINS } from "../plugins/plugins-style";
+import { DiscoverView, type FromSagaxRow } from "../plugins/DiscoverView";
 import { AccountsView } from "../plugins/AccountsView";
 import { SourcesView } from "../plugins/SourcesView";
 import { OrgSourcesAccess } from "../plugins/OrgSourcesAccess";
@@ -47,12 +49,12 @@ import { pageLabel, PluginsPanelSubpage } from "./PluginsPanelSubpage";
 import type { PluginsPanelState } from "./usePluginsPanelState";
 import type { PluginsPanelActions } from "./usePluginsPanelActions";
 
-/** Connect apps shell, search, tabs and dialog frame for PluginsPanel. */
+/** Plugins shell: title, scope, search, tabs and dialog frame for PluginsPanel. */
 export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPanelActions }) {
   const {
     state, dispatch, dialogRef, mcp, stack, page, push, popTo, botsBack, botSources, botFocus, setBotFocus,
     search, setSearch, openedGroups, setOpenedGroups, activeResult, setActiveResult, filter, setFilter,
-    type, setType, tab, setTab, accountService, setAccountService, harness, claudeConnectors,
+    type, setType, tab, setTab, harness, claudeConnectors,
     ownerOrAdmin, libraryEditor, perspicaxOrg, organization, dataCenterFor, setDataCenterFor,
     messagesSetup, skills, setInstalling, panelError, setPanelError, panelNotice,
     scopeBot, setScopeChoice, scope, scopedPluginView, orgRevision, botCapabilities, botView,
@@ -81,30 +83,24 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
   // does not apply there, so it shows turned off with the reason in the
   // note's place. Every line keeps its room on every tab (a bot-only notice
   // is kept invisible on Providers), so the tabs never move.
-  // Pages are the person's own too: the same turned-off scope
-  // Bots too (2026-10-29): bots and templates are the same in both scopes
-  const botsTab = tab === "bots" && page.page === "main" && search.trim() === "";
-  const accountsTab = (tab === "pages" && page.page === "main") || botsTab;
+  // the one install scope (this bot, me, organization), always live (#2104);
+  // the view leaves it out on Bots and Pages, which do not depend on it
+  const scopeNoteText = scope === "bot" && scopeBot
+    ? [t("connectApps.scope.botNote", { name: scopeBot.name }), botView && !botView.canChange ? t("plugins.readOnly") : ""].filter(Boolean).join(" ")
+    : t(scope === "me" ? "connectApps.scope.meNote" : "connectApps.scope.workspaceNote");
   const scopeToggle = (
-    <div data-plugins-scope-bar data-plugins-scope-tab={botsTab ? "bots" : accountsTab ? "accounts" : "plugins"}>
-      <ScopeToggle scope={scope} botName={scopeBot?.name} organization={s.workspaceMarkets && s.mayManageOrganization} onScope={(next) => { setScopeChoice(next); setPanelError(null); }} disabled={accountsTab} describedBy={accountsTab ? "plugins-scope-note" : undefined} />
+    <div data-plugins-scope-bar>
+      <ScopeToggle quiet scope={scope} botName={scopeBot?.name} organization={s.workspaceMarkets && s.mayManageOrganization} onScope={(next) => { setScopeChoice(next); setPanelError(null); }} describedBy="plugins-scope-note" title={scopeNoteText} />
     </div>
   );
   const scopeControl = (
     <div data-plugins-scope-notes>
-      <p id="plugins-scope-note" className="mt-2 min-h-[36px] text-[12px] leading-[18px] text-ink-secondary" data-plugins-scope-note={botsTab ? "bots" : accountsTab ? "accounts" : scope}>
-        {botsTab ? t("connectApps.scope.botsNote") : accountsTab ? t("connectApps.scope.accountsNote") : scope === "bot" && scopeBot ? (
-          <>
-            {t("connectApps.scope.botNote", { name: scopeBot.name })}
-            {botView && !botView.canChange && <> {t("plugins.readOnly")}</>}
-          </>
-        ) : t(scope === "me" ? "connectApps.scope.meNote" : "connectApps.scope.workspaceNote")}
-      </p>
-      <div className={cn(accountsTab && "invisible")} aria-hidden={accountsTab || undefined}>
-        {scope !== "workspace" && scopedPluginView && scopedPluginView.marketplaces.length === 0 && (
-          <p className="mt-2 rounded-lg bg-inset px-3 py-2 text-[12px] text-ink-secondary" data-plugins-scope-empty>{t("connectApps.scope.noMarketplaces")}</p>
-        )}
-      </div>
+      {/* #2104 (Grok Bot's look): no subtitle under the title; the note
+          stays for screen readers and on the scope's tooltip */}
+      <p id="plugins-scope-note" className="sr-only" data-plugins-scope-note={scope}>{scopeNoteText}</p>
+      {scope !== "workspace" && scopedPluginView && scopedPluginView.marketplaces.length === 0 && (
+        <p className="mt-2 rounded-lg bg-inset px-3 py-2 text-[12px] text-ink-secondary" data-plugins-scope-empty>{t("connectApps.scope.noMarketplaces")}</p>
+      )}
     </div>
   );
 
@@ -280,8 +276,9 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
 
   const isOrgAdmin = perspicaxOrg?.viewerRole === "admin";
   const orgHere = isOrgAdmin && scope === "workspace" && perspicaxOrg !== null;
-  // Sources: the GitHub connection row and the marketplaces (2026-10-29)
-  const tabs: ConnectAppsTab[] = ["discover", "bots", "installed", "pages",
+  // Sources: the GitHub connection row and the marketplaces (2026-10-29).
+  // Bots and Pages are visible tabs (#2104, JC's review): a link selects one.
+  const tabs: ConnectAppsTab[] = ["installed", "discover", "bots", "pages",
     ...(githubHere || marketRoute !== null || (marketSummaries?.length ?? 0) > 0 || orgHere ? ["sources" as const] : [])];
   const groups = connectorGroups({
     claude: harness.answer?.claude ? { available: harness.answer.claude.available, reason: harness.answer.claude.reason, connectors: harness.answer.claude.connectors ?? [], manageUrl: harness.answer.manageUrl } : null,
@@ -289,6 +286,20 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     grok: grokConfigured ? { connectors: GROK_CLOUD_CONNECTORS } : null,
     codex: harness.answer?.codex ?? null,
   });
+
+  // one "+ Add" menu (#2104): the server, the pasted config, the skill; an
+  // entry shows only where it may act. It sits in Manage's title row.
+  const addActions = [
+    ...(scope === "workspace" && !mcp.restricted ? [
+      { id: "server", label: t("connectApps.manage.addServer"), icon: <KeyRound size={14} />, onPick: mcp.startAdd, disabled: mcp.busy !== null },
+      { id: "paste", label: t("mcp.import"), icon: <ClipboardPaste size={14} />, onPick: mcp.toggleImport, disabled: mcp.busy !== null },
+    ] : []),
+    ...(scope !== "bot" && skillsOn && (scope === "me" || ownerOrAdmin !== false || libraryEditor) ? [
+      { id: "skill", label: t("connectApps.skill.new"), icon: <BookOpen size={14} />, onPick: () => push({ page: "skill" }) },
+    ] : []),
+  ];
+  // "From Sagax" on the home (Grok Bot's "From Grok"): what is installed
+  const fromSagax: FromSagaxRow[] = entries.map((entry) => ({ key: entry.key, item: entryIcon(entry), name: entry.name, sub: bringsLabel(entry.brings), status: entry.status }));
 
   return (
     <PluginsPanelFrame
@@ -311,11 +322,17 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
           counts={connectedCounts({ entries, engineConnected: scope !== "workspace" ? 0 : claudeConnectors })}
           scope={scopeToggle}
           scopeNote={scopeControl}
+          // the header's "N connected" and its icons (Grok Bot's Connect Apps)
+          // counts the rows Manage lists, so the number matches what it opens
+          connected={{ count: connectedCounts({ entries, engineConnected: scope !== "workspace" ? 0 : claudeConnectors }).installed ?? 0, icons: connectedSummary(scopedItems).icons }}
+          manageActions={addActions.length > 0 ? <AddMenu actions={addActions} /> : undefined}
           search={searchField}
           results={searchResults}
           notices={notices}
-          refreshing={refreshing}
-          onRefresh={refreshAll}
+          // the one refresh (#2104): plugins, servers, skills, and the engine
+          // accounts' connectors, together
+          refreshing={refreshing || harness.loading}
+          onRefresh={() => { refreshAll(); void harness.load(true); }}
           installed={(
             <InstalledView
               loading={mcp.servers === null}
@@ -336,14 +353,16 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               onOpenEntry={(entry) => openItem(entry.primary)}
               onOpenSkill={openItem}
               entryActions={entryActions}
-              onAddServer={scope === "workspace" && !mcp.restricted ? mcp.startAdd : undefined}
-              onPasteConfig={scope === "workspace" && !mcp.restricted ? mcp.toggleImport : undefined}
-              addDisabled={mcp.busy !== null}
-              onNewSkill={scope !== "bot" && skillsOn && (scope === "me" || ownerOrAdmin !== false || libraryEditor) ? () => push({ page: "skill" }) : undefined}
+              // one "+ Add" menu (#2104): the server, the pasted config, the
+              // skill; an entry shows only where it may act
+              add={addActions}
+              addInTitle
+              // lot 4: the organization's declarations (Perspicax), folded
+              // at the end (#2104: Grok Bot's Manage opens on the list)
+              organizationAdmin={scope === "workspace" && orgHere ? <OrgCapabilitiesAdmin /> : undefined}
               onDiscover={() => setTab("discover")}
               macApps={scope !== "bot" ? (
                 <MacAppsInstalledSection
-                  onOpenMac={() => { setTab("installed"); push({ page: "mac" }); }}
                   onOpenMessages={() => { setTab("installed"); push({ page: "mac-messages" }); }}
                   messagesEnabled={messagesSetup?.useMessages}
                 />
@@ -351,8 +370,6 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               providers={(
             <AccountsView
               groups={groups}
-              service={accountService}
-              onService={setAccountService}
               refreshing={harness.loading}
               onRefresh={() => void harness.load(true)}
               servers={organization ? <MyMcpServers /> : undefined}
@@ -368,7 +385,6 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               forms={scope === "workspace" ? (
                 <>
                   {/* lot 4: the organization's declarations, owned by Perspicax */}
-                  {orgHere && <OrgCapabilitiesAdmin />}
                   {mcp.restricted && mcp.policy && <p role="status" className="mb-3 text-[12.5px] leading-relaxed text-ink-secondary">{t("policy.mcpRestricted", { organization: mcp.policy.organizationName })}</p>}
                   <McpMessages mcp={mcp} />
                   <McpReservedServers mcp={mcp} />
@@ -392,6 +408,13 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               onOpenItem={openItem}
               renderAction={renderAction}
               renderBelow={renderBelow}
+              fromSagax={fromSagax}
+              onOpenFromSagax={(row) => {
+                const entry = entries.find((candidate) => candidate.key === row.key);
+                if (entry) openItem(entry.primary);
+              }}
+              onViewInstalled={() => chooseTab("installed")}
+              onAddCustom={scope === "workspace" && !mcp.restricted ? () => push({ page: "connector" }) : undefined}
             />
           )}
           // Browse Bots (2026-10-29): its home, View all, a bot's page and the
@@ -448,7 +471,7 @@ function PluginsPanelFrame({
       className={CATEGORY_MODAL.backdrop}
       onMouseDown={(event) => event.target === event.currentTarget && close()}
     >
-      {/* Capabilities centred modal (decided exception like Settings): same
+      {/* Plugins centred modal (decided exception like Settings): same
           size and close button as Browse Bots used to share. */}
       <div
         ref={dialogRef}
@@ -460,7 +483,7 @@ function PluginsPanelFrame({
         aria-modal="true"
         aria-labelledby="plugins-title"
         tabIndex={-1}
-        className={cn("animate-pop-in", CATEGORY_MODAL.frame)}
+        className={cn("animate-pop-in", CATEGORY_MODAL.frame, PLUGINS.frame)}
       >
         <div className={CATEGORY_MODAL.content}>
           <button

@@ -1,15 +1,14 @@
 // iPad I4/I4b: the bot panel (`BotSettingsDialog.tsx`), docked at the
 // trailing edge from 1024 pt, over the leading edge below
 // (`max-lg:absolute`). Its tabs are the current desktop's
-// (`bot-settings/panel-tabs.ts`): Details (Coding, Activity, Routines),
-// Library (Files, Skills, Plugins: BotPanelLibrary.swift), Computer; no More
-// tab. Edit bot is a pencil on the mascot and the first entry of the
-// bot's one "..." menu (`BotActionsMenu.tsx`, #518), which also holds
-// Rename, the Primary Bot, the export and Archive. Edit bot is the
-// desktop's centred window (PersonaEditorWindow.swift, 2026-11-03), on
-// Identity from the menu and on Appearance from a tap on the mascot. The name and label are edited where they
-// show, under the mascot (`InlineEditableText.tsx`). Which tabs and sections a pairing shows is
-// `DesktopPanelTab` / `DesktopPanelSection` / `DesktopPersonaEditor`
+// (`bot-settings/panel-tabs.ts`): Activity | Library. Edit bot is a
+// pencil on the mascot and the first entry of the bot's one "..." menu
+// (`BotActionsMenu.tsx`, #518), which also holds Rename, the Primary Bot,
+// the export and Archive. Edit bot / the gear open the bot's profile page
+// in the main column (#2136 / #1939), on Identity from the menu and on
+// Appearance from a tap on the mascot. The name and label are edited where
+// they show, under the mascot (`InlineEditableText.tsx`). Which tabs and
+// sections a pairing shows is `DesktopPanelTab` / `DesktopPanelSection`
 // (CompanionCore), from `SurfaceGate`.
 //
 // Sizes from desktop-1366x1024-33-panel-details.json: top bar 48 with 36 pt
@@ -33,7 +32,7 @@ extension DesktopPanelTab: Identifiable {
 
     var title: LocalizedStringKey {
         switch self {
-        case .details: "Details"
+        case .activity: "Activity"
         case .library: "Library"
         case .computer: "Computer"
         }
@@ -74,7 +73,10 @@ private struct BotPanelContent: View {
 
     private var current: Bot { session.state.bot(bot.id) ?? bot }
     private var tabs: [DesktopPanelTab] { DesktopPanelTab.visible(gate: session.surfaceGate, slack: slackURL != nil) }
-    private var tab: DesktopPanelTab { tabs.contains(model.panelTab) ? model.panelTab : .details }
+    private var tab: DesktopPanelTab {
+        let resolved = DesktopPanelTab.resolve(model.panelTab)
+        return tabs.contains(resolved) ? resolved : .activity
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -147,6 +149,10 @@ private struct BotPanelContent: View {
 
     private var topBar: some View {
         HStack(spacing: 8) {
+            DesktopRoundButton(systemImage: "gearshape", label: "Bot settings", icon: .settings) {
+                model.showPersona(nil)
+            }
+            .accessibilityIdentifier("desktop-panel-gear")
             Spacer(minLength: 0)
             DesktopRoundButton(systemImage: "ellipsis", label: "Bot menu", active: menuOpen, icon: .ellipsis) { menuOpen.toggle() }
                 .overlay(alignment: .topTrailing) {
@@ -154,7 +160,7 @@ private struct BotPanelContent: View {
                 }
                 .zIndex(1)
                 .accessibilityIdentifier("desktop-panel-menu")
-            DesktopRoundButton(systemImage: "sidebar.right", label: "Close", icon: .panelRight) { model.togglePanel() }
+            DesktopRoundButton(systemImage: "xmark", label: "Close", icon: .x) { model.togglePanel() }
                 .keyboardShortcut(inlineEditing ? KeyboardShortcut("w", modifiers: [.command, .control, .option, .shift]) : KeyboardShortcut(.escape, modifiers: []))
                 .accessibilityIdentifier("desktop-panel-close")
         }
@@ -305,12 +311,10 @@ private struct BotPanelContent: View {
     @ViewBuilder
     private var tabBody: some View {
         switch tab {
-        case .details:
+        case .activity, .computer:
             AnyView(BotPanelDetails(bot: current))
         case .library:
             AnyView(BotPanelLibrary(bot: current, docked: docked))
-        case .computer:
-            AnyView(BotPanelComputer(bot: current))
         }
     }
 }

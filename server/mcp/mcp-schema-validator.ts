@@ -22,6 +22,24 @@ const validatorOptions = {
  * `strict: false` ignores keywords Ajv does not know instead of refusing
  * the schema. */
 export function compileToolSchema(schema: Record<string, unknown>, options: { allErrors?: boolean; strict?: boolean } = {}): ValidateFunction {
+  // Every tools refresh re-registers the same catalogs, and building a
+  // compiler (meta-schema, formats) costs tens of ms per tool, so a schema
+  // seen before reuses its validator. The key is the schema's content, so a
+  // changed schema compiles fresh; validators run synchronously, so callers
+  // sharing one never see each other's errors.
+  const key = `${options.allErrors === true ? 1 : 0}${options.strict !== false ? 1 : 0}${JSON.stringify(schema)}`;
+  const cached = compiledSchemas.get(key);
+  if (cached) { compiledSchemas.delete(key); compiledSchemas.set(key, cached); return cached; }
+  const validate = compileFresh(schema, options);
+  compiledSchemas.set(key, validate);
+  if (compiledSchemas.size > COMPILED_SCHEMA_LIMIT) compiledSchemas.delete(compiledSchemas.keys().next().value as string);
+  return validate;
+}
+
+const COMPILED_SCHEMA_LIMIT = 512;
+const compiledSchemas = new Map<string, ValidateFunction>();
+
+function compileFresh(schema: Record<string, unknown>, options: { allErrors?: boolean; strict?: boolean }): ValidateFunction {
   const dialect = schema.$schema;
   if (dialect !== undefined && dialect !== "http://json-schema.org/draft-07/schema#" && dialect !== "https://json-schema.org/draft/2020-12/schema") {
     throw new Error("MCP tool schema uses an unsupported dialect; use JSON Schema draft-07 or 2020-12");

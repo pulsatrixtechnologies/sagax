@@ -1,7 +1,7 @@
 import { t } from "./i18n";
 
 export interface FeatureFlagConfig {
-  features?: { skillAuthoring?: boolean; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; routinesInConversation?: boolean; llmThreadTitles?: boolean; templates?: boolean; vpsComputer?: boolean; boatComputer?: boolean; decisionModel?: boolean; dataWindow?: boolean; meetingNotetaker?: boolean; routineGroupSettings?: boolean; skillsLibrary?: boolean };
+  features?: { skillAuthoring?: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; routinesInConversation?: boolean; llmThreadTitles?: boolean; templates?: boolean; vpsComputer?: boolean; boatComputer?: boolean; decisionModel?: boolean; dataWindow?: boolean; meetingNotetaker?: boolean; routineGroupSettings?: boolean; skillsLibrary?: boolean };
   browserEngine?: { kind: "engine" | "unavailable"; reason?: string; installable?: boolean; installing?: boolean; installError?: string };
 }
 
@@ -26,6 +26,34 @@ export function browserUnavailableReason(config: FeatureFlagConfig | null | unde
  * switched off — the same rule as the server's skillAuthoringEnabled. */
 export function skillAuthoringEnabled(config: FeatureFlagConfig | null | undefined): boolean {
   return config?.features?.skillAuthoring !== false;
+}
+
+export const DEFAULT_SKILL_REVIEW_STEPS = 10;
+export const MIN_SKILL_REVIEW_STEPS = 3;
+export const MAX_SKILL_REVIEW_STEPS = 100;
+
+/** Learn skills automatically: a background review after enough tool steps
+ * may create or update the bot's own learned skills. Off unless switched
+ * on, and never while skill authoring is off — mirrors the server's
+ * skillReviewEnabled. */
+export function skillReviewEnabled(config: FeatureFlagConfig | null | undefined): boolean {
+  return skillAuthoringEnabled(config) && config?.features?.skillReview === true;
+}
+
+/** Tool steps between automatic reviews (server default 10, 3-100). */
+export function skillReviewSteps(config: FeatureFlagConfig | null | undefined): number {
+  const raw = config?.features?.skillReviewSteps;
+  const value = typeof raw === "number" && Number.isFinite(raw) ? Math.round(raw) : DEFAULT_SKILL_REVIEW_STEPS;
+  return Math.min(MAX_SKILL_REVIEW_STEPS, Math.max(MIN_SKILL_REVIEW_STEPS, value));
+}
+
+/** The review threshold the person typed, or null when it is not a whole
+ * number in range. */
+export function parseSkillReviewSteps(value: string): number | null {
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const steps = Number(trimmed);
+  return steps >= MIN_SKILL_REVIEW_STEPS && steps <= MAX_SKILL_REVIEW_STEPS ? steps : null;
 }
 
 /** The experimental built-in browser is unavailable until the person using

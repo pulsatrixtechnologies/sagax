@@ -9,21 +9,17 @@
 // cost, and a member who chose Simple must see it.
 import type { AppSettingsSection, BotSettingsSection } from "@/state/store";
 
+// #2080 (L0, 2026-11-05): Simple no longer hides a page of the rail; the
+// rail has the same 13 pages in both modes and Simple folds a page's
+// technical cards under "Advanced" instead. Only Experimental stays hidden,
+// with the former pages that are cards now.
 const HIDDEN_SETTINGS: ReadonlySet<AppSettingsSection> = new Set([
   "experimental",
   "connections",
   "connectedApps",
   "decisionModel",
-  "engines",
-  // Providers (2026-10-30) holds what Models held: Simple hides it as before.
-  "providers",
-  // Voice was part of Models and voice until 2026-10-28: Simple hides it as before.
-  "voice",
-  "computer",
   "mail",
   "activity",
-  "backups",
-  "import",
   "workspaces",
   "people",
 ]);
@@ -44,8 +40,6 @@ export function simpleHidesBotSection(id: BotSettingsSection): boolean {
   return HIDDEN_BOT.has(id);
 }
 
-/** Simple hides Computer and Roles (2026-11-05: the roles graph is a
- * detail; a refused permission still shows as a banner in the thread). */
 export function simpleHidesPanelTab(id: string): boolean {
-  return id === "computer" || id === "roles";
+  return id === "computer";
 }

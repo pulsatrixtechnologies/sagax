@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
-// 2026-11-01: View run under a routine's report, a run's notification and a
-// link to a run's execution thread (an Inbox entry) open the run as an
-// exchange sheet over the chat column (same place as Wren <-> Osprey),
-// never a modal. Continue in the conversation stays a footer action.
+// 2026-11-05 (#2098, the operator: "C'EST INNACEPTABLE"): View run under a routine's
+// report, a run's notification, a link to a run's execution thread (an Inbox
+// entry) and a row of a routine's Runs list all open the run IN THE CHAT, at
+// the run's message in the bot's unified conversation. There is no run view
+// beside the chat any more (no sheet, no Continue in the conversation, no
+// Close Chat).
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
@@ -40,7 +42,7 @@ function report(): Message {
 }
 
 describe("opening a routine run", () => {
-  it("View run opens the exchange sheet over chat, not a modal or split", () => {
+  it("View run lands on the bot's chat and focuses the run's message", () => {
     const actions: Action[] = [];
     const host = document.createElement("div");
     document.body.append(host);
@@ -53,12 +55,13 @@ describe("opening a routine run", () => {
     const button = host.querySelector<HTMLButtonElement>('button[aria-label="View run for Project health watch"]');
     expect(button).not.toBeNull();
     button!.click();
-    expect(actions).toEqual([{ type: "openRoutineRunSheet", runId: "run-1", routineId: "routine-1" }]);
-    const withBot = { ...initialState, bots: [{ ...initialState.bots[0], id: "scout", threadId: "main-chat" } as never], routineRuns: [{ id: "run-1", botId: "scout", routineId: "routine-1" } as never], selectedId: "other" };
+    expect(actions).toEqual([{ type: "openRoutineRunInChat", runId: "run-1", routineId: "routine-1" }]);
+    const withBot = { ...initialState, bots: [{ ...initialState.bots[0], id: "scout", threadId: "main-chat", messages: [report()] } as never], routineRuns: [{ id: "run-1", botId: "scout", routineId: "routine-1" } as never], selectedId: "other" };
     const next = reducer(withBot as typeof initialState, actions[0]!);
     expect(next.activeView).toBe("chat");
-    expect(next.routineRunSheet).toEqual({ runId: "run-1", routineId: "routine-1" });
     expect(next.selectedId).toBe("scout");
+    expect(next.focusMessage).toMatchObject({ threadId: "main-chat", messageId: "report", consumed: false });
+    expect("routineRunSheet" in next).toBe(false);
     root.unmount();
     host.remove();
   });
@@ -73,23 +76,29 @@ describe("opening a routine run", () => {
     root.unmount();
   });
 
-  it("a run's notification opens its exchange sheet, not its report conversation", () => {
+  it("a run's notification opens the run in the chat, not a side view", () => {
     const actions: Action[] = [];
     openNotificationTarget((action) => actions.push(action), { botId: "scout", threadId: "main-chat", routineRunId: "run-1" }, state, false);
-    expect(actions).toEqual([{ type: "openRoutineRunSheet", runId: "run-1" }]);
+    expect(actions).toEqual([{ type: "openRoutineRunInChat", runId: "run-1" }]);
   });
 
-  it("a link to a run's execution thread (an Inbox entry) opens the exchange sheet", () => {
+  it("a link to a run's execution thread (an Inbox entry) opens the run in the chat", () => {
     const actions: Action[] = [];
     expect(routineRunOfThread(state, "run-thread")).toBe("run-1");
     openNotificationTarget((action) => actions.push(action), { botId: "scout", threadId: "run-thread" }, state, false);
-    expect(actions).toEqual([{ type: "openRoutineRunSheet", runId: "run-1" }]);
+    expect(actions).toEqual([{ type: "openRoutineRunInChat", runId: "run-1" }]);
   });
 
   it("a run this client does not know keeps opening its thread", () => {
     const actions: Action[] = [];
     openNotificationTarget((action) => actions.push(action), { botId: "scout", threadId: "main-chat", routineRunId: "run-gone" }, state, false);
-    expect(actions.some((action) => action.type === "openRoutineRunSheet" || action.type === "showRoutines")).toBe(false);
+    expect(actions.some((action) => action.type === "openRoutineRunInChat" || action.type === "showRoutines")).toBe(false);
+  });
+
+  it("a run whose bot this client does not hold still lands on the chat, without a focus", () => {
+    const next = reducer(initialState, { type: "openRoutineRunInChat", runId: "run-unknown" });
+    expect(next.activeView).toBe("chat");
+    expect(next.focusMessage).toBe(initialState.focusMessage);
   });
 
   it("the owner's access notification (no thread) still opens the bot's activity", () => {
@@ -137,11 +146,11 @@ describe("continuing a routine run in the conversation", () => {
     expect(currentSideThread()).toBeNull();
   });
 
-  it("with threads hidden, a link into a run's task opens the exchange sheet, not a column", () => {
+  it("with threads hidden, a link into a run's task opens the run in the chat, not a column", () => {
     closeSideThread();
     const actions: Action[] = [];
     openBotThread((action) => actions.push(action), bot, "run-thread", false);
-    expect(actions).toEqual([{ type: "openRoutineRunSheet", runId: "run-1" }]);
+    expect(actions).toEqual([{ type: "openRoutineRunInChat", runId: "run-1" }]);
     expect(currentSideThread()).toBeNull();
   });
 });

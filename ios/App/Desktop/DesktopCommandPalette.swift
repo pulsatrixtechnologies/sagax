@@ -284,11 +284,13 @@ struct DesktopCommandPalette: View {
         let settingsWord = Self.label(.settings)
         out.append(Item(id: "cmd:settings", group: .settings, label: String(localized: "Open settings"), words: [settingsWord],
                         shortcut: ["⌘", ","], action: .settings(nil)))
-        for section in DesktopSettingsSection.available(for: gate) where section != .about {
+        // #2080 (L0): App (about) is a rail page; the centred About window
+        // stays a separate palette entry under Help-adjacent Settings.
+        for section in DesktopSettingsSection.available(for: gate) {
             out.append(Item(id: "settings:\(section.rawValue)", group: .settings, label: section.labelString,
                             words: [settingsWord] + section.keywords, action: .settings(section)))
         }
-        out.append(Item(id: "settings:about", group: .settings, label: String(localized: "About"), words: [settingsWord, "version"], action: .about))
+        out.append(Item(id: "settings:about-window", group: .settings, label: String(localized: "About"), words: [settingsWord, "version"], action: .about))
         if case let .bot(bot)? = model.selected {
             out.append(Item(id: "cmd:botSettings", group: .settings, label: String(localized: "\(bot.name) settings"), words: [settingsWord],
                             action: .botSettings(bot)))
@@ -335,7 +337,7 @@ struct DesktopCommandPalette: View {
         case .about: model.modal = .about
         case let .botSettings(bot):
             model.open(.bot(bot))
-            model.showPanel(.details)
+            model.showPanel(.activity)
         case .shortcuts: model.modal = .shortcuts
         case .releaseNotes: model.modal = .releaseNotes
         }

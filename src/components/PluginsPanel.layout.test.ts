@@ -33,40 +33,46 @@ describe("Plugins panel views", () => {
     discover: createElement(DiscoverView, discoverProps), installed: "INSTALLED", pages: "PAGES", sources: "SOURCES", ...overrides,
   }));
 
-  it("one page: Capabilities, then the five tabs (no Providers tab since 2026-10-29) with Discover first and open, the count on Installed", () => {
-    const html = page();
-    expect(html).toMatch(/id="plugins-title"[^>]*>Capabilities<\/h2>/);
-    expect(html).not.toContain("data-plugins-connected");
-    // no breadcrumb and no "Manage plugins and skills" page
+  it("Grok Bot's Connect Apps: the home (title, N connected, the sticky search row), then Manage, Bots and the views behind a back bar (#2104)", () => {
+    const html = page({ connected: { count: 2, icons: [] } });
+    expect(html).toMatch(/id="plugins-title"[^>]*>Plugins<\/h2>/);
+    expect(html).toMatch(/data-plugins-connected="2"[\s\S]*?2 connected/);
+    expect(html).not.toContain('role="tablist"');
     expect(html).not.toContain("data-breadcrumb");
     expect(html).not.toContain("Manage plugins and skills");
-    expect(html).toMatch(/aria-label="Installed, 2 connected"[^>]*data-plugins-tab="installed"/);
-    const tabs = [...html.matchAll(/role="tab"[^>]*data-plugins-tab="([a-z]+)"[^>]*><span data-plugins-tab-label="[^"]*">([^<]+)</g)].map((match) => [match[1], match[2]]);
-    expect(tabs).toEqual([["discover", "Discover"], ["bots", "Bots"], ["installed", "Installed"], ["pages", "Pages"], ["sources", "Sources"]]);
-    expect(html).toMatch(/aria-selected="true"[^>]*data-plugins-tab="discover"/);
-    // one search (2026-10-29): under the title, above the tabs; none in Discover
+    // nothing connected: the header still leads to Manage
+    expect(page({ connected: { count: 0, icons: [] } })).toMatch(/data-plugins-connected="0"[\s\S]*?>Manage</);
+    // one search: on the sticky row, with Bot templates on its right
     const searched = page({ search: createElement("input", { "data-plugins-search": "", placeholder: "ONE SEARCH" }) });
-    expect(searched).toMatch(/id="plugins-title"[\s\S]*?data-plugins-search-slot[\s\S]*?ONE SEARCH[\s\S]*?role="tablist"/);
-    // and on the scope's line, on its right (2026-10-29)
-    const both = page({ scope: createElement("div", null, "SCOPE"), search: createElement("input", { "data-plugins-search": "" }) });
-    expect(both).toMatch(/data-plugins-scope-row[^>]*>[\s\S]*?data-plugins-scope-slot[\s\S]*?SCOPE[\s\S]*?data-plugins-search-slot[\s\S]*?<input/);
+    expect(searched).toMatch(/id="plugins-title"[\s\S]*?data-plugins-search-row[\s\S]*?data-plugins-search-slot[\s\S]*?ONE SEARCH[\s\S]*?data-plugins-bot-templates/);
+    expect(searched).toMatch(/class="[^"]*sticky top-0[^"]*"[^>]*data-plugins-search-row/);
     expect(searched.match(/data-plugins-search=""/g)).toHaveLength(1);
-    // with text, the results take the tab's place
+    // the scope is not on the home
+    expect(page({ scope: createElement("div", null, "SCOPE") })).not.toContain("SCOPE");
+    // with text, the results take the catalogue's place
     const results = page({ results: "RESULTS" });
     expect(results).toContain("data-plugins-results");
     expect(results).toContain("RESULTS");
     expect(results).not.toContain("data-plugins-discover");
-    // Bots: a pane of its own, like a page opened from a tab
-    const bots = page({ tab: "bots", bots: "BOTS" });
+    expect(html).not.toContain("INSTALLED");
+    // Manage: the back bar to Plugins, the big title, the scope, the links to Pages and Sources
+    const manage = page({ tab: "installed", scope: createElement("div", null, "SCOPE") });
+    expect(manage).toContain("INSTALLED");
+    expect(manage).toMatch(/data-plugins-home[^>]*>[\s\S]*?Plugins/);
+    expect(manage).toMatch(/id="plugins-title"[^>]*>Manage plugins and skills<\/h2>[\s\S]*?SCOPE/);
+    expect([...manage.matchAll(/data-plugins-view-link="([a-z]+)"/g)].map((match) => match[1])).toEqual(["pages", "sources"]);
+    // Bots: its pane under the back bar, no scope
+    const bots = page({ tab: "bots", bots: "BOTS", scope: createElement("div", null, "SCOPE") });
     expect(bots).toContain("BOTS");
     expect(bots).toMatch(/data-plugins-manage="bots"/);
-    expect(bots).not.toMatch(/data-plugins-list=""[^>]*data-plugins-manage="bots"/);
-    expect(html).not.toContain("INSTALLED");
+    expect(bots).toContain("data-plugins-home");
+    expect(bots).not.toContain("SCOPE");
+    expect(bots).not.toContain("data-apps-back");
     expect(page({ tab: "sources" })).toContain("SOURCES");
-    // a tab left out is not drawn; a tab not offered falls back to Discover
-    const noSources = page({ tabs: ["discover", "installed", "pages"], tab: "sources" });
-    expect(noSources).not.toContain('data-plugins-tab="sources"');
-    expect(noSources).toMatch(/aria-selected="true"[^>]*data-plugins-tab="discover"/);
+    expect(page({ tab: "pages" })).toContain("PAGES");
+    // a view left out is not linked from Manage
+    const noSources = page({ tabs: ["installed", "discover"], tab: "installed" });
+    expect(noSources).not.toContain('data-plugins-view-link="sources"');
   });
 
   it("Discover: no search of its own, every category pill and no Browse Bots button, sections of two-column rows", () => {
@@ -76,7 +82,8 @@ describe("Plugins panel views", () => {
     expect(html).not.toContain("Browse Bots");
     const chips = [...html.matchAll(/data-plugins-chip="([^"]+)"/g)].map((match) => match[1]);
     expect(chips[0]).toBe("all");
-    expect(html).not.toContain("data-plugins-more");
+    // the categories past the row wait behind More (Grok Bot's More chip)
+    expect(html).toContain("data-plugins-more-chips");
     expect(html).toContain('data-plugins-section="recommended"');
     expect(html).toContain("Recommended for you");
     expect(html).toContain("md:grid-cols-2");
@@ -104,10 +111,12 @@ describe("Plugins panel views", () => {
     const html = renderToStaticMarkup(createElement(SkillPage, { skill, onBack: noop, onSaved: noop, onDeleted: noop }));
     expect(html).toContain("Private skill");
     expect(html).toMatch(/data-skill-delete[^>]*class="[^"]*text-danger[^"]*"[\s\S]*?Delete Skill/);
-    expect(html).not.toContain("Publish");
+    expect(html).toMatch(/data-skill-publish[\s\S]*?Publish/);
     expect(html).toContain("Writes notes");
     for (const field of ["name", "description", "instructions"]) expect(html).toContain(`data-skill-field="${field}"`);
     expect(html).toMatch(/type="submit"[^>]*>Save</);
+    // nothing changed yet: Save is off
+    expect(html).toMatch(/type="submit"[^>]*disabled=""/);
     const readOnly = renderToStaticMarkup(createElement(SkillPage, { skill, readOnlyReason: "The plugin kit brought this skill: uninstall the plugin to remove it.", onBack: noop, onSaved: noop, onDeleted: noop }));
     expect(readOnly).not.toContain("Delete Skill");
     expect(readOnly).not.toContain('type="submit"');
@@ -122,11 +131,14 @@ describe("Plugins panel views", () => {
       tools: { list: [{ name: "search", enabled: true }, { name: "delete", enabled: false }], loading: false, onToggle: noop },
       details: [{ label: "Source", value: "Added manually" }, { label: "Transport", value: "HTTP" }],
     }));
-    expect(html).toContain('aria-label="Back"');
-    // Turned on beside the name; Update, Test, Edit and Uninstall wait in the menu
+    expect(html).toContain('aria-label="Back to Plugins"');
+    // Turned on beside the name; Uninstall is Grok Bot's gray pill under the page,
+    // and with no Update, Test or Edit there is no "..." menu
     expect(html).toMatch(/data-plugin-enabled[^>]*>Turned on<button[^>]*aria-label="Turn glitcho off"/);
-    expect(html).toContain('aria-label="More actions for glitcho"');
-    expect(html).not.toContain("Uninstall");
+    expect(html).toMatch(/data-plugin-action="uninstall"[^>]*>Uninstall</);
+    expect(html).not.toContain('aria-label="More actions for glitcho"');
+    const withEdit = renderToStaticMarkup(createElement(PluginDetailView, { item, subtitle: "", busy: false, onBack: noop, onUninstall: noop, onEdit: noop, details: [] }));
+    expect(withEdit).toContain('aria-label="More actions for glitcho"');
     expect(html).toContain("Accounts");
     expect(html).toMatch(/qc1\.example\.net[\s\S]*?Connected/);
     expect(html).toContain("1 of 2 enabled");

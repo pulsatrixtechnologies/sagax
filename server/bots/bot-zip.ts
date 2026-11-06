@@ -57,6 +57,7 @@ import {
   type BotZipPreviewLine,
 } from "../../shared/bot-zip.ts";
 import { isApprovalMode } from "../../shared/approval-mode.ts";
+import { VOICE_MODE_MAX_SPEED, VOICE_MODE_MIN_SPEED, isVoiceModeLanguage } from "../../shared/voice-mode.ts";
 import { botAvatarUrlFromStoredPath } from "../../shared/bot-avatar.ts";
 import { takeImportName } from "../../shared/import-name.ts";
 import { MASCOT_COLOR_NAMES } from "../../shared/mascot-colors.ts";
@@ -146,6 +147,8 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   finishUntilMaxRounds: "settings",
   voice: "settings",
   voiceNotes: "settings",
+  voiceSpeed: "settings",
+  voiceLanguage: "settings",
   emailDrafts: "settings",
   memoryEnabled: "settings",
   loopGuard: "settings",
@@ -162,6 +165,7 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   temporary: { drop: "an imported bot is never temporary (Perspicax #321)" },
   createdByBot: { drop: "a person imports the bot: it starts as a person's bot (server/bots/bot-creation.ts)" },
   section: "settings",
+  sectionId: "settings",
   managedSections: "settings",
   projects: "settings",
   playbooks: "settings",
@@ -186,6 +190,7 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   pinnedMessageId: "conversations",
   unread: { drop: "this server's read state" },
   busy: { drop: "live state" },
+  workFolder: { drop: "derived from the server sandbox" },
   activity: { drop: "live state" },
   waitingForTeammates: { drop: "live state" },
   waitingApprovals: { drop: "derived from the bot's threads" },
@@ -783,6 +788,8 @@ const settingsSchema = z.object({
   finishUntilMaxRounds: z.number().int().min(1).max(50).optional(),
   voice: z.string().max(200).optional(),
   voiceNotes: z.boolean().optional(),
+  voiceSpeed: z.number().finite().min(VOICE_MODE_MIN_SPEED).max(VOICE_MODE_MAX_SPEED).optional(),
+  voiceLanguage: z.string().refine(isVoiceModeLanguage).optional(),
   emailDrafts: z.boolean().optional(),
   memoryEnabled: z.boolean().optional(),
   loopGuard: z.boolean().optional(),
@@ -797,6 +804,7 @@ const settingsSchema = z.object({
   outbound: z.object({ policy: z.enum(["ask", "allow"]), dailyCap: z.number().int().min(0).max(100_000) }).optional(),
   assignedSkills: z.array(z.string().max(64)).max(200).optional(),
   section: z.string().max(60).optional(),
+  sectionId: z.string().regex(/^sec_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i).optional(),
   managedSections: z.array(z.string().max(60)).max(100).optional(),
   projects: z.array(z.object({ id: z.string().min(1).max(64), name: z.string().min(1).max(120), emoji: z.string().max(16).optional() })).max(200).optional(),
   playbooks: z.array(z.object({ key: z.string().max(64), name: z.string().max(100), summary: z.string().max(300), triggers: z.array(z.string().max(100)).max(30), instructions: z.string().max(24_000) })).max(80).optional(),
@@ -947,6 +955,8 @@ export async function importBotZip(host: BotZipHost, inspected: InspectedBotZip,
       ...(settings.finishUntil ? { finishUntil: settings.finishUntil.replace(/[\r\n]+/g, " ").trim() } : {}),
       ...(settings.finishUntilMaxRounds !== undefined ? { finishUntilMaxRounds: settings.finishUntilMaxRounds } : {}),
       ...(settings.voiceNotes !== undefined ? { voiceNotes: settings.voiceNotes } : {}),
+      ...(settings.voiceSpeed !== undefined ? { voiceSpeed: settings.voiceSpeed } : {}),
+      ...(settings.voiceLanguage !== undefined ? { voiceLanguage: settings.voiceLanguage } : {}),
       ...(settings.emailDrafts !== undefined ? { emailDrafts: settings.emailDrafts } : {}),
       ...(settings.memoryEnabled !== undefined ? { memoryEnabled: settings.memoryEnabled } : {}),
       ...(settings.loopGuard !== undefined ? { loopGuard: settings.loopGuard } : {}),

@@ -2,6 +2,7 @@
 // #1388 wave 4 step 3: startTurn dispatch (handoffs.dispatching through sendTurn).
 // Never imports server/index.ts.
 import { resolveClaudeSubagentModel } from "../../shared/claude-subagent-model.ts";
+import { ATTACHMENTS_DIR } from "../attachments/attachments.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
 
@@ -37,6 +38,8 @@ export function createDispatchStartTurn(host: StartTurnHost) {
     languageOfPerson,
     managedPolicy,
     mcpCallTimeoutMinutes,
+    messageFileRootsForThread,
+    cloudGuestOpened,
     routineApprovalWaitMs,
     noteBotRead,
     noteTurnQueued,
@@ -141,6 +144,10 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       const replayRequest = state.personLine && !state.opts?.unattended && !state.guestConfined
         ? { botId: state.bot.id, message: state.userMessage, turnText: state.text, placePicked: state.wants === "local" && state.placeSource !== "auto-pin" }
         : null;
+      const resultRoots = state.worksInWorkspace || state.guestConfined || cloudGuestOpened(state.threadId)
+        ? undefined
+        : messageFileRootsForThread(state.bot.id, state.threadId);
+      const toolResultFolder = Array.isArray(resultRoots) ? resultRoots.find((root: string) => root !== ATTACHMENTS_DIR) : undefined;
       return savedSteps.dispatch.sendTurn(state.instance, replayRequest, {
       threadId: state.threadId,
       botId: state.bot.id,
@@ -200,7 +207,8 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       ...pluginDirsFor(state.bot, state.instance, orgSpeakerPrincipal(state.bot, state.speaker)),
       mcpCallTimeoutMs: mcpCallTimeoutMinutes(cfg) * 60_000,
       ...(() => { const approvalWaitMs = routineApprovalWaitMs?.(state.threadId); return approvalWaitMs ? { approvalWaitMs } : {}; })(),
-      cwd: state.cwd
+      cwd: state.cwd,
+      ...(toolResultFolder ? { toolResultFolder } : {}),
     }, (input: any) => state.instance.adapter.sendTurn(input));
     })), () => !directTurnClaimExists(state.bot.id, state.dispatchClaimId, state.threadId), async () => {
       await state.instance.adapter.interruptTurn(state.threadId).catch(() => {});

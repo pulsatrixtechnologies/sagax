@@ -31,6 +31,7 @@ import { FloatingWindowsHost } from "@/components/floating/FloatingWindowsHost";
 import { CallEngineHost } from "@/components/CallView";
 import { RetroBootSlot, RetroChromeSlot } from "@/components/RetroChromeHost";
 import { t } from "@/lib/i18n";
+import { useShowThreads } from "@/lib/thread-preferences";
 import { viewerBotsReadOnly, viewerCanCreateBots } from "@/lib/viewer";
 import { botsReadOnlyText } from "@/lib/permissions";
 import { ModelWindowHost } from "@/components/ModelWindowHost";
@@ -50,6 +51,7 @@ function GroupSurface({ id, children }: { id: string; children: (group: Group) =
 
 /** Shell chrome and main column: sidebar, conversation surfaces, panels, modals. */
 export function ShellLayout(shell: ShellNavigation) {
+  const showThreads = useShowThreads();
   const {
     dispatch,
     state,
@@ -90,6 +92,7 @@ export function ShellLayout(shell: ShellNavigation) {
     openCalendarRoom,
     nativeViewOverlayOpen,
   } = shell;
+  const profileFillsMain = !remoteClient && state.personaEditor !== null;
 
   return (
     <div className="flex h-full flex-col" data-app-shell="">
@@ -119,10 +122,14 @@ export function ShellLayout(shell: ShellNavigation) {
       <div className="app-content-frame relative flex h-full min-w-0 flex-1 flex-col" data-sidebar-follower="">
       {/* nothing answers this person on an organization server: say so above
           the conversation, with the way back to the first-run step */}
-      {org && (group || bot) && !calendarFillsMain && !mainIsTeamMap && !mainIsMemory && !mainIsCode && !mainIsApprovals && !mainIsRemoteSessions && !mainIsAchievements && !mainIsApps && <OrgEngineNotice />}
+      {org && (group || bot) && !profileFillsMain && !calendarFillsMain && !mainIsTeamMap && !mainIsMemory && !mainIsCode && !mainIsApprovals && !mainIsRemoteSessions && !mainIsAchievements && !mainIsApps && <OrgEngineNotice />}
       {/* The split view (#1504): the main view below is one section; others
           show more conversations beside it (src/lib/split-view.ts). */}
-      <SplitWorkspace panelSlot={panelSlot} main={composeOpen && (group || bot) ? (
+      <SplitWorkspace panelSlot={panelSlot} main={profileFillsMain ? (
+        // The bot's profile page fills the main panel in place of the chat
+        // (#2136); X or Escape goes back to the bot's chat.
+        <PersonaEditorModal />
+      ) : composeOpen && (group || bot) ? (
         group ? <GroupSurface key={`${group.id}:${uiLocale}`} id={group.id}>{(current) => <GroupView group={current} />}</GroupSurface> : bot ? <BotSurface key={uiLocale} id={bot.id}>{(current) => <ChatView bot={current} />}</BotSurface> : null
       ) : calendarFillsMain ? (
         <RoutinesPage fill onBack={closeCalendar} onOpenRoom={openCalendarRoom} />
@@ -195,8 +202,9 @@ export function ShellLayout(shell: ShellNavigation) {
       {composeOpen && <ComposeToPicker key={composeGroup ? "group" : "browse"} startInGroup={composeGroup} onClose={() => setComposeOpen(false)} />}
       </div>
       {/* A bot thread opened beside the main chat (Open beside, or
-          Option-click on a thread row); one at a time. */}
-      <SideThreadPanel />
+          Option-click on a thread row); one at a time. Threads shown only:
+          with one conversation (#2081) no thread opens anywhere beside it. */}
+      {showThreads && <SideThreadPanel />}
       {/* The panels below are siblings, so their keys must differ even
           though each is remounted per bot. Two siblings keyed `bot.id`
           collide in React's keyed reconciliation whenever both are open
@@ -221,9 +229,9 @@ export function ShellLayout(shell: ShellNavigation) {
       {!remoteClient && state.activityOpen && bot && <BotSurface key={`activity:${bot.id}`} id={bot.id}>{(current) => <ActivityPanel bot={current} />}</BotSurface>}
       {state.appSettingsOpen && <SettingsModal />}
       {!remoteClient && <ModelWindowHost />}
-      {/* Restored centred windows: Edit bot, New bot wizard, Browse Bots,
-          archived bots, org import. Capabilities stays a decided modal. */}
-      {!remoteClient && state.personaEditor && <PersonaEditorModal />}
+      {/* Restored centred windows: New bot wizard, Browse Bots, archived
+          bots, org import. Capabilities stays a decided modal. Edit bot is
+          the main panel's profile page above (#2136). */}
       {!remoteClient && state.botWizard && <BotWizard />}
       {state.botCatalogOpen && <BotCatalogModal />}
       {state.archivedBotsOpen && (

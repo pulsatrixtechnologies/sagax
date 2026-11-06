@@ -27,10 +27,7 @@ struct DesktopSecuritySettings: View {
     private var httpsServer: Bool { session.settingsClient?.connection.baseURL?.scheme == "https" }
 
     var body: some View {
-        DesktopText(Text("Ask for a security key or a passkey (Touch ID, Face ID) before Sagax approves the actions you choose. A tap alone is then not enough."),
-                    color: \.inkSecondary)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.bottom, 4)
+        // #2080 (L0): the page intro lives under the title (settings.intro.security).
         if let error { DesktopSettingsNotice(Text(verbatim: error), color: \.danger) }
         if keys?.unreadable == true { DesktopSettingsNotice(Text("Your saved security keys could not be read on the server, so sensitive approvals are refused until it is repaired."), color: \.danger) }
         if let notice { DesktopSettingsNotice(Text(verbatim: notice), color: \.success) }
@@ -288,10 +285,7 @@ struct DesktopVaultSettings: View {
             }
             .task { await load() }
         } else if let list {
-            DesktopText(Text("Logins, API keys and notes your bots can use without seeing them. A bot fills a login into its browser only on the sites you set, and only after you allow it."),
-                        color: \.inkSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, 4)
+            // #2080 (L0): the page intro lives under the title (settings.intro.credentials).
             // the filter chips, each with its count (`categoryChipClass`, vaultTabCounts)
             HStack(spacing: 8) {
                 ForEach([("all", AppStrings.localized("Everything in the vault")), ("login", AppStrings.localized("Logins")), ("payment", AppStrings.localized("Payments")), ("contact", AppStrings.localized("Contacts"))], id: \.0) { option in

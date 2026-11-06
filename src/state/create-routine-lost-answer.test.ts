@@ -57,7 +57,7 @@ beforeEach(async () => {
   FixtureEventSource.opened = [];
   request = vi.fn<typeof fetch>(async (path) => {
     if (typeof path === "string" && path.startsWith("/api/bots?")) return json({ bots: [], groups: [] });
-    if (path === "/api/routines") return json({ routines: [], runs: [] });
+    if (typeof path === "string" && path.startsWith("/api/routines")) return json({ routines: [], runs: [] });
     if (path === "/api/webhooks") return json({ webhooks: [], attempts: [] });
     if (path === "/api/instances") return json({ instances: [] });
     return json({});
@@ -81,7 +81,7 @@ describe("createRoutine lost-answer recovery (#1753)", () => {
   it("keeps the routine and shows no raw 499 when the answer is lost", async () => {
     request.mockImplementation(async (path, init) => {
       if (path === "/api/routines" && init?.method === "POST") return json({}, 499, "Unknown Status Code");
-      if (path === "/api/routines") return json({ routines: [created], runs: [] });
+      if (typeof path === "string" && path.startsWith("/api/routines")) return json({ routines: [created], runs: [] });
       if (typeof path === "string" && path.startsWith("/api/bots?")) return json({ bots: [], groups: [] });
       return json({});
     });
@@ -100,7 +100,7 @@ describe("createRoutine lost-answer recovery (#1753)", () => {
     });
     await settle();
     expect(request.mock.calls.some(([path, init]) => path === "/api/routines" && init?.method === "POST")).toBe(true);
-    expect(request.mock.calls.filter(([path, init]) => path === "/api/routines" && (!init || !init.method || init.method === "GET")).length).toBeGreaterThan(0);
+    expect(request.mock.calls.filter(([path, init]) => typeof path === "string" && path.startsWith("/api/routines") && (!init || !init.method || init.method === "GET")).length).toBeGreaterThan(0);
     expect(state.routines.some((routine) => routine.id === "loop-1")).toBe(true);
     expect(state.error).toBeNull();
   });
@@ -108,7 +108,7 @@ describe("createRoutine lost-answer recovery (#1753)", () => {
   it("shows the readable lost-answer line when the routine is not found", async () => {
     request.mockImplementation(async (path, init) => {
       if (path === "/api/routines" && init?.method === "POST") return json({}, 499, "Unknown Status Code");
-      if (path === "/api/routines") return json({ routines: [], runs: [] });
+      if (typeof path === "string" && path.startsWith("/api/routines")) return json({ routines: [], runs: [] });
       return json({});
     });
     flushSync(() => {
@@ -129,10 +129,10 @@ describe("createRoutine lost-answer recovery (#1753)", () => {
 
   it("keeps a real server refusal as-is, without a recovery re-list", async () => {
     const postsBefore = request.mock.calls.filter(([path, init]) => path === "/api/routines" && init?.method === "POST").length;
-    const getsBefore = request.mock.calls.filter(([path, init]) => path === "/api/routines" && (!init || !init.method || init.method === "GET")).length;
+    const getsBefore = request.mock.calls.filter(([path, init]) => typeof path === "string" && path.startsWith("/api/routines") && (!init || !init.method || init.method === "GET")).length;
     request.mockImplementation(async (path, init) => {
       if (path === "/api/routines" && init?.method === "POST") return json({ error: "Give the routine a name" }, 400);
-      if (path === "/api/routines") return json({ routines: [], runs: [] });
+      if (typeof path === "string" && path.startsWith("/api/routines")) return json({ routines: [], runs: [] });
       return json({});
     });
     flushSync(() => {
@@ -148,7 +148,7 @@ describe("createRoutine lost-answer recovery (#1753)", () => {
     });
     await settle();
     const postsAfter = request.mock.calls.filter(([path, init]) => path === "/api/routines" && init?.method === "POST").length;
-    const getsAfter = request.mock.calls.filter(([path, init]) => path === "/api/routines" && (!init || !init.method || init.method === "GET")).length;
+    const getsAfter = request.mock.calls.filter(([path, init]) => typeof path === "string" && path.startsWith("/api/routines") && (!init || !init.method || init.method === "GET")).length;
     expect(postsAfter - postsBefore).toBe(1);
     expect(getsAfter - getsBefore).toBe(0);
     expect(state.error).toBe("Give the routine a name");

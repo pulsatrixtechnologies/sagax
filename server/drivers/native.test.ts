@@ -8,13 +8,13 @@ import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { ensureDirs, NATIVE_DIR } from "../config.ts";
-import { appendNative, withoutInlineData } from "./native.ts";
+import { appendNative, flushNativeLog, streamedFragment, withoutInlineData } from "./native.ts";
 
 beforeAll(() => ensureDirs());
 
 describe("appendNative", () => {
   it("masks the tokens an ACP session/new hands the agent", () => {
-    appendNative("t-native", {
+    appendNative("t-native-masks-tokens", {
       dir: "out",
       source: "acp",
       msg: {
@@ -33,7 +33,7 @@ describe("appendNative", () => {
       },
     });
 
-    const log = readFileSync(join(NATIVE_DIR, "t-native.ndjson"), "utf8");
+    const log = readFileSync(join(NATIVE_DIR, "t-native-masks-tokens.ndjson"), "utf8");
     expect(log).not.toContain("box_live_dontlogme");
     // the shape a debugger needs is still there: which server, which var
     expect(log).toContain("session/new");
@@ -43,6 +43,7 @@ describe("appendNative", () => {
 
   it("writes the log private to the user", () => {
     appendNative("t-mode", { dir: "in", source: "acp", msg: { hello: "world" } });
+    flushNativeLog("t-mode");
     const mode = statSync(join(NATIVE_DIR, "t-mode.ndjson")).mode & 0o777;
     // Windows does not implement POSIX modes; everywhere else, owner-only
     if (process.platform !== "win32") expect(mode).toBe(0o600);
@@ -53,6 +54,13 @@ describe("appendNative", () => {
     const cyclic: Record<string, unknown> = {};
     cyclic.self = cyclic;
     expect(() => appendNative("t-cyclic", { dir: "in", source: "acp", msg: cyclic })).not.toThrow();
+  });
+
+  it("skips streamed fragments a later whole message carries", () => {
+    expect(streamedFragment("claude.sdk.message", { type: "stream_event", event: { type: "content_block_delta" } })).toBe(true);
+    expect(streamedFragment("codex.app-server", { method: "item/agentMessage/delta" })).toBe(true);
+    expect(streamedFragment("pi.rpc", { type: "message_update" })).toBe(true);
+    expect(streamedFragment("claude.sdk.message", { type: "assistant" })).toBe(false);
   });
 });
 
@@ -68,6 +76,7 @@ describe("appendNative inline data (port de OpenMausBot #3129)", () => {
       ],
     };
     appendNative("t-native-inline", { dir: "in", source: "claude", msg });
+    flushNativeLog("t-native-inline");
     const line = readFileSync(join(NATIVE_DIR, "t-native-inline.ndjson"), "utf8").trim().split("\n").at(-1)!;
     expect(line).not.toContain(base64);
     expect(line).toContain("[base64 data: 4096 base64 chars]");

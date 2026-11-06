@@ -2917,7 +2917,7 @@ describe("restoring the open conversation", () => {
       });
       vi.stubGlobal("EventSource", FixtureEventSource);
       vi.stubGlobal("fetch", (path: string) =>
-        path.startsWith("/api/bots?") ? json({ bots: [first, second], groups: [room] }) : json(answers[path] ?? {}),
+        path.startsWith("/api/bots?") ? json({ bots: [first, second], groups: [room] }) : path.startsWith("/api/routines") ? json(answers["/api/routines"] ?? {}) : json(answers[path] ?? {}),
       );
 
       container = document.createElement("div");

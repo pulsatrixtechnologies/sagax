@@ -83,11 +83,13 @@ async function handleBotRead(env: BotsMutateEnv): Promise<boolean> {
     const body = await env.readBody(env.req);
     requirePinnedClientThread(env, m[1], body?.threadId);
     const current = env.requestedTaskBot(m[1], body?.threadId);
-    env.store.patchTask(current.id, current.threadId, { unread: false, ...env.readCursor(current.threadId) });
+    const task = env.store.taskByThread(current.id, current.threadId);
+    const cursor = env.readCursor(current.threadId);
+    const changed = Boolean(task?.unread) || (cursor.lastReadMessageId !== undefined && task?.lastReadMessageId !== cursor.lastReadMessageId);
+    if (changed) env.store.patchTask(current.id, current.threadId, { unread: false, ...cursor });
     env.pushHub.noteRead(env.actorPrincipalId(env.auth), current.threadId);
-    const bot = env.store.bot(current.id)!;
-    const visible = env.wireBot(bot);
-    env.broadcast({ kind: "bot", bot: visible });
+    const visible = env.wireBot(env.store.bot(current.id)!);
+    if (changed) env.broadcast({ kind: "bot", bot: visible });
     env.json(env.res, 200, { bot: visible });
     return true;
   }

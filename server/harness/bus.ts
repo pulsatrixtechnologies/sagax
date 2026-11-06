@@ -15,9 +15,11 @@
 import { basename, join } from "node:path";
 
 import { EVENTS_DIR } from "../config.ts";
+import { flushNativeLog } from "../drivers/native.ts";
 import { appendLog, logAppended, registerSealedLog, sealLogLines } from "../encryption/content-at-rest.ts";
 import { threadLogsForgotten } from "../threads/forgotten-threads.ts";
 import { redactSecrets } from "../redact.ts";
+import { batchSaves } from "../save-batch.ts";
 import { capThreadLog, currentThreadLogCap } from "../threads/thread-log-rotation.ts";
 import { newId, type ProviderInstance, type RuntimeEvent, type RuntimeEventListener } from "../contracts.ts";
 import { reportBackgroundError } from "../background-error.ts";
@@ -267,7 +269,9 @@ export class EventBus {
     // this one: the log keeps publication order.
     this.enqueue(event);
     this.deliver(event);
-    if (isTerminalEvent(event)) void this.flushDisk().catch(reportBackgroundError);
+    if (!isTerminalEvent(event)) return;
+    flushNativeLog(event.threadId);
+    void this.flushDisk().catch(reportBackgroundError);
   }
 
   private enqueue(event: RuntimeEvent) {
@@ -404,13 +408,15 @@ export class EventBus {
   }
 
   private deliver(event: RuntimeEvent) {
-    for (const listener of Array.from(this.listeners)) {
-      try {
-        listener(event);
-      } catch (e) {
-        console.error("bus: listener threw", e);
+    batchSaves(() => {
+      for (const listener of Array.from(this.listeners)) {
+        try {
+          listener(event);
+        } catch (e) {
+          console.error("bus: listener threw", e);
+        }
       }
-    }
+    });
   }
 
   subscribe(listener: RuntimeEventListener): () => void {

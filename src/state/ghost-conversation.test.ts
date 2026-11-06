@@ -54,7 +54,7 @@ beforeAll(() => {
   vi.stubGlobal("EventSource", FixtureEventSource);
   vi.stubGlobal("fetch", (path: string) => {
     if (path.startsWith("/api/bots?")) return Promise.resolve(json({ bots: [], groups: [structuredClone(dmWithGaby)] }));
-    if (path === "/api/routines") return Promise.resolve(json({ routines: [], runs: [] }));
+    if (typeof path === "string" && path.startsWith("/api/routines")) return Promise.resolve(json({ routines: [], runs: [] }));
     if (path === "/api/webhooks") return Promise.resolve(json({ webhooks: [], attempts: [] }));
     if (path === "/api/instances") return Promise.resolve(json({ instances: [] }));
     return Promise.resolve(json({}));

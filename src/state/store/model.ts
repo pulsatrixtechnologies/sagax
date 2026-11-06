@@ -1352,6 +1352,8 @@ export interface AppState {
   routines: Routine[];
   routineRuns: RoutineRun[];
   routinesLoadState: "loading" | "ready" | "error";
+  /** Where the app's loaded routine runs begin (`GET /api/routines?since=`); null until hydrated or when every run is loaded. */
+  routineRunsSince: number | null;
   /** 2026-10-28: each bot's routine folders in order (shared/routine-folders.ts). */
   routineFolders: Record<string, string[]>;
   routinesFocus: { section?: "schedule" | "logs" | "webhooks"; view?: "calendar" | "list"; botId?: string; routineId?: string; runStatus?: RoutineRunStatusFilter; runId?: string; /** Opens this routine's editor in the side panel. */ editRoutineId?: string; nonce: number };
@@ -1661,9 +1663,10 @@ export type Action =
   | { type: "showOrgImport"; staged?: OrgImportDocument | null }
   | { type: "closeOrgImport" }
   | { type: "showChat" }
-  | { type: "routinesHydrated"; routines: Routine[]; runs: RoutineRun[]; folders?: Record<string, string[]> }
+  | { type: "routinesHydrated"; routines: Routine[]; runs: RoutineRun[]; folders?: Record<string, string[]>; since?: number }
   | { type: "routineFoldersPatched"; botId: string; folders: string[] }
   | { type: "routinesLoadFailed" }
+  | { type: "routineRunsLoaded"; runs: RoutineRun[]; from?: number; to?: number }
   | { type: "routinePatched"; routine: Routine }
   | { type: "routineDeleted"; routineId: string }
   | { type: "routineRunPatched"; run: RoutineRun }
@@ -2568,6 +2571,7 @@ export const initialState: AppState = {
   routines: [],
   routineRuns: [],
   routinesLoadState: "loading",
+  routineRunsSince: null,
   routineFolders: {},
   routinesFocus: { nonce: 0 },
   codeFocus: { nonce: 0 },

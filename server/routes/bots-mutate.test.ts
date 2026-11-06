@@ -41,7 +41,7 @@ function baseDeps(overrides: Partial<BotsMutateRouteDeps> = {}): BotsMutateRoute
       patchTask: vi.fn(),
       messagesFor: vi.fn(() => []),
       projectBotForTask: vi.fn(() => bot),
-      taskByThread: vi.fn(() => ({ threadId: "thread-1" })),
+      taskByThread: vi.fn(() => ({ threadId: "thread-1", unread: true })),
       groups: [],
       sections: [],
       setPrimaryBot: vi.fn(() => []),

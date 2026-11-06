@@ -15,7 +15,8 @@ import { z } from "zod";
 
 import { DATA_DIR } from "../config.ts";
 import type { RuntimeEvent } from "../contracts.ts";
-import { writeFileAtomic } from "../atomic.ts";
+import { OwnedFile } from "../atomic.ts";
+import { saveSoon } from "../save-batch.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { flowRunBlockedReason, routineReportOutcome, type RoutineReportOutcome } from "./routine-report.ts";
 import { meaningfulLine } from "../../shared/routine-result.ts";
@@ -1527,7 +1528,7 @@ function loadAutoPaused(value: unknown): RoutineAutoPause | undefined {
 }
 
 export class RoutineManager {
-  private readonly file: string;
+  private readonly file: string; private readonly disk: OwnedFile;
   private readonly now: () => number;
   private readonly options: RoutineManagerOptions;
   private routines: Routine[] = [];
@@ -1591,9 +1592,12 @@ export class RoutineManager {
   constructor(options: RoutineManagerOptions) {
     this.options = options;
     this.file = options.file ?? join(DATA_DIR, "routines.json");
+    this.disk = new OwnedFile(this.file, { mode: 0o600 });
     this.now = options.now ?? Date.now;
     try {
-      const disk = JSON.parse(readFileSync(this.file, "utf8")) as Partial<RoutineFile>;
+      const text = readFileSync(this.file, "utf8");
+      const disk = JSON.parse(text) as Partial<RoutineFile>;
+      this.disk.loaded(text);
       // A store with the wrong top-level shape is damaged, not empty: a
       // present collection must be a list. Absent ones stay tolerant so
       // older files without newer receipt fields still load.
@@ -1765,7 +1769,7 @@ export class RoutineManager {
           if (routine.postResults === undefined) routine.postResults = true;
         }
         this.postResultsPending = false;
-        this.save();
+        this.saveLater();
       }
     } catch (error) {
       this.routines = [];
@@ -1841,7 +1845,7 @@ export class RoutineManager {
       recovered.push(cloneRun(run));
     }
     if (recovered.length > 0 || resumable) {
-      this.save();
+      this.saveLater();
       for (const run of recovered) {
         this.notifyRunChanged(run);
         if (run.status !== "cancelled") this.options.onRunFailed?.(run);
@@ -1865,7 +1869,7 @@ export class RoutineManager {
         this.options.frozenResultsThread?.(routine.botId, routine.resultsThreadId)) delete routine.resultsThreadId;
     }
     this.frozenPending = false;
-    this.save();
+    this.saveLater();
   }
 
   /** 2026-10-29: a bot routine has no destination of its own any more; it
@@ -1879,7 +1883,7 @@ export class RoutineManager {
       delete routine.resultsThreadId;
       changed = true;
     }
-    if (changed) this.save();
+    if (changed) this.saveLater();
   }
 
   /** Successful delegated/provider turns are not successful runs until the
@@ -2489,7 +2493,7 @@ export class RoutineManager {
       }
       changed = true;
     }
-    if (changed) this.save();
+    if (changed) this.saveLater();
   }
 
   disableForGroup(groupId: string) {
@@ -2520,7 +2524,7 @@ export class RoutineManager {
       }
       changed = true;
     }
-    if (changed) this.save();
+    if (changed) this.saveLater();
   }
 
   /** `startedBy` (2026-11-01): a person asked for this run (Run now, or
@@ -2713,7 +2717,7 @@ export class RoutineManager {
     };
     const dryRuns = [...(run.proactive.dryRuns ?? []), recorded].slice(-40);
     run.proactive = { ...run.proactive, dryRuns };
-    this.save();
+    this.saveLater();
     this.emitRun(run);
     return true;
   }
@@ -2771,7 +2775,7 @@ export class RoutineManager {
       this.emitRun(run);
       changed = true;
     }
-    if (changed) this.save();
+    if (changed) this.saveLater();
   }
 
   async cancelRun(id: string, reason?: string): Promise<RoutineRun | null> {
@@ -2782,7 +2786,7 @@ export class RoutineManager {
     run.attention = undefined;
     run.finishedAt = this.now();
     if (reason) run.error = reason;
-    this.save();
+    this.saveLater();
     this.emitRun(run);
     if (run.threadId) {
       if (run.target === "room-goal" && run.groupId) {
@@ -2800,7 +2804,7 @@ export class RoutineManager {
     if (!run) return null;
     if (!run.seenAt) {
       run.seenAt = this.now();
-      this.save();
+      this.saveLater();
       this.emitRun(run);
     }
     return cloneRun(run);
@@ -3302,8 +3306,10 @@ export class RoutineManager {
       // must not continually overtake work that has already waited. Snapshot
       // IDs retain order across awaits without holding stale objects after
       // another request rolls back a failed routine-definition write.
+      let indexed: RoutineRun[] | null = null, byId = new Map<string, RoutineRun>();
       for (const id of this.runs.map((run) => run.id)) {
-        const run = this.runs.find((candidate) => candidate.id === id);
+        if (indexed !== this.runs) [indexed, byId] = [this.runs, new Map(this.runs.map((run) => [run.id, run]))];
+        const run = byId.get(id);
         if (!run || run.status !== "queued") continue;
         // A run Perspicax rate limited waits its retry time.
         if (run.admitAfter !== undefined && run.admitAfter > now) continue;
@@ -3323,7 +3329,7 @@ export class RoutineManager {
             if (run.status === "queued") {
               this.wait(run, engineNeedsReconnecting(expiredEngine));
               delete run.error;
-              this.save();
+              this.saveLater();
               this.emitRun(run);
               this.options.onRunDeferred?.(cloneRun(run), { detail: engineReconnectAheadDetail(expiredEngine) });
             }
@@ -3338,7 +3344,7 @@ export class RoutineManager {
           const latest = latestIntervalOccurrence(definition.schedule, now, zone);
           if (latest !== null && latest > run.scheduledFor) {
             run.scheduledFor = latest;
-            this.save();
+            this.saveLater();
             this.emitRun(run);
           }
           const requiresCurrentDayOccurrence =
@@ -3445,7 +3451,7 @@ export class RoutineManager {
             this.precheckPassed.add(run.id);
             if (verdict.verdict.note) {
               run.watchNote = verdict.verdict.note.slice(0, ROUTINE_WATCH_LIMITS.maxNoteChars);
-              this.save();
+              this.saveLater();
             }
           }
         }
@@ -3471,7 +3477,7 @@ export class RoutineManager {
               if (attempts < ROUTINE_ADMIT_MAX_ATTEMPTS) {
                 run.admitAfter = at + delay;
                 run.admitAttempts = attempts + 1;
-                this.save();
+                this.saveLater();
                 this.emitRun(run);
                 continue;
               }
@@ -3597,7 +3603,7 @@ export class RoutineManager {
             run.status = "queued";
             run.threadId = undefined;
             run.startedAt = undefined;
-            this.save();
+            this.saveLater();
             this.defer(run, this.now(), "Waits for its conversation to finish the turn under way");
             continue;
           }
@@ -3626,12 +3632,12 @@ export class RoutineManager {
     if (run.deferredAt == null || (reason && run.attention !== reason)) {
       run.deferredAt ??= now;
       if (reason) run.attention = reason;
-      this.save();
+      this.saveLater();
       this.emitRun(run);
     }
     if (run.deferredNoticeAt == null && now - run.deferredAt >= ROUTINE_DEFERRAL_NOTICE_MS) {
       run.deferredNoticeAt = now;
-      this.save();
+      this.saveLater();
       this.emitRun(run);
       this.options.onRunDeferred?.(cloneRun(run));
     }
@@ -3652,7 +3658,7 @@ export class RoutineManager {
       ]);
       if (!answer || !answer.hint.duplicates.length || run.status !== "running") return "";
       run.memoryHint = structuredClone(answer.hint);
-      this.save();
+      this.saveLater();
       this.emitRun(run);
       return answer.note;
     } catch {
@@ -3775,7 +3781,7 @@ export class RoutineManager {
     } else {
       return null;
     }
-    this.save();
+    this.saveLater();
     this.emitRun(run);
     if (event.type === "turn.completed") queueMicrotask(() => this.tickInBackground());
     return cloneRun(run);
@@ -3813,7 +3819,7 @@ export class RoutineManager {
       }
       if (root?.result.trim()) run.output = redactSecretsInText(root.result).trim().slice(0, 2_000);
       if (!this.settleCompleted(run)) {
-        this.save();
+        this.saveLater();
         this.emitRun(run);
       }
     }
@@ -3958,11 +3964,11 @@ export class RoutineManager {
     if ("waiting" in recovery && recovery.waiting) {
       this.wait(run, recovery.attention);
       delete run.error;
-      this.save();
+      this.saveLater();
       this.emitRun(run);
       if (recovery.alert) this.options.onRunDeferred?.(cloneRun(run), recovery.alert);
     } else if ("queued" in recovery && recovery.queued) {
-      this.save();
+      this.saveLater();
       this.emitRun(run);
       this.options.onRunRequeued?.(cloneRun(run));
       if (recovery.alert) this.options.onRunDeferred?.(cloneRun(run), recovery.alert);
@@ -4027,7 +4033,7 @@ export class RoutineManager {
       this.engineReconnectNotified.clear();
     }
     if (!resumed.length) return [];
-    this.save();
+    this.saveLater();
     for (const run of resumed) {
       this.emitRun(run);
       this.options.onRunRequeued?.(cloneRun(run));
@@ -4063,7 +4069,7 @@ export class RoutineManager {
     } else if (status === "needs-input" || status === "paused") {
       this.wait(run, safeDetail.slice(0, 500) || (status === "paused" ? "The room goal is paused" : "The team needs your input"));
       run.error = undefined;
-      this.save();
+      this.saveLater();
       this.emitRun(run);
     } else {
       run.status = status === "stopped" ? "cancelled" : "completed";
@@ -4074,7 +4080,7 @@ export class RoutineManager {
         run.output = safeDetail.slice(0, 2_000) || undefined;
         this.settleReport(run);
       }
-      this.save();
+      this.saveLater();
       this.emitRun(run);
     }
     queueMicrotask(() => this.tickInBackground());
@@ -4149,7 +4155,7 @@ export class RoutineManager {
     const routine = this.routines.find((candidate) => candidate.id === routineId);
     if (!routine || routine.suspended) return false;
     routine.suspended = { reason, at: this.now() };
-    this.save();
+    this.saveLater();
     this.emitRoutine(routine);
     this.options.onSuspended?.(cloneRoutine(routine), run ? cloneRun(run) : null, reason);
     return true;
@@ -4178,7 +4184,7 @@ export class RoutineManager {
       run.attention = undefined;
       run.finishedAt = this.now();
       run.error = message;
-      this.save();
+      this.saveLater();
       this.emitRun(run);
       if (run.threadId) {
         if (run.target === "room-goal" && run.groupId) {
@@ -4198,7 +4204,7 @@ export class RoutineManager {
     const routine = this.routines.find((candidate) => candidate.id === id);
     if (!routine || routine.runAs === principalId) return false;
     routine.runAs = principalId;
-    this.save();
+    this.saveLater();
     this.emitRoutine(routine);
     return true;
   }
@@ -4221,7 +4227,7 @@ export class RoutineManager {
       resumed.push(routine);
     }
     if (!resumed.length) return [];
-    this.save();
+    this.saveLater();
     for (const routine of resumed) {
       this.emitRoutine(routine);
       this.options.onResumed?.(cloneRoutine(routine));
@@ -4267,7 +4273,7 @@ export class RoutineManager {
     run.error = redactSecretsInText(message).slice(0, 500);
     run.finishedAt = this.now();
     const paused = this.autoPauseAfterFailure(run);
-    this.save();
+    this.saveLater();
     this.emitRun(run);
     if (paused) {
       for (const cancelled of paused.cancelled) this.emitRun(cancelled);
@@ -4290,7 +4296,7 @@ export class RoutineManager {
     run.finishedAt = this.now();
     delete run.problems;
     delete run.quiet;
-    this.save();
+    this.saveLater();
     this.emitRun(run);
     this.options.onRunFailed?.(cloneRun(run), alert);
   }
@@ -4341,7 +4347,7 @@ export class RoutineManager {
     run.attention = undefined;
     run.quietReason = redactSecretsInText(reason).slice(0, 200);
     run.finishedAt = this.now();
-    this.save();
+    this.saveLater();
     this.options.emit?.({ kind: "routine.run", run: cloneRun(run) });
   }
 
@@ -4350,7 +4356,7 @@ export class RoutineManager {
     run.attention = undefined;
     run.error = redactSecretsInText(message).slice(0, 500);
     run.finishedAt = this.now();
-    this.save();
+    this.saveLater();
     this.emitRun(run);
     this.options.onRunFailed?.(cloneRun(run));
   }
@@ -4435,7 +4441,7 @@ export class RoutineManager {
       changed++;
       this.emitRoutine(routine);
     }
-    if (changed) this.save();
+    if (changed) this.saveLater();
     return changed;
   }
 
@@ -4903,6 +4909,8 @@ export class RoutineManager {
     }
   }
 
+  /** Lands at the end of the running save batch (server/save-batch.ts); what a caller rolls back on failure uses save. */
+  private saveLater() { saveSoon(this, () => this.save()); }
   private save() {
     // The file on disk failed to load, so it may still hold routines this
     // process cannot see. Management writes refuse above; background saves
@@ -4922,7 +4930,7 @@ export class RoutineManager {
       excess -= 1;
     }
     mkdirSync(dirname(this.file), { recursive: true });
-    writeFileAtomic(this.file, JSON.stringify({
+    this.disk.write(JSON.stringify({
       version: 1,
       ...(this.frozenPending ? {} : { frozenResultsCleared: true }),
       ...(this.postResultsPending ? {} : { postResultsMigrated: true }),
@@ -4933,6 +4941,6 @@ export class RoutineManager {
       ...(this.startupLaunchId === undefined ? {} : { startupLaunchId: this.startupLaunchId }),
       ...(this.ownerNotices.length ? { ownerNotices: this.ownerNotices } : {}),
       ...(this.folderOrder.size ? { folders: Object.fromEntries(this.folderOrder) } : {}),
-    } satisfies RoutineFile, null, 2), { mode: 0o600 });
+    } satisfies RoutineFile));
   }
 }

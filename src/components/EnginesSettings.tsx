@@ -27,7 +27,7 @@ import { canEditConfig, canManageKeys, viewerCan, viewerIsOrgMember } from "@/li
 import { viewerIsOrgAdmin } from "@/lib/group-owner";
 import { boatComputerEnabled, vpsComputerEnabled } from "@/lib/feature-flags";
 import { OrgHostToolsNote, orgRefusesEngine } from "./OrgHostToolsNote";
-import { DescribedRow, FIELD, FoldRow, PILL, PillSelect, SettingsGroup, SettingsIntro } from "./SettingsPrimitives";
+import { DescribedRow, FIELD, FoldRow, PILL, PillSelect, SettingsGroup } from "./SettingsPrimitives";
 import { AutoModelSettings } from "./settings/AutoModelSettings";
 import { BotModelsSettings } from "./settings/BotModelsSettings";
 import { CacheKeepWarmSettings } from "./CacheKeepWarmSettings";
@@ -476,7 +476,6 @@ export function EnginesSettings() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6 pb-2" data-models-voice="" data-models-page="">
-      <SettingsIntro>{t("models.intro")}</SettingsIntro>
       {/* #1675: Bot models first (defaults + table + bulk) */}
       <BotModelsSettings />
       <div data-settings-card="models.advanced">

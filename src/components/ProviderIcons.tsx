@@ -1,5 +1,6 @@
 // Provider brand marks, keyed by driver kind. Official logos only.
 import { useState } from "react";
+import { KeyRound, Server } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { HermesMark } from "./HermesMark";
 import { CursorMark } from "./CursorMark";
@@ -122,6 +123,10 @@ export function PiMark({ size = 16, className }: IconProps) {
   );
 }
 
+/** Drivers that talk to a server the person points at (an OpenAI-compatible
+ * endpoint: Azure Foundry, a personal server, a local runtime). */
+const SERVER_DRIVER = /compat|server|local|ollama|lmstudio|vllm|foundry|azure/i;
+
 export function ProviderMark({ driverKind, size, className }: IconProps & { driverKind: string }) {
   switch (driverKind) {
     case "grok":
@@ -150,11 +155,12 @@ export function ProviderMark({ driverKind, size, className }: IconProps & { driv
     case "piAgent":
       return <PiMark size={size} className={className} />;
     default:
-      return (
-        <span className="flex size-full items-center justify-center text-[10px] font-semibold tracking-tight text-ink-secondary">
-          {(driverKind.replace(/Agent$/i, "").slice(0, 1) || "?").toUpperCase()}
-        </span>
-      );
+      // #2080: a provider with no mark of its own gets its type's generic
+      // glyph, never a letter ("o" for an Azure Foundry or a personal
+      // OpenAI-compatible server read as a typo).
+      return SERVER_DRIVER.test(driverKind)
+        ? <Server size={size ?? 16} aria-hidden="true" data-provider-generic="server" className={cn("shrink-0 text-ink-secondary", className)} />
+        : <KeyRound size={size ?? 16} aria-hidden="true" data-provider-generic="key" className={cn("shrink-0 text-ink-secondary", className)} />;
   }
 }
 

@@ -107,10 +107,11 @@ afterEach(() => {
 });
 
 describe("Settings split: navigation", () => {
-  it("lists Account, Security, Vault, Appearance, Notifications under Personal, and Providers, Models, Voice under AI", async () => {
+  // #2080 (L0): the final rail
+  it("lists Account, Appearance, Notifications, Security, Vault under Personal, and Providers, Models, Voice, Usage under AI", async () => {
     await settings("account");
-    expect(railLabels("you")).toEqual(["Account", "Security", "Vault", "Appearance", "Notifications"]);
-    expect(railLabels("ai")).toEqual(["Providers", "Models", "Voice"]);
+    expect(railLabels("you")).toEqual(["Account", "Appearance", "Notifications", "Security", "Vault"]);
+    expect(railLabels("ai")).toEqual(["Providers", "Models", "Voice", "Usage"]);
     expect(rail().textContent).not.toContain("Models and voice");
   });
 
@@ -124,8 +125,8 @@ describe("Settings split: navigation", () => {
   it("reads in French", async () => {
     setLocale("fr");
     await settings("account");
-    expect(railLabels("you")).toEqual(["Compte", "Sécurité", "Coffre", "Apparence", "Notifications"]);
-    expect(railLabels("ai")).toEqual(["Fournisseurs", "Modèles", "Voix"]);
+    expect(railLabels("you")).toEqual(["Compte", "Apparence", "Notifications", "Sécurité", "Coffre"]);
+    expect(railLabels("ai")).toEqual(["Fournisseurs", "Modèles", "Voix", "Utilisation"]);
   });
 });
 

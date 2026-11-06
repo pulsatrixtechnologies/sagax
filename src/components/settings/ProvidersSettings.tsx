@@ -53,7 +53,7 @@ import { modelOn } from "../../../shared/offered-models";
 import { perspicaxConsoleUrl } from "../PerspicaxOrgSettings";
 import { ImageGenerationSettings, imageProviderLabel } from "./ImageGenerationSettings";
 import { WebSearchSettings } from "./WebSearchSettings";
-import { DescribedRow, FoldRow, HelpTip, LinkRow, PILL, SettingsGroup, SettingsIntro, Switch, requestSettingsCard } from "../SettingsPrimitives";
+import { DescribedRow, FoldRow, HelpTip, LinkRow, PILL, SettingsGroup, Switch, requestSettingsCard } from "../SettingsPrimitives";
 
 const PAYER_KEY = { me: "providers.payer.me", org: "providers.payer.org", computer: "providers.payer.computer" } as const satisfies Record<ProviderRow["payer"], LocaleKey>;
 const WHERE_KEY = {
@@ -502,7 +502,6 @@ export function ProvidersSettings() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6 pb-2" data-providers-page="">
-      <SettingsIntro>{t("providers.intro")}</SettingsIntro>
       {/* the organization (2026-11-05): same page for everyone, its choices change in Perspicax */}
       {organization && (
         <div data-settings-card="providers.organization" data-providers-org-band="">

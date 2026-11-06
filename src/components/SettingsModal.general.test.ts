@@ -85,15 +85,19 @@ describe("Settings > General, the reference design's layout", () => {
     expect(renderToStaticMarkup(createElement(MicrophonePermissionRow))).toBe("");
   });
 
-  it("Updates leave General for a page of their own, where the desktop app answers", () => {
-    expect(render()).not.toContain('<option value="updates"');
+  // #2080 (L0): Updates are the first card of App, where the desktop app answers
+  it("Updates leave General for the App page, where the desktop app answers", () => {
+    fixture.section = "about";
+    expect(render()).not.toContain('data-settings-card="about.updates"');
     vi.stubGlobal("window", { ogb: { updater } });
+    fixture.section = "account";
     const general = render();
-    expect(general).toContain('<option value="updates">Updates</option>');
+    expect(general).toContain('<option value="about">App</option>');
+    expect(general).not.toContain('<option value="updates"');
     expect(general).not.toContain("Check for updates");
-    fixture.section = "updates";
+    fixture.section = "about";
     const page = render();
-    expect(page).toContain('data-settings-card="updates"');
+    expect(page).toContain('data-settings-card="about.updates"');
     expect(page).toContain("Check for updates");
     expect(page).toContain("Update channel");
   });
@@ -115,23 +119,22 @@ describe("Settings > General, the reference design's layout", () => {
     expect(html).toContain(">Système</h3>");
     expect(html).not.toContain(">Thème</div>");
     expect(html).toContain(">Visites guidées</div>");
-    expect(html).toContain('<option value="updates">Mises à jour</option>');
+    expect(html).toContain('<option value="about">Application</option>');
     expect(html).not.toMatch(/[–—]/);
   });
 });
 
 describe("Settings search after the move", () => {
   const section = (id: AppSettingsSection) => SECTIONS.find((entry) => entry.id === id)!;
-  it("finds updates and pre-releases on Updates, not on General", () => {
+  it("finds updates and pre-releases on App, not on General", () => {
     for (const query of ["update", "prerelease", "pre-release", "beta", "mise à jour"]) {
-      expect(sectionMatches(section("updates"), query), query).toBe(true);
+      expect(sectionMatches(section("about"), query), query).toBe(true);
       expect(sectionMatches(section("account"), query), query).toBe(false);
     }
   });
-  it("finds About on its own App entry, not on Updates", () => {
+  it("finds About on its own App entry", () => {
     for (const query of ["about", "à propos", "license", "licence", "github", "documentation"]) {
       expect(sectionMatches(section("about"), query), query).toBe(true);
-      expect(sectionMatches(section("updates"), query), query).toBe(false);
     }
     // "about me" stays on Account; license and github do not
     for (const query of ["license", "licence", "github", "documentation"]) {

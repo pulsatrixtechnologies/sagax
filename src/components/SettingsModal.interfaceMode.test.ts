@@ -45,7 +45,9 @@ describe("Settings Simple and Advanced", () => {
     }
   });
 
-  it("in Simple (chosen), the switch stays in Appearance and technical sections hide", () => {
+  // #2080 (L0): Simple hides no page but Experimental; it folds the
+  // technical cards of each page under "Advanced" instead
+  it("in Simple (chosen), the switch stays in Appearance and only Experimental hides", () => {
     stored.set("sagax.interfaceMode.v1", "simple");
     const html = render();
     expect(html).toContain('aria-label="Advanced mode"');
@@ -54,8 +56,11 @@ describe("Settings Simple and Advanced", () => {
     expect(html).not.toContain("data-settings-scope");
     expect(html).toContain('<option value="account"');
     expect(html).toContain('<option value="appearance"');
-    for (const id of ["connections", "connectedApps", "engines", "computer", "experimental"]) {
+    for (const id of ["connections", "connectedApps", "experimental"]) {
       expect(html, id).not.toContain(`<option value="${id}"`);
+    }
+    for (const id of ["engines", "computer", "providers", "voice"]) {
+      expect(html, id).toContain(`<option value="${id}"`);
     }
     // 2026-10-15: Usage (the person's own plan and cost) shows in Simple too
     expect(html).toContain('<option value="usage"');

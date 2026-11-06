@@ -227,7 +227,7 @@ describe("CodingChatSheet", () => {
     expect(column.querySelector("[data-coding-stop]")).toBeNull();
   });
 
-  it("keeps the composer on screen and sends the follow-up; the way back is the X, no Continue, no Close Chat, no thread", async () => {
+  it("keeps the composer on screen and sends the follow-up; the way back is the compact back control, no Continue, no Close Chat, no thread", async () => {
     const props = mountSheet("finished");
     expect(column.querySelector("[data-coding-continue]")).toBeNull();
     expect(column.textContent).not.toContain("Close Chat");
@@ -240,9 +240,9 @@ describe("CodingChatSheet", () => {
     await vi.waitFor(() => expect(props.onSend).toHaveBeenCalledWith("Also add a test for the empty column"));
     expect(column.querySelector("[data-coding-followup]")).not.toBeNull();
     const close = column.querySelector<HTMLButtonElement>("[data-coding-close]")!;
-    // the same X as a page opened by Sagax (the bot's profile page)
-    expect(close.hasAttribute("data-window-close")).toBe(true);
-    expect(close.getAttribute("aria-label")).toBe("Close");
+    // #2108 compact header: back arrow (also data-coding-back), not the page X
+    expect(close.hasAttribute("data-coding-back")).toBe(true);
+    expect(close.getAttribute("aria-label")).toBe("Back to the chat");
     flushSync(() => close.click());
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });

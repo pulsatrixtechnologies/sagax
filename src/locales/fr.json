@@ -10000,6 +10000,7 @@
   "code.diff.status.renamed": "Renommé",
   "code.diff.status.modified": "Modifié",
   "codingChat.aria": "Tâche de code : {title}",
+  "codingChat.back": "Retour au chat",
   "codingChat.bot": "Bot",
   "codingChat.changes.files": "{count} fichiers modifiés",
   "codingChat.changes.files.one": "{count} fichier modifié",

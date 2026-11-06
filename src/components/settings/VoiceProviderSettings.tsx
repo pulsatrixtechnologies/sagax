@@ -129,6 +129,13 @@ export function VoiceProviderSettings({ bot }: { bot?: { id: string; name: strin
     }
   };
 
+  // #2080 (L1): Auto says what it picked, in grey ("Auto picks xAI").
+  const autoTts = ttsValue === "auto" || (ttsValue === "inherit" && personTts === "auto");
+  const autoStt = sttValue === "auto" || (sttValue === "inherit" && personStt === "auto");
+  const effective = (on: boolean, provider: string | undefined) => on && currentResolution && provider
+    ? <span data-voice-effective={provider}>{t("voice.auto.effective", { provider: label(provider) })}</span>
+    : undefined;
+
   const none = status !== null && !offeredTts.length && !offeredStt.length;
   const selectedVoice = speaking ? view.voices[speaking] ?? "" : "";
   const voiceOptions: Array<PillOption<string>> = [
@@ -143,7 +150,7 @@ export function VoiceProviderSettings({ bot }: { bot?: { id: string; name: strin
       {none && <DescribedRow label={t("voiceProviders.tts")} description={t("voiceProviders.none")} />}
       {status && !none && (
         <>
-          <DescribedRow label={t("voiceProviders.tts")} help={t("voiceProviders.fallbackNote")} rowId="voiceProviders.tts">
+          <DescribedRow label={t("voiceProviders.tts")} help={t("voiceProviders.fallbackNote")} description={effective(autoTts, status.tts)} rowId="voiceProviders.tts">
             <PillSelect<Pick<VoiceTtsProvider>>
               value={ttsValue}
               ariaLabel={t("voiceProviders.tts")}
@@ -172,7 +179,7 @@ export function VoiceProviderSettings({ bot }: { bot?: { id: string; name: strin
               <Volume2 size={13} aria-hidden="true" /> {t("voiceProviders.test")}
             </button>
           </CompactRow>
-          <DescribedRow label={t("voiceProviders.stt")} help={t("voiceProviders.sttHelp")} rowId="voiceProviders.stt">
+          <DescribedRow label={t("voiceProviders.stt")} help={t("voiceProviders.sttHelp")} description={effective(autoStt, status.stt)} rowId="voiceProviders.stt">
             <PillSelect<Pick<VoiceSttProvider>>
               value={sttValue}
               ariaLabel={t("voiceProviders.stt")}

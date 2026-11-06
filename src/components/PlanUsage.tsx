@@ -9,7 +9,7 @@
 // of vanishing. On an organization server the card ends with the link to
 // the person's keys in Perspicax.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ExternalLink, Loader2, RefreshCw, Star } from "lucide-react";
+import { Loader2, RefreshCw, Star } from "lucide-react";
 import { api, useStore } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
@@ -20,6 +20,7 @@ import { usageLocale } from "@/lib/usage-personal";
 import { toggleUsageFavorite, useUsageFavorite } from "@/lib/usage-favorite";
 import { CompactRow, PILL, SettingsGroup } from "./SettingsPrimitives";
 import { EngineConnect } from "./EngineConnect";
+import { ExternalLinkPill } from "./settings/SettingsPatterns";
 
 function dueResetDeadlines(report: PlanUsageReport, now: number, seen: Set<string>): string[] {
   const due: string[] = [];
@@ -139,6 +140,9 @@ export interface PlanUsageViewProps {
   /** The starred plan (its percent is the one the account menu's Usage row
    * shows) and how a star is toggled; absent: no stars. */
   favorite?: { id: string | null; onToggle: (planId: string) => void };
+  /** Inside Usage's Detail fold (#2080): the rows alone, no heading or card
+   * of their own, the refresh at the top. */
+  bare?: boolean;
 }
 
 /** A plan's star: on hover or focus, and always while it is on. Offered on
@@ -296,88 +300,107 @@ function planStatus({ report, loading, failed, unavailable }: Pick<PlanUsageView
  * says why in one line (loading, unavailable, or connect a subscription).
  * 2026-10-30 (#1774): signed-out and error rows stay listed with Connect
  * or Try again (an expired token must not vanish). */
-export function PlanUsageView({ report, loading, now, onRefresh, myEngines, issuer, onOpenEngines, failed = false, unavailable = false, favorite }: PlanUsageViewProps) {
+export function PlanUsageView({ report, loading, now, onRefresh, myEngines, issuer, onOpenEngines, failed = false, unavailable = false, favorite, bare = false }: PlanUsageViewProps) {
   const rows = unavailable ? [] : planRows(report);
   const status = rows.length === 0 ? planStatus({ report, loading, failed, unavailable }) : null;
+  const refresh = unavailable ? undefined : (
+    <button
+      type="button"
+      onClick={onRefresh}
+      disabled={loading}
+      aria-busy={loading}
+      aria-label={t("planUsage.refresh")}
+      title={t("planUsage.refresh")}
+      data-plan-refresh
+      className="ml-auto flex size-7 items-center justify-center rounded-full text-ink-secondary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:opacity-50"
+    >
+      {loading ? <Loader2 size={13} className="animate-spin" data-plan-spinner /> : <RefreshCw size={13} />}
+    </button>
+  );
+  const pad = bare ? "py-2" : "px-3.5 py-2.5";
+  const body = (
+    <>
+      {status && (
+        <div className={pad} data-plan-status={status.kind} role="status">
+          <p className="text-[13px] text-ink-secondary">{status.text}</p>
+        </div>
+      )}
+      {rows.map((provider) => (
+        <div key={provider.id} data-plan-row={provider.id} className={cn("group/plan", pad)}>
+          <div className="mb-2 flex min-w-0 items-baseline gap-2">
+            <span className="truncate text-[13px] leading-[18px] text-ink">{provider.name}</span>
+            {provider.plan && <span className="truncate text-[12px] text-ink-secondary">{provider.plan}</span>}
+            {favorite && <FavoriteStar provider={provider} favorite={favorite} />}
+          </div>
+          {provider.state === "windows" && <PlanSummary provider={provider} now={now} />}
+          {provider.state === "no-windows" && (
+            <p data-plan-state="no-windows" className="text-[12px] text-ink-secondary">
+              {provider.access === "api-key" ? t("planUsage.apiKeyNoWindows") : t("planUsage.noWindows")}
+            </p>
+          )}
+          {provider.state === "signed-out" && (
+            <SignedOut provider={provider} myEngines={myEngines} issuer={issuer} onOpenEngines={onOpenEngines} onRefresh={onRefresh} />
+          )}
+          {provider.state === "error" && (
+            <div data-plan-state="error" className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <p className="text-[12px] text-danger">{provider.message}</p>
+              <button
+                type="button"
+                onClick={onRefresh}
+                disabled={loading}
+                className="rounded-md px-2 py-0.5 text-[12px] text-ink-secondary hover:bg-control hover:text-ink disabled:opacity-50"
+              >
+                {t("planUsage.tryAgain")}
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+      {issuer && !bare && (
+        <CompactRow label={t("modelsVoice.keys.title")} rowId="keys">
+          <ExternalLinkPill href={perspicaxKeysUrl(issuer)}>
+            <span data-plan-keys-link>{t("myEngines.manageKeys")}</span>
+          </ExternalLinkPill>
+        </CompactRow>
+      )}
+    </>
+  );
+  if (bare) {
+    return (
+      <div data-settings-card="usage.plan" data-plan-bare="" className="flex flex-col">
+        {refresh && <div className="flex">{refresh}</div>}
+        {body}
+      </div>
+    );
+  }
   // 0.5.6: the reference design's usage meters, a grey heading outside one rounded card,
   // one block per plan (name, a 4 px gauge per window, its two lines).
   return (
     <div data-settings-card="usage.plan">
-      <SettingsGroup
-        title={t("usage.plan.title")}
-        groupId="plan"
-        accessory={unavailable ? undefined : (
-          <button
-            type="button"
-            onClick={onRefresh}
-            disabled={loading}
-            aria-busy={loading}
-            aria-label={t("planUsage.refresh")}
-            title={t("planUsage.refresh")}
-            data-plan-refresh
-            className="ml-auto flex size-7 items-center justify-center rounded-full text-ink-secondary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:opacity-50"
-          >
-            {loading ? <Loader2 size={13} className="animate-spin" data-plan-spinner /> : <RefreshCw size={13} />}
-          </button>
-        )}
-      >
-        {status && (
-          <div className="px-3.5 py-2.5" data-plan-status={status.kind} role="status">
-            <p className="text-[13px] text-ink-secondary">{status.text}</p>
-          </div>
-        )}
-        {rows.map((provider) => (
-          <div key={provider.id} data-plan-row={provider.id} className="group/plan px-3.5 py-2.5">
-            <div className="mb-2 flex min-w-0 items-baseline gap-2">
-              <span className="truncate text-[13px] leading-[18px] text-ink">{provider.name}</span>
-              {provider.plan && <span className="truncate text-[12px] text-ink-secondary">{provider.plan}</span>}
-              {favorite && <FavoriteStar provider={provider} favorite={favorite} />}
-            </div>
-            {provider.state === "windows" && <PlanSummary provider={provider} now={now} />}
-            {provider.state === "no-windows" && (
-              <p data-plan-state="no-windows" className="text-[12px] text-ink-secondary">
-                {provider.access === "api-key" ? t("planUsage.apiKeyNoWindows") : t("planUsage.noWindows")}
-              </p>
-            )}
-            {provider.state === "signed-out" && (
-              <SignedOut provider={provider} myEngines={myEngines} issuer={issuer} onOpenEngines={onOpenEngines} onRefresh={onRefresh} />
-            )}
-            {provider.state === "error" && (
-              <div data-plan-state="error" className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <p className="text-[12px] text-danger">{provider.message}</p>
-                <button
-                  type="button"
-                  onClick={onRefresh}
-                  disabled={loading}
-                  className="rounded-md px-2 py-0.5 text-[12px] text-ink-secondary hover:bg-control hover:text-ink disabled:opacity-50"
-                >
-                  {t("planUsage.tryAgain")}
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
-        {issuer && (
-          <CompactRow label={t("modelsVoice.keys.title")} rowId="keys">
-            <a
-              href={perspicaxKeysUrl(issuer)}
-              target="_blank"
-              rel="noreferrer noopener"
-              data-plan-keys-link
-              className={PILL}
-            >
-              {t("myEngines.manageKeys")} <ExternalLink size={12} aria-hidden="true" />
-            </a>
-          </CompactRow>
-        )}
+      <SettingsGroup title={t("usage.plan.title")} groupId="plan" accessory={refresh}>
+        {body}
       </SettingsGroup>
     </div>
   );
 }
 
-/** `enabled` false: this account cannot read plan windows here, so the card
- * says so without asking the server. */
-export function PlanUsage({ enabled = true }: { enabled?: boolean }) {
+/** The window the Usage headline shows: the starred plan's (else any plan
+ * reporting windows) most used one, the limit that binds first. */
+export function headlineMeter(report: PlanUsageReport | null, favoriteId: string | null = null): { provider: PlanRow; meter: PlanMeter } | null {
+  const rows = planRows(report).filter((row) => row.state === "windows");
+  const ordered = [...rows.filter((row) => row.id === favoriteId), ...rows.filter((row) => row.id !== favoriteId)];
+  for (const provider of ordered) {
+    const meters = planMeters(provider);
+    if (meters.length === 0) continue;
+    const meter = meters.reduce((top, next) => (next.usedPercent > top.usedPercent ? next : top));
+    return { provider, meter };
+  }
+  return null;
+}
+
+/** The plan windows' state and loader, shared by the card and Usage's
+ * headline (#2080), which read one report. */
+export function usePlanUsage(enabled = true): PlanUsageViewProps {
   const { dispatch } = useStore();
   const org = usePerspicaxOrg();
   const myEngines = useMyEngines();
@@ -422,18 +445,22 @@ export function PlanUsage({ enabled = true }: { enabled?: boolean }) {
     void load(true);
   }, [report, now, load]);
 
-  return (
-    <PlanUsageView
-      report={report}
-      loading={loading}
-      now={now}
-      onRefresh={() => void load(true)}
-      myEngines={org ? myEngines : null}
-      issuer={org?.org.identity.issuer ?? ""}
-      onOpenEngines={() => openSettings(dispatch, "providers")}
-      failed={failed}
-      unavailable={!enabled}
-      favorite={{ id: favorite, onToggle: toggleUsageFavorite }}
-    />
-  );
+  return {
+    report,
+    loading,
+    now,
+    onRefresh: () => void load(true),
+    myEngines: org ? myEngines : null,
+    issuer: org?.org.identity.issuer ?? "",
+    onOpenEngines: () => openSettings(dispatch, "providers"),
+    failed,
+    unavailable: !enabled,
+    favorite: { id: favorite, onToggle: toggleUsageFavorite },
+  };
+}
+
+/** `enabled` false: this account cannot read plan windows here, so the card
+ * says so without asking the server. */
+export function PlanUsage({ enabled = true }: { enabled?: boolean }) {
+  return <PlanUsageView {...usePlanUsage(enabled)} />;
 }

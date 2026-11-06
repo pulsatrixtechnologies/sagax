@@ -138,10 +138,18 @@ describe("Settings split: every moved setting at its new place", () => {
       authentication: { method: "device-code" }, install: { signInCommand: "codex login" },
     } as InstanceInfo));
     await settings("providers");
+    // #2080 (L1): accounts to connect come from Add, then stay listed
+    const add = async (id: string) => {
+      await act(async () => host.querySelector<HTMLButtonElement>("[data-add-provider-open]")!.click());
+      await act(async () => host.querySelector<HTMLButtonElement>('[data-add-provider-way="account"]')!.click());
+      await act(async () => host.querySelector<HTMLButtonElement>(`[data-add-provider-account="account:${id}"]`)!.click());
+    };
+    await add("other");
+    await add("codex");
     const row = (id: string) => host.querySelector<HTMLElement>(`[data-provider-row="account:${id}"]`)!;
     // 2026-11-05: the row's toggle sits beside its one action
     const toggle = (id: string) => row(id).querySelector<HTMLButtonElement>("button[aria-expanded]")!;
-    await act(async () => toggle("codex").click());
+    expect(row("codex").getAttribute("data-open")).toBe("true");
     vi.useFakeTimers();
     const start = [...row("codex").querySelectorAll("button")].find((button) => button.textContent?.includes("Connect ChatGPT"))!;
     await act(async () => start.click());

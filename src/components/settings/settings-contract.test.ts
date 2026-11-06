@@ -39,11 +39,6 @@ type Rule = keyof typeof RULES;
 /** The pages not migrated yet, by rule. Remove a file once its lot lands. */
 const NOT_MIGRATED: Record<Rule, string[]> = {
   accentLink: [
-    "settings/BotModelsSettings.tsx",
-    "settings/ProvidersSettings.tsx",
-    "settings/VoiceProviderOptions.tsx",
-    "DecisionModelSettings.tsx",
-    "EnginesSettings.tsx",
     "MessagesSettings.tsx",
     "WorkspaceBackupSettings.tsx",
   ],
@@ -59,7 +54,6 @@ const NOT_MIGRATED: Record<Rule, string[]> = {
   ],
   roundedBorder: [
     "settings/AccountCard.tsx",
-    "settings/BotModelsSettings.tsx",
     "settings/OrgSharing.tsx",
     "settings/OwnAvatarField.tsx",
     "settings/ProviderKeys.tsx",

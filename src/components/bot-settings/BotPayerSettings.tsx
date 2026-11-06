@@ -4,12 +4,14 @@
 // for their own messages; when the bot's engine is not available to them,
 // it answers with their default model). The owner sets it without an
 // admin (server/routes/bot-runtime-settings.ts). Who pays never changes
-// who reads a conversation. One row of Bot > Model > Advanced (#2050).
+// who reads a conversation. #2080: a grey line under the model chip of
+// Bot > Model ("Paid by the owner") with its one menu, no longer hidden
+// under Advanced.
 import { t } from "@/lib/i18n";
 import { botTurnPayer } from "@/lib/bot-runtime-settings";
 import type { Bot } from "@/state/store";
 import type { TurnPayerMode } from "../../../shared/turn-payer";
-import { DescribedRow, PillSelect } from "../SettingsPrimitives";
+import { HelpTip, PillSelect } from "../SettingsPrimitives";
 import { useBotRuntimeSettings } from "./useBotRuntimeSettings";
 
 type Choice = TurnPayerMode | "default";
@@ -18,7 +20,9 @@ export function payerLabel(mode: TurnPayerMode): string {
   return t(mode === "owner" ? "botPayer.owner" : "botPayer.speaker");
 }
 
-export function BotPayerRow({ bot }: { bot: Bot }) {
+/** The payer under the model chip: who pays, in grey, and the menu that
+ * changes it. Help keeps the full explanation and the privacy note. */
+export function BotPayerLine({ bot }: { bot: Bot }) {
   const { shown, save, saving, error } = useBotRuntimeSettings(bot);
   const current = botTurnPayer(shown);
   if (!current || !shown.turnPayerDefault) return null;
@@ -26,8 +30,15 @@ export function BotPayerRow({ bot }: { bot: Bot }) {
   const value: Choice = shown.turnPayer ?? "default";
   const title = t("botPayer.title");
   return (
-    <div data-bot-payer={current}>
-      <DescribedRow label={title} description={t(current === "owner" ? "botPayer.ownerHelp" : "botPayer.speakerHelp")} help={t("botPayer.privacy")} rowId="botPayerMode">
+    <div data-bot-payer={current} data-settings-row="botPayerMode" className="px-3.5 pb-2.5">
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <span className="flex min-w-0 items-center gap-1 text-[12px] leading-4 text-ink-secondary">
+          <span data-bot-payer-label className="truncate">{t("botModel.paidBy", { value: payerLabel(current) })}</span>
+          <HelpTip label={t("settings.moreAbout", { title })}>
+            <p>{t(current === "owner" ? "botPayer.ownerHelp" : "botPayer.speakerHelp")}</p>
+            <p className="mt-1.5">{t("botPayer.privacy")}</p>
+          </HelpTip>
+        </span>
         <PillSelect<Choice>
           value={value}
           ariaLabel={title}
@@ -39,8 +50,8 @@ export function BotPayerRow({ bot }: { bot: Bot }) {
             { value: "speaker", label: payerLabel("speaker") },
           ]}
         />
-      </DescribedRow>
-      {error && <p role="alert" className="px-3.5 pb-2 text-[12px] text-danger">{error}</p>}
+      </div>
+      {error && <p role="alert" className="pt-1 text-[12px] text-danger">{error}</p>}
     </div>
   );
 }

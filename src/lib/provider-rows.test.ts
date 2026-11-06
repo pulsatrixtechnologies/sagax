@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { InstanceInfo } from "@/state/store";
 import type { MyEngine } from "@/lib/perspicax-org";
-import { filterProviderRows, providerRows, splitProviderRows, type ProviderInput } from "./provider-rows";
+import { providerGroups, providerRows, splitProviderRows, visibleProviderRows, type ProviderInput } from "./provider-rows";
 
 const instance = (instanceId: string, driverKind: string, access: InstanceInfo["access"], extra: Partial<InstanceInfo> = {}): InstanceInfo => ({
   instanceId, driverKind, displayName: instanceId, access,
@@ -110,13 +110,27 @@ describe("providerRows", () => {
     expect(toConnect.map((row) => [row.id, row.state])).toEqual([["account:codex", "available"], ["engine:mistral", "keyMissing"]]);
   });
 
-  it("filters by who pays", () => {
-    const instances = [instance("claude", "claudeAgent", "subscription")];
-    const rows = providerRows(base({
-      instances, allInstances: instances,
-      local: { expose: true, share: false, connected: true, endpoints: [{ id: "e1", baseUrl: "http://127.0.0.1:8000/v1", label: "" }], published: [], probes: [{ id: "e1", status: "offline" }] },
-    }));
-    expect(filterProviderRows(rows, "computer")).toMatchObject([{ id: "local:e1", name: "127.0.0.1:8000", state: "offline" }]);
-    expect(filterProviderRows(rows, "mine").map((row) => row.id)).toEqual(["account:claude"]);
+  it("groups by provider (#2080): several accounts in one row, connected when one works, else the state to fix", () => {
+    const instances = [instance("claude", "claudeAgent", "subscription"), instance("claude-work", "claudeAgent", "subscription"), instance("mistral", "mistral", "api")];
+    const signedIn = (expired: boolean) => mine("x", "claudeAgent", { subscription: { supported: true, signedIn: true, expired } });
+    const input = (expired: [boolean, boolean]) => base({
+      organization: true, manageKeys: false, instances, allInstances: instances,
+      mine: [{ ...signedIn(expired[0]), instanceId: "claude" }, { ...signedIn(expired[1]), instanceId: "claude-work" }, mine("mistral", "mistral", { orgKey: true, myTurns: "org-key" })],
+    });
+    const rows = providerRows(input([false, true]));
+    // the organization's key still applies, out of sight
+    expect(rows.some((row) => row.payer === "org")).toBe(true);
+    const visible = visibleProviderRows(rows);
+    expect(visible.some((row) => row.payer === "org")).toBe(false);
+    const groups = providerGroups(visible, instances);
+    expect(groups.map((group) => [group.name, group.rows.length, group.state])).toEqual([["Claude", 2, "connected"]]);
+    // the account to fix comes first inside the group
+    expect(groups[0]!.rows.map((row) => row.id)).toEqual(["account:claude-work", "account:claude"]);
+    expect(providerGroups(visibleProviderRows(providerRows(input([true, true]))), instances)[0]!.state).toBe("reconnect");
+  });
+
+  it("hides what waits to be connected and what the admin turned off", () => {
+    const instances = [instance("codex", "codex", "subscription", { snapshot: { state: "available", authenticated: false } }), instance("claude", "claudeAgent", "subscription")];
+    expect(visibleProviderRows(providerRows(base({ instances, allInstances: instances }))).map((row) => row.id)).toEqual(["account:claude"]);
   });
 });

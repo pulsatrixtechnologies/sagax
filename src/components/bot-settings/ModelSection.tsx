@@ -1,14 +1,16 @@
-// Bot > Model (#2050, 2026-11-05): three cards. "Model": where the bot
-// runs (BotHostSettings, read-only when the organization decides), the
-// model and the effort. "If it fails": one switch and the ordered backups
-// (bot.fallback, up to 5), which also keep the single backup of
-// automaticRecovery in step: the first ordered backup. "Advanced", a
-// closed fold: who pays for replies and the prompt cache. The global
-// Simple/Advanced mode hides nothing here any more.
-import { EffortRow, ModelPicker } from "../ModelPicker";
+// Bot > Model (#2050, #2080): three cards. "Model": where the bot runs
+// (BotHostSettings, read-only when the organization decides), the model
+// chip ("Model · Effort", the effort is picked in its menu) and, in grey
+// under it, who pays for replies. "If it fails": one switch and the
+// effective backups (effectiveBackups, the same answer as Settings >
+// Models): the bot's ordered list (bot.fallback, up to 5, which keeps the
+// single backup of automaticRecovery in step as its first entry), else
+// the server default, labelled and copied into the bot by "Customize".
+// "Advanced", a closed fold: the prompt cache.
+import { ModelPicker } from "../ModelPicker";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { canEditBotField } from "@/lib/bot-capabilities";
-import { CompactRow, DescribedRow, FoldRow, HelpTip, PillSelect, SettingsGroup, Switch } from "../SettingsPrimitives";
+import { CompactRow, DescribedRow, FoldRow, HelpTip, PILL, PillSelect, SettingsGroup, Switch } from "../SettingsPrimitives";
 import { t } from "@/lib/i18n";
 import { engineLabel } from "@/lib/human-label";
 import { fallbackWithModel } from "../../../shared/handoff-model";
@@ -19,9 +21,9 @@ import { engineOffer } from "../../../shared/offered-engines";
 import { useMyEngines, usePerspicaxOrg } from "@/lib/perspicax-org";
 import { botWithViewerSettings, useViewerBotOverride, viewerLocalBotSettings } from "@/lib/viewer-bot-overrides";
 import { useBotEditor } from "./BotEditorContext";
-import { botRecovery, type BotRecovery } from "@/lib/bot-runtime-settings";
+import { botRecovery, effectiveBackups, type BotRecovery } from "@/lib/bot-runtime-settings";
 import { useBotRuntimeSettings } from "./useBotRuntimeSettings";
-import { BotPayerRow } from "./BotPayerSettings";
+import { BotPayerLine } from "./BotPayerSettings";
 import { BotHostSettings } from "./BotHostSettings";
 
 type Backup = NonNullable<Bot["fallback"]>[number];
@@ -39,18 +41,6 @@ export function ModelSection({ bot }: { bot: Bot }) {
   const turn = modelTurnLock(bot);
   const shown = { ...viewerShown, busy: turn.busy };
   const machine = bot.host?.kind === "machine";
-  const modelVariants = state.instances.find((instance) => instance.instanceId === shown.modelSelection.instanceId)?.capabilities?.modelVariants;
-  const effortTitle = modelVariants ? t("botPanel.model.reasoning") : t("botPanel.model.effort");
-  // Says what the app does, not what the engine ends up at: Codex applies a
-  // level to the whole thread and has no way to take one back, so
-  // "currently: engine default" was a promise we could not keep for a
-  // thread that had already been sent one. Sending nothing is true on
-  // every engine.
-  const effortHelp = viewerLocal
-    ? t("botPanel.model.forYou")
-    : modelVariants
-      ? (draft && !bulk ? t("botPanel.model.reasoningStart") : t("botPanel.model.reasoningGroups"))
-      : `${t("botPanel.model.effortHelp")}${shown.modelSelection.effort ? "" : t("botPanel.model.effortDefault")}`;
   // the same rights as before: the switch and the single backup go with
   // automaticRecovery, the ordered list with fallback (shared/permissions.ts)
   const canSwitch = !draft && canEditBotField(state.config, bot, "automaticRecovery");
@@ -79,32 +69,16 @@ export function ModelSection({ bot }: { bot: Bot }) {
           />
           {!draft && turn.busy && <ModelLockLine bot={bot} lock={turn} />}
         </div>}
-        {/* Share the model picker's effort choices, but edit the profile
-            default. Shown in Simple too since #2050. */}
-        {!machine && <EffortRow
-          bot={shown}
-          viewerLocal={viewerLocal}
-          pill={{ label: effortTitle, help: effortHelp }}
-          className="px-3.5 py-2.5"
-          label={
-            <div>
-              <div className="text-[13px] leading-[18px] text-ink">{effortTitle}</div>
-              <div className="mt-0.5 text-[12px] leading-4 text-ink-secondary">{effortHelp}</div>
-            </div>
-          }
-        />}
+        {payer && <BotPayerLine key={`payer:${bot.id}`} bot={bot} />}
       </SettingsGroup>
       {!machine && (canSwitch || canOrder) && <IfItFailsCard key={`recovery:${bot.id}`} bot={bot} canSwitch={canSwitch} canOrder={canOrder} />}
-      {(payer || keepWarm) && (
+      {keepWarm && (
         <div data-settings-card="botModel.advanced">
           <SettingsGroup title={t("botModel.advanced.title")} groupId="botModelAdvanced">
             <FoldRow cardId="botModel.advanced" label={t("botModel.advanced.title")} description={t("botModel.advanced.help")}>
               <div className="-mx-3.5 flex flex-col pt-1" data-bot-model-advanced="">
-                {payer && <BotPayerRow key={`payer:${bot.id}`} bot={bot} />}
-                {keepWarm && (
-                  <KeepWarmRow bot={bot} workspaceOn={state.config!.cacheKeepWarm!.enabled}
-                    onChange={(cacheKeepWarm) => dispatch({ type: "updateBot", botId: bot.id, patch: { cacheKeepWarm } })} />
-                )}
+                <KeepWarmRow bot={bot} workspaceOn={state.config!.cacheKeepWarm!.enabled}
+                  onChange={(cacheKeepWarm) => dispatch({ type: "updateBot", botId: bot.id, patch: { cacheKeepWarm } })} />
               </div>
             </FoldRow>
           </SettingsGroup>
@@ -205,14 +179,16 @@ function IfItFailsCard({ bot, canSwitch, canOrder }: { bot: Bot; canSwitch: bool
   // a backup on an engine the organization no longer offers is not shown
   // (the server skips it too) and leaves the chain at the next change; one
   // the person pays for themselves stays when the organization lets own
-  // accounts through (#1098, 2026-10-30)
-  const stored = (bot.fallback ?? []).filter((entry) => {
+  // accounts through (#1098, 2026-10-30). #2080: the same answer as
+  // Settings > Models, the server default included.
+  const keep = (entry: Backup) => {
     const offer = engineOffer(offerContext, entry.instanceId);
     return offer === "offered" || (offer === "notGiven" && mine?.find((row) => row.instanceId === entry.instanceId)?.orgNotAllowed !== true);
-  });
-  // a bot with the single backup only (set before #2050, or the server
-  // default) shows it as its first ordered backup
-  const chain: Backup[] = stored.length > 0 ? stored : recovery.backup ? [recovery.backup] : [];
+  };
+  const { chain, source } = effectiveBackups({ fallback: bot.fallback, automaticRecovery: shown.automaticRecovery }, state.config, keep);
+  // the server default is shown, not edited: "Customize" copies it into the bot
+  const fromServer = source === "org";
+  const editable = canOrder && !fromServer;
   // only engines offered to this person (src/lib/offered-instances.ts)
   const available = offered.filter(
     (instance) =>
@@ -235,6 +211,12 @@ function IfItFailsCard({ bot, canSwitch, canOrder }: { bot: Bot; canSwitch: bool
   const toggle = () => {
     if (saving) return;
     void save({ automaticRecovery: recoveryFor(chain, !recovery.enabled) });
+  };
+
+  const customize = () => {
+    if (saving) return;
+    dispatch({ type: "updateBot", botId: bot.id, patch: { fallback: chain } });
+    if (canSwitch) void save({ automaticRecovery: recoveryFor(chain, recovery.enabled) });
   };
 
   const title = t("botModel.ifFails.title");
@@ -264,7 +246,7 @@ function IfItFailsCard({ bot, canSwitch, canOrder }: { bot: Bot; canSwitch: bool
           const modelLabel = models.find((model) => model.id === entry.model)?.label ?? entry.model;
           return (
             <CompactRow key={entry.instanceId} label={`${index + 1}. ${name}`} rowId={`botBackup.${index + 1}`}>
-              {canOrder ? (
+              {editable ? (
                 <>
                   <PillSelect
                     value={entry.model}
@@ -298,7 +280,17 @@ function IfItFailsCard({ bot, canSwitch, canOrder }: { bot: Bot; canSwitch: bool
             </CompactRow>
           );
         })}
-        {canOrder && chain.length < 5 && (
+        {fromServer && (
+          <div data-settings-row="botBackup.default" className="flex min-h-[36px] items-center justify-between gap-5 px-3.5 pb-2">
+            <span className="min-w-0 text-[12px] leading-4 text-ink-secondary">{t(org ? "botModel.recovery.fromOrg" : "botModel.recovery.fromServer")}</span>
+            {canOrder && (
+              <button type="button" className={PILL} disabled={saving} onClick={customize} data-backup-customize="">
+                {t("botModel.recovery.customize")}
+              </button>
+            )}
+          </div>
+        )}
+        {editable && chain.length < 5 && (
           <CompactRow label={t("botPanel.model.addFallback")} rowId="botBackup.add">
             <PillSelect
               value=""

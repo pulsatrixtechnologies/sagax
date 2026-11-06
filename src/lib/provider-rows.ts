@@ -270,14 +270,6 @@ function hostOf(url: string): string {
   try { return new URL(url).host; } catch { return url; }
 }
 
-/** The rows a filter keeps: all, the person's own, the organization's, this computer's. */
-export type ProviderFilter = "all" | "mine" | "org" | "computer";
-export function filterProviderRows(rows: readonly ProviderRow[], filter: ProviderFilter): ProviderRow[] {
-  if (filter === "all") return [...rows];
-  const payer: ProviderPayer = filter === "mine" ? "me" : filter;
-  return rows.filter((row) => row.payer === payer);
-}
-
 /** Not connected yet: an engine with no sign-in or no key so far. Its
  * row waits under "To connect" (and in Add a provider). */
 function toConnect(row: ProviderRow): boolean {
@@ -296,6 +288,74 @@ export function splitProviderRows(rows: readonly ProviderRow[]): { active: Provi
 /** Never counted as ready: a row to reconnect, a missing key, offline. */
 export function providerReady(row: Pick<ProviderRow, "state">): boolean {
   return row.state === "connected";
+}
+
+/** The driver of an engine, as the provider it bills (one group per provider). */
+const DRIVER_PROVIDER: Record<string, string> = {
+  claudeAgent: "anthropic", codex: "openai", grokAgent: "xai", grok: "xai", geminiAgent: "google", kimiAgent: "moonshot",
+  mistral: "mistral", cerebras: "cerebras", groq: "groq", opencodeGo: "opencode", cursorAgent: "cursor", droidAgent: "factory",
+  minimax: "minimax", hermesAgent: "openrouter",
+};
+/** A key of the server's list, as the provider it bills. The custom image
+ * key and an unnamed OpenAI-compatible key stay their own group. */
+const KEY_PROVIDER: Partial<Record<KeyRowId, string>> = {
+  anthropic: "anthropic", openai: "openai", xai: "xai", elevenlabs: "elevenlabs", fishAudio: "fish", openaiImage: "openai",
+  openrouter: "openrouter", mistral: "mistral", azureFoundry: "azure", opencodeGo: "opencode",
+};
+/** The name a person knows the provider by: its models (Claude, Grok), else the company. */
+const GROUP_NAME: Record<string, string> = { ...PERSONAL_PROVIDER_NAMES, anthropic: "Claude", xai: "Grok", azure: "Azure AI Foundry" };
+
+export interface ProviderGroup {
+  /** Stable, for tests and deep links; never shown. */
+  id: string;
+  name: string;
+  rows: ProviderRow[];
+  /** The worst state of its rows in use; "available" when none is connected
+   * yet, "adminOff" when all are turned off. */
+  state: ProviderState;
+}
+
+/** The group key of one row: its provider, or the row itself for a server
+ * of the person's own (each home server is its own provider) and for a key
+ * no provider claims. */
+export function providerGroupKey(row: ProviderRow, instances: ReadonlyArray<Pick<InstanceInfo, "instanceId" | "driverKind">>): string {
+  if (row.kind === "server" || row.kind === "local") return row.id;
+  const provider = row.accountProvider
+    ?? row.voiceKey
+    ?? (row.keyRow ? KEY_PROVIDER[row.keyRow] : undefined)
+    ?? DRIVER_PROVIDER[instances.find((instance) => row.instanceIds.includes(instance.instanceId))?.driverKind ?? ""];
+  return provider ? `provider:${provider}` : row.id;
+}
+
+const STATE_RANK: Record<ProviderState, number> = { reconnect: 0, keyMissing: 1, offline: 2, connected: 3, available: 4, adminOff: 5 };
+
+/**
+ * The rows the person sees (#2080, JC 2026-11-05): what they use. Turned off
+ * by the admin, waiting to be connected (Add covers it) and the organization's
+ * own keys (they still apply, out of sight) are not listed.
+ */
+export function visibleProviderRows(rows: readonly ProviderRow[]): ProviderRow[] {
+  return splitProviderRows(rows).active.filter((row) => row.payer !== "org");
+}
+
+/**
+ * One group per provider, its accounts inside. Connected when at least one
+ * account works, else the state to fix first.
+ */
+export function providerGroups(rows: readonly ProviderRow[], instances: ReadonlyArray<Pick<InstanceInfo, "instanceId" | "driverKind">>): ProviderGroup[] {
+  const byKey = new Map<string, ProviderRow[]>();
+  for (const row of rows) {
+    const key = providerGroupKey(row, instances);
+    byKey.set(key, [...(byKey.get(key) ?? []), row]);
+  }
+  return [...byKey].map(([id, members]): ProviderGroup => {
+    const state: ProviderState = members.some((row) => row.state === "connected")
+      ? "connected"
+      : members.reduce<ProviderState>((worst, row) => (STATE_RANK[row.state] < STATE_RANK[worst] ? row.state : worst), "connected");
+    const provider = id.startsWith("provider:") ? id.slice("provider:".length) : "";
+    const ordered = [...members].sort((x, y) => STATE_RANK[x.state] - STATE_RANK[y.state]);
+    return { id, name: GROUP_NAME[provider] ?? members[0]!.name, rows: ordered, state };
+  });
 }
 
 export { VOICE_KEY_NAMES };

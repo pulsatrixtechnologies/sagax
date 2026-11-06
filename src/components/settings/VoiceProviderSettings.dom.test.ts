@@ -9,7 +9,7 @@ import { readVoiceModeSettings, voiceSettingsForBot } from "@/lib/voice-mode/set
 // Keep the component's hooks, requests and preference writes real; native
 // selects stand in for the shared popover control.
 vi.mock("../SettingsPrimitives", () => {
-  const row = ({ children, rowId }: { children?: ReactNode; rowId?: string }) => createElement("div", { "data-row-id": rowId }, children);
+  const row = ({ children, rowId, description }: { children?: ReactNode; rowId?: string; description?: ReactNode }) => createElement("div", { "data-row-id": rowId }, description, children);
   return {
     CompactRow: row, DescribedRow: row, SettingsGroup: row, GROUP_CARD: "", PILL: "",
     PillSelect: ({ value, options, onChange, disabled }: { value: string; options: Array<{ value: string; label: string }>; onChange(value: string): void; disabled?: boolean }) =>
@@ -72,6 +72,9 @@ it.each([false, true])("switches OpenAI to Auto's resolved xAI voice without wai
   await act(async () => finishAuto!());
   await flush();
   expect(container.querySelector("[data-voice-provider-voice]")?.getAttribute("data-voice-provider-voice")).toBe("xai");
+  // #2080 (L1): Auto names the provider it picked
+  expect(container.querySelector('[data-row-id="voiceProviders.tts"] [data-voice-effective]')?.textContent).toBe("Auto · xAI");
+  expect(container.querySelector('[data-row-id="voiceProviders.stt"] [data-voice-effective]')?.textContent).toBe("Auto · xAI");
   choose("voiceProviders.voice", "eve");
   const saved = JSON.parse(localStorage.getItem(VOICE_MODE_STORAGE_KEY)!);
   expect(voiceSettingsForBot(readVoiceModeSettings(), forBot ? "b-1" : undefined).tts).toBe("auto");

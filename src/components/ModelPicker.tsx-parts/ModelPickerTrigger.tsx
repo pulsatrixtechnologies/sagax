@@ -12,25 +12,32 @@ import { isUltracodeEffort } from "../../../shared/ultracode-effort";
 import { modelLabel, modelProvider } from "./helpers";
 import { TABLE_CELL_CONTROL } from "../SettingsPrimitives";
 
-/** One plain line for the list chip, so the ellipsis cuts a single run. */
-/** #2050: the chip reads "Claude Sonnet 5.5 · Medium": the effort rides
- * the model since the Bot models table has no Effort column any more. */
-export function listChipLabel({ autoOn, autoRecord, active, selection, showActiveAccount }: {
+/** One plain line for the list chip, so the ellipsis cuts a single run.
+ * #2050: the chip reads "Claude Sonnet 5.5 · Medium": the effort rides
+ * the model since the Bot models table has no Effort column any more.
+ * #2080: model first; the provider is the mark, the paying account is the
+ * grey line under the chip (`listChipPayer`), never in the label. */
+export function listChipLabel({ autoOn, autoRecord, active, selection }: {
   autoOn: boolean;
   autoRecord: { modelLabel: string } | null | undefined;
   active: InstanceInfo | undefined;
   selection: ModelSelection;
-  showActiveAccount: boolean;
+  showActiveAccount?: boolean;
 }): string {
   const effort = selection.effort ? effortLabel(selection.effort) : undefined;
   if (autoOn) return [autoChipLabel(autoRecord), effort].filter(Boolean).join(" · ");
-  const provider = active ? modelProvider(active, selection.model) : undefined;
-  return [
-    active && showActiveAccount ? active.displayName : undefined,
-    modelLabel(active, selection.model),
-    provider || undefined,
-    effort,
-  ].filter(Boolean).join(" · ");
+  return [modelLabel(active, selection.model), effort].filter(Boolean).join(" · ");
+}
+
+/** The account that pays, shown under the list chip only when the provider
+ * has several accounts to choose from. */
+export function listChipPayer({ autoOn, active, showActiveAccount }: {
+  autoOn: boolean;
+  active: InstanceInfo | undefined;
+  showActiveAccount: boolean;
+}): string | undefined {
+  if (autoOn || !active || !showActiveAccount) return undefined;
+  return active.displayName;
 }
 
 export function ModelPickerTrigger({
@@ -81,6 +88,7 @@ export function ModelPickerTrigger({
 }) {
   // headless outside the composer (#2050, Settings > Models "Set model for
   // n bots"): no chip at all, the menu opens from `menuControl`.
+  const payer = listChip ? listChipPayer({ autoOn, active, showActiveAccount }) : undefined;
   return windowOnly ? null : headless ? (inComposer ? (
   // no chip: the + menu's Model row reads it; the Retro 98 status bar reads this
   <span hidden data-composer-model={composerLabel} />
@@ -105,23 +113,30 @@ export function ModelPickerTrigger({
   // Settings > Models list cell: the engine mark and the whole model name
   // on one left-aligned line, cut with an ellipsis; the full name rides the
   // tooltip. Fills its column so every row's chip has the same width.
-  <button data-tour="model"
-    ref={triggerRef}
-    type="button"
-    disabled={Boolean(bot.busy)}
-    onClick={() => toggleMenu()}
-    aria-expanded={menu && !bot.busy}
-    aria-haspopup="dialog"
-    data-model-list-chip=""
-    title={bot.busy ? `${summary}${followLine}\n${t(threadId ? "model.threadBusy" : "model.busy")}` : `${summary}${followLine}`}
-    className={TABLE_CELL_CONTROL}
-  >
-    {(autoInstance ?? active) && <InstanceProviderMark instance={(autoInstance ?? active)!} size={14} />}
-    <span data-model-list-chip-label="" className="min-w-0 flex-1 truncate text-left">
-      {listChipLabel({ autoOn, autoRecord, active, selection, showActiveAccount })}
-    </span>
-    <ChevronDown size={13} aria-hidden="true" className={cn("shrink-0 text-ink-secondary transition-transform", menu && "rotate-180")} />
-  </button>
+  <div className="flex min-w-0 flex-col">
+    <button data-tour="model"
+      ref={triggerRef}
+      type="button"
+      disabled={Boolean(bot.busy)}
+      onClick={() => toggleMenu()}
+      aria-expanded={menu && !bot.busy}
+      aria-haspopup="dialog"
+      data-model-list-chip=""
+      title={bot.busy ? `${summary}${followLine}\n${t(threadId ? "model.threadBusy" : "model.busy")}` : `${summary}${followLine}`}
+      className={TABLE_CELL_CONTROL}
+    >
+      {(autoInstance ?? active) && <InstanceProviderMark instance={(autoInstance ?? active)!} size={14} />}
+      <span data-model-list-chip-label="" className="min-w-0 flex-1 truncate text-left">
+        {listChipLabel({ autoOn, autoRecord, active, selection })}
+      </span>
+      <ChevronDown size={13} aria-hidden="true" className={cn("shrink-0 text-ink-secondary transition-transform", menu && "rotate-180")} />
+    </button>
+    {payer && (
+      <span data-model-list-chip-payer="" title={payer} className="truncate px-2 text-[11.5px] leading-4 text-ink-secondary">
+        {t("botModels.paidBy", { account: payer })}
+      </span>
+    )}
+  </div>
 ) : (
   <button data-tour="model"
     ref={triggerRef}

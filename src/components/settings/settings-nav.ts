@@ -79,7 +79,6 @@ export const CARD_KEYWORDS: Record<string, string[]> = {
   "organization.mcpCalls": ["mcp", "timeout", "tool call"],
   "connections.integrations": ["box", "vps"],
   "connections.image": ["image", "avatar", "gpt image"],
-  "providers.toConnect": ["needs setup", "à configurer", "to connect", "à connecter", "kimi", "droid", "qwen", "hermes", "cline", "antigravity"],
   "voice.advanced": ["live call", "read replies", "hang up", "gpt-live"],
   "companion.domain": ["domain", "dns", "caddy"],
   "engines.decisionModel": ["decision", "jev", "typesafe"],

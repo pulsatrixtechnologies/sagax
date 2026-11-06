@@ -2,6 +2,7 @@
 // the run reports to (server/index.ts syncRoutineRunToSource).
 import type { RoutineRunCardData } from "../../shared/routine-run.ts";
 import { readableRoutineProblems } from "../../shared/routine-problems.ts";
+import { clipMarkdownPreservingFences, unclosedFenceOffset } from "../../src/lib/rich-blocks.ts";
 import { redactSecretsInText } from "../redact.ts";
 import type { RoutineRun } from "./routines.ts";
 
@@ -9,6 +10,26 @@ import type { RoutineRun } from "./routines.ts";
  * (2026-10-29): the whole report, not the 2 000 characters the run's record
  * keeps, so nobody has to open the run's own task to read it. */
 export const ROUTINE_REPORT_POST_MAX = 20_000;
+
+/** Soft overflow past ROUTINE_REPORT_POST_MAX so a fence that starts near
+ * the cap can finish (a ```widget must never ship half-closed). */
+export const ROUTINE_REPORT_POST_HARD_MAX = 100_000;
+
+/** The task's cleaned report when it is the run record's whole message
+ * (#2186): the record keeps 2 000 characters and may end inside a fence, so
+ * a strict prefix check alone would drop the rest. */
+export function pickRoutineFullReport(recorded: string, taskReport: string): string | undefined {
+  const report = taskReport.trim();
+  const kept = recorded.trim();
+  if (!report || !kept || report.length <= kept.length) return undefined;
+  const head = kept.slice(0, 200);
+  if (report.startsWith(head)) return report;
+  const open = unclosedFenceOffset(kept);
+  if (open <= 0) return undefined;
+  const before = kept.slice(0, open).replace(/\s+$/u, "");
+  if (!before) return undefined;
+  return report.startsWith(before.slice(0, Math.min(200, before.length))) ? report : undefined;
+}
 
 /** `fullReport`: the bot's whole final message, read from the run's task
  * (syncRoutineRunToSource), when the run's record holds only its start. */
@@ -20,7 +41,15 @@ export function routineRunCard(run: RoutineRun, cardThreadId?: string, fullRepor
   const joined = Boolean(cardThreadId && run.threadId === cardThreadId);
   const report = fullReport?.trim() || run.output;
   const visibleSummary = run.status === "waiting" ? run.attention : joined || run.quiet ? undefined : report;
-  const summary = visibleSummary ? redactSecretsInText(visibleSummary).slice(0, run.status === "waiting" ? 2_000 : ROUTINE_REPORT_POST_MAX) : undefined;
+  // 2026-11-06 (#2186): never cut inside a fenced block. A mid-widget slice
+  // drew as raw code ("Widget-imperfect · N lines") in the chat card.
+  const summary = visibleSummary
+    ? clipMarkdownPreservingFences(
+      redactSecretsInText(visibleSummary),
+      run.status === "waiting" ? 2_000 : ROUTINE_REPORT_POST_MAX,
+      run.status === "waiting" ? 2_000 : ROUTINE_REPORT_POST_HARD_MAX,
+    )
+    : undefined;
   const error = run.error ? redactSecretsInText(run.error).slice(0, 500) : undefined;
   const card: RoutineRunCardData = {
     runId: run.id,

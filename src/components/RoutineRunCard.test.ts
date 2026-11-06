@@ -248,6 +248,41 @@ describe("RoutineRunCard", () => {
     expect(html).toContain("Completed with problems");
   });
 
+  // 2026-11-06 (#2186): a routine result with ```widget-imperfect draws as a
+  // widget, never as a raw CodeBlock ("Widget-imperfect · N lines").
+  it("draws a widget-imperfect fence in a completed-with-problems report as a widget", () => {
+    const summary = [
+      "Dispatch finished.",
+      "",
+      "```widget-imperfect",
+      "<style>#dgx .fold summary::-webkit-details-marker{display:none}</style>",
+      "<div id=dgx><p>Board</p></div>",
+      "```",
+    ].join("\n");
+    const html = renderToStaticMarkup(createElement(RoutineRunCard, {
+      message: message("completed", { summary, problems: "One tool failed twice." }),
+      onOpen: vi.fn(),
+    }));
+    expect(html).toContain("Completed with problems");
+    expect(html).toContain("data-widget-frame");
+    expect(html).toContain("data-widget-imperfect");
+    // CodeBlock chrome for a language chip (the bug): never on a widget frame.
+    expect(html).not.toContain(">Widget-imperfect<");
+    expect(html).not.toContain(">Wrap<");
+    expect(html).toContain("<iframe");
+  });
+
+  it("treats an unclosed widget fence at the end of a routine report as pending, never raw code", () => {
+    const summary = "Building the board:\n\n```widget-imperfect\n<style>#dgx .fold summary::-webk";
+    const html = renderToStaticMarkup(createElement(RoutineRunCard, {
+      message: message("completed", { summary, problems: "Cut short." }),
+    }));
+    expect(html).toContain("data-widget-frame");
+    expect(html).toMatch(/still being written|en cours de rédaction/i);
+    expect(html).not.toContain(">Widget-imperfect<");
+    expect(html).not.toContain(">Wrap<");
+  });
+
   it("says why a queued run has not started (2026-11-01)", () => {
     const html = renderToStaticMarkup(createElement(RoutineRunCard, { message: message("queued", { deferredAt: 1, attention: "Waits for the previous run of this routine to finish" }) }));
     expect(html).toContain("Waits for the previous run of this routine to finish");

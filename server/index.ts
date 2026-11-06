@@ -1289,7 +1289,7 @@ import {
   savedStepsEnabled
 } from "./saved-steps/saved-steps.ts";
 import { redactSecretsInText } from "./redact.ts";
-import { routineRunCard, routineRunFallbackText } from "./routines/routine-run-card.ts";
+import { pickRoutineFullReport, routineRunCard, routineRunFallbackText } from "./routines/routine-run-card.ts";
 
 import { routineReportOutcome, routineRunReportable } from "./routines/routine-report.ts";
 import type { HeadlessBot } from "./cli/headless-cli.ts";
@@ -25213,8 +25213,7 @@ function routineFullReport(run: RoutineRun): string | undefined {
   const last = store.messagesFor(run.threadId).findLast((message) => message.role === "bot" && !message.kind && typeof message.text === "string" && message.text.trim());
   if (!last?.text) return undefined;
   const report = routineReportOutcome(redactSecretsInText(last.text)).report;
-  const head = run.output.slice(0, 200);
-  const body = report.length > run.output.length && report.startsWith(head) ? report : undefined;
+  const body = pickRoutineFullReport(run.output, report);
   if (!body) return undefined;
   // 2026-11-01: dry runs recorded on a proactive wake are visible in its report.
   const dryRuns = run.proactive?.dryRuns;

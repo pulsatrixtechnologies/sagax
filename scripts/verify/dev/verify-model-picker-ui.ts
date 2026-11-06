@@ -154,8 +154,16 @@ async function takeShots(previewUrl: string, dir: string): Promise<void> {
       { name: "menu-en-dark", query: "skin=midnight&lang=en" },
       { name: "effort-submenu-dark", query: "skin=midnight", steps: async (page: import("playwright").Page) => { await page.click("[data-model-settings-effort]"); } },
       { name: "effort-submenu-grok45-light", query: "skin=atelier&model=grok-4.5", steps: async (page: import("playwright").Page) => { await page.click("[data-model-settings-effort]"); } },
-      { name: "model-submenu-dark", query: "skin=midnight", steps: async (page: import("playwright").Page) => { await page.click("[data-model-settings-model]"); } },
+      // #2106: Auto Edit opens Optimize for Intelligence / Balance / Cost.
+      { name: "auto-edit-dark", query: "skin=midnight", steps: async (page: import("playwright").Page) => {
+        await page.click("[data-model-auto-edit]");
+        await page.waitForSelector("[data-model-auto-optimize]", { timeout: 5_000 });
+      } },
       { name: "menu-haiku-dark", query: "skin=midnight&instance=claude&model=claude-haiku-4-5" },
+      { name: "chip-closed-dark", query: "skin=midnight", steps: async (page: import("playwright").Page) => {
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(300);
+      } },
     ];
     for (const shot of shots) {
       const page = await browser.newPage({ viewport: { width: 1100, height: 820 }, deviceScaleFactor: 2 });

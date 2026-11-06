@@ -2412,7 +2412,7 @@ respecté, et si je suis en bypass que ça ne le demande pas.").
 
 ## Bot content has a default theme (2026-10-28)
 
-Pages and widgets bots make draw in the app's look, sober as Grok Bot's.
+Pages and widgets bots make draw in the app's look, sober as the reference design.
 Every page the sandboxed frame route serves (`pageDocument`) starts with
 one inline stylesheet (src/lib/page-theme.ts): the skin's tokens (the app
 preview sends `theme=` and the person's skin as `skin=`, base64url JSON of
@@ -2440,7 +2440,7 @@ scaled-down drawing of its top and its icon, title and "Page"
 (`PageSurface` in src/components/PageViewer.tsx, src/lib/open-page.ts,
 src/lib/page-chat-layout.ts): Back to chat (×) top left, the title pill
 (click to rename, Enter saves), « ⋯ » and Share top right. Default surface
-for published HTML pages is **stage** (measured Grok Bot 0.78.1 HTML/file
+for published HTML pages is **stage** (measured reference design 0.78.1 HTML/file
 artifacts and Sagax 0.8.23 iOS): the page covers the mounted conversation and
 the composer docks on the page (`data-page-stage-chat=docked`). The chat
 column stays mounted underneath (`inert` while covered) so closing returns
@@ -2526,7 +2526,7 @@ new page; the self-knowledge builder reads it too. Tests:
 
 ## Shapes set and eyes (2026-10-28)
 
-Decision (JC): the Shapes bodies are the bloub network's tables (MIT, NOTICE
+Decision (maintainer): the Shapes bodies are the bloub network's tables (MIT, NOTICE
 and `third_party/bloub`) plus our pumpkin, 32 in all (`MASCOT_SHAPES`). The
 first eight keep their stored ids; `LEGACY_SHAPES` maps the older ids. Picking
 the pumpkin sets the bot's color to orange where the skin paints the bot's
@@ -3979,7 +3979,7 @@ covered by `server/mail/bot-inbound-mail.test.ts`,
   bot has no Perspicax owner), 403 `owner_inactive`. Every answer carries
   `X-Sagax-Mail-Api: 1`.
 - Then delivery splits on the To address (`shared/routine-mail-alias.ts`
-  `planMailDelivery`, 2026-11-01 / Grok Bot 0.71):
+  `planMailDelivery`, 2026-11-01 / reference design 0.71):
   - `name+tag@`: only enabled, unsuspended routines of that bot with
     `mailAlias === tag` wake (`wakeRoutine` → `enqueueWebhook` with a
     synthetic `mail-tag:<routineId>` id, confined like S2). Other bots'
@@ -4831,7 +4831,7 @@ Admin writes from Plugins > Sources / Installed (Organization scope) go
 through this server's link with the admin's live sign-in token
 (`server/routes/org-capabilities.ts`). A member's own switch is
 `/api/me/org-capabilities`. No Capabilities tab in the bot panel: the
-resolved list lives in Plugins > Installed (JC, 2026-11-01). Form mirror:
+resolved list lives in Plugins > Installed (maintainer, 2026-11-01). Form mirror:
 `shared/org-capability-form.ts`. Tests: `server/org/org-capabilities.test.ts`,
 `server/routes/org-capabilities.test.ts`, `shared/org-capability-form.test.ts`.
 
@@ -7152,7 +7152,7 @@ its path.
 ### Connect apps > Mac > Messages setup (2026-11-02)
 
 Setup lives under Connect apps > Mac > Messages (Installed shows a "This Mac"
-section). Structure matches the Grok Bot Mac Messages surface; Sagax words and
+section). Structure matches the reference design Mac Messages surface; Sagax words and
 branding only (`docs/design/ux-reference-grokbot-cursor.md` §2.8bis).
 
 - Live permission checks: Full Disk Access (read `chat.db`) and Automation
@@ -8232,7 +8232,7 @@ Rules, none optional (`server/routes/bot-code-branches.ts`, git in
 
 ## Coding chat: a coding task opens where the chat is (2026-11-03)
 
-Decision (JC): a row of Details > Coding no longer opens the task sheet in the
+Decision (maintainer): a row of Details > Coding no longer opens the task sheet in the
 side panel. It opens as a chat over the chat column (`AppState.codingChat`,
 actions `openCodingChat` / `closeCodingChat`, drawn by ChatView like
 `routineRunSheet`; a routine run, another bot or a closing panel closes it),
@@ -8567,7 +8567,7 @@ and `ios/App/Session+FreshTopic.swift`; shared cases in
   `FreshTopicHeader`); scrolling up does not reveal the covered topic in
   the same view. An automatic fresh topic shows nothing. ⌘F still searches
   the covered topic and the earlier ones.
-- New chat sticks (JC 2026-11-02, desktop): an asked-for New topic
+- New chat sticks (maintainer 2026-11-02, desktop): an asked-for New topic
   (`auto: false`) is the bot's current conversation until the person sends,
   Back, or opens the covered topic by name. Opening the bot itself (rows,
   palette, links to the bot, team map, launch, the follow effect) clears

@@ -27,8 +27,8 @@
   {
     "term": "initials",
     "files": "^dist/assets/[^/]+\\.js$",
-    "context": "(?<=[\\w$]\\(|[-+*/%<>^~,!=;{}:?&|(]|return |function |break |continue |case |=>|var |let |const )[A-Za-z]{2}(?=[-+*/%<>^~(=;,)\\]}:]| as |\\.[A-Za-z$])",
-    "reason": "A two-letter variable or label name the minifier picked in the built web bundle (for example `function XY(e,t)`, `i-XY(e)`, `.some(XY)`, `XY:{...break XY}`, `(0,$.jsx)(XY,{` or `XY as r`, or a declaration such as `var XY=220`), not prose: comments are stripped there. Matched in any case, with any operator around it. The prefix and suffix are lookarounds, so two neighbouring names (`Sc(XY)` after `:Sc(`) never hide each other."
+    "context": "(?<=[\\w$]\\(|[-+*/%<>^~,!=;{}:?&|(]|return |function |break |continue |case |=>|var |let |const )[A-Za-z]{2}(?=[-+*/%<>^~(=;,)\\]}:|]| as |\\.[A-Za-z$])",
+    "reason": "A two-letter variable or label name the minifier picked in the built web bundle (for example `function XY(e,t)`, `i-XY(e)`, `.some(XY)`, `XY:{...break XY}`, `(0,$.jsx)(XY,{`, `XY as r`, `var XY=220`, or `if(XY||…)`), not prose: comments are stripped there. Matched in any case, with any operator around it. The prefix and suffix are lookarounds, so two neighbouring names (`Sc(XY)` after `:Sc(`) never hide each other."
   },
   {
     "term": "grok-bot",
@@ -38,9 +38,9 @@
   },
   {
     "term": "grok-bot",
-    "files": "^(?:dist-server/index\\.js|dist/assets/TemplateTools-[^/]+\\.js)$",
+    "files": "^(?:dist-server/index\\.js|dist/assets/(?:TemplateTools|GrokImportBox|people-dm)-[^/]+\\.js)$",
     "context": "JSON reply from Grok Bot|not a Grok Bot export|That Grok Bot export has no name|\\|\\|\\s*[\\\"'`]Grok Bot[\\\"'`]|\\|\\|\\s*[\\\"'`]grok-bot[\\\"'`]|\\} in Grok Bot\\.|Notes from Grok Bot|brought over from Grok Bot\\.|[\\\"'`(|]\\s*Grok Bot creator|This Grok Bot export could not|started from the Grok Bot \\\"|\\\"source\\\": \\\"Grok Bot\\\"",
-    "reason": "The same importer (shared/grok-import.ts) inlined into the server and web bundles: its own messages, the default name and author, and the grok-bot id fallback, phrase by phrase, so no other text in the bundle is covered."
+    "reason": "The same importer (shared/grok-import.ts) inlined into the server and web bundles (TemplateTools, GrokImportBox, people-dm chunks): its own messages, the default name and author, and the grok-bot id fallback, phrase by phrase, so no other text in the bundle is covered."
   },
   {
     "term": "grok-bot",
@@ -50,9 +50,9 @@
   },
   {
     "term": "grok-bot",
-    "files": "^(?:dist-server/index\\.js|dist-server/src/locales/(?:en|fr)\\.json|dist/assets/i18n-[^/]+\\.js)$",
-    "context": "Import a Grok Bot|Bring a shared Grok Bot into|[\\\"'`]Grok Bot link[\\\"'`]|Paste a Grok Bot link|or a Grok Bot marketplace page|your own Grok Bot\\.|[\\\"'`]Grok Bot's reply|Importer un Grok Bot|Faites entrer un Grok Bot|Lien du Grok Bot|Collez un lien de Grok Bot|marketplace Grok Bot\\.|votre propre Grok Bot\\.|ponse du Grok Bot",
-    "reason": "The grokImport.* strings (en, fr) of Settings > Import, which name the x.ai product the bot comes from, phrase by phrase."
+    "files": "^(?:dist-server/index\\.js|dist-server/src/locales/(?:en|fr)\\.json|dist/assets/(?:i18n|fr|en)-[^/]+\\.js)$",
+    "context": "Import a Grok Bot|Bring a shared Grok Bot into|[\\\"'`]Grok Bot link[\\\"'`]|Paste a Grok Bot link|or a Grok Bot marketplace page|your own Grok Bot\\.|[\\\"'`]Grok Bot's reply|Importer un Grok Bot|Faites entrer un Grok Bot|Lien du Grok Bot|Collez un lien de Grok Bot|marketplace Grok Bot\\.|votre propre Grok Bot\\.|ponse du Grok Bot|Import an agent \\(Grok Bot, Claude Code\\)|Importer un agent \\(Grok Bot, Claude Code\\)|agentImport\\.grok[\\\"'`: ]{1,8}Grok Bot|Grok Bot or Claude Code|Grok Bot ou Claude Code|Import from Grok Bot|Importer de Grok Bot",
+    "reason": "The grokImport.* and agent-import strings (en, fr) of Settings > Import and New bot, which name the x.ai product the bot comes from, phrase by phrase. Covers the server locale embed and the web i18n/fr/en chunks."
   },
   {
     "term": "bot-name",
@@ -92,5 +92,17 @@
     "term": "grok-bot",
     "context": "[\"']grok[\"'],\\s*[\"']grok bot[\"']",
     "reason": "The on-screen name in the list of apps that never get a standing one-app rule, kept as the quoted pair so that app stays on the denylist. A comment that merely says the product name does not match."
+  },
+  {
+    "term": "grok-bot",
+    "files": "^dist/assets/[^/]+\\.js$",
+    "context": "import a Grok Bot agent|importez un agent Grok Bot",
+    "reason": "The offline What's new notes (docs/releases/0.8.4.md, compiled into the renderer) name the x.ai product the import feature reads, in those two sentences only."
+  },
+  {
+    "term": "grok-bot",
+    "files": "^dist-server/self-knowledge/knowledge\\.generated\\.json$",
+    "context": "Grok Bot|grok-bot|grokbot",
+    "reason": "The packed self-knowledge quotes the public import guide (docs/import-agent.md) and agent notes that name the x.ai product the importer reads, including path stems such as ux-reference-grokbot-cursor.md and connect-apps-grokbot.mjs. Only this generated file."
   }
 ]

@@ -73,7 +73,7 @@ export function WaitingOnYou({ items, threadId, botFor, onCancel, onOpenThread, 
               {item.threadId && onOpenThread && (
                 <button type="button" data-task-waiting-open onClick={() => onOpenThread(item.botId, item.threadId!)} className={cn(PILL, "gap-1.5")}>
                   <ExternalLink size={13} aria-hidden="true" />
-                  {t("botPanel.activity.openThread")}
+                  {t("approvals.openThread")}
                 </button>
               )}
             </div>

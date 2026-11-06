@@ -4,7 +4,7 @@
 // view's compact form, the way the side thread column shows one. Same data
 // as that column (useSideTranscript: newest page, older pages on scroll-up,
 // then the live stream), so it follows the run while it goes; no new route.
-// "Open thread" in the window's footer still moves the main chat there.
+// "Open the conversation" in the window's footer still moves the main chat there.
 import { useMemo } from "react";
 import { Loader2, Maximize2 } from "lucide-react";
 

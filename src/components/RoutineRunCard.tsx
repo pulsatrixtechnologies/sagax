@@ -1,5 +1,5 @@
-import { ChevronRight, Loader2, PauseCircle, Play, Square } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { ChevronRight, Loader2, PauseCircle, Play } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { chatBubbleWidth, useChatBubbleWidthClasses } from "@/lib/chat-bubble-width";
 import { cn } from "@/lib/cn";
@@ -144,6 +144,15 @@ export function RunStatusPill({ label, tone, live }: { label: string; tone: stri
 }
 
 const QUIET_LINK = "inline-flex items-center gap-0.5 rounded text-ink-tertiary transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent";
+
+/** The parts of the quiet line, one "·" between each two present parts:
+ * an absent part (false, null, undefined, "") never leaves its separator. */
+export function provenanceLine(parts: ReadonlyArray<ReactNode>): ReactNode[] {
+  const present = parts.filter((part) => part !== false && part !== null && part !== undefined && part !== "");
+  return present.flatMap((part, index) => index === 0
+    ? [part]
+    : [<span key={`sep-${index}`} aria-hidden="true" data-routine-run-sep>·</span>, part]);
+}
 
 /** Now, for a running run's elapsed time: a quarter-minute tick is enough
  * for "2 min", and nothing ticks once the run is over. */
@@ -302,45 +311,47 @@ export function RoutineRunCard({
         data-routine-run-provenance
         className={cn("flex flex-wrap items-center gap-x-1.5 gap-y-1 pl-1 text-[11px] text-ink-tertiary", (report || detail) && "mt-1")}
       >
-        {lead && (
-          <span
-            data-routine-run-status
-            className={cn(running && "thinking-shimmer animate-shimmer motion-reduce:animate-none")}
-          >{lead}</span>
-        )}
-        {lead && <span aria-hidden="true">·</span>}
-        <time dateTime={new Date(at).toISOString()}>{routineDateTime(at)}</time>
-        {elapsed && <>
-          <span aria-hidden="true">·</span>
-          <span data-routine-run-elapsed className="tabular-nums">{elapsed}</span>
-        </>}
-        {onOpen && <span aria-hidden="true">·</span>}
-        {onOpen && (
-          <button
-            type="button"
-            data-routine-run-open
-            onClick={onOpen}
-            title={run.routineName}
-            aria-label={t(run.goalStatus === "needs-input" ? "routines.post.reviewFor" : "routines.post.openRunFor", { name: run.routineName })}
-            className={QUIET_LINK}
-          >
-            {t("routineRun.details")}
-            <ChevronRight aria-hidden="true" size={11} />
-          </button>
-        )}
-        {live && onStop && <span aria-hidden="true">·</span>}
-        {live && onStop && (
-          <button
-            type="button"
-            data-run-stop
-            onClick={onStop}
-            aria-label={t("routines.post.stopRunFor", { name: run.routineName })}
-            className={QUIET_LINK}
-          >
-            <Square aria-hidden="true" size={9} fill="currentColor" />
-            {t("routineRun.stop")}
-          </button>
-        )}
+        {/* 2026-11-06 (pre-0.8.59): the separators are drawn between the
+            parts present, never beside an absent one, so two never meet.
+            Stop carries no square glyph: at this size it read as a second
+            separator ("Details · · Stop"). */}
+        {provenanceLine([
+          lead && (
+            <span
+              key="status"
+              data-routine-run-status
+              className={cn(running && "thinking-shimmer animate-shimmer motion-reduce:animate-none")}
+            >{lead}</span>
+          ),
+          <time key="at" dateTime={new Date(at).toISOString()}>{routineDateTime(at)}</time>,
+          elapsed && <span key="elapsed" data-routine-run-elapsed className="tabular-nums">{elapsed}</span>,
+          onOpen && (
+            <button
+              key="open"
+              type="button"
+              data-routine-run-open
+              onClick={onOpen}
+              title={run.routineName}
+              aria-label={t(run.goalStatus === "needs-input" ? "routines.post.reviewFor" : "routines.post.openRunFor", { name: run.routineName })}
+              className={QUIET_LINK}
+            >
+              {t("routineRun.details")}
+              <ChevronRight aria-hidden="true" size={11} />
+            </button>
+          ),
+          live && onStop && (
+            <button
+              key="stop"
+              type="button"
+              data-run-stop
+              onClick={onStop}
+              aria-label={t("routines.post.stopRunFor", { name: run.routineName })}
+              className={QUIET_LINK}
+            >
+              {t("routineRun.stop")}
+            </button>
+          ),
+        ])}
       </div>
       {/* 2026-11-05: items only the person can do, each with its ticket. */}
       {reported && message.attention?.items.length ? (

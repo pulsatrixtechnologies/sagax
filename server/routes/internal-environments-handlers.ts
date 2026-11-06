@@ -266,6 +266,8 @@ export interface InternalEnvironmentsDeps {
   handleMessagesMcp: typeof handleMessagesMcp;
   appendMessage(threadId: string, message: unknown): { id: string };
   bindImessageMessage(requestId: string, messageId: string): void;
+  /** The allow rule the card's answerer kept for this exact candidate (index.ts keptCardRule). */
+  keptCardRule?(bot: InternalEnvironmentsBot, threadId: string, candidate: { tool: string; scope: Record<string, string> }): unknown;
   workspaceDir(botId: string): string;
   taskWorkspacesDir(): string;
 
@@ -900,11 +902,14 @@ async function answerMessagesMcp(deps: InternalEnvironmentsDeps, ctx: InternalRo
         enabled: (app: MacAppId) => deps.macAppEnabled!(app),
         run: (tool: string, args: Record<string, unknown>) => deps.runMacApp!(tool, args),
         unasked: ["auto", "full"].includes(deps.sourceApprovalMode(sender.id, capability.threadId)),
+        // Always allow on the card keeps this rule; kept, the write acts unasked.
+        kept: (tool: string) => Boolean(deps.keptCardRule?.(sender, capability.threadId, macAppRule(tool))),
       },
     } : {}),
     openCard: (pending) => {
       if (pending.macApp) {
-        // An Apple app write (Mail, Calendar, Reminders, Notes) in Ask mode.
+        // An Apple app write (Mail, Calendar, Reminders, Notes) in Ask mode;
+        // Auto and Full act unasked (macApps.unasked). full-access: send
         const message = deps.appendMessage(capability.threadId, {
           role: "bot",
           kind: "options",
@@ -914,10 +919,13 @@ async function answerMessagesMcp(deps: InternalEnvironmentsDeps, ctx: InternalRo
             subtitle: pending.to,
             options: ["Allow", "Deny"],
             requestId: pending.requestId,
+            // full-access: send
             requestType: "permission",
             tool: pending.macApp.tool,
             toolInput: JSON.stringify(pending.macApp.args),
             plain: { title: pending.to, line: pending.macApp.tool, risk: "write" },
+            // Always allow keeps this Apple app action for the bot (#2091).
+            ownerRule: macAppRule(pending.macApp.tool),
           },
         });
         deps.bindImessageMessage(pending.requestId, message.id);
@@ -952,6 +960,12 @@ async function answerMessagesMcp(deps: InternalEnvironmentsDeps, ctx: InternalRo
     },
   });
   return json(res, 200, handled);
+}
+
+/** What Always allow keeps on an Apple app write card: that action of that
+ * app, for this bot (2026-11-06, every card offers Always allow, #2091). */
+export function macAppRule(tool: string): { tool: string; scope: Record<string, string>; description: string } {
+  return { tool: `mac-app:${tool}`, scope: {}, description: `Use ${tool} on this Mac` };
 }
 
 export function routePhoneClaim(deps: InternalEnvironmentsDeps, ctx: InternalRouteContext): EnvironmentAnswer {

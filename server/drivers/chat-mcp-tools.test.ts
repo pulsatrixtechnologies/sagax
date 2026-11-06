@@ -9,6 +9,8 @@ import { ChatToolSessionError, SAVED_RESULTS_FOLDER, SAVED_RESULTS_KEPT, mountCh
 import type { ToolScope } from "../../shared/tool-scope.ts";
 import { startFakeHttpMcp } from "../testing/fake-http-mcp-server.ts";
 import { whopLikeCatalog } from "../testing/whop-like-catalog.ts";
+import { wideSchema } from "../testing/oversized-tool-schema.ts";
+import { schemaBytes, toolSchemaProfile } from "../tool-schema-profile.ts";
 
 // Port de OpenMausBot #3150 : the real kill always runs (cleanup); the probe
 // can only force its verdict and records the budget it was given.
@@ -339,6 +341,24 @@ describe("Chat MCP session", () => {
     await session.execute(name, { url: "https://example.com" }, f.controller.signal);
     const calls = f.read().calls.filter((call) => call.method === "tools/call").map((call) => call.params?.arguments);
     expect(calls).toEqual([dropped ? {} : { url: " " }, { url: "https://example.com" }]);
+  });
+
+  it("shows a model behind Moonshot each schema fitted to its limit, and still checks calls against the full one", async () => {
+    const full = wideSchema(110);
+    const f = fixture("", full);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const plain = await f.mount();
+      expect(plain.definitions[0]!.function.parameters).toEqual(full);
+      const session = await mountChatTools({ custom: { audit: f.server } }, f.controller.signal, false, undefined, undefined, undefined, undefined, undefined, toolSchemaProfile("moonshot"));
+      sessions.push(session);
+      const [definition] = session.definitions;
+      expect(schemaBytes(definition!.function.parameters)).toBeLessThanOrEqual(12_000);
+      expect(definition!.function.description).toContain("Sagax shortened this tool's parameters to fit Kimi's size limit");
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/^chat-mcp: audit: kept only the top-level fields of tool "write"'s parameters/));
+      expect(() => session.validate("audit_write", { field_000: { label: 5 } })).toThrow("input schema");
+      expect(() => session.validate("audit_write", { field_000: { label: "five" } })).not.toThrow();
+    } finally { warn.mockRestore(); }
   });
 
   it("starts servers with the widened PATH rather than the bare one the desktop shell inherits", async () => {

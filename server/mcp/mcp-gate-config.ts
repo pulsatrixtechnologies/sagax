@@ -11,6 +11,7 @@ import { DEFAULT_RESULT_BUDGET, QUERY_TOOL_NAME } from "./mcp-trim.ts";
 import { gateSearchEnv } from "./mcp-gate-search.ts";
 import { REMOTE_MCP_CONFIG_ENV, remoteMcpSpec } from "./mcp-http.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts";
+import { TOOL_SCHEMA_PROFILE_ENV, type ToolSchemaProfileId } from "../tool-schema-profile.ts";
 
 /** Characters of a single tool result allowed into context, or 0 to mount
  * bot servers directly as before. `SAGAX_MCP_RESULT_BUDGET=0` is the escape
@@ -219,8 +220,10 @@ export function gateServer(input: {
   /** #2189: bare tool names the agents server already owns. The gate leaves
    * them out of tools/list and refuses a call, so the model uses agents. */
   withhold?: readonly string[];
+  /** The engine's provider limits each listed tool schema, so the gate fits them to its profile. */
+  schemaProfile?: ToolSchemaProfileId;
 }): { command: string; args: string[]; env: Record<string, string> } | null {
-  const { name, server, budget } = input;
+  const { name, server, budget, schemaProfile } = input;
   const parsed = parseToolScope(input.toolScope);
   if (!parsed.ok) throw new Error(parsed.error);
   const scoped = parsed.scope !== undefined;
@@ -231,7 +234,7 @@ export function gateServer(input: {
   const withhold = name !== "agents"
     ? [...new Set((input.withhold ?? []).filter((tool) => typeof tool === "string" && tool.length > 0 && !tool.includes("__")))].sort()
     : [];
-  if (budget <= 0 && !scoped && !aliased && !approval && !search && !withhold.length) return null;
+  if (budget <= 0 && !scoped && !aliased && !approval && !search && !withhold.length && !schemaProfile) return null;
   if (!scoped && !aliased && !approval && !search && !withhold.length && input.gateRemote !== true && remoteMcpSpec(server)) return null;
   // The directory is the remote proxy's; it sits inside the gate, which
   // knows to look through call_tool at the tool underneath.
@@ -273,6 +276,7 @@ export function gateServer(input: {
     args: [SPAWNED_PROXIES.mcpGate, ...(input.configEnvName ? ["--config-env", input.configEnvName] : [])],
     env: {
       ...input.nodeEnv,
+      ...(schemaProfile ? { [TOOL_SCHEMA_PROFILE_ENV]: schemaProfile } : {}),
       ...(input.configEnvName ? { [input.configEnvName]: JSON.stringify(env) } : env),
     },
   };

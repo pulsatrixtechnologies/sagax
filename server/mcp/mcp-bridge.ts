@@ -32,6 +32,7 @@ import { CONTROL_ACT_WITHIN_MS, CONTROL_UNCONFIRMED, CONTROL_WAITED, controlRefu
 import { augmentedPath, resolveCliSpawn } from "../env-path.ts";
 import { createToolListNormalizer } from "./mcp-tool-schema.ts";
 import { reportBackgroundError } from "../background-error.ts";
+import { toolSchemaProfileFromEnv } from "../tool-schema-profile.ts";
 
 // 45s of TOTAL silence before the bridge even probes. An MCP session is
 // legitimately quiet between tool calls and a slow screenshot can take tens
@@ -283,7 +284,7 @@ export function runMcpBridge(options: BridgeOptions): void {
     forward,
     ...(client ? { gate: { check: () => client.state(true) } } : {}),
   });
-  const toolLists = createToolListNormalizer();
+  const toolLists = createToolListNormalizer(toolSchemaProfileFromEnv(), (line) => process.stderr.write(`${options.label}: ${line}\n`));
   let pendingInput = Promise.resolve();
   const inbound = createLineSplitter((line) => {
     toolLists.observeRequest(line);

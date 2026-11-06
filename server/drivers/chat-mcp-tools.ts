@@ -16,6 +16,8 @@ import { mcpStdioServer } from "../mcp/mcp-gate-config.ts";
 import { REMOTE_MCP_STARTUP_MS, remoteMcpSpec } from "../mcp/mcp-http.ts";
 import { compileToolSchema } from "../mcp/mcp-schema-validator.ts";
 import { agentsPreferredToolNames, filterToolsPreferringAgents, resolvedServerLog } from "../mcp/agents-tool-priority.ts";
+import { fitToolList } from "../mcp/mcp-tool-schema.ts";
+import type { ToolSchemaProfile } from "../tool-schema-profile.ts";
 import { allowsTool, canUseMcpServer, parseToolScope, type ToolScope } from "../../shared/tool-scope.ts";
 import { openApiWriteToolNames } from "../mcp/openapi-tools.ts";
 
@@ -371,8 +373,10 @@ function toolTier(entry: { hostTool: boolean; agents: boolean; directory: boolea
 }
 
 /** A tool result over 50KB is saved whole in `resultFolder`, the bot's working folder, after `scrub` masks secrets (see savedOrBounded).
- * A warm mount is reused: `bindResultSave` points the next turn's results at that turn's folder and mask. */
-export async function mountChatTools(integrations: SendTurnInput["integrations"], signal: AbortSignal, computerUse = false, toolScope?: ToolScope, callTimeoutMs: number = DEFAULT_CALL_MS, toolLimit: number = DEFAULT_TOOL_LIMIT, resultFolder?: string, scrub: (text: string) => string = redactSecretsInText): Promise<ChatToolSession> {
+ * A warm mount is reused: `bindResultSave` points the next turn's results at that turn's folder and mask.
+ * Under `schemaProfile` the model reads each tool's schema fitted to its provider; calls are still checked against the full one. */
+export async function mountChatTools(integrations: SendTurnInput["integrations"], signal: AbortSignal, computerUse = false, toolScope?: ToolScope, callTimeoutMs: number = DEFAULT_CALL_MS, toolLimit: number = DEFAULT_TOOL_LIMIT, resultFolder?: string, scrub: (text: string) => string = redactSecretsInText,
+  schemaProfile?: ToolSchemaProfile): Promise<ChatToolSession> {
   let saveFolder = resultFolder;
   let saveScrub = scrub;
   const parsed = parseToolScope(toolScope);
@@ -460,14 +464,16 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
       if (!object(tool.inputSchema) || tool.inputSchema.type !== "object") throw new Error("MCP tools require an object input schema");
       if (Buffer.byteLength(JSON.stringify(tool.inputSchema)) > SCHEMA_BYTES) throw new Error("MCP tool schema exceeds the 64KB limit");
       const schema = compileToolSchema(tool.inputSchema);
-      const parameters = { ...tool.inputSchema };
+      const [listed] = schemaProfile ? fitToolList([tool], schemaProfile, (line) => console.warn(`chat-mcp: ${server}: ${line}`)) : [tool];
+      if (!object(listed) || !object(listed.inputSchema)) continue;
+      const parameters = { ...listed.inputSchema };
       const constraints: Record<string, unknown> = {};
       if (computerUse) {
         for (const key of ["anyOf", "oneOf", "allOf", "not"]) {
           if (key in parameters) { constraints[key] = parameters[key]; delete parameters[key]; }
         }
       }
-      const description = (typeof tool.description === "string" ? tool.description : "Configured MCP tool") +
+      const description = (typeof listed.description === "string" ? listed.description : "Configured MCP tool") +
         (Object.keys(constraints).length ? " Additional argument constraints (validated before execution): " + JSON.stringify(constraints) : "");
       const base = chatToolName(server, tool.name);
       let name = allocatedNames.get(JSON.stringify([server, tool.name])) ?? base;

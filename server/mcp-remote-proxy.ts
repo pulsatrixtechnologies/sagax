@@ -38,6 +38,8 @@ import {
   remoteMcpSpec,
 } from "./mcp/mcp-http.ts";
 import { lenientToolValidator, schemaProblems } from "./mcp/mcp-schema-validator.ts";
+import { fitToolListResult } from "./mcp/mcp-tool-schema.ts";
+import { toolSchemaProfileFromEnv } from "./tool-schema-profile.ts";
 import { rateLimitGaveUpText, rateLimitRetryText, rateLimitWait, sleepUnlessAborted } from "./usage/rate-limit-retry.ts";
 import { reportBackgroundError } from "./background-error.ts";
 
@@ -120,6 +122,8 @@ function directorySettings(raw: string | undefined): { server: string; scope: To
   return fail("invalid tool directory configuration");
 }
 const directory = directorySettings(settings.SAGAX_REMOTE_MCP_DIRECTORY);
+const SCHEMA_PROFILE = toolSchemaProfileFromEnv(process.env);
+const logFit = (line: string) => { process.stderr.write(`mcp-remote-proxy: ${line}\n`); };
 
 /** Characters of a server's own error message the engine may read. */
 const REMOTE_ERROR_CHARS = 1_000;
@@ -360,7 +364,7 @@ async function handle(message: Json): Promise<void> {
       }
     }
     if (message.method === "initialize") initialized = true;
-    send({ jsonrpc: "2.0", id: message.id, result });
+    send({ jsonrpc: "2.0", id: message.id, result: message.method === "tools/list" ? fitToolListResult(result, SCHEMA_PROFILE, logFit) : result });
   } catch (failure) {
     // Transport failures may carry URLs or header values: never relayed. A
     // server's own JSON-RPC error is its answer (a bad argument, an unknown

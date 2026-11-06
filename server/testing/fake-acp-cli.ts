@@ -623,7 +623,8 @@ const GROK_MCP_HANDSHAKE = { protocolVersion: "2025-11-25", capabilities: { exte
 
 /** Connect one server as the agent's own MCP client would and list its tools. */
 async function listMcpTools(entry: AnyMcpEntry, handshake: unknown): Promise<string[]> {
-  const names = (result: any) => (result?.tools ?? []).map((tool: { name: string }) => tool.name);
+  const names = (result: any) => (result?.tools ?? []).map((tool: { name: string; inputSchema?: unknown }) =>
+    process.env.FAKE_ACP_MCP_SCHEMA_BYTES === "1" ? `${tool.name}=${JSON.stringify(tool.inputSchema ?? {}).length}` : tool.name);
   if (typeof entry.url === "string") {
     const headers: Record<string, string> = { "content-type": "application/json", accept: "application/json, text/event-stream" };
     for (const { name, value } of entry.headers ?? []) headers[name] = value;
@@ -1533,7 +1534,7 @@ function handle(msg: any) {
         return;
       }
       if (mode === "mcp-tools") {
-        const handshake = process.env.FAKE_ACP_MCP_HANDSHAKE ? JSON.parse(process.env.FAKE_ACP_MCP_HANDSHAKE) : GROK_MCP_HANDSHAKE;
+        const handshake = process.env.FAKE_ACP_MCP_HANDSHAKE ? JSON.parse(process.env.FAKE_ACP_MCP_HANDSHAKE; FAKE_ACP_MCP_SCHEMA_BYTES=1 adds each schema\'s length) : GROK_MCP_HANDSHAKE;
         void Promise.all(sessionMcp.map((entry) => listMcpTools(entry, handshake).then(
           (tools) => `${entry.name}: ${tools.join(",")}`,
           (error: Error) => `${entry.name} failed: ${error.message}`,

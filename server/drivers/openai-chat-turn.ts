@@ -14,6 +14,7 @@ import { ChatProtocolError, object } from "./openai-chat-protocol.ts";
 import { appendNative } from "./native.ts";
 import { classifyError, computeBackoff, interruptibleDelay, RETRY_MAX_ATTEMPTS } from "./retry.ts";
 import { outOfCreditsMessage } from "./engine-errors.ts";
+import { toolSchemaProfileFor } from "../tool-schema-profile.ts";
 import { RequestTooLargeError, sizeChange, smallerResend } from "./chat-size-limit.ts";
 import { requestTooLargeMessage } from "../../shared/request-too-large.ts";
 import { providerReplyCutMessage, providerReplyCutReason } from "../../shared/provider-reply-cut.ts";
@@ -146,11 +147,13 @@ async function mountOpenAIChatTurnTools(ctx: OpenAIChatTurnCtx): Promise<{
   // lands in the same cache under the same fingerprint.
   const warmTurn = options.tools === false ? turn : withWarmTokens(turn, turn.threadId);
   const mountIntegrations = options.tools === false ? undefined : warmTurn.integrations;
+  const schemaProfile = toolSchemaProfileFor({ url: options.apiUrl, model: ctx.model });
   const toolsFp = chatToolsFingerprint(mountIntegrations, {
     computerUse: Boolean(options.computerUse),
     toolScope: turn.toolScope,
     toolLimit,
     callTimeoutMs: turn.mcpCallTimeoutMs,
+    schemaProfile: schemaProfile?.id,
   });
   let tools: ChatToolSession;
   let toolsReused = false;
@@ -165,7 +168,7 @@ async function mountOpenAIChatTurnTools(ctx: OpenAIChatTurnCtx): Promise<{
     warmToolSessions.claim(turn.threadId);
     turnTrace(turn.threadId, "tools-reused");
   } else {
-    tools = await mountChatTools(mountIntegrations, abort.signal, options.computerUse, scope, turn.mcpCallTimeoutMs, toolLimit, resultFolder, safeText);
+    tools = await mountChatTools(mountIntegrations, abort.signal, options.computerUse, scope, turn.mcpCallTimeoutMs, toolLimit, resultFolder, safeText, schemaProfile);
     if (mountIntegrations) {
       warmToolSessions.set(turn.threadId, toolsFp, tools, { person: warmResourcePerson(turn), active: true });
       toolsReused = true; // The cache owns cleanup for new mounts too.

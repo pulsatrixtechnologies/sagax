@@ -38,8 +38,13 @@ const baseConfig = (over: Record<string, unknown> = {}) => ({
 async function page(section?: string): Promise<string> {
   if (section) fixture.section = section;
   const { SettingsModal } = await import("./SettingsModal");
-  const { EnginesSettings, ProvidersSettings, VoiceSettingsPage } = await import("./lazy-settings-sections");
-  await Promise.all([EnginesSettings.preload(), ProvidersSettings.preload(), VoiceSettingsPage.preload()]);
+  const { DecisionModelSettings, EnginesSettings, ProvidersSettings, VoiceSettingsPage } = await import("./lazy-settings-sections");
+  await Promise.all([
+    DecisionModelSettings.preload(),
+    EnginesSettings.preload(),
+    ProvidersSettings.preload(),
+    VoiceSettingsPage.preload(),
+  ]);
   return renderToStaticMarkup(createElement(SettingsModal));
 }
 
@@ -54,7 +59,12 @@ function part(html: string, from: string, to?: string): string {
 beforeAll(async () => {
   // b8333c52c: these pages load on demand; static rendering runs no effects.
   const sections = await import("./lazy-settings-sections");
-  await Promise.all([sections.EnginesSettings.preload(), sections.ProvidersSettings.preload(), sections.VoiceSettingsPage.preload()]);
+  await Promise.all([
+    sections.DecisionModelSettings.preload(),
+    sections.EnginesSettings.preload(),
+    sections.ProvidersSettings.preload(),
+    sections.VoiceSettingsPage.preload(),
+  ]);
 }, 60_000);
 
 beforeEach(async () => {

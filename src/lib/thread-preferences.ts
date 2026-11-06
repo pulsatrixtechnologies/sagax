@@ -137,6 +137,20 @@ export function setThreadsLocation(location: ThreadsLocation): void {
   notify();
 }
 
+/** One Settings > Appearance choice for whether and where threads show.
+ * Lives here (not in AppearanceSettings.tsx) so SettingsModal can re-export
+ * it without pulling the Appearance page into the Settings shell chunk. */
+export type ThreadsView = "hidden" | ThreadsLocation;
+
+export function chooseThreadsView(next: ThreadsView): void {
+  if (next === "hidden") {
+    setShowThreads(false);
+    return;
+  }
+  setThreadsLocation(next);
+  setShowThreads(true);
+}
+
 /** The person's own choice in Settings > Appearance (applies when threads are on). */
 export function useThreadsLocationChoice(): ThreadsLocation {
   return useSyncExternalStore(subscribeLocation, threadsLocation, () => THREADS_LOCATION_DEFAULT);

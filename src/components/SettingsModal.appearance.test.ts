@@ -7,7 +7,12 @@ import { en, locales } from "@/locales";
 import type { AppSettingsSection } from "@/state/store";
 import type { Switch } from "./SettingsPrimitives";
 import { chooseThreadsView, SECTIONS, sectionMatches, SettingsModal } from "./SettingsModal";
-import { AppearanceSettings, WorkspaceBackupSettings } from "./lazy-settings-sections";
+import {
+  AppearanceSettings,
+  NotificationSettings,
+  OrganizationSettings,
+  WorkspaceBackupSettings,
+} from "./lazy-settings-sections";
 
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => true, setAdvancedMode: () => {} }));
 
@@ -44,13 +49,26 @@ vi.mock("@/state/store", async (importOriginal) => ({
   api: fixture.api,
   useStore: () => ({ state: { appSettingsSection: fixture.section, instances: [] }, dispatch: fixture.dispatch }),
 }));
-vi.mock("@/lib/thread-preferences", () => ({
-  useShowThreads: () => fixture.showThreads, useThreadsMode: () => ((fixture.showThreads) ? "header" : "one") as "one" | "header" | "sidebar",
-  useShowThreadsChoice: () => fixture.showThreads,
-  setShowThreads: fixture.setShowThreads,
-  useThreadsLocationChoice: () => "header",
-  setThreadsLocation: fixture.setThreadsLocation,
-}));
+vi.mock("@/lib/thread-preferences", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/thread-preferences")>();
+  return {
+    ...real,
+    useShowThreads: () => fixture.showThreads,
+    useThreadsMode: () => ((fixture.showThreads) ? "header" : "one") as "one" | "header" | "sidebar",
+    useShowThreadsChoice: () => fixture.showThreads,
+    setShowThreads: fixture.setShowThreads,
+    useThreadsLocationChoice: () => "header",
+    setThreadsLocation: fixture.setThreadsLocation,
+    chooseThreadsView: (next: "hidden" | "header" | "sidebar") => {
+      if (next === "hidden") {
+        fixture.setShowThreads(false);
+        return;
+      }
+      fixture.setThreadsLocation(next);
+      fixture.setShowThreads(true);
+    },
+  };
+});
 vi.mock("@/lib/panel-visibility", () => ({
   useShowSuggestions: () => fixture.showSuggestions,
   setShowSuggestions: fixture.setShowSuggestions,
@@ -100,7 +118,12 @@ vi.mock("./SettingsPrimitives", async (importOriginal) => {
 
 // Static rendering does not run the effects that load the selected page.
 beforeAll(async () => {
-  await Promise.all([AppearanceSettings.preload(), WorkspaceBackupSettings.preload()]);
+  await Promise.all([
+    AppearanceSettings.preload(),
+    NotificationSettings.preload(),
+    OrganizationSettings.preload(),
+    WorkspaceBackupSettings.preload(),
+  ]);
 });
 
 beforeEach(() => {

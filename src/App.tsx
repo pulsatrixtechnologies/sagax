@@ -1,9 +1,8 @@
 import { useEffect } from "react";
 import { StoreProvider } from "@/state/store";
 import { shallowEqual, useStoreSelector } from "@/state/store-selector";
-import { useWelcomeViewer, WelcomeGate } from "@/components/onboarding/WelcomeGate";
-import { GuidedTour } from "@/components/onboarding/GuidedTour";
-import { OpenAtLoginOffer } from "@/components/OpenAtLoginOffer";
+import { useWelcomeViewer } from "@/components/onboarding/welcome-viewer";
+import { lazyScreen } from "@/components/lazy-screen";
 import { LiveCallHost } from "@/components/LiveCallHost";
 import { ThreadRefsProvider } from "@/components/ThreadRefs";
 import { initAnalytics } from "@/lib/analytics";
@@ -17,6 +16,14 @@ import { usePageLookSync } from "@/lib/page-look-sync";
 import { useShellNavigation } from "./App.tsx-parts/useShellNavigation";
 import { useShellEffects } from "./App.tsx-parts/useShellEffects";
 import { ShellLayout } from "./App.tsx-parts/ShellLayout";
+
+// Welcome / tour / open-at-login stay off the critical startup path: the
+// chat shell paints first, then these chunks load (Refs #1971). Behaviour is
+// unchanged once the chunk arrives; an already-finished tour still mounts
+// as a no-op gate.
+const WelcomeGate = lazyScreen("WelcomeGate", async () => (await import("@/components/onboarding/WelcomeGate")).WelcomeGate);
+const GuidedTour = lazyScreen("GuidedTour", async () => (await import("@/components/onboarding/GuidedTour")).GuidedTour);
+const OpenAtLoginOffer = lazyScreen("OpenAtLoginOffer", async () => (await import("@/components/OpenAtLoginOffer")).OpenAtLoginOffer);
 
 export function Shell() {
   const shell = useShellNavigation();
@@ -50,6 +57,19 @@ function BotAccentSync() {
 function Application() {
   useEffect(() => {
     initAnalytics();
+  }, []);
+  useEffect(() => {
+    const preload = () => {
+      void WelcomeGate.preload().catch(() => {});
+      void GuidedTour.preload().catch(() => {});
+      void OpenAtLoginOffer.preload().catch(() => {});
+    };
+    if (typeof requestIdleCallback === "function") {
+      const handle = requestIdleCallback(preload, { timeout: 2_000 });
+      return () => cancelIdleCallback(handle);
+    }
+    const timer = setTimeout(preload, 1_000);
+    return () => clearTimeout(timer);
   }, []);
   const viewer = useWelcomeViewer();
   return (

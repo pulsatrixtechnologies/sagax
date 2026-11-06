@@ -20,7 +20,7 @@ import { hiddenSidebarRows } from "@/lib/sidebar-hidden-entries";
 import { useOrgPeople } from "@/lib/perspicax-org";
 import { viewerActorId } from "@/lib/viewer";
 import { setShowAllHistory, setShowSuggestions, useShowAllHistory, useShowSuggestions } from "@/lib/panel-visibility";
-import { setShowThreads, setThreadsLocation, useShowThreadsChoice, useThreadsLocationChoice, type ThreadsLocation } from "@/lib/thread-preferences";
+import { chooseThreadsView, useShowThreadsChoice, useThreadsLocationChoice, type ThreadsView } from "@/lib/thread-preferences";
 import { FRESH_TOPIC_AFTER_CHOICES, useFreshTopicAfter, writeFreshTopicAfter, type FreshTopicAfterHours } from "@/lib/fresh-topic";
 import { parseSidebarDensity, setSidebarDensity, SIDEBAR_DENSITIES, useSidebarDensity, type SidebarDensity } from "@/lib/sidebar-preferences";
 import { setShowRunCard, useShowRunCard } from "@/lib/run-card-preferences";
@@ -156,17 +156,7 @@ function ChatWidthRow() {
 }
 
 
-type ThreadsView = "hidden" | ThreadsLocation;
-
-/** Hidden keeps the last place, for when threads come back. */
-export function chooseThreadsView(next: ThreadsView): void {
-  if (next === "hidden") {
-    setShowThreads(false);
-    return;
-  }
-  setThreadsLocation(next);
-  setShowThreads(true);
-}
+export { chooseThreadsView, type ThreadsView };
 
 /** One choice for whether and where conversation threads show. Both stored
  * values stay: hiding keeps the last place for when they return. */

@@ -7,11 +7,12 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 
+import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { useOrgApprovalPolicy } from "@/lib/org-approval-policy";
 import { api, useStore, type Bot } from "@/state/store";
 import { parseRecipientEntry, recipientEntryKey } from "../../../shared/allowed-recipients";
-import { DescribedRow, PILL, PillSelect } from "../SettingsPrimitives";
+import { DescribedRow, PILL, PillSelect, PLAIN_FIELD, useSettingsSurface } from "../SettingsPrimitives";
 import { readableError } from "@/lib/plain-error";
 
 /** How one entry reads: an address or a number as it is; a bot by its name,
@@ -68,6 +69,9 @@ export function AllowedRecipientsRow({ bot }: { bot: Bot }) {
   };
 
   const label = (key: string) => recipientLabel(key, state.bots);
+  // The bot's profile page (#2313): filled chips and a filled field, no
+  // outline inside the card.
+  const plain = useSettingsSurface() === "plain";
 
   return (
     <DescribedRow
@@ -82,7 +86,7 @@ export function AllowedRecipientsRow({ bot }: { bot: Bot }) {
               {list.map((key) => {
                 const shown = label(key);
                 return (
-                  <li key={key} className="flex items-center gap-1 rounded-full border-[0.5px] border-border bg-inset py-0.5 pl-2.5 pr-1 text-[12px] text-ink" title={shown.title}>
+                  <li key={key} className={plain ? "flex items-center gap-1 rounded-full bg-control py-0.5 pl-2.5 pr-1 text-[12px] text-ink" : "flex items-center gap-1 rounded-full border-[0.5px] border-border bg-inset py-0.5 pl-2.5 pr-1 text-[12px] text-ink"} title={shown.title}>
                     <span className="max-w-[240px] truncate">{shown.text}</span>
                     <button
                       type="button"
@@ -98,7 +102,7 @@ export function AllowedRecipientsRow({ bot }: { bot: Bot }) {
               })}
             </ul>
           )}
-          {list.length === 0 && <div className="text-[12px] text-ink-tertiary">{t("botPanel.recipients.empty")}</div>}
+          {list.length === 0 && <div className={plain ? "text-[12px] leading-4 text-ink-secondary" : "text-[12px] text-ink-tertiary"}>{t("botPanel.recipients.empty")}</div>}
           {grantsOff && <div className="text-[12px] text-ink-secondary">{t("botPanel.recipients.orgOff")}</div>}
           <form
             className="flex flex-wrap items-center gap-2"
@@ -115,7 +119,7 @@ export function AllowedRecipientsRow({ bot }: { bot: Bot }) {
               aria-label={t("botPanel.recipients.placeholder")}
               autoComplete="off"
               spellCheck={false}
-              className="min-w-0 flex-1 basis-[200px] rounded-lg border-[0.5px] border-border bg-inset px-3 py-1.5 text-[13px] text-ink placeholder:text-ink-secondary focus:border-focus focus:outline-none"
+              className={plain ? cn(PLAIN_FIELD, "w-auto flex-1 basis-[200px]") : "min-w-0 flex-1 basis-[200px] rounded-lg border-[0.5px] border-border bg-inset px-3 py-1.5 text-[13px] text-ink placeholder:text-ink-secondary focus:border-focus focus:outline-none"}
             />
             <button type="submit" className={PILL} disabled={saving || grantsOff || !draft.trim()}>{t("botPanel.recipients.add")}</button>
             {otherBots.length > 0 && (

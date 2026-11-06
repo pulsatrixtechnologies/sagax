@@ -27,6 +27,8 @@
     "../companion",
     "../shared/profil-fiche.ts",
     "../shared/profil-fiche.test.ts",
+    "../shared/bot-analytics.ts",
+    "../shared/bot-analytics.test.ts",
     // pure IT tools model: typechecked under the server's no-DOM lib so it stays usable on both sides
     "../shared/net-tools"
   ],

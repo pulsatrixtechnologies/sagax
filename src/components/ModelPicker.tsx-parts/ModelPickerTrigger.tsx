@@ -64,6 +64,7 @@ export function ModelPickerTrigger({
   selectedVariantLabel,
   advanced,
   locked = false,
+  plain = false,
 }: {
   windowOnly: boolean;
   inComposer: boolean;
@@ -91,6 +92,9 @@ export function ModelPickerTrigger({
   advanced: boolean;
   /** True when the model must not change (busy with no reasoning row). */
   locked?: boolean;
+  /** The contained chip on a plain settings surface (the bot profile page):
+   * a filled pill, no outline. */
+  plain?: boolean;
 }) {
   // headless outside the composer (#2050, Settings > Models "Set model for
   // n bots"): no chip at all, the menu opens from `menuControl`.
@@ -160,7 +164,8 @@ export function ModelPickerTrigger({
     className={cn(
       // One line only: effort must never wrap under the chip (or under the
       // chat header's bot pill when this chip sat beside it).
-      "flex flex-nowrap items-center gap-1.5 whitespace-nowrap rounded-full border border-hairline/40 bg-control/60 py-1 pl-2 pr-2.5 text-[13px] text-ink hover:bg-raised-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-control/60",
+      "flex flex-nowrap items-center gap-1.5 whitespace-nowrap rounded-full py-1 pl-2 pr-2.5 text-[13px] text-ink disabled:cursor-not-allowed disabled:opacity-50",
+      plain ? "bg-control hover:bg-hover disabled:hover:bg-control" : "border border-hairline/40 bg-control/60 hover:bg-raised-hover disabled:hover:bg-control/60",
       // in a narrow chat header fold to a rounded square with just the
       // provider mark; the model name rides the tooltip (a bot with no
       // resolved engine keeps its label: the mark is what would hide it).

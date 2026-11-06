@@ -8,11 +8,14 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { HelpTip } from "../SettingsPrimitives";
+import { HelpTip, useSettingsSurface } from "../SettingsPrimitives";
 
 /** The card a section's controls sit in (a SettingsGroup's card, with
  * room for free-form controls rather than rows). */
 export const PANE_CARD = "rounded-xl border-[0.5px] border-border bg-elevated px-3.5 py-3";
+/** The same card on the plain surface (the bot's profile page, #2313):
+ * one filled rounded card, no border, as Channels and Bot accounts. */
+export const PLAIN_PANE_CARD = "rounded-2xl bg-card px-4 py-3";
 
 export function PaneSection({
   title,
@@ -34,6 +37,7 @@ export function PaneSection({
   className?: string;
 } & Record<`data-${string}`, string | undefined>) {
   const label = typeof title === "string" ? title : "";
+  const card = useSettingsSurface() === "plain" ? PLAIN_PANE_CARD : PANE_CARD;
   return (
     <section {...rest} data-pane-section="" className={cn("flex min-w-0 flex-col gap-2", className)}>
       {(title || action) && (
@@ -43,9 +47,20 @@ export function PaneSection({
           {action && <div className="ml-auto flex shrink-0 items-center gap-2">{action}</div>}
         </div>
       )}
-      {children && (plain ? <div className="flex min-w-0 flex-col gap-2">{children}</div> : <div className={PANE_CARD} data-settings-surface="">{children}</div>)}
+      {children && (plain ? <div className="flex min-w-0 flex-col gap-2">{children}</div> : <div className={card} data-settings-surface="">{children}</div>)}
     </section>
   );
+}
+
+/** How a full-width list sits in a section's card: its rows reach the
+ * card's edges and keep the card's side padding. The plain surface (the
+ * bot's profile page) draws the reference rows: a 14px title, a 12px
+ * subtitle and no rule between rows, as Channels and Bot accounts. */
+export function usePaneRows() {
+  const plain = useSettingsSurface() === "plain";
+  return plain
+    ? { plain, bleed: "-mx-4", list: "", row: "px-4", title: "text-[14px] leading-5", note: "text-[12px] leading-4" }
+    : { plain, bleed: "-mx-3.5", list: "divide-y divide-hairline/40", row: "px-3.5", title: "text-[13px]", note: "text-[11.5px]" };
 }
 
 /** A section's quiet one-line state ("No topic files yet."). */

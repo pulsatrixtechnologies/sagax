@@ -18,6 +18,7 @@ vi.mock("@/state/store", async (importOriginal) => {
 });
 
 const { CloudBackendPicker } = await import("./CloudBackendPicker");
+const { SettingsSurfaceProvider } = await import("./SettingsPrimitives");
 const picker = (value: "box" | "vps" = "box") => renderToStaticMarkup(createElement(CloudBackendPicker, { value, onChange: () => {} }));
 
 describe("CloudBackendPicker", () => {
@@ -39,5 +40,25 @@ describe("CloudBackendPicker", () => {
   it("leaves no message that tells someone to switch backends for an engine", () => {
     expect(Object.keys(en)).not.toContain("computer.err.vpsEngine");
     expect(Object.values(en).filter((value) => /switch the cloud backend to Boat/i.test(value))).toEqual([]);
+  });
+});
+
+// The bot's profile page (#2313): the card's grey label carries the heading,
+// the description is the subtitle and the choice is the page's segmented
+// control, with no box, border or primary pill.
+describe("CloudBackendPicker on the profile page (plain surface)", () => {
+  const plain = (value: "box" | "vps") => renderToStaticMarkup(createElement(SettingsSurfaceProvider, { surface: "plain", children: createElement(CloudBackendPicker, { value, onChange: () => {} }) }));
+
+  it.each(["box", "vps"] as const)("is a segmented control with both choices and the description (%s)", (value) => {
+    const markup = plain(value);
+    expect(markup).toMatch(/role="group" aria-label="Cloud backend"/);
+    expect(markup).toContain(">Boat<");
+    expect(markup).toContain(">Self-hosted VPS<");
+    expect(markup).toMatch(new RegExp(`aria-pressed="true"[^>]*>${value === "vps" ? "Self-hosted VPS" : "Boat"}<`));
+    expect(markup).toContain(value === "vps" ? en["botPanel.cloud.vpsLong"] : en["botPanel.cloud.boatLong"]);
+    expect(markup).not.toMatch(/\bborder(-\[|-border|-hairline|-accent)/);
+    expect(markup).not.toContain("bg-inset");
+    expect(markup).not.toContain("underline");
+    expect(markup).not.toContain("ui-button-primary");
   });
 });

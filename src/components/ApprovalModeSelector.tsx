@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { useMenuMotion } from "./MenuMotion";
 import { AnchoredPopover } from "./AnchoredPopover";
+import { useSettingsSurface } from "./SettingsPrimitives";
 import { t } from "@/lib/i18n";
 import { focusFirstMenuItem, moveMenuFocus } from "@/lib/menu-keys";
 import type { LocaleKey } from "@/locales";
@@ -134,6 +135,7 @@ export function ApprovalModeSelector({
 }) {
   const row = variant === "row" && !wide;
   const advanced = useAdvancedMode();
+  const plainSurface = useSettingsSurface() === "plain";
   const [open, setOpen] = useState(false);
   const motion = useMenuMotion(open);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -228,6 +230,42 @@ export function ApprovalModeSelector({
     { mode: "ask" as const, label: t("approvalMode.simple.ask"), hint: t("approvalMode.simple.askHint") },
     ...(canDecide ? [{ mode: "auto" as const, label: t("approvalMode.simple.decide"), hint: t("approvalMode.simple.decideHint") }] : []),
   ];
+  // The bot's profile page (#2313): the page's segmented control (the
+  // tabs' family), no outlined tiles; the picked choice's hint reads under
+  // it and every hint stays in its choice's tooltip.
+  if (!advanced && wide && plainSurface) {
+    const picked = choices.find((choice) => known && mode === choice.mode);
+    return (
+      <div data-approval-simple data-approval-mixed={mixed ? "" : undefined} className="flex w-full min-w-0 flex-col gap-1.5">
+        {workingNote}
+        <div role="group" aria-label={t("botPanel.permissions.approval")} className="flex w-fit max-w-full flex-wrap gap-0.5 rounded-2xl bg-control p-0.5">
+          {choices.map((choice) => {
+            const pressed = known && mode === choice.mode;
+            return (
+              <button
+                key={choice.mode}
+                type="button"
+                data-approval-choice={choice.mode}
+                aria-pressed={pressed}
+                disabled={disabled}
+                title={choice.hint}
+                onClick={() => { if (!disabled) onSelect(choice.mode); }}
+                className={cn(
+                  "rounded-full px-3 py-1 text-[13px] leading-[18px] transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+                  pressed ? "bg-hover text-ink" : "text-ink-secondary hover:text-ink",
+                )}
+              >
+                {choice.label}
+              </button>
+            );
+          })}
+        </div>
+        {picked && <p data-approval-choice-hint={picked.mode} className="text-[12px] leading-4 text-ink-secondary">{picked.hint}</p>}
+        {mixed && <p data-approval-mixed-note className="text-[12px] leading-4 text-ink-secondary">{t("bulkEdit.mixed")}</p>}
+        {!known && !mixed && <p data-approval-custom className="text-[12px] leading-4 text-ink-secondary">{t("approvalMode.simple.custom")}</p>}
+      </div>
+    );
+  }
   if (!advanced && wide) {
     const choiceClass = cn(
       "flex min-w-0 flex-1 flex-col rounded-lg border px-2.5 py-1.5 text-left",

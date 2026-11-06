@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { StoreProvider, type Bot } from "@/state/store";
 import { formFromVisibility, mixedRooms, visibilityFromForm, VisibilitySection } from "./VisibilitySection";
+import { SettingsSurfaceProvider } from "../SettingsPrimitives";
 
 const render = (target: Bot) => renderToStaticMarkup(createElement(StoreProvider, null, createElement(VisibilitySection, { bot: target })));
 
@@ -49,5 +50,28 @@ describe("bot visibility form", () => {
     const everyone = render(bot());
     expect(everyone).toMatch(/aria-label="Who can see it"[^>]*title="Everyone who can sign in"/);
     expect(everyone).not.toContain("<textarea");
+  });
+});
+
+// The bot's profile page (#2313): one plain card under the grey label
+// "Who can see it", the row titled "Visible to", the people list a filled
+// field and Save a plain pill inside the card.
+describe("bot visibility on the profile page (plain surface)", () => {
+  const renderPlain = (target: Bot) => renderToStaticMarkup(createElement(StoreProvider, null, createElement(SettingsSurfaceProvider, { surface: "plain", children: createElement(VisibilitySection, { bot: target }) })));
+  const withoutPopovers = (markup: string) => markup.replace(/<div[^>]*popover-surface[\s\S]*?<\/div>/g, "");
+
+  it("has the grey label, the row and the list, with no border, underline or primary pill", () => {
+    const markup = renderPlain(bot({ people: ["ada@example.test"] }));
+    expect(markup).toContain('data-settings-group="botVisibility"');
+    expect(markup).toContain(">Who can see it<");
+    expect(markup).toContain(">Visible to<");
+    expect(markup).toMatch(/aria-label="Who can see it"[^>]*title="Only these people"/);
+    expect(markup).toContain("ada@example.test</textarea>");
+    expect(markup).toContain(">Save<");
+    expect(markup).toContain("data-bot-visibility");
+    const bare = withoutPopovers(markup);
+    expect(bare).not.toMatch(/\bborder(-\[|-border|-hairline|-accent)/);
+    expect(bare).not.toContain("underline");
+    expect(bare).not.toContain("ui-button-primary");
   });
 });

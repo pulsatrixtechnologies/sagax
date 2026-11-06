@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { BotOverview } from "@/lib/bot-overview-types";
 import type { PromptPreviewData } from "./PromptPreview";
 import { OverviewSection } from "./OverviewSection";
+import { PromptPreview } from "./PromptPreview";
+import { SettingsSurfaceProvider } from "../SettingsPrimitives";
 
 // renderToStaticMarkup HTML-escapes apostrophes as &#x27; — decode before
 // comparing against plain-text fixtures that use a straight quote.
@@ -113,5 +115,73 @@ describe("OverviewSection", () => {
     );
 
     expect(markup).not.toContain("Couldn’t refresh");
+  });
+
+  it("no longer lists the recent changes (the History tab holds them)", () => {
+    const markup = render(createElement(OverviewSection, { overview: sentences, prompt, onOpen: vi.fn() }));
+    expect(markup).not.toContain("Recent changes");
+    expect(markup).not.toContain("Title changed");
+    expect(markup).not.toContain("overviewRecent");
+  });
+});
+
+// The bot profile page draws "What it does" with the profile's card look.
+const BORDER = /\bborder(-\[|-border|-hairline|-accent)/;
+function plain(element: Parameters<typeof renderToStaticMarkup>[0]): string {
+  return render(createElement(SettingsSurfaceProvider, { surface: "plain", children: element }));
+}
+
+describe("OverviewSection on the bot profile (plain surface)", () => {
+  it("puts who the bot is, Read all and the prompt preview in one card labelled What it does", () => {
+    const markup = plain(createElement(OverviewSection, { overview: sentences, prompt, onOpen: vi.fn() }));
+    expect(markup).toContain('data-settings-group="overviewSummary"');
+    expect(markup).toContain(">What it does</h3>");
+    expect(markup).toContain(sentences.who.blurb);
+    expect(markup).toContain(sentences.who.soulLead);
+    expect(markup).toContain('data-link-row="readSoul"');
+    expect(markup).toContain("Read all");
+    expect(markup).toContain("Prompt preview");
+    expect(markup).toContain("42 bytes ≈ 11 tokens");
+    expect(markup).toContain('data-prompt-preview="closed"');
+  });
+
+  it("keeps Does, Can reach and Won't as labelled cards, one sentence per row", () => {
+    const markup = plain(createElement(OverviewSection, { overview: sentences, prompt, onOpen: vi.fn() }));
+    for (const label of [">Does</h3>", ">Can reach</h3>", ">Won't</h3>"]) {
+      expect(markup).toContain(label);
+    }
+    for (const line of [...sentences.does, ...sentences.reaches, ...sentences.wont]) expect(markup).toContain(line);
+  });
+
+  it("draws no border, no underline, no primary button and no recent changes", () => {
+    const markup = plain(createElement(OverviewSection, { overview: sentences, refreshError: true, prompt, onOpen: vi.fn() }));
+    expect(markup).not.toMatch(BORDER);
+    expect(markup).not.toContain("underline");
+    expect(markup).not.toContain("ui-button-primary");
+    expect(markup).not.toContain("font-medium");
+    expect(markup).not.toContain("Recent changes");
+    expect(markup).not.toContain("Title changed");
+    expect(markup).toContain("Couldn’t refresh. Showing the last loaded overview.");
+  });
+
+  it("shows Loading… inside the labelled card before the overview arrives", () => {
+    const markup = plain(createElement(OverviewSection, { overview: null, prompt: null, onOpen: vi.fn() }));
+    expect(markup).toContain(">What it does</h3>");
+    expect(markup).toContain("Loading…");
+  });
+
+  it("unfolds the prompt as rows whose text sits in a filled box without outline", () => {
+    const markup = plain(createElement(PromptPreview, { data: prompt, open: true, onToggle: vi.fn() }));
+    expect(markup).toContain('data-prompt-preview="open"');
+    expect(markup).toContain("Identity");
+    expect(markup).toContain("42 bytes");
+    expect(markup).toContain("rounded-lg bg-inset");
+    expect(markup).toContain("Approximate.");
+    expect(markup).not.toMatch(BORDER);
+    expect(markup).not.toContain("font-medium");
+    const closed = plain(createElement(PromptPreview, { data: prompt, open: false, onToggle: vi.fn() }));
+    expect(closed).not.toContain("Identity");
+    const failed = plain(createElement(PromptPreview, { data: null, error: true, open: true, onToggle: vi.fn() }));
+    expect(failed).toContain("Couldn’t load the prompt preview.");
   });
 });

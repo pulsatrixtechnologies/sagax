@@ -1,7 +1,8 @@
 // Bot > Model (#2050, #2080): three cards. "Model": where the bot runs
 // (BotHostSettings, read-only when the organization decides), the model
-// chip ("Model · Effort", the effort is picked in its menu) and, in grey
-// under it, who pays for replies. "If it fails": one switch and the
+// chip ("Model · Effort", the effort is picked in its menu). Who pays for
+// replies lives once, in General > "Who pays for replies" (BotPayerCard).
+// "If it fails": one switch and the
 // effective backups (effectiveBackups, the same answer as Settings >
 // Models): the bot's ordered list (bot.fallback, up to 5, which keeps the
 // single backup of automaticRecovery in step as its first entry), else
@@ -9,9 +10,10 @@
 // "Customize" copies the chain into the bot without changing it.
 // "Advanced", a closed fold: the prompt cache.
 import { ModelPicker } from "../ModelPicker";
-import { ChevronDown, ChevronUp, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Sparkles, X } from "lucide-react";
 import { canEditBotField } from "@/lib/bot-capabilities";
-import { CompactRow, DescribedRow, FoldRow, HelpTip, PILL, PillSelect, SettingsGroup, Switch } from "../SettingsPrimitives";
+import { CompactRow, DescribedRow, FoldRow, HelpTip, PILL, PillSelect, SettingsGroup, Switch, useSettingsSurface } from "../SettingsPrimitives";
+import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { engineLabel } from "@/lib/human-label";
 import { fallbackWithModel } from "../../../shared/handoff-model";
@@ -24,7 +26,6 @@ import { botWithViewerSettings, useViewerBotOverride, viewerLocalBotSettings } f
 import { useBotEditor } from "./BotEditorContext";
 import { botRecovery, effectiveBackups, type BotRecovery } from "@/lib/bot-runtime-settings";
 import { useBotRuntimeSettings } from "./useBotRuntimeSettings";
-import { BotPayerLine, canChooseBotPayer } from "./BotPayerSettings";
 import { BotHostSettings } from "./BotHostSettings";
 
 type Backup = NonNullable<Bot["fallback"]>[number];
@@ -46,10 +47,8 @@ export function ModelSection({ bot }: { bot: Bot }) {
   // automaticRecovery, the ordered list with fallback (shared/permissions.ts)
   const canSwitch = !draft && canEditBotField(state.config, bot, "automaticRecovery");
   const canOrder = !draft && canEditBotField(state.config, bot, "fallback");
-  // #1137: who pays for this bot's replies (organization server only), the
-  // owner's or an admin's choice: never tied to the automaticRecovery right
-  const payer = !draft && canChooseBotPayer(state.config, bot);
   const keepWarm = !draft && Boolean(state.config?.cacheKeepWarm);
+  const plain = useSettingsSurface() === "plain";
   return (
     <div className="flex flex-col gap-5">
       <SettingsGroup title={t("botSettings.nav.model")} groupId="botModel">
@@ -60,17 +59,19 @@ export function ModelSection({ bot }: { bot: Bot }) {
             contained
             viewerLocal={viewerLocal}
             label={
-              <div>
-                <div className="text-[13px] leading-[18px] text-ink">{t("botPanel.model.default")}</div>
-                {(viewerLocal || (draft && !bulk)) && <div className="mt-0.5 text-[12px] leading-4 text-ink-secondary">
-                  {viewerLocal ? t("botPanel.model.forYou") : t("botPanel.model.starting")}
-                </div>}
+              <div className={cn(plain && "flex items-start gap-2")}>
+                {plain && <Sparkles aria-hidden="true" className="mt-px size-5 shrink-0 text-ink-secondary" />}
+                <div className="min-w-0">
+                  <div className="text-[13px] leading-[18px] text-ink">{t("botPanel.model.default")}</div>
+                  {(viewerLocal || (draft && !bulk)) && <div className="mt-0.5 text-[12px] leading-4 text-ink-secondary">
+                    {viewerLocal ? t("botPanel.model.forYou") : t("botPanel.model.starting")}
+                  </div>}
+                </div>
               </div>
             }
           />
           {!draft && turn.busy && <ModelLockLine bot={bot} lock={turn} />}
         </div>}
-        {payer && <BotPayerLine key={`payer:${bot.id}`} bot={bot} />}
       </SettingsGroup>
       {!machine && (canSwitch || canOrder) && <IfItFailsCard key={`recovery:${bot.id}`} bot={bot} canSwitch={canSwitch} canOrder={canOrder} />}
       {keepWarm && (
@@ -133,6 +134,7 @@ export function modelTurnLock(bot: Bot): ModelTurnLock {
  * conversation, where the card waits (or the turn can be stopped). */
 function ModelLockLine({ bot, lock }: { bot: Bot; lock: ModelTurnLock }) {
   const { dispatch } = useStore();
+  const plain = useSettingsSurface() === "plain";
   const open = () => {
     dispatch({ type: "toggleSettings", open: false });
     dispatch({ type: "select", id: bot.id });
@@ -141,9 +143,9 @@ function ModelLockLine({ bot, lock }: { bot: Bot; lock: ModelTurnLock }) {
     : lock.reason === "approval" ? t("botPanel.model.lockedApproval")
       : t("botPanel.model.lockedWorking");
   return (
-    <p data-model-lock={lock.reason} role="status" className="mt-2 text-[12px] leading-4 text-ink-secondary">
+    <p data-model-lock={lock.reason} role="status" className={cn("mt-2 text-[12px] leading-4 text-ink-secondary", plain && "flex flex-wrap items-center gap-x-2 gap-y-1")}>
       {line}{" "}
-      <button type="button" onClick={open} className="underline underline-offset-2 hover:text-ink">
+      <button type="button" onClick={open} className={plain ? PILL : "underline underline-offset-2 hover:text-ink"}>
         {t("botPanel.model.lockedOpen")}
       </button>
     </p>

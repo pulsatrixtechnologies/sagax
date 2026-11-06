@@ -10,7 +10,7 @@ import {
 } from "@/lib/workspace-files";
 import type { LocaleKey } from "@/locales";
 import { cn } from "@/lib/cn";
-import { PILL } from "../../SettingsPrimitives";
+import { PILL, useSettingsSurface } from "../../SettingsPrimitives";
 
 export const buttonCls = PILL;
 export const iconButtonCls = "rounded-md p-1 text-ink-secondary hover:bg-control hover:text-ink disabled:opacity-50";
@@ -32,6 +32,12 @@ export const LOAD_TONE: Record<WorkspaceLoad, string> = {
   "on-demand": "bg-raised text-ink-secondary",
   never: "bg-transparent text-ink-tertiary border border-hairline/40",
 };
+/** The same badges on the bot's profile page (#2313): filled, never outlined. */
+export const LOAD_TONE_PLAIN: Record<WorkspaceLoad, string> = {
+  "every-turn": "bg-accent/15 text-ink",
+  "on-demand": "bg-control text-ink-secondary",
+  never: "bg-control text-ink-tertiary",
+};
 
 export interface Open {
   path: string;
@@ -51,11 +57,12 @@ export interface UploadState {
 export const errorText = (reason: unknown) => readableError(reason);
 
 export function LoadBadge({ load, detailed }: { load: WorkspaceLoad; detailed: boolean }) {
+  const tone = useSettingsSurface() === "plain" ? LOAD_TONE_PLAIN : LOAD_TONE;
   return (
     <span
       data-load-badge={load}
       title={detailed ? t(LOAD_DETAIL[load]) : undefined}
-      className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px] leading-4", LOAD_TONE[load])}
+      className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px] leading-4", tone[load])}
     >
       {t(LOAD_LABEL[load])}
     </span>

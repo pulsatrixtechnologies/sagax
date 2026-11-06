@@ -11,8 +11,9 @@ import { t, activeLocale } from "@/lib/i18n";
 import { botToolGrantsPath } from "@/lib/bot-runtime-settings";
 import { botGrantRequest, grantTier, sortGrants, type GrantDraft, type ToolGrantRow } from "@/lib/tool-grants";
 import { api, type Bot } from "@/state/store";
-import { PaneSection } from "./PaneSection";
-import { PILL, PillSelect } from "../SettingsPrimitives";
+import { cn } from "@/lib/cn";
+import { PaneSection, usePaneRows } from "./PaneSection";
+import { PILL, PLAIN_FIELD, PillSelect, useSettingsSurface } from "../SettingsPrimitives";
 
 const STATE_KEY = {
   active: "settings.toolAccess.state.active",
@@ -26,6 +27,7 @@ export function BotToolAccess({ bot }: { bot: Bot }) {
   const [adminOnlyAreas, setAdminOnlyAreas] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const paneRows = usePaneRows();
 
   const load = useCallback(async () => {
     try {
@@ -63,11 +65,11 @@ export function BotToolAccess({ bot }: { bot: Bot }) {
               {adminOnlyAreas.length > 0 && <p className="text-[12px] text-ink-secondary" data-tool-access-org-areas="">{t("botPanel.toolAccess.orgAreas", { areas: adminOnlyAreas.join(", ") })}</p>}
               {error && <p className="text-[13px] text-danger">{error}</p>}
               {!rows.length ? <p className="text-[13px] text-ink-secondary">{t("botPanel.toolAccess.empty")}</p> : (
-                <ul className="-mx-3.5 flex flex-col divide-y divide-hairline/40 border-t border-hairline/40" aria-label={t("settings.toolAccess.title")}>
+                <ul className={paneRows.plain ? "-mx-4 flex flex-col" : "-mx-3.5 flex flex-col divide-y divide-hairline/40 border-t border-hairline/40"} aria-label={t("settings.toolAccess.title")}>
                   {rows.map((row) => (
-                    <li key={row.id} className="flex items-center justify-between gap-3 px-3.5 py-2">
+                    <li key={row.id} className={cn("flex items-center justify-between gap-3 py-2", paneRows.plain && "min-h-[56px]", paneRows.row)}>
                       <div className="min-w-0">
-                        <div className="text-[13px] font-medium text-ink"><code>{row.scope}</code></div>
+                        <div className={paneRows.plain ? "text-[14px] leading-5 text-ink" : "text-[13px] font-medium text-ink"}><code>{row.scope}</code></div>
                         <div className="text-[12px] text-ink-secondary">
                           {t(STATE_KEY[row.state])}
                           {row.expiresAt && row.state === "active" ? ` · ${t("settings.toolAccess.expires", { date: new Date(row.expiresAt).toLocaleDateString(activeLocale()) })}` : ""}
@@ -111,11 +113,13 @@ function GrantForm({ botId, mayGrantAdmin, onGranted }: { botId: string; mayGran
       setSaving(false);
     }
   };
-  const field = "h-7 rounded-lg border-[0.5px] border-border bg-inset px-2 text-[13px] text-ink focus:border-focus focus:outline-none";
+  // the bot's profile page (#2313): filled fields, no outline
+  const plain = useSettingsSurface() === "plain";
+  const field = plain ? cn(PLAIN_FIELD, "h-7 min-h-0 px-2 py-0") : "h-7 rounded-lg border-[0.5px] border-border bg-inset px-2 text-[13px] text-ink focus:border-focus focus:outline-none";
   return (
     <form className="flex flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); void submit(); }} aria-label={t("settings.toolAccess.form.title")}>
       <label className="flex flex-col gap-1 text-[12px] text-ink-secondary">{t("settings.toolAccess.form.area")}
-        <input className={`${field} w-[110px]`} value={draft.area} onChange={(e) => set({ area: e.target.value })} />
+        <input className={cn(field, "w-[110px]")} value={draft.area} onChange={(e) => set({ area: e.target.value })} />
       </label>
       <label className="flex flex-col gap-1 text-[12px] text-ink-secondary">{t("settings.toolAccess.form.tier")}
         <PillSelect<GrantDraft["tier"]>
@@ -130,7 +134,7 @@ function GrantForm({ botId, mayGrantAdmin, onGranted }: { botId: string; mayGran
         />
       </label>
       <label className="flex flex-col gap-1 text-[12px] text-ink-secondary">{t("settings.toolAccess.form.days")}
-        <input className={`${field} w-[70px]`} inputMode="numeric" value={draft.days} onChange={(e) => set({ days: e.target.value })} />
+        <input className={cn(field, "w-[70px]")} inputMode="numeric" value={draft.days} onChange={(e) => set({ days: e.target.value })} />
       </label>
       <button type="submit" disabled={saving} className={PILL}>{t("settings.toolAccess.form.grant")}</button>
       {draft.tier === "admin" && <p className="w-full text-[12px] text-danger">{t("settings.toolAccess.adminWarning")}</p>}

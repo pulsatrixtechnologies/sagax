@@ -7,7 +7,7 @@
 // (server/bots/bot-visibility.ts). No confirmation step: it is a setting.
 import { useEffect, useState } from "react";
 import { Check, Loader2 } from "lucide-react";
-import { DescribedRow, GROUP_CARD, PILL, PillSelect, PRIMARY_PILL } from "../SettingsPrimitives";
+import { DescribedRow, GROUP_CARD, PILL, PillSelect, PLAIN_FIELD, PRIMARY_PILL, SettingsGroup, useSettingsSurface } from "../SettingsPrimitives";
 
 import { api, useStore, type Bot } from "@/state/store";
 import { cn } from "@/lib/cn";
@@ -71,6 +71,7 @@ export function VisibilitySection({ bot }: { bot: Bot }) {
   const [status, setStatus] = useState<"saved" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const dirty = mode !== saved.mode || (mode === "people" && people.trim() !== saved.people.trim());
+  const plain = useSettingsSurface() === "plain";
 
   // The stored value changed (another admin, or this save echoed back by the
   // live stream): the form follows it.
@@ -113,6 +114,87 @@ export function VisibilitySection({ bot }: { bot: Bot }) {
     }
   };
 
+  const peopleField = (
+    <label className={plain ? "mt-2.5 flex flex-col gap-1.5 text-[12px] leading-4 text-ink-secondary" : "mt-2.5 flex flex-col gap-1.5 text-[12px] text-ink-secondary"}>
+      {t("botSettings.visibility.peopleLabel")}
+      <textarea
+        value={people}
+        onChange={(e) => { setPeople(e.target.value); setStatus(null); }}
+        placeholder={t("botSettings.visibility.peoplePlaceholder")}
+        rows={4}
+        disabled={busy}
+        className={plain ? cn(PLAIN_FIELD, "font-mono") : "rounded-lg border-[0.5px] border-border bg-inset px-3 py-2 font-mono text-[12.5px] text-ink placeholder:text-ink-secondary focus:border-focus focus:outline-none"}
+      />
+    </label>
+  );
+  const audience = (
+    <PillSelect
+      value={mode}
+      ariaLabel={t("botSettings.visibility.title")}
+      disabled={busy}
+      onChange={(next) => { setMode(next); setStatus(null); setError(null); }}
+      options={OPTIONS.map((option) => ({ value: option.mode, label: t(option.key) }))}
+    />
+  );
+  const roomButtons = mixed.map((room) => (
+    <button
+      key={room.id}
+      type="button"
+      disabled={busy}
+      onClick={() => void resetRoom(room.id)}
+      className={PILL}
+    >
+      {t("botSettings.visibility.resetRoom", { room: JSON.stringify(room.name) })}
+    </button>
+  ));
+  const saveButton = (
+    <button
+      type="button"
+      onClick={() => void save()}
+      disabled={busy || !dirty}
+      className={cn(plain ? PILL : PRIMARY_PILL, "gap-1.5", "disabled:opacity-50")}
+    >
+      {busy && <Loader2 size={13} className="animate-spin" />}
+      {busy ? t("botSettings.visibility.saving") : t("botSettings.visibility.save")}
+    </button>
+  );
+  const savedNote = status === "saved" && !dirty && (
+    <span role="status" className="flex items-center gap-1 text-[12px] text-success"><Check size={13} />{t("botSettings.visibility.saved")}</span>
+  );
+
+  // The bot's profile page (#2313): the reference look. The grey label is
+  // the rail's ("Who can see it"); one plain card holds the audience row,
+  // the people field, the rooms note as a subtitle with its pills, and
+  // Save as a plain pill at the card's foot.
+  if (plain) {
+    return (
+      <div data-bot-visibility>
+        <SettingsGroup title={t("botSettings.visibility.title")} groupId="botVisibility">
+          <DescribedRow
+            label={t("botSettings.visibility.audience")}
+            description={t("botSettings.visibility.subtitle")}
+            help={t("botSettings.visibility.rooms")}
+            rowId="visibility"
+            below={mode === "people" && peopleField}
+          >
+            {audience}
+          </DescribedRow>
+          {mixed.length > 0 && (
+            <div className="flex flex-col gap-2 px-4 py-2.5 text-[12px] leading-4 text-ink-secondary" data-visibility-mixed-rooms>
+              <p>{t("botSettings.visibility.mixedRooms", { rooms: mixed.map((room) => JSON.stringify(room.name)).join(", ") })}</p>
+              <div className="flex flex-wrap gap-2">{roomButtons}</div>
+            </div>
+          )}
+          <div className="flex items-center justify-end gap-3 px-4 py-2">
+            {savedNote}
+            {saveButton}
+          </div>
+          {error && <p role="alert" className="px-4 pb-2 text-[12px] text-danger">{error}</p>}
+        </SettingsGroup>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-3" data-bot-visibility>
       {/* 2026-10-16: drawn like Settings: one card row with the
@@ -123,60 +205,20 @@ export function VisibilitySection({ bot }: { bot: Bot }) {
           description={t("botSettings.visibility.subtitle")}
           help={t("botSettings.visibility.rooms")}
           rowId="visibility"
-          below={mode === "people" && (
-            <label className="mt-2.5 flex flex-col gap-1.5 text-[12px] text-ink-secondary">
-              {t("botSettings.visibility.peopleLabel")}
-              <textarea
-                value={people}
-                onChange={(e) => { setPeople(e.target.value); setStatus(null); }}
-                placeholder={t("botSettings.visibility.peoplePlaceholder")}
-                rows={4}
-                disabled={busy}
-                className="rounded-lg border-[0.5px] border-border bg-inset px-3 py-2 font-mono text-[12.5px] text-ink placeholder:text-ink-secondary focus:border-focus focus:outline-none"
-              />
-            </label>
-          )}
+          below={mode === "people" && peopleField}
         >
-          <PillSelect
-            value={mode}
-            ariaLabel={t("botSettings.visibility.title")}
-            disabled={busy}
-            onChange={(next) => { setMode(next); setStatus(null); setError(null); }}
-            options={OPTIONS.map((option) => ({ value: option.mode, label: t(option.key) }))}
-          />
+          {audience}
         </DescribedRow>
       </div>
       {mixed.length > 0 && (
         <div className="flex flex-col gap-2 rounded-lg border border-accent/25 bg-accent/10 px-3 py-2 text-[12px] leading-relaxed text-ink-secondary" data-visibility-mixed-rooms>
           <p>{t("botSettings.visibility.mixedRooms", { rooms: mixed.map((room) => JSON.stringify(room.name)).join(", ") })}</p>
-          <div className="flex flex-wrap gap-2">
-            {mixed.map((room) => (
-              <button
-                key={room.id}
-                type="button"
-                disabled={busy}
-                onClick={() => void resetRoom(room.id)}
-                className={PILL}
-              >
-                {t("botSettings.visibility.resetRoom", { room: JSON.stringify(room.name) })}
-              </button>
-            ))}
-          </div>
+          <div className="flex flex-wrap gap-2">{roomButtons}</div>
         </div>
       )}
       <div className="flex items-center justify-end gap-3">
-        <button
-          type="button"
-          onClick={() => void save()}
-          disabled={busy || !dirty}
-          className={cn(PRIMARY_PILL, "gap-1.5", "disabled:opacity-50")}
-        >
-          {busy && <Loader2 size={13} className="animate-spin" />}
-          {busy ? t("botSettings.visibility.saving") : t("botSettings.visibility.save")}
-        </button>
-        {status === "saved" && !dirty && (
-          <span role="status" className="flex items-center gap-1 text-[12px] text-success"><Check size={13} />{t("botSettings.visibility.saved")}</span>
-        )}
+        {saveButton}
+        {savedNote}
       </div>
       {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
     </div>

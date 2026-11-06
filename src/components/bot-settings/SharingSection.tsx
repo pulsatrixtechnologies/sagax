@@ -7,7 +7,7 @@
 // grants (the owner, manage holders, organization admins, team managers
 // for their teams), from GET /api/bots/:id/grants.
 import { cn } from "@/lib/cn";
-import { GROUP_CARD } from "../SettingsPrimitives";
+import { GROUP_CARD, PLAIN_CARD, useSettingsSurface } from "../SettingsPrimitives";
 import { useEffect, useMemo, useState } from "react";
 
 import { api, useStore, type Bot } from "@/state/store";
@@ -38,7 +38,12 @@ export function initialGrantRows(bot: Pick<Bot, "grants" | "directGrants" | "own
   });
 }
 
-export function SharingSection({ bot }: { bot: Bot }) {
+/** What the bot's sharing editors start from: the organization directory
+ * (loaded once per bot), the bot's grants as rows, whether the viewer owns
+ * the bot and may share it, and the owner's own rights until the server
+ * answers GET /api/bots/:id/grants. The Sharing section and the profile
+ * page's Share popover (bot-profile/ShareBotButton.tsx) both use it. */
+export function useBotSharing(bot: Bot) {
   const { state } = useStore();
   const viewerId = state.config?.viewer?.principalId ?? null;
   const isOwner = Boolean(viewerId && bot.ownerUserId && viewerId.toLowerCase() === bot.ownerUserId.toLowerCase());
@@ -56,20 +61,30 @@ export function SharingSection({ bot }: { bot: Bot }) {
   // 2026-10-09: an owner whose profile lacks sharing.grants sees the
   // grants without the editor's controls, and why.
   const mayShare = viewerCan(state.config, "sharing.grants");
-  const ownerAdminister: GrantAdministration | null = isOwner && mayShare ? { any: true, teamIds: [], maxLevel: "manage", canAdd: true } : null;
+  const administer = useMemo<GrantAdministration | null>(
+    () => (isOwner && mayShare ? { any: true, teamIds: [], maxLevel: "manage", canAdd: true } : null),
+    [isOwner, mayShare],
+  );
+  return { directory, rows, administer, isOwner, mayShare };
+}
+
+export function SharingSection({ bot }: { bot: Bot }) {
+  const { directory, rows, administer, isOwner, mayShare } = useBotSharing(bot);
+  // the profile page's one filled card, no outline
+  const plain = useSettingsSurface() === "plain";
 
   return (
     <div className="flex flex-col gap-3" data-bot-sharing>
       <p className="text-[12.5px] leading-relaxed text-ink-secondary">{t("botSettings.sharing.notice")}</p>
       {isOwner && !mayShare && <p role="note" data-sharing-permission className="text-[12.5px] leading-relaxed text-ink-secondary">{permissionMissingText("sharing.grants")}</p>}
       {/* Settings' card (2026-10-16) */}
-      <div className={cn(GROUP_CARD, "px-3.5 py-2.5")}>
+      <div className={plain ? cn(PLAIN_CARD, "px-4 py-2.5") : cn(GROUP_CARD, "px-3.5 py-2.5")}>
         <GrantEditor
           key={`${bot.id}:${directory ? "directory" : "loading"}`}
           botId={bot.id}
           ownerId={bot.ownerUserId}
           initialGrants={rows}
-          initialAdminister={ownerAdminister}
+          initialAdminister={administer}
           directory={directory}
         />
       </div>

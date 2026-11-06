@@ -17,7 +17,7 @@
 // A rule may be saved for a chosen set of the person's bots (one rule per
 // bot), and an edit shows what changes in its words.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -27,7 +27,7 @@ import { api, ApiError, useStore, type Bot } from "@/state/store";
 import { compileRule, impliedRiskScope, RISK_CLASSES, TURN_STARTS, type CompiledRule, type CustomRule, type CustomRuleBehavior, type RiskClass, type RuleProduct, type TurnStart } from "../../../shared/custom-rules";
 import { OrgRuleBadge, RISK_LABEL, RuleTextDiff, riskList } from "../CustomRuleNotice";
 import { PaneEmpty, PaneSection } from "./PaneSection";
-import { PillSelect } from "../SettingsPrimitives";
+import { PILL, PillSelect, PLAIN_CARD, PLAIN_FIELD, useSettingsSurface } from "../SettingsPrimitives";
 import { RuleTestButton } from "../approvals/RuleTest";
 import { readableError } from "@/lib/plain-error";
 
@@ -125,6 +125,9 @@ export function CustomRuleForm({ botName, initial, risks, saveLabel, onCancel, o
    * its place (its exact command binding included). */
   ruleId?: string;
 }) {
+  // the bot's profile page (#2313): no box of its own inside the card, a
+  // plain field, pill buttons
+  const plain = useSettingsSurface() === "plain";
   const [when, setWhen] = useState(initial.when);
   const [behavior, setBehavior] = useState<CustomRuleBehavior>(allowOff && initial.behavior === "allow" ? "ask" : initial.behavior);
   const [allBots, setAllBots] = useState(initial.allBots);
@@ -163,7 +166,7 @@ export function CustomRuleForm({ botName, initial, risks, saveLabel, onCancel, o
     : RISK_CLASSES;
   return (
     <form
-      className="flex flex-col gap-2 rounded-lg bg-inset px-3 py-2.5"
+      className={plain ? "flex flex-col gap-2" : "flex flex-col gap-2 rounded-lg bg-inset px-3 py-2.5"}
       data-custom-rule-form
       onSubmit={(event) => {
         event.preventDefault();
@@ -180,7 +183,7 @@ export function CustomRuleForm({ botName, initial, risks, saveLabel, onCancel, o
           autoFocus
           placeholder={t("customRules.form.placeholder")}
           onChange={(event) => setWhen(event.target.value)}
-          className="rounded-md bg-raised px-2 py-1.5 text-[13px] text-ink outline-none focus:ring-1 focus:ring-accent"
+          className={plain ? PLAIN_FIELD : "rounded-md bg-raised px-2 py-1.5 text-[13px] text-ink outline-none focus:ring-1 focus:ring-accent"}
         />
       </label>
       {initial.when && <RuleTextDiff before={initial.when} after={when} />}
@@ -262,6 +265,7 @@ export function CustomRuleForm({ botName, initial, risks, saveLabel, onCancel, o
       )}
       {/* 2026-10-26: replay the rule on the last 7 days before saving it */}
       <RuleTestButton
+        plain={plain}
         disabled={!when.trim() || !recognized}
         draft={() => (when.trim() ? {
           ...(ruleId ? { id: ruleId } : {}),
@@ -271,13 +275,13 @@ export function CustomRuleForm({ botName, initial, risks, saveLabel, onCancel, o
         } : null)}
       />
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onCancel} className="rounded-full px-3 py-1 text-[13px] text-ink-secondary hover:bg-control">
+        <button type="button" onClick={onCancel} className={plain ? PILL : "rounded-full px-3 py-1 text-[13px] text-ink-secondary hover:bg-control"}>
           {t("customRules.form.cancel")}
         </button>
         <button
           type="submit"
           disabled={!when.trim() || busy || blocked}
-          className="rounded-full bg-accent px-3 py-1 text-[13px] font-medium text-accent-ink hover:brightness-110 disabled:opacity-40"
+          className={plain ? PILL : "rounded-full bg-accent px-3 py-1 text-[13px] font-medium text-accent-ink hover:brightness-110 disabled:opacity-40"}
         >
           {saveLabel ?? t("customRules.form.save")}
         </button>
@@ -287,6 +291,7 @@ export function CustomRuleForm({ botName, initial, risks, saveLabel, onCancel, o
 }
 
 export function CustomRulesCard({ bot }: { bot: Pick<Bot, "id" | "name"> & Partial<Pick<Bot, "approvalMode" | "ownerUserId">> }) {
+  const plain = useSettingsSurface() === "plain";
   const { state } = useStore();
   const [rules, setRules] = useState<CustomRuleRow[] | null>(null);
   const [alwaysAllow, setAlwaysAllow] = useState(true);
@@ -350,115 +355,157 @@ export function CustomRulesCard({ bot }: { bot: Pick<Bot, "id" | "name"> & Parti
   if (rules === null) return null;
   const hasAllow = rules.some((rule) => !rule.org && rule.behavior === "allow" && rule.enabled);
 
+  // the bot's profile page (#2313): one card under the grey label, the notes
+  // and the rules its rows, Add a pill at the label's right
+  const note = plain ? "px-4 py-2.5 text-[12.5px] leading-[18px] text-ink-secondary" : "mb-2 rounded-lg bg-inset px-3 py-2 text-[12.5px] text-ink-secondary";
+  const ruleText = plain ? "break-words text-[14px] leading-5 text-ink" : "break-words text-[13px] text-ink";
+  const ruleMeta = plain ? "mt-0.5 flex flex-wrap gap-1.5 text-[12px] leading-4" : "mt-0.5 flex flex-wrap gap-1.5 text-[11.5px]";
+  const behaviorText = plain ? "whitespace-nowrap text-[13px]" : "whitespace-nowrap text-[12.5px]";
+  const iconButton = plain ? "rounded-full p-1.5 text-ink-secondary hover:bg-hover hover:text-ink" : "rounded-md p-1 text-ink-secondary hover:bg-control hover:text-ink";
+
+  const notes = (
+    <>
+      {!alwaysAllow && <p role="note" className={note} data-org-always-allow-off="">{t("customRules.org.alwaysAllowOff")}</p>}
+      {alwaysAllow && hasAllow && bot.approvalMode === "full" && <p role="note" className={note} data-custom-rules-level="full">{t("customRules.levelFull")}</p>}
+      <p className={plain ? "px-4 py-2.5 text-[12px] leading-4 text-ink-secondary" : "mb-2 text-[12px] text-ink-tertiary"} data-custom-rules-reviewer="">{t("customRules.reviewerHelp")}</p>
+    </>
+  );
+  const empty = rules.length === 0 && editing !== "new" && (plain
+    ? <p className="px-4 py-2.5 text-[13px] text-ink-secondary">{t("customRules.empty")}</p>
+    : <PaneEmpty>{t("customRules.empty")}</PaneEmpty>);
+  const head = (
+    <div className={plain ? "grid grid-cols-[minmax(0,1fr)_auto_auto] gap-3 px-4 pb-1 pt-2 text-[12px] leading-4 text-ink-secondary" : "grid grid-cols-[minmax(0,1fr)_auto_auto] gap-3 border-b border-hairline/40 bg-inset px-3 py-1.5 text-[12px] font-medium text-ink-secondary"}>
+      <span>{t("customRules.form.when", { name: bot.name })}</span>
+      <span>{t("customRules.form.should")}</span>
+      <span className="sr-only">{t("customRules.edit")}</span>
+    </div>
+  );
+  const rows = rules.map((rule) => (
+    <div key={rule.id} className={plain ? "px-4 py-2.5" : "px-3 py-2"} data-custom-rule-row={rule.behavior} {...(rule.org ? { "data-org-rule-row": "" } : {})}>
+      {rule.org ? (
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3" title={t("customRules.org.locked")}>
+          <div className="min-w-0">
+            <span className={ruleText}>{rule.when}</span>
+            <div className={ruleMeta}>
+              <OrgRuleBadge />
+              {rule.compiled && !rule.compiled.recognized && <span className="text-ink-secondary" data-custom-rule-model="">{t("customRules.unrecognizedShort")}</span>}
+            </div>
+          </div>
+          <span className={cn(behaviorText, rule.behavior === "deny" ? "text-danger" : "text-ink-secondary")}>
+            {t(CUSTOM_BEHAVIOR_LABEL[rule.behavior])}
+          </span>
+        </div>
+      ) : editing === rule.id ? (
+        <CustomRuleForm
+          botName={bot.name}
+          initial={{ when: rule.when, behavior: rule.behavior, allBots: rule.botId === null, riskScope: rule.riskScope, startedBy: rule.startedBy ?? null }}
+          allowOff={!alwaysAllow}
+          ruleId={rule.id}
+          botId={bot.id}
+          products={products}
+          onCancel={() => setEditing(null)}
+          onSave={(draft) => update(rule, { when: draft.when, behavior: draft.behavior, botId: draft.allBots ? null : bot.id, riskScope: draft.riskScope, startedBy: draft.startedBy ?? null })}
+        />
+      ) : (
+        <div className={cn("grid grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-3", (!rule.enabled || (!alwaysAllow && rule.behavior === "allow")) && "opacity-60")}>
+          <div className="min-w-0">
+            <span className={ruleText}>{rule.when}</span>
+            <div className={cn(ruleMeta, plain ? "text-ink-secondary" : "text-ink-tertiary")}>
+              {rule.botId === null && <span>{t("customRules.form.allBots")}</span>}
+              {rule.startedBy && <span>{t(START_LABEL[rule.startedBy])}</span>}
+              {!alwaysAllow && rule.behavior === "allow" && <span className="text-warning" data-custom-rule-paused="">{t("customRules.paused")}</span>}
+              {rule.riskScope.length > 0 && <span className="text-warning">{t("customRules.mayCover", { kinds: riskList(rule.riskScope) })}</span>}
+              {rule.compiled && !rule.compiled.recognized && <span className="text-ink-secondary" data-custom-rule-model="">{t("customRules.unrecognizedShort")}</span>}
+            </div>
+          </div>
+          <span className={cn(behaviorText, rule.behavior === "deny" ? "text-danger" : rule.behavior === "allow" ? "text-success" : "text-ink-secondary")}>
+            {t(CUSTOM_BEHAVIOR_LABEL[rule.behavior])}
+          </span>
+          <div className="flex items-center gap-0.5">
+            <label className="flex items-center gap-1 px-1 text-[11.5px] text-ink-secondary" title={t("customRules.toggle")}>
+              <input
+                type="checkbox"
+                aria-label={t("customRules.toggle")}
+                checked={rule.enabled}
+                onChange={(event) => update(rule, { enabled: event.target.checked })}
+              />
+            </label>
+            <button
+              type="button"
+              aria-label={t("customRules.edit")}
+              title={t("customRules.edit")}
+              onClick={() => setEditing(rule.id)}
+              className={iconButton}
+            >
+              <Pencil size={14} />
+            </button>
+            <button
+              type="button"
+              aria-label={t("customRules.remove")}
+              title={t("customRules.remove")}
+              onClick={() => remove(rule)}
+              className={cn(iconButton, "hover:bg-danger/10 hover:text-danger")}
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  ));
+  const newForm = editing === "new" && (
+    <div className={plain ? "px-4 py-2.5" : "mt-2"}>
+      <CustomRuleForm
+        botName={bot.name}
+        initial={{ when: "", behavior: alwaysAllow ? "allow" : "ask", allBots: false, riskScope: [] }}
+        bots={ownBots}
+        botId={bot.id}
+        products={products}
+        allowOff={!alwaysAllow}
+        onCancel={() => setEditing(null)}
+        onSave={create}
+      />
+    </div>
+  );
+  const addButton = editing !== "new" && (
+    <button type="button" onClick={() => setEditing("new")} className={plain ? PILL : "mt-2 rounded-full border border-hairline/50 px-3 py-1 text-[13px] text-ink hover:bg-control"} data-custom-rule-add>
+      {plain && <Plus size={14} aria-hidden="true" />}
+      {t("customRules.add")}
+    </button>
+  );
+  const failure = error && <div role="alert" className={plain ? "px-4 py-2.5 text-[12px] text-danger" : "mt-2 text-[12px] text-danger"}>{error}</div>;
+
+  if (plain) {
+    return (
+      <PaneSection title={t("customRules.title")} help={t("customRules.help")} action={addButton || undefined} plain data-custom-rules={String(rules.length)}>
+        <div className={PLAIN_CARD} data-settings-surface="">
+          {notes}
+          {empty}
+          {rules.length > 0 && (
+            <>
+              {head}
+              <div className="flex flex-col">{rows}</div>
+            </>
+          )}
+          {newForm}
+          {failure}
+        </div>
+      </PaneSection>
+    );
+  }
+
   return (
     <PaneSection title={t("customRules.title")} help={t("customRules.help")} data-custom-rules={String(rules.length)}>
-      {!alwaysAllow && <p role="note" className="mb-2 rounded-lg bg-inset px-3 py-2 text-[12.5px] text-ink-secondary" data-org-always-allow-off="">{t("customRules.org.alwaysAllowOff")}</p>}
-      {alwaysAllow && hasAllow && bot.approvalMode === "full" && <p role="note" className="mb-2 rounded-lg bg-inset px-3 py-2 text-[12.5px] text-ink-secondary" data-custom-rules-level="full">{t("customRules.levelFull")}</p>}
-      <p className="mb-2 text-[12px] text-ink-tertiary" data-custom-rules-reviewer="">{t("customRules.reviewerHelp")}</p>
-      {rules.length === 0 && editing !== "new" && <PaneEmpty>{t("customRules.empty")}</PaneEmpty>}
+      {notes}
+      {empty}
       {rules.length > 0 && (
         <div className="overflow-hidden rounded-lg border border-hairline/40">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-3 border-b border-hairline/40 bg-inset px-3 py-1.5 text-[12px] font-medium text-ink-secondary">
-            <span>{t("customRules.form.when", { name: bot.name })}</span>
-            <span>{t("customRules.form.should")}</span>
-            <span className="sr-only">{t("customRules.edit")}</span>
-          </div>
-          <div className="divide-y divide-hairline/40">
-            {rules.map((rule) => (
-              <div key={rule.id} className="px-3 py-2" data-custom-rule-row={rule.behavior} {...(rule.org ? { "data-org-rule-row": "" } : {})}>
-                {rule.org ? (
-                  <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3" title={t("customRules.org.locked")}>
-                    <div className="min-w-0">
-                      <span className="break-words text-[13px] text-ink">{rule.when}</span>
-                      <div className="mt-0.5 flex flex-wrap gap-1.5 text-[11.5px]">
-                        <OrgRuleBadge />
-                        {rule.compiled && !rule.compiled.recognized && <span className="text-ink-secondary" data-custom-rule-model="">{t("customRules.unrecognizedShort")}</span>}
-                      </div>
-                    </div>
-                    <span className={cn("whitespace-nowrap text-[12.5px]", rule.behavior === "deny" ? "text-danger" : "text-ink-secondary")}>
-                      {t(CUSTOM_BEHAVIOR_LABEL[rule.behavior])}
-                    </span>
-                  </div>
-                ) : editing === rule.id ? (
-                  <CustomRuleForm
-                    botName={bot.name}
-                    initial={{ when: rule.when, behavior: rule.behavior, allBots: rule.botId === null, riskScope: rule.riskScope, startedBy: rule.startedBy ?? null }}
-                    allowOff={!alwaysAllow}
-                    ruleId={rule.id}
-                    botId={bot.id}
-                    products={products}
-                    onCancel={() => setEditing(null)}
-                    onSave={(draft) => update(rule, { when: draft.when, behavior: draft.behavior, botId: draft.allBots ? null : bot.id, riskScope: draft.riskScope, startedBy: draft.startedBy ?? null })}
-                  />
-                ) : (
-                  <div className={cn("grid grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-3", (!rule.enabled || (!alwaysAllow && rule.behavior === "allow")) && "opacity-60")}>
-                    <div className="min-w-0">
-                      <span className="break-words text-[13px] text-ink">{rule.when}</span>
-                      <div className="mt-0.5 flex flex-wrap gap-1.5 text-[11.5px] text-ink-tertiary">
-                        {rule.botId === null && <span>{t("customRules.form.allBots")}</span>}
-                        {rule.startedBy && <span>{t(START_LABEL[rule.startedBy])}</span>}
-                        {!alwaysAllow && rule.behavior === "allow" && <span className="text-warning" data-custom-rule-paused="">{t("customRules.paused")}</span>}
-                        {rule.riskScope.length > 0 && <span className="text-warning">{t("customRules.mayCover", { kinds: riskList(rule.riskScope) })}</span>}
-                        {rule.compiled && !rule.compiled.recognized && <span className="text-ink-secondary" data-custom-rule-model="">{t("customRules.unrecognizedShort")}</span>}
-                      </div>
-                    </div>
-                    <span className={cn("whitespace-nowrap text-[12.5px]", rule.behavior === "deny" ? "text-danger" : rule.behavior === "allow" ? "text-success" : "text-ink-secondary")}>
-                      {t(CUSTOM_BEHAVIOR_LABEL[rule.behavior])}
-                    </span>
-                    <div className="flex items-center gap-0.5">
-                      <label className="flex items-center gap-1 px-1 text-[11.5px] text-ink-secondary" title={t("customRules.toggle")}>
-                        <input
-                          type="checkbox"
-                          aria-label={t("customRules.toggle")}
-                          checked={rule.enabled}
-                          onChange={(event) => update(rule, { enabled: event.target.checked })}
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        aria-label={t("customRules.edit")}
-                        title={t("customRules.edit")}
-                        onClick={() => setEditing(rule.id)}
-                        className="rounded-md p-1 text-ink-secondary hover:bg-control hover:text-ink"
-                      >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={t("customRules.remove")}
-                        title={t("customRules.remove")}
-                        onClick={() => remove(rule)}
-                        className="rounded-md p-1 text-ink-secondary hover:bg-danger/10 hover:text-danger"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+          {head}
+          <div className="divide-y divide-hairline/40">{rows}</div>
         </div>
       )}
-      {editing === "new" ? (
-        <div className="mt-2">
-          <CustomRuleForm
-            botName={bot.name}
-            initial={{ when: "", behavior: alwaysAllow ? "allow" : "ask", allBots: false, riskScope: [] }}
-            bots={ownBots}
-            botId={bot.id}
-            products={products}
-            allowOff={!alwaysAllow}
-            onCancel={() => setEditing(null)}
-            onSave={create}
-          />
-        </div>
-      ) : (
-        <button type="button" onClick={() => setEditing("new")} className="mt-2 rounded-full border border-hairline/50 px-3 py-1 text-[13px] text-ink hover:bg-control" data-custom-rule-add>
-          {t("customRules.add")}
-        </button>
-      )}
-      {error && <div role="alert" className="mt-2 text-[12px] text-danger">{error}</div>}
+      {newForm || addButton}
+      {failure}
     </PaneSection>
   );
 }

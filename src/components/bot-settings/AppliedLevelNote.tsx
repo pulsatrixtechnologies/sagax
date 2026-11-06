@@ -6,8 +6,10 @@
 // back where there is one. Nothing is shown when both are the same.
 import { TriangleAlert } from "lucide-react";
 
+import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
+import { PILL, useSettingsSurface } from "../SettingsPrimitives";
 import type { AppliedApprovalLevel, AppliedLevelReason, ApprovalMode } from "../../../shared/approval-mode";
 
 const REASON: Record<AppliedLevelReason, LocaleKey> = {
@@ -36,18 +38,23 @@ export function appliedLevelLine(applied: AppliedApprovalLevel): string {
 }
 
 export function AppliedLevelNote({ setting, applied, onUseSetting }: { setting: ApprovalMode; applied: AppliedApprovalLevel; onUseSetting?: () => void }) {
+  // The bot's profile page (#2313): the note reads as the row's subtitle,
+  // with no box of its own, and the way back is a plain pill.
+  const plain = useSettingsSurface() === "plain";
   if (applied.mode === setting) return null;
   return (
     <div
       role="note"
       data-approval-applied={applied.mode}
       data-approval-applied-reason={applied.reason}
-      className="mx-4 mb-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-inset px-3 py-2 text-[12.5px] text-ink-secondary"
+      className={plain
+        ? "flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 px-4 pb-2.5 text-[12px] leading-4 text-ink-secondary"
+        : "mx-4 mb-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-inset px-3 py-2 text-[12.5px] text-ink-secondary"}
     >
       <TriangleAlert size={13} aria-hidden="true" className="shrink-0 text-warning" />
-      <span className="min-w-0 flex-1 text-ink">{appliedLevelLine(applied)}</span>
+      <span className={cn("min-w-0 flex-1", !plain && "text-ink")}>{appliedLevelLine(applied)}</span>
       {onUseSetting && FIXABLE.has(applied.reason) && (
-        <button type="button" data-approval-applied-fix="" onClick={onUseSetting} className="shrink-0 text-accent hover:underline">
+        <button type="button" data-approval-applied-fix="" onClick={onUseSetting} className={plain ? cn(PILL, "shrink-0") : "shrink-0 text-accent hover:underline"}>
           {applied.reason === "consent" ? t("approvalApplied.confirmFull") : t("approvalApplied.useSetting", { level: levelName(setting) })}
         </button>
       )}

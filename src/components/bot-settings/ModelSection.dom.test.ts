@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 // Bot > Model after the 2026-11-05 redesign (#2050, #2080): the Model card
-// with the chip and Who pays in grey under it, the "If it fails" card merging
+// with the chip (who pays lives once, in General > "Who pays for replies",
+// since 2026-11-06), the "If it fails" card merging
 // automatic recovery and the ordered backups (the switch, add, reorder,
 // remove, the single backup kept in step as the first entry, seeding from an
 // older single backup, the server default labelled and copied by Customize),
@@ -46,6 +47,7 @@ vi.mock("./BotHostSettings", () => ({ BotHostSettings: () => null }));
 const { ModelSection, recoveryFor } = await import("./ModelSection");
 const { BotEditorContext } = await import("./BotEditorContext");
 const { BotPayerCard } = await import("./BotPayerSettings");
+const { SettingsSurfaceProvider } = await import("../SettingsPrimitives");
 
 const instance = (instanceId: string, displayName: string, models: Array<[string, string]>): InstanceInfo => ({
   instanceId, driverKind: "codex", displayName, access: "api", cliDefault: instanceId,
@@ -66,11 +68,12 @@ function bot(over: Partial<Bot> = {}): Bot {
 let host: HTMLDivElement;
 let root: Root;
 
-async function render(current: Bot, draft = false) {
+async function render(current: Bot, draft = false, plain = false) {
   const section = createElement(ModelSection, { bot: current });
-  const tree = draft
+  const edited = draft
     ? createElement(BotEditorContext.Provider, { value: { request: fixture.api as never, draft: true } }, section)
     : section;
+  const tree = plain ? createElement(SettingsSurfaceProvider, { surface: "plain", children: edited }) : edited;
   await act(async () => { root.render(tree); });
   await flush();
   return host;
@@ -91,6 +94,14 @@ const pick = async (trigger: Element | null, label: string) => {
 const $ = (selector: string) => host.querySelector<HTMLElement>(selector);
 const recoveryCard = () => $("[data-bot-recovery]");
 const toggle = () => $('[data-settings-row="botRecoveryEnabled"] [role="switch"]') as HTMLButtonElement | null;
+/** The markup of a surface without its floating popovers (HelpTip, menus),
+ * which keep their own outline as overlays. */
+const surface = (element: Element) => {
+  const copy = element.cloneNode(true) as Element;
+  copy.querySelectorAll(".popover-surface").forEach((node) => node.remove());
+  return copy.outerHTML;
+};
+const BORDER = /\bborder(-\[|-border|-hairline|-accent)/;
 const patched = () => fixture.api.mock.calls.map((call) => [call[0] as string, JSON.parse((call[1] as { body: string }).body)]);
 
 beforeEach(() => {
@@ -123,16 +134,14 @@ describe("recoveryFor: the single backup follows the ordered list", () => {
 });
 
 describe("Bot > Model, solo", () => {
-  it("draws the Model card with Who pays under the chip, If it fails with its switch waiting for a backup, and the closed Advanced fold", async () => {
+  it("draws the Model card without who pays, If it fails with its switch waiting for a backup, and the closed Advanced fold", async () => {
     await render(bot());
     expect($("[data-model-picker]")?.textContent).toBe("Default model");
     // the effort rides the chip (picked in its menu): no row of its own
     expect(host.textContent).not.toContain("How hard it thinks");
-    const model = $('[data-settings-group="botModel"]') ?? host;
-    const payer = model.querySelector<HTMLElement>('[data-settings-row="botPayerMode"]')!;
-    expect(payer, "who pays sits in the Model card, outside Advanced").not.toBeNull();
-    expect(payer.closest('[data-settings-card="botModel.advanced"]')).toBeNull();
-    expect(payer.querySelector("[data-bot-payer-label]")?.textContent).toBe("Paid by: The owner");
+    // who pays lives once, in General > Who pays for replies
+    expect($('[data-settings-row="botPayerMode"]')).toBeNull();
+    expect(host.textContent).not.toContain("Paid by");
     const card = recoveryCard()!;
     expect(card.dataset.botRecovery).toBe("off");
     expect(card.textContent).toContain("If it fails");
@@ -269,34 +278,64 @@ describe("Bot > Model, rights and drafts", () => {
 
 // Hotfix 2026-11-06 (JC: "I can no longer select who pays for a shared
 // bot"): who pays was tied to the automaticRecovery right. It is the
-// owner's or an admin's choice, in Bot > Model and in Shared with.
+// owner's or an admin's choice. Since the 2026-11-06 profile restyle it
+// lives once, in General > "Who pays for replies" (BotPayerCard); Bot >
+// Model no longer repeats it.
 describe("Who pays for a shared bot (#1137 regression)", () => {
   const member = (permissions: string[]) => ({ viewer: { operator: false, principalId: "pr_zara", email: "zara@example.test", name: "zara", role: "member", permissions } }) as unknown as ConfigStatus;
   const shared = (over: Partial<Bot> = {}) => bot({ grants: [{ target: "user:pr_sam", level: "use" }], ...over } as Partial<Bot>);
+  const renderCard = async (current: Bot) => {
+    await act(async () => { root.render(createElement(SettingsSurfaceProvider, { surface: "plain", children: createElement(BotPayerCard, { bot: current }) })); });
+    await flush();
+  };
 
-  it("the owner finds the picker in Model even without the recovery right, and changes it", async () => {
+  it("Model no longer repeats it, even for the owner of a shared bot", async () => {
     fixture.config = member([]);
     await render(shared());
     expect(recoveryCard()).toBeNull();
-    const row = $('[data-settings-row="botPayerMode"]');
-    expect(row, "the payer picker in Bot > Model").not.toBeNull();
-    await pick(row!.querySelector("[data-pill-select]"), "Each person");
+    expect($('[data-settings-row="botPayerMode"]')).toBeNull();
+  });
+
+  it("the owner finds the picker in Who pays for replies even without the recovery right, and changes it", async () => {
+    fixture.config = member([]);
+    await renderCard(shared());
+    const card = $('[data-settings-group="botPayerSharing"]')!;
+    expect(card.textContent).toContain("Who pays for replies");
+    const row = card.querySelector<HTMLElement>('[data-settings-row="botPayerMode"]')!;
+    expect(row.querySelector("[data-bot-payer-label]")?.textContent).toBe("Paid by: The owner");
+    expect(row.dataset.botPayer).toBe("owner");
+    // Drawn like the Channels and Bot accounts rows of the same page.
+    expect(row.className).toContain("px-4");
+    expect(row.querySelector("[data-bot-payer-label]")?.className).toContain("text-[14px] leading-5 text-ink");
+    expect(row.querySelector("svg")?.getAttribute("class")).toContain("size-5 shrink-0 text-ink-secondary");
+    expect(surface(card)).not.toMatch(BORDER);
+    expect(surface(card)).not.toContain("underline");
+    await pick(row.querySelector("[data-pill-select]"), "Each person");
     expect(patched()).toContainEqual(["/api/bots/bot-1/runtime-settings", { turnPayer: "speaker" }]);
   });
 
   it("an admin finds it on someone else's shared bot", async () => {
     fixture.config = { viewer: { operator: false, principalId: "pr_admin", role: "admin" } } as unknown as ConfigStatus;
-    await render(shared({ ownerUserId: "pr_other" }));
-    expect($('[data-settings-row="botPayerMode"]')).not.toBeNull();
+    await renderCard(shared({ ownerUserId: "pr_other" }));
+    expect($('[data-settings-group="botPayerSharing"] [data-settings-row="botPayerMode"] [data-pill-select]')).not.toBeNull();
   });
 
-  it("Shared with carries the same picker for the owner, nothing for someone else", async () => {
+  it("nothing for someone else's bot", async () => {
     fixture.config = member([]);
-    await act(async () => { root.render(createElement(BotPayerCard, { bot: shared() })); });
-    await flush();
-    expect($('[data-settings-group="botPayerSharing"] [data-settings-row="botPayerMode"] [data-pill-select]')).not.toBeNull();
-    await act(async () => { root.render(createElement(BotPayerCard, { bot: shared({ ownerUserId: "pr_other" }) })); });
-    await flush();
+    await renderCard(shared({ ownerUserId: "pr_other" }));
+    expect($('[data-settings-row="botPayerMode"]')).toBeNull();
+  });
+});
+
+describe("Bot > Model on the profile page (plain surface)", () => {
+  it("draws no border, no underline and no primary button, keeping its labels", async () => {
+    await render(bot(), false, true);
+    const html = surface(host);
+    expect(html).not.toMatch(BORDER);
+    expect(html).not.toContain("underline");
+    expect(html).not.toContain("ui-button-primary");
+    expect(host.textContent).toContain("If it fails");
+    expect($("[data-model-picker]")).not.toBeNull();
     expect($('[data-settings-row="botPayerMode"]')).toBeNull();
   });
 });

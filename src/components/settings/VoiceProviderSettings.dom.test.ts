@@ -11,7 +11,7 @@ import { readVoiceModeSettings, voiceSettingsForBot } from "@/lib/voice-mode/set
 vi.mock("../SettingsPrimitives", () => {
   const row = ({ children, rowId, description }: { children?: ReactNode; rowId?: string; description?: ReactNode }) => createElement("div", { "data-row-id": rowId }, description, children);
   return {
-    CompactRow: row, DescribedRow: row, SettingsGroup: row, GROUP_CARD: "", PILL: "",
+    CompactRow: row, DescribedRow: row, SettingsGroup: row, GROUP_CARD: "", PILL: "", useSettingsSurface: () => "bordered",
     PillSelect: ({ value, options, onChange, disabled }: { value: string; options: Array<{ value: string; label: string }>; onChange(value: string): void; disabled?: boolean }) =>
       createElement("select", { value, disabled, onChange: (event: { target: { value: string } }) => onChange(event.target.value) },
         options.map((option) => createElement("option", { key: option.value, value: option.value }, option.label))),

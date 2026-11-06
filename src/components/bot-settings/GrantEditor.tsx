@@ -2,7 +2,10 @@
 // teams, a level each (Talk, Run routines, Edit, Manage sharing), remove,
 // and a picker to add. Levels above what the caller may give are omitted;
 // the server decides (GET/PUT/DELETE /api/bots/:id/grants).
-import { useEffect, useMemo, useState } from "react";
+// useGrantEditor holds the state and the calls; GrantEditor (Settings >
+// Organization sharing, bulk edit, the bot panel) and the profile page's
+// Share popover (bot-profile/ShareBotButton.tsx) both draw from it.
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, UserMinus, UserPlus, Users } from "lucide-react";
 
 import { useBotEditor } from "./BotEditorContext";
@@ -17,7 +20,7 @@ import {
   type WireGrant,
 } from "@/lib/perspicax-org";
 import { PresenceDot } from "../PresenceDot";
-import { PILL, PillSelect, PRIMARY_PILL } from "../SettingsPrimitives";
+import { PILL, PillSelect, PLAIN_FIELD, useSettingsSurface } from "../SettingsPrimitives";
 import { cn } from "@/lib/cn";
 
 const LEVEL_KEY = {
@@ -38,13 +41,23 @@ export function grantEditable(grant: { level: GrantLevel }, administer: GrantAdm
   return levelAllowed(grant.level, administer.maxLevel);
 }
 
-export function GrantEditor({ botId, ownerId, initialGrants, initialAdminister, directory }: {
+export interface GrantEditorInput {
   botId: string;
   ownerId?: string;
   initialGrants: WireGrant[];
   initialAdminister: GrantAdministration | null;
   directory: OrgDirectory | null;
-}) {
+}
+
+/** The levels this caller may give, in order. */
+export function grantLevelsFor(administer: GrantAdministration | null): GrantLevel[] {
+  return administer ? GRANT_LEVELS.filter((level) => levelAllowed(level, administer.maxLevel)) : [];
+}
+
+/** A bot's grants as the server keeps them: the rows, who may change them,
+ * the picker's search and candidates, and the calls that add, change and
+ * remove (the server's answer replaces the rows each time). */
+export function useGrantEditor({ botId, ownerId, initialGrants, initialAdminister, directory }: GrantEditorInput) {
   // the bot's own routes; several bots at once keep the grants in their draft
   const { request: api, bulk } = useBotEditor();
   const [grants, setGrants] = useState<WireGrant[]>(initialGrants);
@@ -71,7 +84,7 @@ export function GrantEditor({ botId, ownerId, initialGrants, initialAdminister, 
   );
   const canAdd = Boolean(administer && (administer.any || administer.canAdd !== false));
 
-  const run = async (key: string, request: () => Promise<{ grants: WireGrant[] }>) => {
+  const run = useCallback(async (key: string, request: () => Promise<{ grants: WireGrant[] }>) => {
     setBusy(key);
     setError(null);
     try {
@@ -83,9 +96,24 @@ export function GrantEditor({ botId, ownerId, initialGrants, initialAdminister, 
     } finally {
       setBusy(null);
     }
-  };
-  const put = (target: string, level: GrantLevel) => run(target, () => api(`/api/bots/${botId}/grants`, { method: "PUT", body: JSON.stringify({ target, level }) }));
-  const remove = (target: string) => run(target, () => api(`/api/bots/${botId}/grants/${encodeURIComponent(target)}`, { method: "DELETE" }));
+  }, []);
+  const put = useCallback(
+    (target: string, level: GrantLevel) => run(target, () => api(`/api/bots/${botId}/grants`, { method: "PUT", body: JSON.stringify({ target, level }) })),
+    [run, api, botId],
+  );
+  const remove = useCallback(
+    (target: string) => run(target, () => api(`/api/bots/${botId}/grants/${encodeURIComponent(target)}`, { method: "DELETE" })),
+    [run, api, botId],
+  );
+
+  return { grants, administer, levels: grantLevelsFor(administer), query, setQuery, busy, error, candidates, canAdd, put, remove, bulk: Boolean(bulk) };
+}
+
+export function GrantEditor(input: GrantEditorInput) {
+  const { directory } = input;
+  const { grants, administer, levels, query, setQuery, busy, error, candidates, canAdd, put, remove, bulk } = useGrantEditor(input);
+  // the profile page's one filled card: a filled field, no outline
+  const plain = useSettingsSurface() === "plain";
   const firstLevel: GrantLevel = "use";
 
   return (
@@ -93,7 +121,7 @@ export function GrantEditor({ botId, ownerId, initialGrants, initialAdminister, 
       {grants.length === 0 ? (
         <p className="text-[13px] text-ink-secondary">{t(bulk ? "bulkEdit.sharing.empty" : "botSettings.sharing.empty")}</p>
       ) : (
-        <ul className="flex flex-col divide-y divide-hairline/40" aria-label={t("botSettings.sharing.title")}>
+        <ul className={cn("flex flex-col", !plain && "divide-y divide-hairline/40")} aria-label={t("botSettings.sharing.title")}>
           {grants.map((grant) => {
             const editable = grantEditable(grant, administer);
             return (
@@ -110,7 +138,7 @@ export function GrantEditor({ botId, ownerId, initialGrants, initialAdminister, 
                       ariaLabel={`${t("botSettings.sharing.level")} · ${grant.label}`}
                       disabled={busy !== null}
                       onChange={(level) => void put(grant.target, level)}
-                      options={GRANT_LEVELS.filter((level) => administer && levelAllowed(level, administer.maxLevel)).map((level) => ({ value: level, label: levelLabel(level) }))}
+                      options={levels.map((level) => ({ value: level, label: levelLabel(level) }))}
                     />
                   ) : (
                     <span className="text-[12px] text-ink-secondary">{levelLabel(grant.level)}</span>
@@ -151,11 +179,11 @@ export function GrantEditor({ botId, ownerId, initialGrants, initialAdminister, 
             autoCorrect="off"
             spellCheck={false}
             maxLength={200}
-            className="w-full rounded-lg border-[0.5px] border-border bg-inset px-3 py-2 text-[13px] text-ink placeholder:text-ink-secondary focus:border-focus focus:outline-none"
+            className={plain ? PLAIN_FIELD : "w-full rounded-lg border-[0.5px] border-border bg-inset px-3 py-2 text-[13px] text-ink placeholder:text-ink-secondary focus:border-focus focus:outline-none"}
           />
           {query.trim() && candidates.length === 0 && <p className="text-[12px] text-ink-secondary">{t("botSettings.sharing.noMatch")}</p>}
           {candidates.length > 0 && (
-            <ul className="flex flex-col divide-y divide-hairline/40">
+            <ul className={cn("flex flex-col", !plain && "divide-y divide-hairline/40")}>
               {candidates.map((candidate) => (
                 <li key={candidate.target} className="flex min-w-0 items-center justify-between gap-3 py-2">
                   <div className="flex min-w-0 items-center gap-2">
@@ -173,7 +201,7 @@ export function GrantEditor({ botId, ownerId, initialGrants, initialAdminister, 
                     type="button"
                     disabled={busy !== null}
                     onClick={() => void put(candidate.target, firstLevel)}
-                    className={cn(PRIMARY_PILL, "shrink-0 gap-1")}
+                    className={cn(PILL, "shrink-0 gap-1")}
                   >
                     {busy === candidate.target ? <Loader2 size={12} aria-hidden="true" className="animate-spin motion-reduce:animate-none" /> : <UserPlus size={12} aria-hidden="true" />}
                     {t("botSettings.sharing.add")}

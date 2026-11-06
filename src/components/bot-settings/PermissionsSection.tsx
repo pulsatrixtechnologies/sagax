@@ -39,7 +39,7 @@ import { AllowedRecipientsRow } from "./AllowedRecipientsRow";
 import { LifecycleHooksRow } from "./LifecycleHooksRow";
 import { CommandAllowlistDialog } from "../CommandAllowlistDialog";
 import { LocalComputerAutoWarning } from "../LocalComputerAutoWarning";
-import { DescribedRow, HelpTip, PILL, PillSelect, SettingsGroup, Switch, SwitchRow, UnitField } from "../SettingsPrimitives";
+import { DescribedRow, HelpTip, PILL, PillSelect, SettingsGroup, Switch, SwitchRow, UnitField, useSettingsSurface } from "../SettingsPrimitives";
 import { ManagedTeamsSettings } from "./ManagedTeamsSettings";
 import { OwnerPermissionsCard } from "./OwnerPermissionsCard";
 import { CustomRulesCard } from "./CustomRulesCard";
@@ -65,6 +65,7 @@ export function PermissionsSection({
   part?: "all" | "approval";
 }) {
   const advanced = useAdvancedMode();
+  const plainSurface = useSettingsSurface() === "plain";
   const { patch, engine, canCoordinate, approvalMode, trustedModesAvailable, sectionName, currentChief } = derived;
   const { state, dispatch } = useStore();
   const ownerOrAdmin = useOwnerOrAdmin();
@@ -224,7 +225,7 @@ export function PermissionsSection({
         </DescribedRow>
       )}
       {showApproval && approvalNotice && bot.busy && (
-        <div role="alert" data-approval-notice="" className="mt-2 text-[12px] text-danger">{approvalNotice}</div>
+        <div role="alert" data-approval-notice="" className={cn("mt-2 text-[12px] text-danger", plainSurface && "px-4 pb-2")}>{approvalNotice}</div>
       )}
       {/* 2026-10-28: what the open conversation really runs at, when it is
           not this setting, with why and the way back (server-derived). */}
@@ -370,6 +371,7 @@ export function PermissionsSection({
           checked={Boolean(bot.chiefOfStaff)}
           disabled={!bot.chiefOfStaff && !canCoordinate}
           onChange={() => togglePrimary()}
+          className={plainSurface ? "text-[14px]" : undefined}
         />
         {primaryError && <div role="alert" className="mt-2 text-[12px] text-danger">{primaryError}</div>}
         {showTeams && bot.chiefOfStaff && <ManagedTeamsSettings

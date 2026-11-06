@@ -46,7 +46,7 @@ export function createLocalComputerAutoRoutes(deps: LocalComputerAutoRouteDeps):
 
     if (path === "/api/local-computer/ensure") {
       const reason = body?.reason === "person" ? "person" : "bot";
-      if (deps.localVmAuto) void deps.localVmAuto.ensure(reason);
+      if (deps.localVmAuto) void Promise.resolve(deps.localVmAuto.ensure(reason)).catch(() => {});
       return json(res, 202, { auto: deps.localVmAuto?.snapshot() ?? null });
     }
 
@@ -62,7 +62,7 @@ export function createLocalComputerAutoRoutes(deps: LocalComputerAutoRouteDeps):
     });
     if (deps.localVmAuto) {
       deps.localVmAuto.personStarted();
-      void deps.localVmAuto.ensure("person");
+      void Promise.resolve(deps.localVmAuto.ensure("person")).catch(() => {});
     }
     return json(res, 200, await deps.sharedPayload(auth));
   };

@@ -2245,7 +2245,7 @@ export class PerspicaxMcp {
     entry.budget?.forget();
     this.disarmKeepAlive(entry);
     void entry.identity?.clear();
-    void this.revoke(entry.token);
+    void Promise.resolve(this.revoke(entry.token)).catch(() => {});
   }
 
   private async close(entry: Entry): Promise<void> {

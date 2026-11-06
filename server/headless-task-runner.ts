@@ -151,8 +151,8 @@ export function createHeadlessTaskRunner(deps: HeadlessTaskRunnerDeps) {
     },
     start(intervalMs = 1_000): void {
       stopped = false;
-      void this.tick();
-      timer = setInterval(() => { void this.tick(); }, intervalMs);
+      void Promise.resolve(this.tick()).catch(() => {});
+      timer = setInterval(() => { void Promise.resolve(this.tick()).catch(() => {}); }, intervalMs);
       timer.unref?.();
     },
     stop(): void {

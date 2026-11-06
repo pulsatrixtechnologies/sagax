@@ -16306,7 +16306,7 @@ const limitFailover = createLimitFailoverHost({
     if (fromRunId) {
       const prior = routines.listRuns().find((run) => run.id === fromRunId);
       if (prior && ["queued", "waiting"].includes(prior.status)) {
-        void routines.cancelRun(prior.id, "Continued on a backup engine after a usage limit");
+        void routines.cancelRun(prior.id, "Continued on a backup engine after a usage limit").catch(() => {});
       }
     }
     return Boolean(routines.runNow(routineId));
@@ -21532,7 +21532,7 @@ function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: s
       kind: input.kind, botId: bot.id, botName: bot.name, ownerPrincipalId: effectiveBotOwner(bot) || null, threadId,
       title: null, engine: (task.modelSelection ?? bot.modelSelection)?.instanceId ?? null,
       detail: CONFIDENTIAL_INCIDENT_TEXT
-    });
+    }).catch(() => {});
     if (incidentLedger.note(threadId).muted) return;
     if (input.kind === "could-not-start" || input.kind === "routine-failed") return;
     notify(deliverableNotification("incident", bot, threadId, CONFIDENTIAL_INCIDENT_TEXT, { avatarUrl: bot.avatarUrl }));
@@ -23859,7 +23859,7 @@ function pokeScreenPoller(threadId: string, touches: boolean, surface?: "browser
   // a status read on the computer must not redirect the picture away from a
   // page the browser is still showing.
   if (touches && surface) entry.surface = surface;
-  void entry.capture();
+  void Promise.resolve(entry.capture()).catch(() => {});
 }
 
 function stopScreenPoller(botId: string, threadId?: string) {
@@ -33535,7 +33535,7 @@ function prewakeComputerWhileTyping(botId: string, principalId: string | null | 
   const place = decideWorkplace({ desktopTargeted: false, routine: false, principal, personAsked: false });
   if (place.target !== "user-sandbox" && !cloudOnlyBot(botId)) return;
   if (!typingPrewake.take(principal, botId, Date.now())) return;
-  void userSandbox.prewake(principal, botId);
+  void userSandbox.prewake(principal, botId).catch(() => {});
 }
 // 2026-10-16: a person's custom auto-review rules (server/routes/custom-rules.ts).
 // 2026-10-29: on by default for a Primary Bot; the person turns it off or moves its time.
@@ -41041,7 +41041,7 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
     version
   });
   perspicaxDirectory.start(intervalMs);
-  void syncPersonalProviderDirectory();
+  void syncPersonalProviderDirectory().catch(() => {});
   // a newer Flow version: the sync fetches the marketplaces again when due
   setInterval(() => { void orgFlowPlugins.sync("schedule").catch(() => undefined); }, 30 * 60_000).unref();
   // at start: what is missing or older than the last directory read
@@ -47715,8 +47715,8 @@ for (const group of store.groups) settleRoomFloor(group);
 const pruneDecisionLog = () => {
   void pruneDecisions(DATA_DIR, decisionRetentionDays(cfg.decisions?.retentionDays));
   // The admin activity log keeps its months for the same window.
-  void pruneAdminActivity(DATA_DIR, decisionRetentionDays(cfg.decisions?.retentionDays));
-  void pruneProblemLog(DATA_DIR);
+  void Promise.resolve(pruneAdminActivity(DATA_DIR, decisionRetentionDays(cfg.decisions?.retentionDays))).catch(() => {});
+  void Promise.resolve(pruneProblemLog(DATA_DIR)).catch(() => {});
 };
 pruneDecisionLog();
 setInterval(pruneDecisionLog, 6 * 60 * 60_000).unref();

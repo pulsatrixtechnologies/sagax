@@ -24,7 +24,7 @@ import { isUltracodeEffort } from "../../shared/ultracode-effort";
 import { batchModelActions } from "@/lib/batch-bot-model";
 import { useModelFavorites } from "@/lib/model-favorites";
 import { useModelFavoritesServerSync } from "@/lib/model-favorites-sync";
-import { requestSettingsCard } from "./SettingsPrimitives";
+import { requestSettingsCard, useSettingsSurface } from "./SettingsPrimitives";
 import { modelOffer, type ModelSwitches } from "../../shared/offered-models";
 import type { EffortLevel } from "../../shared/wire";
 
@@ -194,6 +194,7 @@ export function ModelPicker({
   const dialogRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const surface = useSettingsSurface();
   const org = usePerspicaxOrg();
   const advanced = useAdvancedMode();
   const favoriteKeys = useModelFavorites();
@@ -455,6 +456,7 @@ export function ModelPicker({
   const effortTitle = active?.capabilities?.modelVariants ? t("model.reasoning") : t("model.effort");
 
   const trigger = ModelPickerTrigger({
+    plain: contained && surface === "plain",
     windowOnly,
     inComposer,
     headless,

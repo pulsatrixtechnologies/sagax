@@ -194,11 +194,16 @@ export interface GrantCandidate {
   label: string;
   detail: string;
   count?: number;
+  /** A person's address, when the directory has one. */
+  email?: string;
+  /** A person's photo as the directory serves it. */
+  avatarUrl?: string;
 }
 
 /** People and teams a grant (or a section member entry) may add: active
  * people other than the owner, teams, none already listed; a team manager
- * who administers only their teams sees those teams and their members. */
+ * who administers only their teams sees those teams and their members.
+ * People match by name, login or email. */
 export function grantCandidates(directory: OrgDirectory | null, input: { ownerId?: string; taken: string[]; query: string; administer?: GrantAdministration | null }): GrantCandidate[] {
   if (!directory) return [];
   const taken = new Set(input.taken);
@@ -217,8 +222,8 @@ export function grantCandidates(directory: OrgDirectory | null, input: { ownerId
     const target = `user:${person.principalId}`;
     if (person.disabled || taken.has(target) || person.principalId.toLowerCase() === owner) continue;
     if (inTeams && !inTeams.has(person.principalId)) continue;
-    if (q && ![person.name, person.login].some((field) => field.toLowerCase().includes(q))) continue;
-    out.push({ target, kind: "user", label: person.name, detail: person.login });
+    if (q && ![person.name, person.login, person.email ?? ""].some((field) => field.toLowerCase().includes(q))) continue;
+    out.push({ target, kind: "user", label: person.name, detail: person.login, ...(person.email ? { email: person.email } : {}), ...(person.avatarUrl ? { avatarUrl: person.avatarUrl } : {}) });
   }
   return out;
 }

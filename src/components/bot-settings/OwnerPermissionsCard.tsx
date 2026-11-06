@@ -18,7 +18,7 @@ import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { api, type Bot } from "@/state/store";
 import { ConfirmDialog } from "../ConfirmDialog";
-import { FoldRow, HelpTip, PILL, PillSelect, PRIMARY_PILL, SettingsGroup } from "../SettingsPrimitives";
+import { FoldRow, HelpTip, PILL, PillSelect, PLAIN_FIELD, PRIMARY_PILL, SettingsGroup, useSettingsSurface } from "../SettingsPrimitives";
 import { readableError } from "@/lib/plain-error";
 
 export type RuleBehavior = "allow" | "ask" | "deny";
@@ -77,12 +77,13 @@ const RULES_SHOWN = 5;
 
 function RuleText({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
+  const plain = useSettingsSurface() === "plain";
   const long = text.length > LONG_TEXT;
   return (
     <div className="min-w-0">
-      <span className={cn("break-words text-[13px] text-ink", !open && long && "line-clamp-2")}>{text}</span>
+      <span className={cn("break-words text-ink", plain ? "text-[14px] leading-5" : "text-[13px]", !open && long && "line-clamp-2")}>{text}</span>
       {long && (
-        <button type="button" onClick={() => setOpen((value) => !value)} className="block text-[12px] text-accent hover:underline">
+        <button type="button" onClick={() => setOpen((value) => !value)} className={plain ? "block text-[12px] leading-4 text-ink-secondary transition-colors hover:text-ink" : "block text-[12px] text-accent hover:underline"}>
           {open ? t("botPanel.rules.showLess") : t("botPanel.rules.showMore")}
         </button>
       )}
@@ -101,8 +102,11 @@ function RuleEditor({ rule, botId, onCancel, onSave }: {
   const [allBots, setAllBots] = useState(rule.botId === null);
   const [anyTarget, setAnyTarget] = useState(false);
   const scoped = Object.keys(rule.scope).length > 0;
+  // The bot's profile page (#2313): the editor opens in the row, without a
+  // box of its own; a filled field and plain pills.
+  const plain = useSettingsSurface() === "plain";
   return (
-    <div className="flex flex-col gap-2 rounded-lg bg-inset px-3 py-2.5" data-rule-editor={rule.id}>
+    <div className={plain ? "flex flex-col gap-2 py-1" : "flex flex-col gap-2 rounded-lg bg-inset px-3 py-2.5"} data-rule-editor={rule.id}>
       <label className="flex flex-col gap-1 text-[12px] text-ink-secondary">
         {t("botPanel.rules.description")}
         <textarea
@@ -110,7 +114,7 @@ function RuleEditor({ rule, botId, onCancel, onSave }: {
           maxLength={500}
           rows={2}
           onChange={(event) => setDescription(event.target.value)}
-          className="rounded-md bg-raised px-2 py-1.5 text-[13px] text-ink outline-none focus:ring-1 focus:ring-accent"
+          className={plain ? PLAIN_FIELD : "rounded-md bg-raised px-2 py-1.5 text-[13px] text-ink outline-none focus:ring-1 focus:ring-accent"}
         />
       </label>
       <div className="flex items-center justify-between gap-3 text-[12.5px] text-ink-secondary">
@@ -147,7 +151,7 @@ function RuleEditor({ rule, botId, onCancel, onSave }: {
         <button
           type="button"
           onClick={() => onSave({ behavior, description, botId: allBots ? null : botId, anyTarget })}
-          className={PRIMARY_PILL}
+          className={plain ? PILL : PRIMARY_PILL}
         >
           {t("botPanel.rules.save")}
         </button>
@@ -194,6 +198,8 @@ export function OwnerPermissionsCard({ bot, leading }: { bot: Pick<Bot, "id" | "
   };
 
   const groupTitle = t("botPanel.permissions.approvals");
+  const plain = useSettingsSurface() === "plain";
+  const padX = plain ? "px-4" : "px-3.5";
 
   return (
     <>
@@ -203,7 +209,7 @@ export function OwnerPermissionsCard({ bot, leading }: { bot: Pick<Bot, "id" | "
         accessory={<HelpTip label={t("settings.moreAbout", { title: t("botPanel.rules.title") })}>{t("botPanel.rules.help")}</HelpTip>}>
         <div data-owner-rules={String(rules.length)}>
           {rules.length === 0 ? (
-            <p className="px-3.5 py-2.5 text-[12.5px] leading-[18px] text-ink-secondary">{t("botPanel.rules.empty")}</p>
+            <p className={cn(padX, "py-2.5 text-ink-secondary", plain ? "text-[12px] leading-4" : "text-[12.5px] leading-[18px]")}>{t("botPanel.rules.empty")}</p>
           ) : (
             <FoldRow
               cardId="bot.permissions.rules"
@@ -211,16 +217,16 @@ export function OwnerPermissionsCard({ bot, leading }: { bot: Pick<Bot, "id" | "
               label={t("botPanel.rules.title")}
               count={rules.length}
             >
-              <div className="-mx-3.5 divide-y divide-hairline/40 border-t border-hairline/40">
+              <div className={plain ? "-mx-4" : "-mx-3.5 divide-y divide-hairline/40 border-t border-hairline/40"}>
                 {rules.map((rule) => (
-                  <div key={rule.id} className="px-3.5 py-2" data-owner-rule-row={rule.behavior}>
+                  <div key={rule.id} className={cn(padX, "py-2")} data-owner-rule-row={rule.behavior}>
                     {editing === rule.id ? (
                       <RuleEditor rule={rule} botId={bot.id} onCancel={() => setEditing(null)} onSave={(patch) => saveRule(rule, patch)} />
                     ) : (
                       <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-3">
                         <div className="min-w-0">
                           <RuleText text={rule.description} />
-                          <div className="mt-0.5 flex flex-wrap gap-1.5 text-[11.5px] text-ink-tertiary">
+                          <div className={cn("mt-0.5 flex flex-wrap gap-1.5", plain ? "text-[12px] leading-4 text-ink-secondary" : "text-[11.5px] text-ink-tertiary")}>
                             {rule.botId === null && <span>{t("botPanel.rules.allBots")}</span>}
                             {rule.destructive && <span className="text-warning">{t(KIND_LABEL[rule.destructive])}</span>}
                             {rule.legacy && <span>{t("botPanel.rules.migrated")}</span>}
@@ -257,7 +263,7 @@ export function OwnerPermissionsCard({ bot, leading }: { bot: Pick<Bot, "id" | "
               </div>
             </FoldRow>
           )}
-          {error && <div role="alert" className="px-3.5 pb-2 text-[12px] text-danger">{error}</div>}
+          {error && <div role="alert" className={cn(padX, "pb-2 text-[12px] text-danger")}>{error}</div>}
         </div>
       </SettingsGroup>
 

@@ -26,6 +26,8 @@ vi.mock("./bot-settings/FilesSection", () => ({
   MenuItem: (props: Record<string, unknown>) => props,
 }));
 vi.mock("./bot-settings/SkillEditorPage", () => ({ SkillEditorPage: () => null }));
+// The profile page draws the plain surface; this suite reads the settings one.
+vi.mock("./SettingsPrimitives", async (original) => ({ ...await original<typeof import("./SettingsPrimitives")>(), useSettingsSurface: () => "bordered" }));
 vi.mock("@/components/ConfirmProvider", () => ({
   useConfirm: () => async () => true,
   confirmAsync: async () => true,

@@ -2,9 +2,9 @@
 // Bot's layout) in the main panel: its top is the bot's appearance (the
 // banner, the mascot, the name with its label under it, the description and
 // the colour, edited in place, the Appearance pane unfolding under them),
-// then four pill tabs at most, each a page of cards in two columns (one
-// under 900px). Every section of the former editor is still there, on its
-// tab; locked sections are shown with their reason instead of hidden.
+// then five pill tabs at most, each one column of cards (JC 2026-11-06).
+// Every section of the former editor is still there, on its tab; locked
+// sections are shown with their reason instead of hidden.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -69,7 +69,7 @@ vi.mock("../bot-settings/VoiceSection", () => ({ VoiceSection: marker("voice") }
 vi.mock("../bot-settings/SharingSection", () => ({ SharingSection: marker("sharing") }));
 vi.mock("../bot-settings/VisibilitySection", () => ({ VisibilitySection: marker("visibility") }));
 vi.mock("../bot-settings/HistorySection", () => ({ HistorySection: marker("history") }));
-vi.mock("../bot-settings/UsageSection", () => ({ UsageSection: marker("usage") }));
+vi.mock("../bot-settings/BotAnalyticsSection", () => ({ BotAnalyticsSection: marker("usage") }));
 vi.mock("../appearance/AppearancePane", () => ({ AppearancePane: marker("appearance") }));
 vi.mock("@/state/store", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/state/store")>();
@@ -129,13 +129,13 @@ const bodiesOf = (html: string) => [...html.matchAll(/data-section-body="(\w+)"/
 const selectedTab = (html: string) => /data-bot-profile-tab-current="(\w+)"/.exec(html)?.[1];
 const tabsOf = (html: string) => [...html.matchAll(/data-bot-profile-tab="(\w+)"/g)].map((match) => match[1]);
 
-const TABS_ALL = ["general", "knowledge", "tools", "activity"];
+const TABS_ALL = ["general", "knowledge", "tools", "activity", "analytics"];
 const TABS_SIMPLE = ["general", "knowledge", "tools"];
 /** The index of a marker in the page, -1 when absent. */
 const at = (html: string, marker: string) => html.indexOf(marker);
 
 describe("bot profile page shell", () => {
-  it("fills the main panel with the appearance header on top and four tabs at most (#2271)", () => {
+  it("fills the main panel with the appearance header on top and five tabs at most (#2271)", () => {
     const html = render("overview");
     expect(html).toContain('data-bot-profile-placement="main"');
     expect(html).not.toContain("data-detail-panel");
@@ -149,7 +149,7 @@ describe("bot profile page shell", () => {
     expect(tabsOf(html)).toEqual(TABS_ALL);
     expect(BOT_PROFILE_TABS).toEqual(TABS_ALL);
     expect(html).toContain('role="tablist"');
-    for (const label of [">General<", ">Knowledge<", ">Model &amp; tools<", ">Activity<", ">Appearance"]) expect(html).toContain(label);
+    for (const label of [">General<", ">Knowledge<", ">Model &amp; tools<", ">Activity<", ">Analytics<", ">Appearance"]) expect(html).toContain(label);
     // no chevron rows of settings, no Settings fold, no identity card of facts
     expect(html).not.toContain("data-bot-profile-settings-toggle");
     expect(html).not.toContain(">Settings<");
@@ -158,7 +158,7 @@ describe("bot profile page shell", () => {
     expect(html).toContain('aria-label="Close"');
   });
 
-  it("regression #2271: the header (name, label, description, Appearance) comes before the tabs, the tabs are four at most, the panels two columns from 900px", () => {
+  it("regression #2271: the header (name, label, description, Appearance) comes before the tabs, the tabs are five at most, the panels one column (JC 2026-11-06)", () => {
     const html = render("overview");
     const tabs = at(html, 'data-bot-profile-tabs=""');
     expect(tabs).toBeGreaterThan(0);
@@ -166,7 +166,7 @@ describe("bot profile page shell", () => {
       expect(at(html, marker)).toBeGreaterThan(0);
       expect(at(html, marker)).toBeLessThan(tabs);
     }
-    expect(tabsOf(html).length).toBeLessThanOrEqual(4);
+    expect(tabsOf(html).length).toBeLessThanOrEqual(5);
     // the name alone on its line, the label under it, smaller and secondary (JC, never "Name · Label")
     const title = html.slice(at(html, 'data-bot-profile-title=""'), at(html, 'data-bot-profile-label=""'));
     expect(title).toContain(">Pepper<");
@@ -178,14 +178,16 @@ describe("bot profile page shell", () => {
     expect(label).toContain("text-[15px]");
     // the description, edited in place
     expect(html).toMatch(/<textarea[^>]*data-bot-profile-description=""[^>]*>Finds sources\.<\/textarea>/);
-    // each tab is a panel of two responsive columns
+    // each tab is a panel of ONE column (JC 2026-11-06: no two-column grid)
     for (const tab of TABS_ALL) {
       const panel = html.slice(at(html, `id="bot-profile-panel-${tab}"`), at(html, `id="bot-profile-panel-${tab}"`) + 400);
       expect(panel).toContain('role="tabpanel"');
-      expect(panel).toContain("grid-cols-1");
-      expect(panel).toContain("min-[900px]:grid-cols-2");
+      expect(panel).toContain("flex min-w-0 flex-col gap-6");
+      expect(panel).not.toContain("grid-cols-2");
       expect(panel).not.toContain("overflow-x-auto");
     }
+    expect(html).not.toContain("data-bot-profile-column-side");
+    expect(html).not.toContain("min-[900px]:grid-cols-2");
     // the tab row wraps instead of scrolling sideways
     expect(html).toMatch(/role="tablist" data-bot-profile-tabs="" [^>]*class="[^"]*flex-wrap/);
     expect(html).not.toContain("overflow-x-auto whitespace-nowrap");
@@ -255,8 +257,8 @@ describe("bot profile page shell", () => {
     expect(html.slice(toggle, html.indexOf("</button>", toggle))).toContain(">Appearance<");
     // nothing lost under it: who sees it, the description (the colour lives in Appearance > Color)
     for (const marker of ["data-bot-profile-audience", 'data-bot-profile-description=""']) expect(at(html, marker)).toBeGreaterThan(toggle);
-    // the column 1100px at most (two columns) with a 16px gutter on a phone
-    expect(html).toMatch(/data-bot-profile-column="" class="mx-auto flex w-full max-w-\[1100px\] flex-col px-4 pb-10 sm:px-6"/);
+    // the column a reading width (820px at most, one column) with a 16px gutter on a phone
+    expect(html).toMatch(/data-bot-profile-column="" class="mx-auto flex w-full max-w-\[820px\] flex-col px-4 pb-10 sm:px-6"/);
   });
 
   it("regression #2313: X and Private / Shared sit on a bar above the scroll, never scrolled away", () => {
@@ -277,7 +279,7 @@ describe("bot profile page shell", () => {
   it("names the tabs, the header and the channels in French", () => {
     setLocale("fr");
     const html = render("overview");
-    for (const label of [">Général<", ">Connaissances<", ">Modèle et outils<", ">Activité<", ">Apparence", ">Canaux<", ">Comptes du bot<", ">Courriel<", ">Me joindre<"]) expect(html).toContain(label);
+    for (const label of [">Général<", ">Connaissances<", ">Modèle et outils<", ">Activité<", ">Analytique<", ">Apparence", ">Canaux<", ">Comptes du bot<", ">Courriel<", ">Me joindre<"]) expect(html).toContain(label);
     expect(html).not.toContain(">Réglages<");
   });
 
@@ -297,6 +299,7 @@ describe("bot profile page shell", () => {
     expect(botProfileTabFor("memory")).toBe("knowledge");
     expect(botProfileTabFor("model")).toBe("tools");
     expect(botProfileTabFor("history")).toBe("activity");
+    expect(botProfileTabFor("usage")).toBe("analytics");
     expect(personaCategoryForSection("routines")).toBeNull();
     for (const page of ["model", "voice", "usage", "access"] as const) {
       const html = render(page);
@@ -355,7 +358,7 @@ describe("General", () => {
       ],
     };
     const html = render("overview");
-    expect([...html.matchAll(/data-bot-profile-row="([\w-]+)"/g)].map((match) => match[1])).toEqual(["slack", "email", "reachMe", "messages", "engine", "account-0"]);
+    expect([...html.matchAll(/data-bot-profile-row="([\w-]+)"/g)].map((match) => match[1])).toEqual(["slack", "email", "reachMe", "messages", "engine", "account-0", "sharing"]);
     expect(html).toContain("pepper@bots.example");
     expect(html).toContain(">Not offered here<");
     expect(html).toContain('data-bot-profile-action="email"');
@@ -366,13 +369,21 @@ describe("General", () => {
     expect(html).not.toContain(">Summaries<");
     expect(html).toContain("data-bot-profile-add");
     expect(html).not.toContain("k1");
-    // What it does: the server's overview of the bot; Shared with beside it
+    // What it does: the server's overview of the bot; Shared with under it
     expect(sectionHtml(html, "summary").open).toBe(true);
     expect(bodiesOf(sectionHtml(html, "summary").html)).toEqual(["overview"]);
-    expect(bodiesOf(sectionHtml(html, "sharing").html)).toEqual(["sharing"]);
+    // Shared with is a summary row whose Manage opens the top bar's Share
+    // popover (JC 2026-11-06: the people are managed in ONE place); the
+    // people list itself is not drawn on the page
+    const sharing = sectionHtml(html, "sharing").html;
+    expect(sharing).not.toContain('data-section-body="sharing"');
+    expect(sharing).toContain('data-bot-profile-row="sharing"');
+    expect(sharing).toContain(">People and groups<");
+    expect(sharing).toContain('data-bot-profile-share-open=""');
+    expect(html.match(/data-bot-profile-share-open=""/g)).toHaveLength(1);
+    expect(html.match(/data-bot-profile-share=""/g)).toHaveLength(1);
     const panel = html.slice(at(html, 'id="bot-profile-panel-general"'), at(html, 'id="bot-profile-panel-knowledge"'));
-    expect(at(panel, 'data-bot-profile-column-side="left"')).toBeLessThan(at(panel, 'data-bot-profile-section="summary"'));
-    expect(at(panel, 'data-bot-profile-column-side="right"')).toBeLessThan(at(panel, 'data-bot-profile-section="sharing"'));
+    expect(at(panel, 'data-bot-profile-section="summary"')).toBeLessThan(at(panel, 'data-bot-profile-section="sharing"'));
   });
 
   it("shows Slack as managed in Admin where the server offers it, and a Slack link opens it", () => {
@@ -420,9 +431,15 @@ describe("Model & tools and Activity", () => {
     // the search opens from its button (Command-F, a slash): closed at rest
     expect(html).toContain('data-bot-profile-search-toggle="" aria-expanded="false"');
     expect(html).not.toContain("data-persona-search");
-    const activity = render("usage");
+    const activity = render("history");
     expect(selectedTab(activity)).toBe("activity");
     for (const id of BOT_PROFILE_TAB_SECTIONS.activity) expect(bodiesOf(sectionHtml(activity, id).html)).toEqual([id]);
+    // Usage is Analytics' (JC 2026-11-06), once on the page
+    const analytics = render("usage");
+    expect(selectedTab(analytics)).toBe("analytics");
+    expect(bodiesOf(sectionHtml(analytics, "usage").html)).toEqual(["usage"]);
+    expect(analytics.match(/data-section-body="usage"/g)).toHaveLength(1);
+    expect(sectionsOf(activity)).not.toContain("usage");
   });
 
   it("follows Simple mode", () => {
@@ -445,11 +462,12 @@ describe("Model & tools and Activity", () => {
 
   it("names Rules, Skills and History in French", () => {
     setLocale("fr");
+    // Section bodies are mocked, so the names come from the page's own landmarks.
     const html = render("soul");
-    expect(html).toContain(">Règles</span>");
-    expect(html).toContain(">Compétences</span>");
+    expect(html).toContain('aria-label="Règles"');
+    expect(html).toContain('aria-label="Compétences"');
     expect(html).not.toContain(">Skills<");
-    expect(render("history")).toContain(">Changements<");
+    expect(render("history")).toContain('aria-label="Changements"');
   });
 });
 
@@ -475,8 +493,9 @@ describe("bot profile for an organization member", () => {
     expect(history).not.toContain('data-section-body="history"');
     expect(history).toContain("Only this bot&#x27;s owner or an admin can change this.");
     expect(tabsOf(render("history", state))).toEqual(TABS_ALL);
-    // the locked card says so on its heading, not the tab pill
-    expect(history).toMatch(/<h3[^>]*>[\s\S]*?aria-label="Read only"/);
+    // the locked card says so in its own row, not the tab pill
+    expect(history).toContain('data-bot-profile-locked=""');
+    expect(history).toMatch(/<p role="note" data-persona-locked="" aria-label="Read only"/);
     expect(render("history", state)).not.toMatch(/data-bot-profile-tab="activity"[^>]*>Activity<svg/);
   });
 });

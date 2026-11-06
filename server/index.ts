@@ -1295,6 +1295,7 @@ import { SandboxClusterWaker } from "./sandbox/sandbox-k8s-wake.ts";
 import { SANDBOX_WAKE_NOTICE, SANDBOX_WAKE_TIMEOUT_NOTICE } from "../shared/sandbox-wake.ts";
 import { UserSandboxManager, userSandboxSettingsFromEnv } from "./sandbox/user-sandbox-manager.ts";
 import { createUserSandboxRoutes } from "./sandbox/user-sandbox-routes.ts";
+import { createBotAnalyticsRoutes } from "./routes/bot-analytics.ts";
 import { createBotHistoryRoutes } from "./routes/bot-history.ts";
 import { createBotSendStateRoutes } from "./routes/bot-send-state.ts";
 import { createMeEngineModelsRoutes } from "./routes/me-engine-models.ts";
@@ -1341,7 +1342,7 @@ import { createAntigravityLeftoverRoutes } from "./routes/antigravity-leftovers.
 import { createAntigravityAccountRoutes } from "./routes/antigravity-accounts.ts";
 import { findAntigravityLeftovers, removeAntigravityLeftovers } from "./drivers/antigravity-temp.ts";
 import { createLiveRoutes } from "./routes/live.ts";
-import { createUsageRoutes } from "./routes/usage.ts";
+import { createUsageRoutes, usageViewerOf } from "./routes/usage.ts";
 import { createOrgLibraryRoutes } from "./routes/org-library.ts";
 // #1388 wave 0b: empty import anchors for the index split. Each slice worker
 // replaces only its own line with `import { createXRoutes } from "./routes/x.ts"`.
@@ -3545,6 +3546,7 @@ bindLeafHost({
   get createBotCapabilitiesRoutes() { return createBotCapabilitiesRoutes; },
   get createBotCatalogRoutes() { return createBotCatalogRoutes; },
   get createBotCodeBranchRoutes() { return createBotCodeBranchRoutes; },
+  get createBotAnalyticsRoutes() { return createBotAnalyticsRoutes; },
   get createBotComputerShell() { return createBotComputerShell; },
   get createBotCreationTurnOrigin() { return createBotCreationTurnOrigin; },
   get createBotForApproval() { return createBotForApproval; },
@@ -25729,6 +25731,23 @@ ROUTES.push(createBotHistoryRoutes<BotRecord, ReturnType<typeof wireBot>>({
   setSoul: (id, soul) => store.setSoul(id, soul) ?? undefined,
   wireBot: (bot) => wireBot(bot),
   broadcast: (event) => broadcast(event)
+}));
+
+// The bot's analytics (server/routes/bot-analytics.ts): the ledger rows of
+// the bot over 7, 30 or 90 days. Owner, edit holder or admin read every
+// row; another person who sees the bot reads their own turns only.
+ROUTES.push(createBotAnalyticsRoutes<BotRecord>({
+  dataDir: DATA_DIR,
+  bot: (id) => store.bot(id) ?? undefined,
+  sees: (auth, bot) => auth.kind === "loopback" || listedBotVisible(bot, auth.session.principalId),
+  seesAll: (auth, bot) => ownerOrAdminOf(auth, bot),
+  viewer: (auth) => usageViewerOf(auth),
+  prices: operatorPrices,
+  currency: () => cfg.billing?.currency ?? "USD",
+  runs: (botId) => (routines?.listRunsForBot(botId) ?? []).filter((run) => run.target !== "room-goal"),
+  personName: (principalId) => personDisplayName(principals.byId(principalId)) || "",
+  timeZone: () => routineTimeZone(),
+  localPrincipalId: () => localPrincipalId()
 }));
 ROUTES.push(createConnectorStatusRoutes({ perspicax: () => perspicaxReach?.status() ?? null }));
 ROUTES.push(createBotSendStateRoutes({

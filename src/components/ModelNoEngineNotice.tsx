@@ -6,14 +6,18 @@
 import { t } from "@/lib/i18n";
 import { openOrgEngineSetup, usePersonEngineReadiness } from "@/lib/org-engine-readiness";
 import { contactAdminText } from "./OrgEngineSetup";
+import { PILL, useSettingsSurface } from "./SettingsPrimitives";
+import { cn } from "@/lib/cn";
 
 export function ModelNoEngineNotice({ className, onConnect }: { className?: string; onConnect?: () => void }) {
   const readiness = usePersonEngineReadiness();
+  // the bot profile page (plain surface): one heading size, a pill for the action
+  const plain = useSettingsSurface() === "plain";
   if (!readiness.organization || (readiness.state !== "connect" && readiness.state !== "blocked")) return null;
   const blocked = readiness.state === "blocked";
   return (
     <div role="status" data-model-no-engine={readiness.state} className={className}>
-      <p className="text-[12.5px] font-medium text-ink">{blocked ? t("orgEngines.blocked.title") : t("orgEngines.notice.title")}</p>
+      <p className={plain ? "text-[13px] leading-[18px] text-ink" : "text-[12.5px] font-medium text-ink"}>{blocked ? t("orgEngines.blocked.title") : t("orgEngines.notice.title")}</p>
       <p className="mt-0.5 text-[12px] leading-4 text-ink-secondary">
         {blocked ? `${t("orgEngines.blocked.body")} ${contactAdminText(readiness.adminNames)}` : t("model.noEngine.body")}
       </p>
@@ -22,7 +26,7 @@ export function ModelNoEngineNotice({ className, onConnect }: { className?: stri
           type="button"
           data-model-no-engine-connect=""
           onClick={() => { onConnect?.(); openOrgEngineSetup(); }}
-          className="mt-1.5 text-[12px] text-ink-secondary underline underline-offset-2 hover:text-ink"
+          className={plain ? cn(PILL, "mt-1.5") : "mt-1.5 text-[12px] text-ink-secondary underline underline-offset-2 hover:text-ink"}
         >
           {t("orgEngines.notice.connect")}
         </button>

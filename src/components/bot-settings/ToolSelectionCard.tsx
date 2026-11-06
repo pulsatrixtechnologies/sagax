@@ -8,9 +8,9 @@ import { TOOL_SCOPE_SUPPORT } from "../../../shared/tool-scope-support";
 import { readableName } from "../../../shared/readable-name";
 import { mcpServersForBot, useMcpServers } from "@/lib/mcp-servers";
 import { useBotEditor } from "./BotEditorContext";
-import { PRIMARY_PILL, Switch, SwitchRow } from "../SettingsPrimitives";
+import { PILL, PLAIN_FIELD, PRIMARY_PILL, Switch, SwitchRow } from "../SettingsPrimitives";
 import { inputCls } from "./field";
-import { PaneSection } from "./PaneSection";
+import { PaneSection, usePaneRows } from "./PaneSection";
 import { readableError } from "@/lib/plain-error";
 
 type Draft = { custom: boolean; onlyListed: boolean; allow: string; deny: string };
@@ -113,6 +113,11 @@ export function ToolSelectionCard({ bot, engineKind }: { bot: Bot; engineKind?: 
       if (alive.current) setSaving(false);
     }
   };
+  // The bot's profile page (#2313): reference rows, filled fields and
+  // pills, nothing outlined or underlined.
+  const rows = usePaneRows();
+  const { plain } = rows;
+  const field = plain ? PLAIN_FIELD : inputCls;
   const example = engineKind === "piAgent" ? "native:read\nnative:edit\nnative:write"
     : engineKind === "grokAgent" ? "native:read_file\nnative:search_replace\nnative:write"
       : support === "mcp" ? "native:*\nmcp:mail:read_notes" : "native:ask_user\nmcp:mail:read_notes";
@@ -120,7 +125,7 @@ export function ToolSelectionCard({ bot, engineKind }: { bot: Bot; engineKind?: 
   return <PaneSection title={t("botAccess.tools.title")} help={t("botAccess.tools.description")}>
     {!saved.ok && <p role="alert" className="mb-2 text-[12px] text-danger">{t("botAccess.tools.corrupt")}</p>}
     {saved.ok && scope?.allow?.length === 0 && <p role="status" className="mb-2 text-[12px] text-ink-secondary">{t("botAccess.tools.none")}</p>}
-    <div data-tool-groups className="-mx-3.5 -mt-1 divide-y divide-hairline/40">
+    <div data-tool-groups className={cn(rows.bleed, "-mt-1", rows.list)}>
       {groups.map(group => {
         const on = groupOn(group.ns);
         const mine = inGroup(group.ns);
@@ -130,20 +135,20 @@ export function ToolSelectionCard({ bot, engineKind }: { bot: Bot; engineKind?: 
           : exceptions.length ? t("botAccess.tools.exceptions", { count: exceptions.length })
             : on ? t("botAccess.tools.groupAll") : t("botAccess.tools.groupOff");
         return <div key={group.ns} data-tool-group={group.ns}>
-          <div className="flex min-h-[44px] items-center gap-2 px-3.5 py-2">
+          <div className={cn("flex min-h-[44px] items-center gap-2 py-2", rows.row)}>
             <button type="button" aria-expanded={expanded} aria-label={t("botAccess.tools.expand", { name: group.label })}
               onClick={() => { setOpen(expanded ? null : group.ns); setAdding(""); }}
               className="flex min-w-0 flex-1 items-center gap-2 text-left">
               <ChevronRight size={14} aria-hidden="true" className={cn("shrink-0 text-ink-secondary transition-transform motion-reduce:transition-none", expanded && "rotate-90")} />
               <span className="min-w-0">
-                <span className="block truncate text-[13px] text-ink">{group.label}</span>
-                <span className="block truncate text-[11.5px] text-ink-secondary">{status}</span>
+                <span className={cn("block truncate text-ink", rows.title)}>{group.label}</span>
+                <span className={cn("block truncate text-ink-secondary", rows.note)}>{status}</span>
               </span>
             </button>
             <Switch checked={on} disabled={disabled} aria-label={t("botAccess.tools.groupAria", { name: group.label })}
               onClick={() => setGroup(group.ns, !on)} className="disabled:cursor-not-allowed" />
           </div>
-          {expanded && <div className="flex flex-col gap-1 pb-3 pl-9 pr-3.5">
+          {expanded && <div className={cn("flex flex-col gap-1 pb-3", plain ? "pl-[38px] pr-4" : "pl-9 pr-3.5")}>
             {exceptions.map(selector => {
               const name = selector.slice(group.ns.length + 1);
               const ok = allowed(selector);
@@ -160,8 +165,8 @@ export function ToolSelectionCard({ bot, engineKind }: { bot: Bot; engineKind?: 
             {!exceptions.length && <p className="text-[12px] text-ink-secondary">{t(on ? "botAccess.tools.noException" : "botAccess.tools.noneAllowed")}</p>}
             {on || allow ? <form className="mt-1 flex items-center gap-2" onSubmit={(event) => { event.preventDefault(); addTool(group.ns); }}>
               <input aria-label={t("botAccess.tools.toolName")} placeholder={t("botAccess.tools.toolName")} disabled={disabled} spellCheck={false}
-                value={adding} onChange={event => setAdding(event.target.value)} className={`${inputCls} min-w-0 flex-1`} />
-              <button type="submit" disabled={disabled || !adding.trim() || adding.includes("*")} className="shrink-0 text-[12.5px] text-accent disabled:opacity-50">
+                value={adding} onChange={event => setAdding(event.target.value)} className={cn(field, "min-w-0 flex-1")} />
+              <button type="submit" disabled={disabled || !adding.trim() || adding.includes("*")} className={plain ? cn(PILL, "shrink-0") : "shrink-0 text-[12.5px] text-accent disabled:opacity-50"}>
                 {t(on ? "botAccess.tools.block" : "botAccess.tools.allowOne")}
               </button>
             </form> : <p className="text-[12px] text-ink-secondary">{t("botAccess.tools.turnOnHint")}</p>}
@@ -179,19 +184,19 @@ export function ToolSelectionCard({ bot, engineKind }: { bot: Bot; engineKind?: 
           onChange={(next) => change({ custom: true, onlyListed: next })} />
         <label className="text-[13px] text-ink-secondary">{t("botAccess.tools.allow")}
           <textarea aria-label={t("botAccess.tools.allow")} disabled={!fields.custom || !fields.onlyListed} rows={3} spellCheck={false}
-            className={`${inputCls} mt-1 font-mono text-[12px] disabled:opacity-50`} placeholder={example} value={fields.allow} onChange={event => change({ allow: event.target.value })} />
+            className={cn(field, "mt-1 font-mono text-[12px] disabled:opacity-50")} placeholder={example} value={fields.allow} onChange={event => change({ allow: event.target.value })} />
         </label>
         {fields.custom && fields.onlyListed && lines(fields.allow).length === 0 && <p className="text-[12px] text-ink-secondary">{t("botAccess.tools.emptyHint")}</p>}
         <label className="text-[13px] text-ink-secondary">{t("botAccess.tools.exclude")}
-          <textarea aria-label={t("botAccess.tools.exclude")} rows={2} spellCheck={false} className={`${inputCls} mt-1 font-mono text-[12px]`}
+          <textarea aria-label={t("botAccess.tools.exclude")} rows={2} spellCheck={false} className={cn(field, "mt-1 font-mono text-[12px]")}
             placeholder="mcp:mail:send" value={fields.deny} onChange={event => change({ custom: true, deny: event.target.value })} />
         </label>
         <p className="text-[12px] text-ink-secondary">{t("botAccess.tools.syntax")}</p>
         {engineKind === "grokAgent" && <p className="text-[12px] text-ink-secondary">{t("botAccess.tools.grok")}</p>}
         <div className="flex flex-wrap items-center gap-3">
           {fields.custom && <button type="button" onClick={() => change({ custom: false, onlyListed: false, allow: "", deny: "" })}
-            className="text-[12.5px] text-accent">{t("botAccess.tools.all")}</button>}
-          <a href="https://github.com/pulsatrixtechnologies/sagax/blob/main/docs/tool-selection.md" target="_blank" rel="noreferrer" className="text-[12px] text-ink-secondary underline">{t("botAccess.tools.examples")}</a>
+            className={plain ? PILL : "text-[12.5px] text-accent"}>{t("botAccess.tools.all")}</button>}
+          <a href="https://github.com/pulsatrixtechnologies/sagax/blob/main/docs/tool-selection.md" target="_blank" rel="noreferrer" className={plain ? PILL : "text-[12px] text-ink-secondary underline"}>{t("botAccess.tools.examples")}</a>
         </div>
       </fieldset>
     </details>
@@ -202,7 +207,7 @@ export function ToolSelectionCard({ bot, engineKind }: { bot: Bot; engineKind?: 
     {error && <p role="alert" className="mt-2 text-[12px] text-danger">{error}</p>}
     {bot.busy && <p className="mt-2 text-[12px] text-ink-secondary">{t("botAccess.tools.busy")}</p>}
     {draft && <div className="mt-3">
-      <button type="button" disabled={disabled || !parsed.ok} onClick={() => void save()} className={PRIMARY_PILL}>
+      <button type="button" disabled={disabled || !parsed.ok} onClick={() => void save()} className={plain ? PILL : PRIMARY_PILL}>
         {t(saving ? "botAccess.tools.saving" : "botAccess.tools.save")}
       </button>
     </div>}

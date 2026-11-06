@@ -17,6 +17,7 @@ vi.mock("@/state/store", () => ({
   }),
 }));
 import { BotWebhooks, canManageBotWebhooks } from "./BotWebhooks";
+import { SettingsSurfaceProvider } from "../SettingsPrimitives";
 
 const bot = { id: "scout", name: "Scout", ownerUserId: "owner@example.test", modelSelection: { instanceId: "claude", model: "m" } } as unknown as Bot;
 const webhook = (id: string, extra: Partial<WebhookTrigger> = {}): WebhookTrigger => ({
@@ -64,5 +65,36 @@ describe("BotWebhooks", () => {
   it("says its empty state in one line", () => {
     fixture.webhooks = [];
     expect(render()).toContain("No webhooks for this bot.");
+  });
+});
+
+// The bot's profile page (#2313): the webhooks card carries its own grey
+// label, each webhook is a reference row and opens with a plain pill.
+describe("BotWebhooks on the profile page (plain surface)", () => {
+  const plain = () => renderToStaticMarkup(createElement(SettingsSurfaceProvider, { surface: "plain", children: createElement(BotWebhooks, { bot }) }));
+  // HelpTip popovers keep their own outline (a floating surface, not a card).
+  const withoutPopovers = (markup: string) => markup.replace(/<div[^>]*popover-surface[\s\S]*?<\/div>/g, "");
+
+  it("labels its card and keeps every row and action, with no border, underline or primary pill", () => {
+    const html = plain();
+    expect(html).toContain(">Webhooks<");
+    expect(html).toContain('data-bot-webhook="w1"');
+    expect(html).toContain('data-bot-webhook="w2"');
+    expect(html).toContain("Open the routine");
+    expect(html).toContain("Open in Automations");
+    expect(html).toContain("4 deliveries");
+    expect(html).toMatch(/data-open-webhook-home="routine"[^>]*class="[^"]*ui-button/);
+    const bare = withoutPopovers(html);
+    expect(bare).not.toMatch(/\bborder(-\[|-border|-hairline|-accent)/);
+    expect(bare).not.toContain("underline");
+    expect(bare).not.toContain("ui-button-primary");
+  });
+
+  it("says its empty state in the same card", () => {
+    fixture.webhooks = [];
+    const html = plain();
+    expect(html).toContain(">Webhooks<");
+    expect(html).toContain("No webhooks for this bot.");
+    expect(withoutPopovers(html)).not.toMatch(/\bborder(-\[|-border|-hairline|-accent)/);
   });
 });

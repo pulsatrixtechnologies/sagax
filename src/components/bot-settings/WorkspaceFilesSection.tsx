@@ -13,10 +13,10 @@
 // Memory. Images and PDFs open in the read-only previewer; other binaries
 // show type icon, size and download.
 import {
-  Check, ChevronRight, Download, File as FileIcon, FilePlus, Folder, FolderInput,
-  MoreHorizontal, Pencil, Trash2, Upload,
+  Brain, Check, ChevronRight, Download, File as FileIcon, FilePlus, Folder, FolderInput,
+  FolderOpen, MoreHorizontal, Pencil, Trash2, Upload,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 
 import { AnchoredPopover } from "@/components/AnchoredPopover";
 import { cn } from "@/lib/cn";
@@ -31,12 +31,14 @@ import {
 import type { Bot, BotSettingsSection } from "@/state/store";
 import { AttachmentPreviewDialog } from "../AttachmentPreview";
 import { ConfirmDialog } from "../ConfirmDialog";
-import { HelpTip } from "../SettingsPrimitives";
+import { HelpTip, PLAIN_CARD, PLAIN_FIELD, Switch, useSettingsSurface } from "../SettingsPrimitives";
 import { MarkdownEditor } from "../markdown/MarkdownEditor";
 import { KIND_ICON, MenuItem, PopoverMenu } from "./FilesSection";
 import { inputCls } from "./field";
-import { MemoryFolderOptions } from "./MemoryFolderOptions";
+import { MemoryFolderOptions, type MemoryFolderParts } from "./MemoryFolderOptions";
 import { MemoryToggleCard } from "./MemorySection";
+import { PaneSection } from "./PaneSection";
+import { ProfileRow } from "./ProfileRow";
 import { RulesCounter } from "./RulesSection";
 import {
   LoadBadge,
@@ -78,270 +80,285 @@ export function WorkspaceFilesSection({
     toggleSelect, now, rows, folderChoices, deleteBody,
   } = useWorkspaceFiles({ bot, active, onOpenSection, initial, initialExpanded, memoryEditable });
 
-  return (
-    <div
-      className="flex flex-col gap-3"
-      data-workspace-files=""
-      onDragOver={(event) => onDragOver(event, null)}
-      onDragLeave={() => setDropTarget(null)}
-      onDrop={(event) => onDrop(event, null)}
-    >
-      {memory && <MemoryToggleCard enabled={memory.enabled} busy={memory.busy} onToggle={memory.onToggle} />}
-      <div className="flex items-center gap-1.5 text-[13px] text-ink-secondary">
-        <span>{t("persona.files.short")}</span>
-        <HelpTip label={t("settings.moreAbout", { title: t("botSettings.nav.files") })}>
-          <span className="block">{t("persona.files.intro")}</span>
-          {advanced && listing && <span className="mt-2 block break-all font-mono" data-workspace-path="">{listing.workspacePath}</span>}
-        </HelpTip>
-      </div>
+  const plain = useSettingsSurface() === "plain";
 
-      <div className="flex flex-wrap items-center gap-2">
-        <NewMenu memoryEditable={memoryEditable} busy={busy} onPick={(kind) => startCreate(kind)} />
+  const toolbar = (
+    <>
+      <NewMenu memoryEditable={memoryEditable} busy={busy} onPick={(kind) => startCreate(kind)} />
+      <button
+        type="button"
+        className={cn(buttonCls, "inline-flex items-center gap-1.5")}
+        disabled={busy}
+        onClick={() => { uploadFolderRef.current = null; uploadRef.current?.click(); }}
+        data-files-upload=""
+      >
+        <Upload size={14} aria-hidden="true" />
+        {t("persona.files.upload")}
+      </button>
+      {memoryEditable && (
         <button
           type="button"
-          className={cn(buttonCls, "inline-flex items-center gap-1.5")}
-          disabled={busy}
-          onClick={() => { uploadFolderRef.current = null; uploadRef.current?.click(); }}
-          data-files-upload=""
+          className={cn(iconButtonCls, plain ? "rounded-full p-1.5" : "ml-auto p-1.5")}
+          aria-label={t("persona.files.options")}
+          title={t("persona.files.options")}
+          aria-expanded={showOptions}
+          onClick={() => setShowOptions((shown) => !shown)}
+          data-files-options=""
         >
-          <Upload size={14} aria-hidden="true" />
-          {t("persona.files.upload")}
+          <MoreHorizontal size={16} aria-hidden="true" />
         </button>
-        {memoryEditable && (
-          <button
-            type="button"
-            className={cn(iconButtonCls, "ml-auto p-1.5")}
-            aria-label={t("persona.files.options")}
-            title={t("persona.files.options")}
-            aria-expanded={showOptions}
-            onClick={() => setShowOptions((shown) => !shown)}
-            data-files-options=""
-          >
-            <MoreHorizontal size={16} aria-hidden="true" />
-          </button>
-        )}
-        <input ref={uploadRef} type="file" multiple hidden onChange={onUpload} data-files-upload-input="" />
-      </div>
+      )}
+      <input ref={uploadRef} type="file" multiple hidden onChange={onUpload} data-files-upload-input="" />
+    </>
+  );
 
-      {creating && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border-[0.5px] border-border bg-elevated p-2" data-files-create={creating}>
+  // a plain button beside a PILL: Cancel, Close
+  const quietCls = plain ? buttonCls : "rounded-md px-2 py-1 text-[12.5px] text-ink-secondary hover:bg-control hover:text-ink";
+  const lineCls = plain ? "px-4 py-2.5 text-[12px] leading-4" : "text-[12.5px]";
+
+  const createBox = creating && (
+    <div
+      className={plain ? "flex flex-wrap items-center gap-2 px-4 py-2" : "flex flex-wrap items-center gap-2 rounded-xl border-[0.5px] border-border bg-elevated p-2"}
+      data-files-create={creating}
+    >
+      <input
+        autoFocus
+        value={newName}
+        onChange={(event) => setNewName(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && newName.trim()) {
+            event.preventDefault();
+            create();
+          }
+          if (event.key === "Escape") setCreating(null);
+        }}
+        placeholder={t(
+          creating === "topic" ? "botPanel.memory.topicPlaceholder"
+            : creating === "folder" ? "persona.files.newFolderPlaceholder"
+              : "persona.files.newFilePlaceholder",
+        )}
+        aria-label={t(
+          creating === "topic" ? "botPanel.memory.topicAria"
+            : creating === "folder" ? "persona.files.newFolderLabel"
+              : "persona.files.newFileLabel",
+        )}
+        className={cn(plain ? PLAIN_FIELD : inputCls, "min-w-0 max-w-[240px] flex-1")}
+        data-files-new-name=""
+      />
+      <button type="button" className={buttonCls} disabled={busy || !newName.trim()} onClick={create} data-files-new="">
+        {t("persona.files.create")}
+      </button>
+      <button type="button" className={quietCls} onClick={() => setCreating(null)}>
+        {t("common.cancel")}
+      </button>
+    </div>
+  );
+
+  const bulkBar = selected.size > 0 && (
+    <div
+      className={plain ? "flex flex-wrap items-center gap-2 px-4 py-2" : "flex flex-wrap items-center gap-2 rounded-xl border-[0.5px] border-border bg-elevated px-3 py-2"}
+      data-files-bulk=""
+    >
+      <span className={plain ? "text-[12px] text-ink-secondary" : "text-[12.5px] text-ink-secondary"}>{t("persona.files.selected", { count: selected.size })}</span>
+      <button type="button" className={buttonCls} disabled={busy} onClick={() => setMoving({ paths: [...selected], anchor: "bulk" })} data-files-bulk-move="">
+        <FolderInput size={14} aria-hidden="true" className="mr-1 inline" />
+        {t("persona.files.bulkMove")}
+      </button>
+      <button type="button" className={cn(buttonCls, "text-danger")} disabled={busy} onClick={() => void askDelete([...selected])} data-files-bulk-delete="">
+        <Trash2 size={14} aria-hidden="true" className="mr-1 inline" />
+        {t("persona.files.bulkDelete")}
+      </button>
+      <button type="button" className={plain ? buttonCls : "rounded-md px-2 py-1 text-[12.5px] text-ink-secondary hover:bg-control"} onClick={() => setSelected(new Set())}>
+        {t("common.cancel")}
+      </button>
+    </div>
+  );
+
+  const uploadLine = upload && (
+    <p className={cn(lineCls, "text-ink-secondary")} data-files-upload-progress="">
+      {t("persona.files.uploadProgress", { name: upload.name, percent: upload.percent })}
+    </p>
+  );
+
+  const statusLines = (
+    <>
+      {error && <p role="alert" className={cn(lineCls, "text-danger")}>{error}</p>}
+      {listing === null && !error && <p className={cn(lineCls, "text-ink-secondary")}>{t("persona.files.loading")}</p>}
+      {listing?.truncated && <p className={cn(lineCls, "text-ink-secondary")}>{t("persona.files.truncated")}</p>}
+    </>
+  );
+
+  const list = (
+    <ul
+      className={cn(
+        plain ? "flex flex-col" : "flex flex-col divide-y divide-hairline/40 overflow-clip rounded-xl border-[0.5px] border-border bg-elevated",
+        dropTarget === "" && (plain ? "rounded-xl bg-accent/10" : "ring-2 ring-accent/40"),
+      )}
+      data-files-list=""
+    >
+      {rows.map((entry) => {
+        const depth = entryDepth(entry.path);
+        const name = entryName(entry.path);
+        const isOpen = open?.path === entry.path;
+        const folderOpen = entry.kind === "dir" && expanded.has(entry.path);
+        const core = isCoreWorkspaceFile(entry.path) || entry.virtual === "soul";
+        const Icon = entry.kind === "dir" ? Folder : KIND_ICON[entryKind(entry)];
+        const checked = selected.has(entry.path);
+        const nameControl = entry.kind === "dir" ? null : renaming?.path === entry.path ? (
           <input
             autoFocus
-            value={newName}
-            onChange={(event) => setNewName(event.target.value)}
+            value={renaming.value}
+            onChange={(event) => setRenaming({ path: entry.path, value: event.target.value })}
             onKeyDown={(event) => {
-              if (event.key === "Enter" && newName.trim()) {
-                event.preventDefault();
-                create();
-              }
-              if (event.key === "Escape") setCreating(null);
+              if (event.key === "Enter") rename();
+              if (event.key === "Escape") setRenaming(null);
             }}
-            placeholder={t(
-              creating === "topic" ? "botPanel.memory.topicPlaceholder"
-                : creating === "folder" ? "persona.files.newFolderPlaceholder"
-                  : "persona.files.newFilePlaceholder",
-            )}
-            aria-label={t(
-              creating === "topic" ? "botPanel.memory.topicAria"
-                : creating === "folder" ? "persona.files.newFolderLabel"
-                  : "persona.files.newFileLabel",
-            )}
-            className={cn(inputCls, "min-w-0 max-w-[240px] flex-1")}
-            data-files-new-name=""
+            aria-label={t("persona.files.renameLabel")}
+            className={cn(plain ? PLAIN_FIELD : inputCls, "min-w-0 flex-1")}
+            data-file-rename-input={entry.path}
           />
-          <button type="button" className={buttonCls} disabled={busy || !newName.trim()} onClick={create} data-files-new="">
-            {t("persona.files.create")}
+        ) : (
+          <button
+            type="button"
+            onClick={() => { void openEntry(entry); }}
+            aria-expanded={entry.markdown ? isOpen : undefined}
+            className={plain ? "min-w-0 truncate rounded-md text-left text-[14px] leading-5 text-ink hover:text-accent" : "min-w-0 flex-1 truncate text-left text-[13px] text-ink hover:underline"}
+            data-file-open={entry.path}
+          >
+            {name}
           </button>
-          <button type="button" className="rounded-md px-2 py-1 text-[12.5px] text-ink-secondary hover:bg-control hover:text-ink" onClick={() => setCreating(null)}>
-            {t("common.cancel")}
-          </button>
-        </div>
-      )}
-
-      {selected.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border-[0.5px] border-border bg-elevated px-3 py-2" data-files-bulk="">
-          <span className="text-[12.5px] text-ink-secondary">{t("persona.files.selected", { count: selected.size })}</span>
-          <button type="button" className={buttonCls} disabled={busy} onClick={() => setMoving({ paths: [...selected], anchor: "bulk" })} data-files-bulk-move="">
-            <FolderInput size={14} aria-hidden="true" className="mr-1 inline" />
-            {t("persona.files.bulkMove")}
-          </button>
-          <button type="button" className={cn(buttonCls, "text-danger")} disabled={busy} onClick={() => void askDelete([...selected])} data-files-bulk-delete="">
-            <Trash2 size={14} aria-hidden="true" className="mr-1 inline" />
-            {t("persona.files.bulkDelete")}
-          </button>
-          <button type="button" className="rounded-md px-2 py-1 text-[12.5px] text-ink-secondary hover:bg-control" onClick={() => setSelected(new Set())}>
-            {t("common.cancel")}
-          </button>
-        </div>
-      )}
-
-      {upload && (
-        <p className="text-[12.5px] text-ink-secondary" data-files-upload-progress="">
-          {t("persona.files.uploadProgress", { name: upload.name, percent: upload.percent })}
-        </p>
-      )}
-
-      {memoryEditable && <MemoryFolderOptions bot={bot} active={active} showOptions={showOptions} onChanged={() => void reload()} />}
-
-      {error && <p role="alert" className="text-[12.5px] text-danger">{error}</p>}
-      {listing === null && !error && <p className="text-[12.5px] text-ink-secondary">{t("persona.files.loading")}</p>}
-      {listing?.truncated && <p className="text-[12.5px] text-ink-secondary">{t("persona.files.truncated")}</p>}
-
-      <ul
-        className={cn(
-          "flex flex-col divide-y divide-hairline/40 overflow-clip rounded-xl border-[0.5px] border-border bg-elevated",
-          dropTarget === "" && "ring-2 ring-accent/40",
-        )}
-        data-files-list=""
-      >
-        {rows.map((entry) => {
-          const depth = entryDepth(entry.path);
-          const name = entryName(entry.path);
-          const isOpen = open?.path === entry.path;
-          const folderOpen = entry.kind === "dir" && expanded.has(entry.path);
-          const core = isCoreWorkspaceFile(entry.path) || entry.virtual === "soul";
-          const Icon = entry.kind === "dir" ? Folder : KIND_ICON[entryKind(entry)];
-          const checked = selected.has(entry.path);
-          return (
-            <li
-              key={entry.path}
-              data-file-row={entry.path}
-              data-forgotten={entry.forgotten ? "" : undefined}
-              data-folder-expanded={entry.kind === "dir" ? (folderOpen ? "true" : "false") : undefined}
-              data-core={core ? "" : undefined}
-              className={cn("px-3 py-2", dropTarget === entry.path && "bg-accent/10")}
-              draggable={!core}
-              onDragStart={(event) => {
-                if (core) return;
-                const paths = selected.has(entry.path) && selected.size > 1 ? [...selected] : [entry.path];
-                event.dataTransfer.setData(WORKSPACE_DRAG, JSON.stringify(paths));
-                event.dataTransfer.effectAllowed = "move";
-              }}
-              onDragOver={entry.kind === "dir" ? (event) => onDragOver(event, entry.path) : undefined}
-              onDrop={entry.kind === "dir" ? (event) => onDrop(event, entry.path) : undefined}
-            >
-              <div className="flex items-center gap-2" style={{ paddingLeft: depth * 16 }}>
-                {!core && (
-                  <button
-                    type="button"
-                    role="checkbox"
-                    aria-checked={checked}
-                    aria-label={t("persona.files.select", { name })}
-                    data-file-select={entry.path}
-                    className={cn("flex size-4 shrink-0 items-center justify-center rounded border border-hairline text-ink", checked && "border-accent bg-accent text-white")}
-                    onClick={(event) => toggleSelect(entry.path, event.metaKey || event.ctrlKey || event.shiftKey || true)}
-                  >
-                    {checked ? <Check size={10} aria-hidden="true" /> : null}
-                  </button>
-                )}
-                {entry.kind === "dir" ? (
-                  <button
-                    type="button"
-                    data-folder-toggle={entry.path}
-                    aria-expanded={folderOpen}
-                    aria-label={t(folderOpen ? "persona.files.collapse" : "persona.files.expand", { name })}
-                    onClick={() => { void toggleDir(entry.path); }}
-                    className="flex min-w-0 flex-1 items-center gap-2 text-left text-ink-secondary hover:text-ink"
-                  >
-                    <ChevronRight size={12} aria-hidden="true" className={cn("shrink-0 transition-transform", folderOpen && "rotate-90")} />
-                    <Icon size={14} aria-hidden="true" className="shrink-0" />
-                    <span className="min-w-0 flex-1 truncate text-[13px]">{name}/</span>
-                  </button>
-                ) : (
-                  <span className="w-3 shrink-0" aria-hidden="true" />
-                )}
-                {entry.kind === "file" && <Icon size={14} aria-hidden="true" className="shrink-0 text-ink-secondary" />}
-                {entry.kind === "dir" ? null : renaming?.path === entry.path ? (
-                  <input
-                    autoFocus
-                    value={renaming.value}
-                    onChange={(event) => setRenaming({ path: entry.path, value: event.target.value })}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") rename();
-                      if (event.key === "Escape") setRenaming(null);
-                    }}
-                    aria-label={t("persona.files.renameLabel")}
-                    className={cn(inputCls, "min-w-0 flex-1")}
-                    data-file-rename-input={entry.path}
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => { void openEntry(entry); }}
-                    aria-expanded={entry.markdown ? isOpen : undefined}
-                    className="min-w-0 flex-1 truncate text-left text-[13px] text-ink hover:underline"
-                    data-file-open={entry.path}
-                  >
-                    {name}
-                  </button>
-                )}
-                {entry.forgotten && (
-                  <span data-forgotten-badge="" title={advanced ? t("persona.files.forgottenDetail", { days: listing?.forgottenAfterDays ?? 30 }) : undefined} className="shrink-0 rounded-full bg-warning/15 px-2 py-0.5 text-[11px] leading-4 text-warning">
-                    {t("persona.files.forgotten")}
-                  </span>
-                )}
-                {entry.kind === "file" && <LoadBadge load={entry.load} detailed={advanced} />}
-                <RowMenu
-                  entry={entry}
-                  core={core}
-                  busy={busy}
-                  onRename={() => setRenaming({ path: entry.path, value: name })}
-                  onMove={() => setMoving({ paths: [entry.path], anchor: entry.path })}
-                  onDownload={() => void run(() => downloadEntry(bot.id, entry.path))}
-                  onDelete={() => void askDelete([entry.path])}
-                  onUploadInto={() => { uploadFolderRef.current = entry.path; uploadRef.current?.click(); }}
-                />
+        );
+        const details = advanced && entry.kind === "file" ? entryDetails(entry, now) : null;
+        return (
+          <li
+            key={entry.path}
+            data-file-row={entry.path}
+            data-forgotten={entry.forgotten ? "" : undefined}
+            data-folder-expanded={entry.kind === "dir" ? (folderOpen ? "true" : "false") : undefined}
+            data-core={core ? "" : undefined}
+            className={cn(plain ? "px-4 py-1" : "px-3 py-2", dropTarget === entry.path && "bg-accent/10")}
+            draggable={!core}
+            onDragStart={(event) => {
+              if (core) return;
+              const paths = selected.has(entry.path) && selected.size > 1 ? [...selected] : [entry.path];
+              event.dataTransfer.setData(WORKSPACE_DRAG, JSON.stringify(paths));
+              event.dataTransfer.effectAllowed = "move";
+            }}
+            onDragOver={entry.kind === "dir" ? (event) => onDragOver(event, entry.path) : undefined}
+            onDrop={entry.kind === "dir" ? (event) => onDrop(event, entry.path) : undefined}
+          >
+            <div className={plain ? "flex min-h-[44px] items-center gap-3" : "flex items-center gap-2"} style={{ paddingLeft: depth * 16 }}>
+              {!core && (
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={checked}
+                  aria-label={t("persona.files.select", { name })}
+                  data-file-select={entry.path}
+                  className={cn(
+                    plain ? "flex size-4 shrink-0 items-center justify-center rounded bg-control text-ink" : "flex size-4 shrink-0 items-center justify-center rounded border border-hairline text-ink",
+                    checked && (plain ? "bg-accent text-white" : "border-accent bg-accent text-white"),
+                  )}
+                  onClick={(event) => toggleSelect(entry.path, event.metaKey || event.ctrlKey || event.shiftKey || true)}
+                >
+                  {checked ? <Check size={10} aria-hidden="true" /> : null}
+                </button>
+              )}
+              {entry.kind === "dir" ? (
+                <button
+                  type="button"
+                  data-folder-toggle={entry.path}
+                  aria-expanded={folderOpen}
+                  aria-label={t(folderOpen ? "persona.files.collapse" : "persona.files.expand", { name })}
+                  onClick={() => { void toggleDir(entry.path); }}
+                  className={plain ? "flex min-w-0 flex-1 items-center gap-3 text-left text-ink" : "flex min-w-0 flex-1 items-center gap-2 text-left text-ink-secondary hover:text-ink"}
+                >
+                  <ChevronRight size={plain ? 14 : 12} aria-hidden="true" className={cn("shrink-0 transition-transform", plain && "text-ink-secondary", folderOpen && "rotate-90")} />
+                  <Icon size={plain ? 20 : 14} aria-hidden="true" className={plain ? "shrink-0 text-ink-secondary" : "shrink-0"} />
+                  <span className={plain ? "min-w-0 flex-1 truncate text-[14px] leading-5" : "min-w-0 flex-1 truncate text-[13px]"}>{name}/</span>
+                </button>
+              ) : (
+                <span className={plain ? "w-3.5 shrink-0" : "w-3 shrink-0"} aria-hidden="true" />
+              )}
+              {entry.kind === "file" && <Icon size={plain ? 20 : 14} aria-hidden="true" className="shrink-0 text-ink-secondary" />}
+              {plain ? entry.kind === "file" && (
+                <div className="flex min-w-0 flex-1 flex-col">
+                  {nameControl}
+                  {details && (
+                    <span className={cn("truncate text-[12px] leading-4 text-ink-secondary", entry.budget?.over && "text-danger")} data-file-details="">{details}</span>
+                  )}
+                </div>
+              ) : nameControl}
+              {entry.forgotten && (
+                <span data-forgotten-badge="" title={advanced ? t("persona.files.forgottenDetail", { days: listing?.forgottenAfterDays ?? 30 }) : undefined} className="shrink-0 rounded-full bg-warning/15 px-2 py-0.5 text-[11px] leading-4 text-warning">
+                  {t("persona.files.forgotten")}
+                </span>
+              )}
+              {entry.kind === "file" && <LoadBadge load={entry.load} detailed={advanced} />}
+              <RowMenu
+                entry={entry}
+                core={core}
+                busy={busy}
+                onRename={() => setRenaming({ path: entry.path, value: name })}
+                onMove={() => setMoving({ paths: [entry.path], anchor: entry.path })}
+                onDownload={() => void run(() => downloadEntry(bot.id, entry.path))}
+                onDelete={() => void askDelete([entry.path])}
+                onUploadInto={() => { uploadFolderRef.current = entry.path; uploadRef.current?.click(); }}
+              />
+            </div>
+            {!plain && details !== null && (
+              <div className={cn("mt-0.5 text-[11.5px] text-ink-tertiary", entry.budget?.over && "text-danger")} style={{ paddingLeft: depth * 16 + 42 }} data-file-details="">
+                {details}
               </div>
-              {advanced && entry.kind === "file" && (
-                <div className={cn("mt-0.5 text-[11.5px] text-ink-tertiary", entry.budget?.over && "text-danger")} style={{ paddingLeft: depth * 16 + 42 }} data-file-details="">
-                  {entryDetails(entry, now)}
-                </div>
-              )}
-              {isOpen && open && (
-                <div className="mt-2 flex flex-col gap-2" data-file-editor={open.path}>
-                  {open.readOnly && <p className="text-[12px] text-ink-secondary">{t("persona.files.readOnly")}</p>}
-                  <MarkdownEditor
-                    ariaLabel={open.path}
-                    value={open.text}
-                    readOnly={open.readOnly}
-                    onChange={(text) => setOpen({ ...open, text, dirty: true })}
-                    minHeight={200}
-                    dataField={`workspace-file:${open.path}`}
-                    footer={open.path === "RULES.md" ? <RulesCounter text={open.text} /> : <span>{open.path}</span>}
-                  />
-                  {conflict && (
-                    <div role="alert" className="rounded-lg border border-warning/25 bg-warning/10 p-3 text-[12.5px] leading-relaxed text-ink">
-                      <div className="font-medium">{t("persona.rules.conflict")}</div>
-                      <div className="mt-2 flex gap-2">
-                        <button type="button" className={buttonCls} disabled={busy} onClick={() => { setOpen({ ...open, text: conflict.current, hash: conflict.currentHash, dirty: false }); setConflict(null); }}>
-                          {t("persona.rules.reload")}
-                        </button>
-                        <button type="button" className={buttonCls} disabled={busy} onClick={() => void save(conflict.currentHash)}>
-                          {t("persona.rules.overwrite")}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  {!open.readOnly && (
-                    <div className="flex items-center gap-2">
-                      <button type="button" className={buttonCls} disabled={busy || !open.dirty} onClick={() => void save(open.hash)} data-file-save="">
-                        {t("persona.rules.save")}
+            )}
+            {isOpen && open && (
+              <div className={plain ? "mb-2 mt-1 flex flex-col gap-2" : "mt-2 flex flex-col gap-2"} data-file-editor={open.path}>
+                {open.readOnly && <p className={plain ? "text-[12px] leading-4 text-ink-secondary" : "text-[12px] text-ink-secondary"}>{t("persona.files.readOnly")}</p>}
+                <MarkdownEditor
+                  ariaLabel={open.path}
+                  value={open.text}
+                  readOnly={open.readOnly}
+                  onChange={(text) => setOpen({ ...open, text, dirty: true })}
+                  minHeight={200}
+                  dataField={`workspace-file:${open.path}`}
+                  footer={open.path === "RULES.md" ? <RulesCounter text={open.text} /> : <span>{open.path}</span>}
+                />
+                {conflict && (
+                  <div role="alert" className={plain ? "rounded-lg bg-warning/10 p-3 text-[12.5px] leading-relaxed text-ink" : "rounded-lg border border-warning/25 bg-warning/10 p-3 text-[12.5px] leading-relaxed text-ink"}>
+                    <div className={plain ? undefined : "font-medium"}>{t("persona.rules.conflict")}</div>
+                    <div className="mt-2 flex gap-2">
+                      <button type="button" className={buttonCls} disabled={busy} onClick={() => { setOpen({ ...open, text: conflict.current, hash: conflict.currentHash, dirty: false }); setConflict(null); }}>
+                        {t("persona.rules.reload")}
                       </button>
-                      <button type="button" className="rounded-md px-2 py-1 text-[12.5px] text-ink-secondary hover:bg-control hover:text-ink" disabled={busy} onClick={() => { setOpen(null); setConflict(null); }}>
-                        {t("common.close")}
+                      <button type="button" className={buttonCls} disabled={busy} onClick={() => void save(conflict.currentHash)}>
+                        {t("persona.rules.overwrite")}
                       </button>
                     </div>
-                  )}
-                </div>
-              )}
-            </li>
-          );
-        })}
-        {listing && rows.length === 1 && listing.entries.length === 0 && (
-          <li className="px-3 py-2 text-[12.5px] text-ink-secondary">{t("persona.files.empty")}</li>
-        )}
-      </ul>
+                  </div>
+                )}
+                {!open.readOnly && (
+                  <div className="flex items-center gap-2">
+                    <button type="button" className={buttonCls} disabled={busy || !open.dirty} onClick={() => void save(open.hash)} data-file-save="">
+                      {t("persona.rules.save")}
+                    </button>
+                    <button type="button" className={quietCls} disabled={busy} onClick={() => { setOpen(null); setConflict(null); }}>
+                      {t("common.close")}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </li>
+        );
+      })}
+      {listing && rows.length === 1 && listing.entries.length === 0 && (
+        <li className={plain ? "px-4 py-2.5 text-[12px] leading-4 text-ink-secondary" : "px-3 py-2 text-[12.5px] text-ink-secondary"}>{t("persona.files.empty")}</li>
+      )}
+    </ul>
+  );
 
+  const overlays = (
+    <>
       {moving && (
         <MovePopover
           folders={folderChoices}
@@ -373,6 +390,90 @@ export function WorkspaceFilesSection({
           </div>
         </div>
       )}
+    </>
+  );
+
+  const dropProps = {
+    onDragOver: (event: DragEvent<HTMLDivElement>) => onDragOver(event, null),
+    onDragLeave: () => setDropTarget(null),
+    onDrop: (event: DragEvent<HTMLDivElement>) => onDrop(event, null),
+  };
+
+  if (plain) {
+    // The profile page (#2313): one labelled card of rows, "Bot folder",
+    // with the toolbar at the right of its label; tidying and the change
+    // log are two labelled cards under it when the "..." menu is open.
+    const folder = (parts: MemoryFolderParts | null) => (
+      <>
+        <PaneSection title={t("botSettings.nav.files")} help={t("persona.files.intro")} action={toolbar} plain data-files-folder="">
+          <div className={PLAIN_CARD} data-settings-surface="">
+            {memory && (
+              <ProfileRow
+                icon={<Brain />}
+                label={(
+                  <span className="inline-flex items-center gap-1.5">
+                    {t("botPanel.memory.let")}
+                    <HelpTip label={t("settings.moreAbout", { title: t("botPanel.memory.let") })}>{t("botPanel.memory.off")}</HelpTip>
+                  </span>
+                )}
+                state={memory.busy ? t("botPanel.memory.busy").trim() : undefined}
+                action={<Switch checked={memory.enabled} disabled={memory.busy} aria-label={t("botPanel.memory.let")} onClick={() => memory.onToggle(!memory.enabled)} />}
+                wrap
+                data-memory-toggle=""
+              />
+            )}
+            <ProfileRow
+              icon={<FolderOpen />}
+              label={t("persona.files.short")}
+              state={advanced && listing ? <span className="break-all" data-workspace-path="">{listing.workspacePath}</span> : undefined}
+              wrap
+            />
+            {parts?.notice}
+            {createBox}
+            {bulkBar}
+            {uploadLine}
+            {parts?.status}
+            {statusLines}
+            {list}
+          </div>
+        </PaneSection>
+        {parts?.options}
+      </>
+    );
+    return (
+      <div className="flex flex-col gap-5" data-workspace-files="" {...dropProps}>
+        {memoryEditable
+          ? <MemoryFolderOptions bot={bot} active={active} showOptions={showOptions} onChanged={() => void reload()}>{folder}</MemoryFolderOptions>
+          : folder(null)}
+        {overlays}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3" data-workspace-files="" {...dropProps}>
+      {memory && <MemoryToggleCard enabled={memory.enabled} busy={memory.busy} onToggle={memory.onToggle} />}
+      <div className="flex items-center gap-1.5 text-[13px] text-ink-secondary">
+        <span>{t("persona.files.short")}</span>
+        <HelpTip label={t("settings.moreAbout", { title: t("botSettings.nav.files") })}>
+          <span className="block">{t("persona.files.intro")}</span>
+          {advanced && listing && <span className="mt-2 block break-all font-mono" data-workspace-path="">{listing.workspacePath}</span>}
+        </HelpTip>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {toolbar}
+      </div>
+
+      {createBox}
+      {bulkBar}
+      {uploadLine}
+
+      {memoryEditable && <MemoryFolderOptions bot={bot} active={active} showOptions={showOptions} onChanged={() => void reload()} />}
+
+      {statusLines}
+      {list}
+      {overlays}
     </div>
   );
 }

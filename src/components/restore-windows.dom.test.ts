@@ -34,7 +34,7 @@ vi.mock("./bot-settings/VoiceSection", () => ({ VoiceSection: () => null }));
 vi.mock("./bot-settings/SharingSection", () => ({ SharingSection: () => null }));
 vi.mock("./bot-settings/VisibilitySection", () => ({ VisibilitySection: () => null }));
 vi.mock("./bot-settings/HistorySection", () => ({ HistorySection: () => null }));
-vi.mock("./bot-settings/UsageSection", () => ({ UsageSection: () => null }));
+vi.mock("./bot-settings/BotAnalyticsSection", () => ({ BotAnalyticsSection: () => null }));
 vi.mock("./BotProfileAvatarCard", () => ({ BotProfileAvatarCard: () => null }));
 vi.mock("./appearance/AppearancePane", () => ({ AppearancePane: () => null }));
 vi.mock("@/lib/mcp-servers", () => ({ useMcpServers: () => ({ servers: [] }), mcpServersForBot: () => [] }));

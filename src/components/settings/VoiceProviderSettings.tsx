@@ -31,7 +31,7 @@ import {
   type VoiceTtsChoice,
   type VoiceTtsProvider,
 } from "../../../shared/voice-providers";
-import { CompactRow, DescribedRow, GROUP_CARD, PILL, PillSelect, SettingsGroup, type PillOption } from "../SettingsPrimitives";
+import { CompactRow, DescribedRow, GROUP_CARD, PILL, PillSelect, SettingsGroup, useSettingsSurface, type PillOption } from "../SettingsPrimitives";
 import { readableError } from "@/lib/plain-error";
 
 type Pick<P extends string> = "inherit" | "auto" | P;
@@ -116,6 +116,7 @@ export function VoiceProviderSettings({ bot }: { bot?: { id: string; name: strin
   const [testing, setTesting] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const audio = useRef<HTMLAudioElement | null>(null);
+  const plain = useSettingsSurface() === "plain";
 
   useEffect(() => () => { audio.current?.pause(); }, []);
 
@@ -206,11 +207,13 @@ export function VoiceProviderSettings({ bot }: { bot?: { id: string; name: strin
           </DescribedRow>
         </>
       )}
-      {note && <p role="alert" className="px-3.5 pb-2 text-[12px] text-danger">{note}</p>}
+      {note && <p role="alert" className={cn(plain ? "px-4" : "px-3.5", "pb-2 text-[12px] text-danger")}>{note}</p>}
     </>
   );
 
   if (bot) {
+    // The bot's profile page (#2313): a plain card with its grey label.
+    if (plain) return <div data-voice-providers="bot"><SettingsGroup title={t("voiceProviders.title")} groupId="botVoiceProviders">{body}</SettingsGroup></div>;
     return <div className={GROUP_CARD} data-voice-providers="bot">{body}</div>;
   }
   return (

@@ -16682,6 +16682,12 @@
     },
     "Changed: %@": {
       "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ changed"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",

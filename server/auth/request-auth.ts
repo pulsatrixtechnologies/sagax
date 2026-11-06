@@ -704,6 +704,9 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // the handlers.
   { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/history$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/history\/(?:rollback|restore)$/ },
+  // 2026-11-06: the bot's analytics (server/routes/bot-analytics.ts); the
+  // handler narrows a plain member to their own turns.
+  { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/analytics$/ },
   // The rule sets (server/routes/bot-rules.ts): list, add, rename, switch,
   // reorder, save a set's text, delete. Same gate as the Soul edit, checked
   // in the handler.

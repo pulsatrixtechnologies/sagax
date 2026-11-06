@@ -56,7 +56,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     search, setSearch, openedGroups, setOpenedGroups, activeResult, setActiveResult, filter, setFilter,
     type, setType, tab, setTab, harness,
     ownerOrAdmin, libraryEditor, perspicaxOrg, organization, dataCenterFor, setDataCenterFor,
-    messagesSetup, skills, setInstalling, panelError, setPanelError, panelNotice,
+    macAppsVisible, macAppsSetup, skills, setInstalling, panelError, setPanelError, panelNotice,
     scopeBot, setScopeChoice, scope, scopedPluginView, orgRevision, botCapabilities, botView,
     skillsLibraryOn, close, revealLater, shownMarketplaces, grokConfigured, items, scopedItems,
     refreshAll, refreshing, chooseTab, setMarketplaces, loadSkills, loadFeatured,
@@ -389,10 +389,13 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               // at the end (#2104: Grok Bot's Manage opens on the list)
               organizationAdmin={scope === "workspace" && orgHere ? <OrgCapabilitiesAdmin /> : undefined}
               onDiscover={() => setTab("discover")}
-              macApps={scope !== "bot" ? (
+              macApps={scope !== "bot" && macAppsVisible ? (
                 <MacAppsInstalledSection
-                  onOpenMessages={() => { setTab("installed"); push({ page: "mac-messages" }); }}
-                  messagesEnabled={messagesSetup?.useMessages}
+                  status={macAppsSetup}
+                  onOpen={(app) => {
+                    setTab("installed");
+                    push(app === "messages" ? { page: "mac-messages" } : { page: "mac-app", app });
+                  }}
                 />
               ) : undefined}
               accounts={{ sections: accountSections, refreshing: harness.loading, onRefresh: () => void harness.load(true), onSetUp: setUpEngine, onOpen: openAccount }}

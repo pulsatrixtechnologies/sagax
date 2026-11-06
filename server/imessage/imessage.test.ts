@@ -168,3 +168,42 @@ describe("Messages attachments", () => {
     }
   });
 });
+
+// The other Apple apps on the solo Mac (electron/mac-apps.mjs): only the apps
+// the person turned on are offered; a write follows the bot's approval mode.
+describe("Apple apps on the solo Mac", () => {
+  const deps = (unasked: boolean, cards: Array<{ to: string; macApp?: unknown }>, runs: string[]) => ({
+    host: { platform: "darwin", identityKind: "solo" as const },
+    useMessages: false,
+    dbDir: null,
+    sender: { send: async () => ({ service: "iMessage" as const, via: "participant" as const }) },
+    botId: "bot",
+    threadId: "thread",
+    openCard: (pending: { to: string; macApp?: unknown }) => { cards.push(pending); },
+    macApps: {
+      enabled: (app: string) => app === "notes",
+      run: async (tool: string) => { runs.push(tool); return { content: [{ type: "text" as const, text: "done" }] }; },
+      unasked,
+    },
+  });
+
+  it("lists only the apps that are on, asks in Ask mode, acts in Auto, and refuses an app that is off", async () => {
+    const cards: Array<{ to: string; macApp?: unknown }> = [];
+    const runs: string[] = [];
+    const listed = await handleMessagesMcp({ method: "tools/list" }, deps(false, cards, runs)) as { result: { tools: { name: string }[] } };
+    const names = listed.result.tools.map((tool) => tool.name).filter((name) => name.startsWith("mac_"));
+    expect(names.sort()).toEqual(["mac_notes_create", "mac_notes_search"]);
+    const asked = await handleMessagesMcp({ method: "tools/call", params: { name: "mac_notes_create", arguments: { title: "Plan", body: "secret body" } } }, deps(false, cards, runs)) as { result: { content: { text: string }[] } };
+    expect(asked.result.content[0]!.text).toContain("approval card");
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.to).toBe('Note "Plan"');
+    expect(cards[0]!.to).not.toContain("secret");
+    expect(runs).toEqual([]);
+    const auto = await handleMessagesMcp({ method: "tools/call", params: { name: "mac_notes_create", arguments: { title: "Plan", body: "x" } } }, deps(true, cards, runs)) as { result: { content: { text: string }[] } };
+    expect(auto.result.content[0]!.text).toBe("done");
+    expect(runs).toEqual(["mac_notes_create"]);
+    const off = await handleMessagesMcp({ method: "tools/call", params: { name: "mac_mail_send", arguments: { to: ["a@example.com"], subject: "s", body: "b" } } }, deps(true, cards, runs)) as { result: { isError?: boolean } };
+    expect(off.result.isError).toBe(true);
+    expect(runs).toEqual(["mac_notes_create"]);
+  });
+});

@@ -39,6 +39,7 @@ import { inBotFolder } from "../sandbox/sandbox-bot-folder.ts";
 import type { SandboxExecInput } from "../sandbox/sandboxd-core.ts";
 import type { InternalCapabilityView, InternalRouteContext } from "./internal-route.ts";
 import { PASS } from "./table.ts";
+import type { MacAppId, MacAppToolResult } from "../../electron/mac-apps.mjs";
 
 /** One computer select_computer can offer (selectableComputers in index). */
 export type SelectableComputer = {
@@ -223,6 +224,12 @@ export interface InternalEnvironmentsDeps {
 
   desktopConnected(person: string): boolean;
   handleDesktopBridgeMcp: typeof handleDesktopBridgeMcp;
+  /** Solo Mac: an Apple app's On/Off switch (Plugins > This Mac). */
+  macAppEnabled?(app: MacAppId): boolean;
+  /** Solo Mac: run one Apple app tool here (electron/mac-apps.mjs). */
+  runMacApp?(tool: string, args: Record<string, unknown>): Promise<MacAppToolResult>;
+  /** The person's signed-in desktop is a Mac that offers its Apple apps. */
+  desktopBridgeMacApps?(person: string): boolean;
   desktopBridgesRequest(
     person: string,
     operation: DesktopBridgeOperation,
@@ -714,6 +721,8 @@ async function handleDesktopMcp(deps: InternalEnvironmentsDeps, ctx: InternalRou
             return "";
           }
         })()}`
+        // The Apple app tool (target app + verb), never the message or note.
+        : operation.action === "mac_app" ? `mac_app ${operation.tool_name ?? ""}`
         : operation.action;
       let provisioning = false;
       const onProgress = operation.action === "vm_create"
@@ -765,6 +774,7 @@ async function handleDesktopMcp(deps: InternalEnvironmentsDeps, ctx: InternalRou
       }),
       commandVariables: () => deps.commandVariablesFor(capability.botId, capability.threadId, person),
       hold: (full) => deps.saveToolResult(capability, full, true),
+      macApps: () => deps.desktopBridgeMacApps?.(person) === true,
     });
     deps.requireActive(capability);
     return json(res, 200, { result });
@@ -885,7 +895,34 @@ async function answerMessagesMcp(deps: InternalEnvironmentsDeps, ctx: InternalRo
     sender: deps.imessageSender as never,
     botId: sender.id,
     threadId: capability.threadId,
+    ...(deps.macAppEnabled && deps.runMacApp ? {
+      macApps: {
+        enabled: (app: MacAppId) => deps.macAppEnabled!(app),
+        run: (tool: string, args: Record<string, unknown>) => deps.runMacApp!(tool, args),
+        unasked: ["auto", "full"].includes(deps.sourceApprovalMode(sender.id, capability.threadId)),
+      },
+    } : {}),
     openCard: (pending) => {
+      if (pending.macApp) {
+        // An Apple app write (Mail, Calendar, Reminders, Notes) in Ask mode.
+        const message = deps.appendMessage(capability.threadId, {
+          role: "bot",
+          kind: "options",
+          from: { botId: sender.id, name: sender.name, color: sender.color },
+          card: {
+            title: "Approval needed",
+            subtitle: pending.to,
+            options: ["Allow", "Deny"],
+            requestId: pending.requestId,
+            requestType: "permission",
+            tool: pending.macApp.tool,
+            toolInput: JSON.stringify(pending.macApp.args),
+            plain: { title: pending.to, line: pending.macApp.tool, risk: "write" },
+          },
+        });
+        deps.bindImessageMessage(pending.requestId, message.id);
+        return;
+      }
       const preview = pending.text.length > 240 ? `${pending.text.slice(0, 240)}...` : pending.text;
       const line = pending.fileName ? `${preview ? `${preview} ` : ""}File: ${pending.fileName}` : preview;
       // an iMessage send's card, below Full only (imessage-cards.ts

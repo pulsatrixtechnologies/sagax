@@ -78,7 +78,7 @@ const REMOTE_SAFE = new Set(["platform", "windowControls", "windowFullscreen", "
 // every one of these channels again (local-origin.cjs desktopUiOnly, and
 // sharingUiOnly for the server-mode server only). Nothing that reads this
 // computer's files, screen, logins or secrets is handed to the page.
-const BUNDLED_EXTRA = new Set(["floatingBots", "dataWindow", "artifactWindow", "retroAssistant", "windowControls", "windowFullscreen", "onOpenAppSettings", "onOpenAbout", "openExternal", "openConnectorSetup", "confirm", "updater", "serverMode", "computerSharing", "appIcon", "orgMemory", "securityKey", "onChatLink", "desktopLanguage", "openPdf", "shellPreferences", "localModels", "accounts"]);
+const BUNDLED_EXTRA = new Set(["floatingBots", "dataWindow", "artifactWindow", "retroAssistant", "windowControls", "windowFullscreen", "onOpenAppSettings", "onOpenAbout", "openExternal", "openConnectorSetup", "confirm", "updater", "serverMode", "computerSharing", "appIcon", "orgMemory", "securityKey", "onChatLink", "desktopLanguage", "openPdf", "shellPreferences", "localModels", "accounts", "macApps"]);
 let bundledPage = false;
 // main.mjs always answers this channel: a sendSync nobody answers would
 // block this page for good (a test harness must answer it too).
@@ -212,6 +212,15 @@ const bridge = {
     keyBases: () => ipcRenderer.invoke("local-models:key-bases"),
     setKey: (base, key) => ipcRenderer.invoke("local-models:set-key", base, key),
     clearKey: (base) => ipcRenderer.invoke("local-models:clear-key", base),
+  },
+  /** The Apple apps of this Mac (Plugins > This Mac) when the app is on an
+   * organization server: status, switch, test and the privacy pane, all read
+   * and changed here (electron/mac-apps.mjs). Also on the bundled page. */
+  macApps: {
+    status: () => ipcRenderer.invoke("mac-apps:status"),
+    set: (app, enabled) => ipcRenderer.invoke("mac-apps:set", app, enabled),
+    test: (app) => ipcRenderer.invoke("mac-apps:test", app),
+    openSettings: (pane) => ipcRenderer.invoke("mac-apps:open-settings", pane),
   },
   localControl: {
     status: () => ipcRenderer.invoke("cua:linux-status"),

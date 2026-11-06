@@ -17,6 +17,9 @@ export type PendingImessage = {
   fileName?: string;
   /** Absolute path inside the bot's folder. Never written on the card. */
   file?: string;
+  /** An Apple app write (mac_mail_send, mac_calendar_create...) waiting on
+   * the card instead of a Messages send: the tool and its bounded arguments. */
+  macApp?: { tool: string; args: Record<string, unknown> };
 };
 
 const pending = new Map<string, PendingImessage>();

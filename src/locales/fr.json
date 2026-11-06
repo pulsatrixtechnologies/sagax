@@ -6068,6 +6068,7 @@
   "keys.xai.link": "Console xAI",
   "onboarding.tour.error": "Impossible d'enregistrer votre progression. Réessayez ou passez la visite.",
   "organization.engineUnavailable": "L'accès de l'entreprise est indisponible. Vérifiez la connexion à l'organisation et l'installation du fournisseur ; ne vous connectez pas ici à un compte personnel.",
+  "organization.manageInPerspicax": "Gérer dans Perspicax",
   "organization.managedEngine": "Cette connexion d'entreprise est gérée par votre organisation. Pour l'actualiser ou la déconnecter, ouvrez Réglages > Organisation.",
   "policy.managedBy": "Géré par {organization}",
   "policy.remoteBlocked": "Géré par {organization} : l'accès à distance à cet ordinateur est désactivé.",

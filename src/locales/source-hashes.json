@@ -17581,7 +17581,8 @@
       "organization.rules.vaultExport.allowed": "1bb201d188352e9b4633f85e4fb8a31ea93fd14dec702443fd3e2713d657fd2d",
       "organization.rules.vaultExport.blocked": "18f2a0947f9d6523991b29b450307f22773f57d65f7efb98d48a167df04d6b1d",
       "servers.state.linked": "49d13abd41864a31f6d207d6950964d2ee2a0a236babfda5a96e150417d0e665",
-      "servers.state.local": "601b7ae9d3a9212f168cfea775f719c1d6a239758252246dd3bbb3d55863e9a4"
+      "servers.state.local": "601b7ae9d3a9212f168cfea775f719c1d6a239758252246dd3bbb3d55863e9a4",
+      "organization.manageInPerspicax": "6b8a7f811c7cf362b232d64ae462e95edc9c5fafa8316016def505954afebac9"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

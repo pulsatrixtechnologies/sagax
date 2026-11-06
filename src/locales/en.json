@@ -4849,6 +4849,7 @@
   "organization.link.ok": "You are linked to Pulsatrix",
   "organization.loadFailed": "Could not load the organization connection. Try Refresh.",
   "organization.loading": "Loading organization connection…",
+  "organization.manageInPerspicax": "Manage in Perspicax",
   "organization.managedEngine": "This Company connection is managed by your organization. To refresh or disconnect it, open Settings → Organization. Your personal provider accounts are separate.",
   "organization.modelCount": "Approved models: {count}",
   "organization.modelHelp": "Choose a Company entry in the model picker to use organization access. Company model access is managed by your organization.",

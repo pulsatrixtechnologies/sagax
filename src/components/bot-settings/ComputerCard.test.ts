@@ -140,6 +140,17 @@ describe("ComputerCard", () => {
     expect(viaButton).toEqual(rightClick);
   });
 
+  it("puts the ... in the section header row, bare and always visible, not in the card", () => {
+    act(() => root!.render(createElement(ComputerCard, { bot, onPatch: vi.fn() })));
+    const more = host!.querySelector<HTMLButtonElement>("[data-computer-card-more]")!;
+    const heading = host!.querySelector("h3")!;
+    expect(more.parentElement).toBe(heading.parentElement);
+    expect(more.closest("[data-computer-card]")).toBeNull();
+    expect(host!.querySelector("[data-computer-card]")!.parentElement!.contains(more)).toBe(false);
+    expect(more.className).toContain("ui-icon-button");
+    expect(more.className).not.toMatch(/hidden|group-hover/);
+  });
+
   it("has no ... button when read only", () => {
     act(() => root!.render(createElement(ComputerCard, { bot, readOnly: true })));
     expect(host!.querySelector("[data-computer-card-more]")).toBeNull();

@@ -12,14 +12,12 @@ import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import type { LocaleKey } from "@/locales";
 import { DescribedRow, FoldRow, HelpTip, SettingsGroup, Switch } from "../SettingsPrimitives";
-import { ExternalLinkPill } from "./SettingsPatterns";
 import { setDevPodsEnabled, useDevPodPrefs } from "../dev-pods/prefs";
 import { canManageExperimental } from "@/lib/viewer";
 import { useServerFeature } from "@/lib/server-features";
 import { featureMissingOnServer } from "@/lib/server-route";
 import { isPersonalFeature } from "../../../shared/person-settings";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
-import { perspicaxConsoleUrl } from "../PerspicaxOrgSettings";
 import { OrgPhoneCalls } from "./OrgPhoneCalls";
 import { SkillReviewSettings } from "./SkillReviewSettings";
 
@@ -116,7 +114,6 @@ export function ExperimentalSettings() {
   const org = usePerspicaxOrg();
   const orgPresent = Boolean(org);
   const orgAdmin = org?.viewerRole === "admin";
-  const issuer = org?.org.identity.issuer;
   const [saving, setSaving] = useState<ExperimentalFeature | null>(null);
   const [error, setError] = useState("");
 
@@ -285,11 +282,7 @@ export function ExperimentalSettings() {
               label={t("orgCalls.title")}
               rowId="phoneCalls"
               description={t("settings.experimental.phoneCallsOrg")}
-            >
-              {issuer ? (
-                <ExternalLinkPill href={perspicaxConsoleUrl(issuer)}>{t("organization.manageInPerspicax")}</ExternalLinkPill>
-              ) : null}
-            </DescribedRow>
+            />
           )}
         </SettingsGroup>
       )}

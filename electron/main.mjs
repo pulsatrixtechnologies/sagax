@@ -4136,7 +4136,10 @@ ipcMain.handle("screen:frame", localOnly("screen:frame", async () => {
     types: ["screen"],
     thumbnailSize: { width: 1280, height: 800 },
   });
-  return sources[0]?.thumbnail.toDataURL() ?? null;
+  // Without Screen Recording permission macOS hands back an empty thumbnail,
+  // whose data URL is a blank "data:image/png;base64,": that is no frame.
+  const thumbnail = sources[0]?.thumbnail;
+  return thumbnail && !thumbnail.isEmpty() ? thumbnail.toDataURL() : null;
 }));
 
 // Onboarding permission checks. Status reads are free; the mic request

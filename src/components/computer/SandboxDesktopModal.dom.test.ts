@@ -5,6 +5,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { CIRCLE_CLOSE_BUTTON } from "@/lib/circle-button";
 import { setLocale } from "@/lib/i18n";
 import { SandboxDesktopModal } from "./SandboxDesktopModal";
 
@@ -66,12 +67,16 @@ describe("SandboxDesktopModal calm window", () => {
     expect(document.querySelector("[data-takeover-fullscreen]")).toBeNull();
   });
 
-  it("closes with the one collapse button (no red close dot) and with Escape", () => {
+  it("closes with the one round X button (no red close dot) and with Escape", () => {
     const { onClose } = mount();
     expect(document.querySelectorAll("[data-takeover-close]")).toHaveLength(1);
     const collapse = document.querySelector<HTMLButtonElement>("[data-takeover-collapse]")!;
     expect(collapse.hasAttribute("data-takeover-close")).toBe(true);
     expect(collapse.getAttribute("aria-label")).toMatch(/^Close and release control/);
+    // JC 2026-11-06: an X on the standard round button, not the shrink arrows.
+    expect(collapse.className).toContain(CIRCLE_CLOSE_BUTTON);
+    expect(collapse.querySelector("svg.lucide-x")).not.toBeNull();
+    expect(collapse.querySelector("svg.lucide-minimize-2")).toBeNull();
     act(() => collapse.click());
     expect(onClose).toHaveBeenCalledTimes(1);
     act(() => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });

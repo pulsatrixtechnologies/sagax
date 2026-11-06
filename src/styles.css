@@ -2788,11 +2788,35 @@ body {
   outline: none;
 }
 
-/* The profile banner is a quiet grey gradient like Grok Bot (#2141), not
-   the mascot's colour: #3a3a3a to #2a2a2a on a dark skin, its pale echo on
-   a light one (the skin's color-scheme picks the pair). */
+/* The profile banner is a soft wash of the mascot's colour (#2173): the
+   page passes its hex as --bot-profile-banner-color and the wash mixes it
+   with a pale base (a pink mascot gets a pale pink), darker at the top so
+   the mascot reads over its lower edge. A neutral mascot (white, grey,
+   black, sand, brown...) keeps a visible grey instead of fading into the
+   dark skin. light-dark() picks the base for the skin. */
 .bot-profile-banner {
-  background-image: linear-gradient(180deg, light-dark(#ececec, #3a3a3a) 0%, light-dark(#e0e0e0, #2a2a2a) 100%);
+  --bot-profile-banner-base: light-dark(#ffffff, #f4f4f4);
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bot-profile-banner-color, #8e949e) 58%, var(--bot-profile-banner-base)) 0%,
+    color-mix(in srgb, var(--bot-profile-banner-color, #8e949e) 36%, var(--bot-profile-banner-base)) 100%
+  );
+}
+.bot-profile-banner[data-bot-profile-banner-palette="neutral"] {
+  --bot-profile-banner-color: #8e949e;
+}
+/* The profile's tab row (#2173) scrolls sideways; the side that still hides tabs fades out. */
+.bot-profile-tabs[data-bot-profile-tabs-more="end"] {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent);
+}
+.bot-profile-tabs[data-bot-profile-tabs-more="start"] {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 40px);
+  mask-image: linear-gradient(90deg, transparent, #000 40px);
+}
+.bot-profile-tabs[data-bot-profile-tabs-more="both"] {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 40px, #000 calc(100% - 40px), transparent);
 }
 
 /* A sidebar group header focused by a click, or handed focus back after its

@@ -77,11 +77,11 @@ export function personaGroupSections(group: PersonaGroup): readonly PersonaCateg
   return PERSONA_GROUPS.find((entry) => entry.id === group)?.sections ?? [];
 }
 
-/** The bot's profile page (#2126, Grok Bot's layout): General holds the
- * channels and the bot's accounts, Knowledge what it knows and how it
- * behaves, Settings every other section, folded. */
-export const BOT_PROFILE_TABS = ["general", "knowledge", "settings"] as const;
-export type BotProfileTab = (typeof BOT_PROFILE_TABS)[number];
+/** The bot's profile page (#2126, #2173, Grok Bot's layout): a row of pill
+ * tabs. General holds the channels, the bot's accounts and the identity,
+ * Knowledge what it knows and how it behaves, then one tab per setting
+ * (Appearance, Shared with, What it does, Model, ...). */
+export type BotProfileTab = "general" | "knowledge" | SettingsTab;
 
 /** Knowledge's sections, in order (the memory is managed in the Bot folder). */
 export const KNOWLEDGE_SECTIONS = ["skills", "soul", "rules", "files"] as const satisfies readonly PersonaCategory[];
@@ -97,12 +97,24 @@ export const SETTINGS_SECTIONS: readonly PersonaCategory[] = PERSONA_CATEGORIES.
   (id) => !GENERAL_SECTIONS.has(id) && !(KNOWLEDGE_SECTIONS as readonly PersonaCategory[]).includes(id),
 );
 
+/** The settings that are tabs of their own (#2173): every setting but the
+ * identity, which General shows under its cards. */
+export type SettingsTab = Exclude<PersonaCategory, "overview" | "slack" | (typeof KNOWLEDGE_SECTIONS)[number]>;
+export const SETTINGS_TABS: readonly SettingsTab[] = SETTINGS_SECTIONS.filter((id): id is SettingsTab => id !== "overview");
+
+export const BOT_PROFILE_TABS: readonly BotProfileTab[] = ["general", "knowledge", ...SETTINGS_TABS];
+
+export function isSettingsTab(tab: BotProfileTab): tab is SettingsTab {
+  return (SETTINGS_TABS as readonly string[]).includes(tab);
+}
+
 /** The tab a link to `section` opens: the plain opening (Identity) and
- * Slack are General, the instructions Knowledge, the rest Settings. */
+ * Slack are General, the instructions Knowledge, every other setting its
+ * own tab. */
 export function botProfileTabFor(section: BotSettingsSection | null | undefined): BotProfileTab {
   if (!section || section === "overview" || section === "details" || section === "routines") return "general";
   const category = personaCategoryForSection(section);
-  if (!category || GENERAL_SECTIONS.has(category)) return "general";
+  if (!category || category === "overview" || GENERAL_SECTIONS.has(category)) return "general";
   if ((KNOWLEDGE_SECTIONS as readonly PersonaCategory[]).includes(category)) return "knowledge";
-  return "settings";
+  return category as SettingsTab;
 }

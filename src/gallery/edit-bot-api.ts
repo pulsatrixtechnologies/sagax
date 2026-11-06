@@ -7,10 +7,10 @@ import type { Bot } from "../state/store";
 import type { Routine } from "../../shared/routines";
 import type { BotOverview } from "../lib/bot-overview-types";
 
-export function editBotFixture(org: boolean) {
+export function editBotFixture(org: boolean, color?: string | null) {
   const bot = {
     id: "scout", threadId: "t-scout", name: "Scout", title: "Recherche", description: "Trouve des sources et les résume.",
-    notifications: true, color: "green", unread: false, messages: [], tasks: [{ id: "task-1", threadId: "t-scout", title: "Tri" }],
+    notifications: true, color: color ?? "green", unread: false, messages: [], tasks: [{ id: "task-1", threadId: "t-scout", title: "Tri" }],
     soul: "Sois bref et cite tes sources.", modelSelection: { instanceId: "claude", model: "sonnet" }, approvalMode: "ask",
     computer: org ? "cloud" : "local", mcpServers: null,
     toolScope: { deny: ["mcp:mail:send"] },

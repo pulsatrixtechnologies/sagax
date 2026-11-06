@@ -82,7 +82,7 @@ vi.mock("@/state/store", async (importOriginal) => {
 });
 
 const { PersonaEditorModal } = await import("./PersonaEditorModal");
-const { KNOWLEDGE_SECTIONS, SETTINGS_SECTIONS, botProfileTabFor, personaCategoryForSection } = await import("@/lib/persona-sections");
+const { KNOWLEDGE_SECTIONS, SETTINGS_SECTIONS, SETTINGS_TABS, botProfileTabFor, personaCategoryForSection } = await import("@/lib/persona-sections");
 
 const bot = {
   id: "pepper", threadId: "t", name: "Pepper", title: "Research", description: "Finds sources.", notifications: true,
@@ -123,14 +123,17 @@ function sectionHtml(html: string, id: string): { open: boolean; html: string } 
 }
 const sectionsOf = (html: string) => [...html.matchAll(/data-bot-profile-section="(\w+)"/g)].map((match) => match[1]);
 const bodiesOf = (html: string) => [...html.matchAll(/data-section-body="(\w+)"/g)].map((match) => match[1]);
-// Settings unfolds under General's cards (#2136): the page says which it shows.
+// The page says which tab it shows (#2173: one tab per setting).
 const selectedTab = (html: string) => /data-bot-profile-tab-current="(\w+)"/.exec(html)?.[1];
+const tabsOf = (html: string) => [...html.matchAll(/data-bot-profile-tab="(\w+)"/g)].map((match) => match[1]);
 
 const SETTINGS_ALL = ["overview", "appearance", "sharing", "summary", "model", "worksOn", "access", "permissions", "voice", "usage", "history"];
 const SETTINGS_SIMPLE = ["overview", "appearance", "sharing", "summary", "model", "permissions", "voice"];
+const TABS_ALL = ["general", "knowledge", "appearance", "sharing", "summary", "model", "worksOn", "access", "permissions", "voice", "usage", "history"];
+const TABS_SIMPLE = ["general", "knowledge", "appearance", "sharing", "summary", "model", "permissions", "voice"];
 
 describe("bot profile page shell", () => {
-  it("fills the main panel with the banner, the mascot, Name · Label and two tabs, Settings folded under General", () => {
+  it("fills the main panel with the banner, the mascot, Name · Label and one row of tabs, a setting per tab (#2173)", () => {
     const html = render("overview");
     expect(html).toContain('data-bot-profile-placement="main"');
     expect(html).not.toContain("data-detail-panel");
@@ -142,26 +145,47 @@ describe("bot profile page shell", () => {
     expect(html).toContain('data-section-body="avatar"');
     expect(html).toMatch(/>Pepper<[\s\S]*>·<[\s\S]*>Research</);
     expect(html).toContain("data-bot-profile-audience");
-    expect([...html.matchAll(/data-bot-profile-tab="(\w+)"/g)].map((match) => match[1])).toEqual(["general", "knowledge"]);
-    expect(html).toContain('data-bot-profile-settings-toggle="" aria-expanded="false"');
+    expect(tabsOf(html)).toEqual(TABS_ALL);
+    // Who can see it stands in for Shared with where only one is offered
+    expect(SETTINGS_TABS.filter((id) => id !== "visibility")).toEqual(TABS_ALL.slice(2));
     expect(html).toContain('role="tablist"');
-    for (const label of [">General<", ">Knowledge<", ">Settings<"]) expect(html).toContain(label);
+    // one row that scrolls sideways, never wraps
+    expect(html).toMatch(/role="tablist" data-bot-profile-tabs="" [^>]*class="[^"]*overflow-x-auto whitespace-nowrap/);
+    for (const label of [">General<", ">Knowledge<", ">Appearance", ">Shared with", ">What it does", ">Model", ">Workspace", ">Access", ">Permissions", ">Voice", ">Usage", ">Changes"]) expect(html).toContain(label);
+    // no chevron rows of settings, no Settings fold
+    expect(html).not.toContain("data-bot-profile-settings-toggle");
+    expect(html).not.toContain(">Settings<");
     expect(selectedTab(html)).toBe("general");
     expect(html).toContain('aria-label="Close"');
   });
 
-  it("draws a quiet grey banner and a 590px content column, like Grok Bot (#2141)", () => {
+  it("carries no gear: the bot's settings are its tabs and the bot panel's (#2173)", () => {
+    for (const page of ["overview", "appearance", "model"] as const) {
+      const html = render(page);
+      expect(html).not.toContain("lucide-settings");
+      expect(html).not.toContain("data-bot-header-gear");
+      expect(html).not.toContain("data-bot-panel-gear");
+    }
+  });
+
+  it("draws the banner in the mascot's colour, 145px tall, over a 1000px column (#2173)", () => {
     const html = render("overview");
-    expect(html).toMatch(/data-bot-profile-banner="" class="bot-profile-banner /);
-    expect(html).not.toMatch(/data-bot-profile-banner="" style=/);
-    // 590px of content: 622 - 2 x 16, 670 - 2 x 40, 730 - 2 x 70
-    expect(html).toMatch(/data-bot-profile-column="" class="[^"]*max-w-\[622px\][^"]*px-4[^"]*sm:max-w-\[670px\] sm:px-10 lg:max-w-\[730px\] lg:px-\[70px\]/);
+    // the hex goes to the stylesheet as a variable; green is Pepper's
+    expect(html).toMatch(/data-bot-profile-banner="" data-bot-profile-banner-palette="vivid" style="--bot-profile-banner-color:#[0-9a-f]{6}" class="bot-profile-banner relative h-\[145px\] w-full/i);
+    // a neutral mascot keeps a visible grey
+    fixture.state = { bots: [{ ...bot, color: "grey" } as Bot, other], personaEditor: { botId: "pepper", section: "overview" } };
+    const grey = renderToStaticMarkup(createElement(PersonaEditorModal));
+    expect(grey).toContain('data-bot-profile-banner-palette="neutral"');
+    // the mascot over the banner's lower edge, the column 1000px at most with a 16px gutter on a phone
+    expect(html).toMatch(/data-bot-profile-column="" class="mx-auto flex w-full max-w-\[1000px\] flex-col px-4 pb-10 sm:px-6"/);
+    expect(html).toMatch(/class="-mt-\[40px\] w-fit"><div data-section-body="avatar"/);
   });
 
   it("names the tabs and channels in French", () => {
     setLocale("fr");
     const html = render("overview");
-    for (const label of [">Général<", ">Connaissances<", ">Réglages<", ">Canaux<", ">Comptes du bot<", ">Courriel<", ">Me joindre<"]) expect(html).toContain(label);
+    for (const label of [">Général<", ">Connaissances<", ">Apparence", ">Modèle", ">Changements", ">Canaux<", ">Comptes du bot<", ">Courriel<", ">Me joindre<"]) expect(html).toContain(label);
+    expect(html).not.toContain(">Réglages<");
   });
 
   it("renders nothing when closed or when the bot is gone", () => {
@@ -171,18 +195,23 @@ describe("bot profile page shell", () => {
     expect(renderToStaticMarkup(createElement(PersonaEditorModal))).toBe("");
   });
 
-  it("opens a link on the tab that holds its section, unfolded", () => {
+  it("opens a link on the tab that holds its section, shown in place", () => {
     expect(botProfileTabFor("overview")).toBe("general");
     expect(botProfileTabFor("slack")).toBe("general");
     expect(botProfileTabFor("soul")).toBe("knowledge");
     expect(botProfileTabFor("memory")).toBe("knowledge");
-    expect(botProfileTabFor("appearance")).toBe("settings");
-    expect(botProfileTabFor("history")).toBe("settings");
+    expect(botProfileTabFor("appearance")).toBe("appearance");
+    expect(botProfileTabFor("history")).toBe("history");
+    expect(botProfileTabFor("summary")).toBe("summary");
     expect(personaCategoryForSection("routines")).toBeNull();
     for (const page of ["appearance", "model", "voice", "usage"]) {
       const html = render(page as BotSettingsSection);
-      expect(selectedTab(html)).toBe("settings");
+      expect(selectedTab(html)).toBe(page);
+      expect(html).toContain(`data-bot-profile-tab="${page}" aria-selected="true"`);
       expect(sectionHtml(html, page).open).toBe(true);
+      expect(html).toContain(`id="bot-profile-panel-${page}" role="tabpanel"`);
+      // only that setting is on the page: the others are tabs, not rows
+      expect(sectionsOf(html)).toEqual([page]);
     }
     const soul = render("soul");
     expect(selectedTab(soul)).toBe("knowledge");
@@ -191,7 +220,10 @@ describe("bot profile page shell", () => {
     // the memory is managed in the Bot folder
     expect(sectionHtml(render("memory"), "files").open).toBe(true);
     // a link to Who can see it lands on Shared with where only that is offered
-    expect(sectionHtml(render("visibility"), "sharing").open).toBe(true);
+    const visibility = render("visibility");
+    expect(selectedTab(visibility)).toBe("sharing");
+    expect(sectionHtml(visibility, "sharing").open).toBe(true);
+    expect(tabsOf(visibility)).not.toContain("visibility");
   });
 });
 
@@ -255,22 +287,32 @@ describe("Knowledge", () => {
   });
 });
 
-describe("Settings", () => {
-  it("lists every other section of the editor, folded, with the search", () => {
+describe("Settings tabs", () => {
+  it("gives every other section of the editor a tab, its body in place, the search behind the magnifier", () => {
     const html = render("appearance");
-    expect(sectionsOf(html)).toEqual(SETTINGS_ALL);
     expect(SETTINGS_SECTIONS).toEqual(expect.arrayContaining(SETTINGS_ALL));
-    expect(html).toContain("data-persona-search");
-    expect(sectionHtml(html, "voice").open).toBe(false);
-    // the identity (description and facts) without the header's mascot and name
-    const identity = render("summary");
-    expect(sectionHtml(identity, "summary").open).toBe(true);
-    expect(bodiesOf(sectionHtml(identity, "summary").html)).toEqual(["overview"]);
+    expect(tabsOf(html)).toEqual(TABS_ALL);
+    expect(bodiesOf(sectionHtml(html, "appearance").html)).toEqual(["appearance"]);
+    // the search opens from its button (Command-F, a slash): closed at rest
+    expect(html).toContain('data-bot-profile-search-toggle="" aria-expanded="false"');
+    expect(html).not.toContain("data-persona-search");
+    // What it does: the server's overview of the bot
+    const summary = render("summary");
+    expect(sectionHtml(summary, "summary").open).toBe(true);
+    expect(bodiesOf(sectionHtml(summary, "summary").html)).toEqual(["overview"]);
+    // the identity (description and facts) stays on General, under the cards
+    const general = render("overview");
+    expect(sectionsOf(general)).toEqual(["overview"]);
+    expect(sectionHtml(general, "overview").html).toContain(">Identity<");
+    expect(bodiesOf(sectionHtml(general, "overview").html)).toEqual([]);
   });
 
   it("follows Simple mode", () => {
     fixture.advanced = false;
-    expect(sectionsOf(render("appearance"))).toEqual(SETTINGS_SIMPLE);
+    expect(tabsOf(render("appearance"))).toEqual(TABS_SIMPLE);
+    expect(SETTINGS_SIMPLE.filter((id) => id !== "overview")).toEqual(TABS_SIMPLE.slice(2));
+    // a link to a hidden setting lands on General
+    expect(selectedTab(render("usage"))).toBe("general");
   });
 
   it("offers no Perspicax profile configuration on either server type", () => {
@@ -288,7 +330,7 @@ describe("Settings", () => {
     expect(html).toContain(">Règles</span>");
     expect(html).toContain(">Compétences</span>");
     expect(html).not.toContain(">Skills<");
-    expect(render("history")).toContain(">Changements</span>");
+    expect(render("history")).toContain(">Changements<");
   });
 });
 
@@ -313,6 +355,8 @@ describe("bot profile for an organization member", () => {
     const history = sectionHtml(render("history", state), "history").html;
     expect(history).not.toContain('data-section-body="history"');
     expect(history).toContain("Only this bot&#x27;s owner or an admin can change this.");
-    expect(sectionsOf(render("history", state))).toEqual(SETTINGS_ALL);
+    expect(tabsOf(render("history", state))).toEqual(TABS_ALL);
+    // the locked tab says so on its pill
+    expect(render("history", state)).toMatch(/data-bot-profile-tab="history"[^>]*>Changes<svg[^>]*aria-label="Read only"/);
   });
 });

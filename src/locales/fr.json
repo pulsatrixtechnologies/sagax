@@ -6631,6 +6631,7 @@
   "chat.openPanel": "Ouvrir le panneau du bot",
   "chat.openPanelAria": "Ouvrir le panneau de {name}",
   "chat.closePanel": "Fermer le panneau du bot",
+  "chat.header.private": "Privé",
   "chat.closePanelAria": "Fermer le panneau de {name}",
   "settings.sidebarHidden.whereHint": "Réaffichez-les depuis la ligne Masqués, au bas de la barre latérale.",
   "task.unreadMany": "Fils non lus",

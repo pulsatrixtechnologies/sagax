@@ -1326,3 +1326,23 @@ describe("a configured MCP server that cannot mount", () => {
     expect(names.some((name) => name.startsWith("slack_"))).toBe(false);
   });
 });
+
+describe("a provider that streams whole tool calls without an index", () => {
+  it("runs both of Gemini's calls from one chunk and answers each by its id", async () => {
+    const f = await fixture((_body, response, round) => {
+      if (round === 1) sse(response, [chunk({ tool_calls: [
+        { id: "function-call-14076893379878918689", type: "function", function: { name: "audit_write", arguments: '{"name":"first","value":"done"}' } },
+        { id: "function-call-14076893379878916096", type: "function", function: { name: "audit_write", arguments: '{"name":"second","value":"done"}' } },
+      ] }, "stop")]);
+      else answer(response);
+    });
+    await f.start();
+    await f.decide();
+    const second = await f.recorder.until((event) => event.type === "request.opened" && f.recorder.events.filter((seen) => seen.type === "request.opened").indexOf(event) === 1);
+    await f.instance.adapter.respondToRequest(f.threadId, second.requestId!, { behavior: "allow" });
+    expect(await f.completed()).toMatchObject({ ok: true });
+    expect(f.effects()).toEqual([{ name: "first", value: "done" }, { name: "second", value: "done" }]);
+    const results = f.requests[1].messages.filter((message) => message.role === "tool").map((message) => message.tool_call_id);
+    expect(results).toEqual(["function-call-14076893379878918689", "function-call-14076893379878916096"]);
+  });
+});

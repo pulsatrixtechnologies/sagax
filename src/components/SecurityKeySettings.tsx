@@ -1,16 +1,7 @@
-// Settings > Security (wave 2, package E): the person's security keys and
-// passkeys, and which approvals need one (shared/step-up.ts). Each person's
-// own, on an organization server too. Taking a protection away (a class, a
-// key) asks the key itself: the server refuses it otherwise, and the store's
-// `api` runs that step-up and sends the change again.
-//
-// 2026-10-18 : the first key needs a fresh sign-in; the page says so
-// before the person tries and offers it (Sign in again: the forced
-// Pulsatrix sign-in of src/lib/sign-in-again.ts, then back here,
-// src/lib/settings-return.ts; nothing on a server without it). In the desktop app the key is asked in the
-// system browser (electron/security-key-browser.mjs): the page waits for it
-// and can stop waiting. Laid out as the other pages (grey headings over
-// cards of rows, SettingsPrimitives).
+// Settings > Security: the person's security keys and passkeys, and which
+// approvals need one (shared/step-up.ts). #2080 L2: add creates first then
+// names inline; the seven classes fold under one "Ask for a key for" row
+// with HelpTip hints.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { KeyRound, Trash2 } from "lucide-react";
 
@@ -22,7 +13,8 @@ import { api } from "@/state/store";
 import type { LocaleKey } from "@/locales";
 import { STEP_UP_CLASSES, type SecurityKeysState, type StepUpClass } from "../../shared/step-up";
 import { cn } from "@/lib/cn";
-import { DescribedRow, FIELD, PILL, PRIMARY_PILL, SettingsGroup, SettingsNotice, SettingsTextRow, Switch } from "./SettingsPrimitives";
+import { DescribedRow, FIELD, PILL, PRIMARY_PILL, SettingsGroup, SettingsNotice, Switch } from "./SettingsPrimitives";
+import { DisclosurePill } from "./settings/AppearanceSettings";
 import { readableError } from "@/lib/plain-error";
 
 const CLASS_LABEL: Record<StepUpClass, LocaleKey> = {
@@ -55,12 +47,26 @@ function code(error: unknown): string | undefined {
   return typeof body?.code === "string" ? body.code : undefined;
 }
 
+/** A short default name from this device, before the person renames the key. */
+export function defaultSecurityKeyName(): string {
+  if (typeof navigator === "undefined") return t("security.keys.defaultName");
+  const ua = navigator.userAgent || "";
+  const platform = navigator.platform || "";
+  if (/iPhone|iPad/.test(ua)) return t("security.keys.device.iphone");
+  if (/Android/.test(ua)) return t("security.keys.device.android");
+  if (/Mac|Macintosh/.test(platform) || /Mac OS/.test(ua)) return t("security.keys.device.mac");
+  if (/Win/.test(platform) || /Windows/.test(ua)) return t("security.keys.device.windows");
+  return t("security.keys.defaultName");
+}
+
 export function SecurityKeySettings() {
   const [state, setState] = useState<SecurityKeysState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [name, setName] = useState("");
+  const [namingId, setNamingId] = useState<string | null>(null);
+  const [namingValue, setNamingValue] = useState("");
+  const [classesOpen, setClassesOpen] = useState(false);
   /** The key is being asked in the system browser. */
   const [inBrowser, setInBrowser] = useState(false);
   /** The sign-in this page asked for is under way (desktop: in the browser). */
@@ -99,7 +105,6 @@ export function SecurityKeySettings() {
       return true;
     } catch (err) {
       if (code(err) === "reauth_required") {
-        // the server's own word: show the sign-in row, not a red line
         setState((current) => (current ? { ...current, needsSignIn: true } : current));
       } else if (code(err) !== "cancelled" || !waiting.current?.signal.aborted) {
         setError(message(err));
@@ -117,19 +122,39 @@ export function SecurityKeySettings() {
   };
 
   const add = () => void (async () => {
+    const before = new Set((state?.keys ?? []).map((key) => key.id));
     const controller = new AbortController();
     waiting.current = controller;
     setInBrowser(securityKeyInBrowser());
     const ok = await run(async () => {
-      await registerSecurityKey(name.trim() || t("security.keys.defaultName"), controller.signal);
-      setName("");
+      await registerSecurityKey(defaultSecurityKeyName(), controller.signal);
     });
     waiting.current = null;
     setInBrowser(false);
-    if (ok) setNotice(t("security.keys.addedNow"));
-    // stopped waiting: the browser may still have added it
-    else if (controller.signal.aborted) void load();
+    if (ok) {
+      const next = await api<SecurityKeysState>("/api/security-keys");
+      setState(next);
+      const created = next.keys.find((key) => !before.has(key.id));
+      if (created) {
+        setNamingId(created.id);
+        setNamingValue(created.name);
+      }
+      setNotice(t("security.keys.addedNow"));
+    } else if (controller.signal.aborted) {
+      void load();
+    }
   })();
+
+  const saveName = () => {
+    if (!namingId) return;
+    const name = namingValue.trim();
+    if (!name) return;
+    void run(async () => {
+      await api(`/api/security-keys/${encodeURIComponent(namingId)}`, { method: "PATCH", body: JSON.stringify({ name }) });
+      setNamingId(null);
+      setNamingValue("");
+    });
+  };
 
   const stopWaiting = () => waiting.current?.abort();
 
@@ -146,6 +171,8 @@ export function SecurityKeySettings() {
   const date = (at: number) => new Intl.DateTimeFormat(activeLocale(), { dateStyle: "medium" }).format(new Date(at));
   const keyHere = state?.rpId ? state.keys.some((key) => key.rpId === state.rpId) : hasKey;
   const noAddress = !usable || (!state?.rpId && !securityKeyInBrowser());
+  const onCount = state?.classes.length ?? 0;
+  const totalClasses = STEP_UP_CLASSES.length;
 
   return (
     <div className="flex min-w-0 flex-col gap-3" data-settings-card="security">
@@ -155,22 +182,46 @@ export function SecurityKeySettings() {
 
       <SettingsGroup title={t("security.keys.title")} groupId="security.keys">
         {state?.keys.map((key) => (
-          <DescribedRow
-            key={key.id}
-            rowId={`security-key-${key.id.slice(0, 12)}`}
-            icon={<KeyRound size={14} />}
-            label={key.name}
-            description={[
-              key.deviceType === "multiDevice" ? t("security.keys.passkey") : t("security.keys.hardware"),
-              t("security.keys.added", { when: date(key.createdAt) }),
-              key.lastUsedAt ? t("security.keys.lastUsed", { when: date(key.lastUsedAt) }) : null,
-              state.rpId && key.rpId !== state.rpId ? t("security.keys.otherAddress", { address: key.rpId }) : null,
-            ].filter(Boolean).join(" · ")}
-          >
-            <button type="button" className={PILL} disabled={busy} aria-label={t("security.keys.removeNamed", { name: key.name })} onClick={() => remove(key.id)}>
-              <Trash2 size={13} aria-hidden="true" /> {t("security.keys.remove")}
-            </button>
-          </DescribedRow>
+          namingId === key.id ? (
+            <DescribedRow
+              key={key.id}
+              rowId={`security-key-${key.id.slice(0, 12)}`}
+              icon={<KeyRound size={14} />}
+              label={t("security.keys.name")}
+              description={t("security.keys.nameAfterAdd")}
+            >
+              <input
+                className={cn(FIELD, "w-[160px]")}
+                value={namingValue}
+                maxLength={80}
+                aria-label={t("security.keys.name")}
+                autoFocus
+                disabled={busy}
+                onChange={(event) => setNamingValue(event.target.value)}
+                onKeyDown={(event) => { if (event.key === "Enter") saveName(); }}
+              />
+              <button type="button" className={PRIMARY_PILL} disabled={busy || !namingValue.trim()} onClick={saveName}>
+                {t("security.keys.saveName")}
+              </button>
+            </DescribedRow>
+          ) : (
+            <DescribedRow
+              key={key.id}
+              rowId={`security-key-${key.id.slice(0, 12)}`}
+              icon={<KeyRound size={14} />}
+              label={key.name}
+              description={[
+                key.deviceType === "multiDevice" ? t("security.keys.passkey") : t("security.keys.hardware"),
+                t("security.keys.added", { when: date(key.createdAt) }),
+                key.lastUsedAt ? t("security.keys.lastUsed", { when: date(key.lastUsedAt) }) : null,
+                state.rpId && key.rpId !== state.rpId ? t("security.keys.otherAddress", { address: key.rpId }) : null,
+              ].filter(Boolean).join(" · ")}
+            >
+              <button type="button" className={PILL} disabled={busy} aria-label={t("security.keys.removeNamed", { name: key.name })} onClick={() => remove(key.id)}>
+                <Trash2 size={13} aria-hidden="true" /> {t("security.keys.remove")}
+              </button>
+            </DescribedRow>
+          )
         ))}
         {state && !state.keys.length && <DescribedRow label={t("security.keys.none")} rowId="security-keys-none" />}
         {inBrowser ? (
@@ -189,38 +240,47 @@ export function SecurityKeySettings() {
           <DescribedRow
             label={t("security.keys.add")}
             rowId="security-keys-add"
-            description={noAddress ? t("security.stepUp.noAddress") : t("security.keys.addHint")}
+            description={noAddress ? t("security.stepUp.noAddress") : (typeof window !== "undefined" && !window.isSecureContext ? t("security.keys.httpsNote") : undefined)}
           >
-            <input
-              className={cn(FIELD, "w-[160px]")}
-              value={name}
-              maxLength={80}
-              placeholder={t("security.keys.namePlaceholder")}
-              aria-label={t("security.keys.name")}
-              disabled={busy || !state}
-              onChange={(event) => setName(event.target.value)}
-              onKeyDown={(event) => { if (event.key === "Enter" && !busy && usable && state) add(); }}
-            />
             <button type="button" className={PRIMARY_PILL} disabled={busy || !usable || !state} onClick={add}>
               {t("security.keys.addButton")}
             </button>
           </DescribedRow>
         )}
-      </SettingsGroup>
 
-      <SettingsGroup title={t("security.classes.title")} groupId="security.classes">
-        <SettingsTextRow>{hasKey ? t("security.classes.intro") : t("security.classes.needKey")}</SettingsTextRow>
-        {hasKey && !keyHere && <SettingsTextRow tone="warning">{t("security.classes.noKeyHere")}</SettingsTextRow>}
-        {STEP_UP_CLASSES.map((value) => (
-          <DescribedRow key={value} label={t(CLASS_LABEL[value])} description={t(CLASS_HINT[value])} rowId={`security-class-${value}`}>
-            <Switch
-              checked={Boolean(state?.classes.includes(value))}
-              aria-label={t(CLASS_LABEL[value])}
-              disabled={busy || !state || (!hasKey && !state.classes.includes(value))}
-              onClick={() => toggle(value, !state?.classes.includes(value))}
-            />
-          </DescribedRow>
-        ))}
+        <DescribedRow
+          label={t("security.classes.askFor")}
+          description={hasKey
+            ? t("security.classes.summary", { on: onCount, total: totalClasses })
+            : t("security.classes.needKey")}
+          rowId="security-classes"
+          help={!hasKey ? undefined : (hasKey && !keyHere ? t("security.classes.noKeyHere") : undefined)}
+          below={classesOpen && hasKey ? (
+            <div className="mt-2 flex flex-col" data-security-classes="">
+              {STEP_UP_CLASSES.map((value) => (
+                <DescribedRow
+                  key={value}
+                  label={t(CLASS_LABEL[value])}
+                  help={t(CLASS_HINT[value])}
+                  rowId={`security-class-${value}`}
+                >
+                  <Switch
+                    checked={Boolean(state?.classes.includes(value))}
+                    aria-label={t(CLASS_LABEL[value])}
+                    disabled={busy || !state || (!hasKey && !state.classes.includes(value))}
+                    onClick={() => toggle(value, !state?.classes.includes(value))}
+                  />
+                </DescribedRow>
+              ))}
+            </div>
+          ) : undefined}
+        >
+          {hasKey && (
+            <DisclosurePill open={classesOpen} onToggle={() => setClassesOpen((value) => !value)} label={t("security.classes.askFor")}>
+              {classesOpen ? t("settings.appearance.hide") : t("security.classes.choose")}
+            </DisclosurePill>
+          )}
+        </DescribedRow>
       </SettingsGroup>
     </div>
   );

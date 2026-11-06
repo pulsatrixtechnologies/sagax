@@ -179,7 +179,9 @@ describe("Settings split: every moved setting at its new place", () => {
     expect(pane().querySelector("h2")?.textContent).toBe("Security");
     expect(pane().querySelector("[data-security-page]")).not.toBeNull();
     expect(card("security")).not.toBeNull();
-    for (const id of ["security.keys", "security.classes", "myApprovalRules", "myToolAccess"]) expect(group(id), id).not.toBeNull();
+    for (const id of ["security.keys", "myApprovalRules", "myToolAccess"]) expect(group(id), id).not.toBeNull();
+    expect(pane().querySelector('[data-settings-row="security-classes"]')).not.toBeNull();
+    expect(pane().textContent).toContain("Ask for a key for");
     expect(pane().textContent).toContain("Your approval rules");
     expect(pane().textContent).toContain("My tool access");
     expect(card("credentials.items")).toBeNull();
@@ -190,8 +192,12 @@ describe("Settings split: every moved setting at its new place", () => {
     expect(pane().querySelector("h2")?.textContent).toBe("Vault");
     expect(card("credentials.items")).not.toBeNull();
     expect(pane().textContent).toContain("Your vault");
-    for (const action of ["data-credentials-import", "data-credentials-export", "data-credentials-add"]) expect(pane().querySelector(`[${action}]`), action).not.toBeNull();
-    expect(group("credentials.wallets")).not.toBeNull();
+    expect(pane().querySelector("[data-credentials-add]")).not.toBeNull();
+    expect(pane().querySelector("[data-credentials-import]")).toBeNull();
+    await act(async () => { pane().querySelector<HTMLButtonElement>("[data-vault-menu]")!.click(); });
+    for (const action of ["data-credentials-import", "data-credentials-export"]) expect(pane().querySelector(`[${action}]`), action).not.toBeNull();
+    expect(group("credentials.wallets")).toBeNull();
+    expect(card("credentials.wallets")).not.toBeNull();
     expect(pane().textContent).toContain("One-time card");
     expect(card("credentials.onePassword")).not.toBeNull();
     expect(card("security")).toBeNull();
@@ -237,45 +243,34 @@ describe("Settings split: every moved setting at its new place", () => {
   });
 });
 
-describe("Settings split: the approval rules are paged like the usage traces", () => {
+describe("Settings split: the approval rules fold under a summary (#2080)", () => {
   const rows = () => [...host.querySelectorAll("[data-my-rule-row]")].map((node) => node.textContent ?? "");
-  const pager = () => host.querySelector<HTMLElement>("[data-settings-pager]")!;
-  const next = () => pager().querySelector<HTMLButtonElement>("[data-settings-pager-next]")!;
-  const prev = () => pager().querySelector<HTMLButtonElement>("[data-settings-pager-prev]")!;
 
-  it("shows ten rules a page with the Usage pager, then the next pages", async () => {
+  it("shows a summary, then every rule after View, with filters", async () => {
     await render(createElement(MyApprovalRules));
     expect(host.querySelector("[data-my-rules]")?.getAttribute("data-my-rules")).toBe("23");
-    expect(rows()).toHaveLength(10);
-    expect(rows()[0]).toContain("Rule 01");
-    expect(pager().textContent).toContain("1-10 of 23");
-    expect(prev().disabled).toBe(true);
-    await act(async () => next().click());
-    expect(rows()[0]).toContain("Rule 11");
-    expect(pager().textContent).toContain("11-20 of 23");
-    await act(async () => next().click());
-    expect(rows()).toHaveLength(3);
-    expect(pager().textContent).toContain("21-23 of 23");
-    expect(next().disabled).toBe(true);
-    await act(async () => prev().click());
-    expect(pager().textContent).toContain("11-20 of 23");
-  });
-
-  it("offers the same page sizes as the usage traces", async () => {
-    await render(createElement(MyApprovalRules, { initialPageSize: 25 }));
+    expect(host.textContent).toContain("23 rules");
+    expect(host.querySelector("[data-my-rules-list]")).toBeNull();
+    const view = host.querySelector<HTMLButtonElement>('button[aria-label="Your approval rules"]')!;
+    await act(async () => { view.click(); });
+    expect(host.querySelector("[data-my-rules-list]")).toBeTruthy();
     expect(rows()).toHaveLength(23);
-    expect(pager().textContent).toContain("1-23 of 23");
-    expect(pager().querySelector('[aria-label="Per page"]')).not.toBeNull();
+    expect(rows()[0]).toContain("Rule 01");
+    expect(host.querySelector('[data-filter-chips]')).toBeTruthy();
+    const deny = host.querySelector<HTMLButtonElement>('[data-filter-chip="deny"]')!;
+    await act(async () => { deny.click(); });
+    expect(rows()).toHaveLength(RULES.filter((rule) => rule.behavior === "deny").length);
+    expect([...host.querySelectorAll("[data-my-rule-row]")].every((node) => node.getAttribute("data-my-rule-row") === "deny")).toBe(true);
   });
 
-  it("draws no pager when there is no rule", async () => {
+  it("shows the empty summary when there is no rule", async () => {
     fixture.rules = [];
     await render(createElement(MyApprovalRules));
-    expect(host.querySelector("[data-settings-pager]")).toBeNull();
     expect(host.textContent).toContain("No rules yet");
+    expect(host.querySelector("[data-my-rules-list]")).toBeNull();
   });
 
-  it("never leaves an empty page after a removal", () => {
+  it("keeps clampPageOffset for other pagers", () => {
     expect(clampPageOffset(20, 20, 10)).toBe(10);
     expect(clampPageOffset(20, 23, 10)).toBe(20);
     expect(clampPageOffset(10, 0, 10)).toBe(0);

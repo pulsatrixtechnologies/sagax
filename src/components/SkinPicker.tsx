@@ -128,7 +128,14 @@ function useSkinState(): { skin: SkinId; tint: SkinTintId | null; auto: boolean 
   return state;
 }
 
-export function SkinPicker() {
+export function SkinPicker({ modeFirst = false, customizeOpen, showFamilies = true }: {
+  /** #2080 L2: Mode is the first row of Theme; the rest of SkinPicker follows. */
+  modeFirst?: boolean;
+  /** When set, duo / ambiance / texture / depth only show while true. */
+  customizeOpen?: boolean;
+  /** Family tiles; false when Customize already sits under the main picker. */
+  showFamilies?: boolean;
+} = {}) {
   const { skin: active, tint: activeTint, auto } = useSkinState();
   const place = placeOfSkin(active, activeTint);
   const [, rerender] = useState(0);
@@ -143,6 +150,7 @@ export function SkinPicker() {
   const [texture, setTexture] = useState<SkinTexture>(() => readSkinTexture());
   // Intensity reaches the plain colours only (the moods and duo-tones colour everything already).
   const hasDepth = place.variant.group === "color" && Boolean(place.variant.tint);
+  const showCustomize = customizeOpen !== false;
 
   const wear = (family: SkinFamily, variant: SkinVariant, next: SkinModeChoice) => {
     rememberVariant(family.id, variant.id);
@@ -151,12 +159,28 @@ export function SkinPicker() {
     rerender((n) => n + 1);
   };
 
+  const modeRow = place.family.id !== "retro98" && (
+    <CompactRow label={t("settings.theme.mode")} rowId="skinMode">
+      <PillSelect<SkinModeChoice>
+        value={mode}
+        ariaLabel={t("settings.theme.mode")}
+        onChange={(next) => wear(place.family, place.variant, next)}
+        options={MODES.map((value) => ({
+          value,
+          label: t(`settings.skin.mode.${value}`),
+          disabled: value === "auto" ? !canFollowSystem(place.variant) : !schemesOf(place.variant).includes(value),
+        }))}
+      />
+    </CompactRow>
+  );
+
   return (
     <div data-skin-picker="" className="flex flex-col gap-1">
+      {modeFirst && modeRow}
       {/* 0.5.6: the reference design's tiles inside the Appearance card: the picture,
           the name and a check. The tagline is the tile's tooltip and its
           accessible description, so the grid fits four across. */}
-      <div role="group" aria-label={t("settings.skin.title")} data-skin-grid="" className="grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-2 px-2 py-1">
+      {showFamilies && <div role="group" aria-label={t("settings.skin.title")} data-skin-grid="" className="grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-2 px-2 py-1">
         {families.map((family) => {
           const selected = family.id === place.family.id;
           // the tile shows the family as it would be worn: its current variant in the current scheme
@@ -192,8 +216,12 @@ export function SkinPicker() {
             </button>
           );
         })}
-      </div>
-      {GROUPS.map((group) => {
+      </div>}
+      {GROUPS.filter((group) => {
+        if (!showCustomize && group !== "color") return false;
+        if (!showFamilies && group === "color") return false;
+        return true;
+      }).map((group) => {
         // only the moods that exist in the scheme worn now; Auto stays in the mode pill
         const offered = variantsForScheme(place.family, place.scheme, place.variant);
         const variants = offered.filter((variant) => variant.group === group);
@@ -237,7 +265,7 @@ export function SkinPicker() {
           </CompactRow>
         );
       })}
-      {hasDepth && (
+      {showCustomize && hasDepth && (
         <CompactRow label={t("settings.skin.depthLabel")} rowId="skinDepth">
           <PillSelect<SkinDepth>
             value={depth}
@@ -250,7 +278,7 @@ export function SkinPicker() {
           />
         </CompactRow>
       )}
-      {place.family.id !== "retro98" && (
+      {showCustomize && place.family.id !== "retro98" && (
         <CompactRow label={t("settings.skin.textureLabel")} rowId="skinTexture">
           <PillSelect<SkinTexture>
             value={texture}
@@ -263,20 +291,7 @@ export function SkinPicker() {
           />
         </CompactRow>
       )}
-      {place.family.id !== "retro98" && (
-        <CompactRow label={t("settings.skin.modeLabel")} rowId="skinMode">
-          <PillSelect<SkinModeChoice>
-            value={mode}
-            ariaLabel={t("settings.skin.modeLabel")}
-            onChange={(next) => wear(place.family, place.variant, next)}
-            options={MODES.map((value) => ({
-              value,
-              label: t(`settings.skin.mode.${value}`),
-              disabled: value === "auto" ? !canFollowSystem(place.variant) : !schemesOf(place.variant).includes(value),
-            }))}
-          />
-        </CompactRow>
-      )}
+      {!modeFirst && modeRow}
     </div>
   );
 }

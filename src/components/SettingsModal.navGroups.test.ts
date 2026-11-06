@@ -19,7 +19,7 @@ vi.mock("@/state/store", async (importOriginal) => ({
   useStore: () => ({ state: { appSettingsSection: fixture.section, appSettingsSubPage: null, instances: [], bots: [], groups: [], config: fixture.config }, dispatch: vi.fn() }),
 }));
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => true, setAdvancedMode: () => {} }));
-vi.mock("@/lib/analytics", () => ({ analyticsEnabled: () => false, setAnalyticsEnabled: () => {} }));
+vi.mock("@/lib/analytics", () => ({ analyticsEnabled: () => false, setAnalyticsEnabled: () => {}, usageMeterEnabled: () => false, setUsageMeterEnabled: () => {} }));
 vi.mock("@/lib/updater", () => ({ useUpdaterState: () => ({ status: "idle", allowPrerelease: false }) }));
 vi.mock("./DesktopCapabilities", () => ({ useDesktopCapabilities: () => ({ capabilities: {} }) }));
 
@@ -113,16 +113,25 @@ describe("Settings nav groups", () => {
       expect(sectionMatches(account, query), query).toBe(false);
     }
     // "tool access" also names People's tool access, an admin card of
-    // Account > Advanced: a search finds both, each in its own place
+    // App > Advanced (#2080 L2): a search finds both, each in its own place
     expect(sectionMatches(security, "tool access")).toBe(true);
-    expect(sectionMatches(account, "people's tool access")).toBe(true);
+    expect(sectionMatches(SECTIONS.find((entry) => entry.id === "about")!, "people's tool access")).toBe(true);
     for (const query of ["vault", "coffre", "identifiants", "1password", "one-time card", "carte à usage unique", "mot de passe"]) {
       expect(sectionMatches(vault, query), query).toBe(true);
       expect(sectionMatches(account, query), query).toBe(false);
     }
-    // what General held is found on Account; the microphone on Voice
-    for (const query of ["language", "langue", "time zone", "fuseau", "server", "serveur", "tour", "diagnostic", "avatar"]) {
+    // what General held: identity and region on Account, the rest on App
+    // (#2080 L2); the microphone on Voice
+    for (const query of ["language", "langue", "time zone", "fuseau", "avatar"]) {
       expect(sectionMatches(account, query), query).toBe(true);
+    }
+    const app = SECTIONS.find((entry) => entry.id === "about")!;
+    for (const query of ["tour", "diagnostic"]) {
+      expect(sectionMatches(app, query), query).toBe(true);
+    }
+    // the server choice is Organization's (its launch screen on a desktop with no server)
+    for (const query of ["server", "serveur"]) {
+      expect(sectionMatches(SECTIONS.find((entry) => entry.id === "organization")!, query), query).toBe(true);
     }
     expect(sectionMatches(account, "microphone")).toBe(false);
     expect(sectionMatches(SECTIONS.find((entry) => entry.id === "engines")!, "microphone")).toBe(false);

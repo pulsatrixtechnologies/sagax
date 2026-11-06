@@ -56,7 +56,7 @@
   "Security": "settings.section.security",
   "Vault": "settings.section.vault",
   "Notifications": "settings.section.notifications",
-  "Import": "vault.transfer.import",
+  "Import": "vault.menu.import",
   "Your keys": "security.keys.title",
   "No key yet": "security.keys.none",
   "Approvals that need a key": "security.classes.title",

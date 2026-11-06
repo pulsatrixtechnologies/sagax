@@ -53,8 +53,8 @@ describe("Settings → General", () => {
     setLocale("fr");
     const fr = await renderSettings();
     expect(fr).toContain(">Réglages<");
-    // Account opens first: its group is a grey heading over the card
-    expect(fr).toContain(">Compte</h3>");
+    // Account opens first: the account card, then a grey Language and region heading (#2080 L2)
+    expect(fr).toContain(">Langue et région</h3>");
     expect(fr).toContain(">Apparence</button>");
     expect(fr).not.toMatch(/[\u2013\u2014]/);
   });
@@ -65,7 +65,7 @@ describe("Settings → General", () => {
     expect(en).toContain("Settings");
     expect(en).toContain(">Models</button>");
     expect(en).toContain(">Voice</button>");
-    expect(en).toContain(">Account</h3>");
+    expect(en).toContain(">Language and region</h3>");
   });
 
   it("offers a labeled compact section picker without removing desktop navigation", async () => {

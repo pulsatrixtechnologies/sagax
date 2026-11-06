@@ -110,7 +110,7 @@ describe("Settings search", () => {
     for (const query of ["sauvegarde", "restaurer"]) expect(sectionMatches(section("backups"), query), query).toBe(true);
     // #2080 (L0): one word, one page; a password is found on the Vault
     expect(sectionMatches(section("credentials"), "mot de passe")).toBe(true);
-    for (const query of ["nettoyage", "journaux", "diagnostic"]) expect(sectionMatches(section("account"), query), query).toBe(true);
+    for (const query of ["nettoyage", "journaux", "diagnostic"]) expect(sectionMatches(section("about"), query), query).toBe(true);
     // 2026-10-26: no Full access card any more
     expect(cardsMatching("accès complet")).not.toContain("organization.fullAccess");
     expect(cardsMatching("restaurer")).toContain("backups.import");

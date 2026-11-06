@@ -1829,7 +1829,6 @@
   "settings.mac.allow": "Permitir o controle deste computador",
   "settings.mac.open": "Abrir Ajustes do Sistema",
   "settings.noMatch": "Nada corresponde a “{query}”",
-  "settings.notificationSounds.title": "Sons de notificação",
   "settings.notifications.badge.title": "Contador de não lidas no ícone do app",
   "settings.notifications.persistent.title": "Manter as notificações na tela",
   "settings.nudgeShake.title": "Tremer com o nudge",

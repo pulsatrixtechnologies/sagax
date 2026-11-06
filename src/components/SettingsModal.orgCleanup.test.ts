@@ -84,7 +84,12 @@ describe("Settings on an organization server", () => {
     expect(solo).not.toContain('<option value="mail"');
     expect(solo).not.toContain('<option value="activity"');
     fixture.section = "notifications";
-    expect(await render()).not.toContain('data-settings-card="notifications.privacy"');
+    // #2080: Privacy card always hosts blocked people; org rows only on org
+    const soloNotifications = await render();
+    expect(soloNotifications).toContain('data-settings-card="notifications.privacy"');
+    expect(soloNotifications).toContain(">Privacy<");
+    expect(soloNotifications).toContain(">Blocked people<");
+    expect(soloNotifications).not.toContain("Send read receipts");
     fixture.org = ORG;
     const privacy = await render();
     expect(privacy).toContain('data-settings-card="notifications.privacy"');
@@ -160,9 +165,10 @@ describe("an organization member", () => {
     fixture.section = "usage";
     const html = await render();
     expect(html).toContain('<option value="usage" selected="">Usage</option>');
-    expect(html).toContain('data-settings-card="usage.cost"');
-    // the link to the organization's console is an admin's
-    expect(html).not.toContain("data-usage-org-link");
+    expect(html).toContain('data-settings-card="usage.headline"');
+    // the organization's console is an admin's; a member manages their keys (#2080 L1)
+    expect(html).not.toContain("Open Sagax Business");
+    expect(html).toContain("Manage my keys in Perspicax");
   });
 
   it("hides the General and Appearance rows that write the installation", async () => {
@@ -176,8 +182,11 @@ describe("an organization member", () => {
     expect(general).toContain("Language");
 
     fixture.section = "appearance";
-    expect(await render()).not.toContain("Tool calls");
-    expect(await render()).toContain("Interface font");
+    const appearance = await render();
+    expect(appearance).not.toContain("Tool calls");
+    // Font lives under Theme > Customize; the page still shows Theme itself
+    expect(appearance).toContain("Theme");
+    expect(appearance).toContain("Customize");
   });
 });
 

@@ -546,7 +546,6 @@
   "settings.experimental.title": "Experimentelle Funktionen",
   "settings.experimental.error": "Die Einstellung für die experimentelle Funktion konnte nicht gespeichert werden.",
   "settings.experimental.browser": "Eingebauter Browser",
-  "settings.experimental.browserWindows": "Auf diesem Windows-Rechner noch nicht verfügbar: installiere die Browser-Engine mit `openmausbot browser install`.",
   "settings.experimental.browserAria": "Eingebauten Browser aktivieren",
   "browser.notInstalled": "Die Browser-Engine ist auf diesem Server noch nicht installiert. Aktiviere die Browser-Schalter unter {settings} und in den „Access“-Einstellungen des Bots. Öffne dann „Computer des Bots → Browser“, um sie zu installieren. Oder führe `openmausbot browser install` auf dem Server aus.",
   "browser.noEngine": "Dieser Server hat keine Browser-Engine.",
@@ -1882,5 +1881,6 @@
   "botPanel.library.pageState.org": "für meine Organisation veröffentlicht",
   "botPanel.library.pageState.link": "für alle mit dem Link veröffentlicht",
   "botPanel.library.pageState.revoked": "widerrufen",
-  "botPanel.library.pageState.expired": "abgelaufen"
+  "botPanel.library.pageState.expired": "abgelaufen",
+  "settings.experimental.browserWindows": "Auf diesem Windows-Rechner noch nicht verfügbar: installiere die Browser-Engine mit `openmausbot browser install`."
 }

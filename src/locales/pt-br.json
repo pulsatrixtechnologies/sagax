@@ -1813,7 +1813,6 @@
   "settings.diagnostics.title": "Diagnóstico",
   "settings.experimental.browser": "Navegador integrado",
   "settings.experimental.browserAria": "Ativar o navegador integrado",
-  "settings.experimental.browserWindows": "Ainda não disponível nesta máquina Windows: instale o motor do navegador com `openmausbot browser install`.",
   "settings.experimental.error": "Não foi possível salvar a preferência do recurso experimental.",
   "settings.experimental.title": "Recursos experimentais",
   "settings.floatingBots.captions.title": "Legendas da chamada ao lado do mascote",
@@ -2661,5 +2660,6 @@
   "routines.model.botDefault": "Modelo do bot",
   "routines.effort.label": "Esforço",
   "routines.effort.botDefault": "Esforço do bot",
-  "routineEditor.hint.effort": "As execuções e seus subagentes usam este esforço. O chat mantém o esforço do bot."
+  "routineEditor.hint.effort": "As execuções e seus subagentes usam este esforço. O chat mantém o esforço do bot.",
+  "settings.experimental.browserWindows": "Ainda não disponível nesta máquina Windows: instale o motor do navegador com `openmausbot browser install`."
 }

@@ -701,10 +701,8 @@
   "engineSetup.viewGuide": "查看設定指南",
   "settings.experimental.title": "實驗性功能",
   "settings.experimental.error": "無法儲存實驗性功能的設定。",
-  "settings.experimental.skillAuthoring": "允許機器人草擬技能供你審核",
   "settings.experimental.skillAuthoringAria": "允許機器人草擬技能",
   "settings.experimental.browser": "內建瀏覽器",
-  "settings.experimental.browserWindows": "這台 Windows 電腦尚未支援：請使用 `openmausbot browser install` 安裝瀏覽器引擎。",
   "settings.experimental.browserAria": "啟用內建瀏覽器",
   "browser.notInstalled": "此伺服器尚未安裝瀏覽器引擎。請在{settings}以及機器人的「存取」設定中啟用瀏覽器開關，然後開啟「機器人的電腦 → 瀏覽器」進行安裝。或在伺服器上執行 `openmausbot browser install`。",
   "browser.noEngine": "此伺服器沒有瀏覽器引擎。",
@@ -2794,6 +2792,7 @@
   "keys.cerebras.desc": "在 Cerebras 晶片上執行的開放模型（GPT OSS、Qwen），速度比 GPU 雲端快上許多倍。會新增 Cerebras 引擎。",
   "keys.cerebras.link": "Cerebras Cloud",
   "decider.intro": "快速決策模型，能在幾百毫秒內替你的機器人做出選擇，費用僅需幾分之一美分。工作仍由你的機器人完成。",
+  "decider.masterNeedsKey": "請在下方儲存金鑰以啟用此功能。",
   "decider.key.label": "Jev API 金鑰",
   "decider.key.placeholder": "貼上你的 TypeSafe API 金鑰",
   "decider.key.getKey": "前往 typesafe.ai 取得金鑰",
@@ -3617,5 +3616,7 @@
   "botPanel.library.pageState.org": "已發布給我的組織",
   "botPanel.library.pageState.link": "已發布給任何有連結的人",
   "botPanel.library.pageState.revoked": "已撤銷",
-  "botPanel.library.pageState.expired": "已過期"
+  "botPanel.library.pageState.expired": "已過期",
+  "settings.experimental.browserWindows": "這台 Windows 電腦尚未支援：請使用 `openmausbot browser install` 安裝瀏覽器引擎。",
+  "settings.experimental.skillAuthoring": "允許機器人草擬技能供你審核"
 }

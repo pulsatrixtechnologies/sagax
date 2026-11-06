@@ -264,7 +264,7 @@ describe("Coding branches: the card", () => {
     // the message is what does not fit: said so, never "fewer files"
     expect(branchErrorText(new ApiError("x", 413, { code: "message_too_long_for_computer" }))).toBe("That commit message is too long for that computer. Shorten it, or ask the bot to commit.");
     expect(en["botPanel.branch.error.messageTooLong"]).not.toMatch(/files/i);
-    expect((fr as Record<string, string>)["botPanel.branch.error.messageTooLong"]).toBe("Ce message de commit est trop long pour cet ordinateur. Raccourcissez-le, ou demandez au bot de faire le commit.");
+    expect((fr as Record<string, string>)["botPanel.branch.error.messageTooLong"]).toBe("Ce message de commit est trop long pour cet ordinateur. Raccourcis-le, ou demande au bot de faire le commit.");
     expect((fr as Record<string, string>)["botPanel.branch.error.tooLong"]).not.toMatch(/fichiers/);
     // that computer's own git identity, not the person's profile
     expect(branchErrorText(new ApiError("x", 409, { code: "no_git_identity" }))).toBe("Git has no name and email on that computer to sign the commit. Set them there (git config --global user.name and user.email), then try again, or ask the bot to commit.");

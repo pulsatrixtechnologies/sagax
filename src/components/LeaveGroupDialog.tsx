@@ -13,6 +13,8 @@ export function leaveGroupCopy(group: Pick<Group, "name" | "ownerId" | "humanIds
     title: t("room.leave.title", { name: group.name }),
     body: [
       t("room.leave.body"),
+      // #2119: sole-member leave is refused in the menu; keep the last copy
+      // for a defensive dialog if somehow opened.
       outcome === "owner" ? t("room.leave.owner") : outcome === "last" ? t("room.leave.last") : "",
     ].filter(Boolean).join(" "),
     confirmLabel: t("groupPanel.leave"),

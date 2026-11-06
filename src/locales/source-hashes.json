@@ -14196,6 +14196,7 @@
       "teamSetup.error.adminRequired": "7a9444b6e920b920ce37dcc3b84009d42959b0a3285bc45818d95b7e8b1f3534",
       "teamSetup.error.desktopOnly": "3ef4467416ccc05be95acbf2173b5530dacf71814827aa0b294f8b58b2a52a67",
       "serverError.notGroupOwner": "2a4915117c620cb77d1c9c098f400f180fd07748c2e575139b9a0f7674f5bd24",
+      "serverError.soleMember": "fdc2bee31171f8c642514ed32bd5797b710e11c5c821bc1abae33b61755d1ac0",
       "serverError.notChannelEditor": "b7582941492b87ae95aaaddf4240fa6dd92f89d92a85721eea164c7a088520ce",
       "serverError.threadBusy": "c725fc9b3927d1e8324ea6f30b6928e254adc1fa33608ff0150698d9e1dc1ca7",
       "serverError.threadLimit": "fd8b79fbda61387fc3c8fc31064d17c35bc8d1934327700549056681f412da68",

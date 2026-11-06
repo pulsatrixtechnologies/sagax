@@ -6,6 +6,7 @@ afterEach(() => setLocale("en"));
 
 const CASES: Array<[code: string, en: string, fr: string]> = [
   ["not_group_owner", "Only the group's owner can do this.", "Seul le propriétaire du groupe peut le faire."],
+  ["sole_member", "You are the only person left in this group. Delete it instead of leaving.", "Vous êtes la seule personne restante dans ce groupe. Supprimez-le plutôt que de le quitter."],
   ["not_channel_editor", "Only an owner or an admin can change who is in a channel.", "Seul un propriétaire ou un admin peut changer les personnes d'un canal."],
   ["thread_busy", "The bot is already working here. Interrupt it, or wait for it to finish.", "Le bot travaille déjà ici. Interrompez-le ou attendez qu'il termine."],
   ["thread_limit", "This bot has reached its limit of parallel threads. Wait for one to finish.", "Ce bot a atteint sa limite de fils en parallèle. Attendez qu'un fil se termine."],

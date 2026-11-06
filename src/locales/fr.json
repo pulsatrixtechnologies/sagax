@@ -10990,6 +10990,7 @@
   "teamSetup.error.adminRequired": "Cette configuration modifie ou supprime un bot qui n'est pas à vous. Seul le propriétaire de ce bot ou un administrateur de l'organisation peut l'appliquer.",
   "teamSetup.error.desktopOnly": "Approuvez la configuration ou la suppression d'équipe depuis l'app de bureau ou un appareil jumelé en Accès complet. Dans un navigateur local, attendez que tous les bots soient inactifs.",
   "serverError.notGroupOwner": "Seul le propriétaire du groupe peut le faire.",
+  "serverError.soleMember": "Vous êtes la seule personne restante dans ce groupe. Supprimez-le plutôt que de le quitter.",
   "serverError.notChannelEditor": "Seul un propriétaire ou un admin peut changer les personnes d'un canal.",
   "serverError.threadBusy": "Le bot travaille déjà ici. Interrompez-le ou attendez qu'il termine.",
   "serverError.threadLimit": "Ce bot a atteint sa limite de fils en parallèle. Attendez qu'un fil se termine.",

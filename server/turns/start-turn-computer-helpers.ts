@@ -30,11 +30,9 @@ export function createComputerHelpersStartTurn(host: StartTurnHost) {
     interruptDirectThread,
     localVmActiveThreads,
     localVmIdleFor,
-    localVmImageBusy,
     localVmLeaseFor,
     localVmLifecycleBusy,
     localVmMode,
-    localVmModeChangeBusy,
     localVmOwnerBusy,
     localVmPoolSeatHolder,
     localVmSeatPool,
@@ -124,7 +122,7 @@ export function createComputerHelpersStartTurn(host: StartTurnHost) {
       state.localVmTarget = pinnedTarget ?? localVmThreadTargets.get(claimThreadId) ?? { ...localVmTargetForThread(state.bot.id, claimThreadId) };
       const localVmTarget = state.localVmTarget;
       await bindTurnComputer(state.resourceOwner, `computer:vm:${localVmTarget.key}`, true);
-      if (localVmImageBusy || localVmModeChangeBusy || localVmLifecycleBusy.has(localVmTarget.key)) {
+      if (host.localVmImageBusy || host.localVmModeChangeBusy || localVmLifecycleBusy.has(localVmTarget.key)) {
         throw new Error("this Local VM is being started, stopped, or replaced — wait for setup to finish");
       }
       // Claim before the first await. The lifecycle route performs its
@@ -282,7 +280,7 @@ export function createComputerHelpersStartTurn(host: StartTurnHost) {
         if (!localVmSeen.has(localVmTarget.key) && !state.opts?.automationSource) return false;
         const seen = await containerComputerStatus(undefined, undefined, localVmTarget).catch(() => null);
         if (!seen || !autoLocalVmAttachable(seen)) return false;
-        if (localVmImageBusy || localVmModeChangeBusy || localVmLifecycleBusy.has(localVmTarget.key)) return false;
+        if (host.localVmImageBusy || host.localVmModeChangeBusy || localVmLifecycleBusy.has(localVmTarget.key)) return false;
         if (seen.ready && seen.runtime) lazyReadyVm = { runtime: seen.runtime };
       }
       try {

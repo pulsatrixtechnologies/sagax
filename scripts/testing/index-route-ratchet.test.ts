@@ -48,9 +48,8 @@ const EXACT: Record<string, number> = {
   // 23: leftover me/engines, org/bots, people avatar, routine-delegation stub,
   // adminAuditPlan and externalRuntimeMayCall moved out of index (#1388).
   // 18: originGates (hosted health, join, pair) moved to request-pipeline (#1388).
-  // Upstream sync note: upstream still counted ~190 path === before the #1388 moves;
-  // keep the Sagax post-split pins below.
-  'path === "/': 18,
+  // 0: #1388 index-35k moved remaining path === guards into routes / pipeline / leaves.
+  'path === "/': 0,
   // 90: the package preview path moved with the organization library routes.
   // 91: the thread file pin and the bot history routes moved to server/routes (#1099), after the
   // library pin (#1112) and the history owner rule (#1107) had taken it over 93.
@@ -71,27 +70,32 @@ const EXACT: Record<string, number> = {
   // 15: wave 4 moved pairing/:id and sessions/:id path.match (#1388).
   // Remaining avatar, activity/outbound and credential routes moved to modules (#1388).
   // 2: bot model/read/Auto/allowlist/always-allow/PATCH/DELETE/request routes moved to bots-mutate.ts (#1388).
-  "path.match(": 2,
+  // 0: #1388 index-35k moved remaining path.match guards into routes / pipeline / leaves.
+  "path.match(": 0,
   // 13: wave 2 P5 moved hostedModels path.startsWith(/api/instances/) (#1388).
   // 12: wave 4 moved shared-computers path.startsWith (#1388).
   // 13: live count on origin/main 0.8.27 (c4c248539); pin matched after #1909.
   // 12: #1911 moved the backup exclusion into isWorkspaceBackupRoute.
   // 9: me-engines path.startsWith and adminAuditPlan internal/testing startsWith (#1388).
   // 8: originGates hosted/static startsWith moved (#1388).
-  "path.startsWith(": 8,
+  // 0: #1388 index-35k moved remaining path.startsWith guards into routes / pipeline / leaves.
+  "path.startsWith(": 0,
   // 14: wave 2 P5 moved instances/mcp .exec(path) guards (#1388).
   // 13: wave 3 B2 moved the bot-skills gate .exec(path) (#1388).
   // 12: wave 3 B3 moved bot browser live/action .exec(path) (#1388).
   // 10: wave 4 moved domain-check and shared-computers .exec(path) (#1388).
   // Fleet proxy moved to server/routes/fleet.ts (#1388).
   // 1: me-engines login .exec and adminAuditPlan .exec moved (#1388).
-  ".exec(path)": 1,
+  // 0: #1388 index-35k moved remaining .exec(path) guards into routes / pipeline / leaves.
+  ".exec(path)": 0,
   // 7: externalRuntimeMayCall .test moved (#1388).
   // 5: originGates PUBLIC_INVITE_PATH.test moved with the module (#1388).
-  ".test(path)": 5,
+  // 0: #1388 index-35k moved the terminal session WebSocket .test(path) into isTerminalSessionWsPath leaf.
+  ".test(path)": 0,
   // 3: wave 4 moved ENVIRONMENT_PATHS.includes(path) (#1388).
   // 1: originGates auth-path includes moved (#1388).
-  ".includes(path)": 1,
+  // 0: #1388 index-35k moved remaining .includes(path) guards into routes / pipeline / leaves.
+  ".includes(path)": 0,
 };
 
 const count = (needle: string) => INDEX.split(needle).length - 1;

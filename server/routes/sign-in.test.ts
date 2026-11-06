@@ -82,10 +82,12 @@ describe("internal sign-in route", () => {
 });
 
 it("wires createInternalSignInRoutes behind the internal capability gate with the guarded reader", () => {
-  const text = readFileSync(new URL("../index.ts", import.meta.url), "utf8");
+  // #1388: the internal block lives in request-pipeline/run-internal.ts.
+  const text = readFileSync(new URL("../request-pipeline/run-internal.ts", import.meta.url), "utf8");
   expect(text).toContain("createInternalSignInRoutes({");
   expect(text).toContain("readBody: readInternalBody");
   expect(text).toContain("requestSignIn(internalSender, internalCapability.threadId, site, reason)");
   // Must not land in the global ROUTES table (only inside the /api/internal/ block).
-  expect(text).not.toMatch(/ROUTES\.push\(\s*createInternalSignInRoutes/);
+  const index = readFileSync(new URL("../index.ts", import.meta.url), "utf8");
+  expect(index).not.toMatch(/ROUTES\.push\(\s*createInternalSignInRoutes/);
 });

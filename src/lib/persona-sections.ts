@@ -77,44 +77,52 @@ export function personaGroupSections(group: PersonaGroup): readonly PersonaCateg
   return PERSONA_GROUPS.find((entry) => entry.id === group)?.sections ?? [];
 }
 
-/** The bot's profile page (#2126, #2173, Grok Bot's layout): a row of pill
- * tabs. General holds the channels, the bot's accounts and the identity,
- * Knowledge what it knows and how it behaves, then one tab per setting
- * (Appearance, Shared with, What it does, Model, ...). */
-export type BotProfileTab = "general" | "knowledge" | SettingsTab;
+/** The bot's profile page (#2126, #2173, #2271, Grok Bot's layout). Its
+ * top is the bot's appearance: the banner, the mascot, "Name · Label", the
+ * description and the colour, edited in place, with the full Appearance
+ * pane unfolding under them. Under that, four pill tabs, each a page of
+ * cards in two columns (one under 900px):
+ *
+ * - General: the channels, the bot's accounts, What it does, Shared with,
+ *   Who can see it.
+ * - Knowledge: Skills, Personality, Rules, the Bot folder.
+ * - Model & tools: Model, Workspace, Access, Permissions, Voice & alerts.
+ * - Activity: Usage, Changes. */
+export type BotProfileTab = "general" | "knowledge" | "tools" | "activity";
+export const BOT_PROFILE_TABS = ["general", "knowledge", "tools", "activity"] as const satisfies readonly BotProfileTab[];
+
+/** The sections the page's header shows itself (the identity and the
+ * appearance): on every tab, never a tab. */
+export const HEADER_SECTIONS = ["overview", "appearance"] as const satisfies readonly PersonaCategory[];
+export type HeaderSection = (typeof HEADER_SECTIONS)[number];
 
 /** Knowledge's sections, in order (the memory is managed in the Bot folder). */
 export const KNOWLEDGE_SECTIONS = ["skills", "soul", "rules", "files"] as const satisfies readonly PersonaCategory[];
 
-/** The sections General shows itself: the identity is the page's header,
- * Slack a row of Channels. */
-const GENERAL_SECTIONS: ReadonlySet<PersonaCategory> = new Set(["slack"]);
+/** Each tab's sections, in the page's order. Slack is a row of General's
+ * Channels card. */
+export const BOT_PROFILE_TAB_SECTIONS: Readonly<Record<BotProfileTab, readonly PersonaCategory[]>> = {
+  general: ["slack", "summary", "sharing", "visibility"],
+  knowledge: KNOWLEDGE_SECTIONS,
+  tools: ["model", "worksOn", "access", "permissions", "voice"],
+  activity: ["usage", "history"],
+};
 
-/** Settings' sections, in the editor's order: every page that is neither a
- * Knowledge section nor shown by General. The identity (description and
- * facts) stays here as its first section. */
-export const SETTINGS_SECTIONS: readonly PersonaCategory[] = PERSONA_CATEGORIES.filter(
-  (id) => !GENERAL_SECTIONS.has(id) && !(KNOWLEDGE_SECTIONS as readonly PersonaCategory[]).includes(id),
-);
-
-/** The settings that are tabs of their own (#2173): every setting but the
- * identity, which General shows under its cards. */
-export type SettingsTab = Exclude<PersonaCategory, "overview" | "slack" | (typeof KNOWLEDGE_SECTIONS)[number]>;
-export const SETTINGS_TABS: readonly SettingsTab[] = SETTINGS_SECTIONS.filter((id): id is SettingsTab => id !== "overview");
-
-export const BOT_PROFILE_TABS: readonly BotProfileTab[] = ["general", "knowledge", ...SETTINGS_TABS];
-
-export function isSettingsTab(tab: BotProfileTab): tab is SettingsTab {
-  return (SETTINGS_TABS as readonly string[]).includes(tab);
+export function isHeaderSection(id: PersonaCategory): id is HeaderSection {
+  return (HEADER_SECTIONS as readonly string[]).includes(id);
 }
 
-/** The tab a link to `section` opens: the plain opening (Identity) and
- * Slack are General, the instructions Knowledge, every other setting its
- * own tab. */
+/** The tab whose page holds `category`, or null for a header section. */
+export function botProfileTabOf(category: PersonaCategory): BotProfileTab | null {
+  if (isHeaderSection(category)) return null;
+  return BOT_PROFILE_TABS.find((tab) => BOT_PROFILE_TAB_SECTIONS[tab].includes(category)) ?? "general";
+}
+
+/** The tab a link to `section` opens: the header's sections and the bot
+ * panel's land on General, the rest on the tab that holds them. */
 export function botProfileTabFor(section: BotSettingsSection | null | undefined): BotProfileTab {
-  if (!section || section === "overview" || section === "details" || section === "routines") return "general";
+  if (!section) return "general";
   const category = personaCategoryForSection(section);
-  if (!category || category === "overview" || GENERAL_SECTIONS.has(category)) return "general";
-  if ((KNOWLEDGE_SECTIONS as readonly PersonaCategory[]).includes(category)) return "knowledge";
-  return category as SettingsTab;
+  if (!category) return "general";
+  return botProfileTabOf(category) ?? "general";
 }

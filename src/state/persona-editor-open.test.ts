@@ -10,9 +10,9 @@ describe("Persona editor state", () => {
     expect(initialState.personaEditor).toBeNull();
     expect(reducer(withBot, { type: "openPersonaEditor", botId: "gone" })).toBe(withBot);
     const opened = reducer(withBot, { type: "openPersonaEditor", botId: "pepper" });
-    expect(opened.personaEditor).toEqual({ botId: "pepper", section: "overview" });
+    expect(opened.personaEditor).toMatchObject({ botId: "pepper", section: "overview" });
     const soul = reducer(opened, { type: "personaEditorSection", section: "soul" });
-    expect(soul.personaEditor).toEqual({ botId: "pepper", section: "soul" });
+    expect(soul.personaEditor).toMatchObject({ botId: "pepper", section: "soul" });
     expect(reducer(soul, { type: "closePersonaEditor" }).personaEditor).toBeNull();
     expect(reducer(withBot, { type: "personaEditorSection", section: "soul" })).toBe(withBot);
   });
@@ -32,9 +32,32 @@ describe("Persona editor state", () => {
     expect(reducer(opened, { type: "showAchievements" }).personaEditor).toBeNull();
   });
 
+  it("puts the right panel back as it was when the page closes (#2271)", () => {
+    // open panel before: the X puts it back open, on the same bot
+    const panelOpen = reducer(reducer(withBot, { type: "select", id: "pepper" }), { type: "toggleSettings", open: true });
+    expect(panelOpen.settingsOpen).toBe(true);
+    const fromOpen = reducer(panelOpen, { type: "openPersonaEditor", botId: "pepper" });
+    expect(fromOpen.settingsOpen).toBe(false);
+    const closedFromOpen = reducer(fromOpen, { type: "closePersonaEditor" });
+    expect(closedFromOpen.personaEditor).toBeNull();
+    expect(closedFromOpen.settingsOpen).toBe(true);
+    expect(closedFromOpen.panelOwner).toBe(panelOpen.panelOwner);
+    // closed panel before: it stays closed
+    const panelClosed = reducer(panelOpen, { type: "toggleSettings", open: false });
+    const fromClosed = reducer(panelClosed, { type: "openPersonaEditor", botId: "pepper" });
+    expect(reducer(fromClosed, { type: "closePersonaEditor" }).settingsOpen).toBe(false);
+    // moving between sections keeps the snapshot; closing by landing on the bot's chat restores it too
+    const moved = reducer(fromOpen, { type: "personaEditorSection", section: "soul" });
+    expect(reducer(moved, { type: "closePersonaEditor" }).settingsOpen).toBe(true);
+    const other: AppState = { ...fromOpen, selectedId: "other" };
+    const landed = reducer(other, { type: "select", id: "pepper" });
+    expect(landed.personaEditor).toBeNull();
+    expect(landed.settingsOpen).toBe(true);
+  });
+
   it("reroutes a settings deep link that used to land on More to the persona editor", () => {
     const open = (section: never) => reducer(withBot, { type: "toggleSettings", open: true, botId: "pepper", section });
-    expect(open("access" as never).personaEditor).toEqual({ botId: "pepper", section: "access" });
+    expect(open("access" as never).personaEditor).toMatchObject({ botId: "pepper", section: "access" });
     expect(open("voice" as never).personaEditor?.section).toBe("voice");
     expect(open("soul" as never).personaEditor?.section).toBe("soul");
     // every section is its own page: the link keeps it (owner 2026-10-15)

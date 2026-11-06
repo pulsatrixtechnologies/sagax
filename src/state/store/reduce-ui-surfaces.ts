@@ -1,5 +1,5 @@
 // Surface and modal cases of reduceUi (#1383 function-size split).
-import type { Action, AppState } from "./model";
+import type { Action, AppState, ProfilePanelSnapshot } from "./model";
 import { closedRightPanels } from "./reduce-views";
 
 type ReduceFn = (state: AppState, action: Action) => AppState;
@@ -156,7 +156,13 @@ export function reduceUiSurfaces(
       if (!state.bots.some((bot) => bot.id === action.botId)) return state;
       return {
         ...state,
-        personaEditor: { botId: action.botId, section: action.section ?? "overview" },
+        personaEditor: {
+          botId: action.botId,
+          section: action.section ?? "overview",
+          // What the right panel showed before the page: put back when it
+          // closes (#2271). A page reopened over itself keeps the first.
+          panel: state.personaEditor?.panel ?? profilePanelSnapshot(state),
+        },
         // The profile page takes the main panel in place of the chat
         // (#2136): the right panel closes while it is open.
         settingsOpen: false,
@@ -182,7 +188,7 @@ export function reduceUiSurfaces(
         ? { ...state, personaEditor: { ...state.personaEditor, section: action.section } }
         : state;
     case "closePersonaEditor":
-      return state.personaEditor ? { ...state, personaEditor: null } : state;
+      return state.personaEditor ? { ...state, ...state.personaEditor.panel, personaEditor: null } : state;
     case "toggleShortcuts": {
       const open = action.open ?? !state.shortcutsOpen;
       return {
@@ -218,4 +224,10 @@ export function reduceUiSurfaces(
     }
   }
   return undefined;
+}
+
+/** The right panel's state, kept while the bot's profile page covers it. */
+export function profilePanelSnapshot(state: AppState): ProfilePanelSnapshot {
+  const { settingsOpen, panelOwner, computerOpen, inspectorOpen, activityOpen, personPanelId } = state;
+  return { settingsOpen, panelOwner, computerOpen, inspectorOpen, activityOpen, personPanelId };
 }

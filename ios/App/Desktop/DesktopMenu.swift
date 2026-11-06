@@ -31,8 +31,6 @@ struct DesktopMenuEntry: Identifiable {
     var disabled = false
     /// A keycap hint at the trailing edge ("⌘ /").
     var shortcut: String?
-    /// A grey figure at the trailing edge (`data-menu-value`: "4% used").
-    var value: String?
     /// `data-tour` id so the guided tour can point at this row.
     var tourAnchor: String?
     var kind: Kind
@@ -72,25 +70,13 @@ enum DesktopMenuStyle {
         switch self {
         case .standard: 228
         case .section: 220
-        case .profile: 260 // the account variant's min-w-[260px] (#2301)
+        case .profile: 228 // min-w-[228px] (SidebarProfileMenu.tsx), measured on 11
         case .new: 240
         }
     }
 
-    /// Rows: 30 (`h-[30px]`), the account variant's 36 (`h-9`, #2301).
-    var rowHeight: CGFloat { self == .profile ? 36 : 30 }
-    /// Between rows: `gap-0.5`, the account variant's `gap-px`.
-    var rowSpacing: CGFloat { self == .profile ? 1 : 2 }
-    /// Text: 13/18, the account variant's 14/20.
-    var textSize: CGFloat { self == .profile ? 14 : 13 }
-    var lineHeight: CGFloat { self == .profile ? 20 : 18 }
-    /// Row inset and icon-to-label gap: `px-2 gap-2`, the account's `px-2.5 gap-3`.
-    var rowPadding: CGFloat { self == .profile ? 10 : 8 }
-    var labelGap: CGFloat { self == .profile ? 12 : 8 }
-    /// Row corner: `rounded-md`, the account's `rounded-lg`.
-    var rowRadius: CGFloat { self == .profile ? 8 : 6 }
-    /// The account variant's thin grey icons (`stroke-width: 1.6`).
-    var iconStroke: CGFloat { self == .profile ? 1.6 : 2 }
+    // the account menu: 32 pt a row with the 2 pt gap, as measured on 11
+    var rowHeight: CGFloat { 30 }
     var iconSize: CGFloat {
         switch self {
         case .profile: 18
@@ -101,9 +87,7 @@ enum DesktopMenuStyle {
 
     /// A divider's own height: `mx-2 my-1 h-[0.5px]` between entries; the
     /// account menu draws it inside the next item's block, one 2 pt gap less.
-    var dividerHeight: CGFloat { self == .profile ? 12.5 : 8.5 }
-    /// The divider's side inset: `mx-2`, the account's `mx-2.5`.
-    var dividerInset: CGFloat { self == .profile ? 10 : 8 }
+    var dividerHeight: CGFloat { self == .profile ? 6.5 : 8.5 }
     /// The icon's box (`size-5` in the account menu).
     var iconBox: CGFloat { self == .profile ? 20 : iconSize }
 
@@ -111,7 +95,7 @@ enum DesktopMenuStyle {
     /// each side, 2 pt between entries, a divider 8.5 pt.
     func height(_ entries: [DesktopMenuEntry]) -> CGFloat {
         let body = entries.reduce(CGFloat(0)) { $0 + ($1.isDivider ? dividerHeight : rowHeight) }
-        return body + CGFloat(max(0, entries.count - 1)) * rowSpacing + 14
+        return body + CGFloat(max(0, entries.count - 1)) * 2 + 14
     }
 }
 
@@ -127,11 +111,8 @@ struct DesktopMenuPanel: View {
     let dismiss: () -> Void
     @State private var openSubmenuId: String?
 
-    /// `rounded-xl`, the account variant's `rounded-2xl`.
-    private var panelRadius: CGFloat { style == .profile ? 16 : max(theme.radiusXl, 0) }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: style.rowSpacing) {
+        VStack(alignment: .leading, spacing: 2) {
             ForEach(entries) { entry in
                 row(entry)
             }
@@ -139,12 +120,12 @@ struct DesktopMenuPanel: View {
         // p-1.5 inside the 1 pt border
         .padding(7)
         .frame(width: style.width, alignment: .leading)
-        .background(theme.elevated, in: RoundedRectangle(cornerRadius: panelRadius, style: .continuous))
+        .background(theme.elevated, in: RoundedRectangle(cornerRadius: max(theme.radiusXl, 0), style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: panelRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: max(theme.radiusXl, 0), style: .continuous)
                 .strokeBorder(theme.border, lineWidth: 1)
         )
-        .shadow(color: .black.opacity(theme.dark ? 0.45 : 0.16), radius: style == .profile ? 20 : 16, y: 8)
+        .shadow(color: .black.opacity(theme.dark ? 0.45 : 0.16), radius: 16, y: 8)
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
         .accessibilityIdentifier("desktop-menu")
@@ -161,9 +142,9 @@ struct DesktopMenuPanel: View {
             // my-1 around the line; the account menu's sits in the next
             // item's block (one gap less below it)
             Rectangle().fill(theme.border).frame(height: 0.5)
-                .padding(.horizontal, style.dividerInset)
-                .padding(.top, style == .profile ? 6 : 4)
-                .padding(.bottom, style.dividerHeight - (style == .profile ? 6.5 : 4.5))
+                .padding(.horizontal, 8)
+                .padding(.top, 4)
+                .padding(.bottom, style.dividerHeight - 4.5)
         case let .action(perform):
             Button {
                 dismiss()
@@ -171,7 +152,7 @@ struct DesktopMenuPanel: View {
             } label: {
                 label(entry, chevron: false)
             }
-            .buttonStyle(DesktopMenuRowStyle(radius: style.rowRadius))
+            .buttonStyle(DesktopMenuRowStyle(radius: 6))
             .disabled(entry.disabled)
             .accessibilityIdentifier("desktop-menu.\(entry.id)")
             .modifier(DesktopMenuTourAnchor(entry.tourAnchor))
@@ -183,7 +164,7 @@ struct DesktopMenuPanel: View {
             } label: {
                 label(entry, chevron: true)
             }
-            .buttonStyle(DesktopMenuRowStyle(radius: style.rowRadius))
+            .buttonStyle(DesktopMenuRowStyle(radius: 6))
             .disabled(entry.disabled || children.isEmpty)
             .accessibilityIdentifier("desktop-menu.\(entry.id)")
             .modifier(DesktopMenuTourAnchor(entry.tourAnchor))
@@ -198,7 +179,7 @@ struct DesktopMenuPanel: View {
     }
 
     private func submenuFlyout(_ children: [DesktopMenuEntry]) -> some View {
-        VStack(alignment: .leading, spacing: style.rowSpacing) {
+        VStack(alignment: .leading, spacing: 2) {
             ForEach(children) { child in
                 if case let .action(perform) = child.kind {
                     Button {
@@ -207,7 +188,7 @@ struct DesktopMenuPanel: View {
                     } label: {
                         label(child, chevron: false)
                     }
-                    .buttonStyle(DesktopMenuRowStyle(radius: style.rowRadius))
+                    .buttonStyle(DesktopMenuRowStyle(radius: 6))
                     .disabled(child.disabled)
                     .accessibilityIdentifier("desktop-menu.\(child.id)")
                     .modifier(DesktopMenuTourAnchor(child.tourAnchor))
@@ -216,12 +197,12 @@ struct DesktopMenuPanel: View {
         }
         .padding(7)
         .frame(width: style.width, alignment: .leading)
-        .background(theme.elevated, in: RoundedRectangle(cornerRadius: panelRadius, style: .continuous))
+        .background(theme.elevated, in: RoundedRectangle(cornerRadius: max(theme.radiusXl, 0), style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: panelRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: max(theme.radiusXl, 0), style: .continuous)
                 .strokeBorder(theme.border, lineWidth: 1)
         )
-        .shadow(color: .black.opacity(theme.dark ? 0.45 : 0.16), radius: style == .profile ? 20 : 12, y: 6)
+        .shadow(color: .black.opacity(theme.dark ? 0.45 : 0.16), radius: 12, y: 6)
     }
 
     private struct DesktopMenuTourAnchor: ViewModifier {
@@ -239,21 +220,13 @@ struct DesktopMenuPanel: View {
 
     private func label(_ entry: DesktopMenuEntry, chevron: Bool) -> some View {
         let tint = entry.danger ? theme.danger : theme.ink
-        // the account variant's icons are grey (`text-ink-secondary`)
-        let iconTint = entry.danger ? theme.danger : style == .profile ? theme.inkSecondary : tint
-        return HStack(spacing: style.labelGap) {
+        return HStack(spacing: 8) {
             if let icon = entry.icon {
-                DesktopIconView(icon: icon, size: style.iconSize, strokeWidth: style.iconStroke)
-                    .foregroundStyle(iconTint)
+                DesktopIconView(icon: icon, size: style.iconSize)
                     .frame(width: style.iconBox, height: style.iconBox)
             }
-            DesktopLineText(text: entry.title, size: style.textSize, color: tint, lineHeight: style.lineHeight)
+            DesktopLineText(text: entry.title, size: 13, color: tint, lineHeight: 18)
             Spacer(minLength: 0)
-            if let value = entry.value {
-                DesktopLineText(text: value, size: style.textSize, color: theme.inkTertiary, lineHeight: style.lineHeight)
-                    .monospacedDigit()
-                    .accessibilityIdentifier("desktop-menu-value")
-            }
             if let shortcut = entry.shortcut {
                 DesktopLineText(text: shortcut, size: 11, color: theme.inkSecondary, lineHeight: 11)
                     .padding(.horizontal, 6)
@@ -266,7 +239,7 @@ struct DesktopMenuPanel: View {
             }
         }
         .foregroundStyle(tint)
-        .padding(.horizontal, style.rowPadding)
+        .padding(.horizontal, 8)
         .frame(height: style.rowHeight)
         .frame(maxWidth: .infinity, alignment: .leading)
         .opacity(entry.disabled ? 0.4 : 1)
@@ -328,25 +301,11 @@ struct DesktopMenuItems: View {
     }
 }
 
-/// The figure beside the account menu's Usage row (`usagePercent`, #2301),
-/// read from `GET /api/plan-usage` each time the menu opens.
-@MainActor
-final class DesktopAccountUsage: ObservableObject {
-    static let shared = DesktopAccountUsage()
-    @Published private(set) var percent: Int?
-
-    func refresh(_ session: Session) async {
-        guard let client = session.settingsClient, let report = try? await client.planUsage() else { return }
-        percent = PlanUsageRules.menuPercent(report)
-    }
-}
-
 /// The shell's layer for the open popover: a tap outside closes it.
 struct DesktopMenuLayer: View {
     @EnvironmentObject private var session: Session
     @EnvironmentObject private var model: DesktopShellModel
     @ObservedObject private var prefs = SidebarPrefsModel.shared
-    @ObservedObject private var accountUsage = DesktopAccountUsage.shared
 
     var body: some View {
         GeometryReader { geometry in
@@ -380,9 +339,6 @@ struct DesktopMenuLayer: View {
             }
         }
         .ignoresSafeArea()
-        .task(id: model.menu?.kind == .profile) {
-            if model.menu?.kind == .profile { await accountUsage.refresh(session) }
-        }
     }
 
     /// Kept 8 pt inside the window, as `BotContextMenu` clamps it.
@@ -700,19 +656,16 @@ struct DesktopSidebarMenus {
 
     // MARK: Account (SidebarProfileMenu)
 
-    /// SidebarProfileMenu.tsx `profileMenuItems` (Grok Bot's order, #2301):
-    /// Usage › with "N% used", Get Sagax on mobile, Help › (Help Center,
-    /// Keyboard shortcuts, Release notes, Send feedback, About), Settings, Tools › (Automations, Memory, Team map,
+    /// SidebarProfileMenu.tsx `accountMenuItems` (2026-10-28): Usage ›,
+    /// Get Sagax on mobile, Help › (Keyboard shortcuts, Release notes,
+    /// About), Settings, Tools › (Automations, Memory, Team map,
     /// Achievements, and Browse Bots while Templates is on), then the
     /// archived bots. The desktop's update row and its account switching
     /// are the Mac app's (the iPad updates through the App Store).
     func profile() -> [DesktopMenuEntry] {
         var out: [DesktopMenuEntry] = []
         if DesktopSettingsSection.available(for: gate).contains(.usage) {
-            // the plan row (#2301): "Usage" with "4% used" in grey on the right
-            let percent = DesktopAccountUsage.shared.percent
-            out.append(DesktopMenuEntry(id: "usage", title: String(localized: "Usage"), icon: .gauge,
-                                        value: percent.map { String(localized: "\($0)% used") }, kind: .submenu([
+            out.append(DesktopMenuEntry(id: "usage", title: String(localized: "Usage"), icon: .gauge, kind: .submenu([
                 DesktopMenuEntry(id: "view-usage", title: String(localized: "View usage"), kind: .action {
                     model.settingsSection = .usage
                     model.modal = .settings
@@ -728,18 +681,11 @@ struct DesktopSidebarMenus {
             }))
         }
         out.append(DesktopMenuEntry(id: "help", title: String(localized: "Help"), icon: .bookOpen, kind: .submenu([
-            DesktopMenuEntry(id: "helpCenter", title: String(localized: "Help Center"), icon: .lifeBuoy, kind: .action {
-                UIApplication.shared.open(SettingsLinks.helpCenter(french: false))
-            }),
             DesktopMenuEntry(id: "shortcuts", title: String(localized: "Keyboard shortcuts"), icon: .keyboard, shortcut: "⌘ /", kind: .action {
                 model.modal = .shortcuts
             }),
             DesktopMenuEntry(id: "releaseNotes", title: String(localized: "Release notes"), icon: .fileText, kind: .action {
                 model.modal = .releaseNotes
-            }),
-            // the same mail draft as Settings > Send feedback
-            DesktopMenuEntry(id: "feedback", title: String(localized: "Send feedback"), icon: .messageSquare, kind: .action {
-                if let url = SettingsFeedbackRow.mailURL() { UIApplication.shared.open(url) }
             }),
             DesktopMenuEntry(id: "about", title: String(localized: "About"), icon: .info, kind: .action {
                 model.modal = .about

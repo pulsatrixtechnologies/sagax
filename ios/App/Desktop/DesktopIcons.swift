@@ -19,8 +19,6 @@ enum DesktopIcon: String, CaseIterable {
     case appsGrid, brain
     // the account menu of 2026-10-28 (Usage ›, Help ›, Tools ›)
     case gauge, bookOpen, wrench
-    // Help > Help Center (lucide LifeBuoy, #2301)
-    case lifeBuoy
     // the compose picker's wizard row (WandSparkles)
     case wand
     // the palette's bot rows (lucide Bot)
@@ -140,9 +138,6 @@ enum DesktopIcon: String, CaseIterable {
             "m14 7 3 3", "M5 6v4", "M19 14v4", "M10 2v2", "M7 8H3", "M21 16h-4", "M11 3H9",
         ]
         case .gauge: ["m12 14 4-4", "M3.34 19a10 10 0 1 1 17.32 0"]
-        case .lifeBuoy:
-            [Self.circle(12, 12, 10), "m4.93 4.93 4.24 4.24", "m14.83 9.17 4.24-4.24", "m14.83 14.83 4.24 4.24",
-             "m9.17 14.83-4.24 4.24", Self.circle(12, 12, 4)]
         case .bookOpen: ["M12 7v14", "M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"]
         case .wrench: ["M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.106-3.105c.32-.322.863-.22.983.218a6 6 0 0 1-8.259 7.057l-7.91 7.91a1 1 0 0 1-2.999-3l7.91-7.91a6 6 0 0 1 7.057-8.259c.438.12.54.662.219.984z"]
         case .appsGrid: [Self.rect(3, 3, 7, 7, 1.5), Self.rect(14, 3, 7, 7, 1.5), Self.rect(3, 14, 7, 7, 1.5), "M17.5 14v7", "M14 17.5h7"]
@@ -230,7 +225,6 @@ enum DesktopIcon: String, CaseIterable {
         case .bot: "cpu"
         case .wand: "wand.and.stars"
         case .gauge: "gauge.with.dots.needle.33percent"
-        case .lifeBuoy: "lifepreserver"
         case .bookOpen: "book"
         case .wrench: "wrench.adjustable"
         case .brain: "brain"

@@ -57,18 +57,11 @@ struct SettingsFeedbackRow: View {
             composingMail = true
             return
         }
-        if let url = Self.mailURL() { UIApplication.shared.open(url) }
-    }
-
-    /// The feedback draft as a mail link (the account menu's Help > Send
-    /// feedback hands it to the system, as the desktop does).
-    static func mailURL() -> URL? {
-        let row = SettingsFeedbackRow()
         var components = URLComponents()
         components.scheme = "mailto"
         components.path = SettingsLinks.supportEmail
-        components.queryItems = [URLQueryItem(name: "subject", value: row.feedbackSubject), URLQueryItem(name: "body", value: row.feedbackBody)]
-        return components.url
+        components.queryItems = [URLQueryItem(name: "subject", value: feedbackSubject), URLQueryItem(name: "body", value: feedbackBody)]
+        if let url = components.url { UIApplication.shared.open(url) }
     }
 }
 

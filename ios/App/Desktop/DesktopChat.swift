@@ -363,9 +363,8 @@ struct DesktopFindClip: ViewModifier {
 // MARK: - Header
 
 /// The chat header like Grok Bot (#2141 / BotChatHeader.tsx): for a bot, one
-/// centred row with the name pill (mascot ~20, "Name · Label" 14 regular),
-/// who sees the bot, then a round gear that toggles the panel (same as the
-/// pill). Groups keep a single pill. Trailing chrome: More options, threads,
+/// centred name pill (mascot 22, "Name · Title" on one line, 15 regular,
+/// 40 high) that toggles the panel. Groups keep a single pill. Trailing chrome: More options, threads,
 /// Dev pods, New topic. While the docked panel is open its top bar holds the
 /// conversation menu.
 struct DesktopChatHeader: View {
@@ -396,21 +395,13 @@ struct DesktopChatHeader: View {
         return session.state.bot(bot.id) ?? bot
     }
 
-    private var audience: (label: String, shared: Bool)? {
-        guard let bot else { return nil }
-        let principal = session.viewer?.principalId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let viewerId = principal.isEmpty ? "local-owner" : principal.lowercased()
-        let owns = PrimaryBotRules.viewerOwns(bot, viewerId: viewerId)
-        return BotSharingSummary.headerAudience(for: bot, viewerOwns: owns)
-    }
-
     var body: some View {
         ZStack(alignment: .top) {
             HStack {
                 Spacer(minLength: 0)
                 Group {
-                    if let bot, let audience {
-                        botChatHeader(bot: bot, audience: audience)
+                    if let bot {
+                        botChatHeader(bot: bot)
                     } else {
                         groupOrPersonPill
                     }
@@ -457,78 +448,46 @@ struct DesktopChatHeader: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// Bot chat header: name pill, audience, gear (`BotChatHeader`, #2141).
-    private func botChatHeader(bot: Bot, audience: (label: String, shared: Bool)) -> some View {
-        HStack(spacing: 8) {
-            Button(action: openProfile) {
-                HStack(spacing: 8) {
-                    ChatAvatarView(chat: chat, size: 20, state: MausState.forChat(chat, in: session.state), background: theme.chrome)
-                        .frame(width: 20, height: 20)
-                    nameAndLabel(bot: bot)
-                    if ConfidentialBanner.shows(for: chat) {
-                        ConfidentialMark()
-                    }
+    /// Bot chat header: the name pill alone (`BotChatHeader`, #2141, #2298,
+    /// #2304): 40 high, mascot 22, "Name · Title" on one line in 15 regular,
+    /// 8 leading and 14 trailing. No sharing pill and no gear above the chat:
+    /// sharing lives in the bot panel, the pill already toggles it.
+    private func botChatHeader(bot: Bot) -> some View {
+        Button(action: openProfile) {
+            HStack(spacing: 8) {
+                ChatAvatarView(chat: chat, size: 22, state: MausState.forChat(chat, in: session.state), background: theme.chrome)
+                    .frame(width: 22, height: 22)
+                nameAndLabel(bot: bot)
+                if ConfidentialBanner.shows(for: chat) {
+                    ConfidentialMark()
                 }
-                .padding(.leading, 6)
-                .padding(.trailing, 12)
-                .frame(height: 32)
-                .background(theme.elevated, in: Capsule())
-                .overlay(Capsule().strokeBorder(theme.hairlineWeak, lineWidth: 0.5))
-                .contentShape(Capsule())
             }
-            .buttonStyle(.plain)
-            .hoverEffect(.highlight)
-            .keyboardShortcut(".", modifiers: .command)
-            .accessibilityLabel(Text(panelOpen ? "Close \(bot.name)'s panel" : "Open \(bot.name)'s panel"))
-            .accessibilityIdentifier("desktop-chat-pill")
-
-            HStack(spacing: 6) {
-                DesktopIconView(icon: audience.shared ? .users : .lock, size: 13, strokeWidth: 2)
-                    .foregroundStyle(theme.inkSecondary)
-                Text(verbatim: audience.label)
-                    .font(theme.font(13, .regular))
-                    .foregroundStyle(theme.inkSecondary)
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 32)
-            .frame(maxWidth: 192)
+            .padding(.leading, 8)
+            .padding(.trailing, 14)
+            .frame(height: 40)
             .background(theme.elevated, in: Capsule())
             .overlay(Capsule().strokeBorder(theme.hairlineWeak, lineWidth: 0.5))
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("desktop-bot-header-audience")
-
-            Button(action: openProfile) {
-                DesktopIconView(icon: .settings, size: 16, strokeWidth: 1.75)
-                    .foregroundStyle(panelOpen ? theme.ink : theme.inkSecondary)
-                    .frame(width: 32, height: 32)
-                    .background(panelOpen ? theme.elevatedHover : theme.elevated, in: Circle())
-                    .overlay(Circle().strokeBorder(theme.hairlineWeak, lineWidth: 0.5))
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .hoverEffect(.highlight)
-            .accessibilityLabel(Text(panelOpen ? "Close \(bot.name)'s panel" : "Open \(bot.name)'s panel"))
-            .accessibilityAddTraits(panelOpen ? .isSelected : [])
-            .accessibilityIdentifier("desktop-bot-header-gear")
+            .contentShape(Capsule())
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("desktop-bot-chat-header")
+        .buttonStyle(.plain)
+        .hoverEffect(.highlight)
+        .keyboardShortcut(".", modifiers: .command)
+        .accessibilityLabel(Text(panelOpen ? "Close \(bot.name)'s panel" : "Open \(bot.name)'s panel"))
+        .accessibilityAddTraits(panelOpen ? .isSelected : [])
+        .accessibilityIdentifier("desktop-chat-pill")
     }
 
+    /// "Name · Title" as ONE line with one ellipsis for the whole line
+    /// (`PillName`): the name in ink, " · Title" in secondary grey.
     private func nameAndLabel(bot: Bot) -> some View {
         let tag = bot.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return HStack(spacing: 0) {
-            Text(verbatim: bot.name)
-                .foregroundStyle(theme.ink)
-            if !tag.isEmpty {
-                Text(verbatim: " · \(tag)")
-                    .foregroundStyle(theme.inkSecondary)
-                    .accessibilityIdentifier("desktop-bot-header-label")
-            }
-        }
-        .font(theme.font(14, .regular))
-        .lineLimit(1)
+        let name = Text(verbatim: bot.name).foregroundColor(theme.ink)
+        let line = tag.isEmpty ? name : name + Text(verbatim: " · \(tag)").foregroundColor(theme.inkSecondary)
+        return line
+            .font(theme.font(15, .regular))
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .accessibilityIdentifier("desktop-bot-header-text")
     }
 
     /// Group / person pill: mascot stack, name, chevron (pre-#2141 layout).

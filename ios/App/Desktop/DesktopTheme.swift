@@ -161,7 +161,7 @@ struct DesktopTheme: Equatable {
     }
 
     private static let extras: [SkinID: Extra] = [
-        .pulsatrix: Extra(sidebar: "#0e0e0e", sidebarInk: "#f5f5f5", sidebarInkSecondary: "#f5f5f5a8", sidebarHover: "#f5f5f50f",
+        .pulsatrix: Extra(sidebar: "#0e0e0e", sidebarInk: "#e4e4e7", sidebarInkSecondary: "#9e9ea3", sidebarHover: "#f5f5f50f",
                           sidebarSelected: "#4f86f729", sidebarHairline: "#333333", radii: (8, 12), face: .geist),
         .pulsatrixLight: Extra(sidebar: "#24324d", sidebarInk: "#eef2fb", sidebarInkSecondary: "#c3cce0", sidebarHover: "#eef2fb12",
                                sidebarSelected: "#6b9bff38", sidebarHairline: "#41526f", glow: (0.08, 0.05), radii: (8, 12), face: .geist),

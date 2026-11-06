@@ -11,23 +11,24 @@ export function reduceHydrate(state: AppState, action: Action, _reduce: ReduceFn
     case "hydrate": {
       // A snapshot with a missing list (a gallery page whose /api/bots is not
       // answered, an older server) hydrates as an empty one, never a crash.
-      action = { ...action, bots: action.bots ?? [], groups: action.groups ?? [] };
-      const known = (id: string) => action.bots.some((b) => b.id === id) || action.groups.some((g) => g.id === id);
+      const snapshotBots = action.bots ?? [];
+      const snapshotGroups = action.groups ?? [];
+      const known = (id: string) => snapshotBots.some((b) => b.id === id) || snapshotGroups.some((g) => g.id === id);
       const resume = action.resumeId;
       // A remembered conversation only counts while it still resolves to a
       // conversation the sidebar lists; a deleted, hidden or closed one
       // falls back, and the fallback is listed too or nothing at all.
       const hidden = state.sidebarHiddenKeys;
-      const resumed = resume && selectionListed(action.bots, action.groups, resume, hidden) ? resume : "";
+      const resumed = resume && selectionListed(snapshotBots, snapshotGroups, resume, hidden) ? resume : "";
       const selectedId =
-        state.selectedId && known(state.selectedId) ? state.selectedId : resumed || fallbackSelection(action.bots, action.groups, hidden);
+        state.selectedId && known(state.selectedId) ? state.selectedId : resumed || fallbackSelection(snapshotBots, snapshotGroups, hidden);
       const hydrated = {
         ...state,
-        bots: action.bots.map((bot) => {
+        bots: snapshotBots.map((bot) => {
           const previous = state.bots.find((candidate) => candidate.id === bot.id);
           return previous ? { ...bot, tasks: mergeTaskStamps(previous.tasks, bot.tasks) } : bot;
         }),
-        groups: action.groups.map((group) => {
+        groups: snapshotGroups.map((group) => {
           const previous = state.groups.find((candidate) => candidate.id === group.id);
           return previous ? { ...group, tasks: mergeTaskStamps(previous.tasks, group.tasks) } : group;
         }),
@@ -42,7 +43,7 @@ export function reduceHydrate(state: AppState, action: Action, _reduce: ReduceFn
       };
       return reconcileSnapshotQueues(
         action.botQueuedMessages ? replaceBotQueues(hydrated, action.botQueuedMessages) : hydrated,
-        [...action.bots, ...action.groups],
+        [...snapshotBots, ...snapshotGroups],
       );
     }
     case "loadOlderMessages":

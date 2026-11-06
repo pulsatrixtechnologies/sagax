@@ -508,7 +508,7 @@ describe("an unattended run only its owner can fix", () => {
     expect(nextScheduledRun(scheduled, [routine(weekdays, thursday)])).toEqual({ at: thursday, interval: 24 * 60 * MINUTE });
     expect(nextScheduledRun(scheduled, [routine(weekdays, friday)])).toEqual({ at: friday, interval: 3 * 24 * 60 * MINUTE });
     expect(nextScheduledRun({ ...scheduled, triggerSource: "manual" }, [routine(weekdays, thursday)])).toBeUndefined();
-    expect(nextScheduledRun({ routineId: "routine-1", triggerSource: "startup" } as RoutineRun, [routine(weekdays, thursday)])).toBeUndefined();
+    expect(nextScheduledRun({ routineId: "routine-1", triggerSource: "proactive" } as RoutineRun, [routine(weekdays, thursday)])).toBeUndefined();
     expect(nextScheduledRun({ ...scheduled, triggerSource: "webhook" }, [routine(weekdays, thursday)])).toBeUndefined();
     expect(nextScheduledRun(scheduled, [routine({ type: "once", at: thursday }, thursday)])).toBeUndefined();
     expect(nextScheduledRun(scheduled, [routine({ type: "limit_reset", engine: "claude", repeat: "once", at: thursday }, thursday)])).toBeUndefined();
@@ -520,7 +520,7 @@ describe("an unattended run only its owner can fix", () => {
     const covered = recoverRun(run, "You've hit your usage limit.", {
       limit, nextScheduled: { at: START + 3 * 3_600_000, interval: 24 * 3_600_000 },
     }, START, [], { timeZone: "UTC" });
-    expect(covered.queued).toBe(false);
+    expect(covered).toMatchObject({ queued: false });
     expect(run.status).toBe("running");
     const later = { id: "run-2", routineId: "routine-1", routineName: "Price check", botId: "bot-1", target: "bot", status: "running", createdAt: START } as RoutineRun;
     expect(recoverRun(later, "You've hit your usage limit.", {

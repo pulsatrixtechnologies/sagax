@@ -67,7 +67,7 @@ export interface InternalIntegrationsDeps {
   mcpServers(): Record<string, unknown>;
   addDisabledMcpServer(current: Record<string, unknown>, body: unknown): DisabledMcpServerAdd;
   /** Bot add with folder claim / keep-in-tools (OMB #3751). Falls back to addDisabledMcpServer. */
-  botAddMcpServer?(current: Record<string, unknown>, body: unknown, botId: string): DisabledMcpServerAdd & { moved?: Array<{ from: string; to: string }>; server: StoredMcpServer };
+  botAddMcpServer?(current: Record<string, unknown>, body: unknown, botId: string): DisabledMcpServerAdd & { moved?: Array<{ from: string; to: string }> };
   sharedMcpPersonalRefusal(name: string, server: StoredMcpServer): string | null;
   mcpPolicyRefusal(name: string, server: object): string | undefined;
   persistMcpServers(next: Record<string, unknown>): void;

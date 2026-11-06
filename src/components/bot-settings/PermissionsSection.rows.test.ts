@@ -28,6 +28,7 @@ describe("PermissionsSection Full in Edit N bots", () => {
   it("lists Full when the organization allows it, without a desktop channel", async () => {
     const { approvalModeOptionsFor } = await import("../ApprovalModeSelector");
     expect(approvalModeOptionsFor("claudeAgent", false, "allowed").map((option) => option.mode)).toContain("full");
-    expect(approvalModeOptionsFor("claudeAgent", false, undefined).map((option) => option.mode)).not.toContain("full");
+    // omb #2701: Full is available from any client on a solo server too
+    expect(approvalModeOptionsFor("claudeAgent", false, undefined).map((option) => option.mode)).toContain("full");
   });
 });

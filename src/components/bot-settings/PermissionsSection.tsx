@@ -109,7 +109,9 @@ export function PermissionsSection({
   // The menu shows the open conversation. The grant names that conversation
   // so the saved level is the one still on screen after the reply.
   const applyFull = (target: string) => {
-    if (orgFullAccess !== undefined) {
+    // #1674: Edit N bots keeps Full as each bot's own level change (never the
+    // organization grant of the draft). The org grant path is single-bot only.
+    if (orgFullAccess !== undefined && !bulk) {
       if (orgFullAccess !== "allowed") return;
       dispatch({
         type: "updateBot",
@@ -122,6 +124,7 @@ export function PermissionsSection({
       });
       return;
     }
+    if (orgFullAccess !== undefined && orgFullAccess !== "allowed") return;
     dispatch({ type: "updateBot", botId: target, patch: { approvalMode: "full" } });
   };
   const approvalMixed = Boolean(bulk && mixedFields?.has("approvalMode"));

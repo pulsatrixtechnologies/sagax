@@ -47,10 +47,11 @@ describe("Full access in the approval menu", () => {
     for (const other of approvalModeOptionsFor("claudeAgent").filter((option) => option.mode !== "full")) expect(other.Icon).not.toBe(TriangleAlert);
   });
 
-  it("lists the four levels without Full on a solo server outside the packaged app", () => {
+  it("lists Full on a solo server outside the packaged app (omb #2701)", () => {
     const html = openMenu(vi.fn()).html;
     expect(html).toContain("Ask for approval");
-    expect(html).not.toContain("Full access");
+    expect(html).toContain("Full access");
+    expect(approvalModeOptionsFor("claudeAgent", false, undefined).map((option) => option.mode)).toContain("full");
   });
 
   it("offers Full to the bot's owner on an organization server and returns it when picked", () => {

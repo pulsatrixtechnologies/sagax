@@ -48,9 +48,12 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-export function PersonaOverview({ bot, derived }: {
+export function PersonaOverview({ bot, derived, identity = true }: {
   bot: Bot;
   derived: ReturnType<typeof useBotSettingsDerived>;
+  /** The mascot, name, label and primary badge; the profile page shows them
+   * in its header (#2126) and leaves them out here. */
+  identity?: boolean;
 }) {
   const { state } = useStore();
   const people = useOrgPeople();
@@ -68,7 +71,7 @@ export function PersonaOverview({ bot, derived }: {
 
   return (
     <div className="flex flex-col gap-5" data-persona-overview="">
-      <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+      {identity && <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
         <div className="-mt-6 shrink-0">
           <BotProfileAvatarCard bot={bot} activeState={derived.activeState} mascotMotion={derived.mascotMotion} onPatch={derived.patch} />
         </div>
@@ -96,7 +99,7 @@ export function PersonaOverview({ bot, derived }: {
             </span>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* Settings' layout (2026-10-16): grey headings outside the cards,
           the summary as compact rows (label at the left, value at the right). */}

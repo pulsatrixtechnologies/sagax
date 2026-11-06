@@ -380,6 +380,7 @@ people.portal.subtitle
 personLabel.mine
 personLabel.mineHint
 persona.action.rename
+persona.categories
 persona.files.new
 persona.overview.actions
 persona.rules.editorLabel

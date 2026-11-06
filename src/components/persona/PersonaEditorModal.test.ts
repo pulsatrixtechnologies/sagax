@@ -1,6 +1,8 @@
-// The bot editor: the Achievements shell, groups in the left column whose
-// sections are each their own page (owner 2026-10-15), listed under the open
-// group, and locked sections shown with their reason instead of hidden.
+// The bot editor is the bot's profile page (#2126, Grok Bot's layout): a
+// right-hand panel with the banner, the mascot, "Name · Label", who sees it,
+// and the tabs General / Knowledge / Settings. Every section of the former
+// editor is still there, folded under its tab; locked sections are shown with
+// their reason instead of hidden.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,6 +14,10 @@ const fixture = vi.hoisted(() => ({
   advanced: true,
   perspicax: null as unknown,
   dispatch: (() => {}) as (action: unknown) => void,
+  slackUrl: null as string | null,
+  capabilities: null as unknown,
+  mail: null as unknown,
+  reach: null as unknown,
 }));
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => fixture.advanced, setAdvancedMode: () => {} }));
 vi.mock("@/lib/use-owner-or-admin", () => ({ useOwnerOrAdmin: () => true }));
@@ -20,7 +26,26 @@ vi.mock("@/lib/perspicax-org", async (importOriginal) => ({
   usePerspicaxOrg: () => fixture.perspicax,
   useOrgPeople: () => new Map(),
 }));
-vi.mock("../bot-settings/useSlackManagement", () => ({ useSlackManagementUrl: () => null }));
+vi.mock("../bot-settings/useSlackManagement", () => ({ useSlackManagementUrl: () => fixture.slackUrl }));
+vi.mock("@/lib/capabilities", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/capabilities")>()),
+  useBotCapabilities: () => ({ data: fixture.capabilities, error: null, loading: fixture.capabilities === null, reload: vi.fn() }),
+}));
+vi.mock("@/lib/bot-inbound-mail", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/bot-inbound-mail")>()),
+  useBotInboundMailState: () => [fixture.mail, vi.fn()],
+}));
+vi.mock("@/lib/reach-me", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/reach-me")>()),
+  useReachMe: () => [fixture.reach, vi.fn()],
+}));
+vi.mock("@/lib/mac-messages-setup", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/mac-messages-setup")>()),
+  loadMessagesSetup: async () => null,
+}));
+vi.mock("../bot-settings/SlackSection", () => ({ SlackSection: marker("slack") }));
+vi.mock("../bot-settings/BotEmailAddress", () => ({ BotEmailAddress: marker("email") }));
+vi.mock("../bot-settings/BotReachMe", () => ({ BotReachMe: marker("reachMe") }));
 vi.mock("../bot-settings/useBotSettingsDerived", () => ({
   useBotSettingsDerived: () => ({ botRoutines: [], patch: vi.fn(), activeState: "idle", mascotMotion: null }),
 }));
@@ -56,8 +81,8 @@ vi.mock("@/state/store", async (importOriginal) => {
   };
 });
 
-const { PersonaEditorModal, PERSONA_GROUPS } = await import("./PersonaEditorModal");
-const { personaCategoryForSection, personaGroupOf } = await import("@/lib/persona-sections");
+const { PersonaEditorModal } = await import("./PersonaEditorModal");
+const { KNOWLEDGE_SECTIONS, SETTINGS_SECTIONS, botProfileTabFor, personaCategoryForSection } = await import("@/lib/persona-sections");
 
 const bot = {
   id: "pepper", threadId: "t", name: "Pepper", title: "Research", description: "Finds sources.", notifications: true,
@@ -80,250 +105,201 @@ beforeEach(() => {
   fixture.advanced = true;
   fixture.perspicax = { identity: { kind: "perspicax" } };
   fixture.dispatch = vi.fn();
+  fixture.slackUrl = null;
+  fixture.capabilities = null;
+  fixture.mail = null;
+  fixture.reach = null;
   vi.stubGlobal("window", { addEventListener() {}, removeEventListener() {} });
 });
 afterEach(() => vi.unstubAllGlobals());
 
-/** The markup of one page (shown or kept hidden). */
-function pageHtml(html: string, page: string): { hidden: boolean; html: string } {
-  const start = html.indexOf(`data-persona-section="${page}"`);
-  if (start < 0) return { hidden: true, html: "" };
-  const next = html.indexOf("data-persona-section=", start + 1);
+/** The markup of one folded section, up to the next one. */
+function sectionHtml(html: string, id: string): { open: boolean; html: string } {
+  const start = html.indexOf(`data-bot-profile-section="${id}"`);
+  if (start < 0) return { open: false, html: "" };
+  const next = html.indexOf("data-bot-profile-section=", start + 1);
   const chunk = html.slice(start, next < 0 ? undefined : next);
-  return { hidden: /^data-persona-section="\w+" hidden=""/.test(chunk), html: chunk };
+  return { open: /^data-bot-profile-section="\w+" data-persona-section="\w+" data-open=""/.test(chunk), html: chunk };
 }
-const groupsOf = (html: string) => [...html.matchAll(/data-persona-category="(\w+)"/g)].map((match) => match[1]);
-const subPagesOf = (html: string) => [...html.matchAll(/data-persona-page="(\w+)"/g)].map((match) => match[1]);
+const sectionsOf = (html: string) => [...html.matchAll(/data-bot-profile-section="(\w+)"/g)].map((match) => match[1]);
 const bodiesOf = (html: string) => [...html.matchAll(/data-section-body="(\w+)"/g)].map((match) => match[1]);
-/** The bodies of the page on screen (kept-mounted pages are hidden). */
-const shownBodies = (html: string, page: string) => bodiesOf(pageHtml(html, page).html);
-const visiblePages = (html: string) => [...html.matchAll(/data-persona-section="(\w+)"( hidden="")?/g)].filter((match) => !match[2]).map((match) => match[1]);
+const selectedTab = (html: string) => /data-bot-profile-tab="(\w+)" aria-selected="true"/.exec(html)?.[1];
 
-const ALL_PAGES = ["overview", "appearance", "sharing", "summary", "soul", "rules", "skills", "files", "model", "worksOn", "access", "voice", "permissions", "usage", "history"];
-const SIMPLE_PAGES = ["overview", "appearance", "sharing", "summary", "soul", "rules", "files", "model", "voice", "permissions"];
-const ALL_GROUPS = ["profile", "instructions", "modelTools", "security", "activity"];
+const SETTINGS_ALL = ["overview", "appearance", "sharing", "summary", "model", "worksOn", "access", "permissions", "voice", "usage", "history"];
+const SETTINGS_SIMPLE = ["overview", "appearance", "sharing", "summary", "model", "permissions", "voice"];
 
-describe("persona editor shell", () => {
-  it("uses the centred modal shell and lists the groups in order", () => {
+describe("bot profile page shell", () => {
+  it("is a right-hand panel with the banner, the mascot, Name · Label and the three pill tabs", () => {
     const html = render("overview");
-    expect(html).toContain('role="dialog"');
-    expect(html).toContain('aria-modal="true"');
-    expect(html).toContain("data-persona-modal");
-    expect(html).not.toContain("data-persona-back");
-    expect(html).toContain("w-[198px]");
-    expect(groupsOf(html)).toEqual(PERSONA_GROUPS.map((group) => group.id));
-    expect(groupsOf(html)).toEqual(ALL_GROUPS);
-    // Settings' rail (2026-10-16): grey group headings, every page an entry
-    for (const heading of ["Profile", "Instructions", "Model and tools", "Security", "Activity"]) expect(html).toMatch(new RegExp(`id="persona-nav-\\w+"[^>]*>${heading}</div>`));
-    for (const label of ["Identity", "Bot folder", "Model", "Permissions", "Voice", "Usage", "Changes"]) {
-      expect(html).toContain(`>${label}</span>`);
-    }
-    expect(html).toContain("data-persona-search");
-    expect(html).toContain(">Edit bot<");
-    expect(html).not.toContain(">Persona<");
-    expect(html).toContain('aria-current="page"');
+    expect(html).toContain("data-detail-panel");
+    expect(html).toContain("data-bot-profile-page");
+    expect(html).not.toContain('aria-modal="true"');
+    expect(html).toContain("data-bot-profile-banner");
+    expect(html).toContain('data-section-body="avatar"');
+    expect(html).toMatch(/>Pepper<[\s\S]*>·<[\s\S]*>Research</);
+    expect(html).toContain("data-bot-profile-audience");
+    expect([...html.matchAll(/data-bot-profile-tab="(\w+)"/g)].map((match) => match[1])).toEqual(["general", "knowledge", "settings"]);
+    expect(html).toContain('role="tablist"');
+    for (const label of [">General<", ">Knowledge<", ">Settings<"]) expect(html).toContain(label);
+    expect(selectedTab(html)).toBe("general");
+    expect(html).toContain('aria-label="Close"');
   });
 
-  it("names the groups and pages in French", () => {
+  it("names the tabs and channels in French", () => {
     setLocale("fr");
     const html = render("overview");
-    for (const heading of ["Profil", "Instructions", "Modèle et outils", "Sécurité", "Suivi"]) expect(html).toContain(`>${heading}</div>`);
-    for (const label of ["Dossier du bot", "Permissions", "Voix", "Utilisation", "Changements"]) {
-      expect(html).toContain(`>${label}</span>`);
-    }
-    for (const label of ["Identité", "Apparence", "Partagé avec", "Ce qu&#x27;il fait"]) expect(html).toContain(`>${label}</span>`);
-    expect(html).toContain(">Modifier le bot<");
-    expect(render("worksOn")).toContain(">Zone de travail</span>");
+    for (const label of [">Général<", ">Connaissances<", ">Réglages<", ">Canaux<", ">Comptes du bot<", ">Courriel<", ">Me joindre<"]) expect(html).toContain(label);
   });
 
   it("renders nothing when closed or when the bot is gone", () => {
     fixture.state = { bots: [bot], personaEditor: null };
     expect(renderToStaticMarkup(createElement(PersonaEditorModal))).toBe("");
-    fixture.state = { bots: [bot], personaEditor: { botId: "gone", section: "overview" } };
+    fixture.state = { bots: [other], personaEditor: { botId: "pepper", section: "overview" } };
     expect(renderToStaticMarkup(createElement(PersonaEditorModal))).toBe("");
   });
 
-  it("follows Simple mode: the pages it hides are not listed, and an empty group goes", () => {
-    fixture.advanced = false;
-    expect(groupsOf(render("overview"))).toEqual(["profile", "instructions", "modelTools", "security"]);
-    // Instructions without Skills, Model and tools without Workspace and
-    // Access, no Activity
-    expect(subPagesOf(render("soul"))).toEqual(SIMPLE_PAGES);
-    // a link to a hidden page lands on its group's home
-    const skills = render("skills");
-    expect(skills).toContain('data-persona-current="soul"');
-    expect(skills).not.toContain('data-section-body="skills"');
-    expect(render("access")).toContain('data-persona-current="model"');
+  it("opens a link on the tab that holds its section, unfolded", () => {
+    expect(botProfileTabFor("overview")).toBe("general");
+    expect(botProfileTabFor("slack")).toBe("general");
+    expect(botProfileTabFor("soul")).toBe("knowledge");
+    expect(botProfileTabFor("memory")).toBe("knowledge");
+    expect(botProfileTabFor("appearance")).toBe("settings");
+    expect(botProfileTabFor("history")).toBe("settings");
+    expect(personaCategoryForSection("routines")).toBeNull();
+    for (const page of ["appearance", "model", "voice", "usage"]) {
+      const html = render(page as BotSettingsSection);
+      expect(selectedTab(html)).toBe("settings");
+      expect(sectionHtml(html, page).open).toBe(true);
+    }
+    const soul = render("soul");
+    expect(selectedTab(soul)).toBe("knowledge");
+    expect(sectionHtml(soul, "soul").open).toBe(true);
+    expect(bodiesOf(sectionHtml(soul, "soul").html)).toEqual(["soul"]);
+    // the memory is managed in the Bot folder
+    expect(sectionHtml(render("memory"), "files").open).toBe(true);
+    // a link to Who can see it lands on Shared with where only that is offered
+    expect(sectionHtml(render("visibility"), "sharing").open).toBe(true);
   });
 });
 
-describe("persona editor pages", () => {
-  // Each page shows its own section only (plus the hidden drafts of Memory,
-  // Rules and Files, kept mounted).
-  const pages: Array<[BotSettingsSection, string, string[]]> = [
-    ["overview", "profile", ["avatar"]],
-    ["appearance", "profile", ["appearance"]],
-    ["sharing", "profile", ["sharing"]],
-    ["summary", "profile", ["overview"]],
-    ["soul", "instructions", ["soul"]],
-    ["rules", "instructions", ["rules"]],
-    ["skills", "instructions", ["skills"]],
-    ["files", "instructions", ["files"]],
-    ["model", "modelTools", ["model"]],
-    ["worksOn", "modelTools", ["worksOn"]],
-    ["access", "modelTools", ["access"]],
-    ["voice", "modelTools", ["voice"]],
-    ["permissions", "security", ["permissions"]],
-    ["usage", "activity", ["usage"]],
-    ["history", "activity", ["history"]],
-  ];
-  for (const [page, group, bodies] of pages) {
-    it(`${page} is its own page in ${group}`, () => {
-      const html = render(page);
-      expect(html).toContain(`data-persona-pane="${group}"`);
-      expect(html).toContain(`data-persona-current="${page}"`);
-      expect(visiblePages(html)).toEqual([page]);
-      expect(shownBodies(html, page)).toEqual(bodies);
-      expect(html).not.toContain("data-persona-locked");
-      expect(html).toMatch(/<h2[^>]*>[^<]+<\/h2>/);
-      // its entry is the current one in the rail
-      expect(html).toMatch(new RegExp(`data-persona-page="${page}"[^>]*aria-current="page"`));
-    });
-  }
-
-  it("lists every page under its group's heading, as Settings does", () => {
-    expect(subPagesOf(render("overview"))).toEqual(ALL_PAGES);
-    expect(subPagesOf(render("history"))).toEqual(ALL_PAGES);
-    // the memory is managed in the Bot folder
-    expect(render("memory")).toContain('data-persona-current="files"');
-    expect(render("overview")).toContain('data-persona-category="profile"');
-    expect(render("overview")).not.toContain("aria-expanded");
+describe("General", () => {
+  it("lists the channels with their state and the bot's accounts", () => {
+    fixture.mail = { available: true, address: "pepper@bots.example", enabled: true };
+    fixture.reach = { settings: { channels: ["sms"] }, channels: {} };
+    fixture.capabilities = {
+      engine: { kind: "claude", label: "Claude Code" },
+      items: [
+        { key: "k1", form: "connector", name: "Outlook", state: "ready", enabled: true, canToggle: true },
+        { key: "k2", form: "skill", name: "Summaries", state: "ready", enabled: true, canToggle: true },
+      ],
+    };
+    const html = render("overview");
+    expect([...html.matchAll(/data-bot-profile-row="([\w-]+)"/g)].map((match) => match[1])).toEqual(["slack", "email", "reachMe", "messages", "engine", "account-0"]);
+    expect(html).toContain("pepper@bots.example");
+    expect(html).toContain(">Not offered here<");
+    expect(html).toContain('data-bot-profile-action="email"');
+    expect(html).toContain('data-bot-profile-action="reachMe"');
+    expect(html).toContain(">Claude Code<");
+    expect(html).toContain(">Outlook<");
+    // skills are Knowledge's, not an account
+    expect(html).not.toContain(">Summaries<");
+    expect(html).toContain("data-bot-profile-add");
+    expect(html).not.toContain("k1");
   });
 
-  it("titles each page with its own name", () => {
-    expect(render("overview")).toMatch(/<h2[^>]*>Identity<\/h2>/);
-    expect(render("appearance")).toMatch(/<h2[^>]*>Appearance<\/h2>/);
-    expect(render("voice")).toMatch(/<h2[^>]*>Voice<\/h2>/);
+  it("shows Slack as managed in Admin where the server offers it, and a Slack link opens it", () => {
+    fixture.slackUrl = "https://admin.example/slack";
+    expect(render("overview")).toContain(">Managed in Admin<");
+    expect(render("overview")).not.toContain('data-section-body="slack"');
+    const html = render("slack");
+    expect(selectedTab(html)).toBe("general");
+    expect(html).toContain('data-section-body="slack"');
   });
 
-  it("the mobile select lists every page, grouped", () => {
+  it("says when the accounts are loading and when the bot has none", () => {
+    expect(render("overview")).toContain("Loading accounts");
+    fixture.capabilities = { engine: { kind: "claude", label: "Claude Code" }, items: [] };
+    expect(render("overview")).toContain("No accounts connected to this bot yet.");
+  });
+});
+
+describe("Knowledge", () => {
+  it("holds Skills, Personality, Rules and the Bot folder, Skills open, and links the Memory page", () => {
+    const html = render("skills");
+    expect(selectedTab(html)).toBe("knowledge");
+    expect(sectionsOf(html)).toEqual([...KNOWLEDGE_SECTIONS]);
+    expect(sectionHtml(html, "skills").open).toBe(true);
+    expect(sectionHtml(html, "soul").open).toBe(false);
+    expect(html).toContain("data-bot-profile-memory");
+    expect(html).toContain(">Open the Memory page<");
+  });
+
+  it("keeps Rules and the Bot folder mounted while folded, so a draft survives", () => {
+    const html = render("skills");
+    expect(bodiesOf(sectionHtml(html, "rules").html)).toEqual(["rules"]);
+    expect(bodiesOf(sectionHtml(html, "files").html)).toEqual(["files"]);
+    expect(sectionHtml(html, "rules").html).toContain('hidden=""');
+  });
+});
+
+describe("Settings", () => {
+  it("lists every other section of the editor, folded, with the search", () => {
     const html = render("appearance");
-    expect(html).toContain('<optgroup label="Profile">');
-    expect(html).toMatch(/<option value="appearance" selected="">Appearance<\/option>/);
-    expect(html).toContain('<option value="voice">Voice</option>');
+    expect(sectionsOf(html)).toEqual(SETTINGS_ALL);
+    expect(SETTINGS_SECTIONS).toEqual(expect.arrayContaining(SETTINGS_ALL));
+    expect(html).toContain("data-persona-search");
+    expect(sectionHtml(html, "voice").open).toBe(false);
+    // the identity (description and facts) without the header's mascot and name
+    const identity = render("summary");
+    expect(sectionHtml(identity, "summary").open).toBe(true);
+    expect(bodiesOf(sectionHtml(identity, "summary").html)).toEqual(["overview"]);
   });
 
-  it("Profile's home is the identity only; Appearance, Shared with and What it does are pages of their own", () => {
-    const html = render("overview");
-    expect(shownBodies(html, "overview")).toEqual(["avatar"]);
-    expect(html).not.toContain('data-section-body="appearance"');
-    expect(html).not.toContain('data-section-body="sharing"');
-    expect(html).not.toContain('data-section-body="overview"');
-    expect(html).not.toContain("data-persona-summary");
-  });
-
-  it("opens a deep link on its own page", () => {
-    expect(personaGroupOf("appearance")).toBe("profile");
-    expect(personaGroupOf("skills")).toBe("instructions");
-    expect(personaGroupOf("files")).toBe("instructions");
-    expect(personaGroupOf("worksOn")).toBe("modelTools");
-    expect(personaGroupOf("slack")).toBe("modelTools");
-    expect(personaGroupOf("voice")).toBe("modelTools");
-    expect(personaGroupOf("usage")).toBe("activity");
-    expect(personaGroupOf("history")).toBe("activity");
-    expect(personaGroupOf("sharing")).toBe("profile");
-    expect(personaCategoryForSection("appearance")).toBe("appearance");
-    expect(personaCategoryForSection("worksOn")).toBe("worksOn");
-    expect(personaCategoryForSection("routines")).toBeNull();
-    expect(render("appearance")).toContain('data-persona-current="appearance"');
-    // Who can see it stands for Shared with where the server shares person by person
-    expect(render("visibility")).toContain('data-persona-current="sharing"');
-    fixture.perspicax = null;
-    // and the other way round off Perspicax
-    expect(render("sharing")).toContain('data-persona-current="visibility"');
-  });
-
-  for (const category of ["rules", "files"]) {
-    it(`${category} stays mounted on every page and shows only on its own`, () => {
-      const own = render(category as BotSettingsSection);
-      expect(pageHtml(own, category).hidden).toBe(false);
-      const elsewhere = render("model");
-      const page = pageHtml(elsewhere, category);
-      expect(page.hidden).toBe(true);
-      expect(page.html).toContain(`data-section-body="${category}"`);
-    });
-  }
-
-  it("profile shows the mascot, name, label, description and facts, and no quick actions (they are in the bot's \"...\" menu)", () => {
-    const html = render("overview");
-    expect(html).toContain('data-section-body="avatar"');
-    expect(html).toContain(">Pepper<");
-    expect(html).toContain(">Research<");
-    expect(html).toContain("Finds sources.");
-    // the facts are compact Settings rows (label at the left, value at the right)
-    expect(html).toContain('data-settings-group="personaSummary"');
-    for (const label of ["Engine", "Model", "Owner", "Sharing"]) expect(html).toMatch(new RegExp(`>${label}</div><div[^>]*><span[^>]*>`));
-    expect(html).toMatch(/>opus<\/span>/);
-    expect(html).toMatch(/>You<\/span>/);
-    expect(html).not.toContain("data-persona-action");
+  it("follows Simple mode", () => {
+    fixture.advanced = false;
+    expect(sectionsOf(render("appearance"))).toEqual(SETTINGS_SIMPLE);
   });
 
   it("offers no Perspicax profile configuration on either server type", () => {
     for (const org of [fixture.perspicax, null]) {
       fixture.perspicax = org;
-      const html = render("overview");
+      const html = render("appearance");
       expect(html).not.toContain('data-section-body="perspicax"');
       expect(html).not.toContain("Perspicax Profiles");
     }
   });
 
-  it("names Soul Personality, Skills Compétences and History Changements in French", () => {
+  it("names Rules, Skills and History in French", () => {
     setLocale("fr");
     const html = render("soul");
     expect(html).toContain(">Règles</span>");
     expect(html).toContain(">Compétences</span>");
     expect(html).not.toContain(">Skills<");
-    expect(html).not.toContain(">Soul<");
-    expect(render("history")).toMatch(/<h2[^>]*>Changements<\/h2>/);
+    expect(render("history")).toContain(">Changements</span>");
   });
 });
 
-describe("persona editor for an organization member", () => {
-  it("opens Rules and Files on a bot she owns, like the Soul, while Memory stays an admin's", () => {
+describe("bot profile for an organization member", () => {
+  it("opens Rules and the Bot folder on a bot she owns, like the Soul", () => {
     const owned = { ...bot, ownerUserId: "pr_me" } as Bot;
     const state = { config: memberConfig, bots: [owned, other] };
-    expect(shownBodies(render("soul", state), "soul")).toEqual(["soul"]);
-    expect(shownBodies(render("rules", state), "rules")).toEqual(["rules"]);
-    expect(shownBodies(render("files", state), "files")).toEqual(["files"]);
-    // Memory is managed in the Bot folder; "Use memory" stays an admin's
-    // (the folder gets no memory controls then)
-    const memory = render("memory", state);
-    expect(memory).toContain('data-persona-current="files"');
-    expect(shownBodies(memory, "files")).toEqual(["files"]);
+    expect(bodiesOf(sectionHtml(render("soul", state), "soul").html)).toEqual(["soul"]);
+    expect(bodiesOf(sectionHtml(render("rules", state), "rules").html)).toEqual(["rules"]);
+    expect(bodiesOf(sectionHtml(render("files", state), "files").html)).toEqual(["files"]);
+    expect(render("overview", state)).toContain("Private to you<");
   });
 
   it("shows a bot they do not own locked, with the reason, never hidden", () => {
     const state = { config: memberConfig };
-    expect(groupsOf(render("overview", state))).toEqual(PERSONA_GROUPS.map((group) => group.id));
-    const soul = pageHtml(render("soul", state), "soul").html;
+    const soul = sectionHtml(render("soul", state), "soul").html;
     expect(soul).not.toContain('data-section-body="soul"');
     expect(soul).toContain("Only this bot&#x27;s owner or an admin can change this.");
     expect(soul).toContain("Be brief.");
     expect(soul).toContain('aria-readonly="true"');
-    expect(pageHtml(render("rules", state), "rules").html).not.toContain('data-section-body="rules"');
-    expect(pageHtml(render("files", state), "files").html).not.toContain('data-section-body="files"');
-
-    const history = render("history", state);
+    expect(sectionHtml(render("rules", state), "rules").html).not.toContain('data-section-body="rules"');
+    const history = sectionHtml(render("history", state), "history").html;
     expect(history).not.toContain('data-section-body="history"');
-    // 2026-10-26: someone else's bot; their own bot's history is open to them
     expect(history).toContain("Only this bot&#x27;s owner or an admin can change this.");
-
-    const overview = render("overview", state);
-    expect(overview).not.toContain("data-persona-action");
-    // a page that cannot be changed shows the lock in the rail
-    const locked = [...overview.matchAll(/data-persona-page="(\w+)"( data-locked="")?/g)].filter((match) => match[2]).map((match) => match[1]);
-    expect(locked).toContain("files");
-    expect(locked).toContain("history");
-    expect(locked).not.toContain("overview");
+    expect(sectionsOf(render("history", state))).toEqual(SETTINGS_ALL);
   });
 });

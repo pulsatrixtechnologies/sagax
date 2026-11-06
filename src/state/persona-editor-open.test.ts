@@ -17,13 +17,17 @@ describe("Persona editor state", () => {
     expect(reducer(withBot, { type: "personaEditorSection", section: "soul" })).toBe(withBot);
   });
 
-  it("is one modal at a time with Settings and Achievements, and keeps the bot panel open", () => {
+  it("is one surface at a time with Settings and Achievements, and takes the bot panel's place", () => {
     const panel = reducer(withBot, { type: "toggleSettings", open: true });
     const withSettings = reducer(panel, { type: "toggleAppSettings", open: true });
     const opened = reducer(withSettings, { type: "openPersonaEditor", botId: "pepper", section: "model" });
     expect(opened.appSettingsOpen).toBe(false);
     expect(opened.personaEditor?.section).toBe("model");
-    expect(reducer(panel, { type: "openPersonaEditor", botId: "pepper" }).settingsOpen).toBe(true);
+    expect(reducer(panel, { type: "openPersonaEditor", botId: "pepper" }).settingsOpen).toBe(false);
+    // and the bot panel, the computer or a person's panel take its place back
+    expect(reducer(opened, { type: "toggleSettings", open: true }).personaEditor).toBeNull();
+    expect(reducer(opened, { type: "toggleComputer", open: true }).personaEditor).toBeNull();
+    expect(reducer(opened, { type: "openPersonPanel", personId: "sam" }).personaEditor).toBeNull();
     expect(reducer(opened, { type: "toggleAppSettings", open: true }).personaEditor).toBeNull();
     expect(reducer(opened, { type: "showAchievements" }).personaEditor).toBeNull();
   });
@@ -38,7 +42,9 @@ describe("Persona editor state", () => {
     expect(open("sharing" as never).personaEditor?.section).toBe("sharing");
     expect(open("appearance" as never).personaEditor?.section).toBe("appearance");
     expect(open("perspicax" as never).personaEditor?.section).toBe("overview");
-    expect(open("access" as never).settingsOpen).toBe(true);
+    // the profile page takes the bot panel's place, on the linked bot
+    expect(open("access" as never).settingsOpen).toBe(false);
+    expect(open("access" as never).selectedId).toBe("pepper");
   });
 
   it("keeps Details and Routines links in the bot panel", () => {

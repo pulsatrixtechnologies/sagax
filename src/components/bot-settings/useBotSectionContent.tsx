@@ -94,6 +94,7 @@ export function useBotSectionContent(bot: Bot, {
   onOpenSection,
   returnFocusRef,
   slackUrl,
+  channelsElsewhere = false,
 }: {
   /** The section on screen: the overview and history load when it is theirs. */
   section: BotSettingsSection;
@@ -103,6 +104,9 @@ export function useBotSectionContent(bot: Bot, {
   onOpenSection: (target: BotSettingsSection) => void;
   returnFocusRef: RefObject<HTMLElement | null>;
   slackUrl: string | null;
+  /** The bot's address and "Me joindre" are shown elsewhere (the profile
+   * page's Channels, #2126): What it does leaves them out. */
+  channelsElsewhere?: boolean;
 }): { renderSectionBody: (id: BotSettingsSection) => ReactNode; dialogs: ReactNode; derived: ReturnType<typeof useBotSettingsDerived> } {
   const dispatch = useStoreDispatch();
   const { flushBotPatches } = useStoreCommands();
@@ -260,9 +264,9 @@ export function useBotSectionContent(bot: Bot, {
           // precedence PromptPreview already gives its own data vs. error.
           <div className="flex flex-col gap-5">
             {/* B21 (2026-10-21): the bot's own address from the Perspicax relay; nothing when none */}
-            <BotEmailAddress botId={bot.id} />
+            {!channelsElsewhere && <BotEmailAddress botId={bot.id} />}
             {/* 2026-10-26 "Me joindre": how this bot reaches the person outside the app, and when */}
-            <BotReachMe botId={bot.id} />
+            {!channelsElsewhere && <BotReachMe botId={bot.id} />}
             <OverviewSection
               overview={overview}
               refreshError={overview !== null && overviewError}

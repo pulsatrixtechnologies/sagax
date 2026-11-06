@@ -54,6 +54,22 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   ] });
   if (/\/api\/bots\/[^/]+\/background-brief/.test(path)) return json({ apps: 2, settings: { enabled: false, at: "08:00" }, suggestions: [] });
   if (/\/api\/bots\/[^/]+\/overview/.test(path)) return json({ setup: [] });
+  // The profile page's General tab (#2126): accounts, email, reach me, Messages.
+  if (/\/api\/bots\/[^/]+\/capabilities/.test(path)) {
+    const item = (key: string, form: string, name: string, label: string) => ({ key, form, name, source: { kind: "account", label }, scope: "bot", state: "on", enabled: true, canToggle: true, engine: { mcp: "mounted", nothing: false } });
+    return json({ botId: bot.id, engine: { kind: "claude", label: "Claude" }, items: [item("github", "connector", "GitHub", "Example account"), item("calendar", "mcp", "Calendar", "Example account")] });
+  }
+  if (/\/api\/bots\/[^/]+\/inbound-mail/.test(path)) return json({ available: true, address: "pepper@example.com", enabled: true });
+  if (/\/api\/bots\/[^/]+\/reach-me/.test(path)) return json({ saved: true, settings: { channels: ["push"], hours: { always: true } }, channels: { push: { ready: true, devices: 1 } } });
+  // Knowledge tab: a couple of fictional skills so the list is not empty.
+  if (/\/api\/bots\/[^/]+\/skills$/.test(path)) return json({
+    skills: [
+      { name: "weekly-report", description: "Writes the weekly status report from the open tasks.", enabled: true, source: "taught", warnings: [] },
+      { name: "source-check", description: "Checks every claim against two sources before answering.", enabled: true, source: "imported", warnings: [] },
+    ],
+    staged: [], library: [], assignedSkills: [],
+  });
+  if (path === "/api/messages") return json({ available: true, onThisMac: true, useMessages: false, permissions: { fullDiskAccess: "notAsked", automation: "notAsked" } });
   if (/\/api\/bots\/[^/]+\/(activity)/.test(path)) return json({ items: [], subagents: [], launchedAgents: [] });
   if (/\/api\/bots\/[^/]+\/task-list/.test(path)) return json({ tasks: [] });
   if (/\/api\/bots\/[^/]+\/webhooks/.test(path)) return json({ webhooks: [] });

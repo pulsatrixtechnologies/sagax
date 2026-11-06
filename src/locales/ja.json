@@ -3350,8 +3350,6 @@
   "settings.pinnedCircles.subtitle": "固定したボットを大きなアバターで表示します。サイドバーを広げると、1 行に多く表示できます。",
   "settings.universalPins.title": "すべてのグループの固定ボット",
   "settings.universalPins.subtitle": "各グループのチーフを含め、すべてのグループの固定ボットをサイドバー上部に表示します。一覧のほかの部分をスクロールしても残ります。",
-  "settings.notificationSounds.title": "通知音",
-  "settings.notificationSounds.play": "通知音",
   "engines.trialCredit": "無料トライアルに含まれています。My Cloud のボットは、ご自身の Claude または ChatGPT アカウントでサインインするか、API キーを追加するまで、これを使います。",
   "engines.trialCreditOwn": "ご自身の AI が接続されているため、ボットはトライアルの Claude クレジットではなくそちらを使います。",
   "engines.trialCreditUsedUp": "トライアルの Claude クレジットを使い切りました。ボットを動かし続けるには、ご自身の Claude または ChatGPT アカウントでサインインするか、API キーを追加してください。",

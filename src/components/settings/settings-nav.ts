@@ -92,6 +92,7 @@ export const CARD_KEYWORDS: Record<string, string[]> = {
   "about.input": ["send", "enter", "spell check", "spellcheck", "orthographe", "correcteur", "keyboard"],
   "about.help": ["tour", "tours", "visite", "welcome", "bienvenue", "diagnostics", "diagnostic", "journaux", "logs", "download logs", "télécharger les journaux", "feedback", "send feedback", "commentaires", "envoyer des commentaires", "help", "aide"],
   "about.holding": ["cleanup", "retention", "event log", "event-log", "log size", "nettoyage", "people's tool access", "loop guard", "usage meter"],
+  "notifications.privacy": ["blocked", "bloquer", "report", "signalement", "privacy", "confidentialité", "read receipts", "accusés de lecture", "presence", "présence"],
 };
 
 export function cardsMatching(query: string): string[] {

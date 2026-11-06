@@ -402,46 +402,33 @@ describe("Settings → Appearance", () => {
 });
 
 describe("Settings → Notifications", () => {
-  it.each([true, false])("mutes notification sounds on this computer only when the switch is %s", (enabled) => {
+  it.each([true, false])("shows the sound pill as System or None when sounds are %s", (enabled) => {
     fixture.notificationSounds = enabled;
     fixture.section = "notifications";
     const html = render();
-    expect(html).toContain('aria-label="Notification sounds"');
+    expect(html).toContain('aria-label="Notification sound"');
+    expect(html).toContain("data-pill-select");
+    expect(html).toContain(enabled ? ">System</span>" : ">None</span>");
     expect(html).not.toContain("keep the banners but lose the chime");
-    const toggle = fixture.switches.find((props) => props["aria-label"] === "Notification sounds")!;
-    expect(toggle.checked).toBe(enabled);
-    toggle.onClick!({} as never);
-    expect(fixture.setNotificationSounds).toHaveBeenCalledWith(!enabled);
     expect(fixture.api).not.toHaveBeenCalled();
     expect(fixture.dispatch).not.toHaveBeenCalled();
   });
 
-  it.each([true, false])("toggles the nudge sound on this computer only when the switch is %s", (enabled) => {
-    fixture.nudgeSound = enabled;
-    fixture.section = "notifications";
-    render();
-    const toggle = fixture.switches.find((props) => props["aria-label"] === "Nudge sound")!;
-    expect(toggle.checked).toBe(enabled);
-    toggle.onClick!({} as never);
-    expect(fixture.setNudgeSound).toHaveBeenCalledWith(!enabled);
-    expect(fixture.api).not.toHaveBeenCalled();
-    expect(fixture.dispatch).not.toHaveBeenCalled();
-  });
-
-  it("has its own section with every switch on by default", () => {
+  it("has its own section with the alert switches on by default (nudges stay folded)", () => {
     fixture.section = "notifications";
     const html = render();
     expect(html).toContain('<option value="notifications" selected="">Notifications</option>');
-    for (const label of ["Notification sounds", "Keep notifications on screen", "Unread count on the app icon", "Nudge sound", "Shake on nudge"]) {
+    for (const label of ["Keep notifications on screen", "Unread count on the app icon"]) {
       const toggle = fixture.switches.find((props) => props["aria-label"] === label);
       expect(toggle?.checked, label).toBe(true);
     }
+    expect(html).toContain("Sound and window");
+    expect(html).not.toContain('data-nudges-rows');
   });
 
   it.each([
     ["Keep notifications on screen", "omb-notification-persistent"],
     ["Unread count on the app icon", "omb-dock-badge"],
-    ["Shake on nudge", "omb-nudge-shake"],
   ])("%s turns off on this computer only", (label, key) => {
     fixture.section = "notifications";
     render();
@@ -457,18 +444,21 @@ describe("Settings → Notifications", () => {
     expect(html).toContain("On macOS, also choose Alerts in System Settings &gt; Notifications.");
   });
 
-  it("is laid out as the reference design's Notifications: grey headings, a switch per row, no intro paragraph", () => {
+  it("is laid out as Alerts plus Privacy, with nudges and blocked people folded (#2080)", () => {
     fixture.section = "notifications";
     const html = render();
     const groups = [...html.matchAll(/data-settings-group="([^"]+)"/g)].map((match) => match[1]);
-    // Privacy is an organization server's only; Blocked people is everyone's
-    // and Reports an admin's (App Store 1.2, #1184)
-    expect(groups).toEqual(["alerts", "nudges", "blockedPeople"]);
+    expect(groups).toEqual(["alerts", "privacy"]);
     expect(html).toContain(">Alerts</h3>");
-    expect(html).toContain(">Nudges</h3>");
-    expect(html).toContain(">Blocked people</h3>");
-    expect(html).not.toContain('data-settings-group="reports"');
-    expect(html).toContain("· On this computer");
+    expect(html).toContain(">Privacy</h3>");
+    expect(html).toContain(">Nudges</div>");
+    expect(html).toContain("Sound and window");
+    expect(html).toContain(">Blocked people</div>");
+    expect(html).toContain('data-settings-card="notifications.privacy"');
+    // "On this computer" lives in the page intro, not as a repeated accessory
+    expect(html).not.toContain("· On this computer");
+    expect(html).toContain('aria-label="Notification sound"');
+    expect(html).toContain(">System</span>");
     expect(html).not.toContain("How a new message or a nudge gets your attention");
     expect(html).not.toContain("Play a sound when a person writes to you");
     expect(html).not.toMatch(/[–—]/);

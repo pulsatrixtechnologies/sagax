@@ -11,6 +11,7 @@ import {
   readGrokCatalog,
   rememberGrokCatalog,
   resetGrokCatalogs,
+  sagaxAgentToolBareName,
 } from "./grok-tool-catalog.ts";
 import { GROK_KNOWN_TOOLS_SECTION } from "./grok-tool-usage.ts";
 
@@ -240,5 +241,93 @@ describe("grok's managed gateway (grok.com connectors)", () => {
     expect(reach.groups.every((group) => group.tools > 0)).toBe(true);
     expect(grokReachConnectorNames(reach)).toEqual(["Microsoft Teams", "Outlook (Exchange)", "Automations", "Docs Hub"]);
     expect(grokReachConnectorNames(undefined)).toEqual([]);
+  });
+});
+
+// Perspicax #1050: several Perspicax accounts on the same xAI gateway each
+// serve send_prompt / await_turn / list_agents. The catalog keeps them once.
+const DUPLICATE_SAGAX_AGENT = {
+  sessionMcpResolved: true,
+  servers: [
+    {
+      name: "managed_gateway:cursor",
+      displayName: "Cursor",
+      source: "managed",
+      type: "managedGateway",
+      session: {
+        enabled: true,
+        status: "ready",
+        tools: [
+          { name: "cursor__user-dispatch-send_5fprompt___10", enabled: true },
+          { name: "cursor__user-dispatch-await_5fturn___10", enabled: true },
+          { name: "cursor__user-dispatch-list_5fagents___10", enabled: true },
+          { name: "cursor__user-dispatch-api_5flist___10", enabled: true },
+          { name: "cursor__user-personal-bot-send_5fprompt___11", enabled: true },
+          { name: "cursor__user-personal-bot-await_5fturn___11", enabled: true },
+          { name: "cursor__user-personal-bot-list_5fagents___11", enabled: true },
+          { name: "cursor__user-personal-bot-cw_5fpsa_5fget_5fticket___11", enabled: true },
+          { name: "cursor__user-default-send_5fprompt___12", enabled: true },
+          { name: "cursor__user-default-await_5fturn___12", enabled: true },
+          { name: "cursor__user-default-sagax_5fhelp___12", enabled: true },
+        ],
+      },
+    },
+  ],
+};
+
+describe("duplicate Sagax agent tools across Perspicax gateway connectors (#1050)", () => {
+  it("reads the bare Sagax agent name from a gateway use_tool id", () => {
+    expect(sagaxAgentToolBareName("cursor__user-dispatch-send_5fprompt___10")).toBe("send_prompt");
+    expect(sagaxAgentToolBareName("cursor__user-default-sagax_5fhelp___12")).toBe("sagax_help");
+    expect(sagaxAgentToolBareName("cursor__user-dispatch-api_5flist___10")).toBeUndefined();
+    expect(sagaxAgentToolBareName("dispatch__await_turn")).toBe("await_turn");
+  });
+
+  it("keeps each Sagax agent tool once on the first connector when no active profile is known", () => {
+    const groups = grokGatewayConnectors(readGrokCatalog(DUPLICATE_SAGAX_AGENT)!);
+    expect(groups.map((group) => group.label)).toEqual(["default", "dispatch", "personal-bot"]);
+    const byLabel = Object.fromEntries(groups.map((group) => [group.label, group]));
+    // first sorted connector ("default") keeps the agent tools it shares
+    expect(byLabel.default!.tools).toEqual([
+      "cursor__user-default-await_5fturn___12",
+      "cursor__user-default-sagax_5fhelp___12",
+      "cursor__user-default-send_5fprompt___12",
+    ]);
+    expect(byLabel.default!.sagaxAgentToolsNote).toMatch(/Sagax agent tools \(await_turn, send_prompt\) kept once/);
+    expect(byLabel.default!.sagaxAgentToolsNote).toMatch(/folded/);
+    // list_agents was only on dispatch and personal-bot: first of those keeps it
+    expect(byLabel.dispatch!.tools).toEqual([
+      "cursor__user-dispatch-api_5flist___10",
+      "cursor__user-dispatch-list_5fagents___10",
+    ]);
+    expect(byLabel.dispatch!.sagaxAgentToolsNote).toMatch(/list_agents/);
+    expect(byLabel["personal-bot"]!.tools).toEqual(["cursor__user-personal-bot-cw_5fpsa_5fget_5fticket___11"]);
+    expect(byLabel["personal-bot"]!.sagaxAgentToolsNote).toBeUndefined();
+  });
+
+  it("keeps them on the active profile's connector when one is known", () => {
+    const groups = grokGatewayConnectors(readGrokCatalog(DUPLICATE_SAGAX_AGENT)!, { activeProfile: "personal-bot" });
+    const byLabel = Object.fromEntries(groups.map((group) => [group.label, group]));
+    expect(byLabel["personal-bot"]!.tools.map((tool) => sagaxAgentToolBareName(tool) ?? tool)).toEqual([
+      "await_turn",
+      "cursor__user-personal-bot-cw_5fpsa_5fget_5fticket___11",
+      "list_agents",
+      "send_prompt",
+    ]);
+    expect(byLabel["personal-bot"]!.sagaxAgentToolsNote).toMatch(/kept once on this connector/);
+    expect(byLabel.dispatch!.tools).toEqual(["cursor__user-dispatch-api_5flist___10"]);
+    // default keeps sagax_help (never duplicated) after losing send_prompt / await_turn
+    expect(byLabel.default!.tools).toEqual(["cursor__user-default-sagax_5fhelp___12"]);
+  });
+
+  it("says the fold in the catalog section text", () => {
+    const text = grokCatalogSection({
+      catalog: readGrokCatalog(DUPLICATE_SAGAX_AGENT),
+      activeProfile: "dispatch",
+    })!.text;
+    expect(text).toMatch(/dispatch \(4 tools, e\.g\. cursor__user-dispatch-/);
+    expect(text).toMatch(/Sagax agent tools \(await_turn, list_agents, send_prompt\) kept once on this connector/);
+    expect(text).not.toContain("cursor__user-personal-bot-send_5fprompt___11");
+    expect(text).not.toContain("cursor__user-default-send_5fprompt___12");
   });
 });

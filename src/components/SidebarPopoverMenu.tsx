@@ -109,14 +109,8 @@ export function SidebarPopoverMenu({
   openOnHover = false,
   menuClassName = "left-0 right-0",
   placement = "above",
-  variant = "default",
   renderTrigger,
 }: {
-  /** "account" draws the avatar menu after the reference design (Grok Bot's
-   * account menu): taller, airier rows, 14px text, thin grey icons, rounder
-   * corners, its second level in the same style. The other menus keep the
-   * compact default. */
-  variant?: "default" | "account";
   /** "above" stretches over the trigger's width and opens upward (the
    * sidebar's bottom menus); "below" hangs a fixed-width sheet under the
    * trigger's right edge (a header icon). */
@@ -174,14 +168,6 @@ export function SidebarPopoverMenu({
       ? { left: box.right + 12, bottom: Math.max(8, window.innerHeight - box.bottom - 6) }
       : { left: box.right + 12, top: Math.max(8, box.top - 6) });
   }, [sub, items]);
-  // a level taller than the room below its row moves up to stay on screen
-  useLayoutEffect(() => {
-    const at = subAt;
-    const level = subRef.current;
-    if (at?.top === undefined || !level) return;
-    const top = Math.max(8, Math.min(at.top, window.innerHeight - 8 - level.offsetHeight));
-    if (top !== at.top) setSubAt({ ...at, top });
-  }, [subAt]);
   const dismissRef = useRef({
     contains: (target: unknown) => Boolean(
       (rootRef.current && rootRef.current.contains(target as Node)) || (subRef.current && subRef.current.contains(target as Node)),
@@ -191,13 +177,6 @@ export function SidebarPopoverMenu({
     requestAnimationFrame(() => rootRef.current?.querySelector<HTMLElement>(`[data-submenu="${CSS.escape(key)}"] [role="menuitem"]:not([disabled])`)?.focus());
   };
   const motion = useMenuMotion(open);
-  const roomy = variant === "account";
-  // the account variant's thin grey icons (lucide draws at stroke 2)
-  const iconTone = roomy ? "text-ink-secondary [&_svg]:[stroke-width:1.6]" : "text-ink";
-  const separator = roomy ? "mx-2.5 my-1.5 h-[0.5px] bg-border" : "mx-2 my-1 h-[0.5px] bg-border";
-  const surface = roomy
-    ? "flex-col gap-px rounded-2xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 text-[14px] leading-[20px] shadow-xl"
-    : "flex-col gap-0.5 rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 text-[13px] leading-[18px]";
 
   const [hover] = useState(() =>
     createHoverIntent({
@@ -277,7 +256,7 @@ export function SidebarPopoverMenu({
           aria-label={ariaLabel}
           {...motion.exitProps}
           className={cn(
-            "absolute z-40 flex", roomy ? "min-w-[260px]" : "min-w-[200px]", surface,
+            "absolute z-40 flex min-w-[200px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 text-[13px] leading-[18px]",
             placement === "below" ? "top-full right-0 mt-1 w-72 max-w-[calc(100vw-2rem)]" : cn("bottom-full mb-1", menuClassName),
             motion.className,
           )}
@@ -288,7 +267,7 @@ export function SidebarPopoverMenu({
               className={item.submenu ? "relative" : undefined}
               onPointerOver={() => { if (sub !== (item.submenu ? item.key : null)) hoverSub(item.submenu ? item.key : null); }}
             >
-              {item.separatorBefore && <div className={separator} />}
+              {item.separatorBefore && <div className="mx-2 my-1 h-[0.5px] bg-border" />}
               {item.heading && <div className="px-3 pb-0.5 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-secondary">{item.heading}</div>}
               <button
                 type="button"
@@ -315,9 +294,7 @@ export function SidebarPopoverMenu({
                   if (!item.keepOpen) close();
                 }}
                 className={cn(
-                  roomy
-                    ? "flex h-9 w-full items-center gap-3 rounded-lg px-2.5 text-left text-[14px] leading-[20px] disabled:opacity-60"
-                    : "flex h-[30px] w-full items-center gap-2 rounded-md px-2 text-left text-[13px] leading-[18px] disabled:opacity-60",
+                  "flex h-[30px] w-full items-center gap-2 rounded-md px-2 text-left text-[13px] leading-[18px] disabled:opacity-60",
                   (item.subtitle || item.note) && "h-auto py-1.5",
                   item.active || (item.submenu && sub === item.key) ? "bg-selected text-ink" : "text-ink hover:bg-hover",
                 )}
@@ -326,7 +303,7 @@ export function SidebarPopoverMenu({
                   <span
                     className={cn(
                       "flex size-5 shrink-0 items-center justify-center",
-                      iconTone,
+                      "text-ink",
                     )}
                   >
                     {item.icon}
@@ -341,7 +318,7 @@ export function SidebarPopoverMenu({
                 ) : (
                   <span className="flex-1 truncate">{item.label}</span>
                 )}
-                {item.value && <span data-menu-value="" className={cn("shrink-0 tabular-nums text-ink-tertiary", roomy ? "text-[14px]" : "text-[13px]")}>{item.value}</span>}
+                {item.value && <span data-menu-value="" className="shrink-0 text-[13px] tabular-nums text-ink-tertiary">{item.value}</span>}
                 {item.trailing}
                 {item.attention && (
                   <span
@@ -368,13 +345,13 @@ export function SidebarPopoverMenu({
                   }}
                   data-sidebar
                   style={{ minWidth: item.submenuWidth ?? 180, ...subAt }}
-                  className={cn("fixed z-[70] flex w-max max-w-[320px]", surface)}
+                  className="fixed z-[70] flex w-max max-w-[320px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 text-[13px] leading-[18px]"
                 >
                   {item.submenu.map((entry) => (
                     <div key={entry.key}>
-                      {entry.separatorBefore && <div className={separator} />}
+                      {entry.separatorBefore && <div className="mx-2 my-1 h-[0.5px] bg-border" />}
                       {entry.info ? (
-                        <div data-submenu-info="" className={cn("group/info flex items-center gap-3 py-1.5", roomy ? "px-2.5" : "px-2", entry.favorite && "gap-2")}>
+                        <div data-submenu-info="" className={cn("group/info flex items-center gap-3 px-2 py-1.5", entry.favorite && "gap-2")}>
                           <span className="flex min-w-0 flex-1 flex-col">
                             <span className="truncate text-ink">{entry.label}</span>
                             {entry.subtitle && <span className="truncate text-[12px] text-ink-secondary">{entry.subtitle}</span>}
@@ -442,13 +419,13 @@ export function SidebarPopoverMenu({
                             close();
                           }}
                           className={cn(
-                            roomy ? "flex w-full items-center gap-3 rounded-lg px-2.5 text-left disabled:opacity-60" : "flex w-full items-center gap-2 rounded-md px-2 text-left disabled:opacity-60",
-                            entry.subtitle ? (roomy ? "min-h-9 py-1" : "min-h-[30px] py-1") : (roomy ? "h-9" : "h-[30px]"),
+                            "flex w-full items-center gap-2 rounded-md px-2 text-left disabled:opacity-60",
+                            entry.subtitle ? "min-h-[30px] py-1" : "h-[30px]",
                             entry.rename && "pr-14",
                             entry.active ? "bg-selected text-ink" : "text-ink hover:bg-hover",
                           )}
                         >
-                          {entry.icon && <span className={cn("flex size-5 shrink-0 items-center justify-center", roomy && iconTone)}>{entry.icon}</span>}
+                          {entry.icon && <span className="flex size-5 shrink-0 items-center justify-center">{entry.icon}</span>}
                           <span className="flex min-w-0 flex-1 flex-col">
                             <span className="truncate">{entry.label}</span>
                             {entry.subtitle && <span className="truncate text-[11.5px] leading-[14px] text-ink-secondary">{entry.subtitle}</span>}

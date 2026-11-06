@@ -1,9 +1,9 @@
 {
   "version": "0.8.53",
   "generated": "2026-11-06",
-  "hash": "49e8b387652e6a47",
+  "hash": "178f1020ae295e0d",
   "perspicax": {"version":"1.8.45","commit":"e0fce674","date":"2026-10-21"},
-  "counts": {"setting":56,"notes":273,"doc":650,"engine":15,"guide":26,"menu":19,"perspicax":42,"release":48,"route":91,"tool":155},
+  "counts": {"setting":56,"notes":273,"doc":650,"engine":15,"guide":26,"menu":18,"perspicax":42,"release":48,"route":91,"tool":155},
   "sections": [
     {"id":"bot-setting:access","kind":"setting","title":"Bot settings: Access (Accès)","where":"the bot's editor: open the bot, Edit bot (Modifier le bot) > Model and tools > Access (Modèle et outils > Accès)","access":"the bot's owner, or someone allowed to manage it","keywords":"computer vm cloud vps folder workspace browser webhooks always allow grants tool selection tools mcp allow exclude","text":"Access of one bot. Holds: computer, vm, cloud, vps, folder, workspace, browser, webhooks, always allow, grants, tool selection, tools, mcp, allow, exclude.","source":"src/components/bot-settings/sections.ts"},
     {"id":"bot-setting:appearance","kind":"setting","title":"Bot settings: Appearance (Apparence)","where":"the bot's editor: open the bot, Edit bot (Modifier le bot) > Profile > Appearance (Profil > Apparence)","access":"the bot's owner, or someone allowed to manage it","keywords":"appearance mascot avatar character skin color colour look picture image generate upload moves","text":"Appearance of one bot. Holds: appearance, mascot, avatar, character, skin, color, colour, look, picture, image, generate, upload, moves.","source":"src/components/bot-settings/sections.ts"},
@@ -1014,7 +1014,6 @@
     {"id":"menu:releaseNotes.menu","kind":"menu","title":"Account menu: Release notes (Notes de version)","where":"account menu (the person's avatar at the bottom of the sidebar) > Release notes","text":"Release notes / Notes de version: an entry of the account menu.","source":"src/components/SidebarProfileMenu.tsx"},
     {"id":"menu:sidebar.account.addOrganization","kind":"menu","title":"Account menu: Add an organization (Ajouter une organisation)","where":"account menu (the person's avatar at the bottom of the sidebar) > Add an organization","text":"Add an organization / Ajouter une organisation: an entry of the account menu.","source":"src/components/SidebarProfileMenu.tsx"},
     {"id":"menu:sidebar.account.help","kind":"menu","title":"Account menu: Help (Aide)","where":"account menu (the person's avatar at the bottom of the sidebar) > Help","text":"Help / Aide: an entry of the account menu.","source":"src/components/SidebarProfileMenu.tsx"},
-    {"id":"menu:sidebar.account.helpCenter","kind":"menu","title":"Account menu: Help Center (Centre d'aide)","where":"account menu (the person's avatar at the bottom of the sidebar) > Help Center","text":"Help Center / Centre d'aide: an entry of the account menu.","source":"src/components/SidebarProfileMenu.tsx"},
     {"id":"menu:sidebar.account.mobile","kind":"menu","title":"Account menu: Get Sagax on mobile (Obtenir Sagax sur mobile)","where":"account menu (the person's avatar at the bottom of the sidebar) > Get Sagax on mobile","text":"Get Sagax on mobile / Obtenir Sagax sur mobile: an entry of the account menu.","source":"src/components/SidebarProfileMenu.tsx"},
     {"id":"menu:sidebar.account.personal","kind":"menu","title":"Account menu: Personal (Personnel)","where":"account menu (the person's avatar at the bottom of the sidebar) > Personal","text":"Personal / Personnel: an entry of the account menu.","source":"src/components/SidebarProfileMenu.tsx"},
     {"id":"menu:sidebar.account.rename","kind":"menu","title":"Account menu: Rename (Renommer)","where":"account menu (the person's avatar at the bottom of the sidebar) > Rename","text":"Rename / Renommer: an entry of the account menu.","source":"src/components/SidebarProfileMenu.tsx"},

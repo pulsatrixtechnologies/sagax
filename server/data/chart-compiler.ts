@@ -111,6 +111,12 @@ type VegaType = "quantitative" | "temporal" | "nominal";
 
 const vegaType = (c: Resolved): VegaType => (c.cls === "numeric" ? "quantitative" : c.cls === "temporal" ? "temporal" : "nominal");
 
+/** Dates as people write them ("Sep 8", "Oct", "2026"), never Vega's default weekday labels ("Tue 15"). */
+const TIME_AXIS = {
+  formatType: "time",
+  format: { year: "%Y", quarter: "%b", month: "%b", week: "%b %-d", date: "%b %-d", hours: "%-I %p", minutes: "%-I:%M %p", seconds: "%-I:%M:%S", milliseconds: "%-I:%M:%S.%L" },
+};
+
 interface Cte {
   name: string;
   /** The parenthesised body. */
@@ -143,15 +149,22 @@ function categorical(x: Resolved, channel: string, spec: OmbChartSpec): Dimensio
   };
 }
 
+const INTEGER_TYPE = /^U?(TINYINT|SMALLINT|INTEGER|INT\d*|BIGINT|HUGEINT)$/;
+
 /** Equal-width bins over the column's range; the last bin takes the maximum.
- * A constant column gets one bin of width 1 so the bar still shows. */
+ * A constant column gets one bin of width 1 so the bar still shows. Whole numbers
+ * bin by whole steps, so a column like week 36-44 draws one bar per value, not 30 slivers. */
 function binned(x: Resolved, channel: string, bins: number, bars: boolean): Dimension {
   const v = `CAST(${x.id} AS DOUBLE)`;
+  const whole = INTEGER_TYPE.test(x.column.type.trim().toUpperCase());
+  const width = whole
+    ? `greatest(1, ceil((max(${v}) - min(${v}) + 1) / ${bins}))`
+    : `CASE WHEN max(${v}) = min(${v}) THEN 1 ELSE (max(${v}) - min(${v})) / ${bins} END`;
   const cte: Cte = {
     name: `bins_${channel}`,
     body: `
   SELECT min(${v}) AS lo,
-         CASE WHEN max(${v}) = min(${v}) THEN 1 ELSE (max(${v}) - min(${v})) / ${bins} END AS width
+         ${width} AS width
   FROM src
 `,
   };
@@ -164,7 +177,7 @@ function binned(x: Resolved, channel: string, bins: number, bars: boolean): Dime
         expr: start,
         end: { channel: end, expr: `${cte.name}.lo + (${bin} + 1) * ${cte.name}.width` },
         cte,
-        encoding: { field: channel, type: "quantitative", title: x.column.name, bin: "binned" },
+        encoding: { field: channel, type: "quantitative", title: x.column.name, bin: "binned", ...(whole ? { axis: { format: "d" } } : {}) },
         endEncoding: { field: end },
         tooltip: [
           { field: channel, type: "quantitative", title: `${x.column.name} from`, format: ".4~g" },
@@ -182,8 +195,9 @@ function binned(x: Resolved, channel: string, bins: number, bars: boolean): Dime
 }
 
 /** `time_bucket` with the unit from the spec, or chosen in SQL from the
- * data's range: the coarsest of hour/day/week/month/quarter/year that keeps
- * the axis under TIME_BUCKETS_TARGET buckets. A DATE never buckets by hour. */
+ * data's range and its own step: the finest of hour/day/week/month/quarter/year
+ * that stays under TIME_BUCKETS_TARGET buckets and is not finer than the gap
+ * between rows. A DATE never buckets by hour. */
 function timeBucketed(x: Resolved, channel: string, spec: OmbChartSpec, bars: boolean): Dimension {
   const isDate = x.column.type.trim().toUpperCase() === "DATE";
   let unit: string;
@@ -193,23 +207,30 @@ function timeBucketed(x: Resolved, channel: string, spec: OmbChartSpec, bars: bo
   } else {
     cte = { name: `span_${channel}`, body: "" };
     unit = `${cte.name}.unit`;
-    const seconds = `epoch(max(CAST(${x.id} AS TIMESTAMP)) - min(CAST(${x.id} AS TIMESTAMP)))`;
-    const steps: Array<[string, number]> = [
-      ["INTERVAL 1 HOUR", 3600],
-      ["INTERVAL 1 DAY", 86400],
-      ["INTERVAL 1 WEEK", 604800],
-      ["INTERVAL 1 MONTH", 2629800],
-      ["INTERVAL 3 MONTH", 7889400],
+    // The smallest unit that keeps under the target count and is at least the data's own step: weekly rows get week
+    // buckets, never seven one-day slivers. `next` is the shortest length of the following unit.
+    const steps: Array<{ interval: string; seconds: number; next: number }> = [
+      { interval: "INTERVAL 1 HOUR", seconds: 3600, next: 86400 },
+      { interval: "INTERVAL 1 DAY", seconds: 86400, next: 7 * 86400 },
+      { interval: "INTERVAL 1 WEEK", seconds: 604800, next: 28 * 86400 },
+      { interval: "INTERVAL 1 MONTH", seconds: 2629800, next: 89 * 86400 },
+      { interval: "INTERVAL 3 MONTH", seconds: 7889400, next: 365 * 86400 },
     ];
     const whens = steps
-      .filter(([interval]) => !(isDate && interval === "INTERVAL 1 HOUR"))
-      .map(([interval, s]) => `    WHEN ${seconds} <= ${TIME_BUCKETS_TARGET * s} THEN ${interval}`)
+      .filter(({ interval }) => !(isDate && interval === "INTERVAL 1 HOUR"))
+      .map(({ interval, seconds, next }) => `    WHEN span <= ${TIME_BUCKETS_TARGET * seconds} AND step < ${next} THEN ${interval}`)
       .join("\n");
     cte.body = `
   SELECT CASE
 ${whens}
     ELSE INTERVAL 1 YEAR END AS unit
-  FROM src
+  FROM (
+    SELECT epoch(max(v) - min(v)) AS span, coalesce(min(gap), 0) AS step
+    FROM (
+      SELECT v, epoch(v - lag(v) OVER (ORDER BY v)) AS gap
+      FROM (SELECT DISTINCT CAST(${x.id} AS TIMESTAMP) AS v FROM src WHERE ${x.id} IS NOT NULL)
+    )
+  )
 `;
   }
   const bucket = `time_bucket(${unit}, ${x.id})`;
@@ -219,7 +240,7 @@ ${whens}
     expr: bucket,
     ...(bars ? { end: { channel: end, expr: `${bucket} + ${unit}` }, endEncoding: { field: end } } : {}),
     cte,
-    encoding: { field: channel, type: "temporal", title: x.column.name },
+    encoding: { field: channel, type: "temporal", title: x.column.name, axis: TIME_AXIS },
     tooltip: [{ field: channel, type: "temporal", title: x.column.name }],
     reduction: { method: "timeBucket", note: `${x.column.name} bucketed ${unitNote}` },
   };
@@ -274,12 +295,14 @@ interface Plan {
 }
 
 function vegaLiteSpec(mark: string, encoding: Encoding, tooltip: Encoding[]): Record<string, unknown> {
+  // Vega-Lite reads a bar with x and x2 but no binned x as a horizontal range at each y, which draws a stack as ticks.
+  const ranged = mark === "bar" && encoding.x2 !== undefined;
   return {
     $schema: "https://vega.github.io/schema/vega-lite/v6.json",
     width: "container",
     height: 280,
     data: { name: "table" },
-    mark: { type: mark },
+    mark: ranged ? { type: mark, orient: "vertical" } : { type: mark },
     encoding: { ...encoding, tooltip },
   };
 }
@@ -396,7 +419,7 @@ function planM4(x: Resolved, y: Resolved, color: Resolved | undefined, mark: str
   const body = `SELECT x, y${color ? ", color" : ""}\nFROM px\nQUALIFY ${windows}\nORDER BY ${color ? "color, x" : "x"}`;
 
   const encoding: Encoding = {
-    x: { field: "x", type: "temporal", title: x.column.name },
+    x: { field: "x", type: "temporal", title: x.column.name, axis: TIME_AXIS },
     y: { field: "y", type: "quantitative", title: y.column.name, ...(mark === "area" ? { stack: null } : {}) },
   };
   const tooltip: Encoding[] = [

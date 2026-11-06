@@ -425,6 +425,8 @@
   /* ink carried by the user's own bubble. A hex rather than the ink token so
      the contrast check can measure it; every dark skin repeats its ink here. */
   --color-bubble-user-ink: #fcfcfc;
+  /* Reading width for prose beside a chat table (.chat-wide). Sagax bubbles do not use the width modes. */
+  --chat-prose-max: 44rem;
   --color-success-ink: #072114;
   --color-scrollbar: #3d3d3d;
   /* second speed line of the mascot — contrasts against the app ground */
@@ -1334,6 +1336,11 @@
   --radius-lg: 10px;
   --radius-xl: 16px;
   --color-popover-border: #7f8882;   /* field and popover outline: 3:1 on both */
+}
+
+/* A reply with a table is as wide as the message; its prose keeps the reading width. */
+.chat-wide .chat-md > :not(.chat-table) {
+  max-width: var(--chat-prose-max);
 }
 
 /* Shiki emits both palettes so cached blocks follow the nearest skin without

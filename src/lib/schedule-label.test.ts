@@ -16,8 +16,8 @@ describe("schedule labels", () => {
     ["0 9 1,15 * 1", "Custom schedule"],
   ])("labels %s without inventing a meaning for arbitrary expressions", (expression, description) => {
     const schedule = { type: "cron" as const, expression, timeZone: "Asia/Kolkata" };
-    expect(scheduleLabel(schedule)).toBe(`${description} · Asia/Kolkata`);
-    expect(scheduleSentence(schedule)).toBe(`${description} · Asia/Kolkata`);
+    expect(scheduleLabel(schedule)).toBe(`${description} India time`);
+    expect(scheduleSentence(schedule)).toBe(`${description} India time`);
   });
   it("keeps interval restrictions in both compact labels and prose", () => {
     const schedule = { type: "interval" as const, everyMinutes: 5, anchorAt: 0,
@@ -103,17 +103,17 @@ const TABLE: Array<[string, string, string]> = [
 describe("cron wording in French and English", () => {
   it.each(TABLE)("%s", (expression, en, fr) => {
     const schedule = { type: "cron" as const, expression, timeZone: "America/Toronto" };
-    expect(cronScheduleLabel(schedule, "en")).toBe(`${en} · America/Toronto`);
-    expect(cronScheduleLabel(schedule, "fr")).toBe(`${fr} · America/Toronto`);
+    expect(cronScheduleLabel(schedule, "en")).toBe(`${en} Eastern time`);
+    expect(cronScheduleLabel(schedule, "fr")).toBe(`${fr} Eastern time`);
   });
 
   it("follows the app language in the task and list labels", () => {
     const schedule = { type: "cron" as const, expression: "0,17,20,40 8-18 * * 1-5", timeZone: "America/Toronto" };
     try {
       setLocale("fr-CA");
-      expect(scheduleLabel(schedule)).toBe("Du lundi au vendredi, de 8 h à 18 h, à :00, :17, :20 et :40 · America/Toronto");
+      expect(scheduleLabel(schedule)).toBe("Du lundi au vendredi, de 8 h à 18 h, à :00, :17, :20 et :40 Eastern time");
       setLocale("en");
-      expect(scheduleLabel(schedule)).toBe("Weekdays, 8 AM to 6 PM, at :00, :17, :20 and :40 · America/Toronto");
+      expect(scheduleLabel(schedule)).toBe("Weekdays, 8 AM to 6 PM, at :00, :17, :20 and :40 Eastern time");
     } finally {
       setLocale("en");
     }
@@ -139,7 +139,7 @@ describe("compact schedule label", () => {
     setLocale("en");
     const other = local === "Asia/Kolkata" ? "Pacific/Auckland" : "Asia/Kolkata";
     expect(scheduleLabelCompact(cron("30 8 * * 1-5", other))).toBe(`Weekdays around 8:30 AM · ${other}`);
-    expect(scheduleLabel(cron("30 8 * * 1-5", local))).toContain(local);
+    expect(scheduleLabel(cron("30 8 * * 1-5", local))).toMatch(/ time$/);
   });
   it("uses 24 h in French", () => {
     setLocale("fr");

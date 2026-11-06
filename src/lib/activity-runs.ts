@@ -162,14 +162,18 @@ export function isToolStep(message: Message): message is Message & { tool: NonNu
   return failedTurnCause(tool.name) === null;
 }
 
-/** A settled turn's narration: the messages the bot wrote on its way to the
- * answer, folded into the turn's group, and how long the whole turn took. */
-type TurnFold = { turnId: string; elapsedMs: number };
+/** A settled turn's folded rows and how long the whole turn took. */
+type TurnFold = { turnId: string; elapsedMs: number; messages: Message[] };
 
-/** Settled providers may emit several ordinary assistant messages around
- * tool calls. Keep the terminal answer in the transcript and fold the
- * earlier narration into the turn's group of steps. */
-function assistantTurnFolds(messages: Message[]): {
+function foldable(message: Message): boolean {
+  return isToolStep(message) && message.tool.ok === true;
+}
+
+const isNarration = (message: Message, turnId: string) =>
+  message.role === "bot" && message.kind === "text" && message.turnId === turnId && !message.turnTerminal;
+
+/** Once a turn has its answer, the rows `folded` picks go behind one run chip at the first of them. */
+function settledTurnFolds(messages: Message[], folded: (message: Message, turnId: string) => boolean): {
   byAnchorId: Map<string, TurnFold>;
   hiddenIds: Set<string>;
 } {
@@ -183,29 +187,51 @@ function assistantTurnFolds(messages: Message[]): {
       !terminal.turnId ||
       !terminal.turnTerminal
     ) return;
+    const turnId = terminal.turnId;
+    const before = messages.slice(0, terminalIndex);
+    const rows = before.filter((message) => folded(message, turnId));
+    if (!rows.length) return;
 
-    const narration = messages.slice(0, terminalIndex).filter((message) =>
-      message.role === "bot" &&
-      message.kind === "text" &&
-      message.turnId === terminal.turnId &&
-      !message.turnTerminal
-    );
-    if (!narration.length) return;
-
-    const anchor = narration[0];
-    const anchorIndex = messages.findIndex((message) => message.id === anchor.id);
-    let startedAt = anchor.at;
-    for (let i = anchorIndex - 1; i >= 0; i -= 1) {
+    const firstIndex = before.findIndex((message) => message.turnId === turnId);
+    let startedAt = before[firstIndex]?.at ?? rows[0].at;
+    for (let i = firstIndex - 1; i >= 0; i -= 1) {
       if (messages[i].role === "user") {
         startedAt = messages[i].at;
         break;
       }
     }
-    byAnchorId.set(anchor.id, { turnId: terminal.turnId, elapsedMs: Math.max(0, terminal.at - startedAt) });
-    for (const message of narration) hiddenIds.add(message.id);
+    byAnchorId.set(rows[0].id, { turnId, elapsedMs: Math.max(0, terminal.at - startedAt), messages: rows });
+    for (const message of rows) hiddenIds.add(message.id);
   });
 
   return { byAnchorId, hiddenIds };
+}
+
+/** A room shows a member's answer, not its working notes. */
+function assistantTurnFolds(messages: Message[]) {
+  return settledTurnFolds(messages, isNarration);
+}
+
+/** A conversation keeps the bot's own progress lines and folds only its finished tool steps. */
+function toolStepFolds(messages: Message[]) {
+  return settledTurnFolds(messages, (message, turnId) => message.turnId === turnId && foldable(message));
+}
+
+export function roomTurnFolds(messages: Message[]): {
+  byTerminalId: Map<string, TurnFold>;
+  hiddenIds: Set<string>;
+} {
+  const { byAnchorId, hiddenIds } = assistantTurnFolds(messages);
+  const terminals = new Map<string, string>();
+  for (const message of messages) {
+    if (message.role === "bot" && message.kind === "text" && message.turnId && message.turnTerminal) terminals.set(message.turnId, message.id);
+  }
+  const byTerminalId = new Map<string, TurnFold>();
+  for (const fold of byAnchorId.values()) {
+    const terminalId = terminals.get(fold.turnId);
+    if (terminalId) byTerminalId.set(terminalId, fold);
+  }
+  return { byTerminalId, hiddenIds };
 }
 
 /** How long a stretch of steps ran: from the first start to the last end.
@@ -230,22 +256,17 @@ function stepSpan(messages: Message[]): number | undefined {
 function group(messages: Message[], foldAssistantTurns: boolean): TranscriptItem[] {
   const items: TranscriptItem[] = [];
   const folds = foldAssistantTurns
-    ? assistantTurnFolds(messages)
+    ? toolStepFolds(messages)
     : { byAnchorId: new Map<string, TurnFold>(), hiddenIds: new Set<string>() };
   let run: Message[] = [];
-  let turnElapsed: number | undefined;
-  let narrated = false;
   const flush = () => {
-    // one step on its own is cheaper to read than a fold that hides it;
-    // narration is folded even alone, the answer under it is what shows
-    if (run.length > 1 || narrated) {
-      items.push({ kind: "run", id: `run:${run[0].id}`, messages: run, elapsedMs: turnElapsed ?? stepSpan(run) });
+    // one step on its own is cheaper to read than a fold that hides it
+    if (run.length > 1) {
+      items.push({ kind: "run", id: `run:${run[0].id}`, messages: run, elapsedMs: stepSpan(run) });
     } else {
       for (const message of run) items.push({ kind: "message", message });
     }
     run = [];
-    turnElapsed = undefined;
-    narrated = false;
   };
   const join = (message: Message) => {
     const first = run[0];
@@ -262,14 +283,14 @@ function group(messages: Message[], foldAssistantTurns: boolean): TranscriptItem
   for (const message of messages) {
     // "On your computer" is stored for the server, never drawn.
     if (isHiddenStatusActivity(message)) continue;
-    if (folds.hiddenIds.has(message.id)) {
-      join(message);
-      narrated = true;
-      const fold = folds.byAnchorId.get(message.id);
-      if (fold) turnElapsed = fold.elapsedMs;
+    const fold = folds.byAnchorId.get(message.id);
+    if (fold) {
+      flush();
+      items.push({ kind: "run", id: `run:${fold.messages[0].id}`, messages: fold.messages, elapsedMs: fold.elapsedMs });
       continue;
     }
-    if (isToolStep(message)) {
+    if (folds.hiddenIds.has(message.id)) continue;
+    if (foldable(message) || isToolStep(message)) {
       join(message);
       continue;
     }

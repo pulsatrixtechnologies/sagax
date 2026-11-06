@@ -1,4 +1,5 @@
 import { describeCron, describeCronList, type CronLocale } from "./cron-describe.ts";
+import { plainTimeZone } from "./plain-time-zone.ts";
 import type { RoutineCronSchedule } from "./routine-schedule.ts";
 
 const WEEKDAYS = {
@@ -22,9 +23,10 @@ export function cronIsDescribed(schedule: RoutineCronSchedule, locale: CronLocal
 }
 
 /** The schedule as a person reads it, with its zone: "Weekdays, at 8:30 AM,
- * 12:30 PM and 4:30 PM · America/Toronto". */
+ * 12:30 PM and 4:30 PM Eastern time". Zone names stay in English so a French
+ * sentence does not get an awkward Intl generic ("heure : Toronto"). */
 export function cronScheduleLabel(schedule: RoutineCronSchedule, locale: CronLocale = "en"): string {
-  return `${cronScheduleWords(schedule, locale)} · ${schedule.timeZone}`;
+  return `${cronScheduleWords(schedule, locale)} ${plainTimeZone(schedule.timeZone)}`;
 }
 
 /** Describe the expression in words (fr or en), without its zone; "Custom

@@ -1821,7 +1821,7 @@ struct DesktopComputerTopRows: View {
                     }
                 }
                 Button { shell.modal = .plugins } label: {
-                    DesktopText(Text("Open Messages setup in Capabilities"), size: 12.5, weight: .medium, color: \.accentText)
+                    DesktopText(Text("Open Messages setup in Plugins"), size: 12.5, weight: .medium, color: \.accentText)
                 }
                 .buttonStyle(.plain)
                 if let messagesError { DesktopText(verbatim: messagesError, size: 12, line: 16, color: \.danger) }

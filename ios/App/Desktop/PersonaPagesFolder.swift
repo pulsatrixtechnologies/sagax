@@ -9,7 +9,7 @@
 // workspace editor, MEMORY.md and memory/ the memory editor; any other file
 // downloads.
 //
-// Access: MCP servers (one switch each, Manage in Capabilities), the
+// Access: MCP servers (one switch each, Manage in Plugins), the
 // background brief, the browser while Experimental features has it, and
 // "More options" folded: the working folder, webhooks, always allowed.
 import CompanionCore
@@ -1246,7 +1246,7 @@ struct PersonaAccessPage: View {
                                         .foregroundStyle(theme.ink)
                                         .lineLimit(1)
                                     if server.enabled == false {
-                                        DesktopText(verbatim: L("Switched off in Capabilities > Installed. Test it and turn it on there first."),
+                                        DesktopText(verbatim: L("Switched off in Plugins > Installed. Test it and turn it on there first."),
                                                     size: 11.5, line: 17.25, color: \.inkSecondary)
                                     }
                                 }
@@ -1278,7 +1278,7 @@ struct PersonaAccessPage: View {
                     model.modal = .plugins
                 } label: {
                     HStack(spacing: 4) {
-                        Text(verbatim: L("Manage in Capabilities")).font(theme.font(12.5, .medium))
+                        Text(verbatim: L("Manage in Plugins")).font(theme.font(12.5, .medium))
                         FolderIconView(paths: FolderIcon.arrowUpRight, size: 13)
                     }
                     .foregroundStyle(theme.accentText)

@@ -349,7 +349,7 @@ async function run() {
   button.disabled = true;
   try {
     if (!window.PublicKeyCredential || !navigator.credentials) { status.textContent = C.words.unsupported; return finish(false, "unsupported"); }
-    const got = await fetch("/api/security-keys/ceremony/" + C.id, { headers: { accept: "application/json" } });
+    const got = await fetch("/api/security-keys/ceremony/" + C.id, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(30_000) });
     if (!got.ok) return finish(false, "expired");
     const { options } = await got.json();
     let credential;
@@ -370,7 +370,7 @@ async function run() {
       : { id: credential.id, rawId: b64(credential.rawId), type: credential.type, clientExtensionResults: credential.getClientExtensionResults(),
           authenticatorAttachment: credential.authenticatorAttachment || undefined,
           response: { clientDataJSON: b64(r.clientDataJSON), authenticatorData: b64(r.authenticatorData), signature: b64(r.signature), userHandle: r.userHandle ? b64(r.userHandle) : undefined } };
-    const sent = await fetch("/api/security-keys/ceremony/" + C.id, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ response }) });
+    const sent = await fetch("/api/security-keys/ceremony/" + C.id, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ response }), signal: AbortSignal.timeout(30_000) });
     finish(sent.ok, sent.ok ? "" : "failed");
   } catch (error) {
     finish(false, error && error.name === "NotAllowedError" ? "cancelled" : "failed");

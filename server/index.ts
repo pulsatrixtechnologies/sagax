@@ -9328,7 +9328,7 @@ const githubConnect = new GithubConnect({
   onConnected: (principalId, connection) => {
     const previous = githubReplaced.get(principalId);
     githubReplaced.delete(principalId);
-    void syncGithubToSandbox(principalId, connection, undefined, previous);
+    void syncGithubToSandbox(principalId, connection, undefined, previous).catch(() => {});
   }
 });
 /** The organization admin's historical marketplace list, kept in this
@@ -36344,7 +36344,10 @@ async function performBotActRoute(actor: PerformActor, target: RouteTarget, maxC
   const url = new URL(`http://127.0.0.1:${PORT}${target.path}`);
   if (target.query) for (const [key, value] of Object.entries(target.query)) url.searchParams.append(key, value);
   try {
-    const response = await fetch(url, { method: target.method, headers, body, redirect: "error" });
+    // Loopback to this process: without a bound a stalled handler held the
+    // bot's act forever. Fifteen minutes covers large transfers; the catch
+    // path below is unchanged.
+    const response = await fetch(url, { method: target.method, headers, body, redirect: "error", signal: AbortSignal.timeout(15 * 60_000) });
     return { status: response.status, text: (await response.text()).slice(0, maxChars) };
   } catch {
     return { status: 502, text: "The action could not be completed." };
@@ -42730,7 +42733,9 @@ async function performAsMember(person: MemberPerson, request: MemberRequest): Pr
   const headers = new Headers({ accept: "application/json", authorization: `Bearer ${opened.token}` });
   if (request.body !== undefined) headers.set("content-type", "application/json");
   try {
-    const response = await fetch(url, { method: request.method, headers, body: request.body === undefined ? undefined : JSON.stringify(request.body), redirect: "error" });
+    // Same-process member replay: a hung route used to pin the AI client's
+    // session until revoke. Five minutes is enough for ordinary member work.
+    const response = await fetch(url, { method: request.method, headers, body: request.body === undefined ? undefined : JSON.stringify(request.body), redirect: "error", signal: AbortSignal.timeout(5 * 60_000) });
     const text = await response.text();
     let body: unknown = {};
     try {

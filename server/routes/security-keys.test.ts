@@ -9,7 +9,7 @@ import { json, readBody } from "../harness/http.ts";
 import { requiredScope, type RequestAuth } from "../auth/request-auth.ts";
 import { SecurityKeyStore, SecurityKeys } from "../auth/security-keys.ts";
 import { fakeAuthenticator, type FakeAuthenticator } from "../testing/fake-authenticator.ts";
-import { createSecurityKeyRoutes, relyingParty, securityKeyCeremonyRoutes, settingsGrant } from "./security-keys.ts";
+import { ceremonyPage, createSecurityKeyRoutes, relyingParty, securityKeyCeremonyRoutes, settingsGrant } from "./security-keys.ts";
 import { dispatchRoutes } from "./table.ts";
 
 const servers: Server[] = [];
@@ -64,6 +64,12 @@ async function serve(person: string | null = "pr_alice", options: { recent?: boo
 }
 
 describe("security key routes", () => {
+  it("bounds the ceremony page's own fetches so a stalled server cannot hang the key prompt", () => {
+    const { html } = ceremonyPage({ id: "c_test", kind: "register", phone: false });
+    expect(html).toContain("AbortSignal.timeout(30_000)");
+    expect(html.match(/AbortSignal\.timeout\(30_000\)/g)?.length).toBe(2);
+  });
+
   it("are a client session's own routes, and never a bot's or a service's", async () => {
     expect(requiredScope("GET", "/api/security-keys")).toBe("client");
     expect(requiredScope("PUT", "/api/security-keys/classes")).toBe("client");

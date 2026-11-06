@@ -6211,7 +6211,6 @@
   "settings.card.ready": "{count} prêts",
   "settings.card.readyOne": "{count} prêt",
   "modelsVoice.keys.title": "Clés",
-  "modelsVoice.voice.title": "Voix",
   "providerKeys.elevenlabs": "ElevenLabs",
   "providerKeys.fishAudio": "Fish Audio",
   "keys.xai.descVoice": "Pour les modèles Grok de xAI, la voix Grok et la génération d'images et de vidéos avec xAI.",
@@ -9429,7 +9428,7 @@
   "settings.intro.credentials": "Identifiants, clés et notes que tes bots utilisent sans les voir.",
   "settings.intro.providers": "D'où viennent les modèles et les services.",
   "settings.intro.engines": "Quel modèle chaque bot utilise.",
-  "settings.intro.voice": "Comment tes bots parlent et écoutent.",
+  "settings.intro.voice": "Comment tes bots parlent et t'écoutent.",
   "settings.intro.usage": "Ce que tes bots ont consommé et ce que ça coûte.",
   "settings.intro.organization": "Le serveur où tu travailles et ce qu'il partage.",
   "settings.intro.computer": "L'ordinateur où tes bots travaillent.",
@@ -11827,6 +11826,7 @@
   "botPanel.reachMe.push.deviceOne": "Sur ton téléphone jumelé.",
   "voice.noDashes.title": "Pas de tirets longs dans les réponses",
   "voice.noDashes.short": "Les remplace dans le texte final des réponses des bots : « à » entre deux heures ou deux nombres, deux-points après un libellé de liste, virgule ailleurs. Actif par défaut en français.",
+  "voice.auto.effective": "Auto · {provider}",
   "model.auto.why.fast": "Auto : {model} pour ce tour court, le modèle rapide réglé pour ce bot sur {engine}; le modèle plus gros reste pour le raisonnement.",
   "approvals.tab.journal": "Journal",
   "approvals.journal.outcome.allowed": "Permise",
@@ -13372,5 +13372,7 @@
   "botAccess.tools.block": "Bloquer",
   "botAccess.tools.allowOne": "Permettre",
   "botAccess.tools.turnOnHint": "Active le groupe pour choisir ses outils.",
-  "botAccess.tools.advanced": "Avancé"
+  "botAccess.tools.advanced": "Avancé",
+  "voice.options.title": "Moteurs de voix",
+  "voice.options.help": "Modèle Fish Audio et serveur Chatterbox."
 }

@@ -8310,7 +8310,6 @@
   "settings.card.ready": "{count} ready",
   "settings.card.readyOne": "{count} ready",
   "modelsVoice.keys.title": "Keys",
-  "modelsVoice.voice.title": "Voice",
   "providerKeys.elevenlabs": "ElevenLabs",
   "providerKeys.fishAudio": "Fish Audio",
   "keys.xai.descVoice": "For xAI's Grok models, Grok voice, and xAI image and video generation.",
@@ -11827,6 +11826,7 @@
   "botPanel.reachMe.push.deviceOne": "On your paired phone.",
   "voice.noDashes.title": "No em or en dashes in replies",
   "voice.noDashes.short": "Replaces them in the final text of bot replies: a range word between times and numbers, a colon after a list label, a comma elsewhere. On by default in French.",
+  "voice.auto.effective": "Auto · {provider}",
   "model.auto.why.fast": "Auto: {model} for this quick turn, the fast model set for this bot on {engine}; the larger model stays for reasoning.",
   "approvals.tab.journal": "Journal",
   "approvals.journal.outcome.allowed": "Allowed",
@@ -13372,5 +13372,7 @@
   "botAccess.tools.block": "Block",
   "botAccess.tools.allowOne": "Allow",
   "botAccess.tools.turnOnHint": "Turn the group on to pick its tools.",
-  "botAccess.tools.advanced": "Advanced"
+  "botAccess.tools.advanced": "Advanced",
+  "voice.options.title": "Voice engines",
+  "voice.options.help": "Fish Audio model and Chatterbox server."
 }

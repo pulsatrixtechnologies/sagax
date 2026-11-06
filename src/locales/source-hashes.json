@@ -9587,7 +9587,6 @@
       "settings.card.ready": "f5f5fd424d7c18f19a51ee147857efddc320a0ec6e1eeb4354be129425632f05",
       "settings.card.readyOne": "f5f5fd424d7c18f19a51ee147857efddc320a0ec6e1eeb4354be129425632f05",
       "modelsVoice.keys.title": "f0d66a79c138e951c2f840fcd94ea9bdf399f745088a832a9ba49cf07f7125de",
-      "modelsVoice.voice.title": "87bf2bc08589f0bd4a078db145c34ad5e14b8fda53c3ae65b78601294913df95",
       "providerKeys.elevenlabs": "91268016fe6765efe3f7da96437c04676ed8cd8de778298a0c8ceba6c297f915",
       "providerKeys.fishAudio": "243024e3cf3f398c0703bed8bd4f1a6a6fb8f8b01d98868063a3ab8bc26f9d49",
       "keys.xai.descVoice": "0423d976b5500ceda1d5fe1ee722a8b2446c43e5fd73a310378bddc26a7454a7",
@@ -15021,6 +15020,7 @@
       "botPanel.reachMe.push.deviceOne": "4b1f15f37648a92b9ba151033157e83f597948129c27eb87eae352229d726305",
       "voice.noDashes.title": "c7a9268ad1f04a6d8052be9461c107bf848f09815e48c5661d9a5281e08ebc65",
       "voice.noDashes.short": "9db549f652acf00757bb2c84f3ec72579907aa9a1de5a7bb7b48d95b24021845",
+      "voice.auto.effective": "50c3eef55013285ad3a53552453f7a88ee8b9035df1e1fa0b9e0f6f1e6cf1b62",
       "model.auto.why.fast": "e9c4d9d854e59816180adca6a60e8b3fa0c8c3a34379da27b0688f4086925f4d",
       "approvals.tab.journal": "43b7c75d56f02a885fd7ea66592af16ad33f3ddb82f31b786136d4b96821b3e2",
       "approvals.journal.outcome.allowed": "1bb201d188352e9b4633f85e4fb8a31ea93fd14dec702443fd3e2713d657fd2d",
@@ -17137,7 +17137,9 @@
       "botAccess.tools.block": "211d0bb8cf4f5b5202c2a9b7996e483898644aa24714b1e10edd80a54ba4b560",
       "botAccess.tools.allowOne": "e213c161d5cefa520c8dd4155c9569076d9a40406111465136a6f1b207045761",
       "botAccess.tools.turnOnHint": "185fce97a4e3bcab8cad7c3bd5721ca3c144f40bf84191959b92e844cf6f83f4",
-      "botAccess.tools.advanced": "9f088dbebd6c3c70a5ddbc2c943b11e4ca9acea5757b0b4f2b32479f0dbb747e"
+      "botAccess.tools.advanced": "9f088dbebd6c3c70a5ddbc2c943b11e4ca9acea5757b0b4f2b32479f0dbb747e",
+      "voice.options.title": "be79fa03daedd64de9b812ce2305d9d8bf809f9a4249352792e496e097dc0141",
+      "voice.options.help": "a602fd7d20f0b000f0954565d569ebaf60e30bd5d1501fa2342fdda214423b5e"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

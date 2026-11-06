@@ -21,7 +21,7 @@ import { EngineConnect, paysWithText } from "./EngineConnect";
 import { EngineConnectorsLine } from "./plugins/EngineCapabilities";
 import { reloadMyEngines, usePerspicaxOrg, type MyEngine } from "@/lib/perspicax-org";
 import { perspicaxConsoleUrl } from "./PerspicaxOrgSettings";
-import { ExternalLinkPill } from "./settings/SettingsPatterns";
+import { ExternalLinkPill, OrgManagedRow, StatusText } from "./settings/SettingsPatterns";
 import { setVoiceDashes, useVoiceDashes } from "@/lib/voice-dashes-preference";
 import { myTurnsReady } from "../../shared/org-engine-readiness";
 import { canEditConfig, canManageKeys, viewerCan, viewerIsOrgMember } from "@/lib/viewer";
@@ -525,11 +525,10 @@ export function EnginesSettings() {
 /** The person's unified providers and voices, microphone, provider options
  * and installation Live controls. Personal keys live in Providers. */
 export function VoiceSettingsPage() {
-  const { installation } = useModelsVoiceAccess();
+  const { installation, org } = useModelsVoiceAccess();
   return (
     <div className="flex min-w-0 flex-col gap-6 pb-2" data-voice-page="">
       <VoiceProviderSettings />
-      <VoiceProviderOptions installation={installation} />
       {/* this computer's microphone: everyone's, whoever edits the installation */}
       <div data-settings-card="connections.audio">
         <SettingsGroup title={t("settings.audio.title")} groupId="audio">
@@ -537,22 +536,36 @@ export function VoiceSettingsPage() {
           <MicrophoneSettings />
         </SettingsGroup>
       </div>
-      {installation && <VoiceSection />}
+      {installation ? (
+        <VoiceProviderOptions installation>
+          <FoldRow cardId="voice.advanced" label={t("voice.live.title")} icon={<Phone size={14} />}>
+            <div data-voice-advanced="">
+              <LiveCallInstallationSettings />
+            </div>
+          </FoldRow>
+        </VoiceProviderOptions>
+      ) : org ? <OrgLiveCallsRow issuer={org.org.identity.issuer} /> : null}
     </div>
   );
 }
 
-/** Live call installation controls stay folded and preserve their values. */
-function VoiceSection() {
+/** #2080 (L1): in an organization the installation's live calls are the
+ * admins'; the member reads the state and where it changes. */
+function OrgLiveCallsRow({ issuer }: { issuer: string }) {
+  const { state } = useStore();
+  const live = state.config?.live;
+  const on = Boolean(live?.enabled && live.configured);
   return (
     <div data-settings-card="connections.voice" data-voice-section="">
-      <SettingsGroup title={t("modelsVoice.voice.title")} groupId="voice">
-        <FoldRow cardId="voice.advanced" label={t("voice.live.title")} icon={<Phone size={14} />}>
-          <div data-voice-advanced="">
-            <LiveCallInstallationSettings />
-          </div>
-        </FoldRow>
+      <SettingsGroup title={t("voiceMode.call.advanced")} groupId="voice">
+        <OrgManagedRow
+          label={t("voice.live.title")}
+          value={<StatusText tone={on ? "success" : "neutral"}>{t(on ? "settings.card.on" : "settings.card.off")}</StatusText>}
+          href={perspicaxConsoleUrl(issuer)}
+          rowId="voice.live.org"
+        />
       </SettingsGroup>
     </div>
   );
 }
+

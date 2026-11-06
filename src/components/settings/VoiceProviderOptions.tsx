@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { Check, Loader2 } from "lucide-react";
+import { AudioLines, Check, Loader2 } from "lucide-react";
 
 import { api, useStore, type ConfigStatus } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
-import { DescribedRow, PILL, PillSelect, SettingsGroup } from "../SettingsPrimitives";
+import { DescribedRow, FoldRow, PILL, PillSelect, SettingsGroup } from "../SettingsPrimitives";
 import { ExternalLinkPill } from "./SettingsPatterns";
 
 const FISH_MODELS = [
@@ -17,7 +17,7 @@ const INPUT_CLASS = "w-full rounded-lg border border-hairline/40 bg-inset px-3 p
 const SAVE_CLASS = cn(PILL, "shrink-0 disabled:cursor-not-allowed");
 
 /** Non-secret options of voice providers, independent of the person's choice. */
-export function VoiceProviderOptions({ installation = false }: { installation?: boolean }) {
+export function VoiceProviderOptions({ installation = false, children }: { installation?: boolean; children?: React.ReactNode }) {
   const { state, dispatch } = useStore();
   const tts = state.config?.tts;
   const [serverUrl, setServerUrl] = useState("");
@@ -60,11 +60,16 @@ export function VoiceProviderOptions({ installation = false }: { installation?: 
 
   // #2080 (L1): "No long dashes" moved to Models > Advanced; what is left
   // writes the installation.
-  if (!tts || !installation) return null;
+  if (!installation) return null;
 
   return (
-    <div data-settings-card="voice.options">
+    // #2080 (L1): one Advanced card after Audio, every row folded: the
+    // voice engines (Fish, Chatterbox) and, as children, Live calls.
+    <div data-settings-card="connections.voice" data-voice-section="">
       <SettingsGroup title={t("voiceMode.call.advanced")} groupId="voice-options">
+        {tts && (
+        <FoldRow cardId="voice.options" label={t("voice.options.title")} description={t("voice.options.help")} icon={<AudioLines size={14} />}>
+        <div className="-mx-3.5 flex flex-col" data-voice-options="">
         <DescribedRow label={t("voice.fish.model")} help={t("voice.fish.modelHint")} rowId="fishModel">
           <PillSelect
             value={(tts.fishModel ?? "s2.1-pro") as FishModel}
@@ -124,6 +129,10 @@ export function VoiceProviderOptions({ installation = false }: { installation?: 
         />
 
       {error && <div role="alert" className="px-3.5 pb-2 text-[12px] text-danger">{error}</div>}
+        </div>
+        </FoldRow>
+        )}
+        {children}
       </SettingsGroup>
     </div>
   );

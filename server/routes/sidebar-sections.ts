@@ -18,23 +18,27 @@ export interface SidebarSectionsRouteDeps {
   sectionsFor?(auth: RequestAuth): readonly string[];
   /** #2045: a new team belongs to whoever created it. */
   onSectionCreated?(section: string, auth: RequestAuth): void;
+  /** #2045: resolve the caller's stable section id for a display name. */
+  sectionIdFor?(section: string, auth: RequestAuth): string | undefined;
   /** #2045: whether this caller may file this bot in a team (their own bot
    * on an organization server). Absent: every bot. */
   mayFile?(auth: RequestAuth, bot: BotRecord): boolean;
   bot(id: string): BotRecord | undefined;
   /** Throws Error & { status: 409 } when a team computer change is unsafe. */
   assertTeamComputerChangeIdle(before: BotRecord, after: BotRecord): void;
-  teamComputerForSection(section: string): unknown;
+  teamComputerForSection(section: string, auth?: RequestAuth): unknown;
   deleteSection(section: string, auth: RequestAuth): string | null;
   renameSection(section: string, nextName: string, auth: RequestAuth): string | null;
   updateTeamMembers(
     section: string,
     addBotIds: string[],
     removeBotIds: string[],
+    sectionId?: string,
   ): { ok: true; bots: BotRecord[] } | { ok: false; reason: string };
   setBotsSection(
     botIds: string[],
     name: string,
+    sectionId?: string,
   ): { ok: true; bots: BotRecord[] } | { ok: false };
   wireBot(bot: BotRecord): unknown;
   /** #2045: optional owner so another person's same-named team stays. */
@@ -58,7 +62,7 @@ export function createSidebarSectionsRoutes(deps: SidebarSectionsRouteDeps): Rou
       const section = url.searchParams.get("section")?.trim();
       if (!section) return json(res, 400, { error: "Choose a named team" });
       if (!mine(section)) return json(res, 404, { error: "No such team" });
-      if (method === "DELETE" && deps.teamComputerForSection(section)) {
+      if (method === "DELETE" && deps.teamComputerForSection(section, auth)) {
         return json(res, 409, { error: "Unassign this team's computer before deleting the team" });
       }
       let nextName: string | null = null;
@@ -92,7 +96,8 @@ export function createSidebarSectionsRoutes(deps: SidebarSectionsRouteDeps): Rou
           if (bot) deps.assertTeamComputerChangeIdle(bot, { ...bot, section: destination });
         }
       }
-      const result = deps.updateTeamMembers(section, parsed.data.addBotIds, parsed.data.removeBotIds);
+      const sectionId = deps.sectionIdFor?.(section, auth);
+      const result = deps.updateTeamMembers(section, parsed.data.addBotIds, parsed.data.removeBotIds, sectionId);
       if (!result.ok) {
         return json(res, result.reason === "unavailable" ? 404 : 409, {
           error: result.reason === "membership-changed"
@@ -122,11 +127,13 @@ export function createSidebarSectionsRoutes(deps: SidebarSectionsRouteDeps): Rou
         const bot = deps.bot(botId);
         if (bot) deps.assertTeamComputerChangeIdle(bot, { ...bot, section: name || undefined });
       }
-      const result = deps.setBotsSection(botIds, name);
+      // Create the channel first so the membership write can stamp sectionId.
+      if (created) deps.onSectionCreated?.(name, auth);
+      const sectionId = name ? deps.sectionIdFor?.(name, auth) : undefined;
+      const result = deps.setBotsSection(botIds, name, sectionId);
       if (!result.ok) {
         return json(res, 404, { error: "one or more bots are unavailable" });
       }
-      if (created) deps.onSectionCreated?.(name, auth);
       return json(res, 200, { section: name, sections: listed(), bots: result.bots.map(deps.wireBot) });
     }
     return PASS;

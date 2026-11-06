@@ -142,24 +142,29 @@ export function ensureSections(names: (string | undefined)[]): boolean {
   return true;
 }
 
-/** The caller checks that no bots or group chats still use this identity. */
+/** The caller checks that no bots or group chats still use this identity.
+ * #2045: another person may already hold `nextName` as their display name.
+ * In that case drop the old label from the shared list and leave the
+ * existing `nextName` entry alone (team briefs live under owner/id keys). */
 export function changeEmptySection(name: string, nextName: string | null): void {
   const data = loadFile(true);
   const index = data.sections.indexOf(name);
   if (index < 0) throw new Error("No such team");
-  if (nextName !== null && nextName !== name && data.sections.includes(nextName)) {
-    throw new Error("A team with that name already exists");
-  }
   if (nextName === name) return;
-  if (nextName === null) data.sections.splice(index, 1);
-  else data.sections[index] = nextName;
   const context = data.contexts[name];
   delete data.contexts[name];
-  if (nextName !== null && context) data.contexts[nextName] = context;
+  if (nextName === null) {
+    data.sections.splice(index, 1);
+  } else if (data.sections.includes(nextName)) {
+    data.sections.splice(index, 1);
+    // Do not overwrite another person's leftover name-keyed brief.
+  } else {
+    data.sections[index] = nextName;
+    if (context) data.contexts[nextName] = context;
+  }
   saveFile(data);
-  // Every team rename and removal funnels through here, so the team's
-  // published package id and keys follow it (published-teams.ts). The team
-  // itself is already renamed; a failure here costs only key stability.
+  // Legacy name-keyed published packages follow the empty-name path. Org
+  // renames that know a section id also call renamePublishedTeam directly.
   try {
     renamePublishedTeam(name, nextName);
   } catch (error) {

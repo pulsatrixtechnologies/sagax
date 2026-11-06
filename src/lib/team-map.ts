@@ -6,6 +6,9 @@ export interface TeamMapBot {
   name: string;
   hidden?: boolean;
   section?: string;
+  /** #2045: stable team id when the server stamped one. Grouping still uses
+   * the displayed `section` name for API calls and labels. */
+  sectionId?: string;
   chiefOfStaff?: boolean;
   ownerUserId?: string;
   busy?: boolean;
@@ -62,16 +65,21 @@ export function buildTeamMapSections<T extends TeamMapBot>(bots: T[], names: str
   if (options.general) sections.set("", []);
   for (const bot of bots) {
     if (bot.hidden) continue;
-    const key = bot.section?.trim() || "";
+    // #2045: prefer the stable id so two people with the same team name
+    // stay in separate columns when both bots are visible to the viewer.
+    const key = bot.sectionId?.trim() || bot.section?.trim() || "";
     sections.set(key, [...(sections.get(key) ?? []), bot]);
   }
   for (const name of names) {
     const key = name.trim();
-    if (key && !sections.has(key)) sections.set(key, []);
+    if (!key) continue;
+    const already = [...sections.values()].some((list) => list.some((bot) => (bot.section?.trim() || "") === key));
+    if (already || sections.has(key)) continue;
+    sections.set(key, []);
   }
   return [...sections].map(([key, sectionBots]) => ({
     key,
-    name: key || "Unassigned",
+    name: sectionBots[0]?.section?.trim() || key || "Unassigned",
     chiefs: sectionBots.filter(chief),
     members: sectionBots.filter((bot) => !chief(bot)),
   }));

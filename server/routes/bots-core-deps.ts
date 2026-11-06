@@ -97,6 +97,8 @@ export interface BotsCoreRoutines {
 
 export interface BotsCoreRouteDeps {
   store: BotsCoreStore;
+  /** #2045: stable section id for a display name (org servers). */
+  resolveSectionId?: (section: string, auth: RequestAuth, bot?: { ownerUserId?: string }) => string | undefined;
   cfg: { newBotDefaults?: NewBotDefaults; browserProfiles?: ReadonlyArray<{ id: string }> };
   identity: { kind: "solo" | "perspicax" };
   desktopManaged: boolean;

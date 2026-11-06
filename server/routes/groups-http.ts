@@ -136,7 +136,7 @@ export interface GroupsHttpDeps {
   companionRequest(req: IncomingMessage, auth: RequestAuth): boolean;
   callerCan(auth: RequestAuth, key: string): boolean;
   roomSectionMoveRefusal(auth: RequestAuth, group: GroupRecord, next: unknown): string | null;
-  recordRoomMove(groupId: string, from: string, to: string): void;
+  recordRoomMove(groupId: string, from: string, to: string, fromId?: string | null, toId?: string | null): void;
   updateChannel(groupId: string, body: unknown): GroupRecord;
   memberFolderRefusal(principal: string | null, folder: string | null | undefined): { error: string; code?: string } | null;
   memberFolderPrincipal(auth: RequestAuth): string | null;
@@ -541,8 +541,12 @@ export function createGroupsHttpRoutes(deps: GroupsHttpDeps): RouteHandler {
         const outside = checkedRoom.ok ? memberFolderRefusal(memberFolderPrincipal(auth), checkedRoom.cwd) : null;
         if (outside) return json(res, 403, { ...outside, field: "cwd" });
       }
+      const fromSectionId = typeof existingGroup?.sectionId === "string" ? existingGroup.sectionId : undefined;
       let group = updateChannel(m[1], body);
-      if (movesSection) recordRoomMove(group.id, fromSection, sectionKey(group.section));
+      if (movesSection) {
+        const toSectionId = typeof group.sectionId === "string" ? group.sectionId : undefined;
+        recordRoomMove(group.id, fromSection, sectionKey(group.section), fromSectionId, toSectionId);
+      }
       // A room marked read by a person reads their @ tag too (server/rooms/room-mentions.ts).
       const reader = groupReaderId(auth);
       if ((body as { unread?: unknown } | null)?.unread === false) {

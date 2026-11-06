@@ -238,7 +238,7 @@ export interface InternalRequestsDeps {
   peerInScope(from: InternalRequestsBot, target: InternalRequestsBot): boolean;
   archivedAgent(bot: InternalRequestsBot): boolean;
   teamSetupTeams(): string[];
-  canAccessTeam(bot: InternalRequestsBot, name: string): boolean;
+  canAccessTeam(bot: InternalRequestsBot, name: string, sectionId?: string): boolean;
   orgOfferedEngines<T extends { instanceId: string }>(instances: readonly T[], person?: string | null): readonly T[];
   consoleEngineAllowed(instanceId: string): boolean;
   orgOwnAccountsOutsideList(): boolean;

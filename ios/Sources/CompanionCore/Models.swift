@@ -1103,6 +1103,8 @@ public struct Bot: Codable, Hashable, Identifiable, Sendable {
     public var hidden: Bool?
     /// Desktop sidebar section. Missing or blank means the built-in Bots area.
     public var section: String?
+    /// Stable owner-scoped team id (`sec_<uuid>`). Display name stays in `section` (#2045).
+    public var sectionId: String?
     public var chiefOfStaff: Bool?
     /// ask, auto, full, or custom. Missing on older harnesses; autoApprove
     /// remains the compatibility mirror for older companion builds.
@@ -1432,6 +1434,8 @@ public struct Room: Codable, Hashable, Identifiable, Sendable {
     public var dm: Bool?
     /// Desktop sidebar section. Missing or blank means the built-in Channels area.
     public var section: String?
+    /// Stable owner-scoped team id (`sec_<uuid>`). Display name stays in `section` (#2045).
+    public var sectionId: String?
     public var busyBotId: String?
     /// Independent user conversations in this channel. Bot-to-bot rooms
     /// omit tasks because their transcript is the canonical private chat.

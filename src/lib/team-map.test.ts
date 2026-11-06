@@ -22,6 +22,16 @@ describe("team map projection", () => {
     ]);
   });
 
+  it("splits same display names when section ids differ (#2045)", () => {
+    const aliceOps = { id: "a", name: "Ada", section: "Ops", sectionId: "sec_a" };
+    const bobOps = { id: "b", name: "Bea", section: "Ops", sectionId: "sec_b" };
+    expect(buildTeamMapSections([aliceOps, bobOps]).map(({ key, name, members }) => ({ key, name, ids: members.map((bot) => bot.id) })))
+      .toEqual([
+        { key: "sec_a", name: "Ops", ids: ["a"] },
+        { key: "sec_b", name: "Ops", ids: ["b"] },
+      ]);
+  });
+
   it("keeps the unsectioned team distinct from a section literally named General", () => {
     const projected = buildTeamMapSections([
       { id: "none", name: "Unsectioned" },

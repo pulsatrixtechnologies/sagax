@@ -1431,7 +1431,7 @@ import {
   readPublishedLibrary,
   writePublishedLibrary
 } from "./presets.ts";
-import { readPublishedTeam, writePublishedTeam } from "./pages/published-teams.ts";
+import { readPublishedTeam, renamePublishedTeam, writePublishedTeam } from "./pages/published-teams.ts";
 import { OrgLibrary } from "./org/org-library.ts";
 import { createTeamBackup, importTeamBackup } from "./backup/team-backup.ts";
 import { shouldMountLocalComputer } from "./local-routing.ts";
@@ -11650,13 +11650,22 @@ function updateChannel(groupId: string, value: unknown): GroupRecord {
   }
   // same contract as a bot's sidebar section: null/"" clears, 60 chars max
   if (body.section !== undefined) {
-    if (body.section === null) patch.section = undefined;
-    else if (typeof body.section !== "string") throw Object.assign(new Error("section must be a string"), { status: 400 });
+    if (body.section === null) {
+      patch.section = undefined;
+      patch.sectionId = undefined;
+    } else if (typeof body.section !== "string") throw Object.assign(new Error("section must be a string"), { status: 400 });
     else {
       const trimmed = body.section.trim();
-      if (!trimmed) patch.section = undefined;
-      else if (trimmed.length > 60) throw Object.assign(new Error("section must be at most 60 characters"), { status: 400 });
-      else patch.section = trimmed;
+      if (!trimmed) {
+        patch.section = undefined;
+        patch.sectionId = undefined;
+      } else if (trimmed.length > 60) throw Object.assign(new Error("section must be at most 60 characters"), { status: 400 });
+      else {
+        patch.section = trimmed;
+        // #2045: stamp the owner's stable team id beside the display name.
+        const owner = groupOwnerId(existing) || (typeof existing.createdBy === "string" ? existing.createdBy : "") || localPrincipalId();
+        patch.sectionId = sectionChannels && owner ? sectionChannels.ensure(trimmed, owner).id : undefined;
+      }
     }
   }
   // An admin's explicit "show this room to everyone its current bots allow":
@@ -12120,7 +12129,7 @@ function roomHandoffProblem(node: Pick<HandoffView, "groupId" | "threadId" | "bo
   // section boundary inside it; the person put their own bots together.
   const outsideSection = (room: GroupRecord, speaker: BotRecord) => !oneOwnerRoom(room, speaker) && room.memberIds.some(id => {
     const member = store.bot(id);
-    return member && !canAccessBot(speaker, member) && !coordinatorSupervises(member, speaker);
+    return member && !canAccessBot(speaker, member) && !coordinatorSupervises(member, speaker, resolveManagedNameFor(member));
   });
   if (group && outsideSection(group, bot)) return "Destination room includes a member outside the agent's section";
   if (parent) {
@@ -12129,7 +12138,7 @@ function roomHandoffProblem(node: Pick<HandoffView, "groupId" | "threadId" | "bo
     if (!from || from.hidden || (parent.groupId ? !source || !source.memberIds.includes(from.id) || !store.groupTaskByThread(source.id, parent.threadId) : !store.taskByThread(from.id, parent.threadId))) return "Source membership or task was removed";
     // A specialist may address its supervisor in their shared conversation;
     // supervision alone never grants a direct chat or another room's access.
-    const sharedSupervisor = source && group && source.id === group.id && parent.threadId === node.threadId && coordinatorSupervises(bot, from);
+    const sharedSupervisor = source && group && source.id === group.id && parent.threadId === node.threadId && coordinatorSupervises(bot, from, resolveManagedNameFor(bot));
     // Room work between two bots of one person, in rooms that hold only
     // that person's bots, crosses no section boundary (#1098).
     const ownRooms = Boolean(source || group) && sameOwnerBots(from, bot) && (!source || oneOwnerRoom(source, from)) && (!group || oneOwnerRoom(group, bot));
@@ -17799,6 +17808,7 @@ async function teamComputersPayload(): Promise<TeamComputersPayload> {
       const machine = inventory.instances.find(instance => instance.ownerBotId === teamComputerOwner(entry.id));
       return {
         id: entry.id, name: entry.name, section: entry.section,
+        ...(entry.sectionId ? { sectionId: entry.sectionId } : {}),
         held: computerControl.snapshot(teamComputerOwner(entry.id)).held,
         state: boatLifecycleBusyBots.has(teamComputerOwner(entry.id)) ? "working" : machine?.state ?? (inventory.available ? "missing" : "unavailable"),
         ...(entry.problem || inventory.problem ? { problem: entry.problem || inventory.problem! } : {})
@@ -26299,7 +26309,14 @@ const ruleRequests = new RuleRequestService({
 });
 const teamSetupTeams = () => [...new Set(["", ...readSections(), ...store.bots.map((bot) => sectionKey(bot.section)), ...store.groups.map((group) => sectionKey(group.section))])];
 const teamSetupRequests = new TeamSetupRequestService({
-  store, teams: teamSetupTeams, canAccessTeam, covers: primaryCovers, sameOwner: primaryBotSameOwner, canPersist: proposalPersistence, maxBots: MAX_WORKSPACE_BOTS,
+  store, teams: teamSetupTeams,
+  canAccessTeam: (bot, name, sectionId) => {
+    const owner = effectiveBotOwner(bot);
+    const resolve = (label: string) => sectionChannels?.byNameForOwner(label, owner)?.id ?? null;
+    const targetId = sectionId ?? (name ? resolve(name) ?? undefined : undefined);
+    return canAccessTeam(bot, name, targetId, resolve);
+  },
+  covers: primaryCovers, sameOwner: primaryBotSameOwner, canPersist: proposalPersistence, maxBots: MAX_WORKSPACE_BOTS,
   // create_bot from a bot that is not a Primary Bot (server/bots/bot-creation.ts)
   mayCreateBots: (bot) => botCreationOffered(bot, ownerBotsReadOnly(bot)),
   autoApply: (botId, threadId, request) => teamSetupDirectSource(botId, threadId, request) !== null,
@@ -28244,7 +28261,7 @@ function roomPostEligibility(
   // boundary inside it, so its own bots post there.
   const outsider = oneOwnerRoom(group, bot) ? undefined : group.memberIds
     .map((id) => store.bot(id))
-    .find((member) => member && !canAccessBot(bot, member) && !coordinatorSupervises(member, bot));
+    .find((member) => member && !canAccessBot(bot, member) && !coordinatorSupervises(member, bot, resolveManagedNameFor(member)));
   if (outsider) {
     return {
       ok: false,
@@ -32300,7 +32317,12 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     peerInScope: (from, target) => peerInScope(from as unknown as BotRecord, target as unknown as BotRecord),
     archivedAgent: (bot) => archivedAgent(bot as unknown as BotRecord),
     teamSetupTeams,
-    canAccessTeam: (bot, name) => canAccessTeam(bot as unknown as BotRecord, name),
+    canAccessTeam: (bot, name, sectionId) => {
+      const owner = effectiveBotOwner(bot as unknown as BotRecord);
+      const resolve = (label: string) => sectionChannels?.byNameForOwner(label, owner)?.id ?? null;
+      const targetId = sectionId ?? (name ? resolve(name) ?? undefined : undefined);
+      return canAccessTeam(bot as unknown as BotRecord, name, targetId, resolve);
+    },
     orgOfferedEngines,
     consoleEngineAllowed,
     orgOwnAccountsOutsideList,
@@ -37461,9 +37483,18 @@ function botGrants(bot: { grants?: unknown; directGrants?: unknown; ownerUserId?
 }
 /** The shared section a room sits in (slice 4, section-channels.ts): only
  * its own conversation and rooms placed there with consent. */
-function roomSectionAccess(group: { id?: unknown; section?: unknown }): SectionAccess | null {
-  if (IDENTITY.kind !== "perspicax" || typeof group.section !== "string" || !group.section || typeof group.id !== "string") return null;
-  return sectionChannels?.accessForRoom(group.section, group.id) ?? null;
+function roomSectionAccess(group: { id?: unknown; section?: unknown; sectionId?: unknown }): SectionAccess | null {
+  if (IDENTITY.kind !== "perspicax" || typeof group.id !== "string" || !sectionChannels) return null;
+  if (typeof group.sectionId === "string" && group.sectionId.trim()) {
+    const byId = sectionChannels.accessForRoom(
+      typeof group.section === "string" ? group.section : "",
+      group.id,
+      group.sectionId,
+    );
+    if (byId) return byId;
+  }
+  if (typeof group.section !== "string" || !group.section) return null;
+  return sectionChannels.accessForRoom(group.section, group.id);
 }
 /** Owner and grants of a bot, for server/auth/authz.ts. Sections are personal:
  * a bot takes no access from one (the legacy shared sections became bot
@@ -37523,7 +37554,9 @@ function roomOfSubject(subject: PathSubject | null): GroupRecord | null {
 function mayPlaceRoomIn(auth: RequestAuth, sectionName: string): boolean {
   if (IDENTITY.kind !== "perspicax" || !sectionChannels) return false;
   orgSectionNames();
-  const record = sectionChannels.byName(sectionName);
+  const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
+  // #2045: the caller's own team with this name, never the first byName hit.
+  const record = sectionChannels.byNameForOwner(sectionName, owner) ?? sectionChannels.byName(sectionName);
   if (!record) return false;
   const viewer = authzViewerFor(auth);
   if (!viewer || viewer.orgAdmin) return true;
@@ -37543,12 +37576,13 @@ function roomSectionMoveRefusal(auth: RequestAuth, group: GroupRecord, next: unk
   const to = typeof next === "string" ? next.trim() : "";
   if (from === to) return null;
   orgSectionNames();
+  const me = viewer.principalId.trim().toLowerCase();
   for (const name of [from, to]) {
     if (!name) continue;
-    const record = sectionChannels.byName(name);
+    // #2045: prefer the viewer's own team when two people share the name.
+    const record = sectionChannels.byNameForOwner(name, me) ?? sectionChannels.byName(name);
     if (record && !canModerateSection(viewer, recordAccess(record))) return "only a moderator of both sections may move this room";
   }
-  const me = viewer.principalId.trim().toLowerCase();
   const someoneElse = (group.humanIds ?? []).some((entry) => {
     if (entry.startsWith("team:")) return true;
     return (entry.startsWith("user:") ? entry.slice(5) : entry).trim().toLowerCase() !== me;
@@ -37558,10 +37592,17 @@ function roomSectionMoveRefusal(auth: RequestAuth, group: GroupRecord, next: unk
 }
 /** After an allowed move (roomSectionMoveRefusal): the consent follows the
  * room, out of the section it left and into the one it entered. */
-function recordRoomMove(groupId: string, from: string, to: string): void {
+function recordRoomMove(groupId: string, from: string, to: string, fromId?: string | null, toId?: string | null): void {
   if (IDENTITY.kind !== "perspicax" || !sectionChannels || from === to) return;
-  if (from) sectionChannels.forgetRoomPlacement(from, groupId);
-  if (to) sectionChannels.recordRoomPlacement(to, groupId);
+  if (from) sectionChannels.forgetRoomPlacement(from, groupId, fromId);
+  if (to) sectionChannels.recordRoomPlacement(to, groupId, toId);
+}
+/** #2045: resolve a Primary Bot managed-section name against that bot's owner. */
+function resolveManagedNameFor(bot: { ownerUserId?: string } | null | undefined): ((name: string) => string | null) | undefined {
+  if (!sectionChannels || !bot) return undefined;
+  const owner = effectiveBotOwner(bot);
+  if (!owner) return undefined;
+  return (name: string) => sectionChannels.byNameForOwner(name, owner)?.id ?? null;
 }
 function listedBotVisible(bot: { id: string; ownerUserId?: unknown; directGrants?: unknown; grants?: unknown; section?: unknown }, viewerId: string | undefined): boolean {
   const facts = botFacts(bot);
@@ -38844,10 +38885,15 @@ function teamStorageKeyForAuth(auth: RequestAuth, sectionName: string): string {
   return teamStorageKeyFor(sectionName, owner);
 }
 
-function teamStorageForBot(bot: { section?: string; ownerUserId?: string } | null | undefined): { key: string; label: string } {
+function teamStorageForBot(bot: { section?: string; sectionId?: string; ownerUserId?: string } | null | undefined): { key: string; label: string } {
+  const owner = bot ? effectiveBotOwner(bot) : "";
+  // #2045: prefer the stamped section id so a rename never moves team data.
+  if (bot?.sectionId && sectionChannels) {
+    const byId = sectionChannels.byId(bot.sectionId);
+    if (byId) return { key: teamDataKey(byId.ownerPrincipalId, byId.id), label: byId.name };
+  }
   const name = sectionContextKey(bot?.section);
   if (!name) return { key: "", label: "General" };
-  const owner = bot ? effectiveBotOwner(bot) : "";
   const record = sectionChannels && owner ? sectionChannels.byNameForOwner(name, owner) : null;
   if (record) return { key: teamDataKey(record.ownerPrincipalId, record.id), label: record.name };
   return { key: name, label: sectionContextLabel(name) };
@@ -38878,14 +38924,33 @@ if (sectionChannels) {
   if (created) console.log(`sections: ${created} existing section(s) became private channels`);
   migrateSectionSharesToBotGrants(sectionChannels);
   // #2045: team instructions and memory move from name keys to owner/id.
+  // Skip a display name that more than one person holds: do not attach the
+  // leftover brief to the wrong owner.
   const resolveTeamOwner = (name: string) => {
-    const record = sectionChannels.byName(name);
-    return record ? { ownerPrincipalId: record.ownerPrincipalId, id: record.id } : null;
+    const matches = sectionChannels.list().filter((record) => record.name === name);
+    if (matches.length !== 1) return null;
+    const record = matches[0]!;
+    return { ownerPrincipalId: record.ownerPrincipalId, id: record.id };
   };
   const movedBriefs = migrateSectionContextKeys(resolveTeamOwner);
   const movedMemory = teamMemory.migrateSectionKeys(resolveTeamOwner);
-  if (movedBriefs || movedMemory) {
-    console.log(`sections: migrated team data to owner/id (${movedBriefs} brief(s), ${movedMemory} memory section(s))`);
+  // #2045: bot/group membership links move from display name to section id.
+  // #2045: never fall back to byName — two people may share a display name.
+  const movedLinks = store.migrateTeamSectionIds((name, owner) => {
+    const record = sectionChannels.byNameForOwner(name, owner);
+    return record ? record.id : null;
+  });
+  // Stamp sectionId onto team computers that still only hold a display name.
+  for (const computer of teamComputers.list()) {
+    if (!computer.section || computer.sectionId) continue;
+    // A name shared by two owners stays unstamped until assigned again.
+    const matches = sectionChannels.list().filter((record) => record.name === computer.section);
+    if (matches.length !== 1) continue;
+    try { teamComputers.assign(computer.id, computer.section, matches[0]!.id); }
+    catch { /* leave the legacy name assignment alone */ }
+  }
+  if (movedBriefs || movedMemory || movedLinks) {
+    console.log(`sections: migrated team data to owner/id (${movedBriefs} brief(s), ${movedMemory} memory section(s), ${movedLinks} membership link(s))`);
   }
   const channels = sectionChannels;
   ROUTES.push(createSectionChannelRoutes({
@@ -38898,11 +38963,11 @@ if (sectionChannels) {
       const result = store.setBotsSection([], name);
       return result.ok ? undefined : "the section could not be created";
     },
-    // #2045: rename/delete only the owner's bots for that team name.
-    renameSection: (record, nextName) => store.renameSectionForOwner(record.name, nextName, record.ownerPrincipalId, teamComputers),
+    // #2045: rename/delete only the owner's bots for that team id/name.
+    renameSection: (record, nextName) => store.renameSectionForOwner(record.name, nextName, record.ownerPrincipalId, teamComputers, record.id),
     deleteSection: (record) => {
-      if (teamComputers.forSection(record.name)) return "Unassign this section's computer before deleting it";
-      const error = store.deleteSectionForOwner(record.name, record.ownerPrincipalId);
+      if (teamComputers.forSection(record.name, record.id)) return "Unassign this section's computer before deleting it";
+      const error = store.deleteSectionForOwner(record.name, record.ownerPrincipalId, record.id);
       if (error) return error;
       const key = teamDataKey(record.ownerPrincipalId, record.id);
       try { clearSectionContext(key); } catch { /* leave disk as-is */ }
@@ -44523,25 +44588,37 @@ ROUTES.push(createSidebarSectionsRoutes({
   onSectionCreated: (section, auth) => {
     if (sectionChannels) sectionChannels.ensure(section, auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId());
   },
+  sectionIdFor: (section, auth) => {
+    if (!sectionChannels) return undefined;
+    const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
+    return sectionChannels.byNameForOwner(section, owner)?.id;
+  },
   bot: (id) => store.bot(id) ?? undefined,
   assertTeamComputerChangeIdle,
-  teamComputerForSection: (section) => teamComputers.forSection(section),
+  teamComputerForSection: (section, auth) => {
+    if (!sectionChannels || !auth) return teamComputers.forSection(section);
+    const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
+    const id = sectionChannels.byNameForOwner(section, owner)?.id;
+    return teamComputers.forSection(section, id);
+  },
   deleteSection: (section, auth) => {
     if (sectionChannels) {
       const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
-      return store.deleteSectionForOwner(section, owner) ?? null;
+      const id = sectionChannels.byNameForOwner(section, owner)?.id;
+      return store.deleteSectionForOwner(section, owner, id) ?? null;
     }
     return store.deleteSection(section) ?? null;
   },
   renameSection: (section, nextName, auth) => {
     if (sectionChannels) {
       const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
-      return store.renameSectionForOwner(section, nextName, owner, teamComputers) ?? null;
+      const id = sectionChannels.byNameForOwner(section, owner)?.id;
+      return store.renameSectionForOwner(section, nextName, owner, teamComputers, id) ?? null;
     }
     return store.renameSection(section, nextName, teamComputers) ?? null;
   },
-  updateTeamMembers: (section, addBotIds, removeBotIds) => store.updateTeamMembers(section, [...addBotIds], [...removeBotIds]),
-  setBotsSection: (botIds, name) => store.setBotsSection([...botIds], name),
+  updateTeamMembers: (section, addBotIds, removeBotIds, sectionId) => store.updateTeamMembers(section, [...addBotIds], [...removeBotIds], sectionId),
+  setBotsSection: (botIds, name, sectionId) => store.setBotsSection([...botIds], name, sectionId),
   wireBot,
   onSectionRemoved: (section, auth) => {
     const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
@@ -44549,7 +44626,15 @@ ROUTES.push(createSidebarSectionsRoutes({
   },
   onSectionRenamed: (from, to, auth) => {
     const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
+    const id = sectionChannels?.byNameForOwner(from, owner)?.id
+      ?? sectionChannels?.byNameForOwner(to, owner)?.id;
     sectionChannels?.rename(from, to, owner);
+    if (id) {
+      try { renamePublishedTeam(from, to, id); }
+      catch (error) {
+        console.warn(`[teams] Could not move the shared-package record for this team: ${(error as Error).message}`);
+      }
+    }
   },
 }));
 ROUTES.push(createTeamMemoryHttpRoutes({
@@ -44574,7 +44659,12 @@ ROUTES.push(createTeamComputersRoutes({
   listPayload: teamComputersPayload,
   get: (id) => teamComputers.get(id),
   create: (name, requestId) => teamComputers.create(name, requestId),
-  assign: (id, section) => teamComputers.assign(id, section),
+  assign: (id, section, sectionId) => teamComputers.assign(id, section, sectionId),
+  resolveSectionId: (section, auth) => {
+    if (!sectionChannels || section === null || section === "") return undefined;
+    const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
+    return sectionChannels.byNameForOwner(section, owner)?.id;
+  },
   setProblem: (id, problem) => teamComputers.setProblem(id, problem),
   sections: () => store.sections,
   sectionKey,
@@ -44993,8 +45083,18 @@ ROUTES.push(createGroupsHttpRoutes({
   drainQueuedChannelSends,
   profileName: () => cfg.profile?.name?.trim() || "User"
 }));
+/** #2045: resolve (and ensure) the caller's team channel id for a display name. */
+function resolveSectionId(section: string, auth: RequestAuth, bot?: { ownerUserId?: string }): string | undefined {
+  if (!sectionChannels) return undefined;
+  const owner = bot?.ownerUserId?.trim()
+    || (auth.kind === "session" ? auth.session.principalId?.trim() || "" : "")
+    || localPrincipalId();
+  if (!owner) return undefined;
+  return sectionChannels.ensure(section.trim(), owner).id;
+}
 ROUTES.push(createBotsCoreRoutes({
   store,
+  resolveSectionId,
   cfg,
   identity: IDENTITY,
   desktopManaged: DESKTOP_MANAGED,
@@ -45641,6 +45741,7 @@ ROUTES.push(createBotObservabilityRoutes({ store, DATA_DIR, EVENTS_DIR, ownerOrA
 ROUTES.push(createFleetRoutes({ entitled, fleetSocketPath, fleetAvailable, fleetRequest }));
 ROUTES.push(createBotSecretCardRoutes({ getConfig: () => cfg, provideSecretFromPhone, secretMessage, phoneSecretSubmissions, phoneSecretSubmissionKey, resumeSecretCard, currentSecretState }));
 ROUTES.push(createBotsMutateRoutes({
+  resolveSectionId,
   originApprovals,
   ADMIN_APPROVAL_REQUIRED,
   BOTS_READ_ONLY,

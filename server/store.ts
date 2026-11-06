@@ -11,6 +11,7 @@ import { commitBotChange, keptRevocation, saveBotsFor } from "./bots/bots-save.t
 import { applyHumanIds } from "./rooms/channel-membership.ts";
 import { parseToolScope, toolScopeWidens } from "../shared/tool-scope.ts";
 import { ensureSections, readSections, changeEmptySection } from "./rooms/section-context.ts";
+import { isSectionId, migrateSectionLinks, sameTeamLink } from "./rooms/section-link.ts";
 import type { TeamComputers } from "./computer/team-computers.ts";
 import { removeBotFolder, soulFile, soulHash, writeSoulMirror } from "./bots/bot-folder.ts";
 import { cleanTemporaryAgent, type TemporaryAgent } from "./temporary-agents.ts";
@@ -1486,46 +1487,78 @@ export class Store {
   }
 
   /** #2045: rename one person's team without touching another person's bots
-   * that share the same display name. */
-  renameSectionForOwner(name: string, nextName: string, ownerKey: string, computers?: TeamComputers): string | undefined {
+   * that share the same display name. When `sectionId` is set, membership
+   * follows that id so a rename only rewrites the displayed name. */
+  renameSectionForOwner(
+    name: string,
+    nextName: string,
+    ownerKey: string,
+    computers?: TeamComputers,
+    sectionId?: string,
+  ): string | undefined {
     if (!name) return "No such team";
     const wanted = nextName.trim();
     if (!wanted || wanted.length > 60 || [...wanted].some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) {
       return "Team name must be 1 to 60 characters without control characters";
     }
     if (name === wanted) return undefined;
-    if (computers?.forSection(wanted)) return "A team with that name already exists";
+    // #2045: another person's same display name (or their computer) is fine.
+    // Only refuse when this team's own rename would collide with a different
+    // computer already labeled `wanted` without a distinct section id.
+    const computerConflict = computers?.list().some((entry) => {
+      if (entry.section === null || entry.section !== wanted) return false;
+      if (sectionId && entry.sectionId === sectionId) return false;
+      if (sectionId && entry.sectionId) return false;
+      return true;
+    });
+    if (computerConflict) return "A team with that name already exists";
     const owner = ownerKey.trim().toLowerCase();
-    const members = this.bots.filter((bot) => sectionKey(bot.section) === name && this.botOwnerKey(bot) === owner);
+    const link = { name, id: sectionId };
+    const members = this.bots.filter((bot) => sameTeamLink(bot, link) && this.botOwnerKey(bot) === owner);
     const rooms = this.groups.filter((group) => {
-      if (sectionKey(group.section) !== name) return false;
+      if (!sameTeamLink(group, link)) return false;
       const bots = group.memberIds.map((id) => this.bot(id)).filter((bot): bot is BotRecord => Boolean(bot));
       return bots.every((bot) => this.botOwnerKey(bot) === owner);
     });
+    const managedHit = (bot: BotRecord) => Boolean(bot.managedSections?.some((entry) => {
+      const value = sectionKey(entry);
+      if (sectionId && (value === sectionId || (isSectionId(value) && value === sectionId))) return true;
+      return value === name;
+    }));
     const affected = this.bots.filter((bot) => this.botOwnerKey(bot) === owner && (
-      members.includes(bot) || bot.managedSections?.some((section) => sectionKey(section) === name)
+      members.includes(bot) || managedHit(bot)
     ));
     if (affected.some((bot) => bot.busy || bot.tasks?.some((task) => task.busy)) || rooms.some((group) => group.busyBotId)) {
       return "Stop this team's active work before renaming the team";
     }
     const nextBots = this.bots.map((bot) => ({
       ...bot,
-      ...(members.includes(bot) ? { section: wanted } : {}),
+      // Keep sectionId; only the displayed name moves.
+      ...(members.includes(bot) ? { section: wanted, ...(sectionId ? { sectionId } : {}) } : {}),
       ...(bot.managedSections && this.botOwnerKey(bot) === owner
-        ? { managedSections: [...new Set(bot.managedSections.map((section) => sectionKey(section) === name ? wanted : section))] }
+        ? {
+          managedSections: [...new Set(bot.managedSections.map((entry) => {
+            const value = sectionKey(entry);
+            if (sectionId && value === sectionId) return entry;
+            if (value === name && !isSectionId(value)) return wanted;
+            return entry;
+          }))],
+        }
         : {}),
     }));
-    const nextGroups = this.groups.map((group) => (rooms.includes(group) ? { ...group, section: wanted } : group));
+    const nextGroups = this.groups.map((group) => (
+      rooms.includes(group) ? { ...group, section: wanted, ...(sectionId ? { sectionId } : {}) } : group
+    ));
     try {
       this.saveBots(nextBots, false);
       this.saveGroups(nextGroups, false);
+      computers?.renameSection(name, wanted, sectionId);
       this.rememberSections([wanted]);
-      // In-memory bots still hold the old names until Object.assign below;
-      // judge remaining use from the written next* records.
-      const stillUsedAfter = nextBots.some((bot) => sectionKey(bot.section) === name)
+      // Name-only leftovers (another person's same display name) keep the registry entry.
+      const nameStillHeld = nextBots.some((bot) => sectionKey(bot.section) === name)
         || nextGroups.some((group) => sectionKey(group.section) === name)
-        || Boolean(computers?.forSection(name));
-      if (!stillUsedAfter && this.sections.includes(name)) changeEmptySection(name, null);
+        || Boolean(computers?.forSection(name, sectionId));
+      if (!nameStillHeld && this.sections.includes(name)) changeEmptySection(name, null);
     } catch (error) {
       this.saveBots(this.bots, false);
       this.saveGroups(this.groups, false);
@@ -1540,26 +1573,34 @@ export class Store {
   }
 
   /** #2045: delete one person's team; another person's same-named team stays. */
-  deleteSectionForOwner(name: string, ownerKey: string): string | undefined {
+  deleteSectionForOwner(name: string, ownerKey: string, sectionId?: string): string | undefined {
     if (!name) return "No such team";
     const owner = ownerKey.trim().toLowerCase();
-    const members = this.bots.filter((bot) => sectionKey(bot.section) === name && this.botOwnerKey(bot) === owner);
+    const link = { name, id: sectionId };
+    const members = this.bots.filter((bot) => sameTeamLink(bot, link) && this.botOwnerKey(bot) === owner);
     const rooms = this.groups.filter((group) => {
-      if (sectionKey(group.section) !== name) return false;
+      if (!sameTeamLink(group, link)) return false;
       const bots = group.memberIds.map((id) => this.bot(id)).filter((bot): bot is BotRecord => Boolean(bot));
       return bots.every((bot) => this.botOwnerKey(bot) === owner);
     });
     if (members.some((bot) => bot.busy || bot.tasks?.some((task) => task.busy)) || rooms.some((group) => group.busyBotId)) {
       return "Stop this team's active work before deleting the team";
     }
+    const clearManaged = (entry: string) => {
+      const value = sectionKey(entry);
+      if (sectionId && value === sectionId) return false;
+      return value !== name;
+    };
     const nextBots = this.bots.map((bot) => ({
       ...bot,
-      ...(members.includes(bot) ? { section: undefined } : {}),
+      ...(members.includes(bot) ? { section: undefined, sectionId: undefined } : {}),
       ...(bot.managedSections && this.botOwnerKey(bot) === owner
-        ? { managedSections: bot.managedSections.filter((section) => sectionKey(section) !== name) }
+        ? { managedSections: bot.managedSections.filter(clearManaged) }
         : {}),
     }));
-    const nextGroups = this.groups.map((group) => (rooms.includes(group) ? { ...group, section: undefined } : group));
+    const nextGroups = this.groups.map((group) => (
+      rooms.includes(group) ? { ...group, section: undefined, sectionId: undefined } : group
+    ));
     try {
       this.saveBots(nextBots);
       this.saveGroups(nextGroups);
@@ -1577,6 +1618,30 @@ export class Store {
     for (const group of rooms) this.emit({ type: "group", groupId: group.id });
     this.emit({ type: "sections" });
     return undefined;
+  }
+
+  /** #2045: stamp sectionId on bots/groups from the owner's section channel.
+   * Display names and managedSections stay as names. Returns how many
+   * records gained an id. */
+  migrateTeamSectionIds(
+    resolve: (name: string, ownerPrincipalId: string) => string | null,
+  ): number {
+    const bots = migrateSectionLinks(this.bots, (bot) => this.botOwnerKey(bot), resolve);
+    const groups = migrateSectionLinks(this.groups, (group) => {
+      const owner = typeof group.ownerId === "string" ? group.ownerId
+        : typeof group.createdBy === "string" ? group.createdBy
+        : "";
+      if (owner.trim()) return owner;
+      const member = group.memberIds.map((id) => this.bot(id)).find(Boolean);
+      return member ? this.botOwnerKey(member) : "";
+    }, resolve);
+    const moved = bots.moved + groups.moved;
+    if (!moved) return 0;
+    this.saveBots(bots.next, false);
+    this.saveGroups(groups.next, false);
+    for (let i = 0; i < bots.next.length; i++) Object.assign(this.bots[i], bots.next[i]);
+    for (let i = 0; i < groups.next.length; i++) Object.assign(this.groups[i], groups.next[i]);
+    return moved;
   }
 
   // ── groups ────────────────────────────────────────────────────────────
@@ -1673,7 +1738,7 @@ export class Store {
     );
   }
 
-  patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "humanIds" | "defaultResponder" | "bulletin" | "unread" | "lastReadMessageId" | "pinned" | "busyBotId" | "cwd" | "pinnedMessageId" | "section" | "setupCompletedAt" | "setupSkippedAt" | "audienceFloor" | "installedPackage" | "createdBy" | "peopleDm" | "unreadFor" | "memoryEnabled" | "turnTimeoutMinutes" | "tasks" | "mentionAll" | "botPayers" | "archivedAt">>): GroupRecord | null {
+  patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "humanIds" | "defaultResponder" | "bulletin" | "unread" | "lastReadMessageId" | "pinned" | "busyBotId" | "cwd" | "pinnedMessageId" | "section" | "sectionId" | "setupCompletedAt" | "setupSkippedAt" | "audienceFloor" | "installedPackage" | "createdBy" | "peopleDm" | "unreadFor" | "memoryEnabled" | "turnTimeoutMinutes" | "tasks" | "mentionAll" | "botPayers" | "archivedAt">>): GroupRecord | null {
     const group = this.group(id);
     if (!group) return null;
     if (Object.prototype.hasOwnProperty.call(patch, "humanIds")) {
@@ -2306,7 +2371,7 @@ export class Store {
     profile: Partial<
       Pick<
         BotRecord,
-        "name" | "title" | "description" | "soul" | "color" | "mascotExpression" | "mascotBody" | "mascotSkin" | "modelSelection" | "section" | "cwd" | "visibility" | "ownerUserId" | "toolScope" | "temporary" | "createdByBot"
+        "name" | "title" | "description" | "soul" | "color" | "mascotExpression" | "mascotBody" | "mascotSkin" | "modelSelection" | "section" | "sectionId" | "cwd" | "visibility" | "ownerUserId" | "toolScope" | "temporary" | "createdByBot"
       >
     > = {},
     opts: {
@@ -2320,6 +2385,7 @@ export class Store {
     this.rememberSections([profile.section]);
     const name = profile.name?.trim() || pickBotName(this.bots.map((b) => b.name));
     const section = sectionKey(profile.section);
+    const sectionId = profile.sectionId?.trim() && isSectionId(profile.sectionId) ? profile.sectionId.trim() : undefined;
     const startMode = this.newBotApprovalMode();
     const bot: BotRecord = {
       id: newId(),
@@ -2352,6 +2418,7 @@ export class Store {
       ...(profile.createdByBot ? { createdByBot: { ...profile.createdByBot } } : {}),
     };
     if (section) bot.section = section;
+    if (section && sectionId) bot.sectionId = sectionId;
     if (profile.cwd) bot.cwd = profile.cwd;
     bot.tasks = [{
       threadId: bot.threadId,
@@ -2687,17 +2754,23 @@ export class Store {
   setBotsSection(
     botIds: string[],
     section: string,
+    /** #2045: stable team id; when set, stored beside the display name. */
+    sectionId?: string,
   ): { ok: true; bots: BotRecord[] } | { ok: false; reason: "unavailable" } {
     const ids = [...new Set(botIds)];
     const targets = ids.map((id) => this.bot(id));
     if (targets.some((bot) => !bot || bot.hidden)) return { ok: false, reason: "unavailable" };
 
     const targetSection = sectionKey(section);
+    const targetId = sectionId?.trim() && isSectionId(sectionId) ? sectionId.trim() : undefined;
     const selected = targets as BotRecord[];
 
     const patches = new Map<string, Partial<BotRecord>>();
     for (const bot of selected) {
-      patches.set(bot.id, { section: targetSection || undefined });
+      patches.set(bot.id, {
+        section: targetSection || undefined,
+        sectionId: targetSection ? targetId : undefined,
+      });
     }
 
     const changedIds = new Set<string>();
@@ -2721,20 +2794,26 @@ export class Store {
   }
 
   /** Apply only the membership edits the user made, in one bots-file write. */
-  updateTeamMembers(section: string, addIds: string[], removeIds: string[]):
+  updateTeamMembers(section: string, addIds: string[], removeIds: string[], sectionId?: string):
     { ok: true; bots: BotRecord[] } | { ok: false; reason: "unavailable" | "membership-changed" } {
     const key = sectionKey(section);
     if (!key || !this.sections.includes(key)) return { ok: false, reason: "unavailable" };
+    const targetId = sectionId?.trim() && isSectionId(sectionId) ? sectionId.trim() : undefined;
+    const link = { name: key, id: targetId };
     const adds = new Set(addIds), removes = new Set(removeIds);
     const ids = new Set([...adds, ...removes]);
     for (const id of ids) {
       const bot = this.bot(id);
       if (!bot || bot.hidden) return { ok: false, reason: "unavailable" };
       if (adds.has(id) && removes.has(id)) return { ok: false, reason: "membership-changed" };
-      if (removes.has(id) && sectionKey(bot.section) !== key) return { ok: false, reason: "membership-changed" };
+      if (removes.has(id) && !sameTeamLink(bot, link)) return { ok: false, reason: "membership-changed" };
     }
-    const next = this.bots.map(bot => ids.has(bot.id)
-      ? { ...bot, section: adds.has(bot.id) ? key : undefined } : bot);
+    const next = this.bots.map((bot) => {
+      if (!ids.has(bot.id)) return bot;
+      if (adds.has(bot.id)) return { ...bot, section: key, ...(targetId ? { sectionId: targetId } : {}) };
+      // Explicit undefined so the in-memory Object.assign below clears both keys.
+      return { ...bot, section: undefined, sectionId: undefined };
+    });
     if (ids.size) {
       this.saveBots(next);
       for (let i = 0; i < next.length; i++) if (ids.has(next[i].id)) Object.assign(this.bots[i], next[i]);

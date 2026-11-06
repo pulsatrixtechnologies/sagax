@@ -273,29 +273,8 @@ import {
   liveSettingsFor,
   liveCallKey,
   newRoutinesPaused,
-  changedInstanceIds,
-  foldGrokVoiceKeyPatch,
-  grokVoiceKeyFoldMessage,
-  maxConcurrentBotThreads,
-  maxParallelTasksPerPerson,
-  threadEventLogRetentionDays,
-  showToolCallsEnabled,
-  templatesEnabled,
-  vpsComputerEnabled,
-  boatComputerEnabled,
-  decisionModelEnabled,
-  dataWindowEnabled,
-  routineGroupSettingsEnabled,
   skillReviewEnabled,
-  skillReviewSteps,
-  browserProfileReplacementConflict,
-  browserProfilePartitionTarget,
-  syncCredentialEnv,
-  vpsSshAlias,
-  CLAUDE_API_INSTANCE,
-  mergeOpenCodeProviderKeys,
-  openCodeProviderKeys,
-  isCompatServerId
+  skillReviewSteps
 } from "./config.ts";
 import { claudeUserSkillsEnabled } from "./turn-settings.ts";
 import { sweepThreadEventLogsPaced, type ThreadLogRetentionCandidate } from "./threads/thread-retention.ts";
@@ -395,15 +374,10 @@ import {
   routineRunTitle,
   summarize,
   type Notification,
-  buildNoticeNotification,
-  quietForCall
+  buildNoticeNotification
 } from "./notify.ts";
 import {
-  describeAllowRule,
-  approvalPlain,
-  describeApproval,
-  mcpAllowKey,
-  parseToolId
+  describeAllowRule
 } from "../shared/approval-describe.ts";
 import { createMcpServersHost } from "./host/mcp-servers-host.ts";
 import { ComputerAppReader } from "./computer/computer-app.ts";
@@ -661,15 +635,8 @@ import {
   resolvedSkillFiles,
   expandSkillCommandTurnText,
   skillCommandInline,
-  applyStagedSkillWrite,
-  getStagedSkillWrite,
-  listBotSkillsWithOrigin,
-  parseSkillMd,
-  isSkillName,
   stageSkillWrite,
-  applySkillWriteWithReceipt,
-  syncSkillLinks,
-  undoSkillWrite
+  applySkillWriteWithReceipt
 } from "./skills/skills.ts";
 import {
   expandNativeSkillCommand,
@@ -1432,7 +1399,7 @@ import { createAdminActivityRoutes } from "./routes/admin-activity.ts";
 import { createInstancesRoutes } from "./routes/instances.ts";
 import { createCliTestRoutes } from "./routes/cli-test.ts";
 import { createMcpServersHttpRoutes } from "./routes/mcp-servers-http.ts";
-import { createConfigHttpRoutes, type ConfigWriteContext } from "./routes/config-http.ts";
+import { createConfigHttpRoutes } from "./routes/config-http.ts";
 import { reportBackgroundError } from "./background-error.ts";
 import { installMainRuntimeEventSubscriber } from "./runtime-events/dispatcher.ts";
 import { createApplyConfigHttpPatch } from "./routes/config-http-patch.ts";

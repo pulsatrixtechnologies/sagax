@@ -315,7 +315,7 @@ describe("scopes", () => {
   });
 
   it("lets the owner's paired phone switch memory, permissions and access (Lot 1)", () => {
-    expect(companionBotFieldViolation({ memoryEnabled: false, memoryUpkeep: true, name: "Scout", soul: "x", modelSelection: {} })).toBeNull();
+    expect(companionBotFieldViolation({ memoryEnabled: false, memoryUpkeep: true, helperModel: false, name: "Scout", soul: "x", modelSelection: {} })).toBeNull();
     // the voice notes switch of the bot panel (row BA11)
     expect(companionBotFieldViolation({ voiceNotes: false })).toBeNull();
     // Lot 1: Permissions / Approval / Proactive / Access from the phone

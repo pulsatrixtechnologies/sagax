@@ -472,6 +472,7 @@ import { createBackgroundBriefRoutes } from "./routes/background-brief.ts";
 import { briefMessageText, briefNoticeLines, startBriefTimer } from "./proactive/background-brief-schedule.ts";
 import { createMemoryUpkeep, upkeepEnabled } from "./memory/memory-upkeep.ts";
 import { createSkillReview, turnToolSteps } from "./skills/skill-review.ts";
+import { createSideJobs, helperSelection } from "./side-jobs.ts";
 import { CompanyMemoryCache, companyTextForBots } from "./memory/memory-company.ts";
 import { COMPANY_TOPIC } from "./memory/memory-dream.ts";
 import { procedureSignal, recordProcedure } from "./memory/memory-procedures.ts";
@@ -17909,40 +17910,30 @@ bus.subscribe((event: RuntimeEvent) => {
   }
 });
 
+// Small writing jobs (server/side-jobs.ts): the compaction summary and memory
+// upkeep ask here for their one-off text call. A bot's own engine writes
+// whenever it can (an engine the organisation disallows never receives the
+// text); the optional helper model (config `helper`, SAGAX_HELPER_INSTANCE)
+// writes for a bot whose engine cannot. Sagax has no automatic skill-review
+// job yet, so that resolver job is unused here.
+const sideJobs = createSideJobs({
+  bot: (botId) => store.bot(botId),
+  instance: (instanceId) => registry.get(instanceId),
+  refusal: (instance) => policyModelRefusal(instance),
+  // read from the file as it is now, like the sign-in list: a helper removed from config.json stops being used at once
+  helper: cacheUntilConfigChanges((config) => helperSelection(config)),
+  ...(hostedModels ? { modelAllowed: (selection: ModelSelection) => hostedModels.allows(selection) } : {}),
+  assertWithinBudget: () => assertWithinBudget(cfg, DATA_DIR),
+  book: bookTurnUsage,
+  log: (line) => console.log(line),
+});
+
 // Memory upkeep (server/memory/memory-upkeep.ts): background capture, About me
 // suggestions and the nightly tidy-up, for bots with the switch on.
 const memoryUpkeep = createMemoryUpkeep({
   bots: () => store.bots,
   bot: (id) => store.bot(id) ?? undefined,
-  engine: (botId) => {
-    const bot = store.bot(botId);
-    const instance = bot ? registry.get(bot.modelSelection.instanceId) : undefined;
-    // an engine the organisation disallows never receives memory text
-    if (!bot || !instance || policyModelRefusal(instance)) return null;
-    // generateMemoryText: the ACP engines' and Codex's background-only one-shot, on their own provider
-    const generate = (instance.generateText ?? instance.generateMemoryText)?.bind(instance);
-    return generate ? {
-      generateText: async (prompt, options) => {
-        // Check every capture, organize and contradiction call, including
-        // consecutive calls within one upkeep pass.
-        assertWithinBudget(cfg, DATA_DIR);
-        const threadId = `memory-${randomUUID()}`;
-        return generate(prompt, { ...options, onUsage: (usage) => bookTurnUsage({
-          botId: bot.id,
-          botName: bot.name,
-          threadId,
-          instanceId: instance.instanceId,
-          driverKind: instance.driverKind,
-          model: usage.model,
-          input: usage.input ?? 0,
-          output: usage.output ?? 0,
-          ...(usage.cachedInput !== undefined ? { cachedInput: usage.cachedInput } : {}),
-          costUsd: usage.costUsd ?? null,
-          trigger: { kind: "bot", botId: bot.id }
-        }, usage.input !== undefined && usage.output !== undefined, bot.threadId) });
-      }
-    } : {};
-  },
+  engine: (botId) => sideJobs.text("memory", botId),
   busy: (botId) => botHasActiveTurn(botId),
   addToAboutMe: (from, texts) => {
     const current = cfg.profile?.aboutMe ?? "";
@@ -22879,7 +22870,7 @@ async function compactConversation(input: {
   const controller = new AbortController();
   compactionControllers.set(threadId, { generation, controller });
   try {
-    const summary = await draftSummary(fold.folded, { signal: controller.signal, generateText: instance.generateText?.bind(instance) });
+    const summary = await draftSummary(fold.folded, { signal: controller.signal, generateText: sideJobs.text("compaction", bot.id, { instance })?.generateText });
     if (!directTurnClaimIsCurrent(bot.id, generation, threadId)) throw new DirectTurnSetupCancelled("context summarization stopped");
     controller.signal.throwIfAborted();
     // Appended teammate results remain after the fold. A changed prefix is
@@ -43288,6 +43279,7 @@ const orgBotsDeps: BotsDeps = {
       ...(source.loopGuard !== undefined ? { loopGuard: source.loopGuard } : {}),
       ...(storedTeamMemorySharing(source) ? { teamMemorySharing: "private" as const } : {}),
       ...(source.memoryUpkeep !== undefined ? { memoryUpkeep: source.memoryUpkeep } : {}),
+      ...(source.helperModel !== undefined ? { helperModel: source.helperModel } : {}),
       ...(source.browser !== undefined ? { browser: source.browser } : {}),
       ...(source.computer !== undefined ? { computer: source.computer } : {}),
       ...(source.toolScope !== undefined ? { toolScope: structuredClone(source.toolScope) } : {}),

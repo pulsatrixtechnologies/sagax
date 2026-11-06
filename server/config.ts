@@ -19,10 +19,10 @@ import { newBotDefaultsSchema, type NewBotDefaults } from "./bots/new-bot-defaul
 import { loopDetectorConfigSchema, type LoopDetectorConfig } from "./safety/loop-detector.ts";
 import { loopGuardConfigSchema, type LoopGuardConfig } from "./host/loop-guard.ts";
 import { EFFORT_LEVELS, type LiveSettings } from "../shared/wire.ts";
-import { isModelVariant, type InstanceConfigMap, type ModelSelection } from "./contracts.ts";
+import { isModelVariant, type InstanceConfigMap, type McpServerSpec, type ModelSelection } from "./contracts.ts";
 import { DEFAULT_WINDOW_MINUTES, MAX_WINDOW_MINUTES } from "./cache-keepwarm.ts";
 import { PROVIDER_ICON_PRESETS, providerIconError } from "../shared/provider-icon.ts";
-import type { McpServerSpec } from "./contracts.ts";
+import { helperStoredShape, type HelperConfig } from "./side-jobs.ts";
 import type { MailSettings } from "./mail/mail-config.ts";
 import { isRemoteMcpServer, mcpServerServes, parseStoredMcpServer, reservedMcpServerLog, reservedMcpServerName } from "./mcp/mcp-registry.ts";
 import { parseJson, schemaIssue, type JsonObject, type JsonValue } from "./schema.ts";
@@ -802,7 +802,7 @@ const appConfigSchema = z.object({
    * still holds `claudeAi: false` keeps loading (the value is ignored). */
   harnessConnectors: z.object({ claudeAi: z.boolean().optional() }).strict().optional(),
 });
-const storedAppConfigSchema = appConfigSchema.extend({
+const storedAppConfigSchema = appConfigSchema.extend(helperStoredShape).extend({
   browserProfiles: storedBrowserProfilesSchema.optional(),
   /** Read loosely, like mcpServers: a hand-edited provider key that isn't
    * text is dropped here, and a bad name or key later
@@ -818,7 +818,7 @@ const appConfigPatchSchema = appConfigSchema.omit({ instances: true, mcpServers:
   .extend({ threads: threadsPatchSchema.optional() });
 const jsonObjectSchema = z.record(z.string(), z.json());
 
-export interface AppConfig {
+export interface AppConfig extends HelperConfig {
   customDomain?: string;
   signIn?: { admins?: string[]; members?: string[] };
 

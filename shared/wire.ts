@@ -410,6 +410,11 @@ export interface WireBotConversation {
   running?: boolean;
 }
 
+/** Fails closed: only an absent switch or a strict true allows the helper
+ * model; a hand-edited "false" or 0 reads as never (server/side-jobs.ts). */
+export const helperModelAllowed = (bot: { helperModel?: unknown }): boolean =>
+  bot.helperModel === undefined || bot.helperModel === true;
+
 export interface WireBot {
   waitingForTeammates?: boolean;
   /** Bot-to-bot conversations this viewer may read, both ends. Absent: none. */
@@ -600,6 +605,9 @@ export interface WireBot {
    * tidies nightly. On unless explicitly false; every change is journaled
    * and can be undone. */
   memoryUpkeep?: boolean;
+  /** false: the workspace's helper model never writes this bot's background
+   * texts (server/side-jobs.ts). Absent or true: allowed. */
+  helperModel?: boolean;
   /** Prompt-cache keep-warm for this bot's Claude threads: true or false
    * overrides the workspace setting (Settings → Engines); absent follows it. */
   cacheKeepWarm?: boolean;

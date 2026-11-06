@@ -224,6 +224,8 @@ describe("usage summaries", () => {
     expect(triggerKey({ kind: "user", email: "Ada@Example.test" })).toBe("user:ada@example.test");
     expect(triggerKey({ kind: "user" })).toBe("user:unknown");
     expect(triggerLabel({ kind: "routine" })).toBe("Routine: unknown");
+    expect(triggerKey({ kind: "helper", botId: "pi", job: "memory" })).toBe("helper");
+    expect(triggerLabel({ kind: "helper", botId: "pi", job: "memory" })).toBe("Helper model");
   });
 
   it("exports spreadsheet-safe CSV with one line per turn", () => {

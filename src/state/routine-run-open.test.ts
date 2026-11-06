@@ -68,13 +68,14 @@ describe("opening a routine run", () => {
     host.remove();
   });
 
-  it("offers View run for a run whose execution thread is gone (a deleted routine reads)", () => {
+  it("offers Details for a run whose execution thread is gone (a deleted routine reads)", () => {
     const host = document.createElement("div");
     const root = createRoot(host);
     const message = report();
     message.routineRun = { ...message.routineRun!, executionThreadId: undefined };
     flushSync(() => root.render(createElement(RoutineRunCard, { message, onOpen: () => {} })));
-    expect(host.textContent).toContain("View run");
+    expect(host.textContent).toContain("Details");
+    expect(host.textContent).not.toContain("View run");
     root.unmount();
   });
 

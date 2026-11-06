@@ -14,7 +14,7 @@ import { ACTION_LABEL_MAIN, ActionBar, ActionButton, actionButtonClass } from ".
 import { canRunRoutineNow, routineRunInFlight, RunNowButton } from "../routines/RunNowButton";
 import { clearRoutineRuns, RoutineDetail } from "../routines/RoutineDetail";
 import { useConfirm } from "../ConfirmProvider";
-import { PanelPageHeader as RoutineDetailHeader } from "./PanelPage";
+import { PanelPageHeader as RoutineDetailHeader, PanelPageLayer } from "./PanelPage";
 
 export { RoutineDetailHeader };
 
@@ -61,7 +61,7 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
   if (detail) {
     const canRun = canRunRoutineNow(state.config, detail, bot);
     const inFlight = Boolean(routineRunInFlight(state.routineRuns, detail.id));
-    return <div className="absolute inset-0 z-20 flex flex-col bg-panel">
+    return <PanelPageLayer><div data-routine-panel-page className="absolute inset-0 z-20 flex flex-col bg-panel">
       <RoutineDetailHeader
         name={detail.name}
         onBack={() => setDetailId(null)}
@@ -100,7 +100,7 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
       />
       {editing && editing !== "new" && !("copyOf" in editing) && <RoutineEditor key={detail.id} routine={detail} mode={editMode} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} presentation="panel" onClose={() => setEditing(null)} onDismiss={closePanel} onDeleted={() => { setEditing(null); setDetailId(null); }} onDuplicate={(routine) => setEditing({ copyOf: routine })} />}
       {editing && editing !== "new" && "copyOf" in editing && <RoutineEditor key={`${detail.id}-copy`} copyOf={editing.copyOf} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} folder={detail.folder} presentation="panel" onClose={() => setEditing(null)} onDismiss={closePanel} />}
-    </div>;
+    </div></PanelPageLayer>;
   }
 
   // No routine and nothing pending: no section, one quiet line. Asking the bot
@@ -133,11 +133,11 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
       onCreateIn={(folder) => { setNewFolder(folder); setEditing("new"); }}
       onDuplicate={(routine) => setEditing({ copyOf: routine })} />
     {(editing === "new" || (editing && "copyOf" in editing)) && (
-      <div className="absolute inset-0 z-30 min-h-[24rem]">
+      <PanelPageLayer><div className="absolute inset-0 z-30 min-h-[24rem]">
         {editing === "new"
           ? <RoutineEditor key={`${bot.id}-new-${newFolder ?? ""}`} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} folder={newFolder} presentation="panel" onClose={() => { setEditing(null); setNewFolder(undefined); }} onDismiss={() => { setNewFolder(undefined); closePanel(); }} />
           : <RoutineEditor key={`${"copyOf" in editing ? editing.copyOf.id : ""}-copy`} copyOf={"copyOf" in editing ? editing.copyOf : undefined} bots={[bot]} lockedBotId={bot.id} defaultRunOn={defaultRunOn} presentation="panel" onClose={() => setEditing(null)} onDismiss={closePanel} />}
-      </div>
+      </div></PanelPageLayer>
     )}
   </div>;
 }

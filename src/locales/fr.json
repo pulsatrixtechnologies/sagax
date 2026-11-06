@@ -12573,6 +12573,7 @@
   "routineRun.stepsUnavailable": "Aucune étape n'a été conservée pour cette exécution.",
   "routineRun.configuration": "Configuration",
   "routineRun.stop": "Arrêter",
+  "routineRun.details": "Détails",
   "routineRun.runAgain": "Relancer",
   "routineRun.continue": "Continuer dans la conversation",
   "routineRun.openRoutine": "Routine",

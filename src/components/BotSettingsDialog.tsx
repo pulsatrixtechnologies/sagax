@@ -9,7 +9,7 @@ import { botRoutineRuns } from "@/state/view-slices";
 // under bot-settings/; their bodies and reads are useBotSectionContent, shared
 // with the persona editor. Activity > Computer opens the live desktop
 // window directly (SandboxDesktopModal); other links may still open ComputerPanel.
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BOT_PANEL_BOUNDS, DockedPanelResizeHandle, useDockedPanelWidth } from "./DockedPanelResize";
 import { ArrowLeft, Settings, X } from "lucide-react";
 
@@ -43,6 +43,7 @@ import { viewerBotsReadOnly } from "@/lib/viewer";
 import { useBotSectionAvailability, useBotSectionContent } from "./bot-settings/useBotSectionContent";
 import { botsReadOnlyText } from "@/lib/permissions";
 import { RemoteSessionsSection } from "./remote-session/RemoteSessionsSection";
+import { PanelPageHostProvider } from "./bot-settings/PanelPage";
 
 /** #2149: the panel body's scroll per bot and tab, put back when the header
  * pill reopens the panel it closed. */
@@ -69,6 +70,8 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   const { macInset, browser } = useMacInsetChrome();
   const section = state.botSettingsSection;
   const dialogRef = useRef<HTMLElement | null>(null);
+  const [panelHost, setPanelHost] = useState<HTMLElement | null>(null);
+  const asideRef = useCallback((node: HTMLElement | null) => { dialogRef.current = node; setPanelHost(node); }, []);
   // Keep expansion in the store too: header deep links can arrive while
   // this panel is already mounted, including after collapsing the same row.
   const collapsed = !state.botSettingsExpandAccordion;
@@ -222,8 +225,9 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
 
   return (
     <>
+      <PanelPageHostProvider value={panelHost}>
       <aside
-        ref={dialogRef}
+        ref={asideRef}
         role="dialog"
         aria-labelledby="bot-settings-title"
         tabIndex={-1}
@@ -386,6 +390,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
 
         </div>
       </aside>
+      </PanelPageHostProvider>
       {dialogs}
     </>
   );

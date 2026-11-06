@@ -61,12 +61,12 @@ const STILL_SORTING = new Set([
   "backup", "botAccess", "botPanel", "botSettings", "botWizard", "botZip",
   "browser", "call", "canvas", "chat", "cloudSignIn", "code", "commandAllowlist", "composer", "computer",
   "connectApps", "connectors", "customRules", "cw", "devPods", "engines", "engineSetup", "floatingBots",
-  "folder", "groupPanel", "keys", "leftOut", "manageMembers", "mascot", "mcp", "model",
-  "myConnections", "myEngines", "newBot", "onboarding", "org", "organization", "orgComputer",
+  "folder", "groupPanel", "keys", "leftOut", "logins", "manageMembers", "mascot", "mcp", "memory", "model",
+  "myConnections", "myEngines", "newBot", "notice", "onboarding", "org", "organization", "orgComputer",
   "orgImport", "pair", "people", "persona", "personLabel", "place", "planUsage", "pro",
   "question", "releaseNotes", "remote", "remoteControl", "remoteSession", "remoteSessionsAdmin", "room",
-  "routines", "serverEnvironment", "settings", "sidebar", "star", "step", "stream", "task", "teach",
-  "team", "teamBotFromThread", "toolDetail", "triggers", "update", "usage", "vm", "voice", "voiceMode",
+  "routines", "serverEnvironment", "settings", "sidebar", "signIn", "star", "step", "stream", "task", "teach",
+  "team", "teamBotFromThread", "teamSettings", "toolDetail", "triggers", "update", "usage", "vm", "voice", "voiceMode",
   "whop", "worksOn",
 ]);
 

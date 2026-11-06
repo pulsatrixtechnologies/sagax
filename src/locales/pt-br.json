@@ -1551,7 +1551,6 @@
   "room.holds.resume": "Retomar {name}",
   "room.holds.stop": "Parar {name}",
   "room.holds.stopTitle": "Parar só {name}; o resto da sala continua",
-  "room.holds.avatarHeld": "{name} — em pausa (parado por você)",
   "place.view.browser.short": "Somente páginas da web",
   "place.view.ccAtOnce.short": "Em uso",
   "place.view.ccNew.short": "Pronto",

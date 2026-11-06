@@ -2154,7 +2154,6 @@
   "room.holds.resume": "Відновити {name}",
   "room.holds.stop": "Зупинити {name}",
   "room.holds.stopTitle": "Зупинити лише {name}; решта кімнати працює далі",
-  "room.holds.avatarHeld": "{name} — призупинено (зупинено вами)",
   "chat.gotoGroup.agents": "Агентів: {count}",
   "chat.gotoGroup.agentsOne": "1 агент",
   "chat.gotoGroup.aria": "Розмов: {count}, з {agents}: показати список",

@@ -1642,7 +1642,6 @@
   "room.holds.resume": "Reanudar a {name}",
   "room.holds.stop": "Detener a {name}",
   "room.holds.stopTitle": "Detener solo a {name}; el resto de la sala sigue",
-  "room.holds.avatarHeld": "{name}: en pausa (detenido por ti)",
   "chat.gotoGroup.agents": "{count} agentes",
   "chat.gotoGroup.agentsOne": "1 agente",
   "chat.gotoGroup.aria": "{count} conversaciones con {agents}: mostrar la lista",

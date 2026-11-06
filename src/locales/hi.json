@@ -1642,7 +1642,6 @@
   "room.holds.resume": "{name} को फिर शुरू करें",
   "room.holds.stop": "{name} को रोकें",
   "room.holds.stopTitle": "सिर्फ़ {name} को रोकें; बाकी रूम चलता रहेगा",
-  "room.holds.avatarHeld": "{name} — रोका गया (आपके द्वारा)",
   "chat.gotoGroup.agents": "{count} एजेंट",
   "chat.gotoGroup.agentsOne": "1 एजेंट",
   "chat.gotoGroup.aria": "{agents} के साथ {count} बातचीत: सूची दिखाएँ",

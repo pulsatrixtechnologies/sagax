@@ -1660,7 +1660,6 @@
   "room.holds.resume": "{name} fortsetzen",
   "room.holds.stop": "{name} stoppen",
   "room.holds.stopTitle": "Nur {name} stoppen; der Rest des Raums arbeitet weiter",
-  "room.holds.avatarHeld": "{name} – angehalten (von dir gestoppt)",
   "chat.gotoGroup.agents": "{count} Agenten",
   "chat.gotoGroup.agentsOne": "1 Agent",
   "chat.gotoGroup.aria": "{count} Unterhaltungen mit {agents}: Liste anzeigen",

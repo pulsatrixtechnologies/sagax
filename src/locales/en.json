@@ -5799,7 +5799,7 @@
   "room.holds.resume": "Resume {name}",
   "room.holds.stop": "Stop {name}",
   "room.holds.stopTitle": "Stop only {name}; the rest of the room keeps going",
-  "room.holds.avatarHeld": "{name} — held (stopped by you)",
+  "room.holds.avatarHeld": "{name}: held (stopped by you)",
   "room.responder.lead": "Plain messages go to {name}; @mentions override this",
   "room.responder.leadFallback": "the lead bot",
   "room.responder.leadOption": "Lead: {name}",

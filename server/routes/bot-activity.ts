@@ -390,10 +390,12 @@ function activityListMethods(state: BotActivityState) {
     else if (run) status = runStatus(run.status);
     else status = settledStatus(messages(task.threadId, 12).messages);
     const updatedAt = Math.max(task.updatedAt ?? task.createdAt, run?.finishedAt ?? 0);
+    const scan = threadScan(bot, task);
+    // A finished conversation's span is its newest turn (request to reply),
+    // never the thread's age: from createdAt it read "228h 06m" (2026-11-06).
     const startedAt = activityStatusActive(status)
       ? task.turnStartedAt ?? run?.startedAt ?? task.createdAt
-      : run?.startedAt ?? task.createdAt;
-    const scan = threadScan(bot, task);
+      : run?.startedAt ?? scan.turnAt ?? task.createdAt;
     const children = turnChildren(deps.children(bot.id, task.threadId), scan.turnAt);
     const active = activityStatusActive(status);
     const current = active ? currentStep(task.threadId, run) : undefined;

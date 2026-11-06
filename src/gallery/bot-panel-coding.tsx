@@ -9,7 +9,7 @@
  * ?skin=<id>&lang=<code> */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { CalendarClock, Plus, SquareTerminal } from "lucide-react";
+import { PANEL_LABEL } from "../lib/grouped-card";
 import { CodeWorkList, SectionHeader } from "../components/bot-settings/ActivitySection";
 import { AgentRows } from "../components/bot-settings/AgentRows";
 import type { BotActivityItem, BotLaunchedAgentItem } from "../lib/bot-activity";
@@ -57,6 +57,8 @@ const agents: BotActivityItem[] = [
   item("a4", "Tidy the widgets grid", "failed", 130, undefined, 120),
   item("a5", "Index the search", "finished", 300, undefined, 280),
   item("a6", "Spike the old parser", "stopped", 900, undefined, 890),
+  // a finished conversation with no known end: no number (was "228h 06m")
+  item("a7", "Peux tu me créer un fichier html", "finished", 228 * 60 + 6),
 ];
 const launched: BotLaunchedAgentItem[] = [
   { id: "l1", targetBotId: "marc", targetBotName: "Marc", title: "work", status: "running", startedAt: NOW - 4 * M, updatedAt: NOW, threadId: "l1" },
@@ -72,17 +74,14 @@ function Panel() {
     <aside data-gallery-panel="" className="min-h-screen w-[380px] border-r border-hairline/40 bg-panel text-ink">
       <div className="flex flex-col gap-6 px-4 pb-6 pt-4">
         <section data-bot-settings-section="coding" className="flex flex-col gap-2">
-          <SectionHeader icon={<SquareTerminal size={16} aria-hidden="true" className="text-ink-secondary" />} title={t("botPanel.coding.title")} name="coding" onOpenHistory={() => {}} />
+          <SectionHeader title={t("botPanel.coding.title")} name="coding" onOpenHistory={() => {}} />
           <AgentRows items={agents} launched={launched} onOpen={() => {}} onOpenLaunched={() => {}} onStop={() => {}} now={NOW} usageOf={(threadId) => usage[threadId]} onIgnore={() => {}} />
           <CodeWorkList work={work} now={NOW} branchActions={{ botId: "pepper", botName: "Pepper", onArchive: async () => {}, onIgnore: () => {} }} />
         </section>
-        <section data-bot-settings-section="routines" className="flex flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <CalendarClock size={16} className="text-ink-secondary" />
-            <h2 className="min-w-0 flex-1 text-[13px] font-normal leading-[18px] text-ink-secondary">{t("computer.tab.routines")}</h2>
-            <span className="ui-icon-button"><Plus size={15} /></span>
-          </div>
-          <RoutineList routines={[routine("r1", "Résumé du matin", 1440), routine("r2", "Revue des billets ouverts", 60)]} runs={[]} onOpen={() => {}} grouped toggle={false} />
+        {/* The real panel's Upcoming (PANEL_LABEL + PANEL_CARD), so the two compare side by side. */}
+        <section data-bot-settings-section="routines" className="flex flex-col gap-2">
+          <h2 className={PANEL_LABEL}>{t("routines.upcoming.title")}</h2>
+          <RoutineList routines={[routine("r1", "Résumé du matin", 1440), routine("r2", "Revue des billets ouverts", 60)]} runs={[]} onOpen={() => {}} grouped toggle={false} leadingClock />
         </section>
       </div>
     </aside>

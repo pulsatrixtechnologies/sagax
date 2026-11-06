@@ -362,7 +362,8 @@ describe("history and errors", () => {
     const html = renderToStaticMarkup(createElement(PanelSections, props()));
     expect(html).toContain('data-activity-history="all"');
     expect(html).toContain(">All history<");
-    expect(html).not.toContain("text-ink-tertiary");
+    // 2026-11-06 (JC): the same grey label as Upcoming above it (PANEL_LABEL)
+    expect(html).toContain("px-0.5 text-[13px] font-normal leading-[18px] text-ink-tertiary");
     expect(html).not.toContain("data-bot-settings-section");
     // the row is the shared SectionHeader, not copied classes: its button
     // markup is byte-identical to a Coding/Activity header's

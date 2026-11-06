@@ -10,7 +10,10 @@
 // left watching a spinner without knowing why.
 
 import { execFile } from "node:child_process";
-import { closeSync, fstatSync, openSync, readSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readdirSync, readFileSync, readlinkSync, readSync } from "node:fs";
+
+import { redactSecretsInText } from "../../redact.ts";
+import { formatQuietLimit } from "./constants.ts";
 
 /** One fact an agent's debug log states about what it is doing. */
 export type LogSignal =
@@ -18,11 +21,13 @@ export type LogSignal =
   | { kind: "compressing" }
   /** history size against the auto-compression threshold, from the
    * cheap gate's NOOP line: a near-full history is likely compressed next */
-  | { kind: "context"; tokens: number; threshold: number };
+  | { kind: "context"; tokens: number; threshold: number }
+  | { kind: "provider-error"; message: string };
 
 export type QuietState =
   | { kind: "retrying"; status: number | null; delayMs: number | null; attempt: number | null }
   | { kind: "compressing" }
+  | { kind: "provider-error"; message: string }
   | { kind: "waiting-model"; nearFullContext: boolean }
   | { kind: "busy" }
   /** no connection, no CPU, briefly: an SDK sleeping between retries
@@ -276,3 +281,12 @@ export function lastSeenPhrase(state: QuietState): string {
     case "unknown": return "no readable process state";
   }
 }
+
+/** A 429 whose wait is longer than any engine retries on its own is a usage limit, not a short rate limit. */
+export const DEFAULT_LIMIT_QUIET_MS = 2 * 60_000;
+export const limitQuietMs = (): number => {
+  const raw = Number(process.env.SAGAX_ACP_LIMIT_QUIET_MS ?? DEFAULT_LIMIT_QUIET_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_LIMIT_QUIET_MS;
+};
+export const usageLimitWait = (status: number | null | undefined, waitMs: number | null | undefined): boolean =>
+  status === 429 && (waitMs ?? 0) > limitQuietMs();

@@ -19,6 +19,7 @@ import type { ProviderInstance } from "../../contracts.ts";
 import { TurnNotStartedError } from "../../contracts.ts";
 import { recordEvents, type EventRecorder } from "../../testing/events.ts";
 import { promptSplitFingerprints, writePromptSplitReceipt } from "../prompt-split.ts";
+import { classifyError } from "../retry.ts";
 import { GROK_TOOL_REUSE_HINT as HINT } from "./grok.ts";
 import { contextFullMessage, contextRenewedNotice } from "../../context/context-renewal.ts";
 import { createAcpDriver, DEFAULT_ACP_PROMPT_IDLE_MS, skipSubscriptionAuthForLocalInject, type AcpSupport } from "./core.ts";
@@ -290,6 +291,7 @@ describe("ACP turns (fake CLI)", () => {
     delete process.env.FAKE_ACP_PERMISSION_OPTIONS;
     delete process.env.FAKE_ACP_QUESTION_OPTIONS;
     delete process.env.FAKE_ACP_HOLD_ON_CANCELLED;
+    delete process.env.FAKE_ACP_TEXT_REPLY;
     delete process.env.XAI_API_KEY;
     delete process.env.OPENCODE_API_KEY;
     delete process.env.CLINE_API_KEY;
@@ -2634,6 +2636,57 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     expect(done).toMatchObject({ ok: false, stopReason: "empty_turn" });
     expect(recorder.events.find((e) => e.type === "runtime.error")?.message)
       .toMatch(/no reply, image, or tool result/);
+  });
+
+  // omp 18.12's ACP mode sends a provider's refusal as the reply's text and ends the turn with end_turn.
+  describe("a reply that is only a provider's error body", () => {
+    const OAUTH_REFUSED = '403 {"type":"error","error":{"type":"permission_error","message":"OAuth authentication is currently not allowed for this organization.","details":{"error_code":"oauth_not_allowed_for_organization"}},"request_id":"req_011CgY35mSFzqEa1NBU5nq8i"}';
+    const WEEKLY_LIMIT = '429 {"type":"error","error":{"type":"rate_limit_error","code":"1310","message":"[1310][Weekly/Monthly Limit Exhausted. Your limit will reset at 2026-10-23 09:13:38][20261022010620e41a1d021c2d4ce4]"},"request_id":"20261022010620e41a1d021c2d4ce4"} retry-after-ms=115636000';
+    const turn = async (threadId: string, reply: string) => {
+      process.env.FAKE_ACP_TEXT_REPLY = reply;
+      await create(GrokAgentDriver);
+      await instance.adapter.sendTurn({ threadId, text: "go" });
+      const done = await recorder.until((e) => e.type === "turn.completed");
+      const replies = recorder.events.filter((e) => e.type === "item.completed" && e.itemType === "assistant_text");
+      const errors = recorder.events.flatMap((e) => e.type === "runtime.error" ? [e] : []);
+      return { done, replies, errors };
+    };
+
+    it("fails the turn on a 403 and says the refusal in plain words, never the JSON", async () => {
+      const { done, replies, errors } = await turn("t-error-403", OAUTH_REFUSED);
+      expect(done).toMatchObject({ ok: false, stopReason: "rpc_error" });
+      expect(replies).toEqual([]);
+      expect(errors).toEqual([expect.objectContaining({
+        message: 'Grok stopped with an error (HTTP 403; Grok says: "OAuth authentication is currently not allowed for this organization").',
+      })]);
+      expect(errors[0]).not.toHaveProperty("limit");
+      expect(classifyError({ text: errors[0]!.message }).reason).toBe("auth");
+    });
+
+    it("fails the turn on a 429 that names its wait as a usage limit held until then", async () => {
+      const before = Date.now();
+      const { done, replies, errors } = await turn("t-error-429", WEEKLY_LIMIT);
+      const after = Date.now();
+      expect(done).toMatchObject({ ok: false, stopReason: "quota" });
+      expect(replies).toEqual([]);
+      expect(errors).toHaveLength(1);
+      const error = errors[0]!;
+      expect(error.limit).toBe("engine");
+      expect(error.limitResetsAt).toBeGreaterThanOrEqual(before + 115_636_000);
+      expect(error.limitResetsAt).toBeLessThanOrEqual(after + 115_636_000);
+      expect(error.message).toMatch(/^This Grok account has reached its usage limit \(Grok says: "\[1310\]\[Weekly\/Monthly Limit Exhausted/);
+      expect(error.message).toMatch(/which resets .+\. Until then, switch this bot to another engine\.$/);
+      expect(error.message).not.toMatch(/rate_limit_error|retry-after-ms|request_id/);
+      expect(classifyError({ text: error.message }).reason).toBe("quota");
+    });
+
+    it("keeps a reply that quotes such an error among its own words", async () => {
+      const quoted = `The deploy failed with this response:\n\n${OAUTH_REFUSED}\n\nI'll retry with the API key.`;
+      const { done, replies, errors } = await turn("t-error-quoted", quoted);
+      expect(done).toMatchObject({ ok: true, stopReason: null });
+      expect(replies).toEqual([expect.objectContaining({ text: quoted })]);
+      expect(errors).toEqual([]);
+    });
   });
 
   it("reasoning with no answer is a lost turn, not a success", async () => {

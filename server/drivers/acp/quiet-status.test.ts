@@ -6,7 +6,8 @@ import { describe, expect, it } from "vitest";
 
 import { removeTempDir } from "../../testing/cleanup.ts";
 import {
-  classifyQuiet, describeQuiet, LogTail, parseQwenLogLine, quietKey, sampleProcessTree, treePids,
+  classifyQuiet, DEFAULT_LIMIT_QUIET_MS, describeQuiet, LogTail, parseQwenLogLine, quietKey,
+  sampleProcessTree, treePids, usageLimitWait,
 } from "./quiet-status.ts";
 import { qwenDebugLogPath } from "./qwen.ts";
 
@@ -15,6 +16,15 @@ import { qwenDebugLogPath } from "./qwen.ts";
 const RETRY_EXPLICIT = "2026-10-02T02:50:41.757Z [WARN] [RETRY] Attempt 1 failed with status 429. Retrying after explicit delay of 20000ms... {";
 const RETRY_BACKOFF = "2026-10-02T02:51:41.757Z [ERROR] [RETRY] Attempt 3 failed with status 503. Retrying in 12s...";
 const GATE = "2026-10-02T02:49:41.570Z [DEBUG] [COMPRESSION] [compaction] cheap-gate NOOP: effectiveTokens=2587, auto=167000, contextLimit=200000";
+
+describe("usageLimitWait", () => {
+  it("treats only a 429 whose wait is longer than the quiet limit as a usage limit", () => {
+    expect(usageLimitWait(429, DEFAULT_LIMIT_QUIET_MS)).toBe(false);
+    expect(usageLimitWait(429, DEFAULT_LIMIT_QUIET_MS + 1)).toBe(true);
+    expect(usageLimitWait(529, DEFAULT_LIMIT_QUIET_MS + 1)).toBe(false);
+    expect(usageLimitWait(429, null)).toBe(false);
+  });
+});
 
 describe("parseQwenLogLine", () => {
   it("reads a retry's attempt, status and delay", () => {

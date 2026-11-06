@@ -4,6 +4,7 @@ import {
   type LogSignal, type ProcessSample, type QuietState,
 } from "./quiet-status.ts";
 import { ACP_STUCK_AFTER_MS, envOr, promptIdleTimeoutMs } from "./constants.ts";
+import { endTurn } from "./turn-end.ts";
 import { turnLatencyLine } from "./turn-latency.ts";
 import type { AcpSession, AcpSupport, AcpTurn } from "./types.ts";
 import { reportBackgroundError } from "../../background-error.ts";
@@ -107,7 +108,7 @@ export function createStartQuietWatch(deps: Pick<LifecycleDeps, "support" | "emi
 }
 
 export function createSettle(deps: LifecycleDeps) {
-  const { DRIVER_KIND, emit, base, active, sessions, armIdle } = deps;
+  const { support, DRIVER_KIND, emit, base, active, sessions, armIdle } = deps;
   return (threadId: string, session: AcpSession, ok: boolean, stopReason: string | null) => {
 
     const current = session.current;
@@ -122,28 +123,24 @@ export function createSettle(deps: LifecycleDeps) {
     // turn synchronously must find this session free
     session.current = null;
     active.delete(threadId);
-    current.flushAssistantText();
     // `end_turn` with nothing to show for it — no reply, no image, no
     // tool result — is a lost turn, not a success. An engine can report
     // exactly that (a provider may cut a reasoning-only stream and
     // still answer end_turn), and ok:true would end the thread quietly
-    // while the person's message went unanswered. Keep the completion,
-    // but report it as a failure so terminal chips, incidents and
-    // follow-ups see what happened.
-    let finalOk = ok;
-    let finalStopReason = stopReason;
-    if (finalOk && finalStopReason === null && !current.state.producedItem) {
-      finalOk = false;
-      finalStopReason = "empty_turn";
-      emit({
-        ...base(threadId, current.turnId),
-        type: "runtime.error",
-        message: `${DRIVER_KIND} ended the turn with no reply, image, or tool result`,
-      });
-    }
-    emit({ ...base(threadId, current.turnId), type: "turn.completed", ok: finalOk, stopReason: finalStopReason, cost: null });
+    // while the person's message went unanswered. A reply that is only a
+    // provider's error body fails the turn in plain words instead of
+    // posting the raw JSON as an answer.
+    const end = endTurn(
+      current,
+      ok,
+      stopReason,
+      support.displayName,
+      `${DRIVER_KIND} ended the turn with no reply, image, or tool result`,
+    );
+    if (end.error) emit({ ...base(threadId, current.turnId), type: "runtime.error", ...end.error });
+    emit({ ...base(threadId, current.turnId), type: "turn.completed", ok: end.ok, stopReason: end.stopReason, cost: null });
     if (current.latency) {
-      console.log(turnLatencyLine(DRIVER_KIND, threadId, current.latency, Date.now(), finalOk ? "ok" : (finalStopReason ?? "failed")));
+      console.log(turnLatencyLine(DRIVER_KIND, threadId, current.latency, Date.now(), end.ok ? "ok" : (end.stopReason ?? "failed")));
     }
     if (session.child.exitCode === null && !session.closing && !session.dead) {
       armIdle(threadId);

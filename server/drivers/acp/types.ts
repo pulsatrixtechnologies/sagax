@@ -65,6 +65,8 @@ export interface AcpTurn {
   latency?: TurnLatency;
   state: {
     settled: boolean; promptSent: boolean; text: string; producedItem: boolean;
+    /** Assistant text was flushed as a reply item (not only tools or images). */
+    repliedText?: boolean;
     /** A reply or an image went out (not only tool calls): a nudge could repeat it. */
     producedReply?: boolean; startupActivity: boolean; stopped: boolean;
     /** Stop's cancel-timeout is ending the process; child close must not settle as exit_before_result. */

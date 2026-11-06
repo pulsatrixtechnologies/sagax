@@ -85,21 +85,19 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
   // is kept invisible on Providers), so the tabs never move.
   // the one install scope (this bot, me, organization), always live (#2104);
   // the view leaves it out on Bots and Pages, which do not depend on it
+  const scopeNoteText = scope === "bot" && scopeBot
+    ? [t("connectApps.scope.botNote", { name: scopeBot.name }), botView && !botView.canChange ? t("plugins.readOnly") : ""].filter(Boolean).join(" ")
+    : t(scope === "me" ? "connectApps.scope.meNote" : "connectApps.scope.workspaceNote");
   const scopeToggle = (
     <div data-plugins-scope-bar>
-      <ScopeToggle scope={scope} botName={scopeBot?.name} organization={s.workspaceMarkets && s.mayManageOrganization} onScope={(next) => { setScopeChoice(next); setPanelError(null); }} describedBy="plugins-scope-note" />
+      <ScopeToggle quiet scope={scope} botName={scopeBot?.name} organization={s.workspaceMarkets && s.mayManageOrganization} onScope={(next) => { setScopeChoice(next); setPanelError(null); }} describedBy="plugins-scope-note" title={scopeNoteText} />
     </div>
   );
   const scopeControl = (
     <div data-plugins-scope-notes>
-      <p id="plugins-scope-note" className="mt-2 text-[12px] leading-[18px] text-ink-secondary" data-plugins-scope-note={scope}>
-        {scope === "bot" && scopeBot ? (
-          <>
-            {t("connectApps.scope.botNote", { name: scopeBot.name })}
-            {botView && !botView.canChange && <> {t("plugins.readOnly")}</>}
-          </>
-        ) : t(scope === "me" ? "connectApps.scope.meNote" : "connectApps.scope.workspaceNote")}
-      </p>
+      {/* #2104 (Grok Bot's look): no subtitle under the title; the note
+          stays for screen readers and on the scope's tooltip */}
+      <p id="plugins-scope-note" className="sr-only" data-plugins-scope-note={scope}>{scopeNoteText}</p>
       {scope !== "workspace" && scopedPluginView && scopedPluginView.marketplaces.length === 0 && (
         <p className="mt-2 rounded-lg bg-inset px-3 py-2 text-[12px] text-ink-secondary" data-plugins-scope-empty>{t("connectApps.scope.noMarketplaces")}</p>
       )}
@@ -359,6 +357,9 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               // skill; an entry shows only where it may act
               add={addActions}
               addInTitle
+              // lot 4: the organization's declarations (Perspicax), folded
+              // at the end (#2104: Grok Bot's Manage opens on the list)
+              organizationAdmin={scope === "workspace" && orgHere ? <OrgCapabilitiesAdmin /> : undefined}
               onDiscover={() => setTab("discover")}
               macApps={scope !== "bot" ? (
                 <MacAppsInstalledSection
@@ -384,7 +385,6 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               forms={scope === "workspace" ? (
                 <>
                   {/* lot 4: the organization's declarations, owned by Perspicax */}
-                  {orgHere && <OrgCapabilitiesAdmin />}
                   {mcp.restricted && mcp.policy && <p role="status" className="mb-3 text-[12.5px] leading-relaxed text-ink-secondary">{t("policy.mcpRestricted", { organization: mcp.policy.organizationName })}</p>}
                   <McpMessages mcp={mcp} />
                   <McpReservedServers mcp={mcp} />

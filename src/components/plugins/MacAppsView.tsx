@@ -4,6 +4,7 @@
 import { ChevronRight, MessageSquare } from "lucide-react";
 
 import { t } from "@/lib/i18n";
+import { PLUGINS } from "./plugins-style";
 
 /** Compact Mac section for the Installed tab: the one row (Messages) opens
  * its setup directly; no "See all" to a page with the same row (#2104). */
@@ -15,22 +16,22 @@ export function MacAppsInstalledSection({
   messagesEnabled?: boolean;
 }) {
   return (
-    <section className="mt-6 first:mt-0" data-plugins-mac>
-      <h3 className="mb-2 text-[13px] font-semibold text-ink">{t("connectApps.mac.section")}</h3>
-      <ul className="divide-y divide-hairline/60 rounded-2xl border border-border bg-card">
+    <section className="mt-8 first:mt-0" data-plugins-mac>
+      <h3 className={PLUGINS.label}>{t("connectApps.mac.section")}</h3>
+      <ul className="mt-1">
         <li>
           <button
             type="button"
             data-mac-app="messages"
             onClick={onOpenMessages}
-            className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-hover"
+            className="-mx-2 flex w-[calc(100%+16px)] items-center gap-3 rounded-xl px-2 py-[11px] text-left hover:bg-hover"
           >
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-accent">
-              <MessageSquare size={16} aria-hidden="true" />
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-success/90 text-white">
+              <MessageSquare size={18} aria-hidden="true" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-medium text-ink">{t("connectApps.mac.messages.rowTitle")}</span>
-              <span className="block truncate text-[11.5px] text-ink-secondary">
+              <span className={PLUGINS.rowName}>{t("connectApps.mac.messages.rowTitle")}</span>
+              <span className={PLUGINS.rowSub}>
                 {messagesEnabled ? t("connectApps.mac.messages.rowOn") : t("connectApps.mac.messages.rowOff")}
               </span>
             </span>

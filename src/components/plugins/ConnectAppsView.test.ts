@@ -129,7 +129,7 @@ describe("Plugins tabs", () => {
 
   it("Installed: GitHub once, named for people, saying what it brings, then the private skills", () => {
     const html = renderToStaticMarkup(createElement(ManageView, props()));
-    const names = [...html.matchAll(/data-installed-entry="[^"]+"[\s\S]*?block truncate text-\[15px\] leading-5 text-ink">([^<]+)</g)].map((match) => match[1]);
+    const names = [...html.matchAll(/data-installed-entry="[^"]+"[\s\S]*?block truncate text-\[14px\] leading-5 text-ink">([^<]+)</g)].map((match) => match[1]);
     expect(names).toEqual(["GitHub", "Twilio Docs"]);
     expect(html).not.toContain(">github-github<");
     expect(html).toMatch(/GitHub<\/span><span[^>]*data-installed-brings[^>]*>plugin \(claude-plugins-official\) · 1 connector</);

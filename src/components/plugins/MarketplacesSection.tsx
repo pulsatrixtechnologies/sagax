@@ -256,7 +256,7 @@ export function MarketplacesSection({ marketplaces, busy, error, onAdd, onRefres
       )}
       {error && <p role="alert" className="mt-2 rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger">{error}</p>}
       {marketplaces && marketplaces.length > 0 && (
-        <ul className="mt-3 divide-y divide-hairline/60 rounded-2xl border border-border bg-card">
+        <ul className="mt-3 divide-y divide-hairline/60 rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015]">
           {marketplaces.map((market) => {
             const installed = market.plugins.filter((plugin) => plugin.installed).length;
             const bots = market.bots ?? 0;

@@ -252,7 +252,7 @@ export function PluginDetailView(props: PluginDetailProps) {
           <dl className="grid grid-cols-[minmax(90px,auto)_1fr] gap-x-4 text-[14px] leading-5" data-plugin-details>
             {details.map((row) => (
               <div key={row.label} className="contents">
-                <dt className="py-[9px] text-ink">{row.label}</dt>
+                <dt className="py-[9px] text-ink-tertiary">{row.label}</dt>
                 <dd className={cn("min-w-0 break-all py-[9px] text-right text-ink-secondary", row.mono && "font-mono text-[12.5px]")}>{row.value}</dd>
               </div>
             ))}

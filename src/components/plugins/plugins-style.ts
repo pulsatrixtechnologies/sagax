@@ -13,22 +13,22 @@ export const PLUGINS = {
   /** "Connect Apps", top left of the home view */
   title: "text-[18px] font-normal leading-7 tracking-[-0.005em] text-ink",
   /** "Manage plugins and skills": the big title of a view under the back row */
-  bigTitle: "text-[22px] font-semibold leading-8 tracking-[-0.012em] text-ink",
+  bigTitle: "text-[19px] font-normal leading-7 tracking-[-0.005em] text-ink",
   /** "From Sagax", "Recommended for you" */
-  sectionTitle: "text-[15px] font-normal leading-5 text-ink",
-  sectionLink: "text-[13.5px] text-ink-secondary hover:text-ink",
+  sectionTitle: "text-[14.5px] font-normal leading-5 text-ink",
+  sectionLink: "text-[13px] text-ink-secondary hover:text-ink",
   /** "Installed", "Accounts", "Tools": gray labels over a list or a card */
-  label: "text-[13.5px] leading-5 text-ink-secondary",
+  label: "text-[13px] leading-5 text-ink-secondary",
   /** two columns of rows, no cards */
   grid: "grid grid-cols-1 gap-x-8 md:grid-cols-2",
-  rowName: "block truncate text-[15px] leading-5 text-ink",
-  rowSub: "block truncate text-[14px] leading-5 text-ink-secondary",
+  rowName: "block truncate text-[14px] leading-5 text-ink",
+  rowSub: "block truncate text-[13.5px] leading-5 text-ink-secondary",
   /** a card with a subtle border on the window's own background */
-  card: "rounded-[14px] border border-ink/[0.07] bg-ink/[0.02]",
+  card: "rounded-[14px] border-[0.5px] border-ink/[0.08] bg-ink/[0.015]",
   cardRow: "flex min-h-[52px] items-center gap-3 px-4 py-3",
   /** the round search of the home view */
-  search: "flex h-[30px] min-w-0 flex-1 items-center gap-2 rounded-full border border-ink/[0.09] px-3 focus-within:border-border-strong",
-  searchInput: "min-w-0 flex-1 bg-transparent text-[14.5px] leading-5 text-ink placeholder:text-ink-secondary focus:outline-none",
+  search: "flex h-8 min-w-0 flex-1 items-center gap-2 rounded-full border-[0.5px] border-ink/10 px-3 focus-within:border-border-strong",
+  searchInput: "min-w-0 flex-1 bg-transparent text-[14px] leading-5 text-ink placeholder:text-ink-secondary focus:outline-none",
   /** "Bot templates", "Publish", "Cancel": an outlined pill */
   outlinePill: "inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-full border border-border px-3.5 text-[14px] text-ink transition-colors hover:bg-hover disabled:opacity-40 motion-reduce:transition-none",
   /** "Add a custom connector", "Uninstall": a filled gray pill */
@@ -40,9 +40,11 @@ export const PLUGINS = {
   /** a filled field (skill page) */
   field: "w-full rounded-[12px] bg-card px-3.5 py-2.5 text-[14px] leading-5 text-ink placeholder:text-ink-tertiary focus:outline-none focus:ring-1 focus:ring-border-strong disabled:opacity-60",
   /** an outlined field (custom connector) */
-  outlineField: "w-full rounded-[12px] border border-border bg-transparent px-3.5 py-2.5 text-[14px] leading-5 text-ink placeholder:text-ink-tertiary focus:border-border-strong focus:outline-none disabled:opacity-60",
-  /** "Bot templates": borderless text with its icon and an arrow */
-  textLink: "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2 text-[14px] text-ink transition-colors hover:bg-hover motion-reduce:transition-none",
+  outlineField: "w-full rounded-[12px] border-[0.5px] border-ink/10 bg-transparent px-3.5 py-2.5 text-[14px] leading-5 text-ink placeholder:text-ink-tertiary focus:border-border-strong focus:outline-none disabled:opacity-60",
+  /** "Bot templates": a hairline pill, a white round mark, the words, a gray arrow */
+  textLink: "inline-flex h-8 shrink-0 items-center gap-2 rounded-full border-[0.5px] border-ink/10 pl-2 pr-3 text-[14px] text-ink transition-colors hover:bg-hover motion-reduce:transition-none",
+  /** a quiet gray pill of Manage's title row (scope, refresh, + Add) */
+  quietPill: "inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-full bg-ink/[0.06] px-3 text-[13px] text-ink-secondary transition-colors hover:bg-ink/10 hover:text-ink disabled:opacity-50 motion-reduce:transition-none",
   fieldLabel: "mb-1.5 block text-[14px] leading-5 text-ink",
 } as const;
 

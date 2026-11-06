@@ -13,7 +13,7 @@
 // No new page and no bot panel tab: this section lives where the
 // Organization scope is already chosen.
 import { useCallback, useEffect, useState } from "react";
-import { LoaderCircle, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, LoaderCircle, Pencil, Plus, Trash2 } from "lucide-react";
 
 import { useConfirm } from "@/components/ConfirmProvider";
 import { cn } from "@/lib/cn";
@@ -92,7 +92,7 @@ export function OrgCapabilitiesForMe() {
   return (
     <section className="mb-4" data-org-capabilities="me">
       <h3 className="mb-1.5 text-[13px] font-semibold text-ink">{t("orgCapabilities.me.title")}</h3>
-      <ul className="divide-y divide-hairline/60 rounded-2xl border border-border bg-card">
+      <ul className="divide-y divide-hairline/60 rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015]">
         {items.map((item) => {
           const state = installWords(item.state, item.enabled);
           return (
@@ -207,7 +207,7 @@ export function OrgCapabilityForm({ initial, onDone, onCancel }: { initial?: Dec
     }
   };
   return (
-    <form data-org-capability-form={creating ? "new" : "edit"} className="mb-4 flex flex-col gap-3 rounded-2xl border border-border bg-card p-4" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+    <form data-org-capability-form={creating ? "new" : "edit"} className="mb-4 flex flex-col gap-3 rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015] p-4" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
       <h4 className="text-[13px] font-semibold text-ink">{t(creating ? "orgCapabilities.admin.addTitle" : "orgCapabilities.admin.editTitle")}</h4>
       {fields.filter((field) => !field.configuration).map((field) => <DraftFieldView key={field.key} field={field.key} draft={draft} set={set} errors={errors} creating={creating} />)}
       <label className="flex items-center gap-2 text-[12.5px] text-ink">
@@ -264,9 +264,12 @@ export function OrgCapabilitiesAdmin() {
   };
   const rows = inventory?.capabilities ?? [];
   return (
-    <section className="mb-4" data-org-capabilities="admin">
-      <div className="mb-1.5 flex items-center justify-between gap-2">
-        <h3 className="text-[13px] font-semibold text-ink">{t("orgCapabilities.admin.title")}</h3>
+    <details className="group" data-org-capabilities="admin">
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 py-1 text-[13px] text-ink-secondary hover:text-ink [&::-webkit-details-marker]:hidden">
+        <ChevronRight size={14} aria-hidden="true" className="transition-transform group-open:rotate-90 motion-reduce:transition-none" />
+        <h3 className="font-normal">{t("orgCapabilities.admin.title")}</h3>
+      </summary>
+      <div className="mt-2 mb-1.5 flex items-center justify-end gap-2">
         {inventory && editing === null && (
           <button type="button" onClick={() => setEditing("new")} data-org-capability-add="" className="flex items-center gap-1.5 rounded-lg bg-control px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised-hover">
             <Plus size={14} aria-hidden="true" /> {t("orgCapabilities.admin.add")}
@@ -280,7 +283,7 @@ export function OrgCapabilitiesAdmin() {
       )}
       {inventory && rows.length === 0 && editing === null && <p className="rounded-xl bg-inset px-4 py-3 text-[12.5px] text-ink-secondary">{t("orgCapabilities.admin.empty")}</p>}
       {rows.length > 0 && (
-        <ul className="divide-y divide-hairline/60 rounded-2xl border border-border bg-card">
+        <ul className="divide-y divide-hairline/60 rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015]">
           {rows.map((row) => {
             const installed = inventory?.installed?.[row.id];
             const state = installed ? installWords(installed.state, row.enabled) : row.enabled ? null : t("orgCapabilities.state.off");
@@ -302,6 +305,6 @@ export function OrgCapabilitiesAdmin() {
           })}
         </ul>
       )}
-    </section>
+    </details>
   );
 }

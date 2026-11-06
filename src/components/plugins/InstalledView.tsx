@@ -80,9 +80,11 @@ export interface InstalledViewProps {
   macApps?: ReactNode;
   /** the "+ Add" menu sits in Manage's title row: not drawn here */
   addInTitle?: boolean;
+  /** the organization's declarations (an admin, Perspicax): folded at the end */
+  organizationAdmin?: ReactNode;
 }
 
-const INSTALLED_PREVIEW = 8;
+const INSTALLED_PREVIEW = 6;
 
 /** one entry of the "+ Add" menu */
 export interface AddAction {
@@ -109,8 +111,8 @@ export function AddMenu({ actions }: { actions: AddAction[] }) {
   return (
     <div ref={ref} className="relative">
       <button type="button" onClick={() => setOpen((value) => !value)} aria-haspopup="menu" aria-expanded={open} data-plugins-add
-        className={cn(PLUGINS.outlinePill, "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60")}>
-        <Plus size={15} /> {t("connectApps.add")}
+        className={cn(PLUGINS.quietPill, "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong")}>
+        <Plus size={14} /> {t("connectApps.add")}
       </button>
       {open && (
         <div role="menu" className="absolute right-0 top-10 z-20 min-w-52 rounded-xl border border-border bg-raised p-1 shadow-lg">
@@ -137,7 +139,7 @@ function EmptyLine({ children, action }: { children: ReactNode; action?: ReactNo
   );
 }
 
-export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, add = [], forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization, onRemoveSuperseded, removingSuperseded = null, macApps, addInTitle = false }: InstalledViewProps) {
+export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, add = [], forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization, onRemoveSuperseded, removingSuperseded = null, macApps, addInTitle = false, organizationAdmin }: InstalledViewProps) {
   const [all, setAll] = useState(false);
   const shownEntries = all ? entries : entries.slice(0, INSTALLED_PREVIEW);
   return (
@@ -206,7 +208,6 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
           </ul>
         </section>
       )}
-      {macApps}
       {resolved === undefined && skills.length > 0 && (
         <section className="mt-8" data-plugins-skills>
           <h3 className={PLUGINS.label}>{t("connectApps.manage.privateSkills")}</h3>
@@ -229,11 +230,13 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
           </ul>
         </section>
       )}
+      {macApps}
       {providers && (
         <section className="mt-8 first:mt-0" id="plugins-providers" data-plugins-providers>
           {providers}
         </section>
       )}
+      {organizationAdmin && <div className="mt-8" data-plugins-organization-admin>{organizationAdmin}</div>}
     </div>
   );
 }
@@ -291,7 +294,7 @@ function EntryMenu({ name, actions, updateWaiting, hoverOnly = false }: { name: 
         aria-expanded={open}
         aria-label={t("connectApps.entry.menuAria", { name })}
         onClick={() => setOpen((value) => !value)}
-        className={cn("ui-icon-button relative", hoverOnly && !open && !(updateWaiting && actions.update) && "opacity-0 focus-visible:opacity-100 group-hover:opacity-100")}
+        className={cn("ui-icon-button relative", hoverOnly && !open && "opacity-0 focus-visible:opacity-100 group-hover:opacity-100")}
       >
         <MoreHorizontal size={16} />
         {updateWaiting && actions.update && <span data-entry-update-dot className="absolute right-1 top-1 size-1.5 rounded-full bg-accent" aria-hidden="true" />}

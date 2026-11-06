@@ -118,11 +118,25 @@ describe("View all and the breadcrumb", () => {
       })),
     });
     flushSync(() => root.render(createElement(DiscoverView, discover({ items: many, onFilter }))));
-    const viewAll = host.querySelector("[data-plugins-view-all]");
+    const viewAll = host.querySelector("[data-plugins-view-all=\"productivity\"]");
     expect(viewAll).not.toBeNull();
     click(viewAll);
     expect(onFilter).toHaveBeenCalledWith("productivity");
     expect(host.querySelector("[data-breadcrumb]")).toBeNull();
+  });
+
+  it("Recommended has its View all on the right, like Grok Bot's", () => {
+    const onType = vi.fn();
+    const many = buildPluginItems({
+      featured: Array.from({ length: 8 }, (_, index) => ({
+        id: `app${index}`, name: `App ${index}`, description: "", url: `https://mcp${index}.example.net/mcp`, domain: `app${index}.example.net`, auth: "oauth", category: "productivity",
+      })),
+    });
+    flushSync(() => root.render(createElement(DiscoverView, discover({ items: many, onType }))));
+    const viewAll = host.querySelector("[data-plugins-view-all=\"recommended\"]");
+    expect(viewAll).not.toBeNull();
+    click(viewAll);
+    expect(onType).toHaveBeenCalledWith("recommended");
   });
 
   it("the back button and a crumb go back; the current page is not a link", () => {

@@ -67,6 +67,15 @@ try {
     await page.waitForSelector('[data-plugins-main="discover"]');
   };
 
+  // the organization's scope lists the most (featured apps, the custom connector)
+  await page.click("[data-plugins-connected]");
+  await page.waitForSelector('[data-plugins-main="installed"]');
+  if (await page.locator('[data-plugins-scope-option="workspace"]').count()) {
+    await page.click('[data-plugins-scope-option="workspace"]');
+    await page.waitForTimeout(400);
+  }
+  await home();
+  await page.locator('[data-plugins-manage="discover"]').evaluate((list) => { list.scrollTop = 0; });
   await shot("1-home");
   // scrolled: the search row sticks under the window's top
   const overflows = await page.locator('[data-plugins-manage="discover"]').evaluate((list) => list.scrollHeight > list.clientHeight + 40);
@@ -81,11 +90,6 @@ try {
 
   await page.click("[data-plugins-connected]");
   await page.waitForSelector('[data-plugins-main="installed"]');
-  // the organization's scope lists the most (and offers the custom connector)
-  if (await page.locator('[data-plugins-scope-option="workspace"]').count()) {
-    await page.click('[data-plugins-scope-option="workspace"]');
-    await page.waitForTimeout(400);
-  }
   await shot("2-manage");
 
   // a plugin's page: the first plugin row of Manage
@@ -101,7 +105,7 @@ try {
   }
 
   // a skill's page
-  const skillRow = page.locator('[data-installed-entry^="skill:"] button[aria-label]').first();
+  const skillRow = page.locator("[data-plugin-skill]").first();
   if (await skillRow.count()) {
     await skillRow.click();
     await page.waitForSelector("[data-plugins-skill]");

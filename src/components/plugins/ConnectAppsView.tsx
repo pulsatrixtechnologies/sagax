@@ -251,7 +251,7 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
           >
             {search && <div className="min-w-0 flex-1" data-plugins-search-slot>{search}</div>}
             <button type="button" onClick={() => onTab("bots")} className={PLUGINS.textLink} data-plugins-bot-templates>
-              <Bot size={16} aria-hidden="true" />
+              <span className="flex size-[18px] items-center justify-center rounded-full bg-ink text-app" aria-hidden="true"><Bot size={12} /></span>
               {t("connectApps.botTemplates")}
               <ArrowUpRight size={14} className="text-ink-secondary" aria-hidden="true" />
             </button>
@@ -294,12 +294,12 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
       {backBar}
       <div className="min-h-0 flex-1 overflow-y-auto outline-none" tabIndex={-1} data-plugins-list="" data-plugins-manage={shown}>
         <div className={cn(PLUGINS.gutter, "pb-8 pt-3")}>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
             <h2 id="plugins-title" className={cn(PLUGINS.bigTitle, "min-w-0 flex-1")}>{t(BIG_TITLE_KEY[shown])}</h2>
             {shown !== "pages" && scope && <div className="shrink-0" data-plugins-scope-slot>{scope}</div>}
             {shown !== "pages" && (
-              <button type="button" onClick={onRefresh} disabled={refreshing} className="ui-icon-button disabled:opacity-50" aria-label={t("connectors.refreshTitle")} title={t("connectors.refreshTitle")}>
-                <RefreshCw size={15} className={cn(refreshing && "animate-spin")} />
+              <button type="button" onClick={onRefresh} disabled={refreshing} className={cn(PLUGINS.quietPill, "w-7 px-0")} aria-label={t("connectors.refreshTitle")} title={t("connectors.refreshTitle")}>
+                <RefreshCw size={13} className={cn(refreshing && "animate-spin")} />
               </button>
             )}
             {shown === "installed" && manageActions}

@@ -108,7 +108,7 @@ export function CustomConnectorPage({ mcp, onBack, trail }: {
         <div className="mt-[28px] space-y-[10px]">
           <label className="block">
             <span className={labelClass}>{t("connectApps.connector.name")}</span>
-            <input className={fieldClass} value={name} onChange={(event) => setName(event.target.value)} placeholder={t("connectApps.connector.namePlaceholder")} autoFocus data-connector-name />
+            <input className={fieldClass} value={name} onChange={(event) => setName(event.target.value)} placeholder={t("connectApps.connector.namePlaceholder")} data-connector-name />
           </label>
 
           <label className="block">

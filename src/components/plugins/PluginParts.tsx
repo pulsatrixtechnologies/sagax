@@ -150,7 +150,7 @@ export function PluginCard({ title, children, action }: { title?: ReactNode; chi
           {action}
         </div>
       )}
-      <div className="rounded-[14px] border border-border px-[14px] py-2">{children}</div>
+      <div className="rounded-[14px] border-[0.5px] border-ink/10 px-[14px] py-2">{children}</div>
     </section>
   );
 }

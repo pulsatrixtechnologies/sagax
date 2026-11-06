@@ -160,7 +160,7 @@ export function MessagesSetupView({ onBack, trail }: Props) {
         )}
 
         {status && !status.available && (
-          <div className="rounded-2xl border border-border bg-card px-4 py-4" data-messages-setup-unavailable="">
+          <div className="rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015] px-4 py-4" data-messages-setup-unavailable="">
             <p className="text-[13px] font-medium text-ink">{t("connectApps.mac.messages.unavailableTitle")}</p>
             <p className="mt-1 text-[12.5px] leading-relaxed text-ink-secondary">
               {status.reason === "organization_server"
@@ -175,7 +175,7 @@ export function MessagesSetupView({ onBack, trail }: Props) {
 
         {status?.available && (
           <div className="flex flex-col gap-5">
-            <section className="rounded-2xl border border-border bg-card px-4 py-4" data-messages-setup-intro="">
+            <section className="rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015] px-4 py-4" data-messages-setup-intro="">
               <div className="flex items-start gap-3">
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent">
                   <MessageSquare size={20} aria-hidden="true" />
@@ -197,7 +197,7 @@ export function MessagesSetupView({ onBack, trail }: Props) {
               </ul>
             </section>
 
-            <section className="rounded-2xl border border-border bg-card px-4 py-4" data-messages-setup-steps="">
+            <section className="rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015] px-4 py-4" data-messages-setup-steps="">
               <div className="mb-3 flex items-center gap-2">
                 <Shield size={15} className="text-ink-secondary" aria-hidden="true" />
                 <h3 className="text-[13px] font-semibold text-ink">{t("connectApps.mac.messages.stepsTitle")}</h3>

@@ -4,9 +4,8 @@ import { Globe } from "lucide-react";
 import { BrowserUnavailableNote } from "./SettingsLink";
 import { t } from "@/lib/i18n";
 import { api, useStore, type Bot } from "@/state/store";
-import type { BrowserFrame } from "./BrowserViewport";
 import { createBrowserInputQueue } from "@/lib/browser-input-queue";
-import { createBrowserControl, type BrowserInteraction, type BrowserTakeStatus } from "@/lib/browser-control";
+import { createBrowserControl, type BrowserInteraction } from "@/lib/browser-control";
 import type { ScreenState } from "@/lib/desktop-local-vm";
 import { browserDot, reportScreenDot } from "@/lib/screen-status";
 import { ComputerScreen, type ScreenAction } from "./computer/ComputerScreen";
@@ -16,9 +15,9 @@ import { readableError } from "@/lib/plain-error";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { useAnchoredDismissRoot } from "./AnchoredPopover";
 import { LiveBrowserView } from "./BrowserPanel.tsx-parts/LiveBrowserView";
+import { useLiveBrowserFlags } from "./BrowserPanel.tsx-parts/useLiveBrowserFlags";
 
 interface BrowserTab { tabId: string; title: string; url: string; active: boolean }
-type ViewerFrame = BrowserFrame & { viewerId: string; generation: number };
 const RECONNECT_DELAYS = [1_000, 2_000, 4_000, 8_000, 15_000];
 const NO_CONTROL = { held: false, controlling: false, owned: false };
 /** Where the window takes a browser that shows a blank page (the server
@@ -42,36 +41,28 @@ export type BrowserSignIn = { url: string; site: string; nonce: number };
 export function LiveBrowser({ bot, control: allowed = true, placeholder, teach = false, signIn }: { bot: Bot; control?: boolean; placeholder?: string | undefined; teach?: boolean; signIn?: BrowserSignIn | undefined }) {
   const confirm = useConfirm();
   const { state } = useStore();
-  const [attempt, setAttempt] = useState(0);
-  const [frame, setFrame] = useState<ViewerFrame | null>(null);
-  const [tabs, setTabs] = useState<BrowserTab[]>([]);
-  const [address, setAddress] = useState("");
-  const [connected, setConnected] = useState(false);
-  const [control, setControl] = useState({ held: false, controlling: false, owned: false });
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState("");
-  const [showProfiles, setShowProfiles] = useState(false);
-  const [showTyping, setShowTyping] = useState(false);
-  const [viewport, setViewport] = useState({ width: 1280, height: 720 });
-  const [takeStatus, setTakeStatus] = useState<BrowserTakeStatus>("");
-  // The server keeps the view open while the bot's own command holds the browser.
-  const [busy, setBusy] = useState(false);
-  // Last useState of this component: the test fixture (BrowserPanel.test.ts)
-  // seeds the earlier ones by call order.
-  // The stream dropped and an automatic reconnect is under way (not a failure).
-  const [reconnecting, setReconnecting] = useState(false);
-  // The person's network debugger (never the bot's).
-  const [showNetwork, setShowNetwork] = useState(false);
-  // Teach by demonstration (server/browser/browser-teach.ts): a recording runs, then
-  // its steps open in the editor. Never null: the test fixture gives every
-  // useState(null) the frame.
-  const [recording, setRecording] = useState(false);
-  const [taught, setTaught] = useState<{ steps: TeachStep[]; recordedAt: string } | undefined>(undefined);
-  const [teachNote, setTeachNote] = useState("");
-  // Held on purpose: Take control, or a sign-in card's Open.
-  const [kept, setKept] = useState(false);
-  // The typing dialog is for a password or code: masked, never kept.
-  const [masked, setMasked] = useState(false);
+  const {
+    attempt, setAttempt,
+    frame, setFrame,
+    tabs, setTabs,
+    address, setAddress,
+    connected, setConnected,
+    control, setControl,
+    pending, setPending,
+    error, setError,
+    showProfiles, setShowProfiles,
+    showTyping, setShowTyping,
+    viewport, setViewport,
+    takeStatus, setTakeStatus,
+    busy, setBusy,
+    reconnecting, setReconnecting,
+    showNetwork, setShowNetwork,
+    recording, setRecording,
+    taught, setTaught,
+    teachNote, setTeachNote,
+    kept, setKept,
+    masked, setMasked,
+  } = useLiveBrowserFlags();
   const viewer = useRef("");
   const generation = useRef(0);
   const pendingOperation = useRef<number | null>(null);
@@ -371,19 +362,12 @@ export function LiveBrowser({ bot, control: allowed = true, placeholder, teach =
       }
     }
   };
-  // Usable whenever connected and no other window holds the browser: the
-  // first real interaction takes control from the bot by itself.
   const heldElsewhere = control.held && !control.owned;
   const interactive = allowed && connected && !heldElsewhere && !pending;
-  // The dialog pins a lease; it cannot acquire one or freeze the field the
-  // person picked. Click that page field first, before writing in the dialog.
   const typingReady = interactive && control.owned && control.controlling;
-  // Toolbar actions wait out a take as they wait out a running action, so a
-  // repeated click cannot pile up behind it. Page input still buffers.
   const taking = takeStatus === "pending" || takeStatus === "slow";
   const commandsReady = interactive && !taking;
   const pill = "flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-full border bg-menu px-2.5 py-1 text-[11px] shadow-sm sm:text-[12px]";
-  // Who has the browser, in words, with the one action that changes it.
   const mine = control.owned && control.controlling;
   const pageTitle = tabs.find((tab) => tab.active)?.title ?? "";
   const holder = mine ? t("sandboxDesktop.controlling") : heldElsewhere ? t("browser.live.heldElsewhere")

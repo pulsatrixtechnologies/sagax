@@ -7,7 +7,7 @@ function visibleTo(viewer: Viewer) {
   const host = getHost();
   const { VisibleSet } = host;
 
-  const key = viewer.kind === "all" ? "*" : viewer.kind === "none" ? "none" : `member:${viewer.email?.trim().toLowerCase() ?? ""}`;
+  const key = viewer.kind === "all" ? "*" : viewer.kind === "none" ? "none" : `member:${viewer.email?.trim().toLowerCase() ?? ""}:${viewer.personId ?? ""}`;
   let set = host.visibleSets.get(key);
   if (!set) {
     set = new VisibleSet(host.store.bots, host.store.groups, viewer, host.threadOwner);

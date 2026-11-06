@@ -68,3 +68,25 @@ export function pickAccountForModel(input: {
 export function accountsForModel(accounts: readonly PoolAccount[], model: string): PoolAccount[] {
   return accounts.filter((account) => account.models.includes(model));
 }
+
+/** A managed MCP plugin name as the pool compares it ("Microsoft 365",
+ * "microsoft-365" and "Microsoft365" are one plugin). */
+export function pluginKey(name: string): string {
+  return name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+/** #2106: the managed MCP plugins a turn needs, read from what the person
+ * asked: every plugin held by one of the accounts whose name the words say
+ * ("check my Gmail", "post in Slack"). Keys as pluginKey returns them. */
+export function pluginsNamedIn(text: string, known: readonly string[]): string[] {
+  const words = ` ${text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
+  const joined = pluginKey(text);
+  const out = new Set<string>();
+  for (const name of known) {
+    const key = pluginKey(name);
+    if (key.length < 3) continue;
+    const spaced = ` ${name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
+    if (words.includes(spaced) || (key.length >= 6 && joined.includes(key))) out.add(key);
+  }
+  return [...out];
+}

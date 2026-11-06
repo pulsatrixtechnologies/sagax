@@ -154,14 +154,14 @@ export function ModelPickerMenu({
     event.preventDefault();
     closeMenu(true);
   };
-  const content = (
+  // #2106: Auto's Optimize choices sit right under the Auto row; the model's
+  // settings and the links sit below the models, in the same scrolling zone
+  // (one scroll for the whole menu). The two-pane menu keeps them under its panes.
+  const autoPanel = (
     <>
-      <ModelSearchList variant="popover" autoFocus sections={menuSections} onPick={onRow} onEscape={() => closeMenu(true)} disabled={Boolean(bot.busy)} panes={panes}
-        favorites={{ keys: favoriteKeys, onToggle: (row) => toggleModelFavorite(row.key) }}
-        onAutoEdit={setAutoOptimize && setAutoEditOpen && !viewerLocal ? () => setAutoEditOpen((open) => !open) : undefined} />
       {autoEditOpen && setAutoOptimize && setAutoEditOpen && (
         <div role="group" aria-label={t("model.auto.optimizeTitle")} data-model-auto-optimize
-          className="border-t border-popover-hairline px-1.5 py-1">
+          className={cn("py-1", panes ? "border-t border-popover-hairline px-1.5" : "pb-0.5")}>
           <div className="px-2 pb-1 pt-1 text-[11.5px] text-popover-ink-secondary">{t("model.auto.optimizeTitle")}</div>
           {AUTO_OPTIMIZE_VALUES.map((value) => (
             <button
@@ -186,6 +186,10 @@ export function ModelPickerMenu({
           ))}
         </div>
       )}
+    </>
+  );
+  const below = (
+    <>
       {!viewerLocal && <ModelNoEngineNotice className="border-t border-popover-hairline px-3 py-2" onConnect={() => closeMenu()} />}
       {/* #2050: the two-pane selector always shows the effort bar (the
           global Simple/Advanced mode hides nothing on these pages). */}
@@ -202,6 +206,17 @@ export function ModelPickerMenu({
           <ChevronRight size={14} aria-hidden="true" className="text-popover-ink-secondary" />
         </ModelMenuItem>
       </div>
+    </>
+  );
+  const content = (
+    <>
+      <ModelSearchList variant="popover" autoFocus sections={menuSections} onPick={onRow} onEscape={() => closeMenu(true)} disabled={Boolean(bot.busy)} panes={panes}
+        favorites={{ keys: favoriteKeys, onToggle: (row) => toggleModelFavorite(row.key) }}
+        onAutoEdit={setAutoOptimize && setAutoEditOpen && !viewerLocal ? () => setAutoEditOpen((open) => !open) : undefined}
+        after={panes ? undefined : below}
+        autoPanel={panes ? undefined : autoPanel} />
+      {panes && autoPanel}
+      {panes && below}
     </>
   );
 

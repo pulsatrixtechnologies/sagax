@@ -27,7 +27,7 @@
 // chosen column entry, each with its star and the check on the current
 // one. The left and right arrows step the column entries. Typing lists
 // every provider's matches flat, as in the other modes.
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { TriangleAlert, Check, ChevronLeft, ChevronRight, Search, Star } from "lucide-react";
 
 import { cn } from "@/lib/cn";
@@ -155,7 +155,7 @@ export function defaultPaneKey(groups: readonly PaneGroup[]): string | undefined
   return (groups.find((group) => group.current) ?? groups.find((group) => group.key === PANE_FAVORITES_KEY && group.count > 0) ?? groups.find((group) => group.key !== PANE_FAVORITES_KEY) ?? groups[0])?.key;
 }
 
-export function ModelSearchList({ sections, onPick, variant, autoFocus = false, onEscape, disabled = false, label, favorites, submenus = false, groupProviders = false, panes = false, onPreview, onAutoEdit }: {
+export function ModelSearchList({ sections, onPick, variant, autoFocus = false, onEscape, disabled = false, label, favorites, submenus = false, groupProviders = false, panes = false, onPreview, onAutoEdit, after, autoPanel }: {
   sections: ModelMenuSection[];
   onPick: (row: ModelMenuRow) => void;
   onPreview?: (row: ModelMenuRow) => void;
@@ -177,6 +177,13 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
   panes?: boolean;
   /** #2106: Edit on the Auto row opens Optimize for Intelligence / Balance / Cost. */
   onAutoEdit?: () => void;
+  /** #2106: drawn at the end of the flat list, inside the same scrolling
+   * zone (the Auto Optimize choices, the model's settings, the links), and
+   * the list fills the menu's height instead of its own cap. */
+  after?: ReactNode;
+  /** #2106: drawn right under the Auto row of the flat list (its Optimize
+   * choices), so opening Edit shows them where the eye already is. */
+  autoPanel?: ReactNode;
 }) {
   const style = STYLE[variant];
   const [query, setQuery] = useState("");
@@ -363,7 +370,7 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
 
   return (
     <div ref={boxRef} data-model-search-list={variant} data-model-menu-nested={nested || undefined}
-      className={cn("flex flex-col", variant === "popover" ? "min-h-0 min-w-0" : "shrink-0")}>
+      className={cn("flex flex-col", variant === "popover" ? "min-h-0 min-w-0" : "shrink-0", after !== undefined && "flex-1")}>
       <label className={style.field}>
         <Search size={13} aria-hidden="true" className={cn("shrink-0", style.icon)} />
         <input
@@ -492,7 +499,9 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
           {entries!.length === 0 && <div data-model-no-match className={style.empty}>{t("model.noMatch")}</div>}
         </div>
       ) : (
-        <div ref={listRef} id={listboxId} role="listbox" aria-label={label ?? t("model.models")} data-model-list className={style.list}>
+        <div ref={listRef} id={listboxId} role="listbox" aria-label={label ?? t("model.models")} data-model-list
+          data-model-list-scroll={after !== undefined ? "" : undefined}
+          className={after !== undefined ? "min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5 pb-1" : style.list}>
           {shown.length === 0 && <div data-model-no-match className={style.empty}>{t("model.noMatch")}</div>}
           {shown.map((section, index) => (
             <div key={section.key} role="group" aria-label={section.label} data-model-section={section.key}
@@ -503,9 +512,15 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
                   {section.note && <span data-model-section-note className="truncate opacity-80">· {section.note}</span>}
                 </div>
               )}
-              {section.rows.map((row) => <ModelSearchRow key={row.key} {...rowProps(row, row.key)} />)}
+              {section.rows.map((row) => (
+                <Fragment key={row.key}>
+                  <ModelSearchRow {...rowProps(row, row.key)} />
+                  {row.kind === "auto" && autoPanel}
+                </Fragment>
+              ))}
             </div>
           ))}
+          {after !== undefined && <div role="presentation" data-model-list-after className="-mx-1.5">{after}</div>}
         </div>
       )}
       {openSub && openProvider && (

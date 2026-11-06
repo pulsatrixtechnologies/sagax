@@ -333,6 +333,8 @@ export type StartTurnHost = {
   registerComputerResume: any,
   registeredWorkers: any,
   registry: any,
+  /** #2106: managed MCP plugin names a subscription account holds. */
+  accountManagedPlugins?: (instanceId: string) => readonly string[],
   releaseBootEngineSlot: any,
   releaseLocalVmThread: any,
   releasePlain: any,

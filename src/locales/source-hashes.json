@@ -5934,7 +5934,6 @@
       "connectApps.grok.detail": "f6fb836e067f65e1173890510003028018ac731fefa3de9359060bd447b79dc1",
       "connectApps.grok.description": "f65e8f47c52a9fdf275fdb16c3814c9ea3217346495aed136cca07f5433892f4",
       "connectApps.providers.manage": "b7974a3c803c2496bff7f791c511b441ba942461edec48bcc22500a03403fa4c",
-      "connectApps.providers.note": "36e08e2978b986e2e151c158073c04a3fbc43c860220c1f77953b5ae681a1e2d",
       "connectApps.scope.aria": "87987decfe87c78be6edfbabce85ba651cae3897b019b0c49bee3ef80747b773",
       "connectApps.scope.bot": "ce97184a7dcaea83f562c1634923c9484526f53c1c63755f64eebeab677d19a0",
       "connectApps.scope.botNote": "dc579a4ba761689abafa7ec67ed1ece8c06e269eb0a7057f3f428b0d72dbfc4d",
@@ -15120,7 +15119,6 @@
       "connectApps.accounts.notice.notOperator": "9d10b93fe425d1cf7357717bf3416303d24cd5404ca4225480eb8882f7973798",
       "connectApps.accounts.notice.key": "16e873d1b9155a5e27ee8f64da66559dc29063f6e2d3cb7102c3e6229c1397ec",
       "connectApps.accounts.notice.unknown": "57f626d3012b37feeda79bd39d099f5b29b55f5d84f3d78e881207f351eaec7e",
-      "connectApps.accounts.servicesAria": "3cccf4a83b9eac144e0c2d6934f70657edd03786c46963010d68a4dabfb2aa5a",
       "connectApps.sources.adminsOnly": "b6c70926c1aa978c5156df062291186547f987e30eda2f48ea996c0e955dc4b1",
       "organization.plugins.open": "81393d1e2beb18cd4154bbfc9b7011fa622be464b28955dec6473b5d15869419",
       "openAtLogin.title": "557e1a9d41e84b6db99bca3624712510b4cbb543f247a9c764609cab1666c4f6",
@@ -15138,7 +15136,6 @@
       "botPanel.model.backupModel": "34e99052201de509a6189de64ef6b6f35dc7f95f7c78722a8807376dc47b15e4",
       "settings.usage.title": "5dea9f1646259a40cea67106c6ca6b6242e7431e3b662588ee269dcc0c73fff6",
       "settings.usage.help": "2d55b759a12dc119d0e2dfbc5e6eb3920fc700fbe3bc0aff61c4ea2ba3ca0428",
-      "connectApps.scope.accountsNote": "2d5e7b41de12ab039720691a73f3145ceeb211869d95335b46c3b40863dbaa07",
       "connectApps.scope.workspaceNote": "cdf3ba92ea5e71437a37568a31828a82b8005905e4a695e7b48fdad0c2670ec2",
       "connectApps.detail.state.everyoneOn": "31bba3c97e60ca841852f85325cdb04377ac16bf18191cf905f4bd8cc6c8df88",
       "connectApps.detail.state.everyoneOff": "4aa393c07e47e6b4bef78df92a94944fab2ddc333a7938bf792a7e3d50798b3a",
@@ -15414,7 +15411,6 @@
       "chat.step.age.minutes": "1829c58ba472520fd39e61f9e337a1b7da27e86299332dde5bfdea355c3895a8",
       "chat.step.age.hours": "b7fc364731644a6667a1ab0d48785151323d2dce026a3cf09d2c24273ebb2585",
       "connectApps.manage.tab.bots": "f17c0acbd8e50c780760bb7c6493264736305603acae6f076b1eecb0e26f5118",
-      "connectApps.scope.botsNote": "0fdf68d29b7a5bdad6cc09207844c0060abdc609f62f23a5b4b7b92cfdfd4f13",
       "connectApps.search.placeholder": "ffdbbb46109e6f129113b556e0b1801362ec917f1fab7b201a66ee36aaa9d245",
       "connectApps.search.clear": "3b7ea51793e9d906afa06afb86252abb48e1125cc96a7f5efabcfd8597ea183a",
       "connectApps.search.resultsAria": "e978b00de465a271a13bf2f6b9d74d67fdfaa7d973a37378fa32f988c3280599",
@@ -16279,8 +16275,6 @@
       "settings.messages.openSetup": "f279098c56e71a1055d8fa786786f93ac352f92330b6ec6e9974ff5243f2fb7a",
       "connectApps.mac.title": "8b3795aa25390811064d8e7276e56384b720d78e3ab2780e415c7dc9d4e9522b",
       "connectApps.mac.section": "79a4aefc396f611663651ef71a351b1396fdde27aa066e7f3540fc6d63d96d63",
-      "connectApps.mac.seeAll": "d7a8c446069a058592e224c0ef5fe3d33e5c46e3395160baa24580a7de4965c2",
-      "connectApps.mac.intro": "c4d70ad78465395f1fe651321beb0fb2a026b201860e2d262b7012aa717c596b",
       "connectApps.mac.messages.rowTitle": "04d7b48339271ea67d3c8493e07e90bc68dc565485eebe5e0b67c21c1586e3c0",
       "connectApps.mac.messages.rowOn": "421768b0257296656578062d1371cf2ab4c77d2fd99a3295aebec80f1a2dbd35",
       "connectApps.mac.messages.rowOff": "b6ef62328229039bfacacae87a14e4dab4fb8ae70d5ea0fd7100f75e54eef1eb",
@@ -17199,28 +17193,6 @@
       "myToolAccess.scope.settings": "74a883a037bc227f91891ab654a753d3a99f31ab06ae5b5d2b6e594a692b41f8",
       "botProfile.private": "c63eb6720c6e88493897548d3620d45e539d18574465f7b26fdddcbade044ee2",
       "botProfile.shared": "e3c4b39d6d5013477c98cd58236fed455f37aa7017b7168ce1980a449aaf438a",
-      "vault.transfer.import": "2cff9baabf56ca002610e113bc94deb6ededddfc3c130365b6e88ed5195bf774",
-      "vault.transfer.export": "3664895579f0a7e68c4aa09c91316e20239bc74499010e6423ece40cad7c28f7",
-      "settings.launch.change": "c0bf75bd78bf9572596720d596bd5a20a5b9145cde0fe50dec1e783cb184d69b",
-      "settings.launch.server": "0ac0ce8f67d3350f8da789cb790d79d6848802379d6759160b6ee7ea8ae1615b",
-      "settings.launch.solo": "ed0dd6e17c875f7a4ceefcbca57458cce1d5b9dafe8ec52eb53ba22fb46b2ad1",
-      "settings.launch.title": "aef7de28d52977f1b5cd0fecfdc151717610adf41e0aa33b4d9f7522a43337ef",
-      "settings.skin.modeLabel": "5e23ec6a300dc60a79641769017e16e9bf042cbd8fd0a54586a048ab9da972ff",
-      "settings.notificationSounds.play": "7c3c8805424fac6f6567f6cc04b38705b62a191464995c5e9d2a89a2d5da9f7d",
-      "settings.notificationSounds.title": "7c3c8805424fac6f6567f6cc04b38705b62a191464995c5e9d2a89a2d5da9f7d",
-      "settings.advancedPage.title": "9f088dbebd6c3c70a5ddbc2c943b11e4ca9acea5757b0b4f2b32479f0dbb747e",
-      "settings.advancedPage.open": "ed077f3d8125d60dca1979c7133601bd187d47c73ed9975028f677e49e709942",
-      "settings.group.account": "7e1b0d5641f2640ce9a953ec231eea2c27a2a7633f7d3c273e5735e2b30c10b7",
-      "settings.group.system": "6725e7bbcd28f3a8a586fa34bf191fd72dde8b61756932cd3237c17a6f196f1a",
-      "settings.advancedPage.summary": "6bb5f19243458da2003e911d9c1f7a15803d59ce1618511a2bf2a073b65430a2",
-      "settings.group.interface": "c26b3ed4ce70e202816608a9ca6cc14da9ed4a5cf14c7c758be0e2c20344ed82",
-      "settings.group.desktop": "9bd88f2485acbb9426ad3dd9e06842ede8c7516d0ba8559298675f09419681fa",
-      "settings.notifications.thisComputer": "e6af7ee2bde2d5b5d9fd1441db828be287079871bc7d14aebab3ee6a73579a9e",
-      "security.keys.addHint": "4e137354e2801e18bb05b27e72e2a83c8928ab694cb6f91a6f2a3052551e2278",
-      "security.keys.namePlaceholder": "9360e70487107f8e32abdab99dea39593fd6ade2e2854431d4db0981c65e247d",
-      "security.classes.title": "4b7dfc6ce30ab92746559debe066eb1ac90919470043c0352230941c70bc1aaf",
-      "security.classes.intro": "319ea09293497e40e585046e7c6175976e2e796574d0aa5960018cbc83c4f3cc",
-      "settings.timeZone.auto": "f8e41839faf7b5261693683bb03eb8390993c55aa506bfeeb929b70aee7f4a7e",
       "connectApps.add": "9fd728c66c9a256b121472dabf32a34317aed01d8427d70ec830289cf23a7cc8",
       "orgCapabilities.member.loadFailed": "e2cb7bd959ff2a1336e015994e0c91d6b3621d28d2c2e36996c17d1950affd6b",
       "orgCapabilities.member.retry": "d8b8392e2c542950ca64867168e4ef87d4ad606882d5898f826b51c6d553988f",
@@ -22855,10 +22827,7 @@
       "botPanel.library.pageState.org": "8119b886dd6fdd7f0794c5c7b7bfa10335290523691b82ffd5be2862249ae342",
       "botPanel.library.pageState.link": "5b55be3d77de8180e359226b31d65e4632d60372ae6694059ca87e20dc0c4f5f",
       "botPanel.library.pageState.revoked": "4bb47f186df233e48b09d241ee4defb821add0c35ac8311469fe1522c6813dd5",
-      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3",
-      "settings.group.account": "7e1b0d5641f2640ce9a953ec231eea2c27a2a7633f7d3c273e5735e2b30c10b7",
-      "settings.notificationSounds.title": "7c3c8805424fac6f6567f6cc04b38705b62a191464995c5e9d2a89a2d5da9f7d",
-      "settings.notificationSounds.play": "7c3c8805424fac6f6567f6cc04b38705b62a191464995c5e9d2a89a2d5da9f7d"
+      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3"
     },
     "pt-br": {
       "achievements.panel.all": "e2adb0c3b5f28a7c9d5bdac240382201b39376dd11671aedc93e8a73b6468f19",
@@ -25525,8 +25494,7 @@
       "routineEditor.hint.model": "1e4801441d38abd465f72135feab7a2b811ddb57537c948ed2d04e6d6e576719",
       "routines.effort.label": "4387e5d3966fc436532792769763cd1ab7cccd6464d4c01c2b91261894e96b77",
       "routines.effort.botDefault": "a6f2b10be05387215e32f014b3db3c2a378d078db65fa84390757038af7e5dad",
-      "routineEditor.hint.effort": "87361e2d484e0e3a9ec607a0da9676b91370da2c4b80302a9d8a094ba99e3d18",
-      "settings.notificationSounds.title": "7c3c8805424fac6f6567f6cc04b38705b62a191464995c5e9d2a89a2d5da9f7d"
+      "routineEditor.hint.effort": "87361e2d484e0e3a9ec607a0da9676b91370da2c4b80302a9d8a094ba99e3d18"
     },
     "uk": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -34149,10 +34117,7 @@
       "botPanel.library.pageState.org": "8119b886dd6fdd7f0794c5c7b7bfa10335290523691b82ffd5be2862249ae342",
       "botPanel.library.pageState.link": "5b55be3d77de8180e359226b31d65e4632d60372ae6694059ca87e20dc0c4f5f",
       "botPanel.library.pageState.revoked": "4bb47f186df233e48b09d241ee4defb821add0c35ac8311469fe1522c6813dd5",
-      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3",
-      "settings.notificationSounds.title": "7c3c8805424fac6f6567f6cc04b38705b62a191464995c5e9d2a89a2d5da9f7d",
-      "settings.notificationSounds.play": "7c3c8805424fac6f6567f6cc04b38705b62a191464995c5e9d2a89a2d5da9f7d",
-      "settings.group.account": "7e1b0d5641f2640ce9a953ec231eea2c27a2a7633f7d3c273e5735e2b30c10b7"
+      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3"
     }
   }
 }

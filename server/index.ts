@@ -1230,6 +1230,13 @@ import {
   skillCommandInline,
   undoSkillWrite
 } from "./skills/skills.ts";
+import {
+  expandNativeSkillCommand,
+  nativeSkillListing,
+  nativeSkills,
+  readNativeSkillFile,
+  type NativeSkill,
+} from "./skills/native-skills.ts";
 import { newBotDefaultsSchema } from "./bots/new-bot-defaults.ts";
 import { greetingLanguage } from "./bots/new-bot-greeting.ts";
 import {
@@ -4888,17 +4895,38 @@ const availableSkills = () => mergeSkills(bundledSkills, loadUserSkills(join(DAT
 // bot records stay inert until it is on.
 const listBotSkills = (bot: BotRecord) =>
   skillsLibraryEnabled(cfg) ? resolveBotSkills(bot.id, bot.assignedSkills) : listSkills(bot.id);
+/** Folder a thread's turns run in, as the store pins it; null when pinned to none. */
+function threadFolderForSkills(bot: BotRecord, threadId: string): string | null {
+  const task = store.taskByThread(bot.id, threadId);
+  if (task && "cwd" in task && task.cwd !== undefined) return task.cwd;
+  return bot.cwd ?? join(TASK_WORKSPACES_DIR, bot.id, threadId);
+}
+function listNativeSkillsForTurn(
+  bot: BotRecord,
+  threadId: string,
+  instance?: { driverKind: string; config?: unknown; environment?: Record<string, string | undefined> } | null,
+): NativeSkill[] {
+  const engine = instance ?? (() => {
+    const found = registry.get(bot.modelSelection.instanceId);
+    return found ? { driverKind: found.driverKind, config: (found as { config?: unknown }).config, environment: (found as { environment?: Record<string, string | undefined> }).environment } : null;
+  })();
+  if (!engine) return [];
+  return nativeSkills(engine, {
+    claudeUserSkills: claudeUserSkillsEnabled(cfg),
+    cwd: threadFolderForSkills(bot, threadId),
+  });
+}
+const listNativeBotSkills = (bot: BotRecord, threadId: string) =>
+  listNativeSkillsForTurn(bot, threadId).map(nativeSkillListing);
 const readBotSkillFile = (bot: BotRecord, name: string): string | null => {
   const own = readSkillFile(bot.id, name);
-  if (own !== null || !skillsLibraryEnabled(cfg)) return own;
+  if (own !== null) return own;
   // A private listing whose stored bytes no longer verify must not fall
-  // through to a same-named library skill: private wins collisions, so a
-  // broken private file stays unreadable instead of exporting another
-  // bot's library instructions under this bot's name.
+  // through to a same-named library or native skill: private wins collisions.
   if (listSkills(bot.id).some((skill) => skill.name === name)) return null;
-  // The library fallback is by assignment only, never by name alone.
-  if (!bot.assignedSkills?.includes(name)) return null;
-  return readLibrarySkillFile(name);
+  if (skillsLibraryEnabled(cfg) && bot.assignedSkills?.includes(name)) return readLibrarySkillFile(name);
+  const native = listNativeSkillsForTurn(bot, bot.threadId).find((skill) => skill.name === name);
+  return native ? readNativeSkillFile(native) : null;
 };
 
 // Electron's utility-process parent port is private to the desktop main
@@ -10870,9 +10898,17 @@ function botCapabilitiesAs(
       return spec ? mcpOAuth.status(name, spec, bot.mcpAccounts?.[name])?.auth : undefined;
     },
     ...(personal ? { personal } : {}),
-    skills: library
-      ? listBotSkillsWithOrigin(bot.id, bot.assignedSkills).skills.map((skill) => ({ name: skill.name, description: skill.description, enabled: skill.enabled, origin: skill.origin, source: skill.source }))
-      : listSkills(bot.id).map((skill) => ({ name: skill.name, description: skill.description, enabled: skill.enabled, origin: "private" as const, source: skill.source })),
+    skills: (() => {
+      const natives = listNativeBotSkills(bot, bot.threadId);
+      if (library) {
+        return listBotSkillsWithOrigin(bot.id, bot.assignedSkills, [], undefined, natives).skills.map((skill) => ({
+          name: skill.name, description: skill.description, enabled: skill.enabled, origin: skill.origin, source: skill.source,
+        }));
+      }
+      const own = listSkills(bot.id).map((skill) => ({ name: skill.name, description: skill.description, enabled: skill.enabled, origin: "private" as const, source: skill.source }));
+      const names = new Set(own.map((skill) => skill.name));
+      return [...own, ...natives.filter((skill) => !names.has(skill.name)).map((skill) => ({ name: skill.name, description: skill.description, enabled: skill.enabled, origin: skill.origin, source: skill.source }))];
+    })(),
     librarySkills: Object.values(readSkillLibraryIndex()).map((skill) => ({ name: skill.name, source: skill.source })),
     skillsLibrary: library,
     ...(prompt ? { promptIndex: prompt.index, capabilityPromptIndex: prompt.byCapability } : {}),
@@ -47263,6 +47299,7 @@ ROUTES.push(createBotsContentRoutes({
   samePerson,
   personalSkillsList: (person) => personalSkills.list(person),
   listBotSkills,
+  listNativeBotSkills,
   listStagedSkillWrites,
   stagedSkillListing,
   githubCredentialsFor,
@@ -49042,8 +49079,10 @@ const startTurnRunner = createStartTurn({
   ensureTaskWorkspace,
   ensureWorkspace,
   expandLearnTurnText,
+  expandNativeSkillCommand,
   expandSetupTurnText,
   expandSkillCommandTurnText,
+  listNativeSkillsForTurn,
   explainPick,
   extractTurnImages,
   failedTurnTool,
@@ -49216,6 +49255,7 @@ const startTurnRunner = createStartTurn({
   replaysNatively,
   reportIncident,
   requestWorkOrigin,
+  resolveBotSkills,
   resolveComputerPromptKind,
   resolveEngineTurnEffort,
   resolveTurnSpeaker,

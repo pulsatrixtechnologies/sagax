@@ -8957,6 +8957,8 @@
       "persona.rules.short": "b3c3eeff61d2fc42773ba6a7e43023ae57d3570352085f5a7b87f5a0c791a78c",
       "skills.learned.hintOn": "8173c7bbc56827c465ec257db04ae5262abe99e98521db8f460aaba33bfea7b6",
       "skills.learned.hintOff": "f3477db333415d4fdb93b9f40229ca082915b4e47e1749acaac94588a5836ab7",
+      "skills.origin.native": "ed9f6f25068608efd412958da4dfc19328ca3511251fa6d5f9c42baf230e32f8",
+      "skills.origin.nativeHint": "55efb3490c4ae7b0a63a69f0247cb11d46adf9d295a0526cdb2dd76a6213618d",
       "persona.files.short": "80dc6243ea0fe47eceb5210b71c691a53f6070d19a43c770e45c45193ad7df9e",
       "webhooks.status.waiting": "540795994cbadb0124b6f74fce4354659c9e009362d8f88cb01aa68a7aeaea3f",
       "webhooks.status.ready": "0ac215b0f04708a648bbced649770111c4a8eca1b8598a170bbf12d7cea2d691",

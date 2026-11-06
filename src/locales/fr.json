@@ -5664,6 +5664,8 @@
   "persona.rules.short": "Contraintes strictes que le bot vérifie à chaque tour.",
   "skills.learned.hintOn": "Enregistre la vérification d'un bot comme compétence depuis la carte Vérifier, ou importes-en une ici. Chaque compétence nouvelle ou modifiée s'affiche dans le chat avec Annuler.",
   "skills.learned.hintOff": "La création de compétences est désactivée, mais celles que tu as activées restent gérables ici.",
+  "skills.origin.native": "moteur",
+  "skills.origin.nativeHint": "Le moteur du bot charge ceci depuis le dossier sous Source. Modifiez-le ou retirez-le là.",
   "persona.files.short": "Tout le contenu du dossier de ce bot.",
   "webhooks.status.waiting": "En attente d'un test",
   "webhooks.status.ready": "Prêt à activer",

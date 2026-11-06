@@ -7054,6 +7054,8 @@
   "sidebar.update.startingDownload": "Starting download…",
   "sidebar.update.upToDate": "You're up to date",
   "skills.learned.hintOff": "Skill authoring is off, but skills you already enabled stay under your control here.",
+  "skills.origin.native": "engine",
+  "skills.origin.nativeHint": "The bot's engine loads this from the folder under Source. Edit or remove it there.",
   "skills.learned.hintOn": "Save a bot's verification run as a skill from the Verify card, or import one here. Each new or changed skill shows in the chat with Undo.",
   "table.close": "Close table",
   "table.column": "Column {number}",

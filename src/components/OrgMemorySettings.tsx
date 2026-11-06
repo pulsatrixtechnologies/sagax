@@ -55,7 +55,7 @@ export function OrgMemorySettings() {
   return <OrgMemoryPanel bridge={bridge} orgName={org?.org.name ?? null} />;
 }
 
-export function OrgMemoryPanel({ bridge, orgName, initial = null, initialOpenProblem = null }: { bridge: OrgMemoryBridge; orgName: string | null; initial?: OrgMemoryState | null; initialOpenProblem?: OpenProblem | null }) {
+export function OrgMemoryPanel({ bridge, orgName: _orgName, initial = null, initialOpenProblem = null }: { bridge: OrgMemoryBridge; orgName: string | null; initial?: OrgMemoryState | null; initialOpenProblem?: OpenProblem | null }) {
   const { dispatch } = useStore();
   const { state, running } = useOrgMemoryState(bridge, initial);
   const [opening, setOpening] = useState(false);

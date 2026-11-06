@@ -1,23 +1,20 @@
 // Settings > Experimental, laid out as the reference design's settings pages (0.5.6,
 //): one group, each feature a row with its label and a switch. A feature
 // this server cannot run keeps its row, greyed, with "Not available on this
-// server" (the Data window on a server older than 0.5.3, #539/#560; the
-// built-in browser with no engine) and the reason behind the help button.
+// server" (the Data window on a server older than 0.5.3, #539/#560) and the
+// reason behind the help button.
 // Routines in the conversation and Group turns are Organization's
 // (2026-10-15): one way to reach them, no second switch here.
+// #2080 L3: built-in browser and My Chrome live on Computer.
 import { useEffect, useState } from "react";
 import { api, useStore, type ConfigStatus } from "@/state/store";
-import { browserAvailable, builtInBrowserEnabled, dataWindowEnabled, decisionModelEnabled, llmThreadTitlesEnabled, meetingNotetakerEnabled, skillAuthoringEnabled } from "@/lib/feature-flags";
+import { dataWindowEnabled, decisionModelEnabled, llmThreadTitlesEnabled, meetingNotetakerEnabled, skillAuthoringEnabled } from "@/lib/feature-flags";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import type { LocaleKey } from "@/locales";
-import { BrowserProfilesManager } from "../BrowserProfilesManager";
-import { MyChromeSettings } from "./MyChromeSettings";
-import { BrowserUnavailableNote } from "../SettingsLink";
 import { DescribedRow, HelpTip, SettingsGroup, Switch } from "../SettingsPrimitives";
-import { DisclosurePill } from "./AppearanceSettings";
 import { setDevPodsEnabled, useDevPodPrefs } from "../dev-pods/prefs";
-import { canEditConfig, canManageExperimental } from "@/lib/viewer";
+import { canManageExperimental } from "@/lib/viewer";
 import { useServerFeature } from "@/lib/server-features";
 import { featureMissingOnServer } from "@/lib/server-route";
 import { isPersonalFeature } from "../../../shared/person-settings";
@@ -25,7 +22,7 @@ import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { OrgPhoneCalls } from "./OrgPhoneCalls";
 import { SkillReviewSettings } from "./SkillReviewSettings";
 
-type ExperimentalFeature = "skillAuthoring" | "browser" | "decisionModel" | "dataWindow" | "meetingNotetaker" | "llmThreadTitles";
+type ExperimentalFeature = "skillAuthoring" | "decisionModel" | "dataWindow" | "meetingNotetaker" | "llmThreadTitles";
 
 /** One feature: its label, and a grey "Not available on this server" line
  * with the reason on demand when the server cannot run it. */
@@ -78,26 +75,9 @@ function FeatureRow({
   );
 }
 
-/** The browser profiles, under the browser row: a count that opens the
- * manager in place (the server's shared ones, or the viewer's own on an
- * organization server, #1098). */
-function BrowserProfilesBelow({ count }: { count: number }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div data-settings-card="experimental.browserProfiles" data-open={open ? "true" : "false"} className="mt-1 flex flex-col">
-      <div className="flex min-h-[32px] items-center justify-between gap-4 border-l-[0.5px] border-border pl-3">
-        <span className="text-[13px] leading-[18px] text-ink">{t("settings.profiles.title")}</span>
-        <DisclosurePill open={open} onToggle={() => setOpen((value) => !value)} label={t("settings.profiles.title")}>{count}</DisclosurePill>
-      </div>
-      {open && <div className="mt-2"><BrowserProfilesManager /></div>}
-    </div>
-  );
-}
-
 export function ExperimentalSettings() {
   const { state, dispatch } = useStore();
   const skillAuthoring = skillAuthoringEnabled(state.config);
-  const browser = builtInBrowserEnabled(state.config);
   const decisionModel = decisionModelEnabled(state.config);
   const dataWindow = dataWindowEnabled(state.config);
   // A server that predates the Data window (Sagax 0.5.2 and earlier, e.g. an
@@ -107,23 +87,16 @@ export function ExperimentalSettings() {
   const meetingNotetaker = meetingNotetakerEnabled(state.config);
   // A server without the notetaker sends no meetingNotetaker: the row stays, greyed.
   const meetingNotetakerServed = typeof state.config?.features?.meetingNotetaker === "boolean";
-  const desktopBrowser = browserAvailable(state.config);
-  const browserInstallable = state.config?.browserEngine?.installable === true;
-  const browserBlockedOnWindows = typeof window !== "undefined" && window.ogb?.platform === "win32" && !desktopBrowser && !browserInstallable;
   // #1098 (2026-10-27): on an organization server a person sets their own
-  // switches (skill authoring, the Data window, generated titles) and keeps
-  // their own browser profiles, with no right to edit the installation
-  // (/api/me/experimental). The built-in browser and the meeting notetaker
-  // stay the installation's (server.experimental). My Chrome is the person's
-  // own Chrome wherever the server offers it.
-  const editConfig = canEditConfig(state.config);
+  // switches (skill authoring, the Data window, generated titles) with no
+  // right to edit the installation (/api/me/experimental). The meeting
+  // notetaker stays the installation's (server.experimental).
   const manage = canManageExperimental(state.config);
   // An older server refuses a member's own switches (shared/server-features.ts):
   // they show the server's state, locked, with the neutral line.
   const personalServed = useServerFeature("memberPersonSettings") !== "no";
   const personal = state.config?.personalSettings === true && personalServed;
   const personalMissing = state.config?.personalSettings === true && !personalServed && !manage;
-  const profiles = (state.config?.browserProfiles ?? []).filter((profile) => (editConfig ? !profile.personal : profile.personal));
   // 2026-10-26 (owner): generated conversation titles were on only after a
   // hand edit of config.json; they get their switch here.
   const llmThreadTitles = llmThreadTitlesEnabled(state.config);
@@ -171,7 +144,7 @@ export function ExperimentalSettings() {
   const busy = saving !== null;
   // The dev context pods are this computer's own choice: no server round trip.
   const devPods = useDevPodPrefs().enabled;
-  const on = Number(skillAuthoring) + Number(browser) + Number(decisionModel) + Number(dataWindow) + Number(meetingNotetaker) + Number(devPods)
+  const on = Number(skillAuthoring) + Number(decisionModel) + Number(dataWindow) + Number(meetingNotetaker) + Number(devPods)
     + Number(llmThreadTitles);
 
   return (
@@ -179,7 +152,7 @@ export function ExperimentalSettings() {
       <SettingsGroup
         title={t("settings.experimental.title")}
         groupId="experimental"
-        accessory={<span className="min-w-0 truncate text-[13px] leading-[18px] text-ink-secondary" data-experimental-count="">· {t("settings.card.countOn", { count: on, total: 7 })}</span>}
+        accessory={<span className="min-w-0 truncate text-[13px] leading-[18px] text-ink-secondary" data-experimental-count="">· {t("settings.card.countOn", { count: on, total: 6 })}</span>}
       >
         <FeatureRow
           feature="skillAuthoring"
@@ -191,21 +164,6 @@ export function ExperimentalSettings() {
           onToggle={() => void toggle("skillAuthoring", !skillAuthoring)}
           below={<SkillReviewSettings />}
         />
-        <FeatureRow
-          feature="browser"
-          label={t("settings.experimental.browser")}
-          ariaKey="settings.experimental.browserAria"
-          checked={browser}
-          unavailable={!desktopBrowser && !browserInstallable}
-          reason={browserBlockedOnWindows ? t("settings.experimental.browserWindows") : <BrowserUnavailableNote config={state.config} />}
-          // the engine can be installed: the switch works, one step remains
-          note={!desktopBrowser && browserInstallable ? t("settings.experimental.browserInstall") : undefined}
-          busy={busy}
-          locked={!mayToggle("browser")}
-          onToggle={() => void toggle("browser", !browser)}
-          below={(editConfig || personal) && (browser || profiles.length > 0) && <BrowserProfilesBelow count={profiles.length} />}
-        />
-        {browser && <MyChromeSettings />}
         <FeatureRow
           feature="decisionModel"
           label={t("settings.experimental.decisionModel")}

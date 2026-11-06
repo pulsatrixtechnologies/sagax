@@ -21,8 +21,6 @@ import {
 } from "lucide-react";
 import { Card, CommandLine, DANGER_PILL, DescribedRow, PillSelect, SettingsGroup, cardCount } from "./SettingsPrimitives";
 import { SettingsText } from "./SettingsLink";
-import { MacLocalControl } from "./MacLocalControl";
-import { MessagesSettings } from "./MessagesSettings";
 import { cn } from "@/lib/cn";
 import { useStore } from "@/state/store";
 import { boatComputerEnabled, vpsComputerEnabled } from "@/lib/feature-flags";
@@ -30,6 +28,10 @@ import { useDesktopBridgeStatus } from "@/lib/desktop-bridge";
 import { canManageComputers } from "@/lib/viewer";
 import { OrgComputerSettings } from "./settings/OrgComputerSettings";
 import { ComputerCareSettings } from "./settings/ComputerCareSettings";
+import { ComputerBrowserSettings } from "./settings/ComputerBrowserSettings";
+import { ComputerMacControlRow } from "./settings/ComputerMacControlRow";
+import { ServerModeComputerAccess } from "./ServerModeSettings";
+// TODO(L1): MessagesSettings moves to Connect apps > Mac > Messages.
 import { readableError } from "@/lib/plain-error";
 import {
   computerInventoryRequest,
@@ -1218,56 +1220,62 @@ function LocalComputerSectionView({
     removeVpsComputer,
   } = inventories;
 
+  const cloudCard = boatOn ? (
+    <CloudComputersCard
+      instances={cloudInventory}
+      configured={cloudConfigured}
+      loading={cloudLoading}
+      pending={cloudPending}
+      error={cloudError}
+      unavailableReason={cloudUnavailableReason}
+      onRefresh={() => bumpCloudRefresh()}
+      onSleep={(instance) => void actOnCloudComputer("sleep", instance)}
+      onDelete={(instance) => void actOnCloudComputer("delete", instance)}
+    />
+  ) : null;
+
+  const vpsCard = vpsOn ? (
+    <VpsComputersCard
+      instances={vpsInventory}
+      configured={vpsConfigured}
+      sshAlias={vpsSshAlias}
+      loading={vpsLoading}
+      removingName={vpsRemovingName}
+      error={vpsError}
+      unavailableReason={vpsUnavailableReason}
+      onRefresh={() => bumpVpsRefresh()}
+      onRemove={(instance) => void removeVpsComputer(instance)}
+    />
+  ) : null;
+
   return (
     <>
       <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">{announcement}</p>
-      {orgBridge && <OrgComputerSettings bridge={orgBridge} localVmAllowed={storeState.config?.managedPolicy?.computers?.localVm !== false} />}
+      {orgBridge ? (
+        <OrgComputerSettings
+          bridge={orgBridge}
+          localVmAllowed={storeState.config?.managedPolicy?.computers?.localVm !== false}
+          botsExtra={<>{cloudCard}{vpsCard}</>}
+        />
+      ) : (
+        <SettingsGroup title={t("computer.group.yours")} groupId="yourComputer">
+          <ServerModeComputerAccess />
+          <ComputerMacControlRow />
+        </SettingsGroup>
+      )}
 
-      {boatOn && <CloudComputersCard
-        instances={cloudInventory}
-        configured={cloudConfigured}
-        loading={cloudLoading}
-        pending={cloudPending}
-        error={cloudError}
-        unavailableReason={cloudUnavailableReason}
-        onRefresh={() => bumpCloudRefresh()}
-        onSleep={(instance) => void actOnCloudComputer("sleep", instance)}
-        onDelete={(instance) => void actOnCloudComputer("delete", instance)}
-      />}
-
-      {vpsOn && <VpsComputersCard
-        instances={vpsInventory}
-        configured={vpsConfigured}
-        sshAlias={vpsSshAlias}
-        loading={vpsLoading}
-        removingName={vpsRemovingName}
-        error={vpsError}
-        unavailableReason={vpsUnavailableReason}
-        onRefresh={() => bumpVpsRefresh()}
-        onRemove={(instance) => void removeVpsComputer(instance)}
-      />}
-
-      <MacLocalControl />
-      <MessagesSettings />
-
-      {/* Scheduled update and disk saver: hidden by itself where this
-          person has no computer to care for (403/409). */}
-      <ComputerCareSettings />
-
-      {!orgBridge && manageComputers && <>
-      {/* 0.5.6: the reference design's "Bot's computer" group. One row: the
-          Local VM's state in one short grey line, Recheck and Watch as
-          pills; the automatic care and Reset under it. The setup,
-          isolation and safety cards stay below, folded. */}
+      {!orgBridge && manageComputers && (
       <SettingsGroup title={t("computer.group.bots")} groupId="botsComputer">
         <div data-settings-card="computer.main">
           <DescribedRow
             label={t("vm.main.title")}
             rowId="localVm"
             description={(
-              <span aria-live="polite" className="inline-flex items-center gap-1.5" data-local-vm-ready={headerReady ? "yes" : "no"}>
-                {loading ? <Loader2 size={11} className="animate-spin" aria-hidden="true" /> : headerReady ? <Check size={11} className="text-success" aria-hidden="true" /> : <Circle size={7} aria-hidden="true" />}
-                {statusText}
+              <span aria-live="polite" className="inline-flex flex-col gap-1" data-local-vm-ready={headerReady ? "yes" : "no"}>
+                <span className="inline-flex items-center gap-1.5">
+                  {loading ? <Loader2 size={11} className="animate-spin" aria-hidden="true" /> : headerReady ? <Check size={11} className="text-success" aria-hidden="true" /> : unavailable ? <AlertTriangle size={11} className="text-danger" aria-hidden="true" /> : <Circle size={7} aria-hidden="true" />}
+                  {unavailable ? t("vm.inspectFailed") : statusText}
+                </span>
               </span>
             )}
             below={(
@@ -1289,7 +1297,7 @@ function LocalComputerSectionView({
               disabled={loading || pending !== null}
               className="ui-button gap-1.5 disabled:opacity-40"
             >
-              <RefreshCw size={12} aria-hidden="true" /> {t("vm.main.recheck")}
+              <RefreshCw size={12} aria-hidden="true" /> {t(unavailable ? "computer.vm.action.recheck" : "vm.main.recheck")}
             </button>
             {ready && !perBot && (
               <a
@@ -1303,18 +1311,18 @@ function LocalComputerSectionView({
             )}
           </DescribedRow>
         </div>
+        {cloudCard}
+        {vpsCard}
       </SettingsGroup>
+      )}
 
-      <Card
-        collapsible
-        cardId="computer.isolation"
-        defaultOpen={false}
-        title={t("vm.isolation.title")}
-        subtitle={t("vm.isolation.subtitle")}
-        summary={perBot
-          ? t("settings.card.upTo", { label: t("vm.isolation.perBot"), count: status?.max_instances ?? 2 })
-          : t("vm.isolation.shared")}
-      >
+      <ComputerCareSettings />
+      <ComputerBrowserSettings />
+
+      {!orgBridge && manageComputers && <>
+      <SettingsGroup advanced title={t("vm.isolation.title")} groupId="computerIsolation">
+      <div data-settings-card="computer.isolation" className="flex flex-col gap-3 px-3.5 py-3">
+        <p className="text-[12.5px] text-ink-secondary">{t("vm.isolation.subtitle")}</p>
         <div className="flex overflow-hidden rounded-lg border border-hairline/40">
           {(status?.organization ? ["shared"] as const : ["shared", "per-bot"] as const).map((mode, index) => (
             <button
@@ -1354,21 +1362,12 @@ function LocalComputerSectionView({
           onSave={onSaveIdleTimeout}
         />
         {policyPending && <div className="mt-2 flex items-center gap-1.5 text-[12px] text-ink-secondary"><Loader2 size={12} className="animate-spin" /> {t("vm.saving")}</div>}
-      </Card>
+      </div>
+      </SettingsGroup>
 
-      <Card
-        collapsible
-        cardId="computer.setup"
-        defaultOpen={Boolean(status) && !(perBot ? headerReady : ready)}
-        title={t("vm.setup.title")}
-        subtitle={t("vm.setup.subtitle")}
-        summary={!status
-          ? t("common.checking")
-          : (perBot ? headerReady : ready)
-            ? t("settings.card.done")
-            : t("settings.card.step", { step: setupStep(status), total: 4 })}
-      >
-        <div className="flex flex-col gap-4">
+      <SettingsGroup advanced title={t("vm.setup.title")} groupId="computerSetup">
+        <div data-settings-card="computer.setup" className="flex flex-col gap-4 px-3.5 py-3">
+          <p className="text-[12.5px] text-ink-secondary">{t("vm.setup.subtitle")}</p>
           <Step n={1} title={t("vm.setup.step1")} done={Boolean(status?.runtime)}>
             <div className="text-[13px] leading-relaxed text-ink-secondary">
               {t("vm.setup.step1Detail")}
@@ -1452,7 +1451,7 @@ function LocalComputerSectionView({
             {c?.run && <details className="text-[12px] text-ink-secondary"><summary className="cursor-pointer">{t("vm.setup.showCommand")}</summary><div className="mt-2"><CommandLine command={c.run} /></div></details>}
           </Step>
         </div>
-      </Card>
+      </SettingsGroup>
 
       {perBot && (
         <LocalVmInventoryCard
@@ -1467,47 +1466,37 @@ function LocalComputerSectionView({
         />
       )}
 
-      {unavailable && (
-        <div role="status" className="flex gap-2 rounded-[14px] border-[0.5px] border-border px-3.5 py-3 text-[13px] text-ink-secondary">
-          <AlertTriangle size={15} className="mt-0.5 shrink-0 text-warning" />
-          <span>{t("vm.inspectFailed")}</span>
-        </div>
-      )}
-
-      <Card
-        collapsible
-        cardId="computer.safety"
-        defaultOpen={false}
-        title={t("vm.safety.title")}
-        summary={t("settings.card.safety")}
-        subtitle={
-          perBot
-            ? t("vm.safety.perBot", { path: status?.workspace_guest_path ?? "/home/cua/workspace" })
-            : t("vm.safety.shared", { path: status?.workspace_guest_path ?? "/home/cua/workspace" })
-        }
-      >
-        {existing && (
-          <div className="flex flex-wrap gap-2">
-            {status?.container === "running" && (
-              <ActionButton action="stop" pending={pending} onClick={() => onAct("stop")}>
-                <Square size={12} /> {t("vm.safety.stop")}
+      <SettingsGroup advanced title={t("vm.safety.title")} groupId="computerSafety">
+        <div data-settings-card="computer.safety" className="flex flex-col gap-3 px-3.5 py-3">
+          <p className="text-[12.5px] text-ink-secondary">
+            {perBot
+              ? t("vm.safety.perBot", { path: status?.workspace_guest_path ?? "/home/cua/workspace" })
+              : t("vm.safety.shared", { path: status?.workspace_guest_path ?? "/home/cua/workspace" })}
+          </p>
+          {existing && (
+            <div className="flex flex-wrap gap-2">
+              {status?.container === "running" && (
+                <ActionButton action="stop" pending={pending} onClick={() => onAct("stop")}>
+                  <Square size={12} /> {t("vm.safety.stop")}
+                </ActionButton>
+              )}
+              <ActionButton action="remove" pending={pending} onClick={() => onAct("remove")} danger>
+                <Trash2 size={12} /> {perBot ? t("vm.safety.deleteLegacy") : t("vm.safety.deleteVm")}
               </ActionButton>
-            )}
-            <ActionButton action="remove" pending={pending} onClick={() => onAct("remove")} danger>
-              <Trash2 size={12} /> {perBot ? t("vm.safety.deleteLegacy") : t("vm.safety.deleteVm")}
-            </ActionButton>
+            </div>
+          )}
+          <div className="break-all text-[11px] text-ink-secondary">
+            {t("vm.safety.workspace", {
+              path: status?.workspace_path ?? t("vm.safety.notCreated"),
+              driver: status?.driver_version ?? "0.20.0",
+              image: status?.image_ref ?? t("vm.safety.notPrepared"),
+            })}
+            {status?.base_image_ref ? <> · {t("vm.safety.baseImage", { image: status.base_image_ref })}</> : null}
           </div>
-        )}
-        <div className="mt-3 break-all text-[11px] text-ink-secondary">
-          {t("vm.safety.workspace", {
-            path: status?.workspace_path ?? t("vm.safety.notCreated"),
-            driver: status?.driver_version ?? "0.20.0",
-            image: status?.image_ref ?? t("vm.safety.notPrepared"),
-          })}
-          {status?.base_image_ref ? <> · {t("vm.safety.baseImage", { image: status.base_image_ref })}</> : null}
         </div>
-      </Card>
+      </SettingsGroup>
       </>}
+
     </>
   );
 }

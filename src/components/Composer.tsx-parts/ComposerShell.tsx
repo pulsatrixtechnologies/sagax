@@ -261,7 +261,6 @@ export function ComposerShell({
           <ComposerActionBar
             bot={bot}
             group={group}
-            members={members}
             remoteClient={remoteClient}
             locked={locked}
             threadId={threadId}

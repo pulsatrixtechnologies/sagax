@@ -16,7 +16,7 @@ function connectorsElsewhereFor(bot: BotRecord, instance: { instanceId: string; 
       if (candidate.instanceId === instance.instanceId) continue;
       const input = host.accountConnectorInput(bot, candidate, speaker);
       if (!claudeAiConnectorsForTurn(input)) continue;
-      const account = host.claudeAccountForPrincipal(connectorPrincipalFor(input));
+      const account = host.claudeAccountForPrincipal(connectorPrincipalFor(input), candidate.instanceId);
       if ("unavailable" in account) continue;
       const inventory = host.claudeAiInventory.peek(account.key, { cli: account.cli, env: account.env });
       if (inventory?.auth !== "subscription") continue;
@@ -26,18 +26,18 @@ function connectorsElsewhereFor(bot: BotRecord, instance: { instanceId: string; 
     if (!secondLoginSupported(candidate.driverKind)) continue;
     const payer = host.turnPayerPrincipal(bot, candidate, speaker);
     if (!payer || !isPrincipalId(payer)) continue;
-    const both = host.engineLogins?.signedIn(payer, candidate.driverKind, "second") ?? false;
+    const both = host.engineLogins?.signedIn(payer, candidate.driverKind, "second", candidate.instanceId) ?? false;
     for (const slot of ["primary", "second"] as const) {
       if (candidate.instanceId === instance.instanceId && slot === currentSlot) continue;
       if (slot === "second" && !both) continue;
       const input = host.accountConnectorInput(bot, candidate, speaker, undefined, slot);
       if (!grokCloudConnectorsForTurn(input) || !host.withholdHostToolsFor(candidate) || bot.toolScope !== undefined) continue;
-      const reach = host.grokAccountReach(host.principalLoginDir(payer, "grokAgent", slot));
+      const reach = host.grokAccountReach(host.principalLoginDir(payer, "grokAgent", slot, candidate.instanceId));
       if (!reach) {
         host.engineLogins?.warmReach(payer, candidate.instanceId, slot);
         continue;
       }
-      const kind = host.grokAccountKindFor(payer, slot);
+      const kind = host.grokAccountKindFor(payer, slot, candidate.instanceId);
       // the first sign-in keeps the engine's own name (run_with_engine "Grok"); the second is named by what it is
       const engine = slot === "second" ? host.relayAccountLabel(host.engineDisplayName(candidate), kind) : host.engineDisplayName(candidate);
       out.push({ engine, connectors: host.grokReachConnectorNames(reach), ...(kind ? { accountKind: kind } : {}) });

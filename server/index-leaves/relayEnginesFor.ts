@@ -32,17 +32,17 @@ function relayEnginesFor(bot: BotRecord, speaker: TurnSpeaker, guestConfined = f
       // what it is ("Grok (personal account)"); each is reached on its own
       // sign-in folder, never on the other's.
       const payer = host.turnPayerPrincipal(bot, instance, speaker);
-      const second = secondLoginSupported(instance.driverKind) && payer && (host.engineLogins?.signedIn(payer, instance.driverKind, "second") ?? false)
+      const second = secondLoginSupported(instance.driverKind) && payer && (host.engineLogins?.signedIn(payer, instance.driverKind, "second", instance.instanceId) ?? false)
         ? resolveEngineAccess(host.orgEngineInput(bot, instance, speaker, "second"))
         : null;
       const plan = resolveEngineAccess(host.orgEngineInput(bot, instance, speaker, "primary"));
       if (plan.ok) {
         via = plan.via;
-        const kind = second?.ok ? host.grokAccountKindFor(payer, "primary") : undefined;
+        const kind = second?.ok ? host.grokAccountKindFor(payer, "primary", instance.instanceId) : undefined;
         engines.push(entry(kind ? { accountKind: kind } : {}));
       }
       if (second?.ok && second.via === "subscription") {
-        const kind = host.grokAccountKindFor(payer, "second");
+        const kind = host.grokAccountKindFor(payer, "second", instance.instanceId);
         engines.push(entry({ via: "subscription", displayName: host.relayAccountLabel(host.engineDisplayName(instance), kind), account: "second", ...(kind ? { accountKind: kind } : {}) }));
       }
       continue;

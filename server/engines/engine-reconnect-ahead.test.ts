@@ -105,3 +105,24 @@ describe("isEngineReconnectCondition", () => {
     expect(engineNameFromReconnectFailure("Reconnect Grok now")).toBe("Grok");
   });
 });
+
+// #2384: two bots of one person on two accounts of one provider: only the
+// bot whose own account is expired waits.
+describe("engineReconnectAhead per account (#2384)", () => {
+  it("asks about the routine's own bot, so the other account's bot runs", () => {
+    const asked: Array<string | undefined> = [];
+    const result = engineReconnectAhead({
+      now: NOW,
+      routines: [
+        { id: "r1", name: "On A", botId: "bot-a", enabled: true, nextRunAt: NOW + HOUR },
+        { id: "r2", name: "On B", botId: "bot-b", enabled: true, nextRunAt: NOW + HOUR },
+      ],
+      botDriver: () => "claudeAgent",
+      botPayer: () => "pr_alice",
+      expired: (_person, _driver, botId) => { asked.push(botId); return botId === "bot-b"; },
+    });
+    expect(asked).toEqual(["bot-a", "bot-b"]);
+    expect(result.pauseBotIds).toEqual(new Set(["bot-b"]));
+    expect(result.notify).toEqual([expect.objectContaining({ routineNames: ["On B"] })]);
+  });
+});

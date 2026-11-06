@@ -19,6 +19,7 @@ function accountConnectorInput(bot: BotRecord, instance: { instanceId: string; d
     identity: host.IDENTITY.kind,
     restrictedByPolicy: host.managedPolicy.restrictsMcp(),
     driver: instance.driverKind,
+    instanceId: instance.instanceId,
     ...(planned ? { via: planned } : {}),
     ...(payerPrincipalId !== undefined ? { payerPrincipalId } : {}),
     speaker,

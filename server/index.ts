@@ -13869,7 +13869,13 @@ routines = new RoutineManager({
       const bot = store.bot(botId);
       return bot ? effectiveBotOwner(bot) || null : null;
     },
-    expired: (principalId, driver) => engineLogins?.expired(principalId, driver) ?? false,
+    // #2384: a bot's own account; a person-level check: any of their accounts
+    expired: (principalId, driver, botId) => {
+      if (!engineLogins) return false;
+      const bot = botId ? store.bot(botId) : undefined;
+      if (bot && namesEngine(bot.modelSelection)) return engineLogins.expired(principalId, driver, "primary", bot.modelSelection.instanceId);
+      return engineLogins.expiredAny(principalId, driver);
+    },
     onAheadNotify: (principalId, detail, routineNames, engineName) => {
       const bot = store.bots.find((candidate) => effectiveBotOwner(candidate) === principalId)
         ?? store.bots.find((candidate) => {
@@ -15529,8 +15535,8 @@ function turnPayerPrincipal(bot: BotRecord, instance: { instanceId: string; driv
   return turnPayer(orgEngineInput(bot, instance, speaker)).principalId.trim().toLowerCase();
 }
 /** What a person's Grok sign-in is (personal or team), or undefined. */
-function grokAccountKindFor(principalId: string, slot: LoginSlot): "personal" | "team" | undefined {
-  const kind = engineLogins?.grokAccountIdentity(principalId, slot)?.kind;
+function grokAccountKindFor(principalId: string, slot: LoginSlot, instanceId?: string): "personal" | "team" | undefined {
+  const kind = engineLogins?.grokAccountIdentity(principalId, slot, instanceId)?.kind;
   return kind === "personal" || kind === "team" ? kind : undefined;
 }
 /** #1137 (shared/turn-payer.ts): the default "who pays" of a bot with no
@@ -15816,7 +15822,7 @@ const turnConnectorsFor = createTurnConnectorsFor(getLeafHost);
 /** The claude.ai connectors of the turn's account, when its inventory was
  * read (a subscription); undefined when not yet. */
 function claudeAiConnectorRows(account: ClaudeAiTurnInput): Array<{ name: string; status: string }> | undefined {
-  const owner = claudeAccountForPrincipal(connectorPrincipalFor(account));
+  const owner = claudeAccountForPrincipal(connectorPrincipalFor(account), account.instanceId);
   const inventory = "unavailable" in owner ? undefined : claudeAiInventory.peek(owner.key, { cli: owner.cli, env: owner.env });
   return inventory && inventory.auth === "subscription" ? inventory.connectors : undefined;
 }
@@ -16510,7 +16516,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       const owner = connectorThread(botId, threadId);
       if (!owner) return null;
       const claude = registry.instances().find((candidate) => candidate.enabled && candidate.driverKind === "claudeAgent" && !keyOnlyInstance(candidate.instanceId) && engineInstalled(candidate.instanceId));
-      if (!claude || engineLogins.signedIn(principalId, "claudeAgent")) return null;
+      // #2384: any of the person's Claude accounts is enough
+      if (!claude || engineLogins.signedInAny(principalId, "claudeAgent")) return null;
       const name = engineDisplayName(claude);
       store.appendMessage(threadId, {
         role: "bot",
@@ -17572,7 +17579,7 @@ ROUTES.push(createAchievementRoutes({
   unlocked: (person, unlocked) => broadcast({ kind: "achievements", audience: person, unlocked }),
   linked: (person) => {
     if (IDENTITY.kind === "perspicax") {
-      const signedIn = engineLogins?.signedIn(person, "claudeAgent") === true;
+      const signedIn = engineLogins?.signedInAny(person, "claudeAgent") === true;
       const sub = principals.byId(person)?.subject?.iss === IDENTITY.issuer ? principals.byId(person)?.subject?.sub : undefined;
       const held = sub ? perspicaxDirectory?.providerKeys(sub) ?? [] : [];
       const myKey = providersOfDriver("claudeAgent").some((provider) => held.includes(provider));
@@ -18576,7 +18583,7 @@ const subscriptionDepositor = IDENTITY.kind === "perspicax" && engineLogins && !
   ? new SubscriptionDepositor({
     people: () => principals.list()
       .filter((person) => person.subject && person.disabledAt === undefined
-        && (engineLogins!.signedIn(person.id, "claudeAgent") || engineLogins!.signedIn(person.id, "codex")))
+        && (engineLogins!.signedInAny(person.id, "claudeAgent") || engineLogins!.signedInAny(person.id, "codex")))
       .map((person) => person.id),
     subjectOf: (principalId) => {
       const person = principals.byId(principalId);
@@ -18587,16 +18594,18 @@ const subscriptionDepositor = IDENTITY.kind === "perspicax" && engineLogins && !
       const base = perspicaxBase();
       return base ? perspicaxAgentsClient.runs(perspicaxAgentsAccess(base, subjectToken), { mine: true }) : [];
     },
-    signedIn: (principalId, driver) => engineLogins!.signedIn(principalId, driver),
+    // #2384: a personal run takes the person's first working account
+    signedIn: (principalId, driver) => engineLogins!.signedInAny(principalId, driver),
     vaultKey: (principalId, provider) => {
       const person = principals.byId(principalId);
       return Boolean(person?.subject && perspicaxDirectory?.providerKeys(person.subject.sub).includes(provider));
     },
-    read: (principalId, engine) => readSubscriptionAccess(engine, engineLogins!.loginDir(principalId, ENGINE_DRIVER[engine])),
+    read: (principalId, engine) => readSubscriptionAccess(engine, engineLogins!.loginDir(principalId, ENGINE_DRIVER[engine], "primary", engineLogins!.preferredAccount(principalId, ENGINE_DRIVER[engine]))),
     renew: async (principalId, engine) => {
       const cli = subscriptionCli(engine);
       if (!cli) return;
-      const loginDir = engineLogins!.loginDir(principalId, ENGINE_DRIVER[engine]);
+      const account = engineLogins!.preferredAccount(principalId, ENGINE_DRIVER[engine]);
+      const loginDir = engineLogins!.loginDir(principalId, ENGINE_DRIVER[engine], "primary", account);
       // #1768: Claude shares one rotating refresh token across every process
       // of this person. Renew through the same single flight bot turns use.
       if (engine === "claude-code") {
@@ -18606,7 +18615,7 @@ const subscriptionDepositor = IDENTITY.kind === "perspicax" && engineLogins && !
           environment: cli.environment,
           force: true,
           onRenewed: () => {
-            engineLogins?.clearExpired(principalId, "claudeAgent");
+            engineLogins?.clearExpired(principalId, "claudeAgent", "primary", account);
             resumeEngineReconnectForPerson(principalId, "Claude");
           }
         });
@@ -18626,13 +18635,16 @@ subscriptionDepositor?.start();
 if (engineLogins) {
   onClaudeSubscriptionRenewed((loginHome) => {
     for (const person of principals.list()) {
-      try {
-        if (claudeSubscriptionHomeKey(engineLogins.loginDir(person.id, "claudeAgent")) === loginHome) {
-          engineLogins.clearExpired(person.id, "claudeAgent");
-          resumeEngineReconnectForPerson(person.id, "Claude");
+      // #2384: each of the person's Claude accounts has its own folder
+      for (const account of engineLogins.accountInstances(person.id, "claudeAgent")) {
+        try {
+          if (claudeSubscriptionHomeKey(engineLogins.loginDir(person.id, "claudeAgent", "primary", account)) === loginHome) {
+            engineLogins.clearExpired(person.id, "claudeAgent", "primary", account);
+            resumeEngineReconnectForPerson(person.id, "Claude");
+          }
+        } catch {
+          /* not a login directory for this person */
         }
-      } catch {
-        /* not a login directory for this person */
       }
     }
   });
@@ -18641,11 +18653,12 @@ if (engineLogins) {
 // start (a server update) heals everyone already marked.
 const signInRecheck = engineLogins
   ? createSignInRecheck({
-    renew: async (principalId, driver) => {
+    renew: async (principalId, driver, instanceId) => {
       const engine: RunEngine | null = driver === "claudeAgent" ? "claude-code" : driver === "codex" ? "codex" : null;
       const cli = engine ? subscriptionCli(engine) : null;
       if (!engine || !cli || !engineLogins) return false;
-      const loginDir = engineLogins.loginDir(principalId, ENGINE_DRIVER[engine]);
+      // #2384: the refused account's own folder
+      const loginDir = engineLogins.loginDir(principalId, ENGINE_DRIVER[engine], "primary", instanceId);
       if (engine === "claude-code") {
         return (await ensureClaudeSubscriptionFresh({ loginDir, cli: cli.cli, environment: cli.environment, force: true })).ok;
       }
@@ -18653,9 +18666,10 @@ const signInRecheck = engineLogins
       const access = await readSubscriptionAccess(engine, loginDir);
       return Boolean(access && (access.expiresAt === null || access.expiresAt > Date.now() + 60_000));
     },
-    markExpired: (principalId, driver, slot) => engineLogins.markExpired(principalId, driver, slot),
-    clearExpired: (principalId, driver, slot) => engineLogins.clearExpired(principalId, driver, slot),
-    expired: (principalId, driver, slot) => engineLogins.expired(principalId, driver, slot),
+    markExpired: (principalId, driver, slot, instanceId) => engineLogins.markExpired(principalId, driver, slot, instanceId),
+    clearExpired: (principalId, driver, slot, instanceId) => engineLogins.clearExpired(principalId, driver, slot, instanceId),
+    expired: (principalId, driver, slot, instanceId) => engineLogins.expired(principalId, driver, slot, instanceId),
+    accounts: (principalId, driver) => engineLogins.accountInstances(principalId, driver),
     onRestored: (principalId, driver) => resumeEngineReconnectForPerson(principalId, driver === "codex" ? "Codex" : "Claude")
   })
   : null;
@@ -20652,14 +20666,15 @@ if (IDENTITY.kind === "perspicax" && engineLogins) {
    * record) and the grok.com connectors it brings (its reach, probed in the
    * background when not known yet). Their own page only. */
   const grokAccountsFor = (principalId: string, instanceId: string) => (["primary", "second"] as const).map((slot) => {
-    const signedIn = logins.signedIn(principalId, "grokAgent", slot);
+    // #2384: this card's account folder (an added account has its own)
+    const signedIn = logins.signedIn(principalId, "grokAgent", slot, instanceId);
     if (signedIn) logins.warmReach(principalId, instanceId, slot);
-    const identity = signedIn ? logins.grokAccountIdentity(principalId, slot) : null;
-    const reach = signedIn ? grokAccountReach(logins.loginDir(principalId, "grokAgent", slot)) : undefined;
+    const identity = signedIn ? logins.grokAccountIdentity(principalId, slot, instanceId) : null;
+    const reach = signedIn ? grokAccountReach(logins.loginDir(principalId, "grokAgent", slot, instanceId)) : undefined;
     return {
       slot,
       signedIn,
-      ...(signedIn && logins.expired(principalId, "grokAgent", slot) ? { expired: true } : {}),
+      ...(signedIn && logins.expired(principalId, "grokAgent", slot, instanceId) ? { expired: true } : {}),
       ...(identity ? { kind: identity.kind, ...(identity.email ? { email: identity.email } : {}) } : {}),
       ...(reach ? { connectors: reach.groups.map((group) => ({ label: GROK_CLOUD_CONNECTORS.find((entry) => entry.id === group.id)?.name ?? group.label, tools: group.tools })) } : {})
     };
@@ -22312,7 +22327,7 @@ ROUTES.push(createHarnessConnectorRoutes({
   isAdmin: (auth) => (IDENTITY.kind === "perspicax" ? orgAdminCaller(auth) : true),
   claudeAccountFor: claudeAccountForPrincipal,
   inventory: claudeAiInventory,
-  onSignedOut: (principalId) => { void signInRecheck?.refused(principalId, "claudeAgent"); }
+  onSignedOut: (principalId, instanceId) => { void signInRecheck?.refused(principalId, "claudeAgent", "primary", instanceId); }
 }));
 
 // The engines' own slash commands in the chat (server/harness-commands.ts):

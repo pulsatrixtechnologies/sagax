@@ -21,7 +21,7 @@ describe("sign-in recheck (#2040)", () => {
     const h = harness([true]);
     await h.recheck.refused("p1", "claudeAgent");
     expect(h.deps.markExpired).not.toHaveBeenCalled();
-    expect(h.deps.onRestored).toHaveBeenCalledWith("p1", "claudeAgent");
+    expect(h.deps.onRestored).toHaveBeenCalledWith("p1", "claudeAgent", undefined);
   });
 
   it("marks the sign-in expired when the renew fails", async () => {
@@ -155,5 +155,46 @@ describe("sign-in refusal card (#2057)", () => {
     expect(settleSignInRefusal(null, { principalId: "p1", driver: "claudeAgent", ...noRecheck })).toBe(false);
     expect(noRecheck.show).toHaveBeenCalledTimes(1);
     expect(h.deps.renew).toHaveBeenCalledTimes(1);
+  });
+});
+
+// #2384: a refusal on an added account renews and marks that account only;
+// heal walks every account of the person.
+describe("sign-in recheck per account (#2384)", () => {
+  function accountHarness(renew: (pid: string, driver: string, instanceId?: string) => boolean) {
+    const marked = new Set<string>();
+    const k = (pid: string, driver: string, id?: string) => `${pid}/${driver}/${id ?? ""}`;
+    const deps: SignInRecheckDeps = {
+      renew: vi.fn(async (pid, driver, id) => renew(pid, driver, id)),
+      markExpired: vi.fn((pid, driver, _slot, id) => { marked.add(k(pid, driver, id)); }),
+      clearExpired: vi.fn((pid, driver, _slot, id) => { marked.delete(k(pid, driver, id)); }),
+      expired: (pid, driver, _slot, id) => marked.has(k(pid, driver, id)),
+      accounts: () => [undefined, "claude-b"],
+      onRestored: vi.fn(),
+    };
+    return { deps, marked, k, recheck: createSignInRecheck(deps) };
+  }
+
+  it("marks the refused account, never the provider's own", async () => {
+    const h = accountHarness(() => false);
+    await h.recheck.refused("p1", "claudeAgent", "primary", "claude-b");
+    expect(h.deps.renew).toHaveBeenCalledWith("p1", "claudeAgent", "claude-b");
+    expect(h.marked.has(h.k("p1", "claudeAgent", "claude-b"))).toBe(true);
+    expect(h.marked.has(h.k("p1", "claudeAgent"))).toBe(false);
+  });
+
+  it("a failed renew on one account does not hold the other's in cooldown", async () => {
+    const h = accountHarness(() => false);
+    await h.recheck.refused("p1", "claudeAgent", "primary", "claude-b");
+    expect(h.recheck.renewable("p1", "claudeAgent", "primary", "claude-b")).toBe(false);
+    expect(h.recheck.renewable("p1", "claudeAgent", "primary")).toBe(true);
+  });
+
+  it("heal renews an expired added account and clears its marker", async () => {
+    const h = accountHarness((_pid, driver, id) => driver === "claudeAgent" && id === "claude-b");
+    h.marked.add(h.k("p1", "claudeAgent", "claude-b"));
+    expect(await h.recheck.heal(["p1"])).toBe(1);
+    expect(h.marked.size).toBe(0);
+    expect(h.deps.onRestored).toHaveBeenCalledWith("p1", "claudeAgent", "claude-b");
   });
 });

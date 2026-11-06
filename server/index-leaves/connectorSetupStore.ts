@@ -13,14 +13,16 @@ function connectorSetupStore() {
     patch: (threadId: string, messageId: string, view: ConnectorSetupView) => { host.store.patchMessage(threadId, messageId, { connectorSetup: view }); },
     // the person's own Grok sign-in folder, as their turns run it (engine-credentials.ts)
     grokReach: (principalId: string) => {
-      const reach = host.grokAccountReach(host.principalLoginDir(principalId, "grokAgent"));
+      // #2384: the person's first signed-in Grok account (an added one has its own folder)
+      const acct = host.engineLogins?.preferredAccount(principalId, "grokAgent");
+      const reach = host.grokAccountReach(host.principalLoginDir(principalId, "grokAgent", "primary", acct));
       // 2026-10-29: the person's second Grok sign-in, when that one has it
-      const second = host.engineLogins?.signedIn(principalId, "grokAgent", "second") ? host.grokAccountReach(host.principalLoginDir(principalId, "grokAgent", "second")) : undefined;
+      const second = host.engineLogins?.signedIn(principalId, "grokAgent", "second", acct) ? host.grokAccountReach(host.principalLoginDir(principalId, "grokAgent", "second", acct)) : undefined;
       const elsewhere = second?.connectors.length
-        ? { engine: host.relayAccountLabel(host.driverDisplayName("grokAgent"), host.grokAccountKindFor(principalId, "second")), connectors: second.connectors }
+        ? { engine: host.relayAccountLabel(host.driverDisplayName("grokAgent"), host.grokAccountKindFor(principalId, "second", acct)), connectors: second.connectors }
         : undefined;
       // 2026-10-30: which account the card's connector goes on
-      const account = host.grokAccountKindFor(principalId, "primary");
+      const account = host.grokAccountKindFor(principalId, "primary", acct);
       if (!reach && !elsewhere && !account) return undefined;
       return { connectors: reach?.connectors ?? [], at: reach?.at ?? 0, ...(elsewhere ? { elsewhere } : {}), ...(account ? { account } : {}) };
     }

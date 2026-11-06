@@ -17,7 +17,7 @@ function connectorSwitchForTurn(bot: BotRecord, threadId: string, speaker: TurnS
   const current: SwitchEngine = {
     instanceId: base.instanceId, engineLabel: host.engineDisplayName(base), models: [], reach: host.engineReachFor(bot, base, speaker),
     ...(baseSlot === "second" ? { account: "second" as const } : {}),
-    ...(basePayer && secondLoginSupported(base.driverKind) ? ((kind) => kind ? { accountKind: kind } : {})(host.grokAccountKindFor(basePayer, baseSlot)) : {})
+    ...(basePayer && secondLoginSupported(base.driverKind) ? ((kind) => kind ? { accountKind: kind } : {})(host.grokAccountKindFor(basePayer, baseSlot, base.instanceId)) : {})
   };
   const priced = (engine: AutoEngine) => engine.models.options.map((option) => ({ id: option.id, ...((price) => price === undefined ? {} : { price })(host.catalogPrice(engine.driverKind, option.id)) }));
   const confined = host.cloudGuestDriven(threadId) || host.botmailConfined(threadId);

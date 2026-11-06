@@ -225,9 +225,45 @@ export class PrincipalEngineLogins {
   /** 2026-10-29: what a Grok sign-in of this person is (personal or team)
    * and its address, from the CLI's own login record; null when not signed
    * in there or unreadable. */
-  grokAccountIdentity(principalId: string, slot: LoginSlot = "primary"): GrokAccountIdentity | null {
-    if (!this.signedIn(principalId, "grokAgent", slot)) return null;
-    return readGrokAccountIdentity(join(this.loginDir(principalId, "grokAgent", slot), ".grok", "auth.json"));
+  grokAccountIdentity(principalId: string, slot: LoginSlot = "primary", instanceId?: string): GrokAccountIdentity | null {
+    if (!this.signedIn(principalId, "grokAgent", slot, instanceId)) return null;
+    return readGrokAccountIdentity(join(this.loginDir(principalId, "grokAgent", slot, instanceId), ".grok", "auth.json"));
+  }
+
+  /** #2384: every account folder this person keeps for a driver: the
+   * provider's own (undefined, always first) then each added account
+   * (`<prefix>-<uuid>`) that has a folder for it. Signed in or not. */
+  accountInstances(principalId: string, driver: string): Array<string | undefined> {
+    if (!isLoginDriver(driver) || !isPrincipalId(principalId)) return [];
+    const out: Array<string | undefined> = [undefined];
+    const accounts = join(this.options.dataDir, "principals", principalId, "accounts");
+    let ids: string[] = [];
+    try { ids = readdirSync(accounts).sort(); } catch { return out; }
+    for (const id of ids) if (separateAccountInstance(id) && existsSync(join(accounts, id, LOGIN_DIR[driver]))) out.push(id);
+    return out;
+  }
+
+  /** #2384: the accounts of this person signed in on a driver. */
+  signedInAccounts(principalId: string, driver: string, slot: LoginSlot = "primary"): Array<string | undefined> {
+    return this.accountInstances(principalId, driver).filter((instanceId) => this.signedIn(principalId, driver, slot, instanceId));
+  }
+
+  /** #2384: at least one account of this person is signed in on a driver. */
+  signedInAny(principalId: string, driver: string, slot: LoginSlot = "primary"): boolean {
+    return this.signedInAccounts(principalId, driver, slot).length > 0;
+  }
+
+  /** #2384: at least one signed-in account of this person is marked expired. */
+  expiredAny(principalId: string, driver: string, slot: LoginSlot = "primary"): boolean {
+    return this.accountInstances(principalId, driver).some((instanceId) => this.expired(principalId, driver, slot, instanceId));
+  }
+
+  /** #2384: the account a person-level use (no bot, no turn) runs on: the
+   * first signed-in account that is not expired, else the first signed in;
+   * undefined (the provider's own folder) when none is. */
+  preferredAccount(principalId: string, driver: string, slot: LoginSlot = "primary"): string | undefined {
+    const signed = this.signedInAccounts(principalId, driver, slot);
+    return signed.find((instanceId) => !this.expired(principalId, driver, slot, instanceId)) ?? signed[0];
   }
 
   private ensureDir(principalId: string, driver: LoginDriver, slot: LoginSlot = "primary", instanceId?: string): string {

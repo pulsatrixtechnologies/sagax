@@ -625,7 +625,9 @@ export interface RoutineManagerOptions {
     botDriver: (botId: string) => LoginDriver | string | null | undefined;
     payer: (botId: string) => string | null | undefined;
     /** Cheap file-marker check: that person's sign-in for this driver is expired. */
-    expired: (principalId: string, driver: string) => boolean;
+    /** #2384: with `botId`, the account that bot runs on; without, any of
+     * the person's accounts on this driver. */
+    expired: (principalId: string, driver: string, botId?: string) => boolean;
     /** Person to notify before due routines fire (once per person+engine). */
     onAheadNotify?: (principalId: string, detail: string, routineNames: string[], engineName: string) => void;
   };
@@ -2964,7 +2966,7 @@ export class RoutineManager {
     for (const botId of Array.from(this.engineReconnectPauseBots.keys())) {
       const driver = gate.botDriver(botId);
       const payer = gate.payer(botId)?.trim();
-      if (!driver || !payer || !gate.expired(payer, driver)) this.engineReconnectPauseBots.delete(botId);
+      if (!driver || !payer || !gate.expired(payer, driver, botId)) this.engineReconnectPauseBots.delete(botId);
     }
     for (const [botId, engineName] of result.pauseEngineByBot) {
       this.engineReconnectPauseBots.set(botId, engineName);
@@ -3000,7 +3002,7 @@ export class RoutineManager {
     const driver = gate.botDriver(botId);
     if (!driver) return null;
     const payer = gate.payer(botId)?.trim();
-    if (!payer || !gate.expired(payer, driver)) {
+    if (!payer || !gate.expired(payer, driver, botId)) {
       this.engineReconnectPauseBots.delete(botId);
       return null;
     }

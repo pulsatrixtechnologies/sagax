@@ -17,9 +17,9 @@ describe("limitBackupAllowed", () => {
     expect(limitBackupAllowed(claude, claude)).toBe(false);
   });
 
-  it("never rotates to another sign-in of the same subscription, but takes a pay-per-use key", () => {
+  it("rotates to another account of the same provider, including a pay-per-use key (#2192)", () => {
     const second = { instanceId: "claude-2", driverKind: "claudeAgent" };
-    expect(limitBackupAllowed(claude, second)).toBe(false);
+    expect(limitBackupAllowed(claude, second)).toBe(true);
     expect(limitBackupAllowed(claude, second, { access: "api" })).toBe(true);
     expect(limitBackupAllowed(claude, second, { environment: { ANTHROPIC_API_KEY: "set" } })).toBe(true);
     // Two OpenAI-compatible endpoints are separate bills.
@@ -39,6 +39,30 @@ describe("pickLimitBackup", () => {
   it("falls back to the catalog order and the engine's default model", () => {
     const candidates = [engine("claude", "claudeAgent"), engine("grok", "grokAgent", ["grok-4.5", "grok-4"], "grok-4.5"), engine("codex", "codex")];
     expect(pickLimitBackup({ ...base, preferred: [], candidates, blocked: () => false })).toEqual({ instanceId: "grok", model: "grok-4.5" });
+  });
+
+  it("prefers another account of the same provider before another engine (#2192)", () => {
+    const candidates = [
+      engine("claude", "claudeAgent"),
+      engine("grok", "grokAgent"),
+      engine("claude-work", "claudeAgent", ["opus", "sonnet"], "opus"),
+    ];
+    expect(pickLimitBackup({ ...base, preferred: [], candidates, blocked: () => false }))
+      .toEqual({ instanceId: "claude-work", model: "opus" });
+    expect(pickLimitBackup({ ...base, preferred: [{ instanceId: "grok" }], candidates, blocked: () => false }))
+      .toEqual({ instanceId: "claude-work", model: "opus" });
+  });
+
+  it("picks the same-provider account with more headroom (#2192)", () => {
+    const candidates = [
+      engine("claude-a", "claudeAgent"),
+      engine("claude-b", "claudeAgent"),
+      engine("claude-c", "claudeAgent"),
+    ];
+    expect(pickLimitBackup({
+      from: claude, preferred: [], candidates, blocked: () => false, config: () => undefined,
+      usedPercent: (id) => id === "claude-a" ? 95 : id === "claude-b" ? 40 : 70,
+    })).toEqual({ instanceId: "claude-b", model: "m1" });
   });
 
   it("never takes an engine that is not a candidate (not allowed, not signed in)", () => {
@@ -63,6 +87,8 @@ describe("pickLimitBackup", () => {
   it("skips a pay-per-use catalog fallthrough unless the person chose it as a backup (3ed90a037)", () => {
     const candidates = [engine("api", "claudeAgent"), engine("grok", "grokAgent")];
     const config = (id: string) => id === "api" ? { access: "api" as const } : undefined;
+    // Same-provider api key beats another engine when preferred; catalog fallthrough
+    // still skips an unchosen pay-per-use key in favour of another provider.
     expect(pickLimitBackup({ from: claude, preferred: [], candidates, blocked: () => false, config }))
       .toEqual({ instanceId: "grok", model: "m1" });
     expect(pickLimitBackup({ from: claude, preferred: [{ instanceId: "api" }], candidates, blocked: () => false, config }))

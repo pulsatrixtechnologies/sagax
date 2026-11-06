@@ -521,6 +521,18 @@ export function spentPlanUntil(row: PlanProviderRow): number | null {
   return until;
 }
 
+/** #2192: the fullest window used-percent on this plan row (0–100), or null
+ * when the row has no windows. Used to rotate accounts before the limit. */
+export function planUsedPercent(row: PlanProviderRow): number | null {
+  if (row.state !== "windows") return null;
+  let used: number | null = null;
+  for (const window of [row.fiveHour, row.weekly]) {
+    if (!window.available || window.usedPercent === null) continue;
+    used = used === null ? window.usedPercent : Math.max(used, window.usedPercent);
+  }
+  return used;
+}
+
 /** The notice's words, English like the server's other notification titles. */
 export function planUsageAlertText(alert: PlanUsageAlert): { title: string; body: string } {
   const span = alert.window === "weekly" ? "weekly" : "5-hour";

@@ -43,6 +43,10 @@ vi.mock("@/lib/perspicax-org", async (importOriginal) => ({
   usePerspicaxOrg: () => fixture.org,
   useMyEngines: () => fixture.mine,
 }));
+vi.mock("@/lib/desktop-local-models", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/desktop-local-models")>(),
+  loadLocalModels: vi.fn(async () => ({ expose: false, share: false, endpoints: [] })),
+}));
 vi.mock("../DesktopCapabilities", () => ({ useDesktopCapabilities: () => ({ capabilities: {} }) }));
 vi.mock("../HarnessConnectorsSection", () => ({ HarnessConnectorsSection: () => createElement("div", { "data-harness-connectors": "" }) }));
 
@@ -153,6 +157,20 @@ describe("Settings > Providers, solo", () => {
     expect(fixture.dispatch).toHaveBeenCalledWith({ type: "toggleAppSettings", open: true, section: "engines" });
     // no GUID outside the fold: the id sits inside the Advanced fold
     expect(row.querySelector("[data-engine-advanced], [data-provider-advanced]")).not.toBeNull();
+  });
+});
+
+describe("Settings > Providers, this computer's model servers (from Settings > Computer, #2080 L1/L3)", () => {
+  it("opens the local group on the full Local models settings, which no longer live on the Computer page", async () => {
+    await render();
+    const local = host.querySelector<HTMLElement>('[data-provider-group="local"]')!;
+    expect(local.textContent).toContain("Local models");
+    expect(local.querySelector("[data-local-models]"), "closed: settings stay folded").toBeNull();
+    await act(async () => { local.querySelector<HTMLButtonElement>("button[aria-expanded]")!.click(); });
+    for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
+    const settings = local.querySelector<HTMLElement>('[data-settings-card="providers.localModels"]')!;
+    expect(settings, "LocalModelsSettings, bare, inside Providers").not.toBeNull();
+    expect(settings.dataset.localModels).toBe("off");
   });
 });
 

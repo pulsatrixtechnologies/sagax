@@ -13,13 +13,14 @@ describe("configured bot creation", () => {
     if (selection) bot.modelSelection = selection;
     const events: string[] = [];
     const bodies: unknown[] = [];
-    const request = vi.fn(async (path: string, init?: RequestInit) => {
+    const requestMock = vi.fn(async (path: string, init?: RequestInit) => {
       events.push(`${init?.method} ${path}`);
       const body = JSON.parse(String(init?.body ?? "{}"));
       bodies.push(body);
       if (init?.method === "PATCH") bot = { ...bot, ...body };
       return { bot };
-    }) as unknown as typeof api;
+    });
+    const request = requestMock as unknown as typeof api;
     let grants = 0;
     const approvals = { setMode: vi.fn(async (_id: string, grant: string, options?: { threadId?: string }) => {
       events.push(`grant ${options?.threadId ?? "bot"}`);
@@ -27,7 +28,7 @@ describe("configured bot creation", () => {
       bot = { ...bot, approvalMode: grant } as Bot;
       return bot;
     }) };
-    return { draft, events, bodies, request, approvals, getBot: () => bot };
+    return { draft, events, bodies, request, requestMock, approvals, getBot: () => bot };
   }
 
   it("sets the chosen audience in the first creation request", async () => {
@@ -141,7 +142,7 @@ describe("configured bot creation", () => {
 
   it("rolls back when the Full thread PATCH fails after the bot grant", async () => {
     const f = fixture("full");
-    f.request.mockImplementation(async (path: string, init?: RequestInit) => {
+    f.requestMock.mockImplementation(async (path: string, init?: RequestInit) => {
       f.events.push(`${init?.method} ${path}`);
       const body = JSON.parse(String(init?.body ?? "{}"));
       f.bodies.push(body);
@@ -158,7 +159,7 @@ describe("configured bot creation", () => {
 
   it("does not grant the initial thread when the bot PATCH returns the wrong mode", async () => {
     const f = fixture("full");
-    f.request.mockImplementation(async (path: string, init?: RequestInit) => {
+    f.requestMock.mockImplementation(async (path: string, init?: RequestInit) => {
       f.events.push(`${init?.method} ${path}`);
       const body = JSON.parse(String(init?.body ?? "{}"));
       f.bodies.push(body);

@@ -47,15 +47,6 @@ const mint = async (botId: string, threadId: string, kind = "connectors") => {
 const relay = (token: string, name: string, args: unknown = {}) => api("POST", "/api/internal/connectors/mcp",
   { jsonrpc: "2.0", id: Math.random(), method: "tools/call", params: { name, arguments: args } }, token);
 const cards = async (thread: string) => (await api("GET", `/api/threads/${thread}/messages?limit=100`)).body.messages as any[];
-const pending = async (thread: string) => {
-  let card: any;
-  await expect.poll(async () => {
-    card = (await cards(thread)).findLast((row: any) => row.card?.outboundRequest && !row.card.answered);
-    return Boolean(card);
-  }, { timeout: 5_000 }).toBe(true);
-  return card;
-};
-
 beforeAll(async () => {
   broker = createServer(async (req, res) => {
     let raw = "";

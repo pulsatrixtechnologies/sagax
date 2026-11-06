@@ -3,25 +3,34 @@ import { useStore } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { useAutoModelStatus } from "@/lib/auto-model-preview";
 import { autoReasonSentence } from "@/lib/auto-model";
+import { DescribedRow, FoldRow, PillSelect, SettingsTextRow } from "../SettingsPrimitives";
 import type { AutoModelPreview } from "../../../shared/auto-model";
 
-/** Only metadata produced by the same candidate list as dispatch, no paid probe. */
+const LIST = "flex flex-col gap-1 text-[12px] leading-4 text-ink-secondary";
+
+/** Rows of the "What Auto would choose now" group (one card level, #2080):
+ * the order Auto would follow, folded under a count pill with the reason of
+ * the pick as its grey line, then what it left out and why. Only metadata
+ * produced by the same candidate list as dispatch, no paid probe. */
 export function AutoModelStatus({ status }: { status: AutoModelPreview | null }) {
-  return <section data-auto-model-status className="flex min-w-0 flex-col gap-2 rounded-xl bg-inset p-3 text-[12px] leading-relaxed text-ink-secondary">
-    <h3 className="font-semibold text-ink">{t("model.auto.chain.title")}</h3>
-    {status?.pick && <p>{autoReasonSentence(status.pick)}</p>}
-    {!status ? <p role="status">{t("model.auto.chain.waiting")}</p> : <>
-      {status.chain?.length ? <ol data-auto-model-chain className="list-decimal space-y-1 pl-4">
-        {status.chain.map((entry) => <li key={`${entry.instanceId}/${entry.model}`}><span className="text-ink">{entry.modelLabel}</span> · {entry.engineLabel}</li>)}
-      </ol> : <p>{t("model.auto.chain.empty")}</p>}
-      {Boolean(status.excluded?.length) && <details data-auto-model-excluded>
-        <summary className="cursor-pointer font-medium text-ink">{t("model.auto.chain.excluded", { count: status.excluded.length })}</summary>
-        <ul className="mt-2 space-y-1">
-          {status.excluded.map((entry, index) => <li key={`${entry.instanceId}/${entry.model ?? ""}/${index}`}>{entry.modelLabel ? `${entry.modelLabel} · ` : ""}{entry.engineLabel}: {t(`model.auto.exclude.${entry.reason}`)}</li>)}
+  if (!status) return <div data-auto-model-status=""><SettingsTextRow live>{t("model.auto.chain.waiting")}</SettingsTextRow></div>;
+  const chain = status.chain ?? [];
+  const excluded = status.excluded ?? [];
+  const reason = status.pick ? autoReasonSentence(status.pick) : undefined;
+  return <div data-auto-model-status="">
+    {chain.length ? <FoldRow cardId="models.auto.chain" defaultOpen label={t("model.auto.chain.order")} description={reason} count={chain.length}>
+      <ol data-auto-model-chain="" className={`${LIST} list-decimal pl-5`}>
+        {chain.map((entry) => <li key={`${entry.instanceId}/${entry.model}`}><span className="text-ink">{entry.modelLabel}</span> · {entry.engineLabel}</li>)}
+      </ol>
+    </FoldRow> : <DescribedRow label={t("model.auto.chain.order")} description={reason ?? t("model.auto.chain.empty")} rowId="models.auto.chain" />}
+    {excluded.length > 0 && <div data-auto-model-excluded="">
+      <FoldRow cardId="models.auto.excluded" label={t("model.auto.chain.leftOut")} description={t("model.auto.chain.leftOutShort")} count={excluded.length}>
+        <ul className={LIST}>
+          {excluded.map((entry, index) => <li key={`${entry.instanceId}/${entry.model ?? ""}/${index}`}>{entry.modelLabel ? <><span className="text-ink">{entry.modelLabel}</span> · </> : null}{entry.engineLabel}: {t(`model.auto.exclude.${entry.reason}`)}</li>)}
         </ul>
-      </details>}
-    </>}
-  </section>;
+      </FoldRow>
+    </div>}
+  </div>;
 }
 
 export function AutoModelSettings() {
@@ -31,14 +40,10 @@ export function AutoModelSettings() {
   const bot = bots.find((candidate) => candidate.id === picked) ?? bots[0];
   const revision = JSON.stringify([bot?.modelSelection, state.config?.disabledModels, state.config?.myDisabledModels, state.instances]);
   const status = useAutoModelStatus(bot?.id ?? "", undefined, Boolean(bot), revision);
-  return <div className="flex min-w-0 flex-col gap-2" data-auto-model-settings>
-    <p className="text-[12px] text-ink-secondary">{t("model.auto.settings.body")}</p>
-    {bot && <label className="flex items-center gap-2 text-[12px] text-ink-secondary">
-      <span>{t("model.auto.chain.bot")}</span>
-      <select value={bot.id} onChange={(event) => setPicked(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-hairline/40 bg-inset px-2 py-1.5 text-ink">
-        {bots.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
-      </select>
-    </label>}
-    <AutoModelStatus status={status} />
+  return <div className="flex min-w-0 flex-col" data-auto-model-settings="">
+    <DescribedRow label={t("model.auto.chain.bot")} description={t("model.auto.settings.short")} help={t("model.auto.settings.body")} rowId="models.auto.bot">
+      {bot && <PillSelect value={bot.id} options={bots.map((candidate) => ({ value: candidate.id, label: candidate.name }))} onChange={setPicked} ariaLabel={t("model.auto.chain.bot")} />}
+    </DescribedRow>
+    {bot && <AutoModelStatus status={status} />}
   </div>;
 }

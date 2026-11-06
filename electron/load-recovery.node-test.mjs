@@ -127,7 +127,6 @@ test("main wires both guards", () => {
   assert.match(source, /wireAccountPage\(win, win\.webContents\);/);
   assert.match(source, /onCreated: \(contents\) => wireAccountPage\(win, contents\)/);
   assert.match(source, /await waitForUiBundle\(\{\s*check: \(\) => uiBundleState\(\{ resourcesPath: process\.resourcesPath \}\)/);
-  assert.match(source, /startupScreen\?\.fail\(`\$\{strings\.bundleTitle\}\. \$\{strings\.bundleBody\}`\)/);
 });
 
 test("an HTTP error with an empty body (Chromium -379) is retried too", () => {

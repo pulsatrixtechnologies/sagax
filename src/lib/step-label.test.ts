@@ -28,11 +28,14 @@ describe("step labels in plain words", () => {
     expect(readStep({ name: "mcp__agents__phone_tool", ok: false, input: JSON.stringify({ tool: "teleport" }) })).toEqual({ label: "N'a pas pu utiliser un outil de votre téléphone" });
   });
 
-  it("speaks in the tense of the state: running, done, failed", () => {
+  it("speaks in the tense of the state: running, done, failed, unverified", () => {
     expect(stepPhase({ ok: undefined })).toBe("running");
+    expect(stepPhase({ ok: undefined }, false)).toBe("unverified");
+    expect(stepPhase({ ok: undefined }, true)).toBe("running");
     expect(stepPhase({ ok: true })).toBe("done");
     expect(stepPhase({ ok: false })).toBe("failed");
     expect(stepLabel({ name: "Read" })).toBe("Reading a file");
+    expect(stepLabel({ name: "Read" }, undefined, false)).toBe("Read a file");
     expect(stepLabel({ name: "Read", ok: false })).toBe("Could not read a file");
   });
 

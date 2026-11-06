@@ -115,6 +115,7 @@ import { InputRequestCard } from "./InputRequestCard";
 import { withoutDeadThreadChips } from "@/lib/dead-thread-chips";
 import { VerifyCard } from "./VerifyCard";
 import { askText, runSkill, runSteps, runSummary, showRun, skillPrompt } from "@/lib/verify-steps";
+import { liveToolIds } from "@/lib/tool-liveness";
 import { useShowRunCard } from "@/lib/run-card-preferences";
 import { sendsMessage, useSendKey } from "@/lib/send-key";
 import { ToolActivity, botNames } from "./ToolActivity";
@@ -251,6 +252,8 @@ interface ChatRows {
   localVoice: boolean;
   /** Editing, regenerating and switching versions wait for the turn. */
   busy: boolean;
+  /** Tool activity ids that belong to the live turn (not historical receipts). */
+  liveTools: ReadonlySet<string>;
   /** Older messages remain on the server, beyond the page the thread holds. */
   hasMore: boolean;
   /** Every bot, for who wrote a relayed line or sits across a bot⇄bot chip. */
@@ -1005,7 +1008,7 @@ function PeerLabel({ peer, autoModel }: { peer: PeerLine; autoModel?: Message["a
 /** A tool run as a quiet step row (StepRow), or a receipt that opens a conversation. */
 const ActivityChip = memo(function ActivityChip({ message, place = "auto" }: { message: Message; place?: EffectivePlace }) {
   "use memo";
-  const { bots, dispatch, botDmIds } = useChatRows();
+  const { bots, dispatch, botDmIds, liveTools } = useChatRows();
   const tool = message.tool;
   if (!tool) return null;
   if (message.inputRequest) return <InputRequestCard message={message} />;
@@ -1033,7 +1036,7 @@ const ActivityChip = memo(function ActivityChip({ message, place = "auto" }: { m
   }
   // 2026-11-05 (JC): no role notice in the chat (rows saved before stay hidden)
   if (tool.roleNotice) return null;
-  return <ToolActivity tool={tool} place={toolPlace(tool.name, place)} nameOf={botNames(bots)} />;
+  return <ToolActivity tool={tool} live={liveTools.has(message.id)} place={toolPlace(tool.name, place)} nameOf={botNames(bots)} />;
 });
 
 /** What a bot's turn elsewhere left for the person (2026-11-05): its card,
@@ -2205,14 +2208,16 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   // The bot's run in the current ask — every command it ran, the control-CLI
   // ones verified — for the run card. Saving mirrors the /learn gate: the
   // flag, an engine with the agents tools, and a bot that can take a message
-  // now — plus a run with something to keep.
-  const recordedRun = useMemo(() => runSteps(messages), [messages]);
+  // now — plus a run with something to keep. Incomplete tools only count as
+  // running while they belong to the live turn.
+  const liveTools = useMemo(() => liveToolIds(messages, bot), [messages, bot.busy, bot.turnStartedAt]);
+  const recordedRun = useMemo(() => runSteps(messages, liveTools), [messages, liveTools]);
   const recordedRunCounts = runSummary(recordedRun);
   const engineSupportsAgents = Boolean(
     engine?.capabilities?.agentsMcp,
   );
   const canSaveRun =
-    skillAuthoringEnabled(state.config) && engineSupportsAgents && recordedRunCounts.passed > 0 && recordedRunCounts.running === 0 && !bot.busy;
+    skillAuthoringEnabled(state.config) && engineSupportsAgents && recordedRunCounts.passed > 0 && recordedRunCounts.running === 0 && recordedRunCounts.unverified === 0 && !bot.busy;
   // A dismissal is pinned to the run's last step, per thread: the card comes
   // back when the bot runs another command, not merely when a step settles,
   // and stays away across a switch to another thread and back.
@@ -2284,8 +2289,8 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   const dmIds = useStoreSelector((current) => current.groups.filter((group) => group.dm && !group.peopleDm).map((group) => group.id), shallowEqual);
   const botDmIds = useMemo(() => new Set(dmIds), [dmIds]);
   const rows = useMemo<ChatRows>(
-    () => ({ botId: bot.id, threadId: bot.threadId, botName: bot.name, viewerName, voiceId: bot.voice, tts, localVoice, busy, hasMore, bots, mentionPeers, focus, showToolCalls, locale, dispatch, onBranch, reactionSelf, botDmIds }),
-    [bot.id, bot.threadId, bot.name, viewerName, bot.voice, tts, localVoice, busy, hasMore, bots, mentionPeers, focus, showToolCalls, locale, dispatch, onBranch, reactionSelf, botDmIds],
+    () => ({ botId: bot.id, threadId: bot.threadId, botName: bot.name, viewerName, voiceId: bot.voice, tts, localVoice, busy, liveTools, hasMore, bots, mentionPeers, focus, showToolCalls, locale, dispatch, onBranch, reactionSelf, botDmIds }),
+    [bot.id, bot.threadId, bot.name, viewerName, bot.voice, tts, localVoice, busy, liveTools, hasMore, bots, mentionPeers, focus, showToolCalls, locale, dispatch, onBranch, reactionSelf, botDmIds],
   );
   // Where this conversation works, for the place icon on screen and page tools.
   const place = effectivePlace(bot, bot.tasks?.find((task) => task.threadId === bot.threadId));

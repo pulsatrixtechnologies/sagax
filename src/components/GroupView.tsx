@@ -29,6 +29,7 @@ import { TurnTimingLine } from "./TurnTimingLine";
 import { InputRequestCard } from "./InputRequestCard";
 import { withoutDeadThreadChips } from "@/lib/dead-thread-chips";
 import { ToolActivity, botNames } from "./ToolActivity";
+import { liveToolIds } from "@/lib/tool-liveness";
 import { StepRow } from "./StepRow";
 import { stepLabel } from "@/lib/step-label";
 import { ThreadRefText } from "./ThreadRefs";
@@ -172,7 +173,7 @@ type RoomItem =
  * visible row. A member's failed turn is not a step at all: it is the row a
  * 1:1 chat shows for the same failure, sign-in card and all, for the engine
  * that member ran on. */
-export function RoomToolChip({ message, roomId }: { message: Message; roomId?: string }) {
+export function RoomToolChip({ message, roomId, live = false }: { message: Message; roomId?: string; live?: boolean }) {
   "use memo";
   const dispatch = useStoreDispatch();
   const storeBots = useStoreSelector((current) => current.bots);
@@ -190,7 +191,7 @@ export function RoomToolChip({ message, roomId }: { message: Message; roomId?: s
   }
   const comm = message.comm;
   const nameOf = botNames(storeBots);
-  if (!comm) return <ToolActivity tool={tool} nameOf={nameOf} />;
+  if (!comm) return <ToolActivity tool={tool} nameOf={nameOf} live={live} />;
   const withBot = storeBots.find((b) => b.id === comm.withBotId);
   const avatar = <BotAvatar bot={withBot ?? { name: comm.withName, color: comm.withColor }} state="happy" size={14} animated={false} />;
   // A bot-to-bot DM is read in this column. Selecting it would leave the
@@ -658,6 +659,7 @@ export const Transcript = memo(function Transcript({
   const newestMessageId = messages.at(-1)?.id;
   const newestUserMessageId = [...messages].reverse().find((message) => message.role === "user")?.id;
   const roomBusy = Boolean(group.busyBotId || group.working);
+  const liveTools = useMemo(() => liveToolIds(transcript, { busy: roomBusy, turnStartedAt: group.turnStartedAt }), [transcript, roomBusy, group.turnStartedAt]);
   let retryableId: string | undefined;
   let retryableIndex = -1;
   for (let index = transcript.length - 1; index >= 0; index -= 1) {
@@ -808,7 +810,7 @@ export const Transcript = memo(function Transcript({
                     nameOf={botNames(state.bots)}
                     renderStep={(step) => (
                       <div className="contents" data-mid={step.id}>
-                        <RoomToolChip message={step} />
+                        <RoomToolChip message={step} live={liveTools.has(step.id)} />
                       </div>
                     )}
                   />
@@ -931,11 +933,11 @@ export const Transcript = memo(function Transcript({
           ) : m.kind === "activity" && shownCwWidget(m.tool) ? (
             <div className="flex flex-col gap-2">
               <CwWidgetView widget={m.tool!.widget!} brand={m.tool!.product} threadId={group.threadId} botId={m.from?.botId} />
-              {roomActivityVisible(m, showToolCalls) ? <RoomToolChip message={m} roomId={group.id} /> : null}
+              {roomActivityVisible(m, showToolCalls) ? <RoomToolChip message={m} roomId={group.id} live={liveTools.has(m.id)} /> : null}
             </div>
           ) : m.kind === "activity" && m.tool ? (
             roomActivityVisible(m, showToolCalls) ? (
-              m.dataResult ? <DataResultChip message={m} /> : isStatusActivity(m) ? <StatusActivityRow message={m} /> : <RoomToolChip message={m} roomId={group.id} />
+              m.dataResult ? <DataResultChip message={m} /> : isStatusActivity(m) ? <StatusActivityRow message={m} /> : <RoomToolChip message={m} roomId={group.id} live={liveTools.has(m.id)} />
             ) : null
           ) : m.kind === "screen" ? (
             // views on request only (shared/requested-views.ts)

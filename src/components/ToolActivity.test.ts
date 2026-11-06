@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { setLocale } from "@/lib/i18n";
 import { ToolActivity } from "./ToolActivity";
 import { BotEditorStore } from "@/state/store";
 
@@ -84,11 +85,17 @@ describe("ToolActivity", () => {
   });
 
   it("distinguishes running, failed and unrecorded output", () => {
-    const render = (ok?: boolean) => renderToStaticMarkup(createElement(ToolActivity, { tool: { name: "Read", ok }, defaultOpen: true }));
-    expect(render()).toContain('data-phase="running"');
-    expect(render()).toContain("thinking-shimmer");
-    expect(render()).toContain(">Reading a file<");
-    expect(render()).toContain("Waiting for the tool to finish");
+    const render = (ok?: boolean, live = false) => renderToStaticMarkup(createElement(ToolActivity, { tool: { name: "Read", ok }, live, defaultOpen: true }));
+    expect(render(undefined, true)).toContain('data-phase="running"');
+    expect(render(undefined, true)).toContain("thinking-shimmer");
+    expect(render(undefined, true)).toContain(">Reading a file<");
+    expect(render(undefined, true)).toContain("Waiting for the tool to finish");
+    // historical incomplete receipt after a restart: no shimmer, "No result"
+    expect(render()).toContain('data-phase="unverified"');
+    expect(render()).toContain(">Read a file<");
+    expect(render()).toContain("No result");
+    expect(render()).not.toContain("Waiting for the tool to finish");
+    expect(render()).not.toContain("thinking-shimmer");
     expect(render(false)).toContain('data-phase="failed"');
     expect(render(false)).toContain("text-danger");
     expect(render(false)).toContain(">Could not read a file<");
@@ -97,6 +104,16 @@ describe("ToolActivity", () => {
     expect(render(false)).not.toContain("No output was recorded");
     expect(render(true)).toContain("No output was recorded");
     expect(render(true)).not.toContain("thinking-shimmer");
+  });
+
+  it("translates unverified status in active locale", () => {
+    try {
+      setLocale("fr");
+      const html = renderToStaticMarkup(createElement(ToolActivity, { tool: { name: "Read" }, defaultOpen: true }));
+      expect(html).toContain("Aucun résultat");
+    } finally {
+      setLocale("en");
+    }
   });
 
   it("shows a failure's own words, whatever envelope a driver stored (2026-11-03)", () => {

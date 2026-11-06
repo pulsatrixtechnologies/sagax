@@ -33,7 +33,7 @@ extension DesktopPanelTab: Identifiable {
 
     var title: LocalizedStringKey {
         switch self {
-        case .details: "Details"
+        case .activity: "Activity"
         case .library: "Library"
         case .computer: "Computer"
         }
@@ -74,7 +74,10 @@ private struct BotPanelContent: View {
 
     private var current: Bot { session.state.bot(bot.id) ?? bot }
     private var tabs: [DesktopPanelTab] { DesktopPanelTab.visible(gate: session.surfaceGate, slack: slackURL != nil) }
-    private var tab: DesktopPanelTab { tabs.contains(model.panelTab) ? model.panelTab : .details }
+    private var tab: DesktopPanelTab {
+        let resolved = DesktopPanelTab.resolve(model.panelTab)
+        return tabs.contains(resolved) ? resolved : .activity
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -147,6 +150,10 @@ private struct BotPanelContent: View {
 
     private var topBar: some View {
         HStack(spacing: 8) {
+            DesktopRoundButton(systemImage: "gearshape", label: "Bot settings", icon: .settings) {
+                model.showPersona(nil)
+            }
+            .accessibilityIdentifier("desktop-panel-gear")
             Spacer(minLength: 0)
             DesktopRoundButton(systemImage: "ellipsis", label: "Bot menu", active: menuOpen, icon: .ellipsis) { menuOpen.toggle() }
                 .overlay(alignment: .topTrailing) {
@@ -154,7 +161,7 @@ private struct BotPanelContent: View {
                 }
                 .zIndex(1)
                 .accessibilityIdentifier("desktop-panel-menu")
-            DesktopRoundButton(systemImage: "sidebar.right", label: "Close", icon: .panelRight) { model.togglePanel() }
+            DesktopRoundButton(systemImage: "xmark", label: "Close", icon: .x) { model.togglePanel() }
                 .keyboardShortcut(inlineEditing ? KeyboardShortcut("w", modifiers: [.command, .control, .option, .shift]) : KeyboardShortcut(.escape, modifiers: []))
                 .accessibilityIdentifier("desktop-panel-close")
         }
@@ -305,12 +312,10 @@ private struct BotPanelContent: View {
     @ViewBuilder
     private var tabBody: some View {
         switch tab {
-        case .details:
+        case .activity, .computer:
             AnyView(BotPanelDetails(bot: current))
         case .library:
             AnyView(BotPanelLibrary(bot: current, docked: docked))
-        case .computer:
-            AnyView(BotPanelComputer(bot: current))
         }
     }
 }

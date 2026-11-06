@@ -139,6 +139,7 @@ struct PanelInlineText: View {
 
 struct BotPanelDetails: View {
     @Environment(\.desktopTheme) private var theme
+    @Environment(\.openWindow) private var openWindow
     @EnvironmentObject private var session: Session
     @EnvironmentObject private var shell: DesktopShellModel
     let bot: Bot
@@ -166,7 +167,8 @@ struct BotPanelDetails: View {
         // while the bot keeps none) takes no gap, as a flex gap skips an
         // empty child's box only when it is not rendered at all
         PanelSectionStack(spacing: 24) {
-            // Details > Suggestions (SuggestionsSection.tsx); the routines are just below
+            // Activity: Upcoming, Suggested, Computer card, Voice chat (#2127).
+            AnyView(BotPanelRoutines(bot: bot))
             DesktopBotSuggestionsCard(bot: bot, setup: suggestionsSetup) { action in
                 switch action {
                 case let .openThread(threadId): session.openChat(threadId: threadId)
@@ -174,7 +176,11 @@ struct BotPanelDetails: View {
                 case let .openSection(name): shell.showPersona(DesktopPanelSection(rawValue: name))
                 }
             }
-            // Details > Tasks (BotTaskSection.tsx): the to-do list the bot keeps
+            BotPanelComputerCard(bot: bot) {
+                DesktopComputerWindow.open(botId: bot.id, openWindow: openWindow, model: shell)
+            }
+            BotPanelVoiceChatCard(bot: bot)
+            // Progressive disclosure: tasks, coding, remote sessions stay.
             BotTaskListCard(bot: bot) { threadId in session.openChat(threadId: threadId) }
             if showsActivity {
                 if activity.showsCodingSection {
@@ -184,9 +190,7 @@ struct BotPanelDetails: View {
                     AnyView(allHistoryRow)
                 }
             }
-            // Temporary attended remote sessions: only while active, above Routines.
             BotPanelRemoteSessions(model: remoteSessions)
-            AnyView(BotPanelRoutines(bot: bot))
         }
         .padding(.top, 8)
         // the panel's 1 pt leading border sits inside the desktop's px-4
@@ -439,8 +443,14 @@ struct BotPanelRoutines: View {
     @State private var openRoutine: Routine?
     @State private var adding = false
     @State private var toggling: Set<String> = []
+    @State private var expanded = false
 
     private var mine: [Routine] { DesktopRoutineList.of(botId: bot.id, in: routines) }
+    private var shown: [Routine] {
+        if expanded || mine.count <= PanelRoutinePreview.limit { return mine }
+        return Array(mine.prefix(PanelRoutinePreview.limit))
+    }
+    private var needsMore: Bool { !expanded && mine.count > PanelRoutinePreview.limit }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -451,7 +461,7 @@ struct BotPanelRoutines: View {
             HStack(spacing: 8) {
                 DesktopIconView(icon: .calendarClock, size: 16)
                     .foregroundStyle(theme.inkSecondary)
-                Text("Routines")
+                Text("Upcoming")
                     .font(theme.font(13))
                     .foregroundStyle(theme.inkSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -557,18 +567,33 @@ struct BotPanelRoutines: View {
             .overlay(RoundedRectangle(cornerRadius: theme.radiusXl, style: .continuous)
                 .strokeBorder(theme.hairline50, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
         } else {
-            VStack(spacing: 0) {
-                ForEach(Array(mine.enumerated()), id: \.element.id) { index, routine in
-                    row(routine)
-                    if index < mine.count - 1 {
-                        Rectangle().fill(theme.hairlineWeak).frame(height: 1)
+            VStack(spacing: 8) {
+                VStack(spacing: 0) {
+                    ForEach(Array(shown.enumerated()), id: \.element.id) { index, routine in
+                        row(routine)
+                        if index < shown.count - 1 {
+                            Rectangle().fill(theme.hairlineWeak).frame(height: 1)
+                        }
                     }
                 }
+                .padding(1)
+                .background(theme.card, in: RoundedRectangle(cornerRadius: theme.radiusXl, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: theme.radiusXl, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: theme.radiusXl, style: .continuous).strokeBorder(theme.hairlineWeak, lineWidth: 1))
+                if needsMore {
+                    Button {
+                        expanded = true
+                    } label: {
+                        Text("Show more")
+                            .font(theme.font(13, .medium))
+                            .foregroundStyle(theme.inkSecondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("desktop-panel-upcoming-show-more")
+                }
             }
-            .padding(1)
-            .background(theme.card, in: RoundedRectangle(cornerRadius: theme.radiusXl, style: .continuous))
-            .clipShape(RoundedRectangle(cornerRadius: theme.radiusXl, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: theme.radiusXl, style: .continuous).strokeBorder(theme.hairlineWeak, lineWidth: 1))
         }
     }
 

@@ -1136,6 +1136,12 @@ public struct Bot: Codable, Hashable, Identifiable, Sendable {
     /// met. Absent = `FinishUntilLine.defaultRounds`.
     public var finishUntilMaxRounds: Int? = nil
     public var voice: String?
+    /// TTS rate for this bot (`bot.voice.speed` once #2125 ships). Absent on
+    /// older servers: the Voice chat card falls back to the local call setting.
+    public var voiceSpeed: Double? = nil
+    /// Recognition language for this bot (`bot.voice.language`). Absent means
+    /// Auto-detect on the Voice chat card.
+    public var voiceLanguage: String? = nil
     /// The server's mirror of the active task's pinned message. Read
     /// `pinnedMessageIdForShownThread`, which prefers the task's own pin.
     public var pinnedMessageId: String? = nil
@@ -2036,6 +2042,10 @@ public struct BotProfilePatch: Encodable, Sendable {
     public var avatarCrop: AvatarCrop?
     public var mascotBody: String?
     public var voice: String?
+    /// Bot TTS rate (`voice.speed` / `voiceSpeed`). Omitted when unchanged.
+    public var voiceSpeed: Double?
+    /// Bot recognition language (`voice.language` / `voiceLanguage`).
+    public var voiceLanguage: String?
     public var speakReplies: Bool?
     /// #1329: one sentence; an empty string clears it.
     public var finishUntil: String?
@@ -2074,6 +2084,8 @@ public struct BotProfilePatch: Encodable, Sendable {
         avatarCrop: AvatarCrop? = nil,
         mascotBody: String? = nil,
         voice: String? = nil,
+        voiceSpeed: Double? = nil,
+        voiceLanguage: String? = nil,
         speakReplies: Bool? = nil,
         color: String? = nil,
         mascotSkin: MascotSkin? = nil,
@@ -2093,6 +2105,8 @@ public struct BotProfilePatch: Encodable, Sendable {
         self.avatarCrop = avatarCrop
         self.mascotBody = mascotBody
         self.voice = voice
+        self.voiceSpeed = voiceSpeed
+        self.voiceLanguage = voiceLanguage
         self.speakReplies = speakReplies
         self.color = color
         self.mascotSkin = mascotSkin
@@ -2106,7 +2120,7 @@ public struct BotProfilePatch: Encodable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case name, title, description, notifications, avatarUrl, avatarCrop, mascotBody, voice, speakReplies
+        case name, title, description, notifications, avatarUrl, avatarCrop, mascotBody, voice, voiceSpeed, voiceLanguage, speakReplies
         case color, mascotSkin, mascotLook, mascotExpression, avatarZoom, avatarFocusX, avatarFocusY
         case finishUntil, finishUntilMaxRounds
     }
@@ -2126,6 +2140,8 @@ public struct BotProfilePatch: Encodable, Sendable {
         try values.encodeIfPresent(avatarCrop, forKey: .avatarCrop)
         try values.encodeIfPresent(mascotBody, forKey: .mascotBody)
         try values.encodeIfPresent(voice, forKey: .voice)
+        try values.encodeIfPresent(voiceSpeed, forKey: .voiceSpeed)
+        try values.encodeIfPresent(voiceLanguage, forKey: .voiceLanguage)
         try values.encodeIfPresent(speakReplies, forKey: .speakReplies)
         try values.encodeIfPresent(color, forKey: .color)
         try values.encodeIfPresent(mascotSkin, forKey: .mascotSkin)

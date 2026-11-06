@@ -552,7 +552,7 @@ private struct DesktopTeamCanvas: View {
     /// settings); the chat button opens the chat.
     private func open(_ bot: Bot, panel: Bool) {
         shell.open(session.returning(to: .bot(bot)))
-        if panel { shell.showPanel(.details) }
+        if panel { shell.showPanel(.activity) }
     }
 
     private func loadModelLabels() async {

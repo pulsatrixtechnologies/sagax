@@ -25,7 +25,7 @@ struct BotSuggestionsCard: View {
             if prefs.showSuggestions, !items.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("Suggestions")
+                        Text("Suggested")
                             .font(Theme.Font.label)
                             .foregroundStyle(Theme.textTertiary)
                         Spacer()

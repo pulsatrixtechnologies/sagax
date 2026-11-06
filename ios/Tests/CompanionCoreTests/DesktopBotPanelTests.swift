@@ -9,7 +9,7 @@ import XCTest
 final class DesktopBotPanelTests: XCTestCase {
     func testAdminSeesEveryTabAndTheDesktopSectionOrder() {
         let admin = SurfaceGate(scope: .serverAdmin)
-        XCTAssertEqual(DesktopPanelTab.visible(gate: admin), [.details, .library, .computer])
+        XCTAssertEqual(DesktopPanelTab.visible(gate: admin), [.activity, .library])
         XCTAssertTrue(DesktopPersonaEditor.offered(gate: admin))
         // a served page that is not an organization's adds "Who can see it"
         XCTAssertEqual(
@@ -56,7 +56,7 @@ final class DesktopBotPanelTests: XCTestCase {
         let sections = DesktopPanelSection.visible(gate: client)
         XCTAssertEqual(sections, [.voice, .usage])
         // no More tab: Voice and Usage open from Edit persona
-        XCTAssertEqual(DesktopPanelTab.visible(gate: client), [.details, .library, .computer])
+        XCTAssertEqual(DesktopPanelTab.visible(gate: client), [.activity, .library])
         XCTAssertTrue(DesktopPersonaEditor.offered(gate: client))
     }
 
@@ -71,8 +71,9 @@ final class DesktopBotPanelTests: XCTestCase {
     }
 
     func testThereIsNoMoreTab() {
-        // the desktop dropped it for the persona editor (panel-tabs.test.ts)
-        XCTAssertEqual(DesktopPanelTab.allCases.map(\.rawValue), ["details", "library", "computer"])
+        // Activity + Library shown; computer kept for deep-link resolve only (#2127).
+        XCTAssertEqual(DesktopPanelTab.allCases.map(\.rawValue), ["activity", "library", "computer"])
+        XCTAssertEqual(DesktopPanelTab.visible(gate: SurfaceGate(scope: .serverAdmin)), [.activity, .library])
     }
 
     func testWorksOnIsListedOnlyOnAnOrganizationServer() {

@@ -272,7 +272,7 @@ extension ChatView {
         // iPad desktop shell: the bot's profile is the docked panel.
         // The pill toggles it (BotHeaderPill.tsx), its chevron turning.
         if let desktopChat, case .bot = current {
-            if desktopChat.panelOpen { desktopChat.togglePanel() } else { desktopChat.showPanel(.details) }
+            if desktopChat.panelOpen { desktopChat.togglePanel() } else { desktopChat.showPanel(.activity) }
             return
         }
         guard case .bot = current else {

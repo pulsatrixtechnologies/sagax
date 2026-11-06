@@ -337,7 +337,7 @@ struct DesktopCommandPalette: View {
         case .about: model.modal = .about
         case let .botSettings(bot):
             model.open(.bot(bot))
-            model.showPanel(.details)
+            model.showPanel(.activity)
         case .shortcuts: model.modal = .shortcuts
         case .releaseNotes: model.modal = .releaseNotes
         }

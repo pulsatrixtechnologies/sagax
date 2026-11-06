@@ -57,9 +57,11 @@ describe.skipIf(process.platform === "win32")("at start", () => {
     dirs.push(dir);
     // A stand-in engine in its own group: starts a helper, reports it, exits.
     // The helper stays, re-parented to init, as after a server crash.
+    // Drop FORCE_COLOR: console.log would wrap the pid in ANSI and Number() becomes NaN.
+    const { FORCE_COLOR: _fc, NO_COLOR: _nc, ...cleanEnv } = process.env;
     const leader = spawn(process.execPath, ["-e",
       `const c = require("node:child_process").spawn(process.execPath, ["-e", ${JSON.stringify(IDLE)}], { stdio: "ignore" }); console.log(c.pid); process.exit(0);`,
-    ], { detached: true, stdio: ["ignore", "pipe", "ignore"] });
+    ], { detached: true, stdio: ["ignore", "pipe", "ignore"], env: cleanEnv });
     const helper = await new Promise<number>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("helper did not report its pid")), 10_000);
       leader.stdout!.once("data", (chunk) => { clearTimeout(timer); resolve(Number(String(chunk).trim())); });

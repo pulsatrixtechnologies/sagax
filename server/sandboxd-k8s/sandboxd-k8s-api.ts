@@ -3,6 +3,7 @@
 // returns this table plus syncSpare and setHostDeny.
 import type { Duplex } from "node:stream";
 
+import { reportBackgroundError } from "../background-error.ts";
 import type { SandboxAudit } from "../sandbox/sandbox-audit.ts";
 import type { K8sClient } from "./sandboxd-k8s-client.ts";
 import {

@@ -10,6 +10,7 @@
 // no other person's bot turn ever gets these
 // (server/routes/person-connections.ts). The person manages them with no
 // admin (the Sagax permission `apps.ownIntegrations`).
+import { ChevronRight } from "lucide-react";
 import { copyText } from "@/lib/copy-text";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -148,38 +149,52 @@ function GithubCard({ data, onChanged }: { data: MyConnections; onChanged: () =>
             {github.state === "error" && github.login && (
               <p className="text-[12px] text-ink-secondary" data-github-reconnect-hint>{t("myConnections.github.reconnectHint", { login: github.login })}</p>
             )}
+            {!github.deviceFlow && (
+              <p className="text-[12px] leading-relaxed text-ink-secondary" data-github-no-device-flow>{t("myConnections.github.noDeviceFlow")}</p>
+            )}
             <div className="flex flex-wrap gap-2">
-              {/* One Connect GitHub, for everyone: the device flow when the
-                  server has a GitHub OAuth App, else a token. */}
+              {/* #2109: Connect GitHub is GitHub's link plus a pairing code;
+                  a token is the last resort, under Advanced. */}
               <button type="button" className="ui-button ui-button-primary" disabled={busy} data-github-connect={github.deviceFlow ? "device" : "token"}
-                onClick={() => (github.deviceFlow ? void run(startGithubDevice) : setTokenOpen((open) => !open))}>
+                onClick={() => (github.deviceFlow ? void run(startGithubDevice) : setTokenOpen(true))}>
                 {github.state === "error" && github.login ? t("myConnections.github.reconnect") : t("myConnections.github.connect")}
               </button>
-              {github.deviceFlow && (
-                <button type="button" className="ui-button" disabled={busy} onClick={() => setTokenOpen((open) => !open)}>{t("myConnections.github.useToken")}</button>
-              )}
               {github.state === "error" && github.login && (
                 <button type="button" className="ui-button" disabled={busy} data-github-disconnect-dead onClick={() => void run(disconnectGithub)}>{t("myConnections.github.disconnect")}</button>
               )}
             </div>
           </>
         )}
-        {tokenOpen && github.state !== "connected" && (
-          <form
-            className="flex flex-col gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void run(async () => {
-                await connectGithubToken(token);
-                setToken("");
-                setTokenOpen(false);
-              });
-            }}
-          >
-            <input type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} placeholder="github_pat_..." aria-label={t("myConnections.github.tokenLabel")} className={inputClass} />
-            <p className="text-[12px] leading-relaxed text-ink-secondary">{t("myConnections.github.tokenHint")}</p>
-            <div><button type="submit" className="ui-button ui-button-primary" disabled={busy || !token.trim()}>{t("myConnections.github.saveToken")}</button></div>
-          </form>
+        {github.state !== "connected" && (
+          <div className="flex flex-col gap-2" data-github-advanced>
+            <button
+              type="button"
+              className="inline-flex w-fit items-center gap-1 text-[12px] font-medium text-ink-secondary hover:text-ink"
+              aria-expanded={tokenOpen}
+              data-github-advanced-toggle
+              onClick={() => setTokenOpen((open) => !open)}
+            >
+              <ChevronRight aria-hidden="true" size={12} className={tokenOpen ? "rotate-90 transition-transform" : "transition-transform"} />
+              {t("myConnections.github.advanced")}
+            </button>
+            {tokenOpen && (
+              <form
+                className="flex flex-col gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void run(async () => {
+                    await connectGithubToken(token);
+                    setToken("");
+                    setTokenOpen(false);
+                  });
+                }}
+              >
+                <input type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} placeholder="github_pat_..." aria-label={t("myConnections.github.tokenLabel")} className={inputClass} />
+                <p className="text-[12px] leading-relaxed text-ink-secondary">{t("myConnections.github.tokenHint")}</p>
+                <div><button type="submit" className="ui-button ui-button-primary" disabled={busy || !token.trim()}>{t("myConnections.github.saveToken")}</button></div>
+              </form>
+            )}
+          </div>
         )}
         {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
       </div>
@@ -274,7 +289,7 @@ function AddServerForm({ data, onDone, onCancel }: { data: MyConnections; onDone
   const githubPreset = () => {
     setKind("remote");
     setUrl(GITHUB_MCP_URL);
-    setAuth(data.github.state === "connected" ? "github" : "token");
+    setAuth("github");
     if (!named.current) setName("github");
   };
   const submit = async () => {
@@ -312,12 +327,13 @@ function AddServerForm({ data, onDone, onCancel }: { data: MyConnections; onDone
             <select value={auth} onChange={(event) => setAuth(event.target.value as Auth)} className="rounded-lg border border-border bg-transparent px-2 py-1 text-[12.5px] text-ink">
               <option value="oauth">{t("myConnections.auth.oauth")}</option>
               <option value="token">{t("myConnections.auth.token")}</option>
-              <option value="github" disabled={data.github.state !== "connected"}>{t("myConnections.auth.github")}</option>
+              <option value="github">{t("myConnections.auth.github")}</option>
               <option value="none">{t("myConnections.auth.none")}</option>
             </select>
           </label>
           {auth === "token" && <input type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} placeholder={t("myConnections.add.tokenPlaceholder")} aria-label={t("myConnections.auth.token")} className={inputClass} />}
           {auth === "oauth" && <p className="text-[12px] leading-relaxed text-ink-secondary">{t("myConnections.add.oauthHint")}</p>}
+          {auth === "github" && data.github.state !== "connected" && <p className="text-[12px] leading-relaxed text-ink-secondary" data-github-auth-hint>{t("myConnections.add.githubHint")}</p>}
         </>
       ) : (
         <>

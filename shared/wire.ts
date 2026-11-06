@@ -9,6 +9,7 @@
  * fails compilation until it is either declared here or explicitly listed
  * as server-private. */
 import type { PersonAttentionCard } from "./person-attention.ts";
+import type { GithubConnectCard } from "./github-connect-card.ts";
 import type { LimitFailoverLine } from "./limit-failover.ts";
 import type { OrderTracking } from "./order-tracking.ts";
 import type { SoloGoalLine } from "./solo-goal-line.ts";
@@ -885,6 +886,10 @@ export interface WireMessage extends WaitLineField {
    * into their own conversation with that bot (shared/person-attention.ts).
    * On a routine.run row it rides beside the report. `text` is the fallback. */
   attention?: PersonAttentionCard;
+  /** #2109 (2026-11-05): GitHub sign-in by link and pairing code, posted by
+   * connect_github in the bot's chat and patched to connected in place
+   * (shared/github-connect-card.ts). On a text row; `text` is the fallback. */
+  githubConnect?: GithubConnectCard;
   /** 2026-11-05: a bot's answer in a routine run's task after the run had
    * ended (a teammate's result resumed it), mirrored here: the source id. */
   lateRunReplyOf?: string;

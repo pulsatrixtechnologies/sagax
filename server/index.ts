@@ -2190,6 +2190,7 @@ import {
   githubSandboxArgv,
   githubTokenKind
 } from "./github/github-connect.ts";
+import { GithubConnectCards } from "./github/github-connect-cards.ts";
 import { SANDBOX_PLUGINS_DIR, syncPluginsToSandbox } from "./sandbox/sandbox-plugins.ts";
 import { OrgCapabilities, ORG_CAPABILITY_KEY_PREFIX, type OrgCapabilityMount } from "./org/org-capabilities.ts";
 import { createOrgCapabilityRoutes, ORG_CAPABILITIES_CALL, OrgSettingOwnedElsewhere } from "./routes/org-capabilities.ts";
@@ -5619,9 +5620,9 @@ function agentsIntegration(
         return speaking?.memeReplies === "off" ? "0" : "1";
       })(),
       SAGAX_VOICE_CALL: voiceCalls.active(threadId) ? "1" : "0",
-      // connect_github: a 1:1 turn on a server with a GitHub OAuth App
-      // (device flow). The route re-checks both.
-      SAGAX_GITHUB_CONNECT: !store.groupByThread(threadId) && githubConnect.deviceFlowAvailable() ? "1" : "0",
+      // connect_github: any chat (#2109) on a server with a GitHub OAuth App
+      // (device flow). The route re-checks.
+      SAGAX_GITHUB_CONNECT: githubConnect.deviceFlowAvailable() ? "1" : "0",
       // join_meeting: Settings > Experimental > Meeting notetaker, direct
       // conversations only. The internal route re-checks both.
       SAGAX_MEETINGS: meetingNotetakerEnabled(cfg) && !store.groupByThread(threadId) ? "1" : "0",
@@ -9697,6 +9698,11 @@ async function syncPluginFoldersForTurn(principalId: string, botId: string): Pro
   }
 }
 const githubReplaced = new Map<string, { token: string; login: string }>();
+// #2109: the sign-in cards connect_github posts in a bot's chat.
+const githubConnectCards = new GithubConnectCards({
+  appendMessage: (threadId, message) => store.appendMessage(threadId, message as never),
+  patchMessage: (threadId, messageId, patch) => store.patchMessage(threadId, messageId, patch as never)
+});
 const githubConnect = new GithubConnect({
   clientId: githubClientId,
   save: (principalId, connection) => {
@@ -9709,7 +9715,9 @@ const githubConnect = new GithubConnect({
     const previous = githubReplaced.get(principalId);
     githubReplaced.delete(principalId);
     void syncGithubToSandbox(principalId, connection, undefined, previous).catch(reportBackgroundError);
-  }
+    githubConnectCards.settle(principalId, { state: "connected", login: connection.login });
+  },
+  onFlowEnded: (principalId, outcome) => githubConnectCards.settle(principalId, outcome)
 });
 /** The organization admin's historical marketplace list, kept in this
  * server's config (absent: any marketplace). */
@@ -33941,6 +33949,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     githubProbeStatus: (principalId, current) => githubConnect.probeStatus(principalId, current as Parameters<typeof githubConnect.probeStatus>[1]),
     githubDeviceFlowAvailable: () => githubConnect.deviceFlowAvailable(),
     githubStartDeviceFlow: (principalId) => githubConnect.startDeviceFlow(principalId),
+    githubPostCard: (principalId, threadId, start, from) => githubConnectCards.post(principalId, threadId, start, from).messageId,
     githubTokenKind,
     credentialConfigured: (credentialId) => credentialIsConfigured(cfg, credentialId),
     appendMessage: (threadId, message) => store.appendMessage(threadId, message as never),

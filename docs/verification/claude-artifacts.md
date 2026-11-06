@@ -118,13 +118,18 @@ signed-out). Headless UI only on the ports this worktree starts (5176-5206).
 ### Lot 1 runbook (dispatch viewer mirror)
 
 Goal: the dispatch history viewer (Flow skill `mirroring-dispatch-journal`,
-product page `assets/dispatch-history.html`) is published under the **bot's**
-claude.ai account, then the tenant's dispatch viewer URL is updated.
+page `library/claude-artifact/dispatch/skills/mirroring-dispatch-journal/assets/dispatch-history.html`
+in the Pulsatrix Flow plugin) is published under the **bot's** claude.ai
+account, then the tenant's dispatch viewer URL is updated.
 
-Blocked until: Sagax with `claude_artifact` is deployed (0.8.49 line; latest
-public cut at the time of writing was 0.8.48 without #2018).
+Blocked until: a Sagax **server** image that includes `claude_artifact` and
+`server/routes/claude-artifacts.ts` is live on the tenant host. Source tags
+from `pulsa-v0.8.51` onward carry that surface. As of 2026-11-06 the GOX
+Sagax image commit still predated those routes, so Lot 1 live stays blocked
+on the next Sagax server roll that includes #2018. Desktop / `feat/next-0828`
+alone is not enough.
 
-Steps (after deploy, on the tenant host, neutral wording):
+Steps (after that server roll, on the tenant host, neutral wording):
 
 1. Confirm the speaking person / bot has a Claude subscription sign-in in
    Sagax (Settings > Models, Claude) that owns the account that should hold

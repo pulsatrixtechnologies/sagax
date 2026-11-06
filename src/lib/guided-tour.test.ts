@@ -89,13 +89,13 @@ describe("guided tour", () => {
       if (s.anchor) ids.add(s.anchor);
       if (s.fallbackAnchor) ids.add(s.fallbackAnchor);
     }
-    // computer must be present (Advanced / remote Simple header). Other
-    // skipIfMissing anchors may still be absent until their panels open.
-    expect(src).toContain('data-tour="computer"');
+    // The header has no Computer button (JC 2026-11-05): its step skips.
+    // Other skipIfMissing anchors may still be absent until their panels open.
+    expect(src).not.toContain('data-tour="computer"');
     for (const id of ids) {
       const step = TOUR_STEPS.find((s) => s.anchor === id || s.fallbackAnchor === id)!;
       const present = src.includes(`data-tour="${id}"`) || src.includes(`tourId: "${id}"`) || src.includes(`"data-tour": "${id}"`);
-      if (!step.skipIfMissing || id === "computer") expect(present, id).toBe(true);
+      if (!step.skipIfMissing) expect(present, id).toBe(true);
     }
   });
 

@@ -1,7 +1,6 @@
-import { ArrowRight, ChevronRight, Loader2, PauseCircle, Play, Square } from "lucide-react";
+import { ChevronRight, Loader2, PauseCircle, Play, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { BotAvatar } from "@/components/Avatar";
 import { chatBubbleWidth, useChatBubbleWidthClasses } from "@/lib/chat-bubble-width";
 import { cn } from "@/lib/cn";
 import { prefersWideBubble } from "@/lib/rich-blocks";
@@ -10,6 +9,7 @@ import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { AttentionItems } from "./AttentionCard";
+import { DelegationList, type DelegationEntry } from "./DelegationList";
 import type { RoutineRunCardData } from "../../shared/routine-run";
 import type { Bot, Message } from "@/state/store";
 
@@ -93,31 +93,15 @@ export function RunResultDetails({ details }: { details: string }) {
   );
 }
 
-/** The teammates a run handed work to, each linked to the thread where
- * that work's outcome is (2026-11-03: "Sent work to a teammate"). */
-export function TeammateThreadLinks({ handedTo, onOpenThread }: {
-  handedTo: ReadonlyArray<{ botId: string; threadId: string; name?: string; status: string }>;
+/** The teammates a run handed work to, as the sub-agent list (2026-11-06,
+ * DelegationList); the click is the one the rows always had. */
+export function TeammateThreadLinks({ handedTo, onOpenThread, botOf, modelOf }: {
+  handedTo: ReadonlyArray<DelegationEntry>;
   onOpenThread?: (botId: string, threadId: string) => void;
+  botOf?: (botId: string) => Bot | undefined;
+  modelOf?: (botId: string, threadId: string) => string | undefined;
 }) {
-  return (
-    <ul data-run-handed-to className="mt-1 flex flex-col gap-0.5 px-1 text-[12px] text-ink-secondary">
-      {handedTo.map((entry) => {
-        const name = entry.name || t("routineRun.aTeammate");
-        return (
-          <li key={entry.threadId} className="flex flex-wrap items-center gap-x-1.5">
-            <span>{t("routineRun.handedTo", { name })}</span>
-            {onOpenThread && <>
-              <span aria-hidden="true">·</span>
-              <button type="button" data-run-teammate-thread={entry.threadId} onClick={() => onOpenThread(entry.botId, entry.threadId)} className="inline-flex items-center gap-0.5 rounded font-medium text-accent transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
-                {t("routineRun.openTeammateThread", { name })}
-                <ArrowRight aria-hidden="true" size={12} />
-              </button>
-            </>}
-          </li>
-        );
-      })}
-    </ul>
-  );
+  return <DelegationList entries={handedTo} botOf={botOf} modelOf={modelOf} onOpen={onOpenThread} />;
 }
 
 /** A lifecycle receipt can outlive its isolated execution task. Only offer
@@ -159,88 +143,7 @@ export function RunStatusPill({ label, tone, live }: { label: string; tone: stri
   );
 }
 
-const ACTION_PILL = "inline-flex shrink-0 items-center gap-1 rounded-full border border-hairline/50 px-3 py-1 text-[12.5px] font-medium text-ink transition-colors hover:bg-control focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent";
-const LINE_LINK = "inline-flex items-center gap-0.5 rounded font-medium text-accent transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent";
 const QUIET_LINK = "inline-flex items-center gap-0.5 rounded text-ink-tertiary transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent";
-
-/** The teammates a run handed work to. On a status card: mascot, name, pill,
- * optional thread link. Under a plain finished report: one grey line each
- * (2026-11-05, #2081). Thread link only when onOpenThread is given (threads
- * shown); unified chat names the teammate without a link. */
-function RunHandoffRows({ handedTo, botOf, onOpenThread, asCard }: {
-  handedTo: ReadonlyArray<{ botId: string; threadId: string; name?: string; status: string }>;
-  botOf?: (botId: string) => Bot | undefined;
-  onOpenThread?: (botId: string, threadId: string) => void;
-  asCard?: boolean;
-}) {
-  return (
-    <ul
-      data-run-handed-to
-      className={cn(
-        "flex flex-col",
-        asCard ? "mt-3 gap-2 border-t border-hairline/40 pt-3" : "mt-1 gap-0.5 pl-1 text-[11px] text-ink-tertiary",
-      )}
-    >
-      {handedTo.map((entry) => {
-        const teammate = botOf?.(entry.botId);
-        const name = entry.name || teammate?.name || t("routineRun.aTeammate");
-        const known = (COPY as Record<string, { label: LocaleKey; tone: string }>)[entry.status];
-        const state = entry.status === "completed" ? DONE : known;
-        return (
-          <li
-            key={entry.threadId}
-            data-run-handoff={entry.botId}
-            className={cn("flex flex-wrap items-center", asCard ? "gap-2.5" : "gap-x-1.5")}
-          >
-            {asCard && (
-              teammate && "color" in teammate && teammate.color
-                ? <BotAvatar bot={teammate} size={22} animated={false} />
-                : <span aria-hidden="true" className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-inset"><ArrowRight size={12} className="text-ink-secondary" /></span>
-            )}
-            {!asCard && entry.status === "running" && <Loader2 aria-hidden="true" className="size-3 animate-spin" />}
-            <span className={cn("min-w-0 truncate", asCard ? "flex-1 text-[13px] text-ink" : undefined)}>
-              {t("routineRun.handedTo", { name })}
-            </span>
-            {state && (
-              asCard
-                ? <RunStatusPill label={t(state.label)} tone={state.tone} live={entry.status === "running"} />
-                : <>
-                    <span aria-hidden="true">·</span>
-                    <span data-run-handoff-status>{t(state.label)}</span>
-                  </>
-            )}
-            {onOpenThread && (
-              asCard ? (
-                <button
-                  type="button"
-                  data-run-teammate-thread={entry.threadId}
-                  onClick={() => onOpenThread(entry.botId, entry.threadId)}
-                  className={ACTION_PILL}
-                >
-                  {t("routineRun.openTeammateThread", { name })}
-                  <ArrowRight aria-hidden="true" size={12} />
-                </button>
-              ) : (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <button
-                    type="button"
-                    data-run-teammate-thread={entry.threadId}
-                    onClick={() => onOpenThread(entry.botId, entry.threadId)}
-                    className={LINE_LINK}
-                  >
-                    {t("routineRun.openTeammateThread", { name })}
-                    <ArrowRight aria-hidden="true" size={12} />
-                  </button>
-                </>
-              )
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
 
 /** Now, for a running run's elapsed time: a quarter-minute tick is enough
  * for "2 min", and nothing ticks once the run is over. */
@@ -275,8 +178,11 @@ export function RoutineRunCard({
   onResume,
   onStop,
   onOpenThread,
+  modelOf,
 }: {
   message: Message;
+  /** 2026-11-06: the model a teammate works on, grey in its row. */
+  modelOf?: (botId: string, threadId: string) => string | undefined;
   /** The bot that ran the routine: its mascot leads the status card. */
   bot?: Bot;
   /** A teammate a run handed work to, for its name and mascot. */
@@ -467,7 +373,7 @@ export function RoutineRunCard({
           )}
         </div>
       )}
-      {handedTo.length > 0 && <RunHandoffRows handedTo={handedTo} botOf={botOf} onOpenThread={onOpenThread} asCard={false} />}
+      {handedTo.length > 0 && <DelegationList entries={handedTo} botOf={botOf} modelOf={modelOf} onOpen={onOpenThread} />}
     </section>
   );
 }

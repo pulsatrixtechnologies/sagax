@@ -4,7 +4,9 @@
  * hand-off), Completed with problems, Failed and paused, Running live. Under
  * a team goal card for comparison, through the chat's own row and the real
  * store. Neutral fictional bots and routines. Not shipped in the app.
- * ?width=<px>&height=<px>&skin=<id> (pulsatrix: dark, pulsatrix-light: light) */
+ * ?width=<px>&height=<px>&skin=<id> (pulsatrix: dark, pulsatrix-light: light)
+ * ?scene=delegation (2026-11-06): a run that handed work to three teammates,
+ * Done and Running mixed, as Grok Bot's sub-agent list. */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -37,6 +39,16 @@ const makeBot = (id: string, name: string, color: string) => ({
 }) as unknown as Bot;
 const atlas = makeBot("atlas", "Atlas", "blue");
 const nova = makeBot("nova", "Nova", "pink");
+const teammate = (id: string, name: string, color: string, model: string, threadId: string, busy: boolean) => {
+  const bot = makeBot(id, name, color) as unknown as { modelSelection: unknown; tasks: unknown[] };
+  bot.modelSelection = { instanceId: "test", model };
+  bot.tasks = [...bot.tasks, { threadId, title: name, createdAt: NOW - 10 * M, busy, activity: busy ? "working" : "idle" }];
+  return bot as unknown as Bot;
+};
+const harrie = teammate("harrie", "Harrie", "green", "Opus 4.7", "harrie-work", false);
+const melonie = teammate("melonie", "Melonie", "orange", "Sonnet 4.6", "melonie-work", true);
+const quill = teammate("quill", "Quill", "purple", "Haiku 4.5", "quill-work", true);
+const team = [atlas, nova, harrie, melonie, quill];
 
 const card = (id: string, run: Partial<RoutineRunCardData> & Pick<RoutineRunCardData, "routineName" | "status">, at: number): Message => ({
   id, role: "bot", kind: "routine.run", at, from: { botId: "atlas" },
@@ -83,6 +95,14 @@ const NEIGHBOUR = `Two things changed since this morning:
 | Open PRs | 6 | 4 |
 
 The 2 PM meeting moved to 3 PM; the room is the same.`;
+const delegatedRun = card("delegated", {
+  routineName: "dispatch-gox-pass", status: "running", startedAt: NOW - 4 * M,
+  handedTo: [
+    { botId: "harrie", threadId: "harrie-work", name: "Harrie", status: "completed", task: "Reconcile the bank overage for Northwind", startedAt: NOW - 4 * M, finishedAt: NOW - 1 * M, note: "Moved 2.5 h to the right agreement." },
+    { botId: "melonie", threadId: "melonie-work", name: "Melonie", status: "running", task: "Draft the weekly client summary", startedAt: NOW - 3 * M },
+    { botId: "quill", threadId: "quill-work", name: "Quill", status: "running", startedAt: NOW - 2 * M },
+  ],
+} as Partial<RoutineRunCardData> & Pick<RoutineRunCardData, "routineName" | "status">, NOW - 4 * M);
 const reportRun = card("report", { routineName: "dispatch-gox-pass", status: "completed", summary: REPORT }, NOW - 9 * M);
 
 /** ?scene=unified (#2096, #2098): the bot's conversation with threads off. A
@@ -120,7 +140,7 @@ const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-  if (url.includes("/api/bots?")) return json({ bots: [atlas, nova], groups: [], sections: [], computerControl: {} });
+  if (url.includes("/api/bots?")) return json({ bots: team, groups: [], sections: [], computerControl: {} });
   if (url.includes("/api/routines")) return json({ routines: [], runs: [], scope: "mine", allowed: { mine: true, team: false, all: false }, facets: { teams: [], owners: [], botChoices: [] } });
   if (url.includes("/api/")) return json({});
   return realFetch(input, init);
@@ -129,7 +149,7 @@ window.fetch = async (input, init) => {
 function Shell() {
   const { dispatch } = useStore();
   useEffect(() => {
-    dispatch({ type: "hydrate", bots: [atlas, nova], groups: [], sections: [], computerControl: {} } as never);
+    dispatch({ type: "hydrate", bots: team, groups: [], sections: [], computerControl: {} } as never);
     dispatch({ type: "routinesHydrated", routines: [], runs: [] });
     dispatch({ type: "select", id: "atlas" });
   }, [dispatch]);
@@ -143,6 +163,11 @@ function Shell() {
               <div className="ml-auto w-fit rounded-[18px] bg-bubble-user px-3 py-[7px] text-[13px] leading-5 text-ink">What changed today?</div>
               <NeighbourBubble text={NEIGHBOUR} />
               <RoutineRunRow message={reportRun} botId="atlas" />
+            </>
+          ) : scene === "delegation" ? (
+            <>
+              <div className="ml-auto w-fit rounded-[18px] bg-bubble-user px-3 py-[7px] text-[13px] leading-5 text-ink">Run the dispatch pass.</div>
+              <RoutineRunRow message={delegatedRun} botId="atlas" />
             </>
           ) : scene === "unified" ? (
             <>

@@ -21,6 +21,13 @@ import { childrenSince, clip, isTerminal, path } from "./runtime/tree.ts";
 import { reservedSlotAdmission, wakeKind } from "./runtime/hold.ts";
 import type { Assignment, EndResult, Mode, Origin, Owner, Reply, Requester, RunInput, RunResult, StatusView, TurnRunner } from "./runtime/types.ts";
 
+/** A teammate's work as one short title: the brief's first line, without
+ * markdown marks (2026-11-06, the sub-agent list under a run). */
+export function briefTitle(brief: string): string {
+  const line = brief.split("\n").map((part) => part.replace(/^[\s#>*\-_`]+/, "").replace(/[*_`]+/g, "").trim()).find(Boolean) ?? "";
+  return clip(line, 80);
+}
+
 /** Refusals the model and index.ts read; the words are the legacy tree's. */
 const NOT_RUNNING = "The originating room task is no longer running";
 const WRONG_SPEAKER = "The handoff belongs to a different room speaker";
@@ -635,7 +642,18 @@ export class RuntimeCoordinator implements Coordinator {
       const children = this.store.children(root.id);
       for (const child of children) {
         const threadId = child.assignee.destination.threadId;
-        if (threadId && !handed.some((entry) => entry.threadId === threadId)) handed.push({ botId: child.assignee.botId, threadId, status: child.status });
+        if (threadId && !handed.some((entry) => entry.threadId === threadId)) {
+          // 2026-11-06 (owner, the sub-agent list): what the work was and how it ended, for the row under the run.
+          const task = briefTitle(child.brief);
+          const note = isTerminal(child) ? clip(child.outcomeDetail || child.result || "", 160) : "";
+          handed.push({
+            botId: child.assignee.botId, threadId, status: child.status,
+            ...(task ? { task } : {}),
+            ...(child.startedAt !== undefined ? { startedAt: child.startedAt } : {}),
+            ...(child.finishedAt !== undefined ? { finishedAt: child.finishedAt } : {}),
+            ...(note ? { note } : {}),
+          });
+        }
         if (child.reply === "none" || !isTerminal(child)) continue;
         if (child.status === "completed") continue;
         // Redone later by the same teammate, and that completed: not a failure.

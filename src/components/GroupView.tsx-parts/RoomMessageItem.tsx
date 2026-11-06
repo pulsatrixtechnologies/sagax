@@ -16,6 +16,7 @@ import { ApprovalCard, approvalCardStaysInChat } from "../ApprovalCard";
 import { OptionCard } from "../OptionCard";
 import { AccessCard } from "../AccessCard";
 import { GoalRunCard, goalRunPlace } from "../GoalRunCard";
+import { delegateModelLabel } from "../DelegationList";
 import { RoutineRunCard } from "../RoutineRunCard";
 import { CwWidgetView, shownCwWidget } from "../cw/CwWidgetView";
 import { RoomToolChip } from "./RoomToolChip";
@@ -185,6 +186,7 @@ export function RoomMessageItem({
           message={m}
           bot={state.bots.find((candidate) => candidate.id === m.from?.botId)}
           botOf={(id) => state.bots.find((candidate) => candidate.id === id)}
+          modelOf={(id, threadId) => delegateModelLabel(state.bots.find((candidate) => candidate.id === id), state.instances, threadId)}
           onOpen={routineRunRef
             ? () => openRoutineRun(dispatch, { runId: routineRunRef.runId, routineId: routineRunRef.routineId })
             : undefined}

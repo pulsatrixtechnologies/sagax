@@ -65,8 +65,9 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
    * and the panel's drag strip made unreliable). Never from the switch or the
    * row's own menu button. */
   onRowDragStart?: (routine: Routine, event: ReactPointerEvent<HTMLElement>) => void;
-  /** The quiet "Running" word on a row whose routine runs right now opens that
-   * run in Automations (2026-10-28). Without it the word is not shown. */
+  /** Shows the quiet "Running" word on a row whose routine runs right now.
+   * The row itself always opens the routine, running or not (JC 2026-11-06):
+   * the live run is in the routine's Runs list. Without it the word is not shown. */
   onOpenRunning?: (routine: Routine, run: RoutineRun) => void;
   /** Alt+Up / Alt+Down on a row: to the previous or next folder. */
   onRowStep?: (routine: Routine, direction: -1 | 1) => void;
@@ -149,7 +150,7 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
               onContextMenu={onRowMenu && !readOnly ? (event) => { event.preventDefault(); openMenu(routine, event.currentTarget, { x: event.clientX, y: event.clientY }); } : undefined}
               className={cn("group/routine", onRowDragStart && !readOnly && "cursor-grab select-none", leadingClock ? cn("flex items-center gap-2.5 hover:bg-hover", PANEL_ROW) : grouped ? cn("flex items-center gap-2 hover:bg-hover", GROUPED_ROW, "py-1.5") : "flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-hover")}>
               {leadingClock && <Clock size={16} strokeWidth={1.5} aria-hidden="true" className="shrink-0 text-ink-tertiary" />}
-              {renamingId === routine.id && onRenameSave ? <RoutineNameInput initial={routine.name} onSave={(name) => onRenameSave(routine, name)} onCancel={() => onRenameCancel?.()} /> : <button type="button" onClick={() => runningRun ? onOpenRunning!(routine, runningRun) : onOpen(routine)}
+              {renamingId === routine.id && onRenameSave ? <RoutineNameInput initial={routine.name} onSave={(name) => onRenameSave(routine, name)} onCancel={() => onRenameCancel?.()} /> : <button type="button" onClick={() => onOpen(routine)}
                 onKeyDown={(onRowMenu || onRowStep || onRenameStart) && !readOnly ? (event: ReactKeyboardEvent<HTMLButtonElement>) => {
                   if (onRenameStart && event.key === "F2") { event.preventDefault(); onRenameStart(routine); }
                   else if (onRowMenu && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) { event.preventDefault(); openMenu(routine, event.currentTarget); }

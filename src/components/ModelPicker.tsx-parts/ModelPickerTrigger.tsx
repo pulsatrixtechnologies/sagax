@@ -62,6 +62,7 @@ export function ModelPickerTrigger({
   showActiveAccount,
   selectedVariantLabel,
   advanced,
+  locked = false,
 }: {
   windowOnly: boolean;
   inComposer: boolean;
@@ -85,6 +86,8 @@ export function ModelPickerTrigger({
   showActiveAccount: boolean;
   selectedVariantLabel: string | undefined;
   advanced: boolean;
+  /** True when the model must not change (busy with no reasoning row). */
+  locked?: boolean;
 }) {
   // headless outside the composer (#2050, Settings > Models "Set model for
   // n bots"): no chip at all, the menu opens from `menuControl`.
@@ -96,9 +99,9 @@ export function ModelPickerTrigger({
   <button data-tour="model"
     ref={triggerRef}
     type="button"
-    disabled={Boolean(bot.busy)}
+    disabled={locked}
     onClick={() => toggleMenu()}
-    aria-expanded={menu && !bot.busy}
+    aria-expanded={menu && !locked}
     aria-haspopup="listbox"
     title={bot.busy ? `${composerLabel}${followLine}\n${t(threadId ? "model.threadBusy" : "model.busy")}` : `${composerLabel}${followLine}`}
     className={cn(
@@ -117,9 +120,9 @@ export function ModelPickerTrigger({
     <button data-tour="model"
       ref={triggerRef}
       type="button"
-      disabled={Boolean(bot.busy)}
+      disabled={locked}
       onClick={() => toggleMenu()}
-      aria-expanded={menu && !bot.busy}
+      aria-expanded={menu && !locked}
       aria-haspopup="dialog"
       data-model-list-chip=""
       title={bot.busy ? `${summary}${followLine}\n${t(threadId ? "model.threadBusy" : "model.busy")}` : `${summary}${followLine}`}
@@ -133,7 +136,7 @@ export function ModelPickerTrigger({
         </span>
       )}
       <span data-model-list-chip-label="" className="min-w-0 flex-1 truncate text-left">
-        {listChipLabel({ autoOn, autoRecord, active, selection })}
+        {listChipLabel({ autoOn, autoRecord, active, selection, showActiveAccount })}
       </span>
       <ChevronDown size={13} aria-hidden="true" className={cn("shrink-0 text-ink-secondary transition-transform", menu && "rotate-180")} />
     </button>
@@ -147,9 +150,9 @@ export function ModelPickerTrigger({
   <button data-tour="model"
     ref={triggerRef}
     type="button"
-    disabled={Boolean(bot.busy)}
+    disabled={locked}
     onClick={() => toggleMenu()}
-    aria-expanded={menu && !bot.busy}
+    aria-expanded={menu && !locked}
     aria-haspopup="dialog"
     className={cn(
       // One line only: effort must never wrap under the chip (or under the

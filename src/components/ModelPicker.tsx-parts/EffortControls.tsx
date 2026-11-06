@@ -198,10 +198,10 @@ export function ModelVariantRow({ bot, threadId, updateBotDefault, viewerLocal =
     <div className={className}>
       <label className="flex items-center justify-between gap-3">
         {label}
-        <select aria-label={t("model.variant.aria")} disabled={bot.busy}
+        <select aria-label={t("model.variant.aria")}
           value={selection.variant === undefined ? "unset" : missing ? "missing" : String(options.findIndex((option) => option.id === selection.variant))}
           onChange={(event) => choose(options[Number(event.target.value)]?.id)}
-          className="min-w-0 max-w-[65%] rounded-lg border border-hairline/40 bg-inset px-2 py-1.5 text-[12px] text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:opacity-50">
+          className="min-w-0 max-w-[65%] rounded-lg border border-hairline/40 bg-inset px-2 py-1.5 text-[12px] text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70">
           <option value="unset">{t("model.variant.session")}</option>
           {missing && <option value="missing" disabled>{selection.variant} ({unavailable ? t("model.variant.unavailableTag") : t("model.variant.unverifiedTag")})</option>}
           {options.map((option, index) => <option key={option.id} value={String(index)}>{variantLabel(option)}</option>)}
@@ -221,9 +221,9 @@ export function ModelVariantRow({ bot, threadId, updateBotDefault, viewerLocal =
         </p>
       )}
       {selection.variant !== undefined && (
-        <button type="button" disabled={bot.busy} onClick={() => choose()}
+        <button type="button" onClick={() => choose()}
           title={t("model.variant.clearTitle")}
-          className="mt-2 block text-[12px] text-ink-secondary underline underline-offset-2 hover:text-ink disabled:opacity-50">
+          className="mt-2 block text-[12px] text-ink-secondary underline underline-offset-2 hover:text-ink">
           {t("model.variant.clear")}
         </button>
       )}
@@ -233,12 +233,11 @@ export function ModelVariantRow({ bot, threadId, updateBotDefault, viewerLocal =
             <button
               key={option.id}
               type="button"
-              disabled={bot.busy}
               aria-pressed={selection.variant === option.id}
               title={t("model.variant.useTitle", { variant: variantLabel(option) })}
               onClick={() => choose(option.id)}
               className={cn(
-                "rounded-full border px-2.5 py-1 text-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:opacity-50",
+                "rounded-full border px-2.5 py-1 text-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70",
                 selection.variant === option.id ? "border-accent/60 bg-control text-ink" : "border-hairline/40 text-ink-secondary hover:bg-control/60 hover:text-ink",
               )}
             >

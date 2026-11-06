@@ -573,3 +573,34 @@ describe("organisation policy", () => {
     expect(allowed).not.toContain("Managed by");
   });
 });
+
+describe("while the bot is working (omb #4395)", () => {
+  it("unlocks the menu when the engine offers a reasoning level", async () => {
+    const { lockedWhileBusy, offersReasoning } = await import("./ModelPicker.tsx-parts/model-picker-reasoning");
+    const withEffort = engine(["low", "high"]);
+    const state = { instances: [withEffort], modelVariantSessions: {} };
+    const busyBot = { ...bot(), busy: true };
+    expect(offersReasoning(state, withEffort, busyBot.modelSelection, busyBot.threadId)).toBe(true);
+    expect(lockedWhileBusy(state, busyBot, false, busyBot.threadId)).toBe(false);
+    expect(lockedWhileBusy(state, busyBot, true, busyBot.threadId)).toBe(true);
+    expect(lockedWhileBusy(state, busyBot, false, busyBot.threadId)).toBe(false);
+    const bare = engine();
+    expect(lockedWhileBusy({ instances: [bare], modelVariantSessions: {} }, busyBot, false, busyBot.threadId)).toBe(true);
+  });
+
+  it("lets a variant change while the bot is working", () => {
+    const variantEngine: InstanceInfo = {
+      ...engine(),
+      capabilities: { modelVariants: true },
+      models: {
+        default: "gpt-5.6",
+        options: [{ id: "gpt-5.6", label: "GPT-5.6", variants: [{ id: "fast", label: "Fast" }, { id: "deep", label: "Deep" }] }],
+      },
+    };
+    fixture.instances = [variantEngine];
+    const busy = { ...bot(), busy: true, modelSelection: { instanceId: "codex", model: "gpt-5.6", variant: "fast" } };
+    const markup = renderToStaticMarkup(createElement(ModelVariantRow, { bot: busy }));
+    expect(markup).not.toMatch(/disabled/);
+    expect(markup).toContain("Fast");
+  });
+});

@@ -8257,15 +8257,13 @@ function checkedModelSelection(
     }
     selection.variant = value.variant;
   }
-  const changed = current && (
+  // Each turn reads its reasoning level when it starts, so effort or variant
+  // (and Auto) may change while the bot works; the model may not.
+  const modelChanged = current && (
     selection.instanceId !== current.selection.instanceId ||
-    selection.model !== current.selection.model ||
-    selection.auto !== current.selection.auto ||
-    selection.autoOptimize !== current.selection.autoOptimize ||
-    selection.effort !== current.selection.effort ||
-    selection.variant !== current.selection.variant
+    selection.model !== current.selection.model
   );
-  if (current?.busy && changed) {
+  if (current?.busy && modelChanged) {
     return { ok: false, status: 409, error: "the bot is working — stop it before changing models" };
   }
   const target = registry.get(selection.instanceId);

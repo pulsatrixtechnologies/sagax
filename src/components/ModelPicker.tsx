@@ -48,6 +48,8 @@ import { EffortRow, ModelVariantRow, variantLabel } from "./ModelPicker.tsx-part
 import { ClaudeAccountSelect, ModelEngineRail } from "./ModelPicker.tsx-parts/ModelEngineRail";
 import { buildModelPickerSections } from "./ModelPicker.tsx-parts/buildSections";
 import { ModelPickerTrigger } from "./ModelPicker.tsx-parts/ModelPickerTrigger";
+import { BusyModelMenu } from "./ModelPicker.tsx-parts/ModelPickerBusyMenu";
+import { lockedWhileBusy } from "./ModelPicker.tsx-parts/model-picker-reasoning";
 import { ModelPickerMenu, windowOnlyMenuPlace } from "./ModelPicker.tsx-parts/ModelPickerMenu";
 import { useModelPickerEffects } from "./ModelPicker.tsx-parts/useModelPickerEffects";
 import { modelPickerComposerLabel, modelPickerFollowLine, modelPickerSummary } from "./ModelPicker.tsx-parts/labels";
@@ -157,7 +159,10 @@ export function ModelPicker({
   /** #2106: Auto Edit panel (Intelligence / Balance / Cost); owned here so
    * ModelPickerMenu stays hook-free for the function-call interaction harness. */
   const [autoEditOpen, setAutoEditOpen] = useState(false);
-  const menuMotion = useMenuMotion(menu && !bot.busy);
+  // While the bot works the menu still opens to its reasoning level, which
+  // applies from the next turn; the model stays locked.
+  const locked = lockedWhileBusy(state, bot, contained, threadId);
+  const menuMotion = useMenuMotion(menu && !locked);
   const [menuAt, setMenuAt] = useState<{ left?: number; right?: number; top?: number; bottom?: number } | null>(() => (
     windowOnly && typeof window !== "undefined" ? windowOnlyMenuPlace() : null
   ));
@@ -232,6 +237,11 @@ export function ModelPicker({
   const botModelName = botModelInstance
     ? `${botModelInstance.displayName} · ${modelLabel(botModelInstance, profile.modelSelection.model)}`
     : profile.modelSelection.model;
+  // Only a thread on the bot's own model may carry a busy reasoning change to
+  // the bot default; otherwise the save would also copy this thread's model.
+  const busyUpdatesBotDefault = Boolean(threadId)
+    && bot.modelSelection.instanceId === profile.modelSelection.instanceId
+    && bot.modelSelection.model === profile.modelSelection.model;
 
   const fallback = state.modelFallbacks?.[threadId ?? bot.threadId];
   const fallbackNow = fallback && fallback.instanceId === selection.instanceId && fallback.requested === selection.model ? fallback : undefined;
@@ -280,7 +290,6 @@ export function ModelPicker({
   };
 
   const setEffort = (effort: EffortLevel | undefined) => {
-    if (bot.busy && !alsoApplyTo?.length) return;
     if (viewerLocal && !alsoApplyTo?.length) {
       saveViewerChoice(dispatch, bot.id, { effort: effort ?? null });
       return;
@@ -288,7 +297,8 @@ export function ModelPicker({
     const { variant: _variant, ...rest } = selection;
     const next = { ...rest, ...(effort ? { effort } : { effort: undefined }) };
     if (!viewerLocal) {
-      dispatch({ type: "setModel", botId: bot.id, threadId, ...(threadId ? { updateBotDefault: true } : {}), selection: next });
+      const updateBotDefault = bot.busy ? busyUpdatesBotDefault : Boolean(threadId);
+      dispatch({ type: "setModel", botId: bot.id, threadId, ...(updateBotDefault ? { updateBotDefault: true } : {}), selection: next });
     }
     applyToOthers(next);
   };
@@ -363,7 +373,7 @@ export function ModelPicker({
   const composerLabel = modelPickerComposerLabel({ autoOn, autoRecord, active, selection, selectedVariantLabel });
 
   const toggleMenu = (anchor: HTMLElement | null = null, onDone?: () => void) => {
-    if (bot.busy) return;
+    if (locked) return;
     if (menu) {
       closeMenu();
       return;
@@ -394,11 +404,11 @@ export function ModelPicker({
 
   const composerTitle = bot.busy ? `${composerLabel}${followLine}\n${t(threadId ? "model.threadBusy" : "model.busy")}` : `${composerLabel}${followLine}`;
   const ultracodeChip = isUltracodeEffort(selection.effort);
-  const menuShownOpen = menu && !bot.busy;
+  const menuShownOpen = menu && !locked;
 
   useModelPickerEffects({
     anyOpen, orgMode, refreshInstances, refreshInstanceModels, displayedInstanceId,
-    railDriverKind, railNeedsSetup, botBusy: Boolean(bot.busy), windowOnly, open: false, menu, setMenu, setOpen: () => undefined,
+    railDriverKind, railNeedsSetup, botBusy: Boolean(bot.busy), locked, windowOnly, open: false, menu, setMenu, setOpen: () => undefined,
     closeWindow: () => closeMenu(), closeMenu, dialogRef, menuRef, triggerRef, anchorRef, headless, fallbackAnchor,
     inComposer, botId: bot.id, toggleMenu, onChip, composerLabel, composerTitle, ultracodeChip, menuShownOpen,
   });
@@ -429,6 +439,7 @@ export function ModelPicker({
     // #2080: the two-pane chip always reads "Model · Effort" (Bot > Model
     // has no Effort row of its own any more)
     advanced: advanced || panes,
+    locked,
   });
 
   const portal = (node: ReactNode) => (typeof document === "undefined" ? node : createPortal(node, document.body));
@@ -449,7 +460,28 @@ export function ModelPicker({
         trigger
       )}
 
-      {menuMotion.shown && portal(ModelPickerMenu({
+      {menuMotion.shown && portal(bot.busy && !contained ? (
+        <div
+          ref={menuRef}
+          data-model-menu=""
+          role="dialog"
+          aria-label={t("model.menu")}
+          {...menuMotion.exitProps}
+          className={cn(
+            "z-50 flex max-h-[min(560px,calc(100dvh-96px))] max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-xl border border-popover-hairline popover-surface bg-popover py-1 text-popover-ink shadow-2xl shadow-black/50",
+            menuAt ? "fixed" : "absolute bottom-full right-0 mb-1.5",
+            menuMotion.className,
+          )}
+          style={menuAt ? { ...menuAt, width: BASE_MENU_WIDTH } : { width: BASE_MENU_WIDTH }}
+        >
+          <BusyModelMenu
+            bot={bot}
+            threadId={threadId}
+            updateBotDefault={busyUpdatesBotDefault}
+            variants={Boolean(active?.capabilities?.modelVariants)}
+          />
+        </div>
+      ) : ModelPickerMenu({
         menuRef,
         menuAt,
         menuMotion,

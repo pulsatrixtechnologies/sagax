@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** checkedModelSelection (#1388). Pure move from server/index.ts. */
+import { isModelVariant } from "../contracts.ts";
+import { isEffortLevel } from "../../shared/wire.ts";
 export type Host = Record<string, any>;
 
 export function createCheckedModelSelection(getHost: () => Host): any {

@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** workplaceNoteText (#1388). Pure move from server/index.ts. */
+import { DESKTOP_BRIDGE_MCP_NAME } from "../../shared/bot-workplace.ts";
+import { autoComputerGuidance } from "../computer/auto-computer.ts";
 export type Host = Record<string, any>;
 
 export function createWorkplaceNoteText(getHost: () => Host): any {

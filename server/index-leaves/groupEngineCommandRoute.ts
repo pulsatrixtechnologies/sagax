@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** groupEngineCommandRoute (#1388). Pure move from server/index.ts. */
+import { groupCommandTarget } from "../../shared/harness-commands.ts";
+import { harnessEngineFor } from "../harness-commands.ts";
 export type Host = Record<string, any>;
 
 export function createGroupEngineCommandRoute(getHost: () => Host): any {

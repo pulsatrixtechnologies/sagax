@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** scopeApprovalMessage (#1388). Pure move from server/index.ts. */
+import { approvalAudience, approvalDelivery } from "../approvals/approval-audience.ts";
 export type Host = Record<string, any>;
 
 export function createScopeApprovalMessage(getHost: () => Host): any {

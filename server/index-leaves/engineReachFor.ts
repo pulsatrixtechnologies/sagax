@@ -1,10 +1,12 @@
 // @ts-nocheck
 /** engineReachFor (#1388). Pure move from server/index.ts. */
+import { claudeAiConnectorsForTurn } from "../harness-connectors.ts";
 export type Host = Record<string, any>;
 
 export function createEngineReachFor(getHost: () => Host): any {
-function engineReachFor(bot: BotRecord, instance: Parameters<typeof withholdHostToolsFor>[0] & { instanceId: string }, speaker: TurnSpeaker, via?: TurnAccess["via"], slot: LoginSlot = turnSlotFor(bot, instance)): Array<{ connector: string }> | null {
+function engineReachFor(bot: BotRecord, instance: Parameters<typeof withholdHostToolsFor>[0] & { instanceId: string }, speaker: TurnSpeaker, via?: TurnAccess["via"], slot?: LoginSlot): Array<{ connector: string }> | null {
   const host = getHost();
+  slot ??= host.turnSlotFor(bot, instance);
   const { connectorPrincipalFor, grokCloudConnectorsForTurn, isPrincipalId } = host;
 
   const input = host.accountConnectorInput(bot, instance, speaker, via, slot);

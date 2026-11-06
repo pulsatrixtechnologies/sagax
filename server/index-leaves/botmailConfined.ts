@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** botmailConfined (#1388). Pure move from server/index.ts. */
+import { botmailRunConfined } from "../mail/bot-inbound-mail.ts";
 export type Host = Record<string, any>;
 
 export function createBotmailConfined(getHost: () => Host): any {

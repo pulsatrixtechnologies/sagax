@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** harnessCommandAccount (#1388). Pure move from server/index.ts. */
+import { commandListAccess } from "../harness-commands.ts";
 export type Host = Record<string, any>;
 
 export function createHarnessCommandAccount(getHost: () => Host): any {

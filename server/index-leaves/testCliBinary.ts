@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** testCliBinary (#1388). Pure move from server/index.ts. */
+import { BUILT_IN_DRIVERS } from "../drivers/builtIn.ts";
 export type Host = Record<string, any>;
 
 export function createTestCliBinary(getHost: () => Host): any {

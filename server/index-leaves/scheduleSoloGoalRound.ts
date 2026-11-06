@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** scheduleSoloGoalRound (#1388). Pure move from server/index.ts. */
+import { soloGoalContinuePrompt, soloGoalLine } from "../solo-goal.ts";
 export type Host = Record<string, any>;
 
 export function createScheduleSoloGoalRound(getHost: () => Host): any {

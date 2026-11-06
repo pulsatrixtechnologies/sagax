@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** dispatchDelegationWake (#1388). Pure move from server/index.ts. */
+import { isTurnAdmissionBlocked } from "../turns/turn-dispatch-guard.ts";
+import { buildDelegationFailurePrompt, buildDelegationRevivalPrompt } from "../peers/delegation-receipts.ts";
 export type Host = Record<string, any>;
 
 export function createDispatchDelegationWake(getHost: () => Host): any {

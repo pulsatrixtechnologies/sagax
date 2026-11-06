@@ -8,7 +8,7 @@ import { createConnectorStatusRoutes } from "./routes/connector-status.ts";
 import { preSendRefusalKind, isCodexAmbientMcpRefusal } from "../shared/presend-refusal.ts";
 import { ambientRefusalFor, clearAmbientRefusal, fixAmbientMcp } from "./drivers/codex/ambient-mcp.ts";
 import { classifyRoutineFailure as readinessFailureClass } from "./routines/routine-recovery.ts";
-import { canUseMcpServer } from "../shared/tool-scope.ts";
+import { canUseMcpServer, parseToolScope, toolScopeWidens } from "../shared/tool-scope.ts";
 import { withRequiredComputer } from "../shared/routine-readiness.ts";
 import { missingCitedPaths } from "./routines/routine-cited-paths.ts";
 import { createBotAvatarGenerateRoutes } from "./routes/bot-avatar-generate.ts";
@@ -46,7 +46,7 @@ import { groupLeftFrameAllowed } from "./groups/group-leave.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, hostname, userInfo } from "node:os";
 import { ToolGrantStore } from "./tools/tool-grants.ts";
 import { foreignToolSpelling, sagaxInternalSelfAnswers, sagaxInternalTool } from "./sagax-internal-tools.ts";
 import { createAgentCardGuard } from "./tools/agent-tool-card-guard.ts";
@@ -58,7 +58,6 @@ import { safetyArm, safetyHttpRefusal, safetyPermissionEffect, safetyToolHold, s
 import { writeFileAtomic } from "./atomic.ts";
 import { hideServerPathsInSections } from "./server-path-prompt.ts";
 import { rm as removeDirectory } from "node:fs/promises";
-import { hostname, userInfo } from "node:os";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { ToolResults } from "./tools/tool-results.ts";
 import { basename, dirname, join } from "node:path";
@@ -85,13 +84,12 @@ import { provenRequestPerson, SharedComputers, sharedComputerOperation } from ".
 import { publishPersonalCopy, readPersonalCopy } from "./personal-copy.ts";
 import { createUserComputerRouter } from "./computer/user-computers.ts";
 import { SharedComputerControl } from "./computer/shared-computer-control.ts";
-import { createCoordinator, type ComposedTurn, type Coordinator, type HandoffView } from "./coordinator.ts";
 import {
   createCoordinator,
   type ComposedTurn,
   type Coordinator,
-  type HandoffOpener,
   type HandoffView,
+  type HandoffOpener,
   type HostTurnResult
 } from "./coordinator.ts";
 import { queuedBehindPersonText, UnansweredApprovals } from "./waits/waiting-on-person.ts";
@@ -105,21 +103,20 @@ import { SafePointPreempts } from "./safe-point-preempt.ts";
 import { atThreadCapacity, interruptKeepsTeammates } from "./team/teammate-replies.ts";
 
 import { canWorkOnCloud, type CloudEngine } from "../shared/cloud-computer.ts";
-import { approvalModeFor, engineApprovalMode, modelSwitchNeedsAsk, isEmergencyApprovalDowngrade, liveApprovalChange, isApprovalMode, staleThreadException, type ApprovalMode } from "../shared/approval-mode.ts";
 import {
   approvalModeFor,
   engineApprovalMode,
-  hasNativeAutoReview,
   modelSwitchNeedsAsk,
   isEmergencyApprovalDowngrade,
   liveApprovalChange,
-  liveApprovalTightens,
   isApprovalMode,
+  staleThreadException,
+  type ApprovalMode,
+  hasNativeAutoReview,
+  liveApprovalTightens,
   setDefaultApprovalMode,
   appliedLevelReason,
-  staleThreadException,
-  type AppliedApprovalLevel,
-  type ApprovalMode
+  type AppliedApprovalLevel
 } from "../shared/approval-mode.ts";
 import { isProactiveMode, normalizeProactiveMode, proactiveModeFor } from "../shared/proactive-mode.ts";
 import { parsePageTargetDefault } from "../shared/page-targets.ts";
@@ -150,14 +147,13 @@ import { createTeamBotVaultRoutes, soloMayManage } from "./routes/team-bot-vault
 import { withCommandVariables } from "./vault/credential-command-env.ts";
 
 import { createRoomTurnLevels } from "./rooms/room-turn-level.ts";
-import { approvalModeForOrigin } from "./approvals/auto-approve.ts";
 import {
+  approvalModeForOrigin,
   HELD_NOTE,
   approvalHeldNote,
   approvalHeldReason,
-  approvalModeForOrigin,
   autoVerdict,
-  deliverFullAccessApproval,
+  deliverFullAccessApproval
 } from "./approvals/auto-approve.ts";
 import { readsOwnFiles } from "./own-file-reads.ts";
 import { CommandAllowlistStore, commandAllowlistCandidate, sandboxCommandCandidate } from "./command-allowlist.ts";
@@ -197,7 +193,6 @@ import { TeamComputers, teamComputerOwner, type TeamComputerRecord } from "./com
 import { instructionsLead } from "../shared/instructions-lead.ts";
 import { type BotVisibility, type ResolvedSender, type WireAccessCard, type WireBot, type WireTask } from "../shared/wire.ts";
 import { isPersistentQuestionCard, shouldSettleRequestCard } from "../shared/ask-question.ts";
-import { parseToolScope, toolScopeWidens } from "../shared/tool-scope.ts";
 import { closeRowsLeftByRestart, endedToolOutput } from "./threads/subagent-cleanup.ts";
 import { reapOrphanEngineGroups } from "./engines/engine-groups.ts";
 import { BOT_ACTIVITY_WINDOW_MS as SUBAGENT_SWEEP_WINDOW_MS } from "../shared/bot-activity.ts";
@@ -224,7 +219,27 @@ import { procedureSignal, recordProcedure } from "./memory/memory-procedures.ts"
 import { appendAboutMe, commitLearned, planLearned } from "./profiles/profile-learned.ts";
 import { archivedAgent, canAccessBot, canAccessTeam, primaryCovers, canReachPeer, peerAllowed, peerName, peerRosterSystemPrompt, peerInScope, reachablePeers, sameOwnerBots, setPeerScope, setPrimaryCover, setSameOwner, roomPeerRosterSystemPrompt, roomRosterLine, uniquePeerName, PEER_ACCESS_HELP } from "./peers/peer-roster.ts";
 import { orgPeerInScope } from "./peers/peer-scope.ts";
-import { containerComputerAction, containerComputerExists, containerComputerFrame, containerComputerMcp, containerComputerScreenshot, containerComputerStatus, containerExec, containerRuntimeStatus, localVmWorkspaceExists, perBotLocalVmTarget, poolLocalVmTarget, SHARED_LOCAL_VM_TARGET, setupCommands, startContainerRuntime, VM_WORKSPACE_GUEST, type LocalVmTarget, type Runtime } from "./computer/container-computer.ts";
+import {
+  containerComputerAction,
+  containerComputerExists,
+  containerComputerFrame,
+  containerComputerMcp,
+  containerComputerScreenshot,
+  containerComputerStatus,
+  containerExec,
+  containerRuntimeStatus,
+  localVmWorkspaceExists,
+  perBotLocalVmTarget,
+  poolLocalVmTarget,
+  SHARED_LOCAL_VM_TARGET,
+  setupCommands,
+  startContainerRuntime,
+  VM_WORKSPACE_GUEST,
+  type LocalVmTarget,
+  type Runtime,
+  autoLocalVmAttachable,
+  type ContainerComputerStatus
+} from "./computer/container-computer.ts";
 import { LocalVmAutoStarter } from "./computer/local-vm-auto.ts";
 import {
   cacheUntilConfigChanges,
@@ -294,7 +309,7 @@ import { videoCredential } from "./video/video-credentials.ts";
 import { videoSourceMessage } from "./video/video-source.ts";
 import { videoStatusRow } from "./video/video-status.ts";
 import { createXaiVideoProvider, generatedMp4Chunks, openGeneratedVideo } from "./video/video-provider.ts";
-import { mediaProxyPolicyFromEnv } from "./media/media-proxy-guard.ts";
+import { mediaProxyPolicyFromEnv, blockedAddressReason, defaultMediaProxyResolver } from "./media/media-proxy-guard.ts";
 import { createWebSearchRoutes } from "./routes/web-search.ts";
 import { createWebBotAuthRoutes } from "./routes/web-bot-auth.ts";
 import { createGrokBridgeRoutes } from "./routes/grok-bridge.ts";
@@ -326,11 +341,10 @@ import { createMemeStore, memeScope } from "./memes/store.ts";
 import { memeRepliesEnabled } from "../shared/memes.ts";
 import { engineHasNativeWebSearch } from "./web-search/native.ts";
 import { isIP } from "node:net";
-import { blockedAddressReason, defaultMediaProxyResolver } from "./media/media-proxy-guard.ts";
 import { createSettingsActionsInternalRoutes } from "./routes/settings-actions-internal.ts";
 import { createPrimaryApprovalsInternalRoutes } from "./routes/primary-approvals-internal.ts";
 import { createPrimaryApprovals, primaryAnswerable } from "./approvals/primary-approvals.ts";
-import { reviewedSkillSha256 } from "../shared/skill-request.ts";
+import { reviewedSkillSha256, type SkillRequestCardData } from "../shared/skill-request.ts";
 import { checkPersonQuote, personWordsForTurn } from "../shared/primary-request.ts";
 import { sessionIdlePolicy } from "./drivers/session-idle.ts";
 import { wireCodexSessionLifecycle } from "./drivers/codex/lifecycle.ts";
@@ -339,8 +353,6 @@ import { PageLive } from "./pages/page-live.ts";
 import { commentsForModel } from "../shared/page-threads.ts";
 import { coalescedRun } from "./coalesced-run.ts";
 import type { EarlyListener } from "./early-listener.ts";
-import { appendUsage, readUsage, flushUsageLedger, type UsageRow, type UsageTrigger } from "./usage/usage-ledger.ts";
-import { newPlanUsageAlerts, orgPlanAccounts, planAccountsFromInstances, planUsageAlertText, spentPlanUntil, type PlanAccount } from "./usage/plan-usage.ts";
 import {
   appendUsage,
   readUsage,
@@ -348,12 +360,41 @@ import {
   type UsageRow,
   type UsageTrigger
 } from "./usage/usage-ledger.ts";
-import type { PlanUsageReport } from "./usage/plan-usage.ts";
-import { newPlanUsageAlerts, orgPlanAccounts, planAccountsFromInstances, planUsageAlertText, planUsedPercent, spentPlanUntil, type PlanAccount } from "./usage/plan-usage.ts";
+import {
+  newPlanUsageAlerts,
+  orgPlanAccounts,
+  planAccountsFromInstances,
+  planUsageAlertText,
+  spentPlanUntil,
+  type PlanAccount,
+  type PlanUsageReport,
+  planUsedPercent
+} from "./usage/plan-usage.ts";
 import { GroupUsageReader } from "./groups/group-thread-usage.ts";
 import { ledgerCost, listPriceFor } from "./models/model-prices.ts";
 import type { PriceList } from "./usage/prices.ts";
-import type { RequestAuth } from "./auth/request-auth.ts";
+import {
+  type RequestAuth,
+  clearSessionCookie,
+  clientBotPatchViolation,
+  companionBotFieldViolation,
+  memberBotFieldViolation,
+  clientInstanceView,
+  isLoopbackHost,
+  isProxied,
+  requestOrigin,
+  requestSource,
+  readWorkerRelayToken,
+  resolveLoopbackTrust,
+  resolveRequestAuth,
+  parseCookies,
+  isSameOrigin,
+  serializeSessionCookie,
+  sessionCookieName,
+  sessionPrincipal,
+  secureTokenMatch,
+  ipcPeer
+} from "./auth/request-auth.ts";
 import { can, experimentalOnlyConfigViolation, permissionRefusal, type PermissionKey } from "../shared/permissions.ts";
 import { isMemberBotField } from "../shared/viewer-capabilities.ts";
 import { effectivePermissions, permissionList, type EffectivePermissions } from "./org/org-permissions.ts";
@@ -364,7 +405,20 @@ import { startLowDiskWatch } from "./process/low-disk-alert.ts";
 import { voiceCostUsd } from "./voice/voice-cost.ts";
 import { assertWithinBudget, noteSpend, spendAlertText, spendState, takeSpendAlert } from "./usage/spend.ts";
 import { fleetAvailable, fleetRequest, fleetSocketPath } from "./fleet/fleet-client.ts";
-import { entitled } from "./enterprise.ts";
+import {
+  entitled,
+  createWorkspaceAccess,
+  describeEdition,
+  editionStatus,
+  hostedAccessEntitled,
+  hostedWorkspaceConfiguration,
+  hostedWorkspaceConfigured,
+  licenseWarning,
+  sharedWorkspaceFullAccessConfigured,
+  loadEnterpriseLayer,
+  type EditionStatus,
+  type WorkspaceAccess
+} from "./enterprise.ts";
 import { describeSpawnFailure, execCli, runAsBotEngine } from "./procs.ts";
 import {
   blockedTarget,
@@ -410,7 +464,17 @@ import { builtinAgentToolName, memberOwnScopeTool, unknownAgentToolRefusal } fro
 import { serverApprovalWords } from "./approvals/approval-words.ts";
 import { finalConfirmation, finalConfirmationOptions } from "./approvals/final-confirmation.ts";
 import { personLanguageOf } from "./people/person-language.ts";
-import { TurnNotStartedError, TurnAuthenticationRefusedError, type ModelSelection, type RuntimeEvent, type SendTurnInput, type CompactPromptInput, newId } from "./contracts.ts";
+import {
+  TurnNotStartedError,
+  TurnAuthenticationRefusedError,
+  type ModelSelection,
+  type RuntimeEvent,
+  type SendTurnInput,
+  type CompactPromptInput,
+  newId,
+  type ProviderInstance,
+  type RemoteMcpSpec
+} from "./contracts.ts";
 import { USAGE_LIMIT } from "./drivers/retry.ts";
 import { recoveryCapabilityError } from "./automatic-recovery.ts";
 import { createCacheKeepWarm, type KeepWarmStatus, type KeepWarmTarget } from "./cache-keepwarm.ts";
@@ -456,55 +520,67 @@ import { type DataContext } from "./data-context.ts";
 import { DevPodsThreads, devPodsPrompt } from "./dev-pods-prompt.ts";
 import { promptWithDataContext, setPageContextSource } from "../shared/data-context.ts";
 import { admit, DRAIN_COALESCE_MAX_ITEMS } from "./admission.ts";
-import { DelegationWakeBudget, loadDelegationReceipts } from "./peers/delegation-receipts.ts";
-import { hasQueuedSteeredMessages, isSteeredMessageQueued, onSteeredQueueChange, queuedSteerSnapshot, queuedThreadPosition, queueSteeredMessage, restoreSteeredMessages } from "./turns/steer-queue.ts";
-import { parallelBlocked, parallelPending } from "./parallel-tasks.ts";
-import { type ParallelTaskRef } from "../shared/parallel-tasks.ts";
 import {
-  buildDelegationFailurePrompt,
-  buildDelegationRevivalPrompt,
   DelegationWakeBudget,
   loadDelegationReceipts,
+  buildDelegationFailurePrompt,
+  buildDelegationRevivalPrompt,
   recordDelegationReceipt,
   summarizeDelegatedActivity,
   takeLegacyDelegations,
   type DelegationReceipt
 } from "./peers/delegation-receipts.ts";
+import {
+  hasQueuedSteeredMessages,
+  isSteeredMessageQueued,
+  onSteeredQueueChange,
+  queuedSteerSnapshot,
+  queuedThreadPosition,
+  queueSteeredMessage,
+  restoreSteeredMessages,
+  drainSteeredMessages,
+  cancelThreadQueue,
+  discardSteeredQueue,
+  queuedSteeredMessage
+} from "./turns/steer-queue.ts";
+import {
+  parallelBlocked,
+  parallelPending,
+  parallelAdmission,
+  parallelBrief,
+  parallelResourceBlocked,
+  parallelOutcome,
+  parallelResultText,
+  parallelTaskTitle,
+  prepareParallelWorkspace,
+  type BriefLine
+} from "./parallel-tasks.ts";
+import type { ParallelTaskRef, ParallelTaskState } from "../shared/parallel-tasks.ts";
 import { RoomMemberLock } from "./room-member-lock.ts";
 import { providerMcpTool, providerToolAllowKey } from "./provider-tool-allow.ts";
 import { listSignedInSites, signOutOfSites } from "./browser-sites.ts";
 import { roomTurnNarrationIds } from "./room-reply.ts";
 import { RoomContextTracker } from "./room-context.ts";
 import { applyHoldDirective, classifyHoldDirective, heldMemberLine, rememberHeldMessage, stopWordPlacement } from "./room-holds.ts";
-import { parseSurface } from "./surface.ts";
+import {
+  parseSurface,
+  autoOnlyDestination,
+  browserIsThePlace,
+  cloudPlaceRefusal,
+  computerSkippedNote,
+  computerToolsRefusal,
+  honouredPin,
+  PlaceUnavailableError,
+  placeUnavailable,
+  resolveSurface,
+  surfaceLabel,
+  surfaceOfComputerKind,
+  surfacePrompt,
+  type PlaceSource,
+  type Surface
+} from "./surface.ts";
 import type { RoomLine } from "./memory/memory-capture.ts";
 import { signInOutcome, signInResumePrompt, normalizeSignInSite, signInFallbackText, isPendingSignInRequest } from "../shared/sign-in-request.ts";
-  drainSteeredMessages,
-  cancelThreadQueue,
-  discardSteeredQueue,
-  hasQueuedSteeredMessages,
-  isSteeredMessageQueued,
-  onSteeredQueueChange,
-  queuedSteerSnapshot,
-  queuedSteeredMessage,
-  queuedThreadPosition,
-  queueSteeredMessage,
-  restoreSteeredMessages
-} from "./turns/steer-queue.ts";
-  parallelAdmission,
-  parallelBlocked,
-  parallelBrief,
-  parallelResourceBlocked,
-  parallelOutcome,
-  parallelPending,
-  parallelResultText,
-  parallelTaskTitle,
-  prepareParallelWorkspace,
-  type BriefLine
-} from "./parallel-tasks.ts";
-  type ParallelTaskRef,
-  type ParallelTaskState
-} from "../shared/parallel-tasks.ts";
 import { RoutableSteers } from "./busy-routing.ts";
 import { restoreChannelMessages } from "./rooms/channel-queue.ts";
 import { acceptedSendMatch, sendFingerprint, SendSequencer } from "./messages/send-idempotency.ts";
@@ -516,7 +592,6 @@ import { wasOldestThread } from "./threads/main-thread.ts";
 import { HOST_COMPUTER_REFUSAL, ManagedDesktopPolicy, type ComputerKind } from "./managed-policy.ts";
 import { hostedModelPolicy, HOSTED_PROVIDER_SETTINGS_ERROR } from "./models/hosted-models.ts";
 import { holdIncludedServices, voiceCredential } from "./included-services.ts";
-import type { ProviderInstance, RemoteMcpSpec } from "./contracts.ts";
 import { createModelAccessRefusals, personPayer, type RefusalPayer } from "./models/model-access-refusals.ts";
 import { MODEL_ACCESS_DISABLED_MESSAGE } from "../shared/model-access-disabled.ts";
 import { withInstanceConfig, withNewBotEffort, type SelectableInstance } from "./models/default-model-selection.ts";
@@ -554,7 +629,6 @@ import { fitTurnImagesForModel, modelImageCopyPath } from "./models/model-image.
 import { callTitleExcerpt } from "./threads/thread-title.ts";
 import { stallLimitMs, TurnWatchdog } from "./turns/turn-watchdog.ts";
 import { TurnResources, type TurnOwner } from "./turns/turn-resources.ts";
-import { ensureWorkspace, ensureTaskWorkspace, workspaceCwdPrompt, workspaceLocationsPrompt, supportsWorkspaceFiles, updateMemory, appendMemoryLog, memorySourceLabel, searchDocFiles, SESSION_SEARCH_SYSTEM_PROMPT, WITHHELD_HOST_TOOLS_PROMPT, TASK_WORKSPACES_DIR, workspaceDir } from "./workspace/workspace.ts";
 import {
   ensureWorkspace,
   ensureTaskWorkspace,
@@ -563,16 +637,24 @@ import {
   supportsWorkspaceFiles,
   updateMemory,
   appendMemoryLog,
-  memoryLogPath,
-  memorySystemPrompt,
   memorySourceLabel,
   searchDocFiles,
   SESSION_SEARCH_SYSTEM_PROMPT,
   WITHHELD_HOST_TOOLS_PROMPT,
   TASK_WORKSPACES_DIR,
-  workspaceDir
+  workspaceDir,
+  memoryLogPath,
+  memorySystemPrompt,
+  holdBotMemoryPlain,
+  listMemoryTopics,
+  memoryDate,
+  onMemoryTopicWritten,
+  readMemoryFile,
+  readMemoryTopic,
+  readMemoryTopicAsync,
+  writeMemoryFile,
+  writeMemoryTopic
 } from "./workspace/workspace.ts";
-import { holdBotMemoryPlain, listMemoryTopics, memoryDate, onMemoryTopicWritten, readMemoryFile, readMemoryTopic, readMemoryTopicAsync, writeMemoryFile, writeMemoryTopic } from "./workspace/workspace.ts";
 import { holdPlain, noteAtRestWrite, readAtRestSync, registerAtRestRoot, releasePlain, setAtRestHolderCheck, setAtRestThreadFiles, waitPlain } from "./encryption/content-at-rest.ts";
 import {
   beginMemoryTurn,
@@ -630,13 +712,7 @@ import { expandLearnTurnText, learnSource } from "./skills/skill-learn.ts";
 import { expandSetupTurnText, setupModeActive, setupSystemPrompt } from "./setup-mode.ts";
 import { onDemandPromptParts, promptReferencesAvailable } from "./context/prompt-references.ts";
 import { checkSoulDrift } from "./bots/bot-folder.ts";
-import { buildSystemPrompt, userProfileSystemPrompt, computerPrompt, customMcpPrompt, CLAUDE_REUSE_VOLATILE_SECTIONS, CREDENTIAL_PROMPT, longCommandsPrompt, REACTION_PROMPT, mentionPrompt, THREADS_PROMPT, WIDGET_PROMPT, WIDGET_APPROVAL_PROMPT, richOutputPrompt, LEARN_PROMPT, PROFILE_PROMPT, PROFILE_CREATOR_PROMPT, TEAM_MEMORY_PROMPT, ROUTINE_PROMPT, ROUTINE_EXECUTION_PROMPT, WEBHOOK_PROMPT, resolveComputerPromptKind, teamAvailabilityPart, modelPrompt } from "./system-prompt.ts";
-import type { SkillRequestCardData } from "../shared/skill-request.ts";
 import {
-  checkSoulDrift
-} from "./bots/bot-folder.ts";
-import { mentionPrompt,
-  aiClientPrompt,
   buildSystemPrompt,
   userProfileSystemPrompt,
   computerPrompt,
@@ -644,8 +720,8 @@ import { mentionPrompt,
   CLAUDE_REUSE_VOLATILE_SECTIONS,
   CREDENTIAL_PROMPT,
   longCommandsPrompt,
-  MEME_PROMPT,
   REACTION_PROMPT,
+  mentionPrompt,
   THREADS_PROMPT,
   WIDGET_PROMPT,
   WIDGET_APPROVAL_PROMPT,
@@ -659,7 +735,9 @@ import { mentionPrompt,
   WEBHOOK_PROMPT,
   resolveComputerPromptKind,
   teamAvailabilityPart,
-  modelPrompt
+  modelPrompt,
+  aiClientPrompt,
+  MEME_PROMPT
 } from "./system-prompt.ts";
 import { lightenColdPrompt } from "./context/cold-prompt-budget.ts";
 import { shellTimeoutHookResult } from "./shell-timeout-hint.ts";
@@ -695,12 +773,23 @@ import { routineTurnModel } from "../shared/routine-model.ts";
 import { nextOccurrence, PREWARM_ENGINE_LEAD_MS, ROUTINE_RESTARTED, RoutineManager, setRoutineTimeZone, type Routine, type RoutineRun, type RoutineRunOn, type RoutineRunTrigger } from "./routines/routines.ts";
 import { RoutineConsents, routineRenewMs, type RoutineConsentEnd } from "./org/org-routine-consent.ts";
 import { CalendarCallManager } from "./calendar/calendar-calls.ts";
-import { BUILT_IN_BROWSER_SYSTEM_PROMPT, pauseBrowserStream } from "./browser/browser-engine.ts";
+import {
+  BUILT_IN_BROWSER_SYSTEM_PROMPT,
+  pauseBrowserStream,
+  agentBrowserFrame,
+  browserEngineEncryptionKey,
+  clearBrowserSessionState,
+  browserProfileDirectory,
+  closeBrowserSession,
+  browserEngineStatus,
+  browserSessionId,
+  isTemporaryBrowserSession,
+  setBrowserViewport
+} from "./browser/browser-engine.ts";
 import { BrowserRuntime, browserProfileChangeRefusal, browserRuntimeEnv } from "./browser/browser-runtime.ts";
 import { browserEgress, sameOwnerBots as sameOwnerBrowserBots } from "./browser/egress/registry.ts";
 import { BrowserLive } from "./browser/browser-live.ts";
 import { BrowserNetworkDebug } from "./browser/browser-network-debug.ts";
-import { agentBrowserFrame, browserEngineEncryptionKey, clearBrowserSessionState, browserProfileDirectory, closeBrowserSession, browserEngineStatus, browserSessionId, isTemporaryBrowserSession, setBrowserViewport } from "./browser/browser-engine.ts";
 import { createScreenFrameSource } from "./computer/screen-frame-source.ts";
 import { screenFrameHash } from "./computer/screen-frame-gate.ts";
 import { RoutineRequestService } from "./routines/routine-requests.ts";
@@ -745,61 +834,61 @@ import { PersonalSkills, createPersonalSkillRoutes } from "./skills/personal-ski
 import { createSkillShareRoutes } from "./routes/skill-share.ts";
 import { runSkillsLibraryBootSweep } from "./skills/skills-library-migration.ts";
 import { installedPlaybookInstructions } from "./installed-playbooks.ts";
-import { createLibraryPackageExport, createTeamPackageExport, TeamExportError } from "./packages/package-export.ts";
-import { createPresetStore, readPublishedLibrary, writePublishedLibrary } from "./presets.ts";
-import { readPublishedTeam, renamePublishedTeam, writePublishedTeam } from "./pages/published-teams.ts";
 import {
   createLibraryPackageExport,
   createTeamPackageExport,
-  picture as sharedPicture,
   TeamExportError,
+  picture as sharedPicture,
   type ExportablePackageSkill,
   type TeamExportSkip
 } from "./packages/package-export.ts";
+import {
+  createPresetStore,
+  readPublishedLibrary,
+  writePublishedLibrary,
+  DEFAULTS_PRESET_KEY,
+  presetFromDefaults
+} from "./presets.ts";
+import {
+  readPublishedTeam,
+  renamePublishedTeam,
+  writePublishedTeam,
+  migratePublishedTeamKeys
+} from "./pages/published-teams.ts";
+import {
   importPackageDocument,
   PackageImportError,
   type PackageImportDeps,
   type PackageImportResult
 } from "./packages/package-import.ts";
-  createPresetStore,
-  DEFAULTS_PRESET_KEY,
-  presetFromDefaults,
-  readPublishedLibrary,
-  writePublishedLibrary
-} from "./presets.ts";
-import { migratePublishedTeamKeys, readPublishedTeam, renamePublishedTeam, writePublishedTeam } from "./pages/published-teams.ts";
 import { OrgLibrary } from "./org/org-library.ts";
 import { createTeamBackup, importTeamBackup } from "./backup/team-backup.ts";
 import { shouldMountLocalComputer } from "./local-routing.ts";
-import { autoLocalVmAttachable, type ContainerComputerStatus } from "./computer/container-computer.ts";
 import { startAutoVmClaim, type AutoVmClaimTable } from "./computer/auto-vm-claims.ts";
 import { CONTROL_ACT_WITHIN_MS, CONTROL_WAIT_MS } from "./control-client.ts";
 import { modelContextWindow } from "./models/model-context-window.ts";
-import { autoOnlyDestination, browserIsThePlace, cloudPlaceRefusal, computerSkippedNote, computerToolsRefusal, honouredPin, PlaceUnavailableError, placeUnavailable, resolveSurface, surfaceLabel, surfaceOfComputerKind, surfacePrompt, type PlaceSource, type Surface } from "./surface.ts";
 import { cloudRefusal } from "../shared/place-view.ts";
 import { PendingTurnCancellations, ProviderTurnGenerationRegistry, RetiredTurnRegistry, guardTurnDispatch } from "./turns/turn-dispatch-guard.ts";
 import { createGracefulShutdown } from "./process/graceful-shutdown.ts";
-import { shutdownDrainMs } from "./turns/interrupted-turns.ts";
-import { clearHeldSteersForThread, recordHeldSteer } from "./turns/held-steers.ts";
 import {
+  shutdownDrainMs,
   drainTurns,
   saveInterruptedTurns,
-  shutdownDrainMs,
   takeInterruptedTurns,
   TURN_RESUME_PROMPT,
   type InterruptedTurn
 } from "./turns/interrupted-turns.ts";
+import {
   clearHeldSteersForThread,
+  recordHeldSteer,
   joinHeldSteerTexts,
   migrateLegacyHeldSteers,
-  recordHeldSteer,
   resumePromptWithHeld,
   takeHeldSteersForThread,
   takeRemainingHeldSteers
 } from "./turns/held-steers.ts";
 import { continuationSpeaker } from "./turns/continuation-speaker.ts";
 import { acquireDataDirLeaseForProcess } from "./data-dir-lease.ts";
-import { createWorkspaceAccess, describeEdition, editionStatus, hostedAccessEntitled, hostedWorkspaceConfiguration, hostedWorkspaceConfigured, licenseWarning, sharedWorkspaceFullAccessConfigured, loadEnterpriseLayer, type EditionStatus, type WorkspaceAccess } from "./enterprise.ts";
 import { environmentDescriptor, environmentLabel, loadEnvironmentId, releaseVersion, serverVersion } from "./environment.ts";
 import { deployFacts, hostFacts, overviewRoutes, readBackupStatus, selfCheckEngines } from "./org/org-admin-overview.ts";
 import { appendProblem, pruneProblemLog, readProblems } from "./org/org-problem-log.ts";
@@ -890,7 +979,6 @@ import { turnConnectorsRecord } from "./turns/turn-connectors.ts";
 import { remoteSessionReach } from "./remote-support/remote-session-reach.ts";
 import { createHarnessCommandRoutes, HarnessCommandCatalog, typedCommandForTurn, unavailableCommandError } from "./harness-commands.ts";
 import { ProviderAuthSessions } from "./engines/provider-auth-sessions.ts";
-import { clearSessionCookie, clientBotPatchViolation, companionBotFieldViolation, memberBotFieldViolation, clientInstanceView, isLoopbackHost, isProxied, requestOrigin, requestSource, readWorkerRelayToken, resolveLoopbackTrust, resolveRequestAuth, parseCookies, isSameOrigin, serializeSessionCookie, sessionCookieName, sessionPrincipal, secureTokenMatch } from "./auth/request-auth.ts";
 import { cookieMaxAgeSeconds, isBotActSession, SessionRegistry, type SessionRecord } from "./auth/sessions.ts";
 import { recentPersonSignIn } from "./auth/recent-sign-in.ts";
 import { createAuthRefusalLogger } from "./auth/auth-refusal-log.ts";
@@ -914,7 +1002,17 @@ import { identityWarning } from "./perspicax/perspicax-identity.ts";
 import { OrgFlowPlugins, flowSkillsNote, guarded as orgFlowGuarded } from "./org/org-flow-plugins.ts";
 import { applyIdentityMigration, principalIdFor, rewritePeopleForAttach } from "./people/identity-migration.ts";
 import { ThreadStarters } from "./threads/thread-starters.ts";
-import { appendAdminAction, botAuditSnapshot, flushAdminActivity, pruneAdminActivity, readOrgAuditPage, sharedSignIn, type AdminActionRow, type AdminActor } from "./activity/admin-activity.ts";
+import {
+  appendAdminAction,
+  botAuditSnapshot,
+  flushAdminActivity,
+  pruneAdminActivity,
+  readOrgAuditPage,
+  sharedSignIn,
+  type AdminActionRow,
+  type AdminActor,
+  ADMIN_ACTIVITY_CATEGORIES
+} from "./activity/admin-activity.ts";
 import { audienceEquals, narrowestAudience, ownerKeepsSight, parseVisibility, roomFeeds, routineVisible, SEES_EVERYTHING, SEES_NOTHING, VisibleSet, type PathSubject, type StreamSeen, type ThreadOwner, type Viewer } from "./bots/bot-visibility.ts";
 import { serviceThreadViewer, serviceViewerClosed } from "./cli/service-viewer.ts";
 import { browserNavigationRefusal } from "./browser/browser-navigation.ts";
@@ -1022,12 +1120,11 @@ import { readMessagesSettings } from "./imessage/imessage-settings.ts";
 import { messagesOnBotMac } from "../shared/imessage.ts";
 import { fileInsideRoots } from "./imessage/imessage-db.ts";
 import { spawnPcHook } from "./hooks/lifecycle-hook-exec.ts";
-import { GithubConnect, githubGitEnvironment, githubTokenKind } from "./github/github-connect.ts";
 import {
   GithubConnect,
   githubGitEnvironment,
-  githubSandboxArgv,
-  githubTokenKind
+  githubTokenKind,
+  githubSandboxArgv
 } from "./github/github-connect.ts";
 import { GithubConnectCards } from "./github/github-connect-cards.ts";
 import { SANDBOX_PLUGINS_DIR, syncPluginsToSandbox } from "./sandbox/sandbox-plugins.ts";
@@ -1129,7 +1226,6 @@ import { createMeetingInternalRoutes } from "./routes/meeting-internal.ts";
 import { createPhoneCardScanRoutes, createPhoneToolInternalRoutes, createPhoneToolRoutes } from "./routes/phone-tools.ts";
 import { cardScanRequester, createPhoneToolBroker, phoneToolTurn } from "./phone/phone-tools.ts";
 import { phoneConnectionTransport } from "../shared/phone-transport.ts";
-import { ipcPeer } from "./auth/request-auth.ts";
 import { PHONE_TOOLS_FRAME } from "../shared/phone-tools.ts";
 import { createArtifactStore } from "./artifacts/artifacts.ts";
 import { createPreferenceStore } from "./people/preference-import.ts";
@@ -1209,7 +1305,6 @@ import { groupMemoryEnabled, groupMemorySystemPrompt, updateGroupMemory } from "
 import type { OrgRecord } from "./org/org-record.ts";
 import { createOidcLoginRoutes, identityConfigFromEnv, identityDescriptor, isInterimSignInRoute, MANAGED_PROFILE_REFUSAL, oidcSessionFields, profileManagement, writesManagedProfile } from "./auth/oidc-login.ts";
 import { OidcRelyingParty } from "./auth/oidc-rp.ts";
-import { ADMIN_ACTIVITY_CATEGORIES } from "./activity/admin-activity.ts";
 import { createOrgMemberRoutes, ORG_MEMBER_ASSERTION_ACTORS, type MemberPerson } from "./org/org-member-routes.ts";
 import { createOrgLinkRoutes, DirectoryRefreshScheduler } from "./org/org-link-routes.ts";
 import { internalAgentApiTool } from "./routes/agent-api-internal.ts";
@@ -1248,7 +1343,8 @@ import { ownEnvironmentSensitiveRead, ownEnvironmentTurnOrigin } from "./people/
 import { lineageEnvironmentCall } from "./approvals/owner-autonomy.ts";
 import { routineOwnerAuthorization } from "./routines/routine-authorization.ts";
 import { runPermissionModeMigration } from "./approvals/approval-level-migration.ts";
-import { MEMBER_AUTO_NOT_ALLOWED, memberAutoApprovalAllowed, memberAutoChangeRefused, memberAutoSettle, memberTurnLevel, type MemberAutoReset } from "./approvals/member-auto-approval.ts";
+import { MEMBER_AUTO_NOT_ALLOWED, memberAutoApprovalAllowed, memberAutoChangeRefused, memberAutoSettle,
+  memberRoomTurnLevel, memberTurnLevel, type MemberAutoReset } from "./approvals/member-auto-approval.ts";
 import { ORG_FULL_ACCESS_DEFAULT_MARKER, orgFullAccessAllowed, orgFullAccessGrandfathered, orgFullAccessHolds, orgNewBotApprovalMode, ORG_FULL_ACCESS_DISABLED, parseOrgFullAccessBody, threadFollowsFullGrant, trustedChannelFullRefusal } from "./org/org-full-access.ts";
 import { createInterimAttachRoutes, INTERIM_WINDOW_DAYS } from "./interim-attach-routes.ts";
 import { createLinkedSubjectsRoute, createOrgExportRoute } from "./org/org-export.ts";
@@ -1561,7 +1657,6 @@ import { createAllowCwAction } from "./index-leaves/allowCwAction.ts";
 import { createAnswerProactiveProposal } from "./index-leaves/answerProactiveProposal.ts";
 import { createAnsweringCardAs } from "./index-leaves/answeringCardAs.ts";
 import { createAppendSkillRequestCard } from "./index-leaves/appendSkillRequestCard.ts";
-import { createApplyDelegatedLevel } from "./index-leaves/applyDelegatedLevel.ts";
 import { createApplyStricterApprovalLive } from "./index-leaves/applyStricterApprovalLive.ts";
 import { createApprovalAnswerRefusal } from "./index-leaves/approvalAnswerRefusal.ts";
 import { createAsPlaceFailure } from "./index-leaves/asPlaceFailure.ts";
@@ -1686,7 +1781,6 @@ import { createWorkflowOwned } from "./index-leaves/workflowOwned.ts";
 import { createTranscriptPage } from "./index-leaves/transcriptPage.ts";
 import { createTeamComputersPayload } from "./index-leaves/teamComputersPayload.ts";
 import { createSkillProposalPersistence } from "./index-leaves/skillProposalPersistence.ts";
-import { createRoomTurnApprovalMode } from "./index-leaves/roomTurnApprovalMode.ts";
 import { createRecordPerspicaxWork } from "./index-leaves/recordPerspicaxWork.ts";
 import { createReachMeCard } from "./index-leaves/reachMeCard.ts";
 import { createPendingApprovalCards } from "./index-leaves/pendingApprovalCards.ts";
@@ -1856,7 +1950,6 @@ import { createLastAutoPlace } from "./index-leaves/lastAutoPlace.ts";
 import { createGroupThreadIsWorking } from "./index-leaves/groupThreadIsWorking.ts";
 import { createForgetThreadEngineSessions } from "./index-leaves/forgetThreadEngineSessions.ts";
 import { createEngineInstalled } from "./index-leaves/engineInstalled.ts";
-import { createDelegatedLevel } from "./index-leaves/delegatedLevel.ts";
 import { createBindOwnedTrigger } from "./index-leaves/bindOwnedTrigger.ts";
 import { createAuthorizedInternalCapability } from "./index-leaves/authorizedInternalCapability.ts";
 import { createAuditFullAccessTurn } from "./index-leaves/auditFullAccessTurn.ts";
@@ -2205,6 +2298,13 @@ const pageLive = new PageLive();
 const dataDirLease = acquireDataDirLeaseForProcess(DATA_DIR);
 let dataDirLeaseReleaseAttempted = false;
 const releaseDataDirLeaseAtExit = createReleaseDataDirLeaseAtExit(getLeafHost);
+Object.assign(leafHostBindings, { dataDirLease, releaseDataDirLeaseAtExit });
+Object.defineProperty(leafHostBindings, "dataDirLeaseReleaseAttempted", {
+  configurable: true,
+  enumerable: true,
+  get: () => dataDirLeaseReleaseAttempted,
+  set: (value) => { dataDirLeaseReleaseAttempted = value; },
+});
 process.once("exit", releaseDataDirLeaseAtExit);
 // Restore before constructing any long-lived config, Store, session or provider
 // objects. Replacing files underneath a live Store would overwrite restored data.
@@ -2238,6 +2338,7 @@ if (process.env.SAGAX_LOOP_LAG !== "0") {
 // in with Pulsatrix only (Perspicax owns accounts), so the list is empty
 // there and a legacy email session ends at its next request.
 const IDENTITY = identityConfigFromEnv();
+Object.assign(leafHostBindings, { IDENTITY });
 // #1098: an organization server keeps the shared host's ceilings (parallel
 // tasks, attachment sizes); a solo server lifts them (server/host-kind.ts).
 setSharedHost(IDENTITY.kind === "perspicax");
@@ -2510,6 +2611,12 @@ const observePushFrame = createObservePushFrame(getLeafHost);
 const observeLiveActivityFrame = createObserveLiveActivityFrame(getLeafHost);
 /** Server events read from live frames: a routine run that completed, a sub-agent, Auto picking a computer. */
 const observeAchievementFrame = createObserveAchievementFrame(getLeafHost);
+// Boot store listeners call fanoutSsePayload before the final bag assign.
+Object.assign(leafHostBindings, {
+  observePushFrame,
+  observeLiveActivityFrame,
+  observeAchievementFrame,
+});
 /** A person's "where bots work" preference (shared/bot-workplace.ts). */
 const workplacePreference = createWorkplacePreference(getLeafHost);
 /** What one turn decided about where its tools run, by thread, for the
@@ -3344,6 +3451,7 @@ function adminActorFor(auth: RequestAuth, req: IncomingMessage): AdminActor {
  * the blame (or the credit) for another admin's change made meanwhile. */
 type AdminActorScope = { actor: AdminActor; sharedAtStart: boolean } | null;
 const adminActorScope = new AsyncLocalStorage<AdminActorScope>();
+Object.assign(leafHostBindings, { adminActorScope });
 onConfigSaved((before, after) => recordAdminConfigChange(before, after));
 /** The rows of an admin-scope save, put down to the admin whose request runs.
  * Also called for settings kept outside config.json (MCP servers in the
@@ -3983,6 +4091,12 @@ class ComputerWaitParked extends Error {
     this.generation = generation;
   }
 }
+Object.assign(leafHostBindings, {
+  ComputerWaitParked,
+  DirectTurnSetupCancelled,
+  PlaceUnavailableError,
+  placeUnavailable
+});
 /** A failed place never sticks: a select_computer move to it, or an auto
  * pin an older build left, is the machine's, not a choice, so the next
  * message runs on Auto. A person's pin stays. */
@@ -5227,6 +5341,40 @@ const store = new Store(
   newBotApprovalMode,
   newBotGreetingLanguage,
 );
+// #1388: boot leaves (refreshUnsetModelSelectionsFrom, moveOffComputerEngine, …)
+// read these before the final bag assign. Function decls below are hoisted.
+Object.assign(leafHostBindings, {
+  registry,
+  store,
+  cfg,
+  hostedModels,
+  selectableInstances,
+  defaultSelection,
+  selectionContext,
+  healBotEngine,
+  namesEngine,
+  withNewBotEffort,
+  policyModelRefusal,
+  orgEngineAllowRefusal,
+  removedComputerInstanceIds,
+  writeComputerEngineMoveLines,
+  computerEngineMoveText,
+  canWorkOnCloud,
+  cloudEngine,
+  boat,
+  inheritedTeamComputer,
+  newBotDefaultsSchema,
+  saveConfig,
+  managedDesktop,
+  DATA_DIR,
+  migrateCapabilitiesStores,
+});
+Object.defineProperty(leafHostBindings, "bootSelection", {
+  configurable: true,
+  enumerable: true,
+  get: () => bootSelection,
+  set: (value) => { bootSelection = value; },
+});
 /** Bot-owned MCP claim + leave-out of servers that do not start (OMB #3751 / #2115).
  * Boxed on a hosted workspace (Cloud); on desktop every bot reaches every folder. */
 const mcpServersHost = createMcpServersHost({
@@ -5378,6 +5526,7 @@ if (browserCleanupReferencesReconciled) browserCleanup.startPending();
 // restored workspace or an imported team is mapped as well.
 // `identityMigratedAt` only records when that first happened.
 const principals = new PrincipalRegistry({ path: join(DATA_DIR, "principals.json") });
+Object.assign(leafHostBindings, { principals, isPrincipalId });
 // Slice 7: a person marked out or back in is an organization audit row.
 principals.onDisabledChanged((person, disabled) => orgAudit({
   category: "people", action: disabled ? "person.disabled" : "person.enabled",
@@ -6044,6 +6193,7 @@ let githubCredentialsMigrated = false;
 /** Move the former files in (once; again at the next call if the vault key
  * was not there yet). Never logs a token. */
 const migrateGithubCredentials = createMigrateGithubCredentials(getLeafHost);
+Object.assign(leafHostBindings, { migrateGithubCredentials });
 /** A credential `actor` may pick: their own, or the organization's. */
 const usableCredential = createUsableCredential(getLeafHost);
 /** Automatic for `actor`: their own GitHub connection, their other
@@ -6079,6 +6229,7 @@ const marketplaceCredentials = {
 // on disk beside these stores.
 const botCapabilityStore = new BotCapabilityStore(DATA_DIR);
 const installationCapabilityStore = new InstallationCapabilityStore(DATA_DIR, vaultKeySource);
+Object.assign(leafHostBindings, { botCapabilityStore, installationCapabilityStore });
 const migrateCapabilitiesConfigStores = createMigrateCapabilitiesConfigStores(getLeafHost);
 migrateCapabilitiesConfigStores();
 // Skills library boot sweep (features.skillsLibrary): migrate the per-bot
@@ -7044,7 +7195,21 @@ function peerReviewRequired(bot: BotRecord, threadId: string): boolean {
  * capped at what its engine implements). Only a Primary Bot passes its level on —
  * an ordinary bot's delegation still uses the recipient's setting. Returns
  * null to keep the recipient's own level. */
-const delegatedLevel = createDelegatedLevel(getLeafHost);
+const delegatedLevel = createDelegatedLevel({
+  store,
+  node: (id) => coordinator.node(id),
+  sourceLevel: sourceApprovalMode,
+  turnLevel: approvalModeForTurn,
+  driverKind: (bot) => registry.cliTarget(bot.modelSelection.instanceId)?.driverKind,
+  guestDriven: cloudGuestDriven,
+  recipientMemberOwned: (bot) => memberOwnedInOrg(bot) && orgDeniesFull(bot),
+  memberAutoRefused: (bot, previous, next) => memberAutoRefused(bot, previous, next),
+  memberRoomTurnLevel: (level) => memberRoomTurnLevel(level, memberAutoApprovalAllowed(cfg.organization)),
+});
+
+/** A running turn's Sagax decisions read the conversation's saved level now
+ * (omb #3627), never the copy frozen on directTurnBots at dispatch. */
+const liveApprovalMode = createLiveApprovalMode({ store, turnLevel: approvalModeForTurn });
 
 /** The teammate's own level for a thread of its own, before any delegation. */
 function ownThreadLevel(target: BotRecord, threadId: string): ApprovalMode {
@@ -7053,15 +7218,25 @@ function ownThreadLevel(target: BotRecord, threadId: string): ApprovalMode {
 
 const DELEGATED_LEVEL_NAMES: Partial<Record<ApprovalMode, string>> = { edits: "Auto-accept edits", auto: "Approve for me", full: "Full access" };
 
-/** Start a thread the Chief opened at the Chief's level, and say so in it
- * once, so the level the chip shows and the level the turns run at agree,
- * and the person can see where it came from (and change it there). */
-const applyDelegatedLevel = createApplyDelegatedLevel(getLeafHost);
+/** Compatibility wrapper: callers that have no hand-off node still raise the
+ * first hop when `from` itself is a Primary Bot. */
+function applyDelegatedLevel(
+  from: BotRecord,
+  fromThreadId: string,
+  target: BotRecord,
+  threadId: string,
+  fromNodeId?: string,
+): void {
+  delegatedLevel.apply(from, fromThreadId, fromNodeId, target, threadId);
+}
 
 /** A room member's level for one turn. Work a Primary Bot hands out in a room runs
  * at the Primary Bot's level for that turn: the room thread is shared, so the
  * level is not stored on it — it rides the handoff. */
-const roomTurnApprovalMode = createRoomTurnApprovalMode(getLeafHost);
+function roomTurnApprovalMode(bot: BotRecord, threadId: string, orchestration?: GroupTurnOrchestration): ApprovalMode {
+  const handoff = orchestration?.roomHandoffId ? coordinator.node(orchestration.roomHandoffId) : undefined;
+  return delegatedLevel.roomTurn(bot, threadId, handoff?.parentId ? coordinator.node(handoff.parentId) : undefined);
+}
 
 /** Privileged approval-mode transitions are deliberately absent from the
  * loopback HTTP authority model: a bot with shell access can curl that
@@ -9901,9 +10076,16 @@ function pendingExpireDaysForThread(threadId: string): number {
 
 /** #1940: age-based expiry deps (periodic, startup, lazy on read). */
 const pendingExpiryDeps = createPendingExpiryDeps(getLeafHost);
+Object.assign(leafHostBindings, {
+  pendingExpiryDeps,
+  openPendingInboxCards,
+  openApprovalCardMessages,
+  appendDecision,
+});
 
 /** #1940: expire every due pending approval (startup, interval, lazy). */
 const runPendingApprovalExpirySweep = createRunPendingApprovalExpirySweep(getLeafHost);
+Object.assign(leafHostBindings, { runPendingApprovalExpirySweep });
 
 /** #1940: lazy expiry for one thread before list_pending_approvals / a read. */
 const expireDueApprovalsInThread = createExpireDueApprovalsInThread(getLeafHost);
@@ -11747,6 +11929,28 @@ const routineEffortForTurn = createRoutineEffortForTurn(getLeafHost);
 function routineDelegationCanResume(threadId: string, routineRunId?: string): boolean {
   return !routineRunId || activeRoutineRunForThread(threadId)?.id === routineRunId;
 }
+
+const pendingDelegationWakes = new Map<string, {
+  botId: string;
+  targetName: string;
+  failureReason?: string;
+  routineRunId?: string;
+  budgetAcquired?: boolean;
+  speaker?: TurnSpeaker;
+}>();
+const delegationWakeBudget = new DelegationWakeBudget();
+const roomMemberLock = new RoomMemberLock();
+const roomMemberContexts = new RoomContextTracker();
+const CLOUD_HOME = false;
+function cloudOwnerOnlyThread(_threadId: string): boolean { return true; }
+Object.assign(leafHostBindings, {
+  pendingDelegationWakes,
+  delegationWakeBudget,
+  roomMemberLock,
+  roomMemberContexts,
+  CLOUD_HOME,
+  cloudOwnerOnlyThread,
+});
 
 const dispatchDelegationWake = createDispatchDelegationWake(getLeafHost);
 
@@ -14913,6 +15117,8 @@ function configForAccess(...args: any[]) {
   return (_configForAccessImpl ??= createConfigForAccess(getLeafHost) as any)(...args);
 }
 
+Object.assign(leafHostBindings, { _configForAccessImpl, configForAccess, configStatus, editionForSettings });
+
 /** Whose GitHub connection the MCP listing reads (a session's person). */
 function mcpViewer(auth: RequestAuth): string | null {
   return auth.kind === "session" ? auth.session.principalId?.trim().toLowerCase() || null : null;
@@ -15849,6 +16055,15 @@ ROUTES.push(createArtifactRoutes({
 }));
 // #2194: per-person allowlisted SMS contact personas (numbers on Perspicax).
 const phoneLineContacts = new PhoneLineContactsStore(DATA_DIR);
+/** The setup cards of a conversation and the calls that prove one (server/routes/connector-setup.ts). */
+let _connectorSetupStoreImpl: ReturnType<typeof createConnectorSetupStore> | undefined;
+function connectorSetupStore(...args: any[]) {
+  return (_connectorSetupStoreImpl ??= createConnectorSetupStore(getLeafHost) as any)(...args);
+}
+let _connectorSetupContextImpl: ReturnType<typeof createConnectorSetupContext> | undefined;
+function connectorSetupContext(...args: any[]) {
+  return (_connectorSetupContextImpl ??= createConnectorSetupContext(getLeafHost) as any)(...args);
+}
 const INTERNAL_ROUTES: InternalRouteHandler[] = [
   // recall_topic (server/routes/recall-topic-internal.ts, server/streams/single-stream.ts)
   createRecallTopicInternalRoutes({
@@ -19697,6 +19912,7 @@ function viewerBotLevel(auth: RequestAuth, bot: Parameters<typeof botFacts>[0]):
 function privateThreads(): boolean {
   return IDENTITY.kind === "perspicax";
 }
+Object.assign(leafHostBindings, { privateThreads });
 /** Per viewer and bot: the thread they last opened (`botId\nprincipal`).
  * Kept in memory; after a restart they land on their newest thread. */
 const viewerSelections = new Map<string, string>();
@@ -21853,22 +22069,12 @@ ROUTES.push(createConnectorSetupRoutes({
     return inventory.auth === "subscription" ? inventory.connectors : null;
   }
 }));
-/** The setup cards of a conversation and the calls that prove one (server/routes/connector-setup.ts). */
-let _connectorSetupStoreImpl: ReturnType<typeof createConnectorSetupStore> | undefined;
-function connectorSetupStore(...args: any[]) {
-  return (_connectorSetupStoreImpl ??= createConnectorSetupStore(getLeafHost) as any)(...args);
-}
 /** The person a sign-in card is for: the one speaking, never a routine or a peer. */
 function connectorSetupSpeaker(threadId: string): string | undefined {
   const speaker = turnSpeakers.get(threadId);
   if (!speaker || (speaker.origin !== "person" && speaker.origin !== "operator")) return undefined;
   const bot = store.bots.find((candidate) => candidate.threadId === threadId) ?? store.bots.find((candidate) => store.taskByThread(candidate.id, threadId));
   return connectorPrincipalFor({ identity: IDENTITY.kind, speaker, ownerPrincipalId: bot ? effectiveBotOwner(bot) : "", localPrincipalId: localPrincipalId() }) || undefined;
-}
-/** The bot's engine and whose account it runs on for this turn (#943). */
-let _connectorSetupContextImpl: ReturnType<typeof createConnectorSetupContext> | undefined;
-function connectorSetupContext(...args: any[]) {
-  return (_connectorSetupContextImpl ??= createConnectorSetupContext(getLeafHost) as any)(...args);
 }
 
 ROUTES.push(createHarnessConnectorRoutes({
@@ -23392,6 +23598,10 @@ const performAsMember = createPerformAsMember(getLeafHost);
 // API, /api/org/member/agents/<tool>). Every send lands in a hidden
 // conversation (#291, #302) the caller owns. server/agent-api.ts is the core.
 const AGENT_API_KEY_FILE = join(DATA_DIR, "agent-api.key");
+async function prepareMcpServers(bot: BotRecord): Promise<void> {
+  await mcpServersHost.prepare(bot);
+}
+Object.assign(leafHostBindings, { DATA_DIR, AGENT_API_KEY_FILE });
 let _agentApiSecretImpl: ReturnType<typeof createAgentApiSecret> | undefined;
 function agentApiSecret(...args: any[]) {
   return (_agentApiSecretImpl ??= createAgentApiSecret(getLeafHost) as any)(...args);
@@ -26938,13 +27148,6 @@ warnReservedMcpServers(cfg);
 }
 // Organization server, once: every bot thread from before private threads
 // gets its owner (server/threads/thread-privacy.ts), before anyone can read one.
-migrateThreadOwners();
-resetMemberAutoLevelsOnce();
-// and every start after it: a level stored since (a demoted admin's bot)
-settleMemberAutoLevelsFor(store.bots.map((bot) => bot.id), "at start");
-hideEarlierAgentThreads();
-hideBotThreadsOnce();
-migrateBotRuntimeSettings();
 // Unified chat (2026-11-05): background threads that finished are archived,
 // the backlog first, a minute after start so nothing restarting is caught.
 setTimeout(() => {
@@ -27019,13 +27222,6 @@ const onListening = async () => {
   }
   importLegacyDelegations();
 };
-if (earlyListener) {
-  earlyListener.adopt(handleRequest);
-  void onListening().catch(reportBackgroundError);
-} else {
-  server.listen(PORT, "127.0.0.1", onListening);
-}
-
 // connector gateway on this machine forwards public traffic to this IPC path.
 // Nothing changes about the loopback bind above. Requests arriving here have
 // no peer address, which request-auth treats as "through a proxy": a session
@@ -28322,6 +28518,10 @@ Object.assign(leafHostBindings, {
   settleWaitingOnPersonChips,
   delegationWakeBudget,
   pendingDelegationWakes,
+  roomMemberLock,
+  roomMemberContexts,
+  CLOUD_HOME,
+  cloudOwnerOnlyThread,
   routineOnWire,
   routineActor,
   principalMayRunRoutine,
@@ -30025,7 +30225,6 @@ Object.assign(leafHostBindings, {
   createAppliesDirectly,
   createApplyAutoReviewDefault,
   createApplyConfigHttpPatch,
-  createApplyDelegatedLevel,
   createApplyDesktopMutationTokenMessage,
   createApplyModelSwitches,
   createApplyOrgEngineAllowList,
@@ -30783,7 +30982,6 @@ Object.assign(leafHostBindings, {
   createRoomRoutingInput,
   createRoomSectionAccess,
   createRoomSectionMoveRefusal,
-  createRoomTurnApprovalMode,
   createRoomTurnLevels,
   createRouteMessageInternalRoutes,
   createRouteSteeredMessage,
@@ -32195,6 +32393,16 @@ Object.assign(leafHostBindings, {
   writesManagedProfile,
   z
 });
+// Organization server, once: every bot thread from before private threads
+// gets its owner (server/threads/thread-privacy.ts), before anyone can read one.
+// Runs after the leaf host bag is filled so migrate/hide leaves see host.* bindings.
+migrateThreadOwners();
+resetMemberAutoLevelsOnce();
+// and every start after it: a level stored since (a demoted admin's bot)
+settleMemberAutoLevelsFor(store.bots.map((bot) => bot.id), "at start");
+hideEarlierAgentThreads();
+hideBotThreadsOnce();
+migrateBotRuntimeSettings();
 if (earlyListener) {
   earlyListener.adopt(handleRequest);
   void onListening();

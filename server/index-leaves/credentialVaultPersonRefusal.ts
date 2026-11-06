@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** credentialVaultPersonRefusal (#1388). Pure move from server/index.ts. */
+import { isBotActSession } from "../auth/sessions.ts";
 export type Host = Record<string, any>;
 
 export function createCredentialVaultPersonRefusal(getHost: () => Host): any {

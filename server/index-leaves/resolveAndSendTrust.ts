@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** resolveAndSendTrust (#1388). Pure move from server/index.ts. */
+import { settleSafetyHold } from "../safety/safety-review.ts";
 export type Host = Record<string, any>;
 
 export function createResolveAndSendTrust(getHost: () => Host): any {

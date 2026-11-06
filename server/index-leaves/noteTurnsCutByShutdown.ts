@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** noteTurnsCutByShutdown (#1388). Pure move from server/index.ts. */
+import { saveInterruptedTurns } from "../turns/interrupted-turns.ts";
 export type Host = Record<string, any>;
 
 export function createNoteTurnsCutByShutdown(getHost: () => Host): any {

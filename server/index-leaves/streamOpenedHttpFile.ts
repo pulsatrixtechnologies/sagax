@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** streamOpenedHttpFile (#1388). Pure move from server/index.ts. */
+import { parseAttachmentRange } from "../attachments/attachments.ts";
 export type Host = Record<string, any>;
 
 export function createStreamOpenedHttpFile(getHost: () => Host): any {

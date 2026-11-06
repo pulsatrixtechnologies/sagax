@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** scopedSkillsPrompt (#1388). Pure move from server/index.ts. */
+import { join, relative, sep } from "node:path";
+import { syncSkillLinks } from "../skills/skills.ts";
 export type Host = Record<string, any>;
 
 export function createScopedSkillsPrompt(getHost: () => Host): any {

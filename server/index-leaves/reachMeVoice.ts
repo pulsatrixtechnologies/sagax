@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** reachMeVoice (#1388). Pure move from server/index.ts. */
+import { randomBytes } from "node:crypto";
 export type Host = Record<string, any>;
 
 export function createReachMeVoice(getHost: () => Host): any {

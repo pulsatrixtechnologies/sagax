@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** ownEnvironmentRequest (#1388). Pure move from server/index.ts. */
+import { memberEnvironmentAutonomyAllowed, ownEnvironmentCall } from "../people/member-environment.ts";
 export type Host = Record<string, any>;
 
 export function createOwnEnvironmentRequest(getHost: () => Host): any {

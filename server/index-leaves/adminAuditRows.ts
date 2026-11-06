@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** adminAuditRows (#1388). Pure move from server/index.ts. */
+import { parsedBodyOf } from "../harness/http.ts";
 export type Host = Record<string, any>;
 
 export function createAdminAuditRows(getHost: () => Host): any {

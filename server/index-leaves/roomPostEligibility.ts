@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** roomPostEligibility (#1388). Pure move from server/index.ts. */
+import { coordinatorSupervises } from "../peers/peer-roster.ts";
 export type Host = Record<string, any>;
 
 export function createRoomPostEligibility(getHost: () => Host): any {

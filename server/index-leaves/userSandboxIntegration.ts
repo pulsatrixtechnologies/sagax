@@ -12,7 +12,7 @@ function userSandboxIntegration(botId: string, threadId: string, generation: str
   return {
     command: process.execPath,
     args: [host.SPAWNED_PROXIES.userSandbox],
-    env: { ...AGENTS_NODE_FLAG, SAGAX_SANDBOX_TOKEN: token, SAGAX_HARNESS_URL: `http://127.0.0.1:${PORT}` }
+    env: { ...host.AGENTS_NODE_FLAG, SAGAX_SANDBOX_TOKEN: token, SAGAX_HARNESS_URL: `http://127.0.0.1:${host.PORT}` }
   };
 
 }

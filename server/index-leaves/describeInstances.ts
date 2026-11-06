@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** describeInstances (#1388). Pure move from server/index.ts. */
+import { CLAUDE_API_INSTANCE } from "../config.ts";
 export type Host = Record<string, any>;
 
 export function createDescribeInstances(getHost: () => Host): any {

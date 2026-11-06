@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** closeCutToolRows (#1388). Pure move from server/index.ts. */
+import { CUT_TOOL_OUTPUT, closedTool, toolRowOpen } from "../threads/subagent-cleanup.ts";
 export type Host = Record<string, any>;
 
 export function createCloseCutToolRows(getHost: () => Host): any {

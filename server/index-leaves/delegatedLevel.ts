@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** delegatedLevel (#1388). Pure move from server/index.ts. */
+import { delegatedApprovalMode } from "../approvals/auto-approve.ts";
 export type Host = Record<string, any>;
 
 export function createDelegatedLevel(getHost: () => Host): any {

@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** teammateReportContext (#1388). Pure move from server/index.ts. */
+import { escapeNotes, reportNote } from "../peers/peer-provenance.ts";
 export type Host = Record<string, any>;
 
 export function createTeammateReportContext(getHost: () => Host): any {

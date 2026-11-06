@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** autoAnswerStepUp (#1388). Pure move from server/index.ts. */
+import { callStepUpClasses } from "../auth/step-up-gate.ts";
 export type Host = Record<string, any>;
 
 export function createAutoAnswerStepUp(getHost: () => Host): any {

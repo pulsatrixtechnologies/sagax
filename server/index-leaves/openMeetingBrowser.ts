@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** openMeetingBrowser (#1388). Pure move from server/index.ts. */
+import { agentBrowserIntegration, describeBrowserEngine, prepareBrowserSessionState } from "../browser/browser-engine.ts";
 export type Host = Record<string, any>;
 
 export function createOpenMeetingBrowser(getHost: () => Host): any {

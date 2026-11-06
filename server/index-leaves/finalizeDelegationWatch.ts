@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** finalizeDelegationWatch (#1388). Pure move from server/index.ts. */
+import { masteryDelegationFacts } from "../achievements-mastery.ts";
+import { recordDelegationReceipt } from "../peers/delegation-receipts.ts";
 export type Host = Record<string, any>;
 
 export function createFinalizeDelegationWatch(getHost: () => Host): any {

@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** botActs (#1388). Pure move from server/index.ts. */
+import { requiredScope } from "../auth/request-auth.ts";
 export type Host = Record<string, any>;
 
 export function createBotActs(getHost: () => Host): any {

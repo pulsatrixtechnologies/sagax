@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** stopParallelTask (#1388). Pure move from server/index.ts. */
+import { cancelThreadQueue } from "../turns/steer-queue.ts";
 export type Host = Record<string, any>;
 
 export function createStopParallelTask(getHost: () => Host): any {

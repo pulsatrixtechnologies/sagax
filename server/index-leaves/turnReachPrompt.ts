@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** turnReachPrompt (#1388). Pure move from server/index.ts. */
+import { noteTurnReach, reachContributions, reachSummaryPrompt } from "../turns/turn-reach.ts";
 export type Host = Record<string, any>;
 
 export function createTurnReachPrompt(getHost: () => Host): any {

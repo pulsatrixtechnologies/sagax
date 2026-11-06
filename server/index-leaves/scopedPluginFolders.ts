@@ -1,11 +1,13 @@
 // @ts-nocheck
 /** scopedPluginFolders (#1388). Pure move from server/index.ts. */
+import { selectPluginScopes } from "../capabilities/capability-plugin-mounts.ts";
+import { basename } from "node:path";
 export type Host = Record<string, any>;
 
 export function createScopedPluginFolders(getHost: () => Host): any {
 function scopedPluginFolders(bot: { id: string; ownerUserId?: unknown }, principal?: string): Array<{ name: string; dir: string; scope: PluginScope }> {
   const host = getHost();
-  const { basename, installationPlugins, orgCapabilityMounts, orgFlowPlugins } = host;
+  const { installationPlugins, orgCapabilityMounts, orgFlowPlugins } = host;
   const resolvedPrincipal = principal ?? host.effectiveBotOwner(bot);
   const person = host.IDENTITY.kind === "perspicax" ? resolvedPrincipal.trim().toLowerCase() : host.localPrincipalId();
   const aliases = host.flowAliasFolders(bot, person);

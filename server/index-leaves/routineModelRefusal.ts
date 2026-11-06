@@ -11,7 +11,7 @@ function routineModelRefusal(botId: string, model: string) {
   const instance = host.registry.get(bot.modelSelection.instanceId);
   if (!instance) return null;
   const offered = host.engineModelIds(instance);
-  if (offered.length && !offered.includes(model)) return `Model "${model}" is not offered by this bot's engine (${engineDisplayName(instance)}).`;
+  if (offered.length && !offered.includes(model)) return `Model "${model}" is not offered by this bot's engine (${host.engineDisplayName(instance)}).`;
   return host.modelSwitchRefusal(instance.instanceId, model, host.effectiveBotOwner(bot)) ?? null;
 
 }

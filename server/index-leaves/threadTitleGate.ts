@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** threadTitleGate (#1388). Pure move from server/index.ts. */
+import { DATA_DIR, llmThreadTitlesEnabled } from "../config.ts";
 export type Host = Record<string, any>;
 
 export function createThreadTitleGate(getHost: () => Host): any {
@@ -13,7 +14,7 @@ function threadTitleGate(bot: Pick<BotRecord, "modelSelection">, principalId?: s
   const refusal = host.policyModelRefusal(instance);
   if (refusal) return { ok: false, refusal };
   try {
-    assertWithinBudget(host.cfg, DATA_DIR);
+    host.assertWithinBudget(host.cfg, DATA_DIR);
   } catch (error) {
     return { ok: false, refusal: error instanceof Error ? error.message : String(error) };
   }

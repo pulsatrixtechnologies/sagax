@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** cloudRoutineReadiness (#1388). Pure move from server/index.ts. */
+import { NO_ENGINE_PERSON, namesEngine } from "../bots/bot-engine.ts";
+import { redactSecretsInText } from "../redact.ts";
 export type Host = Record<string, any>;
 
 export function createCloudRoutineReadiness(getHost: () => Host): any {
@@ -35,7 +37,7 @@ async function cloudRoutineReadiness(botId: string, threadId?: string): Promise<
   if (!host.boat.boatConfigured(host.cfg)) {
     return {
       ready: false,
-      reason: `${boatNotConfigured(bot, "routine").message} For the bot's configured computer, including a self-hosted VPS, set run_on="maus" instead.`
+      reason: `${host.boatNotConfigured(bot, "routine").message} For the bot's configured computer, including a self-hosted VPS, set run_on="maus" instead.`
     };
   }
   // The same rule a cloud turn applies, before anything is provisioned.

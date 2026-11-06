@@ -388,6 +388,8 @@ export function handleTurnCompleted(event: any, ctx: any, host: any): void {
         const tokens = event.usage ?? lastReported;
         const speakingBot = host.store.bot(speaker.botId);
         const selection = speakingBot?.modelSelection;
+        host.roomMemberContexts.record(event.threadId, speaker.botId, lastContext, selection?.model,
+          selection ? host.registry.get(selection.instanceId)?.models : undefined);
         const promptBytes = host.turnPromptBytes.get(event.threadId);
         host.turnPromptBytes.delete(event.threadId);
         host.turnContextBuckets.delete(event.threadId);

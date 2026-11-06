@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** importLegacyDelegations (#1388). Pure move from server/index.ts. */
+import { takeLegacyDelegations } from "../peers/delegation-receipts.ts";
 export type Host = Record<string, any>;
 
 export function createImportLegacyDelegations(getHost: () => Host): any {

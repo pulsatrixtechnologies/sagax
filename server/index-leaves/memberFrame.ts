@@ -1,5 +1,8 @@
 // @ts-nocheck
 /** memberFrame (#1388). Pure move from server/index.ts. */
+import { liveFramesNeedChannelFilter } from "../rooms/channel-visibility.ts";
+import { frameForMember, noteSeen } from "../bots/bot-visibility.ts";
+import { encodeSseDataFrame } from "../streams/sse-fanout.ts";
 export type Host = Record<string, any>;
 
 export function createMemberFrame(getHost: () => Host): any {

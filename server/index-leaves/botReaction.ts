@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** botReaction (#1388). Pure move from server/index.ts. */
+import { botReactionActorId, botReactionEmoji, normalizeReactions, reactionEmoji, reactionsBy, BOT_REACTIONS } from "../../shared/reactions.ts";
 export type Host = Record<string, any>;
 
 export function createBotReaction(getHost: () => Host): any {

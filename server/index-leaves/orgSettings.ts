@@ -1,5 +1,8 @@
 // @ts-nocheck
 /** orgSettings (#1388). Pure move from server/index.ts. */
+import { pendingApprovalExpireDays } from "../approvals/pending-approval-expiry.ts";
+import { interimWindowUntil } from "../interim-attach-routes.ts";
+import { memberEnvironmentAutonomyAllowed } from "../people/member-environment.ts";
 export type Host = Record<string, any>;
 
 export function createOrgSettings(getHost: () => Host): any {

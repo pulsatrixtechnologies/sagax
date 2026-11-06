@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** connectorSwitchForTurn (#1388). Pure move from server/index.ts. */
+import { pickConnectorSwitch } from "../connector-switch.ts";
 export type Host = Record<string, any>;
 
 export function createConnectorSwitchForTurn(getHost: () => Host): any {

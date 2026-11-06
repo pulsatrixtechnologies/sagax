@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** runGroupGoalOperation (#1388). Pure move from server/index.ts. */
+import { groupGoalAssignmentKey, groupGoalCoordinatorInstructions, groupGoalWorkerInstructions, parseGroupGoalDecision, resolveGroupGoalMember } from "../groups/group-goal-run.ts";
 export type Host = Record<string, any>;
 
 export function createRunGroupGoalOperation(getHost: () => Host): any {

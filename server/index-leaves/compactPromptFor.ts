@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** compactPromptFor (#1388). Pure move from server/index.ts. */
+import { compactMemoryDir, compactPins, toolUsage, KNOWN_USE_CALLS } from "../context/compact-prompt.ts";
 export type Host = Record<string, any>;
 
 export function createCompactPromptFor(getHost: () => Host): any {

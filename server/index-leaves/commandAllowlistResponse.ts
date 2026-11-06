@@ -1,11 +1,13 @@
 // @ts-nocheck
 /** commandAllowlistResponse (#1388). Pure move from server/index.ts. */
+import { join } from "node:path";
+import { existsSync, realpathSync } from "node:fs";
 export type Host = Record<string, any>;
 
 export function createCommandAllowlistResponse(getHost: () => Host): any {
 function commandAllowlistResponse(bot: BotRecord) {
   const host = getHost();
-  const { DATA_DIR, existsSync, realpathSync } = host;
+  const { DATA_DIR } = host;
 
   const instance = host.registry.get(bot.modelSelection.instanceId);
   const task = host.store.taskByThread(bot.id, bot.threadId);

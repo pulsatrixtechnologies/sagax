@@ -1,5 +1,8 @@
 // @ts-nocheck
 /** mcpServerResponse (#1388). Pure move from server/index.ts. */
+import { skipPersonalInSharedProbe } from "../mcp/mcp-personal-shared-guard.ts";
+import { DEFAULT_MCP_ACCOUNT } from "../mcp/mcp-oauth.ts";
+import { reservedMcpServers } from "../mcp/mcp-registry.ts";
 export type Host = Record<string, any>;
 
 export function createMcpServerResponse(getHost: () => Host): any {

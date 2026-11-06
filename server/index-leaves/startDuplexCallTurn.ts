@@ -1,5 +1,8 @@
 // @ts-nocheck
 /** startDuplexCallTurn (#1388). Pure move from server/index.ts. */
+import { DUPLEX_INTERRUPT_WAIT_MS, admitDuplexSend, continuesSameUtterance, isThreadBusyError, lastOwnUserVoiceText, matchingVoiceSibling, waitForThreadIdle } from "../voice/voice-call-duplex.ts";
+import { beginVoiceFirstSentence } from "../voice/voice-first-sentence.ts";
+import { discardSteeredQueue } from "../turns/steer-queue.ts";
 export type Host = Record<string, any>;
 
 export function createStartDuplexCallTurn(getHost: () => Host): any {

@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** dispatchSecretResume (#1388). Pure move from server/index.ts. */
+import { isTurnAdmissionBlocked } from "../turns/turn-dispatch-guard.ts";
 export type Host = Record<string, any>;
 
 export function createDispatchSecretResume(getHost: () => Host): any {

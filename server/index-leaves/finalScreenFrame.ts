@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** finalScreenFrame (#1388). Pure move from server/index.ts. */
+import { settledFrameIsNews } from "../computer/screen-frame-gate.ts";
 export type Host = Record<string, any>;
 
 export function createFinalScreenFrame(getHost: () => Host): any {

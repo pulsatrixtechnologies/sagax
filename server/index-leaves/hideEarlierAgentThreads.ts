@@ -1,11 +1,14 @@
 // @ts-nocheck
 /** hideEarlierAgentThreads (#1388). Pure move from server/index.ts. */
+import { join } from "node:path";
+import { readAdminActivityRange } from "../activity/admin-activity.ts";
+import { existsSync, writeFileSync } from "node:fs";
 export type Host = Record<string, any>;
 
 export function createHideEarlierAgentThreads(getHost: () => Host): any {
 function hideEarlierAgentThreads() {
   const host = getHost();
-  const { DATA_DIR, existsSync, writeFileSync } = host;
+  const { DATA_DIR } = host;
 
   if (host.IDENTITY.kind !== "perspicax") return;
   const marker = join(DATA_DIR, "agent-threads-hidden.v1");

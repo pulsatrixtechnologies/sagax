@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** inboxPending (#1388). Pure move from server/index.ts. */
+import { describeApproval } from "../../shared/approval-describe.ts";
+import { inboxKey } from "../../shared/approvals-inbox.ts";
 export type Host = Record<string, any>;
 
 export function createInboxPending(getHost: () => Host): any {

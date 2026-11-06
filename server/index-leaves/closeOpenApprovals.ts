@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** closeOpenApprovals (#1388). Pure move from server/index.ts. */
+import { cancelPeerApprovalsForThread } from "../peers/peer-approval.ts";
 export type Host = Record<string, any>;
 
 export function createCloseOpenApprovals(getHost: () => Host): any {

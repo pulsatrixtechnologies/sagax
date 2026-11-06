@@ -21,9 +21,9 @@ function phoneIntegration(botId: string, threadId: string, generation: string) {
     openedThreads: 0
   });
   const env: Record<string, string> = {
-    ...AGENTS_NODE_FLAG,
+    ...host.AGENTS_NODE_FLAG,
     SAGAX_PHONE_TOKEN: token,
-    SAGAX_HARNESS_URL: `http://127.0.0.1:${PORT}`
+    SAGAX_HARNESS_URL: `http://127.0.0.1:${host.PORT}`
   };
   if (process.env.SAGAX_ADB_PATH) env.SAGAX_ADB_PATH = process.env.SAGAX_ADB_PATH;
   if (process.env.SAGAX_RESOURCES_PATH) env.SAGAX_RESOURCES_PATH = process.env.SAGAX_RESOURCES_PATH;

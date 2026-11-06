@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** setBotApprovalModeFromConsole (#1388). Pure move from server/index.ts. */
+import { approvalModeFor } from "../../shared/approval-mode.ts";
 export type Host = Record<string, any>;
 
 export function createSetBotApprovalModeFromConsole(getHost: () => Host): any {

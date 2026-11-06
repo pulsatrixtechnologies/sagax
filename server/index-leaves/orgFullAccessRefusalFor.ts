@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** orgFullAccessRefusalFor (#1388). Pure move from server/index.ts. */
+import { orgFullAccessGrantRefusal } from "../org/org-full-access.ts";
 export type Host = Record<string, any>;
 
 export function createOrgFullAccessRefusalFor(getHost: () => Host): any {

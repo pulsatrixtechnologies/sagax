@@ -1,5 +1,8 @@
 // @ts-nocheck
 /** browserIntegration (#1388). Pure move from server/index.ts. */
+import { browserProfilePartitionTarget } from "../config.ts";
+import { noteBrowserOwner } from "../auth/web-bot-auth.ts";
+import { agentBrowserIntegration, prepareBrowserSessionState, describeBrowserEngine } from "../browser/browser-engine.ts";
 export type Host = Record<string, any>;
 
 export function createBrowserIntegration(getHost: () => Host): any {
@@ -56,7 +59,7 @@ async function browserIntegration(botId: string, requestedProfile: string | unde
     kind: "browser", depth: 0, skillAuthoring: false, createdBots: 0, openedThreads: 0 });
   return { profile: partitionId, session, spec, integration: {
     command: process.execPath, args: [host.SPAWNED_PROXIES.harnessMcp, "browser"], env: {
-      ...AGENTS_NODE_FLAG, SAGAX_MCP_TOKEN: token, SAGAX_HARNESS_URL: `http://127.0.0.1:${PORT}`
+      ...host.AGENTS_NODE_FLAG, SAGAX_MCP_TOKEN: token, SAGAX_HARNESS_URL: `http://127.0.0.1:${host.PORT}`
     }
   } };
 

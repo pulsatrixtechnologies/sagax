@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** agentsIntegration (#1388). Pure move from server/index.ts. */
+import { join } from "node:path";
 export type Host = Record<string, any>;
 
 export function createAgentsIntegration(getHost: () => Host): any {
@@ -26,8 +27,8 @@ function agentsIntegration(   botId: string,   threadId: string,   depth: number
     command: process.execPath,
     args: [host.agentsProxyPath],
     env: {
-      ...AGENTS_NODE_FLAG,
-      SAGAX_HARNESS_URL: `http://127.0.0.1:${PORT}`,
+      ...host.AGENTS_NODE_FLAG,
+      SAGAX_HARNESS_URL: `http://127.0.0.1:${host.PORT}`,
       SAGAX_BOT_ID: botId,
       SAGAX_THREAD_ID: threadId,
       SAGAX_COMMS_TOKEN: token,

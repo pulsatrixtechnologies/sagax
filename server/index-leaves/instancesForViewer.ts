@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** instancesForViewer (#1388). Pure move from server/index.ts. */
+import { isCompatServerId } from "../config.ts";
+import { withoutRefusedModels } from "../models/model-access-refusals.ts";
 export type Host = Record<string, any>;
 
 export function createInstancesForViewer(getHost: () => Host): any {

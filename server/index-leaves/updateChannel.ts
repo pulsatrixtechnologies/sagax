@@ -1,5 +1,8 @@
 // @ts-nocheck
 /** updateChannel (#1388). Pure move from server/index.ts. */
+import { memberIdsDropBot } from "../workers.ts";
+import { applyHumanIds } from "../rooms/channel-membership.ts";
+import { parseConversationTurnTimeout } from "../rooms/room-turn-timeout.ts";
 export type Host = Record<string, any>;
 
 export function createUpdateChannel(getHost: () => Host): any {

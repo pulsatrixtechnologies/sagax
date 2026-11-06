@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** authorizedInternalCapability (#1388). Pure move from server/index.ts. */
+import { timingSafeEqual } from "node:crypto";
 export type Host = Record<string, any>;
 
 export function createAuthorizedInternalCapability(getHost: () => Host): any {

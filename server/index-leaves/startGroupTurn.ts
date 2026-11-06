@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** startGroupTurn (#1388). Pure move from server/index.ts. */
+import { channelTurnGate } from "../workers.ts";
+import { selectGroupGoalCoordinator, GROUP_GOAL_MAX_TURNS } from "../groups/group-goal-run.ts";
 export type Host = Record<string, any>;
 
 export function createStartGroupTurn(getHost: () => Host): any {

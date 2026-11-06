@@ -1,5 +1,10 @@
 // @ts-nocheck
 /** compactConversation (#1388). Pure move from server/index.ts. */
+import { compactBudget, contextWindowFor, defaultCompactAt, nativeCompactionPoint, shouldCompact } from "../context/context-budget.ts";
+import { MAX_SUMMARY_BYTES } from "../context/context-rebuild.ts";
+import { autoCompactWindow } from "../drivers/claude.ts";
+import { remindAfterCompaction } from "../finish-until.ts";
+import { createHash } from "node:crypto";
 export type Host = Record<string, any>;
 
 export function createCompactConversation(getHost: () => Host): any {

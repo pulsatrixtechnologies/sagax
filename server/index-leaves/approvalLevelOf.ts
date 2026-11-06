@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** approvalLevelOf (#1388). Pure move from server/index.ts. */
+import { appliedLevelReason } from "../../shared/approval-mode.ts";
 export type Host = Record<string, any>;
 
 export function createApprovalLevelOf(getHost: () => Host): any {

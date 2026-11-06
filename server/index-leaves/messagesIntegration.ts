@@ -20,9 +20,9 @@ function messagesIntegration(botId: string, threadId: string, generation: string
     command: process.execPath,
     args: [host.messagesProxyPath],
     env: {
-      ...AGENTS_NODE_FLAG,
+      ...host.AGENTS_NODE_FLAG,
       SAGAX_MESSAGES_TOKEN: token,
-      SAGAX_HARNESS_URL: `http://127.0.0.1:${PORT}`
+      SAGAX_HARNESS_URL: `http://127.0.0.1:${host.PORT}`
     }
   };
 

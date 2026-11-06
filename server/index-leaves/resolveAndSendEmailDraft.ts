@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** resolveAndSendEmailDraft (#1388). Pure move from server/index.ts. */
+import { EMAIL_SEND_REQUEST_PREFIX, emailSendInstruction } from "../../shared/email-draft-send.ts";
 export type Host = Record<string, any>;
 
 export function createResolveAndSendEmailDraft(getHost: () => Host): any {

@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** offerRoomPostToBots (#1388). Pure move from server/index.ts. */
+import { textNamesBot } from "../proactive/proactive-wake.ts";
 export type Host = Record<string, any>;
 
 export function createOfferRoomPostToBots(getHost: () => Host): any {

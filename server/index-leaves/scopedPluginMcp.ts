@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** scopedPluginMcp (#1388). Pure move from server/index.ts. */
+import { ORG_CAPABILITY_KEY_PREFIX } from "../org/org-capabilities.ts";
 export type Host = Record<string, any>;
 
 export function createScopedPluginMcp(getHost: () => Host): any {

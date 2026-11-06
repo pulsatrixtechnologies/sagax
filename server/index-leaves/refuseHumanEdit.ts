@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** refuseHumanEdit (#1388). Pure move from server/index.ts. */
+import { canEditRoomHumans } from "../auth/authz.ts";
+import { canEditHumans, firstUnseenPerson } from "../rooms/channel-membership.ts";
 export type Host = Record<string, any>;
 
 export function createRefuseHumanEdit(getHost: () => Host): any {

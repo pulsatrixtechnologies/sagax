@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** destinationOfCall (#1388). Pure move from server/index.ts. */
+import { ownDestinationCall } from "../people/member-environment.ts";
 export type Host = Record<string, any>;
 
 export function createDestinationOfCall(getHost: () => Host): any {

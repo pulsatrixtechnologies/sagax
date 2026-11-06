@@ -1,7 +1,8 @@
 // @ts-nocheck
 /** confirmHeldCard (#1388). Pure move from server/index.ts. */
 import { wholeCallDigest } from "../approvals/owner-approval.ts";
-
+import { openSafetyHold } from "../safety/safety-review.ts";
+import { HELD_NOTE } from "../approvals/auto-approve.ts";
 export type Host = Record<string, any>;
 
 export function createConfirmHeldCard(getHost: () => Host): any {

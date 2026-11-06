@@ -1,11 +1,12 @@
 // @ts-nocheck
 /** purgeConfidentialEngineKeys (#1388). Pure move from server/index.ts. */
+import { ENGINE_PURGE_ATTEMPTS, compactPending, purgeEngineSessions, readPendingPurges, writePendingPurges, describePurge } from "../engines/engine-transcripts.ts";
 export type Host = Record<string, any>;
 
 export function createPurgeConfidentialEngineKeys(getHost: () => Host): any {
 function purgeConfidentialEngineKeys(keys: readonly string[], why: string, options: { live?: readonly string[]; recheck?: boolean } = {}) {
   const host = getHost();
-  const { DATA_DIR, readPendingPurges } = host;
+  const { DATA_DIR } = host;
   const pending = readPendingPurges(DATA_DIR);
   if (!keys.length && !pending.length) return;
   const started = Date.now();

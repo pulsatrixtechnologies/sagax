@@ -1,11 +1,13 @@
 // @ts-nocheck
 /** orgBotFileRoots (#1388). Pure move from server/index.ts. */
+import { join } from "node:path";
+import { existsSync } from "node:fs";
 export type Host = Record<string, any>;
 
 export function createOrgBotFileRoots(getHost: () => Host): any {
 function orgBotFileRoots(bot: BotRecord) {
   const host = getHost();
-  const { ATTACHMENTS_DIR, TASK_WORKSPACES_DIR, existsSync, workspaceDir } = host;
+  const { ATTACHMENTS_DIR, TASK_WORKSPACES_DIR, workspaceDir } = host;
 
   // A confidential thread's folder is never in the console (server/threads/confidential-threads.ts).
   const confidential = new Set(host.store.tasks(bot.id).filter((task) => task.confidential === true).map((task) => task.threadId));

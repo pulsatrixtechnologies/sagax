@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** roomSectionMoveRefusal (#1388). Pure move from server/index.ts. */
+import { canModerateSection } from "../auth/authz.ts";
+import { recordAccess } from "../rooms/section-channels.ts";
 export type Host = Record<string, any>;
 
 export function createRoomSectionMoveRefusal(getHost: () => Host): any {

@@ -1,11 +1,14 @@
 // @ts-nocheck
 /** migrateBotRuntimeSettings (#1388). Pure move from server/index.ts. */
+import { RUNTIME_SETTINGS_MIGRATION_MARKER, planRuntimeSettingsMigration } from "../bots/bot-runtime-settings.ts";
+import { join } from "node:path";
+import { existsSync, writeFileSync } from "node:fs";
 export type Host = Record<string, any>;
 
 export function createMigrateBotRuntimeSettings(getHost: () => Host): any {
 function migrateBotRuntimeSettings() {
   const host = getHost();
-  const { DATA_DIR, existsSync, writeFileSync } = host;
+  const { DATA_DIR } = host;
 
   const marker = join(DATA_DIR, RUNTIME_SETTINGS_MIGRATION_MARKER);
   if (existsSync(marker)) return;

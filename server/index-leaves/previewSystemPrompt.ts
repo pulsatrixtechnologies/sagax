@@ -1,11 +1,13 @@
 // @ts-nocheck
 /** previewSystemPrompt (#1388). Pure move from server/index.ts. */
+import { CLAUDE_REUSE_VOLATILE_SECTIONS, CREDENTIAL_PROMPT, REACTION_PROMPT, ROUTINE_PROMPT, TEAM_MEMORY_PROMPT } from "../system-prompt.ts";
+import { WITHHELD_HOST_TOOLS_PROMPT } from "../workspace/workspace.ts";
 export type Host = Record<string, any>;
 
 export function createPreviewSystemPrompt(getHost: () => Host): any {
 function previewSystemPrompt(bot: BotRecord, principal?: string) {
   const host = getHost();
-  const { botCreationOffered, buildSystemPrompt, builtInBrowserEnabled, computerPrompt, customMcpPrompt, finishUntilPrompt, localVmMode, longCommandsPrompt, peerRosterSystemPrompt, reachablePeers, resolveComputerPromptKind, resolveSurface, richOutputPrompt, sectionContextSystemPrompt, skillAuthoringEnabled, supportsWorkspaceFiles, surfacePrompt, teamAvailabilityPart, userProfileSystemPrompt } = host;
+  const { botCreationOffered, buildSystemPrompt, builtInBrowserEnabled, cfg, computerPrompt, customMcpPrompt, finishUntilPrompt, localVmMode, longCommandsPrompt, peerRosterSystemPrompt, reachablePeers, resolveComputerPromptKind, resolveSurface, richOutputPrompt, sectionContextSystemPrompt, skillAuthoringEnabled, supportsWorkspaceFiles, surfacePrompt, teamAvailabilityPart, userProfileSystemPrompt } = host;
   // `cfg` is the module-level config (`const cfg = loadConfig()` near the
   // top of index.ts), the same object the turn code reads.
   const persona = [

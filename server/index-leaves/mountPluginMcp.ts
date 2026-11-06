@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** mountPluginMcp (#1388). Pure move from server/index.ts. */
+import { pluginMcpPrecheck, pluginSpecOnComputer } from "../capabilities/capability-plugin-mounts.ts";
 export type Host = Record<string, any>;
 
 export function createMountPluginMcp(getHost: () => Host): any {

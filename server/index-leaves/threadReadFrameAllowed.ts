@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** threadReadFrameAllowed (#1388). Pure move from server/index.ts. */
+import { readVisibleTo } from "../messages/read-receipts.ts";
 export type Host = Record<string, any>;
 
 export function createThreadReadFrameAllowed(getHost: () => Host): any {

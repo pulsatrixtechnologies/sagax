@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** finishVoiceCallRequestedByBot (#1388). Pure move from server/index.ts. */
+import { voiceCallTurnSettle } from "../voice/voice-call-session.ts";
 export type Host = Record<string, any>;
 
 export function createFinishVoiceCallRequestedByBot(getHost: () => Host): any {

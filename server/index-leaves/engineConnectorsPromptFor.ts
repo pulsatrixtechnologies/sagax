@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** engineConnectorsPromptFor (#1388). Pure move from server/index.ts. */
+import { accountConnectorsForTurn, engineConnectorsPrompt } from "../harness-connectors.ts";
 export type Host = Record<string, any>;
 
 export function createEngineConnectorsPromptFor(getHost: () => Host): any {

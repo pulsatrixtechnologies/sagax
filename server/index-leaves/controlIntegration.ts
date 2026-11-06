@@ -8,7 +8,7 @@ function controlIntegration(   botId: string,   threadId: string,   generation: 
 
   const { localVmTarget, boxId } = machine === "this computer" ? {} : machine;
   return {
-    url: `http://127.0.0.1:${PORT}/api/internal/computer-control?botId=${encodeURIComponent(botId)}`,
+    url: `http://127.0.0.1:${host.PORT}/api/internal/computer-control?botId=${encodeURIComponent(botId)}`,
     token: host.mintInternalCapability({
       botId,
       threadId,

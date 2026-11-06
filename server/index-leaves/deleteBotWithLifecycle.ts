@@ -1,11 +1,16 @@
 // @ts-nocheck
 /** deleteBotWithLifecycle (#1388). Pure move from server/index.ts. */
+import { vpsSshAlias } from "../config.ts";
+import { requireBrowserCleanupAcknowledged } from "../browser/browser-lifecycle-cleanup.ts";
+import { forgetDataScopes } from "../data/scope.ts";
+import { existsSync } from "node:fs";
+import { cancelPeerApprovalsFor } from "../peers/peer-approval.ts";
 export type Host = Record<string, any>;
 
 export function createDeleteBotWithLifecycle(getHost: () => Host): any {
 async function deleteBotWithLifecycle(botId: string, revalidate: () => void = () => {}, setupRequest?: TeamSetupRequest) {
   const host = getHost();
-  const { containerComputerAction, containerComputerStatus, dataEngine, existsSync, localVmMode, perBotLocalVmTarget } = host;
+  const { containerComputerAction, containerComputerStatus, dataEngine, localVmMode, perBotLocalVmTarget } = host;
   const deletionResponse = (status: number, body: { error?: string; ok?: boolean }) => ({ status, body });
       revalidate();
       const bot = host.store.bot(botId);

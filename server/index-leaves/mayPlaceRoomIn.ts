@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** mayPlaceRoomIn (#1388). Pure move from server/index.ts. */
+import { recordAccess } from "../rooms/section-channels.ts";
+import { roleRank, sectionRole } from "../auth/authz.ts";
 export type Host = Record<string, any>;
 
 export function createMayPlaceRoomIn(getHost: () => Host): any {

@@ -1,11 +1,12 @@
 // @ts-nocheck
 /** turnConnectorsFor (#1388). Pure move from server/index.ts. */
+import { basename } from "node:path";
 export type Host = Record<string, any>;
 
 export function createTurnConnectorsFor(getHost: () => Host): any {
 function turnConnectorsFor(bot: BotRecord, instance: Parameters<typeof withholdHostToolsFor>[0] & { instanceId: string; driverKind: string }, speaker: TurnSpeaker,   integrations: NonNullable<SendTurnInput["integrations"]>, principal: string | null, customMcp: boolean) {
   const host = getHost();
-  const { basename, claudeAiConnectorsForTurn, scopedPluginFolders } = host;
+  const { claudeAiConnectorsForTurn, scopedPluginFolders } = host;
   const account = host.accountConnectorInput(bot, instance, speaker);
   const claudeAi = claudeAiConnectorsForTurn(account);
   const claudeConnectors = claudeAi ? host.claudeAiConnectorRows(account) : undefined;

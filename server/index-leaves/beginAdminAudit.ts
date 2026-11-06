@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** beginAdminAudit (#1388). Pure move from server/index.ts. */
+import { onJsonBody } from "../harness/http.ts";
+import { requiredScope } from "../auth/request-auth.ts";
 export type Host = Record<string, any>;
 
 export function createBeginAdminAudit(getHost: () => Host): any {

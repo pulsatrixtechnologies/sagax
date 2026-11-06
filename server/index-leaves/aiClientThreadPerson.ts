@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** aiClientThreadPerson (#1388). Pure move from server/index.ts. */
+import { aiClientPrompt } from "../system-prompt.ts";
 export type Host = Record<string, any>;
 
 export function createAiClientThreadPerson(getHost: () => Host): any {

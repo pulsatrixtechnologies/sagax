@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** addPersonalMcpServer (#1388). Pure move from server/index.ts. */
+import { sharedPersonalNameRefusal } from "../mcp/mcp-personal-shared-guard.ts";
+import { parsePersonalMcpInput, personalMcpHostRefusal, personalMcpPrivateAllowed } from "../people/person-connections.ts";
 export type Host = Record<string, any>;
 
 export function createAddPersonalMcpServer(getHost: () => Host): any {
@@ -18,7 +20,7 @@ async function addPersonalMcpServer(principalId: string, body: unknown) {
   const sharedClash = sharedPersonalNameRefusal(name, Object.keys(host.cfg.mcpServers ?? {}));
   if (sharedClash) throw new PersonConnectionsError(sharedClash, "name_taken", 409);
   if (server.kind === "stdio" && !host.userSandbox) {
-    throw new PersonConnectionsError("This server has no server environments, so a command cannot run for you here. Add a remote server (an https address) instead.", "no_environment", 409);
+    throw new PersonConnectionsError("This server has no server environments, so a command cannot run for you here. Add a remote host.server (an https address) instead.", "no_environment", 409);
   }
   host.personConnections.add(principalId, name, server);
   if (server.kind === "remote" && server.auth === "oauth") {

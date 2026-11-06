@@ -1,11 +1,14 @@
 // @ts-nocheck
 /** agentApiSourceFile (#1388). Pure move from server/index.ts. */
+import { join, sep } from "node:path";
+import { statSync, realpathSync } from "node:fs";
+import { ATTACHMENTS_DIR } from "../attachments/attachments.ts";
 export type Host = Record<string, any>;
 
 export function createAgentApiSourceFile(getHost: () => Host): any {
 function agentApiSourceFile(from: BotRecord, sourceThreadId: string, relative: string): { path: string; bytes: number } | Refusal {
   const host = getHost();
-  const { agentRefuse, realpathSync } = host;
+  const { agentRefuse } = host;
   const roots = host.messageFileRootsForThread(from.id, sourceThreadId).filter((root) => root !== ATTACHMENTS_DIR);
   for (const root of roots) {
     const candidate = join(root, relative);

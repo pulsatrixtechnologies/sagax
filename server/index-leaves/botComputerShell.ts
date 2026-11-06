@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** botComputerShell (#1388). Pure move from server/index.ts. */
+import { vpsSshAlias } from "../config.ts";
 export type Host = Record<string, any>;
 
 export function createBotComputerShell(getHost: () => Host): any {

@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** attachmentVmForTurn (#1388). Pure move from server/index.ts. */
+import { controlRefusal } from "../control-client.ts";
 export type Host = Record<string, any>;
 
 export function createAttachmentVmForTurn(getHost: () => Host): any {

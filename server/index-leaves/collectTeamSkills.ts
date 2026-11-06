@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** collectTeamSkills (#1388). Pure move from server/index.ts. */
+import { isSkillName } from "../skills/skills.ts";
 export type Host = Record<string, any>;
 
 export function createCollectTeamSkills(getHost: () => Host): any {

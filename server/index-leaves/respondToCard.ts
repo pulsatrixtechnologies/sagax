@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** respondToCard (#1388). Pure move from server/index.ts. */
+import { resolvePeerComms } from "../peers/peer-approval.ts";
 export type Host = Record<string, any>;
 
 export function createRespondToCard(getHost: () => Host): any {

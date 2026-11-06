@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** resolveImessageCard (#1388). Pure move from server/index.ts. */
+import { join } from "node:path";
 export type Host = Record<string, any>;
 
 export function createResolveImessageCard(getHost: () => Host): any {

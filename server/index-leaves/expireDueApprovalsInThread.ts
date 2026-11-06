@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** expireDueApprovalsInThread (#1388). Pure move from server/index.ts. */
+import { expirePendingApprovalIfDue } from "../approvals/pending-approval-expiry.ts";
 export type Host = Record<string, any>;
 
 export function createExpireDueApprovalsInThread(getHost: () => Host): any {

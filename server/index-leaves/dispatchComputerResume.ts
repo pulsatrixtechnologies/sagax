@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** dispatchComputerResume (#1388). Pure move from server/index.ts. */
+import { isTurnAdmissionBlocked } from "../turns/turn-dispatch-guard.ts";
 export type Host = Record<string, any>;
 
 export function createDispatchComputerResume(getHost: () => Host): any {

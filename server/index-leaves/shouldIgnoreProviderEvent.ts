@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** shouldIgnoreProviderEvent (#1388). Pure move from server/index.ts. */
+import { isTurnEventQuarantined } from "../turns/turn-dispatch-guard.ts";
 export type Host = Record<string, any>;
 
 export function createShouldIgnoreProviderEvent(getHost: () => Host): any {

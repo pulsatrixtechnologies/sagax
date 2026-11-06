@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** publishedPageViewer (#1388). Pure move from server/index.ts. */
+import { loopbackBrowserRefused } from "../auth/request-auth.ts";
 export type Host = Record<string, any>;
 
 export function createPublishedPageViewer(getHost: () => Host): any {

@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** answerInboxCard (#1388). Pure move from server/index.ts. */
+import { resolvePeerComms } from "../peers/peer-approval.ts";
+import { settleSafetyHold } from "../safety/safety-review.ts";
 export type Host = Record<string, any>;
 
 export function createAnswerInboxCard(getHost: () => Host): any {

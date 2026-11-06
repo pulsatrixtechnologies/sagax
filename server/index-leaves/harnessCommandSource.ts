@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** harnessCommandSource (#1388). Pure move from server/index.ts. */
+import { harnessEngineFor } from "../harness-commands.ts";
 export type Host = Record<string, any>;
 
 export function createHarnessCommandSource(getHost: () => Host): any {

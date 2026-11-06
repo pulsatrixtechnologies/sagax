@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** voicePickForTurn (#1388). Pure move from server/index.ts. */
+import { pickVoiceModel } from "../models/model-auto.ts";
 export type Host = Record<string, any>;
 
 export function createVoicePickForTurn(getHost: () => Host): any {

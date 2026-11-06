@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** runRoutes (#1388). Pure move from server/index.ts. */
+import { ROUTES, dispatchRoutes } from "../routes/table.ts";
+import { BODY_YIELD_BYTES, estimateJsonBytes, json, readBody, yieldToEventLoop } from "../harness/http.ts";
 export type Host = Record<string, any>;
 
 export function createRunRoutes(getHost: () => Host): any {

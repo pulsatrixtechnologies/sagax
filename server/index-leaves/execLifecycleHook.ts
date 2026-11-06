@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** execLifecycleHook (#1388). Pure move from server/index.ts. */
+import { join } from "node:path";
+import { commandWithFiles } from "../hooks/lifecycle-hooks.ts";
 export type Host = Record<string, any>;
 
 export function createExecLifecycleHook(getHost: () => Host): any {

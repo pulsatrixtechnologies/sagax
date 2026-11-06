@@ -3,8 +3,9 @@
 export type Host = Record<string, any>;
 
 export function createAccountConnectorInput(getHost: () => Host): any {
-function accountConnectorInput(bot: BotRecord, instance: { instanceId: string; driverKind: string }, speaker: TurnSpeaker, via?: TurnAccess["via"], slot: LoginSlot = turnSlotFor(bot, instance)) {
+function accountConnectorInput(bot: BotRecord, instance: { instanceId: string; driverKind: string }, speaker: TurnSpeaker, via?: TurnAccess["via"], slot?: LoginSlot) {
   const host = getHost();
+  slot ??= host.turnSlotFor(bot, instance);
   const { resolveEngineAccess } = host;
   let planned = via;
   let payerPrincipalId: string | undefined;

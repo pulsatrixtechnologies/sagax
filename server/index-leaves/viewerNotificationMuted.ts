@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** viewerNotificationMuted (#1388). Pure move from server/index.ts. */
+import { viewerWantsBotNotification } from "../../shared/viewer-bot-overrides.ts";
 export type Host = Record<string, any>;
 
 export function createViewerNotificationMuted(getHost: () => Host): any {

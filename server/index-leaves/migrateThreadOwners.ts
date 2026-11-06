@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** migrateThreadOwners (#1388). Pure move from server/index.ts. */
+import { migrationLogLine, planThreadOwners } from "../threads/thread-privacy.ts";
 export type Host = Record<string, any>;
 
 export function createMigrateThreadOwners(getHost: () => Host): any {

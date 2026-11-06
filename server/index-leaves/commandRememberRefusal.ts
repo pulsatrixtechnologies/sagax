@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** commandRememberRefusal (#1388). Pure move from server/index.ts. */
+import { cardStandingGrants } from "../exec-target.ts";
 export type Host = Record<string, any>;
 
 export function createCommandRememberRefusal(getHost: () => Host): any {

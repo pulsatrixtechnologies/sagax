@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** bindTurnComputer (#1388). Pure move from server/index.ts. */
+import { computerFreeAfterText, computerParkedText, computerStoppedWaitingText, computerWaitingText } from "../computer/computer-wait.ts";
+import { computerKindForResource } from "../managed-policy.ts";
 export type Host = Record<string, any>;
 
 export function createBindTurnComputer(getHost: () => Host): any {

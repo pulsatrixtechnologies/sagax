@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** streamDigestPrompt (#1388). Pure move from server/index.ts. */
+import { STREAM_FULL_ENTRIES, composeStreamDigest } from "../streams/single-stream.ts";
 export type Host = Record<string, any>;
 
 export function createStreamDigestPrompt(getHost: () => Host): any {

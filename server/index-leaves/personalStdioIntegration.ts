@@ -14,7 +14,7 @@ function personalStdioIntegration(botId: string, threadId: string, generation: s
   return {
     command: process.execPath,
     args: [host.SPAWNED_PROXIES.userSandbox],
-    env: { ...AGENTS_NODE_FLAG, SAGAX_SANDBOX_TOKEN: token, SAGAX_HARNESS_URL: `http://127.0.0.1:${PORT}`, SAGAX_TOOL_SERVER: host.PERSONAL_STDIO_TOOL_SERVER }
+    env: { ...host.AGENTS_NODE_FLAG, SAGAX_SANDBOX_TOKEN: token, SAGAX_HARNESS_URL: `http://127.0.0.1:${host.PORT}`, SAGAX_TOOL_SERVER: host.PERSONAL_STDIO_TOOL_SERVER }
   };
 
 }

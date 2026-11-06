@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** settleConfidentialMemoryCard (#1388). Pure move from server/index.ts. */
+import { cwActionLanguage } from "../widgets/cw-widget-actions.ts";
 export type Host = Record<string, any>;
 
 export function createSettleConfidentialMemoryCard(getHost: () => Host): any {

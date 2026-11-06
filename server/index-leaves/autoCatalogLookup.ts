@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** autoCatalogLookup (#1388). Pure move from server/index.ts. */
+import { bareModelId, familyOfModel } from "../models/model-auto.ts";
 export type Host = Record<string, any>;
 
 export function createAutoCatalogLookup(getHost: () => Host): any {

@@ -1,11 +1,15 @@
 // @ts-nocheck
 /** configStatus (#1388). Pure move from server/index.ts. */
+import {  boatComputerEnabled, dataWindowEnabled, decisionModelEnabled, maxConcurrentBotThreads, maxParallelTasksPerPerson, openCodeProviderKeys, roomMemoryCaptureEnabled, routineGroupSettingsEnabled, showToolCallsEnabled, skillReviewEnabled, skillReviewSteps, templatesEnabled, threadEventLogRetentionDays, vpsComputerEnabled, vpsSshAlias, threadEventLogMaxBytes } from "../config.ts";
+import { editionStatus, workspaceMembership } from "../enterprise.ts";
+import { describeDecider } from "../decider/index.ts";
+import { claudeUserSkillsEnabled } from "../turn-settings.ts";
 export type Host = Record<string, any>;
 
 export function createConfigStatus(getHost: () => Host): any {
 function configStatus() {
   const host = getHost();
-  const { autoRecallEnabled, avatarImageStatus, builtInBrowserEnabled, cacheKeepWarmSettings, claudeUserMcpEnabled, decisionRetentionDays, editionStatus, liveSettingsFor, llmThreadTitlesEnabled, localVmIdleTimeoutMinutes, localVmMaxInstances, localVmMode, mcpCallTimeoutMinutes, meetingNotetakerEnabled, roomTurnTimeoutMinutes, routinesInConversationEnabled, savedStepsEnabled, semanticRecallEnabled, sharedComputersEnabled, skillAuthoringEnabled, skillsLibraryEnabled, threadEventLogMaxBytes } = host;
+  const { autoRecallEnabled, avatarImageStatus, builtInBrowserEnabled, cacheKeepWarmSettings, claudeUserMcpEnabled, decisionRetentionDays, liveSettingsFor, llmThreadTitlesEnabled, localVmIdleTimeoutMinutes, localVmMaxInstances, localVmMode, mcpCallTimeoutMinutes, meetingNotetakerEnabled, roomTurnTimeoutMinutes, routinesInConversationEnabled, savedStepsEnabled, semanticRecallEnabled, sharedComputersEnabled, skillAuthoringEnabled, skillsLibraryEnabled } = host;
   // off-by-default thread cleanup knobs stay absent so clients can tell
   // "unset" apart from any in-range value
   const eventLogMaxBytes = threadEventLogMaxBytes(host.cfg);
@@ -88,6 +92,8 @@ function configStatus() {
     },
     features: {
       skillAuthoring: skillAuthoringEnabled(host.cfg),
+      skillReview: skillReviewEnabled(host.cfg),
+      skillReviewSteps: skillReviewSteps(host.cfg),
       skillsLibrary: skillsLibraryEnabled(host.cfg),
       showToolCalls: showToolCallsEnabled(host.cfg),
       routinesInConversation: routinesInConversationEnabled(host.cfg),
@@ -99,6 +105,7 @@ function configStatus() {
       meetingNotetaker: meetingNotetakerEnabled(host.cfg),
       routineGroupSettings: routineGroupSettingsEnabled(host.cfg),
       browser: builtInBrowserEnabled(host.cfg),
+      connectedApps: host.cfg.features?.connectedApps === true,
       // Maintainer-only escape hatch, not a Settings toggle: the desktop
       // shell and the Settings UI read it so they offer nothing this server
       // would refuse.
@@ -106,7 +113,10 @@ function configStatus() {
       // Capabilities > Installed switch: Claude bots also see this machine's
       // own Claude Code MCP servers
       claudeUserMcp: claudeUserMcpEnabled(host.cfg, host.IDENTITY.kind === "perspicax"),
+      // Off unless true: personal Claude Code skills via --add-dir
+      claudeUserSkills: claudeUserSkillsEnabled(host.cfg),
       autoRecall: autoRecallEnabled(host.cfg),
+      roomMemoryCapture: roomMemoryCaptureEnabled(host.cfg),
       // hand-edited config.json only; the thread menu offers Regenerate title from it
       llmThreadTitles: llmThreadTitlesEnabled(host.cfg),
       savedSteps: savedStepsEnabled(host.cfg),

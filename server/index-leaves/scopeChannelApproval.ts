@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** scopeChannelApproval (#1388). Pure move from server/index.ts. */
+import { approvalAudience, receivesApprovalCard } from "../approvals/approval-audience.ts";
 export type Host = Record<string, any>;
 
 export function createScopeChannelApproval(getHost: () => Host): any {

@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** packageImportDeps (#1388). Pure move from server/index.ts. */
+import { saveImage } from "../attachments/attachments.ts";
 export type Host = Record<string, any>;
 
 export function createPackageImportDeps(getHost: () => Host): any {

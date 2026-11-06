@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** sendSkillResolution (#1388). Pure move from server/index.ts. */
+import { json } from "../harness/http.ts";
 export type Host = Record<string, any>;
 
 export function createSendSkillResolution(getHost: () => Host): any {

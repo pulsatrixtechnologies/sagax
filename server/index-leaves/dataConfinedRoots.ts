@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** dataConfinedRoots (#1388). Pure move from server/index.ts. */
+import { join } from "node:path";
+import { dataScopeAudience, dataScopeBotId, dataScopeKind, dataScopeThread } from "../data/scope.ts";
 export type Host = Record<string, any>;
 
 export function createDataConfinedRoots(getHost: () => Host): any {

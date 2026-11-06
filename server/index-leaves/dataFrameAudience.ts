@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** dataFrameAudience (#1388). Pure move from server/index.ts. */
+import { dataScopeAudience, dataScopeKind, dataScopeThread } from "../data/scope.ts";
 export type Host = Record<string, any>;
 
 export function createDataFrameAudience(getHost: () => Host): any {

@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** memoryPromptFor (#1388). Pure move from server/index.ts. */
+import { memorySystemPrompt } from "../workspace/workspace.ts";
 export type Host = Record<string, any>;
 
 export function createMemoryPromptFor(getHost: () => Host): any {

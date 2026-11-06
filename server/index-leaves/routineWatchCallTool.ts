@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** routineWatchCallTool (#1388). Pure move from server/index.ts. */
+import { parseToolId } from "../../shared/approval-describe.ts";
 export type Host = Record<string, any>;
 
 export function createRoutineWatchCallTool(getHost: () => Host): any {

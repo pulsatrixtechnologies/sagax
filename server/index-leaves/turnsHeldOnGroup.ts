@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** turnsHeldOnGroup (#1388). Pure move from server/index.ts. */
+import { turnsOpenForMembership } from "../workers.ts";
 export type Host = Record<string, any>;
 
 export function createTurnsHeldOnGroup(getHost: () => Host): any {

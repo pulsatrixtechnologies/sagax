@@ -1,11 +1,13 @@
 // @ts-nocheck
 /** agentApiStageFiles (#1388). Pure move from server/index.ts. */
+import { mkdirSync, existsSync, writeFileSync } from "node:fs";
+import { join, basename } from "node:path";
 export type Host = Record<string, any>;
 
 export function createAgentApiStageFiles(getHost: () => Host): any {
 function agentApiStageFiles(caller: AgentCaller, target: BotRecord, files: FileInput[]) {
   const host = getHost();
-  const { agentRefuse, basename, existsSync, workspaceDir, writeFileSync } = host;
+  const { agentRefuse, workspaceDir } = host;
   if (!files.length) return [];
   const from = host.agentApiCallerBot(caller);
   const slug = (caller.name || caller.id).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "agent";

@@ -1,12 +1,12 @@
 // @ts-nocheck
 /** sessionBearer (#1388). Pure move from server/index.ts. */
+import { randomBytes } from "node:crypto";
 export type Host = Record<string, any>;
 
 export function createSessionBearer(getHost: () => Host): any {
 function sessionBearer(capability: Omit<InternalCapability, "orphanExpiresAt">) {
   const host = getHost();
-  const { randomBytes } = host;
-
+  
   const credentials = host.sessionCredentials.get(capability.threadId) ?? new Map<string, { grants: string; token: string }>();
   host.sessionCredentials.set(capability.threadId, credentials);
   const slot = `${capability.botId} ${capability.kind}`;

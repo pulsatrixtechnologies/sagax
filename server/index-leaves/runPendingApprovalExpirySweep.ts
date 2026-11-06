@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** runPendingApprovalExpirySweep (#1388). Pure move from server/index.ts. */
+import { sweepPendingApprovalExpiry } from "../approvals/pending-approval-expiry.ts";
 export type Host = Record<string, any>;
 
 export function createRunPendingApprovalExpirySweep(getHost: () => Host): any {

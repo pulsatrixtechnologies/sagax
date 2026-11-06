@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** runLifecycleEvent (#1388). Pure move from server/index.ts. */
+import { chooseHookTarget, dispatchLifecycleHooks, lifecycleEvent } from "../hooks/lifecycle-hooks.ts";
 export type Host = Record<string, any>;
 
 export function createRunLifecycleEvent(getHost: () => Host): any {

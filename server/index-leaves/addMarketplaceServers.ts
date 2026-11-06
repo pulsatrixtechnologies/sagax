@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** addMarketplaceServers (#1388). Pure move from server/index.ts. */
+import { marketplaceServerName } from "../plugins/plugin-marketplaces.ts";
 export type Host = Record<string, any>;
 
 export function createAddMarketplaceServers(getHost: () => Host): any {

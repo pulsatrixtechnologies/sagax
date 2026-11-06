@@ -34,6 +34,7 @@ function publicGroupState(record: GroupRecord) {
     // apart from a partial patch that did not mention the field.
     turnTimeoutMinutes: record.turnTimeoutMinutes ?? null,
     usage: usage ?? null,
+    memberContext: host.roomMemberContexts.forThread(group.threadId) ?? null,
     busyBotId: currentSpeaker?.botId ?? (activeWorking ? record.busyBotId : null),
     // The room works while any of its tasks does, a background goal's too:
     // the sidebar, a call and Stop read this.

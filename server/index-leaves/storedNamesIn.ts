@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** storedNamesIn (#1388). Pure move from server/index.ts. */
+import { sep } from "node:path";
+import { ATTACHMENTS_DIR } from "../attachments/attachments.ts";
 export type Host = Record<string, any>;
 
 export function createStoredNamesIn(getHost: () => Host): any {

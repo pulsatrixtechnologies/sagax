@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** failQueuedMessage (#1388). Pure move from server/index.ts. */
+import { failTurnOnMembershipRemoval, failTurnOnWorkerClose } from "../workers.ts";
 export type Host = Record<string, any>;
 
 export function createFailQueuedMessage(getHost: () => Host): any {

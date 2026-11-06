@@ -1,11 +1,13 @@
 // @ts-nocheck
 /** agentApiSecret (#1388). Pure move from server/index.ts. */
+import { randomBytes } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 export type Host = Record<string, any>;
 
 export function createAgentApiSecret(getHost: () => Host): any {
 function agentApiSecret() {
   const host = getHost();
-  const { DATA_DIR, randomBytes, readFileSync, writeFileSync } = host;
+  const { DATA_DIR } = host;
   try {
     const existing = readFileSync(host.AGENT_API_KEY_FILE);
     if (existing.length >= 32) return existing;

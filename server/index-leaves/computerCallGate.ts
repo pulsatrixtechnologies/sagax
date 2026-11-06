@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** computerCallGate (#1388). Pure move from server/index.ts. */
+import { computerPersonAwayText } from "../computer/computer-wait.ts";
+import { CONTROL_BUSY, CONTROL_HANDED_BACK, CONTROL_WAITED } from "../control-client.ts";
 export type Host = Record<string, any>;
 
 export function createComputerCallGate(getHost: () => Host): any {

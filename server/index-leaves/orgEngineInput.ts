@@ -3,8 +3,9 @@
 export type Host = Record<string, any>;
 
 export function createOrgEngineInput(getHost: () => Host): any {
-function orgEngineInput(bot: BotRecord, instance: { instanceId: string; driverKind: string }, speaker: TurnSpeaker, slot: LoginSlot = turnSlotFor(bot, instance)) {
+function orgEngineInput(bot: BotRecord, instance: { instanceId: string; driverKind: string }, speaker: TurnSpeaker, slot?: LoginSlot) {
   const host = getHost();
+  slot ??= host.turnSlotFor(bot, instance);
   const { DATA_DIR, driverKeyBacked, orgPersonFacts } = host;
   const ownerId = host.effectiveBotOwner(bot);
   const owner = host.principals.byId(ownerId);

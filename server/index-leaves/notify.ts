@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** notify (#1388). Pure move from server/index.ts. */
+import { quietForCall } from "../notify.ts";
+import { CONFIDENTIAL_NOTICE_BODY } from "../threads/confidential-threads.ts";
 export type Host = Record<string, any>;
 
 export function createNotify(getHost: () => Host): any {

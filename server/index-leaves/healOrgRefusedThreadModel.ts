@@ -19,7 +19,7 @@ function healOrgRefusedThreadModel(botId: string, threadId: string, speaker: Tur
   const person = (refusal.payerPrincipalId && host.principals.byId(refusal.payerPrincipalId)?.name) || "the person this turn runs for";
   console.error(`[omb-turn] bot=${botId} thread model on ${own.instanceId} has no credentials here, now on ${bot.modelSelection.instanceId}`);
   host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: {
-    name: `notice: This thread's model (${modelName(own)}) cannot run on this server: ${engineDisplayName(mine)} has no credentials here for ${person}. It now uses ${bot.name}'s model (${modelName(bot.modelSelection)}).`,
+    name: `notice: This thread's model (${modelName(own)}) cannot run on this server: ${host.engineDisplayName(mine)} has no credentials here for ${person}. It now uses ${bot.name}'s model (${modelName(bot.modelSelection)}).`,
     ok: true
   } });
 

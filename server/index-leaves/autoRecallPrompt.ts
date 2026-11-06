@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** autoRecallPrompt (#1388). Pure move from server/index.ts. */
+import { buildRecall } from "../recall/recall.ts";
 export type Host = Record<string, any>;
 
 export function createAutoRecallPrompt(getHost: () => Host): any {

@@ -1,5 +1,11 @@
 // @ts-nocheck
 /** journalRowsFor (#1388). Pure move from server/index.ts. */
+import { JOURNAL_SELF } from "../../shared/action-journal.ts";
+import { join } from "node:path";
+import { statSync } from "node:fs";
+import { buildJournal } from "../action-journal.ts";
+import { readAdminActivityRange } from "../activity/admin-activity.ts";
+import { actorLabel } from "../decision-log.ts";
 export type Host = Record<string, any>;
 
 export function createJournalRowsFor(getHost: () => Host): any {

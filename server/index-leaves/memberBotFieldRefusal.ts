@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** memberBotFieldRefusal (#1388). Pure move from server/index.ts. */
+import { BOT_FIELD_PERMISSIONS } from "../../shared/permissions.ts";
 export type Host = Record<string, any>;
 
 export function createMemberBotFieldRefusal(getHost: () => Host): any {

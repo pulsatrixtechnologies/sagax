@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** memberDefaultSelection (#1388). Pure move from server/index.ts. */
+import { instancesForPerson, memberNewBotSelection, starredModelSelections } from "../models/default-model-selection.ts";
 export type Host = Record<string, any>;
 
 export function createMemberDefaultSelection(getHost: () => Host): any {

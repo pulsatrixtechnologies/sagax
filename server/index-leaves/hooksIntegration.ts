@@ -16,7 +16,7 @@ function hooksIntegration(botId: string, threadId: string, generation: string): 
     createdBots: 0,
     openedThreads: 0
   });
-  return { url: `http://127.0.0.1:${PORT}`, token };
+  return { url: `http://127.0.0.1:${host.PORT}`, token };
 
 }
   return hooksIntegration;

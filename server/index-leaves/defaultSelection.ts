@@ -1,10 +1,12 @@
 // @ts-nocheck
 /** defaultSelection (#1388). Pure move from server/index.ts. */
+import { selectDefaultModelSelection } from "../models/default-model-selection.ts";
 export type Host = Record<string, any>;
 
 export function createDefaultSelection(getHost: () => Host): any {
-async function defaultSelection(saved: ModelSelection | null = cfg.defaultModelSelection ?? null, instances?: readonly SelectableInstance[]) {
+async function defaultSelection(saved?: ModelSelection | null, instances?: readonly SelectableInstance[]) {
   const host = getHost();
+  saved ??= host.cfg.defaultModelSelection ?? null;
 
   if (host.hostedModels) return host.hostedModels.select(saved ?? undefined);
   return selectDefaultModelSelection(host.selectableInstances<SelectableInstance>(instances ?? await host.registry.describe()), saved ?? undefined, {

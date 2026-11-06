@@ -1,11 +1,13 @@
 // @ts-nocheck
 /** privateFolderThread (#1388). Pure move from server/index.ts. */
+import { join } from "node:path";
+import { realpathSync } from "node:fs";
 export type Host = Record<string, any>;
 
 export function createPrivateFolderThread(getHost: () => Host): any {
 function privateFolderThread(botId: string, threadId: string) {
   const host = getHost();
-  const { TASK_WORKSPACES_DIR, realpathSync } = host;
+  const { TASK_WORKSPACES_DIR } = host;
 
   const task = host.store.taskByThread(botId, threadId);
   if (!task) return false;

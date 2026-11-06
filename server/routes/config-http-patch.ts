@@ -3,6 +3,28 @@
  * /api/config write pipeline (#1388): named steps of applyConfigHttpPatch.
  * Pure move out of server/index.ts; behaviour unchanged. Never imports index.ts.
  */
+import { browserSessionId } from "../browser/browser-engine.ts";
+import { finalizeBrowserCleanupMutation, requireBrowserCleanupAcknowledged } from "../browser/browser-lifecycle-cleanup.ts";
+import { boatAccountResourceChangeError, vpsAliasResourceChangeError } from "../cloud-backend.ts";
+import {
+  browserProfilePartitionTarget,
+  browserProfileReplacementConflict,
+  builtInBrowserEnabled,
+  changedInstanceIds,
+  engineLaunches,
+  foldGrokVoiceKeyPatch,
+  grokVoiceKeyFoldMessage,
+  loadConfig,
+  localVmMode,
+  meetingNotetakerEnabled,
+  mergeOpenCodeProviderKeys,
+  parseConfigPatch,
+  saveConfig,
+  syncCredentialEnv,
+  vpsSshAlias,
+} from "../config.ts";
+import { deciderIncludedHere, deciderSavePatch } from "../decider/index.ts";
+import { parseSkillMd } from "../../shared/skill-md.ts";
 import type { ConfigWriteContext } from "./config-http.ts";
 
 export type ConfigHttpPatchHost = Record<string, any>;

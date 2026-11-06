@@ -1,5 +1,8 @@
 // @ts-nocheck
 /** inboxTestRule (#1388). Pure move from server/index.ts. */
+import { RULE_TEST_DAYS } from "../../shared/action-journal.ts";
+import { compileRule } from "../../shared/custom-rules.ts";
+import { replayable, testRuleOnJournal } from "../action-journal.ts";
 export type Host = Record<string, any>;
 
 export function createInboxTestRule(getHost: () => Host): any {

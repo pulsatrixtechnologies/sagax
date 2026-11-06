@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** stepUpGate (#1388). Pure move from server/index.ts. */
+import { approvalStepUp } from "../auth/step-up-gate.ts";
 export type Host = Record<string, any>;
 
 export function createStepUpGate(getHost: () => Host): any {

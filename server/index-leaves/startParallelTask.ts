@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** startParallelTask (#1388). Pure move from server/index.ts. */
+import { join } from "node:path";
+import { parallelAdmission, parallelBrief, parallelResourceBlocked, parallelTaskTitle, prepareParallelWorkspace } from "../parallel-tasks.ts";
 export type Host = Record<string, any>;
 
 export function createStartParallelTask(getHost: () => Host): any {

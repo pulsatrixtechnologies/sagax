@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** orgVisibleSections (#1388). Pure move from server/index.ts. */
+import { sectionRole } from "../auth/authz.ts";
 export type Host = Record<string, any>;
 
 export function createOrgVisibleSections(getHost: () => Host): any {

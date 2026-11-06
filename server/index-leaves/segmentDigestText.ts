@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** segmentDigestText (#1388). Pure move from server/index.ts. */
+import { extractSegmentDigest } from "../streams/single-stream.ts";
 export type Host = Record<string, any>;
 
 export function createSegmentDigestText(getHost: () => Host): any {

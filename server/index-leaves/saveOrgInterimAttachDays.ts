@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** saveOrgInterimAttachDays (#1388). Pure move from server/index.ts. */
+import { windowWithDays } from "../interim-attach-routes.ts";
 export type Host = Record<string, any>;
 
 export function createSaveOrgInterimAttachDays(getHost: () => Host): any {

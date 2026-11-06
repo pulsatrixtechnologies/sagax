@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** attachInterimPerson (#1388). Pure move from server/index.ts. */
+import { directFromGrants } from "../store.ts";
 export type Host = Record<string, any>;
 
 export function createAttachInterimPerson(getHost: () => Host): any {

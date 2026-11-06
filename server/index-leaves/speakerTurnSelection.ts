@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** speakerTurnSelection (#1388). Pure move from server/index.ts. */
+import { pickEquivalentModel, tierOfModel } from "../models/model-auto.ts";
+import { starredModelSelections } from "../models/default-model-selection.ts";
 export type Host = Record<string, any>;
 
 export function createSpeakerTurnSelection(getHost: () => Host): any {

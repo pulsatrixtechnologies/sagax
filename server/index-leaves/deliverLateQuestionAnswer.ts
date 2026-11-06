@@ -1,5 +1,8 @@
 // @ts-nocheck
 /** deliverLateQuestionAnswer (#1388). Pure move from server/index.ts. */
+import { queueChannelMessage, queuedChannelMessage } from "../rooms/channel-queue.ts";
+import { queuedSteeredMessage } from "../turns/steer-queue.ts";
+import { createHash } from "node:crypto";
 export type Host = Record<string, any>;
 
 export function createDeliverLateQuestionAnswer(getHost: () => Host): any {

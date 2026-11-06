@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** guardedRequestSnapshot (#1388). Pure move from server/index.ts. */
+import { guardedRequestPath, requestNeedsInput } from "../auth/guarded-requests.ts";
 export type Host = Record<string, any>;
 
 export function createGuardedRequestSnapshot(getHost: () => Host): any {

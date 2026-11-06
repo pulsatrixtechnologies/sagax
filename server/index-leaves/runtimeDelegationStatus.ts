@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** runtimeDelegationStatus (#1388). Pure move from server/index.ts. */
+import { peerStatus } from "../peers/peer-roster.ts";
+import { summarizeDelegatedActivity } from "../peers/delegation-receipts.ts";
 export type Host = Record<string, any>;
 
 export function createRuntimeDelegationStatus(getHost: () => Host): any {

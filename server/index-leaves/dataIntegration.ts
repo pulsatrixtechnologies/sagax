@@ -18,7 +18,7 @@ function dataIntegration(botId: string, turn: { threadId: string; generation: st
   const token = host.mintInternalCapability({ botId, ...turn, kind: "data", depth: 0, skillAuthoring: false, createdBots: 0, openedThreads: 0 });
   return {
     command: process.execPath, args: [host.SPAWNED_PROXIES.harnessMcp, "data"], env: {
-      ...AGENTS_NODE_FLAG, SAGAX_MCP_TOKEN: token, SAGAX_HARNESS_URL: `http://127.0.0.1:${PORT}`
+      ...host.AGENTS_NODE_FLAG, SAGAX_MCP_TOKEN: token, SAGAX_HARNESS_URL: `http://127.0.0.1:${host.PORT}`
     }
   };
 

@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** proposalPersistence (#1388). Pure move from server/index.ts. */
+import { safetyIsArmed } from "../safety/safety-review.ts";
 export type Host = Record<string, any>;
 
 export function createProposalPersistence(getHost: () => Host): any {

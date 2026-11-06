@@ -1,11 +1,15 @@
 // @ts-nocheck
 /** wipeConfidentialThread (#1388). Pure move from server/index.ts. */
+import { join } from "node:path";
+import { threadScopeKeyFor } from "../data/scope.ts";
+import { rmSync, writeFileSync } from "node:fs";
+import { CONFIDENTIAL_FORGOTTEN_MARKER } from "../workspace-backup.ts";
 export type Host = Record<string, any>;
 
 export function createWipeConfidentialThread(getHost: () => Host): any {
 function wipeConfidentialThread(botId: string, threadId: string, attachmentNames: readonly string[], engineKeys: readonly string[]) {
   const host = getHost();
-  const { ATTACHMENTS_DIR, DATA_DIR, TASK_WORKSPACES_DIR, dataEngine, rmSync, writeFileSync } = host;
+  const { ATTACHMENTS_DIR, DATA_DIR, TASK_WORKSPACES_DIR, dataEngine } = host;
   if (host.deletedConfidentialThreads.size >= 10_000) host.deletedConfidentialThreads.clear();
   host.deletedConfidentialThreads.add(threadId);
   // the engines' own transcripts of it (a caller deleting several threads

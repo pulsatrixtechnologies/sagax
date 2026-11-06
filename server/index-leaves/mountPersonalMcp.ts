@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** mountPersonalMcp (#1388). Pure move from server/index.ts. */
+import { personalMcpPrecheck } from "../turns/turn-mounts.ts";
 export type Host = Record<string, any>;
 
 export function createMountPersonalMcp(getHost: () => Host): any {

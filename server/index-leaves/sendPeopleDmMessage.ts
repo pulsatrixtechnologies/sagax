@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** sendPeopleDmMessage (#1388). Pure move from server/index.ts. */
+import { parseSendId } from "../messages/send-idempotency.ts";
 export type Host = Record<string, any>;
 
 export function createSendPeopleDmMessage(getHost: () => Host): any {

@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** pendingExpireDaysForPerson (#1388). Pure move from server/index.ts. */
+import { pendingApprovalExpireDays } from "../approvals/pending-approval-expiry.ts";
 export type Host = Record<string, any>;
 
 export function createPendingExpireDaysForPerson(getHost: () => Host): any {

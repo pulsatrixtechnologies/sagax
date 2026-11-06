@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** migrateCapabilitiesConfigStores (#1388). Pure move from server/index.ts. */
+import { discoverBotPluginIds, discoverPersonIds } from "../capabilities/capabilities-store-migration.ts";
+import { makeInstallationCapabilityBridge, setInstallationCapabilityBridge } from "../capabilities/installation-capability-bridge.ts";
 export type Host = Record<string, any>;
 
 export function createMigrateCapabilitiesConfigStores(getHost: () => Host): any {
@@ -13,7 +15,7 @@ function migrateCapabilitiesConfigStores() {
       bots: host.botCapabilityStore,
       installation: host.installationCapabilityStore,
       botIds: () => [...new Set([...store.bots.map((bot) => bot.id), ...discoverBotPluginIds(DATA_DIR)])],
-      personIds: () => host.discoverPersonIds(DATA_DIR),
+      personIds: () => discoverPersonIds(DATA_DIR),
       assignedSkillsFor: (botId) => host.store.bot(botId)?.assignedSkills ?? [],
       readMcpServers: () => (host.cfg.mcpServers ?? {}) as Record<string, unknown>,
       clearMcpServers: () => {
@@ -22,7 +24,7 @@ function migrateCapabilitiesConfigStores() {
       },
       githubCredentialsMigrated: () => host.githubCredentialsMigrated
     });
-    host.setInstallationCapabilityBridge(host.makeInstallationCapabilityBridge(host.installationCapabilityStore));
+    setInstallationCapabilityBridge(makeInstallationCapabilityBridge(host.installationCapabilityStore));
     try {
       if (host.installationCapabilityStore.hasMigrated("config-mcp-servers")) {
         host.cfg.mcpServers = host.installationCapabilityStore.read().mcpServers as typeof host.cfg.mcpServers;

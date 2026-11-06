@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** autoPickForTurn (#1388). Pure move from server/index.ts. */
+import { pickOrchestrationModel, pickWorkerModel } from "../models/model-auto.ts";
+import { statSync } from "node:fs";
 export type Host = Record<string, any>;
 
 export function createAutoPickForTurn(getHost: () => Host): any {

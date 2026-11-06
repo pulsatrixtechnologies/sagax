@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** threadReadsFor (#1388). Pure move from server/index.ts. */
+import { readsVisibleTo } from "../messages/read-receipts.ts";
 export type Host = Record<string, any>;
 
 export function createThreadReadsFor(getHost: () => Host): any {

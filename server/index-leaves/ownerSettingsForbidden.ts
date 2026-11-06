@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** ownerSettingsForbidden (#1388). Pure move from server/index.ts. */
+import { crossOwnerSettingsRefusal } from "../../shared/viewer-bot-overrides.ts";
 export type Host = Record<string, any>;
 
 export function createOwnerSettingsForbidden(getHost: () => Host): any {

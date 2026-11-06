@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** engineHomes (#1388). Pure move from server/index.ts. */
+import { distinctHomes, environmentEngineHomes } from "../engines/engine-transcripts.ts";
 export type Host = Record<string, any>;
 
 export function createEngineHomes(getHost: () => Host): any {

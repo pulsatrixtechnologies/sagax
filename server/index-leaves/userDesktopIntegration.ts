@@ -12,7 +12,7 @@ function userDesktopIntegration(botId: string, threadId: string, generation: str
   return {
     command: process.execPath,
     args: [host.SPAWNED_PROXIES.userSandbox],
-    env: { ...AGENTS_NODE_FLAG, SAGAX_SANDBOX_TOKEN: token, SAGAX_HARNESS_URL: `http://127.0.0.1:${PORT}`, SAGAX_TOOL_SERVER: host.DESKTOP_BRIDGE_MCP_NAME }
+    env: { ...host.AGENTS_NODE_FLAG, SAGAX_SANDBOX_TOKEN: token, SAGAX_HARNESS_URL: `http://127.0.0.1:${host.PORT}`, SAGAX_TOOL_SERVER: host.DESKTOP_BRIDGE_MCP_NAME }
   };
 
 }

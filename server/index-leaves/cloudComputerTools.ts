@@ -10,7 +10,7 @@ function cloudComputerTools(botId: string, owner: TurnOwner, boxId: string | nul
   return {
     command: process.execPath,
     args: [host.SPAWNED_PROXIES.harnessMcp, "computer"],
-    env: { ...AGENTS_NODE_FLAG, SAGAX_HARNESS_URL: `http://127.0.0.1:${PORT}`, SAGAX_MCP_TOKEN: control.token },
+    env: { ...host.AGENTS_NODE_FLAG, SAGAX_HARNESS_URL: `http://127.0.0.1:${host.PORT}`, SAGAX_MCP_TOKEN: control.token },
     platform: "linux"
   };
 

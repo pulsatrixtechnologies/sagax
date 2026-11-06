@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** primaryTurnGate (#1388). Pure move from server/index.ts. */
+import { actorForTurn } from "../../shared/bot-act.ts";
 export type Host = Record<string, any>;
 
 export function createPrimaryTurnGate(getHost: () => Host): any {

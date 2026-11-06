@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** applyAutoReviewDefault (#1388). Pure move from server/index.ts. */
+import { hasNativeAutoReview } from "../../shared/approval-mode.ts";
+import { autoReviewThreadMode } from "../bots/bot-settings.ts";
 export type Host = Record<string, any>;
 
 export function createApplyAutoReviewDefault(getHost: () => Host): any {

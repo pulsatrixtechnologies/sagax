@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** recentWorkFor (#1388). Pure move from server/index.ts. */
+import { recentWork } from "../recent-work.ts";
 export type Host = Record<string, any>;
 
 export function createRecentWorkFor(getHost: () => Host): any {

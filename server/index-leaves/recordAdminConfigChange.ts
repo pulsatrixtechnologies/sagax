@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** recordAdminConfigChange (#1388). Pure move from server/index.ts. */
+import { configChangeRows, signInListsOf } from "../activity/admin-activity.ts";
 export type Host = Record<string, any>;
 
 export function createRecordAdminConfigChange(getHost: () => Host): any {

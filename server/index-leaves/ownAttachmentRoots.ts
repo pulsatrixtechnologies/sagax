@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** ownAttachmentRoots (#1388). Pure move from server/index.ts. */
+import { normalizedDestinationPath } from "../people/member-environment.ts";
+import { USER_SANDBOX_MCP_NAME } from "../sandbox/user-sandbox-routing.ts";
 export type Host = Record<string, any>;
 
 export function createOwnAttachmentRoots(getHost: () => Host): any {

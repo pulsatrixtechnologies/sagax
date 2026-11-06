@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** updateInstallationPlugin (#1388). Pure move from server/index.ts. */
+import { planServerUpdate } from "../plugins/plugin-marketplaces.ts";
+import { updateLibrarySkill } from "../skills/skill-library.ts";
 export type Host = Record<string, any>;
 
 export function createUpdateInstallationPlugin(getHost: () => Host): any {

@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** memberFrameContext (#1388). Pure move from server/index.ts. */
+import { VisibleSet } from "../bots/bot-visibility.ts";
 export type Host = Record<string, any>;
 
 export function createMemberFrameContext(getHost: () => Host): any {

@@ -1,11 +1,16 @@
 // @ts-nocheck
 /** ingestEngineHook (#1388). Pure move from server/index.ts. */
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { digestPromptLine } from "../digest.ts";
+import { lifecycleEvent } from "../hooks/lifecycle-hooks.ts";
+import { createHash } from "node:crypto";
+import { boundedContextText, MAX_SUMMARY_BYTES } from "../context/context-rebuild.ts";
 export type Host = Record<string, any>;
 
 export function createIngestEngineHook(getHost: () => Host): any {
 function ingestEngineHook(capability: InternalCapability, body: unknown): { ok: boolean; ignored?: string; context?: string; hookSpecificOutput?: unknown } {
   const host = getHost();
-  const { createHash } = host;
 
   const event = body && typeof body === "object" ? (body as { event?: unknown; payload?: unknown }) : {};
   const name = typeof event.event === "string" ? event.event : "";

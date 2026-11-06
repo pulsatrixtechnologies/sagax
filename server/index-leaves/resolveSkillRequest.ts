@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** resolveSkillRequest (#1388). Pure move from server/index.ts. */
+import { applyStagedSkillWrite, getStagedSkillWrite } from "../skills/skills.ts";
+import { createHash } from "node:crypto";
 export type Host = Record<string, any>;
 
 export function createResolveSkillRequest(getHost: () => Host): any {
@@ -15,7 +17,7 @@ function resolveSkillRequest(args: {
   | { claimed: true; status: number; error: string }
   | { claimed: true; outcome: "allowed-once" | "rejected"; alreadySettled?: true } {
   const host = getHost();
-  const { DATA_DIR, appendDecision, createHash, rejectStagedSkillWrite } = host;
+  const { DATA_DIR, appendDecision, rejectStagedSkillWrite } = host;
   const message = host.store.messagesFor(args.threadId).find(
     (candidate) => candidate.card?.requestId === args.requestId && candidate.card.skillRequest,
   );

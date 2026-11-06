@@ -1,12 +1,12 @@
 // @ts-nocheck
 /** mintInternalCapability (#1388). Pure move from server/index.ts. */
+import { randomBytes } from "node:crypto";
 export type Host = Record<string, any>;
 
 export function createMintInternalCapability(getHost: () => Host): any {
 function mintInternalCapability(capability: Omit<InternalCapability, "orphanExpiresAt" | "turnStartedAt">, { perTurn = false } = {}) {
   const host = getHost();
-  const { randomBytes } = host;
-
+  
   if (host.activeInternalGenerationByThread.get(capability.threadId) !== capability.generation) {
     throw new Error("cannot mint an integration capability for an inactive turn");
   }

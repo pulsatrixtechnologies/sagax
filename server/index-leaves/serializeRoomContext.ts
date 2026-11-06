@@ -1,5 +1,8 @@
 // @ts-nocheck
 /** serializeRoomContext (#1388). Pure move from server/index.ts. */
+import { transcriptText } from "../messages/replies.ts";
+import { digestPromptLine } from "../digest.ts";
+import { escapeNotes, peerProvenanceNote, webhookPostText } from "../peers/peer-provenance.ts";
 export type Host = Record<string, any>;
 
 export function createSerializeRoomContext(getHost: () => Host): any {

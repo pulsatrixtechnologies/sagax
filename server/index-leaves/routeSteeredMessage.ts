@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** routeSteeredMessage (#1388). Pure move from server/index.ts. */
+import { promptWithReply } from "../messages/replies.ts";
 export type Host = Record<string, any>;
 
 export function createRouteSteeredMessage(getHost: () => Host): any {
@@ -43,7 +44,7 @@ async function routeSteeredMessage(input: { botId: string; threadId: string; han
   host.store.patchMessage(input.threadId, row.id, { steered: false });
   const queued = queueSteeredMessage(input.botId, input.threadId, entry.text, {
     existingMessageId: row.id,
-    prompt: `[You set this message aside earlier to handle once your previous work was done. Handle it now.]\n${promptWithReply(entry.text, context.replyTo, context.sender?.name || cfg.profile?.name?.trim() || "User")}`,
+    prompt: `[You set this message aside earlier to handle once your previous work was done. Handle it now.]\n${promptWithReply(entry.text, context.replyTo, context.sender?.name || host.cfg.profile?.name?.trim() || "User")}`,
     ...(context.replyTo ? { replyToId: context.replyTo.id } : {}),
     sender: context.sender, trigger: context.trigger, speaker: context.speaker
   });

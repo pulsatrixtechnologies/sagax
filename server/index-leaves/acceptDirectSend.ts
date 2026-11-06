@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** acceptDirectSend (#1388). Pure move from server/index.ts. */
+import { queuedSteeredMessage } from "../turns/steer-queue.ts";
 export type Host = Record<string, any>;
 
 export function createAcceptDirectSend(getHost: () => Host): any {
@@ -54,7 +55,7 @@ async function acceptDirectSend(
             ? { ...canonical, steered: true as const }
             : canonical;
         }
-        const queued = host.queuedSteeredMessage(botId, threadId, sendId);
+        const queued = queuedSteeredMessage(botId, threadId, sendId);
         if (queued) {
           if (queued.text !== text || queued.replyToId !== replyTo?.id) {
             throw Object.assign(new Error("sendId already belongs to another message"), { status: 409 });

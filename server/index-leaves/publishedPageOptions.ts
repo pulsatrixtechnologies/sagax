@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** publishedPageOptions (#1388). Pure move from server/index.ts. */
+import { readerAssetsFrom } from "../routes/published-pages.ts";
+import { OIDC_START_PATH } from "../auth/oidc-login.ts";
 export type Host = Record<string, any>;
 
 export function createPublishedPageOptions(getHost: () => Host): any {

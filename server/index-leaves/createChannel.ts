@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** createChannel (#1388). Pure move from server/index.ts. */
+import { applyHumanIds } from "../rooms/channel-membership.ts";
 export type Host = Record<string, any>;
 
 export function createCreateChannel(getHost: () => Host): any {
@@ -21,7 +22,7 @@ function createChannel(value: unknown) {
   if (body.name !== undefined && typeof body.name !== "string") {
     throw Object.assign(new Error("channel name must be a string"), { status: 400 });
   }
-  const name = body.name?.trim() || (memberIds.length ? `${store.bot(memberIds[0])!.name} & co.` : "New group");
+  const name = body.name?.trim() || (memberIds.length ? `${host.store.bot(memberIds[0])!.name} & co.` : "New group");
   if (name.length > 100) throw Object.assign(new Error("channel name must be at most 100 characters"), { status: 400 });
   let section: string | undefined;
   if (body.section !== undefined && body.section !== null) {

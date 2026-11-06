@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** settleParallelTask (#1388). Pure move from server/index.ts. */
+import { parallelOutcome, parallelResultText } from "../parallel-tasks.ts";
 export type Host = Record<string, any>;
 
 export function createSettleParallelTask(getHost: () => Host): any {

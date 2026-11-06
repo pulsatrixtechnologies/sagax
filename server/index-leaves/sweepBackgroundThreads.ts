@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** sweepBackgroundThreads (#1388). Pure move from server/index.ts. */
+import { sweepSummary } from "../threads/background-sweep.ts";
 export type Host = Record<string, any>;
 
 export function createSweepBackgroundThreads(getHost: () => Host): any {

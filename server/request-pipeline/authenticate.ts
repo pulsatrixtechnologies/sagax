@@ -1,5 +1,17 @@
 // @ts-nocheck
 /** authenticate (#1388). Pure move from server/index.ts. */
+import { masteryRequestFacts } from "../achievements-mastery.ts";
+import { achievementRequestEvents, roomPeopleCount } from "../achievements.ts";
+import { canOnBot } from "../auth/authz.ts";
+import { IDP_REFRESH_WAIT_MS, settledWithin } from "../auth/idp-session.ts";
+import { isAccountEmail } from "../auth/principals.ts";
+import {clearSessionCookie, parseCookies, requestOrigin, requiredScope, resolveRequestAuth, routePermissions, secureTokenMatch, serializeSessionCookie} from "../auth/request-auth.ts";
+import { cookieMaxAgeSeconds, isBotActSession } from "../auth/sessions.ts";
+import { memberBody, notFoundFor, pathSubject } from "../bots/bot-visibility.ts";
+import { sharedComputersEnabled } from "../config.ts";
+import { json, onJsonBody, readBody } from "../harness/http.ts";
+import { channelViewerId } from "../rooms/channel-visibility.ts";
+import {PRE_AUTH_AFTER_RESOLVE, dispatchPreAuthRoutes} from "../routes/table.ts";
 export type Host = Record<string, any>;
 
 export function createAuthenticate(getHost: () => Host): any {

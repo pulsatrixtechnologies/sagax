@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** readyLocalVmForTurn (#1388). Pure move from server/index.ts. */
+import { localVmWakeAction } from "../computer/container-computer.ts";
 export type Host = Record<string, any>;
 
 export function createReadyLocalVmForTurn(getHost: () => Host): any {

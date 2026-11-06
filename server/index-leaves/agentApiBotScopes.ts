@@ -1,11 +1,11 @@
 // @ts-nocheck
 /** agentApiBotScopes (#1388). Pure move from server/index.ts. */
+import { readFileSync } from "node:fs";
 export type Host = Record<string, any>;
 
 export function createAgentApiBotScopes(getHost: () => Host): any {
 function agentApiBotScopes(bot: BotRecord) {
   const host = getHost();
-  const { readFileSync } = host;
 
   const fallback: AgentScope[] = bot.chiefOfStaff && !host.ownerBotsReadOnly(bot) ? ["agents.read", "agents.send", "agents.create"] : ["agents.read", "agents.send"];
   try {

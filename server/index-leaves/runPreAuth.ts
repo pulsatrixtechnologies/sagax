@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** runPreAuth (#1388). Pure move from server/index.ts. */
+import { handlePublishedPagePublic, isPagesPath } from "../routes/published-pages.ts";
+import { dispatchPreAuthRoutes } from "../routes/table.ts";
 export type Host = Record<string, any>;
 
 export function createRunPreAuth(getHost: () => Host): any {

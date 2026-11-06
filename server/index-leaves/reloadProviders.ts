@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** reloadProviders (#1388). Pure move from server/index.ts. */
+import { changedInstanceIds } from "../config.ts";
 export type Host = Record<string, any>;
 
 export function createReloadProviders(getHost: () => Host): any {

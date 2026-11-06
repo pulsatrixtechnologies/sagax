@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** mountUserSandbox (#1388). Pure move from server/index.ts. */
+import { AUTO_COMPUTER_MCP_NAME } from "../computer/auto-computer.ts";
+import { USER_SANDBOX_MCP_NAME } from "../sandbox/user-sandbox-routing.ts";
 export type Host = Record<string, any>;
 
 export function createMountUserSandbox(getHost: () => Host): any {

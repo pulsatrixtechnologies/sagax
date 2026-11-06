@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** personalMcpNamesForGuard (#1388). Pure move from server/index.ts. */
+import { collectPersonalMcpNames } from "../mcp/mcp-personal-shared-guard.ts";
 export type Host = Record<string, any>;
 
 export function createPersonalMcpNamesForGuard(getHost: () => Host): any {

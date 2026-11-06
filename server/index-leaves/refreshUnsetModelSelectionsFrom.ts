@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** refreshUnsetModelSelectionsFrom (#1388). Pure move from server/index.ts. */
+import { readyToRun } from "../models/default-model-selection.ts";
 export type Host = Record<string, any>;
 
 export function createRefreshUnsetModelSelectionsFrom(getHost: () => Host): any {

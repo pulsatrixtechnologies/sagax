@@ -1,5 +1,8 @@
 // @ts-nocheck
 /** insideDataDir (#1388). Pure move from server/index.ts. */
+import { DATA_DIR } from "../config.ts";
+import { sep } from "node:path";
+import { realpathSync } from "node:fs";
 export type Host = Record<string, any>;
 
 export function createInsideDataDir(getHost: () => Host): any {

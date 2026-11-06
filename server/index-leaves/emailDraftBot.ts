@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** emailDraftBot (#1388). Pure move from server/index.ts. */
+import { approvalAnswerStatus, approvalAudience } from "../approvals/approval-audience.ts";
 export type Host = Record<string, any>;
 
 export function createEmailDraftBot(getHost: () => Host): any {

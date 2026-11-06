@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** sweepThreadEventLogsDeferred (#1388). Pure move from server/index.ts. */
+import { threadEventLogRetentionDays } from "../config.ts";
 export type Host = Record<string, any>;
 
 export function createSweepThreadEventLogsDeferred(getHost: () => Host): any {

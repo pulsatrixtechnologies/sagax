@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** checkedExportSkillNames (#1388). Pure move from server/index.ts. */
+import { BOT_PACKAGE_MAX_SKILLS } from "../bots/bot-package.ts";
+import { isSkillName } from "../skills/skills.ts";
 export type Host = Record<string, any>;
 
 export function createCheckedExportSkillNames(getHost: () => Host): any {

@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** coordinationLiveRosterBlock (#1388). Pure move from server/index.ts. */
+import { livePeerRoster, livePeerRosterBlock } from "../peers/peer-roster.ts";
 export type Host = Record<string, any>;
 
 export function createCoordinationLiveRosterBlock(getHost: () => Host): any {

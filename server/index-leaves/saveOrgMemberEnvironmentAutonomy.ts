@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** saveOrgMemberEnvironmentAutonomy (#1388). Pure move from server/index.ts. */
+import { memberEnvironmentAutonomyAllowed } from "../people/member-environment.ts";
 export type Host = Record<string, any>;
 
 export function createSaveOrgMemberEnvironmentAutonomy(getHost: () => Host): any {

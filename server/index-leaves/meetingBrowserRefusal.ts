@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** meetingBrowserRefusal (#1388). Pure move from server/index.ts. */
+import { describeBrowserEngine } from "../browser/browser-engine.ts";
 export type Host = Record<string, any>;
 
 export function createMeetingBrowserRefusal(getHost: () => Host): any {

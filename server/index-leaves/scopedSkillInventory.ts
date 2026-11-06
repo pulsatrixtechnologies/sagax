@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** scopedSkillInventory (#1388). Pure move from server/index.ts. */
+import { join, relative, sep } from "node:path";
+import { skillsLibraryEnabled } from "../config.ts";
 export type Host = Record<string, any>;
 
 export function createScopedSkillInventory(getHost: () => Host): any {
@@ -11,9 +13,9 @@ function scopedSkillInventory(bot: BotRecord, instance: { driverKind: string } |
   const personal = person ? host.personalSkillInputs(bot, person).filter((skill) => !skill.shadowed) : [];
   const personalNames = new Set(personal.filter((skill) => skill.enabled).map((skill) => skill.name));
   const assigned = skillsLibraryEnabled(host.cfg) ? (host.store.bot(bot.id)?.assignedSkills ?? bot.assignedSkills) : undefined;
-  const rows: DiscoveredSkill[] = resolvedSkillFiles(bot.id, assigned).filter((skill) => !personalNames.has(skill.name)).map((skill) => {
+  const rows: DiscoveredSkill[] = host.resolvedSkillFiles(bot.id, assigned).filter((skill) => !personalNames.has(skill.name)).map((skill) => {
     const file = skill.file;
-    const local = file ? relative(workspaceDir(bot.id), file) : "";
+    const local = file ? relative(host.workspaceDir(bot.id), file) : "";
     const library = Boolean(file && (local === ".." || local.startsWith(".." + sep)));
     const scope = skill.source.startsWith("org:") ? "organization" : library ? "library" : "bot";
     return { id: `${scope}:skill:${skill.name}`, name: skill.name, kind: "skill", scope,

@@ -11,8 +11,8 @@ function limitFailoverRow(threadId: string, line: LimitFailoverLine) {
   const failed = line.kind === "exhausted";
   const words = line.kind === "switched" && line.to === "Auto" && line.reason !== "model"
     ? line.estimated
-      ? `${line.from} reached its usage limit during this turn and gave no reset time: Auto continued the same turn on another model that works, with the steps already taken; ${line.from} is tried again around ${limitClockText(line.resetsAt)}.`
-      : `${line.from} reached its usage limit during this turn: Auto continued the same turn on another model that works, with the steps already taken; ${line.from} is picked again once its limit resets (around ${limitClockText(line.resetsAt)}).`
+      ? `${line.from} reached its usage limit during this turn and gave no reset time: Auto continued the same turn on another model that works, with the steps already taken; ${line.from} is tried again around ${host.limitClockText(line.resetsAt)}.`
+      : `${line.from} reached its usage limit during this turn: Auto continued the same turn on another model that works, with the steps already taken; ${line.from} is picked again once its limit resets (around ${host.limitClockText(line.resetsAt)}).`
     : host.limitFailoverText(line, host.limitClockText);
   if (quiet) {
     console.info(`[limit-failover] ${threadId}: ${words}`);

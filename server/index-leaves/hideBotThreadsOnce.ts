@@ -1,11 +1,13 @@
 // @ts-nocheck
 /** hideBotThreadsOnce (#1388). Pure move from server/index.ts. */
+import { join } from "node:path";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 export type Host = Record<string, any>;
 
 export function createHideBotThreadsOnce(getHost: () => Host): any {
 function hideBotThreadsOnce() {
   const host = getHost();
-  const { DATA_DIR, existsSync, readFileSync, writeFileSync } = host;
+  const { DATA_DIR } = host;
 
   const marker = join(DATA_DIR, "agent-threads-hidden.v2");
   if (existsSync(marker)) return;

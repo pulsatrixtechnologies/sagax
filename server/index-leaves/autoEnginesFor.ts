@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** autoEnginesFor (#1388). Pure move from server/index.ts. */
+import { modelOn } from "../../shared/offered-models.ts";
 export type Host = Record<string, any>;
 
 export function createAutoEnginesFor(getHost: () => Host): any {

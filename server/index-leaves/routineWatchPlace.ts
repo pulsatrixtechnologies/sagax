@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** routineWatchPlace (#1388). Pure move from server/index.ts. */
+import { chooseHookTarget } from "../hooks/lifecycle-hooks.ts";
 export type Host = Record<string, any>;
 
 export function createRoutineWatchPlace(getHost: () => Host): any {

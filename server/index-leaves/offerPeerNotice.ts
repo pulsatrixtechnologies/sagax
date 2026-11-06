@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** offerPeerNotice (#1388). Pure move from server/index.ts. */
+import { peerNoticeDropped, peerNoticeEvent } from "../proactive/proactive-wake.ts";
 export type Host = Record<string, any>;
 
 export function createOfferPeerNotice(getHost: () => Host): any {

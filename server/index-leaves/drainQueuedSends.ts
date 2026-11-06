@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** drainQueuedSends (#1388). Pure move from server/index.ts. */
+import { drainSteeredMessages } from "../turns/steer-queue.ts";
 export type Host = Record<string, any>;
 
 export function createDrainQueuedSends(getHost: () => Host): any {

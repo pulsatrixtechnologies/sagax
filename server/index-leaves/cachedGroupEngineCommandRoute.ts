@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** cachedGroupEngineCommandRoute (#1388). Pure move from server/index.ts. */
+import { resolveTypedCommand } from "../../shared/harness-commands.ts";
 export type Host = Record<string, any>;
 
 export function createCachedGroupEngineCommandRoute(getHost: () => Host): any {

@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** provideSecretFromPhone (#1388). Pure move from server/index.ts. */
+import { assertPhoneSecretRequestMatches, PhoneSecretError, phoneSecretOperationId } from "../phone/phone-secret.ts";
 export type Host = Record<string, any>;
 
 export function createProvideSecretFromPhone(getHost: () => Host): any {

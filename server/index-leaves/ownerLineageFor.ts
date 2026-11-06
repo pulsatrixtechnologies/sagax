@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** ownerLineageFor (#1388). Pure move from server/index.ts. */
+import { ownerLineageOrigin } from "../approvals/owner-autonomy.ts";
 export type Host = Record<string, any>;
 
 export function createOwnerLineageFor(getHost: () => Host): any {

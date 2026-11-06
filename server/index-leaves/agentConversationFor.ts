@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** agentConversationFor (#1388). Pure move from server/index.ts. */
+import { agentCallerLabel, agentOpenerId } from "../../shared/agent-conversation.ts";
 export type Host = Record<string, any>;
 
 export function createAgentConversationFor(getHost: () => Host): any {

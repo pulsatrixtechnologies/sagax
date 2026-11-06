@@ -1,5 +1,14 @@
 // @ts-nocheck
 /** runInternal (#1388). Pure move from server/index.ts. */
+import { timingSafeEqual } from "node:crypto";
+import { z } from "zod";
+import { json, readBody } from "../harness/http.ts";
+import { botmailConfinedInternalRefusal } from "../mail/bot-inbound-mail.ts";
+import { reachablePeers } from "../peers/peer-roster.ts";
+import { PASS, dispatchRoutes } from "../routes/table.ts";
+import { COMPUTER_JOURNAL_PATH } from "../saved-steps/journal-tap.ts";
+import { fillPluginBot } from "../../shared/bot-act.ts";
+import { CONFIDENTIAL_PEER_REFUSED, confidentialInternalRefusal, mcpConfidentialVerdict } from "../threads/confidential-threads.ts";
 export type Host = Record<string, any>;
 
 export function createRunInternal(getHost: () => Host): any {
@@ -77,7 +86,7 @@ async function runInternal(req: IncomingMessage, res: ServerResponse, url: URL, 
     // route below with its bearer, through every check that follows.
     const harnessHttpKind = host.harnessMcpHttpKind(path);
     if (harnessHttpKind) {
-      await host.serveHarnessMcpHttp(req, res, harnessHttpKind, `http://127.0.0.1:${PORT}`);
+      await host.serveHarnessMcpHttp(req, res, harnessHttpKind, `http://127.0.0.1:${host.PORT}`);
       return true;
     }
     const internalCapability = host.authorizedInternalCapability(req.headers.authorization);
@@ -327,7 +336,7 @@ async function runInternal(req: IncomingMessage, res: ServerResponse, url: URL, 
     // one its first call's claim created or woke (mountBotBoat).
     if (method === "POST" && path === host.DATA_INTERNAL_MCP_PATH) {
       const body = await readInternalBody();
-      const unavailable = dataEngine.unavailable();
+      const unavailable = host.dataEngine.unavailable();
       if (unavailable !== null) {
         json(res, 503, { error: `Data tools are unavailable: ${unavailable}` });
         return true;
@@ -341,7 +350,7 @@ async function runInternal(req: IncomingMessage, res: ServerResponse, url: URL, 
       res.once("close", () => { if (!res.writableEnded) abort.abort(); });
       let database;
       try {
-        database = await dataEngine.forBot(scopeKey);
+        database = await host.dataEngine.forBot(scopeKey);
       } catch (error) {
         if (error instanceof host.DataFailure) {
           json(res, 503, { error: error.message });
@@ -352,7 +361,7 @@ async function runInternal(req: IncomingMessage, res: ServerResponse, url: URL, 
       requireActiveInternalCapability();
       json(res, 200, { result: await host.dataRpc(body, {
         database, sheet: host.dataSheets.for(scopeKey),
-        compileChart, validateVegaLite, renderer: chartRenderer,
+        compileChart: host.compileChart, validateVegaLite: host.validateVegaLite, renderer: host.chartRenderer,
         exportRoots: () => host.dataExportRoots(internalSender, scopeKey),
         confinedRoots: () => host.dataConfinedRoots(scopeKey),
         downloadDir: () => host.dataDownloadDir(scopeKey),

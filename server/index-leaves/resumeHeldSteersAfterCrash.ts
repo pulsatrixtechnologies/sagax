@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** resumeHeldSteersAfterCrash (#1388). Pure move from server/index.ts. */
+import { joinHeldSteerTexts, takeHeldSteersForThread, takeRemainingHeldSteers } from "../turns/held-steers.ts";
 export type Host = Record<string, any>;
 
 export function createResumeHeldSteersAfterCrash(getHost: () => Host): any {

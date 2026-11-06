@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** stagePendingAttachments (#1388). Pure move from server/index.ts. */
+import { SANDBOX_ATTACHMENTS_DIR } from "../attachments/attachment-staging.ts";
 export type Host = Record<string, any>;
 
 export function createStagePendingAttachments(getHost: () => Host): any {
@@ -15,7 +16,7 @@ async function stagePendingAttachments(threadId: string, generation: string) {
   for (const file of files) {
     try {
       if (target.kind === "user-sandbox" && host.userSandbox) {
-        const path = `${SANDBOX_ATTACHMENTS_DIR}/${stagedName(file)}`;
+        const path = `${SANDBOX_ATTACHMENTS_DIR}/${host.stagedName(file)}`;
         // Linux keeps each environment string under 128 KiB: chunks of 48 KiB
         // (a multiple of 3, so their base64 pieces concatenate), up to 8 per
         // call so an archive of tens of MB does not take thousands of calls.
@@ -38,7 +39,7 @@ async function stagePendingAttachments(threadId: string, generation: string) {
           group.length = 0;
         }
         const argv = isArchiveAttachment(file.file) && host.storedArchiveManifest(file.file)?.status === "ok"
-          ? host.sandboxArchiveArgv(path, `${SANDBOX_ATTACHMENTS_DIR}/${extractedFolderName(stagedName(file))}`)
+          ? host.sandboxArchiveArgv(path, `${SANDBOX_ATTACHMENTS_DIR}/${host.extractedFolderName(host.stagedName(file))}`)
           : null;
         if (argv) {
           const result = await host.userSandbox.exec(person, { argv, timeoutSec: 300 }, workplace.botId);
@@ -61,9 +62,9 @@ async function stagePendingAttachments(threadId: string, generation: string) {
           if (result?.isError) throw new Error(`unpack failed: ${result.content?.[0]?.text ?? "no result"}`);
         }
       }
-      host.bridgeAudit.record({ person, botId: workplace.botId, threadId, target: target.kind, kind: "tool", detail: `attachment ${stagedName(file)}`, ok: true });
+      host.bridgeAudit.record({ person, botId: workplace.botId, threadId, target: target.kind, kind: "tool", detail: `attachment ${host.stagedName(file)}`, ok: true });
     } catch (error) {
-      host.bridgeAudit.record({ person, botId: workplace.botId, threadId, target: target.kind, kind: "tool", detail: `attachment ${stagedName(file)}`, ok: false, error: (error as Error).message });
+      host.bridgeAudit.record({ person, botId: workplace.botId, threadId, target: target.kind, kind: "tool", detail: `attachment ${host.stagedName(file)}`, ok: false, error: (error as Error).message });
       console.error(`[omb-bridge] could not copy attachment ${file.file} to ${target.kind}: ${(error as Error).message}`);
     }
   }

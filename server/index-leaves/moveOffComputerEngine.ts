@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** moveOffComputerEngine (#1388). Pure move from server/index.ts. */
+import { withoutRemovedBackup } from "../bots/bot-runtime-settings.ts";
 export type Host = Record<string, any>;
 
 export function createMoveOffComputerEngine(getHost: () => Host): any {

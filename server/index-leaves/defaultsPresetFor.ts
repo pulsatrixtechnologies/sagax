@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** defaultsPresetFor (#1388). Pure move from server/index.ts. */
+import { presetFromDefaults, DEFAULTS_PRESET_KEY } from "../presets.ts";
 export type Host = Record<string, any>;
 
 export function createDefaultsPresetFor(getHost: () => Host): any {

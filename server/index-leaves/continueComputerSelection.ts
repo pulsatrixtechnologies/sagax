@@ -26,10 +26,10 @@ function continueComputerSelection(threadId: string, generation: string | undefi
     // The model picked this surface through select_computer; the person
     // never chose it. It holds this request only, and is never recorded.
     host.computerSelectionMoves.set(threadId, surface);
-    const text = `The computer selection is now ${surfaceLabel(surface)}. Continue the user's original request using the tools mounted for this turn; verify the result before claiming success.\n\n${selection.text}`;
+    const text = `The computer selection is now ${host.surfaceLabel(surface)}. Continue the user's original request using the tools mounted for this turn; verify the result before claiming success.\n\n${selection.text}`;
     void host.startTurn(bot.id, text, { threadId, userMessage: selection.source, computerSelectionContinuation: true, speaker: host.turnSpeakers.get(threadId), dataContext: selection.dataContext }).catch(error => {
       if (host.store.taskByThread(bot.id, threadId)) host.store.appendMessage(threadId, { role: "bot", kind: "activity",
-        tool: { name: `Could not continue on ${surfaceLabel(surface)}: ${error instanceof Error ? error.message : String(error)}`, ok: false } });
+        tool: { name: `Could not continue on ${host.surfaceLabel(surface)}: ${error instanceof Error ? error.message : String(error)}`, ok: false } });
     });
   });
   return true;

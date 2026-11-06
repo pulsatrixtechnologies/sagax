@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** drainTurnsBeforeShutdown (#1388). Pure move from server/index.ts. */
+import { deliverSseFrame } from "../streams/sse-fanout.ts";
+import { drainTurns } from "../turns/interrupted-turns.ts";
 export type Host = Record<string, any>;
 
 export function createDrainTurnsBeforeShutdown(getHost: () => Host): any {

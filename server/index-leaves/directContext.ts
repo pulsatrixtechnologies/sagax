@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** directContext (#1388). Pure move from server/index.ts. */
+import { webhookPostText } from "../peers/peer-provenance.ts";
+import { digestPromptLine } from "../digest.ts";
 export type Host = Record<string, any>;
 
 export function createDirectContext(getHost: () => Host): any {

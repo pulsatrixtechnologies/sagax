@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** roomTurnApprovalMode (#1388). Pure move from server/index.ts. */
+import { memberRoomTurnLevel } from "../approvals/member-auto-approval.ts";
 export type Host = Record<string, any>;
 
 export function createRoomTurnApprovalMode(getHost: () => Host): any {

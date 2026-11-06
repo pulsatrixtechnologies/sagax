@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** delegateOnRuntime (#1388). Pure move from server/index.ts. */
+import { peerApprovalFailure } from "../peers/peer-approval.ts";
 export type Host = Record<string, any>;
 
 export function createDelegateOnRuntime(getHost: () => Host): any {

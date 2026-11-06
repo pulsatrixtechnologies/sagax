@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** personalHostRefusalCached (#1388). Pure move from server/index.ts. */
+import { personalMcpHostRefusal, personalMcpPrivateAllowed } from "../people/person-connections.ts";
 export type Host = Record<string, any>;
 
 export function createPersonalHostRefusalCached(getHost: () => Host): any {

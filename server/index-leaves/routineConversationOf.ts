@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** routineConversationOf (#1388). Pure move from server/index.ts. */
+import { ROUTINE_CONVERSATION_HEADER } from "../../shared/wire.ts";
 export type Host = Record<string, any>;
 
 export function createRoutineConversationOf(getHost: () => Host): any {

@@ -1,11 +1,13 @@
 // @ts-nocheck
 /** confidentialThreadAttachments (#1388). Pure move from server/index.ts. */
+import { join } from "node:path";
+import { existsSync } from "node:fs";
 export type Host = Record<string, any>;
 
 export function createConfidentialThreadAttachments(getHost: () => Host): any {
 function confidentialThreadAttachments(botId: string, threadId: string) {
   const host = getHost();
-  const { ATTACHMENTS_DIR, existsSync, threadFileRefs } = host;
+  const { ATTACHMENTS_DIR, threadFileRefs } = host;
   const names = new Set<string>();
   const consider = (path: string | undefined) => {
     if (!path) return;

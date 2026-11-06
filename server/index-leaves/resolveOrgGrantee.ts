@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** resolveOrgGrantee (#1388). Pure move from server/index.ts. */
+import { isPrincipalId } from "../auth/principals.ts";
 export type Host = Record<string, any>;
 
 export function createResolveOrgGrantee(getHost: () => Host): any {

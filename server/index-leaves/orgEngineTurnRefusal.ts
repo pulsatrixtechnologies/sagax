@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** orgEngineTurnRefusal (#1388). Pure move from server/index.ts. */
+import { paidByPerson } from "../engines/engine-credentials.ts";
 export type Host = Record<string, any>;
 
 export function createOrgEngineTurnRefusal(getHost: () => Host): any {

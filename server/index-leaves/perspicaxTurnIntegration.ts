@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** perspicaxTurnIntegration (#1388). Pure move from server/index.ts. */
+import { perspicaxUnavailableRow, PERSPICAX_UNAVAILABLE_WHY } from "../perspicax/perspicax-mcp.ts";
 export type Host = Record<string, any>;
 
 export function createPerspicaxTurnIntegration(getHost: () => Host): any {
@@ -50,8 +51,8 @@ async function perspicaxTurnIntegration(input: {
         command: process.execPath,
         args: [host.perspicaxBridgePath],
         env: {
-          ...AGENTS_NODE_FLAG,
-          SAGAX_HARNESS_URL: `http://127.0.0.1:${PORT}`,
+          ...host.AGENTS_NODE_FLAG,
+          SAGAX_HARNESS_URL: `http://127.0.0.1:${host.PORT}`,
           SAGAX_PERSPICAX_TOKEN: token,
           SAGAX_BOT_ID: live.id,
           SAGAX_THREAD_ID: input.threadId
@@ -64,7 +65,7 @@ async function perspicaxTurnIntegration(input: {
   if (!plan.unavailable.length) return { custom, prompt: conventions };
   const lines = plan.unavailable.map((entry) => entry.reason === "no_delegation"
     ? `Perspicax tools are not available in this routine run: ${PERSPICAX_UNAVAILABLE_WHY.no_delegation}.`
-    : `Perspicax tools are not available in this turn: ${perspicaxUnavailableWhy(entry.reason, entry.detail)}. Tell them so if they ask for these tools.`);
+    : `Perspicax tools are not available in this turn: ${host.perspicaxUnavailableWhy(entry.reason, entry.detail)}. Tell them so if they ask for these tools.`);
   const personName = (speakerPrincipalId && host.principals.byId(speakerPrincipalId)?.name) || "";
   const speakerName = routine
     ? (personName ? `a routine of ${personName}` : "a routine")

@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** migrateSectionSharesToBotGrants (#1388). Pure move from server/index.ts. */
+import { levelRank } from "../auth/authz.ts";
+import { SectionChannels, sectionShareGrants } from "../rooms/section-channels.ts";
 export type Host = Record<string, any>;
 
 export function createMigrateSectionSharesToBotGrants(getHost: () => Host): any {

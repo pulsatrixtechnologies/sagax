@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** teamMemoryMemberMayAnswer (#1388). Pure move from server/index.ts. */
+import { teamMemoryCardReachesMember } from "../../shared/team-memory-sharing.ts";
 export type Host = Record<string, any>;
 
 export function createTeamMemoryMemberMayAnswer(getHost: () => Host): any {

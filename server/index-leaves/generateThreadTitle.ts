@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** generateThreadTitle (#1388). Pure move from server/index.ts. */
+import { threadTitlePrompt } from "../threads/thread-title.ts";
+import { titleFromLlm } from "../store.ts";
 export type Host = Record<string, any>;
 
 export function createGenerateThreadTitle(getHost: () => Host): any {

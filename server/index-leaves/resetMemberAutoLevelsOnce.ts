@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** resetMemberAutoLevelsOnce (#1388). Pure move from server/index.ts. */
+import { memberAutoLevelResets, memberAutoResetPending } from "../approvals/member-auto-approval.ts";
 export type Host = Record<string, any>;
 
 export function createResetMemberAutoLevelsOnce(getHost: () => Host): any {

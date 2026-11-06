@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** relayEnginesFor (#1388). Pure move from server/index.ts. */
+import { modelOn } from "../../shared/offered-models.ts";
 export type Host = Record<string, any>;
 
 export function createRelayEnginesFor(getHost: () => Host): any {

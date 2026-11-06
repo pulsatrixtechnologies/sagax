@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** reportIncident (#1388). Pure move from server/index.ts. */
+import { INCIDENTS_THREAD_TITLE, chiefForBot, incidentChip, incidentText } from "../peers/incidents.ts";
+import { problemReason } from "../org/org-problem-log.ts";
 export type Host = Record<string, any>;
 
 export function createReportIncident(getHost: () => Host): any {

@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** undoSkillCard (#1388). Pure move from server/index.ts. */
+import { undoSkillWrite } from "../skills/skills.ts";
 export type Host = Record<string, any>;
 
 export function createUndoSkillCard(getHost: () => Host): any {

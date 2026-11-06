@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** syncHeadlessTeam (#1388). Pure move from server/index.ts. */
+import { MAX_WORKSPACE_BOTS } from "../routes/bots-core-deps.ts";
 export type Host = Record<string, any>;
 
 export function createSyncHeadlessTeam(getHost: () => Host): any {

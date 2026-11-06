@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** diskSaverTarget (#1388). Pure move from server/index.ts. */
+import { oldCheckpointRepos } from "../computer/computer-care.ts";
 export type Host = Record<string, any>;
 
 export function createDiskSaverTarget(getHost: () => Host): any {

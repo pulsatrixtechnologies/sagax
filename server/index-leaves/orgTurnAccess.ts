@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** orgTurnAccess (#1388). Pure move from server/index.ts. */
+import { materializeEngineAccess } from "../engines/engine-credentials.ts";
 export type Host = Record<string, any>;
 
 export function createOrgTurnAccess(getHost: () => Host): any {

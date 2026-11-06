@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** codeBranchCredentials (#1388). Pure move from server/index.ts. */
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 export type Host = Record<string, any>;
 
 export function createCodeBranchCredentials(getHost: () => Host): any {

@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** viewerIdentity (#1388). Pure move from server/index.ts. */
+import { capabilitiesForAuth } from "../auth/request-auth.ts";
 export type Host = Record<string, any>;
 
 export function createViewerIdentity(getHost: () => Host): any {

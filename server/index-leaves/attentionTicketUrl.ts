@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** attentionTicketUrl (#1388). Pure move from server/index.ts. */
+import { cwSiteFromEnv } from "../widgets/cw-widget-actions.ts";
 export type Host = Record<string, any>;
 
 export function createAttentionTicketUrl(getHost: () => Host): any {

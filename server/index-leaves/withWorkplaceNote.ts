@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** withWorkplaceNote (#1388). Pure move from server/index.ts. */
+import { botFolderNote } from "../sandbox/sandbox-bot-folder.ts";
+import { DATA_DIR } from "../config.ts";
 export type Host = Record<string, any>;
 
 export function createWithWorkplaceNote(getHost: () => Host): any {

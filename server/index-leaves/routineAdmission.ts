@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** routineAdmission (#1388). Pure move from server/index.ts. */
+import { ROUTINE_UNREACHABLE_RETRIED, ROUTINE_UNREACHABLE_RETRY_MS, ROUTINE_UNREACHABLE_SKIPPED } from "../routines/routines.ts";
 export type Host = Record<string, any>;
 
 export function createRoutineAdmission(getHost: () => Host): any {

@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** applyStricterApprovalLive (#1388). Pure move from server/index.ts. */
+import { liveApprovalTightens } from "../../shared/approval-mode.ts";
 export type Host = Record<string, any>;
 
 export function createApplyStricterApprovalLive(getHost: () => Host): any {

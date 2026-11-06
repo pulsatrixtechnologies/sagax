@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** inboxHistory (#1388). Pure move from server/index.ts. */
+import { INBOX_HISTORY_MAX } from "../../shared/approvals-inbox.ts";
+import { activityEntries } from "../activity/admin-activity.ts";
 export type Host = Record<string, any>;
 
 export function createInboxHistory(getHost: () => Host): any {

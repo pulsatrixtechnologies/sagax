@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** stopOwnSubagents (#1388). Pure move from server/index.ts. */
+import { cancelThreadQueue } from "../turns/steer-queue.ts";
+import { openedThreadRefs, ownSubagentThreads } from "../threads/subagent-cleanup.ts";
 export type Host = Record<string, any>;
 
 export function createStopOwnSubagents(getHost: () => Host): any {

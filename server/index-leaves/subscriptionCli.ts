@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** subscriptionCli (#1388). Pure move from server/index.ts. */
+import { instanceConfigs } from "../config.ts";
+import { ENGINE_DRIVER } from "../cloud-agents/subscription-access.ts";
 export type Host = Record<string, any>;
 
 export function createSubscriptionCli(getHost: () => Host): any {

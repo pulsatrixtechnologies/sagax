@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** perspicaxSessionAlone (#1388). Pure move from server/index.ts. */
+import { PERSPICAX_PROTOCOL_VERSION } from "../perspicax/perspicax-mcp.ts";
 export type Host = Record<string, any>;
 
 export function createPerspicaxSessionAlone(getHost: () => Host): any {
@@ -23,7 +24,7 @@ async function perspicaxSessionAlone<T>(
     });
     if (!plan.mounted.length) {
       const first = plan.unavailable[0];
-      return { error: first ? `Perspicax: ${perspicaxUnavailableWhy(first.reason, first.detail)}` : "The Perspicax connection could not be used." };
+      return { error: first ? `Perspicax: ${host.perspicaxUnavailableWhy(first.reason, first.detail)}` : "The Perspicax connection could not be used." };
     }
     const relay = (frame: Record<string, unknown>) => mcp.relay({ threadId, generation, botId: live.id, frame });
     await relay({ jsonrpc: "2.0", id: "artifact-init", method: "initialize", params: { protocolVersion: PERSPICAX_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: input.clientName, version: serverVersion() } } });

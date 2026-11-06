@@ -1,7 +1,6 @@
 // @ts-nocheck
 /** performBotActRoute (#1388). Pure move from server/index.ts. */
 import { botActConsoleRouteError } from "../../shared/bot-act.ts";
-
 export type Host = Record<string, any>;
 
 export function createPerformBotActRoute(getHost: () => Host): any {

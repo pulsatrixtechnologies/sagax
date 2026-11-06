@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** viewerIsOperator (#1388). Pure move from server/index.ts. */
+import { sessionIsOperator } from "../people/viewer-identity.ts";
 export type Host = Record<string, any>;
 
 export function createViewerIsOperator(getHost: () => Host): any {

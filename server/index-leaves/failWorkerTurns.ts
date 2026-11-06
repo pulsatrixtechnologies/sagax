@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** failWorkerTurns (#1388). Pure move from server/index.ts. */
+import { failTurnOnWorkerClose } from "../workers.ts";
 export type Host = Record<string, any>;
 
 export function createFailWorkerTurns(getHost: () => Host): any {

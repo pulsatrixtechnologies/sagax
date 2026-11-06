@@ -1,5 +1,9 @@
 // @ts-nocheck
 /** botCapabilitiesAs (#1388). Pure move from server/index.ts. */
+import { reservedMcpServerName } from "../mcp/mcp-registry.ts";
+import { readPluginContents } from "../bots/bot-plugins.ts";
+import { resolveBotCapabilities } from "../capabilities/capabilities.ts";
+import { listBotSkillsWithOrigin } from "../skills/skills.ts";
 export type Host = Record<string, any>;
 
 export function createBotCapabilitiesAs(getHost: () => Host): any {

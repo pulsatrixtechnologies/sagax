@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** nonPrimaryCreationRefusal (#1388). Pure move from server/index.ts. */
+import { botCreationDepth, botCreationRefusal, recentBotCreations } from "../bots/bot-creation.ts";
+import { BOT_FIELD_PERMISSIONS } from "../../shared/permissions.ts";
 export type Host = Record<string, any>;
 
 export function createNonPrimaryCreationRefusal(getHost: () => Host): any {

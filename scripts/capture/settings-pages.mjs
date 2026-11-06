@@ -8,7 +8,7 @@
  * only: no window opens; the gallery answers /api itself.
  * Usage: node scripts/capture/settings-pages.mjs [--out DIR] [--port N]
  *   [--prefix before|after] [--lang en|fr] [--sections account,security,...]
- *   [--query providers=1] [--wait ms]
+ *   [--query providers=1] [--wait ms] [--open cardId,cardId] (folds shown open)
  *   (SAGAX_VERIFY_BROWSER_CHROME=<chromium> to use an installed browser)
  */
 import { spawn } from "node:child_process";
@@ -29,6 +29,8 @@ const sections = arg("--sections", "account,security,credentials,engines,voice")
 // extra gallery parameters, e.g. --query providers=1 (a fuller set of engines and keys)
 const query = arg("--query", "");
 const settle = Number(arg("--wait", "900"));
+// folds to draw open (their remembered state on this device), e.g. --open providers.advanced
+const openCards = arg("--open", "").split(",").filter(Boolean);
 const skins = [{ id: "pulsatrix-light", label: "light" }, { id: "pulsatrix", label: "dark" }];
 
 async function waitForServer(url, ms = 120_000) {
@@ -58,6 +60,7 @@ try {
   browser = await chromium.launch({ headless: true, ...(process.env.SAGAX_VERIFY_BROWSER_CHROME ? { executablePath: process.env.SAGAX_VERIFY_BROWSER_CHROME } : {}) });
   for (const skin of skins) {
     const page = await browser.newPage({ viewport: { width: 1100, height: 900 }, deviceScaleFactor: 2, colorScheme: skin.label });
+    if (openCards.length) await page.addInitScript((ids) => { localStorage.setItem("openmausbot.settingsCards.v1", JSON.stringify(Object.fromEntries(ids.map((id) => [id, true])))); }, openCards);
     page.on("pageerror", (error) => console.error("page error:", error.stack));
     for (const section of sections) {
       await page.goto(`${base}?section=${section}&skin=${skin.id}&lang=${lang}${query ? `&${query}` : ""}`, { waitUntil: "networkidle" });

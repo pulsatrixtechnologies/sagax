@@ -10,7 +10,8 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { openExternalLink } from "@/lib/app-links";
-import { HelpTip } from "./SettingsPrimitives";
+import { DescribedRow, FoldRow, PILL, SettingsGroup } from "./SettingsPrimitives";
+import { StatusText } from "./settings/SettingsPatterns";
 import { ConnectFromEngine } from "./ConnectFromEngine";
 import { CapabilityTags } from "./plugins/EngineCapabilities";
 import { claudeAiConnectorCapabilities } from "../../shared/engine-connectors";
@@ -107,9 +108,12 @@ export function HarnessConnectorsSection({ placement = "panel", onAnswer }: {
   // card's "Connect Claude", never the claude.ai page, which connects nothing
   const signIn = claude && !claude.available && claude.reason === "not_signed_in" && myClaude ? myClaude : undefined;
   const expired = Boolean(signIn?.subscription.signedIn && signIn.subscription.expired);
+  if (placement === "settings") {
+    return <SettingsConnectors answer={answer} loading={loading} error={error} expired={expired} signIn={signIn} onRefresh={() => void load(true)} />;
+  }
   return (
     <section aria-labelledby="harness-connectors-title" data-harness-connectors={placement}
-      className={cn(placement === "panel" && "mx-6 mb-3 rounded-xl border border-border bg-inset px-4 py-3 sm:mx-8", placement === "settings" && "rounded-xl border border-hairline/40 px-3.5 py-2.5")}>
+      className={cn(placement === "panel" && "mx-6 mb-3 rounded-xl border border-border bg-inset px-4 py-3 sm:mx-8")}>
       {placement === "provider" ? (
         <div className="flex items-center justify-between gap-3">
           <h4 id="harness-connectors-title" className="text-[12px] font-medium text-ink-secondary">{t("connectApps.providers.connectors")}</h4>
@@ -129,18 +133,8 @@ export function HarnessConnectorsSection({ placement = "panel", onAnswer }: {
         <div className="min-w-0">
           <h3 id="harness-connectors-title" className="flex items-center gap-1.5 text-[13px] font-semibold text-ink">
             {t("harnessConnectors.title")}
-            {placement === "settings" && (
-              <HelpTip label={t("settings.moreAbout", { title: t("harnessConnectors.title") })}>
-                {t("harnessConnectors.body")}
-                {answer && !answer.codex.available && <span className="mt-2 block">{t("harnessConnectors.codex")}</span>}
-              </HelpTip>
-            )}
           </h3>
-          {placement === "settings"
-            ? claude?.available && claude.connectors.length > 0 && (
-              <p className="mt-0.5 text-[12px] text-ink-secondary">{t(claude.connectors.length === 1 ? "harnessConnectors.countOne" : "harnessConnectors.count", { count: claude.connectors.length })}</p>
-            )
-            : <p className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">{t("harnessConnectors.body")}</p>}
+          <p className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">{t("harnessConnectors.body")}</p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <button
@@ -183,11 +177,6 @@ export function HarnessConnectorsSection({ placement = "panel", onAnswer }: {
         </div>
       ) : claude && claude.connectors.length === 0 ? (
         <p className="mt-2 text-[12px] text-ink-secondary">{t("harnessConnectors.empty")}</p>
-      ) : claude && placement === "settings" ? (
-        <details className="mt-1">
-          <summary className="cursor-pointer text-[12px] text-ink-secondary hover:text-ink">{t("harnessConnectors.show")}</summary>
-          <ConnectorList connectors={claude.connectors} manageUrl={answer?.manageUrl} />
-        </details>
       ) : claude ? (
         <ConnectorList connectors={claude.connectors} manageUrl={answer?.manageUrl} />
       ) : null}
@@ -232,5 +221,101 @@ function ConnectorList({ connectors, manageUrl }: { connectors: HarnessConnector
             );
           })}
         </ul>
+  );
+}
+
+/** Providers > Advanced (#2295): the claude.ai connectors as rows of their
+ * own group, never a card in a card. One row names the account, counts the
+ * connectors and holds Check again and Manage on claude.ai; its count pill
+ * opens the list (same rows as the providers above). The longer
+ * explanation sits behind the info button. */
+function SettingsConnectors({ answer, loading, error, expired, signIn, onRefresh }: {
+  answer: HarnessConnectorsAnswer | null;
+  loading: boolean;
+  error: string | null;
+  expired: boolean;
+  signIn: MyEngine | undefined;
+  onRefresh: () => void;
+}) {
+  const claude = answer?.claude;
+  const title = t("harnessConnectors.title");
+  const help = (
+    <>
+      {t("harnessConnectors.body")}
+      {answer && !answer.codex.available && <span className="mt-2 block">{t("harnessConnectors.codex")}</span>}
+    </>
+  );
+  const controls = (
+    <>
+      <button type="button" onClick={onRefresh} disabled={loading} className="ui-icon-button disabled:opacity-50"
+        title={t("harnessConnectors.refresh")} aria-label={t("harnessConnectors.refresh")}>
+        <RefreshCw size={14} className={cn(loading && "animate-spin")} />
+      </button>
+      {!signIn && (
+        <button type="button" data-harness-connectors-manage="" className={cn(PILL, "inline-flex items-center gap-1.5")}
+          onClick={() => void openExternalLink(answer?.manageUrl ?? "https://claude.ai/customize/connectors")}>
+          {t("harnessConnectors.manage")}
+          <ExternalLink size={12} aria-hidden="true" className="shrink-0 text-ink-secondary" />
+        </button>
+      )}
+    </>
+  );
+  const icon = <Plug size={14} />;
+  const list = claude?.available && claude.connectors.length > 0 ? claude.connectors : null;
+  const description = loading && !answer
+    ? <span className="inline-flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" aria-hidden="true" />{t("harnessConnectors.loading")}</span>
+    : claude && !claude.available
+      ? <span role="status">{t(expired ? "harnessConnectors.unavailable.expired" : harnessUnavailableKey(claude.reason))}</span>
+      : list
+        ? t(list.length === 1 ? "harnessConnectors.countOne" : "harnessConnectors.count", { count: list.length })
+        : claude ? t("harnessConnectors.empty") : undefined;
+  return (
+    <div data-harness-connectors="settings" data-harness-connectors-unavailable={claude && !claude.available ? (claude.reason ?? "unknown") : undefined}>
+      <SettingsGroup groupId="providers-claude-connectors">
+        {list ? (
+          <FoldRow cardId="providers.advanced.connectors" label={title} description={description} help={help} icon={icon}
+            count={list.length} toggleLabel={t("harnessConnectors.show")} controls={controls}>
+            <ul className="flex flex-col" data-harness-connector-list="">
+              {list.map((connector) => <ConnectorRow key={connector.name} connector={connector} manageUrl={answer?.manageUrl} />)}
+            </ul>
+          </FoldRow>
+        ) : (
+          <DescribedRow label={title} description={description} help={help} icon={icon} rowId="providers.claudeConnectors"
+            below={signIn && (
+              <div className="mt-2">
+                <ClaudeSignIn
+                  key={signIn.instanceId}
+                  instanceId={signIn.instanceId}
+                  base={`/api/me/engines/${encodeURIComponent(signIn.instanceId)}/login`}
+                  label={t(expired ? "engineConnect.reconnect" : "engineConnect.connect", { name: "Claude" })}
+                  onSignedIn={async () => { await reloadMyEngines(); }}
+                />
+              </div>
+            )}>
+            {controls}
+          </DescribedRow>
+        )}
+        {error && <p role="alert" className="px-3.5 pb-2 text-[12px] text-danger">{error}</p>}
+      </SettingsGroup>
+    </div>
+  );
+}
+
+/** One connector as a plain row of the list (no surface of its own). */
+function ConnectorRow({ connector, manageUrl }: { connector: HarnessConnectorsAnswer["claude"]["connectors"][number]; manageUrl?: string }) {
+  const missing = connector.status === "needs_auth" || connector.status === "failed";
+  return (
+    <li className="flex min-h-[36px] min-w-0 items-center justify-between gap-3 py-1" data-harness-connector={connector.name}>
+      <span className="flex min-w-0 items-center gap-2 text-[13px] text-ink">
+        <span className="truncate">{connector.name}</span>
+        <CapabilityTags capabilities={claudeAiConnectorCapabilities(connector.name)} name={connector.name} />
+      </span>
+      <span className="flex shrink-0 items-center gap-2">
+        <StatusText tone={connector.status === "connected" ? "success" : connector.status === "needs_auth" ? "warning" : "neutral"}>
+          {t(STATUS_KEY[connector.status] ?? STATUS_KEY.unknown)}
+        </StatusText>
+        {missing && manageUrl && <ConnectFromEngine missing manageUrl={manageUrl} />}
+      </span>
+    </li>
   );
 }

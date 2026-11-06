@@ -3,7 +3,7 @@ import { api, useStore } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { PROVIDER_ACCOUNTS_PATH, providerAccountsChanged, useProviderAccounts } from "@/lib/provider-accounts";
 import type { PersonalProviderServer, ProviderAccountsView } from "../../../shared/provider-accounts";
-import { FIELD, PILL } from "../SettingsPrimitives";
+import { FIELD, PILL, PillSelect } from "../SettingsPrimitives";
 
 /** Secret input is local to this one provider; metadata alone returns. */
 export function PersonalProviderKey({ provider, name, onDone }: { provider: string; name: string; onDone?(): void }) {
@@ -74,7 +74,7 @@ export function PersonalProviderServerForm({ server, onDone }: { server?: Person
   return <form className="flex min-w-0 flex-col gap-2" data-personal-provider-server="" onSubmit={(event) => { event.preventDefault(); void save(false); }}>
     <label className="flex flex-col gap-1 text-[12px] text-ink-secondary">{t("compatServers.name")}<input className={FIELD} value={name} onChange={(event) => setName(event.target.value)} disabled={busy} /></label>
     <label className="flex flex-col gap-1 text-[12px] text-ink-secondary">{t("compatServers.url")}<input type="url" className={FIELD} value={url} onChange={(event) => setUrl(event.target.value)} disabled={busy} placeholder="https://api.example.com/v1" /></label>
-    <label className="flex flex-col gap-1 text-[12px] text-ink-secondary">{t("providers.server.protocol")}<select className={FIELD} value={protocol} onChange={(event) => setProtocol(event.target.value as PersonalProviderServer["protocol"])} disabled={busy}><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option></select></label>
+    <div className="flex flex-col items-start gap-1 text-[12px] text-ink-secondary">{t("providers.server.protocol")}<PillSelect<PersonalProviderServer["protocol"]> value={protocol} onChange={setProtocol} disabled={busy} ariaLabel={t("providers.server.protocol")} options={[{ value: "openai", label: "OpenAI" }, { value: "anthropic", label: "Anthropic" }]} /></div>
     <label className="flex flex-col gap-1 text-[12px] text-ink-secondary">{t("providers.server.models")}<textarea className={FIELD} rows={3} value={models} onChange={(event) => setModels(event.target.value)} disabled={busy} /></label>
     <label className="flex flex-col gap-1 text-[12px] text-ink-secondary">{t("voiceKeys.key", { provider: name || t("providers.add.server") })}<input type="password" autoComplete="off" className={FIELD} value={key} onChange={(event) => setKey(event.target.value)} disabled={busy} /></label>
     <div className="flex flex-wrap gap-2"><button type="submit" className={PILL} disabled={busy || !name.trim() || !url.trim()}>{t("voiceKeys.save")}</button>{server && <button type="button" className={PILL} disabled={busy} onClick={() => void save(true)}>{t("compatServers.remove")}</button>}<button type="button" className={PILL} onClick={onDone}>{t("common.cancel")}</button></div>

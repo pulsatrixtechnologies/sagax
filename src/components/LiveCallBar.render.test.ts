@@ -157,7 +157,7 @@ describe("LiveCallSettings", () => {
     const first = { focus: vi.fn() };
     const querySelector = vi.fn(() => first);
     tree.props.ref({ querySelector });
-    expect(querySelector).toHaveBeenCalledWith("select, input, button");
+    expect(querySelector).toHaveBeenCalledWith("input, button");
     expect(first.focus).toHaveBeenCalledOnce();
     const stopPropagation = vi.fn();
     tree.props.onKeyDown({ key: "Escape", stopPropagation });

@@ -76,7 +76,9 @@ export const HOSTED_CARDS: Partial<Record<AppSettingsSection, AppSettingsSection
  * is looking for what the card holds, so it should not stay folded. */
 export const CARD_KEYWORDS: Record<string, string[]> = {
   "general.aboutMe": ["about me"],
-  "providers.linkedGrokBot": ["linked grok", "grok bot", "grok bridge", "pont grok"],
+  // #2295: the Grok Bot link and the claude.ai connectors live in Providers > Advanced
+  "providers.advanced": ["link with grok bot", "lier à grok bot", "linked grok", "grok bot", "grok bridge", "pont grok", "claude.ai", "connectors", "connecteurs", "cloud agent", "cloud coding"],
+  "providers.advanced.connectors": ["claude.ai", "connectors", "connecteurs"],
   "myApprovalRules": ["always allow", "always deny", "ask first", "approval rules", "règles d'approbation"],
   "general.threadCleanup": ["cleanup", "retention", "event log", "event-log", "log size"],
   "organization.mcpCalls": ["mcp", "timeout", "tool call"],

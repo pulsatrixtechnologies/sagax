@@ -47,7 +47,10 @@ export function reducer(state: AppState, action: Action): AppState {
   // else from the sidebar (another bot, the chat, a view, memory, plugins)
   // leaves it.
   if (state.personaEditor && next.personaEditor === state.personaEditor && leavesProfile(state, next, action)) {
-    next = { ...next, personaEditor: null };
+    // Closing the page lands on its bot's chat: the right panel comes back
+    // as it was (#2271). Any other destination keeps the panel it set.
+    const back = action.type === "select" && action.id === state.personaEditor.botId ? state.personaEditor.panel : undefined;
+    next = { ...next, ...back, personaEditor: null };
   }
   // A section's panel lasts as long as the panel: closed, it is gone.
   return next.panelOwner && !next.settingsOpen && !next.computerOpen ? { ...next, panelOwner: null } : next;

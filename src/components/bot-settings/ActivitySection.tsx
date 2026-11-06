@@ -26,7 +26,7 @@
 // list refetches when the bot's threads change (the store's event stream)
 // and polls while work runs.
 import { useCallback, useEffect, useState } from "react";
-import { ChevronRight, History, GitCommitHorizontal, GitMerge, GitPullRequest, GitPullRequestClosed, SquareTerminal } from "lucide-react";
+import { ChevronRight, GitCommitHorizontal, GitMerge, GitPullRequest, GitPullRequestClosed } from "lucide-react";
 
 import { api, openRoutineRun, type Action, type Bot, type TaskUsage } from "@/state/store";
 import { useStoreDispatch, useStoreGetter } from "@/state/store-selector";
@@ -58,7 +58,7 @@ import { ActivityDetailModal } from "./ActivityDetailModal";
 import { ActivityListModal } from "./ActivityListModal";
 import { ActivityList, type CardActions } from "./ActivityList";
 import { useBotActivityFeed } from "@/lib/use-bot-activity-feed";
-import { GROUPED_CARD, GROUPED_ROW } from "@/lib/grouped-card";
+import { GROUPED_CARD, GROUPED_ROW, PANEL_LABEL } from "@/lib/grouped-card";
 import { loadArchivedBranches, setBranchArchived } from "@/lib/code-branches";
 import { CodeBranchList, type BranchListActions } from "./CodeBranchList";
 
@@ -218,7 +218,7 @@ export function panelSections(list: BotActivityList | null, live?: LiveView, adv
 }
 
 /** A section header; its title opens the section's history. */
-export function SectionHeader({ icon, title, name, onOpenHistory }: { icon: React.ReactNode; title: string; name: BotActivityFilter | "all"; onOpenHistory: (filter: BotActivityFilter) => void }) {
+export function SectionHeader({ icon, title, name, onOpenHistory }: { icon?: React.ReactNode; title: string; name: BotActivityFilter | "all"; onOpenHistory: (filter: BotActivityFilter) => void }) {
   return (
     <h2 className="flex">
       <button
@@ -227,8 +227,10 @@ export function SectionHeader({ icon, title, name, onOpenHistory }: { icon: Reac
         onClick={() => onOpenHistory(name === "all" ? "coding" : name)}
         aria-haspopup="dialog"
         title={t("botPanel.history.open")}
-        className="group -mx-1 flex min-w-0 items-center gap-2 rounded-md px-1 py-0.5 text-left text-[13px] font-normal leading-[18px] text-ink-secondary hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+        className={cn("group flex min-w-0 items-center gap-1 rounded-md text-left hover:text-ink-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60", PANEL_LABEL)}
       >
+        {/* 2026-11-06 (JC): a plain grey label like Upcoming, Suggested and
+            Computer beside it; the icon stays for callers that pass one. */}
         {icon}
         <span className="truncate">{title}</span>
         <ChevronRight size={13} aria-hidden="true" className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
@@ -276,7 +278,6 @@ export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunch
       {showCoding && (
         <section data-bot-settings-section="coding" className="flex flex-col gap-2">
           <SectionHeader
-            icon={<SquareTerminal size={16} aria-hidden="true" className="text-ink-secondary" />}
             title={t("botPanel.coding.title")}
             name="coding"
             onOpenHistory={onOpenHistory}
@@ -292,7 +293,6 @@ export function PanelSections({ list, live, actions, onOpenHistory, onOpenLaunch
       {!showCoding && showAllHistory && (
         <div className="flex min-h-7 items-center">
           <SectionHeader
-            icon={<History size={16} aria-hidden="true" className="text-ink-secondary" />}
             title={t("botPanel.history.all")}
             name="all"
             onOpenHistory={onOpenHistory}

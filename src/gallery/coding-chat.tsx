@@ -1,14 +1,17 @@
 /** Isolated gallery for the coding chat (2026-11-03): a coding task of the
  * bot panel's Coding list opened over the chat column. Synthetic data only.
  * A coding window (#2149): the X, the bot's own composer, the </> panel.
- * ?skin=<id>&lang=<code>&status=running|finished&pods=1 (Experimental on) */
+ * ?skin=<id>&lang=<code>&status=running|finished&pods=1 (Experimental on)
+ * &panel=1 draws the bot panel on the right, where the session card and the
+ * dev pods go (#2285). */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { ExchangeColumnProvider, useExchangeColumn } from "../components/BotExchangeChip";
 import { ChatWindowProvider } from "../components/BotHeaderPill";
 import { Composer } from "../components/Composer";
 import { CodingChatSheet } from "../components/coding/CodingChat";
-import { DevPods, DevPodsToggle } from "../components/dev-pods/DevPods";
+import { DevPodsPanel } from "../components/dev-pods/DevPods";
+import { setCodingPanelHost } from "../lib/coding-panel-host";
 import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { StoreProvider, useStore, type Bot, type Message } from "../state/store";
@@ -20,6 +23,7 @@ const skinParam = params.get("skin") as SkinId | null;
 applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? skinParam : readSkin());
 await loadLocale(params.get("lang") ?? "en");
 const live = params.get("status") === "running";
+const withPanel = params.get("panel") === "1";
 try {
   localStorage.setItem("sagax.devPods.v1", JSON.stringify({ enabled: params.get("pods") === "1" }));
 } catch {
@@ -52,7 +56,7 @@ const ROOT = "/workspace/bots/osprey/dispatch-board";
 const NOW = Date.now();
 const at = (minutesAgo: number) => NOW - minutesAgo * 60_000;
 const pretty = (value: unknown) => JSON.stringify(value, null, 2);
-const bot = { id: "osprey", threadId: "main", name: "Osprey", color: "green", tasks: [], messages: [], modelSelection: { instanceId: "t", model: "t" } } as unknown as Bot;
+const bot = { id: "osprey", threadId: "main", name: "Osprey", title: "Chief of Staff", color: "green", tasks: [], messages: [], modelSelection: { instanceId: "t", model: "t" } } as unknown as Bot;
 
 let seq = 0;
 const say = (role: "user" | "bot", text: string, minutesAgo: number, extra: Partial<Message> = {}): Message => ({
@@ -134,11 +138,11 @@ function Ready() {
     dispatch({ type: "hydrate", bots: [bot], groups: [], sections: [], computerControl: {} } as never);
   }, [dispatch]);
   return (
-    <div className="h-screen bg-app text-ink" data-gallery="">
-      <div ref={column.ref} className="relative mx-auto h-full max-w-[960px] border-x border-hairline/30">
+    <div className="flex h-screen bg-app text-ink" data-gallery="">
+      <div ref={column.ref} className="relative h-full min-w-0 flex-1">
         <ExchangeColumnProvider node={column.node}>
           {column.node && (
-            <ChatWindowProvider value={{ panelOpen: false, onTogglePanel: () => {}, composerInset: 0 }}>
+            <ChatWindowProvider value={{ panelOpen: withPanel, onTogglePanel: () => {}, composerInset: 0 }}>
             <CodingChatSheet
               item={detail}
               detail={detail}
@@ -151,14 +155,18 @@ function Ready() {
               onClose={() => {}}
               onStop={live ? () => {} : undefined}
               onSend={async () => {}}
-              headerTools={<DevPodsToggle bot={bot} />}
-              pods={<DevPods bot={bot} messages={messages} composerHeight={0} headerHeight={0} computerStart={undefined} dispatch={dispatch} forced />}
+              side={<DevPodsPanel bot={bot} messages={messages} computerStart={undefined} dispatch={dispatch} />}
               composer={<Composer bot={{ ...bot, busy: live }} />}
             />
             </ChatWindowProvider>
           )}
         </ExchangeColumnProvider>
       </div>
+      {withPanel && (
+        <aside data-gallery-bot-panel="" className="flex h-full w-[380px] shrink-0 flex-col overflow-y-auto border-l-[0.5px] border-hairline-weak bg-[var(--bot-panel-bg)] px-4 pb-6 pt-6">
+          <div ref={(element) => setCodingPanelHost(bot.id, element)} data-coding-panel-host="" className="flex flex-col gap-5 empty:hidden" />
+        </aside>
+      )}
     </div>
   );
 }

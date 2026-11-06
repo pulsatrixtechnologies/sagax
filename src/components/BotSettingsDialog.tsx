@@ -9,7 +9,7 @@ import { botRoutineRuns } from "@/state/view-slices";
 // under bot-settings/; their bodies and reads are useBotSectionContent, shared
 // with the persona editor. Activity > Computer opens the live desktop
 // window directly (SandboxDesktopModal); other links may still open ComputerPanel.
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BOT_PANEL_BOUNDS, DockedPanelResizeHandle, useDockedPanelWidth } from "./DockedPanelResize";
 import { ArrowLeft, Settings, X } from "lucide-react";
 
@@ -38,11 +38,13 @@ import { ComputerPanel } from "./ComputerPanel";
 import { BotProfileAvatarCard } from "./BotProfileAvatarCard";
 import { useCaptionChrome, useMacInsetChrome } from "./DesktopCapabilities";
 import { t } from "@/lib/i18n";
+import { setCodingPanelHost } from "@/lib/coding-panel-host";
 import { canEditBotField } from "@/lib/bot-capabilities";
 import { viewerBotsReadOnly } from "@/lib/viewer";
 import { useBotSectionAvailability, useBotSectionContent } from "./bot-settings/useBotSectionContent";
 import { botsReadOnlyText } from "@/lib/permissions";
 import { RemoteSessionsSection } from "./remote-session/RemoteSessionsSection";
+import { PanelPageHostProvider } from "./bot-settings/PanelPage";
 
 /** #2149: the panel body's scroll per bot and tab, put back when the header
  * pill reopens the panel it closed. */
@@ -69,6 +71,8 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   const { macInset, browser } = useMacInsetChrome();
   const section = state.botSettingsSection;
   const dialogRef = useRef<HTMLElement | null>(null);
+  const [panelHost, setPanelHost] = useState<HTMLElement | null>(null);
+  const asideRef = useCallback((node: HTMLElement | null) => { dialogRef.current = node; setPanelHost(node); }, []);
   // Keep expansion in the store too: header deep links can arrive while
   // this panel is already mounted, including after collapsing the same row.
   const collapsed = !state.botSettingsExpandAccordion;
@@ -105,6 +109,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   const dockedPanel = useDockedPanelWidth(BOT_PANEL_BOUNDS);
   // Compact head: once the in-flow tabs reach the top bar, they move into it.
   const bodyRef = useRef<HTMLDivElement | null>(null);
+  const codingHost = useCallback((element: HTMLDivElement | null) => setCodingPanelHost(bot.id, element), [bot.id]);
   const tabsRef = useRef<HTMLDivElement | null>(null);
   const [compact, setCompact] = useState(false);
   const onBodyScroll = () => {
@@ -222,8 +227,9 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
 
   return (
     <>
+      <PanelPageHostProvider value={panelHost}>
       <aside
-        ref={dialogRef}
+        ref={asideRef}
         role="dialog"
         aria-labelledby="bot-settings-title"
         tabIndex={-1}
@@ -315,7 +321,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
                     panel header (#2196): ~17px semibold, ~65px under the
                     mascot centre. */}
                 <div
-                  className="mt-5 flex max-w-full items-center justify-center gap-1 text-[17px] font-semibold leading-[22px] text-ink"
+                  className="mt-5 flex max-w-full items-center justify-center gap-1 text-[17px] font-medium leading-[22px] text-ink"
                   // the bot's menu on the name too, as on the mascot
                   onContextMenu={openActionsAt}
                 >
@@ -327,7 +333,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
                     ariaLabel={t("botPanel.name.edit")}
                     onSave={canEditBotField(state.config, bot, "name") ? (name) => derived.patch({ name }) : undefined}
                     editRequest={renameRequest}
-                    className="min-w-0 shrink gap-0 px-0.5 text-[17px] font-semibold leading-[22px] text-ink [&>svg]:absolute [&>svg]:-left-3.5"
+                    className="min-w-0 shrink gap-0 px-0.5 text-[17px] font-medium leading-[22px] text-ink [&>svg]:absolute [&>svg]:-left-3.5"
                   />
                   {bot.title?.trim() && (
                     <>
@@ -338,7 +344,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
                         placeholder={t("botPanel.label.add")}
                         ariaLabel={t("botPanel.label.edit")}
                         onSave={canEditBotField(state.config, bot, "title") ? (title) => derived.patch({ title }) : undefined}
-                        className="min-w-0 shrink gap-0 px-0.5 text-[17px] font-semibold leading-[22px] text-ink [&>svg]:absolute [&>svg]:-right-3.5"
+                        className="min-w-0 shrink gap-0 px-0.5 text-[17px] font-medium leading-[22px] text-ink [&>svg]:absolute [&>svg]:-right-3.5"
                       />
                     </>
                   )}
@@ -352,6 +358,9 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
 
               {tab === "activity" && (
                 <div className="flex flex-col gap-5 px-4 pb-6">
+                  {/* #2285: an open coding window puts its session and its
+                      dev pods here, as sections of this panel. */}
+                  <div ref={codingHost} data-coding-panel-host="" className="flex flex-col gap-5 empty:hidden" />
                   <section data-bot-settings-section="routines" className="flex flex-col gap-2">
                     <RoutinesSection bot={bot} routines={derived.botRoutines} runs={runs} grouped upcoming createRequest={meetingRequest} />
                   </section>
@@ -386,6 +395,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
 
         </div>
       </aside>
+      </PanelPageHostProvider>
       {dialogs}
     </>
   );

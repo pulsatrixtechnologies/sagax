@@ -51,7 +51,7 @@ import { canEditConfig } from "@/lib/viewer";
 import { canEditBotField } from "@/lib/bot-capabilities";
 import { teamMemorySharingOf } from "../../../shared/team-memory-sharing";
 import { ApiError, api, useStore, type Bot, type ConfigStatus } from "@/state/store";
-import { HelpTip, PILL, PillSelect, SettingRow, SwitchRow } from "../SettingsPrimitives";
+import { HelpTip, InlineFold, PILL, PillSelect, SettingRow, SwitchRow } from "../SettingsPrimitives";
 import { AdvancedFold } from "./AdvancedFold";
 import { MarkdownEditor } from "../markdown/MarkdownEditor";
 import { inputCls } from "./field";
@@ -929,14 +929,11 @@ export function MemoryJournalList({
               )}
             </div>
             {row.diff && (
-              <details className="mt-1">
-                <summary className="cursor-pointer text-[12px] text-ink-secondary">
-                  {t("botPanel.memory.diff", { added: String(row.added), removed: String(row.removed) })}
-                </summary>
-                <pre className="mt-1 max-h-[240px] overflow-auto whitespace-pre-wrap rounded-md p-2 font-mono text-[11.5px] leading-relaxed text-ink">
+              <InlineFold className="mt-1" label={t("botPanel.memory.diff", { added: String(row.added), removed: String(row.removed) })}>
+                <pre className="max-h-[240px] overflow-auto whitespace-pre-wrap rounded-md p-2 font-mono text-[11.5px] leading-relaxed text-ink">
                   {row.diff}
                 </pre>
-              </details>
+              </InlineFold>
             )}
           </div>
         );

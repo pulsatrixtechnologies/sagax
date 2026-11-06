@@ -22,7 +22,7 @@ import {
   parseEnvLines, removePersonalServer, setPersonalServerEnabled, startGithubDevice, startPersonalServerSignIn, suggestServerName,
   type MyConnections, type PersonalServer,
 } from "@/lib/my-connections";
-import { Card, Switch } from "../SettingsPrimitives";
+import { Card, PillSelect, Switch } from "../SettingsPrimitives";
 
 const message = readableError;
 const inputClass = "w-full rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] text-ink placeholder:text-ink-secondary focus:border-border-strong focus:outline-none";
@@ -322,15 +322,15 @@ function AddServerForm({ data, onDone, onCancel }: { data: MyConnections; onDone
       {kind === "remote" ? (
         <>
           <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://example.com/mcp" aria-label={t("myConnections.add.url")} className={inputClass} />
-          <label className="flex items-center gap-2 text-[12.5px] text-ink-secondary">
+          <div className="flex items-center gap-2 text-[12.5px] text-ink-secondary">
             {t("myConnections.add.auth")}
-            <select value={auth} onChange={(event) => setAuth(event.target.value as Auth)} className="rounded-lg border border-border bg-transparent px-2 py-1 text-[12.5px] text-ink">
-              <option value="oauth">{t("myConnections.auth.oauth")}</option>
-              <option value="token">{t("myConnections.auth.token")}</option>
-              <option value="github">{t("myConnections.auth.github")}</option>
-              <option value="none">{t("myConnections.auth.none")}</option>
-            </select>
-          </label>
+            <PillSelect<Auth> value={auth} onChange={setAuth} ariaLabel={t("myConnections.add.auth")} options={[
+              { value: "oauth", label: t("myConnections.auth.oauth") },
+              { value: "token", label: t("myConnections.auth.token") },
+              { value: "github", label: t("myConnections.auth.github") },
+              { value: "none", label: t("myConnections.auth.none") },
+            ]} />
+          </div>
           {auth === "token" && <input type="password" autoComplete="off" value={token} onChange={(event) => setToken(event.target.value)} placeholder={t("myConnections.add.tokenPlaceholder")} aria-label={t("myConnections.auth.token")} className={inputClass} />}
           {auth === "oauth" && <p className="text-[12px] leading-relaxed text-ink-secondary">{t("myConnections.add.oauthHint")}</p>}
           {auth === "github" && data.github.state !== "connected" && <p className="text-[12px] leading-relaxed text-ink-secondary" data-github-auth-hint>{t("myConnections.add.githubHint")}</p>}

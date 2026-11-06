@@ -19,6 +19,7 @@ import { humanStep } from "@/lib/coding-chat";
 import { formatTokens, headlineTokens } from "@/lib/usage";
 import { openExternalLink } from "@/lib/app-links";
 import { cn } from "@/lib/cn";
+import { PANEL_CARD, PANEL_ROW } from "@/lib/grouped-card";
 import { t } from "@/lib/i18n";
 
 /** Rows shown before "↓ N more". */
@@ -72,7 +73,7 @@ function glyphFor(status: RowStatus): { glyph: string; className: string } {
 
 function Right({ elapsed, tokens }: { elapsed?: string; tokens?: number }) {
   return (
-    <span data-agent-right className="shrink-0 text-[11px] tabular-nums text-ink-tertiary">
+    <span data-agent-right className="shrink-0 text-[12px] leading-4 tabular-nums text-ink-tertiary">
       {elapsed}
       {tokens !== undefined && tokens > 0 && (
         <>
@@ -99,24 +100,25 @@ function Shell({ status, tag, title, line, right, onOpen, openAria, stop, childr
 }) {
   const { glyph, className } = glyphFor(status);
   return (
-    <li {...attrs} data-agent-row data-agent-status={status} className="group flex items-start gap-2 px-1 py-1 font-mono text-[12px] leading-5">
-      <span aria-hidden="true" className={cn("w-[1ch] shrink-0 select-none text-center text-[10px] leading-5", className)}>{glyph}</span>
+    // 2026-11-06 (JC): the same card, row and UI font as Upcoming beside it (PANEL_CARD / PANEL_ROW), never mono.
+    <li {...attrs} data-agent-row data-agent-status={status} className={cn("group flex items-center gap-2.5 hover:bg-hover", PANEL_ROW)}>
+      <span aria-hidden="true" className={cn("flex size-4 shrink-0 select-none items-center justify-center text-[10px]", className)}>{glyph}</span>
       <button
         type="button"
         onClick={onOpen}
         disabled={!onOpen}
         aria-label={openAria}
-        className="min-w-0 flex-1 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-default"
+        className="min-w-0 flex-1 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-default"
       >
         <span className="flex min-w-0 items-baseline gap-2">
-          <span className="min-w-0 flex-1 truncate" title={title}>
+          <span className="min-w-0 flex-1 truncate text-[14px] leading-[18px]" title={title}>
             {tag && <span data-agent-tag className="font-semibold text-ink">{tag}</span>}
             {tag && <span aria-hidden="true" className="text-ink-tertiary"> · </span>}
             <span className="text-ink">{title}</span>
           </span>
           {right}
         </span>
-        {line && <span data-agent-line className="block truncate text-ink-secondary">{line}</span>}
+        {line && <span data-agent-line className="block truncate text-[12px] leading-4 text-ink-secondary">{line}</span>}
         {children}
       </button>
       {stop}
@@ -127,7 +129,9 @@ function Shell({ status, tag, title, line, right, onOpen, openAria, stop, childr
 function ItemRow({ item, now, onOpen, onStop, stopping, usageOf, onIgnore }: { item: BotActivityItem; now: number; onOpen: (item: BotActivityItem) => void; onStop?: (item: BotActivityItem) => void; stopping?: ReadonlySet<string>; usageOf?: (threadId: string) => TaskUsage | undefined; onIgnore?: (id: string) => void }) {
   const live = activityStatusActive(item.status);
   const usage = item.threadId ? usageOf?.(item.threadId) : undefined;
-  const elapsed = formatActivityDuration((item.endedAt ?? now) - item.startedAt);
+  // A finished row shows how long it ran (end minus start); with no end
+  // known, no number at all (never "now minus start": 228h on an old thread).
+  const elapsed = live ? formatActivityDuration(now - item.startedAt) : item.endedAt !== undefined ? formatActivityDuration(item.endedAt - item.startedAt) : undefined;
   const step = live ? humanStep(item.currentStep) ?? activityStatusLabel(item.status) : activityStatusLabel(item.status);
   // where it works (repository · branch) stays on the second line, after the step
   const where = codingWhere(item);
@@ -203,8 +207,8 @@ export function AgentRows({ items, launched = [], onOpen, onOpenLaunched, onStop
   const hidden = all ? 0 : Math.max(0, rows.length - shown);
   const drawn = hidden > 0 ? rows.slice(0, shown) : rows;
   return (
-    <div data-agent-rows className="flex flex-col">
-      <ul aria-label={t("botPanel.coding.title")} className="flex flex-col" {...(launched.length > 0 ? { "data-launched-agents": "" } : {})}>
+    <div data-agent-rows className="flex flex-col gap-1">
+      <ul aria-label={t("botPanel.coding.title")} className={PANEL_CARD} {...(launched.length > 0 ? { "data-launched-agents": "" } : {})}>
         {drawn.map((row) => row.node)}
       </ul>
       {hidden > 0 && (
@@ -212,7 +216,7 @@ export function AgentRows({ items, launched = [], onOpen, onOpenLaunched, onStop
           type="button"
           data-agent-rows-more
           onClick={() => setAll(true)}
-          className="self-start rounded px-1 py-0.5 font-mono text-[12px] text-ink-tertiary hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+          className="w-full rounded-md px-3 py-2 text-center text-[13px] leading-[18px] text-ink-secondary hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60"
         >
           ↓ {t("botPanel.coding.more", { count: hidden })}
         </button>

@@ -6,6 +6,7 @@ import { ChevronDown } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { InlineFold } from "../SettingsPrimitives";
 
 export interface PromptPreviewData {
   sections: Array<{ id: string; label: string; text: string; bytes: number }>;
@@ -50,15 +51,11 @@ export function PromptPreview({
       {open && data && (
         <div className="mt-3 flex flex-col gap-2">
           {data.sections.map((section) => (
-            <details key={section.id} className="rounded-lg border border-hairline/40 bg-inset px-3 py-2">
-              <summary className="flex cursor-pointer items-center justify-between gap-3 text-[13px] text-ink">
-                <span>{section.label}</span>
-                <span className="shrink-0 tabular-nums text-ink-secondary">{t("botPanel.prompt.bytes", { count: section.bytes.toLocaleString() })}</span>
-              </summary>
-              <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-ink">
+            <InlineFold key={section.id} label={<>{section.label} · <span className="tabular-nums">{t("botPanel.prompt.bytes", { count: section.bytes.toLocaleString() })}</span></>}>
+              <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-ink">
                 {section.text}
               </pre>
-            </details>
+            </InlineFold>
           ))}
           {data.note && <div className="text-[11px] text-ink-secondary">{data.note}</div>}
         </div>

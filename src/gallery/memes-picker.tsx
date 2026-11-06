@@ -2,6 +2,7 @@
  * No live provider key: mocked hits only. */
 import { useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { ComposerPlusMenu } from "../components/ComposerControls";
 import { MemeImage } from "../components/MemeImage";
 import { MemePicker, MemePickerButton } from "../components/MemePicker";
 import { loadLocale } from "../lib/i18n";
@@ -75,6 +76,16 @@ function Gallery() {
   return (
     <main className="min-h-screen bg-app p-8 text-ink" data-gallery-sample="memes-picker">
       <div className="mx-auto flex max-w-xl flex-col gap-6">
+        {/* #2295: the + and the GIF button side by side, the same icon button */}
+        <section className="rounded-2xl border border-border bg-panel p-4 shadow-sm" data-gallery-panel="composer-bar">
+          <div className="flex min-h-11 items-end gap-1 rounded-[22px] border-[0.5px] border-border bg-composer px-2 py-1.5">
+            <div className="composer-band flex flex-wrap items-center gap-2">
+              <ComposerPlusMenu items={[]} />
+              <MemePickerButton open={false} onToggle={() => undefined} buttonRef={{ current: null }} />
+            </div>
+            <span className="self-center px-1 text-[15px] text-ink-tertiary">Message…</span>
+          </div>
+        </section>
         <section className="rounded-2xl border border-border bg-panel p-4 shadow-sm" data-gallery-panel="composer">
           <p className="mb-3 text-[13px] text-ink-secondary">Composer</p>
           <div className="relative flex items-center gap-2 rounded-[22px] border border-border bg-composer px-2 py-2">

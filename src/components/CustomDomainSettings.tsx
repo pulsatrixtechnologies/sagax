@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Check, ExternalLink, Globe, Loader2 } from "lucide-react";
 import { api } from "@/state/store";
 import { t } from "@/lib/i18n";
-import { Card, CommandLine } from "./SettingsPrimitives";
+import { Card, CommandLine, InlineFold } from "./SettingsPrimitives";
 
 export interface CustomDomainStatus {
   publicUrl: string | null;
@@ -85,9 +85,8 @@ ${hold}
 
 export function CustomDomainGuide({ status }: { status: CustomDomainStatus }) {
   return (
-    <details className="rounded-lg border border-hairline/50 bg-inset px-3 py-2.5 text-[12px] text-ink-secondary">
-      <summary className="cursor-pointer font-medium text-ink">{t("settings.domain.guide")}</summary>
-      <ol className="mt-3 list-decimal space-y-3 pl-4 leading-relaxed">
+    <InlineFold label={t("settings.domain.guide")} className="text-[12px] text-ink-secondary">
+      <ol className="mt-1 list-decimal space-y-3 pl-4 leading-relaxed">
         <li>{t("settings.domain.dns")}</li>
         <li>
           {t("settings.domain.proxy")}
@@ -102,7 +101,7 @@ export function CustomDomainGuide({ status }: { status: CustomDomainStatus }) {
       <a className="mt-3 inline-flex items-center gap-1.5 text-accent hover:underline" href="https://github.com/pulsatrixtechnologies/sagax/blob/main/docs/self-hosting.md#connect-a-custom-domain-in-settings" target="_blank" rel="noopener noreferrer">
         {t("settings.domain.fullGuide")} <ExternalLink size={12} />
       </a>
-    </details>
+    </InlineFold>
   );
 }
 

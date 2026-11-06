@@ -45,6 +45,7 @@ vi.mock("./BotHostSettings", () => ({ BotHostSettings: () => null }));
 
 const { ModelSection, recoveryFor } = await import("./ModelSection");
 const { BotEditorContext } = await import("./BotEditorContext");
+const { BotPayerCard } = await import("./BotPayerSettings");
 
 const instance = (instanceId: string, displayName: string, models: Array<[string, string]>): InstanceInfo => ({
   instanceId, driverKind: "codex", displayName, access: "api", cliDefault: instanceId,
@@ -263,5 +264,39 @@ describe("Bot > Model, rights and drafts", () => {
     expect($('[data-settings-row="botPayerMode"]')).toBeNull();
     expect(recoveryCard()).toBeNull();
     expect($('[data-settings-row="botKeepWarm"]')).not.toBeNull();
+  });
+});
+
+// Hotfix 2026-11-06 (JC: "I can no longer select who pays for a shared
+// bot"): who pays was tied to the automaticRecovery right. It is the
+// owner's or an admin's choice, in Bot > Model and in Shared with.
+describe("Who pays for a shared bot (#1137 regression)", () => {
+  const member = (permissions: string[]) => ({ viewer: { operator: false, principalId: "pr_zara", email: "zara@example.test", name: "zara", role: "member", permissions } }) as unknown as ConfigStatus;
+  const shared = (over: Partial<Bot> = {}) => bot({ grants: [{ target: "user:pr_sam", level: "use" }], ...over } as Partial<Bot>);
+
+  it("the owner finds the picker in Model even without the recovery right, and changes it", async () => {
+    fixture.config = member([]);
+    await render(shared());
+    expect(recoveryCard()).toBeNull();
+    const row = $('[data-settings-row="botPayerMode"]');
+    expect(row, "the payer picker in Bot > Model").not.toBeNull();
+    await pick(row!.querySelector("[data-pill-select]"), "Each person");
+    expect(patched()).toContainEqual(["/api/bots/bot-1/runtime-settings", { turnPayer: "speaker" }]);
+  });
+
+  it("an admin finds it on someone else's shared bot", async () => {
+    fixture.config = { viewer: { operator: false, principalId: "pr_admin", role: "admin" } } as unknown as ConfigStatus;
+    await render(shared({ ownerUserId: "pr_other" }));
+    expect($('[data-settings-row="botPayerMode"]')).not.toBeNull();
+  });
+
+  it("Shared with carries the same picker for the owner, nothing for someone else", async () => {
+    fixture.config = member([]);
+    await act(async () => { root.render(createElement(BotPayerCard, { bot: shared() })); });
+    await flush();
+    expect($('[data-settings-group="botPayerSharing"] [data-settings-row="botPayerMode"] [data-pill-select]')).not.toBeNull();
+    await act(async () => { root.render(createElement(BotPayerCard, { bot: shared({ ownerUserId: "pr_other" }) })); });
+    await flush();
+    expect($('[data-settings-row="botPayerMode"]')).toBeNull();
   });
 });

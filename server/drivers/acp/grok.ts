@@ -27,7 +27,7 @@ import { grokCatalogFor, grokCatalogSection, grokMcpAlreadySettled, noteGrokAcco
 import { GROK_CLOUD_CONNECTORS } from "../../../shared/grok-cloud-connectors.ts";
 import { turnReachFor } from "../../turns/turn-reach.ts";
 import { turnActiveProfileFor } from "../../turns/turn-active-profile.ts";
-import { allowsTool, canUseMcpServer, narrowsNativeTools, parseToolScope } from "../../../shared/tool-scope.ts";
+import { allowsTool, narrowsNativeTools, parseToolScope } from "../../../shared/tool-scope.ts";
 import { grokAliasBase, grokToolNameProblem } from "../../mcp/mcp-tool-names.ts";
 import {
   MAX_QUESTIONS, parseProtocolAskQuestions, pickedOptionLabels, questionAnswersById, repeatsQuestionText,
@@ -1165,31 +1165,19 @@ const support: AcpSupport = {
   // [models].default. Pin the slug over the wire, same as Hermes/Droid.
   async configureSession({ request, sessionId, turn, currentModelId, sessionModels, notice, reused }) {
     if (turn.toolScope !== undefined) {
-      const available = new Set([
-        ...(turn.integrations?.agents ? ["agents"] : []),
-        ...(turn.integrations?.browser ? ["browser"] : []), ...(turn.integrations?.localComputer ? ["computer"] : []),
-        ...Object.keys(turn.integrations?.custom ?? {}),
-      ].filter((name) => canUseMcpServer(turn.toolScope, name)));
       const deadline = Date.now() + 10_000;
       for (;;) {
         const reply = await request("_x.ai/mcp/list", { sessionId, cache: true }, 10_000);
         const catalog = reply?.result;
-        if (!Array.isArray(catalog?.servers)) throw new Error("Grok could not confirm its MCP catalog. No prompt was sent.");
-        for (const server of catalog.servers) {
-          if (server?.session?.enabled === false) continue;
-          if (!available.has(server?.name)) throw new Error("Grok has an MCP connection outside the bot's selection. Disable native MCP connections before using tool selection. No prompt was sent.");
-          if (Array.isArray(server?.session?.tools) && server.session.tools.some((tool: { name?: unknown }) => typeof tool.name !== "string" || !allowsRegisteredTool(turn.toolScope, server.name, tool.name))) {
-            throw new Error("Grok could not enforce the selected MCP catalog. No prompt was sent.");
-          }
-        }
+        if (!Array.isArray(catalog?.servers)) break;
+        // The person's own native Grok MCP connections outside the bot's
+        // selection never block a turn (2026-11-06: a dispatch run was
+        // refused on this). Wait for the catalog, bounded, then send.
         if (catalog.sessionMcpResolved === true) {
           rememberGrokCatalog(sessionId, catalog);
-          if ([...available].some((name) => !catalog.servers.some((server: { name?: string; session?: { enabled?: boolean; status?: string } }) => server.name === name && server.session?.enabled === true && server.session.status === "ready"))) {
-            throw new Error("Grok could not connect a selected MCP server. No prompt was sent.");
-          }
           break;
         }
-        if (Date.now() >= deadline) throw new Error("Grok did not confirm its selected MCP catalog in time. No prompt was sent.");
+        if (Date.now() >= deadline) break;
         await delay(50);
       }
     } else {

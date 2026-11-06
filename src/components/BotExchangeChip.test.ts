@@ -7,6 +7,13 @@ import { setLocale } from "@/lib/i18n";
 import type { Message } from "@/state/store";
 import { BotExchangeChip } from "./BotExchangeChip";
 
+// These lines exist only with threads on; the unified chat (the default)
+// draws none of them (unified-chat.guard.test.ts).
+vi.mock("@/lib/thread-preferences", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/thread-preferences")>(),
+  useShowThreads: () => true,
+}));
+
 const NOTE = "[Message from @Quasar, another bot in this Sagax workspace. Reply to them.]\n\nWhich database?";
 
 beforeAll(() => {

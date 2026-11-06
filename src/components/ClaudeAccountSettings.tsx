@@ -3,7 +3,7 @@ import { Loader2, Plus, RefreshCw } from "lucide-react";
 import { api, useStore, type InstanceInfo } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
-import { CommandLine } from "./SettingsPrimitives";
+import { CommandLine, InlineFold } from "./SettingsPrimitives";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { readableError } from "@/lib/plain-error";
 
@@ -55,8 +55,7 @@ export function ClaudeAccountForm({ instance, onSaved, onCancel }: {
           className="w-full rounded-lg border border-hairline/40 bg-inset px-3 py-2 text-[13px] text-ink focus:outline-none disabled:opacity-50"
         />
       </label>
-      <details>
-        <summary className="cursor-pointer text-[12px] text-ink-secondary hover:text-ink">{t("engines.account.advanced")}</summary>
+      <InlineFold label={t("engines.account.advanced")}>
         <label className="mt-2 flex flex-col gap-1 text-[12px] text-ink-secondary">
           {t("engines.account.configDir")}
           <input
@@ -71,7 +70,7 @@ export function ClaudeAccountForm({ instance, onSaved, onCancel }: {
         </label>
         <p className="mt-1 text-[11.5px] leading-relaxed text-ink-secondary">{t("engines.account.configDirHint")}</p>
         {instance && <p className="mt-1 text-[11.5px] leading-relaxed text-warning">{t("engines.account.changeDirHint")}</p>}
-      </details>
+      </InlineFold>
       {!instance && <p className="text-[12px] leading-relaxed text-ink-secondary">{t("engines.account.addHint")}</p>}
       {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
       <div className="flex justify-end gap-2">
@@ -177,9 +176,8 @@ export function ClaudeAccountSettings({ instance }: { instance: InstanceInfo }) 
           <RefreshCw size={12} className={cn(busy && "animate-spin")} />{t("engines.account.check")}
         </button>
       </div>
-      <details>
-        <summary className="cursor-pointer rounded-md py-1 font-medium text-ink-secondary outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-accent">{t("engines.account.manage")}</summary>
-        <div className="mt-3 space-y-4 rounded-xl bg-inset p-4">
+      <InlineFold label={t("engines.account.manage")}>
+        <div className="mt-1 space-y-4">
           <p className="leading-relaxed text-ink-secondary">{t("engines.account.signInHint")}</p>
           {account.signInShell === "powershell" && <p className="text-ink-secondary">{t("engines.account.powershell")}</p>}
           <CommandLine command={account.signInCommand} copyLabel={t("engineSetup.copyCommand")} />
@@ -202,7 +200,7 @@ export function ClaudeAccountSettings({ instance }: { instance: InstanceInfo }) 
             </div>
           )}
         </div>
-      </details>
+      </InlineFold>
       {error && <p role="alert" className="text-danger">{error}</p>}
       <ConfirmDialog
           open={confirmRemove}

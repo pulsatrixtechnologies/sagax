@@ -11,7 +11,7 @@ import { t } from "@/lib/i18n";
 import { useOrgApprovalPolicy } from "@/lib/org-approval-policy";
 import { api, useStore, type Bot } from "@/state/store";
 import { parseRecipientEntry, recipientEntryKey } from "../../../shared/allowed-recipients";
-import { DescribedRow, PILL } from "../SettingsPrimitives";
+import { DescribedRow, PILL, PillSelect } from "../SettingsPrimitives";
 import { readableError } from "@/lib/plain-error";
 
 /** How one entry reads: an address or a number as it is; a bot by its name,
@@ -119,16 +119,13 @@ export function AllowedRecipientsRow({ bot }: { bot: Bot }) {
             />
             <button type="submit" className={PILL} disabled={saving || grantsOff || !draft.trim()}>{t("botPanel.recipients.add")}</button>
             {otherBots.length > 0 && (
-              <select
-                className={`${PILL} max-w-[200px]`}
-                aria-label={t("botPanel.recipients.addBot")}
+              <PillSelect
+                ariaLabel={t("botPanel.recipients.addBot")}
                 value=""
                 disabled={saving || grantsOff}
-                onChange={(event) => { if (event.target.value) save([...list, `bot:${event.target.value}`]); }}
-              >
-                <option value="">{t("botPanel.recipients.addBot")}</option>
-                {otherBots.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
-              </select>
+                onChange={(next) => { if (next) save([...list, `bot:${next}`]); }}
+                options={[{ value: "", label: t("botPanel.recipients.addBot") }, ...otherBots.map((candidate) => ({ value: candidate.id, label: candidate.name }))]}
+              />
             )}
           </form>
           {error && <div role="alert" className="text-[12px] text-danger">{error}</div>}

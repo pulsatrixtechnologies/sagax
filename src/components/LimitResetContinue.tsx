@@ -38,7 +38,9 @@ export function engineLimitNoticeKey(limit: { engine: string; blocked: boolean; 
 }
 
 /** Full-width dismissible banner above the conversation when this bot's engine
- * is near or at its usage limit. Same shell as the other chat banners. */
+ * is near its usage limit. Same shell as the other chat banners. At the limit
+ * the composer's own line says it (with Continue at and Switch engine), so the
+ * banner stays out: one message, never two (JC 2026-11-06). */
 export function EngineLimitNotice({
   engine,
   botId,
@@ -51,7 +53,7 @@ export function EngineLimitNotice({
   const limit = useEngineLimits().find((candidate) => candidate.engine === engine);
   const continueAt = useLimitResetContinue(botId, threadId, limit?.resetsAt ?? undefined);
   const [dismissed, setDismissed] = useState<string | null>(null);
-  if (!limit || !nearLimit(limit)) return null;
+  if (!limit || !nearLimit(limit) || limit.blocked) return null;
   const key = engineLimitNoticeKey(limit);
   if (dismissed === key || noticeDismissed(key)) return null;
   return (

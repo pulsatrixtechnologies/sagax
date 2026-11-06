@@ -3,13 +3,26 @@
 // routine page and the task detail. Escape goes back one level (onBack),
 // never closes the whole panel. Covers the host with absolute inset-0;
 // the host (BotSettingsDialog, persona editor, NewBotDialog) is relative.
-import { ChevronLeft, PanelRight } from "lucide-react";
-import { useEffect, useRef, type ReactNode } from "react";
+import { ChevronLeft, X } from "lucide-react";
+import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { useCaptionChrome, useMacInsetChrome } from "../DesktopCapabilities";
 import { RoutineTitle } from "../routines/RoutineRowMenu";
+
+/** The whole docked panel (its top bar included), so a pushed page covers
+ * the panel's own gear and close row instead of stacking a second header
+ * under it (2026-11-06, JC: one header row, back, title, X). */
+const PanelPageHostContext = createContext<HTMLElement | null>(null);
+export const PanelPageHostProvider = PanelPageHostContext.Provider;
+
+/** Renders a pushed page over the whole panel when a host is provided. */
+export function PanelPageLayer({ children }: { children: ReactNode }) {
+  const host = useContext(PanelPageHostContext);
+  return host ? createPortal(children, host) : <>{children}</>;
+}
 
 export type PanelPageHeaderProps = {
   name: string;
@@ -21,7 +34,7 @@ export type PanelPageHeaderProps = {
   closeLabel?: string;
 };
 
-/** The top bar of a pushed page: back, title, close the panel. */
+/** The top bar of a pushed page, one row: back, title, close the panel (X). */
 export function PanelPageHeader({ name, onBack, onClose, onRename, backLabel, closeLabel }: PanelPageHeaderProps) {
   const { padClass } = useCaptionChrome();
   const { macInset, browser } = useMacInsetChrome();
@@ -32,7 +45,7 @@ export function PanelPageHeader({ name, onBack, onClose, onRename, backLabel, cl
       {onRename
         ? <span className="absolute inset-x-14 flex justify-center"><RoutineTitle name={name} editable onRename={onRename} className="truncate text-center text-[14px] font-semibold text-ink" /></span>
         : <span className="pointer-events-none absolute inset-x-14 truncate text-center text-[14px] font-semibold text-ink">{name}</span>}
-      <button type="button" aria-label={closeLabel ?? t("botPanel.routines.close")} title={closeLabel ?? t("botPanel.routines.close")} onClick={onClose} className={CIRCLE_BUTTON}><PanelRight size={18} strokeWidth={1.75} /></button>
+      <button type="button" aria-label={closeLabel ?? t("botPanel.routines.close")} title={closeLabel ?? t("botPanel.routines.close")} onClick={onClose} data-panel-page-close className={CIRCLE_BUTTON}><X size={18} strokeWidth={1.75} /></button>
     </div>
   </>;
 }
@@ -82,6 +95,7 @@ export function PanelPage({
   }, [autoFocus, name]);
 
   return (
+    <PanelPageLayer>
     <div
       ref={rootRef}
       data-panel-page=""
@@ -102,5 +116,6 @@ export function PanelPage({
       <div data-panel-page-body="" className={cn("min-h-0 flex-1 overflow-y-auto overflow-x-hidden", bodyClassName)}>{children}</div>
       {footer ? <div data-panel-page-footer="" className="flex shrink-0 flex-wrap items-center gap-2 border-t border-hairline/40 px-3 py-3">{footer}</div> : null}
     </div>
+    </PanelPageLayer>
   );
 }

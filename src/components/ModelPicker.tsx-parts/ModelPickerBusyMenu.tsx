@@ -3,7 +3,7 @@ import type { Bot } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { EffortRow } from "./EffortControls";
 
-/** The model menu while the bot works: only the reasoning level can change, for the next turn. */
+/** The model menu while the bot works: only the reasoning level, no help text (the trigger tooltip says why the model is locked). */
 export function BusyModelMenu({
   bot,
   threadId,
@@ -29,15 +29,6 @@ export function BusyModelMenu({
           </span>
         )}
       />
-      {threadId && (
-        <p data-model-busy-scope className="px-3.5 py-1 text-[12px] leading-4 text-ink-tertiary">
-          {t(updateBotDefault ? "model.scope.botHelp" : "model.scope.threadHelp")}
-        </p>
-      )}
-      <p className="px-3.5 py-1 text-[12px] leading-4 text-ink-tertiary">{t("model.reasoningNextTurn")}</p>
-      <p className="px-3.5 py-1 text-[12px] leading-4 text-ink-tertiary">
-        {t(threadId ? "model.threadBusy" : "model.busy")}
-      </p>
     </div>
   );
 }

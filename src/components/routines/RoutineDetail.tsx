@@ -109,10 +109,10 @@ function TriggerRow({ routine, bot, editable, onPatch }: { routine: Routine; bot
   return <PanelRow data-routine-trigger-row="" label={t("routineDetail.trigger")}>
     {editable && onPatch
       ? <button ref={anchor} type="button" data-routine-trigger aria-haspopup="dialog" aria-expanded={open} title={t("routineTrigger.change")} onClick={() => setOpen((value) => !value)}
-        className="-mr-1.5 inline-flex min-w-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-right text-[13px] leading-5 text-ink hover:bg-hover aria-expanded:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">
-        <span className="min-w-0 truncate">{scheduleLabel(routine.schedule)}</span>{watch}<ChevronDown size={13} aria-hidden="true" className="shrink-0 text-ink-tertiary" />
+        className="-mr-1.5 inline-flex min-w-0 items-center gap-1 rounded-xl px-1.5 py-0.5 text-right text-[13px] leading-5 text-ink hover:bg-hover aria-expanded:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">
+        <span data-routine-trigger-value title={scheduleLabel(routine.schedule)} className="min-w-0 whitespace-normal text-right [overflow-wrap:anywhere]">{scheduleLabel(routine.schedule)}</span>{watch}<ChevronDown size={13} aria-hidden="true" className="shrink-0 text-ink-tertiary" />
       </button>
-      : <span data-routine-trigger className="flex min-w-0 items-center gap-1.5"><PanelValue>{scheduleLabel(routine.schedule)}</PanelValue>{watch}</span>}
+      : <span data-routine-trigger className="flex min-w-0 items-center gap-1.5"><span data-routine-trigger-value title={scheduleLabel(routine.schedule)} className="min-w-0 text-right text-[13px] leading-5 text-ink [overflow-wrap:anywhere]">{scheduleLabel(routine.schedule)}</span>{watch}</span>}
     {open && onPatch && <TriggerPopover routine={routine} bot={bot} anchorRef={anchor} onApply={onPatch} onClose={() => setOpen(false)} />}
   </PanelRow>;
 }

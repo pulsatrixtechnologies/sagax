@@ -59,6 +59,7 @@ import { GroupRoomRoster } from "./GroupView.tsx-parts/GroupRoomRoster";
 import { GroupRoomTranscriptPane } from "./GroupView.tsx-parts/GroupRoomTranscriptPane";
 import { groupRoomIdentity } from "./GroupView.tsx-parts/groupRoomIdentity";
 import { RoomHoldsBanner } from "./GroupView.tsx-parts/RoomHoldsBanner";
+import { ChatEdgeFade } from "@/components/ChatEdgeFade";
 
 export { RoomToolChip, Transcript, RoutedByLine, DefaultResponderSelect, RoomWorkingFolder, roomFolderEditable, RoomHoldsBanner };
 
@@ -208,11 +209,14 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
         {...headerDragProps}
         className={cn(
           "content-topbar",
-          "@container/chathead relative flex min-h-[52px] items-center justify-end px-5 py-2.5",
+          // z-[3] + ChatEdgeFade: the transcript fades out under the header
+          // like a bot chat's (JC 2026-11-06).
+          "@container/chathead relative z-[3] flex min-h-[52px] items-center justify-end px-5 py-2.5",
           // Room for the drawer button, which overlays this corner below sm.
           "pl-11 sm:pl-5",
         )}
       >
+        <ChatEdgeFade edge="top" />
         <div className="absolute left-1/2 top-1/2 flex max-w-[50%] -translate-x-1/2 -translate-y-1/2 items-center gap-2" style={headerNoDragStyle}>
           {groupPill}
         </div>

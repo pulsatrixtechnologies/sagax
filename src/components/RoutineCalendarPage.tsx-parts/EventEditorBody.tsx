@@ -10,9 +10,12 @@ import type { EventEditorBodyProps } from "./types";
 import { makeCalendarSchedule } from "./helpers";
 import type { CalendarRecurrenceChoice } from "./types";
 import { scheduleDraftFor } from "@/components/routines/schedule-editor";
+import { useCaptionChrome, useMacInsetChrome } from "@/components/DesktopCapabilities";
 
 export function EventEditorBody(props: EventEditorBodyProps) {
   const m = useEventEditorBody(props);
+  const { padClass } = useCaptionChrome();
+  const { macInset, browser } = useMacInsetChrome();
   const {
     kind, panel, dialogRef, requestClose, requestDismiss, dirty, viewing, name, setName, titleText,
     readOnly, canSwitchKind, setKind, setBotIds, recurrence, setRecurrence, setScheduleDraft, at, weekdays,
@@ -42,9 +45,13 @@ export function EventEditorBody(props: EventEditorBodyProps) {
         {kind === "routine" ? (
           // 2026-11-03 (JC, Grok Bot's routine panel): < the routine's name ×.
           // Editing, the name is edited in place.
-          <div data-routine-editor-header className={cn("sticky top-0 z-20 flex min-w-0 items-center gap-1.5", panel ? "bg-panel px-3 py-2" : "border-b border-hairline/40 bg-elevated px-5 py-3")}>
+          // 2026-11-06 (JC): in the panel this one row is the whole header,
+          // the same back, title, X as every pushed page of the panel.
+          <>
+          {panel && (macInset || browser) && <div className="content-topbar-strip" />}
+          <div data-routine-editor-header className={cn("sticky top-0 z-20 flex min-w-0 items-center gap-1.5", panel ? cn("content-topbar h-12 shrink-0 bg-panel px-3", padClass) : "border-b border-hairline/40 bg-elevated px-5 py-3")}>
             {panel && (
-              <button type="button" data-editor-back onClick={requestClose} aria-label={t("routineRun.back")} title={t("routineRun.back")} className="flex size-8 shrink-0 items-center justify-center rounded-full text-ink-secondary hover:bg-hover hover:text-ink">
+              <button type="button" data-editor-back onClick={requestClose} aria-label={t("routineRun.back")} title={t("routineRun.back")} className={cn(CIRCLE_BUTTON, "shrink-0")}>
                 <ChevronLeft size={18} strokeWidth={1.75} />
               </button>
             )}
@@ -52,10 +59,11 @@ export function EventEditorBody(props: EventEditorBodyProps) {
               ? <h2 data-editor-title className="min-w-0 flex-1 truncate px-0.5 text-[15px] font-medium leading-6 text-ink" title={name}>{name || titleText}</h2>
               : <input autoFocus={!existingRoutine} data-editor-title data-routine-editor-name value={name} onChange={(event) => setName(event.target.value)} aria-label={t("routineEditor.name")} placeholder={t("routineCalendar.addTitle")} className="h-8 min-w-0 flex-1 rounded-md bg-transparent px-1.5 text-[15px] font-medium leading-6 text-ink outline-none placeholder:text-ink-tertiary hover:bg-hover focus:bg-inset focus:ring-2 focus:ring-accent/40" />}
             {dirty && !viewing && <span data-editor-dirty className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent-text"><span aria-hidden="true" className="size-1.5 rounded-full bg-accent" />{t("routineEditor.unsaved")}</span>}
-            <button type="button" data-editor-close onClick={() => void requestDismiss()} aria-label={t("common.close")} title={t("common.close")} className={cn(CIRCLE_BUTTON, "size-8")}>
-              <X size={15} strokeWidth={1.75} />
+            <button type="button" data-editor-close onClick={() => void requestDismiss()} aria-label={t("common.close")} title={t("common.close")} className={cn(CIRCLE_BUTTON, "shrink-0", !panel && "size-8")}>
+              <X size={panel ? 18 : 15} strokeWidth={1.75} />
             </button>
           </div>
+          </>
         ) : (
         <div className={cn("sticky top-0 z-20 flex items-center justify-between", panel ? "bg-panel px-4 py-2" : "border-b border-hairline/40 bg-elevated px-6 py-4")}>
           <div className="flex min-w-0 items-center gap-2">

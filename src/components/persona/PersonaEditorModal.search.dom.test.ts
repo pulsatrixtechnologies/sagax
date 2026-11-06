@@ -99,7 +99,8 @@ const shownTab = () => host.querySelector('[data-bot-profile-tab][aria-selected=
 const toggle = () => host.querySelector<HTMLElement>("[data-bot-profile-search-toggle]")!;
 // The tabs the query leads to, best first is the one shown; the others stay plain.
 const matching = () => [...host.querySelectorAll("[data-bot-profile-tab][data-bot-profile-tab-match]")].map((el) => el.getAttribute("data-bot-profile-tab"));
-const opened = () => [...host.querySelectorAll('[role="tabpanel"][data-bot-profile-section][data-open]')].map((el) => el.getAttribute("data-bot-profile-section"));
+// The sections on view: the Appearance fold of the header and the cards of the tab shown (#2271).
+const opened = () => [...host.querySelectorAll('#bot-profile-appearance[data-open], [data-bot-profile-panel]:not([hidden]) [data-bot-profile-section][data-open]')].map((el) => el.getAttribute("data-bot-profile-section"));
 
 function type(value: string) {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
@@ -144,8 +145,10 @@ afterEach(() => {
 
 describe("bot profile settings search", () => {
   it("opens from the magnifier beside the tabs, under them, and dims no tab while empty", () => {
-    expect(selectedTab()).toBe("appearance");
-    expect(shownTab()).toBe("appearance");
+    // a link to Appearance lands on General with the header's fold open (#2271)
+    expect(selectedTab()).toBe("general");
+    expect(shownTab()).toBe("general");
+    expect(opened()).toContain("appearance");
     expect(host.querySelector("[data-persona-search]")).toBeNull();
     expect(toggle().getAttribute("aria-expanded")).toBe("false");
     act(() => toggle().click());
@@ -160,18 +163,20 @@ describe("bot profile settings search", () => {
   it("shows the tab that holds a word, in English and in French, and marks the tabs that do", () => {
     act(() => toggle().click());
     type("mascot");
-    expect(selectedTab()).toBe("appearance");
-    expect(matching()).toEqual(["appearance"]);
-    expect(opened()).toEqual(["appearance"]);
-    expect(host.querySelector('[data-bot-profile-tab="model"]')!.classList.contains("opacity-40")).toBe(true);
+    // the appearance is the header's: its fold opens, no tab is the match
+    expect(selectedTab()).toBe("general");
+    expect(matching()).toEqual([]);
+    expect(opened()).toContain("appearance");
+    expect(host.querySelector('[data-bot-profile-tab="tools"]')!.classList.contains("opacity-40")).toBe(true);
     type("effort");
-    expect(selectedTab()).toBe("model");
-    expect(matching()[0]).toBe("model");
-    expect(opened()).toEqual(["model"]);
+    expect(selectedTab()).toBe("tools");
+    expect(matching()[0]).toBe("tools");
+    expect(opened()).toContain("model");
+    expect(host.querySelector('[data-bot-profile-tab="tools"]')!.classList.contains("opacity-40")).toBe(false);
     act(() => setLocale("fr"));
     act(() => root.render(createElement(PersonaEditorModal)));
     type("modèle");
-    expect(selectedTab()).toBe("model");
+    expect(selectedTab()).toBe("tools");
   });
   it("hides the rows that do not match on the tab shown and marks the first", () => {
     act(() => toggle().click());
@@ -187,7 +192,7 @@ describe("bot profile settings search", () => {
     act(() => toggle().click());
     type("zzzxq");
     expect(matching()).toEqual([]);
-    expect(selectedTab()).toBe("appearance");
+    expect(selectedTab()).toBe("general");
     expect(host.querySelector("[data-persona-no-match]")!.textContent).toBe("Nothing matches “zzzxq”");
   });
   it("opens the field with a slash or Command-F from any tab, but not while typing", async () => {

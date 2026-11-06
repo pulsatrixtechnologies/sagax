@@ -45,8 +45,10 @@ import {
   Info,
   Keyboard,
   Laptop,
+  LifeBuoy,
   Loader2,
   LogOut,
+  MessageSquare,
   Monitor as MonitorIcon,
   Network,
   Plus,
@@ -73,7 +75,9 @@ import { costOf, formatCost, personalUsagePeriods, usageQuery, type PersonalUsag
 import { requestAbout } from "@/lib/about-ui";
 import { requestReleaseNotes } from "@/lib/release-notes-ui";
 import { serverModeBridge } from "@/lib/launch";
-import { openExternalLink } from "@/lib/app-links";
+import { appVersion, HELP_CENTER_URL, openExternalLink, platformLabel } from "@/lib/app-links";
+import { desktopCapabilitiesNow } from "@/lib/desktop";
+import { feedbackMailto } from "@/lib/feedback";
 import { canViewUsage } from "@/lib/viewer";
 import { ShortcutHint } from "./ShortcutHint";
 import { shallowEqual, useStoreDispatch, useStoreSelector } from "@/state/store-selector";
@@ -293,8 +297,10 @@ export interface ProfileMenuHandlers {
   onRemoteSessions: () => void;
   onSettings: () => void;
   onAchievements: () => void;
+  onHelpCenter: () => void;
   onShortcuts: () => void;
   onReleaseNotes: () => void;
+  onFeedback: () => void;
   onAbout: () => void;
   onViewUsage: () => void;
   onSwitch: (id: string) => void;
@@ -305,8 +311,11 @@ export interface ProfileMenuHandlers {
   onMobile: () => void;
 }
 
-/** The reference design's account menu (2026-10-16; src/lib/account-menu.ts):
- * Usage ›, Get Sagax on mobile, Help ›, Settings, Tools › (Automations,
+/** The reference design's account menu (2026-10-16, reordered after Grok
+ * Bot's 2026-11-06; src/lib/account-menu.ts): the plan row (the starred
+ * plan's name, else Usage, with "4% used" on the right) ›, Get Sagax on
+ * mobile, Help › (Help Center, Keyboard shortcuts, Release notes, Check for
+ * updates, Send feedback, About), Settings, Tools › (Automations,
  * Team map, Remote sessions, Achievements), a hairline, Switch
  * organization › (a business session: Switch account ›), Sign out.
  * Automations came back here from the settings nav (2026-10-16) and sits
@@ -316,8 +325,8 @@ export interface ProfileMenuHandlers {
 export function profileMenuItems(input: {
   /** null: no plan reports a window, so Usage carries no percent */
   usagePercent: number | null;
-  /** the starred plan's short name while its figure is the one shown
-   * ("Grok 87%"); null or absent: the usual figure ("100% used") */
+  /** the starred plan's short name while its figure is the one shown: it
+   * names the row ("Grok   87% used"); null or absent: "Usage   87% used" */
   usageName?: string | null;
   usageLines: UsageLine[];
   /** the starred plan's id, and how a star is toggled; absent: no stars */
@@ -377,6 +386,7 @@ export function profileMenuItems(input: {
     ...(input.monthCost !== null ? [{ key: "month-cost", label: t("sidebar.account.monthCost"), value: input.monthCost, info: true }] : []),
   ];
   const help: SidebarSubmenuEntry[] = [
+    { key: "help-center", label: t("sidebar.account.helpCenter"), icon: <LifeBuoy size={16} />, onSelect: input.handlers.onHelpCenter },
     { key: "shortcuts", label: t("sidebar.menu.shortcuts"), icon: <Keyboard size={16} />, trailing: input.shortcutsTrailing, onSelect: input.handlers.onShortcuts },
     { key: "release-notes", label: t("releaseNotes.menu"), icon: <ScrollText size={16} />, onSelect: input.handlers.onReleaseNotes },
     ...(input.updateItem ? [{
@@ -386,6 +396,7 @@ export function profileMenuItems(input: {
       disabled: input.updateItem.disabled,
       onSelect: input.updateItem.onSelect,
     }] : []),
+    { key: "feedback", label: t("settings.feedback.title"), icon: <MessageSquare size={16} />, onSelect: input.handlers.onFeedback },
     { key: "about", label: t("sidebar.menu.about"), icon: <Info size={16} />, onSelect: input.handlers.onAbout },
   ];
   const switching: SidebarSubmenuEntry[] = [
@@ -508,13 +519,9 @@ export function profileMenuItems(input: {
   return [
     {
       key: "usage",
-      label: t("sidebar.account.usage"),
+      label: (input.usagePercent !== null && input.usageName) || t("sidebar.account.usage"),
       icon: <Gauge size={18} />,
-      value: input.usagePercent === null
-        ? undefined
-        : input.usageName
-          ? t("sidebar.account.usageFavorite", { name: input.usageName, used: input.usagePercent })
-          : t("planUsage.used", { used: input.usagePercent }),
+      value: input.usagePercent === null ? undefined : t("planUsage.used", { used: input.usagePercent }),
       submenu: [
         ...usage,
         { key: "view-usage", label: t("sidebar.account.viewUsage"), separatorBefore: usage.length > 0, onSelect: input.handlers.onViewUsage },
@@ -748,6 +755,15 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
         triggerRef.current?.closest("button")?.focus();
         dispatch({ type: "toggleShortcuts", open: true });
       },
+      onHelpCenter: () => { void openExternalLink(HELP_CENTER_URL); },
+      onFeedback: () => {
+        // the same mail draft as Settings > Send feedback; the desktop window
+        // hands a mail link to the system through window.open
+        const system = platformLabel(desktopCapabilitiesNow()?.host?.platform) ?? t("settings.feedback.browser");
+        const url = feedbackMailto({ version: appVersion(), system });
+        if (window.ogb) window.open(url, "_blank", "noopener");
+        else window.location.href = url;
+      },
       onReleaseNotes: () => requestReleaseNotes("browse"),
       onAbout: () => requestAbout(),
       onViewUsage: () => dispatch({ type: "toggleAppSettings", open: true, section: "usage" }),
@@ -822,7 +838,8 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
     <SidebarPopoverMenu
       items={items}
       ariaLabel={name}
-      menuClassName={avatarOnly ? "left-0 w-max min-w-[228px] max-w-[300px]" : undefined}
+      variant="account"
+      menuClassName={avatarOnly ? "left-0 w-max min-w-[260px] max-w-[320px]" : undefined}
       renderTrigger={({ open }) => avatarOnly && withName ? (
         // The foot's profile (reference design): the avatar and the full
         // name, normal weight, no background pill; the update dot on the avatar.

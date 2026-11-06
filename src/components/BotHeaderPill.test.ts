@@ -145,8 +145,27 @@ describe("bot chat header, like Grok Bot (#2141)", () => {
     expect(html).not.toContain("Shared with");
     expect(html).toContain("Pepper");
     expect(html).toContain(" · Research");
-    expect(html).toContain("text-[14px] font-normal");
+    expect(html).toContain("text-[15px] font-normal");
     expect(html).not.toContain("data-bot-header-chevron");
+  });
+
+  it("shows \"Name · Title\" on ONE line, like Grok Bot: name in ink, \" · Title\" in secondary grey (JC 2026-11-06)", () => {
+    const html = header();
+    expect(html).toMatch(/<span data-bot-header-text="" class="[^"]*truncate[^"]*whitespace-nowrap[^"]*"><span data-bot-header-name="" class="text-ink">Pepper<\/span><span data-bot-header-label="" class="text-ink-secondary"> · Research<\/span><\/span>/);
+    expect(html).not.toContain("flex-col");
+    expect(html).toContain("h-10");
+  });
+
+  it("the window pill (Coding, split view) carries the title on the same line too", () => {
+    const html = renderToStaticMarkup(createElement(BotHeaderPill, {
+      name: "Pepper",
+      label: "Research",
+      panelOpen: false,
+      onToggle: () => {},
+      avatar: createElement("span", { "data-test-avatar": "" }),
+    }));
+    expect(html).toMatch(/>Pepper<\/span><span data-bot-header-label="" class="text-ink-secondary"> · Research<\/span>/);
+    expect(html).not.toContain("flex-col");
   });
 
   it("leaves the label out when the bot has none", () => {

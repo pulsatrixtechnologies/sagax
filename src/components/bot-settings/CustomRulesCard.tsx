@@ -27,6 +27,7 @@ import { api, ApiError, useStore, type Bot } from "@/state/store";
 import { compileRule, impliedRiskScope, RISK_CLASSES, TURN_STARTS, type CompiledRule, type CustomRule, type CustomRuleBehavior, type RiskClass, type RuleProduct, type TurnStart } from "../../../shared/custom-rules";
 import { OrgRuleBadge, RISK_LABEL, RuleTextDiff, riskList } from "../CustomRuleNotice";
 import { PaneEmpty, PaneSection } from "./PaneSection";
+import { PillSelect } from "../SettingsPrimitives";
 import { RuleTestButton } from "../approvals/RuleTest";
 import { readableError } from "@/lib/plain-error";
 
@@ -186,44 +187,40 @@ export function CustomRuleForm({ botName, initial, risks, saveLabel, onCancel, o
       {!recognized && <p role="note" className="text-[12px] text-ink-secondary" data-custom-rule-unrecognized>{t("customRules.unrecognized")}</p>}
       {shellFamily && <p role="alert" className="text-[12px] text-danger" data-custom-rule-shell-family>{t("customRules.shellFamily")}</p>}
       {exactOutsideCard && <p role="alert" className="text-[12px] text-danger" data-custom-rule-exact-card>{t("customRules.exactFromCard")}</p>}
-      <label className="flex items-center justify-between gap-3 text-[12.5px] text-ink-secondary">
+      <div className="flex items-center justify-between gap-3 text-[12.5px] text-ink-secondary">
         {t("customRules.form.should")}
-        <select
+        <PillSelect<CustomRuleBehavior>
           value={behavior}
-          onChange={(event) => setBehavior(event.target.value as CustomRuleBehavior)}
-          className="rounded-md bg-raised px-2 py-1 text-[13px] text-ink"
-        >
-          {(["allow", "ask", "deny"] as const).filter((value) => !allowOff || value !== "allow").map((value) => <option key={value} value={value}>{t(CUSTOM_BEHAVIOR_LABEL[value])}</option>)}
-        </select>
-      </label>
-      <label className="flex items-center justify-between gap-3 text-[12.5px] text-ink-secondary">
+          ariaLabel={t("customRules.form.should")}
+          onChange={setBehavior}
+          options={(["allow", "ask", "deny"] as const).filter((value) => !allowOff || value !== "allow").map((value) => ({ value, label: t(CUSTOM_BEHAVIOR_LABEL[value]) }))}
+        />
+      </div>
+      <div className="flex items-center justify-between gap-3 text-[12.5px] text-ink-secondary">
         {t("customRules.form.appliesTo")}
-        <select
+        <PillSelect
           value={choosing ? "some" : allBots ? "all" : "this"}
-          onChange={(event) => {
-            const value = event.target.value;
+          ariaLabel={t("customRules.form.appliesTo")}
+          onChange={(value) => {
             setAllBots(value === "all");
             setChosen(value === "some" && botId ? [botId] : null);
           }}
-          className="rounded-md bg-raised px-2 py-1 text-[13px] text-ink"
-        >
-          <option value="this">{t("customRules.form.thisBot")}</option>
-          <option value="all">{t("customRules.form.allBots")}</option>
-          {canChoose && <option value="some">{t("customRules.form.someBots")}</option>}
-        </select>
-      </label>
-      <label className="flex items-center justify-between gap-3 text-[12.5px] text-ink-secondary">
+          options={[
+            { value: "this", label: t("customRules.form.thisBot") },
+            { value: "all", label: t("customRules.form.allBots") },
+            ...(canChoose ? [{ value: "some", label: t("customRules.form.someBots") }] : []),
+          ]}
+        />
+      </div>
+      <div className="flex items-center justify-between gap-3 text-[12.5px] text-ink-secondary" data-custom-rule-started-by={startedBy || "any"}>
         {t("customRules.form.startedBy")}
-        <select
+        <PillSelect<TurnStart | "">
           value={startedBy}
-          data-custom-rule-started-by={startedBy || "any"}
-          onChange={(event) => setStartedBy(event.target.value as TurnStart | "")}
-          className="rounded-md bg-raised px-2 py-1 text-[13px] text-ink"
-        >
-          <option value="">{t("customRules.form.startedBy.any")}</option>
-          {TURN_STARTS.map((value) => <option key={value} value={value}>{t(START_OPTION[value])}</option>)}
-        </select>
-      </label>
+          ariaLabel={t("customRules.form.startedBy")}
+          onChange={setStartedBy}
+          options={[{ value: "", label: t("customRules.form.startedBy.any") }, ...TURN_STARTS.map((value) => ({ value, label: t(START_OPTION[value]) }))]}
+        />
+      </div>
       <p className="text-[11.5px] text-ink-tertiary">{t("customRules.form.startedBy.hint")}</p>
       {choosing && bots && (
         <fieldset className="flex flex-col gap-1 text-[12.5px] text-ink-secondary" data-custom-rule-bots>

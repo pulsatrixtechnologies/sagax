@@ -171,6 +171,7 @@ export function useChatViewPresence({
   const botPill = (
     <BotHeaderPill
       name={bot.name}
+      label={bot.title}
       panelOpen={panelPillOpen}
       onToggle={togglePanelFromPill}
       avatar={
@@ -179,7 +180,7 @@ export function useChatViewPresence({
           primary={isViewersPrimaryBot(bot, viewerActorId(state.config))}
           primaryRingClassName="ring-elevated"
           state={stateForBot({ ...bot, messages })}
-          size={24}
+          size={22}
           motion={(mascotMotion?.kind as never) ?? "none"}
           motionKey={mascotMotion?.nonce ?? 0}
           animated={mascotRowAnimated(bot, pendingQueued as Record<string, unknown[]>, mascotMotion?.kind as never, noticing)}
@@ -204,7 +205,7 @@ export function useChatViewPresence({
           primary={isViewersPrimaryBot(bot, viewerActorId(state.config))}
           primaryRingClassName="ring-elevated"
           state={stateForBot({ ...bot, messages })}
-          size={20}
+          size={22}
           motion={(mascotMotion?.kind as never) ?? "none"}
           motionKey={mascotMotion?.nonce ?? 0}
           animated={mascotRowAnimated(bot, pendingQueued as Record<string, unknown[]>, mascotMotion?.kind as never, noticing)}

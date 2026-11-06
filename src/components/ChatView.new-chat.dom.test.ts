@@ -96,7 +96,7 @@ beforeAll(() => {
     const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : {};
     if (init?.method === "POST") posts.push({ path, body });
     if (path.startsWith("/api/bots?")) return Promise.resolve(json({ bots: [wireBot("a"), wireBot("b")], groups: [] }));
-    if (path === "/api/routines") return Promise.resolve(json({ routines: [], runs: [] }));
+    if (path.split("?")[0] === "/api/routines") return Promise.resolve(json({ routines: [], runs: [] }));
     if (path === "/api/webhooks") return Promise.resolve(json({ webhooks: [], attempts: [] }));
     if (path === "/api/instances") return Promise.resolve(json({ instances: [] }));
     // an earlier topic read back above the live one

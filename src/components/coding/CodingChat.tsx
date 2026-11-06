@@ -7,8 +7,9 @@
 // - Header (#2108 + #2149): compact, left-aligned. Back arrow (the chat is one
 //   chat: no thread to close), small mascot + bot name, task title truncated
 //   on one line (click or chevron expands it), Stop at the right of the title
-//   line, the </> button of the dev pods, then a muted meta line: folder ·
-//   branch · status glyph + human phrase · duration · tokens when known.
+//   line, then a muted meta line: folder · branch. #2285 (JC 2026-11-06):
+//   the bot is the chat's own pill (BotHeaderPill, toggles the bot panel);
+//   status, duration and tokens moved to the panel's "This session" card.
 // - Transcript (#2099): the task's own thread (useSideTranscript: the newest
 //   page, older pages on demand, then the live frames). A person's words are a
 //   highlighted row with "›", the bot's plain text; every tool call is one
@@ -23,8 +24,9 @@
 //   and voice), always there like Claude Code's prompt; a message goes to the
 //   task's thread, joining the turn while it runs. No Continue, no Close
 //   Chat, no Open thread.
-// - The dev pods (</>: Environment, Connectors, Context, Changes) live here
-//   only, never in the plain chat (#2149).
+// - The dev pods (Environment, Connectors, Context, Changes, Background
+//   tasks) live in the bot panel on the right while the window is open, as
+//   sections of it (#2285), never in the plain chat (#2149).
 //
 // The activity entry is polled every 3 s while the task runs (and a while
 // after a follow-up, until the new turn shows); a reload keeps what is on
@@ -61,13 +63,15 @@ import { useWaitingCards } from "@/lib/use-waiting-cards";
 import { waitingSources } from "@/lib/activity-waiting-sources";
 import { openExternalLink } from "@/lib/app-links";
 import { useChatColumnClass } from "@/lib/chat-bubble-width";
-import { mausInk } from "@/lib/mascot";
+import { useCodingPanelHost } from "@/lib/coding-panel-host";
+import { PANEL_CARD, PANEL_LABEL, PANEL_ROW } from "@/lib/grouped-card";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { formatTokens } from "@/lib/usage";
 import { avatarBot, useExchangePortalHost } from "../BotExchangeChip";
 import { Composer } from "../Composer";
-import { DevPods, DevPodsToggle } from "../dev-pods/DevPods";
+import { DevPodsPanel } from "../dev-pods/DevPods";
+import { BotHeaderPill, useChatWindow } from "../BotHeaderPill";
 import { ChatMarkdown } from "../ChatMarkdown";
 import { MessageBoundary } from "../MessageBoundary";
 import { PartyAvatar } from "../PartyAvatar";
@@ -257,14 +261,44 @@ export interface CodingChatSheetProps {
   /** The chat's composer aimed at the task's thread (CodingChat); the plain
    * follow-up field stands in without it (tests, galleries). */
   composer?: ReactNode;
-  /** The dev pods' rail, anchored in the transcript pane. */
-  pods?: ReactNode;
-  /** Controls at the header's right end (the </> button). */
-  headerTools?: ReactNode;
+  /** The dev pods as sections of the bot panel (#2285), put in the panel
+   * under the "This session" card. */
+  side?: ReactNode;
+}
+
+/** #2285: what the header used to say on its meta line (status, duration,
+ * tokens), as a card of the bot panel, like its neighbours. */
+function SessionCard({ glyph, lead, live, elapsed, tokens }: { glyph: string; lead: string; live: boolean; elapsed: string; tokens?: string }) {
+  const row = cn(PANEL_ROW, "flex min-w-0 items-center justify-between gap-3 text-[13px] leading-[18px]");
+  return (
+    <section data-coding-session-card="" className="flex flex-col gap-2">
+      <h2 className={PANEL_LABEL}>{t("codingChat.panel.title")}</h2>
+      <div className={cn(PANEL_CARD, "divide-y divide-hairline-weak")}>
+        <div className={row}>
+          <span className="shrink-0 text-ink-secondary">{t("codingChat.panel.status")}</span>
+          <span data-coding-state="" className="inline-flex min-w-0 items-center gap-1.5 text-ink">
+            <span data-coding-glyph aria-hidden="true">{glyph}</span>
+            <span className={cn("min-w-0 truncate", live && "thinking-shimmer animate-shimmer motion-reduce:animate-none")}>{lead}</span>
+          </span>
+        </div>
+        <div className={row}>
+          <span className="shrink-0 text-ink-secondary">{t("codingChat.panel.duration")}</span>
+          <span data-coding-elapsed className="tabular-nums text-ink">{elapsed}</span>
+        </div>
+        {tokens && (
+          <div className={row}>
+            <span className="shrink-0 text-ink-secondary">{t("codingChat.panel.tokens")}</span>
+            <span data-coding-tokens className="tabular-nums text-ink">{tokens}</span>
+          </div>
+        )}
+      </div>
+    </section>
+  );
 }
 
 /** The sheet, without fetching: tests and galleries draw it with fixed data. */
-export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMore = false, loadingOlder = false, onLoadOlder, onRetry, now, bot, bots, onClose, onStop, stopping = false, onSend, waiting, composer, pods, headerTools }: CodingChatSheetProps) {
+export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMore = false, loadingOlder = false, onLoadOlder, onRetry, now, bot, bots, onClose, onStop, stopping = false, onSend, waiting, composer, side }: CodingChatSheetProps) {
+  const chat = useChatWindow();
   const chatColumnClassName = useChatColumnClass();
   const column = useExchangePortalHost();
   const shown = detail ?? item;
@@ -326,7 +360,8 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
   const statusLead = live
     ? (humanStep(shown.currentStep) || shown.currentStep?.trim() || t("codingChat.working"))
     : activityStatusLabel(shown.status);
-  const tokensLabel = tokens !== undefined && tokens > 0 ? t("chat.usage.cardTokens", { tokens: formatTokens(tokens) }) : undefined;
+  const tokensLabel = tokens !== undefined && tokens > 0 ? formatTokens(tokens) : undefined;
+  const panelHost = useCodingPanelHost(shown.botId);
 
   const sheet = (
     <div
@@ -338,8 +373,7 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
       data-coding-status={shown.status}
     >
       <header data-coding-header className="relative flex shrink-0 flex-col gap-0.5 border-b border-hairline/40 px-3 py-2">
-        {headerTools && <div data-coding-tools className="absolute right-3 top-2 z-10 flex items-center gap-1">{headerTools}</div>}
-        <div className="flex min-w-0 items-center gap-1.5 pe-10">
+        <div className="flex min-w-0 items-center gap-1.5">
           <button
             type="button"
             data-testid="bot-exchange-close"
@@ -352,8 +386,15 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
           >
             <ChevronLeft size={16} aria-hidden="true" />
           </button>
-          <PartyAvatar id={party.id} bot={party} size={16} />
-          <span data-coding-bot className="shrink-0 text-[13px] font-medium leading-5" style={{ color: mausInk(party.color) }}>{party.name}</span>
+          <div data-coding-bot="" className="flex min-w-0 max-w-[45%] shrink-0">
+            <BotHeaderPill
+              name={party.name}
+              label={bot?.title}
+              panelOpen={chat?.panelOpen ?? false}
+              onToggle={() => chat?.onTogglePanel()}
+              avatar={<PartyAvatar id={party.id} bot={party} size={22} />}
+            />
+          </div>
           <button
             type="button"
             data-coding-title-toggle
@@ -392,24 +433,11 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
             </button>
           )}
         </div>
-        <div data-coding-meta className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 ps-8 text-[12px] leading-4 text-ink-secondary">
+        {(folderText || place.branch) && <div data-coding-meta className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 ps-8 text-[12px] leading-4 text-ink-secondary">
           {folderText && <span data-coding-folder className="min-w-0 truncate" title={place.repo ?? place.folder}>{folderText}</span>}
           {folderText && place.branch && <span aria-hidden="true">·</span>}
           {place.branch && <span data-coding-branch className="min-w-0 truncate font-mono text-[11.5px]" title={place.branch}>{place.branch}</span>}
-          {(folderText || place.branch) && <span aria-hidden="true">·</span>}
-          <span data-coding-state={shown.status} className="inline-flex min-w-0 items-center gap-1.5">
-            <span data-coding-glyph aria-hidden="true">{statusGlyph}</span>
-            <span className={cn("min-w-0 truncate", live && "thinking-shimmer animate-shimmer motion-reduce:animate-none")}>{statusLead}</span>
-            <span aria-hidden="true">·</span>
-            <span data-coding-elapsed className="tabular-nums">{elapsed}</span>
-            {tokensLabel && (
-              <>
-                <span aria-hidden="true">·</span>
-                <span data-coding-tokens className="tabular-nums">{tokensLabel}</span>
-              </>
-            )}
-          </span>
-        </div>
+        </div>}
       </header>
 
       <div data-coding-pane className="relative flex min-h-0 flex-1 flex-col">
@@ -436,7 +464,6 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
           {rows.map((row) => <Row key={row.id} row={row} bot={party} bots={bots} reveal={reveal} />)}
         </div>
       </div>
-      {pods}
       </div>
 
       {waiting && <div className="max-h-[40%] shrink-0 overflow-y-auto overscroll-contain px-5 pb-2"><div className={chatColumnClassName}>{waiting}</div></div>}
@@ -460,7 +487,18 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
       )}
     </div>
   );
-  return column ? createPortal(sheet, column) : sheet;
+  // #2285: the session card and the dev pods go to the bot panel on the
+  // right, at the top of its Activity tab, while this window is open.
+  const panel = panelHost
+    ? createPortal(
+      <>
+        <SessionCard glyph={statusGlyph} lead={statusLead} live={live} elapsed={elapsed} tokens={tokensLabel} />
+        {side}
+      </>,
+      panelHost,
+    )
+    : null;
+  return <>{column ? createPortal(sheet, column) : sheet}{panel}</>;
 }
 
 /** The task's thread, read and followed (a child so the hook runs only with a thread). */
@@ -538,9 +576,8 @@ export function CodingChat({ target, onClose }: { target: CodingChatTarget; onCl
   const follow = useCallback(() => setFollowUntil(Date.now() + FOLLOW_MS), []);
   const computerStart = state.computerStarts[target.botId];
   const taskBot = bot && threadId ? { ...bot, threadId } : undefined;
-  const headerTools = taskBot ? <DevPodsToggle bot={taskBot} /> : undefined;
-  const pods = (messages: readonly Message[]) => taskBot
-    ? <DevPods bot={taskBot} messages={messages} composerHeight={0} headerHeight={0} computerStart={computerStart} dispatch={dispatch} forced />
+  const side = (messages: readonly Message[]) => taskBot
+    ? <DevPodsPanel bot={taskBot} messages={messages} computerStart={computerStart} dispatch={dispatch} />
     : undefined;
   // The chat's own composer ("Message <bot>", +, microphone, voice) aimed at
   // the task's thread; a person who may not write there keeps the plain field.
@@ -557,7 +594,6 @@ export function CodingChat({ target, onClose }: { target: CodingChatTarget; onCl
     stopping,
     onSend: send,
     waiting,
-    headerTools,
   };
   if (!threadId) {
     const messages = detail ? stepMessages(detail.steps, item.botId, bot?.name ?? item.botName ?? "") : [];
@@ -568,7 +604,7 @@ export function CodingChat({ target, onClose }: { target: CodingChatTarget; onCl
       <CodingChatSheet
         {...common}
         composer={composer}
-        pods={pods(transcript.messages)}
+        side={side(transcript.messages)}
         messages={transcript.messages}
         loaded={transcript.loaded}
         failed={transcript.failed}

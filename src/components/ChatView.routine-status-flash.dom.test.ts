@@ -95,7 +95,7 @@ function route(input: RequestInfo | URL): Promise<Response> {
   const path = typeof input === "string" ? input : input instanceof URL ? input.pathname + input.search : input.url;
   if (path.startsWith("/api/bots?")) return json({ bots: [{ ...announce([runTask(), mainTask()]), messages: [...transcript, receipt("completed")], activeLeafId: "receipt" }], groups: [] });
   if (path === "/api/instances") return json({ instances: [] });
-  if (path === "/api/routines") return json({ routines: [], runs: [runRecord("completed")] });
+  if (path.split("?")[0] === "/api/routines") return json({ routines: [], runs: [runRecord("completed")] });
   if (path === "/api/webhooks") return json({ webhooks: [], attempts: [] });
   return json({});
 }
@@ -152,7 +152,7 @@ afterAll(async () => {
 
 const cardOf = () => container.querySelector<HTMLElement>("section[data-routine-run-card]") ?? container.querySelector<HTMLElement>("section[aria-label*='routine run']");
 const bubbleOf = () => cardOf()?.querySelector<HTMLElement>("[data-routine-run-bubble]") ?? cardOf()?.firstElementChild as HTMLElement | null;
-const statusText = () => cardOf()?.querySelector("[aria-live]")?.textContent ?? "";
+const statusText = () => cardOf()?.querySelector("[data-routine-run-status]")?.textContent ?? "";
 
 describe("a routine run's card flipping status fast", () => {
   it("updates in place: no remount, no toggling, no jump, the shell untouched", async () => {
@@ -242,8 +242,8 @@ describe("a routine run's card flipping status fast", () => {
     // nothing came and went, in the card or the transcript
     expect(report.toggled).toEqual([]);
     // the burst draws once: Running, then its last status. Completed keeps
-    // the status pill ("Done", 2026-11-04) so the chip never unmounts.
-    expect(report.statusesShown).toEqual(["Running", "Done"]);
+    // no status badge (#2283): the muted line says Running while it runs, then only the plain message stays.
+    expect(report.statusesShown).toEqual(["Running", ""]);
     // nothing outside the card changed, the column is the same, no jump
     expect(report.outsideMutations).toBe(0);
     expect(report.columnSame).toBe(true);
@@ -259,12 +259,12 @@ describe("a routine run's card flipping status fast", () => {
 
   it("still shows a single status change once it has held", async () => {
     // Card starts completed from the burst above; running holds the previous
-    // "Done" pill until ROUTINE_STATUS_SETTLE_MS, then flips once.
+    // plain look (no badge) until ROUTINE_STATUS_SETTLE_MS, then flips once.
     for (const frame of statusFrames("running")) send(frame);
     await settle();
-    expect(statusText()).toBe("Done");
+    expect(statusText()).toBe("");
     await tick(ROUTINE_STATUS_SETTLE_MS + 100);
     expect(statusText()).toBe("Running");
-    expect(cardOf()?.querySelector(".animate-spin")).not.toBeNull();
+    expect(cardOf()?.querySelector(".animate-shimmer")).not.toBeNull();
   });
 });

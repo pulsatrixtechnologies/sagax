@@ -9,6 +9,13 @@ import { collapseGotoLines, silentChatItem, type GotoGroup, type GotoTarget } fr
 import type { Bot, Message } from "@/state/store";
 import { GotoGroupChip } from "./GotoGroupChip";
 
+// These lines exist only with threads on; the unified chat (the default)
+// draws none of them (unified-chat.guard.test.ts).
+vi.mock("@/lib/thread-preferences", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/thread-preferences")>(),
+  useShowThreads: () => true,
+}));
+
 const bots = [
   { id: "ts", name: "Timesheets", color: "blue" },
   { id: "sales", name: "Sales", color: "green" },

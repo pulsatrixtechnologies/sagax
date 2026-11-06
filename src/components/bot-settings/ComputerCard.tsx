@@ -6,7 +6,9 @@
 // PillSelect (Voice "Ara ⌄" style) listing the same computers as the chat
 // Computer menu / LocalComputerSection (`computerChoices`); picking one
 // changes the bot's Works on and refreshes the card.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
+import { Check } from "lucide-react";
 
 import type { Bot } from "@/state/store";
 import { PANEL_CARD, PANEL_LABEL, PANEL_ROW } from "@/lib/grouped-card";
@@ -24,7 +26,8 @@ import {
 } from "@/lib/desktop-bridge";
 import { desktopLocalVm } from "@/lib/desktop-local-vm";
 import { DEFAULT_BOT_WORKPLACE } from "../../../shared/bot-workplace";
-import { PillSelect, type PillOption } from "../SettingsPrimitives";
+import type { PillOption } from "../SettingsPrimitives";
+import { navigateThreadMenu } from "../BotProjects";
 import { SandboxDesktopModal } from "../computer/SandboxDesktopModal";
 import { worksOnMode } from "../computer/WorksOnSetting";
 import { activeComputer } from "../computer/OrgComputerTab";
@@ -60,7 +63,7 @@ export function computerSelectValue(computer: Bot["computer"] | null | undefined
   return mode;
 }
 
-/** Options for the section chevron: Cloud + each online local computer from
+/** Options for the computer row's context menu: Cloud + each online local computer from
  * `computerChoices` (chat Computer menu / OrgComputerTab), plus Auto and Off
  * so the bot's Works on can follow. Solo (no bridge desktops) falls back to
  * the Works on set alone. */
@@ -159,29 +162,35 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
   const desktopId = liveIsLocal ? currentDesktop(bridge)?.id : undefined;
   const caption = t("computer.screenOf", { name: bot.name });
   const canOpenLive = place !== "off" && place !== "browser";
+  const menuEnabled = !readOnly && !!onPatch;
+  const [menu, setMenu] = useState<{ trigger: HTMLElement; x: number; y: number } | null>(null);
+  const openMenu = (trigger: HTMLElement, at?: { x: number; y: number }) => {
+    const rect = trigger.getBoundingClientRect();
+    setMenu({ trigger, x: at?.x ?? rect.right - 220, y: at?.y ?? rect.bottom + 4 });
+  };
+  const closeMenu = (focusTrigger = true) => {
+    const trigger = menu?.trigger;
+    setMenu(null);
+    if (focusTrigger) trigger?.focus();
+  };
 
   return (
     <section data-bot-settings-section="computer" aria-labelledby={`bot-computer-${bot.id}`} className="flex flex-col gap-2">
-      <div className="flex min-w-0 items-center justify-between gap-2">
-        <h3 id={`bot-computer-${bot.id}`} className={cn(PANEL_LABEL, "min-w-0 flex-1 truncate")}>{t("botPanel.tab.computer")}</h3>
-        <span data-computer-card-select="" className="inline-flex min-w-0 shrink-0">
-          <PillSelect
-            value={selectValue}
-            ariaLabel={t("botPanel.computerCard.choose")}
-            disabled={readOnly || !onPatch}
-            bordered
-            options={options}
-            onChange={(next) => onPatch?.(modeToPatch(next))}
-          />
-        </span>
-      </div>
+      {/* JC 2026-11-06: no dropdown beside the section title; the Works on
+          choices are the row's right-click menu, like the other rows. */}
+      <h3 id={`bot-computer-${bot.id}`} className={cn(PANEL_LABEL, "min-w-0 truncate")}>{t("botPanel.tab.computer")}</h3>
       <div className={PANEL_CARD}>
         <button
           type="button"
           data-computer-card=""
-          disabled={!canOpenLive}
+          aria-disabled={!canOpenLive || undefined}
           onClick={() => { if (canOpenLive) setLiveOpen(true); }}
-          className={`${PANEL_ROW} flex w-full min-w-0 items-center gap-3 text-left hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60 disabled:cursor-default disabled:opacity-60`}
+          onContextMenu={menuEnabled ? (event) => { event.preventDefault(); openMenu(event.currentTarget, { x: event.clientX, y: event.clientY }); } : undefined}
+          onKeyDown={menuEnabled ? (event) => {
+            if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); openMenu(event.currentTarget); }
+          } : undefined}
+          aria-haspopup={menuEnabled ? "menu" : undefined}
+          className={`${PANEL_ROW} flex w-full min-w-0 items-center gap-3 text-left hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60 aria-disabled:cursor-default`}
         >
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="truncate text-[14px] font-normal leading-5 text-ink">{title}</span>
@@ -194,6 +203,27 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
           </span>
         </button>
       </div>
+      {menu && createPortal(
+        <div className="fixed inset-0 z-40" onMouseDown={() => closeMenu(false)} onContextMenu={(event) => { event.preventDefault(); closeMenu(false); }}>
+          <div role="menu" data-computer-card-menu="" aria-label={t("botPanel.computerCard.choose")}
+            style={{ left: Math.max(8, Math.min(menu.x, window.innerWidth - 228)), top: Math.max(8, Math.min(menu.y, window.innerHeight - 200)) }}
+            className="absolute flex w-[220px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-ink shadow-lg"
+            onMouseDown={(event) => event.stopPropagation()}
+            onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+              if (event.key === "Escape" || event.key === "Tab") { event.preventDefault(); event.stopPropagation(); closeMenu(); return; }
+              navigateThreadMenu(event);
+            }}>
+            {options.map((option, index) => (
+              <button key={option.value} type="button" role="menuitemradio" aria-checked={option.value === selectValue}
+                data-computer-card-option={option.value} autoFocus={index === 0}
+                onClick={() => { closeMenu(); if (option.value !== selectValue) onPatch?.(modeToPatch(option.value)); }}
+                className={MENU_ITEM}>
+                <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                {option.value === selectValue && <Check size={14} aria-hidden="true" className="shrink-0 text-ink-secondary" />}
+              </button>
+            ))}
+          </div>
+        </div>, document.body)}
       {liveOpen && (
         <SandboxDesktopModal
           title={caption}
@@ -207,6 +237,9 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
     </section>
   );
 }
+
+/** Same item as the bot panel's other row menus (BotTaskSection). */
+const MENU_ITEM = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover focus-visible:bg-hover focus-visible:outline-none disabled:opacity-50";
 
 /** The desktop wallpaper shown before the bot sent any screen. */
 const WALLPAPER = "radial-gradient(120% 90% at 20% 15%, #6d8cff 0%, transparent 55%), radial-gradient(110% 100% at 85% 90%, #c86bd6 0%, transparent 60%), linear-gradient(135deg, #24305e 0%, #3b2a63 55%, #1c1f3a 100%)";

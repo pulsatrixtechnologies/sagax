@@ -4,12 +4,18 @@ import { useEffect, useState } from "react";
 import { t } from "@/lib/i18n";
 import { sendBlockActionLabel, sendBlockText, type SendBlock } from "@/lib/send-state";
 
+import { useLimitResetContinue } from "./LimitResetContinue";
+import { ComposerNoticeBand } from "./WorkplaceNotice";
+
 /** The one line above the composer while the bot cannot answer this person
  * (src/lib/send-state.ts): the reason and the one thing to do. #2013: the
  * engine refusing a turn before any prompt went out says it here too, never
  * as a red card in the chat, with the engine's own words under Details. */
-export function ComposerSendBlock({ block, onConnect, onRetry, onSwitchEngine, onResend, onFix }: {
+export function ComposerSendBlock({ block, botId, threadId, onConnect, onRetry, onSwitchEngine, onResend, onFix }: {
   block: SendBlock;
+  /** engine_limit: the conversation the "Continue at <reset>" one-shot picks up. */
+  botId?: string;
+  threadId?: string;
   onConnect: () => void;
   onRetry: () => void;
   /** engine_limit: the model window, where the bot moves to another engine or account. */
@@ -42,11 +48,21 @@ export function ComposerSendBlock({ block, onConnect, onRetry, onSwitchEngine, o
           : onRetry;
   const Icon = block.reason === "engine_limit" ? Clock3 : block.action.kind === "fix" ? Wrench : CircleAlert;
   const cause = block.refusal?.cause?.trim();
+  // On the composer's opaque ground, in the dock's flow (JC 2026-11-06: it was
+  // transparent over the transcript and the messages read through it). The
+  // transcript's bottom padding follows the dock, so the thread ends above it.
   return (
-    <div data-composer-send-block={block.reason} data-composer-send-block-advisory={block.advisory ? "" : undefined} role="status" className="mb-2 flex items-start gap-2 rounded-lg px-3 py-1.5 text-[12px] text-ink-secondary">
+    <ComposerNoticeBand>
+    <div data-composer-send-block={block.reason} data-composer-send-block-advisory={block.advisory ? "" : undefined} role="status" className="flex items-start gap-2 rounded-lg border border-hairline/40 bg-raised px-3 py-1.5 text-[12px] text-ink-secondary">
       <Icon size={14} aria-hidden className="mt-px shrink-0" />
       <div className="min-w-0 flex-1 break-words">
         <span>{fixFailed ? t("sendBlock.fixFailed") : sendBlockText(block, now)}</span>
+        {/* The engine at its limit: "Continue at 4:10 PM when your limit
+            resets" lives here, on the one limit line (JC 2026-11-06: the
+            top banner is gone at the limit). */}
+        {block.reason === "engine_limit" && block.limit?.cause !== "credits" && botId && threadId && typeof resetsAt === "number" && (
+          <LimitContinueButton botId={botId} threadId={threadId} resetsAt={resetsAt} />
+        )}
         {cause && (
           <details className="mt-0.5 text-[11.5px]">
             <summary className="cursor-pointer select-none">{t("chat.error.details")}</summary>
@@ -65,5 +81,24 @@ export function ComposerSendBlock({ block, onConnect, onRetry, onSwitchEngine, o
         {sendBlockActionLabel(block)}
       </button>}
     </div>
+    </ComposerNoticeBand>
+  );
+}
+
+function LimitContinueButton({ botId, threadId, resetsAt }: { botId: string; threadId: string; resetsAt: number }) {
+  const continueAt = useLimitResetContinue(botId, threadId, resetsAt);
+  if (!continueAt) return null;
+  return (
+    <>
+      {" · "}
+      <button
+        type="button"
+        data-composer-send-block-continue=""
+        onClick={continueAt.onClick}
+        className="font-medium text-ink underline hover:no-underline"
+      >
+        {continueAt.label}
+      </button>
+    </>
   );
 }

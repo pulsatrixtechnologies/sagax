@@ -907,6 +907,12 @@ ne jamais coder une couleur, un rayon ou une ombre en dur dans un composant.
 - La référence est d'abord sombre : fond presque noir et neutre, surfaces en deux ou
   trois paliers plus clairs, encre presque blanche, encre secondaire grise. Pas de bleu
   marine ni de teinte forte dans le fond par défaut.
+- Encre de l'habillage par défaut : blanc cassé doux `#e4e4e7`, jamais le blanc pur ;
+  encre secondaire grise `#9e9ea3`. Le nom du bot dans son panneau est en poids moyen,
+  pas en gras.
+- Pastille d'en-tête du bot (chat, session Coding) : 40 px de haut, pilule pleine au
+  fond `elevated`, mascotte d'environ 22 px, nom en 15 px, 8 px de marge à gauche et
+  14 px à droite.
 - Chaque écran se vérifie en clair et en sombre, et dans au moins un habillage autre que
   celui par défaut.
 

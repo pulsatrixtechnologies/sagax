@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { Phone } from "lucide-react";
 
 import { LIVE_VOICE_OPTIONS } from "../../shared/live-call";
 import { t } from "@/lib/i18n";
@@ -6,7 +7,7 @@ import { liveDisclosure } from "@/lib/call-mode";
 import { api, useStore } from "@/state/store";
 import type { LiveSettings } from "../../shared/wire";
 import { SettingsText } from "./SettingsLink";
-import { PillSelect, SwitchRow } from "./SettingsPrimitives";
+import { DescribedRow, FoldRow, PillSelect, SwitchRow } from "./SettingsPrimitives";
 import { readableError } from "@/lib/plain-error";
 
 const IDLE_CHOICES = [1, 2, 3, 5, 10, 15, 30, 60];
@@ -39,7 +40,7 @@ function useLiveSettingsEditor() {
 export function LiveCallSettings({ onClose }: { onClose: () => void }) {
   const { live, saving, error, save } = useLiveSettingsEditor();
   const focusOnOpen = useCallback((dialog: HTMLDivElement | null) => {
-    dialog?.querySelector<HTMLElement>("select, input, button")?.focus();
+    dialog?.querySelector<HTMLElement>("input, button")?.focus();
   }, []);
   const voice = live.voice || "marin";
   const known = LIVE_VOICE_OPTIONS.some((option) => option.id === voice);
@@ -57,18 +58,16 @@ export function LiveCallSettings({ onClose }: { onClose: () => void }) {
         onClose();
       }}
     >
-      <label className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2">
         <span className="text-ink-secondary">{t("call.live.voice")}</span>
-        <select
+        <PillSelect
           value={voice}
+          ariaLabel={t("call.live.voice")}
           disabled={saving}
-          onChange={(event) => void save({ voice: event.target.value })}
-          className="min-w-0 rounded-md border border-hairline/60 bg-panel px-2 py-1 text-ink outline-none"
-        >
-          {!known && <option value={voice}>{voice}</option>}
-          {LIVE_VOICE_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-        </select>
-      </label>
+          onChange={(next) => void save({ voice: next })}
+          options={[...(known ? [] : [{ value: voice, label: voice }]), ...LIVE_VOICE_OPTIONS.map((option) => ({ value: option.id, label: option.label }))]}
+        />
+      </div>
       <div className="-mt-2 text-[11.5px] text-ink-tertiary">{t("call.live.voiceNext")}</div>
       <div className="text-[11.5px] text-ink-tertiary">
         <SettingsText text={t("voice.live.inSettings")} links={{ settings: { section: "engines", cardId: "voice.advanced" } }} />
@@ -79,37 +78,41 @@ export function LiveCallSettings({ onClose }: { onClose: () => void }) {
 }
 
 /** Key, silence limit and typed replies. Installation-wide, so they live in
- * Settings rather than on the call bar. */
+ * Settings rather than on the call bar. One folding row of the Voice page's
+ * Advanced group (#2080): the key on its grey line, the privacy and cost
+ * notes behind its help, the switch and the pill menu as rows inside. */
 export function LiveCallInstallationSettings() {
   const { live, saving, error, save } = useLiveSettingsEditor();
   const minutes = [...new Set([...IDLE_CHOICES, live.idleMinutes])].sort((a, b) => a - b);
 
-  // 0.5.6: compact rows (the reference design's settings): a switch, a pill menu, the
-  // key line; why typed replies matter behind the switch's info button.
   return (
-    <div className="flex flex-col gap-3 text-[13px]">
-      <SwitchRow
-        label={t("call.live.readTyped")}
-        help={t("call.live.readTypedHint")}
-        checked={live.readTypedReplies}
-        disabled={saving}
-        onChange={(next) => void save({ readTypedReplies: next })}
-      />
-      <div className="flex items-center justify-between gap-4">
-        <span className="min-w-0 text-ink">{t("call.live.idle")}</span>
-        <PillSelect
-          value={String(live.idleMinutes)}
-          ariaLabel={t("call.live.idle")}
+    <FoldRow
+      cardId="voice.advanced"
+      label={t("voice.live.title")}
+      icon={<Phone size={14} />}
+      description={<span data-live-key={live.configured ? "openai" : "none"}>{t(live.configured ? "call.live.usesOpenAiKey" : "call.live.needsOpenAiKey")}</span>}
+      help={`${liveDisclosure()} ${t("call.live.cost")}`}
+    >
+      <div className="-mx-3.5 flex flex-col" data-voice-advanced="">
+        <SwitchRow
+          className="px-3.5 py-2.5"
+          label={t("call.live.readTyped")}
+          help={t("call.live.readTypedHint")}
+          checked={live.readTypedReplies}
           disabled={saving}
-          onChange={(next) => void save({ idleMinutes: Number(next) })}
-          options={minutes.map((value) => ({ value: String(value), label: t("call.live.idleMinutes", { minutes: value }) }))}
+          onChange={(next) => void save({ readTypedReplies: next })}
         />
+        <DescribedRow label={t("call.live.idle")} rowId="live.idle">
+          <PillSelect
+            value={String(live.idleMinutes)}
+            ariaLabel={t("call.live.idle")}
+            disabled={saving}
+            onChange={(next) => void save({ idleMinutes: Number(next) })}
+            options={minutes.map((value) => ({ value: String(value), label: t("call.live.idleMinutes", { minutes: value }) }))}
+          />
+        </DescribedRow>
+        {error && <div role="alert" className="px-3.5 pb-2 text-[12px] text-danger">{error}</div>}
       </div>
-      <div className="text-[12px] leading-4 text-ink-secondary" data-live-key={live.configured ? "openai" : "none"}>
-        {t(live.configured ? "call.live.usesOpenAiKey" : "call.live.needsOpenAiKey")}
-      </div>
-      <div className="text-[12px] leading-4 text-ink-secondary">{liveDisclosure()} {t("call.live.cost")}</div>
-      {error && <div role="alert" className="text-[12px] text-danger">{error}</div>}
-    </div>
+    </FoldRow>
   );
 }

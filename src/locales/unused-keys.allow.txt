@@ -137,6 +137,7 @@ chat.export.heading
 chat.export.menuAria
 chat.find
 chat.findShortcut
+chat.header.private
 chat.loadEarlier
 chat.more
 chat.run.showSteps
@@ -237,7 +238,6 @@ folder.namedSettings
 folder.newIn
 folder.newNamed
 groupPanel.folderAdminOnly
-import.prefs.none
 keys.optional
 keys.other.title
 keys.providers.subtitle
@@ -370,7 +370,6 @@ organization.licenseExpired
 organization.link.lastSync
 organization.loadFailed
 organization.loading
-organization.manageInPerspicax
 organization.modelCount
 organization.modelHelp
 organization.noModels
@@ -471,6 +470,8 @@ routines.logsFor
 routines.neverRun
 routines.newRoutine
 routines.newWebhook
+routines.post.openRun
+routines.post.review
 routines.repeat.once
 routines.repeat.weekly
 routines.results.back
@@ -508,6 +509,7 @@ settings.experimental.decisionModel
 settings.experimental.routineGroupSettings
 settings.experimental.routineGroupSettingsAria
 settings.experimental.routineGroupSettingsDetail
+settings.experimental.skillReviewNoEngine
 settings.experimental.vpsComputer
 settings.experimental.vpsComputerDetail
 settings.group.ai

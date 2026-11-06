@@ -6,6 +6,7 @@ import { cn } from "@/lib/cn";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ChatGptPlanStatus } from "./ChatGptPlanStatus";
 import { readableError } from "@/lib/plain-error";
+import { InlineFold } from "./SettingsPrimitives";
 
 export function AddProviderAccount({ antigravityInstanceId }: { antigravityInstanceId?: string } = {}) {
   const antigravity = antigravityInstanceId !== undefined;
@@ -103,16 +104,15 @@ export function CodexAccountSettings({ instance }: { instance: InstanceInfo }) {
       </div>
       {plan && <ChatGptPlanStatus key={instance.instanceId} instanceId={instance.instanceId} />}
       {canSignOut && (
-        <details>
-          <summary className="cursor-pointer rounded-md py-1 font-medium text-ink-secondary outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-accent">{t("engines.account.manage")}</summary>
-          <div className="mt-3 space-y-2 rounded-xl bg-inset p-4">
+        <InlineFold label={t("engines.account.manage")}>
+          <div className="mt-1 space-y-2">
             <p className="leading-relaxed text-ink-secondary">{signOutHint}</p>
             {assigned > 0 && <p className="leading-relaxed text-warning">{t(plan ? "engineSetup.chatgpt.signOutAssigned" : "engineSetup.device.signOutAssigned", { count: String(assigned) })}</p>}
             <button type="button" onClick={() => setConfirm(true)} disabled={busy !== null} className="text-danger hover:underline disabled:no-underline disabled:opacity-50">
               {busy === "signOut" ? t("engineSetup.device.signingOut") : t("engineSetup.device.signOut")}
             </button>
           </div>
-        </details>
+        </InlineFold>
       )}
       {error && <p role="alert" className="text-danger">{error}</p>}
       <ConfirmDialog

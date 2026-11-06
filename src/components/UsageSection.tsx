@@ -33,7 +33,7 @@ import {
 } from "@/lib/usage-personal";
 import { headlineMeter, PlanUsageView, usePlanUsage, type PlanMeter } from "./PlanUsage";
 import { SettingsSubPageRow } from "./SettingsSubPage";
-import { CompactRow, ConfirmPill, DescribedRow, FIELD, FoldRow, PILL, PillSelect, PRIMARY_PILL, SettingsGroup } from "./SettingsPrimitives";
+import { ConfirmPill, DescribedRow, FIELD, FoldRow, PILL, PillSelect, PRIMARY_PILL, SettingsGroup } from "./SettingsPrimitives";
 import { readableError } from "@/lib/plain-error";
 import type { PlanRow } from "@/lib/plan-usage";
 

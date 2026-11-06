@@ -200,8 +200,9 @@ export function buildCodexInstanceApi(bag: Record<string, any>): ProviderInstanc
       const turn = active.get(threadId);
       const finish = turn?.asks.get(requestId);
       if (!finish) return "unavailable"; // settled, timed out, or turn gone
-      finish(decision.behavior, decision.message, "user");
-      return decision.behavior === "allow" ? "allowed-once" : decision.behavior === "answer" ? "answered" : "rejected";
+      // Async questions return their own outcome after the steer settles.
+      return (await finish(decision.behavior, decision.message, "user"))
+        ?? (decision.behavior === "allow" ? "allowed-once" : decision.behavior === "answer" ? "answered" : "rejected");
     },
     hasSession: (threadId) => active.has(threadId) || sessions.has(threadId),
     releaseWarmSession: (threadId) => {

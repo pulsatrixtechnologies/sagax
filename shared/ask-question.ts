@@ -169,6 +169,20 @@ export function parseAskQuestions(input: unknown): AskQuestion[] | null {
   return questions.length ? questions : null;
 }
 
+/** The questions on a Codex agent message delivered by its
+ * `request_user_input_async` tool: `{ title, options: string[] | null }`
+ * entries the model posts while it keeps working, so nothing waits on an
+ * answer. Read into the card's shape under the same caps; null unless at
+ * least one question offers an option, because a bare question is already
+ * readable in the message text itself. */
+export function parseAsyncQuestions(entries: unknown): AskQuestion[] | null {
+  if (!Array.isArray(entries)) return null;
+  const questions = parseAskQuestions({
+    questions: entries.map((entry) => (isRecord(entry) ? { question: entry.title, options: entry.options } : null)),
+  });
+  return questions?.some((question) => question.options.length > 0) ? questions : null;
+}
+
 /** The one line the card subtitle and a spoken prompt show. */
 export function askQuestionSummary(questions: readonly AskQuestion[]): string {
   const first = questions[0]?.question ?? "";

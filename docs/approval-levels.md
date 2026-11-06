@@ -546,10 +546,16 @@ card for a person. What differs per engine is only how the ask travels:
 | Engine family | How an ask travels | Multiple questions at once |
 | --- | --- | --- |
 | Claude Code | Structured round-trip (its own `AskUserQuestion`) | Yes — capped at 4 by the CLI |
-| Codex | Structured round-trip | Yes — up to 6 |
+| Codex | Structured round-trip, or an async question that does not stop the turn | Yes — up to 6 |
 | Grok Build, Minimax, OpenAI-compatible endpoints | The injected `ask_user` tool | Yes — up to 6 |
 | ACP engines (Cursor, Antigravity, Gemini CLI, Qwen Code, OpenCode, …) | Option-match round-trip on the ACP permission request | One at a time — the request carries one choice set |
 | Pi | Free-text round-trip over `extension_ui_request` | One at a time |
+
+Codex can also ask without waiting (its `request_user_input_async` tool).
+The question arrives with the bot's message as the same question card, and
+the turn keeps working. Your answer is steered into that turn while it runs.
+After the turn ends, the answer is sent as your reply, like any question
+answered late.
 
 Whatever the engine, a bot is told to ask through its interactive question
 tool, with the recommended option first, and never to put a list of choices in

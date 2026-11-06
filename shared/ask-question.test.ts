@@ -14,6 +14,7 @@ import {
   MAX_QUESTION_TEXT,
   MAX_QUESTIONS,
   parseAskQuestions,
+  parseAsyncQuestions,
   parseChoices,
   parseProtocolAskQuestions,
   pickedOptionLabels,
@@ -223,6 +224,25 @@ describe("answerWithoutPreamble", () => {
   });
 });
 
+describe("parseAsyncQuestions", () => {
+  it("reads Codex's title and string options into the card shape", () => {
+    expect(parseAsyncQuestions([
+      { title: "Which source?", options: ["Directly", "Executor", "Directly"] },
+      { title: "Anything else?", options: null },
+    ])).toEqual([
+      { question: "Which source?", options: [{ label: "Directly" }, { label: "Executor" }] },
+      { question: "Anything else?", options: [] },
+    ]);
+  });
+
+  it("returns null when nothing offers an option to pick", () => {
+    expect(parseAsyncQuestions(undefined)).toBeNull();
+    expect(parseAsyncQuestions("please")).toBeNull();
+    expect(parseAsyncQuestions([])).toBeNull();
+    expect(parseAsyncQuestions([{ title: "Free text?", options: null }])).toBeNull();
+    expect(parseAsyncQuestions([{ title: "  ", options: ["Orphan"] }, "x"])).toBeNull();
+  });
+});
 
 describe("capAnswerEcho", () => {
   it("leaves an answer within the limit alone", () => {

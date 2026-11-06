@@ -437,6 +437,8 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     delete process.env.FAKE_CODEX_APPROVAL_REQUEST;
     delete process.env.FAKE_CODEX_DUMP;
     delete process.env.FAKE_CODEX_ASK_HOLD;
+    delete process.env.FAKE_CODEX_ASYNC_QUESTIONS;
+    delete process.env.FAKE_CODEX_ASYNC_QUESTION_GATE;
     delete process.env.FAKE_CODEX_TRANSIENTS;
     delete process.env.FAKE_CODEX_PARTIAL_FAILS;
     delete process.env.FAKE_CODEX_STATE;
@@ -2812,6 +2814,57 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     const decision = JSON.parse(readFileSync(dump, "utf8")).decision;
     expect(decision.error.code).toBe(-32602);
     expect(decision.error.message).toContain("array of questions");
+  });
+
+  it("opens one question card for an async question and steers the answer into the running turn", async () => {
+    const dump = join(scratch, "codex-async.json");
+    const gate = join(scratch, "async-gate");
+    process.env.FAKE_CODEX_DUMP = dump;
+    await create({ mode: "async-question", environment: { FAKE_CODEX_ASYNC_QUESTION_GATE: gate } });
+    await instance.adapter.sendTurn({ threadId: "t-async-question", text: "which source?" });
+    const opened = await recorder.until((e) => e.type === "request.opened");
+    expect(opened).toMatchObject({
+      requestType: "question",
+      tool: "ask_user",
+      summary: "Which source should I use?",
+      choices: ["Directly in Sagax", "The official server in Executor"],
+      questions: [{ question: "Which source should I use?", options: [{ label: "Directly in Sagax" }, { label: "The official server in Executor" }] }],
+    });
+    expect(recorder.events.find((e) => e.type === "item.completed" && e.itemType === "assistant_text")).toMatchObject({
+      text: "Which source should I use?\n- Directly in Sagax\n- The official server in Executor",
+    });
+
+    const answer = "The user answered your questions.\n\nQ: Which source should I use?\nA: Directly in Sagax";
+    await expect(instance.adapter.respondToRequest("t-async-question", opened.requestId!, { behavior: "answer", message: answer })).resolves.toBe("answered");
+    expect(await recorder.until((e) => e.type === "request.resolved")).toMatchObject({ requestId: opened.requestId, behavior: "answer", source: "user" });
+    expect(JSON.parse(readFileSync(dump, "utf8")).calls.find((c: any) => c.method === "turn/steer")?.params?.input).toEqual([{ type: "text", text: answer }]);
+
+    writeFileSync(gate, "");
+    await recorder.until((e) => e.type === "turn.completed");
+    expect(recorder.events.filter((e) => e.type === "request.opened")).toHaveLength(1);
+    await expect(instance.adapter.respondToRequest("t-async-question", opened.requestId!, { behavior: "answer", message: answer })).resolves.toBe("unavailable");
+  });
+
+  it("leaves an async question the turn outlived to the harness's late answer", async () => {
+    await create({ mode: "async-question" });
+    await instance.adapter.sendTurn({ threadId: "t-async-late", text: "which source?" });
+    const opened = await recorder.until((e) => e.type === "request.opened");
+    await recorder.until((e) => e.type === "turn.completed");
+    expect(recorder.events.find((e) => e.type === "request.resolved")).toMatchObject({ requestId: opened.requestId, behavior: "deny", source: "system" });
+    await expect(instance.adapter.respondToRequest("t-async-late", opened.requestId!, { behavior: "answer", message: "Directly" })).resolves.toBe("unavailable");
+  });
+
+  it("keeps an async message as plain text when its questions offer nothing to pick", async () => {
+    for (const questions of ["please", [], [{ title: "   ", options: ["Orphan"] }, { title: "Anything else?", options: null }]]) {
+      await create({ mode: "async-question", environment: { FAKE_CODEX_ASYNC_QUESTIONS: JSON.stringify(questions) } });
+      await instance.adapter.sendTurn({ threadId: "t-async-plain", text: "ask loosely" });
+      await recorder.until((e) => e.type === "turn.completed");
+      const first = recorder.events.find((e) => e.type === "item.completed" && e.itemType === "assistant_text");
+      expect(first).toMatchObject({ text: expect.stringContaining("Which source should I use?") });
+      expect(recorder.events.some((e) => e.type === "request.opened")).toBe(false);
+      recorder.stop();
+      await instance.dispose();
+    }
   });
 
   it("times out an ask with empty answers and a timeout-sourced resolve", async () => {

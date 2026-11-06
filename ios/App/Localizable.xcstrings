@@ -15105,7 +15105,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Os bots rodam em ferramentas de IA instaladas neste computador — veja o que encontramos."
+            "value": "Os bots rodam em ferramentas de IA instaladas neste computador. Veja o que encontramos."
           }
         }
       }
@@ -28251,7 +28251,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "A pasta de cada bot — ou um caminho absoluto"
+            "value": "A pasta de cada bot, ou um caminho absoluto"
           }
         }
       }
@@ -35259,7 +35259,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Instruções do grupo — todo bot deste grupo as segue (quem faz o quê, tom, objetivos, uma lista de tarefas…)"
+            "value": "Instruções do grupo: todo bot deste grupo as segue (quem faz o quê, tom, objetivos, uma lista de tarefas…)"
           }
         }
       }
@@ -35275,7 +35275,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mural do grupo — instruções compartilhadas para todos os bots daqui"
+            "value": "Mural do grupo: instruções compartilhadas para todos os bots daqui"
           }
         }
       }
@@ -44599,7 +44599,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mensagem para %@ — %@"
+            "value": "Mensagem para %@: %@"
           }
         }
       }
@@ -100819,7 +100819,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "equivalente — está na sua assinatura, não é cobrado"
+            "value": "equivalente: está na sua assinatura, não é cobrado"
           }
         }
       }

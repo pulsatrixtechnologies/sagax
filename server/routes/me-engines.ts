@@ -29,9 +29,10 @@ export function createMeEnginesRoutes(deps: MeEnginesRouteDeps): RouteHandler {
       const installed = deps.engineInstalled(entry.instanceId);
       // #1533: an API-key engine has no sign-in of its own; the person's subscription never runs it
       const supported = deps.isLoginDriver(driver) && !deps.keyOnlyInstance(entry.instanceId);
-      const signedIn = supported && deps.logins.signedIn(principalId, driver);
+      // #2373: each account's own sign-in, never the first account's
+      const signedIn = supported && deps.logins.signedIn(principalId, driver, "primary", entry.instanceId);
       // #1533: the provider refused that sign-in since (the card says Reconnect)
-      const expired = signedIn && deps.logins.expired(principalId, driver);
+      const expired = signedIn && deps.logins.expired(principalId, driver, "primary", entry.instanceId);
       const held = sub ? deps.perspicaxDirectory?.providerKeys(sub) ?? [] : [];
       const myKey = deps.providersOfInstance(entry.instanceId, driver).some((provider: any) => held.includes(provider));
       // a key sealed for this person on this server serves their turns too (engine-credentials.ts 4b)

@@ -106,11 +106,11 @@ function signIn(person: string, driver: "claudeAgent" | "codex" | "grokAgent", c
   }
 }
 
-function orgAccounts(person: string, keys: Partial<Record<string, boolean>> = {}): PlanAccount[] {
+function orgAccounts(person: string, keys: Partial<Record<string, boolean>> = {}, fleet: InstanceConfigMap = FLEET): PlanAccount[] {
   const store = logins();
-  return orgPlanAccounts(FLEET, {
-    loginDir: (driver) => store.loginDir(person, driver),
-    signedIn: (driver) => store.signedIn(person, driver),
+  return orgPlanAccounts(fleet, {
+    loginDir: (driver, instanceId) => store.loginDir(person, driver, "primary", instanceId),
+    signedIn: (driver, instanceId) => store.signedIn(person, driver, "primary", instanceId),
     apiKeyConfigured: (_driver, instanceId) => keys[instanceId] === true,
   });
 }
@@ -171,6 +171,21 @@ describe("one row per provider", () => {
     expect(rows[2]?.environment.CODEX_HOME).toBe(logins().loginDir(ALICE, "codex"));
     expect(rows[0]?.environment.GROK_HOME).toBe(join(logins().loginDir(ALICE, "grokAgent"), ".grok"));
     expect(JSON.stringify(rows)).not.toContain(serverHome);
+  });
+});
+
+describe("#2373: an added account has its own usage row", () => {
+  it("reads each added account from its own folder, signed in or not on its own", () => {
+    const added = "claude-22222222-2222-4222-8222-222222222222";
+    signIn(ALICE, "claudeAgent", null);
+    const rows = orgAccounts(ALICE, {}, { claude: { driver: "claudeAgent" }, [added]: { driver: "claudeAgent", displayName: "Claude (work)" } });
+    expect(rows.map((row) => [row.id, row.name, row.instanceId, Boolean(row.signedOut)])).toEqual([
+      ["claude", "Claude", "claude", false],
+      [added, "Claude (work)", added, true],
+    ]);
+    const dir = logins().loginDir(ALICE, "claudeAgent", "primary", added);
+    expect(dir).toBe(join(root, "principals", ALICE, "accounts", added, "claude"));
+    expect(rows[1]).toMatchObject({ configDir: dir, environment: { CLAUDE_CONFIG_DIR: dir, HOME: dir } });
   });
 });
 

@@ -909,7 +909,7 @@ import { compatServers, compatServerOwner, compatServerVisible } from "./openai-
 import { createOpenAiCompatServerRoutes } from "./routes/openai-compat-servers.ts";
 import { providersOfDriver, providersOfInstance, resolveEngineAccess, subscriptionDriver, turnPayer, type AccessPayer, type SubscriptionDriver, type NoAccessCause, type TurnAccess } from "./engines/engine-credentials.ts";
 import { fileKeyConfigured } from "./engines/engine-api-keys.ts";
-import { isLoginDriver, LOGIN_MARKER, loginCliFor, loginSlotOf, PrincipalEngineLogins, secondLoginSupported, type LoginDriver, type LoginSlot } from "./engines/principal-engine-logins.ts";
+import { isLoginDriver, LOGIN_MARKER, loginCliFor, loginSlotOf, PrincipalEngineLogins, secondLoginSupported, separateAccountInstance, type LoginDriver, type LoginSlot } from "./engines/principal-engine-logins.ts";
 import { LOGIN_ENGINE_LABEL } from "./engines/engine-reconnect-ahead.ts";
 import {
   createSectionChannelRoutes,
@@ -10151,8 +10151,8 @@ const limitReset = createLimitResetHost({
     try {
       // The person's own sign-ins only, under the engine's instance id (the id the chat and the routines name).
       return orgPlanAccounts(providerConfigs(), {
-        loginDir: (driver) => logins.loginDir(principalId, driver),
-        signedIn: (driver) => logins.signedIn(principalId, driver),
+        loginDir: (driver, instanceId) => logins.loginDir(principalId, driver, "primary", instanceId),
+        signedIn: (driver, instanceId) => logins.signedIn(principalId, driver, "primary", instanceId),
       }).filter((account) => limitPlanDriver(account) && account.access !== "api-key" && !account.signedOut)
         .map((account) => ({ ...account, id: account.instanceId ?? account.id }));
     } catch {
@@ -13317,7 +13317,7 @@ const proactiveWaker = new ProactiveWaker({
     const driver = registry.cliTarget(bot.modelSelection.instanceId)?.driverKind;
     if (!driver || !isLoginDriver(driver)) return false;
     const payer = effectiveBotOwner(bot)?.trim();
-    return Boolean(payer && engineLogins.expired(payer, driver));
+    return Boolean(payer && engineLogins.expired(payer, driver, "primary", bot.modelSelection.instanceId));
   },
   // the verification fixtures shorten the gathering window
   ...(Number(process.env.SAGAX_PROACTIVE_GATHER_MS) > 0 ? { gatherMs: Number(process.env.SAGAX_PROACTIVE_GATHER_MS) } : {})
@@ -15766,8 +15766,10 @@ class EngineAccessLost extends Error {
   }
 }
 /** A person's own engine login directory (their subscription). */
-function principalLoginDir(principalId: string, driver: SubscriptionDriver, slot: LoginSlot = "primary"): string {
-  return engineLogins?.loginDir(principalId, driver, slot) ?? join(DATA_DIR, "principals", principalId, { claudeAgent: "claude", codex: "codex", grokAgent: slot === "second" ? "grok-2" : "grok", kimiAgent: "kimi" }[driver]);
+function principalLoginDir(principalId: string, driver: SubscriptionDriver, slot: LoginSlot = "primary", instanceId?: string): string {
+  const name = { claudeAgent: "claude", codex: "codex", grokAgent: slot === "second" ? "grok-2" : "grok", kimiAgent: "kimi" }[driver];
+  // #2373: an added account (`claude-<uuid>`) has its own folder
+  return engineLogins?.loginDir(principalId, driver, slot, instanceId) ?? (separateAccountInstance(instanceId) ? join(DATA_DIR, "principals", principalId, "accounts", instanceId, name) : join(DATA_DIR, "principals", principalId, name));
 }
 /** Slice 4: the credentials of one turn on an organization server, fetched
  * at dispatch; undefined in solo mode. Throws EngineAccessLost. */

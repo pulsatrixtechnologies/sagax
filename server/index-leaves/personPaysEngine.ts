@@ -20,8 +20,8 @@ function personPaysEngine(principalId: string, instanceId: string) {
     owner: { principalId: id, ...orgPersonFacts(person) },
     instance: { instanceId, driver: driverKind, installed: host.engineInstalled(instanceId),
       ...(host.personalProviderInstances.get(instanceId) ? { keyOnly: true, keyProvider: host.personalProviderInstances.get(instanceId)!.provider, personalOwner: host.personalProviderInstances.get(instanceId)!.owner } : {}) },
-    subscriptionSignedIn: (pid, driver) => host.engineLogins?.signedIn(pid, driver) ?? false,
-    subscriptionExpired: (pid, driver) => host.engineLogins?.expired(pid, driver) ?? false,
+    subscriptionSignedIn: (pid, driver, instanceId) => host.engineLogins?.signedIn(pid, driver, "primary", instanceId) ?? false,
+    subscriptionExpired: (pid, driver, instanceId) => host.engineLogins?.expired(pid, driver, "primary", instanceId) ?? false,
     hasKey: (sub, provider) => host.perspicaxDirectory?.providerKeys(sub).includes(provider) ?? false,
     keyBacked: false,
     hasLocalKey: (pid, driver) => host.fileKeyConfigured(DATA_DIR, { organization: true, principalId: pid }, driver)

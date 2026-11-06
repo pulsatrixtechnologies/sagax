@@ -21,7 +21,12 @@ function harness(options: { onClaudeLinked?: (principalId: string) => void; prob
       : id === "codex" ? { driver: "codex", cli: "codex" }
         : id === "grok" ? { driver: "grokAgent", cli: "grok", environment: { XAI_API_KEY: "xai-workspace" } }
           : id === "kimi" ? { driver: "kimiAgent", cli: "kimi" }
-            : id === "cursor" ? { driver: "cursorAgent", cli: "cursor-agent" } : null),
+            : id === "cursor" ? { driver: "cursorAgent", cli: "cursor-agent" }
+              // #2373: added accounts, one instance each
+              : id.startsWith("claude-") ? { driver: "claudeAgent", cli: "claude" }
+                : id.startsWith("chatgpt-") ? { driver: "codex", cli: "codex" }
+                  : id.startsWith("grok-") ? { driver: "grokAgent", cli: "grok" }
+                    : id.startsWith("kimi-") ? { driver: "kimiAgent", cli: "kimi" } : null),
     controller: ({ driver, home, environment, onAuthenticated }) => {
       let phase: ProviderAuthenticationStatus["phase"] = "waiting";
       const record = { driver, home, env: environment(), finish: async () => { phase = "succeeded"; await onAuthenticated(); }, signedOut: false };
@@ -46,6 +51,78 @@ function writeGrokAuth(home: string, principalType: string, email: string): void
   mkdirSync(join(home, ".grok"), { recursive: true });
   writeFileSync(join(home, ".grok", "auth.json"), JSON.stringify({ "https://auth.x.ai::p-1": { principal_type: principalType, email, auth_mode: "oidc" } }));
 }
+
+// #2373: two accounts of one provider were one folder per person: the second
+// sign-in overwrote the first and signing out of either signed out both.
+const ACCOUNT_A = "11111111-1111-4111-8111-111111111111";
+const ACCOUNT_B = "22222222-2222-4222-8222-222222222222";
+const PROVIDERS = [
+  { label: "Claude", prefix: "claude", driver: "claudeAgent", folder: "claude", env: (dir: string) => ({ CLAUDE_CONFIG_DIR: dir }) },
+  { label: "ChatGPT (Codex)", prefix: "chatgpt", driver: "codex", folder: "codex", env: (dir: string) => ({ CODEX_HOME: dir }) },
+  { label: "Grok", prefix: "grok", driver: "grokAgent", folder: "grok", env: (dir: string) => ({ HOME: dir, GROK_HOME: join(dir, ".grok") }) },
+  { label: "Kimi", prefix: "kimi", driver: "kimiAgent", folder: "kimi", env: () => ({}) },
+] as const;
+
+describe("#2373: each added account of a provider is its own sign-in", () => {
+  for (const provider of PROVIDERS) {
+    it(`${provider.label}: signing out of account A leaves account B signed in, in its own folder`, async () => {
+      const { dataDir, logins, made } = harness();
+      const a = `${provider.prefix}-${ACCOUNT_A}`;
+      const b = `${provider.prefix}-${ACCOUNT_B}`;
+      const dirA = join(dataDir, "principals", A, "accounts", a, provider.folder);
+      const dirB = join(dataDir, "principals", A, "accounts", b, provider.folder);
+      expect(logins.loginDir(A, provider.driver, "primary", a)).toBe(dirA);
+      expect(logins.loginDir(A, provider.driver, "primary", b)).toBe(dirB);
+      await logins.start(A, a, "session-a");
+      await made[0]!.finish();
+      await logins.start(A, b, "session-a");
+      await made[1]!.finish();
+      // each login ran in its own account's folder
+      expect(made[0]!.home).toBe(dirA);
+      expect(made[1]!.home).toBe(dirB);
+      expect(made[0]!.env).toMatchObject(provider.env(dirA));
+      expect(made[1]!.env).toMatchObject(provider.env(dirB));
+      expect(logins.signedIn(A, provider.driver, "primary", a)).toBe(true);
+      expect(logins.signedIn(A, provider.driver, "primary", b)).toBe(true);
+      // the person's first account is untouched by both
+      expect(logins.signedIn(A, provider.driver)).toBe(false);
+      await logins.signOut(A, a, "session-a");
+      expect(made[0]!.signedOut).toBe(true);
+      expect(made[1]!.signedOut).toBe(false);
+      expect(logins.signedIn(A, provider.driver, "primary", a)).toBe(false);
+      expect(existsSync(dirA)).toBe(false);
+      expect(logins.signedIn(A, provider.driver, "primary", b)).toBe(true);
+      expect(existsSync(join(dirB, LOGIN_MARKER))).toBe(true);
+      // an expired account is that account only
+      logins.markExpired(A, provider.driver, "primary", b);
+      expect(logins.expired(A, provider.driver, "primary", b)).toBe(true);
+      expect(logins.expired(A, provider.driver)).toBe(false);
+    });
+  }
+
+  it("the account kept before the fix (the provider's own instance) keeps its folder and sign-in", async () => {
+    const { dataDir, logins, made } = harness();
+    await logins.start(A, "claude", "session-a");
+    await made[0]!.finish();
+    expect(made[0]!.home).toBe(join(dataDir, "principals", A, "claude"));
+    await logins.start(A, `claude-${ACCOUNT_B}`, "session-a");
+    await made[1]!.finish();
+    await logins.signOut(A, `claude-${ACCOUNT_B}`, "session-a");
+    expect(logins.signedIn(A, "claudeAgent", "primary", "claude")).toBe(true);
+    expect(logins.signedIn(A, "claudeAgent")).toBe(true);
+    expect(made[0]!.signedOut).toBe(false);
+  });
+
+  it("Reset access clears the added accounts too", async () => {
+    const { dataDir, logins, made } = harness();
+    await logins.start(A, "claude", "session-a");
+    await made[0]!.finish();
+    await logins.start(A, `claude-${ACCOUNT_B}`, "session-a");
+    await made[1]!.finish();
+    expect(logins.clearAll(A)).toBe(2);
+    expect(existsSync(join(dataDir, "principals", A, "accounts"))).toBe(false);
+  });
+});
 
 describe("2026-10-29: a second Grok sign-in per person", () => {
   it("lives in its own folder, is told apart from the first, and goes away on its own sign-out", async () => {

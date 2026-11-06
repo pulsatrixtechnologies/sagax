@@ -14,7 +14,7 @@ function defaultTurnPayerFor(bot: BotRecord) {
   const driver = host.registry.get(stored.modelSelection.instanceId)?.driverKind ?? "";
   return host.defaultTurnPayerMode({
     ownerLocalModel: host.desktopLocalModels.personOfModel(stored.modelSelection.model) === owner.toLowerCase(),
-    ownerSubscription: subscriptionDriver(driver) && (host.engineLogins?.signedIn(owner, driver) ?? false)
+    ownerSubscription: subscriptionDriver(driver) && (host.engineLogins?.signedIn(owner, driver, "primary", stored.modelSelection.instanceId) ?? false)
   });
 
 }

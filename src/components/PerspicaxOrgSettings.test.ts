@@ -43,6 +43,9 @@ describe("Settings > Organization without Sharing in the organization", () => {
         expect(html, `${locale} ${role}`).toContain('data-org-band=""');
         expect(html, `${locale} ${role}`).toContain('data-settings-group="organizationRules"');
         expect(html, `${locale} ${role}`).toContain('data-settings-row="vaultExport"');
+        // a count not loaded yet draws no row, never its label twice
+        expect(html, `${locale} ${role}`).not.toContain('data-settings-row="teamSecrets"');
+        expect(html, `${locale} ${role}`).not.toContain('data-settings-row="orgPages"');
         expect(html, `${locale} ${role}`).not.toContain("<a ");
         expect(html, `${locale} ${role}`).not.toContain("data-external-link-pill");
         expect(html, `${locale} ${role}`).not.toContain("/console");

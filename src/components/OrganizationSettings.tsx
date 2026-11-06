@@ -148,7 +148,7 @@ export function OrganizationSettings({ memoryShown = false }: { advanced?: boole
   // access lives on Computer now.
   return <>
     {orgReady && (
-      <SettingsGroup title={t("organization.group.server")} groupId="servers" accessory={<span className="min-w-0 truncate text-[13px] leading-[18px] text-ink-secondary">{serverState}</span>}>
+      <SettingsGroup plain title={t("organization.group.server")} groupId="servers" accessory={<span className="min-w-0 truncate text-[13px] leading-[18px] text-ink-secondary">· {serverState}</span>}>
         {!showJoinOnly && <ConnectedWorkspacesSettings />}
         {remoteActive && <RemoteComputerSection />}
         <ConnectServerWizard defaultOpen={false} />

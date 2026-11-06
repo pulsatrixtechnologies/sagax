@@ -36,7 +36,7 @@ export function OrgGithubApp({ initial }: { initial: Settings }) {
   return (
     <div data-settings-card="organization.githubApp" data-org-github-app>
       <DescribedRow
-        label={t("organization.github.title")}
+        label={t("organization.github.clientId")}
         rowId="githubApp"
         description={github.fromEnvironment ? t("organization.github.fromEnvironment") : t("organization.github.hint")}
         below={(

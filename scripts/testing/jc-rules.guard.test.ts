@@ -95,7 +95,7 @@ const attention: PersonAttentionCard = {
 describe("#2098 a routine run opens in the chat, never beside it", () => {
   const ENTRY_POINTS = [
     "state/store/model.ts", // View run, notifications, Inbox links, unified thread links
-    "components/ChatView.tsx", // the run card in the chat
+    "components/ChatView.tsx-parts/chips.tsx", // the run card in the chat (#1383 leaf)
     "components/GroupView.tsx",
     "components/RoutineCalendarPage.tsx", // the grid, the Runs list, Run now
     "components/bot-settings/RoutinesSection.tsx", // a routine's panel, its Runs list
@@ -204,8 +204,9 @@ describe("#2096 Stop on the running card, not in a bottom bar", () => {
   });
 
   it("the chat wires Stop to cancelRoutineRun on the card", () => {
-    const chat = readSrc("components/ChatView.tsx");
-    expect(chat).toContain('onStop={run?.runId ? () => dispatch({ type: "cancelRoutineRun", runId: run.runId }) : undefined}');
+    // #1383: RoutineRunRow lives in ChatView.tsx-parts/chips.tsx
+    const chips = readSrc("components/ChatView.tsx-parts/chips.tsx");
+    expect(chips).toContain('onStop={run?.runId ? () => dispatch({ type: "cancelRoutineRun", runId: run.runId }) : undefined}');
   });
 
   it("no bottom bar (exchange sheet footer) carries a routine's Stop", () => {
@@ -246,16 +247,19 @@ describe("unified chat mode: zero threads, following the threads setting", () =>
   });
 
   it("the chat gates every thread link and the side panel on the threads setting", () => {
-    const chat = readSrc("components/ChatView.tsx");
-    expect(chat.match(/onOpenThread=\{showThreads \? /g)?.length ?? 0).toBeGreaterThanOrEqual(2);
-    expect(chat).toContain("onReply={showThreads ? undefined : async (text) =>");
+    // #1383: AttentionRow / RoutineRunRow gates live in chips.tsx
+    const chips = readSrc("components/ChatView.tsx-parts/chips.tsx");
+    expect(chips.match(/onOpenThread=\{showThreads \? /g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(chips).toContain("onReply={showThreads ? undefined : async (text) =>");
     expect(readSrc("App.tsx-parts/ShellLayout.tsx")).toContain("{showThreads && <SideThreadPanel />}");
   });
 
   it("the gate reads the setting, never a hard-coded value", () => {
     const hardCoded = files.filter((file) => /const showThreads = (true|false)\b|showThreads=\{(true|false)\}/.test(file.text)).map((file) => file.name);
     expect(hardCoded).toEqual([]);
-    for (const name of ["components/ChatView.tsx", "App.tsx-parts/ShellLayout.tsx"]) expect(readSrc(name), name).toContain("useShowThreads()");
+    for (const name of ["components/ChatView.tsx-parts/useChatViewSession.ts", "components/ChatView.tsx-parts/chips.tsx", "App.tsx-parts/ShellLayout.tsx"]) {
+      expect(readSrc(name), name).toContain("useShowThreads()");
+    }
   });
 });
 

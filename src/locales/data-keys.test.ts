@@ -58,14 +58,14 @@ it("keeps no Data string that nothing reads", () => {
 // literal t("…") or t('…'), or through a template on its parent.
 const STILL_SORTING = new Set([
   "access", "achievements", "activity", "approval", "approvalMode", "apps", "attach", "attention",
-  "backup", "botAccess", "botPanel", "botSettings", "botWizard", "botZip",
+  "backup", "backups", "botAccess", "botPanel", "botSettings", "botWizard", "botZip",
   "browser", "call", "canvas", "chat", "cloudSignIn", "code", "commandAllowlist", "composer", "computer",
   "connectApps", "connectors", "customRules", "cw", "devPods", "engines", "engineSetup", "floatingBots",
-  "folder", "groupPanel", "keys", "leftOut", "logins", "manageMembers", "mascot", "mcp", "memory", "model",
+  "folder", "groupPanel", "import", "keys", "leftOut", "logins", "manageMembers", "mascot", "mcp", "memory", "model",
   "myConnections", "myEngines", "newBot", "notice", "onboarding", "org", "organization", "orgComputer",
   "orgImport", "pair", "people", "persona", "personLabel", "place", "planUsage", "pro",
   "question", "releaseNotes", "remote", "remoteControl", "remoteSession", "remoteSessionsAdmin", "room",
-  "routines", "serverEnvironment", "settings", "sidebar", "signIn", "star", "step", "stream", "task", "teach",
+  "routines", "serverEnvironment", "servers", "settings", "sidebar", "signIn", "star", "step", "stream", "task", "teach",
   "team", "teamBotFromThread", "teamSettings", "toolDetail", "triggers", "update", "usage", "vm", "voice", "voiceMode",
   "whop", "worksOn",
 ]);

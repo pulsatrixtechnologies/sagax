@@ -27,7 +27,7 @@
 // chosen column entry, each with its star and the check on the current
 // one. The left and right arrows step the column entries. Typing lists
 // every provider's matches flat, as in the other modes.
-import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { TriangleAlert, Check, ChevronLeft, ChevronRight, Search, Star } from "lucide-react";
 
 import { cn } from "@/lib/cn";
@@ -153,6 +153,99 @@ export function paneGroups(sections: readonly ModelMenuSection[], favoriteKeys: 
  * current model, else Favorites when it has some, else the first provider. */
 export function defaultPaneKey(groups: readonly PaneGroup[]): string | undefined {
   return (groups.find((group) => group.current) ?? groups.find((group) => group.key === PANE_FAVORITES_KEY && group.count > 0) ?? groups.find((group) => group.key !== PANE_FAVORITES_KEY) ?? groups[0])?.key;
+}
+
+/** Two-column empty-search body for ModelSearchList (Favorites / providers | models). */
+function ModelPanesBody({
+  pane,
+  activePane,
+  activePanePreview,
+  expandedProviders,
+  listRef,
+  listboxId,
+  label,
+  after,
+  variant,
+  style,
+  rowProps,
+  choosePane,
+  toggleProviderExpanded,
+}: {
+  pane: { top: ModelMenuRow[]; groups: PaneGroup[] };
+  activePane: PaneGroup;
+  activePanePreview: { rows: ModelMenuRow[]; hidden: number };
+  expandedProviders: Record<string, boolean>;
+  listRef: RefObject<HTMLDivElement | null>;
+  listboxId: string;
+  label?: string;
+  after?: ReactNode;
+  variant: "popover" | "window";
+  style: Style;
+  rowProps: (row: ModelMenuRow, key: string) => Parameters<typeof ModelSearchRow>[0];
+  choosePane: (key: string) => void;
+  toggleProviderExpanded: (key: string) => void;
+}) {
+  return (
+    <div ref={listRef} id={listboxId} role="listbox" aria-label={label ?? t("model.models")} data-model-list data-model-panes
+      data-model-list-scroll={after !== undefined ? "" : undefined}
+      className={cn("@container flex min-h-0", after !== undefined ? "flex-1 overflow-hidden px-1.5 pb-1" : variant === "popover" ? "max-h-[min(280px,39dvh)] px-1.5 pb-1" : "")}>
+      <div className="flex min-h-0 w-full flex-col @min-[26rem]:flex-row">
+        <div role="group" aria-label={t("model.providers")} data-model-panes-left
+          className={cn("flex shrink-0 flex-col overflow-y-auto overscroll-contain py-0.5 @max-[26rem]:border-b @min-[26rem]:w-[11rem] @min-[26rem]:border-r @min-[26rem]:pr-1.5", variant === "popover" ? "border-popover-hairline" : "border-hairline/50")}>
+          {pane.top.map((row) => <ModelSearchRow key={row.key} {...rowProps(row, row.key)} />)}
+          {pane.groups.map((group) => {
+            const selected = group.key === activePane.key;
+            return (
+              <button
+                key={group.key}
+                type="button"
+                data-model-pane-group={group.key}
+                data-model-pane-selected={selected || undefined}
+                aria-pressed={selected}
+                // keep the focus in the search field
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => choosePane(group.key)}
+                className={cn(
+                  "flex min-h-8 w-full cursor-default items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] outline-none",
+                  style.row, selected && style.active, group.count === 0 && "opacity-50",
+                )}
+              >
+                <span className="flex min-w-0 items-center gap-1.5">
+                  {group.key === PANE_FAVORITES_KEY && <Star size={12} aria-hidden="true" fill="currentColor" className={cn("shrink-0", style.check)} />}
+                  <span className="truncate">{group.label}</span>
+                </span>
+                <span className="flex shrink-0 items-center gap-1.5">
+                  {group.current && <span data-model-provider-current aria-hidden="true" className={cn("size-1.5 rounded-full bg-current", style.check)} />}
+                  <span data-model-pane-count className={cn("text-[11.5px] tabular-nums", style.detail)}>{group.count}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div role="group" aria-label={activePane.label} data-model-panes-right={activePane.key}
+          className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain py-0.5 @min-[26rem]:pl-1.5">
+          <div aria-hidden="true" className={cn("flex items-baseline gap-1.5", style.heading)}>
+            <span className="truncate">{activePane.label}</span>
+            {activePane.note && <span data-model-section-note className="truncate opacity-80">· {activePane.note}</span>}
+          </div>
+          {activePanePreview.rows.map((row) => <ModelSearchRow key={row.key} {...rowProps(row, row.key)} />)}
+          {(activePanePreview.hidden > 0 || expandedProviders[activePane.key]) && activePane.key !== PANE_FAVORITES_KEY && (
+            <ShowMoreRow
+              sectionKey={activePane.key}
+              expanded={Boolean(expandedProviders[activePane.key])}
+              style={style}
+              onToggle={() => toggleProviderExpanded(activePane.key)}
+            />
+          )}
+          {activePane.rows.length === 0 && (
+            <div data-model-pane-empty className={style.empty}>
+              {activePane.key === PANE_FAVORITES_KEY ? t("model.panes.noFavorites") : t("model.noMatch")}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function ModelSearchList({ sections, onPick, variant, autoFocus = false, onEscape, disabled = false, label, favorites, submenus = false, groupProviders = false, panes = false, onPreview, onAutoEdit, after, autoPanel }: {
@@ -421,65 +514,21 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
         />
       </label>
       {pane && activePane && activePanePreview ? (
-        <div ref={listRef} id={listboxId} role="listbox" aria-label={label ?? t("model.models")} data-model-list data-model-panes
-          data-model-list-scroll={after !== undefined ? "" : undefined}
-          className={cn("@container flex min-h-0", after !== undefined ? "flex-1 overflow-hidden px-1.5 pb-1" : variant === "popover" ? "max-h-[min(280px,39dvh)] px-1.5 pb-1" : "")}>
-          <div className="flex min-h-0 w-full flex-col @min-[26rem]:flex-row">
-            <div role="group" aria-label={t("model.providers")} data-model-panes-left
-              className={cn("flex shrink-0 flex-col overflow-y-auto overscroll-contain py-0.5 @max-[26rem]:border-b @min-[26rem]:w-[11rem] @min-[26rem]:border-r @min-[26rem]:pr-1.5", variant === "popover" ? "border-popover-hairline" : "border-hairline/50")}>
-              {pane.top.map((row) => <ModelSearchRow key={row.key} {...rowProps(row, row.key)} />)}
-              {pane.groups.map((group) => {
-                const selected = group.key === activePane.key;
-                return (
-                  <button
-                    key={group.key}
-                    type="button"
-                    data-model-pane-group={group.key}
-                    data-model-pane-selected={selected || undefined}
-                    aria-pressed={selected}
-                    // keep the focus in the search field
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => choosePane(group.key)}
-                    className={cn(
-                      "flex min-h-8 w-full cursor-default items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] outline-none",
-                      style.row, selected && style.active, group.count === 0 && "opacity-50",
-                    )}
-                  >
-                    <span className="flex min-w-0 items-center gap-1.5">
-                      {group.key === PANE_FAVORITES_KEY && <Star size={12} aria-hidden="true" fill="currentColor" className={cn("shrink-0", style.check)} />}
-                      <span className="truncate">{group.label}</span>
-                    </span>
-                    <span className="flex shrink-0 items-center gap-1.5">
-                      {group.current && <span data-model-provider-current aria-hidden="true" className={cn("size-1.5 rounded-full bg-current", style.check)} />}
-                      <span data-model-pane-count className={cn("text-[11.5px] tabular-nums", style.detail)}>{group.count}</span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            <div role="group" aria-label={activePane.label} data-model-panes-right={activePane.key}
-              className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain py-0.5 @min-[26rem]:pl-1.5">
-              <div aria-hidden="true" className={cn("flex items-baseline gap-1.5", style.heading)}>
-                <span className="truncate">{activePane.label}</span>
-                {activePane.note && <span data-model-section-note className="truncate opacity-80">· {activePane.note}</span>}
-              </div>
-              {activePanePreview.rows.map((row) => <ModelSearchRow key={row.key} {...rowProps(row, row.key)} />)}
-              {(activePanePreview.hidden > 0 || expandedProviders[activePane.key]) && activePane.key !== PANE_FAVORITES_KEY && (
-                <ShowMoreRow
-                  sectionKey={activePane.key}
-                  expanded={Boolean(expandedProviders[activePane.key])}
-                  style={style}
-                  onToggle={() => toggleProviderExpanded(activePane.key)}
-                />
-              )}
-              {activePane.rows.length === 0 && (
-                <div data-model-pane-empty className={style.empty}>
-                  {activePane.key === PANE_FAVORITES_KEY ? t("model.panes.noFavorites") : t("model.noMatch")}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <ModelPanesBody
+          pane={pane}
+          activePane={activePane}
+          activePanePreview={activePanePreview}
+          expandedProviders={expandedProviders}
+          listRef={listRef}
+          listboxId={listboxId}
+          label={label}
+          after={after}
+          variant={variant}
+          style={style}
+          rowProps={rowProps}
+          choosePane={choosePane}
+          toggleProviderExpanded={toggleProviderExpanded}
+        />
       ) : root ? (
         <div ref={listRef} id={listboxId} role="menu" aria-label={label ?? t("model.models")} data-model-list
           data-model-list-scroll={after !== undefined ? "" : undefined}

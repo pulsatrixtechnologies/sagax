@@ -19,7 +19,7 @@ const styles = readFileSync(stylesPath, "utf8");
 // Hover-only details that are not actions. Keyed by file and a snippet of the
 // class string so a stale entry fails below instead of silently widening.
 const notActions: Array<{ file: string; snippet: string; why: string }> = [
-  { file: "components/GroupView.tsx", snippet: "self-end pb-1 text-[11px] tabular-nums", why: "message timestamp, informational" },
+  { file: "components/GroupView.tsx-parts/RoomTextMessage.tsx", snippet: "self-end pb-1 text-[11px] tabular-nums", why: "message timestamp, informational" },
   { file: "components/BotExchangeChip.tsx", snippet: "self-end pb-1 text-[11px] tabular-nums", why: "message timestamp, informational" },
   { file: "components/ScreenFrame.tsx", snippet: "group-hover/image:opacity-100", why: "aria-hidden zoom hint; the whole image is the tap target" },
   { file: "components/AttachmentPreview.tsx", snippet: "group-hover/image:opacity-100", why: "zoom hint; the whole image is the tap target" },

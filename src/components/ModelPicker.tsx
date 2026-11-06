@@ -444,6 +444,126 @@ export function ModelPicker({
 
   const portal = (node: ReactNode) => (typeof document === "undefined" ? node : createPortal(node, document.body));
   return (
+    <ModelPickerShell
+      rootRef={rootRef}
+      className={className}
+      contained={contained}
+      listChip={listChip}
+      viewerLocal={viewerLocal}
+      label={label}
+      trigger={trigger}
+      menuMotion={menuMotion}
+      portal={portal}
+      bot={bot}
+      threadId={threadId}
+      menuRef={menuRef}
+      menuAt={menuAt}
+      containedBusy={Boolean(bot.busy && !contained)}
+      active={active}
+      busyUpdatesBotDefault={busyUpdatesBotDefault}
+      menuSections={menuSections}
+      onRow={onRow}
+      favoriteKeys={favoriteKeys}
+      openProviders={openProviders}
+      advanced={advanced}
+      selection={selection}
+      autoOn={autoOn}
+      setEffort={setEffort}
+      setAutoOptimize={setAutoOptimize}
+      autoEditOpen={autoEditOpen}
+      setAutoEditOpen={setAutoEditOpen}
+      pick={pick}
+      effortTitle={effortTitle}
+      headless={headless}
+      windowOnly={windowOnly}
+      closeMenu={closeMenu}
+      triggerRef={triggerRef}
+      inComposer={inComposer}
+      panes={panes}
+      turnedOff={turnedOff}
+      openActiveModels={openActiveModels}
+    />
+  );
+}
+
+function ModelPickerShell({
+  rootRef,
+  className,
+  contained,
+  listChip,
+  viewerLocal,
+  label,
+  trigger,
+  menuMotion,
+  portal,
+  bot,
+  threadId,
+  menuRef,
+  menuAt,
+  containedBusy,
+  active,
+  busyUpdatesBotDefault,
+  menuSections,
+  onRow,
+  favoriteKeys,
+  openProviders,
+  advanced,
+  selection,
+  autoOn,
+  setEffort,
+  setAutoOptimize,
+  autoEditOpen,
+  setAutoEditOpen,
+  pick,
+  effortTitle,
+  headless,
+  windowOnly,
+  closeMenu,
+  triggerRef,
+  inComposer,
+  panes,
+  turnedOff,
+  openActiveModels,
+}: {
+  rootRef: React.RefObject<HTMLDivElement | null>;
+  className?: string;
+  contained: boolean;
+  listChip: boolean;
+  viewerLocal: boolean;
+  label?: ReactNode;
+  trigger: ReactNode;
+  menuMotion: ReturnType<typeof useMenuMotion>;
+  portal: (node: ReactNode) => ReactNode;
+  bot: Bot;
+  threadId?: string;
+  menuRef: React.RefObject<HTMLDivElement | null>;
+  menuAt: { left?: number; right?: number; top?: number; bottom?: number } | null;
+  containedBusy: boolean;
+  active: ReturnType<typeof useStore>["state"]["instances"][number] | undefined;
+  busyUpdatesBotDefault: boolean;
+  menuSections: Parameters<typeof ModelPickerMenu>[0]["menuSections"];
+  onRow: (row: ModelMenuRow) => void;
+  favoriteKeys: ReturnType<typeof useModelFavorites>;
+  openProviders: () => void;
+  advanced: boolean;
+  selection: ModelSelection;
+  autoOn: boolean;
+  setEffort: (effort: ModelSelection["effort"]) => void;
+  setAutoOptimize: (optimize: NonNullable<ModelSelection["autoOptimize"]>) => void;
+  autoEditOpen: boolean;
+  setAutoEditOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  pick: (instance: NonNullable<typeof active>, modelId: string) => void;
+  effortTitle: string;
+  headless: boolean;
+  windowOnly: boolean;
+  closeMenu: (refocus?: boolean) => void;
+  triggerRef: React.RefObject<HTMLButtonElement | null>;
+  inComposer: boolean;
+  panes: boolean;
+  turnedOff: number;
+  openActiveModels?: () => void;
+}) {
+  return (
     <div ref={rootRef} className={cn(contained || listChip ? "w-full min-w-0" : "relative", className)}>
       {listChip ? (
         <div className="min-w-0 w-full">
@@ -460,7 +580,7 @@ export function ModelPicker({
         trigger
       )}
 
-      {menuMotion.shown && portal(bot.busy && !contained ? (
+      {menuMotion.shown && portal(containedBusy ? (
         <div
           ref={menuRef}
           data-model-menu=""
@@ -504,8 +624,6 @@ export function ModelPicker({
         setAutoEditOpen,
         pick,
         effortTitle,
-        // Settings > Models list: hang off the chip, inside the Settings window.
-        // Chat bar chip (#2106): hang the menu off the visible trigger.
         anchorRef: (!headless && !windowOnly && (listChip || inComposer)) ? triggerRef : undefined,
         panes,
         turnedOff,
@@ -514,3 +632,4 @@ export function ModelPicker({
     </div>
   );
 }
+

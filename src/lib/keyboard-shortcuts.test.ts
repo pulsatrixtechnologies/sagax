@@ -218,9 +218,13 @@ describe("the reference design's app-wide chords", () => {
     expect(shell).toContain('<ComposeToPicker key={composeGroup ? "group" : "browse"} startInGroup={composeGroup}');
     expect(read("../components/ComposeToPicker.tsx")).toContain('useState<ComposeMode>(startInGroup ? "group" : "browse")');
     expect(read("../components/CitationUI.tsx")).toMatch(/appShortcutFor\(event\) === "quote-selection"\) \{[\s\S]*?addRef\.current\(captured\.citation\);/);
-    for (const view of ["../components/ChatView.tsx", "../components/GroupView.tsx"]) {
-      expect(read(view)).toContain('(event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "f")');
-    }
+    const chatFind = [
+      read("../components/ChatView.tsx"),
+      read("../components/ChatView.tsx-parts/useChatViewSession.ts"),
+    ].join("\n");
+    expect(chatFind).toContain('(event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "f")');
+    expect(read("../components/GroupView.tsx")).toContain('(event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "f")');
+
   });
 });
 

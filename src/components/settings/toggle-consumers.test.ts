@@ -18,8 +18,8 @@ afterEach(() => vi.unstubAllGlobals());
 describe("local switches: setter stores, consumer reads", () => {
   const table: Array<[string, string, string, string, string, string]> = [
     // toggle, module, setter, consumer file, consumer symbol
-    ["Show the run card", "lib/run-card-preferences", "setShowRunCard", "components/ChatView.tsx", "useShowRunCard", ""],
-    ["Show the inspector button", "lib/inspector-preferences", "setShowInspectorButton", "components/ChatView.tsx", "useShowInspectorButton", ""],
+    ["Show the run card", "lib/run-card-preferences", "setShowRunCard", "components/ChatView.tsx-parts/useChatViewTranscript.tsx", "useShowRunCard", ""],
+    ["Show the inspector button", "lib/inspector-preferences", "setShowInspectorButton", "components/ChatView.tsx-parts/useChatViewSession.ts", "useShowInspectorButton", ""],
     ["Sidebar logo", "lib/sidebar-logo-preferences", "setShowSidebarLogo", "components/Sidebar.tsx", "useShowSidebarLogo", ""],
     ["Routines badge", "lib/routines-badge-preferences", "setShowRoutinesBadge", "components/SidebarProfileMenu.tsx", "useShowRoutinesBadge", ""],
     ["Show suggestions", "lib/panel-visibility", "setShowSuggestions", "components/bot-settings/SuggestionsSection.tsx", "useShowSuggestions", ""],
@@ -65,7 +65,7 @@ describe("other switches and their consumers", () => {
     ["Built-in browser", "components/ComputerPanel.tsx-parts/useComputerPanelSession.ts", "builtInBrowserEnabled"],
     ["Data window", "components/DataWindowButton.tsx", "dataWindowEnabled"],
     ["Decision model", "components/DecisionModelSettings.tsx", "decider"],
-    ["Show tool calls", "components/ChatView.tsx", "showToolCallsEnabled"],
+    ["Show tool calls", "components/ChatView.tsx-parts/MessagesListItem.tsx", "showToolCallsEnabled"],
     ["Simple or Advanced", "components/BotSettingsDialog.tsx", "useAdvancedMode"],
   ];
   for (const [name, file, symbol] of rows) {

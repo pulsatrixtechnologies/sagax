@@ -22,7 +22,7 @@
 // change says why (botSectionLock); nothing is hidden for lack of a
 // permission. The page itself carries no gear: the bot's settings live here
 // and in the right-hand bot panel.
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject, type SetStateAction } from "react";
 import { BellRing, Brain, ChevronDown, ChevronRight, Cpu, LayoutDashboard, Lock, Mail, MessageCircle, Plug, Search, Star, Users, X } from "lucide-react";
 
 import { useStore, type Bot, type BotSettingsSection } from "@/state/store";
@@ -509,7 +509,133 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
   const bannerStyle = { "--bot-profile-banner-color": bannerColor } as CSSProperties;
 
   return (
-    <main
+    <BotProfilePageView
+      rootRef={rootRef}
+      bot={bot}
+      tab={tab}
+      setTab={setTab}
+      onClose={onClose}
+      onCloseRef={onCloseRef}
+      noDragStyle={noDragStyle}
+      controlsShiftStyle={controlsShiftStyle}
+      privateBot={privateBot}
+      bannerStyle={bannerStyle}
+      derived={derived}
+      goTo={goTo}
+      canName={canName}
+      canLabel={canLabel}
+      audience={audience}
+      isPrimary={isPrimary}
+      tabs={tabs}
+      tabLabel={tabLabel}
+      tabsRef={tabsRef}
+      searching={searching}
+      matching={matching}
+      lockOf={lockOf}
+      searchRef={searchRef}
+      query={query}
+      changeQuery={changeQuery}
+      onSearchKey={onSearchKey}
+      closeSearch={closeSearch}
+      openSearch={openSearch}
+      q={q}
+      results={results}
+      slackUrl={slackUrl}
+      channel={channel}
+      setChannel={setChannel}
+      fold={fold}
+      shown={shown}
+      body={body}
+      open={open}
+      dispatch={dispatch}
+      dialogs={dialogs}
+    />
+  );
+}
+
+function BotProfilePageView({
+  rootRef,
+  bot,
+  tab,
+  setTab,
+  onClose,
+  onCloseRef,
+  noDragStyle,
+  controlsShiftStyle,
+  privateBot,
+  bannerStyle,
+  derived,
+  goTo,
+  canName,
+  canLabel,
+  audience,
+  isPrimary,
+  tabs,
+  tabLabel,
+  tabsRef,
+  searching,
+  matching,
+  lockOf,
+  searchRef,
+  query,
+  changeQuery,
+  onSearchKey,
+  closeSearch,
+  openSearch,
+  q,
+  results,
+  slackUrl,
+  channel,
+  setChannel,
+  fold,
+  shown,
+  body,
+  open,
+  dispatch,
+  dialogs,
+}: {
+  rootRef: RefObject<HTMLElement | null>;
+  bot: Bot;
+  tab: BotProfileTab;
+  setTab: Dispatch<SetStateAction<BotProfileTab>>;
+  onClose: () => void;
+  onCloseRef: RefObject<() => void>;
+  noDragStyle: CSSProperties | undefined;
+  controlsShiftStyle: CSSProperties | undefined;
+  privateBot: boolean;
+  bannerStyle: CSSProperties;
+  derived: ReturnType<typeof useBotSectionContent>["derived"];
+  goTo: (id: BotSettingsSection) => void;
+  canName: boolean;
+  canLabel: boolean;
+  audience: string;
+  isPrimary: boolean;
+  tabs: readonly BotProfileTab[];
+  tabLabel: (id: BotProfileTab) => string;
+  tabsRef: RefObject<HTMLDivElement | null>;
+  searching: boolean;
+  matching: Set<BotProfileTab>;
+  lockOf: (id: BotSettingsSection) => LocaleKey | null;
+  searchRef: RefObject<HTMLInputElement | null>;
+  query: string;
+  changeQuery: (value: string) => void;
+  onSearchKey: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
+  closeSearch: () => void;
+  openSearch: () => void;
+  q: string;
+  results: PersonaCategory[];
+  slackUrl: string | null | undefined;
+  channel: Channel | null;
+  setChannel: Dispatch<SetStateAction<Channel | null>>;
+  fold: (id: PersonaCategory) => ReactNode;
+  shown: (id: PersonaCategory) => boolean;
+  body: (id: PersonaCategory) => ReactNode;
+  open: ReadonlySet<PersonaCategory>;
+  dispatch: ReturnType<typeof useStore>["dispatch"];
+  dialogs: ReactNode;
+}) {
+  return (
+<main
       ref={rootRef}
       tabIndex={-1}
       aria-label={`${t("persona.title")}: ${bot.name}`}
@@ -738,6 +864,7 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
     </main>
   );
 }
+
 
 /** A card of the page: a grey label (and its accessory) over a borderless
  * surface a step lighter than the page (Grok Bot). */

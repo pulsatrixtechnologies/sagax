@@ -402,6 +402,7 @@
   "botAccess.grants.noApps": "Aucune application connectée pour le moment.",
   "botPanel.computerCard.awake": "Éveillé",
   "botPanel.computerCard.back": "Retour à Activité",
+  "botPanel.computerCard.choose": "Choisir un ordinateur",
   "botPanel.computerCard.title": "Ordinateur du bot",
   "botPanel.computerCard.working": "Au travail",
   "botPanel.routines.showLess": "Afficher moins",

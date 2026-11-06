@@ -595,6 +595,7 @@
   "botAccess.grants.noApps": "No apps connected yet.",
   "botPanel.computerCard.awake": "Awake",
   "botPanel.computerCard.back": "Back to Activity",
+  "botPanel.computerCard.choose": "Choose computer",
   "botPanel.computerCard.title": "Bot's computer",
   "botPanel.computerCard.working": "Working",
   "botPanel.routines.showLess": "Show less",

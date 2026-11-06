@@ -7,8 +7,8 @@ import { botRoutineRuns } from "@/state/view-slices";
 // copy link, float) opens on a right click on the mascot or the name, and the
 // profile page holds the same actions. Every section lives under
 // bot-settings/; their bodies and reads are useBotSectionContent, shared
-// with the persona editor. Activity > Computer opens the computer view in
-// this same panel, with a back arrow to Activity.
+// with the persona editor. Activity > Computer opens the live desktop
+// window directly (SandboxDesktopModal); other links may still open ComputerPanel.
 import { useEffect, useRef, useState } from "react";
 import { BOT_PANEL_BOUNDS, DockedPanelResizeHandle, useDockedPanelWidth } from "./DockedPanelResize";
 import { ArrowLeft, Settings, X } from "lucide-react";
@@ -351,7 +351,13 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
                     slackUrl={slackUrl}
                     onAddToMeeting={() => setMeetingRequest((count) => count + 1)}
                   />
-                  {computerShown && <ComputerCard bot={bot} />}
+                  {computerShown && (
+                    <ComputerCard
+                      bot={bot}
+                      onPatch={derived.patch}
+                      readOnly={!canEditBotField(state.config, bot, "computer")}
+                    />
+                  )}
                   <VoiceChatCard bot={bot} onPatch={derived.patch} readOnly={!canEditBotField(state.config, bot, "voice")} />
                   {/* What the bot does now and did: each folds away when empty. */}
                   <BotTaskSection botId={bot.id} />

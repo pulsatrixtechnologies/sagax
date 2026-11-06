@@ -64,11 +64,14 @@ struct DesktopBotProfileHost: View {
             } else {
                 profileRoot
             }
-            WindowCloseChip(action: close)
-                .padding(.leading, 12)
-                .padding(.top, 12)
-                .zIndex(20)
-                .accessibilitySortPriority(1000)
+            // The profile root carries its own X on its top bar (#2313).
+            if sectionPage != nil {
+                WindowCloseChip(action: close)
+                    .padding(.leading, 12)
+                    .padding(.top, 12)
+                    .zIndex(20)
+                    .accessibilitySortPriority(1000)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.app)

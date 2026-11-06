@@ -26,6 +26,9 @@ struct DesktopRoutinePanel: View {
     let openRun: (RoutineRun) -> Void
     let openEditor: (Routine) -> Void
     let duplicate: (Routine) -> Void
+    /// Set when the page covers the bot panel (desktop PanelPage): the
+    /// header leads with a back chevron instead of the colour square.
+    var back: (() -> Void)? = nil
 
     @State private var editing = false
     @State private var name = ""
@@ -99,10 +102,22 @@ struct DesktopRoutinePanel: View {
     /// name 14 medium (a field while editing), the round × that closes.
     private var header: some View {
         HStack(spacing: 8) {
-            // EventDetails: `size-3 rounded bg-accent` (a call: #6d7cff)
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(Theme.accent)
-                .frame(width: 12, height: 12)
+            if let back {
+                // PanelPage header: back, the title, X (ff87bf7daf).
+                Button(action: back) {
+                    Image(systemName: "chevron.left").font(.system(size: 13, weight: .semibold)).frame(width: 28, height: 30)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.textSecondary)
+                .hoverEffect(.highlight)
+                .accessibilityLabel(Text("Back"))
+                .accessibilityIdentifier("panel-page-back")
+            } else {
+                // EventDetails: `size-3 rounded bg-accent` (a call: #6d7cff)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(Theme.accent)
+                    .frame(width: 12, height: 12)
+            }
             if editing {
                 TextField(String(localized: "Name"), text: $name)
                     .font(Theme.font(16, .semibold))

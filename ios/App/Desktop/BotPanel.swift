@@ -96,6 +96,17 @@ private struct BotPanelContent: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(theme.app)
+        .overlay {
+            // Desktop PanelPage (ff87bf7daf): the routine page covers the
+            // whole panel, top bar included.
+            if let routineId = model.panelRoutineId {
+                BotPanelRoutinePage(routineId: routineId)
+                    .transition(.move(edge: .trailing))
+            }
+        }
+        .onValueChange(of: model.panelOpen) { open in
+            if !open { model.panelRoutineId = nil }
+        }
         .overlay(alignment: docked ? .leading : .trailing) {
             Rectangle().fill(theme.hairlineWeak).frame(width: 1)
         }

@@ -5,9 +5,12 @@
 import { createHash } from "node:crypto";
 import { chmodSync, existsSync, readFileSync, mkdirSync, rmSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
-import { writeFileAtomic, writeFileAtomicIfChanged } from "./atomic.ts";
+import { isDeepStrictEqual } from "node:util";
+import { OwnedFile, writeFileAtomic } from "./atomic.ts";
 import { PROACTIVE_MODE_DEFAULT, normalizeProactiveMode } from "../shared/proactive-mode.ts";
-import { commitBotChange, keptRevocation, saveBotsFor } from "./bots/bots-save.ts";
+import { commitBotChange, keptRevocation, saveBotsFor, touchesPermissions } from "./bots/bots-save.ts";
+import { discardNativeLog } from "./drivers/native.ts";
+import { saveSoon } from "./save-batch.ts";
 import { applyHumanIds } from "./rooms/channel-membership.ts";
 import { parseToolScope, toolScopeWidens } from "../shared/tool-scope.ts";
 import { ensureSections, readSections, changeEmptySection } from "./rooms/section-context.ts";
@@ -757,6 +760,8 @@ export class Store {
   /** Room turns and old callers have their own activity slot. Clearing
    * that slot must not clear a concurrently running independent task. */
   private legacyActivities = new Map<string, BotActivity>();
+  private readonly botsFile = new OwnedFile(BOTS_FILE, { mode: 0o600 });
+  private readonly groupsFile = new OwnedFile(GROUPS_FILE, { mode: 0o600 });
 
   constructor(
     defaultSelection: () => ModelSelection,
@@ -781,9 +786,11 @@ export class Store {
     // as "every member was deleted".
     let botsLoaded = false;
     try {
-      const raw: unknown = JSON.parse(readFileSync(BOTS_FILE, "utf8"));
+      const text = readFileSync(BOTS_FILE, "utf8");
+      const raw: unknown = JSON.parse(text);
       if (!Array.isArray(raw)) throw new Error("bots.json must be an array");
       this.bots = raw;
+      this.botsFile.loaded(text);
       botsLoaded = true;
     } catch (error) {
       this.bots = [];
@@ -797,9 +804,11 @@ export class Store {
       }
     }
     try {
-      const raw: unknown = JSON.parse(readFileSync(GROUPS_FILE, "utf8"));
+      const text = readFileSync(GROUPS_FILE, "utf8");
+      const raw: unknown = JSON.parse(text);
       if (!Array.isArray(raw)) throw new Error("groups.json must be an array");
       this.groups = raw;
+      this.groupsFile.loaded(text);
     } catch (error) {
       this.groups = [];
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
@@ -1388,20 +1397,23 @@ export class Store {
   // Many saves repeat what is already on disk (the same resume cursor, an
   // unchanged task field), so both registries skip a byte-identical write.
   // Events are still emitted by the callers either way.
-  /** Memory changes only once bots.json holds them: a failed save puts the bot back as it was. */
-  private commitBotChange(bot: BotRecord, action: string, change: () => void, onRollback?: () => void) {
-    commitBotChange(bot, action, () => this.saveBots(), change, onRollback);
+  /** Memory changes only once bots.json holds them: a failed save puts the bot back as it was.
+   * Bookkeeping saves land once at the end of the running batch (server/save-batch.ts). */
+  private commitBotChange(bot: BotRecord, action: string, change: () => void, onRollback?: () => void, bookkeeping = false) {
+    commitBotChange(bot, action, bookkeeping ? () => this.saveBotsSoon() : () => this.saveBots(), change, onRollback);
   }
+
+  private saveBotsSoon() { saveSoon(this.botsFile, () => this.saveBots()); }
 
   private saveBots(bots: BotRecord[] = this.bots, registerSections = true) {
     if (this.botsUnreadable) {
       throw Object.assign(new Error("Saved bots could not be read. Repair bots.json before changing them."), { status: 503 });
     }
     if (registerSections) this.rememberSections([...this.bots, ...bots].map((bot) => bot.section));
-    writeFileAtomicIfChanged(BOTS_FILE, JSON.stringify(bots.map(({ busy: _busy, activity: _activity, ...bot }) => ({
+    this.botsFile.write(JSON.stringify(bots.map(({ busy: _busy, activity: _activity, ...bot }) => ({
       ...bot,
       tasks: bot.tasks?.map(({ busy: _taskBusy, activity: _taskActivity, turnStartedAt: _taskTurnStarted, ...task }) => persistedPin(task)),
-    })), null, 2), { mode: 0o600 });
+    }))));
   }
 
   private saveGroups(groups: GroupRecord[] = this.groups, registerSections = true) {
@@ -1409,10 +1421,10 @@ export class Store {
       throw Object.assign(new Error("Saved rooms could not be read. Repair groups.json before changing them."), { status: 503 });
     }
     if (registerSections) this.rememberSections(groups.map((group) => group.section));
-    writeFileAtomicIfChanged(GROUPS_FILE, JSON.stringify(groups.map(({ busyBotId: _busyBotId, turnStartedAt: _turnStartedAt, ...g }) => ({
+    this.groupsFile.write(JSON.stringify(groups.map(({ busyBotId: _busyBotId, turnStartedAt: _turnStartedAt, ...g }) => ({
       ...g,
       ...(g.tasks ? { tasks: g.tasks.map((task) => persistedPin(task)) } : {}),
-    })), null, 2), { mode: 0o600 });
+    }))));
   }
 
   get sections(): string[] { return readSections(); }
@@ -1826,6 +1838,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
   private deleteThreadRecord(threadId: string, beforeCommit?: () => void) {
     mdb.deleteThread(threadId, beforeCommit);
     this.threads.delete(threadId);
+    discardNativeLog(threadId);
     for (const file of [
       messagesFile(threadId),
       `${messagesFile(threadId)}.imported`,
@@ -3199,6 +3212,8 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     if (!bot) return;
     // the cursor belongs to the task that produced it, not to the bot
     const task = threadId ? this.taskByThread(botId, threadId) : this.activeTask(botId);
+    const mirrored = !threadId || bot.threadId === threadId;
+    if (isDeepStrictEqual(task?.resumeCursors[instanceId], cursor) && (!mirrored || isDeepStrictEqual(bot.resumeCursors[instanceId], cursor))) return;
     if (task) {
       task.resumeCursors[instanceId] = cursor;
       if (typeof cursor === "string" && cursor && !task.engineSessions?.includes(cursor)) {
@@ -3207,8 +3222,8 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     }
     // The legacy mirror follows the task visible in chat, never a detached
     // routine task working in the background.
-    if (!threadId || bot.threadId === threadId) bot.resumeCursors[instanceId] = cursor;
-    saveBotsFor("the conversation's engine session", () => this.saveBots());
+    if (mirrored) bot.resumeCursors[instanceId] = cursor;
+    saveBotsFor("the conversation's engine session", () => this.saveBotsSoon());
     this.emit({ type: "bot", botId });
   }
 
@@ -3219,7 +3234,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     const task = this.taskByThread(botId, threadId);
     if (!task || task.lastInstanceId === instanceId) return;
     task.lastInstanceId = instanceId;
-    saveBotsFor("which engine has this conversation", () => this.saveBots());
+    saveBotsFor("which engine has this conversation", () => this.saveBotsSoon());
   }
 
   setHandedMessages(botId: string, threadId: string, instanceId: string, state: HandedState) {
@@ -3229,7 +3244,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
     const live = Object.entries(task.handedMessages ?? {})
       .filter(([id, record]) => id !== instanceId && record.session !== undefined && record.session === task.resumeCursors[id]);
     task.handedMessages = { ...Object.fromEntries(live), [instanceId]: state };
-    saveBotsFor("what this conversation handed its engine", () => this.saveBots());
+    saveBotsFor("what this conversation handed its engine", () => this.saveBotsSoon());
   }
 
   /** Bank one settled turn onto its task. Called once per turn.completed;
@@ -3275,7 +3290,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
       // measured one, rides on that reading.
       ...(context ? { context } : {}),
     };
-    saveBotsFor("the thread's usage", () => this.saveBots());
+    saveBotsFor("the thread's usage", () => this.saveBotsSoon());
     this.emit({ type: "bot", botId });
     return task.usage;
   }
@@ -3559,7 +3574,7 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
       if (task.routineRunId || task.hidden === true) task.unread = false;
       if (bot.threadId === threadId) this.mirrorActiveTask(bot, task);
       bot.unread = botHasPersonUnread(bot);
-    }, revocation && (() => Object.assign(task, revocation)));
+    }, revocation && (() => Object.assign(task, revocation)), !touchesPermissions(patch));
     this.emit({ type: "bot", botId });
     return task;
   }
@@ -3905,7 +3920,7 @@ const patch = { approvalMode: mode, autoApprove: false, alwaysAllow: [] };
     const task = this.taskByThread(botId, threadId);
     if (!task || !Number.isFinite(at) || (task.askedAt ?? -1) >= at) return task ?? null;
     task.askedAt = at;
-    saveBotsFor("when you last wrote in this thread", () => this.saveBots());
+    saveBotsFor("when you last wrote in this thread", () => this.saveBotsSoon());
     this.emit({ type: "bot", botId });
     return task;
   }
@@ -3993,7 +4008,7 @@ const patch = { approvalMode: mode, autoApprove: false, alwaysAllow: [] };
     this.commitBotChange(bot, "the thread's title", () => {
       task.title = titleFromMessage(text);
       task.titleFromFirstMessage = true;
-    });
+    }, undefined, true);
     this.emit({ type: "bot", botId });
     return task;
   }

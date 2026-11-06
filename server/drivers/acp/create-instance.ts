@@ -14,7 +14,7 @@ import type {
 import { newEventId } from "../../contracts.ts";
 import { augmentedPath } from "../../env-path.ts";
 import { appendNative } from "../native.ts";
-import { sessionIdlePolicy } from "../session-idle.ts";
+import { armIdleClose, sessionIdlePolicy, stopIdleClose } from "../session-idle.ts";
 import { createSendTurn } from "./turn-send.ts";
 import { createAcpMcp } from "./instance-mcp.ts";
 import { createInstanceText } from "./instance-text.ts";
@@ -149,7 +149,8 @@ export async function createAcpInstance(
     if (process.env.SAGAX_ACP_REUSE_DIAG === "1") console.error(`[acp-reuse-diag] closeSession thread=${threadId.slice(0, 8)} why=${why}`);
     session.closing = true;
     session.budget?.retiring();
-    if (session.idleTimer) clearTimeout(session.idleTimer);
+    stopIdleClose(`${instanceId}\0${threadId}`, session.idleTimer);
+    session.idleTimer = null;
     appendNative(threadId, { dir: "out", source: SOURCE, msg: { close: why } });
     // a new turn must never adopt a closing session
     sessions.delete(threadId);
@@ -170,9 +171,11 @@ export async function createAcpInstance(
   const armIdle = (threadId: string) => {
     const session = sessions.get(threadId);
     if (!session) return;
-    if (session.idleTimer) clearTimeout(session.idleTimer);
-    session.idleTimer = setTimeout(() => closeSession(threadId, "idle"), SESSION_IDLE_MS);
-    session.idleTimer.unref?.();
+    stopIdleClose(`${instanceId}\0${threadId}`, session.idleTimer);
+    session.idleTimer = armIdleClose(`${instanceId}\0${threadId}`, SESSION_IDLE_MS, {
+      close: () => closeSession(threadId, "idle"),
+      idle: () => sessions.get(threadId) === session && !session.closing && !session.current,
+    });
     session.budget?.idle();
   };
   // "Always allow this session", remembered by the driver when the agent

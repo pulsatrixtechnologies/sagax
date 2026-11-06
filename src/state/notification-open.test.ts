@@ -112,7 +112,7 @@ beforeAll(() => {
       server = { ...server, tasks, unread: tasks.some((task) => task.unread) };
       return announcedThen({ bot: structuredClone(server) });
     }
-    if (path === "/api/routines") return Promise.resolve(json({ routines: [], runs: [] }));
+    if (typeof path === "string" && path.startsWith("/api/routines")) return Promise.resolve(json({ routines: [], runs: [] }));
     if (path === "/api/webhooks") return Promise.resolve(json({ webhooks: [], attempts: [] }));
     if (path === "/api/instances") return Promise.resolve(json({ instances: [] }));
     return Promise.resolve(json({}));

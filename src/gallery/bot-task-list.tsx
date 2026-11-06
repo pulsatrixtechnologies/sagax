@@ -50,7 +50,7 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     if (task) { task.state = "done"; task.updatedAt = Date.now(); }
     return json({ task });
   }
-  if (path === "/api/routines") return json({ routines, runs: [], folders: {} });
+  if (typeof path === "string" && path.startsWith("/api/routines")) return json({ routines, runs: [], folders: {} });
   if (path === "/api/bots") return json({ bots: [bot], groups: [], sections: [], computerControl: {} });
   return realFetch(input, init);
 }) as typeof window.fetch;

@@ -205,6 +205,7 @@ import { useTranscriptViewport } from "@/hooks/use-transcript-viewport";
 import { offscreenAnchorShift, useOffscreenRowAnchor } from "@/hooks/use-offscreen-row-anchor";
 import { claimMessageEntrance } from "@/lib/message-entrance";
 import { equalRows, peerBots, peerGroups } from "@/state/view-slices";
+import { useThreadRoutineRun } from "@/state/older-routine-runs";
 import { shallowEqual, useStoreDispatch, useStoreGetter, useStoreSelector } from "@/state/store-selector";
 import { useUnreadDivider } from "@/hooks/use-unread-divider";
 import { NewMessagesDivider } from "./NewMessagesDivider";
@@ -2056,6 +2057,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
     ? { ...stored, threadId: preview.threadId, messages: preview.messages, hasMore: preview.hasMore, activeLeafId: preview.activeLeafId ?? null, awaitingThreadSnapshot: true }
     : stored, [stored, preview]);
   const bot = useMemo(() => currentTaskBot(profile), [profile]);
+  useThreadRoutineRun(bot.id, bot.threadId);
   const dataItem = useDataWindowItem(bot);
   const dispatch = useStoreDispatch();
   const state = useStoreSelector((current) => ({

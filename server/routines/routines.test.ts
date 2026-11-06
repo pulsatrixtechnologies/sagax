@@ -1482,7 +1482,8 @@ describe("RoutineManager", () => {
     let failureWasPersistedBeforeCallback = false;
     h.options.onRunFailed = (run) => {
       h.failed.push(run);
-      failureWasPersistedBeforeCallback = readFileSync(routineFile, "utf8").includes('"status": "failed"');
+      const disk = readFileSync(routineFile, "utf8");
+      failureWasPersistedBeforeCallback = disk.includes('"status":"failed"') || disk.includes('"status": "failed"');
     };
     // The first reload resumes the cut run once, in its own thread.
     const resumed = new RoutineManager(h.options);
@@ -1740,7 +1741,10 @@ describe("RoutineManager", () => {
     const file = h.options.file;
     if (!file) throw new Error("test harness did not configure routine persistence");
     const stored = readFileSync(file, "utf8");
-    const malformed = stored.replace(`"sourceThreadId": "${request.threadId}"`, '"sourceThreadId": 42');
+    const needle = stored.includes(`"sourceThreadId":"${request.threadId}"`)
+      ? `"sourceThreadId":"${request.threadId}"`
+      : `"sourceThreadId": "${request.threadId}"`;
+    const malformed = stored.replace(needle, '"sourceThreadId": 42');
     expect(malformed).not.toBe(stored);
     writeFileSync(file, malformed);
 

@@ -30,6 +30,7 @@ import {
 import { PUSH_TOKEN_HEADER, pushTokenFromHeader } from "../push/devices.ts";
 import { openSseHeartbeat } from "../streams/sse-fanout.ts";
 import type { BotRecord, GroupRecord, Message } from "../store.ts";
+import { flushNativeLog } from "../drivers/native.ts";
 import { readThreadEvents } from "../threads/thread-events.ts";
 import {
   listThreadFiles,
@@ -752,6 +753,7 @@ export function createThreadsHttpRoutes(deps: ThreadsHttpRouteDeps): RouteHandle
         return json(res, 400, { error: "limit must be a positive whole number" });
       }
       const limit = parsedLimit;
+      flushNativeLog(threadId);
       return json(res, 200, readThreadEvents({ eventsDir: EVENTS_DIR, nativeDir: NATIVE_DIR, threadId, limit }));
     }
 

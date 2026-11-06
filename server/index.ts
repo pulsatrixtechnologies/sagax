@@ -267,7 +267,7 @@ import { createApprovalModeSupport } from "./capabilities/harness-capabilities.t
 import { escapeAttribute } from "../src/lib/composer-attachments.ts";
 import { threadRefUrl } from "../src/lib/thread-refs.ts";
 import { markDeadThreadChip } from "./threads/dead-thread-chips.ts";
-import { credentialIsConfigured } from "../shared/credential-request.ts";
+import { credentialIsConfigured, isCredentialTargetId } from "../shared/credential-request.ts";
 import { VAULT_LOGIN_TARGET, ONE_PASSWORD_WAITING } from "../shared/credential-vault.ts";
 import { HOST_COMPUTER_RESOURCE, HOST_CONTROL_NOTICE } from "../shared/host-control.ts";
 import { CredentialVault, fillResolverFor, LOCAL_VAULT_PRINCIPAL } from "./vault/credential-vault.ts";
@@ -29238,7 +29238,7 @@ async function provideSecretFromPhone(
   // card, so the exact retry can repair that tiny window without writing the
   // credential again. A different randomized envelope was rejected above.
   if (message.secret.phoneOperationId === operationId && !message.secret.provided) {
-    if (!credentialIsConfigured(cfg, message.secret.target)) {
+    if (!(isCredentialTargetId(message.secret.target) && credentialIsConfigured(cfg, message.secret.target))) {
       throw new PhoneSecretError(`${message.secret.label} is no longer configured`, 409);
     }
     if (!resumeSecretCard(context.botId, context.threadId, context.messageId, "provided")) {
@@ -29255,7 +29255,7 @@ async function provideSecretFromPhone(
         409,
       );
     }
-    if (!credentialIsConfigured(cfg, message.secret.target)) {
+    if (!(isCredentialTargetId(message.secret.target) && credentialIsConfigured(cfg, message.secret.target))) {
       throw new PhoneSecretError(`${message.secret.label} is no longer configured`, 409);
     }
     // A crash or older build may have committed the credential and marked
@@ -29298,7 +29298,7 @@ async function provideSecretFromPhone(
     // Electron acknowledges only after credentials.bin and the server's
     // external-secret config update both commit. Keep this assertion at the
     // boundary so a future parent handler cannot accidentally resume first.
-    if (!credentialIsConfigured(cfg, current.secret.target)) {
+    if (!(isCredentialTargetId(current.secret.target) && credentialIsConfigured(cfg, current.secret.target))) {
       throw new PhoneSecretError(`${current.secret.label} was not saved yet`, 409);
     }
     // Persist the winning randomized envelope id before completing the card.
@@ -32864,7 +32864,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     mcpServers: () => cfg.mcpServers ?? {},
     addDisabledMcpServer,
     botAddMcpServer: (current, body, botId) => mcpServersHost.botAdd(current, body, botId),
-    redeemMcpBody: (body, botId, threadId) => customSecretVault.redeemMcpServer(body, botId, threadId),
+    redeemMcpBody: (body, botId, threadId) => customSecretVault.redeemMcpServer(body, botId, threadId) as never,
     sharedMcpPersonalRefusal,
     mcpPolicyRefusal,
     persistMcpServers,

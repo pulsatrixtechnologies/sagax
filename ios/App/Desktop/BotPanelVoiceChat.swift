@@ -43,7 +43,7 @@ struct BotPanelVoiceChat: View {
             VStack(spacing: 0) {
                 row("Voice", value: voiceName, id: "bot-panel.voice-chat.voice") {
                     Picker(selection: voiceBinding) {
-                        Text("Not set").tag("")
+                        Text("Provider's default voice").tag("")
                         ForEach(voices ?? []) { voice in
                             Text(verbatim: PhoneBotCallVoiceCard.capitalizedLabel(voice.label)).tag(voice.id)
                         }
@@ -80,7 +80,7 @@ struct BotPanelVoiceChat: View {
     }
 
     private var voiceName: String {
-        guard !botVoice.isEmpty else { return String(localized: "Not set") }
+        guard !botVoice.isEmpty else { return String(localized: "Provider's default voice") }
         if let label = voices?.first(where: { $0.id == botVoice })?.label {
             return PhoneBotCallVoiceCard.capitalizedLabel(label)
         }

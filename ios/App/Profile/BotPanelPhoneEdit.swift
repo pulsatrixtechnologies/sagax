@@ -192,7 +192,7 @@ struct PhoneBotCallVoiceCard: View {
         ProfileCard(margin: SettingsMetrics.cardMargin) {
             menuRow("Voice", value: voiceName, id: "panel-edit-voice") {
                 Picker(selection: voiceBinding) {
-                    Text("Not set").tag("")
+                    Text("Provider's default voice").tag("")
                     ForEach(voices ?? []) { voice in Text(verbatim: Self.capitalizedLabel(voice.label)).tag(voice.id) }
                     if !botVoice.isEmpty, !(voices ?? []).contains(where: { $0.id == botVoice }) {
                         Text(verbatim: Self.capitalizedLabel(botVoice)).tag(botVoice)
@@ -237,7 +237,7 @@ struct PhoneBotCallVoiceCard: View {
     }
 
     private var voiceName: String {
-        guard !botVoice.isEmpty else { return String(localized: "Not set") }
+        guard !botVoice.isEmpty else { return String(localized: "Provider's default voice") }
         if let label = voices?.first(where: { $0.id == botVoice })?.label {
             return Self.capitalizedLabel(label)
         }

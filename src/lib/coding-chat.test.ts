@@ -9,6 +9,7 @@ import type { Message } from "@/state/store";
 import {
   changedFiles,
   codingPlace,
+  codingTokens,
   codingRoot,
   codingRows,
   codingStep,
@@ -155,6 +156,19 @@ describe("rows", () => {
     expect(place).toMatchObject({ folder: "dispatch-board", branch: "feat/column", pull: { number: 12 }, commit: { sha: "abcdef1234" } });
     expect(languageOf("src/a.tsx")).toBe("tsx");
     expect(languageOf("Dockerfile")).toBe("dockerfile");
+  });
+
+  it("sums turn digest tokens when any message reported usage", () => {
+    expect(codingTokens([line("user", "hi")])).toBeUndefined();
+    const withUsage = {
+      ...line("bot", "done"),
+      digest: {
+        turnId: "t1", botId: "wren", threadId: "th", at: 1, durationMs: 10,
+        tools: [], memory: [], reply: "done", hookCoverage: "full" as const,
+        usage: { input: 10_000, output: 2_400 },
+      },
+    };
+    expect(codingTokens([line("user", "hi"), withUsage])).toBe(12_400);
   });
 });
 

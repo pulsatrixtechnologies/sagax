@@ -55,8 +55,8 @@ const pretty = (value: unknown) => JSON.stringify(value, null, 2);
 const bot = { id: "osprey", threadId: "main", name: "Osprey", color: "green", tasks: [], messages: [], modelSelection: { instanceId: "t", model: "t" } } as unknown as Bot;
 
 let seq = 0;
-const say = (role: "user" | "bot", text: string, minutesAgo: number): Message => ({
-  id: `g${++seq}`, role, kind: "text", text, at: at(minutesAgo), ...(role === "bot" ? { from: { botId: "osprey", name: "Osprey", color: "green" } } : {}),
+const say = (role: "user" | "bot", text: string, minutesAgo: number, extra: Partial<Message> = {}): Message => ({
+  id: `g${++seq}`, role, kind: "text", text, at: at(minutesAgo), ...(role === "bot" ? { from: { botId: "osprey", name: "Osprey", color: "green" } } : {}), ...extra,
 } as Message);
 const call = (name: string, input: unknown, minutesAgo: number, extra: Partial<NonNullable<Message["tool"]>> = {}): Message => ({
   id: `g${++seq}`, role: "bot", kind: "activity", text: "", at: at(minutesAgo), from: { botId: "osprey", name: "Osprey", color: "green" },
@@ -92,15 +92,33 @@ const messages: Message[] = [
     call("Bash", { command: `cd ${ROOT} && git add -A && git commit -m "Keep the hand-set order in board columns"` }, 4.2, { durationMs: 600, output: "[feat/column-order 3f9c2a1] Keep the hand-set order in board columns\n 3 files changed, 6 insertions(+), 2 deletions(-)" }),
     call("Bash", { command: "git push -u origin feat/column-order" }, 4, { durationMs: 1_800, output: "To github.com:acme/dispatch-board.git\n * [new branch]      feat/column-order -> feat/column-order" }),
     call("Bash", { command: "gh pr create --title \"Keep the hand-set order in board columns\" --body-file -" }, 3.8, { durationMs: 2_100, output: "https://github.com/acme/dispatch-board/pull/41" }),
-    say("bot", "C'est fait. La colonne garde l'ordre posé à la main et place les nouvelles cartes à la fin.\n\n- `column.ts` trie par `order`, puis par date\n- `card.ts` ajoute le champ `order`\n- le test couvre une carte glissée au-dessus d'une plus récente\n\nLes 18 tests passent. La PR #41 est ouverte.", 3.5),
+    say("bot", "C'est fait. La colonne garde l'ordre posé à la main et place les nouvelles cartes à la fin.\n\n- `column.ts` trie par `order`, puis par date\n- `card.ts` ajoute le champ `order`\n- le test couvre une carte glissée au-dessus d'une plus récente\n\nLes 18 tests passent. La PR #41 est ouverte.", 3.5, {
+      digest: {
+        turnId: "gallery-turn", botId: "osprey", threadId: "gallery", at: at(3.5), durationMs: 330_000,
+        tools: [], memory: [], reply: "C'est fait.", hookCoverage: "full",
+        usage: { input: 10_200, output: 2_200 },
+      },
+    }),
   ]),
 ];
+
+// Running gallery: one digest so the header can show tokens while the task works.
+if (live) {
+  const firstBot = messages.find((message) => message.role === "bot" && message.kind === "text");
+  if (firstBot) {
+    firstBot.digest = {
+      turnId: "gallery-turn-live", botId: "osprey", threadId: "gallery", at: at(8.8), durationMs: 12_000,
+      tools: [], memory: [], reply: firstBot.text ?? "", hookCoverage: "full",
+      usage: { input: 10_200, output: 2_200 },
+    };
+  }
+}
 
 const detail: BotActivityDetail = {
   id: "thread:gallery", kind: "session", botId: "osprey", botName: "Osprey",
   title: "Pour la colonne du board, garde l'ordre que les gens placent à la main au lieu de trier par date.",
   status: live ? "running" : "finished", startedAt: at(9), ...(live ? {} : { endedAt: at(3.5) }), updatedAt: NOW, threadId: "gallery", coding: true,
-  canStop: live, currentStep: live ? "pnpm typecheck" : undefined,
+  canStop: live, currentStep: live ? (params.get("lang") === "fr" ? "Vérifie les types" : "Checking types") : undefined,
   code: {
     folder: ROOT, branch: "feat/column-order", repo: "acme/dispatch-board",
     pullRequests: live ? [] : [{ repo: "acme/dispatch-board", number: 41, url: "https://github.com/acme/dispatch-board/pull/41", action: "opened", branch: "feat/column-order", at: at(3.8) }],

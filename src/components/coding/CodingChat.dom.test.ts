@@ -59,12 +59,13 @@ const messages: Message[] = [
   { id: "m7", role: "bot", kind: "activity", text: "", at: NOW - 120_000, tool: { name: "Write", input: pretty({ file_path: `${ROOT}/src/board/order.ts`, content: "export const byOrder = (a, b) => a.order - b.order;\n" }), ok: true } },
 ];
 
-const item = (status: BotActivityItem["status"]): BotActivityItem => ({
+const item = (status: BotActivityItem["status"], extra: Partial<BotActivityItem> = {}): BotActivityItem => ({
   id: "thread:th-1", kind: "session", botId: "wren", botName: "Wren", title: "Pour la colonne du board, garde l'ordre des cartes",
   status, startedAt: NOW - 250_000, ...(status === "running" ? { currentStep: `cd ${ROOT} && pnpm vitest run src/board` } : { endedAt: NOW - 60_000 }), updatedAt: NOW, threadId: "th-1", coding: true, canStop: status === "running",
   code: { folder: ROOT, branch: "feat/column-order", repo: "acme/board", pullRequests: [{ number: 41, url: "https://github.com/acme/board/pull/41", action: "opened", at: NOW }], branches: [], commits: [{ sha: "0badc0ffee12", pushed: true, at: NOW }] },
+  ...extra,
 });
-const detail = (status: BotActivityItem["status"]): BotActivityDetail => ({ ...item(status), steps: [], stepsTruncated: false, files: [], children: [], canStop: status === "running" });
+const detail = (status: BotActivityItem["status"], extra: Partial<BotActivityDetail> = {}): BotActivityDetail => ({ ...item(status), steps: [], stepsTruncated: false, files: [], children: [], canStop: status === "running", ...extra });
 
 let host: HTMLDivElement;
 let column: HTMLDivElement;
@@ -109,23 +110,50 @@ const lines = () => [...column.querySelectorAll<HTMLElement>("[data-coding-row]"
 const headOf = (row: HTMLElement) => `${row.querySelector("[data-tool-name]")?.textContent ?? ""}${row.querySelector("[data-tool-arg]")?.textContent ?? ""}`;
 
 describe("CodingChatSheet", () => {
-  it("opens over the chat column with the task's title, bot, folder, branch, and the state once with the step in words", () => {
-    mountSheet("running");
+  it("opens over the chat column with a compact left header: back, bot, title, folder, branch and status", () => {
+    const props = mountSheet("running", { item: item("running", { currentStep: "Checking types" }), detail: detail("running", { currentStep: "Checking types" }) });
     const sheet = column.querySelector<HTMLElement>("[data-testid=coding-chat]")!;
-    expect(sheet).not.toBeNull();
-    expect(sheet.querySelector("[data-coding-title]")?.textContent).toContain("Pour la colonne du board");
-    expect(sheet.textContent).toContain("Wren");
-    expect(sheet.querySelector("[data-coding-folder]")?.textContent).toBe("dispatch-board");
-    expect(sheet.textContent).toContain("feat/column-order");
-    const state = sheet.querySelectorAll("[data-coding-state]");
-    expect(state).toHaveLength(1);
-    expect(state[0]!.textContent).toMatch(/Running\s*·\s*4m/);
-    // the current step in words, never the raw command
-    expect(sheet.querySelector("[data-coding-step-now]")?.textContent).toBe("Running src/board tests");
-    expect(sheet.textContent).not.toContain("cd dispatch-board");
+    const header = sheet.querySelector<HTMLElement>("[data-coding-header]")!;
+    expect(header).not.toBeNull();
+    expect(header.className).not.toMatch(/items-center/);
+    expect(header.querySelector("[data-coding-back]")).not.toBeNull();
+    expect(header.querySelector("[data-coding-bot]")?.textContent).toBe("Wren");
+    expect(header.querySelector("[data-coding-title]")?.textContent).toContain("Pour la colonne du board");
+    expect(header.querySelector("[data-coding-title]")?.className).toMatch(/truncate/);
+    expect(header.querySelector("[data-coding-folder]")?.textContent).toBe("dispatch-board");
+    expect(header.querySelector("[data-coding-branch]")?.textContent).toBe("feat/column-order");
+    expect(header.querySelector("[data-coding-glyph]")?.textContent).toBe("○");
+    expect(header.querySelector("[data-coding-state]")?.textContent).toMatch(/Checking types\s*·\s*4m/);
+    expect(header.querySelector("[data-coding-stop-header]")).not.toBeNull();
     // one status only: no "Working:" line, no branch repeated in the band
     expect(sheet.querySelector("[data-coding-working]")).toBeNull();
-    expect(sheet.querySelector("[data-coding-branch]")).toBeNull();
+    flushSync(() => header.querySelector<HTMLButtonElement>("[data-coding-back]")!.click());
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("expands the full task title inline from the header chevron", () => {
+    mountSheet("running");
+    const toggle = column.querySelector<HTMLButtonElement>("[data-coding-title-toggle]")!;
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(column.querySelector("[data-coding-title]")?.className).toMatch(/truncate/);
+    flushSync(() => toggle.click());
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(column.querySelector("[data-coding-title]")?.className).not.toMatch(/truncate/);
+  });
+
+  it("shows a finished status glyph and phrase without Stop", () => {
+    mountSheet("finished");
+    const header = column.querySelector<HTMLElement>("[data-coding-header]")!;
+    expect(header.querySelector("[data-coding-glyph]")?.textContent).toBe("●");
+    expect(header.querySelector("[data-coding-state]")?.textContent).toMatch(/Finished\s*·\s*3m/);
+    expect(header.querySelector("[data-coding-stop-header]")).toBeNull();
+  });
+
+  it("humanizes a live command step in the compact header status", () => {
+    mountSheet("running");
+    const header = column.querySelector<HTMLElement>("[data-coding-header]")!;
+    expect(header.querySelector("[data-coding-state]")?.textContent).toMatch(/Running src\/board tests\s*·\s*4m/);
+    expect(header.textContent).not.toContain("cd dispatch-board");
   });
 
   it("draws each tool call as one terminal line: the dot, Name(arg), ⎿ the first lines, then … +N lines", () => {
@@ -188,12 +216,12 @@ describe("CodingChatSheet", () => {
     expect(column.querySelector('[data-coding-line="bot"]')?.textContent).toBe("I'll look at the column first.");
   });
 
-  it("shows Stop once, in the head beside the state, while live; none once finished", () => {
+  it("shows Stop in the header while live (one place), and none once finished", () => {
     const props = mountSheet("running");
-    const stops = column.querySelectorAll<HTMLButtonElement>("[data-coding-stop]");
-    expect(stops).toHaveLength(1);
-    expect(stops[0]!.closest("[data-coding-meta]")).not.toBeNull();
-    flushSync(() => stops[0]!.click());
+    const stop = column.querySelector<HTMLButtonElement>("[data-coding-stop-header]")!;
+    expect(stop).not.toBeNull();
+    expect(column.querySelectorAll("[data-coding-stop]")).toHaveLength(1);
+    flushSync(() => stop.click());
     expect(props.onStop).toHaveBeenCalledTimes(1);
     mountSheet("finished");
     expect(column.querySelector("[data-coding-stop]")).toBeNull();

@@ -565,6 +565,20 @@ export function codingPlace(detail: Pick<BotActivityDetail, "code"> | null | und
   };
 }
 
+/** Sum of turn digests' tokens on the task's thread, when any turn reported
+ * usage. Absent when nothing reported tokens yet. */
+export function codingTokens(messages: readonly Message[]): number | undefined {
+  let total = 0;
+  let any = false;
+  for (const message of messages) {
+    const usage = message.digest?.usage;
+    if (!usage) continue;
+    any = true;
+    total += (usage.input ?? 0) + (usage.output ?? 0);
+  }
+  return any ? total : undefined;
+}
+
 /** The extension's grammar for the syntax colours (ChatMarkdown's ids). */
 export function languageOf(path: string): string {
   const name = path.split("/").at(-1)?.toLowerCase() ?? "";

@@ -925,10 +925,12 @@ export function memorySystemPrompt(botId: string, opts: { managedWrites?: boolea
   const memoryFile = absolutePaths ? join(workspaceDir(botId), "MEMORY.md") : "MEMORY.md";
   const topicDir = absolutePaths ? join(workspaceDir(botId), "memory") : "memory/";
   if (opts.fileTools === false && !opts.managedWrites) {
-    if (!memory && !opts.company?.trim()) return "";
+    // Even with no MEMORY.md, topic notes must still say where they live
+    // (a turn in a task folder has no other memory path).
+    if (!memory && !opts.company?.trim()) return topicIndexBlock(botId, "search");
     const body = memory
       ? ` Your saved memory is supplied as context; this turn has no memory editing tools.\n\nYour memory (MEMORY.md):\n${memory.text}${memory.truncated ? " [Only the initial memory excerpt is visible.]" : ""}${topicIndexBlock(botId, false)}`
-      : " Your saved memory is supplied as context; this turn has no memory editing tools.";
+      : ` Your saved memory is supplied as context; this turn has no memory editing tools.${topicIndexBlock(botId, "search")}`;
     return withCompany(body, opts.company);
   }
   // memory_update's own description carries how it writes; the prompt adds
@@ -964,8 +966,9 @@ function topicIndexBlock(botId: string, reach: TopicReach | boolean): string {
   const index = memoryTopicIndex(botId);
   if (!index) return "";
   const mode: TopicReach = reach === true ? "files" : reach === false ? "search" : reach;
+  // Every turn reaches this, including one whose prompt names no other memory path, and a turn runs in a task folder.
   const how = mode === "files"
-    ? "when a request touches one of these topics, read that file with your file tools before you answer"
+    ? `paths are relative to ${JSON.stringify(workspaceDir(botId))}, not your working folder; when a request touches one of these topics, read that file with your file tools before you answer`
     : mode === "workspace_read"
       ? "when a request touches one of these topics, read memory/<name> with workspace_read before you answer"
       : "when a request touches one of these topics, look it up with session_search before you answer";

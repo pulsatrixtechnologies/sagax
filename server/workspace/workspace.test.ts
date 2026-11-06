@@ -738,6 +738,19 @@ describe("workspace", () => {
     expect(withheld).not.toContain("read that file with your file tools");
     expect(withheld).not.toContain(workspaceDir(BOT));
     expect(memorySystemPrompt(BOT, { fileTools: true, withholdHostTools: false })).toContain("read that file with your file tools");
+    expect(memorySystemPrompt(BOT, { fileTools: true, withholdHostTools: false })).toContain(`paths are relative to ${JSON.stringify(workspaceDir(BOT))}`);
+  });
+
+  // A turn without file tools or managed writes still needs the topic index when notes exist.
+  it("tells a turn without memory tools where its topic notes are, with or without a MEMORY.md", () => {
+    writeMemoryTopic(BOT, "regulars.md", "---\ntitle: Regulars\n---\n- Code MOSS-42\n");
+    const withoutMemory = memorySystemPrompt(BOT, { fileTools: false, managedWrites: false });
+    expect(withoutMemory).toContain("- memory/regulars.md");
+    expect(withoutMemory).toContain("look it up with session_search before you answer");
+    writeMemoryFile(BOT, "- The owner likes figs.");
+    const withMemory = memorySystemPrompt(BOT, { fileTools: false, managedWrites: false });
+    expect(withMemory).toContain("- memory/regulars.md");
+    expect(withMemory).toContain("look it up with session_search before you answer");
   });
 
   it("API drivers retain supplied memory without inventing filesystem tools", () => {

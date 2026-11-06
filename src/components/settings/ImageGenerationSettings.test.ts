@@ -64,7 +64,7 @@ describe("AvatarImageGenerator", () => {
     fixture.config = { imageGen: { configured: false, provider: "openai" } };
     const html = generate();
     expect(html).toContain("Set up image generation");
-    expect(html).toContain(">Models<");
+    expect(html).toContain(">Providers<");
     expect(html).not.toContain('type="password"');
     expect(html).not.toContain("Image provider");
     expect(html).not.toContain("Generate avatar");

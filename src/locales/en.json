@@ -13014,7 +13014,7 @@
   "botModels.col.bot": "Bot",
   "botModels.col.backup": "Backup",
   "botModels.backup.auto": "{backups} · default",
-  "botModels.backup.add": "Add a backup",
+  "botModels.backup.none": "None",
   "botModels.paidBy": "Paid by {account}",
   "botModels.selectSection": "Select every bot in {section}",
   "botModels.selectBot": "Select {name}",

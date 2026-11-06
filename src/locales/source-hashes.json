@@ -15753,7 +15753,6 @@
       "botModels.col.bot": "41e35ba1a1fd8b4cdc7f899b3b8f9442a7542f445170e8782e219732cc25c10f",
       "botModels.col.backup": "838557924a5cdfb2f10f233635223e79be8443aef62f9d176cfe18787a2e8b03",
       "botModels.backup.auto": "6779791a14e25757075b19d8d1f7691ee3fa03e95ad431c6a1ce65e992cb6e29",
-      "botModels.backup.add": "e5999c2fedbe1c4bd8541310355237918fbe074cbb9e08b8bb1fc7d1e78828d1",
       "botModels.paidBy": "ddd2a6826ecd4f06acff59cd8cd4e5646d3d50c4ad9cecae16a2db1496260a63",
       "botModels.selectSection": "fceb36a625df9dd53e01ad03903ec4e52267d7c0e83547aca7b40922ba6d7312",
       "botModels.selectBot": "cbe2f0672d5fa31237d6a0db471aaa842fcfbc924608b2bfcf3445e320b73df1",
@@ -17568,7 +17567,8 @@
       "settings.updates.links.about": "7bee0e89939a2aeeaf12a5b4e9758e7918ca45316a35b2910d3fbc1673ba82ed",
       "voice.phoneCalls.orgReadonly": "a1e032d0987f9ad920be91fd8d42825387e6e8de1f1c79c0c1daba4fd7d77e3f",
       "voice.phoneCalls.onWithCallback": "8fa581e33f1c5ac71113ddf14b6888b99ed22762605fbd29a8369b44bfc26233",
-      "organization.advanced.summary": "fa79ab54ae213b6cb40346bee1bf31e48ea99c444dee2c5ae592efd5d8699453"
+      "organization.advanced.summary": "fa79ab54ae213b6cb40346bee1bf31e48ea99c444dee2c5ae592efd5d8699453",
+      "botModels.backup.none": "dc937b59892604f5a86ac96936cd7ff09e25f18ae6b758e8014a24c7fa039e91"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

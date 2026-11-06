@@ -12968,7 +12968,7 @@
   "botModels.col.bot": "Bot",
   "botModels.col.backup": "Secours",
   "botModels.backup.auto": "{backups} · par défaut",
-  "botModels.backup.add": "Ajouter un secours",
+  "botModels.backup.none": "Aucun",
   "botModels.paidBy": "Payé par {account}",
   "botModels.selectSection": "Sélectionner tous les bots de {section}",
   "botModels.selectBot": "Sélectionner {name}",

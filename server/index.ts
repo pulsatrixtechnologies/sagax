@@ -1669,6 +1669,7 @@ import {
 import { effortAcceptedByEngine, resolveEngineTurnEffort } from "../shared/ultracode-effort.ts";
 import { routeTurnModel, type TurnModelSwitch } from "./turns/turn-model-routing.ts";
 import { effortAcceptedByModel, effortForModel } from "../shared/model-capabilities.ts";
+import { isAutoOptimize } from "../shared/model-auto-optimize.ts";
 import { VoiceLatencyLog } from "./voice/voice-latency.ts";
 import {
   noteFirstResponse,
@@ -7877,7 +7878,7 @@ function checkedModelSelection(
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return { ok: false, status: 400, error: "modelSelection must be an object" };
   }
-  const value = raw as { instanceId?: unknown; model?: unknown; effort?: unknown; variant?: unknown; auto?: unknown; fast?: unknown };
+  const value = raw as { instanceId?: unknown; model?: unknown; effort?: unknown; variant?: unknown; auto?: unknown; fast?: unknown; autoOptimize?: unknown };
   if (typeof value.instanceId !== "string" || !value.instanceId.trim()) {
     return { ok: false, status: 400, error: "modelSelection.instanceId is required" };
   }
@@ -7905,6 +7906,13 @@ function checkedModelSelection(
     return { ok: false, status: 400, error: "modelSelection.auto must be a boolean" };
   }
   if (value.auto === true) selection.auto = true;
+  // #2106: Auto's Optimize preference (Intelligence / Balance / Cost), kept only with Auto.
+  if (value.autoOptimize !== undefined && value.autoOptimize !== null) {
+    if (!isAutoOptimize(value.autoOptimize)) {
+      return { ok: false, status: 400, error: "modelSelection.autoOptimize must be intelligence, balance or cost" };
+    }
+    if (value.auto === true) selection.autoOptimize = value.autoOptimize;
+  }
   // The fast model (#1209): a model the engine lists, kept only with Auto.
   if (value.fast !== undefined && value.fast !== null) {
     const fast = value.fast as { instanceId?: unknown; model?: unknown };
@@ -7937,6 +7945,7 @@ function checkedModelSelection(
     selection.instanceId !== current.selection.instanceId ||
     selection.model !== current.selection.model ||
     selection.auto !== current.selection.auto ||
+    selection.autoOptimize !== current.selection.autoOptimize ||
     selection.effort !== current.selection.effort ||
     selection.variant !== current.selection.variant
   );
@@ -40686,6 +40695,29 @@ function claudeAccountForPrincipal(principalId: string): { cli: string; env: Nod
   return { cli, env, key: `instance:${instanceId}` };
 }
 
+/** #2106: the managed MCP plugins (claude.ai connectors, connected) a
+ * subscription account of this computer holds, from the cached inventory
+ * (refreshed in the background). The account pool sends a turn that needs
+ * one to the account that has it. Empty when not known yet. */
+function accountManagedPlugins(instanceId: string): string[] {
+  if (IDENTITY.kind === "perspicax") return [];
+  const entry = instanceConfigs(cfg)[instanceId];
+  if (!entry || entry.driver !== "claudeAgent" || entry.environment?.ANTHROPIC_API_KEY) return [];
+  const config = (entry.config ?? {}) as { cli?: unknown; configDir?: unknown };
+  const cli = typeof config.cli === "string" && config.cli.trim() ? config.cli : "claude";
+  const env: NodeJS.ProcessEnv = { ...process.env, ...entry.environment };
+  if (typeof config.configDir === "string" && config.configDir.trim()) {
+    try {
+      env.CLAUDE_CONFIG_DIR = resolveClaudeConfigDir(config.configDir, env);
+    } catch {
+      return [];
+    }
+  }
+  const inventory = claudeAiInventory.peek(`instance:${instanceId}`, { cli, env });
+  if (inventory?.auth !== "subscription") return [];
+  return inventory.connectors.filter((connector) => connector.status === "connected").map((connector) => connector.name);
+}
+
 // claude.ai artifacts (#2018): every call runs through the person's OWN
 // Claude account (claudeAccountForPrincipal), never another person's.
 async function personClaudeArtifactCall(
@@ -47613,6 +47645,7 @@ const startTurnRunner = createStartTurn({
   registerComputerResume,
   registeredWorkers,
   registry,
+  accountManagedPlugins,
   releaseBootEngineSlot,
   releaseLocalVmThread,
   releasePlain,

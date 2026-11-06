@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickAccountForModel, type PoolAccount } from "./model-account-pool.ts";
+import { pickAccountForModel, pluginKey, pluginsNamedIn, type PoolAccount } from "./model-account-pool.ts";
 
 const account = (partial: Partial<PoolAccount> & Pick<PoolAccount, "instanceId">): PoolAccount => ({
   models: ["claude-sonnet-5", "claude-opus-5"],
@@ -65,5 +65,26 @@ describe("pickAccountForModel (#2106)", () => {
       model: "claude-sonnet-5",
       accounts: [account({ instanceId: "claude-a", models: ["other"], credit: "ok" })],
     })).toBeNull();
+  });
+});
+
+describe("pluginsNamedIn (#2106)", () => {
+  const known = ["Gmail", "Microsoft 365", "Slack", "Google Drive"];
+  it("finds the managed plugins the words name", () => {
+    expect(pluginsNamedIn("Check my gmail then post in Slack", known).sort()).toEqual(["gmail", "slack"]);
+    expect(pluginsNamedIn("ouvre mon microsoft365", known)).toEqual(["microsoft365"]);
+    expect(pluginsNamedIn("Résume le dossier Google Drive", known)).toEqual(["googledrive"]);
+  });
+  it("names nothing when no plugin is said", () => {
+    expect(pluginsNamedIn("refactor this function", known)).toEqual([]);
+    expect(pluginsNamedIn("slackline", ["Slack"])).toEqual([]);
+  });
+  it("routes the turn to the account that holds the named plugin", () => {
+    const accounts = [
+      account({ instanceId: "a", managedPlugins: [] }),
+      account({ instanceId: "b", managedPlugins: ["Gmail"].map(pluginKey) }),
+    ];
+    const neededPlugins = pluginsNamedIn("summarize my Gmail inbox", accounts.flatMap((item) => item.managedPlugins));
+    expect(pickAccountForModel({ model: "claude-opus-5", accounts, preferredInstanceId: "a", neededPlugins })).toBe("b");
   });
 });

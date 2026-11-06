@@ -4,7 +4,7 @@ import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState, PrepareResult } from "./start-turn-state.ts";
 import { resolveModelAccount } from "../models/resolve-model-account.ts";
 import { activeEngineRefusal } from "../engines/engine-refusals.ts";
-import type { AccountCreditState } from "../../shared/model-account-pool.ts";
+import { pluginKey, pluginsNamedIn, type AccountCreditState } from "../../shared/model-account-pool.ts";
 
 export function createPrepareValidateStartTurn(
   host: StartTurnHost,
@@ -394,11 +394,12 @@ export function createPrepareValidateStartTurn(
           instanceId: inst.instanceId,
           models: (inst.models?.options ?? []).map((option: { id: string }) => option.id),
           credit: creditOf(inst.instanceId),
-          // Host has no per-account managed-plugin inventory yet; pool still
-          // ranks by neededPlugins when a later turn passes them.
-          managedPlugins: [] as string[],
+          // the managed MCP plugins this account holds (claude.ai connectors)
+          managedPlugins: ((host.accountManagedPlugins?.(inst.instanceId) ?? []) as string[]).map(pluginKey),
         }));
-      const remapped = resolveModelAccount({ selection, accounts });
+      // the plugins the person's words name, among those the accounts hold
+      const neededPlugins = pluginsNamedIn(state.text ?? "", accounts.flatMap((account) => account.managedPlugins));
+      const remapped = resolveModelAccount({ selection, accounts, neededPlugins });
       if (remapped.instanceId !== selection.instanceId) {
         state.bot = { ...state.bot, modelSelection: remapped };
       }

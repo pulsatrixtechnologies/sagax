@@ -93,9 +93,14 @@ function nodes(value: ReactNode): Node[] {
   return Children.toArray(value).flatMap((child) => {
     if (!isValidElement(child)) return [];
     const node = child as Node;
+    // #2228: the picker's shell and menu became function components of their
+    // own (hook-free); expand them so their output is searched like the rest.
+    if (typeof node.type === "function" && ["ModelPickerShell", "ModelPickerMenu"].includes(node.type.name)) {
+      return nodes((node.type as (props: unknown) => ReactNode)(node.props));
+    }
     // #2181: the menu footer (Effort, Provider) is passed as `after` and drawn
     // outside the scrolling list.
-    return [node, ...nodes(node.props.children), ...nodes(node.props.after as ReactNode), ...nodes(node.props.autoPanel as ReactNode)];
+    return [node, ...nodes(node.props.children), ...nodes(node.props.after as ReactNode), ...nodes(node.props.autoPanel as ReactNode), ...nodes(node.props.trigger as ReactNode)];
   });
 }
 

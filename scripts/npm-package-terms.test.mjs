@@ -107,9 +107,23 @@ describe("npm package term scan", () => {
     expect(blocked('throw new GrokImportError("That is not a Grok Bot export.")', "dist-server/shared/grok-import.js")).toEqual([]);
     expect(blocked('const agentKey = slug(name, 60) || "grok-bot";', "dist-server/shared/grok-import.js")).toEqual([]);
     expect(blocked('throw new B(`That is not a Grok Bot export.`)', "dist/assets/TemplateTools-abc.js")).toEqual([]);
+    expect(blocked('throw new B(`That is not a Grok Bot export.`)', "dist/assets/GrokImportBox-abc.js")).toEqual([]);
+    expect(blocked('throw new B(`That is not a Grok Bot export.`)', "dist/assets/people-dm-abc.js")).toEqual([]);
     expect(blocked('"grokImport.title":`Import a Grok Bot`', "dist/assets/i18n-abc.js")).toEqual([]);
+    expect(blocked('"onboarding.firstRun.bot.import":`Import an agent (Grok Bot, Claude Code)`', "dist/assets/i18n-abc.js")).toEqual([]);
+    expect(blocked('"onboarding.firstRun.bot.import": "Importer un agent (Grok Bot, Claude Code)"', "dist/assets/fr-abc.js")).toEqual([]);
+    expect(blocked('"agentImport.grok":`Grok Bot`', "dist/assets/i18n-abc.js")).toEqual([]);
+    expect(blocked('"newBot.importAgentOption":`Grok Bot or Claude Code…`', "dist-server/index.js")).toEqual([]);
+    expect(blocked('"botWizard.other.importAgent":`Importer de Grok Bot ou Claude Code`', "dist/assets/fr-abc.js")).toEqual([]);
+    expect(blocked("import a Grok Bot agent (desktop and iOS)", "dist/assets/index-abc.js")).toEqual([]);
+    expect(blocked("importez un agent Grok Bot (bureau et iOS)", "dist/assets/index-abc.js")).toEqual([]);
+    expect(blocked("From Grok Bot is the public product", "dist-server/self-knowledge/knowledge.generated.json")).toEqual([]);
+    expect(blocked("docs.x.ai/grok-bot/overview", "dist-server/self-knowledge/knowledge.generated.json")).toEqual([]);
     expect(blocked("// as Grok Bot's sidebar does", "dist-server/index.js")).toEqual(["grok-bot"]);
+    expect(blocked("import a Grok Bot agent", "dist-server/index.js")).toEqual(["grok-bot"]);
+    expect(blocked("From Grok Bot is the public product", "dist-server/index.js")).toEqual(["grok-bot"]);
     expect(blocked('throw new B(`That is not a Grok Bot export.`)', "dist/assets/Sidebar-abc.js")).toEqual(["grok-bot"]);
+    expect(blocked('"newBot.importAgentOption":`Grok Bot or Claude Code…`', "dist/assets/Sidebar-abc.js")).toEqual(["grok-bot"]);
     const pair = '"grok", "grok bot"';
     expect(blocked(pair, "dist-server/shared/computer-app.js")).toEqual([]);
     expect(blocked(pair, "dist-server/index.js")).toEqual([]);
@@ -133,6 +147,7 @@ describe("npm package term scan", () => {
   it("allows a minified declaration and two names side by side (`:Sc(PQ)`), in the web bundle only", () => {
     expect(blocked("var PQ=220;function Yc(e){}", "dist/assets/chunk-1.js")).toEqual([]);
     expect(blocked("{bots:Yc(Sc,xc({owner:Zc.nullable(),grants:Sc(PQ).max(qC)}))}", "dist/assets/chunk-1.js")).toEqual([]);
+    expect(blocked("var PQ=!1;async function YC(){if(PQ||typeof window)", "dist/assets/chunk-1.js")).toEqual([]);
     expect(blocked("var PQ=220;", "dist-server/index.js")).toEqual(["initials"]);
   });
 

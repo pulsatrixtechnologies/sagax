@@ -108,7 +108,9 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   // #2048: pick which surface to publish with before propose_page / save_artifact / claude_artifact
   p("pages:choose", "own", "choose_page_target"),
   // place_call is the same tool under its compatibility name
-  p("phone:call", "own", "place_phone_call", "sagax", ["place_call"]),
+  p("phone:call", "own", "place_phone_call", "sagax", ["place_call", "phone_call_owner"]),
+  // #2194: allowlisted SMS contact persona (numbers live on Perspicax)
+  p("phone:contacts", "own", "phone_line_contact"),
   // mid-call controls on the person's own live call (server/outbound/outbound-calls.ts)
   p("phone:dtmf", "own", "send_dtmf"),
   p("phone:transfer", "own", "transfer"),

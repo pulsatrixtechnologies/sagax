@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { callTwiml, canadianNumber, createCallArgs, formatPhone, maskPhone, parseOutboundCall } from "./outbound-call.ts";
+import {
+  callTwiml,
+  canadianNumber,
+  createCallArgs,
+  formatPhone,
+  maskPhone,
+  ownerCallToPlaceArgs,
+  parseOutboundCall,
+} from "./outbound-call.ts";
 
 const good = { to: "514-555-0142", from: "+1 438 555 0100", purpose: "Confirmer le rendez-vous", message: "Jean confirme le rendez-vous de mardi à 10 h." };
 
@@ -46,5 +54,28 @@ describe("outbound call", () => {
     const args = createCallArgs(request, "<Response/>", true);
     expect(args).toMatchObject({ resource: "Calls", action: "create", _dry_run: true, set: { To: "+15145550142", From: "+14385550100", Twiml: "<Response/>" } });
     expect(createCallArgs(request, "<Response/>", false)).not.toHaveProperty("_dry_run");
+  });
+
+  it("phone_call_owner maps questions to a conversation place_phone_call (#2194)", () => {
+    const mapped = ownerCallToPlaceArgs({
+      questions: ["Tu es libre demain ?", "À quelle heure ?"],
+      context: "Pour le rendez-vous fournisseur",
+      to: "+1 514 555 0142",
+      language: "fr",
+    });
+    expect(mapped).toMatchObject({
+      to: "+15145550142",
+      mode: "conversation",
+      objective: "Tu es libre demain ?",
+      language: "fr",
+      max_minutes: 5,
+    });
+    if (typeof mapped === "string") throw new Error(mapped);
+    expect(mapped.instructions).toContain("1. Tu es libre demain ?");
+    expect(mapped.instructions).toContain("2. À quelle heure ?");
+    expect(mapped.instructions).toContain("Pour le rendez-vous fournisseur");
+    expect(ownerCallToPlaceArgs({ questions: [] })).toMatch(/at least one/);
+    expect(ownerCallToPlaceArgs({ questions: ["ok"], to: "+1 212 555 0142" })).toMatch(/Only Canadian/);
+    expect(ownerCallToPlaceArgs(null)).toMatch(/needs questions/);
   });
 });

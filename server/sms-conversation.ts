@@ -1,32 +1,35 @@
 import { reportBackgroundError } from "./background-error.ts";
-// Texting your own bot (2026-10-29). The person texts their Perspicax Voice
-// line from their own verified number; the text becomes a turn of their
-// conversation with the bot, with the same memory, and the bot's answer is
-// texted back to that number.
+// Own-line turns into the unified chat (2026-10-29 SMS; 2026-11-06 call
+// requests, #2194). The person reaches their Perspicax Voice line from a
+// verified number; the words become a turn of their single conversation
+// with the bot, with the same memory, and the bot's answer is texted back
+// to that number. Never a separate phone thread.
 //
-// Who counts as the person: Perspicax already admits a text only from a
-// number listed AND verified on the line, inside an SMS session opened by
-// the person's PIN (crates/gateway/src/voice/webhook.rs `sms`). It then
-// posts `authenticated: true` and `person.id`, the Perspicax user the
-// number belongs to. A text is the person's own when that id is the line
-// owner's (the assertion's `sub`, already matched to the bot's owner by
-// server/bots/bot-inbound-telephony.ts). Anyone else on the line (a teammate's
-// verified number) keeps the phone triggers, as before.
+// Two inbound shapes:
+//   - `sms`: Perspicax admits a text only from a number listed AND verified
+//     on the line, inside an SMS session opened by the person's PIN. It
+//     posts `authenticated: true` and `person.id`. Carrier keywords
+//     (STOP, START, HELP and the French ones) are the carrier's: never a turn.
+//   - `call_request`: the realtime voice sidecar asked the bot something
+//     after a verified NIP on an inbound call (`authenticated: true`). Same
+//     owner match. Marked `via: "call"` in the chat.
 //
-// Where it lands: the bot's single conversation with that person, the
-// one an AI client's send_prompt also lands in (conversationOrStart in
+// Who counts as the person: `person.id` is the line owner's (the assertion's
+// `sub`, already matched to the bot's owner by
+// server/bots/bot-inbound-telephony.ts). Anyone else on the line keeps the
+// phone triggers, as before.
+//
+// Where it lands: the bot's single conversation with that person, the one
+// an AI client's send_prompt also lands in (conversationOrStart in
 // server/index.ts), never a confidential, hidden, routine or parallel one.
 // It is sent through the same route the app uses, as the person
-// (performAsMember), so every check of a typed line applies. The line is
-// marked `via: "sms"`.
+// (performAsMember), so every check of a typed line applies.
 //
 // The answer: when the turn ends, the bot's words after that line go back
-// by text (voice_sms with the person's own access, to the number the text
-// came from), cut to one text of at most SMS_REPLY_MAX characters. A card
-// that waits on the person is said in one text (the card itself reaches
-// them the way "Me joindre" says). Nothing retries a send: a text costs
-// money. Carrier keywords (STOP, START, HELP and the French ones) are the
-// carrier's: never a turn.
+// by text (voice_sms with the person's own access, to the number the
+// request came from), cut to one text of at most SMS_REPLY_MAX characters.
+// A card that waits on the person is said in one text. Nothing retries a
+// send: a text costs money.
 //
 // Logs carry the bot and a masked number only, never the words.
 
@@ -46,6 +49,8 @@ export function isCarrierKeyword(text: string): boolean {
   return CARRIER_KEYWORDS.has(text.trim().toLowerCase().replace(/[.!]+$/u, ""));
 }
 
+export type OwnLineVia = "sms" | "call";
+
 export interface OwnTextInput {
   event: string;
   authenticated: boolean;
@@ -53,15 +58,29 @@ export interface OwnTextInput {
   /** The line owner (the assertion's sub). */
   sub: string;
   text?: string | null;
+  /** SMS only: Perspicax's sender kind. Absent on call_request and older Perspicax. */
+  sender?: "owner_mobile" | "allowlisted" | "verified_caller" | null;
 }
 
-/** Whether this event is the line owner texting from their own verified number. */
+/** Whether this event is the line owner speaking or texting from their own
+ * verified number, and should land in their unified chat. */
 export function isOwnText(input: OwnTextInput): boolean {
-  if (input.event !== "sms" || !input.authenticated) return false;
+  if (!input.authenticated) return false;
   const person = input.personId?.trim();
   if (!person || person !== input.sub.trim()) return false;
   const text = input.text?.trim() ?? "";
-  return text.length > 0 && !isCarrierKeyword(text);
+  if (!text) return false;
+  if (input.event === "call_request") return true;
+  if (input.event !== "sms") return false;
+  // When Perspicax names the sender, only the owner's own mobile is a turn.
+  // Older Perspicax (no sender) keeps the authenticated+owner match.
+  if (input.sender && input.sender !== "owner_mobile") return false;
+  return !isCarrierKeyword(text);
+}
+
+/** How the chat line is stamped for an own-line turn. */
+export function ownLineVia(event: string): OwnLineVia {
+  return event === "call_request" ? "call" : "sms";
 }
 
 /** The text that goes back: the bot's words, cut to one SMS_REPLY_MAX text. */
@@ -88,8 +107,9 @@ export type SmsTurnState = "running" | "queued" | "waiting" | "idle";
 
 export interface SmsConversationDeps {
   /** Send the words as the person into their conversation with the bot.
-   * `label` is the human caller label stamped on the message (never a raw id). */
-  send(input: { person: string; sub: string; botId: string; text: string; label: string }): Promise<{ ok: true; threadId: string; messageId: string } | { ok: false; error: string }>;
+   * `label` is the human caller label stamped on the message (never a raw id).
+   * `via` is `"sms"` or `"call"` for the chat stamp. */
+  send(input: { person: string; sub: string; botId: string; text: string; label: string; via: OwnLineVia }): Promise<{ ok: true; threadId: string; messageId: string } | { ok: false; error: string }>;
   state(botId: string, threadId: string): SmsTurnState;
   /** The bot's words after `messageId` (text replies), or "" when none. */
   replyAfter(threadId: string, messageId: string): string;
@@ -110,6 +130,8 @@ export interface OwnTextEvent {
   text: string;
   /** Human label for who texted (person name or formatted number). */
   label: string;
+  /** How the chat stamps the line. Defaults to `"sms"`. */
+  via?: OwnLineVia;
 }
 
 const mask = (number: string) => {
@@ -134,7 +156,8 @@ export class SmsConversation {
   /** The text becomes a turn; the answer goes back on its own. False when
    * the turn could not start (the caller then keeps its usual way). */
   async start(event: OwnTextEvent): Promise<boolean> {
-    const sent = await this.deps.send({ person: event.person, sub: event.sub, botId: event.botId, text: event.text, label: event.label });
+    const via = event.via ?? "sms";
+    const sent = await this.deps.send({ person: event.person, sub: event.sub, botId: event.botId, text: event.text, label: event.label, via });
     if (!sent.ok) {
       this.log(`sms-conversation: ${event.botId} could not start (${sent.error.slice(0, 120)})`);
       return false;

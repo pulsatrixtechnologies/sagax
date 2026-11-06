@@ -12,6 +12,8 @@ describe("a Sagax tool that does not exist", () => {
     expect(knownAgentToolName("make_video")).toBe(true);
     expect(knownAgentToolName("memory_recall")).toBe(true);
     expect(knownAgentToolName("place_phone_call")).toBe(true);
+    expect(knownAgentToolName("phone_call_owner")).toBe(true);
+    expect(knownAgentToolName("phone_line_contact")).toBe(true);
     // a coordinating turn replaces these, a routine or webhook turn lists
     // them (coreCatalogTools ROOM_REPLACED_TOOLS): still real tools
     expect(knownAgentToolName("ask_bot")).toBe(true);

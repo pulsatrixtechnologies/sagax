@@ -10,7 +10,8 @@ import { ASK_CHOICE_TOOL, parseAskChoiceInput, parseOptionsCardInput, WATCHER_OP
 import { parsePageProposal } from "../../shared/published-pages.ts";
 import { parseWidgetInput, widgetAdvice } from "../../shared/widget.ts";
 import { parseAppInput } from "../../shared/app.ts";
-import { PLACE_PHONE_CALL_TOOL } from "../../shared/outbound-call.ts";
+import { PHONE_CALL_OWNER_TOOL, PLACE_PHONE_CALL_TOOL } from "../../shared/outbound-call.ts";
+import { PHONE_LINE_CONTACT_TOOL } from "../../shared/phone-line-contacts.ts";
 import { HANG_UP_TOOL, PLACE_CALL_TOOL, SEND_DTMF_TOOL, TRANSFER_CALL_TOOL } from "../../shared/phone-call-live.ts";
 import { CHOOSE_PAGE_TARGET_TOOL } from "./agents-artifact-tools.ts";
 import { pageTargetAutoResult, pageTargetCardResult, type PageTargetOffer } from "../../shared/page-targets.ts";
@@ -20,7 +21,7 @@ import type { Json } from "./agents-client.ts";
 
 export const CARD_TOOL_NAMES: ReadonlySet<string> = new Set([
   "create_options_card", ASK_CHOICE_TOOL, CHOOSE_PAGE_TARGET_TOOL, "check_widget", "show_widget", "update_widget", "show_html", "update_html",
-  "propose_page", "page_comments", PLACE_PHONE_CALL_TOOL, PLACE_CALL_TOOL, SEND_DTMF_TOOL, TRANSFER_CALL_TOOL, HANG_UP_TOOL,
+  "propose_page", "page_comments", PLACE_PHONE_CALL_TOOL, PHONE_CALL_OWNER_TOOL, PHONE_LINE_CONTACT_TOOL, PLACE_CALL_TOOL, SEND_DTMF_TOOL, TRANSFER_CALL_TOOL, HANG_UP_TOOL,
 ]);
 
 const CARD_ROUTE = "/api/internal/options-card";
@@ -96,11 +97,23 @@ export async function callCardTool(name: string, args: Json, context: ToolCallCo
     };
   }
 
-  // place_phone_call / place_call (server/outbound/outbound-calls.ts): consent once,
-  // then the request card (Ask) or Auto place; the harness builds every word.
+  // place_phone_call / place_call / phone_call_owner (server/outbound/outbound-calls.ts):
+  // consent once, then the request card (Ask) or Auto place; the harness builds every word.
+  // phone_call_owner (#2194) resolves the person's verified number then places a conversation call.
   if (name === PLACE_PHONE_CALL_TOOL || name === PLACE_CALL_TOOL) {
     const { ok, body } = await apiResponse("/api/internal/phone-call", { method: "POST", body: JSON.stringify(args) });
     if (!ok) return { text: String(body.error ?? "The call could not be prepared. Nothing was placed."), isError: true };
+    return { text: String(body.text ?? ""), ...(body.isError === true ? { isError: true } : {}) };
+  }
+  if (name === PHONE_CALL_OWNER_TOOL) {
+    const { ok, body } = await apiResponse("/api/internal/phone-call/owner", { method: "POST", body: JSON.stringify(args) });
+    if (!ok) return { text: String(body.error ?? "The owner call could not be prepared. Nothing was placed."), isError: true };
+    return { text: String(body.text ?? ""), ...(body.isError === true ? { isError: true } : {}) };
+  }
+  // phone_line_contact (#2194): persona and summary rules for an allowlisted SMS number.
+  if (name === PHONE_LINE_CONTACT_TOOL) {
+    const { ok, body } = await apiResponse("/api/internal/phone-line-contact", { method: "POST", body: JSON.stringify(args ?? {}) });
+    if (!ok) return { text: String(body.error ?? "The phone-line contact could not be saved."), isError: true };
     return { text: String(body.text ?? ""), ...(body.isError === true ? { isError: true } : {}) };
   }
   if (name === SEND_DTMF_TOOL) {

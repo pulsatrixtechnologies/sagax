@@ -24,11 +24,14 @@
 //
 //   - `sms`, `call_request`, `call_summary` wake the bot with the text
 //     (`sms.received`, `call.requested`, `call.summary`);
-//   - 2026-10-29: an `sms` the line owner sent from their own verified
-//     number (`authenticated`, `person.id` is the assertion's `sub`) is the
-//     person texting their bot: it becomes a turn of their conversation
-//     with the bot and the answer goes back by text (server/sms-conversation.ts,
-//     `ownText`). The phone triggers keep everyone else's texts. A carrier
+//   - 2026-10-29 / #2194: an `sms` or authenticated `call_request` the line
+//     owner made from their own verified number (`authenticated`,
+//     `person.id` is the assertion's `sub`; SMS also `sender: owner_mobile`
+//     when Perspicax sends it) is the person reaching their bot: it becomes
+//     a turn of their unified conversation with the bot (`via: "sms"` or
+//     `via: "call"`) and the answer goes back by text
+//     (server/sms-conversation.ts, `ownText`). The phone triggers keep
+//     everyone else's texts and unauthenticated call requests. A carrier
 //     keyword alone (STOP, HELP) is never a turn;
 //   - `call_started`, `pin_locked`, `call_rejected` are notices: metadata
 //     only, one admin activity row, no run;
@@ -69,7 +72,14 @@ import type { NormalizedTriggerEvent } from "../../shared/trigger-sources.ts";
 import type { ConsoleAssertion, ConsoleAssertionActor } from "../auth/oidc-rp.ts";
 import { AssertionReplayCache } from "../org/org-admin-routes.ts";
 import { reachMeSmsReply } from "../reach-me/inbound.ts";
-import { isOwnText } from "../sms-conversation.ts";
+import {
+  phoneContactDirective,
+  phoneContactGuidance,
+  phoneContactOwnerNotice,
+  phoneUnknownOwnerNotice,
+  type PhoneLineContact,
+} from "../../shared/phone-line-contacts.ts";
+import { isOwnText, ownLineVia } from "../sms-conversation.ts";
 import { maskedCaller, type WebhookReceiveResult } from "../triggers/webhooks.ts";
 
 export const TELEPHONY_PATH = "/api/org/telephony/inbound";
@@ -163,11 +173,11 @@ const telephonySchema = z.object({
     id: oneLine(1, 256),
     name: oneLine(0, 200),
   }).optional(),
-  /** Optional human label Perspicax resolved for the caller. Never an id;
-   * Sagax derives one from `person.name` or the number when this is absent. */
-  sender: z.object({
-    label: oneLine(1, 200).optional(),
-  }).optional(),
+  /** SMS only (perspicax-voice/1): who texted. Absent on voice events and on
+   * Perspicax before 1.9.22. `owner_mobile` is the line owner; `allowlisted`
+   * is an external number on the owner's SMS list; `verified_caller` is
+   * another person's verified number on the line (acts as that person). */
+  sender: z.enum(["owner_mobile", "allowlisted", "verified_caller"]).optional(),
   content: z.object({
     trust: z.literal("caller"),
     text: printable(TELEPHONY_TEXT_MAX),
@@ -212,16 +222,30 @@ const TITLES: Record<string, string> = {
   "call.summary": "Call summary",
 };
 
-/** Human label for who called or texted: Perspicax's `sender.label`, else
- * the verified person's name, else a formatted E.164 number, else the
- * already-masked `***1234`. Never `person.id` or any other raw id. */
-export function telephonySenderLabel(event: Pick<TelephonyEvent, "from" | "person" | "sender">): string {
-  const fromSender = event.sender?.label?.trim();
-  if (fromSender) return fromSender;
+/** Who texted, as Perspicax names it on SMS events. */
+export type TelephonySenderKind = "owner_mobile" | "allowlisted" | "verified_caller";
+
+const SENDER_KIND_LABEL: Record<TelephonySenderKind, string> = {
+  owner_mobile: "Owner's own verified mobile",
+  allowlisted: "External number on the owner's SMS list (not the owner)",
+  verified_caller: "Another verified person on the line (not the owner)",
+};
+
+/** Human label for who called or texted: the verified person's name, else a
+ * formatted E.164 number, else the already-masked `***1234`. Never
+ * `person.id` or any other raw id. The wire `sender` field is a kind enum,
+ * not a display name. */
+export function telephonySenderLabel(event: Pick<TelephonyEvent, "from" | "person">): string {
   const fromPerson = event.person?.name?.trim();
   if (fromPerson) return fromPerson;
   if (E164.test(event.from)) return formatPhone(event.from);
   return event.from;
+}
+
+/** Closed wording for the SMS sender kind, or null when absent (voice, or
+ * an older Perspicax). */
+export function telephonySenderKindLabel(kind: TelephonySenderKind | undefined): string | null {
+  return kind ? SENDER_KIND_LABEL[kind] : null;
 }
 
 /** The normalized event every telephony trigger receives, or null for a
@@ -235,12 +259,14 @@ export function telephonyTriggerEvent(event: TelephonyEvent): NormalizedTriggerE
   if (!kind) return null;
   const label = telephonySenderLabel(event);
   const personName = event.person?.name?.trim();
+  const senderKind = telephonySenderKindLabel(event.sender);
   const header = [
     `Event: ${event.event}`,
     `Caller: ${label}`,
     `From: ${event.from}`,
     `Line: ${event.line.number}`,
     `Caller authenticated: ${event.authenticated ? "yes" : "no"}`,
+    ...(senderKind ? [`Sender: ${senderKind}`] : []),
     ...(personName && personName !== label
       ? [`Person (as Perspicax identified the caller): ${personName}`]
       : !event.authenticated && personName
@@ -255,7 +281,10 @@ export function telephonyTriggerEvent(event: TelephonyEvent): NormalizedTriggerE
     kind,
     title: TITLES[kind] ?? "Phone event",
     occurredAt: new Date(Date.parse(event.receivedAt)).toISOString(),
-    fields: { sender: event.from },
+    fields: {
+      sender: event.from,
+      ...(event.sender ? { senderKind: event.sender } : {}),
+    },
     senderLabel: label,
     text: `${header.join("\n")}\n\n${text}`,
     resource: event.eventId,
@@ -296,12 +325,21 @@ export interface TelephonyRouteDeps {
   callResult?(input: { sub: string; result: CallResultBody }): "applied" | "unknown" | "not_yours" | "already";
   /** Mid-call live progress (event call_progress) for the line owner. */
   callProgress?(input: { sub: string; progress: CallProgressBody }): "applied" | "unknown" | "not_yours";
-  /** The line owner texting their bot from their own verified number: a
-   * turn of their conversation, answered by text. False: it could not
-   * start, the text goes to the phone triggers as before. Absent: always
-   * the triggers. `label` is the human caller label for message metadata
-   * and the UI (never a raw id). */
-  ownText?(input: { ownerPrincipalId: string; sub: string; botId: string; from: string; text: string; label: string }): Promise<boolean>;
+  /** The line owner texting or speaking to their bot from their own
+   * verified number: a turn of their unified conversation, answered by
+   * text. False: it could not start, the event goes to the phone triggers
+   * as before. Absent: always the triggers. `label` is the human caller
+   * label for message metadata and the UI (never a raw id). `via` stamps
+   * the chat line (`sms` or `call`). */
+  ownText?(input: { ownerPrincipalId: string; sub: string; botId: string; from: string; text: string; label: string; via: "sms" | "call" }): Promise<boolean>;
+  /** Allowlisted SMS contact persona for this owner (#2194). */
+  allowlistedContact?(ownerPrincipalId: string, from: string): PhoneLineContact | null;
+  /** One-line notice in the owner's unified chat (allowlisted summary or
+   * unknown-sender notice). Fire-and-forget; never blocks delivery. */
+  ownerNotice?(input: { ownerPrincipalId: string; botId: string; text: string }): void;
+  /** Whether the owner wants a chat notice for SMS that are not their own
+   * and have no allowlisted contact persona. */
+  noticeUnknown?(ownerPrincipalId: string): boolean;
   /** WebhookManager.ingest: throws an Error with `status` on a refusal. */
   ingest(triggerId: string, event: NormalizedTriggerEvent, dedupeKey: string): WebhookReceiveResult | null;
   record(row: TelephonyDeliveryRow): void;
@@ -464,8 +502,16 @@ export function createBotInboundTelephonyRoute(deps: TelephonyRouteDeps): (req: 
       }
     }
 
-    // 2026-10-29: the person texting their own bot: their conversation
-    if (deps.ownText && isOwnText({ event: event.event, authenticated: event.authenticated, personId: event.person?.id, sub: assertion.sub, text: event.content?.text })) {
+    // 2026-10-29 / #2194: the person texting or speaking to their own bot
+    // lands in their unified conversation (never a separate phone thread).
+    if (deps.ownText && isOwnText({
+      event: event.event,
+      authenticated: event.authenticated,
+      personId: event.person?.id,
+      sub: assertion.sub,
+      text: event.content?.text,
+      sender: event.sender,
+    })) {
       const started = await deps.ownText({
         ownerPrincipalId: owner.principalId,
         sub: assertion.sub,
@@ -473,6 +519,7 @@ export function createBotInboundTelephonyRoute(deps: TelephonyRouteDeps): (req: 
         from: event.from,
         text: event.content!.text.trim(),
         label: telephonySenderLabel(event),
+        via: ownLineVia(event.event),
       });
       if (started) {
         seen.add(seenKey, now());
@@ -489,7 +536,22 @@ export function createBotInboundTelephonyRoute(deps: TelephonyRouteDeps): (req: 
     let duplicate = 0;
     let ignored = 0;
     let rateLimited = 0;
-    const normalized = telephonyTriggerEvent(event);
+    let normalized = telephonyTriggerEvent(event);
+    // #2194: allowlisted SMS contact persona lives in Sagax; numbers stay on
+    // Perspicax's allowlist. Merge the persona into the trigger event and
+    // optionally post a one-line notice in the owner's unified chat.
+    let contact: PhoneLineContact | null = null;
+    if (normalized && event.event === "sms" && deps.allowlistedContact) {
+      contact = deps.allowlistedContact(owner.principalId, event.from);
+      if (contact) {
+        const directive = phoneContactDirective(contact);
+        normalized = {
+          ...normalized,
+          directives: { ...normalized.directives, ...directive },
+          text: `${normalized.text}\n\n${phoneContactGuidance(contact)}`,
+        };
+      }
+    }
     if (normalized) {
       triggers = deps.triggers(bot.id);
       for (const id of triggers) {
@@ -507,6 +569,26 @@ export function createBotInboundTelephonyRoute(deps: TelephonyRouteDeps): (req: 
       }
       // Not remembered: Perspicax may try again once the rate allows it.
       if (triggers.length && rateLimited === triggers.length) return send(res, 429, { error: "rate_limited" });
+    }
+    if (event.event === "sms" && deps.ownerNotice) {
+      const smsText = event.content?.text?.trim() ?? "";
+      if (contact?.summarizeToOwner) {
+        deps.ownerNotice({
+          ownerPrincipalId: owner.principalId,
+          botId: bot.id,
+          text: phoneContactOwnerNotice({
+            label: contact.label || telephonySenderLabel(event),
+            from: formatPhone(event.from),
+            text: smsText,
+          }),
+        });
+      } else if (!contact && event.sender !== "owner_mobile" && deps.noticeUnknown?.(owner.principalId)) {
+        deps.ownerNotice({
+          ownerPrincipalId: owner.principalId,
+          botId: bot.id,
+          text: phoneUnknownOwnerNotice({ from: formatPhone(event.from), text: smsText }),
+        });
+      }
     }
     seen.add(seenKey, now());
     deps.record({

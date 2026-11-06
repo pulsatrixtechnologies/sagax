@@ -3,19 +3,31 @@
 // answer cut to one text. No network: every send is a fake.
 import { describe, expect, it } from "vitest";
 
-import { SMS_REPLY_MAX, SmsConversation, isCarrierKeyword, isOwnText, smsReplyBody, type SmsTurnState } from "./sms-conversation.ts";
+import { SMS_REPLY_MAX, SmsConversation, isCarrierKeyword, isOwnText, ownLineVia, smsReplyBody, type SmsTurnState } from "./sms-conversation.ts";
 
 describe("whose text it is", () => {
   it("the line owner, PIN session open, words that are not a carrier keyword", () => {
     const own = { event: "sms", authenticated: true, personId: "u_1", sub: "u_1", text: "Quoi de neuf ?" };
     expect(isOwnText(own)).toBe(true);
+    expect(isOwnText({ ...own, sender: "owner_mobile" })).toBe(true);
+    expect(isOwnText({ ...own, sender: "allowlisted" })).toBe(false);
+    expect(isOwnText({ ...own, sender: "verified_caller" })).toBe(false);
     expect(isOwnText({ ...own, personId: "u_2" })).toBe(false);
     expect(isOwnText({ ...own, personId: null })).toBe(false);
     expect(isOwnText({ ...own, authenticated: false })).toBe(false);
-    expect(isOwnText({ ...own, event: "call_request" })).toBe(false);
     expect(isOwnText({ ...own, text: "  " })).toBe(false);
     for (const word of ["STOP", "stop.", "Arrêt", "HELP", "aide", "START"]) expect(isCarrierKeyword(word), word).toBe(true);
     expect(isCarrierKeyword("stop the build")).toBe(false);
+  });
+
+  it("an authenticated call_request from the owner is an own-line turn (#2194)", () => {
+    const own = { event: "call_request", authenticated: true, personId: "u_1", sub: "u_1", text: "Statut du billet ?" };
+    expect(isOwnText(own)).toBe(true);
+    expect(ownLineVia("call_request")).toBe("call");
+    expect(ownLineVia("sms")).toBe("sms");
+    expect(isOwnText({ ...own, authenticated: false })).toBe(false);
+    expect(isOwnText({ ...own, personId: "u_2" })).toBe(false);
+    expect(isOwnText({ ...own, text: "  " })).toBe(false);
   });
 
   it("cuts a long answer to one text", () => {
@@ -28,7 +40,7 @@ describe("whose text it is", () => {
 
 function harness(script: SmsTurnState[], reply = "Trois factures, 3 en tout.", sendOk = true) {
   const texts: Array<{ to: string; body: string }> = [];
-  const sent: Array<{ person: string; botId: string; text: string; label: string }> = [];
+  const sent: Array<{ person: string; botId: string; text: string; label: string; via: "sms" | "call" }> = [];
   let step = 0;
   let clock = 0;
   const conversation = new SmsConversation({
@@ -55,7 +67,15 @@ describe("the answer by text", () => {
     const { conversation, texts, sent } = harness(["running", "running", "idle"]);
     expect(await conversation.start(EVENT)).toBe(true);
     await conversation.drain();
-    expect(sent).toEqual([{ person: "pr_a", sub: "u_1", botId: "b1", text: "Quoi de neuf ?", label: "Osprey" }]);
+    expect(sent).toEqual([{ person: "pr_a", sub: "u_1", botId: "b1", text: "Quoi de neuf ?", label: "Osprey", via: "sms" }]);
+    expect(texts).toEqual([{ to: "+15145550100", body: "Trois factures, 3 en tout." }]);
+  });
+
+  it("a call_request stamps via call and still texts the answer back", async () => {
+    const { conversation, texts, sent } = harness(["running", "idle"]);
+    expect(await conversation.start({ ...EVENT, via: "call", text: "Statut ?" })).toBe(true);
+    await conversation.drain();
+    expect(sent).toEqual([{ person: "pr_a", sub: "u_1", botId: "b1", text: "Statut ?", label: "Osprey", via: "call" }]);
     expect(texts).toEqual([{ to: "+15145550100", body: "Trois factures, 3 en tout." }]);
   });
 

@@ -63,22 +63,32 @@ export const CARD_HOME: Readonly<Record<string, AppSettingsSection>> = {
   // what stays on Models: online computers, Decision model
   "connections.integrations": "engines",
   "engines.decisionModel": "engines",
-  // #2080 L2: Account Advanced rows live on App until L1 / L3 take them
-  "general.threadCleanup": "about",
+  // JC 2026-11-06: the App catch-all split. Cleanup lives on Backups and
+  // storage, people's tool access on Security, the usage meter on Usage,
+  // startup, keys and the loop guard on General, help rows on Help and about.
+  "general.threadCleanup": "backups",
+  "general.peopleToolAccess": "security",
+  "general.usage": "usage",
+  "general.loopGuard": "general",
+  "general.system": "general",
+  "general.input": "general",
+  "general.interface": "general",
+  "general.bots": "general",
   "general.diagnostics": "about",
   "general.logs": "about",
   "general.feedback": "about",
-  "general.loopGuard": "about",
-  "general.usage": "about",
-  "about.startup": "about",
+  // old App card ids (#2080 L2) open the page that holds their rows now
+  "about.startup": "general",
+  "about.input": "general",
+  "about.holding": "general",
   "about.help": "about",
-  "about.holding": "about",
+  "about.about": "about",
 };
 
 /** Sections hidden from the app since 2026-10-14 (managing several
  * people is Sagax Business's job; the app shows what concerns the person
  * signed in). Their server routes stay. An old link opens the nearest page:
- * Account (General is out of the navigation since 2026-10-26). 2026-10-15: People and Installations joined them, so Email (a
+ * Account. General is a page again since 2026-11-06 (system, keys, Advanced mode). 2026-10-15: People and Installations joined them, so Email (a
  * card of People) opens General too. */
 const HIDDEN: Partial<Record<AppSettingsSection, AppSettingsSection>> = {
   companion: "account",
@@ -88,8 +98,6 @@ const HIDDEN: Partial<Record<AppSettingsSection, AppSettingsSection>> = {
   workspaces: "account",
   // Published pages moved to Connect apps > Manage; openSettings opens it there.
   pages: "account",
-  // General is gone (2026-10-26): what it held is in Account and Models and voice.
-  general: "account",
 };
 
 /** Cards of General > Advanced that moved to Organization (2026-10-15):

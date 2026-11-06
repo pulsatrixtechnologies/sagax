@@ -41,7 +41,7 @@ export function useSettingsModal() {
   // 2026-10-14, so it lands on Appearance.
   const current = currentSettingsSection(state.appSettingsSection);
   const requested: AppSettingsSection =
-    remoteActive && current !== "appearance" && current !== "organization" && current !== "notifications" && current !== "updates" && current !== "about"
+    remoteActive && current !== "appearance" && current !== "organization" && current !== "notifications" && current !== "updates" && current !== "general" && current !== "about"
       ? "appearance"
       : current;
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -74,7 +74,7 @@ export function useSettingsModal() {
   // show for this viewer. A card keeps the rules its section had.
   const allowed = (id: AppSettingsSection): boolean => {
     // a remote client shows the pages that are about this desktop
-    if (remoteActive && !["appearance", "organization", "privacy", "notifications", "memory", "updates", "about"].includes(id)) return false;
+    if (remoteActive && !["appearance", "organization", "privacy", "notifications", "memory", "updates", "general", "about"].includes(id)) return false;
     // this app's own updates: where the desktop app answers
     if (id === "updates" && !window.ogb?.updater) return false;
     // the organization memory's local cache is the desktop app's (main
@@ -111,12 +111,12 @@ export function useSettingsModal() {
   // A request for Settings > Organization (the Server menu, a deep link) on
   // a desktop with no server opens the launch screen on Server instead,
   // unless the page holds this computer's organization memory.
-  // A link to a card moved from General > Advanced (#2080 L2) opens App,
-  // where those cards live under Advanced until L3 takes them.
+  // A link to a card moved from General > Advanced opens General, where
+  // those cards live under Advanced on a solo desktop (JC 2026-11-06).
   useEffect(() => {
     if (!soloDesktop || memoryShown || state.appSettingsSection !== "organization") return;
     if (isMovedOrganizationCard(takeRequestedSettingsCard())) {
-      dispatch({ type: "toggleAppSettings", open: true, section: "about" });
+      dispatch({ type: "toggleAppSettings", open: true, section: "general" });
       return;
     }
     dispatch({ type: "toggleAppSettings", open: false, section: "account" });
@@ -127,8 +127,8 @@ export function useSettingsModal() {
   // A page this viewer cannot see (an old link to Email where People is not
   // shown, a hidden page) draws the first page they can, at once.
   const section: AppSettingsSection = availableSections.some((entry) => entry.id === requested) ? requested : availableSections[0]?.id ?? requested;
-  // #2080 L2: App (about) stays searchable; org-advanced keywords match there on a solo desktop.
-  const visibleSections = availableSections.filter((entry) => sectionMatches(entry, q, soloDesktop && entry.id === "about" ? ORGANIZATION_ADVANCED_KEYWORDS : []));
+  // On a solo desktop the org-advanced rows live on General, so its search matches their words.
+  const visibleSections = availableSections.filter((entry) => sectionMatches(entry, q, soloDesktop && entry.id === "general" ? ORGANIZATION_ADVANCED_KEYWORDS : []));
   const pagesHit = Boolean(q) && publishedPagesMatch(q);
   const sectionLabelKey = SECTIONS.find((entry) => entry.id === section)?.labelKey;
   // #2080: every page has its one sentence under the title, drawn by the modal.

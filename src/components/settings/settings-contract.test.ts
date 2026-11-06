@@ -110,14 +110,44 @@ describe("Settings search keywords", () => {
     expect(twice).toEqual([]);
   });
 
-  it("draws the pages of the final rail (Updates, Experimental and App), no Grok Import card", async () => {
+  it("draws the pages of the final rail (Updates, Experimental, General, Help and about), no Grok Import card", async () => {
     const { SECTIONS, CARD_KEYWORDS } = await import("./settings-nav");
-    expect(SECTIONS).toHaveLength(15);
-    // #2090 Updates + #2080 App (id about); every page has its intro line
+    expect(SECTIONS).toHaveLength(16);
+    // #2090 Updates; 2026-11-06 General (system) and Help and about (id about); every page has its intro line
     expect(SECTIONS.every((entry) => entry.introKey === `settings.intro.${entry.id}`)).toBe(true);
     expect(SECTIONS.find((entry) => entry.id === "about")?.introKey).toBe("settings.intro.about");
-    expect(Object.keys(CARD_KEYWORDS)).toEqual(expect.arrayContaining(["about.help", "about.holding"]));
-    expect(Object.keys(CARD_KEYWORDS)).not.toContain("backups.import");
-    expect(Object.keys(CARD_KEYWORDS)).not.toContain("about.updates");
+    expect(Object.keys(CARD_KEYWORDS)).toEqual(expect.arrayContaining(["about.help", "about.about", "general.system", "general.input", "general.interface"]));
+    for (const gone of ["about.holding", "about.startup", "about.input", "backups.import", "about.updates"]) {
+      expect(Object.keys(CARD_KEYWORDS), gone).not.toContain(gone);
+    }
+  });
+
+  // 2026-11-06 (JC: « un gros fourre-tout ») : the old App page split, each
+  // option where a person looks for it. Nothing lost: every option is found
+  // by search on its new page and on no other page.
+  it("puts every option of the old App page on its own page, found by search there only", async () => {
+    const { SECTIONS, sectionMatches } = await import("./settings-nav");
+    const { CARD_HOME } = await import("@/lib/settings-sections");
+    const home: Record<string, string[]> = {
+      general: ["open at login", "app icon", "hotkey", "hardware acceleration", "send key", "spellcheck", "advanced mode", "loop guard"],
+      about: ["licence", "release notes", "tours", "diagnostics", "download logs", "send feedback"],
+      backups: ["cleanup", "retention", "event log", "stockage"],
+      security: ["people's tool access"],
+      usage: ["usage meter"],
+    };
+    for (const [page, queries] of Object.entries(home)) {
+      for (const query of queries) {
+        const found = SECTIONS.filter((entry) => sectionMatches(entry, query)).map((entry) => entry.id);
+        expect(found, query).toEqual([page]);
+      }
+    }
+    const cards: Record<string, string> = {
+      "general.system": "general", "general.input": "general", "general.interface": "general", "general.loopGuard": "general", "general.bots": "general",
+      "about.about": "about", "about.help": "about", "general.diagnostics": "about", "general.logs": "about", "general.feedback": "about",
+      "general.threadCleanup": "backups", "general.peopleToolAccess": "security", "general.usage": "usage",
+      // old links of the App page land on the page that holds the card now
+      "about.startup": "general", "about.input": "general", "about.holding": "general",
+    };
+    for (const [card, page] of Object.entries(cards)) expect(CARD_HOME[card], card).toBe(page);
   });
 });

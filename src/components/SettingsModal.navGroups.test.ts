@@ -48,11 +48,12 @@ describe("Settings nav groups", () => {
     expect([...at].sort((x, y) => x - y)).toEqual(at);
     expect(SECTIONS.map((entry) => entry.id)).toEqual([
       // #2080 (L0): the final rail; Import lives in Backups (its old id stays
-      // an alias). #2090: Updates is its own page; App (about) keeps L2 extras.
+      // an alias). #2090: Updates is its own page. 2026-11-06: the old App
+      // page splits into General (system, keyboard, mode) and Help and about.
       "account", "appearance", "notifications", "security", "credentials",
       "providers", "engines", "voice", "usage",
       "organization", "computer", "backups",
-      "updates", "experimental", "about",
+      "updates", "experimental", "general", "about",
     ]);
   });
 
@@ -68,21 +69,25 @@ describe("Settings nav groups", () => {
     for (const page of ["Account", "Security", "Vault", "Appearance", "Notifications"]) expect(you, page).toContain(`>${page}</button>`);
     expect(rail).not.toContain("data-settings-automations");
     const app = rail.slice(rail.indexOf('data-settings-nav-group="app"'));
-    // #2090: Updates (desktop) then Experimental; #2080: App keeps L2 extras
-    expect(app.indexOf(">Updates</button>")).toBeLessThan(app.indexOf(">Experimental</button>"));
-    expect(app.indexOf(">Experimental</button>")).toBeLessThan(app.indexOf(">App</button>"));
+    // #2090: Updates (desktop) then Experimental, General, Help and about
+    const order = [">Updates</button>", ">Experimental</button>", ">General</button>", ">Help and about</button>"].map((label) => app.indexOf(label));
+    expect(order.every((value) => value >= 0)).toBe(true);
+    expect([...order].sort((x, y) => x - y)).toEqual(order);
+    expect(app).not.toContain(">App</button>");
     expect(app).not.toContain(">About</button>");
     // each group is labelled by its heading for assistive tech
     expect(rail).toMatch(/role="group" aria-labelledby="app-settings-nav-you"/);
   });
 
-  // 2026-10-26: General is out of the navigation, Published pages are in
-  // Connect apps. 2026-10-28: Security and Vault are pages of their own.
-  it("leaves General out of the rail and the menu; Account first, then Security and Vault", () => {
+  // 2026-10-26: Published pages are in Connect apps. 2026-10-28: Security
+  // and Vault are pages of their own. 2026-11-06: General comes back as the
+  // app's own system page, under the App heading, never in Personal.
+  it("keeps General under App, not Personal; Account first, then Security and Vault", () => {
     const html = render();
     const rail = nav(html);
-    expect(rail).not.toContain(">General</button>");
-    expect(html).not.toContain('<option value="general"');
+    const you = rail.slice(rail.indexOf('data-settings-nav-group="you"'), rail.indexOf('data-settings-nav-group="ai"'));
+    expect(you).not.toContain(">General</button>");
+    expect(rail.slice(rail.indexOf('data-settings-nav-group="app"'))).toContain(">General</button>");
     const at = [">Account</button>", ">Appearance</button>", ">Security</button>", ">Vault</button>"].map((label) => rail.indexOf(label));
     expect(at.every((value) => value >= 0)).toBe(true);
     expect([...at].sort((x, y) => x - y)).toEqual(at);
@@ -112,16 +117,17 @@ describe("Settings nav groups", () => {
       expect(sectionMatches(security, query), query).toBe(true);
       expect(sectionMatches(account, query), query).toBe(false);
     }
-    // "tool access" also names People's tool access, an admin card of
-    // App > Advanced (#2080 L2): a search finds both, each in its own place
+    // "tool access" also names People's tool access, an admin card that
+    // lives on Security now (2026-11-06): one search, one place
     expect(sectionMatches(security, "tool access")).toBe(true);
-    expect(sectionMatches(SECTIONS.find((entry) => entry.id === "about")!, "people's tool access")).toBe(true);
+    expect(sectionMatches(security, "people's tool access")).toBe(true);
+    expect(sectionMatches(SECTIONS.find((entry) => entry.id === "about")!, "people's tool access")).toBe(false);
     for (const query of ["vault", "coffre", "identifiants", "1password", "one-time card", "carte à usage unique", "mot de passe"]) {
       expect(sectionMatches(vault, query), query).toBe(true);
       expect(sectionMatches(account, query), query).toBe(false);
     }
-    // what General held: identity and region on Account, the rest on App
-    // (#2080 L2); the microphone on Voice
+    // what General held: identity and region on Account, tours and
+    // diagnostics on Help and about; the microphone on Voice
     for (const query of ["language", "langue", "time zone", "fuseau", "avatar"]) {
       expect(sectionMatches(account, query), query).toBe(true);
     }
@@ -136,21 +142,27 @@ describe("Settings nav groups", () => {
     expect(sectionMatches(account, "microphone")).toBe(false);
     expect(sectionMatches(SECTIONS.find((entry) => entry.id === "engines")!, "microphone")).toBe(false);
     expect(sectionMatches(SECTIONS.find((entry) => entry.id === "voice")!, "microphone")).toBe(true);
-    expect(SECTIONS.some((entry) => entry.id === ("general" as string))).toBe(false);
+    const general = SECTIONS.find((entry) => entry.id === "general")!;
+    for (const query of ["open at login", "hotkey", "send key", "advanced mode"]) {
+      expect(sectionMatches(general, query), query).toBe(true);
+      expect(sectionMatches(app, query), query).toBe(false);
+    }
   });
 
   it("groups the small-screen menu the same way", () => {
     const html = render();
     expect(html).toContain('<optgroup label="Personal"><option value="account" selected="">Account</option>');
     expect(html).toContain('<optgroup label="App"><option value="updates">Updates</option>');
-    expect(html).toContain('<option value="about">App</option>');
+    expect(html).toContain('<option value="general">General</option><option value="about">Help and about</option>');
+    expect(html).not.toContain(">App</option>");
   });
 
-  it("keeps the App page without an updater; Updates hides; About is never a row label", () => {
+  it("keeps General and Help and about without an updater; Updates hides; About is never a row label", () => {
     vi.stubGlobal("window", {});
     const rail = nav(render());
     expect(rail).toContain('data-settings-nav-group="app"');
-    expect(rail).toContain(">App</button>");
+    expect(rail).toContain(">General</button>");
+    expect(rail).toContain(">Help and about</button>");
     expect(rail).not.toContain(">Updates</button>");
     expect(rail).not.toContain(">About</button>");
     // a member who cannot edit the installation has no Experimental
@@ -159,6 +171,8 @@ describe("Settings nav groups", () => {
     const member = nav(render());
     expect(member).not.toContain(">About</button>");
     expect(member).not.toContain(">Experimental</button>");
+    expect(member).toContain(">General</button>");
+    expect(member).toContain(">Help and about</button>");
   });
 
   it("draws Updates without a This app heading; App keeps the About link", () => {

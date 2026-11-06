@@ -5,7 +5,7 @@ import { setLocale } from "@/lib/i18n";
 import type { AppSettingsSection } from "@/state/store";
 import { SettingsModal } from "./SettingsModal";
 
-const fixture = vi.hoisted(() => ({ section: "about" as AppSettingsSection }));
+const fixture = vi.hoisted(() => ({ section: "general" as AppSettingsSection }));
 vi.mock("@/state/store", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/state/store")>(),
   useStore: () => ({ state: { appSettingsSection: fixture.section, instances: [] }, dispatch: vi.fn() }),
@@ -15,7 +15,7 @@ const stored = new Map<string, string>();
 
 beforeEach(async () => {
   stored.clear();
-  fixture.section = "about";
+  fixture.section = "general";
   vi.stubGlobal("localStorage", {
     getItem: (key: string) => stored.get(key) ?? null,
     setItem: (key: string, value: string) => { stored.set(key, value); },
@@ -47,12 +47,12 @@ describe("Settings Simple and Advanced", () => {
 
   // #2080 (L0): Simple hides no page but Experimental; it folds the
   // technical cards of each page under "Advanced" instead
-  // #2080 L2: the switch lives on App > Advanced; Simple folds it there,
+  // #2080 L2: the switch lives on General > Interface; Simple folds the Advanced cards there,
   // the fold (filled once mounted) keeps the way back one click away
-  it("in Simple (chosen), the switch is named in App > Advanced and only Experimental hides", () => {
+  it("in Simple (chosen), the switch is named in General and only Experimental hides", () => {
     stored.set("sagax.interfaceMode.v1", "simple");
     const html = render();
-    expect(html).toContain('data-settings-card="about.advancedFold"');
+    expect(html).toContain('data-settings-card="general.advancedFold"');
     expect(html).not.toContain("data-settings-scope");
     expect(html).toContain('<option value="account"');
     expect(html).toContain('<option value="appearance"');

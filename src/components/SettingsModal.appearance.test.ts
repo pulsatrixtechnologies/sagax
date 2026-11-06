@@ -275,9 +275,9 @@ describe("Settings → Appearance", () => {
     ["enter", "Enter"],
     ["shift-enter", "Shift+Enter"],
     ["mod-enter", "Ctrl+Enter"],
-  ] as const)("shows the saved send key (%s) on App > Input (#2080 L2)", (sendKey, label) => {
+  ] as const)("shows the saved send key (%s) on General > Keyboard and typing", (sendKey, label) => {
     fixture.sendKey = sendKey;
-    fixture.section = "about";
+    fixture.section = "general";
     const html = render();
     expect(html).toContain("Send messages with");
     expect(html).toContain('aria-label="Send messages with"');
@@ -289,28 +289,28 @@ describe("Settings → Appearance", () => {
     expect(fixture.dispatch).not.toHaveBeenCalled();
   });
 
-  it("asks Japanese speakers in Japanese for the send key on App", () => {
+  it("asks Japanese speakers in Japanese for the send key on General", () => {
     setLocale("ja");
     fixture.sendKey = "shift-enter";
-    fixture.section = "about";
+    fixture.section = "general";
     const html = render();
     expect(html).toContain("メッセージの送信キー");
     const pill = /aria-label="メッセージの送信キー"[^>]*>[\s\S]*?<\/button>/.exec(html)?.[0] ?? "";
     expect(pill).toContain('title="Shift+Enter"');
   });
 
-  it("finds the app icon on App and the dock badge in Notifications", () => {
-    const about = SECTIONS.find((section) => section.id === "about")!;
+  it("finds the app icon on General and the dock badge in Notifications", () => {
+    const general = SECTIONS.find((section) => section.id === "general")!;
     const notifications = SECTIONS.find((section) => section.id === "notifications")!;
-    expect(sectionMatches(about, "icon")).toBe(true);
+    expect(sectionMatches(general, "icon")).toBe(true);
     expect(sectionMatches(notifications, "icon")).toBe(true);
     expect(sectionMatches(notifications, "icône")).toBe(true);
   });
 
-  it("finds the send key by the keys' names on App", () => {
-    const about = SECTIONS.find((section) => section.id === "about")!;
+  it("finds the send key by the keys' names on General", () => {
+    const general = SECTIONS.find((section) => section.id === "general")!;
     for (const query of ["enter", "return", "shift+enter", "ctrl+enter", "cmd+enter", "⌘+enter", "send", "new line", "ime"]) {
-      expect(sectionMatches(about, query), query).toBe(true);
+      expect(sectionMatches(general, query), query).toBe(true);
     }
   });
 
@@ -357,7 +357,8 @@ describe("Settings → Appearance", () => {
     expect(html).toContain('<option value="appearance" selected="">Appearance</option>');
     // Pair devices is hidden since 2026-10-14
     expect(html).not.toContain('<option value="companion"');
-    expect(html).not.toContain('<option value="general">');
+    // General (system, keys, Advanced mode) is about this desktop, so it stays (JC 2026-11-06)
+    expect(html).toContain('<option value="general">General</option>');
     expect(html).not.toContain('<option value="connections">');
     expect(html).not.toContain('<option value="engines">');
     expect(html).not.toContain('<option value="backups">');
@@ -372,7 +373,7 @@ describe("Settings → Appearance", () => {
   it("offers full backups in local Settings", () => {
     fixture.section = "backups";
     const html = render();
-    expect(html).toContain('<option value="backups" selected="">Backups</option>');
+    expect(html).toContain('<option value="backups" selected="">Backups and storage</option>');
     // one card, two actions; each form opens in place (2026-10-14)
     expect(html).toContain('data-backup-action="export"');
     expect(html).toContain('data-backup-action="import"');

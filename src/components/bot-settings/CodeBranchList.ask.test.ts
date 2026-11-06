@@ -193,9 +193,11 @@ describe("Coding branches: asking the bot when its computer cannot be reached", 
     }
     flushSync(() => menu.querySelector<HTMLButtonElement>('[data-menu-item="commit"]')!.click());
     expect(dispatch.mock.calls[0]![0]).toMatchObject({ type: "send", threadId: "t-work", text: "Commit the changes on the branch fix/send-card, with a clear message." });
-    // the row keeps where the branch is and what the earlier read counted
-    expect(document.querySelector('[data-code-row="branch"]')?.textContent).toContain("on Studio");
-    expect(document.querySelector('[data-code-row="branch"]')?.textContent).toContain("1 changed file");
+    // the row keeps where the branch is and what the earlier read counted,
+    // in its tooltip since #2148 (the row shows the short repo name only)
+    const tip = document.querySelector('[data-code-row="branch"] [title]')?.getAttribute("title");
+    expect(tip).toContain("on Studio");
+    expect(tip).toContain("1 changed file");
   });
 
   it("says what a commit takes: every change with every file checked, else exactly the checked files", async () => {

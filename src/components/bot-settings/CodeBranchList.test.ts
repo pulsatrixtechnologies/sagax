@@ -75,7 +75,10 @@ describe("Coding branches: the card", () => {
     expect(html).toContain("feat/it-tools-widgets");
     expect(html).toContain('data-branch-status="local"');
     expect(html).toContain(">Not pushed<");
-    expect(html).toContain("acme/web · 2 commits ahead · 2 changed files · 15 h ago");
+    // #2148: one grey sub-line with the short repo name; the rest in the tooltip
+    expect(html).toMatch(/data-branch-repo=""[^>]*>web</);
+    expect(html).not.toContain("acme/web · 2 commits ahead");
+    expect(html).toContain("2 commits ahead · 2 changed files · 15 h ago");
     expect(html).toContain('data-branch-menu-button="feat/it-tools-widgets"');
     expect(html).toContain('aria-label="Actions for feat/it-tools-widgets"');
     // busy: a spinner instead of the menu; a note under the row
@@ -300,5 +303,27 @@ describe("Coding branches: the card", () => {
       expect(en[key], key).not.toMatch(/bot's computer/);
       expect((fr as Record<string, string>)[key], key).not.toMatch(/ordinateur du bot/);
     }
+  });
+
+  it("keeps what the row no longer shows behind the menu: details, GitHub, copy link, and Ignore (#2148)", () => {
+    const pushed: CodingBranch = { ...local, pushed: true, url: "https://github.com/acme/web/tree/feat/it-tools-widgets" };
+    const html = renderToStaticMarkup(createElement(BranchMenuPanel, { branch: pushed, info: info(), archived: false, botName: "Scout", details: "2 commits ahead · 15 h ago", canIgnore: true, onPick: () => {} }));
+    expect(html).toContain("data-branch-details");
+    expect(html).toContain("2 commits ahead · 15 h ago");
+    expect(html).toContain('data-menu-item="github"');
+    expect(html).toContain('data-menu-item="copyLink"');
+    expect(html).toContain('data-menu-item="ignore"');
+    expect(html).toContain(">Ignore<");
+    // no link: no GitHub nor copy; no handler: no Ignore
+    const bare = renderToStaticMarkup(createElement(BranchMenuItems, { branch: local, info: info(), archived: false, botName: "Scout", onPick: () => {} }));
+    expect(bare).not.toContain('data-menu-item="github"');
+    expect(bare).not.toContain('data-menu-item="ignore"');
+    // the row no longer says "Pushed to <URL>" nor where the computer is
+    const row = renderToStaticMarkup(createElement(BranchRow, { branch: pushed, now: NOW, info: info({}, { place: "remote", computer: "desktop" }), actions: { botId: "pepper", botName: "Pepper", onArchive: async () => {}, onIgnore: () => {} }, onAct: () => {} }));
+    expect(row).not.toMatch(/Pushed to/i);
+    expect(row).not.toMatch(/>[^<]*on your computer[^<]*</i);
+    expect(row).toMatch(/title="[^"]*github\.com\/acme\/web\/tree/);
+    expect(en["botPanel.branch.ignore"]).toBe("Ignore");
+    expect(fr["botPanel.branch.ignore"]).toBe("Ignorer");
   });
 });

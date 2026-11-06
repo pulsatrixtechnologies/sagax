@@ -20,7 +20,7 @@ import type { BotLaunchedAgentItem } from "../../../shared/bot-launched-agents.t
 import { ActivityDetailBody, ActivityDetailModal, activityViews } from "./ActivityDetailModal";
 import { SETTINGS_WINDOW } from "../SettingsPrimitives";
 import { ActivityListModal } from "./ActivityListModal";
-import { activityLive, activityTitle, codingLive, codingWhere, codingWork, FINISHED_FADE_MS, FINISHED_LINGER_MS, formatActivityDuration, historyItems, isParallelWork, LiveActivity } from "@/lib/bot-activity";
+import { activityLive, activityTitle, CODING_RETAIN_MS, codingKept, codingLive, codingRetained, codingWhere, codingWork, FINISHED_FADE_MS, FINISHED_LINGER_MS, formatActivityDuration, historyItems, isParallelWork, LiveActivity } from "@/lib/bot-activity";
 import type { Bot } from "@/state/store";
 
 const NOW = 1_800_000_000_000;
@@ -235,6 +235,34 @@ describe("Coding, live only", () => {
   });
 });
 
+describe("Coding, kept 24 h or until ignored (#2148)", () => {
+  it("keeps a finished coding job 24 h after it ended, a running one always", () => {
+    const done = job("thread:done", { coding: true, endedAt: NOW - 60_000 });
+    const old = job("thread:old", { coding: true, endedAt: NOW - CODING_RETAIN_MS, updatedAt: NOW - CODING_RETAIN_MS });
+    const live = job("thread:live", { coding: true, status: "running", startedAt: NOW - 2 * CODING_RETAIN_MS, endedAt: undefined, updatedAt: NOW - 2 * CODING_RETAIN_MS });
+    const chat = job("thread:chat");
+    expect(codingRetained([done, old, live, chat], NOW).map((item) => item.id)).toEqual(["thread:live", "thread:done"]);
+    expect(codingKept(done, NOW + CODING_RETAIN_MS - 60_001)).toBe(true);
+    expect(codingKept(done, NOW + CODING_RETAIN_MS - 60_000)).toBe(false);
+  });
+
+  it("drops an ignored job now, running or finished", () => {
+    const done = job("thread:done", { coding: true });
+    const live = job("thread:live", { coding: true, status: "running", endedAt: undefined });
+    const hidden = new Set(["job|thread:done", "job|thread:live"]);
+    expect(codingRetained([done, live], NOW, hidden)).toEqual([]);
+    const draw = (archived?: ReadonlySet<string>) => renderToStaticMarkup(createElement(PanelSections, { list: { items: [done], subagents: [] }, live: liveOf([done]), actions: { onOpen: () => {}, now: NOW }, onOpenHistory: () => {}, archived, onIgnore: () => {} }));
+    expect(draw()).toContain('data-agent-ignore="thread:done"');
+    expect(draw(new Set(["job|thread:done"]))).not.toContain("data-activity-card");
+  });
+
+  it("drops an ignored branch from the list, the git branch untouched", () => {
+    const branchy = job("thread:b", { coding: true, code: { repo: "acme/marketplace", pullRequests: [], branches: [{ name: "fix/menu", repo: "acme/marketplace", pushed: true, at: NOW }], commits: [] } });
+    expect(codingWork([branchy]).branches.map((branch) => branch.name)).toEqual(["fix/menu"]);
+    expect(codingWork([branchy], new Set(["ignore|acme/marketplace:fix/menu"])).branches).toEqual([]);
+  });
+});
+
 const liveOf = (items: BotActivityItem[]) => {
   const tracker = new LiveActivity(() => {});
   tracker.update(items);
@@ -281,7 +309,9 @@ describe("Activity, live only", () => {
     // not loaded yet, then loaded with nothing running
     expect(sections(null)).toBe("");
     const chat = job("thread:chat", { status: "running", endedAt: undefined });
-    const idle = sections({ items: [job("thread:old", { coding: true }), chat, parallel], subagents: [] });
+    // a coding job that ended more than 24 h ago has left the list (#2148)
+    const old = job("thread:old", { coding: true, endedAt: NOW - CODING_RETAIN_MS - 1, updatedAt: NOW - CODING_RETAIN_MS - 1 });
+    const idle = sections({ items: [old, chat, parallel], subagents: [] });
     expect(idle).not.toContain("data-bot-settings-section");
     expect(idle).not.toContain("Nothing running.");
     expect(idle).not.toContain("Ongoing activities");
@@ -404,7 +434,10 @@ describe("Coding, code work only", () => {
     // a branch is a grouped card row like a routine's: status pill, where and when
     expect(html).toContain('data-branch-status="open"');
     expect(html).toContain("PR #42 open");
-    expect(html).toContain("acme/parser · 1 h ago");
+    // #2148: one short grey line, the short repo name; the rest in the tooltip
+    expect(html).toMatch(/data-branch-repo=""[^>]*>parser</);
+    expect(html).not.toContain("acme/parser · 1 h ago");
+    expect(html).toMatch(/title="acme\/parser\n1 h ago\n[^"]*"/);
     expect(html).toContain(">Commits<");
     expect(html).toContain("fix: split the lexer");
     expect(html).toContain("1a2b3c4 · fix/lexer · Pushed");
@@ -426,22 +459,27 @@ describe("Coding, code work only", () => {
     expect(live).toContain('data-bot-settings-section="coding"');
     expect(live).toContain("data-activity-where");
     expect(live).toContain("parser · main");
-    // finished jobs are not listed, their pull request is
+    // #2148: a finished job stays 24 h, then only its pull request is listed
     const done = draw([shipped]);
     expect(done).toContain('data-bot-settings-section="coding"');
-    expect(done).not.toContain("data-activity-card");
+    expect(done).toContain('data-activity-card');
     expect(done).toContain("#42 Split the lexer");
-    expect(panelSections({ items: [codeJob("thread:empty")], subagents: [] }, liveOf([])).showCoding).toBe(false);
+    const later = renderToStaticMarkup(createElement(PanelSections, { list: { items: [shipped], subagents: [] }, live: liveOf([shipped]), actions: { onOpen: () => {}, now: NOW + CODING_RETAIN_MS }, onOpenHistory: () => {} }));
+    expect(later).not.toContain("data-activity-card");
+    expect(later).toContain("#42 Split the lexer");
+    expect(panelSections({ items: [codeJob("thread:empty")], subagents: [] }, liveOf([]), true, undefined, NOW).showCoding).toBe(true);
+    expect(panelSections({ items: [codeJob("thread:empty")], subagents: [] }, liveOf([]), true, undefined, NOW + CODING_RETAIN_MS).showCoding).toBe(false);
   });
 
   it("keeps the Git links (pull requests, branches, commits) for Advanced mode", () => {
-    const simple = renderToStaticMarkup(createElement(PanelSections, { list: { items: [shipped], subagents: [] }, live: liveOf([shipped]), actions: { onOpen: () => {}, now: NOW }, onOpenHistory: () => {}, advanced: false }));
+    const after = NOW + CODING_RETAIN_MS;
+    const simple = renderToStaticMarkup(createElement(PanelSections, { list: { items: [shipped], subagents: [] }, live: liveOf([shipped]), actions: { onOpen: () => {}, now: after }, onOpenHistory: () => {}, advanced: false }));
     expect(simple).not.toContain("#42 Split the lexer");
     expect(simple).not.toContain("data-code-work");
     // finished work with only Git links draws no Coding section in Simple
     expect(simple).not.toContain('data-bot-settings-section="coding"');
     expect(simple).toContain('data-activity-history="all"');
-    expect(panelSections({ items: [shipped], subagents: [] }, liveOf([shipped]), false).showCoding).toBe(false);
+    expect(panelSections({ items: [shipped], subagents: [] }, liveOf([shipped]), false, undefined, after).showCoding).toBe(false);
   });
 
   it("draws launched cloud agents in one grouped card with failed PR link", () => {

@@ -3,8 +3,8 @@
 exports[`prompt size by engine and turn kind (#1997) > measures each section and both cache halves using the production builders 1`] = `
 [
   {
-    "approxTokens": 5739,
-    "bytes": 22954,
+    "approxTokens": 5752,
+    "bytes": 23008,
     "engine": "claudeAgent",
     "kind": "chat",
     "sections": [
@@ -65,7 +65,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 1063,
+        "bytes": 1117,
         "id": "credential",
       },
       {
@@ -102,12 +102,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22867,
+    "stableBytes": 22921,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2798,
-    "bytes": 11190,
+    "approxTokens": 2808,
+    "bytes": 11230,
     "engine": "claudeAgent",
     "kind": "routine",
     "sections": [
@@ -168,7 +168,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 600,
         "id": "credential",
       },
       {
@@ -205,12 +205,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10614,
+    "stableBytes": 10654,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5457,
-    "bytes": 21827,
+    "approxTokens": 5471,
+    "bytes": 21881,
     "engine": "claudeAgent",
     "kind": "room",
     "sections": [
@@ -271,7 +271,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -304,12 +304,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 21740,
+    "stableBytes": 21794,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5645,
-    "bytes": 22577,
+    "approxTokens": 5658,
+    "bytes": 22631,
     "engine": "claudeAgent",
     "kind": "sub-agent",
     "sections": [
@@ -370,7 +370,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -411,12 +411,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22490,
+    "stableBytes": 22544,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5739,
-    "bytes": 22954,
+    "approxTokens": 5752,
+    "bytes": 23008,
     "engine": "codex",
     "kind": "chat",
     "sections": [
@@ -477,7 +477,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 1063,
+        "bytes": 1117,
         "id": "credential",
       },
       {
@@ -514,12 +514,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22867,
+    "stableBytes": 22921,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2798,
-    "bytes": 11190,
+    "approxTokens": 2808,
+    "bytes": 11230,
     "engine": "codex",
     "kind": "routine",
     "sections": [
@@ -580,7 +580,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 600,
         "id": "credential",
       },
       {
@@ -617,12 +617,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10614,
+    "stableBytes": 10654,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5457,
-    "bytes": 21827,
+    "approxTokens": 5471,
+    "bytes": 21881,
     "engine": "codex",
     "kind": "room",
     "sections": [
@@ -683,7 +683,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -716,12 +716,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 21740,
+    "stableBytes": 21794,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5645,
-    "bytes": 22577,
+    "approxTokens": 5658,
+    "bytes": 22631,
     "engine": "codex",
     "kind": "sub-agent",
     "sections": [
@@ -782,7 +782,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -823,12 +823,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22490,
+    "stableBytes": 22544,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5739,
-    "bytes": 22954,
+    "approxTokens": 5752,
+    "bytes": 23008,
     "engine": "piAgent",
     "kind": "chat",
     "sections": [
@@ -889,7 +889,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 1063,
+        "bytes": 1117,
         "id": "credential",
       },
       {
@@ -926,12 +926,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22867,
+    "stableBytes": 22921,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2798,
-    "bytes": 11190,
+    "approxTokens": 2808,
+    "bytes": 11230,
     "engine": "piAgent",
     "kind": "routine",
     "sections": [
@@ -992,7 +992,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 600,
         "id": "credential",
       },
       {
@@ -1029,12 +1029,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10614,
+    "stableBytes": 10654,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5457,
-    "bytes": 21827,
+    "approxTokens": 5471,
+    "bytes": 21881,
     "engine": "piAgent",
     "kind": "room",
     "sections": [
@@ -1095,7 +1095,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -1128,12 +1128,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 21740,
+    "stableBytes": 21794,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5645,
-    "bytes": 22577,
+    "approxTokens": 5658,
+    "bytes": 22631,
     "engine": "piAgent",
     "kind": "sub-agent",
     "sections": [
@@ -1194,7 +1194,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -1235,12 +1235,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22490,
+    "stableBytes": 22544,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5739,
-    "bytes": 22954,
+    "approxTokens": 5752,
+    "bytes": 23008,
     "engine": "grokAgent",
     "kind": "chat",
     "sections": [
@@ -1301,7 +1301,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 1063,
+        "bytes": 1117,
         "id": "credential",
       },
       {
@@ -1338,12 +1338,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22867,
+    "stableBytes": 22921,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2798,
-    "bytes": 11190,
+    "approxTokens": 2808,
+    "bytes": 11230,
     "engine": "grokAgent",
     "kind": "routine",
     "sections": [
@@ -1404,7 +1404,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 600,
         "id": "credential",
       },
       {
@@ -1441,12 +1441,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10614,
+    "stableBytes": 10654,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5457,
-    "bytes": 21827,
+    "approxTokens": 5471,
+    "bytes": 21881,
     "engine": "grokAgent",
     "kind": "room",
     "sections": [
@@ -1507,7 +1507,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -1540,12 +1540,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 21740,
+    "stableBytes": 21794,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5645,
-    "bytes": 22577,
+    "approxTokens": 5658,
+    "bytes": 22631,
     "engine": "grokAgent",
     "kind": "sub-agent",
     "sections": [
@@ -1606,7 +1606,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -1647,12 +1647,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22490,
+    "stableBytes": 22544,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5739,
-    "bytes": 22954,
+    "approxTokens": 5752,
+    "bytes": 23008,
     "engine": "geminiAgent",
     "kind": "chat",
     "sections": [
@@ -1713,7 +1713,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 1063,
+        "bytes": 1117,
         "id": "credential",
       },
       {
@@ -1750,12 +1750,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22867,
+    "stableBytes": 22921,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2798,
-    "bytes": 11190,
+    "approxTokens": 2808,
+    "bytes": 11230,
     "engine": "geminiAgent",
     "kind": "routine",
     "sections": [
@@ -1816,7 +1816,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 600,
         "id": "credential",
       },
       {
@@ -1853,12 +1853,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10614,
+    "stableBytes": 10654,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5457,
-    "bytes": 21827,
+    "approxTokens": 5471,
+    "bytes": 21881,
     "engine": "geminiAgent",
     "kind": "room",
     "sections": [
@@ -1919,7 +1919,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -1952,12 +1952,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 21740,
+    "stableBytes": 21794,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5645,
-    "bytes": 22577,
+    "approxTokens": 5658,
+    "bytes": 22631,
     "engine": "geminiAgent",
     "kind": "sub-agent",
     "sections": [
@@ -2018,7 +2018,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -2059,12 +2059,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22490,
+    "stableBytes": 22544,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5739,
-    "bytes": 22954,
+    "approxTokens": 5752,
+    "bytes": 23008,
     "engine": "kimiAgent",
     "kind": "chat",
     "sections": [
@@ -2125,7 +2125,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 1063,
+        "bytes": 1117,
         "id": "credential",
       },
       {
@@ -2162,12 +2162,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22867,
+    "stableBytes": 22921,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2798,
-    "bytes": 11190,
+    "approxTokens": 2808,
+    "bytes": 11230,
     "engine": "kimiAgent",
     "kind": "routine",
     "sections": [
@@ -2228,7 +2228,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 600,
         "id": "credential",
       },
       {
@@ -2265,12 +2265,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10614,
+    "stableBytes": 10654,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5457,
-    "bytes": 21827,
+    "approxTokens": 5471,
+    "bytes": 21881,
     "engine": "kimiAgent",
     "kind": "room",
     "sections": [
@@ -2331,7 +2331,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -2364,12 +2364,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 21740,
+    "stableBytes": 21794,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5645,
-    "bytes": 22577,
+    "approxTokens": 5658,
+    "bytes": 22631,
     "engine": "kimiAgent",
     "kind": "sub-agent",
     "sections": [
@@ -2430,7 +2430,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -2471,12 +2471,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22490,
+    "stableBytes": 22544,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5739,
-    "bytes": 22954,
+    "approxTokens": 5752,
+    "bytes": 23008,
     "engine": "opencodeGo",
     "kind": "chat",
     "sections": [
@@ -2537,7 +2537,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 1063,
+        "bytes": 1117,
         "id": "credential",
       },
       {
@@ -2574,12 +2574,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22867,
+    "stableBytes": 22921,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2798,
-    "bytes": 11190,
+    "approxTokens": 2808,
+    "bytes": 11230,
     "engine": "opencodeGo",
     "kind": "routine",
     "sections": [
@@ -2640,7 +2640,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 600,
         "id": "credential",
       },
       {
@@ -2677,12 +2677,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10614,
+    "stableBytes": 10654,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5457,
-    "bytes": 21827,
+    "approxTokens": 5471,
+    "bytes": 21881,
     "engine": "opencodeGo",
     "kind": "room",
     "sections": [
@@ -2743,7 +2743,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -2776,12 +2776,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 21740,
+    "stableBytes": 21794,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5645,
-    "bytes": 22577,
+    "approxTokens": 5658,
+    "bytes": 22631,
     "engine": "opencodeGo",
     "kind": "sub-agent",
     "sections": [
@@ -2842,7 +2842,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -2883,12 +2883,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22490,
+    "stableBytes": 22544,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5739,
-    "bytes": 22954,
+    "approxTokens": 5752,
+    "bytes": 23008,
     "engine": "antigravityAgent",
     "kind": "chat",
     "sections": [
@@ -2949,7 +2949,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 1063,
+        "bytes": 1117,
         "id": "credential",
       },
       {
@@ -2986,12 +2986,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22867,
+    "stableBytes": 22921,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2798,
-    "bytes": 11190,
+    "approxTokens": 2808,
+    "bytes": 11230,
     "engine": "antigravityAgent",
     "kind": "routine",
     "sections": [
@@ -3052,7 +3052,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 600,
         "id": "credential",
       },
       {
@@ -3089,12 +3089,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10614,
+    "stableBytes": 10654,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5457,
-    "bytes": 21827,
+    "approxTokens": 5471,
+    "bytes": 21881,
     "engine": "antigravityAgent",
     "kind": "room",
     "sections": [
@@ -3155,7 +3155,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -3188,12 +3188,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 21740,
+    "stableBytes": 21794,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5645,
-    "bytes": 22577,
+    "approxTokens": 5658,
+    "bytes": 22631,
     "engine": "antigravityAgent",
     "kind": "sub-agent",
     "sections": [
@@ -3254,7 +3254,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -3295,12 +3295,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22490,
+    "stableBytes": 22544,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5739,
-    "bytes": 22954,
+    "approxTokens": 5752,
+    "bytes": 23008,
     "engine": "droidAgent",
     "kind": "chat",
     "sections": [
@@ -3361,7 +3361,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 1063,
+        "bytes": 1117,
         "id": "credential",
       },
       {
@@ -3398,12 +3398,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22867,
+    "stableBytes": 22921,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2798,
-    "bytes": 11190,
+    "approxTokens": 2808,
+    "bytes": 11230,
     "engine": "droidAgent",
     "kind": "routine",
     "sections": [
@@ -3464,7 +3464,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 600,
         "id": "credential",
       },
       {
@@ -3501,12 +3501,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10614,
+    "stableBytes": 10654,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5457,
-    "bytes": 21827,
+    "approxTokens": 5471,
+    "bytes": 21881,
     "engine": "droidAgent",
     "kind": "room",
     "sections": [
@@ -3567,7 +3567,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -3600,12 +3600,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 21740,
+    "stableBytes": 21794,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5645,
-    "bytes": 22577,
+    "approxTokens": 5658,
+    "bytes": 22631,
     "engine": "droidAgent",
     "kind": "sub-agent",
     "sections": [
@@ -3666,7 +3666,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -3707,12 +3707,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22490,
+    "stableBytes": 22544,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5739,
-    "bytes": 22954,
+    "approxTokens": 5752,
+    "bytes": 23008,
     "engine": "cursorAgent",
     "kind": "chat",
     "sections": [
@@ -3773,7 +3773,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 1063,
+        "bytes": 1117,
         "id": "credential",
       },
       {
@@ -3810,12 +3810,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22867,
+    "stableBytes": 22921,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2798,
-    "bytes": 11190,
+    "approxTokens": 2808,
+    "bytes": 11230,
     "engine": "cursorAgent",
     "kind": "routine",
     "sections": [
@@ -3876,7 +3876,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 600,
         "id": "credential",
       },
       {
@@ -3913,12 +3913,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10614,
+    "stableBytes": 10654,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5457,
-    "bytes": 21827,
+    "approxTokens": 5471,
+    "bytes": 21881,
     "engine": "cursorAgent",
     "kind": "room",
     "sections": [
@@ -3979,7 +3979,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -4012,12 +4012,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 21740,
+    "stableBytes": 21794,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5645,
-    "bytes": 22577,
+    "approxTokens": 5658,
+    "bytes": 22631,
     "engine": "cursorAgent",
     "kind": "sub-agent",
     "sections": [
@@ -4078,7 +4078,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -4119,12 +4119,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22490,
+    "stableBytes": 22544,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5739,
-    "bytes": 22954,
+    "approxTokens": 5752,
+    "bytes": 23008,
     "engine": "qwenAgent",
     "kind": "chat",
     "sections": [
@@ -4185,7 +4185,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 1063,
+        "bytes": 1117,
         "id": "credential",
       },
       {
@@ -4222,12 +4222,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22867,
+    "stableBytes": 22921,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2798,
-    "bytes": 11190,
+    "approxTokens": 2808,
+    "bytes": 11230,
     "engine": "qwenAgent",
     "kind": "routine",
     "sections": [
@@ -4288,7 +4288,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 600,
         "id": "credential",
       },
       {
@@ -4325,12 +4325,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10614,
+    "stableBytes": 10654,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5457,
-    "bytes": 21827,
+    "approxTokens": 5471,
+    "bytes": 21881,
     "engine": "qwenAgent",
     "kind": "room",
     "sections": [
@@ -4391,7 +4391,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -4424,12 +4424,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 21740,
+    "stableBytes": 21794,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5645,
-    "bytes": 22577,
+    "approxTokens": 5658,
+    "bytes": 22631,
     "engine": "qwenAgent",
     "kind": "sub-agent",
     "sections": [
@@ -4490,7 +4490,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -4531,12 +4531,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22490,
+    "stableBytes": 22544,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5739,
-    "bytes": 22954,
+    "approxTokens": 5752,
+    "bytes": 23008,
     "engine": "hermesAgent",
     "kind": "chat",
     "sections": [
@@ -4597,7 +4597,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 1063,
+        "bytes": 1117,
         "id": "credential",
       },
       {
@@ -4634,12 +4634,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22867,
+    "stableBytes": 22921,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2798,
-    "bytes": 11190,
+    "approxTokens": 2808,
+    "bytes": 11230,
     "engine": "hermesAgent",
     "kind": "routine",
     "sections": [
@@ -4700,7 +4700,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 600,
         "id": "credential",
       },
       {
@@ -4737,12 +4737,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10614,
+    "stableBytes": 10654,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5457,
-    "bytes": 21827,
+    "approxTokens": 5471,
+    "bytes": 21881,
     "engine": "hermesAgent",
     "kind": "room",
     "sections": [
@@ -4803,7 +4803,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -4836,12 +4836,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 21740,
+    "stableBytes": 21794,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5645,
-    "bytes": 22577,
+    "approxTokens": 5658,
+    "bytes": 22631,
     "engine": "hermesAgent",
     "kind": "sub-agent",
     "sections": [
@@ -4902,7 +4902,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -4943,12 +4943,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22490,
+    "stableBytes": 22544,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5739,
-    "bytes": 22954,
+    "approxTokens": 5752,
+    "bytes": 23008,
     "engine": "clineAgent",
     "kind": "chat",
     "sections": [
@@ -5009,7 +5009,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 1063,
+        "bytes": 1117,
         "id": "credential",
       },
       {
@@ -5046,12 +5046,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22867,
+    "stableBytes": 22921,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2798,
-    "bytes": 11190,
+    "approxTokens": 2808,
+    "bytes": 11230,
     "engine": "clineAgent",
     "kind": "routine",
     "sections": [
@@ -5112,7 +5112,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 600,
         "id": "credential",
       },
       {
@@ -5149,12 +5149,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10614,
+    "stableBytes": 10654,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5457,
-    "bytes": 21827,
+    "approxTokens": 5471,
+    "bytes": 21881,
     "engine": "clineAgent",
     "kind": "room",
     "sections": [
@@ -5215,7 +5215,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -5248,12 +5248,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 21740,
+    "stableBytes": 21794,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5645,
-    "bytes": 22577,
+    "approxTokens": 5658,
+    "bytes": 22631,
     "engine": "clineAgent",
     "kind": "sub-agent",
     "sections": [
@@ -5314,7 +5314,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -5355,12 +5355,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22490,
+    "stableBytes": 22544,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5739,
-    "bytes": 22954,
+    "approxTokens": 5752,
+    "bytes": 23008,
     "engine": "customAcp",
     "kind": "chat",
     "sections": [
@@ -5421,7 +5421,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 1063,
+        "bytes": 1117,
         "id": "credential",
       },
       {
@@ -5458,12 +5458,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22867,
+    "stableBytes": 22921,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2798,
-    "bytes": 11190,
+    "approxTokens": 2808,
+    "bytes": 11230,
     "engine": "customAcp",
     "kind": "routine",
     "sections": [
@@ -5524,7 +5524,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 600,
         "id": "credential",
       },
       {
@@ -5561,12 +5561,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10614,
+    "stableBytes": 10654,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5457,
-    "bytes": 21827,
+    "approxTokens": 5471,
+    "bytes": 21881,
     "engine": "customAcp",
     "kind": "room",
     "sections": [
@@ -5627,7 +5627,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -5660,12 +5660,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 21740,
+    "stableBytes": 21794,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5645,
-    "bytes": 22577,
+    "approxTokens": 5658,
+    "bytes": 22631,
     "engine": "customAcp",
     "kind": "sub-agent",
     "sections": [
@@ -5726,7 +5726,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -5767,12 +5767,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22490,
+    "stableBytes": 22544,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5683,
-    "bytes": 22729,
+    "approxTokens": 5696,
+    "bytes": 22783,
     "engine": "grok",
     "kind": "chat",
     "sections": [
@@ -5829,7 +5829,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 1063,
+        "bytes": 1117,
         "id": "credential",
       },
       {
@@ -5866,12 +5866,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22642,
+    "stableBytes": 22696,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2742,
-    "bytes": 10965,
+    "approxTokens": 2752,
+    "bytes": 11005,
     "engine": "grok",
     "kind": "routine",
     "sections": [
@@ -5928,7 +5928,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 600,
         "id": "credential",
       },
       {
@@ -5965,12 +5965,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10389,
+    "stableBytes": 10429,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5401,
-    "bytes": 21602,
+    "approxTokens": 5414,
+    "bytes": 21656,
     "engine": "grok",
     "kind": "room",
     "sections": [
@@ -6027,7 +6027,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -6060,12 +6060,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 21515,
+    "stableBytes": 21569,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5588,
-    "bytes": 22352,
+    "approxTokens": 5602,
+    "bytes": 22406,
     "engine": "grok",
     "kind": "sub-agent",
     "sections": [
@@ -6122,7 +6122,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -6163,12 +6163,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22265,
+    "stableBytes": 22319,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5683,
-    "bytes": 22729,
+    "approxTokens": 5696,
+    "bytes": 22783,
     "engine": "openai-compat",
     "kind": "chat",
     "sections": [
@@ -6225,7 +6225,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 1063,
+        "bytes": 1117,
         "id": "credential",
       },
       {
@@ -6262,12 +6262,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22642,
+    "stableBytes": 22696,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2742,
-    "bytes": 10965,
+    "approxTokens": 2752,
+    "bytes": 11005,
     "engine": "openai-compat",
     "kind": "routine",
     "sections": [
@@ -6324,7 +6324,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 600,
         "id": "credential",
       },
       {
@@ -6361,12 +6361,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10389,
+    "stableBytes": 10429,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5401,
-    "bytes": 21602,
+    "approxTokens": 5414,
+    "bytes": 21656,
     "engine": "openai-compat",
     "kind": "room",
     "sections": [
@@ -6423,7 +6423,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -6456,12 +6456,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 21515,
+    "stableBytes": 21569,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5588,
-    "bytes": 22352,
+    "approxTokens": 5602,
+    "bytes": 22406,
     "engine": "openai-compat",
     "kind": "sub-agent",
     "sections": [
@@ -6518,7 +6518,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -6559,12 +6559,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22265,
+    "stableBytes": 22319,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5683,
-    "bytes": 22729,
+    "approxTokens": 5696,
+    "bytes": 22783,
     "engine": "minimax",
     "kind": "chat",
     "sections": [
@@ -6621,7 +6621,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 1063,
+        "bytes": 1117,
         "id": "credential",
       },
       {
@@ -6658,12 +6658,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22642,
+    "stableBytes": 22696,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2742,
-    "bytes": 10965,
+    "approxTokens": 2752,
+    "bytes": 11005,
     "engine": "minimax",
     "kind": "routine",
     "sections": [
@@ -6720,7 +6720,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 600,
         "id": "credential",
       },
       {
@@ -6757,12 +6757,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10389,
+    "stableBytes": 10429,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5401,
-    "bytes": 21602,
+    "approxTokens": 5414,
+    "bytes": 21656,
     "engine": "minimax",
     "kind": "room",
     "sections": [
@@ -6819,7 +6819,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -6852,12 +6852,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 21515,
+    "stableBytes": 21569,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5588,
-    "bytes": 22352,
+    "approxTokens": 5602,
+    "bytes": 22406,
     "engine": "minimax",
     "kind": "sub-agent",
     "sections": [
@@ -6914,7 +6914,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -6955,12 +6955,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22265,
+    "stableBytes": 22319,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5683,
-    "bytes": 22729,
+    "approxTokens": 5696,
+    "bytes": 22783,
     "engine": "mistral",
     "kind": "chat",
     "sections": [
@@ -7017,7 +7017,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 1063,
+        "bytes": 1117,
         "id": "credential",
       },
       {
@@ -7054,12 +7054,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22642,
+    "stableBytes": 22696,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2742,
-    "bytes": 10965,
+    "approxTokens": 2752,
+    "bytes": 11005,
     "engine": "mistral",
     "kind": "routine",
     "sections": [
@@ -7116,7 +7116,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 600,
         "id": "credential",
       },
       {
@@ -7153,12 +7153,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10389,
+    "stableBytes": 10429,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5401,
-    "bytes": 21602,
+    "approxTokens": 5414,
+    "bytes": 21656,
     "engine": "mistral",
     "kind": "room",
     "sections": [
@@ -7215,7 +7215,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -7248,12 +7248,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 21515,
+    "stableBytes": 21569,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5588,
-    "bytes": 22352,
+    "approxTokens": 5602,
+    "bytes": 22406,
     "engine": "mistral",
     "kind": "sub-agent",
     "sections": [
@@ -7310,7 +7310,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -7351,12 +7351,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22265,
+    "stableBytes": 22319,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5683,
-    "bytes": 22729,
+    "approxTokens": 5696,
+    "bytes": 22783,
     "engine": "cerebras",
     "kind": "chat",
     "sections": [
@@ -7413,7 +7413,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 1063,
+        "bytes": 1117,
         "id": "credential",
       },
       {
@@ -7450,12 +7450,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22642,
+    "stableBytes": 22696,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2742,
-    "bytes": 10965,
+    "approxTokens": 2752,
+    "bytes": 11005,
     "engine": "cerebras",
     "kind": "routine",
     "sections": [
@@ -7512,7 +7512,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 600,
         "id": "credential",
       },
       {
@@ -7549,12 +7549,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10389,
+    "stableBytes": 10429,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5401,
-    "bytes": 21602,
+    "approxTokens": 5414,
+    "bytes": 21656,
     "engine": "cerebras",
     "kind": "room",
     "sections": [
@@ -7611,7 +7611,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -7644,12 +7644,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 21515,
+    "stableBytes": 21569,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5588,
-    "bytes": 22352,
+    "approxTokens": 5602,
+    "bytes": 22406,
     "engine": "cerebras",
     "kind": "sub-agent",
     "sections": [
@@ -7706,7 +7706,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -7747,12 +7747,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22265,
+    "stableBytes": 22319,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5683,
-    "bytes": 22729,
+    "approxTokens": 5696,
+    "bytes": 22783,
     "engine": "groq",
     "kind": "chat",
     "sections": [
@@ -7809,7 +7809,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 1063,
+        "bytes": 1117,
         "id": "credential",
       },
       {
@@ -7846,12 +7846,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22642,
+    "stableBytes": 22696,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 2742,
-    "bytes": 10965,
+    "approxTokens": 2752,
+    "bytes": 11005,
     "engine": "groq",
     "kind": "routine",
     "sections": [
@@ -7908,7 +7908,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 600,
         "id": "credential",
       },
       {
@@ -7945,12 +7945,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 10389,
+    "stableBytes": 10429,
     "volatileBytes": 576,
   },
   {
-    "approxTokens": 5401,
-    "bytes": 21602,
+    "approxTokens": 5414,
+    "bytes": 21656,
     "engine": "groq",
     "kind": "room",
     "sections": [
@@ -8007,7 +8007,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -8040,12 +8040,12 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 21515,
+    "stableBytes": 21569,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 5588,
-    "bytes": 22352,
+    "approxTokens": 5602,
+    "bytes": 22406,
     "engine": "groq",
     "kind": "sub-agent",
     "sections": [
@@ -8102,7 +8102,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "coordination",
       },
       {
-        "bytes": 560,
+        "bytes": 614,
         "id": "credential",
       },
       {
@@ -8143,7 +8143,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
       },
     ],
     "skillsBytes": 10783,
-    "stableBytes": 22265,
+    "stableBytes": 22319,
     "volatileBytes": 87,
   },
 ]

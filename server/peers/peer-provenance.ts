@@ -40,6 +40,7 @@ import { z } from "zod";
 import { redactSecretsInText } from "../../shared/redact.ts";
 import type { WireMessage as Message } from "../../shared/wire.ts";
 import { peerName } from "./peer-roster.ts";
+import { informationOnly, lineNote, type LineLabels, type ProvenanceLine } from "./provenance-label.ts";
 
 const REQUEST_QUOTE_MAX = 400;
 
@@ -151,6 +152,13 @@ export function peerProvenanceNote({ botName: rawName, delivery, origin, unatten
 export function withPeerProvenance(message: string, provenance: PeerProvenance): string {
   return `${peerProvenanceNote(provenance)}\n\n${escapeNotes(message)}`;
 }
+/** A person line with its note, when the chat needs one (omb #4210). */
+export function labelledLine(line: ProvenanceLine, text: string, labels: LineLabels): string {
+  const note = lineNote(line, labels);
+  if (!note) return text;
+  return informationOnly(note) ? `${note}\n${JSON.stringify(escapeNotes(text))}` : `${note}\n${escapeNotes(text)}`;
+}
+
 
 /** A "post" webhook's line: an outside app chose the words and the chat
  * shows them as the bot's, so whoever reads it back is told (port of
@@ -179,7 +187,7 @@ export function reportNote(rawName: string): string {
 // bot's conversation open, and every other note it writes about
 // bot-authored text, with the coming protocol's [OMB …] headers.
 const DELIVERED_NOTES = ["message from", "delegated by", "thread opened by", "retry requested by", "aside from"];
-const NOTE_OPENINGS = [...DELIVERED_NOTES, "messages this conversation", "delivered earlier by", "posted by", "assigned by",
+const NOTE_OPENINGS = [...DELIVERED_NOTES, "from", "messages this conversation", "delivered earlier by", "posted by", "assigned by",
   "report from", "teammate report", "teammate result", "thread you opened", "incident report"].map(opening => opening.split(" "));
 // The protocol's headers open with the app's name and a word: "[Sagax
 // assignment …]", "[Sagax report …]" (server/runtime/envelope.ts);
@@ -256,7 +264,7 @@ export function escapeNotes(text: string): string {
 /** A delivered line's words without the note the harness put in front of
  * them, for a reader that wants only what was asked. */
 export function withoutDeliveredNote(text: string): string {
-  return text.replace(LEADING_NOTE, "").trim();
+  return text.replace(LEADING_NOTE, "").replace(/^\[From [^\]\n]*\]/u, "").trim();
 }
 
 /** A bot-authored line in a 1:1 conversation as a replay, or an unseen-

@@ -1,7 +1,16 @@
 import { createServer } from "node:http";
 import { afterEach, expect, it, vi } from "vitest";
-import { OpenAICompatDriver } from "./openai-compat.ts";
+import { OpenAICompatDriver, onThisNetwork } from "./openai-compat.ts";
 import { recordEvents } from "../testing/events.ts";
+
+it("checks only servers on this machine or network, never a cloud provider", () => {
+  for (const url of ["http://127.0.0.1:11434/v1", "http://localhost:1234/v1", "http://[::1]:8080/v1", "http://192.168.1.20:11434/v1", "http://10.0.0.5/v1", "http://172.20.1.2/v1", "http://studio.local:1234/v1"]) {
+    expect(onThisNetwork(url), url).toBe(true);
+  }
+  for (const url of ["https://openrouter.ai/api/v1", "https://api.together.xyz/v1", "http://172.32.0.1/v1", "not a url"]) {
+    expect(onThisNetwork(url), url).toBe(false);
+  }
+});
 
 afterEach(() => vi.unstubAllEnvs());
 

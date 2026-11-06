@@ -531,6 +531,7 @@ export const BOT_FIELD_PERMISSIONS: Readonly<Record<string, PermissionKey>> = {
   loopGuard: "bots.behaviour",
   voiceNotes: "bots.behaviour",
   emailDrafts: "bots.behaviour",
+  memeReplies: "bots.behaviour",
   fallback: "bots.behaviour",
   parkDirectMessages: "bots.behaviour",
   maxConcurrentThreads: "bots.behaviour",

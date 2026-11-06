@@ -156,6 +156,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Speak replies | Bot editor > Voice | `sagax_settings` get, set `bot.speakReplies` | simple |
 | Voice notes | Bot editor > Voice | `sagax_settings` get, set `bot.voiceNotes` | simple |
 | Email drafts | Bot editor > Permissions > Email drafts | `sagax_settings` get, set `bot.emailDrafts` | simple |
+| Meme replies | Bot editor > Permissions > Meme replies | `sagax_settings` get, set `bot.memeReplies` | simple |
 | Notifications | Bot editor > Voice > Notifications | `sagax_settings` get, set `bot.notifications` | simple |
 | Model and effort ({instanceId, model, effort}) | Bot editor > Model | `sagax_settings` get, set `bot.model` | simple |
 | Reasoning effort (low, medium, high, ...; keeps the model) | Bot editor > Model > Effort | `sagax_settings` get, set `bot.effort` | simple |
@@ -405,6 +406,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Remove your MCP server (its name) | Capabilities > Providers | `sagax_settings` set `connections.mcpServerRemove` | suppression |
 | Disconnect GitHub (true) | Capabilities > Sources > GitHub | `sagax_settings` set `connections.githubDisconnect` | suppression + secret |
 | Your web search provider ({provider: brave/exa/parallel/firecrawl/searxng, baseUrl, key?}; null forgets it). get says whether a key is saved, never the key | Settings > Providers > Other services > Web search | `sagax_settings` get, set `connections.webSearch` | simple |
+| Your meme provider ({provider: tenor/giphy, key?}; null forgets it). get says whether a key is saved, never the key | Settings > Providers > Other services > Memes | `sagax_settings` get, set `connections.memes` | simple |
 | The person's webhooks (read only: names, bots, on or off; never a signing secret) | Routines > Webhooks | `sagax_settings` get, set `connections.webhooks` | simple |
 | Give a webhook a new signing secret (its id; the secret is never returned to the bot: the person sees it with Reveal) | Routines > Webhooks > webhook > Rotate | `sagax_settings` set `connections.webhookSecretRotate` | secret |
 | Test web search with the saved settings (value true) | Settings > Providers > Other services > Web search > Test | `sagax_settings` set `connections.webSearchTest` | simple |

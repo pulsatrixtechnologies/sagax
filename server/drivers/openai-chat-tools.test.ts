@@ -698,7 +698,9 @@ describe.each<Provider>(["openai-compat", "grok", "minimax"])("%s structured too
   });
 
   it("preserves ordinary transcript chat and leaves textual tool imitations as text", async () => {
-    const imitation = '<tool_call>{"name":"audit_write","arguments":{"value":"pretend"}}</tool_call>';
+    // Trailing words after the tag: a quotation, not a request to run a tool
+    // (#4180 recovers a bare tagged call on a local / loopback endpoint).
+    const imitation = 'The page shows <tool_call>{"name":"audit_write","arguments":{"value":"pretend"}}</tool_call> as an example.';
     const f = await fixture((_body, response) => answer(response, imitation), provider);
     await f.start({ integrations: undefined, system: "Fixture persona", transcript: [{ role: "user", text: "Earlier question" }, { role: "assistant", text: "Earlier answer" }] });
     expect(await f.completed()).toMatchObject({ ok: true });
@@ -1016,9 +1018,10 @@ describe("structured tool execution boundaries", () => {
     expect(readFileSync(join(NATIVE_DIR, `${f.threadId}.ndjson`), "utf8")).not.toContain(API_KEY_CANARY);
   });
 
-  it("never promotes textual tool syntax into execution, even when that tool is mounted", async () => {
+  it("never promotes textual tool syntax into execution on a hosted model, even when that tool is mounted", async () => {
     const imitation = '<tool_call>{"name":"audit_write","arguments":{"name":"receipt","value":"pretend"}}</tool_call>';
-    const f = await fixture((_body, response) => answer(response, imitation));
+    // grok is hosted: loopback openai-compat sets localModel and recovers the call (#4180).
+    const f = await fixture((_body, response) => answer(response, imitation), "grok");
     await f.start();
     expect(await f.completed()).toMatchObject({ ok: true });
     expect(f.requests[0].tools?.some((tool) => tool.function.name === "audit_write")).toBe(true);
@@ -1215,8 +1218,10 @@ describe("structured tool execution boundaries", () => {
   });
 
   it("stops a model that keeps requesting tools after 64 steps, with one next action that does not repeat the steps that ran", async () => {
+    // Distinct arguments each round: the local-model repeat guard (#4180)
+    // would otherwise end the turn after ten identical successful answers.
     const f = await fixture((_body, response, round) => sse(response, [
-      chunk({ tool_calls: [toolCall("audit_write", '{"name":"receipt","value":"done"}', `call_${round}`)] }, "tool_calls"),
+      chunk({ tool_calls: [toolCall("audit_write", JSON.stringify({ name: "receipt", value: `done-${round}` }), `call_${round}`)] }, "tool_calls"),
     ]));
     const stop = f.instance.adapter.onEvent((event) => {
       if (event.type === "request.opened") void f.instance.adapter.respondToRequest(f.threadId, event.requestId!, { behavior: "allow" });

@@ -1163,8 +1163,11 @@ async function onLoopbackEngine(f: any, answer: (res: ServerResponse) => void): 
 it("continues a teammate's step cap in place and stops it once it makes no progress", () => fixture(async f => {
   let calls = 0;
   const close = await onLoopbackEngine(f, res => {
-    // Never a final answer: one more tool call, every round.
-    const call = { tool_calls: [{ index: 0, id: `call_${++calls}`, type: "function", function: { name: "missing_tool", arguments: "{}" } }] };
+    // Never a final answer: one more tool call, every round. Vary the
+    // arguments so the local-model repeat guard (#4180) does not stop the
+    // turn before the 64-step cap this fixture is about.
+    const n = ++calls;
+    const call = { tool_calls: [{ index: 0, id: `call_${n}`, type: "function", function: { name: "missing_tool", arguments: JSON.stringify({ attempt: n }) } }] };
     res.writeHead(200, { "content-type": "text/event-stream" });
     res.end(`data: ${JSON.stringify({ choices: [{ index: 0, delta: call, finish_reason: "tool_calls" }] })}\n\ndata: [DONE]\n\n`);
   });

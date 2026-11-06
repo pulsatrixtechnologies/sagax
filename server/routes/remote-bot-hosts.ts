@@ -40,6 +40,7 @@ export function createRemoteBotHostsRoutes(deps: {
           hosts: out.hosts,
           catalog: out.catalog,
           attached: out.attached,
+          inherited: out.inherited,
           ...(out.reason ? { reason: out.reason } : {}),
         });
       }

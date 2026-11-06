@@ -6,7 +6,7 @@ exposes to a bot or an AI client. The machine-readable form is the registry in
 `server/mcp/mcp-permissions.ts`; `server/mcp/mcp-permissions.test.ts` fails when a
 catalog tool has no permission.
 
-Totals: capabilities 166, covered 166, gaps 0.
+Totals: capabilities 167, covered 167, gaps 0.
 
 Sources read: the agents tool catalog, the internal routes it calls
 (`/api/internal/*`), the member API (`docs/org-member-api.md`), and the

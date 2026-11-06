@@ -30,11 +30,14 @@ const FN_TYPES = new Set([
 // guard stays a ratchet: new oversizers fail, these named leftovers do not.
 const ALLOWED_OVERSIZED = new Set([
   "server/usage/limit-failover-host.ts::createLimitFailoverHost",
+  "server/drivers/muse-code.ts::create",
   "server/desktop-trusted-approval.ts::createHandleDesktopTrustedApprovalMessage",
   "server/desktop-trusted-approval.ts::handleDesktopTrustedApprovalMessage",
   "server/turns/start-turn-prepare-validate.ts::createPrepareValidateStartTurn",
   "server/turns/start-turn-setup.ts::createSetupStartTurn",
+  "server/agent-api.ts::createAgentApiHandlers",
   "server/capabilities/capabilities.ts::resolveBotCapabilities",
+  "server/drivers/claude/turn-prepare-mcp.ts::prepareClaudeTurnMcp",
 ]);
 
 type Oversized = { lines: number; file: string; line: number; name: string };

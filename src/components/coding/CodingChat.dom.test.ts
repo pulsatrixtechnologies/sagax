@@ -9,6 +9,10 @@
 // path or id on the screen. A coding window (#2149): the X of a page opened
 // by Sagax closes it, the bot's real composer (+, micro, voice) is aimed at the
 // task's thread, and the </> panel lives here, never in the normal chat.
+// #2285 (JC 2026-11-06): the header's bot is the chat's own pill
+// (BotHeaderPill); status, duration and tokens leave the header for a "This
+// session" card of the bot panel, and the dev pods move there too, as panel
+// sections, instead of the </> popover.
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -16,6 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot, Message } from "@/state/store";
 import type { BotActivityDetail, BotActivityItem } from "../../../shared/bot-activity";
 import { setExchangeColumnHost } from "@/lib/exchange-column-host";
+import { setCodingPanelHost } from "@/lib/coding-panel-host";
 
 const apiMock = vi.fn();
 const dispatchMock = vi.fn();
@@ -36,8 +41,7 @@ vi.mock("../Composer", () => ({
   Composer: (props: { bot: Bot }) => { composerProps(props); return createElement("div", { "data-test-composer": props.bot.threadId }); },
 }));
 vi.mock("../dev-pods/DevPods", () => ({
-  DevPods: (props: { bot: Bot; forced?: boolean }) => { podsProps(props); return createElement("div", { "data-test-pods": props.bot.threadId }); },
-  DevPodsToggle: (props: { bot?: Bot }) => createElement("button", { type: "button", "data-test-pods-toggle": props.bot?.threadId ?? "" }),
+  DevPodsPanel: (props: { bot: Bot }) => { podsProps(props); return createElement("div", { "data-test-pods": props.bot.threadId }); },
 }));
 
 const { setLocale } = await import("@/lib/i18n");
@@ -70,6 +74,7 @@ const detail = (status: BotActivityItem["status"], extra: Partial<BotActivityDet
 let host: HTMLDivElement;
 let column: HTMLDivElement;
 let root: Root;
+let panel: HTMLDivElement;
 
 beforeEach(() => {
   setLocale("en");
@@ -80,12 +85,17 @@ beforeEach(() => {
   host.append(column);
   document.body.append(host);
   setExchangeColumnHost(column);
+  panel = document.createElement("div");
+  document.body.append(panel);
+  setCodingPanelHost("wren", panel);
   root = createRoot(host);
 });
 
 afterEach(() => {
   flushSync(() => root.unmount());
   setExchangeColumnHost(null);
+  setCodingPanelHost("wren", null);
+  panel.remove();
   host.remove();
 });
 
@@ -110,7 +120,7 @@ const lines = () => [...column.querySelectorAll<HTMLElement>("[data-coding-row]"
 const headOf = (row: HTMLElement) => `${row.querySelector("[data-tool-name]")?.textContent ?? ""}${row.querySelector("[data-tool-arg]")?.textContent ?? ""}`;
 
 describe("CodingChatSheet", () => {
-  it("opens over the chat column with a compact left header: back, bot, title, folder, branch and status", () => {
+  it("opens over the chat column with a compact left header: back, the bot pill, title, folder and branch", () => {
     const props = mountSheet("running", { item: item("running", { currentStep: "Checking types" }), detail: detail("running", { currentStep: "Checking types" }) });
     const sheet = column.querySelector<HTMLElement>("[data-testid=coding-chat]")!;
     const header = sheet.querySelector<HTMLElement>("[data-coding-header]")!;
@@ -118,12 +128,19 @@ describe("CodingChatSheet", () => {
     expect(header.className).not.toMatch(/items-center/);
     expect(header.querySelector("[data-coding-back]")).not.toBeNull();
     expect(header.querySelector("[data-coding-bot]")?.textContent).toBe("Wren");
+    // the same pill as the chat header (BotHeaderPill)
+    expect(header.querySelector("[data-coding-bot] [data-bot-header-pill]")?.className).toMatch(/rounded-full/);
     expect(header.querySelector("[data-coding-title]")?.textContent).toContain("Pour la colonne du board");
     expect(header.querySelector("[data-coding-title]")?.className).toMatch(/truncate/);
     expect(header.querySelector("[data-coding-folder]")?.textContent).toBe("dispatch-board");
     expect(header.querySelector("[data-coding-branch]")?.textContent).toBe("feat/column-order");
-    expect(header.querySelector("[data-coding-glyph]")?.textContent).toBe("○");
-    expect(header.querySelector("[data-coding-state]")?.textContent).toMatch(/Checking types\s*·\s*4m/);
+    // #2285: no status, duration or tokens in the header; they are in the panel
+    expect(header.querySelector("[data-coding-state]")).toBeNull();
+    expect(header.querySelector("[data-coding-elapsed]")).toBeNull();
+    expect(header.querySelector("[data-coding-tokens]")).toBeNull();
+    expect(panel.querySelector("[data-coding-glyph]")?.textContent).toBe("○");
+    expect(panel.querySelector("[data-coding-state]")?.textContent).toMatch(/Checking types/);
+    expect(panel.querySelector("[data-coding-elapsed]")?.textContent).toBe("4m");
     expect(header.querySelector("[data-coding-stop-header]")).not.toBeNull();
     // one status only: no "Working:" line, no branch repeated in the band
     expect(sheet.querySelector("[data-coding-working]")).toBeNull();
@@ -141,18 +158,21 @@ describe("CodingChatSheet", () => {
     expect(column.querySelector("[data-coding-title]")?.className).not.toMatch(/truncate/);
   });
 
-  it("shows a finished status glyph and phrase without Stop", () => {
+  it("shows a finished status glyph and phrase in the panel card, without Stop and without Finished in the header", () => {
     mountSheet("finished");
     const header = column.querySelector<HTMLElement>("[data-coding-header]")!;
-    expect(header.querySelector("[data-coding-glyph]")?.textContent).toBe("●");
-    expect(header.querySelector("[data-coding-state]")?.textContent).toMatch(/Finished\s*·\s*3m/);
+    expect(header.textContent).not.toContain("Finished");
+    expect(panel.querySelector("[data-coding-session-card] h2")?.textContent).toBe("This session");
+    expect(panel.querySelector("[data-coding-glyph]")?.textContent).toBe("●");
+    expect(panel.querySelector("[data-coding-state]")?.textContent).toMatch(/Finished/);
+    expect(panel.querySelector("[data-coding-elapsed]")?.textContent).toBe("3m");
     expect(header.querySelector("[data-coding-stop-header]")).toBeNull();
   });
 
-  it("humanizes a live command step in the compact header status", () => {
+  it("humanizes a live command step in the panel's session card", () => {
     mountSheet("running");
     const header = column.querySelector<HTMLElement>("[data-coding-header]")!;
-    expect(header.querySelector("[data-coding-state]")?.textContent).toMatch(/Running src\/board tests\s*·\s*4m/);
+    expect(panel.querySelector("[data-coding-state]")?.textContent).toMatch(/Running src\/board tests/);
     expect(header.textContent).not.toContain("cd dispatch-board");
   });
 
@@ -247,17 +267,34 @@ describe("CodingChatSheet", () => {
     expect(props.onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("draws the composer, the pods and the header tools it is given", () => {
+  it("draws the composer it is given, and the side content in the bot panel, not over the transcript", () => {
     mountSheet("finished", {
       composer: createElement("div", { "data-test-given-composer": "" }),
-      pods: createElement("div", { "data-test-given-pods": "" }),
-      headerTools: createElement("button", { type: "button", "data-test-given-tools": "" }),
+      side: createElement("div", { "data-test-given-pods": "" }),
     });
     expect(column.querySelector("[data-coding-composer] [data-test-given-composer]")).not.toBeNull();
     // the given composer replaces the fallback follow-up field
     expect(column.querySelector("[data-coding-followup]")).toBeNull();
-    expect(column.querySelector("[data-coding-pane] [data-test-given-pods]")).not.toBeNull();
-    expect(column.querySelector("[data-coding-tools] [data-test-given-tools]")).not.toBeNull();
+    expect(column.querySelector("[data-test-given-pods]")).toBeNull();
+    expect(panel.querySelector("[data-test-given-pods]")).not.toBeNull();
+    // the session card comes first, the pods after it
+    expect(panel.firstElementChild?.hasAttribute("data-coding-session-card")).toBe(true);
+    expect(column.querySelector("[data-coding-tools]")).toBeNull();
+  });
+
+  it("draws nothing in a panel when the bot panel is closed", () => {
+    setCodingPanelHost("wren", null);
+    mountSheet("finished", { side: createElement("div", { "data-test-given-pods": "" }) });
+    expect(column.querySelector("[data-coding-header]")).not.toBeNull();
+    expect(document.querySelector("[data-test-given-pods]")).toBeNull();
+    expect(document.querySelector("[data-coding-session-card]")).toBeNull();
+  });
+
+  it("counts the tokens in the panel card, never in the header", () => {
+    const counted = [...messages, { id: "m8", role: "bot", kind: "text", text: "Done.", at: NOW - 60_000, digest: { usage: { input: 9_000, output: 3_400 } } } as unknown as Message];
+    mountSheet("finished", { messages: counted });
+    expect(panel.querySelector("[data-coding-tokens]")?.textContent).toBe("12.4k");
+    expect(column.querySelector("[data-coding-header] [data-coding-tokens]")).toBeNull();
   });
 
   it("shows no server path and no id", () => {
@@ -270,7 +307,7 @@ describe("CodingChatSheet", () => {
 });
 
 describe("CodingChat", () => {
-  it("reads the task's thread, aims the bot's composer at it and opens the </> panel there", async () => {
+  it("reads the task's thread, aims the bot's composer at it and puts the dev pods in the bot panel", async () => {
     apiMock.mockImplementation(async (url: string) => {
       if (url.includes("/activity/item")) return { item: detail("running") };
       if (url.startsWith("/api/threads/th-1/messages")) return { messages, hasMore: false };
@@ -282,9 +319,9 @@ describe("CodingChat", () => {
     await vi.waitFor(() => expect(column.querySelector("[data-coding-row]")).not.toBeNull());
     expect(column.querySelector('[data-coding-composer] [data-test-composer="th-1"]')).not.toBeNull();
     expect(composerProps).toHaveBeenLastCalledWith(expect.objectContaining({ bot: expect.objectContaining({ id: "wren", threadId: "th-1", busy: true }) }));
-    expect(column.querySelector('[data-coding-pane] [data-test-pods="th-1"]')).not.toBeNull();
-    expect(podsProps).toHaveBeenLastCalledWith(expect.objectContaining({ forced: true }));
-    expect(column.querySelector('[data-coding-tools] [data-test-pods-toggle="th-1"]')).not.toBeNull();
+    expect(panel.querySelector('[data-test-pods="th-1"]')).not.toBeNull();
+    expect(column.querySelector("[data-test-pods]")).toBeNull();
+    expect(podsProps).toHaveBeenLastCalledWith(expect.objectContaining({ bot: expect.objectContaining({ id: "wren", threadId: "th-1" }) }));
   });
 
   it("Stop interrupts the task's turn", async () => {

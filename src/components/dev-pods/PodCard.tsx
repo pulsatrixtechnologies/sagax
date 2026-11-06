@@ -6,6 +6,7 @@ import { Component, useCallback, useEffect, useRef, useState, type ErrorInfo, ty
 import { ChevronDown, MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { PANEL_CARD, PANEL_LABEL } from "@/lib/grouped-card";
 import { SIDE_CARD, SIDE_CARD_HEADER, SIDE_CARD_ICON_BUTTON } from "@/lib/side-card";
 import { DEV_MENU_ITEM, DevMenu } from "./DevMenu";
 import type { DevPodContext, DevPodDefinition } from "./registry";
@@ -19,8 +20,9 @@ export interface PodMenuActions {
   onMoveUp: () => void;
   onMoveDown: () => void;
   onHide: () => void;
-  /** Hide every pod in this conversation (the header button brings them back). */
-  onDismissThread: () => void;
+  /** Hide every pod in this conversation (the header button brings them
+   * back). Absent in the bot panel (#2285), where nothing brings them back. */
+  onDismissThread?: () => void;
   /** Present while some pods are hidden. */
   onShowAll?: () => void;
 }
@@ -33,8 +35,12 @@ function PodMenu({ name, open, anchorRef, onClose, actions }: { name: string; op
       <button type="button" role="menuitem" className={DEV_MENU_ITEM} disabled={!actions.canMoveDown} onClick={run(actions.onMoveDown)}>{t("devPods.menu.moveDown")}</button>
       <button type="button" role="menuitem" data-pod-hide="" className={DEV_MENU_ITEM} onClick={run(actions.onHide)}>{t("devPods.menu.hide")}</button>
       {actions.onShowAll && <button type="button" role="menuitem" className={DEV_MENU_ITEM} onClick={run(actions.onShowAll)}>{t("devPods.menu.showAll")}</button>}
-      <div aria-hidden="true" className="mx-2 my-0.5 h-px bg-hairline-weak" />
-      <button type="button" role="menuitem" data-pods-dismiss="" className={DEV_MENU_ITEM} onClick={run(actions.onDismissThread)}>{t("devPods.dismiss")}</button>
+      {actions.onDismissThread && (
+        <>
+          <div aria-hidden="true" className="mx-2 my-0.5 h-px bg-hairline-weak" />
+          <button type="button" role="menuitem" data-pods-dismiss="" className={DEV_MENU_ITEM} onClick={run(actions.onDismissThread)}>{t("devPods.dismiss")}</button>
+        </>
+      )}
     </DevMenu>
   );
 }
@@ -49,6 +55,7 @@ export function PodFrame({
   onToggleCollapsed,
   summary,
   actions,
+  variant = "card",
   children,
 }: {
   id: string;
@@ -59,6 +66,10 @@ export function PodFrame({
   onToggleCollapsed: () => void;
   summary?: ReactNode;
   actions: PodMenuActions;
+  /** "panel" (#2285): a section of the bot panel, its grey label above
+   * (PANEL_LABEL, a disclosure when collapsible) and its body in a
+   * PANEL_CARD, like Upcoming and Coding beside it. */
+  variant?: "card" | "panel";
   children?: ReactNode;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -66,6 +77,60 @@ export function PodFrame({
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   const open = !collapsible || !collapsed;
   const bodyId = `dev-pod-${id}-body`;
+  if (variant === "panel") {
+    const label = (
+      <>
+        <span className="truncate">{title}</span>
+        {summary}
+      </>
+    );
+    return (
+      <section
+        data-dev-pod={id}
+        data-dev-pod-variant="panel"
+        data-collapsed={open ? undefined : ""}
+        aria-label={title}
+        className="relative flex flex-col gap-2"
+        onContextMenu={(event) => {
+          event.preventDefault();
+          setMenuOpen(true);
+        }}
+      >
+        <h2 className="group/podhead flex min-w-0 items-center gap-1">
+          {collapsible ? (
+            <button
+              type="button"
+              onClick={onToggleCollapsed}
+              aria-expanded={open}
+              aria-controls={bodyId}
+              aria-label={open ? t("devPods.collapse", { name: title }) : t("devPods.expand", { name: title })}
+              className={cn("flex min-w-0 flex-1 items-center gap-1 rounded-md text-left hover:text-ink-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60", PANEL_LABEL)}
+            >
+              {label}
+              <ChevronDown size={13} aria-hidden="true" className={cn("dev-pod-chevron shrink-0", !open && "-rotate-90")} />
+            </button>
+          ) : (
+            <span className={cn("flex min-w-0 flex-1 items-center gap-1", PANEL_LABEL)}>{label}</span>
+          )}
+          <button
+            ref={menuButton}
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            data-pod-menu=""
+            aria-label={t("devPods.menu.aria", { name: title })}
+            title={t("devPods.menu.aria", { name: title })}
+            onClick={() => setMenuOpen((value) => !value)}
+            className={cn(HEADER_ICON, "opacity-0 touch:opacity-100 focus-visible:opacity-100 group-hover/podhead:opacity-100", menuOpen && "opacity-100")}
+          >
+            <MoreHorizontal size={14} />
+          </button>
+        </h2>
+        <PodMenu name={title} open={menuOpen} anchorRef={menuButton} onClose={closeMenu} actions={actions} />
+        {open && children ? <div id={bodyId} className={cn(PANEL_CARD, "px-3 py-2 text-[12.5px] leading-[18px]")}>{children}</div> : null}
+      </section>
+    );
+  }
   return (
     <section
       data-dev-pod={id}
@@ -125,6 +190,7 @@ interface PodChrome {
   actions: PodMenuActions;
   /** Whether the pod has something on screen (not empty). */
   onPresence: (id: string, present: boolean) => void;
+  variant?: "card" | "panel";
 }
 
 /** Runs the pod's data hook and draws its state. Inside the boundary, so a
@@ -145,6 +211,7 @@ function PodHost({ definition, ctx, chrome }: { definition: DevPodDefinition; ct
     collapsed: chrome.collapsed,
     onToggleCollapsed: chrome.onToggleCollapsed,
     actions: chrome.actions,
+    variant: chrome.variant,
   };
   if (data.status === "loading") {
     return (
@@ -215,6 +282,7 @@ class PodBoundary extends Component<{ definition: DevPodDefinition; chrome: PodC
           collapsed={false}
           onToggleCollapsed={chrome.onToggleCollapsed}
           actions={chrome.actions}
+          variant={chrome.variant}
         >
           <PodError onRetry={() => this.setState({ failed: false })} />
         </PodFrame>

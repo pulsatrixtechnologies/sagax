@@ -348,3 +348,50 @@ export function DevPodsToggle({ bot }: { bot: Pick<Bot, "id" | "threadId"> }) {
     </button>
   );
 }
+
+/** #2285 (JC 2026-11-06): the pods as sections of the bot panel on the
+ * right, the coding window's side content (CodingChat portals it there), in
+ * place of the </> popover over the transcript. Same pods, same order, same
+ * collapse and menu; each one a grey label above a panel card. Nothing while
+ * the Experimental switch is off. */
+export function DevPodsPanel({ bot, messages, computerStart, dispatch }: Omit<DevPodsProps, "composerHeight" | "forced" | "headerHeight">) {
+  const prefs = useDevPodPrefs();
+  const threadKey = threadKeyOf(bot);
+  const task = bot.tasks?.find((entry) => entry.threadId === bot.threadId);
+  const version = useSyncExternalStore(subscribeDevPods, devPodsVersion, devPodsVersion);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const definitions = useMemo(() => devPodDefinitions(), [version]);
+  const arranged = useMemo(() => arrangePods(definitions, prefs.order, prefs.hidden), [definitions, prefs.order, prefs.hidden]);
+  const ids = useMemo(() => arranged.map((definition) => definition.id), [arranged]);
+  const ctx: DevPodContext = useMemo(
+    () => ({ bot, task, messages, threadKey, computerStart, dispatch }),
+    [bot, task, messages, threadKey, computerStart, dispatch],
+  );
+  const onPresence = useCallback(() => {}, []);
+  if (!prefs.enabled) return null;
+  return (
+    <>
+      {arranged.map((definition, index) => (
+        <DevPod
+          key={`${threadKey}:${definition.id}`}
+          definition={definition}
+          ctx={ctx}
+          chrome={{
+            variant: "panel",
+            collapsed: prefs.collapsed[definition.id] === true,
+            onToggleCollapsed: () => setPodCollapsed(definition.id, prefs.collapsed[definition.id] !== true),
+            onPresence,
+            actions: {
+              canMoveUp: index > 0,
+              canMoveDown: index < arranged.length - 1,
+              onMoveUp: () => movePod(ids, definition.id, -1),
+              onMoveDown: () => movePod(ids, definition.id, 1),
+              onHide: () => setPodHidden(definition.id, true),
+              onShowAll: prefs.hidden.length ? showAllPods : undefined,
+            },
+          }}
+        />
+      ))}
+    </>
+  );
+}

@@ -13808,5 +13808,9 @@
   "settings.updates.links.releaseNotes": "Release notes",
   "settings.updates.links.about": "About Sagax",
   "voice.phoneCalls.orgReadonly": "Set by your organization.",
-  "voice.phoneCalls.onWithCallback": "On · callback {number}"
+  "voice.phoneCalls.onWithCallback": "On · callback {number}",
+  "codingChat.panel.title": "This session",
+  "codingChat.panel.status": "Status",
+  "codingChat.panel.duration": "Duration",
+  "codingChat.panel.tokens": "Tokens"
 }

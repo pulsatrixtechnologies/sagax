@@ -38,6 +38,7 @@ import { ComputerPanel } from "./ComputerPanel";
 import { BotProfileAvatarCard } from "./BotProfileAvatarCard";
 import { useCaptionChrome, useMacInsetChrome } from "./DesktopCapabilities";
 import { t } from "@/lib/i18n";
+import { setCodingPanelHost } from "@/lib/coding-panel-host";
 import { canEditBotField } from "@/lib/bot-capabilities";
 import { viewerBotsReadOnly } from "@/lib/viewer";
 import { useBotSectionAvailability, useBotSectionContent } from "./bot-settings/useBotSectionContent";
@@ -108,6 +109,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   const dockedPanel = useDockedPanelWidth(BOT_PANEL_BOUNDS);
   // Compact head: once the in-flow tabs reach the top bar, they move into it.
   const bodyRef = useRef<HTMLDivElement | null>(null);
+  const codingHost = useCallback((element: HTMLDivElement | null) => setCodingPanelHost(bot.id, element), [bot.id]);
   const tabsRef = useRef<HTMLDivElement | null>(null);
   const [compact, setCompact] = useState(false);
   const onBodyScroll = () => {
@@ -356,6 +358,9 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
 
               {tab === "activity" && (
                 <div className="flex flex-col gap-5 px-4 pb-6">
+                  {/* #2285: an open coding window puts its session and its
+                      dev pods here, as sections of this panel. */}
+                  <div ref={codingHost} data-coding-panel-host="" className="flex flex-col gap-5 empty:hidden" />
                   <section data-bot-settings-section="routines" className="flex flex-col gap-2">
                     <RoutinesSection bot={bot} routines={derived.botRoutines} runs={runs} grouped upcoming createRequest={meetingRequest} />
                   </section>

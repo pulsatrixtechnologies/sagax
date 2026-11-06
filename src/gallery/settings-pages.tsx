@@ -53,7 +53,15 @@ const API: Record<string, unknown> = {
     anthropic: { configured: true },
     ...(params.get("org") ? { personalSettings: true, viewer: { role: "admin", operator: false, principalId: "p-1", email: "alex@example.com", name: "Alex Example", canCreateBots: true }, allowedEngines: ["claude", "codex", "grok", "compat-azure"], disabledModels: ["compat-azure/gpt-4o"] } : {}),
     ...(params.get("providers") ? { myDisabledModels: ["compat-azure/o4-mini"] } : {}),
-    ...(params.get("providers") ? { openai: { configured: true }, openaiCompatServers: [{ instanceId: "compat-azure", name: "Azure Foundry", url: "https://example-resource.openai.azure.com/openai/v1", configured: true }] } : {}),
+    ...(params.get("providers") ? {
+      openai: { configured: true },
+      openaiCompatServers: [
+        { instanceId: "compat-azure", name: "Azure Foundry", url: "https://example-resource.openai.azure.com/openai/v1", configured: true },
+        { instanceId: "personal-lab", name: "Home lab", url: "http://127.0.0.1:8002/v1", configured: true },
+      ],
+      // Server default recovery so Models shows a real Backup column (#2080).
+      automaticRecovery: { enabled: true, backup: { instanceId: "grok", model: "grok-4" } },
+    } : {}),
     features: {},
     onboarding: { completedAt: NOW - 30 * DAY, launchMode: "solo" },
     newBotDefaults: { profile: { modelSelection: { instanceId: "claude", model: "sonnet", effort: "medium" }, approvalMode: "ask" } },
@@ -61,13 +69,15 @@ const API: Record<string, unknown> = {
   "/api/instances": { instances: [
     { instanceId: "claude", displayName: "Claude", driverKind: "claudeAgent", cliDefault: "claude", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { default: "sonnet", options: [{ id: "opus", label: "Claude Opus 4.1" }, { id: "sonnet", label: "Claude Sonnet 4.5" }, { id: "haiku", label: "Claude Haiku 4.5" }] }, capabilities: { effortLevels: ["low", "medium", "high"] } },
     { instanceId: "grok", displayName: "Grok", driverKind: "grokAgent", cliDefault: "grok", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { default: "grok-4", options: [{ id: "grok-4", label: "Grok 4" }] }, capabilities: { effortLevels: ["low", "medium", "high"] } },
-    // ?providers=1 (2026-10-30): a fuller set for Providers and Models
+    // ?providers=1 (#2080): several accounts per provider (emails stay inside
+    // the Claude group), a personal openai-compat server (Skye), Azure Foundry.
     ...(params.get("providers") ? [
+      { instanceId: "claude-work", displayName: "alex_bots@example.com", driverKind: "claudeAgent", cliDefault: "claude", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { default: "sonnet", options: [{ id: "opus", label: "Claude Opus 4.1" }, { id: "sonnet", label: "Claude Sonnet 4.5" }, { id: "haiku", label: "Claude Haiku 4.5" }] }, capabilities: { effortLevels: ["low", "medium", "high"] } },
       { instanceId: "codex", displayName: "Codex", driverKind: "codex", cliDefault: "codex", access: "subscription", snapshot: { state: "available", authenticated: false }, models: { default: "", options: [] } },
-      { instanceId: "grok", displayName: "Grok", driverKind: "grokAgent", cliDefault: "grok", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { default: "", options: [] } },
       { instanceId: "openai-api", displayName: "OpenAI (API key)", driverKind: "codex", access: "api", snapshot: { state: "available", authenticated: true }, models: { default: "", options: [] } },
       { instanceId: "mistral", displayName: "Mistral", driverKind: "mistral", access: "api", snapshot: { state: "available", authenticated: false }, models: { default: "", options: [] } },
       { instanceId: "compat-azure", displayName: "Azure Foundry", driverKind: "openai-compat", access: "api", capabilities: { withholdsHostTools: true }, snapshot: { state: "available", authenticated: true }, models: { default: "gpt-4.1", options: [{ id: "gpt-4.1", label: "gpt-4.1", custom: true }, { id: "gpt-4.1-mini", label: "gpt-4.1-mini", custom: true }, { id: "o4-mini", label: "o4-mini", custom: true }, { id: "gpt-4o", label: "gpt-4o", custom: true }] } },
+      { instanceId: "personal-lab", displayName: "Home lab", driverKind: "openai-compat", access: "api", snapshot: { state: "available", authenticated: true }, models: { default: "qwen-3.8-27b", options: [{ id: "qwen-3.8-27b", label: "Qwen 3.8 27B", custom: true }] }, capabilities: { effortLevels: [] } },
     ] : []),
   ] },
   "/api/me/cloud-agent-providers": { providers: [] },
@@ -89,8 +99,12 @@ const API: Record<string, unknown> = {
   "/api/bots": { bots: [
     { id: "bot-0", name: "Scout", section: "Clients", ownerUserId: "p-1", instanceId: "claude", model: "sonnet", threadId: "thread-0", modelSelection: { instanceId: "claude", model: "sonnet", effort: "high" }, fallback: [{ instanceId: "grok", model: "grok-4" }], turnPayerDefault: "owner", turnPayer: "speaker", threads: [], messages: [] },
     { id: "bot-1", name: "Atlas", section: "Clients", ownerUserId: "p-1", instanceId: "grok", model: "grok-4", threadId: "thread-1", modelSelection: { instanceId: "grok", model: "grok-4", ...(params.has("auto") ? { auto: true } : {}) }, threads: [], messages: [] },
-    { id: "bot-2", name: "Juniper", ownerUserId: "p-1", instanceId: "claude", model: "sonnet", threadId: "thread-2", modelSelection: { instanceId: "claude", model: "haiku" }, threads: [], messages: [] },
-  ], groups: [], sections: ["Clients"] },
+    { id: "bot-2", name: "Juniper", ownerUserId: "p-1", instanceId: "claude", model: "sonnet", threadId: "thread-2", modelSelection: { instanceId: params.get("providers") ? "claude-work" : "claude", model: "haiku" }, threads: [], messages: [] },
+    ...(params.get("providers") ? [
+      { id: "bot-3", name: "Skye", section: "Lab", ownerUserId: "p-1", instanceId: "personal-lab", model: "qwen-3.8-27b", threadId: "thread-3", modelSelection: { instanceId: "personal-lab", model: "qwen-3.8-27b" }, threads: [], messages: [] },
+      { id: "bot-4", name: "Ember", section: "Lab", ownerUserId: "p-1", instanceId: "claude-work", model: "opus", threadId: "thread-4", modelSelection: { instanceId: "claude-work", model: "opus", effort: "high" }, threads: [], messages: [] },
+    ] : []),
+  ], groups: [], sections: params.get("providers") ? ["Clients", "Lab"] : ["Clients"] },
   ...Object.fromEntries(BOTS.map((_, index) => [`/api/bots/bot-${index}/auto-model`, {
     auto: params.has("auto"), pick: { instanceId: "claude", model: "opus", engineLabel: "Claude", modelLabel: "Claude Opus 4.1", role: "orchestration", tier: "top", reason: "strongest-own", via: params.has("org") ? "org-key" : "subscription", at: NOW },
     chain: [{ instanceId: "claude", engineLabel: "Claude", model: "opus", modelLabel: "Claude Opus 4.1" }, { instanceId: "compat-azure", engineLabel: "Azure Foundry", model: "gpt-4.1", modelLabel: "gpt-4.1" }],

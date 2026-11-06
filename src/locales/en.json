@@ -12733,7 +12733,7 @@
   "settings.section.providers": "Providers",
   "engineConnect.paysWith.serverKey": "Pays with: your key on this server",
   "providers.title": "Providers",
-  "providers.help": "A provider is an account, a key or a server. Each row says who pays, where its key lives and what it brings. Bots, Auto and voice only choose among them.",
+  "providers.help": "A provider is an account, a key or a server. Each row says who pays and what it brings. Bots, Auto and voice only choose among them.",
   "providers.payer.me": "Me",
   "providers.payer.org": "The organization",
   "providers.payer.computer": "This computer",

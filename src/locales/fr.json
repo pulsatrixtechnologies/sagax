@@ -12733,7 +12733,7 @@
   "settings.section.providers": "Fournisseurs",
   "engineConnect.paysWith.serverKey": "Payé par : votre clé sur ce serveur",
   "providers.title": "Fournisseurs",
-  "providers.help": "Un fournisseur est un compte, une clé ou un serveur. Chaque ligne dit qui paie, où vit la clé et ce qu'il apporte. Les bots, Auto et la voix ne font que choisir parmi eux.",
+  "providers.help": "Un fournisseur est un compte, une clé ou un serveur. Chaque ligne dit qui paie et ce qu'il apporte. Les bots, Auto et la voix ne font que choisir parmi eux.",
   "providers.payer.me": "Moi",
   "providers.payer.org": "L'organisation",
   "providers.payer.computer": "Cet ordinateur",

@@ -142,6 +142,13 @@ export interface InternalSessionsDeps {
     previous?: { preview: string; source: string };
     ownerRule?: { tool: string; scope: Record<string, string>; description: string };
   }): { requestId: string; summary: string };
+  /** Apply a skill the bot staged for itself (skill_manage and automatic review). */
+  applyOwnStagedSkill(
+    from: InternalSessionsBot,
+    threadId: string,
+    staged: Exclude<ReturnType<typeof stageSkillWrite>, { error: string }>,
+    direct: DirectApply,
+  ): ReturnType<typeof applySkillWriteWithReceipt>;
   appendDecision(row: Record<string, unknown>): void;
 }
 
@@ -597,15 +604,21 @@ export function createInternalSessionsRoutes(deps: InternalSessionsDeps): Intern
       // instructions the bot reads: new content always shows its card)
       const skillRule = skillRuleCandidate(staged);
       const skillKept = direct ? undefined : deps.keptCardRule(from, fromThreadId, skillRule, ["always-grant"]);
-      if (direct || skillKept) {
-        // What an update replaces, so Undo can put it back.
+      if (direct) {
+        const applied = deps.applyOwnStagedSkill(from, fromThreadId, staged, direct);
+        if ("error" in applied) return json(res, 422, { state: "failed", error: applied.error });
+        return json(res, 201, { state: "applied", stagedId: staged.id, name: staged.name, action: staged.action,
+          gist: staged.gist, warnings: staged.warnings, ...applied, summary: `Skill ${staged.name} ${staged.action === "create" ? "enabled" : "updated"}.` });
+      }
+      if (skillKept) {
+        // Always allow on this skill: apply with a receipt, tagged as owner-rule.
         const previousSkillMd = staged.action === "update" ? readSkillFile(from.id, staged.name) : null;
         const previousSource = listSkills(from.id).find((skill) => skill.name === staged.name)?.source;
         const previous = previousSkillMd !== null && previousSource ? { preview: previousSkillMd, source: previousSource } : undefined;
         const applied = applySkillWriteWithReceipt(from.id, staged, () => {
           const receipt = deps.appendSkillRequestCard({ botId: from.id, threadId: fromThreadId, staged, applied: true, previous });
-          deps.appendDecision( { threadId: fromThreadId, requestId: receipt.requestId, botId: from.id, botName: from.name,
-            tool: "stage_skill", summary: receipt.summary, decision: "auto-approved", source: direct || "owner-rule", ...(skillKept ? { rule: skillKept.id } : {}) });
+          deps.appendDecision({ threadId: fromThreadId, requestId: receipt.requestId, botId: from.id, botName: from.name,
+            tool: "stage_skill", summary: receipt.summary, decision: "auto-approved", source: "owner-rule", rule: skillKept.id });
         });
         if ("error" in applied) {
           rejectStagedSkillWrite(from.id, staged.id);

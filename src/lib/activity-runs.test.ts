@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { describeRun, groupActivityRuns, groupTranscript, isHiddenStatusActivity, isRecoveryActivity, isToolStep, statusActivity } from "./activity-runs";
+import { describeRun, groupActivityRuns, groupTranscript, isHiddenStatusActivity, isRecoveryActivity, isToolStep, roomTurnFolds, statusActivity } from "./activity-runs";
 import type { Message } from "@/state/store";
 import { SANDBOX_WAKE_NOTICE, SANDBOX_WAKE_TIMEOUT_NOTICE } from "../../shared/sandbox-wake";
 import { workspaceLineName } from "../../shared/workspace-line";
@@ -310,51 +310,47 @@ describe("groupTranscript", () => {
     turnTerminal,
   });
 
-  it("folds settled progress messages and leaves the terminal answer visible", () => {
-    const user: Message = { id: "u1", at: 1_000, role: "user", kind: "text", text: "check todoist" };
-    const first = assistant("I'm checking connected apps.", "turn-1", false, 2_000);
-    const second = assistant("I'm reading your tasks.", "turn-1", false, 3_000);
-    const final = assistant("You have three tasks.", "turn-1", true, 5_000);
+  const step = (name: string, turnId: string, at = ++seq * 1_000, ok = true): Message =>
+    ({ id: `t${++seq}`, at, role: "bot", kind: "activity", tool: { name, ok }, turnId });
 
-    const items = groupTranscript([user, first, second, final]);
-    expect(items.map((item) => item.kind)).toEqual(["message", "run", "message"]);
-    expect(items[1]).toMatchObject({
-      kind: "run",
-      id: `run:${first.id}`,
-      elapsedMs: 4_000,
-      messages: [first, second],
-    });
-    expect(items[2].kind === "message" && items[2].message).toBe(final);
+  it("keeps the bot's progress lines above the answer and folds only the settled turn's tool steps", () => {
+    const user: Message = { id: "u1", at: 1_000, role: "user", kind: "text", text: "compare note-takers" };
+    const ack = assistant("I'll check current pricing since this changes often.", "turn-1", false, 2_000);
+    const search = step("WebSearch", "turn-1", 2_500);
+    const read = step("WebFetch", "turn-1", 3_000);
+    const helper = assistant("I'll spin up a research specialist for the details.", "turn-1", false, 3_500);
+    const fetch = step("WebFetch", "turn-1", 4_000);
+    const final = assistant("Here are the three best.", "turn-1", true, 30_000);
+
+    const items = groupTranscript([user, ack, search, read, helper, fetch, final]);
+    expect(items.map((item) => item.kind === "message" ? item.message.id : item.kind)).toEqual([user.id, ack.id, "run", helper.id, final.id]);
+    expect(items[2]).toMatchObject({ kind: "run", id: `run:${search.id}`, elapsedMs: 29_000, messages: [search, read, fetch] });
   });
 
-  it("never shows a short turn as two rows: narration and its tools are one group", () => {
-    // Owner's capture: "Worked for 15s" then "Used 2 tools" under it
-    const user: Message = { id: "u3", at: 1_000, role: "user", kind: "text", text: "check" };
-    const said = assistant("Let me check.", "turn-3", false, 2_000);
-    const first = { ...tool("Read"), at: 3_000 };
-    const second = { ...tool("Bash"), at: 4_000 };
-    const final = assistant("Done.", "turn-3", true, 16_000);
-    const items = groupTranscript([user, said, first, second, final]);
+  it("shows just the answer for a turn with nothing to say: its steps fold, no line of it is hidden", () => {
+    const user: Message = { id: "u2", at: 1_000, role: "user", kind: "text", text: "what time is it in Tokyo?" };
+    const lookup = step("Bash", "turn-2", 1_500);
+    const final = assistant("It's 9:30 PM in Tokyo.", "turn-2", true, 5_000);
+    const items = groupTranscript([user, lookup, final]);
     expect(items.map((item) => item.kind)).toEqual(["message", "run", "message"]);
-    expect(items[1]).toMatchObject({ elapsedMs: 15_000, messages: [said, first, second] });
-    // tools first, narration after: still one group
-    const late = assistant("Reading the result.", "turn-4", false, 5_000);
-    const steps = [{ ...tool("Read"), at: 2_000 }, { ...tool("Bash", false), at: 3_000 }];
-    const end = assistant("Done.", "turn-4", true, 9_000);
-    expect(groupTranscript([{ ...user, id: "u4" }, ...steps, late, end]).map((item) => item.kind)).toEqual(["message", "run", "message"]);
+    expect(items.flatMap((item) => item.kind === "message" ? [item.message.text] : [])).toEqual([user.text, final.text]);
+    expect(groupTranscript([user, final]).map((item) => item.kind)).toEqual(["message", "message"]);
   });
 
-  it("folds a settled turn's narration and its steps into one group, in order", () => {
-    const user: Message = { id: "u2", at: 1_000, role: "user", kind: "text", text: "check ticket 296221" };
-    const said = assistant("I'm reading the ticket.", "turn-2", false, 2_000);
-    const failed = { ...tool("mcp", false), at: 3_000 };
-    const read = { ...tool("mcp"), at: 4_000 };
-    const again = assistant("Now the notes.", "turn-2", false, 5_000);
-    const notes = { ...tool("mcp"), at: 6_000 };
-    const final = assistant("Here is the summary.", "turn-2", true, 174_000);
-    const items = groupTranscript([user, said, failed, read, again, notes, final]);
-    expect(items.map((item) => item.kind)).toEqual(["message", "run", "message"]);
-    expect(items[1]).toMatchObject({ kind: "run", elapsedMs: 173_000, messages: [said, failed, read, again, notes] });
+  it("leaves a failed step and other rows that are not work where they were", () => {
+    const failed = step("Bash", "turn-3", 2_000, false);
+    const ok = step("Read", "turn-3", 3_000);
+    const final = assistant("Done.", "turn-3", true, 5_000);
+    const items = groupTranscript([ok, failed, final]);
+    expect(items.map((item) => item.kind === "message" ? item.message.id : item.kind)).toEqual(["run", failed.id, final.id]);
+  });
+
+  it("folds a room member's working notes, so a room still reads as answers", () => {
+    const first = assistant("I'm checking connected apps.", "turn-r", false, 2_000);
+    const final = assistant("You have three tasks.", "turn-r", true, 5_000);
+    const { byTerminalId, hiddenIds } = roomTurnFolds([first, final]);
+    expect([...hiddenIds]).toEqual([first.id]);
+    expect(byTerminalId.get(final.id)).toMatchObject({ messages: [first] });
   });
 
   it("keeps every message visible until the turn settles", () => {
@@ -368,13 +364,13 @@ describe("groupTranscript", () => {
     expect(groupTranscript([only])).toEqual([{ kind: "message", message: only }]);
   });
 
-  it("does not fold narration from a different turn", () => {
-    const older = assistant("Previous answer.", "turn-old");
-    const progress = assistant("Checking.", "turn-new");
+  it("does not fold steps from a different turn", () => {
+    const older = step("Read", "turn-old");
+    const progress = step("Edit", "turn-new");
     const final = assistant("Done.", "turn-new", true);
-    expect(groupTranscript([older, progress, final]).map((item) => item.kind)).toEqual([
+    expect(groupTranscript([older, progress, final]).map((item) => item.kind === "run" ? item.messages.map((m) => m.id) : item.kind)).toEqual([
       "message",
-      "run",
+      [progress.id],
       "message",
     ]);
   });

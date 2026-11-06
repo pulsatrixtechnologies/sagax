@@ -1,5 +1,6 @@
 // @ts-nocheck
 // #1388 wave 4 step 3: runGroupMemberTurn phase. Never imports server/index.ts.
+import { ATTACHMENTS_DIR } from "../attachments/attachments.ts";
 import { hideServerPathsInSections } from "../server-path-prompt.ts";
 import { onDemandPromptParts, onDemandPromptText, promptReferencesAvailable } from "../context/prompt-references.ts";
 import type { GroupMemberTurnHost } from "./group-member-turn-types.ts";
@@ -146,7 +147,10 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     markCancelledProviderHandshake,
     markWorkspaceUse,
     mcpCallTimeoutMinutes,
+    messageFileRootsForThread,
     mcpServersAsPerson,
+    prepareMcpServers,
+    mcpServersOff,
     memoryPromptFor,
     mentionedBots,
     messagesIntegration,
@@ -419,6 +423,7 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
   let roomGithubWithheld: string[] = [];
   if (instance.adapter.capabilities.customMcp === true) {
     await refreshMcpOAuth(bot);
+    await prepareMcpServers(bot);
     const mounted = mcpServersAsPerson(bot, orgSpeakerPrincipal(bot, roomAccessSpeaker), threadId);
     attachCustomMcp(integrations, mounted.servers, cfg);
     roomGithubWithheld = mounted.githubWithheld;
@@ -921,7 +926,7 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     { id: "files", label: "File locations", text: workspace ? workspaceLocationsPrompt(bot.id, cwd, readyBot.cwd, { attachFile: Boolean(integrations.agents) && !HOSTED_WORKSPACE, ...(roomStable ? { cwdElsewhere: true } : {}), serverFiles: roomServerFiles, environmentFolder: roomEnvironmentFolder }) : "" },
     { id: "files-cwd", label: "Current working folder", text: roomStable && workspace && roomServerFiles ? workspaceCwdPrompt(cwd) : "" },
     { id: "shell", label: "Long-running commands", text: workspace ? longCommandsPrompt(roomComputerPromptKind) : "" },
-    { id: "mcp", label: "MCP servers", text: customMcpPrompt(Object.keys(integrations.custom ?? {})) + githubWithheldPrompt(roomGithubWithheld) },
+    { id: "mcp", label: "MCP servers", text: customMcpPrompt(Object.keys(integrations.custom ?? {}), mcpServersOff(bot)) + githubWithheldPrompt(roomGithubWithheld) },
     { id: "perspicax", label: "Perspicax", text: roomPerspicaxPrompt },
     { id: "claude-ai", label: "Claude connectors", text: engineConnectorsPromptFor(readyBot, instance, roomSpeakerId ? { origin: "person", principalId: roomSpeakerId, groupId } : roomRoutineSpeaker(threadId) ?? { origin: "operator" }, { level: roomPromptLevel }) },
     { id: "approval-level", label: "Approval level", text: approvalLevelPrompt(roomPromptLevel) },
@@ -1129,6 +1134,10 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
 const sendRoomTurn = async (roomTurnAccess: TurnAccess | undefined) => {
       const roomCommand = await roomCommandFor(roomTurnAccess);
       const engineCommand = roomCommand.kind === "engine" ? roomCommand : null;
+      const resultRoots = worksInWorkspace || roomGuestConfined || cloudGuestOpened(threadId)
+        ? undefined
+        : messageFileRootsForThread(readyBot.id, threadId);
+      const toolResultFolder = Array.isArray(resultRoots) ? resultRoots.find((root: string) => root !== ATTACHMENTS_DIR) : undefined;
       return instance.adapter.sendTurn({
         threadId,
         botId: readyBot.id,
@@ -1148,6 +1157,7 @@ const sendRoomTurn = async (roomTurnAccess: TurnAccess | undefined) => {
         systemVolatile: roomSystem.volatile,
         systemVolatileSections: roomSystem.volatileSections,
         cwd,
+        ...(toolResultFolder ? { toolResultFolder } : {}),
         integrations,
         ...(withholdHostToolsFor(instance) ? { withholdHostTools: true } : {}),
         ...turnCommandEnvironment(instance, readyBot.id, threadId),

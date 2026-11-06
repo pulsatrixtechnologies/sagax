@@ -1540,8 +1540,6 @@
   "botPanel.skills.source": "Quelle: {source}",
   "botPanel.skills.proposalOne": "{count} Vorschlag wartet im Chat auf eine Entscheidung.",
   "botPanel.skills.proposalMany": "{count} Vorschläge warten im Chat auf eine Entscheidung.",
-  "botPanel.skills.importedOne": "{count} Skill importiert. Prüfe ihn und schalte ihn unten ein.",
-  "botPanel.skills.importedMany": "{count} Skills importiert. Prüfe sie und schalte sie unten ein.",
   "botPanel.skills.loadError": "Gelernte Skills konnten nicht geladen werden.",
   "botPanel.skills.assignError": "Dieser Skill konnte nicht zugewiesen werden.",
   "botPanel.skills.unavailable": "Der Inhalt des Skills ist nicht verfügbar. Entferne ihn und importiere oder lerne ihn erneut.",

@@ -1524,8 +1524,6 @@
   "botPanel.skills.source": "ソース: {source}",
   "botPanel.skills.proposalOne": "{count} 件の提案がチャットで判断を待っています。",
   "botPanel.skills.proposalMany": "{count} 件の提案がチャットで判断を待っています。",
-  "botPanel.skills.importedOne": "{count} 件のスキルをインポートしました。下で確認して有効にしてください。",
-  "botPanel.skills.importedMany": "{count} 件のスキルをインポートしました。下で確認して有効にしてください。",
   "botPanel.skills.loadError": "学習したスキルを読み込めませんでした。",
   "botPanel.skills.assignError": "そのスキルを割り当てできませんでした。",
   "botPanel.skills.unavailable": "スキルの内容を取得できません。削除してから、再度インポートするか学習させてください。",

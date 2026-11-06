@@ -2303,8 +2303,6 @@
   "botPanel.skills.source": "来源：{source}",
   "botPanel.skills.proposalOne": "{count} 条提议正在聊天中等待决定。",
   "botPanel.skills.proposalMany": "{count} 条提议正在聊天中等待决定。",
-  "botPanel.skills.importedOne": "已导入 {count} 个技能。请在下方复查并启用。",
-  "botPanel.skills.importedMany": "已导入 {count} 个技能。请在下方复查并启用。",
   "botPanel.skills.loadError": "无法加载已学会的技能。",
   "botPanel.skills.assignError": "无法分配该技能。",
   "botPanel.skills.unavailable": "技能内容不可用。请移除后重新导入或再学习一次。",

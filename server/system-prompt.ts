@@ -237,10 +237,11 @@ export function cloudHomePrompt(sharedComputerTools: boolean): string {
 
 /** Names the user-added MCP servers a turn actually mounted, so the bot
  * reaches for them instead of saying it has no such tool. Empty when none. */
-export function customMcpPrompt(names: string[]): string {
-  if (names.length === 0) return "";
+export function customMcpPrompt(names: string[], off: ReadonlyArray<{ name: string; error: string }> = []): string {
   const list = names.map((name) => `"${name}"`).join(", ");
-  return ` The user also added ${names.length === 1 ? "an MCP server" : "MCP servers"} for you: ${list}. Use their available tools under the engine's normal approval rules.`;
+  const mounted = names.length === 0 ? "" : ` The user also added ${names.length === 1 ? "an MCP server" : "MCP servers"} for you: ${list}. Use their available tools under the engine's normal approval rules.`;
+  const left = off.map(({ name, error }) => ` The MCP server "${name}" is off for you because it doesn't start for you (${error}); it is tried again on its own.`).join("");
+  return mounted + left;
 }
 /** The ```cw sentence, built from the validator's own constants
  * (shared/cw-widgets/schema.ts) so it never names a family, a view or a

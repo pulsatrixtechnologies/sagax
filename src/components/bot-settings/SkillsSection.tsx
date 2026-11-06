@@ -8,6 +8,8 @@
 import { ArrowUpRight, Ellipsis, Eye, Pencil, Share2, Trash2 } from "lucide-react";
 import { useConfirm } from "@/components/ConfirmProvider";
 import { t } from "@/lib/i18n";
+import { skillImportLines } from "@/lib/skill-import";
+import type { SkillImportSummary } from "../../../shared/skill-import";
 import { useEffect, useRef, useState } from "react";
 
 import { useStore, type Bot } from "@/state/store";
@@ -390,11 +392,8 @@ export function SkillsSection({ bot }: { bot: Bot }) {
       const result = (await api(`/api/bots/${bot.id}/skills`, {
         method: "POST",
         body: JSON.stringify({ source: trimmed }),
-      })) as { installed?: unknown[] };
-      const count = (result.installed ?? []).length;
-      setImportMessage(count === 1
-        ? t("botPanel.skills.importedOne", { count: String(count) })
-        : t("botPanel.skills.importedMany", { count: String(count) }));
+      })) as { imported?: SkillImportSummary[] };
+      setImportMessage([...skillImportLines(result.imported ?? []), t("skills.import.reviewBelow")].join(" "));
       setSource("");
       await refresh();
     } catch (cause) {

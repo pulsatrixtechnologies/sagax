@@ -1522,8 +1522,6 @@
   "botPanel.skills.source": "Origen: {source}",
   "botPanel.skills.proposalOne": "{count} propuesta espera una decisión en el chat.",
   "botPanel.skills.proposalMany": "{count} propuestas esperan una decisión en el chat.",
-  "botPanel.skills.importedOne": "Se importó {count} habilidad. Revísala y actívala abajo.",
-  "botPanel.skills.importedMany": "Se importaron {count} habilidades. Revísalas y actívalas abajo.",
   "botPanel.skills.loadError": "No se pudieron cargar las habilidades aprendidas.",
   "botPanel.skills.assignError": "No se pudo asignar esa habilidad.",
   "botPanel.skills.unavailable": "El contenido de la habilidad no está disponible. Quítala e impórtala o haz que la aprenda de nuevo.",

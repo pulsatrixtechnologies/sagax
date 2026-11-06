@@ -271,6 +271,7 @@ export function createWarmToolSessions(options?: { maxPerPerson?: number; budget
           limit.scope,
           turn.mcpCallTimeoutMs,
           limit.toolLimit,
+          turn.cwd ?? turn.toolResultFolder,
         );
         if (opts.signal?.aborted) {
           await session.close().catch(reportBackgroundError);

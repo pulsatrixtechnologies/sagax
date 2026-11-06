@@ -154,8 +154,10 @@ export function useComposerCommands({
   const goalStatus = latestGoalRun?.run.status;
   const commandCandidates = useMemo((): ComposerMenuItem[] => {
     if (!slash || slash.start === dismissedSlashAt) return [];
+    // Built-in commands only work at the start of a message; skills can be named anywhere.
+    const builtIns = slash.start === 0;
     const available: ComposerSlashCommand[] = [];
-    if ((group && !group.dm) || !group) {
+    if (builtIns && ((group && !group.dm) || !group)) {
       available.push({
         id: "goal",
         label: "/goal",
@@ -173,7 +175,7 @@ export function useComposerCommands({
         });
       }
     }
-    if (learnAvailable) {
+    if (builtIns && learnAvailable) {
       available.push({
         id: "learn",
         label: "/learn",
@@ -182,12 +184,12 @@ export function useComposerCommands({
     }
     // Setup mode needs the agents tools (propose_profile and friends) and a
     // single bot: a room cannot set itself up.
-    if (!group && supportsAgents(bot)) available.push({
+    if (builtIns && !group && supportsAgents(bot)) available.push({
       id: "setup",
       label: "/setup",
       description: t("composer.command.setupDesc"),
     });
-    if (bot || (group && !group.dm)) {
+    if (builtIns && (bot || (group && !group.dm))) {
       available.push({
         id: "loop",
         label: "/loop",
@@ -202,13 +204,14 @@ export function useComposerCommands({
         });
       }
     }
+    // Mid-message: only skills (and, in rooms, nothing from the built-in list).
     return group
-      ? composerGroupCommandMenu(groupSlashBotId ? [] : available, groupTargets.map((target): GroupEngineCommands => ({
+      ? composerGroupCommandMenu(groupSlashBotId ? [] : available, builtIns ? groupTargets.map((target): GroupEngineCommands => ({
         bot: { id: target.bot.id, name: target.bot.name },
         commands: groupEngineCommands.lists.find((list) => list.botId === target.bot.id)?.answer.commands ?? [],
         mention: target.mention,
-      })), slash.query)
-      : composerCommandMenu(available, engineCommands.answer?.commands ?? [], slash.query, slashSkills);
+      })) : [], slash.query)
+      : composerCommandMenu(available, builtIns ? (engineCommands.answer?.commands ?? []) : [], slash.query, slashSkills);
   }, [slash, dismissedSlashAt, group, members, bot, config, instances, locale, engineCommands.answer, groupTargets, groupEngineCommands.lists, groupSlashBotId, learnAvailable, goalStatus, slashSkills]);
   const commandPickerOpen = commandCandidates.length > 0;
 
@@ -382,7 +385,7 @@ export function useComposerCommands({
     const command = item.kind === "sagax" ? item.command : null;
     const replacement = item.kind === "engine"
       ? engineCommandInsertion(item)
-      : item.kind === "skill" ? skillCommandInsertion(item)
+      : item.kind === "skill" ? skillCommandInsertion(item, text.slice(slash.end))
       : command?.id === "learn" ? "/learn " : command?.id === "setup" ? "/setup " : command?.id === "loop" ? "/loop " : "";
     const next = replaceComposerSlashTrigger(text, slash, replacement);
     editText(next.text);

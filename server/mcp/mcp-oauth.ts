@@ -23,6 +23,9 @@ import { z } from "zod";
 
 import { writeFileAtomic } from "../atomic.ts";
 import type { McpServerSpec, RemoteMcpSpec } from "../contracts.ts";
+import { McpHttpError, RemoteMcpClient } from "./mcp-http.ts";
+import { discoverMcpAuth } from "./mcp-oauth-discovery.ts";
+import { sendsCredentials, SIGN_IN_CHECK_TOOL } from "./mcp-probe.ts";
 import { guardedFetch } from "../public-fetch.ts";
 import type { VaultKeySource } from "../vault/vault-key-source.ts";
 
@@ -1153,8 +1156,63 @@ async function withRefreshLock<T>(path: string, work: () => Promise<T>): Promise
 
 // ── probe and discovery ──────────────────────────────────────────────────
 
+/** After initialize answered without a sign-in: a credential-less probe still
+ * checks whether tool calls need one (servers that list tools to anyone and
+ * refuse calls). Only HTTP 401 behind a protected-resource document counts;
+ * every other answer keeps the server open. Never touches tokens. */
+async function discoverSignInViaToolCall(
+  fetcher: typeof fetch,
+  server: RemoteMcpSpec,
+  signal: AbortSignal,
+): Promise<DiscoveredAuth | null> {
+  const client = new RemoteMcpClient(
+    { ...server, headers: { ...server.headers } },
+    { fetch: fetcher },
+  );
+  try {
+    const bound = AbortSignal.any([signal, AbortSignal.timeout(5_000)]);
+    await client.initialize("Sagax", bound);
+    const listed = await client.request("tools/list", {}, bound);
+    const tools = listed && typeof listed === "object" ? (listed as { tools?: unknown }).tools : undefined;
+    if (!Array.isArray(tools) || tools.some((tool) => (tool as { name?: unknown } | null)?.name === SIGN_IN_CHECK_TOOL)) {
+      return null;
+    }
+    try {
+      await client.request(
+        "tools/call",
+        { name: SIGN_IN_CHECK_TOOL, arguments: {} },
+        AbortSignal.any([signal, AbortSignal.timeout(5_000)]),
+      );
+      return null;
+    } catch (error) {
+      if (!(error instanceof McpHttpError) || error.kind !== "status" || error.status !== 401) return null;
+      const meta = await discoverMcpAuth(server.url, error.wwwAuthenticate ?? null, {
+        fetch: fetcher,
+        signal: AbortSignal.any([signal, AbortSignal.timeout(5_000)]),
+      }).catch(() => null);
+      if (!meta || meta.source !== "protected-resource") return null;
+      return {
+        resource: meta.resource,
+        issuer: meta.issuer,
+        authorizationEndpoint: meta.authorizationEndpoint,
+        tokenEndpoint: meta.tokenEndpoint,
+        ...(meta.registrationEndpoint ? { registrationEndpoint: meta.registrationEndpoint } : {}),
+        ...(meta.revocationEndpoint ? { revocationEndpoint: meta.revocationEndpoint } : {}),
+        ...(meta.tokenEndpointAuthMethods ? { tokenAuthMethods: meta.tokenEndpointAuthMethods } : {}),
+        ...(meta.scopes?.length ? { scope: meta.scopes.join(" ") } : {}),
+      };
+    }
+  } catch {
+    return null;
+  } finally {
+    await client.close().catch(() => {});
+  }
+}
+
 /** One unauthenticated (or bearer) request to the server: `initialize` over
- * streamable HTTP, or the GET that opens an SSE stream. */
+ * streamable HTTP, or the GET that opens an SSE stream. A credential-less
+ * probe that gets an open initialize still checks tools/call, so servers that
+ * only refuse calls are recorded as needing a sign-in. */
 export async function probeServer(
   fetcher: typeof fetch,
   server: RemoteMcpSpec,
@@ -1186,7 +1244,12 @@ export async function probeServer(
     return { kind: "unreachable", error: "Could not reach this address. Check the URL and your network." };
   }
   await response.body?.cancel().catch(() => {});
-  if (response.status !== 401 && response.status !== 403) return { kind: "open" };
+  if (response.status !== 401 && response.status !== 403) {
+    // Probes that carry any header value (or a Bearer we added) send no check.
+    if (bearer || sendsCredentials(server)) return { kind: "open" };
+    const discovered = await discoverSignInViaToolCall(fetcher, server, signal);
+    return discovered ? { kind: "oauth", discovered } : { kind: "open" };
+  }
   if (response.status === 403) {
     // 403 insufficient_scope still names the metadata; anything else is a
     // refusal a sign-in would not fix.

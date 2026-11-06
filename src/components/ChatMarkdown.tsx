@@ -1668,7 +1668,10 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
     };
   }, [needsMath]);
   const mathPlugin = needsMath && katexReady ? katexPlugin : null;
+  // A reply with a table takes the message's width; its prose stays at reading width (.chat-wide).
+  const wideTable = /(^|\n)\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*(\n|$)/.test(source);
   return (
+    <div className={wideTable ? "chat-wide min-w-0" : "min-w-0"}>
     <div className="chat-md min-w-0 [&>*+*]:mt-2">
       <Markdown
         remarkPlugins={[remarkGfm, remarkMath, remarkWindowsPathDestinations, unwrapLinkedImages, remarkCallouts, remarkGithubRefs, [remarkMentions, { peers: mentionPeers, everyone }], remarkThreadRefs(threads, currentBotId), remarkSoftBreaks]}
@@ -1679,6 +1682,7 @@ function ChatMarkdownComponent({ text, message, botId, mentionPeers = NO_MENTION
       >
         {source}
       </Markdown>
+    </div>
     </div>
   );
 }

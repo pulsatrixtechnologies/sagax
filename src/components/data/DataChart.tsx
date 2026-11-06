@@ -20,6 +20,13 @@ export interface DataChartProps {
   rowCount: number | undefined;
   theme: ColorScheme;
   revision?: string;
+  /** Drawn in a chat message: the legend sits above the plot so a narrow message keeps the plot wide. */
+  inline?: boolean;
+}
+
+export function chartConfig(theme: ColorScheme, inline = false): Record<string, unknown> {
+  const config = vegaConfig(theme);
+  return inline ? { ...config, legend: { ...(config.legend as Record<string, unknown>), orient: "top", direction: "horizontal", titleOrient: "left" } } : config;
 }
 
 /** The reduced rows, paged like the grid pages: never more than pageSize
@@ -61,7 +68,7 @@ export function bindChartRows(spec: Record<string, unknown>, rows: Array<Record<
 /** A Vega-Lite chart of a card's reduced rows. vega-embed (~270 KB gzipped)
  * loads on the first chart, not with the app. The theme comes from the
  * skin; the shared config carries OMB's palette and fonts. */
-export function DataChart({ botId, dataThread, cardId, spec, rowCount, theme, revision }: DataChartProps) {
+export function DataChart({ botId, dataThread, cardId, spec, rowCount, theme, revision, inline = false }: DataChartProps) {
   const host = useRef<HTMLDivElement>(null);
   const displayed = useRef<{ result: Result; naturalHeight?: number } | null>(null);
   const [state, setState] = useState<{ loading: boolean; error: string | null }>({ loading: true, error: null });
@@ -113,7 +120,7 @@ export function DataChart({ botId, dataThread, cardId, spec, rowCount, theme, re
       element.append(candidate);
       // SAFETY: the server validated the spec against Vega-Lite's schema and
       // rendered it once headlessly; embed throws on anything it still rejects.
-      const embedded = await embed(candidate, bound as Parameters<typeof embed>[1], { actions: false, config: vegaConfig(theme) });
+      const embedded = await embed(candidate, bound as Parameters<typeof embed>[1], { actions: false, config: chartConfig(theme, inline) });
       candidateResult = embedded;
       if (!alive) { discardCandidate(); return; }
       // Keep a chart's preferred height in a tall panel; shrink only to fit the available output.
@@ -145,7 +152,7 @@ export function DataChart({ botId, dataThread, cardId, spec, rowCount, theme, re
       abort.abort();
       if (!committed) discardCandidate();
     };
-  }, [botId, dataThread, cardId, specText, rowCount, theme, revision]);
+  }, [botId, dataThread, cardId, specText, rowCount, theme, revision, inline]);
   return (
     <div className="relative min-h-0 w-full flex-1" data-testid="data-chart">
       <div ref={host} className="relative h-full w-full" />

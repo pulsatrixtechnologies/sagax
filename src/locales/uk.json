@@ -2034,8 +2034,6 @@
   "botPanel.skills.source": "Джерело: {source}",
   "botPanel.skills.proposalOne": "{count} пропозиція чекає рішення в чаті.",
   "botPanel.skills.proposalMany": "{count} пропозицій чекають рішення в чаті.",
-  "botPanel.skills.importedOne": "Імпортовано {count} навичку. Перегляньте й увімкніть нижче.",
-  "botPanel.skills.importedMany": "Імпортовано {count} навичок. Перегляньте й увімкніть нижче.",
   "botPanel.skills.loadError": "Не вдалося завантажити вивчені навички.",
   "botPanel.skills.assignError": "Не вдалося призначити цю навичку.",
   "botPanel.skills.unavailable": "Вміст навички недоступний. Вилучіть її, потім імпортуйте або навчіть знову.",

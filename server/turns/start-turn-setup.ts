@@ -41,6 +41,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     latestCompaction,
     localPrincipalId,
     mcpServersAsPerson,
+    prepareMcpServers,
     messagesIntegration,
     messagesWanted,
     orgSpeakerPrincipal,
@@ -390,6 +391,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     if (state.instance.adapter.capabilities.customMcp === true) {
       await refreshMcpOAuth(state.bot);
       if (!state.warmOnly) turnTrace(state.threadId, "oauth-refreshed");
+      await prepareMcpServers(state.bot);
       const mounted = mcpServersAsPerson(state.bot, orgSpeakerPrincipal(state.bot, state.speaker), state.threadId);
       attachCustomMcp(state.integrations, mounted.servers, cfg);
       state.githubWithheld = mounted.githubWithheld;

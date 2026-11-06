@@ -534,8 +534,6 @@
   "botPanel.skills.importAria": "Importar uma habilidade",
   "botPanel.skills.importError": "Não foi possível importar essa habilidade.",
   "botPanel.skills.importPlaceholder": "owner/repo, https://github.com/…/SKILL.md ou https://skills.sh/…",
-  "botPanel.skills.importedMany": "{count} habilidades importadas. Revise e ative abaixo.",
-  "botPanel.skills.importedOne": "{count} habilidade importada. Revise e ative abaixo.",
   "botPanel.skills.importing": "Importando…",
   "botPanel.skills.loadError": "Não foi possível carregar as habilidades aprendidas.",
   "botPanel.skills.originPrivate": "privada",

@@ -8,7 +8,7 @@ import type { AddressInfo } from "node:net";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { githubAccessFailure, githubSkillFetch, probeGithubRepo, type GithubCredential } from "./github-access.ts";
@@ -56,15 +56,40 @@ async function fakeGithub(): Promise<{ origin: string; seen: string[] }> {
     const isPrivate = req.url?.startsWith("/repos/acme/private");
     if (isPrivate && token !== "good-token-123") return send(404, { message: "Not Found" });
     if (req.url === "/repos/acme/private" || req.url === "/repos/acme/public") return send(200, { full_name: "acme/x", private: isPrivate });
+    const commit = "a".repeat(40);
+    const skillMd = "---\nname: digest\ndescription: Weekly digest\n---\nWrite it.\n";
+    const skillBlobSha = createHash("sha1").update(`blob ${Buffer.byteLength(skillMd)}\0`).update(skillMd).digest("hex");
+    const skillsTreeSha = "b".repeat(40);
+    const digestTreeSha = "c".repeat(40);
+    if (req.url === `/repos/acme/private/commits/HEAD` || req.url === `/repos/acme/private/commits/main`) {
+      res.writeHead(200, { "content-type": "application/vnd.github.sha" });
+      res.end(commit);
+      return;
+    }
     if (req.url?.startsWith("/repos/acme/private/contents/")) {
       const path = req.url.slice("/repos/acme/private/contents/".length).split("?")[0];
-      if (path === "") return send(200, [{ type: "dir", name: "skills", path: "skills" }]);
-      if (path === "skills") return send(200, [{ type: "dir", name: "digest", path: "skills/digest" }]);
-      if (path === "skills/digest") return send(200, [{ type: "file", name: "SKILL.md", path: "skills/digest/SKILL.md", download_url: "https://raw.githubusercontent.com/acme/private/main/skills/digest/SKILL.md" }]);
+      if (path === "") return send(200, [{ type: "dir", name: "skills", path: "skills", sha: skillsTreeSha }]);
+      if (path === "skills") return send(200, [{ type: "dir", name: "digest", path: "skills/digest", sha: digestTreeSha }]);
+      if (path === "skills/digest") {
+        return send(200, [{
+          type: "file",
+          name: "SKILL.md",
+          path: "skills/digest/SKILL.md",
+          sha: skillBlobSha,
+          download_url: `https://raw.githubusercontent.com/acme/private/${commit}/skills/digest/SKILL.md`,
+        }]);
+      }
+    }
+    if (req.url === `/repos/acme/private/git/trees/${digestTreeSha}?recursive=1`) {
+      return send(200, {
+        sha: digestTreeSha,
+        truncated: false,
+        tree: [{ path: "SKILL.md", mode: "100644", type: "blob", sha: skillBlobSha, size: Buffer.byteLength(skillMd) }],
+      });
     }
     if (req.url === "/raw/digest") {
       res.writeHead(200, { "content-type": "text/plain" });
-      res.end("---\nname: digest\ndescription: Weekly digest\n---\nWrite it.\n");
+      res.end(skillMd);
       return;
     }
     return send(404, { message: "Not Found" });
@@ -130,7 +155,7 @@ describe("why GitHub refuses", () => {
     const without = await fetchSkillFromSource("https://github.com/acme/private", githubSkillFetch([], routed, env(github.origin)));
     expect(without).toMatchObject({ error: expect.stringContaining("GitHub answered 404 for acme/private: it is private") });
     const withToken = await fetchSkillFromSource("https://github.com/acme/private", githubSkillFetch([{ token: "good-token-123", via: "person" }], routed, env(github.origin)));
-    expect("skills" in withToken && withToken.skills[0]?.files[0]?.content).toContain("name: digest");
+    expect("skills" in withToken && Buffer.from(withToken.skills[0]!.files[0]!.content).toString("utf8")).toContain("name: digest");
   });
 });
 

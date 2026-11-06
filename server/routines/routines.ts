@@ -1278,6 +1278,19 @@ export function nextOccurrence(schedule: RoutineSchedule, after: number, zone?: 
   return null;
 }
 
+/** Next scheduled occurrence and one interval of its schedule, for a run that schedule started.
+ * None for any other trigger (manual, startup, webhook, proactive), and none for a one-time, trigger, or limit-reset routine. */
+export function nextScheduledRun(run: Pick<RoutineRun, "routineId" | "triggerSource" | "manual">, routines: readonly Pick<Routine, "id" | "enabled" | "nextRunAt" | "schedule">[]): RoutineFailureFacts["nextScheduled"] {
+  if ((run.triggerSource ?? (run.manual ? "manual" : "schedule")) !== "schedule") return undefined;
+  const routine = routines.find((candidate) => candidate.id === run.routineId);
+  if (!routine?.enabled || routine.nextRunAt == null) return undefined;
+  const { schedule, nextRunAt: at } = routine;
+  const following = schedule.type === "cron" ? nextOccurrence(schedule, at) : null;
+  const interval = schedule.type === "interval" ? schedule.everyMinutes * 60_000 : schedule.type === "daily" ? LOCAL_DAY_MS
+    : following !== null ? following - at : null;
+  return interval === null ? undefined : { at, interval };
+}
+
 function latestIntervalOccurrence(
   schedule: RoutineIntervalSchedule,
   at: number,
@@ -3888,7 +3901,9 @@ export class RoutineManager {
     const who = { botId: run.botId, ...(run.runAs ? { runAs: run.runAs } : {}) };
     const language = this.options.languageFor?.(who);
     const timeZone = this.options.timeZoneFor?.(who);
-    const recovery = recoverRun(run, said, limit ? { ...facts, limit } : facts, this.now(), this.ownerNotices, {
+    const recovery = recoverRun(run, said, {
+      ...(limit ? { ...facts, limit } : facts), nextScheduled: nextScheduledRun(run, this.routines),
+    }, this.now(), this.ownerNotices, {
       ...(language ? { language } : {}), ...(timeZone ? { timeZone } : {}),
     });
     if ("waiting" in recovery && recovery.waiting) {

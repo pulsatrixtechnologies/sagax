@@ -1522,8 +1522,6 @@
   "botPanel.skills.source": "स्रोत: {source}",
   "botPanel.skills.proposalOne": "{count} प्रस्ताव चैट में निर्णय की प्रतीक्षा कर रहा है।",
   "botPanel.skills.proposalMany": "{count} प्रस्ताव चैट में निर्णय की प्रतीक्षा कर रहे हैं।",
-  "botPanel.skills.importedOne": "{count} कौशल आयात हुआ। नीचे जाँचें और चालू करें।",
-  "botPanel.skills.importedMany": "{count} कौशल आयात हुए। नीचे जाँचें और चालू करें।",
   "botPanel.skills.loadError": "सीखे गए कौशल लोड नहीं हो सके।",
   "botPanel.skills.assignError": "वह कौशल सौंपा नहीं जा सका।",
   "botPanel.skills.unavailable": "कौशल की सामग्री उपलब्ध नहीं है। हटाएँ, फिर आयात करें या फिर से सिखाएँ।",

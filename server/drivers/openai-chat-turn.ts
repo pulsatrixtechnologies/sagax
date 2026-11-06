@@ -154,6 +154,7 @@ async function mountOpenAIChatTurnTools(ctx: OpenAIChatTurnCtx): Promise<{
   });
   let tools: ChatToolSession;
   let toolsReused = false;
+  const resultFolder = turn.cwd ?? turn.toolResultFolder;
   const cached = mountIntegrations ? warmToolSessions.get(turn.threadId, toolsFp, warmResourcePerson(turn)) : undefined;
   if (cached) {
     tools = cached;
@@ -164,12 +165,14 @@ async function mountOpenAIChatTurnTools(ctx: OpenAIChatTurnCtx): Promise<{
     warmToolSessions.claim(turn.threadId);
     turnTrace(turn.threadId, "tools-reused");
   } else {
-    tools = await mountChatTools(mountIntegrations, abort.signal, options.computerUse, scope, turn.mcpCallTimeoutMs, toolLimit);
+    tools = await mountChatTools(mountIntegrations, abort.signal, options.computerUse, scope, turn.mcpCallTimeoutMs, toolLimit, resultFolder, safeText);
     if (mountIntegrations) {
       warmToolSessions.set(turn.threadId, toolsFp, tools, { person: warmResourcePerson(turn), active: true });
       toolsReused = true; // The cache owns cleanup for new mounts too.
     }
   }
+  // A prewarmed mount kept the previous turn's folder. This turn's folder and mask win before any call.
+  tools.bindResultSave?.(resultFolder, safeText);
   turnTrace(turn.threadId, "tools-mounted");
   for (const { server, reason } of tools.skipped) {
     // A technical detail for the logs, never a row in the chat.

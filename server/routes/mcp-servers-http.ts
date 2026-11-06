@@ -70,6 +70,8 @@ export interface McpServersHttpDeps {
   managedPolicy: { mcpAllowed(name: string, url?: string): boolean };
   mcpPolicyRefusal(name: string, server: object): string | undefined;
   persistMcpServers(next: Record<string, unknown>): void;
+  /** Whether each command server starts for each bot: checked again when one is added, changed or turned on. */
+  health?: { changed(name: string): void };
   bots(): McpServersHttpBot[];
   patchBot(id: string, patch: { mcpAccounts?: Record<string, string> | undefined }): McpServersHttpBot | null | undefined;
   broadcast(event: { kind: "bot"; bot: unknown }): void;
@@ -186,11 +188,17 @@ export function createMcpServersHttpRoutes(deps: McpServersHttpDeps): RouteHandl
         const server = parsed.server;
         if (!isRemoteMcpServer(server)) return json(res, 200, await probeMcpServer(server, undefined, controller.signal, name));
         await deps.mcpOAuth.refresh(name, server, false, controller.signal).catch(() => false);
-        let result = await probeMcpServer({ ...server, ...deps.mcpOAuth.withAuthHeaders({ [name]: server })[name] }, undefined, controller.signal, name);
+        const withSignIn = { ...server, ...deps.mcpOAuth.withAuthHeaders({ [name]: server })[name] };
+        let result = await probeMcpServer(withSignIn, undefined, controller.signal, name);
         if (!result.ok && /HTTP 401\b/.test(result.error) && await deps.mcpOAuth.refresh(name, server, true, controller.signal).catch(() => false)) {
           result = await probeMcpServer({ ...server, ...deps.mcpOAuth.withAuthHeaders({ [name]: server })[name] }, undefined, controller.signal, name);
         }
-        if (!result.ok && /HTTP 40[13]\b/.test(result.error)) await deps.mcpOAuth.probe(name, server, controller.signal).catch(() => undefined);
+        // Record a sign-in the Test found. probeServer never drops tokens for a
+        // credential-less probe; a Bearer we sent and the server refused still
+        // goes through the refresh / expire path inside probe.
+        if (!result.ok && (result.auth === "required" || /HTTP 40[13]\b/.test(result.error))) {
+          await deps.mcpOAuth.probe(name, server, controller.signal).catch(() => undefined);
+        }
         return json(res, 200, result);
       } finally {
         res.off("close", disconnect);
@@ -221,6 +229,7 @@ export function createMcpServersHttpRoutes(deps: McpServersHttpDeps): RouteHandl
         const refusal = deps.mcpPolicyRefusal(name, parsed.server);
         if (refusal) return json(res, 403, { error: refusal, code: "managed_policy" });
         deps.persistMcpServers({ ...current, [name]: parsed.server });
+        deps.health?.changed(name);
         await deps.mcpOAuth.forget(name).catch(() => undefined);
         await deps.probeMcpOAuth([name]);
         return json(res, 201, deps.mcpServerResponse(deps.mcpViewer(auth)));
@@ -266,6 +275,7 @@ export function createMcpServersHttpRoutes(deps: McpServersHttpDeps): RouteHandl
           });
         }
         deps.persistMcpServers({ ...current, ...parsed.servers });
+        for (const added of names) deps.health?.changed(added);
         for (const added of names) await deps.mcpOAuth.forget(added).catch(() => undefined);
         await deps.probeMcpOAuth(names);
         return json(res, 201, { ...(deps.mcpServerResponse(deps.mcpViewer(auth)) as object), added: names });
@@ -308,6 +318,7 @@ export function createMcpServersHttpRoutes(deps: McpServersHttpDeps): RouteHandl
             else delete next.disabledTools;
           }
           deps.persistMcpServers({ ...current, [name]: next });
+          if (patch.data.enabled !== undefined) deps.health?.changed(name);
           return json(res, 200, deps.mcpServerResponse(deps.mcpViewer(auth)));
         }
 
@@ -323,6 +334,7 @@ export function createMcpServersHttpRoutes(deps: McpServersHttpDeps): RouteHandl
         const refusal = deps.mcpPolicyRefusal(name, parsed.server);
         if (refusal) return json(res, 403, { error: refusal, code: "managed_policy" });
         deps.persistMcpServers({ ...current, [name]: parsed.server });
+        deps.health?.changed(name);
         const previousUrl = isRemoteMcpServer(existing.server) ? existing.server.url : undefined;
         const nextUrl = isRemoteMcpServer(parsed.server) ? parsed.server.url : undefined;
         if (previousUrl !== nextUrl) await deps.mcpOAuth.forget(name).catch(() => undefined);

@@ -17,6 +17,7 @@ import { cn } from "@/lib/cn";
 import { activeLocale, t } from "@/lib/i18n";
 import { copyText } from "@/lib/copy-text";
 import { isTableNumber, tableCsv, tableRowOrder, type TableSort } from "@/lib/table-data";
+import { columnMinimums, fitsColumns } from "@/lib/table-fit";
 import {
   nextSort,
   numericColumns,
@@ -200,11 +201,25 @@ function ModelTable({ model, dir, caption, large = false }: ModelTableProps & { 
   const headerText = model.header.map((cell) => cell.text);
   const shownText = order.map((index) => texts[index]!);
   const filterable = model.rows.length > FILTER_THRESHOLD;
+  const minimums = useMemo(() => columnMinimums(model.header.map((cell) => cell.text), texts), [model, texts]);
+  const [available, setAvailable] = useState<number | null>(null);
+  useEffect(() => {
+    const element = scroll.ref.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setAvailable(element.clientWidth || null));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [scroll.ref]);
+  // A short message table shares the bubble when its columns can sit at their floors. A long one keeps a scroll box.
+  const long = order.length > 80;
+  const fit = fitsColumns({ wrap: true, virtual: long, minimums, available });
   // Re-measure the fade after sort/filter changes the grid width.
   useEffect(() => { scroll.onScroll(); }, [order, sort, query, scroll.onScroll]);
 
   return (
-    <div data-testid="rich-table" className="group/table rich-table my-2 min-w-0 overflow-hidden rounded-lg border border-hairline/50 bg-panel text-ink">
+    <>
+    <div className="chat-table" hidden={fullscreen ? true : undefined}>
+    <div data-testid="rich-table" className="group/table rich-table my-2 w-fit min-w-[min(100%,var(--chat-prose-max))] max-w-full overflow-hidden rounded-lg border border-hairline/50 bg-panel text-ink">
       <div className="flex flex-wrap items-center gap-1.5 border-b border-hairline/40 bg-inset px-2.5 py-1.5 text-[11px] text-ink-secondary">
         <Table2 size={12} aria-hidden="true" className="shrink-0" />
         <span className="me-auto tabular-nums text-ink" aria-live="polite" data-testid="rich-table-rows">
@@ -257,24 +272,20 @@ function ModelTable({ model, dir, caption, large = false }: ModelTableProps & { 
           </button>
         )}
       </div>
-      {fullscreen && (
-        <TableDialog title={caption ?? t("rich.table.region")} returnFocus={fullscreen} onClose={() => setFullscreen(null)}>
-          <ModelTable model={model} dir={dir} caption={caption} large />
-        </TableDialog>
-      )}
       <div className="relative min-w-0">
         <div
           ref={scroll.ref}
           data-table-scroll=""
+          data-fit={fit || undefined}
           data-overflow-left={scroll.edges.left ? "" : undefined}
           data-overflow-right={scroll.edges.right ? "" : undefined}
           onScroll={scroll.onScroll}
-          className={cn("overflow-auto overscroll-x-contain", large ? "max-h-[calc(94dvh-10rem)]" : "max-h-[min(70vh,34rem)]")}
+          className={cn("overflow-auto overscroll-x-contain", large ? "max-h-[calc(94dvh-10rem)]" : long ? "max-h-[min(70vh,34rem)]" : undefined)}
           tabIndex={0}
           role="region"
           aria-label={caption ?? t("rich.table.region")}
         >
-        <table dir={dir} className="w-max min-w-full border-collapse text-[12.5px] text-ink">
+        <table dir={dir} className={cn("border-collapse text-[12.5px] text-ink", fit ? "w-full table-auto" : "w-max min-w-full")}>
           <thead>
             <tr>
               {model.header.map((cell, column) => {
@@ -286,10 +297,12 @@ function ModelTable({ model, dir, caption, large = false }: ModelTableProps & { 
                     scope="col"
                     aria-sort={active === "asc" ? "ascending" : active === "desc" ? "descending" : undefined}
                     className={cn(
-                      "sticky top-0 z-[1] border-b border-hairline bg-raised p-0 font-semibold text-ink whitespace-nowrap",
+                      "sticky top-0 z-[1] border-b border-hairline bg-raised p-0 font-semibold text-ink",
+                      !fit && "whitespace-nowrap",
                       align === "right" ? "text-end" : align === "center" ? "text-center" : "text-start",
                     )}
                   >
+                    <div className={fit ? "break-words [overflow-wrap:anywhere]" : undefined} style={fit ? { minWidth: minimums[column] } : undefined}>
                     <button
                       type="button"
                       onClick={() => setSort((current) => nextSort(current, column))}
@@ -308,6 +321,7 @@ function ModelTable({ model, dir, caption, large = false }: ModelTableProps & { 
                         <ArrowUpDown size={11} aria-hidden="true" className="shrink-0 opacity-0 transition-opacity group-hover/sort:opacity-50 group-focus-visible/sort:opacity-50 touch:opacity-50 motion-reduce:transition-none" />
                       )}
                     </button>
+                    </div>
                   </th>
                 );
               })}
@@ -325,15 +339,19 @@ function ModelTable({ model, dir, caption, large = false }: ModelTableProps & { 
                         key={column}
                         className={cn(
                           "px-2.5 py-2 align-top text-ink",
-                          numeric[column]
-                            ? "min-w-[4.5rem] tabular-nums whitespace-nowrap"
-                            : "min-w-[7.5rem] max-w-[18rem] break-words [overflow-wrap:break-word] [word-break:normal]",
+                          fit
+                            ? numeric[column] ? "tabular-nums" : undefined
+                            : numeric[column]
+                              ? "min-w-[4.5rem] tabular-nums whitespace-nowrap"
+                              : "min-w-[7.5rem] max-w-[18rem] break-words [overflow-wrap:break-word] [word-break:normal]",
                           align === "right" ? "text-end" : align === "center" ? "text-center" : "text-start",
                         )}
                       >
-                        {cellNeedsExpand(row.text[column] ?? "")
-                          ? <ExpandableCell content={row.cells[column] ?? ""} text={row.text[column] ?? ""} column={headerText[column] ?? ""} />
-                          : row.cells[column] ?? ""}
+                        <div dir="auto" className={fit ? "break-words [overflow-wrap:anywhere]" : undefined}>
+                          {cellNeedsExpand(row.text[column] ?? "")
+                            ? <ExpandableCell content={row.cells[column] ?? ""} text={row.text[column] ?? ""} column={headerText[column] ?? ""} />
+                            : row.cells[column] ?? ""}
+                        </div>
                       </td>
                     );
                   })}
@@ -366,6 +384,13 @@ function ModelTable({ model, dir, caption, large = false }: ModelTableProps & { 
         )}
       </div>
     </div>
+    </div>
+    {fullscreen && (
+      <TableDialog title={caption ?? t("rich.table.region")} returnFocus={fullscreen} onClose={() => setFullscreen(null)}>
+        <ModelTable model={model} dir={dir} caption={caption} large />
+      </TableDialog>
+    )}
+    </>
   );
 }
 
@@ -435,7 +460,7 @@ function GridTable({ columns, rows, name = t("table.title"), expanded = false, d
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   const surface = (large: boolean) => (
-    <div className="rich-table min-w-0 max-w-full overflow-hidden rounded-xl border border-hairline/50 bg-panel text-ink" dir="ltr">
+    <div className="rich-table w-fit min-w-[min(100%,var(--chat-prose-max))] max-w-full overflow-hidden rounded-xl border border-hairline/50 bg-panel text-ink" dir="ltr">
       <div className="flex flex-wrap items-center gap-1 border-b border-hairline/40 px-2 py-1.5">
         <label className="flex min-w-24 flex-1 items-center gap-2 px-1 text-ink-secondary">
           <Search size={13} aria-hidden="true" />
@@ -455,7 +480,7 @@ function GridTable({ columns, rows, name = t("table.title"), expanded = false, d
       </footer>
     </div>
   );
-  return <><div hidden={open}>{surface(expanded)}</div>{open && <TableDialog title={name} returnFocus={trigger.current} onClose={() => setOpen(false)}>{surface(true)}</TableDialog>}</>;
+  return <><div hidden={open} className="chat-table">{surface(expanded)}</div>{open && <TableDialog title={name} returnFocus={trigger.current} onClose={() => setOpen(false)}>{surface(true)}</TableDialog>}</>;
 }
 
 function TableViewport({ columns, rows, order, name, wrap, large, sort, onSort, direction, headless = false }: RichTableProps & {
@@ -471,6 +496,16 @@ function TableViewport({ columns, rows, order, name, wrap, large, sort, onSort, 
     return () => observer.disconnect();
   }, []);
   const virtual = order.length > 80;
+  const minimums = useMemo(() => columnMinimums(columns.map((column) => column.text), rows.map((row) => row.map((cell) => cell.text))), [columns, rows]);
+  const [available, setAvailable] = useState<number | null>(null);
+  useEffect(() => {
+    const element = scroll.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setAvailable(element.clientWidth || null));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const fit = fitsColumns({ wrap, virtual, minimums, available });
   const widths = useMemo(() => columns.map((column, index) => column.width ?? Math.min(320, Math.max(140,
     Math.max(column.text.length, ...rows.slice(0, 100).map((row) => Math.min(40, row[index]?.text.length ?? 0))) * 7 + 40,
   ))), [columns, rows]);
@@ -487,15 +522,15 @@ function TableViewport({ columns, rows, order, name, wrap, large, sort, onSort, 
   const after = virtual && items.length ? Math.max(0, virtualizer.getTotalSize() - items.at(-1)!.end + headingHeight) : 0;
   const alignment = (column: TableColumn, index: number) => column.align ?? (numeric[index] || direction === "rtl" ? "right" : "left");
   return <div ref={scroll} tabIndex={0} role="region" aria-label={name} className="overflow-auto overscroll-x-contain focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60"
-    style={{ maxHeight: large ? "65dvh" : 400 }}>
-    <table dir={direction} aria-label={name} aria-rowcount={order.length + 1} className="w-full table-fixed border-separate border-spacing-0 text-[13px]" style={{ minWidth: widths.reduce((a, b) => a + b, 0) }}>
-      <colgroup>{widths.map((width, index) => <col key={index} style={{ width }} />)}</colgroup>
+    style={{ maxHeight: large ? "65dvh" : virtual || !wrap ? 400 : undefined }} data-fit={fit || undefined}>
+    <table dir={direction} aria-label={name} aria-rowcount={order.length + 1} className={`w-full ${fit ? "table-auto" : "table-fixed"} border-separate border-spacing-0 text-[13px]`} style={fit ? undefined : { minWidth: widths.reduce((a, b) => a + b, 0) }}>
+      {!fit && <colgroup>{widths.map((width, index) => <col key={index} style={{ width }} />)}</colgroup>}
       <thead ref={heading} hidden={headless} className="sticky top-0 z-10 bg-raised"><tr aria-rowindex={1}>
         {columns.map((column, index) => <th key={index} scope="col" aria-sort={sort?.column === index ? sort.descending ? "descending" : "ascending" : "none"}
           className="h-10 border-b border-hairline/60 px-3 py-2 font-medium" style={{ textAlign: alignment(column, index) }}>
-          <div className="flex items-center gap-1">
-            <span dir="auto" className="min-w-0 flex-1 break-words">{column.content ?? (column.text || t("table.column", { number: index + 1 }))}</span>
-            <button type="button" className="table-action shrink-0" aria-label={t("table.sort", { column: column.text || index + 1 })} title={t("table.sort", { column: column.text || index + 1 })} onClick={() => onSort(index)}>
+          <div className="break-words [overflow-wrap:anywhere]" style={fit ? { minWidth: minimums[index] } : undefined}>
+            <span dir="auto">{column.content ?? (column.text || t("table.column", { number: index + 1 }))}</span>
+            <button type="button" className="table-action ms-1 inline-flex align-middle" aria-label={t("table.sort", { column: column.text || index + 1 })} title={t("table.sort", { column: column.text || index + 1 })} onClick={() => onSort(index)}>
               {sort?.column === index && sort.descending ? <ArrowDown size={12} /> : <ArrowUp size={12} className={sort?.column === index ? "" : "opacity-35"} />}
             </button>
           </div>
@@ -510,7 +545,7 @@ function TableViewport({ columns, rows, order, name, wrap, large, sort, onSort, 
             return <td key={index} className="border-b border-hairline/20 px-3 py-2.5 align-top tabular-nums" style={{ textAlign: cell?.align ?? alignment(column, index), verticalAlign: cell?.vAlign }}>
               {cell && cellNeedsExpand(cell.text)
                 ? <ExpandableCell content={cell.content ?? cell.text} text={cell.text} column={column.text} />
-                : <div dir="auto" title={!wrap ? cell?.text : undefined} className={wrap ? "whitespace-pre-wrap break-words [overflow-wrap:break-word] [word-break:normal]" : "truncate"}>{cell?.content ?? cell?.text}</div>}
+                : <div dir="auto" title={!wrap ? cell?.text : undefined} className={wrap ? "whitespace-pre-wrap break-words [overflow-wrap:anywhere]" : "truncate"}>{cell?.content ?? cell?.text}</div>}
             </td>;
           })}
         </tr>)}

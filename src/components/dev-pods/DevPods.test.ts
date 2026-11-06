@@ -17,7 +17,7 @@ vi.mock("@/lib/mcp-servers", async (importOriginal) => ({
   useMcpServers: () => ({ servers: [{ name: "github", enabled: true }], error: false, refresh: async () => [] }),
 }));
 
-const { DevPods, DevPodsToggle } = await import("./DevPods");
+const { DevPods, DevPodsPanel, DevPodsToggle } = await import("./DevPods");
 const { DevPod } = await import("./PodCard");
 const { registerDevPod, unregisterDevPod } = await import("./registry");
 const { DEFAULT_PREFS, resetDevPodPrefsForTest, resetDevPodsLiveForTest } = await import("./prefs");
@@ -225,5 +225,38 @@ describe("dev pods: each pod on its own", () => {
     } finally {
       unregisterDevPod("zz-extra");
     }
+  });
+});
+
+describe("dev pods: in the bot panel (#2285)", () => {
+  const renderPanel = (b: Bot) => act(() => {
+    root.render(createElement(DevPodsPanel, { bot: b, messages: b.messages, computerStart: undefined, dispatch }));
+  });
+
+  it("renders nothing while the Experimental switch is off", () => {
+    renderPanel(bot("panel-off", devMessages()));
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("draws every pod as a panel section: grey label, panel card, same order, no rail and no toggle", () => {
+    resetDevPodPrefsForTest({ ...DEFAULT_PREFS, enabled: true });
+    renderPanel(bot("panel-thread", devMessages()));
+    expect(container.querySelector("[data-dev-pods]")).toBeNull();
+    expect(container.querySelector("[data-dev-pods-toggle]")).toBeNull();
+    const sections = [...container.querySelectorAll<HTMLElement>("[data-dev-pod-variant='panel']")];
+    expect(sections.map((node) => node.dataset.devPod)).toEqual(["environment", "context", "connectors", "changes"]);
+    expect(sections[0]!.querySelector("h2")!.textContent).toContain(t("devPods.environment.title"));
+    expect(container.querySelector("[data-env-branch]")!.textContent).toContain("feat/login");
+    expect(container.querySelector("[data-change='pull:acme/app#7']")).not.toBeNull();
+  });
+
+  it("folds a section behind its label, the detail one click away", () => {
+    resetDevPodPrefsForTest({ ...DEFAULT_PREFS, enabled: true });
+    renderPanel(bot("panel-fold", devMessages()));
+    const head = container.querySelector<HTMLButtonElement>("[data-dev-pod='environment'] h2 button[aria-expanded]")!;
+    expect(head.getAttribute("aria-expanded")).toBe("true");
+    act(() => head.click());
+    expect(container.querySelector<HTMLButtonElement>("[data-dev-pod='environment'] h2 button[aria-expanded]")!.getAttribute("aria-expanded")).toBe("false");
+    expect(container.querySelector("[data-env-branch]")).toBeNull();
   });
 });

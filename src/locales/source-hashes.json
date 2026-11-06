@@ -17567,7 +17567,11 @@
       "botModels.backup.none": "dc937b59892604f5a86ac96936cd7ff09e25f18ae6b758e8014a24c7fa039e91",
       "grokBridge.urlPlaceholder": "ab04e20ed4f2c0256f573142c263b113e16bb23e64e6e563f066fe76a61e0ec8",
       "settings.profile.emailPlaceholder": "53e6cdc30765aade0129f85e5aeb50124b1d3f5bb9a70373be31e4eb328371e0",
-      "routineRun.details": "45989de49fb7f66dfe17a8fc26f3a02c7abcd74f7e8e6cf9f39fa0e3775780df"
+      "routineRun.details": "45989de49fb7f66dfe17a8fc26f3a02c7abcd74f7e8e6cf9f39fa0e3775780df",
+      "codingChat.panel.title": "6da6530a0728728ec3b9b78da3e40519cb602c7f6e1d5017b49a4c2170e2c07a",
+      "codingChat.panel.status": "920e413c7d411b61ef3e8c63b1cb6ad058d5f95f8b481dbafe60248387d8c355",
+      "codingChat.panel.duration": "4fc52a3c4c558b517c463b22d86d0e3b9cfd4255c98fe3510f9075b37ab419c9",
+      "codingChat.panel.tokens": "a039dfb9628b53ddaebcfe8ef0793e3fdf19867601295f00d192acef59050869"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

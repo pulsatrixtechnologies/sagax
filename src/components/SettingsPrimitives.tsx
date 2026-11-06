@@ -624,6 +624,13 @@ export type PillOption<T extends string> = { value: T; label: string; group?: st
 /** The reference design's borderless pill menu ("Follow System ⌄"): the current value
  * and a chevron; the choices open in a small list under it. A listbox, so
  * arrows, Home/End, Enter and Escape work as in a native select. */
+/** A page's own bottom bar (Cancel / Save) stays uncovered: the menu flips
+ * above or shrinks before it reaches the bar (#2320). */
+function barFloor(anchor: HTMLElement): number | null {
+  const bar = anchor.closest("[data-popover-floor-scope]")?.querySelector("[data-popover-floor]");
+  return bar ? bar.getBoundingClientRect().top : null;
+}
+
 export function PillSelect<T extends string>({
   value,
   options,
@@ -715,6 +722,7 @@ export function PillSelect<T extends string>({
           align={fill ? "start" : "end"}
           maxHeight={280}
           bounds={fill ? enclosingWindowBounds : undefined}
+          floor={barFloor}
           id={listId}
           role="listbox"
           aria-label={ariaLabel}

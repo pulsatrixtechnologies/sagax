@@ -1596,7 +1596,6 @@
   "botAccess.mcpUseAll": "使用所有已啟用的伺服器",
   "botAccess.mcpBusy": "請等這個機器人完成所有進行中的任務，再變更其 MCP 伺服器。",
   "skills.learned.hintOff": "技能撰寫已關閉，但你已啟用的技能仍在此由你掌控。",
-  "settings.section.backups": "備份",
   "backup.excluded": "不含已儲存的帳戶憑證與連線。換到新機器時請重新連接你的帳戶；目的地原有的憑證不會受到影響。外部 CLI 登入與遠端 VM 磁碟也不包含在內。",
   "backup.privacy": "對話、草稿與使用者檔案不會自動遮蔽，可能含有貼上的機密。請妥善保管這份備份，並安全保存其密碼；密碼無法復原。",
   "backup.export": "匯出完整備份",

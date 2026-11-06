@@ -14,7 +14,7 @@ async function perspicaxTurnIntegration(input: {
   /** A call warm builds the same prompt and mounts, and writes no activity row. */
   quiet?: boolean;
   /** When setup already started prepare+handshake in parallel, reuse it. */
-  prepared?: ReturnType<typeof host.perspicaxTurnPrepare>;
+  prepared?: ReturnType<typeof perspicaxTurnPrepare>;
 }): Promise<{ custom: Record<string, McpServerSpec>; prompt: string }> {
   const host = getHost();
 

@@ -13,7 +13,7 @@ export type Host = Record<string, any>;
 export function createCompactConversation(getHost: () => Host): any {
 async function compactConversation(input: {
   bot: BotRecord; threadId: string; generation: string;
-  instance: NonNullable<ReturnType<typeof host.registry.get>>; model: string;
+  instance: NonNullable<ReturnType<typeof registry.get>>; model: string;
   excludedIds: ReadonlySet<string>; manual: boolean;
 }): Promise<void> {
   const host = getHost();

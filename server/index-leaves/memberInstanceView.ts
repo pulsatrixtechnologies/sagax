@@ -3,7 +3,7 @@
 export type Host = Record<string, any>;
 
 export function createMemberInstanceView(getHost: () => Host): any {
-function memberInstanceView(instance: Awaited<ReturnType<typeof host.describeInstances>>[number], person?: string | null) {
+function memberInstanceView(instance: Awaited<ReturnType<typeof describeInstances>>[number], person?: string | null) {
   const host = getHost();
 
   const { cli: _cli, cliDefault: _cliDefault, cliCandidates: _cliCandidates, install: _install, authentication: _authentication, claudeAccount: _claudeAccount, freeUpSpace: _freeUpSpace, managed: _managed, ...rest } = instance as typeof instance & Record<string, unknown>;

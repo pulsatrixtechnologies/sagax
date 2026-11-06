@@ -4,7 +4,7 @@ import { accountConnectorsForTurn, engineConnectorsPrompt } from "../harness-con
 export type Host = Record<string, any>;
 
 export function createEngineConnectorsPromptFor(getHost: () => Host): any {
-function engineConnectorsPromptFor(bot: BotRecord, instance: Parameters<typeof host.withholdHostToolsFor>[0] & { instanceId: string }, speaker: TurnSpeaker,   turn: { level?: ApprovalMode; relay?: boolean } = {}) {
+function engineConnectorsPromptFor(bot: BotRecord, instance: Parameters<typeof withholdHostToolsFor>[0] & { instanceId: string }, speaker: TurnSpeaker,   turn: { level?: ApprovalMode; relay?: boolean } = {}) {
   const host = getHost();
   const { claudeAiConnectorsForTurn } = host;
 

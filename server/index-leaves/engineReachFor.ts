@@ -6,7 +6,7 @@ import { claudeAiConnectorsForTurn, connectorPrincipalFor, grokCloudConnectorsFo
 export type Host = Record<string, any>;
 
 export function createEngineReachFor(getHost: () => Host): any {
-function engineReachFor(bot: BotRecord, instance: Parameters<typeof host.withholdHostToolsFor>[0] & { instanceId: string }, speaker: TurnSpeaker, via?: TurnAccess["via"], slot: LoginSlot = getHost().turnSlotFor(bot, instance)): Array<{ connector: string }> | null {
+function engineReachFor(bot: BotRecord, instance: Parameters<typeof withholdHostToolsFor>[0] & { instanceId: string }, speaker: TurnSpeaker, via?: TurnAccess["via"], slot: LoginSlot = getHost().turnSlotFor(bot, instance)): Array<{ connector: string }> | null {
   const host = getHost();
   const input = host.accountConnectorInput(bot, instance, speaker, via, slot);
   if (claudeAiConnectorsForTurn(input)) {

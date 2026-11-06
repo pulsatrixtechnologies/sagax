@@ -1,6 +1,6 @@
 // @ts-nocheck
 /** defaultsPresetFor (#1388). Pure move from server/index.ts. */
-import { sharedPicture } from "../packages/package-export.ts";
+import { picture as sharedPicture } from "../packages/package-export.ts";
 import { presetFromDefaults, DEFAULTS_PRESET_KEY } from "../presets.ts";
 export type Host = Record<string, any>;
 

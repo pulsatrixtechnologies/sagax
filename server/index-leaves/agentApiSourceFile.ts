@@ -1,6 +1,6 @@
 // @ts-nocheck
 /** agentApiSourceFile (#1388). Pure move from server/index.ts. */
-import { AGENT_SEND_FILE_MAX_BYTES } from "../agent-api.ts";
+import { SEND_FILE_MAX_BYTES as AGENT_SEND_FILE_MAX_BYTES } from "../agent-api.ts";
 import { join, sep } from "node:path";
 import { statSync, realpathSync } from "node:fs";
 import { ATTACHMENTS_DIR } from "../attachments/attachments.ts";

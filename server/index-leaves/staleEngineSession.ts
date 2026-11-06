@@ -3,7 +3,7 @@
 export type Host = Record<string, any>;
 
 export function createStaleEngineSession(getHost: () => Host): any {
-function staleEngineSession(threadId: string, task: TaskRecord, instance: NonNullable<ReturnType<typeof host.registry.get>>,   messages: readonly Message[], excludedIds: ReadonlySet<string>) {
+function staleEngineSession(threadId: string, task: TaskRecord, instance: NonNullable<ReturnType<typeof registry.get>>,   messages: readonly Message[], excludedIds: ReadonlySet<string>) {
   const host = getHost();
   const { isContextMessage, replaysNatively } = host;
 

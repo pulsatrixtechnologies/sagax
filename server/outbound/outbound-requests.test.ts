@@ -4,7 +4,7 @@
 // happened, never leave a waiter hanging.
 import { describe, expect, it } from "vitest";
 
-import { OutboundRequestService } from "./outbound-requests.ts";
+import { OutboundRequestService, outboundCard } from "./outbound-requests.ts";
 
 const open = (service: OutboundRequestService, timeoutMs = 60_000) =>
   service.open({ botId: "b1", threadId: "t1", tool: "GMAIL_SEND_EMAIL", timeoutMs });
@@ -56,5 +56,18 @@ describe("OutboundRequestService", () => {
       state: "already_settled",
       behavior: "timeout",
     });
+  });
+});
+
+describe("outboundCard", () => {
+  it("summarizes each send for the consent card, cutting long arguments at 400 characters", () => {
+    const long = "x".repeat(500);
+    const card = outboundCard([
+      { slug: "GMAIL_SEND_EMAIL", arguments: { to: "a@fixture.test", body: long } },
+      { slug: "SLACK_SEND_MESSAGE", arguments: { text: "hi" } },
+    ]);
+    expect(card.calls).toHaveLength(2);
+    expect(card.summary).toContain("… [arguments truncated]");
+    expect(card.summary).toContain("hi");
   });
 });

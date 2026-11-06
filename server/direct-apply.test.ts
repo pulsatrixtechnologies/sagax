@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { directApply } from "./direct-apply.ts";
+import { appliesNow, directApply } from "./direct-apply.ts";
+
+describe("appliesNow", () => {
+  it("reports full-access or level, and null when the owner must confirm", () => {
+    expect(appliesNow({ fullAccess: true, ownerMustConfirm: false })).toBe("full-access");
+    expect(appliesNow({ fullAccess: false, ownerMustConfirm: false })).toBe("level");
+    expect(appliesNow({ fullAccess: true, ownerMustConfirm: true })).toBeNull();
+  });
+});
 
 describe("directApply", () => {
   it("applies everything at Full access, unchanged", () => {

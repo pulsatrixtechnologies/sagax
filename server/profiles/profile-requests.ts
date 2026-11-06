@@ -332,9 +332,9 @@ export class ProfileRequestService {
 
     const copy = profileCardCopy({ name: targetName, crossBot }, snapshot, before, finalChanges, reason);
     const grant = submitted && !args.quoteRefused ? (args.primaryAsked ? "primary-bot" as const : this.autoApply?.(args.botId, args.threadId, targetBotId) ?? null) : null;
-    // A new working folder widens what the bot's tools read and write
-    // without asking, so below Full access it keeps today's card.
-    const automatic = grant === "full-access" || ((grant === "self" || grant === "primary-bot") && finalChanges.cwd === undefined);
+    // omb #3014: any grant applies with Undo, including a cwd change. The
+    // person sees a receipt, not a second card on top of the level they chose.
+    const automatic = grant !== null;
     const persistence = this.canPersist?.(args.botId, args.threadId, !automatic);
     if (persistence && !persistence.ok) {
       throw new ProfileRequestError(persistence.error, persistence.status);

@@ -399,12 +399,8 @@ function handleDesktopTrustedApprovalMessage(raw: unknown): boolean {
     return true;
   }
   if (!host.supportsApprovalMode(existing.modelSelection, mode)) {
-    respond({
-      ok: false,
-      error: mode === "full"
-        ? "This provider does not support Full access"
-        : "Custom approval settings are available only for Codex bots"
-    });
+    // Full runs on every engine (omb #2808); only Custom is engine-bound.
+    respond({ ok: false, error: "Custom approval settings are available only for Codex bots" });
     return true;
   }
   if (

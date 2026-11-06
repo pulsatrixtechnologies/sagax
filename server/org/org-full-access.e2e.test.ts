@@ -147,8 +147,8 @@ posixOnly("organization Full access", () => {
     erinId = (await api("GET", "/api/auth/session", erin)).body.principalId;
     const created = await api("POST", "/api/bots", erin, { name: "Zed" });
     expect(created.status, created.text).toBe(201);
-    // #1098: no policy saved, so a new bot of the organization starts on
-    // Approve for me, as on a solo server
+    // #1098 / this fixture: no org New-bot policy saved, so a new bot starts
+    // on Approve for me. Full still comes only from the owner's own grant.
     expect(created.body.bot.approvalMode).toBe("auto");
     const patched = await api("PATCH", `/api/bots/${created.body.bot.id}`, erin, { modelSelection: { instanceId: "claude", model: "fake-model" } });
     expect(patched.status, patched.text).toBe(200);
@@ -167,24 +167,21 @@ posixOnly("organization Full access", () => {
     if (home) removeTempDir(home);
   });
 
-  it("FA-1: the owner confirms once, the turn bypasses prompts, host tools stay withheld", async () => {
-    // 2026-10-26 (owner): no organization switch, the owner's confirmation is the gate
+  it("FA-1: the owner turns Full on at once, the turn bypasses prompts, host tools stay withheld", async () => {
+    // 2026-10-26 (owner): no organization switch; omb #2701: Full needs no confirmation dialog
     expect((await api("GET", "/api/org", alice)).body.settings.allowFullAccess).toBe(true);
     const thread = `/api/bots/${zed.id}/tasks/${zed.threadId}`;
-    const unconfirmed = await api("PATCH", thread, erin, { approvalMode: "full" });
-    expect(unconfirmed.status, unconfirmed.text).toBe(409);
-    expect(unconfirmed.body.code).toBe("full_access_confirm_required");
     // the admin is not the owner
     // the admin never reaches the owner's private thread, and is not the
     // bot's owner either
-    expect((await api("PATCH", thread, alice, { approvalMode: "full", confirmFullAccess: true })).status).toBe(404);
-    const byAdmin = await api("PATCH", `/api/bots/${zed.id}`, alice, { approvalMode: "full", confirmFullAccess: true });
+    expect((await api("PATCH", thread, alice, { approvalMode: "full" })).status).toBe(404);
+    const byAdmin = await api("PATCH", `/api/bots/${zed.id}`, alice, { approvalMode: "full" });
     expect(byAdmin.body.code, byAdmin.text).toBe("full_access_owner_only");
-    const granted = await api("PATCH", thread, erin, { approvalMode: "full", confirmFullAccess: true });
+    const granted = await api("PATCH", thread, erin, { approvalMode: "full" });
     expect(granted.status, granted.text).toBe(200);
     expect(granted.body.task.approvalMode).toBe("full");
     expect(granted.body.bot.fullAccessConsent.principalId).toBe(erinId);
-    // confirmed once: the next grant for this bot needs no confirmation
+    // turning Full off and on again still needs no confirmation
     expect((await api("PATCH", thread, erin, { approvalMode: "ask" })).status).toBe(200);
     expect((await api("PATCH", thread, erin, { approvalMode: "full" })).status).toBe(200);
 
@@ -193,7 +190,8 @@ posixOnly("organization Full access", () => {
     expect(sent.status, sent.text).toBe(202);
     await waitFor(async () => existsSync(dump), 20_000);
     const argv = (JSON.parse(readFileSync(dump, "utf8")) as { argv: string[] }).argv;
-    expect(argv[argv.indexOf("--permission-mode") + 1]).toBe("bypassPermissions");
+    // Sagax #1982: Full keeps acceptEdits + the broker (no bypassPermissions).
+    expect(argv[argv.indexOf("--permission-mode") + 1]).toBe("acceptEdits");
     const denied = argv[argv.indexOf("--disallowedTools") + 1]!.split(",");
     for (const tool of CLAUDE_HOST_TOOLS) expect(denied).toContain(tool);
     await waitFor(async () => (await auditRows(alice, "approval")).some((row) => row.action === "approval.full_access_turn"));

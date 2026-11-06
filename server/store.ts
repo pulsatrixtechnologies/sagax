@@ -746,7 +746,7 @@ export class Store {
   private defaultSelection: () => ModelSelection;
   private completeNewBotSelection: (selection: ModelSelection) => ModelSelection;
   /** The approval level every new bot and its first thread start on. */
-  private newBotApprovalMode: () => "ask" | "auto";
+  private newBotApprovalMode: () => "ask" | "auto" | "full";
   private greetingLanguage: (ownerUserId: string | undefined) => "fr" | "en";
   private listeners = new Set<(change: StoreChange) => void>();
   /** A broken team registry must not prevent loading independent chat data. */
@@ -768,9 +768,9 @@ export class Store {
     /** Template effort applied to every new bot's selection, whichever path
      * created it. */
     completeNewBotSelection: (selection: ModelSelection) => ModelSelection = (selection) => selection,
-    /** Approve for me on a solo server; on an organization server the
-     * organization's policy decides (2026-10-11, orgNewBotApprovalMode). */
-    newBotApprovalMode: () => "ask" | "auto" = () => "auto",
+    /** Full access on a solo server (omb #2808); on an organization server
+     * the organization's policy decides (2026-10-11, orgNewBotApprovalMode). */
+    newBotApprovalMode: () => "ask" | "auto" | "full" = () => "full",
     /** The language a new bot's greeting uses for the person who will own
      * it (#1075, server/bots/new-bot-greeting.ts). English when not given. */
     greetingLanguage: (ownerUserId: string | undefined) => "fr" | "en" = () => "en",
@@ -1223,14 +1223,16 @@ export class Store {
         botsMigrated = true;
       }
     }
-    // Approve for me is the default. The first start on this data directory
-    // moves bots and threads still on Ask (or with no mode) onto it. A later
-    // choice of Ask, Edits, Full or Custom stays. This computer keeps Ask
-    // until its own warning. A grant revoked above stays Ask, threads included.
-    // The marker is written after the save so a crash before the write retries.
-    // Where new bots start on Ask (an organization whose policy does not say
-    // Approve for me, 2026-10-11) nothing moves, and the marker is written so
-    // a later change of that policy never moves existing bots either.
+    // When new bots still start on Approve for me (org New-bot policy), the
+    // first start on this data directory moves bots and threads still on Ask
+    // (or with no mode) onto Auto. Solo servers now start on Full (omb #2808),
+    // so this pass is a no-op there. A later choice of Ask, Edits, Full or
+    // Custom stays. This computer keeps Ask until its own warning. A grant
+    // revoked above stays Ask, threads included. The marker is written after
+    // the save so a crash before the write retries. Where new bots start on
+    // Ask (an organization whose policy says Ask, 2026-10-11) nothing moves,
+    // and the marker is written so a later change of that policy never moves
+    // existing bots either.
     const approvalDefaultMarker = join(DATA_DIR, "approval-default-auto.v1");
     const approvalDefaultPending = !existsSync(approvalDefaultMarker);
     if (approvalDefaultPending && this.newBotApprovalMode() === "auto") {
@@ -2540,10 +2542,14 @@ patchGroup(id: string, patch: Partial<Pick<GroupRecord, "name" | "memberIds" | "
         if (at >= 0 || !operation.threadId || !operation.fields.name || !operation.fields.modelSelection) throw new Error("Invalid new bot in team setup");
         const createdAt = Date.now();
         const modelSelection = this.newBotSelection(operation.fields.modelSelection);
+        // omb #2808: teammates start at the same default as any new bot
+        // (Full on solo; org New-bot policy on Perspicax). A level named in
+        // operation.fields still wins via the spread.
+        const startMode = this.newBotApprovalMode();
         next = { id: operation.botId, threadId: operation.threadId, name: operation.fields.name,
           title: "", description: "", soul: "", notifications: true, color: COLORS[nextBots.length % COLORS.length], unread: false,
           resumeCursors: {}, createdAt, ...operation.fields, modelSelection,
-          approvalMode: "auto", autoApprove: true, approvePeerComms: false,
+          approvalMode: startMode, autoApprove: startMode === "auto", approvePeerComms: false,
           // A Primary Bot's new teammate is seen by exactly the Primary Bot's audience:
           // a restricted Primary Bot never creates a bot everyone sees.
           ...(chief.visibility && chief.visibility !== "everyone" ? { visibility: structuredClone(chief.visibility) } : {}),

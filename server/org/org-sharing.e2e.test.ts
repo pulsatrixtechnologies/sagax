@@ -664,14 +664,14 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     expect((await api("POST", `/api/bots/${zed.id}/direct-grants`, erin, { userId: aliceId })).status).toBe(200);
     // Custom stays the org rule (2026-10-01: Full follows org-full-access.ts)
     expect((await api("PATCH", `/api/bots/${zed.id}`, erin, { approvalMode: "custom" })).body.code).toBe("member_bot_full_access");
-    // Full: the owner must confirm the warning once for this bot
-    const unconfirmed = await api("PATCH", `/api/bots/${zed.id}`, erin, { approvalMode: "full" });
-    expect(unconfirmed.status, unconfirmed.text).toBe(409);
-    expect(unconfirmed.body.code).toBe("full_access_confirm_required");
+    // Full: the owner turns it on at once with no confirmation (omb #2701)
+    const granted = await api("PATCH", `/api/bots/${zed.id}`, erin, { approvalMode: "full" });
+    expect(granted.status, granted.text).toBe(200);
+    expect(granted.body.bot.approvalMode).toBe("full");
     // 2026-10-26 (owner): Ask or Auto on their own bot is the owner's own setting
     expect((await api("PATCH", `/api/bots/${zed.id}`, erin, { approvalMode: "auto" })).status).toBe(200);
     // an admin is not the owner: never Full on someone else's bot
-    const full = await api("PATCH", `/api/bots/${zed.id}`, alice, { approvalMode: "full", confirmFullAccess: true });
+    const full = await api("PATCH", `/api/bots/${zed.id}`, alice, { approvalMode: "full" });
     expect(full.status, full.text).toBe(403);
     expect(full.body.code).toBe("full_access_owner_only");
     expect((await api("PATCH", `/api/bots/${zed.id}`, alice, { approvalMode: "custom" })).body.code).toBe("member_bot_full_access");

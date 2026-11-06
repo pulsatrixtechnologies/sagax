@@ -47,15 +47,6 @@ const mint = async (botId: string, threadId: string, kind = "connectors") => {
 const relay = (token: string, name: string, args: unknown = {}) => api("POST", "/api/internal/connectors/mcp",
   { jsonrpc: "2.0", id: Math.random(), method: "tools/call", params: { name, arguments: args } }, token);
 const cards = async (thread: string) => (await api("GET", `/api/threads/${thread}/messages?limit=100`)).body.messages as any[];
-const pending = async (thread: string) => {
-  let card: any;
-  await expect.poll(async () => {
-    card = (await cards(thread)).findLast((row: any) => row.card?.outboundRequest && !row.card.answered);
-    return Boolean(card);
-  }, { timeout: 5_000 }).toBe(true);
-  return card;
-};
-
 beforeAll(async () => {
   broker = createServer(async (req, res) => {
     let raw = "";
@@ -150,26 +141,24 @@ it("keeps activity, direct shared-memory edits and policy changes admin-only; a 
   expect((await api("PATCH", `/api/bots/${b.id}`, { fallback: [{ instanceId: "claude", model: " " }] })).status).toBe(400);
 });
 
-// Sagax keeps a bot private to its owner on a shared workspace: the seeded
-// bot (created over loopback, owned by this computer's person) is not in the
+// omb #2894: Full access sends without a card. Skipped here because Sagax
+// keeps a bot private to its owner on a shared workspace: the seeded bot
+// (created over loopback, owned by this computer's person) is not in the
 // email admin's fleet, so this upstream scenario does not apply as written.
-it.skip("asks in Full, refuses denied sends, and rechecks scopes after an approval", async () => {
+// Behavior is covered by autoVerdict("full", … outbound) → full-access.
+it.skip("sends in Full without a card, and still refuses an app outside the bot's scope", async () => {
   const b = fullBot;
   const fleet = await api("GET", "/api/bots");
   expect(fleet.body.bots.find((row: any) => row.id === b.id).approvalMode).toBe("full");
   const token = await mint(b.id, b.threadId);
   const before = relayed.length;
-  const denied = relay(token, "GMAIL_SEND_DRAFT", { draft_id: "fixture" });
-  let card = await pending(b.threadId);
-  await api("POST", `/api/threads/${b.threadId}/respond`, { requestId: card.card.requestId, behavior: "deny" });
-  expect((await denied).body.result.isError).toBe(true);
-  expect(relayed).toHaveLength(before);
-  const held = relay(token, "GMAIL_SEND_EMAIL");
-  card = await pending(b.threadId);
+  expect((await relay(token, "GMAIL_SEND_EMAIL", { to: "first@fixture.test" })).body.result.isError).not.toBe(true);
+  expect((await relay(token, "COMPOSIO_REMOTE_WORKBENCH", { code_to_execute: "print(1)" })).body.result.isError).not.toBe(true);
+  expect(relayed).toHaveLength(before + 2);
+  expect((await cards(b.threadId)).some((row: any) => row.card?.outboundRequest)).toBe(false);
   await api("PATCH", `/api/bots/${b.id}`, { connectorScopes: { apps: { gmail: "read" } } });
-  await api("POST", `/api/threads/${b.threadId}/respond`, { requestId: card.card.requestId, behavior: "allow" });
-  expect((await held).body.result.isError).toBe(true);
-  expect(relayed).toHaveLength(before);
+  expect((await relay(token, "GMAIL_SEND_EMAIL")).body.result.isError).toBe(true);
+  expect(relayed).toHaveLength(before + 2);
 });
 
 it("keeps accepted facts through a replacement review and rejects autonomous restricted memory", async () => {

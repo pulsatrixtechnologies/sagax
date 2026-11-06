@@ -169,7 +169,15 @@ export async function commitBotPatch(env: BotsMutateEnv, state: BotPatchState): 
     bot = env.store.patchBotProfile(m[1], profile.patch);
   } else {
     if (freshBrowserBot) env.assertTeamComputerChangeIdle(freshBrowserBot, { ...freshBrowserBot, ...patch } as BotRecord);
-    bot = env.store.patchBot(m[1], patch, { actorPrincipalId: env.sessionPrincipal(env.auth) });
+    // omb #2701: Full over HTTP records consent so new conversations and
+    // turn-time checks know who chose it (same marker the desktop channel wrote).
+    let commitPatch = patch;
+    if (patch.approvalMode === "full") {
+      const principalId = env.sessionPrincipal(env.auth)
+        ?? (env.auth.kind === "loopback" && env.auth.trust !== "service" ? env.localPrincipalId().trim().toLowerCase() : null);
+      if (principalId) commitPatch = { ...patch, fullAccessConsent: { principalId, at: Date.now() } };
+    }
+    bot = env.store.patchBot(m[1], commitPatch, { actorPrincipalId: env.sessionPrincipal(env.auth) });
   }
   if (!bot) {
     env.json(env.res, 404, { error: "no such bot" });

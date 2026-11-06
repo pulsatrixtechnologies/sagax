@@ -8,18 +8,19 @@ afterEach(() => vi.unstubAllGlobals());
 describe("configured bot creation", () => {
   function fixture(mode: "ask" | "auto" | "full" | "custom", fail = 0, selection?: Bot["modelSelection"]) {
     const draft = new BotCreationDraft(EMPTY_BOT_DEFAULTS, vi.fn());
-    draft.patch({ name: "Fixture", approvalMode: mode, notifications: false, confirmFullAccess: true });
+    draft.patch({ name: "Fixture", approvalMode: mode, notifications: false });
     let bot = { ...draft.bot, id: "created", threadId: "initial", approvalMode: "ask" } as Bot;
     if (selection) bot.modelSelection = selection;
     const events: string[] = [];
     const bodies: unknown[] = [];
-    const request = vi.fn(async (path: string, init?: RequestInit) => {
+    const requestMock = vi.fn(async (path: string, init?: RequestInit) => {
       events.push(`${init?.method} ${path}`);
       const body = JSON.parse(String(init?.body ?? "{}"));
       bodies.push(body);
       if (init?.method === "PATCH") bot = { ...bot, ...body };
       return { bot };
-    }) as unknown as typeof api;
+    });
+    const request = requestMock as unknown as typeof api;
     let grants = 0;
     const approvals = { setMode: vi.fn(async (_id: string, grant: string, options?: { threadId?: string }) => {
       events.push(`grant ${options?.threadId ?? "bot"}`);
@@ -27,7 +28,7 @@ describe("configured bot creation", () => {
       bot = { ...bot, approvalMode: grant } as Bot;
       return bot;
     }) };
-    return { draft, events, bodies, request, approvals };
+    return { draft, events, bodies, request, requestMock, approvals, getBot: () => bot };
   }
 
   it("sets the chosen audience in the first creation request", async () => {
@@ -73,7 +74,7 @@ describe("configured bot creation", () => {
 
   it("keeps the permission settings a member's profile opens (#1076)", async () => {
     const f = fixture("auto");
-    f.draft.patch({ computer: "vm", proactiveMode: "off", voiceNotes: false, acknowledgeLocalAuto: true, confirmFullAccess: true });
+    f.draft.patch({ computer: "vm", proactiveMode: "off", voiceNotes: false, acknowledgeLocalAuto: true });
     const approvalLevel = new Set(["approvalMode", "autoApprove", "acknowledgeLocalAuto", "proactiveMode"]);
     await createConfiguredBot(f.draft, f.request, persistBotUpdate, f.approvals, undefined, {
       memberFieldsOnly: true, memberMayWrite: field => approvalLevel.has(field),
@@ -102,26 +103,75 @@ describe("configured bot creation", () => {
       expect(f.bodies[0]).toMatchObject({ useDefaults: false, name: "Fixture" });
       expect(result.bot).toMatchObject({ approvalMode: mode, notifications: false });
       expect(result.warnings).toEqual([]);
+      // Full goes over HTTP (omb #2701); Custom still uses the desktop bridge.
       expect(f.events.filter(event => event.startsWith("grant"))).toEqual(
-        mode === "full" || mode === "custom" ? ["grant bot", "grant initial"] : [],
+        mode === "custom" ? ["grant bot", "grant initial"] : [],
       );
+      if (mode === "full") {
+        expect(f.events).toEqual([
+          "POST /api/bots",
+          "PATCH /api/bots/created",
+          "PATCH /api/bots/created/tasks/initial",
+        ]);
+      }
       expect(f.events).not.toContain("DELETE /api/bots/created");
     });
   }
 
-  for (const fail of [1, 2]) {
-    it(`rolls back when native grant ${fail} fails`, async () => {
-      const f = fixture("full", fail);
-      await expect(createConfiguredBot(f.draft, f.request, persistBotUpdate, f.approvals)).rejects.toThrow("Grant rejected");
-      expect(f.events.at(-1)).toBe("DELETE /api/bots/created");
-    });
-  }
-
-  it("does not grant the initial thread when the native bot grant returns the wrong mode", async () => {
+  it("applies Full to the bot and its first thread over the API when there is no desktop bridge", async () => {
     const f = fixture("full");
-    f.approvals.setMode.mockImplementation(async () => ({ ...f.draft.bot, id: "created", threadId: "initial", approvalMode: "ask" }));
-    await expect(createConfiguredBot(f.draft, f.request, persistBotUpdate, f.approvals)).rejects.toThrow("was not granted");
-    expect(f.approvals.setMode).toHaveBeenCalledTimes(1);
+    const result = await createConfiguredBot(f.draft, f.request, persistBotUpdate, undefined);
+    expect(result.bot).toMatchObject({ approvalMode: "full" });
+    expect(f.events).toEqual(["POST /api/bots", "PATCH /api/bots/created", "PATCH /api/bots/created/tasks/initial"]);
+    expect(f.bodies[1]).toMatchObject({ approvalMode: "full" });
+    expect(f.bodies[2]).toEqual({ approvalMode: "full" });
+    for (const body of f.bodies) expect(body).not.toHaveProperty("confirmFullAccess");
+  });
+
+  it("still refuses Custom without the desktop bridge and removes the half-made bot", async () => {
+    const f = fixture("custom");
+    await expect(createConfiguredBot(f.draft, f.request, persistBotUpdate, undefined)).rejects.toThrow("desktop app on the computer that runs this server");
+    expect(f.events).toEqual(["POST /api/bots", "DELETE /api/bots/created"]);
+  });
+
+  it("rolls back when the Custom desktop grant fails", async () => {
+    const f = fixture("custom", 1);
+    await expect(createConfiguredBot(f.draft, f.request, persistBotUpdate, f.approvals)).rejects.toThrow("Grant rejected");
+    expect(f.events.at(-1)).toBe("DELETE /api/bots/created");
+  });
+
+  it("rolls back when the Full thread PATCH fails after the bot grant", async () => {
+    const f = fixture("full");
+    f.requestMock.mockImplementation(async (path: string, init?: RequestInit) => {
+      f.events.push(`${init?.method} ${path}`);
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      f.bodies.push(body);
+      if (init?.method === "PATCH" && path.includes("/tasks/")) throw new Error("Thread grant rejected");
+      if (init?.method === "PATCH") {
+        const bot = { ...f.getBot(), ...body } as Bot;
+        return { bot };
+      }
+      return { bot: f.getBot() };
+    });
+    await expect(createConfiguredBot(f.draft, f.request, persistBotUpdate, undefined)).rejects.toThrow("Thread grant rejected");
+    expect(f.events.at(-1)).toBe("DELETE /api/bots/created");
+  });
+
+  it("does not grant the initial thread when the bot PATCH returns the wrong mode", async () => {
+    const f = fixture("full");
+    f.requestMock.mockImplementation(async (path: string, init?: RequestInit) => {
+      f.events.push(`${init?.method} ${path}`);
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      f.bodies.push(body);
+      if (init?.method === "POST") return { bot: f.getBot() };
+      if (init?.method === "PATCH" && path === "/api/bots/created") {
+        return { bot: { ...f.getBot(), approvalMode: "ask" } as Bot };
+      }
+      if (init?.method === "DELETE") return { bot: f.getBot() };
+      return { bot: { ...f.getBot(), ...body } as Bot };
+    });
+    await expect(createConfiguredBot(f.draft, f.request, persistBotUpdate, undefined)).rejects.toThrow("was not granted");
+    expect(f.events.filter((event) => event.includes("/tasks/"))).toEqual([]);
     expect(f.events.at(-1)).toBe("DELETE /api/bots/created");
   });
 });

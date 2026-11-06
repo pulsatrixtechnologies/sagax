@@ -1,7 +1,7 @@
-// The level a new bot starts on comes from the server (2026-10-11): Approve
-// for me on a solo server, the organization's policy on an organization
+// The level a new bot starts on comes from the server (2026-10-11 / omb #2808):
+// Full access on a solo server, the organization's policy on an organization
 // server, and the one-time move of older bots from Ask to Approve for me never
-// runs where new bots start on Ask.
+// runs where new bots start on Ask (or on Full).
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -17,16 +17,16 @@ describe("the level a new bot starts on", () => {
   // The shared Vitest setup gives this file its own disposable home.
   beforeEach(() => rmSync(DATA_DIR, { recursive: true, force: true }));
 
-  it("is Approve for me by default (a solo server), bot and first thread", () => {
+  it("is Full access by default (a solo server), bot and first thread", () => {
     const store = new Store(selection);
     const created = store.createBot({}, { seedMessages: false });
-    expect(created).toMatchObject({ approvalMode: "auto", autoApprove: true });
+    expect(created).toMatchObject({ approvalMode: "full", autoApprove: false });
     // #1207: the first thread stores no copy of the level; it reads the bot's.
     expect(created.tasks?.[0].approvalMode).toBeUndefined();
-    expect(store.projectBotForTask(created.id, created.threadId)).toMatchObject({ approvalMode: "auto", autoApprove: true });
-    // The zero-choice default is the safe level, never Full access: making the
-    // engine/model Auto must never weaken the approval safeguard.
-    expect(created.approvalMode).not.toBe("full");
+    expect(store.projectBotForTask(created.id, created.threadId)).toMatchObject({ approvalMode: "full", autoApprove: false });
+    // omb #2808: solo servers start on Full, like t3code. Org New-bot policy
+    // still chooses Ask or Approve for me on Perspicax.
+    expect(created.approvalMode).toBe("full");
   });
 
   it("follows the server's level, read at each creation", () => {

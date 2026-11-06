@@ -222,11 +222,11 @@ export interface CoordinatorHost {
   unparked?(node: HandoffView, reason: string, defaulted: boolean): void;
   /** The permission level the target thread will actually run with, after
    * the host applied any delegated level, and its engine kind. Recorded on
-   * the assignment so the envelope states the truth (invariant I6). For a
-   * hand-off, `source` is the requesting node's address: a Chief's level
-   * flows into a room with the hand-off (never onto the shared thread), so
-   * the host resolves it from the source, as the room turn will. */
-  levelOf(target: RoomAddress, source?: RoomAddress): { level: Level; driverKind?: string };
+   * the assignment so the envelope states the truth (invariant I6). When
+   * that level came down a Primary Bot's chain, `chief` is that conversation's
+   * level. `source` is the requester's node whose parents lead up the chain
+   * (room hand-offs included). */
+  levelOf(target: RoomAddress, source?: HandoffView): { level: Level; chief?: Level; driverKind?: string };
   /** The conversation is a Chief of Staff's. */
   chiefOf(address: RoomAddress): boolean;
   /** What the cut turn of this node already did outward (sent, posted,

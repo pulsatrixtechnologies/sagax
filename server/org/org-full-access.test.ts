@@ -63,14 +63,12 @@ describe("organization Full access grants", () => {
       .toBe("full_access_owner_only");
   });
 
-  it("asks for the confirmation once per bot", () => {
-    expect(orgFullAccessGrantRefusal({ policyAllowed: true, callerPrincipalId: "alice", ownerPrincipalId: "alice", confirmed: false, consent: null })?.code)
-      .toBe("full_access_confirm_required");
+  it("turns Full on at once with no confirmation (omb #2701)", () => {
+    expect(orgFullAccessGrantRefusal({ policyAllowed: true, callerPrincipalId: "alice", ownerPrincipalId: "alice", confirmed: false, consent: null })).toBeNull();
     expect(orgFullAccessGrantRefusal({ policyAllowed: true, callerPrincipalId: "alice", ownerPrincipalId: "alice", confirmed: true, consent: null })).toBeNull();
     expect(orgFullAccessGrantRefusal({ policyAllowed: true, callerPrincipalId: "Alice", ownerPrincipalId: "alice", confirmed: false, consent })).toBeNull();
-    // another person's consent is not the owner's
-    expect(orgFullAccessGrantRefusal({ policyAllowed: true, callerPrincipalId: "alice", ownerPrincipalId: "alice", confirmed: false, consent: { principalId: "bob", at: 1 } })?.code)
-      .toBe("full_access_confirm_required");
+    // another person's prior consent does not block the owner
+    expect(orgFullAccessGrantRefusal({ policyAllowed: true, callerPrincipalId: "alice", ownerPrincipalId: "alice", confirmed: false, consent: { principalId: "bob", at: 1 } })).toBeNull();
   });
 
   it("runs a turn Full only while the policy is on and the current owner consented", () => {

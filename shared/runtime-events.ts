@@ -183,6 +183,11 @@ export type RuntimeEvent = RuntimeEventBase &
          * defaults to the working folder), resolved against the turn's
          * working folder. Absent when the tool names no file. */
         paths?: string[];
+        /** Absolute paths a read tool's ask reads (Claude Read/Grep/Glob/LS/
+         * NotebookRead, or an ACP read call). A request that reads only the
+         * bot's own files is answered without the person
+         * (server/own-file-reads.ts). Like `command`, never broadcast. */
+        reads?: string[];
         choices?: string[];
         /** A provider's structured ask (Claude's AskUserQuestion): the whole
          * set of questions, each with its own options, so the card can offer

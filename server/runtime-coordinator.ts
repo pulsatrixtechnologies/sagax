@@ -303,7 +303,8 @@ export class RuntimeCoordinator implements Coordinator {
     const reply: Reply = asked === "notify" ? "none" : root.reply === "poll" ? "poll" : "resume";
     const requester: Requester = { kind: "bot_turn", botId: parent.assignee.botId, threadId: parent.assignee.destination.threadId,
       chief: this.host.chiefOf(address(parent)), ...(parent.id === root.id && root.requester.runId !== undefined ? { runId: root.requester.runId } : {}) };
-    const level = this.host.levelOf(target, address(parent));
+    // Pass the requester's node so a Primary Bot's level walks every hop (omb #3470).
+    const level = this.host.levelOf(target, view(parent));
     const criterion = typeof doneWhen === "string" ? doneWhen.trim().slice(0, 500) : "";
     const result = this.runtime.enqueue({
       parentId: parent.id,
@@ -313,7 +314,7 @@ export class RuntimeCoordinator implements Coordinator {
         ...(target.groupId ? { groupId: target.groupId } : {}) } },
       mode: asked, reply, brief: text, rework,
       ...(extra.priority ? { priority: extra.priority } : {}),
-      levels: { own: level.level },
+      levels: { own: level.level, ...(level.chief !== undefined ? { chief: level.chief } : {}) },
       ...(level.driverKind !== undefined ? { driverKind: level.driverKind } : {}),
       approved: approvalGranted,
       ...(target.groupId && requestBatchKey ? { batchKey: requestBatchKey } : {}),

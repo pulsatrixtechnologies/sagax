@@ -291,7 +291,6 @@ model.simple.manage
 model.simple.model
 model.simple.needsSetup
 model.simple.provider
-model.simple.reasoning
 model.simple.setUp
 model.simple.signInForOwn
 myConnections.preferences.clear

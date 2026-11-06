@@ -204,6 +204,7 @@ import {
   liveApprovalChange,
   liveApprovalTightens,
   isApprovalMode,
+  setDefaultApprovalMode,
   appliedLevelReason,
   staleThreadException,
   type AppliedApprovalLevel,
@@ -286,8 +287,8 @@ import {
   approvalModeForOrigin,
   autoVerdict,
   deliverFullAccessApproval,
-  delegatedApprovalMode
 } from "./approvals/auto-approve.ts";
+import { readsOwnFiles } from "./own-file-reads.ts";
 import { CommandAllowlistStore, commandAllowlistCandidate, sandboxCommandCandidate } from "./command-allowlist.ts";
 import type { CommandAllowlistCandidate, CommandAllowlistResponse } from "../shared/command-allowlist.ts";
 import { claudeAccountInfo } from "./engines/claude-accounts.ts";
@@ -1293,6 +1294,8 @@ import {
   subscribeLoopGuard
 } from "./host/loop-guard-wiring.ts";
 import { correctiveRounds, loopGuardSettings } from "./host/loop-guard.ts";
+import { createDelegatedLevel } from "./host/delegated-level.ts";
+import { createLiveApprovalMode } from "./host/live-approval.ts";
 import { createWaitsBootstrap, cancelWaitFromCard, waitRunChat } from "./waits/wait-host.ts";
 import { findWaitPeer, hostWaitRefusal, waitSourceRefusal } from "./routes/waits.ts";
 import { createReadAndDraft } from "./read-and-draft.ts";
@@ -3461,6 +3464,11 @@ const customRules = new CustomRuleStore(join(DATA_DIR, "custom-approval-rules.js
 const botSettings = createBotSettingsStore(DATA_DIR);
 const SESSION_COOKIE = sessionCookieName(PORT, ENVIRONMENT_ID);
 const HOSTED_WORKSPACE = hostedWorkspaceConfigured();
+// omb #2808 / PRO-RÈGLE: Full access is every bot's default on a solo
+// server. On a shared company workspace or organization server, unset bots
+// stay at Ask; new bots still take the org New-bot policy via
+// newBotApprovalMode().
+if (HOSTED_WORKSPACE || IDENTITY.kind === "perspicax") setDefaultApprovalMode("ask");
 let workspaceAccess: WorkspaceAccess | null = null;
 const DESKTOP_MANAGED = process.env.SAGAX_DESKTOP_PARENT === "1";
 const SHARED_WORKSPACE_FULL_ACCESS = sharedWorkspaceFullAccessConfigured();
@@ -8251,15 +8259,13 @@ function checkedModelSelection(
     }
     selection.variant = value.variant;
   }
-  const changed = current && (
+  // Each turn reads its reasoning level when it starts, so effort or variant
+  // (and Auto) may change while the bot works; the model may not.
+  const modelChanged = current && (
     selection.instanceId !== current.selection.instanceId ||
-    selection.model !== current.selection.model ||
-    selection.auto !== current.selection.auto ||
-    selection.autoOptimize !== current.selection.autoOptimize ||
-    selection.effort !== current.selection.effort ||
-    selection.variant !== current.selection.variant
+    selection.model !== current.selection.model
   );
-  if (current?.busy && changed) {
+  if (current?.busy && modelChanged) {
     return { ok: false, status: 409, error: "the bot is working — stop it before changing models" };
   }
   const target = registry.get(selection.instanceId);
@@ -11150,11 +11156,13 @@ const wireBot = (bot: BotRecord): WireBot => {
     Object.assign(rest, HELD_ACTIVITY);
   }
   // An elevated selection is inert until the desktop confirms its exact
-  // private reply. Every ordinary client sees the effective Ask state during
-  // that two-phase window, never a grant that may still roll back.
+  // private reply. Every ordinary client sees the level the bot runs at: Ask
+  // during that two-phase window, never a grant that may still roll back.
+  // Otherwise the resolved default (Full on solo, Ask on shared/org) so a
+  // record with no stored level still shows what the turn will run (omb #2808).
   const visible = approvalGrant && !approvalGrant.threadOnly
     ? { ...rest, approvalMode: "ask" as const, autoApprove: false }
-    : rest;
+    : { ...rest, approvalMode: approvalModeFor(rest) };
   const lead = instructionsLead(visible.soul);
   // 2026-10-19: a bot-to-bot conversation's cards wait on the person, who
   // never sees that conversation (server/approvals/inter-bot-approvals.ts).
@@ -11539,92 +11547,43 @@ function peerReviewRequired(bot: BotRecord, threadId: string): boolean {
   return peerContactCardRequired(Boolean(bot.approvePeerComms), sourceApprovalMode(bot.id, threadId));
 }
 
-/** A Primary Bot's level flows down its delegation. The person set the
- * Primary Bot's level so its work runs that way; a teammate the Primary Bot brings in
- * starting at "Ask for approval" meant switching every such thread by hand,
- * all day, for the whole team. So a teammate a Primary Bot delegates to starts at
- * the Primary Bot's level for that work: Auto-accept edits, Approve for me or Full
- * access (delegatedApprovalMode: never lower than the teammate's own level,
- * capped at what its engine implements). Only a Primary Bot passes its level on —
- * an ordinary bot's delegation still uses the recipient's setting. Returns
- * null to keep the recipient's own level. */
-function delegatedLevel(from: BotRecord, fromThreadId: string, target: BotRecord, recipientMode: ApprovalMode): ApprovalMode | null {
-  return delegatedApprovalMode({
-    senderIsChief: Boolean(from.chiefOfStaff),
-    senderMode: sourceApprovalMode(from.id, fromThreadId),
-    sameBot: from.id === target.id,
-    recipientMode,
-    recipientDriverKind: registry.cliTarget(target.modelSelection.instanceId)?.driverKind,
-    // Organization server: only a bot whose owner allowed Full access (and
-    // while the organization allows it) inherits a Primary Bot's Full.
-    recipientMemberOwned: orgDeniesFull(target)
-  });
+/** A Primary Bot's level flows down every hop it hands out (omb #3470): the
+ * nearest Primary Bot conversation up the hand-off chain lifts the teammate's
+ * thread (and room turns), with Sagax org gates kept in delegated-level.ts. */
+const delegatedLevel = createDelegatedLevel({
+  store,
+  node: (id) => coordinator.node(id),
+  sourceLevel: sourceApprovalMode,
+  turnLevel: approvalModeForTurn,
+  driverKind: (bot) => registry.cliTarget(bot.modelSelection.instanceId)?.driverKind,
+  guestDriven: cloudGuestDriven,
+  recipientMemberOwned: (bot) => memberOwnedInOrg(bot) && orgDeniesFull(bot),
+  memberAutoRefused: (bot, previous, next) => memberAutoRefused(bot, previous, next),
+  memberRoomTurnLevel: (level) => memberRoomTurnLevel(level, memberAutoApprovalAllowed(cfg.organization)),
+});
+
+/** A running turn's Sagax decisions read the conversation's saved level now
+ * (omb #3627), never the copy frozen on directTurnBots at dispatch. */
+const liveApprovalMode = createLiveApprovalMode({ store, turnLevel: approvalModeForTurn });
+
+/** Compatibility wrapper: callers that have no hand-off node still raise the
+ * first hop when `from` itself is a Primary Bot. */
+function applyDelegatedLevel(
+  from: BotRecord,
+  fromThreadId: string,
+  target: BotRecord,
+  threadId: string,
+  fromNodeId?: string,
+): void {
+  delegatedLevel.apply(from, fromThreadId, fromNodeId, target, threadId);
 }
 
-/** The teammate's own level for a thread of its own, before any delegation. */
-function ownThreadLevel(target: BotRecord, threadId: string): ApprovalMode {
-  return approvalModeForTurn(store.projectBotForTask(target.id, threadId) ?? target, false, threadId);
-}
-
-const DELEGATED_LEVEL_NAMES: Partial<Record<ApprovalMode, string>> = { edits: "Auto-accept edits", auto: "Approve for me", full: "Full access" };
-
-/** Start a thread the Chief opened at the Chief's level, and say so in it
- * once, so the level the chip shows and the level the turns run at agree,
- * and the person can see where it came from (and change it there). */
-function applyDelegatedLevel(from: BotRecord, fromThreadId: string, target: BotRecord, threadId: string): void {
-  const level = delegatedLevel(from, fromThreadId, target, ownThreadLevel(target, threadId));
-  if (!level || store.taskByThread(target.id, threadId)?.approvalMode === level) return;
-  // 2026-10-17 (re-review of #688): a Primary Bot's Auto or Auto-accept
-  // edits is never saved on a member's thread while the organization turned
-  // automatic levels off for members' bots; the thread keeps its own level.
-  if (memberAutoRefused(target, [store.taskByThread(target.id, threadId)?.approvalMode], level)) {
-    store.appendMessage(threadId, {
-      role: "bot",
-      kind: "activity",
-      tool: { name: `${DELEGATED_LEVEL_NAMES[level] ?? level} not passed on by ${from.name}: automatic levels are off for members' bots in this organization`, ok: false }
-    });
-    return;
-  }
-  store.patchTask(target.id, threadId, { approvalMode: level, autoApprove: false, alwaysAllow: [], approvalOwn: "delegated" });
-  const name = DELEGATED_LEVEL_NAMES[level] ?? level;
-  store.appendMessage(threadId, {
-    role: "bot",
-    kind: "activity",
-    tool: { name: `${name} — delegated by ${from.name}, a Primary Bot on ${name}`, ok: true }
-  });
-}
-
-/** A room member's level for one turn. Work a Primary Bot hands out in a room runs
- * at the Primary Bot's level for that turn: the room thread is shared, so the
- * level is not stored on it — it rides the handoff. */
 function roomTurnApprovalMode(bot: BotRecord, threadId: string, orchestration?: GroupTurnOrchestration): ApprovalMode {
   const handoff = orchestration?.roomHandoffId ? coordinator.node(orchestration.roomHandoffId) : undefined;
-  const source = handoff?.parentId ? coordinator.node(handoff.parentId) : undefined;
-  return roomTurnLevel(bot, threadId, source);
-}
-
-/** The one rule behind roomTurnApprovalMode, also what the coordinator
- * records on a room hand-off at enqueue (the host's levelOf): the level a
- * member's turn in `threadId` runs with, given the requesting node `source`
- * of a hand-off (none for the member's own turn), so the row and the turn
- * agree (invariant I6). */
-function roomTurnLevel(bot: BotRecord, threadId: string, source: Pick<HandoffView, "botId" | "threadId"> | undefined): ApprovalMode {
-  // On a Cloud home a room turn a guest drives runs in Ask (cloudGuestDriven).
-  if (cloudGuestDriven(threadId)) return "ask";
-  const from = source ? store.bot(source.botId) : undefined;
-  // On an organization server a bot runs Full, even for a Primary Bot's
-  // handoff, only when its owner allowed it and the organization does.
-  if (memberOwnedInOrg(bot) && orgDeniesFull(bot)) return "ask";
-  // A hand-off's turn is peer-initiated (Custom reads as Auto); a root's own
-  // turn, first or run again, is the person's.
-  const own = approvalModeForTurn(bot, source !== undefined, threadId);
-  const level = (from && source && delegatedLevel(from, source.threadId, bot, own)) || own;
-  // A member's bot: a Primary Bot's handoff never lifts it past what the
-  // organization allows members' bots (member-auto-approval.ts): Custom
-  // stays Ask, and Auto or Auto-accept edits run as Ask while an admin has
-  // turned organization.memberAutoApproval off (2026-10-17, review of #688).
-  if (memberOwnedInOrg(bot)) return memberRoomTurnLevel(level, memberAutoApprovalAllowed(cfg.organization));
-  return level;
+  // Pass the requester's node (parent of this hand-off) so the chain walk
+  // finds the Primary Bot above Ada when Bea runs in the room. Org gates
+  // (member Full deny, memberRoomTurnLevel) live in delegated-level.ts.
+  return delegatedLevel.roomTurn(bot, threadId, handoff?.parentId ? coordinator.node(handoff.parentId) : undefined);
 }
 
 /** Privileged approval-mode transitions are deliberately absent from the
@@ -13282,23 +13241,11 @@ const coordinator: Coordinator = createCoordinator({
       const task = store.taskByThread(node.botId, node.threadId);
       return !task || Boolean(task.archivedAt);
     },
-    // The level the target thread really runs with (invariant I6): the same
-    // decision a coordinated turn makes at dispatch — the thread's own bot
-    // (a delegated level is stored on it by applyDelegatedLevel), as a peer-
-    // initiated turn (Custom reads as Auto), capped by the engine and by a
-    // guest-driven conversation (approvalModeForTurn). The engine kind comes
-    // from the registry, as delegatedLevel reads it.
-    levelOf: (target, source) => {
-      const bot = store.bot(target.botId);
-      if (!bot) return { level: "ask" };
-      const running = store.projectBotForTask(bot.id, target.threadId) ?? bot;
-      const driverKind = registry.cliTarget(running.modelSelection.instanceId)?.driverKind;
-      // A room thread has no task of the member's: a Chief's delegated level
-      // rides the hand-off, so it is resolved from the source here exactly
-      // as the member's turn will resolve it (roomTurnLevel).
-      if (target.groupId) return { level: roomTurnLevel(bot, target.threadId, source), driverKind };
-      return { level: approvalModeForTurn(running, true, target.threadId), driverKind };
-    },
+    // The level the target thread really runs with (invariant I6), and when
+    // that came down a Primary Bot's chain, the Primary Bot conversation's
+    // level (omb #3470). `source` is the requester's node whose parents lead
+    // up the chain.
+    levelOf: (target, source) => delegatedLevel.levelOf(target, source),
     chiefOf: address => Boolean(store.bot(address.botId)?.chiefOfStaff)
   }
 });
@@ -19741,7 +19688,7 @@ bus.subscribe((event: RuntimeEvent) => {
   if (!privateImageEvent && !dropCancelledVoiceEvent(staleAssistant, event)) {
     // Exact executable input is internal matching metadata, not inspector UI.
     // The event bus's persistence redactor does not scrub its live event.
-    const publicEvent = event.type === "request.opened" ? { ...event, command: undefined } : withoutPrivateFields(event);
+    const publicEvent = event.type === "request.opened" ? { ...event, command: undefined, reads: undefined } : withoutPrivateFields(event);
     broadcast({ kind: "runtime", event: publicEvent });
     // A relayed teammate reply (coordinate_bots relay) streams in the
     // requester's conversation too; only its visible text, never reasoning.
@@ -20076,7 +20023,7 @@ bus.subscribe((event: RuntimeEvent) => {
       // A mail-woken routine run (S2) is held the same way: Ask, and no rule
       // the owner saved answers for it.
       const guestDriven = cloudGuestDriven(event.threadId) || botmailConfined(event.threadId);
-      const ownApprovalMode = (who: BotRecord) => approvalModeForTurn(who, isInternalTurn(event.threadId), event.threadId);
+      const ownApprovalMode = (who: BotRecord) => liveApprovalMode(who, event.threadId, isInternalTurn(event.threadId));
       // A room turn runs at the level it was sent with, which a Chief's
       // handoff may have raised (roomTurnApprovalMode). The bot's own level
       // would make a Full room turn ask on engines that leave requests to us.
@@ -20483,6 +20430,8 @@ bus.subscribe((event: RuntimeEvent) => {
           ownAttachmentRead: attachmentRead,
           ownComputerChoice: ownComputerChoice && !strictCard,
           ownReadOnlyCommand: readOnlyCommand,
+          // never in a guest's turn: the folder holds its owner's memory
+          ownFilesRead: Boolean(asker) && !guestDriven && !strictCard && readsOwnFiles(DATA_DIR, asker!.id, event),
           ...(perspicaxSelfKind && !strictCard && !foreignDestination && perspicaxSelfAnswerAt(perspicaxSelfKind, effectiveApprovalMode)
             ? { perspicaxSelf: perspicaxSelfKind } : {}),
           ...(event.mcpTool ? { toolName: event.mcpTool } : {}),
@@ -33852,8 +33801,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     roomHandoffProblem: (node, parent) => roomHandoffProblem(node as never, parent as never),
     turnOrigin: (capability) => turnOrigin(capability as InternalCapability),
     joinPerson,
-    applyDelegatedLevel: (from, fromThreadId, target, threadId) =>
-      applyDelegatedLevel(from as unknown as BotRecord, fromThreadId, target as unknown as BotRecord, threadId),
+    applyDelegatedLevel: (from, fromThreadId, target, threadId, fromNodeId) =>
+      applyDelegatedLevel(from as unknown as BotRecord, fromThreadId, target as unknown as BotRecord, threadId, fromNodeId),
     adoptReservedWorkThread,
     openerFrom,
     latestFailedTurnCause,
@@ -33918,8 +33867,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     startParallelTask: (input) => startParallelTask(input as never) as Promise<{ parallel: { threadId: string; title: string; state: string } }>,
     globalRuntimeSettings: () => cfg as never,
     turnOrigin: (capability) => turnOrigin(capability as InternalCapability),
-    applyDelegatedLevel: (from, fromThreadId, target, threadId) =>
-      applyDelegatedLevel(from as unknown as BotRecord, fromThreadId, target as unknown as BotRecord, threadId),
+    applyDelegatedLevel: (from, fromThreadId, target, threadId, fromNodeId) =>
+      applyDelegatedLevel(from as unknown as BotRecord, fromThreadId, target as unknown as BotRecord, threadId, fromNodeId),
     threadBusy,
     botAtThreadCapacity: (botId: string) => botAtThreadCapacity(botId),
     activeGroupTurnForBot: (botId: string) => activeGroupTurnForBot(botId),
@@ -38932,8 +38881,12 @@ function newBotGreetingLanguage(ownerUserId: string | undefined): "fr" | "en" {
   } catch { /* no preference of their own */ }
   return greetingLanguage([person, cfg.language]);
 }
-function newBotApprovalMode(): "ask" | "auto" {
-  return IDENTITY.kind === "perspicax" ? orgNewBotApprovalMode(cfg.newBotDefaults?.profile.approvalMode) : "auto";
+function newBotApprovalMode(): "ask" | "auto" | "full" {
+  // omb #2808 / PRO-RÈGLE: solo bots start on Full access. Organization
+  // servers keep #1098 (Approve for me, or Ask when the org chose Ask).
+  if (IDENTITY.kind === "perspicax") return orgNewBotApprovalMode(cfg.newBotDefaults?.profile.approvalMode);
+  if (HOSTED_WORKSPACE) return "ask";
+  return "full";
 }
 /** Organization server: a stored Full that may not run as Full now (the
  * policy is off, or the bot's current owner never confirmed it). Never on
@@ -47640,6 +47593,7 @@ ROUTES.push(createBotsMutateRoutes({
   isTeamMemorySharing,
   limitFailover,
   liveApprovalChange,
+  localPrincipalId,
   lockedLookRefusal,
   maySetBotHost,
   mcpServerNameError,
@@ -48212,7 +48166,7 @@ async function runInternal(req: IncomingMessage, res: ServerResponse, url: URL, 
       const opener = handoffOpener({ botId: minted.id, threadId }, threadId);
       coordinator.beginTurn({
         id: generation, address: { botId: minted.id, threadId, ...(owner?.group ? { groupId: owner.group.id } : {}) }, brief: latestUser?.text ?? "",
-        level: owner?.group ? roomTurnLevel(minted, threadId, undefined) : approvalModeForTurn(store.projectBotForTask(minted.id, threadId) ?? minted, false, threadId),
+        level: owner?.group ? delegatedLevel.roomTurn(minted, threadId, undefined) : approvalModeForTurn(store.projectBotForTask(minted.id, threadId) ?? minted, false, threadId),
         ...(opener ? { opener } : {}), origin: requestWorkOrigin({ line: latestUser }), ...personForJoin(threadId),
       });
     }
@@ -48911,6 +48865,7 @@ const startTurnRunner = createStartTurn({
   applyViewerModelOverride,
   approvalLevelPrompt,
   approvalModeForTurn,
+  liveApprovalMode,
   asPlaceFailure,
   assertModelVariantSupported,
   assertTurnAdmission,
@@ -49897,7 +49852,13 @@ async function delegateOnRuntime(from: BotRecord, target: BotRecord, message: st
     { botId: from.id, name: from.name, kind: "work", threadId: address.threadId, at: Date.now() });
   if (!task) return refused("no such bot", 404);
   if (continued) adoptReservedWorkThread(target.id, task.threadId);
-  applyDelegatedLevel(from, address.threadId, store.bot(target.id)!, task.threadId);
+  applyDelegatedLevel(
+    from,
+    address.threadId,
+    store.bot(target.id)!,
+    task.threadId,
+    capability.roomHandoffId ?? capability.generation,
+  );
   try {
     const sourceText = [...store.messagesFor(address.threadId)].reverse().find(m => m.role === "user" && m.kind === "text")?.text ?? "";
     const { node, duplicate } = external

@@ -206,6 +206,12 @@ export interface SendTurnInput {
   /** Per-bot approval policy, reasserted by providers on every turn so a
    * resumed native session cannot retain a stale, more permissive mode. */
   approvalMode?: ApprovalMode;
+  /** The conversation's level right now, which the person may change while
+   * the turn runs (server/host/live-approval.ts). A driver that gates its own
+   * tool calls may read it before each one; a native engine keeps
+   * `approvalMode` until its next turn. Sagax answers request.opened at this
+   * level for every engine. */
+  approvalModeNow?: () => ApprovalMode;
   /** Fresh owner selection, independent of execution approval and resume state. */
   toolScope?: ToolScope;
   /** A guest drives this turn on an OMB Cloud home: it runs with no shell

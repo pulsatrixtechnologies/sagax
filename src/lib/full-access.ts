@@ -20,16 +20,13 @@ export function orgFullAccessFor(
   return org.settings.allowFullAccess === false ? "disabled" : "allowed";
 }
 
-/** Whether choosing Full asks for the warning: once per bot. On an
- * organization server the confirmation is the viewer's own; on a solo
- * server (one owner) any recorded confirmation counts. */
+/** Whether choosing Full asks for the warning. Always false since omb #2701
+ * / PRO-RÈGLE: Full turns on at once with no confirmation dialog. Kept so
+ * older call sites compile; arguments are ignored. */
 export function fullAccessNeedsConfirmation(
-  bot: { fullAccessConsent?: { principalId: string } } | null | undefined,
-  viewerId: string | null | undefined,
-  organization: boolean,
+  _bot?: { fullAccessConsent?: { principalId: string } } | null,
+  _viewerId?: string | null,
+  _organization?: boolean,
 ): boolean {
-  const consent = bot?.fullAccessConsent;
-  if (!consent?.principalId) return true;
-  if (!organization) return false;
-  return !viewerId || consent.principalId.trim().toLowerCase() !== viewerId.trim().toLowerCase();
+  return false;
 }

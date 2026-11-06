@@ -11,8 +11,9 @@
 // - the caller is a person signed in (a session with a principal), and is
 //   the bot's owner: a bot's own shell, a service caller or loopback never
 //   is, so a bot cannot raise itself;
-// - the owner confirmed the risks once for that bot (`fullAccessConsent`,
-//   kept on the bot): the first grant needs `confirmFullAccess: true`.
+// - (PRO-RÈGLE / omb #2701) Full turns on at once: no confirmation dialog.
+//   The grant still records `fullAccessConsent` for the owner who set it, so
+//   turn-time and new-conversation checks know who chose Full.
 //
 // At turn time a stored Full runs as Full only while the policy is on and the
 // consent belongs to the bot's current owner (a routine runs as the bot's
@@ -43,6 +44,8 @@ export const FULL_ACCESS_OWNER_ONLY: FullAccessRefusal = {
   error: "Only the bot's owner, signed in, can turn on Full access for it.",
   code: "full_access_owner_only",
 };
+/** Kept for older clients and tests that still name this code; the grant no
+ * longer refuses for a missing confirmation (omb #2701 / PRO-RÈGLE). */
 export const FULL_ACCESS_CONFIRM_REQUIRED: FullAccessRefusal = {
   status: 409,
   error: "Confirm the Full access warning for this bot first.",
@@ -113,13 +116,13 @@ export function orgFullAccessGrantRefusal(input: {
   /** The signed-in person asking; null for loopback, a service or a bot. */
   callerPrincipalId: string | null;
   ownerPrincipalId: string;
-  confirmed: boolean;
-  consent: unknown;
+  /** Ignored since omb #2701: Full turns on at once with no confirmation. */
+  confirmed?: boolean;
+  consent?: unknown;
 }): FullAccessRefusal | null {
   if (!input.policyAllowed) return ORG_FULL_ACCESS_DISABLED;
   const caller = input.callerPrincipalId?.trim().toLowerCase();
   if (!caller || caller !== input.ownerPrincipalId.trim().toLowerCase()) return FULL_ACCESS_OWNER_ONLY;
-  if (!input.confirmed && !fullAccessConsentedBy(input.consent, caller)) return FULL_ACCESS_CONFIRM_REQUIRED;
   return null;
 }
 
@@ -164,7 +167,16 @@ export function newConversationFullAllowed(input: {
   consent: unknown;
 }): boolean {
   if (input.identity === "perspicax") {
-    return orgFullAccessGrantRefusal({ policyAllowed: true, callerPrincipalId: input.callerPrincipalId, ownerPrincipalId: input.ownerPrincipalId, confirmed: false, consent: input.consent }) === null;
+    // Grant no longer needs a confirmation dialog (omb #2701), but a new
+    // conversation still opens on Full only after the owner has set Full on
+    // this bot (the consent marker written at grant time).
+    return orgFullAccessGrantRefusal({
+      policyAllowed: true,
+      callerPrincipalId: input.callerPrincipalId,
+      ownerPrincipalId: input.ownerPrincipalId,
+      confirmed: false,
+      consent: input.consent,
+    }) === null && fullAccessConsentedBy(input.consent, input.ownerPrincipalId);
   }
   return input.soloOwner && fullAccessConsentedBy(input.consent, input.localPrincipalId);
 }

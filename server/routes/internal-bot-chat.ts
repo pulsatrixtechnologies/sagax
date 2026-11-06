@@ -156,7 +156,7 @@ export interface InternalBotChatDeps {
   ): string | undefined;
   turnOrigin(capability: InternalCapabilityView): unknown;
   joinPerson(threadId: string): string | undefined;
-  applyDelegatedLevel(from: InternalBotChatBot, fromThreadId: string, target: InternalBotChatBot, threadId: string): void;
+  applyDelegatedLevel(from: InternalBotChatBot, fromThreadId: string, target: InternalBotChatBot, threadId: string, fromNodeId?: string): void;
   adoptReservedWorkThread(botId: string, threadId: string): void;
   openerFrom(fromThreadId: string): string | undefined;
   latestFailedTurnCause(threadId: string): string | null;
@@ -684,7 +684,13 @@ export function createInternalBotChatRoutes(deps: InternalBotChatDeps): Internal
               target.threadId = task.threadId;
               if (!continued) createdThread = task.threadId;
               else adoptReservedWorkThread(target.botId, task.threadId);
-              applyDelegatedLevel(internalSender, internalCapability.threadId, store.bot(target.botId)!, target.threadId);
+              applyDelegatedLevel(
+                internalSender,
+                internalCapability.threadId,
+                store.bot(target.botId)!,
+                target.threadId,
+                internalCapability.roomHandoffId ?? internalCapability.generation,
+              );
             }
             // No mode: a question to the bot that sent this work (an
             // ancestor) is a consultation, anything else is work.

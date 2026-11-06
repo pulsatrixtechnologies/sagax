@@ -72,6 +72,8 @@ export type DecisionSource =
   /** an approval left open when Sagax restarted: its request died with the process */
   | "restart"
   | "self"
+  /** omb #3014: a non-Full level that still applied without a card (direct-apply appliesNow) */
+  | "level"
   /** the person asked their own Primary Bot for this change now (2026-10-20) */
   | "primary-bot"
   | "question"

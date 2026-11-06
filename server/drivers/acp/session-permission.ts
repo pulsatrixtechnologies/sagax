@@ -4,6 +4,7 @@ import type { RequestOutcome } from "../../contracts.ts";
 import { newId } from "../../contracts.ts";
 import { acpPermissionCommand } from "../permission-command.ts";
 import { acpHostToolRequest } from "../host-tools.ts";
+import { acpReadPaths } from "../../own-file-reads.ts";
 import { connectorAsk } from "./connector-ask.ts";
 import { gatedMcpAsk } from "./gated-mcp-ask.ts";
 import { sessionOperationKey } from "./helpers.ts";
@@ -243,6 +244,7 @@ export function createPermissionHandler(deps: PermissionHandlerDeps) {
             summary,
             ...(mcpTool ? { mcpTool } : {}),
             command: isShellCommand ? acpPermissionCommand(toolCall.rawInput, commandCwd) : undefined,
+            ...(!isQuestion && acpReadPaths(toolCall) ? { reads: acpReadPaths(toolCall) } : {}),
             requiresExplicitApproval: isShellCommand && (
               toolCall.rawInput?.dangerouslyDisableSandbox === true || toolCall.rawInput?.sandbox_permissions === "require_escalated"
             ) || undefined,

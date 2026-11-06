@@ -848,6 +848,8 @@ import { createRemoteSessionInternalRoutes, createRemoteSessionRoutes } from "./
 import { createRemoteSessionsAdminRoutes } from "./routes/remote-sessions-admin.ts";
 import { createRemoteBotHosts } from "./remote-support/remote-bot-hosts.ts";
 import { createRemoteBotHostsRoutes } from "./routes/remote-bot-hosts.ts";
+import { createRemoteHostsRoutes } from "./routes/remote-hosts.ts";
+import { RemoteHostTeams } from "./remote-support/remote-host-teams.ts";
 import { createRemoteControlRoutes, isRemoteControlPath } from "./routes/remote-control.ts";
 import { BOT_ACT_ROUTE_HEADER, createRemoteSessionFileRoutes, remoteCallerIsAgent } from "./routes/remote-session-files.ts";
 import { createDeviceSettingsBroker } from "./device-settings.ts";
@@ -5609,6 +5611,15 @@ try {
   }
 } catch { /* a migration notice must never block startup */ }
 const teamComputers = new TeamComputers(join(DATA_DIR, "team-computers.json"), ENVIRONMENT_ID);
+// Computers panel (2026-11-06): enrolled hosts the person placed on a team.
+const remoteHostTeams = new RemoteHostTeams(join(DATA_DIR, "remote-host-teams.json"));
+/** A bot's hosts: those attached in its Computer tab, then those its owner
+ * placed on its team from the Computers panel (person isolation). */
+function effectiveRemoteHosts(bot: { remoteHosts?: string[]; section?: string; sectionId?: string } & Parameters<typeof effectiveBotOwner>[0]): string[] {
+  const own = bot.remoteHosts ?? [];
+  const inherited = remoteHostTeams.forBot(bot, effectiveBotOwner(bot), sectionKey);
+  return [...new Set([...own, ...inherited])];
+}
 let followupsReady = false;
 const sendSequencer = new SendSequencer();
 /** Presses that fold their widget, while their message is on its way in:
@@ -9004,6 +9015,7 @@ const unattendedHosts = createUnattendedHosts({
       ? person.subject.sub
       : null;
   },
+  defaultOrg: () => process.env.SAGAX_ORG_ID?.trim() || process.env.SAGAX_ORG_NAME?.trim() || undefined,
   audit: (event) => remoteSessionActionsAudit.write({
     at: event.at,
     sessionId: "",
@@ -9026,6 +9038,10 @@ const remoteBotHosts = createRemoteBotHosts({
     const bot = store.bot(botId);
     if (!bot) return null;
     return { id: bot.id, remoteHosts: bot.remoteHosts, ownerPrincipalId: effectiveBotOwner(bot) };
+  },
+  inherited: (botId) => {
+    const bot = store.bot(botId);
+    return bot ? remoteHostTeams.forBot(bot, effectiveBotOwner(bot), sectionKey) : [];
   },
   canEdit: (principalId, botId) => {
     const bot = store.bot(botId);
@@ -13355,9 +13371,10 @@ const routineReadinessDeps: RoutineReadinessDeps = {
     if (!bot) return undefined;
     const principal = effectiveRunAs(run) ?? localPrincipalId();
     const rows: ReadinessComputer[] = sharedComputers.status(principal).map(row => ({ name: row.name, online: row.online }));
-    if (bot.remoteHosts?.length) {
+    const botHosts = effectiveRemoteHosts(bot);
+    if (botHosts.length) {
       const listed = await remoteBotHosts.available(principal);
-      if (listed.available) for (const host of listed.hosts.filter(host => bot.remoteHosts?.includes(host.hostId))) {
+      if (listed.available) for (const host of listed.hosts.filter(host => botHosts.includes(host.hostId))) {
         rows.push({ name: host.hostname ?? "Computer", online: host.state !== "enrolled" ? false : host.lastSeenAt ? Date.now() - Date.parse(host.lastSeenAt) < 120_000 : undefined });
       }
     }
@@ -22581,7 +22598,7 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
         botId: turn.botId,
         principalId: turn.principalId,
         ownerSub,
-        remoteHosts: bot?.remoteHosts,
+        remoteHosts: bot ? effectiveRemoteHosts(bot) : undefined,
         ownsHost: async (hostId) => {
           const out = await remoteBotHosts.assertOwnHost(turn.principalId, hostId);
           return !("ok" in out && out.ok === false);
@@ -24686,6 +24703,20 @@ ROUTES.push(createRemoteControlRoutes({
 ROUTES.push(createRemoteSessionFileRoutes({ sessions: remoteSessions, principalId: terminalPrincipalId }));
 ROUTES.push(createRemoteSessionsAdminRoutes({ admin: remoteSessionsAdmin, hosts: unattendedHosts, principalId: terminalPrincipalId, orgAdmin: orgAdminCaller }));
 ROUTES.push(createRemoteBotHostsRoutes({ hosts: remoteBotHosts, principalId: terminalPrincipalId }));
+ROUTES.push(createRemoteHostsRoutes({
+  principalId: terminalPrincipalId,
+  available: (principalId) => remoteBotHosts.available(principalId),
+  installCode: (principalId, options) => unattendedHosts.installCode({ principalId }, options),
+  teams: remoteHostTeams,
+  sectionsFor: (auth) => (sectionChannels
+    ? orgVisibleSections(orgSectionNames(), auth.kind === "session" ? auth.session.principalId?.trim() || undefined : localPrincipalId())
+    : store.sections),
+  resolveSectionId: (section, auth) => {
+    if (!sectionChannels) return undefined;
+    const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
+    return sectionChannels.byNameForOwner(section, owner)?.id;
+  }
+}));
 ROUTES.push(resourceUsage.route);
 
 // Live calls (GPT-Live as the voice, the bot as the brain). A client holds
@@ -24917,9 +24948,13 @@ ROUTES.push(createSidebarSectionsRoutes({
     if (sectionChannels) {
       const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
       const id = sectionChannels.byNameForOwner(section, owner)?.id;
-      return store.renameSectionForOwner(section, nextName, owner, teamComputers, id) ?? null;
+      const failed = store.renameSectionForOwner(section, nextName, owner, teamComputers, id);
+      if (!failed) remoteHostTeams.renameSection(section, nextName.trim());
+      return failed ?? null;
     }
-    return store.renameSection(section, nextName, teamComputers) ?? null;
+    const failed = store.renameSection(section, nextName, teamComputers);
+    if (!failed) remoteHostTeams.renameSection(section, nextName.trim());
+    return failed ?? null;
   },
   updateTeamMembers: (section, addBotIds, removeBotIds, sectionId) => store.updateTeamMembers(section, [...addBotIds], [...removeBotIds], sectionId),
   setBotsSection: (botIds, name, sectionId) => store.setBotsSection([...botIds], name, sectionId),

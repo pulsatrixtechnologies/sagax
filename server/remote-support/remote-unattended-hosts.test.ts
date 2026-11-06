@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createUnattendedHosts, HOST_REVOKE_TOOL, HOSTS_LIST_TOOL, type PerspicaxSeat } from "./remote-unattended-hosts.ts";
+import { createUnattendedHosts, HOST_CODE_TOOL, HOST_REVOKE_TOOL, hostInstallCommand, HOSTS_LIST_TOOL, type PerspicaxSeat } from "./remote-unattended-hosts.ts";
 import type { TailcatRun } from "./remote-support-local.ts";
 
 const NOW = new Date("2026-10-26T12:00:00.000Z");
@@ -200,5 +200,27 @@ describe("enrolled hosts at Perspicax", () => {
     expect(closeById).not.toHaveBeenCalled();
     // No reason given: none sent (Perspicax decides who may revoke).
     expect(calls.find((c) => c.tool === HOST_REVOKE_TOOL)?.args).toEqual({ host_id: HOST });
+  });
+});
+
+describe("install code (Computers panel, 2026-11-06)", () => {
+  it("asks Perspicax for a host code and returns the install command", async () => {
+    const { hosts, calls } = make({ answers: { [HOST_CODE_TOOL]: () => ok({ code: "K7QM-NP42", enroll_url: "https://example.com/e/K7QM", org: "Acme", scope: "view-only", expires_at: "2026-10-26T12:15:00Z" }) } });
+    const out = await hosts.installCode(viewer, { scope: "view-only", consentRef: "CW-123" });
+    expect(calls.find((c) => c.tool === HOST_CODE_TOOL)?.args).toEqual({ org: "Acme", scope: "view-only", consent_ref: "CW-123" });
+    expect(out).toMatchObject({ ok: true, code: "K7QM-NP42", enrollUrl: "https://example.com/e/K7QM", org: "Acme", scope: "view-only", expiresAt: "2026-10-26T12:15:00.000Z" });
+    expect(out.ok && out.installCommand).toBe(hostInstallCommand({ org: "Acme", code: "K7QM-NP42", scope: "view-only", recordedBy: "Ada" }));
+  });
+
+  it("defaults to full-control and reports a missing code or seat", async () => {
+    const empty = make({ answers: { [HOST_CODE_TOOL]: () => ok({}) } });
+    expect(await empty.hosts.installCode(viewer, { scope: "bogus" })).toMatchObject({ ok: false, error: "refused" });
+    expect(empty.calls.find((c) => c.tool === HOST_CODE_TOOL)?.args).toEqual({ org: "Acme", scope: "full-control" });
+    expect(await make({ noSeat: true }).hosts.installCode(viewer)).toMatchObject({ ok: false, error: "unavailable" });
+  });
+
+  it("quotes every value of the install command", () => {
+    expect(hostInstallCommand({ org: "Exemple inc.", code: "AB-12", scope: "shell-only", recordedBy: "" }))
+      .toBe('sagax-remote-access install --unattended --org "Exemple inc." --code "AB-12" --scope shell-only --consent-recorded-by "Sagax"');
   });
 });

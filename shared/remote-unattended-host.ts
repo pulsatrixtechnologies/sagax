@@ -135,3 +135,29 @@ export function hostOwnedByPerson(
 export function canRevokeUnattendedHost(row: Pick<UnattendedHostRow, "state">): boolean {
   return row.state !== "revoked";
 }
+
+/** A host beats every `poll_every` (10 s by default): two minutes without a
+ * beat reads as offline. */
+export const UNATTENDED_HOST_ONLINE_MS = 120_000;
+
+/** True when an enrolled host was seen within UNATTENDED_HOST_ONLINE_MS. */
+export function unattendedHostOnline(row: Pick<UnattendedHostRow, "state" | "lastSeenAt">, now = Date.now()): boolean {
+  if (row.state !== "enrolled" || !row.lastSeenAt) return false;
+  const seen = Date.parse(row.lastSeenAt);
+  return Number.isFinite(seen) && now - seen < UNATTENDED_HOST_ONLINE_MS;
+}
+
+/** One enrolled host as the Computers panel shows it (2026-11-06): its
+ * online state and the team the person placed it on. */
+export interface RemoteHostCard {
+  hostId: string;
+  hostname: string | null;
+  org: string | null;
+  scope: UnattendedHostScope;
+  state: UnattendedHostRow["state"];
+  enrolledAt: string;
+  expiresAt: string;
+  lastSeenAt: string | null;
+  online: boolean;
+  section: string | null;
+}

@@ -440,6 +440,12 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["GET", "POST"], path: /^\/api\/bots\/[\w-]{1,80}\/remote-hosts$/ },
   { methods: ["DELETE"], path: /^\/api\/bots\/[\w-]{1,80}\/remote-hosts\/(h_[0-9a-f]{32})$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]{1,80}\/remote-hosts\/(h_[0-9a-f]{32})\/open$/ },
+  // Computers panel: the person's own enrolled hosts, an install code to add
+  // one (Unattended Remote Control) and placing one on their own team.
+  // Handler enforces person isolation in routes/remote-hosts.ts.
+  { methods: ["GET"], path: /^\/api\/remote-hosts$/ },
+  { methods: ["POST"], path: /^\/api\/remote-hosts\/code$/ },
+  { methods: ["PUT"], path: /^\/api\/remote-hosts\/h_[0-9a-f]{32}\/team$/ },
   { methods: ["POST"], path: /^\/api\/computer\/(?:update|reset)$/ },
   // Its scheduled update, read and set from the phone (parity R7, O2). The
   // handler (routes/computer-care.ts) keys it to the person's own computer.

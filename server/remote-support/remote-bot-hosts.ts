@@ -21,6 +21,8 @@ export type RemoteBotHostsOutcome =
 export function createRemoteBotHosts(deps: {
   /** Bots the person may edit. */
   bot(botId: string): { id: string; remoteHosts?: string[]; ownerPrincipalId?: string | null } | null;
+  /** Hosts the bot inherits from its team (Computers panel placement). */
+  inherited?(botId: string): string[];
   /** True when the principal may change this bot (owner or admin). */
   canEdit(principalId: string, botId: string): boolean;
   /** Persist the cleaned host list on the bot. */
@@ -63,22 +65,25 @@ export function createRemoteBotHosts(deps: {
       hosts: UnattendedHostRow[];
       catalog: UnattendedHostRow[];
       attached: string[];
+      inherited: string[];
       reason?: string;
     }> {
       const bot = deps.bot(botId);
       if (!bot || !deps.canEdit(principalId, botId)) {
-        return { available: false, hosts: [], catalog: [], attached: [], reason: "You cannot change that bot." };
+        return { available: false, hosts: [], catalog: [], attached: [], inherited: [], reason: "You cannot change that bot." };
       }
       const listed = await available(principalId);
       const attached = cleanRemoteHosts(bot.remoteHosts);
-      if (!listed.available) return { available: false, hosts: [], catalog: [], attached, reason: listed.reason };
+      const inherited = cleanRemoteHosts(deps.inherited?.(botId)).filter((id) => !attached.includes(id));
+      if (!listed.available) return { available: false, hosts: [], catalog: [], attached, inherited, reason: listed.reason };
       const owned = new Map(listed.hosts.map((row) => [row.hostId, row]));
       return {
         available: true,
         attached,
+        inherited,
         catalog: listed.hosts,
         // Attached ids that are no longer owned disappear from the offer.
-        hosts: attached.map((id) => owned.get(id)).filter((row): row is UnattendedHostRow => Boolean(row)),
+        hosts: [...attached, ...inherited].map((id) => owned.get(id)).filter((row): row is UnattendedHostRow => Boolean(row)),
       };
     },
 
@@ -115,7 +120,7 @@ export function createRemoteBotHosts(deps: {
         return { ok: false as const, error: "forbidden" as const, message: "You cannot change that bot." };
       }
       const id = parseUnattendedHostId(hostId);
-      if (!id || !cleanRemoteHosts(bot.remoteHosts).includes(id)) {
+      if (!id || ![...cleanRemoteHosts(bot.remoteHosts), ...cleanRemoteHosts(deps.inherited?.(botId))].includes(id)) {
         return { ok: false as const, error: "not_found" as const, message: "Add that computer to this bot first." };
       }
       const host = await assertOwnHost(principalId, id);

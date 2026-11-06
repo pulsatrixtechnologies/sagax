@@ -24,7 +24,9 @@ import {
   hostOwnedByPerson,
   parseUnattendedHostId,
   parseUnattendedHosts,
+  UNATTENDED_HOST_SCOPES,
   type UnattendedHostRow,
+  type UnattendedHostScope,
 } from "../../shared/remote-unattended-host.ts";
 import { handleRemoteSupportCall, openUnattendedSession, type RemoteSupportContext } from "./remote-support-local.ts";
 import { reportBackgroundError } from "../background-error.ts";
@@ -33,6 +35,8 @@ import { reportBackgroundError } from "../background-error.ts";
  * docs/inscription-hote.md). A server without them reads as "not available". */
 export const HOSTS_LIST_TOOL = "remote_support_hosts";
 export const HOST_REVOKE_TOOL = "remote_support_host_revoke";
+/** One-time install code for a new host (Computers panel, 2026-11-06). */
+export const HOST_CODE_TOOL = "remote_support_host_code";
 
 /** One person's link to Perspicax for a page action: a bot of theirs with a
  * Perspicax account connection, its conversation (where the session card lands), and one
@@ -69,6 +73,9 @@ export type HostsListOutcome = { available: true; hosts: UnattendedHostRow[] } |
 export type HostOpenOutcome =
   | { ok: true; code: string; botId: string; threadId: string }
   | { ok: false; error: "invalid" | "unavailable" | "refused" | "not_found"; message: string };
+export type HostCodeOutcome =
+  | { ok: true; code: string; enrollUrl: string | null; org: string; scope: UnattendedHostScope; expiresAt: string | null; installCommand: string }
+  | { ok: false; error: "unavailable" | "refused"; message: string };
 export type HostRevokeOutcome = { ok: true } | { ok: false; error: "invalid" | "unavailable" | "refused"; message: string };
 
 const NOT_AVAILABLE = "Perspicax does not list enrolled computers yet on this server.";
@@ -101,6 +108,25 @@ export function cleanReason(raw: unknown): string {
   return raw.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, REVOKE_REASON_MAX);
 }
 
+/** A shell-safe double-quoted argument (no control characters). */
+function quoted(value: string): string {
+  // eslint-disable-next-line no-control-regex
+  return `"${value.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/["\\$`]/g, "\\$&")}"`;
+}
+
+/** The command the person runs on the computer to install the host
+ * (sagax-remote-access docs: install --unattended). Consent is recorded by
+ * Perspicax at enrollment; the flag names the person who set it up. */
+export function hostInstallCommand(input: { org: string; code: string; scope: UnattendedHostScope; recordedBy: string }): string {
+  return [
+    "sagax-remote-access install --unattended",
+    `--org ${quoted(input.org)}`,
+    `--code ${quoted(input.code)}`,
+    `--scope ${input.scope}`,
+    `--consent-recorded-by ${quoted(input.recordedBy || "Sagax")}`,
+  ].join(" ");
+}
+
 /** A status answer that means the session is done (or never coming). */
 function finished(text: string): "connected" | "over" | null {
   const state = answerObject(text.split("\n")[0])?.state;
@@ -120,6 +146,8 @@ export function createUnattendedHosts(deps: {
   /** Perspicax subject for the Sagax principal. Used to enforce ownership
    * when the host list is wider than the person (defense in depth). */
   ownerSub?(principalId: string): string | null;
+  /** The organization an install code enrolls into (defaults to the local org name). */
+  defaultOrg?(): string | undefined;
   /** How often and how long the page's open waits for the host's beat. The
    * host polls every `poll_every` (10 s by default), so a minute and a half
    * covers a few missed beats. */
@@ -236,6 +264,41 @@ export function createUnattendedHosts(deps: {
       auditOpen(true, seat.botId);
       void follow(seat, local, hostId, out.code).catch(reportBackgroundError);
       return { ok: true, code: out.code, botId: seat.botId, threadId: seat.threadId };
+    },
+
+    /** A one-time code to enroll a new computer for unattended access
+     * (Computers panel). Perspicax mints it in the person's name (at most
+     * 10 an hour) and keeps the consent record; the host install redeems it. */
+    async installCode(viewer: UnattendedHostsViewer, options: { org?: string; scope?: string; consentRef?: string } = {}): Promise<HostCodeOutcome> {
+      const local = deps.local(viewer.principalId);
+      const org = (options.org?.trim() || deps.defaultOrg?.() || local.orgName || "Sagax").slice(0, 128);
+      const scope: UnattendedHostScope = (UNATTENDED_HOST_SCOPES as readonly string[]).includes(options.scope ?? "")
+        ? options.scope as UnattendedHostScope
+        : "full-control";
+      const consentRef = cleanReason(options.consentRef).slice(0, 128);
+      const out = await withSeat(viewer.principalId, async (seat) => {
+        const posted = await seat.call(HOST_CODE_TOOL, { org, scope, ...(consentRef ? { consent_ref: consentRef } : {}) });
+        const refused = refusal(posted);
+        return refused ? { refused } : { answer: answerObject(posted.body.text) };
+      });
+      if ("error" in out) return { ok: false, error: "unavailable", message: out.error };
+      if ("refused" in out && out.refused) return { ok: false, error: "refused", message: out.refused };
+      const answer = out.answer ?? {};
+      const code = typeof answer.code === "string" ? answer.code.trim() : "";
+      if (!code) return { ok: false, error: "refused", message: "Perspicax did not return an install code." };
+      const enrollUrl = typeof answer.enroll_url === "string" && answer.enroll_url.startsWith("https://") ? answer.enroll_url : null;
+      const answeredOrg = typeof answer.org === "string" && answer.org.trim() ? answer.org.trim().slice(0, 128) : org;
+      const answeredScope = (UNATTENDED_HOST_SCOPES as readonly string[]).includes(String(answer.scope)) ? answer.scope as UnattendedHostScope : scope;
+      const expires = typeof answer.expires_at === "string" && Number.isFinite(Date.parse(answer.expires_at)) ? new Date(Date.parse(answer.expires_at)).toISOString() : null;
+      return {
+        ok: true,
+        code,
+        enrollUrl,
+        org: answeredOrg,
+        scope: answeredScope,
+        expiresAt: expires,
+        installCommand: hostInstallCommand({ org: answeredOrg, code, scope: answeredScope, recordedBy: local.technicianName ?? "" }),
+      };
     },
 
     /** Revoke a host: Perspicax lets the person who enrolled it and any

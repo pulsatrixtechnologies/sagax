@@ -17135,7 +17135,9 @@
       "botAccess.tools.turnOnHint": "185fce97a4e3bcab8cad7c3bd5721ca3c144f40bf84191959b92e844cf6f83f4",
       "botAccess.tools.advanced": "9f088dbebd6c3c70a5ddbc2c943b11e4ca9acea5757b0b4f2b32479f0dbb747e",
       "voice.options.title": "be79fa03daedd64de9b812ce2305d9d8bf809f9a4249352792e496e097dc0141",
-      "voice.options.help": "a602fd7d20f0b000f0954565d569ebaf60e30bd5d1501fa2342fdda214423b5e"
+      "voice.options.help": "a602fd7d20f0b000f0954565d569ebaf60e30bd5d1501fa2342fdda214423b5e",
+      "botModels.activeModels": "dc48441dc914f96bf061e35f3d6b5e9f8a1dacbac481fab88ea4beefc4d7f9e6",
+      "botModels.activeModelsNone": "641bf09ffd4624c8f6694b22d5365c92f89b90979a8422e7bb3a1f21e208cdef"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

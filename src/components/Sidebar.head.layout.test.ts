@@ -11,7 +11,7 @@ import { CIRCLE_BUTTON, SIDEBAR_CIRCLE_BUTTON } from "@/lib/circle-button";
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const sidebar = read("./Sidebar.tsx");
 // Chat header chrome moved into ChatView.tsx-parts; scan both sources.
-const chatView = [read("./ChatView.tsx"), read("./ChatView.tsx-parts/ChatViewHeader.tsx"), read("./ChatView.tsx-parts/ChatViewShell.tsx")].join("\n");
+const chatView = [read("./ChatView.tsx"), read("./ChatView.tsx-parts/ChatViewHeader.tsx"), read("./ChatView.tsx-parts/ChatViewShell.tsx"), read("./ChatHeaderBar.tsx")].join("\n");
 const styles = read("../styles.css");
 const classes = (value: string) => value.split(/\s+/).filter(Boolean);
 /** Tailwind spacing scale: `h-14` is 3.5rem, 56px. */

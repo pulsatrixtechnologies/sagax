@@ -17,7 +17,7 @@ vi.mock("@/lib/mcp-servers", async (importOriginal) => ({
   useMcpServers: () => ({ servers: [{ name: "github", enabled: true }], error: false, refresh: async () => [] }),
 }));
 
-const { DevPods, DevPodsPanel, DevPodsToggle } = await import("./DevPods");
+const { ACTIVITY_DEV_PODS, DevPods, DevPodsPanel, DevPodsToggle } = await import("./DevPods");
 const { DevPod } = await import("./PodCard");
 const { registerDevPod, unregisterDevPod } = await import("./registry");
 const { DEFAULT_PREFS, resetDevPodPrefsForTest, resetDevPodsLiveForTest } = await import("./prefs");
@@ -248,6 +248,16 @@ describe("dev pods: in the bot panel (#2285)", () => {
     expect(sections[0]!.querySelector("h2")!.textContent).toContain(t("devPods.environment.title"));
     expect(container.querySelector("[data-env-branch]")!.textContent).toContain("feat/login");
     expect(container.querySelector("[data-change='pull:acme/app#7']")).not.toBeNull();
+  });
+
+  it("splits between the Coding tab and Activity: Connectors stay in Activity (JC 2026-11-06)", () => {
+    resetDevPodPrefsForTest({ ...DEFAULT_PREFS, enabled: true });
+    const b = bot("panel-split", devMessages());
+    const ids = () => [...container.querySelectorAll<HTMLElement>("[data-dev-pod-variant='panel']")].map((node) => node.dataset.devPod);
+    act(() => { root.render(createElement(DevPodsPanel, { bot: b, messages: b.messages, computerStart: undefined, dispatch, only: (id: string) => !ACTIVITY_DEV_PODS.includes(id) })); });
+    expect(ids()).toEqual(["environment", "context", "changes"]);
+    act(() => { root.render(createElement(DevPodsPanel, { bot: b, messages: b.messages, computerStart: undefined, dispatch, only: (id: string) => ACTIVITY_DEV_PODS.includes(id) })); });
+    expect(ids()).toEqual(["connectors"]);
   });
 
   it("folds a section behind its label, the detail one click away", () => {

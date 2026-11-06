@@ -119,13 +119,32 @@ beforeEach(() => {
 afterEach(() => resetFreshTopicMemory());
 afterAll(() => vi.unstubAllGlobals());
 
+describe("Clear chat in the ... menu (JC 2026-11-06)", () => {
+  it("is an entry of the conversation menu, never a button of its own, and starts the fresh topic", async () => {
+    await launch();
+    expect(host.querySelector("[data-new-topic]")).toBeNull();
+    expect(host.querySelector("[data-chat-clear]")).toBeNull();
+    flushSync(() => host.querySelector<HTMLButtonElement>('[data-clear-chat-menu="a"]')!.click());
+    const clear = host.querySelector<HTMLButtonElement>('[role="menu"] [data-chat-clear][data-new-topic="a"]');
+    expect(clear?.textContent).toContain("Clear chat");
+    expect([...host.querySelectorAll("[data-chat-clear]")].every((node) => node.closest('[role="menu"]'))).toBe(true);
+    flushSync(() => clear!.click());
+    await settle();
+    expect(posts.some((post) => post.path === "/api/bots/a/tasks")).toBe(true);
+    expect(host.textContent).not.toContain("old answer a");
+    expect(host.querySelector('[data-clear-chat-menu="a"]')?.getAttribute("aria-expanded")).toBe("false");
+    unmount();
+  });
+});
+
 describe("New chat sticks", () => {
   it("stays empty through typing, a switch away and back, a live frame and a reload, then the send makes the new topic", async () => {
     await launch();
     expect(state.selectedId).toBe("a");
     expect(host.textContent).toContain("old answer a");
 
-    flushSync(() => host.querySelector<HTMLButtonElement>("[data-new-topic=a]")!.click());
+    flushSync(() => host.querySelector<HTMLButtonElement>('[data-clear-chat-menu="a"]')!.click());
+    flushSync(() => host.querySelector<HTMLButtonElement>('[role="menu"] [data-chat-clear]')!.click());
     await settle();
     expect(host.textContent).not.toContain("old answer a");
     expect(host.querySelector("[data-fresh-topic-divider]")).toBeTruthy();

@@ -84,7 +84,9 @@ describe("the single stream in the main chat", () => {
   it("draws the earlier topic above the live one as soon as the live one is read back: one timeline, no fold", () => {
     preferences.setShowThreads(false);
     const markup = render(bot);
-    expect(markup).toContain('data-new-topic="bot"');
+    // Clear chat (a fresh topic) lives in the "..." menu, no button of its own (JC 2026-11-06)
+    expect(markup).toContain('data-clear-chat-menu="bot"');
+    expect(markup).not.toContain("data-new-topic");
     // never a fold: no "Earlier topics" line, the history is just there
     expect(markup).not.toContain("data-previous-topics");
     expect(markup).toContain('data-stream-segment="first"');
@@ -245,6 +247,7 @@ describe("the single stream in the main chat", () => {
     preferences.setShowThreads(true);
     const markup = render(bot);
     expect(markup).not.toContain("data-new-topic");
+    expect(markup).not.toContain("data-clear-chat-menu");
     expect(markup).not.toContain("data-stream-segment");
     expect(markup).not.toContain("data-topic-divider");
     preferences.setShowThreads(false);
@@ -253,7 +256,7 @@ describe("the single stream in the main chat", () => {
   it("is the default for a person who never chose", () => {
     expect(preferences.SHOW_THREADS_DEFAULT).toBe(false);
     fixture.stored.threads = null;
-    expect(render(bot)).toContain('data-new-topic="bot"');
+    expect(render(bot)).toContain('data-clear-chat-menu="bot"');
   });
 
   it("loads one earlier topic at once and offers the one before it", () => {

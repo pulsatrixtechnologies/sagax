@@ -10,9 +10,9 @@ import { ExchangeColumnProvider, useExchangeColumn } from "../components/BotExch
 import { ChatWindowProvider } from "../components/BotHeaderPill";
 import { Composer } from "../components/Composer";
 import { CodingChatSheet } from "../components/coding/CodingChat";
-import { DevPodsPanel } from "../components/dev-pods/DevPods";
+import { ACTIVITY_DEV_PODS, DevPodsPanel } from "../components/dev-pods/DevPods";
 import { setCodingPanelHost } from "../lib/coding-panel-host";
-import { loadLocale } from "../lib/i18n";
+import { loadLocale, t } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { StoreProvider, useStore, type Bot, type Message } from "../state/store";
 import type { BotActivityDetail } from "../../shared/bot-activity";
@@ -24,6 +24,9 @@ applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? ski
 await loadLocale(params.get("lang") ?? "en");
 const live = params.get("status") === "running";
 const withPanel = params.get("panel") === "1";
+// The bot panel's tab while the coding chat is open: Coding (the session and
+// the pods) by default, ?tab=activity for Connectors (JC 2026-11-06).
+const panelTab = params.get("tab") === "activity" ? "activity" : "coding";
 try {
   localStorage.setItem("sagax.devPods.v1", JSON.stringify({ enabled: params.get("pods") === "1" }));
 } catch {
@@ -155,7 +158,8 @@ function Ready() {
               onClose={() => {}}
               onStop={live ? () => {} : undefined}
               onSend={async () => {}}
-              side={<DevPodsPanel bot={bot} messages={messages} computerStart={undefined} dispatch={dispatch} />}
+              side={<DevPodsPanel bot={bot} messages={messages} computerStart={undefined} dispatch={dispatch} only={(id) => !ACTIVITY_DEV_PODS.includes(id)} />}
+              activitySide={<DevPodsPanel bot={bot} messages={messages} computerStart={undefined} dispatch={dispatch} only={(id) => ACTIVITY_DEV_PODS.includes(id)} />}
               composer={<Composer bot={{ ...bot, busy: live }} />}
             />
             </ChatWindowProvider>
@@ -164,7 +168,14 @@ function Ready() {
       </div>
       {withPanel && (
         <aside data-gallery-bot-panel="" className="flex h-full w-[380px] shrink-0 flex-col overflow-y-auto border-l-[0.5px] border-hairline-weak bg-[var(--bot-panel-bg)] px-4 pb-6 pt-6">
-          <div ref={(element) => setCodingPanelHost(bot.id, element)} data-coding-panel-host="" className="flex flex-col gap-5 empty:hidden" />
+          <div role="tablist" className="flex items-center justify-center gap-1 pb-4">
+            {(["activity", "library", "coding"] as const).map((id) => (
+              <span key={id} role="tab" data-panel-tab={id} aria-selected={id === panelTab} className={id === panelTab ? "rounded-full bg-raised px-3 py-[3px] text-[14px] leading-5 text-ink" : "rounded-full px-3 py-[3px] text-[14px] leading-5 text-ink-secondary"}>{t(`botPanel.tab.${id}`)}</span>
+            ))}
+          </div>
+          {panelTab === "coding"
+            ? <div key="coding" ref={(element) => setCodingPanelHost(bot.id, element)} data-coding-panel-host="" className="flex flex-col gap-5 empty:hidden" />
+            : <div key="activity" ref={(element) => setCodingPanelHost(bot.id, element, "activity")} data-coding-activity-host="" className="flex flex-col gap-5 empty:hidden" />}
         </aside>
       )}
     </div>

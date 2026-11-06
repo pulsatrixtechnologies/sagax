@@ -15,6 +15,7 @@ import { prefersWideBubble } from "@/lib/rich-blocks";
 import { runCorners } from "@/lib/room-authors";
 import { cn } from "@/lib/cn";
 import { useChatWindow, WindowHeaderPill } from "./BotHeaderPill";
+import { CHAT_UNDER_BAR_PAD, ChatBottomEdge, ChatHeaderBar } from "./ChatHeaderBar";
 import { WindowCloseButton } from "./WindowCloseButton";
 import { getExchangeColumnHost, setExchangeColumnHost, subscribeExchangeColumnHost } from "@/lib/exchange-column-host";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -168,28 +169,37 @@ export function ExchangeSheet({
       data-chat-window=""
       onClick={onClose}
     >
-      <div className="relative flex shrink-0 flex-col items-center gap-1.5 px-12 pt-6" onClick={(event) => event.stopPropagation()}>
+      {/* The same floating bar as the bot chat (ChatHeaderBar): the X at the
+          left, the 40px pill centered, the transcript scrolling under both
+          with the chat's top fade (JC 2026-11-06, hotfix 0.8.57). */}
+      <ChatHeaderBar
+        data-exchange-header=""
+        className="pl-14 sm:pl-14"
+        onClick={(event) => event.stopPropagation()}
+        center={(
+          <WindowHeaderPill label={run.ends.map((party) => party.name).join(" ⇄ ")}>
+            {run.ends.map((party, index) => {
+              const bot = avatarBot(party, bots);
+              return (
+                <span key={`${party.id ?? party.name}:${index}`} className="flex min-w-0 items-center gap-1.5">
+                  {index > 0 && <ArrowLeftRight size={14} className="shrink-0 text-ink-tertiary" />}
+                  <PartyAvatar id={party.id} bot={bot} size={22} />
+                  <span className="min-w-0 truncate whitespace-nowrap text-[15px] font-normal leading-5" style={{ color: mausInk(bot.color) }}>{party.name}</span>
+                </span>
+              );
+            })}
+          </WindowHeaderPill>
+        )}
+      >
         <WindowCloseButton onClose={onClose} data-testid="bot-exchange-close" />
-        <WindowHeaderPill label={run.ends.map((party) => party.name).join(" ⇄ ")}>
-          {run.ends.map((party, index) => {
-            const bot = avatarBot(party, bots);
-            return (
-              <span key={`${party.id ?? party.name}:${index}`} className="flex items-center gap-1.5">
-                {index > 0 && <ArrowLeftRight size={14} className="text-ink-tertiary" />}
-                <PartyAvatar id={party.id} bot={bot} size={18} />
-                <span className="text-[13px] font-medium" style={{ color: mausInk(bot.color) }}>{party.name}</span>
-              </span>
-            );
-          })}
-        </WindowHeaderPill>
-        {meta && <div data-exchange-meta className="max-w-[min(92%,36rem)] px-4 text-center text-[12px] text-ink-secondary">{meta}</div>}
-      </div>
+      </ChatHeaderBar>
       {/* The same pane and column as a 1:1 chat (ChatView): the gutter, the
           chat column, Geist at 13px, the Markdown renderer and the bubble
           widths, so the lines use the room a wider window gives. The scroll
           ends above the opaque footer band; no message text sits under it. */}
-      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-5" data-testid="bot-exchange-scroll">
+      <div className={cn("min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-5", CHAT_UNDER_BAR_PAD)} data-testid="bot-exchange-scroll">
       <div className={cn(chatColumnClassName, "py-6")} role="log" aria-live="off" onClick={(event) => event.stopPropagation()}>
+        {meta && <div data-exchange-meta className="mx-auto mb-4 max-w-[min(92%,36rem)] px-4 text-center text-[12px] text-ink-secondary">{meta}</div>}
         {loadError ? (
           <div role="alert" data-testid="bot-exchange-error" className="flex flex-col items-center gap-2 py-8 text-center text-[13px] text-ink-secondary">
             <p>{t("chat.exchange.loadError")}</p>
@@ -270,23 +280,25 @@ export function ExchangeSheet({
         })}
       </div>
       </div>
-      {pinned && (
-        <div data-exchange-pinned className="max-h-[50%] shrink-0 overflow-y-auto overscroll-y-contain px-5 pb-2" onClick={(event) => event.stopPropagation()}>
-          <div className={chatColumnClassName}>{pinned}</div>
-        </div>
-      )}
       {/* #2149: the X at the top closes; the chat's composer stays below the
           window. A routine run's actions keep their row (narrow widths wrap
-          it in order, centered). */}
-      {footer && (
-        <div
-          data-exchange-footer=""
-          className="flex shrink-0 flex-wrap items-center justify-center gap-2 border-t border-hairline/40 bg-app px-4 py-3"
-          onClick={(event) => event.stopPropagation()}
-        >
-          {footer}
-        </div>
-      )}
+          it in order, centered). The bottom edge carries the chat's fade
+          over the transcript's end, with or without a row. */}
+      <ChatBottomEdge onClick={(event) => event.stopPropagation()}>
+        {pinned && (
+          <div data-exchange-pinned className="max-h-[50vh] overflow-y-auto overscroll-y-contain bg-app px-5 pb-2">
+            <div className={chatColumnClassName}>{pinned}</div>
+          </div>
+        )}
+        {footer && (
+          <div
+            data-exchange-footer=""
+            className="flex flex-wrap items-center justify-center gap-2 bg-app px-4 py-3"
+          >
+            {footer}
+          </div>
+        )}
+      </ChatBottomEdge>
     </div>
   );
   // A column host (ChatView, GroupView, or the shared host) is the containing

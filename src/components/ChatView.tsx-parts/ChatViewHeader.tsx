@@ -1,14 +1,12 @@
-import type { CSSProperties, Dispatch, ReactNode } from "react";
+import type { CSSProperties, Dispatch, HTMLAttributes, ReactNode } from "react";
 import { downloadBotZip, showBotZipExport } from "@/lib/bot-zip";
 import { splitBesideMain } from "@/lib/split-view";
 import { CallOverlay } from "../CallView";
 import { ExportTranscriptMenu } from "../ExportTranscriptMenu";
 import { TaskPicker } from "../TaskPicker";
-import { cn } from "@/lib/cn";
-import type { Action, Bot, ConfigStatus, Message } from "@/state/store";
-import { NewTopicButton } from "./stream";
+import { startNewTopic, type Action, type Bot, type ConfigStatus, type Message } from "@/state/store";
 import type { SideChat } from "./sideChat";
-import { ChatEdgeFade } from "@/components/ChatEdgeFade";
+import { ChatHeaderBar } from "@/components/ChatHeaderBar";
 
 /** Call overlay strip and the floating bot-pill header (or a side header). */
 export function ChatViewHeader({
@@ -64,23 +62,16 @@ export function ChatViewHeader({
       {(macInset || browser) && <div className="content-topbar-strip" />}
       </>}
       {/* Header */}
-      {side ? (typeof side.header === "function" ? side.header(side.panel ? botPill : null) : side.header) : <div
-        {...headerDragProps}
-        className={cn(
-          "content-topbar",
-          // @container so the chips on the right can fold to icon bubbles
-          // when the column is narrow (side panel open, small window)
-          // Grok Bot: no band; the transcript scrolls under the pill and
-          // ChatEdgeFade softens it. Pulsatrix Light makes it `relative`.
-          "@container/chathead absolute inset-x-0 top-0 z-[3] flex min-h-[52px] items-center justify-end px-5 py-2.5",
-          // Room for the drawer button, which overlays this corner below sm.
-          "pl-11 sm:pl-5",
-        )}
+      {side ? (typeof side.header === "function" ? side.header(side.panel ? botPill : null) : side.header) : <ChatHeaderBar
+        {...(headerDragProps as HTMLAttributes<HTMLDivElement>)}
+        // Every chat view floats this same bar (ChatHeaderBar): no band, the
+        // transcript scrolls under the pill and ChatEdgeFade softens it.
+        // @container/chathead lets the chips on the right fold to icon
+        // bubbles when the column is narrow. Pulsatrix Light makes it
+        // `relative`.
+        center={chatHeader}
+        centerStyle={headerNoDragStyle}
       >
-        <ChatEdgeFade edge="top" />
-        <div className="absolute left-1/2 top-1/2 flex max-w-[60%] -translate-x-1/2 -translate-y-1/2 items-center gap-2" style={headerNoDragStyle}>
-          {chatHeader}
-        </div>
         <div
           data-chathead-controls
           className="flex shrink-0 items-center gap-2 @max-[30rem]/chathead:ml-auto @max-[30rem]/chathead:flex-wrap @max-[30rem]/chathead:justify-end @min-[30rem]/chathead:col-start-3 @min-[30rem]/chathead:justify-self-end"
@@ -95,7 +86,10 @@ export function ChatViewHeader({
               Inspector (Advanced) and Data (Experimental). The pill opens
               the bot's panel; while the panel is open its top bar carries
               this same menu. */}
-          {!panelOpen && <ExportTranscriptMenu
+          {/* Clear chat is the menu's first entry (JC 2026-11-06), never a
+              separate button, so the menu stays while the panel is open
+              when the chat has it. */}
+          {(!panelOpen || !showThreads) && <ExportTranscriptMenu
             title={bot.name}
             messages={messages}
             botName={bot.name}
@@ -104,11 +98,11 @@ export function ChatViewHeader({
             {...(!remoteClient && showInspector && advanced ? { onToggleInspector: () => dispatch({ type: "toggleInspector" }), inspectorOpen: state.inspectorOpen } : {})}
             {...(dataItem ? { data: dataItem as never } : {})}
             onSplit={(edge) => splitBesideMain(showThreads ? { kind: "bot", botId: bot.id, threadId: bot.threadId } : { kind: "bot", botId: bot.id }, edge)}
+            {...(!showThreads ? { onClearChat: () => startNewTopic(dispatch, bot), clearChatKey: bot.id } : {})}
           />}
-          {!showThreads && <NewTopicButton bot={bot} />}
           <TaskPicker bot={bot} />
         </div>
-      </div>}
+      </ChatHeaderBar>}
     </>
   );
 }

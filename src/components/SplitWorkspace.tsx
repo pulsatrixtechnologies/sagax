@@ -52,6 +52,7 @@ import { useSideTranscript } from "@/lib/use-side-transcript";
 import { groupMemberBots } from "@/lib/group-members";
 import { BotAvatar } from "./Avatar";
 import { BotHeaderPill, botPillActions } from "./BotHeaderPill";
+import { ChatHeaderBar } from "./ChatHeaderBar";
 import { ChatView } from "./ChatView";
 import { GroupView } from "./GroupView";
 import { GroupAvatarStack } from "./GroupPanel";
@@ -397,16 +398,17 @@ function SplitPane({ leaf }: { leaf: SplitLeaf }) {
  * on its left, Open in main and Close in the corner. */
 function PaneHeader({ pill, title, subtitle, onOpenMain, onClose, inFlow = false }: { pill?: ReactNode; title: string; subtitle?: string; onOpenMain?: () => void; onClose: () => void; inFlow?: boolean }) {
   return (
-    <div data-split-pane-header className={cn("content-topbar z-[3] flex min-h-[52px] items-center gap-2 px-3 py-2.5", inFlow ? "relative shrink-0" : "absolute inset-x-0 top-0")}>
-      {pill ? (
-        <>
-          <span dir="auto" className="min-w-0 max-w-[calc(25%-1rem)] truncate text-[12.5px] leading-5 text-ink-secondary">{subtitle ? title : ""}</span>
-          <div data-split-pane-pill="" className="absolute left-1/2 top-1/2 flex max-w-[50%] -translate-x-1/2 -translate-y-1/2 items-center">{pill}</div>
-          <span aria-hidden className="flex-1" />
-        </>
-      ) : (
-        <span dir="auto" className="min-w-0 flex-1 truncate text-[13.5px] font-medium leading-5 text-ink">{title}</span>
-      )}
+    // The same floating bar as every chat view (ChatHeaderBar): the pill
+    // centered, the transcript under it with the same top fade.
+    <ChatHeaderBar
+      data-split-pane-header=""
+      className={cn("px-3 pl-3 sm:pl-3", inFlow && "relative shrink-0")}
+      centerClassName="max-w-[50%]"
+      center={pill ? <div data-split-pane-pill="" className="flex min-w-0 items-center">{pill}</div> : undefined}
+      start={pill
+        ? (subtitle ? <span dir="auto" data-chat-thread-title="" className="min-w-0 truncate text-[12.5px] leading-5 text-ink-secondary">{title}</span> : undefined)
+        : <span dir="auto" className="min-w-0 flex-1 truncate text-[13.5px] font-medium leading-5 text-ink">{title}</span>}
+    >
       {onOpenMain && (
         <button type="button" data-split-open-main onClick={onOpenMain} aria-label={t("splitView.openInMain")} title={t("splitView.openInMain")} className={CIRCLE_BUTTON}>
           <Maximize2 size={15} strokeWidth={1.75} aria-hidden="true" />
@@ -415,7 +417,7 @@ function PaneHeader({ pill, title, subtitle, onOpenMain, onClose, inFlow = false
       <button type="button" data-split-close onClick={onClose} aria-label={t("splitView.close")} title={t("splitView.close")} className={CIRCLE_BUTTON}>
         <X size={17} strokeWidth={1.75} aria-hidden="true" />
       </button>
-    </div>
+    </ChatHeaderBar>
   );
 }
 

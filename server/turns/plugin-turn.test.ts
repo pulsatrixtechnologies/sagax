@@ -150,6 +150,6 @@ describe("plugin skills and commands on a turn", () => {
     expect(discovered).toHaveLength(45);
     const prompt = capabilityPrompt("grok", [{ key: "packing", name: "Packing", files: discovered.map((file) => ({ ...file, read: () => "Check" })) }]);
     expect(prompt.byCapability.packing).toMatchObject({ skills: 30, omitted: 15 });
-    expect(prompt.text).toContain("30/45 files");
+    expect(prompt.text).toContain("30/45 references");
   });
 });

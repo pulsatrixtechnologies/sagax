@@ -1,5 +1,6 @@
 // @ts-nocheck
 // #1388 wave 4 step 3: runGroupMemberTurn phase. Never imports server/index.ts.
+import { ATTACHMENTS_DIR } from "../attachments/attachments.ts";
 import { hideServerPathsInSections } from "../server-path-prompt.ts";
 import { onDemandPromptParts, onDemandPromptText, promptReferencesAvailable } from "../context/prompt-references.ts";
 import type { GroupMemberTurnHost } from "./group-member-turn-types.ts";
@@ -146,6 +147,7 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     markCancelledProviderHandshake,
     markWorkspaceUse,
     mcpCallTimeoutMinutes,
+    messageFileRootsForThread,
     mcpServersAsPerson,
     memoryPromptFor,
     mentionedBots,
@@ -1129,6 +1131,10 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
 const sendRoomTurn = async (roomTurnAccess: TurnAccess | undefined) => {
       const roomCommand = await roomCommandFor(roomTurnAccess);
       const engineCommand = roomCommand.kind === "engine" ? roomCommand : null;
+      const resultRoots = worksInWorkspace || roomGuestConfined || cloudGuestOpened(threadId)
+        ? undefined
+        : messageFileRootsForThread(readyBot.id, threadId);
+      const toolResultFolder = Array.isArray(resultRoots) ? resultRoots.find((root: string) => root !== ATTACHMENTS_DIR) : undefined;
       return instance.adapter.sendTurn({
         threadId,
         botId: readyBot.id,
@@ -1148,6 +1154,7 @@ const sendRoomTurn = async (roomTurnAccess: TurnAccess | undefined) => {
         systemVolatile: roomSystem.volatile,
         systemVolatileSections: roomSystem.volatileSections,
         cwd,
+        ...(toolResultFolder ? { toolResultFolder } : {}),
         integrations,
         ...(withholdHostToolsFor(instance) ? { withholdHostTools: true } : {}),
         ...turnCommandEnvironment(instance, readyBot.id, threadId),

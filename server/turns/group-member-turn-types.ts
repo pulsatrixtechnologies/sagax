@@ -143,6 +143,7 @@ export type GroupMemberTurnHost = {
   markCancelledProviderHandshake: any,
   markWorkspaceUse: any,
   mcpCallTimeoutMinutes: any,
+  messageFileRootsForThread: any,
   mcpServersAsPerson: any,
   memoryPromptFor: any,
   mentionedBots: any,

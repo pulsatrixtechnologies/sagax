@@ -151,7 +151,7 @@ describe("bot chat header, like Grok Bot (#2141)", () => {
 
   it("shows \"Name · Title\" on ONE line, like Grok Bot: name in ink, \" · Title\" in secondary grey (JC 2026-11-06)", () => {
     const html = header();
-    expect(html).toMatch(/<span data-bot-header-text="" class="[^"]*truncate[^"]*whitespace-nowrap[^"]*"><span data-bot-header-name="" class="text-ink">Pepper<\/span><span data-bot-header-label="" class="text-ink-secondary"> · Research<\/span><\/span>/);
+    expect(html).toMatch(/<span data-bot-header-text="" title="Pepper · Research" class="[^"]*truncate[^"]*whitespace-nowrap[^"]*"><span data-bot-header-name="" class="text-ink">Pepper<\/span><span data-bot-header-label="" class="text-ink-secondary"> · Research<\/span><\/span>/);
     expect(html).not.toContain("flex-col");
     expect(html).toContain("h-10");
   });
@@ -166,6 +166,19 @@ describe("bot chat header, like Grok Bot (#2141)", () => {
     }));
     expect(html).toMatch(/>Pepper<\/span><span data-bot-header-label="" class="text-ink-secondary"> · Research<\/span>/);
     expect(html).not.toContain("flex-col");
+  });
+
+  it("a long group name ends in an ellipsis on one line, the chevron stays, the full name on hover (JC 2026-11-06)", () => {
+    const name = "Ada Lovelace, Bob Martin, Cléo Tremblay et Atlas";
+    const html = renderToStaticMarkup(createElement(BotHeaderPill, {
+      name,
+      panelOpen: false,
+      onToggle: () => {},
+      avatar: createElement("span", { "data-test-avatar": "" }),
+    }));
+    expect(html).toMatch(new RegExp(`<span data-bot-header-text="" title="${name}" class="[^"]*min-w-0[^"]*truncate[^"]*whitespace-nowrap`));
+    expect(html).toMatch(/data-bot-header-pill="" class="[^"]*min-w-0/);
+    expect(/<svg[^>]*data-bot-header-chevron[^>]*>/.exec(html)?.[0]).toContain("shrink-0");
   });
 
   it("leaves the label out when the bot has none", () => {

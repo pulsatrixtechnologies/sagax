@@ -1,6 +1,7 @@
 import type { RefObject, MutableRefObject } from "react";
 import { Square } from "lucide-react";
 import { t } from "@/lib/i18n";
+import { cn } from "@/lib/cn";
 import { useStore, type Bot, type Group, type Message } from "@/state/store";
 import type { OrgDirectoryPerson } from "@/lib/perspicax-org";
 import type { ThreadReads } from "@/lib/read-receipts";
@@ -124,7 +125,9 @@ export function GroupRoomTranscriptPane({
           ref={transcriptRef}
           // Same chat column as a bot chat and the composer, so the
           // thread lines up with the field.
-          className={chatColumnClassName}
+          // pt-14: the first message clears the floating header pill at
+          // rest, as in a bot chat (ChatViewShell).
+          className={cn(chatColumnClassName, "pt-14")}
           style={{ paddingBottom: composerDockPad }}
           role="log"
           // off, as in ChatView: TranscriptAnnouncer speaks once per reply

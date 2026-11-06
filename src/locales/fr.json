@@ -2432,6 +2432,8 @@
   "connectApps.count.connectorOne": "1 connecteur",
   "connectApps.count.skillMany": "{count} compétences",
   "connectApps.count.skillOne": "1 compétence",
+  "connectApps.detail.more": "Plus sur ce plugin",
+  "connectApps.detail.noAccounts": "Aucun compte requis",
   "connectApps.detail.accounts": "Comptes",
   "connectApps.detail.accountsCount": "Comptes",
   "connectApps.detail.addAccount": "Ajouter un autre compte",

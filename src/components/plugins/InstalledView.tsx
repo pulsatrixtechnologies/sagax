@@ -119,7 +119,7 @@ export function AddMenu({ actions }: { actions: AddAction[] }) {
           {actions.map((action) => (
             <button key={action.id} type="button" role="menuitem" data-plugins-add-action={action.id} disabled={action.disabled}
               onClick={() => { setOpen(false); action.onPick(); }}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-[14px] text-ink hover:bg-hover disabled:opacity-40">
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-[13px] text-ink hover:bg-hover disabled:opacity-40">
               {action.icon}
               {action.label}
             </button>
@@ -132,7 +132,7 @@ export function AddMenu({ actions }: { actions: AddAction[] }) {
 
 function EmptyLine({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-border px-4 py-3 text-[14px] text-ink-secondary" data-plugins-empty>
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-border px-4 py-3 text-[13px] text-ink-secondary" data-plugins-empty>
       <span>{children}</span>
       {action}
     </div>
@@ -223,7 +223,7 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
                       {skill.description ? ` · ${skill.description}` : ""}
                     </span>
                   </span>
-                  {skill.status === "off" && <span className="shrink-0 text-[14px] text-ink-secondary">{t("connectApps.status.off")}</span>}
+                  {skill.status === "off" && <span className="shrink-0 text-[13px] text-ink-secondary">{t("connectApps.status.off")}</span>}
                 </button>
               </li>
             ))}
@@ -251,7 +251,7 @@ export function InstalledRow({ entry, onOpen, actions }: { entry: InstalledEntry
           <span className={PLUGINS.rowName}>{entry.name}</span>
           <span className={PLUGINS.rowSub} data-installed-brings>{bringsLabel(entry.brings)}</span>
         </span>
-        <PluginStatusLabel status={entry.status} className="text-[14px] font-normal" />
+        <PluginStatusLabel status={entry.status} className="text-[13px] font-normal" />
       </button>
       <EntryMenu name={entry.name} actions={actions} updateWaiting={entry.updateAvailable} hoverOnly />
     </div>
@@ -308,7 +308,7 @@ function EntryMenu({ name, actions, updateWaiting, hoverOnly = false }: { name: 
               role="menuitem"
               data-entry-action={item.id}
               onClick={() => { setOpen(false); item.run(); }}
-              className={cn("flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-[14px] hover:bg-hover", item.danger ? "text-danger" : "text-ink")}
+              className={cn("flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-[13px] hover:bg-hover", item.danger ? "text-danger" : "text-ink")}
             >
               {item.icon}
               {item.label}
@@ -339,7 +339,7 @@ function OrganizationRow({ item }: { item: Capability }) {
         {role ? <KeyRound size={15} aria-hidden="true" /> : <Building2 size={15} aria-hidden="true" />}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13px] font-medium text-ink">{name}</span>
+        <span className="block truncate text-[12px] font-medium text-ink">{name}</span>
         <span className="block truncate text-[11.5px] text-ink-secondary" title={reason ?? sub}>{reason ? `${sub} · ${reason}` : sub}</span>
       </span>
       <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px] leading-[15px]", chip.tone)}>{chip.text}</span>

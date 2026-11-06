@@ -41,8 +41,8 @@ export interface SkillPageProps {
   onDeleted: () => Promise<unknown> | void;
 }
 
-const fieldClass = cn(PLUGINS.field, "min-h-[46px] rounded-[14px] px-[17px] py-3 text-[15px] leading-[22px]");
-const labelClass = "px-2 text-[13.5px] leading-5 text-ink-secondary";
+const fieldClass = cn(PLUGINS.field, "min-h-[46px] rounded-[14px] px-[17px] py-3 text-[14px] leading-[22px]");
+const labelClass = "px-2 text-[12.5px] leading-5 text-ink-secondary";
 
 export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDeleted, basePath = "/api/skills-library" }: SkillPageProps) {
   const confirm = useConfirm();
@@ -150,15 +150,11 @@ export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDel
         <div className="flex flex-wrap items-center gap-3" data-skill-head>
           <div className="flex size-14 shrink-0 items-center justify-center rounded-[14px] border-[0.5px] border-ink/10 bg-card text-ink-secondary"><FileText size={20} aria-hidden="true" /></div>
           <div className="min-w-0 flex-[1_1_200px] pl-0.5">
-            <div className="truncate text-[17px] leading-6 text-ink">{creating ? t("connectApps.skill.new") : skill.name}</div>
-            <div className="truncate text-[14px] leading-5 text-ink-secondary">{t("connectApps.skill.private")}</div>
+            <div className="truncate text-[16px] leading-6 text-ink">{creating ? t("connectApps.skill.new") : skill.name}</div>
+            <div className="truncate text-[13px] leading-5 text-ink-secondary">{t("connectApps.skill.private")}</div>
           </div>
           {skill && (
             <div className="ml-auto flex flex-wrap items-center gap-2">
-              <label className="flex items-center gap-2 text-[13.5px] text-ink-secondary" data-skill-enabled>
-                {busy === "toggle" ? <Loader2 size={13} className="animate-spin" /> : t(enabled ? "connectApps.skill.on" : "connectApps.skill.off")}
-                <Switch checked={enabled} disabled={busy !== null || !loaded} onClick={() => void toggle()} aria-label={t(enabled ? "connectApps.skill.turnOff" : "connectApps.skill.turnOn")} />
-              </label>
               <PublishMenu disabled={!loaded} fileName={`${name.trim() || skill.name}.md`} text={skillMd} />
               {!readOnly && (
                 <button
@@ -175,10 +171,10 @@ export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDel
           )}
         </div>
 
-        {skill?.description && <p className="text-[15px] leading-[20px] text-ink-secondary" data-skill-summary>{skill.description}</p>}
-        {skill && !enabled && <p className="text-[13px] text-ink-secondary">{t("connectApps.skill.reviewHint")}</p>}
-        {readOnlyReason && <p role="note" className="rounded-[12px] bg-card px-3.5 py-2.5 text-[13.5px] text-ink-secondary">{readOnlyReason}</p>}
-        {skill && skill.warnings.length > 0 && <ul className="list-disc pl-5 text-[13px] text-warning">{skill.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
+        {skill?.description && <p className="text-[14px] leading-[20px] text-ink-secondary" data-skill-summary>{skill.description}</p>}
+        {skill && !enabled && <p className="text-[12px] text-ink-secondary">{t("connectApps.skill.reviewHint")}</p>}
+        {readOnlyReason && <p role="note" className="rounded-[12px] bg-card px-3.5 py-2.5 text-[12.5px] text-ink-secondary">{readOnlyReason}</p>}
+        {skill && skill.warnings.length > 0 && <ul className="list-disc pl-5 text-[12px] text-warning">{skill.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
 
         <form
           id="skill-form"
@@ -191,7 +187,7 @@ export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDel
           <label className="flex flex-col gap-2.5">
             <span className={labelClass}>{t("connectApps.skill.name")}</span>
             <input value={name} disabled={readOnly || !loaded} maxLength={64} onChange={(event) => setName(event.target.value)} className={fieldClass} data-skill-field="name" />
-            {name.trim() !== "" && !nameOk && <span className="px-2 text-[13px] text-danger">{t("connectApps.skill.nameRule")}</span>}
+            {name.trim() !== "" && !nameOk && <span className="px-2 text-[12px] text-danger">{t("connectApps.skill.nameRule")}</span>}
           </label>
           <label className="flex flex-col gap-2.5">
             <span className={labelClass}>{t("connectApps.skill.description")}</span>
@@ -209,20 +205,30 @@ export function SkillPage({ skill, readOnlyReason, onBack, trail, onSaved, onDel
               dataField="skill-instructions"
               toolbarOnFocus
               showCount={false}
-              className="rounded-[14px] border-transparent bg-card px-1.5 py-2 text-[15px]"
+              className="rounded-[14px] border-transparent bg-card px-1.5 py-2 text-[14px]"
             />
           </div>
           {/* what each engine gets of a library skill (lot 1b): the prompt index */}
-          <p className="px-2 text-[13px] text-ink-secondary" data-skill-engines>
+          <p className="px-2 text-[12px] text-ink-secondary" data-skill-engines>
             <span className="text-ink">{t("capabilities.detail.engines")}</span>{t("capabilities.engines.colon")}{enginesLine("skill", { skills: true, indexOnly: true })}
           </p>
-          {error && <p role="alert" className="rounded-[12px] bg-danger/10 px-3.5 py-2.5 text-[13.5px] text-danger">{error}</p>}
+          {error && <p role="alert" className="rounded-[12px] bg-danger/10 px-3.5 py-2.5 text-[12.5px] text-danger">{error}</p>}
         </form>
+        {/* on or off: a row below the form, Grok Bot's header has no switch (#2146) */}
+        {skill && (
+          <label className="flex min-h-[44px] items-center justify-between gap-3 rounded-[14px] border-[0.5px] border-ink/10 px-4 text-[13px] text-ink" data-skill-enabled>
+            <span className="flex items-center gap-2">
+              {busy === "toggle" && <Loader2 size={13} className="animate-spin" />}
+              {t(enabled ? "connectApps.skill.on" : "connectApps.skill.off")}
+            </span>
+            <Switch checked={enabled} disabled={busy !== null || !loaded} onClick={() => void toggle()} aria-label={t(enabled ? "connectApps.skill.turnOff" : "connectApps.skill.turnOn")} />
+          </label>
+        )}
       </div>
       {!readOnly && (
         <div className="flex shrink-0 items-center justify-end gap-3 border-t border-hairline-weak px-4 py-3" data-skill-savebar>
-          {saved && !error && !dirty && <span role="status" className="text-[13.5px] text-success">{t("connectApps.skill.saved")}</span>}
-          <button type="submit" form="skill-form" disabled={!canSave} className={cn(PLUGINS.primaryPill, "h-9 px-6 text-[15px] disabled:bg-card disabled:text-ink-tertiary disabled:opacity-100")}>{busy === "save" ? <Loader2 size={14} className="animate-spin" /> : t("connectApps.skill.save")}</button>
+          {saved && !error && !dirty && <span role="status" className="text-[12.5px] text-success">{t("connectApps.skill.saved")}</span>}
+          <button type="submit" form="skill-form" disabled={!canSave} className={cn(PLUGINS.primaryPill, "h-9 px-6 text-[14px] disabled:bg-card disabled:text-ink-tertiary disabled:opacity-100")}>{busy === "save" ? <Loader2 size={14} className="animate-spin" /> : t("connectApps.skill.save")}</button>
         </div>
       )}
     </>
@@ -246,15 +252,15 @@ function PublishMenu({ text, fileName, disabled }: { text: () => string; fileNam
   };
   return (
     <div className="relative" ref={ref}>
-      <button type="button" data-skill-publish aria-haspopup="menu" aria-expanded={open} disabled={disabled} onClick={() => setOpen((value) => !value)} className={cn(PLUGINS.outlinePill, "h-[26px] px-3 text-[15px]")}>
+      <button type="button" data-skill-publish aria-haspopup="menu" aria-expanded={open} disabled={disabled} onClick={() => setOpen((value) => !value)} className={cn(PLUGINS.outlinePill, "h-[26px] px-3")}>
         <Link2 size={14} aria-hidden="true" /> {copied ? t("connectApps.skill.copied") : t("connectApps.skill.publish")} <ChevronDown size={14} aria-hidden="true" />
       </button>
       {open && (
         <div role="menu" className="absolute right-0 top-9 z-10 min-w-[220px] rounded-xl border border-border bg-raised p-1 shadow-lg">
-          <button type="button" role="menuitem" data-skill-publish-copy className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[14px] text-ink hover:bg-hover" onClick={() => { setOpen(false); void copyText(text()).then((result) => setCopied(result === "copied")); }}>
+          <button type="button" role="menuitem" data-skill-publish-copy className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-ink hover:bg-hover" onClick={() => { setOpen(false); void copyText(text()).then((result) => setCopied(result === "copied")); }}>
             <Copy size={14} /> {t("connectApps.skill.copyMd")}
           </button>
-          <button type="button" role="menuitem" data-skill-publish-file className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[14px] text-ink hover:bg-hover" onClick={() => { setOpen(false); download(); }}>
+          <button type="button" role="menuitem" data-skill-publish-file className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-ink hover:bg-hover" onClick={() => { setOpen(false); download(); }}>
             <Download size={14} /> {t("connectApps.skill.saveMd")}
           </button>
         </div>

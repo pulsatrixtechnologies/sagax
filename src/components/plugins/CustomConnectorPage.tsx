@@ -31,8 +31,8 @@ export function connectorUrl(value: string): string {
 }
 
 // measured on Grok Bot's form (DPR 2): 28px fields, 14px radius, 14px text
-const fieldClass = cn(PLUGINS.outlineField, "h-[28px] rounded-[14px] px-[8px] py-0 text-[14px]");
-const labelClass = "mb-[6px] block text-[14px] leading-5 text-ink-secondary";
+const fieldClass = cn(PLUGINS.outlineField, "h-[28px] rounded-[14px] px-[8px] py-0 text-[13px]");
+const labelClass = "mb-[6px] block text-[13px] leading-5 text-ink-secondary";
 
 export function CustomConnectorPage({ mcp, onBack, trail }: {
   mcp: McpServers;
@@ -171,15 +171,15 @@ export function CustomConnectorPage({ mcp, onBack, trail }: {
           </label>
         </div>
 
-        {errorText && <p className="mt-4 text-[13px] text-danger" role="alert">{errorText}</p>}
+        {errorText && <p className="mt-4 text-[12px] text-danger" role="alert">{errorText}</p>}
 
         <div className="mt-[25px] flex items-center justify-between">
-          <button type="button" className={cn(PLUGINS.outlinePill, "h-[31px] px-[11px] text-[15px]")} onClick={onBack} data-connector-cancel>
+          <button type="button" className={cn(PLUGINS.outlinePill, "h-[31px] px-[11px] text-[14px]")} onClick={onBack} data-connector-cancel>
             {t("common.cancel")}
           </button>
           <button
             type="submit"
-            className={cn(PLUGINS.fillPill, "h-[31px] px-[11px] text-[15px]", !complete && "text-ink-tertiary")}
+            className={cn(PLUGINS.fillPill, "h-[31px] px-[11px] text-[14px]", !complete && "text-ink-tertiary")}
             disabled={!complete || saving}
             data-connector-submit
           >

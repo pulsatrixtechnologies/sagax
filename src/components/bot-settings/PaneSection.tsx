@@ -43,7 +43,7 @@ export function PaneSection({
           {action && <div className="ml-auto flex shrink-0 items-center gap-2">{action}</div>}
         </div>
       )}
-      {children && (plain ? <div className="flex min-w-0 flex-col gap-2">{children}</div> : <div className={PANE_CARD}>{children}</div>)}
+      {children && (plain ? <div className="flex min-w-0 flex-col gap-2">{children}</div> : <div className={PANE_CARD} data-settings-surface="">{children}</div>)}
     </section>
   );
 }

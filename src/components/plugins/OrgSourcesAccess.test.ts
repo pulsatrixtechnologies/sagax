@@ -42,16 +42,15 @@ const org = (viewerRole: "admin" | "member"): PerspicaxOrg => ({
 });
 
 describe("Organization sources and access", () => {
-  it("Settings > Organization: sources are a read-only OrgManagedRow for everyone (edits in Perspicax)", () => {
-    // #2080 L3: sources are a read-only OrgManagedRow for everyone (edits in Perspicax)
-    // Base (#2104): Plugins window owns marketplace policy; Organization keeps the read-only row.
+  it("Settings > Organization: sources are one read-only row for everyone, and the admin keeps the GitHub OAuth App's client id", () => {
+    // #2080 L3: sources are a read-only row for everyone, with no shortcut to Perspicax
     const admin = renderToStaticMarkup(createElement(PerspicaxOrgSettings, { org: org("admin"), onChanged: () => {} }));
     expect(admin).toContain('data-settings-row="orgSources"');
     expect(admin).toContain("Sources and access");
-    expect(admin).toContain('data-external-link-pill=""');
+    expect(admin).not.toContain("data-external-link-pill");
     expect(admin).not.toContain("data-org-plugin-policy");
     expect(admin).not.toContain("data-github-token-add");
-    expect(admin).not.toContain('data-settings-card="organization.githubApp"');
+    expect(admin).toContain('data-settings-card="organization.githubApp"');
     expect(admin).not.toContain('data-settings-card="organization.plugins"');
     const member = renderToStaticMarkup(createElement(PerspicaxOrgSettings, { org: org("member"), onChanged: () => {} }));
     expect(member).toContain('data-settings-row="orgSources"');

@@ -31,7 +31,7 @@ import { ComputerCareSettings } from "./settings/ComputerCareSettings";
 import { ComputerBrowserSettings } from "./settings/ComputerBrowserSettings";
 import { ComputerMacControlRow } from "./settings/ComputerMacControlRow";
 import { ServerModeComputerAccess } from "./ServerModeSettings";
-// TODO(L1): MessagesSettings moves to Connect apps > Mac > Messages.
+// Messages lives in Connect apps > Mac > Messages (MessagesSetupView).
 import { readableError } from "@/lib/plain-error";
 import {
   computerInventoryRequest,

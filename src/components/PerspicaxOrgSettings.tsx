@@ -1,17 +1,18 @@
 // Settings > Organization on a server signed in with Perspicax (#2080 L3):
-// the same page for everyone. OrgBand + OrgManagedRows; edits live in
-// Perspicax. Approvals are a count row with a Perspicax link (the allow/deny
-// file left Settings). Interim people stay when the window still has some.
+// the same page for everyone. The organization's name and the person's role,
+// no shortcut to Perspicax (JC 2026-11-05: they only took space). Approvals
+// waiting are a count row. Interim people stay when the window still has some.
 import { useEffect, useState } from "react";
 
 import { t } from "@/lib/i18n";
 import type { PerspicaxOrg } from "@/lib/perspicax-org";
 import { setOrgApprovalsCount, useOrgApprovalsVersion } from "@/lib/org-approvals";
 import { api } from "@/state/store";
-import { DescribedRow, ExternalLinkPill, OrgBand, OrgManagedRow, SettingsGroup } from "./SettingsPrimitives";
+import { DescribedRow, OrgBand, SettingsGroup } from "./SettingsPrimitives";
 import { InterimPeople } from "./settings/InterimPeople";
-import { OrgRulesReadOnly } from "./settings/OrgRulesReadOnly";
 import { OrganizationBotRows } from "./settings/OrganizationBotRules";
+import { OrgGithubApp } from "./settings/OrgGithubApp";
+import { OrgRulesReadOnly } from "./settings/OrgRulesReadOnly";
 
 interface PendingAdminApproval {
   botId: string;
@@ -81,7 +82,6 @@ export function PerspicaxOrgSettings({ org, onChanged }: {
   const linked = org.link.state === "ok";
   const role = admin ? t("organization.role.adminShort") : t("organization.role.memberShort");
   const waiting = (approvals ?? []).length;
-  const consoleHref = perspicaxConsoleUrl(org.org.identity.issuer);
   const bandRole = (
     <span role="status" className={linked ? undefined : "text-warning"}>
       {linked ? t("organization.link.okShort") : linkStateLine(org.link)} · {role}
@@ -90,36 +90,30 @@ export function PerspicaxOrgSettings({ org, onChanged }: {
 
   return (
     <>
-      <OrgBand
-        name={org.org.name}
-        role={bandRole}
-        sentence={t("organization.orgBand.sentence")}
-        href={consoleHref}
-      />
-      <SettingsGroup groupId="organizationPeople">
-        <div data-settings-card="organization.perspicax" data-perspicax-org>
-          <OrgManagedRow
-            label={t("organization.people")}
-            value={t("organization.people.value")}
-            href={`${consoleHref}people`}
-            rowId="orgPeople"
-          />
+      <OrgBand name={org.org.name} role={bandRole} />
+      {(waiting > 0 || (interimVisible && interim?.until)) && (
+        <SettingsGroup groupId="organizationPeople">
           {waiting > 0 && (
             <DescribedRow
               label={t("organization.approvals.waiting")}
               description={t("organization.approvals.count", { count: waiting })}
               rowId="adminApprovals"
-            >
-              <ExternalLinkPill href={`${consoleHref}approvals`}>{t("organization.approvals.see")}</ExternalLinkPill>
-            </DescribedRow>
+            />
           )}
-        </div>
-        {interimVisible && interim?.until ? <InterimPeople until={interim.until} onChanged={onChanged} /> : null}
-      </SettingsGroup>
+          {interimVisible && interim?.until ? <InterimPeople until={interim.until} onChanged={onChanged} /> : null}
+        </SettingsGroup>
+      )}
       <OrgRulesReadOnly org={org} />
       <SettingsGroup advanced title={t("organization.group.botRules")} groupId="organizationBots">
         <OrganizationBotRows />
       </SettingsGroup>
+      {/* The GitHub OAuth App's client id is a server setting behind
+          Connect GitHub for everyone, so it stays here for admins. */}
+      {admin && (
+        <SettingsGroup advanced title={t("organization.github.title")} groupId="organizationGithub">
+          <OrgGithubApp initial={org.settings} />
+        </SettingsGroup>
+      )}
     </>
   );
 }

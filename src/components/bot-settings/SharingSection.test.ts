@@ -200,12 +200,12 @@ describe("Settings > Organization on a Perspicax server", () => {
     viewerRole: "admin" as const,
     settings: { orgKeyConfigured: false },
   };
-  it("shows the link, the role and the console link", () => {
+  it("shows the link and the role, with no shortcut to the console", () => {
     const markup = renderToStaticMarkup(createElement(PerspicaxOrgSettings, { org, onChanged: () => {} }));
     // #584: link state and role on one grey line under the organization's name
     expect(markup).toContain("Linked to Pulsatrix · Admin");
-    expect(markup).toContain("Manage in Perspicax");
-    expect(markup).toContain('href="https://px.example.test/console/"');
+    expect(markup).not.toContain("Manage in Perspicax");
+    expect(markup).not.toContain("/console");
     expect(markup).not.toContain("type=\"checkbox\"");
     expect(markup).not.toContain("Who pays for a turn");
     expect(markup).not.toContain("data-pay-order");
@@ -217,7 +217,8 @@ describe("Settings > Organization on a Perspicax server", () => {
     expect(markup).not.toContain("My subscriptions and keys");
     expect(markup).not.toContain("data-my-engines");
     expect(markup).not.toContain("Routines in my name");
-    expect(markup).not.toContain('data-settings-card="organization.githubApp"');
+    // the GitHub OAuth App's client id stays for the admin, under advanced
+    expect(markup).toContain('data-settings-card="organization.githubApp"');
   });
   it("gives an admin the force actions menu on every bot, and a member none (OrgSharing.test.ts has the rest)", async () => {
     const { OrgSharing } = await import("../settings/OrgSharing");

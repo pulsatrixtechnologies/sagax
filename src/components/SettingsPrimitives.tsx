@@ -1124,5 +1124,5 @@ export function ConfirmPill({ label, confirmLabel, ariaLabel, title, onConfirm, 
 }
 
 // #2080 (L0): the shared Settings patterns, one import for every page.
-export { ExternalLinkPill, StatusText, OrgManagedRow, OrgBand, FilterChips, SelectionBar, SettingsEmpty } from "./settings/SettingsPatterns";
+export { ExternalLinkPill, StatusText, OrgBand, FilterChips, SelectionBar, SettingsEmpty } from "./settings/SettingsPatterns";
 export type { FilterChip } from "./settings/SettingsPatterns";

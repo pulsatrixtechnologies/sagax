@@ -34,20 +34,23 @@ afterEach(() => {
 });
 
 describe("Settings > Organization (Perspicax)", () => {
-  it("draws OrgBand then read-only rules, same for everyone, approvals as a count when waiting", async () => {
+  it("draws OrgBand then read-only rules, same for everyone, with no shortcut to Perspicax", async () => {
     const { PerspicaxOrgSettings } = await import("./PerspicaxOrgSettings");
     const html = renderToStaticMarkup(createElement(PerspicaxOrgSettings, { org: org("admin"), onChanged: () => {} }));
     expect(html).toContain('data-org-band=""');
     expect(html.indexOf('data-org-band=""')).toBeLessThan(html.indexOf('data-settings-group="organizationRules"'));
     expect(html).toContain("Acme Corp");
     expect(html).toContain("Linked to Pulsatrix · Admin");
-    expect(html).toContain("Manage in Perspicax");
+    expect(html).not.toContain("Manage in Perspicax");
     expect(html).toContain('data-settings-group="organizationRules"');
     expect(html).toContain("On by default");
     expect(html).toContain("Blocked");
-    expect(html).toContain('data-external-link-pill=""');
+    expect(html).not.toContain("data-external-link-pill");
+    expect(html).not.toContain("<a ");
     expect(html).not.toContain('data-settings-card="organization.fullAccess"');
-    expect(html).not.toContain('data-settings-card="organization.githubApp"');
+    // the GitHub OAuth App's client id, a server setting, under advanced for the admin
+    expect(html).toContain('data-settings-group="organizationGithub"');
+    expect(html).toContain('data-settings-card="organization.githubApp"');
     expect(html).not.toContain('data-settings-card="organization.teamSecrets"');
     // bot rules stay under advanced for who may edit the installation
     expect(html).toContain('data-settings-group="organizationBots"');
@@ -70,7 +73,7 @@ describe("Settings > Organization (Perspicax)", () => {
     const html = renderToStaticMarkup(createElement(PerspicaxOrgSettings, { org: org("admin"), onChanged: () => {} }));
     expect(html).toContain("Règles des bots");
     expect(html).toContain("Règles de l&#x27;organisation");
-    expect(html).toContain("Gérer dans Perspicax");
+    expect(html).not.toContain("Perspicax");
   });
 });
 

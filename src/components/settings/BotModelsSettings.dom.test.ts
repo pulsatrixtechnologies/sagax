@@ -2,7 +2,7 @@
 // Settings > Models > Bot models (#1675, redesigned #2050): the real page
 // with synthetic bots: the Bot / Model · effort / Backup table, "All bots",
 // the "Set model for n bots" button opening the two-pane selector, the
-// Defaults card (editable solo, read-only with a Perspicax link in an
+// Defaults card (editable solo, read-only with no Perspicax link in an
 // organization) and the Active models link.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -277,7 +277,7 @@ describe("BotModelsSettings page", () => {
     expect(bar()).toBeNull();
   });
 
-  it("in an organization, shows Defaults for new bots read-only with the current choice and a Perspicax link", async () => {
+  it("in an organization, shows Defaults for new bots read-only with the current choice and no Perspicax link", async () => {
     fixture.org = { org: { name: "Example", identity: { kind: "perspicax", issuer: "https://px.example.test" } } };
     act(() => root.render(createElement(BotModelsSettings)));
     await flush();
@@ -285,8 +285,8 @@ describe("BotModelsSettings page", () => {
     const row = container.querySelector('[data-settings-row="models.newBotDefaults"]');
     expect(row).not.toBeNull();
     expect(row?.textContent).toContain("Chosen in Perspicax");
-    expect(row?.querySelector<HTMLAnchorElement>('[data-perspicax-link="newBotDefaults"] a')?.href).toBe("https://px.example.test/console/");
-    expect(row?.textContent).toContain("Change");
+    expect(row?.querySelector('[data-perspicax-link="newBotDefaults"]')).toBeNull();
+    expect(row?.querySelector("a")).toBeNull();
     // read-only in an organization: the card is an Advanced one (folded in Simple mode)
     expect(container.querySelector('[data-settings-group="bot-models-defaults"]')?.hasAttribute("data-settings-advanced")).toBe(true);
     // the table itself stays the person's: rows and Edit several are there

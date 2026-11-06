@@ -1,6 +1,6 @@
 // Settings > Usage (#2080, 2026-11-05): read in three seconds. One headline
 // card (this month's cost, its renewal, one thin bar for the spending limit
-// or the plan's tightest window, the spending limit row, Manage usage), then
+// or the plan's tightest window, the spending limit row), then
 // a Detail group whose rows fold: the breakdown by bot and by model with the
 // cycle and the 30-day line, the full plan windows, and the per-job traces
 // on a sub-page. With nothing to show it says so once, with Try again.
@@ -8,14 +8,13 @@
 // GET /api/usage?mine=1), which keeps only the requester's turns
 // (server/routes/usage.ts) and is open to every member (2026-10-15).
 // Per-person tables, organization totals, budgets and sell prices belong to
-// the organization's console, reached from Manage usage.
+// the organization's console; no shortcut to it here (2026-11-05).
 import { useEffect, useState } from "react";
 import { api, ApiError, useStore } from "@/state/store";
 import { t, activeLocale } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { canViewUsage } from "@/lib/viewer";
-import { viewerIsOrgAdmin } from "@/lib/group-owner";
-import { perspicaxKeysUrl, usePerspicaxOrg } from "@/lib/perspicax-org";
+import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { formatResetDistance, planRows } from "@/lib/plan-usage";
 import {
   costOf,
@@ -33,10 +32,8 @@ import {
   type PersonalUsageSummary,
 } from "@/lib/usage-personal";
 import { headlineMeter, PlanUsageView, usePlanUsage, type PlanMeter } from "./PlanUsage";
-import { perspicaxConsoleUrl } from "./PerspicaxOrgSettings";
 import { SettingsSubPageRow } from "./SettingsSubPage";
 import { CompactRow, ConfirmPill, DescribedRow, FIELD, FoldRow, PILL, PillSelect, PRIMARY_PILL, SettingsGroup } from "./SettingsPrimitives";
-import { ExternalLinkPill } from "./settings/SettingsPatterns";
 import { readableError } from "@/lib/plain-error";
 import type { PlanRow } from "@/lib/plan-usage";
 
@@ -178,10 +175,6 @@ export function UsageSection() {
     return () => { alive = false; };
   }, [cycle, usage]);
   const plan = usePlanUsage(planUsageShown({ organization: org !== null, viewUsage: canViewUsage(state.config) }));
-  const issuer = org?.org.identity.issuer ?? "";
-  const manage: UsageManageLink | null = !org ? null : viewerIsOrgAdmin(state.config)
-    ? { href: perspicaxConsoleUrl(issuer), label: t("usage.personal.openConsole") }
-    : { href: perspicaxKeysUrl(issuer), label: t("myEngines.manageKeys") };
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <UsageHeadline
@@ -192,7 +185,6 @@ export function UsageSection() {
         now={plan.now}
         cap={cap}
         onCapChange={setCap}
-        manage={manage}
         onRetry={() => { setReload((count) => count + 1); plan.onRefresh(); }}
       />
       <UsageDetail
@@ -207,8 +199,6 @@ export function UsageSection() {
     </div>
   );
 }
-
-export interface UsageManageLink { href: string; label: string }
 
 /** "Dec 1", "1er déc.": the day the monthly cost and the limit renew. */
 export function renewalDay(now = new Date()): string {
@@ -241,9 +231,9 @@ function Bar({ kind, percent, tone, label, caption }: { kind: "cap" | "plan"; pe
 }
 
 /** The headline card: one figure, one date, one bar, then the spending
- * limit and Manage usage. With neither a cost nor a plan window, one grey
+ * limit. With neither a cost nor a plan window, one grey
  * line with Try again instead of a card per missing figure. */
-export function UsageHeadline({ usage, error, plan = null, planLoading = false, now = Date.now(), cap = null, onCapChange, writeCap = writeSpendCap, manage = null, onRetry }: {
+export function UsageHeadline({ usage, error, plan = null, planLoading = false, now = Date.now(), cap = null, onCapChange, writeCap = writeSpendCap, onRetry }: {
   usage: PersonalUsage | null;
   error: PersonalUsageError | null;
   plan?: { provider: PlanRow; meter: PlanMeter } | null;
@@ -252,7 +242,6 @@ export function UsageHeadline({ usage, error, plan = null, planLoading = false, 
   cap?: PersonalSpendCap | null;
   onCapChange?: (next: PersonalSpendCap) => void;
   writeCap?: (monthlyUsd: number | null) => Promise<PersonalSpendCap>;
-  manage?: UsageManageLink | null;
   onRetry?: () => void;
 }) {
   const nothing = error !== null && !plan && !planLoading;
@@ -299,11 +288,6 @@ export function UsageHeadline({ usage, error, plan = null, planLoading = false, 
           </div>
         )}
         {cap?.supported && <SpendCapRow data={cap} write={writeCap} onChange={onCapChange} />}
-        {manage && (
-          <CompactRow label={t("usage.manage")} rowId="manage">
-            <ExternalLinkPill href={manage.href}><span data-usage-org-link>{manage.label}</span></ExternalLinkPill>
-          </CompactRow>
-        )}
       </SettingsGroup>
     </div>
   );

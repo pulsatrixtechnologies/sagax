@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-// #2080 (L0): the shared patterns of the Settings redesign. One action per
-// org-managed row, no filter chip without an item, at most one action in an
+// #2080 (L0): the shared patterns of the Settings redesign. No Perspicax
+// shortcut in the organization band, no filter chip without an item, at most one action in an
 // empty state, and a selection bar Escape closes.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -8,7 +8,7 @@ import { Inbox } from "lucide-react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setLocale } from "@/lib/i18n";
-import { ExternalLinkPill, FilterChips, OrgBand, OrgManagedRow, SelectionBar, SettingsEmpty, StatusText } from "@/components/SettingsPrimitives";
+import { ExternalLinkPill, FilterChips, OrgBand, SelectionBar, SettingsEmpty, StatusText } from "@/components/SettingsPrimitives";
 
 let root: Root;
 let host: HTMLDivElement;
@@ -25,24 +25,11 @@ afterEach(() => {
 const draw = (node: React.ReactNode) => act(() => root.render(node));
 
 describe("Settings patterns", () => {
-  it("OrgManagedRow: the value in grey and one way out, to Perspicax, never an accent link", () => {
-    draw(createElement(OrgManagedRow, { label: "Approvals", value: "Ask first", href: "https://perspicax.example/approvals", rowId: "approvals" }));
-    const actions = host.querySelectorAll("a, button");
-    expect(actions).toHaveLength(1);
-    const link = actions[0] as HTMLAnchorElement;
-    expect(link.getAttribute("href")).toBe("https://perspicax.example/approvals");
-    expect(link.target).toBe("_blank");
-    expect(link.textContent).toBe("Managed in Perspicax");
-    expect(link.className).not.toContain("text-accent");
-    expect(host.textContent).toContain("Ask first");
-    expect(host.querySelector("input, select, [role=switch]")).toBeNull();
-  });
-
-  it("OrgBand: the name, the role and one Perspicax link", () => {
-    draw(createElement(OrgBand, { name: "Acme", role: "Member", sentence: "Acme sets your providers.", href: "https://perspicax.example" }));
+  it("OrgBand: the name and the role, no shortcut to Perspicax", () => {
+    draw(createElement(OrgBand, { name: "Acme", role: "Member" }));
     expect(host.querySelector("[data-org-band]")?.textContent).toContain("Acme");
-    expect(host.textContent).toContain("Member · Acme sets your providers.");
-    expect(host.querySelectorAll("a, button")).toHaveLength(1);
+    expect(host.textContent).toContain("Member");
+    expect(host.querySelectorAll("a, button")).toHaveLength(0);
   });
 
   it("ExternalLinkPill and StatusText", () => {

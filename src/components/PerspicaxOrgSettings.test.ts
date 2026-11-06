@@ -33,7 +33,7 @@ beforeEach(() => setLocale("en"));
 afterEach(() => setLocale("en"));
 
 describe("Settings > Organization without Sharing in the organization", () => {
-  it("draws the same page for an admin and a member: OrgBand, read-only rules, no admin inputs", async () => {
+  it("draws the same rules for an admin and a member, with no shortcut to Perspicax", async () => {
     const { PerspicaxOrgSettings } = await import("./PerspicaxOrgSettings");
     for (const locale of ["en", "fr"] as const) {
       setLocale(locale);
@@ -41,22 +41,22 @@ describe("Settings > Organization without Sharing in the organization", () => {
       const member = renderToStaticMarkup(createElement(PerspicaxOrgSettings, { org: org("member"), onChanged: () => {} }));
       for (const [role, html] of [["admin", admin], ["member", member]] as const) {
         expect(html, `${locale} ${role}`).toContain('data-org-band=""');
-        expect(html, `${locale} ${role}`).toContain('data-settings-card="organization.perspicax"');
         expect(html, `${locale} ${role}`).toContain('data-settings-group="organizationRules"');
-        expect(html, `${locale} ${role}`).toContain('data-external-link-pill=""');
-        expect(html, `${locale} ${role}`).not.toContain("<input");
+        expect(html, `${locale} ${role}`).toContain('data-settings-row="vaultExport"');
+        expect(html, `${locale} ${role}`).not.toContain("<a ");
+        expect(html, `${locale} ${role}`).not.toContain("data-external-link-pill");
+        expect(html, `${locale} ${role}`).not.toContain("/console");
         expect(html, `${locale} ${role}`).not.toContain('role="switch"');
         expect(html, `${locale} ${role}`).not.toContain('data-settings-card="organization.sharing"');
         expect(html, `${locale} ${role}`).not.toContain("data-org-sharing");
-        expect(html, `${locale} ${role}`).not.toContain("{admin &&");
       }
-      // same cards for both roles (only the role word changes)
-      const normalize = (html: string) => html
-        .replace(/\bAdministrateur\b/g, "ROLE")
-        .replace(/\bAdmin\b/g, "ROLE")
-        .replace(/\bMember\b/g, "ROLE")
-        .replace(/\bMembre\b/g, "ROLE");
-      expect(normalize(admin), locale).toBe(normalize(member));
+      // the GitHub OAuth App's client id, a server setting, is the admin's only input
+      expect(admin, locale).toContain("data-org-github-app");
+      expect(member, locale).not.toContain("data-org-github-app");
+      expect(member, locale).not.toContain("<input");
+      // the rules are the same for both roles
+      const rules = (html: string) => html.slice(html.indexOf('data-settings-group="organizationRules"'), html.indexOf('data-settings-group="organizationBots"'));
+      expect(rules(admin), locale).toBe(rules(member));
     }
   });
 

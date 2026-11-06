@@ -31,43 +31,12 @@ export function StatusText({ tone, children }: { tone: keyof typeof STATUS_TONE;
   return <span data-status-text={tone} className={STATUS_TONE[tone]}>{children}</span>;
 }
 
-/** A setting the organization sets: its value in grey and one way out,
- * "Managed in Perspicax", to the exact Perspicax page. The same row for
- * everyone (no admin variant); solo keeps its own editable row instead. */
-export function OrgManagedRow({ label, value, href, rowId }: {
-  label: string;
-  /** The current value ("On", "5 minutes", "Claude, OpenAI"). */
-  value?: React.ReactNode;
-  /** The Perspicax page where it changes. */
-  href: string;
-  rowId?: string;
-}) {
-  return (
-    <DescribedRow label={label} description={value} icon={<Building2 size={14} />} rowId={rowId}>
-      <ExternalLinkPill href={href}>{t("settings.org.managed")}</ExternalLinkPill>
-    </DescribedRow>
-  );
-}
-
-/** The first card of a page that holds OrgManagedRows: the organization's
- * name and the person's role, one sentence, and the Perspicax link. */
-export function OrgBand({ name, role, sentence, href }: {
-  name: string;
-  role?: React.ReactNode;
-  /** The one sentence of the band (what the organization sets here). */
-  sentence?: React.ReactNode;
-  href: string;
-}) {
+/** The first card of the Organization page: the organization's name and
+ * the person's role on one grey line. No link to Perspicax (JC 2026-11-05). */
+export function OrgBand({ name, role }: { name: string; role?: React.ReactNode }) {
   return (
     <section data-settings-group="orgBand" data-org-band="" className={GROUP_CARD}>
-      <DescribedRow
-        label={name}
-        icon={<Building2 size={14} />}
-        description={role || sentence ? <>{role}{role && sentence ? " · " : null}{sentence}</> : undefined}
-        rowId="orgBand"
-      >
-        <ExternalLinkPill href={href}>{t("organization.manageInPerspicax")}</ExternalLinkPill>
-      </DescribedRow>
+      <DescribedRow label={name} icon={<Building2 size={14} />} description={role} rowId="orgBand" />
     </section>
   );
 }

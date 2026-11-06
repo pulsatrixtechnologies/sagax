@@ -207,8 +207,10 @@ export async function buildBotPatchAccess(env: BotsMutateEnv, state: BotPatchSta
     patch.autoApprove = requestedApprovalMode === "auto";
   }
   const targetSelection = normalizedSelection ?? existingBot?.modelSelection;
+  // Full runs on every engine (omb #2808). Custom stays Codex-only and never
+  // crosses engines.
   if (
-    (requestedApprovalMode === "full" || requestedApprovalMode === "custom") &&
+    requestedApprovalMode === "custom" &&
     body.approvalMode !== undefined &&
     (!targetSelection || !env.supportsApprovalMode(targetSelection, requestedApprovalMode) ||
       (existingBot && normalizedSelection && env.engineSwitchNeedsAsk(requestedApprovalMode, existingBot.modelSelection, normalizedSelection)))

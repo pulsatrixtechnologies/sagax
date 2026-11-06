@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   APPROVAL_MODES,
+  DEFAULT_APPROVAL_MODE,
   approvalModeFor,
   supportsApprovalMode,
   modelSwitchNeedsAsk,
@@ -10,7 +11,9 @@ import {
   liveApprovalChange,
   liveApprovalTightens,
   isApprovalMode,
+  setDefaultApprovalMode,
 } from "../../shared/approval-mode.ts";
+import { BUILT_IN_DRIVERS } from "../drivers/builtIn.ts";
 import { createApprovalModeSupport } from "./harness-capabilities.ts";
 
 describe("approval modes", () => {
@@ -18,14 +21,14 @@ describe("approval modes", () => {
     for (const driver of ["codex", "claudeAgent", "grokAgent", "antigravityAgent", "piAgent", "customAcp"]) {
       expect(modelSwitchNeedsAsk("ask", "codex", driver)).toBe(false);
       expect(modelSwitchNeedsAsk("auto", "codex", driver)).toBe(false);
-      // 2026-10-26: Full carries to every engine that runs it
-      expect(modelSwitchNeedsAsk("full", "codex", driver)).toBe(!supportsApprovalMode(driver, "full"));
+      // the person's Full access stays with the bot, on every engine
+      expect(modelSwitchNeedsAsk("full", "codex", driver)).toBe(false);
       expect(modelSwitchNeedsAsk("custom", "codex", driver)).toBe(driver !== "codex");
     }
     expect(modelSwitchNeedsAsk("edits", "claudeAgent", "codex")).toBe(true);
     expect(modelSwitchNeedsAsk("edits", "claudeAgent", "grokAgent")).toBe(false);
     expect(modelSwitchNeedsAsk("full", "claudeAgent", "claudeAgent")).toBe(false);
-    expect(modelSwitchNeedsAsk("full", "codex", undefined)).toBe(true);
+    expect(modelSwitchNeedsAsk("full", "codex", undefined)).toBe(false);
   });
   it("only exposes implemented provider capabilities", () => {
     for (const driver of ["codex", "claudeAgent", "antigravityAgent", "cursorAgent", "grokAgent", "opencodeGo", "qwenAgent", "geminiAgent"]) {
@@ -36,18 +39,24 @@ describe("approval modes", () => {
       // auto-accept edits exists only where the engine has such a mode
       expect(supportsApprovalMode(driver, "edits")).toBe(["claudeAgent", "grokAgent", "antigravityAgent", "qwenAgent", "geminiAgent"].includes(driver));
     }
-    expect(supportsApprovalMode(undefined, "full")).toBe(false);
+    expect(supportsApprovalMode(undefined, "full")).toBe(true);
     expect(supportsApprovalMode(undefined, "edits")).toBe(false);
   });
 
+  it("runs Full access, the default level, on every engine", () => {
+    for (const { driverKind } of BUILT_IN_DRIVERS) expect(supportsApprovalMode(driverKind, "full"), driverKind).toBe(true);
+  });
+
+  // No permissive mode of their own: the harness answers the permission
+  // requests they leave, so Full runs there too.
   it.each([
     "kimiAgent", "droidAgent", "hermesAgent", "customAcp",
     "piAgent", "unknown",
-  ])("keeps %s on supported approval levels without claiming native Auto", (driver) => {
+  ])("runs Full on %s without claiming native Auto or Edits", (driver) => {
     expect(supportsApprovalMode(driver, "ask")).toBe(true);
     expect(supportsApprovalMode(driver, "auto")).toBe(true);
     expect(supportsApprovalMode(driver, "edits")).toBe(false);
-    expect(supportsApprovalMode(driver, "full")).toBe(false);
+    expect(supportsApprovalMode(driver, "full")).toBe(true);
     expect(supportsApprovalMode(driver, "custom")).toBe(false);
     expect(hasNativeAutoReview(driver)).toBe(false);
   });
@@ -75,8 +84,28 @@ describe("approval modes", () => {
 
   it("migrates the legacy Auto bit to safe Auto, never Full access", () => {
     expect(approvalModeFor({ autoApprove: true })).toBe("auto");
-    expect(approvalModeFor({ autoApprove: false })).toBe("ask");
-    expect(approvalModeFor({})).toBe("ask");
+  });
+
+  it("starts a bot or conversation nobody has set a level on at Full access", () => {
+    expect(DEFAULT_APPROVAL_MODE).toBe("full");
+    expect(approvalModeFor({})).toBe("full");
+    // Every bot made over HTTP stores the legacy bit off beside no level.
+    expect(approvalModeFor({ autoApprove: false })).toBe("full");
+    // A level a person picked stays, Ask included.
+    expect(approvalModeFor({ approvalMode: "ask", autoApprove: false })).toBe("ask");
+  });
+
+  it("keeps Ask as the default where the server says so (a shared company workspace)", () => {
+    setDefaultApprovalMode("ask");
+    try {
+      expect(approvalModeFor({})).toBe("ask");
+      expect(approvalModeFor({ autoApprove: false })).toBe("ask");
+      // Full the operator's policy granted is stored, so it holds.
+      expect(approvalModeFor({ approvalMode: "full" })).toBe("full");
+    } finally {
+      setDefaultApprovalMode(DEFAULT_APPROVAL_MODE);
+    }
+    expect(approvalModeFor({})).toBe("full");
   });
 
   it("prefers a valid explicit mode and fails closed around corrupt values", () => {
@@ -147,7 +176,7 @@ describe("approval support bound to a registry", () => {
     expect(supports(codex, "custom")).toBe(true);
     expect(supports(pi, "ask")).toBe(true);
     expect(supports(pi, "auto")).toBe(true);
-    expect(supports(pi, "full")).toBe(false);
+    expect(supports(pi, "full")).toBe(true);
     expect(supports(pi, "custom")).toBe(false);
   });
 
@@ -155,16 +184,16 @@ describe("approval support bound to a registry", () => {
     const ghost = { instanceId: "ghost", model: "fixture" };
     expect(supports(ghost, "ask")).toBe(true);
     expect(supports(ghost, "edits")).toBe(false);
-    expect(supports(ghost, "full")).toBe(false);
+    expect(supports(ghost, "full")).toBe(true);
     expect(supports(undefined, "ask")).toBe(true);
-    expect(supports(undefined, "full")).toBe(false);
+    expect(supports(undefined, "full")).toBe(true);
   });
 
   it("passes already-resolved driver views to the table unchanged", () => {
     expect(supports({ driverKind: "codex" }, "custom")).toBe(true);
-    expect(supports({ driverKind: "piAgent" }, "full")).toBe(false);
+    expect(supports({ driverKind: "piAgent" }, "full")).toBe(true);
     expect(supports({ driverKind: undefined }, "ask")).toBe(true);
-    expect(supports({ driverKind: undefined }, "full")).toBe(false);
+    expect(supports({ driverKind: undefined }, "full")).toBe(true);
   });
 
   it("agrees with the pure table across every mode", () => {

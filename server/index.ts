@@ -204,6 +204,7 @@ import {
   liveApprovalChange,
   liveApprovalTightens,
   isApprovalMode,
+  setDefaultApprovalMode,
   appliedLevelReason,
   staleThreadException,
   type AppliedApprovalLevel,
@@ -3461,6 +3462,11 @@ const customRules = new CustomRuleStore(join(DATA_DIR, "custom-approval-rules.js
 const botSettings = createBotSettingsStore(DATA_DIR);
 const SESSION_COOKIE = sessionCookieName(PORT, ENVIRONMENT_ID);
 const HOSTED_WORKSPACE = hostedWorkspaceConfigured();
+// omb #2808 / PRO-RÈGLE: Full access is every bot's default on a solo
+// server. On a shared company workspace or organization server, unset bots
+// stay at Ask; new bots still take the org New-bot policy via
+// newBotApprovalMode().
+if (HOSTED_WORKSPACE || IDENTITY.kind === "perspicax") setDefaultApprovalMode("ask");
 let workspaceAccess: WorkspaceAccess | null = null;
 const DESKTOP_MANAGED = process.env.SAGAX_DESKTOP_PARENT === "1";
 const SHARED_WORKSPACE_FULL_ACCESS = sharedWorkspaceFullAccessConfigured();
@@ -11150,11 +11156,13 @@ const wireBot = (bot: BotRecord): WireBot => {
     Object.assign(rest, HELD_ACTIVITY);
   }
   // An elevated selection is inert until the desktop confirms its exact
-  // private reply. Every ordinary client sees the effective Ask state during
-  // that two-phase window, never a grant that may still roll back.
+  // private reply. Every ordinary client sees the level the bot runs at: Ask
+  // during that two-phase window, never a grant that may still roll back.
+  // Otherwise the resolved default (Full on solo, Ask on shared/org) so a
+  // record with no stored level still shows what the turn will run (omb #2808).
   const visible = approvalGrant && !approvalGrant.threadOnly
     ? { ...rest, approvalMode: "ask" as const, autoApprove: false }
-    : rest;
+    : { ...rest, approvalMode: approvalModeFor(rest) };
   const lead = instructionsLead(visible.soul);
   // 2026-10-19: a bot-to-bot conversation's cards wait on the person, who
   // never sees that conversation (server/approvals/inter-bot-approvals.ts).
@@ -38932,8 +38940,12 @@ function newBotGreetingLanguage(ownerUserId: string | undefined): "fr" | "en" {
   } catch { /* no preference of their own */ }
   return greetingLanguage([person, cfg.language]);
 }
-function newBotApprovalMode(): "ask" | "auto" {
-  return IDENTITY.kind === "perspicax" ? orgNewBotApprovalMode(cfg.newBotDefaults?.profile.approvalMode) : "auto";
+function newBotApprovalMode(): "ask" | "auto" | "full" {
+  // omb #2808 / PRO-RÈGLE: solo bots start on Full access. Organization
+  // servers keep #1098 (Approve for me, or Ask when the org chose Ask).
+  if (IDENTITY.kind === "perspicax") return orgNewBotApprovalMode(cfg.newBotDefaults?.profile.approvalMode);
+  if (HOSTED_WORKSPACE) return "ask";
+  return "full";
 }
 /** Organization server: a stored Full that may not run as Full now (the
  * policy is off, or the bot's current owner never confirmed it). Never on

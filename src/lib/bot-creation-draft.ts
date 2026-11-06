@@ -28,12 +28,11 @@ export class BotCreationDraft {
 
   constructor(defaults: NewBotDefaults, readonly changed: () => void, private network: typeof api = api) {
     this.template = structuredClone(defaults);
-    // Approve for me is the mode a new bot starts in, This computer too
-    // (2026-10-26, the owner: the person's own machine; its warning shows once per
-    // computer, LocalComputerAutoWarning). A saved template that already
-    // names a mode stays as given.
+    // Full access is the mode a new bot starts in on a solo server (omb #2808 /
+    // PRO-RÈGLE), This computer too. A saved template or org New-bot defaults
+    // that already name a mode stay as given.
     if (this.template.profile.approvalMode === undefined) {
-      this.template.profile.approvalMode = "auto";
+      this.template.profile.approvalMode = "full";
     }
     this.routines = defaults.routines.map(routine => this.routine({ ...routine, botId: this.id }));
   }

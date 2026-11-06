@@ -3,9 +3,9 @@ import { BotCreationDraft, EMPTY_BOT_DEFAULTS } from "./bot-creation-draft";
 import { api } from "@/state/store";
 
 describe("isolated creation draft", () => {
-  it("starts a new bot on This computer in Auto like every other place (2026-10-26)", () => {
+  it("starts a new bot on Full access, This computer included (omb #2808)", () => {
     const local = new BotCreationDraft({ ...EMPTY_BOT_DEFAULTS, profile: { computer: "local" } }, vi.fn());
-    expect(local.template.profile.approvalMode).toBe("auto");
+    expect(local.template.profile.approvalMode).toBe("full");
     // a template that names a mode keeps it
     const asked = new BotCreationDraft({ ...EMPTY_BOT_DEFAULTS, profile: { computer: "local", approvalMode: "ask" } }, vi.fn());
     expect(asked.template.profile.approvalMode).toBe("ask");

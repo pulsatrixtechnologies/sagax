@@ -98,10 +98,7 @@ export async function admitBotPatch(env: BotsMutateEnv, state: BotPatchState): P
       env.json(env.res, 409, { error: "the bot's approval mode is still being confirmed" });
       return true;
     }
-    if (!env.supportsApprovalMode(target.modelSelection, "full")) {
-      env.json(env.res, 400, { error: "This provider does not support Full access" });
-      return true;
-    }
+    // Full runs on every engine (omb #2808); no provider gate here.
     // The settings control shows the open conversation. The grant has to
     // land on that thread too, or the menu snaps back to the thread's
     // previous level while only the bot default changed. Only a thread

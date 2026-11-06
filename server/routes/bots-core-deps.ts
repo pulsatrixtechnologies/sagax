@@ -128,7 +128,7 @@ export interface BotsCoreRouteDeps {
   knowsPersonThreads(req: IncomingMessage): boolean;
   publicGroupState(group: GroupRecord): object;
   botComputerControlSnapshot(botId: string): { held: unknown; helpReason: unknown };
-  newBotApprovalMode(): "ask" | "auto";
+  newBotApprovalMode(): "ask" | "auto" | "full";
   memberDefaultSelection(principalId: string | null | undefined): Promise<ModelSelection>;
   defaultSelection(): Promise<ModelSelection>;
   githubCredentialsFor(actor: string | null | undefined): readonly GithubCredential[];

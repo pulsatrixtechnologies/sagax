@@ -16526,7 +16526,6 @@
       "routineRun.blockedNoReason": "86125df318f362f979ca2e1dc943a4526580b13bb2ce496d7bf4aa37e9b0b2c8",
       "routineRun.blockedWaitingFor": "57b71f6b66229a24e6db4b75ac6e3c619b5309f31c2cd193a677a4e410c190fb",
       "routineRun.handedTo": "84c689b817df5b5b659e0e61fa0d69688eb2266bf2ff15fe908903d903df46c7",
-      "routineRun.openTeammateThread": "198ea9804d588b2ef5b1b441514d7bde66093362d3333f47f6132acf512be676",
       "routineRun.aTeammate": "1ca7804e31164a622443afee44c7ab79a97c1fb2e169b4df211bff0c10bd4a30",
       "routineRun.card.done": "11a6767d5674c7e45f7e00dc525762275b3a48491ad6045427d2609cc496c516",
       "routineResult.failed": "08731644a8289e290b379f7aed831b88f52a8aca73521727a48c71251f43411b",
@@ -17658,7 +17657,16 @@
       "fileLink.download": "d6eafe82359100423c93c5ce53c352c1b51ca1e699215fcec3f5c5dd9bf12d24",
       "fileLink.copyPath": "720ff4160412b943370afdb8fc1c082ff057d54713d5fb4b4b7a9634bfabf5fe",
       "fileLink.missing": "bae65615affe87d117bad0535e78bf2e486d3811f2be67069f1088deff242897",
-      "fileLink.openFailed": "4a9bb2e67f6609870a9d67d7a1faa0c515def5bc1fd31307d2113d2c516bf2a5"
+      "fileLink.openFailed": "4a9bb2e67f6609870a9d67d7a1faa0c515def5bc1fd31307d2113d2c516bf2a5",
+      "delegation.state.running": "963759741d1a9441bc55d2bff7271c7b1c2ee20ac6ef10cf0d3c3ef19df7388e",
+      "delegation.state.queued": "f5e5f81fd2567874402915699d24f77022e28cb1db332841895e424d18ba7472",
+      "delegation.state.waiting": "84ec74aa1a91b78bbc3a6ea68ec854aac99b349cfac99b7402601779138eeed7",
+      "delegation.state.completed": "22a970d2e5b1cc233e462be7c7b64e135a275bb09d83d87683bf4236c43113a1",
+      "delegation.state.failed": "031a8f0f659df890dfd53c92e45295b0f14c997185bae46e168831e403b273f7",
+      "delegation.state.ended": "7804f7a79a9eee323b6e89d3f8287c7d36076f4d76291646295f435b0dec736e",
+      "delegation.waitingFor": "c5f0b2149c6783602f83efc1c5b94be0d3a90963953d325fd186b161b37b8506",
+      "delegation.waitingForCount": "8832ef5bace116e7f1899f7916fa9abb6f23d7ac649d4a47f740904e09869d39",
+      "delegation.open": "af1a617eb26e0043cfff7b8a6010cff45ff0746e79c9ec04f4ec0906c157590b"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

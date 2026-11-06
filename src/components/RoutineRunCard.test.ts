@@ -93,9 +93,10 @@ describe("RoutineRunCard", () => {
     }));
     expect(handoff).toContain("data-routine-run-plain");
     expect(handoff).not.toContain("rounded-2xl border bg-card");
-    expect(handoff).toMatch(/data-run-handed-to[^>]*class="[^"]*text-\[11px\]/);
+    expect(handoff).toContain("data-run-handed-to");
     expect(handoff).toContain("Sent work to Nova");
-    expect(handoff).toMatch(/data-run-handoff-status[^>]*>Running</);
+    expect(handoff).toContain("Planning next moves");
+    expect(handoff).toContain("data-delegation-waiting");
     // threads hidden (no onOpenThread): the teammate is named, never linked
     expect(handoff).not.toContain("data-run-teammate-thread");
     expect(handoff).not.toContain("thread");
@@ -306,7 +307,7 @@ describe("RoutineRunCard", () => {
   });
   // With threads shown the hand-off row links the teammate's thread. One
   // message per run, never a card.
-  it("shows a hand-off under a quiet pass with its status and, threads shown, an Open thread link", () => {
+  it("shows a hand-off under a quiet pass with its status and, threads shown, a row that opens the teammate's work", () => {
     const markup = renderToStaticMarkup(createElement(RoutineRunCard, {
       message: message("nothing_to_report", { handedTo: [{ botId: "nova", threadId: "nova-work", name: "Nova", status: "completed" }] }),
       onOpen: () => {},
@@ -317,7 +318,9 @@ describe("RoutineRunCard", () => {
     expect(markup).toContain('data-run-handoff="nova"');
     expect(markup).toContain("Sent work to Nova");
     expect(markup).toContain('data-run-teammate-thread="nova-work"');
-    expect(markup).toContain("Open Nova&#x27;s thread");
+    expect(markup).toContain("See Nova&#x27;s work, Completed");
+    expect(markup).not.toContain("Open Nova");
+    expect(markup).not.toContain("data-delegation-waiting");
     expect(markup.match(/data-routine-run-card/g)).toHaveLength(1);
   });
 

@@ -611,7 +611,6 @@ describe("JC unified chat guards (#2106)", () => {
  * sit on UNIFIED_THREAD_KEY_ALLOWLIST with a comment. */
 const UNIFIED_THREAD_KEYS = [
   "needsYou.openThread",
-  "routineRun.openTeammateThread",
   "botPanel.activity.openThread",
   "floatingBots.menu.openThread",
   "chat.openThread",
@@ -625,7 +624,6 @@ const UNIFIED_THREAD_KEYS = [
 const UNIFIED_THREAD_KEY_ALLOWLIST: ReadonlyArray<{ file: string; why: string }> = [
   // gated: optional onOpenThread; ChatView only passes it when showThreads
   { file: "src/components/AttentionCard.tsx", why: "renders needsYou.openThread only when onOpenThread is passed (ChatView gates it)" },
-  { file: "src/components/RoutineRunCard.tsx", why: "renders openTeammateThread only when onOpenThread is passed (ChatView gates it)" },
   { file: "src/components/ThreadChip.tsx", why: "returns null when !useShowThreads()" },
   { file: "src/components/ThreadRefs.tsx", why: "openThread(..., showThreads) and chat.openThread titles on a threads-shown ref chip" },
   { file: "src/components/bot-settings/RolePermissionsSection.tsx", why: "passes onOpenThread only when showThreads" },

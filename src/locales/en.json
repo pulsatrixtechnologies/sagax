@@ -1160,7 +1160,7 @@
   "botPanel.permissions.makePrimary": "Make this bot your primary bot, your main contact who coordinates your other bots.",
   "botPanel.permissions.one": "One per person",
   "botPanel.permissions.outbound": "Sending on your behalf",
-  "botPanel.permissions.outboundHelp": "Emails, messages, posts, invites, and payments through connectors and MCP servers. Reading and drafting never count. This applies at every approval level, including Full access.",
+  "botPanel.permissions.outboundHelp": "Emails, messages, posts, invites, and payments through connectors and MCP servers. Reading and drafting never count. Full access sends without asking.",
   "botPanel.permissions.primary": "Primary Bot",
   "botPanel.permissions.usedToday": "{today} of {cap} used today",
   "botPanel.prompt.bytes": "{count} bytes",

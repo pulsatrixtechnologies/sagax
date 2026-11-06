@@ -429,10 +429,9 @@ export function PermissionsSection({
   );
 }
 
-/** Sending on the person's behalf. Separate from the approval level on
- * purpose: Full access does not bypass it, so it cannot live inside that
- * selector without implying it does. Today's count comes from the harness,
- * which is the only thing that knows what actually went out. */
+/** Sending on the person's behalf. Below Full access this policy still
+ * decides (ask every send, or a daily allowance). Full access sends without
+ * asking (omb #2894 / PRO-RÈGLE). Today's count comes from the harness. */
 function OutboundControl({ bot, onChange }: { bot: Bot; onChange: (policy: OutboundPolicy) => void }) {
   const policy = bot.outbound ?? DEFAULT_OUTBOUND_POLICY;
   const [today, setToday] = useState<number | null>(null);

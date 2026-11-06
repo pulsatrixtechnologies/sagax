@@ -942,7 +942,7 @@
   "botPanel.permissions.makePrimary": "Fais de ce bot ton bot principal, le contact qui coordonne tes autres bots.",
   "botPanel.permissions.one": "Un par personne",
   "botPanel.permissions.outbound": "Envois en ton nom",
-  "botPanel.permissions.outboundHelp": "Courriels, messages, publications, invitations et paiements par les connecteurs et les serveurs MCP. La lecture et les brouillons ne comptent jamais. Cela s'applique à chaque niveau d'approbation, y compris l'accès complet.",
+  "botPanel.permissions.outboundHelp": "Courriels, messages, publications, invitations et paiements par les connecteurs et les serveurs MCP. La lecture et les brouillons ne comptent jamais. L'accès complet envoie sans demander.",
   "botPanel.permissions.primary": "Bot principal",
   "botPanel.permissions.usedToday": "{today} sur {cap} utilisés aujourd'hui",
   "botPanel.prompt.bytes": "{count} octets",

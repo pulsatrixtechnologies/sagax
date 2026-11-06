@@ -270,6 +270,10 @@ time-window limits on scheduled routines in that same disposable fixture.
 The [server settings recipe](server-settings.md) checks browser provider sign-in
 with an offline CLI and custom-domain validation without touching live accounts.
 
+The [GitHub Copilot engine checks](copilot-engine.md) cover its ACP catalog,
+model and effort selection, sign-in detection, and moving a bot between Claude
+and Copilot with fake engines.
+
 The [engine library fixture](engines-ui.md) checks onboarding and Settings cards,
 responsive layouts, theme contrast, and status refreshes without losing drafts.
 

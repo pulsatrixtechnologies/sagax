@@ -2417,6 +2417,7 @@ export function instanceConfigs(cfg: AppConfig): InstanceConfigMap {
     kimi: { driver: "kimiAgent" },
     droid: { driver: "droidAgent" },
     cursor: { driver: "cursorAgent" },
+    githubCopilot: { driver: "copilotAgent" },
     claude: { driver: "claudeAgent" },
     codex: { driver: "codex" },
     chatgpt: { driver: "codex", displayName: "ChatGPT plan", config: { authMode: "chatgpt-plan" } },
@@ -2447,6 +2448,7 @@ export function instanceConfigs(cfg: AppConfig): InstanceConfigMap {
   const PRODUCT_FLEET_ADDITIONS = {
     chatgpt: { driver: "codex", displayName: "ChatGPT plan", config: { authMode: "chatgpt-plan" } },
     cursor: { driver: "cursorAgent" },
+    githubCopilot: { driver: "copilotAgent" },
     openaiCompat: { driver: "openai-compat" },
     mistral: { driver: "mistral" },
     cerebras: { driver: "cerebras" },

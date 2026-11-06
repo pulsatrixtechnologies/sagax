@@ -28,6 +28,7 @@ const instances: InstanceInfo[] = [
   ["kimi", "kimiAgent", "Kimi", false, ""],
   ["droid", "droidAgent", "Droid", false, ""],
   ["cursor", "cursorAgent", "Cursor", false, ""],
+  ["githubCopilot", "copilotAgent", "GitHub Copilot", true, "1.0.103"],
   ["hermes", "hermesAgent", "Hermes", false, ""],
   ["qwen", "qwenAgent", "Qwen", false, ""],
   ["pi", "piAgent", "Pi", false, ""],

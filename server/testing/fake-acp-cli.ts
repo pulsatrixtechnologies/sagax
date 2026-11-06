@@ -451,6 +451,10 @@ const dumpEnv = Object.fromEntries(
     "SAGAX_ACP_BACKGROUND_TEXT",
     "SAGAX_GROK_MODEL_PROBE",
     "SAGAX_GROK_REACH_PROBE",
+    "COPILOT_ALLOW_ALL",
+    "COPILOT_GITHUB_TOKEN",
+    "GH_TOKEN",
+    "GITHUB_TOKEN",
   ].flatMap((key) => (process.env[key] === undefined ? [] : [[key, process.env[key]]] as const)),
 );
 // pid rides along so a test can tell a respawned process (new pid, fresh

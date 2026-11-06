@@ -114,6 +114,34 @@ describe("encodeSseDataFrame and runtime delta coalesce", () => {
     expect(flushed).toHaveLength(3);
     vi.useRealTimers();
   });
+
+  it("flushAll before resume publishes held deltas so a reconnect does not lose them (#1971)", () => {
+    vi.useFakeTimers();
+    const flushed: Array<Record<string, unknown>> = [];
+    const coalescer = new SseRuntimeDeltaCoalescer((payload) => flushed.push(payload), 16);
+    const delta = (text: string, eventId: string) => ({
+      kind: "runtime",
+      event: {
+        type: "content.delta",
+        threadId: "t1",
+        turnId: "turn",
+        itemId: "item",
+        streamKind: "assistant_text",
+        delta: text,
+        eventId,
+        provider: "claude",
+        providerInstanceId: "p",
+      },
+    });
+    expect(coalescer.offer(delta("Hel", "a"))).toBe(true);
+    expect(coalescer.offer(delta("lo", "b"))).toBe(true);
+    expect(flushed).toHaveLength(1);
+    // SSE reconnect path: flush before reading the replay buffer.
+    coalescer.flushAll();
+    expect(flushed).toHaveLength(2);
+    expect((flushed[1]!.event as { delta: string }).delta).toBe("lo");
+    vi.useRealTimers();
+  });
 });
 
 describe("deliverSseFrame", () => {

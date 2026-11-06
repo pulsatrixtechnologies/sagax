@@ -219,11 +219,18 @@ export class EventBus {
     this.write(event);
   }
 
+  /** Publish every thread's waiting merged text now (sync). Used before SSE
+   * resume so a reconnecting client does not miss deltas still in the merge
+   * window (#1971). Does not wait for disk. */
+  flushPendingText(): void {
+    for (const threadId of Array.from(this.pendingText.keys())) this.flushThread(threadId);
+  }
+
   /** Publish every thread's waiting text now, and wait until the canonical
    * log has accepted every event already queued. Detach and shutdown call
    * this; a terminal event flushes the same queue. */
   flush(): Promise<void> {
-    for (const threadId of Array.from(this.pendingText.keys())) this.flushThread(threadId);
+    this.flushPendingText();
     return this.flushDisk();
   }
 

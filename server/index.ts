@@ -44965,6 +44965,10 @@ ROUTES.push(createThreadsHttpRoutes({
   replayBuffer,
   wants,
   sseFrameFor,
+  flushPendingStreamDeltas: () => {
+    bus.flushPendingText();
+    runtimeDeltaCoalescer.flushAll();
+  },
 }));
 ROUTES.push(createUploadsRoutes({
   uploadOwner: (auth) => channelViewerId(auth) ?? localPrincipalId() ?? "workspace",

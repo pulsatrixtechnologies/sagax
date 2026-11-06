@@ -169,7 +169,10 @@ describe("nudge sound preference", () => {
 describe("Settings > Notifications defaults", () => {
   it("every switch is on by default, with nothing written", async () => {
     const preference = await import("./notification-preferences");
-    expect(preference.attentionSettings()).toEqual({ sound: true, persistent: true, badge: true, nudgeSound: true, nudgeShake: true });
+    expect(preference.attentionSettings()).toEqual({
+      sound: true, persistent: true, badge: true, nudgeSound: true, nudgeShake: true,
+      bots: true, people: true, groups: true, approvals: true, routines: true,
+    });
     expect(local.setItem).not.toHaveBeenCalled();
     expect(preference.useLocalSwitch(preference.persistentNotifications)).toBe(true);
     expect(hook.serverSnapshot!()).toBe(true);
@@ -181,11 +184,16 @@ describe("Settings > Notifications defaults", () => {
     preference.dockBadge.set(false);
     expect(local.getItem("omb-notification-persistent")).toBe("0");
     expect(local.getItem("omb-dock-badge")).toBe("0");
-    expect(preference.attentionSettings()).toEqual({ sound: true, persistent: false, badge: false, nudgeSound: true, nudgeShake: true });
+    expect(preference.attentionSettings()).toEqual({
+      sound: true, persistent: false, badge: false, nudgeSound: true, nudgeShake: true,
+      bots: true, people: true, groups: true, approvals: true, routines: true,
+    });
     preference.nudgeShake.set(false);
     expect(preference.attentionSettings().nudgeShake).toBe(false);
     preference.nudgeShake.set(true);
     expect(preference.attentionSettings().nudgeShake).toBe(true);
+    preference.notifyBots.set(false);
+    expect(preference.attentionSettings().bots).toBe(false);
   });
 
   it("another window's change reaches the hook", async () => {

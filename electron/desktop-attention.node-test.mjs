@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createDesktopAttention, normalizeAttentionRequest } from "./desktop-attention.mjs";
+import { createDesktopAttention, normalizeAttentionRequest, notificationUrgency } from "./desktop-attention.mjs";
 
 function fakeNotificationClass() {
   const made = [];
@@ -163,4 +163,87 @@ test("an approval answered elsewhere takes its notification down", () => {
   assert.deepEqual(closed, ["Allow Nib to run a command?"]);
   assert.equal(attention.withdraw("approval:t1:r1"), 0);
   assert.equal(attention.keptCount(), 1);
+});
+
+test("macOS never uses critical urgency (no critical-alerts entitlement)", () => {
+  assert.equal(notificationUrgency("darwin", true), "normal");
+  assert.equal(notificationUrgency("darwin", false), "normal");
+  assert.equal(notificationUrgency("win32", true), "critical");
+  assert.equal(notificationUrgency("linux", false), "normal");
+  const { FakeNotification, made } = fakeNotificationClass();
+  createDesktopAttention({
+    platform: "darwin",
+    app: fakeApp().app,
+    Notification: FakeNotification,
+    getWindow: () => null,
+    onClick: () => {},
+  }).notify({ title: "Scout", body: "done", persistent: true });
+  assert.equal(made[0].options.urgency, "normal");
+});
+
+test("macOS carries subtitle, replace id, avatar icon and hasReply", () => {
+  const { FakeNotification, made } = fakeNotificationClass();
+  const replies = [];
+  const attention = createDesktopAttention({
+    platform: "darwin",
+    app: fakeApp().app,
+    Notification: FakeNotification,
+    getWindow: () => fakeWindow().win,
+    onClick: () => {},
+    onReply: (id, reply, target) => replies.push({ id, reply, target }),
+    icon: "/app/icon.png",
+  });
+  attention.notify({
+    id: "click-1",
+    replaceId: "sagax:chat:t1",
+    groupKey: "sagax:chat:t1",
+    title: "Scout",
+    subtitle: "Ops",
+    body: "hello",
+    hasReply: true,
+    replyPlaceholder: "Reply to Scout",
+    icon: "/tmp/avatar.png",
+    target: { botId: "scout", threadId: "t1" },
+  });
+  assert.equal(made[0].options.id, "sagax:chat:t1");
+  assert.equal(made[0].options.groupId, "sagax:chat:t1");
+  assert.equal(made[0].options.subtitle, "Ops");
+  assert.equal(made[0].options.hasReply, true);
+  assert.equal(made[0].options.icon, "/tmp/avatar.png");
+  made[0].handlers.reply?.(null, "  sounds good  ");
+  assert.deepEqual(replies, [{ id: "click-1", reply: "sounds good", target: { botId: "scout", threadId: "t1" } }]);
+});
+
+test("a second notice for the same chat replaces the first", () => {
+  const closed = [];
+  class FakeNote {
+    constructor(options) { this.options = options; this.handlers = {}; }
+    static isSupported() { return true; }
+    static remove(id) { closed.push(`remove:${id}`); }
+    show() {}
+    close() { closed.push(`close:${this.options.body}`); this.handlers.close?.(); }
+    on(event, fn) { this.handlers[event] = fn; }
+  }
+  const attention = createDesktopAttention({ platform: "darwin", app: fakeApp().app, Notification: FakeNote, getWindow: () => null, onClick: () => {} });
+  attention.notify({ id: "a", title: "Scout", body: "one", replaceId: "sagax:chat:t1", groupKey: "sagax:chat:t1" });
+  attention.notify({ id: "b", title: "Scout", body: "two", replaceId: "sagax:chat:t1", groupKey: "sagax:chat:t1" });
+  assert.equal(attention.keptCount(), 1);
+  assert.ok(closed.includes("close:one"));
+  assert.ok(closed.includes("remove:sagax:chat:t1"));
+});
+
+test("ensureAuthorized runs once on first notify", () => {
+  const { FakeNotification } = fakeNotificationClass();
+  let calls = 0;
+  const attention = createDesktopAttention({
+    platform: "darwin",
+    app: fakeApp().app,
+    Notification: FakeNotification,
+    getWindow: () => null,
+    onClick: () => {},
+    ensureAuthorized: () => { calls += 1; return true; },
+  });
+  attention.notify({ title: "A", body: "1" });
+  attention.notify({ title: "B", body: "2" });
+  assert.equal(calls, 1);
 });

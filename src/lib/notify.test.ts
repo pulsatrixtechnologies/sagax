@@ -1,13 +1,33 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const sounds = vi.hoisted(() => ({ enabled: true, persistent: true }));
+const sounds = vi.hoisted(() => ({
+  enabled: true,
+  persistent: true,
+  bots: true,
+  people: true,
+  groups: true,
+  approvals: true,
+  routines: true,
+}));
 vi.mock("./notification-preferences", () => ({
-  attentionSettings: () => ({ sound: sounds.enabled, persistent: sounds.persistent, badge: true, nudgeSound: true, nudgeShake: true }),
+  attentionSettings: () => ({
+    sound: sounds.enabled,
+    persistent: sounds.persistent,
+    badge: true,
+    nudgeSound: true,
+    nudgeShake: true,
+    bots: sounds.bots,
+    people: sounds.people,
+    groups: sounds.groups,
+    approvals: sounds.approvals,
+    routines: sounds.routines,
+  }),
 }));
 
 import {
   buildNotificationOptions,
   requestNotificationPermission,
+  resetNotificationPendingCounts,
   showNotification,
   type NotifyFrame,
 } from "./notify";
@@ -40,8 +60,14 @@ function installNotification(permission: NotificationPermission, focused = false
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  resetNotificationPendingCounts();
   sounds.enabled = true;
   sounds.persistent = true;
+  sounds.bots = true;
+  sounds.people = true;
+  sounds.groups = true;
+  sounds.approvals = true;
+  sounds.routines = true;
 });
 
 describe("desktop notifications", () => {
@@ -58,11 +84,14 @@ describe("desktop notifications", () => {
     expect(requestPermission).toHaveBeenCalledOnce();
   });
 
-  it("shows a notification after permission is granted", () => {
+  it("shows a notification after permission is granted with the bot name as title", () => {
     const { notices } = installNotification("granted");
     showNotification(frame, vi.fn());
     expect(notices).toHaveLength(1);
-    expect(notices[0]).toMatchObject({ title: frame.title, options: { body: frame.body, tag: `openmausbot:${frame.botId}` } });
+    expect(notices[0]).toMatchObject({
+      title: "Maus",
+      options: { body: frame.body, tag: `sagax:chat:${frame.threadId}` },
+    });
   });
 
   it("stays quiet only when the exact target thread is already visible", () => {
@@ -79,7 +108,7 @@ describe("desktop notifications", () => {
     showNotification({ ...frame, kind: "spend", title: "Monthly spend limit reached" }, vi.fn(), "https://avatar.test/a.png", frame.threadId);
 
     expect(notices).toHaveLength(1);
-    expect(notices[0]!.options).toMatchObject({ tag: "openmausbot:spend", icon: undefined });
+    expect(notices[0]!.options).toMatchObject({ tag: "sagax:spend", icon: undefined });
   });
 
   it("still alerts a focused app when another task is visible", () => {
@@ -105,21 +134,20 @@ describe("desktop notifications", () => {
     });
   });
 
-  it("groups under the bot, not the thread", () => {
+  it("groups under the chat thread so one banner replaces the previous", () => {
     const { notices } = installNotification("granted");
 
     showNotification(frame, vi.fn());
     showNotification(
-      { ...frame, threadId: "thread-2", body: "Second task done" },
+      { ...frame, body: "Second update" },
       vi.fn(),
     );
 
-    // one bot across two threads shares a tag, so the platform replaces
-    // rather than stacks; another bot gets its own key
-    expect(notices[0]?.options?.tag).toBe(`openmausbot:${frame.botId}`);
-    expect(notices[1]?.options?.tag).toBe(`openmausbot:${frame.botId}`);
-    showNotification({ ...frame, botId: "bot-2" }, vi.fn());
-    expect(notices[2]?.options?.tag).toBe(`openmausbot:bot-2`);
+    expect(notices[0]?.options?.tag).toBe(`sagax:chat:${frame.threadId}`);
+    expect(notices[1]?.options?.tag).toBe(`sagax:chat:${frame.threadId}`);
+    expect(notices[1]?.options?.body).toContain("2 messages");
+    showNotification({ ...frame, botId: "bot-2", threadId: "thread-2" }, vi.fn());
+    expect(notices[2]?.options?.tag).toBe("sagax:chat:thread-2");
   });
 
   it("carries the bot's avatar when its profile has one", () => {
@@ -131,6 +159,13 @@ describe("desktop notifications", () => {
 
     showNotification(frame, vi.fn(), null);
     expect(notices[1]?.options?.icon).toBeUndefined();
+  });
+
+  it("respects the Bots type switch", () => {
+    sounds.bots = false;
+    const { notices } = installNotification("granted");
+    showNotification(frame, vi.fn());
+    expect(notices).toHaveLength(0);
   });
 });
 
@@ -146,14 +181,14 @@ describe("notification sounds", () => {
     const { notices } = installNotification("granted");
     showNotification(frame, vi.fn());
     expect(notices).toHaveLength(1);
-    expect(notices[0]?.options).toMatchObject({ body: frame.body, silent: true });
+    expect(notices[0]?.options).toMatchObject({ silent: true });
   });
 });
 
 describe("buildNotificationOptions", () => {
-  it("keys coalescing on botId and omits a missing avatar", () => {
-    expect(buildNotificationOptions({ id: "bot-9" })).toEqual({
-      tag: "openmausbot:bot-9",
+  it("keys coalescing on the chat thread and omits a missing avatar", () => {
+    expect(buildNotificationOptions({ threadId: "t-9", botId: "bot-9" })).toEqual({
+      tag: "sagax:chat:t-9",
       icon: undefined,
     });
   });
@@ -169,21 +204,38 @@ describe("notifications that stay", () => {
     expect(notices[1]?.options?.requireInteraction).toBe(false);
   });
 
-  it("the desktop shell shows it, with sound, persistent, a Dock bounce for a person, and a click opens the thread", () => {
+  it("the desktop shell shows it with HIG title, chat replace id, and a click opens the thread", () => {
     const sent: Array<Record<string, unknown>> = [];
     let click: ((id: string, target?: unknown) => void) | undefined;
     vi.stubGlobal("document", { hasFocus: () => false });
     vi.stubGlobal("window", {
       focus: vi.fn(),
       ogb: {
+        platform: "darwin",
         notify: (request: Record<string, unknown>) => sent.push(request),
         onNotificationClick: (cb: (id: string, target?: unknown) => void) => { click = cb; return () => {}; },
       },
     });
     const onOpen = vi.fn();
-    showNotification({ ...frame, kind: "message", botId: "", title: "Alice", body: "lunch?", threadId: "dm-thread", groupId: "dm-1" }, onOpen);
+    showNotification(
+      { ...frame, kind: "message", botId: "", botName: "", title: "Alice", body: "lunch?", threadId: "dm-thread", groupId: "dm-1" },
+      onOpen,
+      null,
+      null,
+      { groupName: "Alice" },
+    );
     expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({ title: "Alice", body: "lunch?", sound: true, persistent: true, bounce: "critical", flash: true });
+    expect(sent[0]).toMatchObject({
+      title: "Alice",
+      subtitle: "Alice",
+      body: "lunch?",
+      sound: true,
+      persistent: true,
+      bounce: "critical",
+      flash: true,
+      replaceId: "sagax:chat:dm-thread",
+      hasReply: true,
+    });
     click?.(sent[0]!.id as string);
     expect(sent[0]!.target).toEqual({ botId: "", threadId: "dm-thread", groupId: "dm-1" });
     expect(onOpen).toHaveBeenCalledWith({ botId: "", threadId: "dm-thread", groupId: "dm-1" });

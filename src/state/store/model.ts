@@ -2026,7 +2026,8 @@ export function openNotificationTarget(
   // 2026-10-29, then #2098 (2026-11-05): a run's notification, or a link to
   // a run's own execution thread (an Inbox entry, an activity line), opens
   // the run's message in the bot's chat, never a view beside the chat.
-  // openThread asks for the thread itself.
+  // openThread asks for the thread itself. #2120 keeps native banners in the
+  // conversation; the former run sheet is gone.
   if (options.runDetail !== false) {
     const runId = target.routineRunId ?? routineRunOfThread(state, target.threadId);
     if (runId && (!state.routineRuns || state.routineRuns.some((run) => run.id === runId))) {

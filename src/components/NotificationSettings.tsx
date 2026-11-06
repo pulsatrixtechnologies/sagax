@@ -14,6 +14,11 @@ import {
   approvalChime,
   connectionNotices,
   persistentNotifications,
+  notifyBots,
+  notifyPeople,
+  notifyGroups,
+  notifyApprovals,
+  notifyRoutines,
   setNotificationSounds,
   setNudgeSound,
   useLocalSwitch,
@@ -90,8 +95,30 @@ export function NotificationSettings({ privacy = false }: { privacy?: boolean })
   const badge = useLocalSwitch(dockBadge);
   const chime = useLocalSwitch(approvalChime);
   const connection = useLocalSwitch(connectionNotices);
+  const bots = useLocalSwitch(notifyBots);
+  const people = useLocalSwitch(notifyPeople);
+  const groups = useLocalSwitch(notifyGroups);
+  const approvals = useLocalSwitch(notifyApprovals);
+  const routines = useLocalSwitch(notifyRoutines);
   return (
     <>
+      <SettingsGroup title={t("settings.group.notificationTypes")} groupId="notificationTypes">
+        <CompactRow label={t("settings.notifications.types.bots")} rowId="notifyBots">
+          <Switch checked={bots} aria-label={t("settings.notifications.types.bots")} onClick={() => notifyBots.set(!bots)} />
+        </CompactRow>
+        <CompactRow label={t("settings.notifications.types.people")} rowId="notifyPeople">
+          <Switch checked={people} aria-label={t("settings.notifications.types.people")} onClick={() => notifyPeople.set(!people)} />
+        </CompactRow>
+        <CompactRow label={t("settings.notifications.types.groups")} rowId="notifyGroups">
+          <Switch checked={groups} aria-label={t("settings.notifications.types.groups")} onClick={() => notifyGroups.set(!groups)} />
+        </CompactRow>
+        <CompactRow label={t("settings.notifications.types.approvals")} rowId="notifyApprovals">
+          <Switch checked={approvals} aria-label={t("settings.notifications.types.approvals")} onClick={() => notifyApprovals.set(!approvals)} />
+        </CompactRow>
+        <CompactRow label={t("settings.notifications.types.routines")} rowId="notifyRoutines">
+          <Switch checked={routines} aria-label={t("settings.notifications.types.routines")} onClick={() => notifyRoutines.set(!routines)} />
+        </CompactRow>
+      </SettingsGroup>
       <SettingsGroup title={t("settings.group.alerts")} groupId="alerts">
         <NotificationInvite />
         <SoundRow />

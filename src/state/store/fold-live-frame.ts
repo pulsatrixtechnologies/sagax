@@ -179,15 +179,36 @@ export function foldLiveFrame(frame: ServerFrame, ctx: FoldLiveFrameCtx): void {
           // (src/lib/moderation.ts): their line is folded away anyway.
           if (frame.notification.kind === "message" && blockedDmSender(frame.notification.threadId, stateRef.current)) break;
           if (frame.notification.kind === "report") notifyReportsChanged();
-          showNotification(
-            frame.notification,
-            (target) => frame.notification.kind === "report"
-              // a report opens the admins' list (Settings > Notifications)
-              ? dispatch({ type: "toggleAppSettings", open: true, section: "notifications" })
-              : openNotificationTarget(dispatch, target, stateRef.current, showThreadsRef.current),
-            stateRef.current.bots.find((bot) => bot.id === frame.notification.botId)?.avatarUrl,
-            visibleNotificationThread(stateRef.current),
-          );
+          {
+            const note = frame.notification;
+            const groupName = note.groupId
+              ? stateRef.current.groups.find((group) => group.id === note.groupId)?.name
+              : undefined;
+            showNotification(
+              note,
+              (target) => note.kind === "report"
+                // a report opens the admins' list (Settings > Notifications)
+                ? dispatch({ type: "toggleAppSettings", open: true, section: "notifications" })
+                : openNotificationTarget(dispatch, target, stateRef.current, showThreadsRef.current),
+              note.avatarUrl
+                ?? stateRef.current.bots.find((bot) => bot.id === note.botId)?.avatarUrl,
+              visibleNotificationThread(stateRef.current),
+              {
+                groupName,
+                onReply: (target, text) => {
+                  const trimmed = text.trim();
+                  if (!trimmed) return;
+                  if (target.groupId) {
+                    dispatch({ type: "sendGroup", groupId: target.groupId, text: trimmed, threadId: target.threadId || undefined });
+                    return;
+                  }
+                  if (target.botId) {
+                    dispatch({ type: "send", botId: target.botId, text: trimmed, threadId: target.threadId || undefined });
+                  }
+                },
+              },
+            );
+          }
           break;
         case "notify-withdraw":
           withdrawNotification(approvalWithdrawKey(frame.threadId, frame.requestId));

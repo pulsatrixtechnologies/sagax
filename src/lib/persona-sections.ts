@@ -76,3 +76,33 @@ export function personaGroupOf(section: BotSettingsSection): PersonaGroup {
 export function personaGroupSections(group: PersonaGroup): readonly PersonaCategory[] {
   return PERSONA_GROUPS.find((entry) => entry.id === group)?.sections ?? [];
 }
+
+/** The bot's profile page (#2126, Grok Bot's layout): General holds the
+ * channels and the bot's accounts, Knowledge what it knows and how it
+ * behaves, Settings every other section, folded. */
+export const BOT_PROFILE_TABS = ["general", "knowledge", "settings"] as const;
+export type BotProfileTab = (typeof BOT_PROFILE_TABS)[number];
+
+/** Knowledge's sections, in order (the memory is managed in the Bot folder). */
+export const KNOWLEDGE_SECTIONS = ["skills", "soul", "rules", "files"] as const satisfies readonly PersonaCategory[];
+
+/** The sections General shows itself: the identity is the page's header,
+ * Slack a row of Channels. */
+const GENERAL_SECTIONS: ReadonlySet<PersonaCategory> = new Set(["slack"]);
+
+/** Settings' sections, in the editor's order: every page that is neither a
+ * Knowledge section nor shown by General. The identity (description and
+ * facts) stays here as its first section. */
+export const SETTINGS_SECTIONS: readonly PersonaCategory[] = PERSONA_CATEGORIES.filter(
+  (id) => !GENERAL_SECTIONS.has(id) && !(KNOWLEDGE_SECTIONS as readonly PersonaCategory[]).includes(id),
+);
+
+/** The tab a link to `section` opens: the plain opening (Identity) and
+ * Slack are General, the instructions Knowledge, the rest Settings. */
+export function botProfileTabFor(section: BotSettingsSection | null | undefined): BotProfileTab {
+  if (!section || section === "overview" || section === "details" || section === "routines") return "general";
+  const category = personaCategoryForSection(section);
+  if (!category || GENERAL_SECTIONS.has(category)) return "general";
+  if ((KNOWLEDGE_SECTIONS as readonly PersonaCategory[]).includes(category)) return "knowledge";
+  return "settings";
+}

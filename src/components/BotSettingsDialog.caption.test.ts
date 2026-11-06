@@ -73,7 +73,9 @@ describe("bot panel header and tabs", () => {
   it("opens the editor from the mascot, with no second persona button", () => {
     vi.stubGlobal("window", { ogb: { platform: "darwin" } });
     const html = renderToStaticMarkup(createElement(DesktopCapabilitiesProvider, null, createElement(BotSettingsDialog, { bot })));
-    expect(html).toContain('aria-haspopup="dialog"');
+    // the mascot opens the profile page, a side panel, not a dialog (#2126)
+    expect(html).toContain("data-avatar-edit");
+    expect(html).not.toContain('aria-haspopup="dialog"');
     expect(html).not.toContain('aria-label="Edit persona"');
     expect(html).not.toContain(">Edit persona<");
     // the name pencil shows only on hover or focus (and on touch screens);

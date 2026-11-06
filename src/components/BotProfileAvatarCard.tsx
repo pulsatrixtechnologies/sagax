@@ -1,7 +1,8 @@
-// The bot's avatar at the top of the bot panel and of the persona editor's
-// Overview. It plays the bot's moves as they happen (mascotMotion from the
-// store) and opens the persona editor on Appearance when clicked, where the
-// character, its look and the picture sources live (appearance/AppearancePane).
+// The bot's avatar at the top of the bot panel and of the bot's profile page.
+// It plays the bot's moves as they happen (mascotMotion from the store) and
+// opens the bot's profile page when clicked (#2126); on the profile page
+// itself a click goes to Settings > Appearance, where the character, its look
+// and the picture sources live (appearance/AppearancePane).
 // A right click opens the bot panel's "..." menu where the pointer is. In
 // the New bot dialog the bot is a draft the store does not hold yet, so the
 // click shows the same Appearance pane under the avatar instead.
@@ -27,6 +28,7 @@ export function BotProfileAvatarCard({
   onPatch,
   onContextMenu,
   size = 144,
+  onOpen,
 }: {
   bot: Bot;
   activeState: MausState;
@@ -39,6 +41,9 @@ export function BotProfileAvatarCard({
   /** The mascot's size: 144 in the panel; the bot wizard's Identity step
    * draws it smaller beside the name (2026-10-27). */
   size?: number;
+  /** What a click does instead of opening the profile page (the profile
+   * page goes to its Appearance section). */
+  onOpen?: () => void;
 }) {
   const { dispatch } = useStore();
   const { draft } = useBotEditor();
@@ -47,7 +52,8 @@ export function BotProfileAvatarCard({
   const sources = useAvatarSources(bot, onPatch);
   const open = () => {
     if (draft) setDraftOpen((value) => !value);
-    else dispatch({ type: "openPersonaEditor", botId: bot.id, section: "appearance" });
+    else if (onOpen) onOpen();
+    else dispatch({ type: "openPersonaEditor", botId: bot.id });
   };
 
   return (
@@ -58,7 +64,6 @@ export function BotProfileAvatarCard({
           type="button"
           aria-label={t("botPanel.avatar.edit")}
           aria-expanded={draft ? draftOpen : undefined}
-          aria-haspopup={draft ? undefined : "dialog"}
           data-avatar-edit=""
           onClick={open}
           onContextMenu={onContextMenu}

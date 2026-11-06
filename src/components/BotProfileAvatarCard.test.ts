@@ -1,5 +1,5 @@
-// The bot's avatar: a click opens the persona editor on Appearance (the
-// look's one home), a right click keeps the bot panel's menu, and a draft
+// The bot's avatar: a click opens the bot's profile page (#2126; on the page,
+// its Appearance section), a right click keeps the bot panel's menu, and a draft
 // bot (New bot) shows the Appearance pane under its avatar instead.
 //
 // A happy-dom window installed by hand (src/testing/happy-window.ts).
@@ -58,15 +58,23 @@ describe("BotProfileAvatarCard", () => {
 
   const avatar = () => host.querySelector<HTMLButtonElement>("[data-avatar-edit]")!;
 
-  it("opens the persona editor on Appearance, with no popover of its own", async () => {
+  it("opens the bot's profile page, with no popover of its own (#2126)", async () => {
     await act(async () => root.render(createElement(BotProfileAvatarCard, { bot: makeBot(), activeState: "idle", mascotMotion: null, onPatch: vi.fn() })));
     expect(avatar().getAttribute("aria-label")).toBe("Edit avatar");
-    expect(avatar().getAttribute("aria-haspopup")).toBe("dialog");
+    expect(avatar().hasAttribute("aria-haspopup")).toBe(false);
     expect(avatar().hasAttribute("aria-expanded")).toBe(false);
     await act(async () => avatar().click());
-    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "openPersonaEditor", botId: "bot-1", section: "appearance" });
+    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "openPersonaEditor", botId: "bot-1" });
     expect(document.querySelector("[data-avatar-popover]")).toBeNull();
     expect(host.querySelector("[data-appearance-pane]")).toBeNull();
+  });
+
+  it("on the profile page, a click does what the page asks (its Appearance section)", async () => {
+    const onOpen = vi.fn();
+    await act(async () => root.render(createElement(BotProfileAvatarCard, { bot: makeBot(), activeState: "idle", mascotMotion: null, onPatch: vi.fn(), onOpen })));
+    await act(async () => avatar().click());
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(fixture.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: "openPersonaEditor" }));
   });
 
   it("keeps the right click for the bot panel's menu", async () => {

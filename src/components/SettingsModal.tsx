@@ -371,9 +371,9 @@ export function SettingsModal() {
                 turns and MCP calls are rows of its groups. */}
             {section === "organization" && (
               allowed("organization")
-                ? <OrganizationSettings advanced={advanced} memoryShown={memoryShown} />
+                ? <OrganizationSettings memoryShown={memoryShown} />
                 : memoryShown && (
-                  <SettingsGroup title={t("settings.thisComputer.title")} groupId="thisComputer">
+                  <SettingsGroup title={t("organization.group.memory")} groupId="organizationMemory">
                     <OrgMemorySettings />
                   </SettingsGroup>
                 )

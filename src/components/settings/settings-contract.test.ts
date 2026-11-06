@@ -63,7 +63,6 @@ const NOT_MIGRATED: Record<Rule, string[]> = {
   ],
   adminGate: [
     "settings/OrgSharing.tsx",
-    "PerspicaxOrgSettings.tsx",
   ],
 };
 

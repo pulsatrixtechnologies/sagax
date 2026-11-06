@@ -1,37 +1,17 @@
-// Settings > Organization on a server signed in with Perspicax (slice 3):
-// the link line, the viewer's role, and one link to the Perspicax console.
-// Below that card: interim people, sharing, full access and,
-// for admins, the server commands waiting for an admin.
-// Slice 4 adds Sharing in the organization (the bots whose sharing the
-// viewer administers; an admin can force-stop or force-delete any of them).
-// Since 2026-10-01 a person's own engine sign-in (My engines) lives in
-// Settings > Model providers, and "Bring bots from a solo Sagax" is hidden
-// (the desktop's join flow still copies bots through POST /api/org/import).
-// 2026-10-26: no admin switch for Full access, Auto or the own
-// environment of members' bots any more (server/org/org-full-access.ts).
-// People, teams and invitations live in Perspicax, never here.
-// 2026-10-15 : Sharing in the organization (every bot of the
-// organization with its owner) is hidden from the app, like Activity, Email,
-// People and Installations (#518, #524): the app shows the person signed in,
-// views of everyone belong to Sagax Business and the Perspicax console.
-// OrgSharing and its server routes stay; an old link to the
-// "organization.sharing" card opens this page. A bot's owner still shares it
-// from the bot's own Shared with section.
+// Settings > Organization on a server signed in with Perspicax (#2080 L3):
+// the same page for everyone. OrgBand + OrgManagedRows; edits live in
+// Perspicax. Approvals are a count row with a Perspicax link (the allow/deny
+// file left Settings). Interim people stay when the window still has some.
 import { useEffect, useState } from "react";
-import { ExternalLink } from "lucide-react";
 
 import { t } from "@/lib/i18n";
 import type { PerspicaxOrg } from "@/lib/perspicax-org";
 import { setOrgApprovalsCount, useOrgApprovalsVersion } from "@/lib/org-approvals";
-import { api, useStore } from "@/state/store";
-import { CountPill, DescribedRow, PILL, SettingsGroup } from "./SettingsPrimitives";
+import { api } from "@/state/store";
+import { DescribedRow, ExternalLinkPill, OrgBand, OrgManagedRow, SettingsGroup } from "./SettingsPrimitives";
 import { InterimPeople } from "./settings/InterimPeople";
-
-import { OrgVaultExportPolicy } from "./settings/OrgVaultExportPolicy";
-import { OrgConfidentialThreadsDefault } from "./settings/OrgConfidentialThreadsDefault";
-import { OrgTeamSecrets } from "./settings/OrgTeamSecrets";
-import { OrgGithubApp } from "./settings/OrgGithubApp";
-import { OrganizationPages } from "./PublishedPages";
+import { OrgRulesReadOnly } from "./settings/OrgRulesReadOnly";
+import { OrganizationBotRows } from "./settings/OrganizationBotRules";
 
 interface PendingAdminApproval {
   botId: string;
@@ -65,33 +45,29 @@ export function linkStateLine(link: PerspicaxOrg["link"]): string {
 
 /** Whether the "People from before Perspicax" card shows: while the window
  * is open and someone is left, and also once the last one is attached in
- * this view, so the admin still sees the "Attached to" notice. */
-export function showInterimCard(admin: boolean, interim: PerspicaxOrg["settings"]["interimAttach"], shownBefore: boolean): boolean {
-  return admin && Boolean(interim?.until) && ((interim?.people ?? 0) > 0 || shownBefore);
+ * this view, so the person still sees the "Attached to" notice. */
+export function showInterimCard(interim: PerspicaxOrg["settings"]["interimAttach"], shownBefore: boolean): boolean {
+  return Boolean(interim?.until) && ((interim?.people ?? 0) > 0 || shownBefore);
 }
 
-export function PerspicaxOrgSettings({ org, onChanged, botRows = null, after = null }: {
+export function PerspicaxOrgSettings({ org, onChanged }: {
   org: PerspicaxOrg;
   onChanged: () => void | Promise<void>;
-  /** More rows of the organization's bots group (routines, group turns, MCP calls). */
-  botRows?: React.ReactNode;
-  /** What follows the two groups (This computer). */
-  after?: React.ReactNode;
 }) {
   const admin = org.viewerRole === "admin";
-  const { dispatch } = useStore();
   const [approvals, setApprovals] = useState<PendingAdminApproval[] | null>(null);
-  const [answering, setAnswering] = useState<string | null>(null);
-  const [showApprovals, setShowApprovals] = useState(false);
   const interim = org.settings.interimAttach;
   const [interimShown, setInterimShown] = useState(false);
-  const interimVisible = showInterimCard(admin, interim, interimShown);
+  const interimVisible = showInterimCard(interim, interimShown);
   useEffect(() => { if (interimVisible) setInterimShown(true); }, [interimVisible]);
 
-  // reloads whenever the server says the waiting list changed (org.approvals)
   const approvalsVersion = useOrgApprovalsVersion();
   const loadApprovals = async () => {
-    if (!admin) return;
+    // The route answers admins only; members keep a zero count.
+    if (!admin) {
+      setApprovals([]);
+      return;
+    }
     try {
       const list = (await api<{ approvals: PendingAdminApproval[] }>("/api/org/approvals")).approvals ?? [];
       setApprovals(list);
@@ -102,107 +78,48 @@ export function PerspicaxOrgSettings({ org, onChanged, botRows = null, after = n
   };
   useEffect(() => { void loadApprovals(); }, [admin, approvalsVersion]);
 
-  const answer = async (approval: PendingAdminApproval, behavior: "allow" | "deny") => {
-    setAnswering(approval.requestId);
-    try {
-      await api(`/api/threads/${approval.threadId}/respond`, {
-        method: "POST",
-        body: JSON.stringify({ requestId: approval.requestId, behavior, ...(behavior === "deny" ? { message: "Denied by an admin." } : {}) }),
-      });
-    } catch {
-      /* the list below says what is still waiting */
-    } finally {
-      setAnswering(null);
-      await loadApprovals();
-    }
-  };
-
-  // 0.5.6: the reference design's layout. "Organization": its name, the link and
-  // the viewer's role on one grey line, Manage in Perspicax as a pill; the
-  // people from before Perspicax folded behind a count. "Organization's
-  // bots": the commands waiting for an admin (folded, with a count), Full
-  // access, and the rows the page adds (routines, group turns, MCP calls).
   const linked = org.link.state === "ok";
   const role = admin ? t("organization.role.adminShort") : t("organization.role.memberShort");
-  const waiting = approvals ?? [];
+  const waiting = (approvals ?? []).length;
+  const consoleHref = perspicaxConsoleUrl(org.org.identity.issuer);
+  const bandRole = (
+    <span role="status" className={linked ? undefined : "text-warning"}>
+      {linked ? t("organization.link.okShort") : linkStateLine(org.link)} · {role}
+    </span>
+  );
+
   return (
     <>
-      <SettingsGroup title={t("settings.section.organization")} groupId="organization">
+      <OrgBand
+        name={org.org.name}
+        role={bandRole}
+        sentence={t("organization.orgBand.sentence")}
+        href={consoleHref}
+      />
+      <SettingsGroup groupId="organizationPeople">
         <div data-settings-card="organization.perspicax" data-perspicax-org>
-          <DescribedRow
-            label={org.org.name}
-            rowId="perspicax"
-            description={<span role="status" className={linked ? undefined : "text-warning"}>{linked ? t("organization.link.okShort") : linkStateLine(org.link)} · {role}</span>}
-          >
-            <a href={perspicaxConsoleUrl(org.org.identity.issuer)} target="_blank" rel="noreferrer noopener" className={`${PILL} inline-flex items-center gap-1.5`}>
-              {t("organization.manageInPerspicax")}
-              <ExternalLink size={12} aria-hidden="true" className="text-ink-secondary" />
-            </a>
-          </DescribedRow>
+          <OrgManagedRow
+            label={t("organization.people")}
+            value={t("organization.people.value")}
+            href={`${consoleHref}people`}
+            rowId="orgPeople"
+          />
+          {waiting > 0 && (
+            <DescribedRow
+              label={t("organization.approvals.waiting")}
+              description={t("organization.approvals.count", { count: waiting })}
+              rowId="adminApprovals"
+            >
+              <ExternalLinkPill href={`${consoleHref}approvals`}>{t("organization.approvals.see")}</ExternalLinkPill>
+            </DescribedRow>
+          )}
         </div>
         {interimVisible && interim?.until ? <InterimPeople until={interim.until} onChanged={onChanged} /> : null}
       </SettingsGroup>
-      <SettingsGroup title={t("organization.group.bots")} groupId="organizationBots">
-        {admin && (
-          <div data-settings-card="organization.adminApprovals">
-            <DescribedRow
-              label={t("organization.adminApprovals.title")}
-              rowId="adminApprovals"
-              description={waiting.length ? approvalWho(waiting[0]!) : t("organization.adminApprovals.empty")}
-              below={showApprovals && waiting.length > 0 && (
-                <ul className="mt-2 flex flex-col gap-1" aria-label={t("organization.adminApprovals.title")}>
-                  {waiting.map((approval) => (
-                    <li key={`${approval.threadId}:${approval.requestId}`} className="flex min-w-0 flex-col gap-1.5 rounded-lg bg-inset px-3 py-2">
-                      <div className="flex min-w-0 items-baseline justify-between gap-2">
-                        <span className="truncate text-[13px] text-ink">{approvalWho(approval)}</span>
-                        {approval.tool && <span className="shrink-0 text-[12px] text-ink-secondary">{approval.tool}</span>}
-                      </div>
-                      {approval.summary && (
-                        <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-md bg-app/40 px-2.5 py-1.5 font-mono text-[12px] text-ink">{approval.summary}</pre>
-                      )}
-                      <div className="flex flex-wrap justify-end gap-2">
-                        <button type="button" className={`${PILL} text-danger`} disabled={answering !== null} onClick={() => void answer(approval, "deny")}>
-                          {t("organization.adminApprovals.deny")}
-                        </button>
-                        <button type="button" className={PILL} disabled={answering !== null} onClick={() => void answer(approval, "allow")}>
-                          {t("organization.adminApprovals.allow")}
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            >
-              {waiting.length > 0 && (
-                <CountPill count={waiting.length} open={showApprovals} label={t("organization.adminApprovals.title")} onToggle={() => setShowApprovals((value) => !value)} />
-              )}
-            </DescribedRow>
-          </div>
-        )}
-        {admin && <OrgConfidentialThreadsDefault initial={org.settings.confidentialThreadsByDefault === true} onChanged={onChanged} />}
-        {admin && <OrgVaultExportPolicy initial={org.settings.allowVaultExport !== false} onChanged={onChanged} />}
-        {admin && <OrgTeamSecrets />}
-        {botRows}
+      <OrgRulesReadOnly org={org} />
+      <SettingsGroup advanced title={t("organization.group.botRules")} groupId="organizationBots">
+        <OrganizationBotRows />
       </SettingsGroup>
-      {/* 2026-10-27 (owner: one place per subject): where plugins come from
-          is managed in Connect apps > Sources, in its admin part, and the
-          organization's GitHub credentials in Sources > GitHub. Here, one
-          link, and (2026-10-28) the GitHub OAuth App's client id: a server
-          setting, behind Connect GitHub for everyone. */}
-      {admin && (
-        <SettingsGroup title={t("connectApps.orgAccess.title")} groupId="organizationPlugins">
-          <div data-settings-card="organization.plugins" data-org-sources-moved>
-            <DescribedRow label={t("connectApps.orgAccess.title")} description={t("sources.orgAccess.moved")}>
-              <button type="button" className={PILL} onClick={() => dispatch({ type: "togglePlugins", open: true, page: "sources" })}>
-                {t("organization.plugins.open")}
-              </button>
-            </DescribedRow>
-          </div>
-          <OrgGithubApp initial={org.settings} />
-        </SettingsGroup>
-      )}
-      {admin && <OrganizationPages />}
-      {after}
     </>
   );
 }

@@ -39,7 +39,15 @@ const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve()
 
 beforeEach(() => {
   fixture.values = []; fixture.index = 0; fixture.effects = []; fixture.updating = false;
-  fixture.store = { bots: [], instances: [], config: undefined, dispatch: vi.fn(), flushBotPatches: vi.fn(async () => null) };
+  // Member without editConfig: OrganizationBotRows stays empty in this SSR fixture
+  // (the real solo owner keeps the advanced bot rules).
+  fixture.store = {
+    bots: [],
+    instances: [],
+    config: { viewer: { role: "member", capabilities: { editConfig: false, manageKeys: false, manageComputers: false, viewUsage: false, manageBackups: false, pairDevices: false } } },
+    dispatch: vi.fn(),
+    flushBotPatches: vi.fn(async () => null),
+  };
   vi.stubGlobal("window", { ogb: { organization: { begin: vi.fn(), state: vi.fn(), onState: vi.fn(() => () => {}) } } });
   vi.stubGlobal("fetch", vi.fn());
   setLocale("en");
@@ -68,11 +76,10 @@ describe("Organization settings without the hosted Admin portal", () => {
     for (const effect of fixture.effects) effect();
     await flush();
     const view = render();
-    // 2026-10-14: one "Connect to a server" card, open while nothing is
-    // connected, on its Perspicax method (the only one without a desktop bridge)
+    // #2080 L3: Connect to a server stays closed by default; Perspicax is the method
     expect(view.html).toContain("Connect to a server");
-    expect(view.html).toContain('data-settings-card="organization.connect" data-open="true"');
-    expect(view.html).toContain('data-connect-wizard="perspicax"');
+    expect(view.html).toContain('data-settings-card="organization.connect" data-open="false"');
+    expect(view.html).toContain("Server");
     expect(view.html).not.toContain('data-settings-card="organization.joinPerspicax"');
     expect(view.html).not.toContain('data-settings-card="organization.connectServer"');
     expect(view.html).not.toContain("Create an organization");

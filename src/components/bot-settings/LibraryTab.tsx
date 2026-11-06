@@ -6,7 +6,7 @@
 // both follow the person to iOS. Skills live on the Personas page and the
 // bot's Claude Code plugins in Connect apps, in that bot's scope.
 // (docs/superpowers/specs/2026-10-16-artifacts-design.md)
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AppWindow, Copy, Download, FolderOpen, LoaderCircle, MessageSquare, MoreHorizontal, Pin, PinOff, RefreshCw, RotateCcw, Share, Trash2, X } from "lucide-react";
 
 import { api, useStore, type Bot, type Group } from "@/state/store";
@@ -87,6 +87,61 @@ export function GroupLibraryTab({ group }: { group: Group }) {
   return <LibraryTabView list={list} pages={pages} files={files} />;
 }
 
+const NO_ARTIFACTS: ArtifactList = { artifacts: [], error: false, reload: () => {}, patch: () => {} };
+// A person's Library has files only: when they fail, the artifact side
+// reads as failed too, so the Library shows its Retry instead of nothing.
+const NO_ARTIFACTS_FAILED: ArtifactList = { ...NO_ARTIFACTS, artifacts: null, error: true };
+
+/** A person's Library (#2117): the files of the rooms the viewer and this
+ * person both belong to, their direct conversation included
+ * (GET /api/people/:id/library, server/routes/person-library.ts). Each
+ * file carries its conversation; Show in chat opens its room. */
+export function PersonLibraryTab({ personId }: { personId: string }) {
+  const { dispatch } = useStore();
+  const [files, setFiles] = useState<ThreadFile[] | null>(null);
+  const [error, setError] = useState(false);
+  const [status, setStatus] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const advanced = useAdvancedMode();
+  const request = useRef(0);
+  const load = useCallback(() => {
+    const id = ++request.current;
+    setError(false);
+    void api<{ files: ThreadFile[] }>(`/api/people/${encodeURIComponent(personId)}/library`)
+      .then((body) => { if (id === request.current) setFiles(Array.isArray(body.files) ? body.files : []); })
+      .catch(() => { if (id === request.current) setError(true); });
+  }, [personId]);
+  useEffect(() => { setFiles(null); load(); }, [load]);
+  const setPinned = (file: ThreadFile, pinned: boolean) => {
+    if (!file.threadId) return;
+    const patch = (value: boolean) => setFiles((current) => (current ?? []).map((entry) => (entry.id === file.id && entry.threadId === file.threadId ? { ...entry, pinned: value } : entry)));
+    patch(pinned);
+    void api(`/api/threads/${encodeURIComponent(file.threadId)}/files/${encodeURIComponent(file.id)}/pin`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pinned }),
+    }).catch((reason: unknown) => {
+      patch(!pinned);
+      setStatus({ tone: "error", text: reason instanceof Error ? reason.message : t("botPanel.library.pinFailed") });
+    });
+  };
+  return (
+    <PersonLibraryBody
+      files={files}
+      filesError={error}
+      onRetryFiles={load}
+      onJump={(file) => { if (file.groupId) dispatch({ type: "select", id: file.groupId }); }}
+      onPinFile={setPinned}
+      advanced={advanced}
+      status={status}
+    />
+  );
+}
+
+/** The person's Library as drawn, given the loaded files (tests render it). */
+export function PersonLibraryBody(props: Omit<Parameters<typeof LibraryBody>[0], "threadId" | "list" | "pages" | "emptyText">) {
+  return <LibraryBody {...props} threadId="" list={props.files === null && props.filesError ? NO_ARTIFACTS_FAILED : NO_ARTIFACTS} pages={[]} emptyText={t("personPanel.library.empty")} />;
+}
+
 function LibraryTabView({ list, pages, files }: { list: ArtifactList; pages: ReturnType<typeof useBotPages>; files: ReturnType<typeof useThreadFiles> }) {
   const advanced = useAdvancedMode();
   const [status, setStatus] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
@@ -121,7 +176,9 @@ function LibraryTabView({ list, pages, files }: { list: ArtifactList; pages: Ret
 }
 
 /** Everything the tab shows, given the loaded lists (tests render it). */
-export function LibraryBody({ threadId, files, filesError = false, onRetryFiles = () => {}, onJump = () => {}, onPinFile = () => {}, list, pages = null, onPageChange = () => {}, onPageRemoved = () => {}, advanced = false, now, status = null, openMenus = false }: {
+export function LibraryBody({ threadId, files, filesError = false, onRetryFiles = () => {}, onJump = () => {}, onPinFile = () => {}, list, pages = null, onPageChange = () => {}, onPageRemoved = () => {}, advanced = false, now, status = null, openMenus = false, emptyText }: {
+  /** The conversation of the files; a file that names its own (a person's
+   * Library, several conversations) is served from that one. */
   threadId: string;
   /** null while the first load is in flight. */
   files: ThreadFile[] | null;
@@ -140,12 +197,15 @@ export function LibraryBody({ threadId, files, filesError = false, onRetryFiles 
   status?: { tone: "ok" | "error"; text: string } | null;
   /** Tests: render every row menu already open. */
   openMenus?: boolean;
+  /** The empty state's line; the bot's by default. */
+  emptyText?: string;
 }) {
   const [error, setError] = useState("");
   const [note, setNote] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [imageId, setImageId] = useState<string | null>(null);
   const [media, setMedia] = useState<{ file: ThreadFile; kind: "video" | "audio" } | null>(null);
   const actions = useArtifactActions(list, setError);
+  const at = (file: ThreadFile) => file.threadId ?? threadId;
 
   const loading = (files === null && !filesError) || (list.artifacts === null && !list.error);
   const failed = (files === null && filesError) && (list.artifacts === null && list.error);
@@ -163,16 +223,16 @@ export function LibraryBody({ threadId, files, filesError = false, onRetryFiles 
   // Pictures open in one viewer that steps through them, newest first.
   const pictures = (files ?? []).filter((file) => file.available && classifyFile(file) === "image").sort((a, b) => b.at - a.at);
   const previews = pictures.map((file) => ({
-    src: threadFileUrl(threadId, file.id, true),
+    src: threadFileUrl(at(file), file.id, true),
     name: file.name,
-    downloadUrl: threadFileUrl(threadId, file.id),
+    downloadUrl: threadFileUrl(at(file), file.id),
     downloadName: canonicalDownloadFilename({ fallback: file.name, source: file.name, mime: file.mime }),
   }));
   const imageIndex = imageId ? pictures.findIndex((file) => file.id === imageId) : -1;
 
   const download = (file: ThreadFile) => {
     setNote(null);
-    void downloadThreadFile(threadId, file).catch((reason: unknown) =>
+    void downloadThreadFile(at(file), file).catch((reason: unknown) =>
       setNote({ tone: "error", text: reason instanceof Error ? reason.message : t("attach.downloadFailed") }));
   };
   const open = (file: ThreadFile) => {
@@ -189,7 +249,7 @@ export function LibraryBody({ threadId, files, filesError = false, onRetryFiles 
   };
 
   const row = (item: LibraryItem): ReactNode => item.kind === "file"
-    ? <FileRow key={item.key} threadId={threadId} file={item.file} advanced={advanced} openMenus={openMenus} onOpen={open} onJump={onJump} onDownload={download} onCopyPath={copyPath} onPin={onPinFile} />
+    ? <FileRow key={item.key} threadId={at(item.file)} file={item.file} advanced={advanced} openMenus={openMenus} onOpen={open} onJump={onJump} onDownload={download} onCopyPath={copyPath} onPin={onPinFile} />
     : item.kind === "page"
       ? <PageLibraryRow key={item.key} page={item.page} linkOff={!policy.linkSharing} openMenus={openMenus} onChange={onPageChange}
           onPin={(page) => patchPage(page, { pinned: page.pinned !== true })} onDelete={setDeletingPage} />
@@ -232,7 +292,7 @@ export function LibraryBody({ threadId, files, filesError = false, onRetryFiles 
       ) : items.length === 0 ? (
         <div data-library-empty="" className="flex flex-col items-center gap-2 px-6 py-12 text-center text-ink-secondary">
           <FolderOpen size={20} aria-hidden="true" />
-          <span className="text-[13px]">{t("botPanel.library.empty")}</span>
+          <span className="text-[13px]">{emptyText ?? t("botPanel.library.empty")}</span>
         </div>
       ) : (
         <>
@@ -241,7 +301,7 @@ export function LibraryBody({ threadId, files, filesError = false, onRetryFiles 
         </>
       )}
       {imageIndex >= 0 && <AttachmentPreviewDialog image={previews[imageIndex]!} images={previews} initialIndex={imageIndex} onClose={() => setImageId(null)} />}
-      {media && <MediaPreviewDialog threadId={threadId} file={media.file} kind={media.kind} onClose={() => setMedia(null)} />}
+      {media && <MediaPreviewDialog threadId={at(media.file)} file={media.file} kind={media.kind} onClose={() => setMedia(null)} />}
       <ArtifactDialogs state={actions} />
       <ConfirmDialog
         open={deletingPage !== null}

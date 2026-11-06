@@ -705,6 +705,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"GET","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/versions\\/(\\d+)\\/source$","tier":"read","readOnly":true,"scope":"pages:read","defaultEnabled":false},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/pages\\/([\\w-]+)\\/versions$","tier":"write","readOnly":false,"scope":"pages:write","defaultEnabled":false},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/people\\/([\\w-]{1,80})\\/avatar$","tier":"read","readOnly":true,"scope":"people:read","defaultEnabled":true},
+  {"method":"GET","kind":"pattern","route":"^\\/api\\/people\\/([\\w-]{1,80})\\/library$","tier":"read","readOnly":true,"scope":"people:read","defaultEnabled":true},
   {"method":"PUT","kind":"pattern","route":"^\\/api\\/people\\/(pr_[0-9a-f-]{36})\\/label$","tier":"write","readOnly":false,"scope":"people:write","defaultEnabled":true},
   {"method":"ANY","kind":"pattern","route":"^\\/api\\/people\\/[\\w-]{1,80}\\/avatar(?:\\?v=[0-9A-Za-z_-]{1,64})?$","tier":"write","readOnly":false,"scope":"people:write","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/profile\\/learned\\/([\\w-]+)\\/remove$","tier":"admin","readOnly":false,"scope":"profile:admin","defaultEnabled":false,"destructive":true},

@@ -56,14 +56,46 @@ describe("PersonPanel", () => {
     expect(html).not.toContain('data-person-section="connections"');
   });
 
-  it("links an admin to the person's page in the Perspicax console and lists their connections", () => {
+  it("never shows their connections nor a console link, even to an admin (#2117)", () => {
     fixture.role = "admin";
     const html = render();
-    expect(html).toContain("data-person-manage");
-    expect(html).toContain('href="https://px.example.test/console/users/u1"');
-    expect(html).toContain("Manage in Perspicax");
-    expect(html).toContain('data-person-section="connections"');
-    expect(html).toContain("Loading connections…");
+    expect(html).not.toContain('data-person-section="connections"');
+    expect(html).not.toContain("Connections");
+    expect(html).not.toContain("Remove all");
+    expect(html).not.toContain("data-person-manage");
+    expect(html).not.toContain("Manage in Perspicax");
+  });
+
+  it("draws no In common section when there is no group in common and no bot of theirs (#2117)", () => {
+    fixture.groups = [{ id: "dm", name: "dm", peopleDm: true, humanIds: ["pr_me", "pr_ada"], memberIds: [], messages: [], unread: false } as unknown as Group];
+    fixture.bots = [];
+    const html = render();
+    expect(html).not.toContain("In common");
+    expect(html).not.toContain('data-person-section="groups"');
+    expect(html).not.toContain('data-person-section="bots"');
+  });
+
+  it("shows only the parts of In common that have content (#2117)", () => {
+    const groupsOnly = render();
+    expect(groupsOnly).toContain("In common");
+    expect(groupsOnly).toContain('data-person-section="groups"');
+    expect(groupsOnly).not.toContain('data-person-section="bots"');
+    expect(groupsOnly).not.toContain("No bots");
+    fixture.groups = [];
+    fixture.bots = [{ id: "rex", name: "Rex", ownerUserId: "pr_ada", color: "green", messages: [], unread: false } as unknown as Bot];
+    const botsOnly = render();
+    expect(botsOnly).toContain("In common");
+    expect(botsOnly).toContain('data-person-section="bots"');
+    expect(botsOnly).not.toContain('data-person-section="groups"');
+  });
+
+  it("offers a Library tab between Profile and Achievements (#2117)", () => {
+    const html = render();
+    expect(html).toMatch(/data-person-tab="profile"[\s\S]*data-person-tab="library"[\s\S]*data-person-tab="achievements"/);
+    expect(html).toContain(">Library<");
+    const open = renderToStaticMarkup(createElement(PersonPanel, { personId: "pr_ada", directory, initialTab: "library" }));
+    expect(open).toContain('data-person-tabpanel="library"');
+    expect(open).toContain("data-library=");
   });
 
   it("offers no Message to yourself and says when someone is not in the directory", () => {

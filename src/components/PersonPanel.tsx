@@ -1,9 +1,12 @@
 // The right panel for a person of the organization, the counterpart of the
 // bot panel: who they are (from the Perspicax directory only), the groups
 // you share, their bots shared with you, and what you can do (write to
-// them, hide or show them in your sidebar, and for an admin, their page in
-// the Perspicax console). Nothing from a private thread shows here.
-// Profile is the default tab (email, teams, groups). The Achievements tab
+// them). Nothing from a private thread shows here, and neither do their
+// connected accounts nor a console link (#2117, JC 2026-11-05).
+// Profile is the default tab (email, teams, groups). "In common" shows only
+// what there is: no groups in common and no bots of theirs shared with you,
+// no section at all. The Library tab (#2117) is the bot panel's Library for
+// the files you and this person have together. The Achievements tab
 // (AchievementsPanel.tsx, 2026-10-26) is drawn for the narrow column: a
 // compact summary (level, chosen title, points and a bar to the next level),
 // the last unlocks, then every achievement as a grid of icons; title and
@@ -15,7 +18,7 @@
 // conversation with this person (2026-10-26); from a group or elsewhere it
 // stays.
 import { useState } from "react";
-import { ExternalLink, Mail, MessageSquare, PanelRight, Users } from "lucide-react";
+import { Mail, MessageSquare, PanelRight, Users } from "lucide-react";
 
 import { useStore } from "@/state/store";
 import { t } from "@/lib/i18n";
@@ -29,14 +32,13 @@ import {
   canMessagePerson,
   findPanelPerson,
   personDmGroup,
-  personManageUrl,
   personSharedBots,
   personTeams,
   sharedGroups,
 } from "@/lib/person-panel";
 import { hiddenKey, showInSidebar, useSidebarHidden } from "@/lib/sidebar-hidden";
 import { BotAvatar } from "./Avatar";
-import { PersonConnectionsSection } from "./PersonConnectionsSection";
+import { PersonLibraryTab } from "./bot-settings/LibraryTab";
 import { PersonAvatar } from "./MessageAuthor";
 import { achievementTitleName } from "./achievements/MemberCard";
 import { AchievementsPanel } from "./achievements/AchievementsPanel";
@@ -47,7 +49,7 @@ import { InlineEditableText } from "./bot-settings/InlineEditableText";
 import { canEditPersonLabel, savePersonLabel, usePersonLabel } from "@/lib/person-labels";
 import { PERSON_LABEL_MAX } from "../../shared/person-label";
 import { DockedPanelResizeHandle, useDockedPanelWidth } from "./DockedPanelResize";
-import { DescribedRow, FoldRow, PILL, SettingsGroup } from "./SettingsPrimitives";
+import { FoldRow, PILL, SettingsGroup } from "./SettingsPrimitives";
 import { personLabel } from "@/lib/human-label";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -60,9 +62,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 /** A list of what the viewer shares with this person, folded under a count
- * pill as Settings folds its long lists; a plain row when there is none. */
-function SharedList({ cardId, label, empty, count, children }: { cardId: string; label: string; empty: string; count: number; children: React.ReactNode }) {
-  if (!count) return <DescribedRow label={label} description={empty} />;
+ * pill as Settings folds its long lists. Drawn only when there is one. */
+function SharedList({ cardId, label, count, children }: { cardId: string; label: string; count: number; children: React.ReactNode }) {
   return (
     <FoldRow cardId={cardId} defaultOpen={count <= 5} label={label} count={count}>
       <ul className="flex flex-col gap-0.5">{children}</ul>
@@ -70,7 +71,7 @@ function SharedList({ cardId, label, empty, count, children }: { cardId: string;
   );
 }
 
-export function PersonPanel({ personId, directory: given }: { personId: string; directory?: OrgDirectory | null }) {
+export function PersonPanel({ personId, directory: given, initialTab = "profile" }: { personId: string; directory?: OrgDirectory | null; initialTab?: "profile" | "library" | "achievements" }) {
   const { state, dispatch } = useStore();
   const { padClass } = useCaptionChrome();
   const { macInset, browser } = useMacInsetChrome();
@@ -86,7 +87,6 @@ export function PersonPanel({ personId, directory: given }: { personId: string; 
   const groups = sharedGroups(state.groups, personId);
   const bots = personSharedBots(state.bots, personId);
   const dm = personDmGroup(state.groups, personId);
-  const manageUrl = personManageUrl(person, org?.viewerRole ?? null);
   // already in the conversation with them: Message would only reopen it
   const inTheirDm = Boolean(dm && state.activeView === "chat" && state.selectedId === dm.id);
   const canMessage = canMessagePerson(person, viewerId) && !inTheirDm;
@@ -104,8 +104,8 @@ export function PersonPanel({ personId, directory: given }: { personId: string; 
   // the person's own "Show my points" / "Show my title": the server leaves
   // what they hid off the card, for everyone, the viewer included
   const ownPanel = personId.trim().toLowerCase() === viewerId;
-  const [tab, setTab] = useState<"profile" | "achievements">("profile");
-  const tabs = ["profile", "achievements"] as const;
+  const [tab, setTab] = useState<"profile" | "library" | "achievements">(initialTab);
+  const tabs = ["profile", "library", "achievements"] as const;
   const dockedPanel = useDockedPanelWidth();
   const close = () => dispatch({ type: "openPersonPanel", personId: null });
 
@@ -193,7 +193,7 @@ export function PersonPanel({ personId, directory: given }: { personId: string; 
                   tab === id ? "bg-elevated-hover text-ink" : "text-ink-secondary hover:text-ink",
                 )}
               >
-                {id === "profile" ? t("personPanel.tab.profile") : t("personPanel.tab.achievements")}
+                {id === "profile" ? t("personPanel.tab.profile") : id === "library" ? t("personPanel.tab.library") : t("personPanel.tab.achievements")}
               </button>
             ))}
           </div>
@@ -219,50 +219,48 @@ export function PersonPanel({ personId, directory: given }: { personId: string; 
             </SettingsGroup>
           )}
 
-          <SettingsGroup groupId="person-shared" title={t("personPanel.inCommon")}>
-            <div data-person-section="groups">
-              <SharedList cardId="person-panel.groups" label={t("personPanel.sharedGroups")} empty={t("personPanel.noSharedGroups")} count={groups.length}>
-                {groups.map((group) => (
-                  <li key={group.id}>
-                    <button type="button" onClick={() => dispatch({ type: "select", id: group.id })} className="flex min-h-[44px] w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-ink hover:bg-hover md:min-h-0">
-                      <Users size={14} className="shrink-0 text-ink-secondary" aria-hidden />
-                      <span className="truncate">{group.name}</span>
-                    </button>
-                  </li>
-                ))}
-              </SharedList>
-            </div>
-            <div data-person-section="bots">
-              <SharedList cardId="person-panel.bots" label={t("personPanel.sharedBots")} empty={t("personPanel.noSharedBots")} count={bots.length}>
-                {bots.map((bot) => (
-                  <li key={bot.id}>
-                    <button type="button" onClick={() => dispatch({ type: "select", id: bot.id })} className="flex min-h-[44px] w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-ink hover:bg-hover md:min-h-0">
-                      <BotAvatar bot={bot} state="idle" size={24} animated={false} />
-                      <span className="min-w-0 flex-1 truncate">{bot.name}</span>
-                      {bot.title && <span className="shrink-0 truncate text-[12px] text-ink-secondary">{bot.title}</span>}
-                    </button>
-                  </li>
-                ))}
-              </SharedList>
-            </div>
-          </SettingsGroup>
-
-          {person && org?.viewerRole === "admin" && (
-            <PersonConnectionsSection principalId={person.principalId} />
+          {(groups.length > 0 || bots.length > 0) && (
+            <SettingsGroup groupId="person-shared" title={t("personPanel.inCommon")}>
+              {groups.length > 0 && (
+                <div data-person-section="groups">
+                  <SharedList cardId="person-panel.groups" label={t("personPanel.sharedGroups")} count={groups.length}>
+                    {groups.map((group) => (
+                      <li key={group.id}>
+                        <button type="button" onClick={() => dispatch({ type: "select", id: group.id })} className="flex min-h-[44px] w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-ink hover:bg-hover md:min-h-0">
+                          <Users size={14} className="shrink-0 text-ink-secondary" aria-hidden />
+                          <span className="truncate">{group.name}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </SharedList>
+                </div>
+              )}
+              {bots.length > 0 && (
+                <div data-person-section="bots">
+                  <SharedList cardId="person-panel.bots" label={t("personPanel.sharedBots")} count={bots.length}>
+                    {bots.map((bot) => (
+                      <li key={bot.id}>
+                        <button type="button" onClick={() => dispatch({ type: "select", id: bot.id })} className="flex min-h-[44px] w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-ink hover:bg-hover md:min-h-0">
+                          <BotAvatar bot={bot} state="idle" size={24} animated={false} />
+                          <span className="min-w-0 flex-1 truncate">{bot.name}</span>
+                          {bot.title && <span className="shrink-0 truncate text-[12px] text-ink-secondary">{bot.title}</span>}
+                        </button>
+                      </li>
+                    ))}
+                  </SharedList>
+                </div>
+              )}
+            </SettingsGroup>
           )}
-
-          {manageUrl && (
-            <a
-              href={manageUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              data-person-manage
-              className={`${PILL} self-start`}
-            >
-              <ExternalLink size={14} aria-hidden />
-              {t("personPanel.manage")}
-            </a>
-          )}
+        </div>
+        <div
+          role="tabpanel"
+          id="person-panel-library"
+          aria-labelledby="person-tab-library"
+          data-person-tabpanel="library"
+          hidden={tab !== "library"}
+        >
+          {tab === "library" && <PersonLibraryTab personId={personId} />}
         </div>
         <div
           role="tabpanel"

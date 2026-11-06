@@ -821,6 +821,8 @@ describe("agents-proxy MCP surface", () => {
       "remote_support_close",
       "review_write",
       "place_phone_call",
+      "phone_call_owner",
+      "phone_line_contact",
       "place_call",
       "send_dtmf",
       "transfer",

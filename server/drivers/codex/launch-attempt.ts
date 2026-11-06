@@ -5,6 +5,7 @@ import { wireCodexSession } from "./wire.ts";
 import { attachCodexTools } from "./tools.ts";
 import { attachCodexStream } from "./stream.ts";
 import { finishCodexLaunch } from "./finish.ts";
+import { mcpStartupTracker } from "./mcp-startup.ts";
 import type { CodexSession } from "./session-types.ts";
 import type { PreparedCodexLaunch } from "./turn-types.ts";
 
@@ -13,7 +14,7 @@ export type LaunchAttemptDeps = PrepareLaunchDeps & Omit<CodexSession,
   "earlyNotifications" | "state" | "asks" | "nextId" | "sensitiveResponseIds" | "rpcPending" |
   "send" | "request" | "stopping" | "terminate" | "completeStoppedTurn" | "interruptRequested" |
   "stop" | "settle" | "relaunch" | "renewContext" | "steerActiveTurn" | "controlsHost" |
-  "handleServerRequest" | "handleNotification" | "reviewWarning" | "timedOutReview" | "seenReviews" |
+  "handleServerRequest" | "handleNotification" | "mcpStartup" | "reviewWarning" | "timedOutReview" | "seenReviews" |
   "reviewNotice" | "turnError" | "retryLoginRace" | "buf" | "stderr" | "stderrSinceOutput" |
   "runLaunchAttempt" | "attempt" | "input" | "detachStream" | "lastUsage"
 > & {
@@ -42,6 +43,7 @@ export async function runLaunchAttempt(deps: LaunchAttemptDeps, attempt: number)
     codexTurnId: null as string | null,
     startingNativeTurn: false,
     earlyNotifications: [] as any[],
+    mcpStartup: mcpStartupTracker(prepared.child),
     state: {
       settled: false,
       lastError: "",

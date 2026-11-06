@@ -21,6 +21,11 @@ export function attachCodexStream(s: CodexSession): void {
   const turn = s.input;
 s.handleNotification = (msg: any) => {
   const p = msg.params ?? {};
+  // MCP servers start with the thread, before it has an id; this process serves this turn alone.
+  if (msg.method === "mcpServer/startupStatus/updated") {
+    s.mcpStartup.record(p);
+    return;
+  }
   // An app-server also emits notifications for native helper threads.
   // Only this request's parent may write its transcript/usage or settle
   // its run. Requests still use the approval broker above, including

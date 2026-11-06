@@ -113,6 +113,7 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("cards:ask", "own", "ask_choice"),
   p("rooms:react", "own", "react_to_message"),
   p("rooms:unreact", "own", "remove_reaction"),
+  p("rooms:meme", "own", "send_meme"),
   p("rooms:post", "own", "post_to_room"),
   p("threads:close", "own", "close_thread"),
   p("voice:note", "own", "send_voice_note"),

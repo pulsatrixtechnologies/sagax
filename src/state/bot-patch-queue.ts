@@ -37,6 +37,7 @@ type BotPatchBody = {
   speakReplies: boolean;
   voice: string;
   voiceNotes: boolean;
+  memeReplies: "auto" | "off";
   pinned: boolean;
   hidden: boolean;
   section: string;

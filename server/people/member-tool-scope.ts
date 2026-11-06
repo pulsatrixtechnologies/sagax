@@ -52,6 +52,7 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   coordinate_bots: "conversation",
   post_to_room: "conversation",
   react_to_message: "conversation",
+  send_meme: "conversation",
   remove_reaction: "conversation",
   start_thread: "conversation",
   route_message: "conversation",

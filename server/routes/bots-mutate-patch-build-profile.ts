@@ -197,6 +197,13 @@ export async function buildBotPatchProfile(env: BotsMutateEnv, state: BotPatchSt
     }
     patch.emailDrafts = body.emailDrafts;
   }
+  if (body.memeReplies !== undefined) {
+    if (body.memeReplies !== "auto" && body.memeReplies !== "off") {
+      env.json(env.res, 400, { error: "memeReplies must be auto or off" });
+      return true;
+    }
+    patch.memeReplies = body.memeReplies;
+  }
   // Per-bot proactive on/off (shared/proactive-mode.ts). Legacy
   // propose / read-auto / follow-rules normalize to proactive.
   if (body.proactiveMode !== undefined) {

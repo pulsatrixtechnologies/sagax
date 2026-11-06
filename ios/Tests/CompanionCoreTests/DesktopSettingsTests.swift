@@ -12,9 +12,11 @@ final class DesktopSettingsTests: XCTestCase {
     // MARK: Sections per pairing
 
     func testAnAdminSessionListsTheDesktopSectionsInOrder() {
+        // #2080 (L0): Import and Updates are cards; Usage sits under AI before
+        // Organization; App (about) is the rail page that holds Updates.
         let expected: [DesktopSettingsSection] = [
-            .general, .security, .vault, .appearance, .notifications, .providers, .engines, .voice, .organization,
-            .computer, .usage, .backups, .importBot, .experimental, .updates, .about,
+            .general, .security, .vault, .appearance, .notifications, .providers, .engines, .voice, .usage,
+            .organization, .computer, .backups, .experimental, .about,
         ]
         XCTAssertEqual(DesktopSettingsSection.available(for: SurfaceGate(scope: .serverAdmin)), expected)
         // an organization server adds My engines (#1098) and My connections
@@ -27,14 +29,14 @@ final class DesktopSettingsTests: XCTestCase {
     func testAClientOnAnOrganizationServerGetsMyConnections() {
         XCTAssertEqual(
             DesktopSettingsSection.available(for: SurfaceGate(scope: .serverClient, organization: true)),
-            [.appearance, .notifications, .myEngines, .myConnections, .organization, .updates, .about]
+            [.appearance, .notifications, .myEngines, .myConnections, .organization, .about]
         )
         XCTAssertTrue(DesktopSettingsSection.myConnections.matches("mes connexions", label: "My connections"))
     }
 
     func testASidecarAndAClientSessionGetTheRemoteClientSections() {
         for scope in [PairingScope.sidecar, .serverClient] {
-            XCTAssertEqual(DesktopSettingsSection.available(for: SurfaceGate(scope: scope)), [.appearance, .notifications, .organization, .updates, .about])
+            XCTAssertEqual(DesktopSettingsSection.available(for: SurfaceGate(scope: scope)), [.appearance, .notifications, .organization, .about])
         }
     }
 
@@ -43,6 +45,9 @@ final class DesktopSettingsTests: XCTestCase {
         XCTAssertEqual(DesktopSettingsSection.resolve(.connections, available: all, visible: all), .providers)
         XCTAssertEqual(DesktopSettingsSection.resolve(.decisionModel, available: all, visible: all), .engines)
         XCTAssertEqual(DesktopSettingsSection.resolve(.companion, available: all, visible: all), .organization)
+        // #2080 (L0)
+        XCTAssertEqual(DesktopSettingsSection.resolve(.importBot, available: all, visible: all), .backups)
+        XCTAssertEqual(DesktopSettingsSection.resolve(.updates, available: all, visible: all), .about)
         XCTAssertTrue(DesktopSettingsSection.engines.matches("jev", label: "Models and voice"))
         XCTAssertTrue(DesktopSettingsSection.engines.matches("OpenRouter", label: "Models and voice"))
     }
@@ -51,7 +56,9 @@ final class DesktopSettingsTests: XCTestCase {
         XCTAssertTrue(DesktopSettingsSection.connections.matches("OpenRouter", label: "API keys"))
         XCTAssertTrue(DesktopSettingsSection.engines.matches("model prov", label: "Model providers"))
         XCTAssertTrue(DesktopSettingsSection.general.matches("  ", label: "General"))
-        XCTAssertFalse(DesktopSettingsSection.backups.matches("skin", label: "Backups"))
+        XCTAssertFalse(DesktopSettingsSection.backups.matches("skin", label: "Backups and import"))
+        XCTAssertTrue(DesktopSettingsSection.about.matches("updates", label: "App"))
+        XCTAssertTrue(DesktopSettingsSection.backups.matches("importer", label: "Backups and import"))
     }
 
     func testResolveKeepsTheRequestOrFallsToTheFirstMatch() {

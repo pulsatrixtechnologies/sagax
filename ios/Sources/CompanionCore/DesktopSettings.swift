@@ -53,13 +53,18 @@ public enum DesktopSettingsSection: String, CaseIterable, Hashable, Sendable {
         case .people: ["people", "users", "invite", "members", "admins", "access"]
         case .mail: ["email", "mail", "smtp", "sender", "invitations", "sign-in codes"]
         case .activity: ["activity", "audit", "log", "history", "who changed", "admin"]
-        case .backups: ["export", "import", "restore", "full backup", "password", "recovery"]
+        // #2080 (L0): Import is a card of Backups and import.
+        case .backups: ["export", "import", "importer", "restore", "restaurer", "full backup", "password", "recovery",
+                        "grok", "grok bot", "share link", "preferences", "préférences", "sauvegarde", "sauvegardes"]
         case .providers:
             ["providers", "fournisseurs", "model providers", "accounts", "comptes", "claude", "codex", "grok", "sign in",
              "subscription", "keys", "api", "api key", "api keys", "xai", "mistral", "openrouter", "openai", "anthropic"]
         case .voice: ["voice", "voix", "tts", "speech", "parole", "speed", "language", "microphone", "micro", "audio"]
         case .updates: ["updates", "update", "version", "mise à jour", "testflight", "app store"]
-        case .about: ["about", "à propos", "version", "license", "licence", "github", "documentation", "release notes"]
+        // #2080 (L0): App (id "about") holds Updates as its first card.
+        case .about: ["about", "à propos", "app", "application", "version", "updates", "update", "mise à jour",
+                      "mises à jour", "license", "licence", "github", "documentation", "release notes",
+                      "testflight", "app store", "prerelease", "beta"]
         case .security: ["security", "sécurité", "security key", "passkey", "approval rules", "règles d'approbation", "tool access", "always allow", "always deny"]
         case .vault: ["vault", "coffre", "password", "mot de passe", "credentials", "identifiants", "login", "card", "carte"]
         case .notifications: ["notifications", "sound", "son", "badge", "chime", "nudge", "blocked", "bloqué"]
@@ -93,16 +98,18 @@ public enum DesktopSettingsSection: String, CaseIterable, Hashable, Sendable {
         // My engines (#1098): the person's own subscription sign-in, on an
         // organization server (`SurfaceFeature.myEngines`).
         let engines: [DesktopSettingsSection] = gate.allows(.myEngines) ? [.myEngines] : []
-        // 2026-11-03 (iPad 1:1): the desktop's rail, Personal (Account,
-        // Appearance), AI (Providers, Models, Voice), Installation
-        // (Organization, Computer, Usage, Backups), App (Experimental,
-        // Updates, About).
+        // #2080 (L0, 2026-11-05): the desktop's final rail. Personal: Account,
+        // Appearance, Notifications, Security, Vault. AI: Providers, Models,
+        // Voice, Usage. Installation: Organization, Computer, Backups and
+        // import. App: App (id "about", Updates is its first card) and
+        // Experimental. Import and Updates are cards (settings-sections.ts
+        // MERGED), never rows of the rail.
         switch gate.scope {
         case .sidecar, .serverClient:
-            return [.appearance, .notifications] + engines + mine + [.organization, .updates, .about]
+            return [.appearance, .notifications] + engines + mine + [.organization, .about]
         case .serverAdmin:
             return [.general, .security, .vault, .appearance, .notifications, .providers, .engines] + engines + mine
-                + [.voice, .organization, .computer, .usage, .backups, .importBot, .experimental, .updates, .about]
+                + [.voice, .usage, .organization, .computer, .backups, .experimental, .about]
         }
     }
 
@@ -112,6 +119,9 @@ public enum DesktopSettingsSection: String, CaseIterable, Hashable, Sendable {
         case .connections: .providers
         case .decisionModel: .engines
         case .companion, .mail, .activity, .people: .organization
+        // #2080 (L0): Import → Backups and import; Updates → App (about).
+        case .importBot: .backups
+        case .updates: .about
         default: self
         }
     }
@@ -137,8 +147,9 @@ public enum DesktopSettingsNavGroup: String, CaseIterable, Hashable, Sendable {
     public static func of(_ section: DesktopSettingsSection) -> DesktopSettingsNavGroup {
         switch section {
         case .general, .security, .vault, .appearance, .notifications: .personal
-        case .providers, .engines, .myEngines, .myConnections, .voice, .connections, .decisionModel: .ai
-        case .organization, .computer, .usage, .backups, .importBot, .companion, .people, .mail, .activity: .installation
+        // #2080: Usage sits under AI (the cost of the models).
+        case .providers, .engines, .myEngines, .myConnections, .voice, .connections, .decisionModel, .usage: .ai
+        case .organization, .computer, .backups, .importBot, .companion, .people, .mail, .activity: .installation
         case .experimental, .updates, .about: .app
         }
     }
@@ -146,9 +157,11 @@ public enum DesktopSettingsNavGroup: String, CaseIterable, Hashable, Sendable {
     /// `sections` in group order, each group in the desktop rail's order;
     /// empty groups are left out.
     public static func grouped(_ sections: [DesktopSettingsSection]) -> [(group: DesktopSettingsNavGroup, sections: [DesktopSettingsSection])] {
+        // #2080 (L0): Usage under AI; Import and Updates are hosted cards, so
+        // they stay out of the rail order (host resolves deep links).
         let order: [DesktopSettingsSection] = [
             .general, .security, .vault, .appearance, .notifications, .providers, .engines, .myEngines, .myConnections, .voice,
-            .organization, .computer, .usage, .backups, .importBot, .experimental, .updates, .about,
+            .usage, .organization, .computer, .backups, .experimental, .about,
         ]
         let ranked = sections.sorted { (order.firstIndex(of: $0) ?? 99) < (order.firstIndex(of: $1) ?? 99) }
         return allCases.compactMap { group in

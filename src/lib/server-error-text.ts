@@ -7,6 +7,7 @@ import type { LocaleKey } from "@/locales";
 
 const BY_CODE: Readonly<Record<string, LocaleKey>> = {
   not_group_owner: "serverError.notGroupOwner",
+  sole_member: "serverError.soleMember",
   not_channel_editor: "serverError.notChannelEditor",
   thread_busy: "serverError.threadBusy",
   thread_limit: "serverError.threadLimit",

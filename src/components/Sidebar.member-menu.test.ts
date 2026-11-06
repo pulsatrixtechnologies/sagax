@@ -335,3 +335,31 @@ describe("Leave group in the room menu (#1480)", () => {
     expect(openRoom(personRow(false)).labels).not.toContain(t("groupPanel.leave"));
   });
 });
+
+describe("Leave vs Delete in the room menu (#2119)", () => {
+  const orgRoom = (ownerId: string, humanIds: string[], memberIds: string[] = []): Group => ({
+    ...room(),
+    ownerId,
+    humanIds,
+    memberIds,
+  });
+  const deleteLabel = () => t("sidebar.room.deleteChannel");
+
+  it("creator alone (bots do not count): Delete only, never Leave", () => {
+    const open = openRoom(orgRoom("pr_me", ["pr_me"], ["bot-1"]));
+    expect(open.labels).not.toContain(t("groupPanel.leave"));
+    expect(open.labels).toContain(deleteLabel());
+  });
+
+  it("invited member: Leave only, never Delete", () => {
+    const open = openRoom(orgRoom("pr_boss", ["pr_boss", "pr_me"]));
+    expect(open.labels).toContain(t("groupPanel.leave"));
+    expect(open.labels).not.toContain(deleteLabel());
+  });
+
+  it("creator with other people: Leave and Delete", () => {
+    const open = openRoom(orgRoom("pr_me", ["pr_me", "pr_bob"]));
+    expect(open.labels).toContain(t("groupPanel.leave"));
+    expect(open.labels).toContain(deleteLabel());
+  });
+});

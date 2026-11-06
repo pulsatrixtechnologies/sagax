@@ -11009,6 +11009,7 @@
   "teamSetup.error.adminRequired": "This setup changes or deletes a bot that is not yours. Only that bot's owner or an organization admin can apply it.",
   "teamSetup.error.desktopOnly": "Approve team setup or deletion from the desktop app or a paired Full-access device. In a local browser, wait until every bot is idle.",
   "serverError.notGroupOwner": "Only the group's owner can do this.",
+  "serverError.soleMember": "You are the only person left in this group. Delete it instead of leaving.",
   "serverError.notChannelEditor": "Only an owner or an admin can change who is in a channel.",
   "serverError.threadBusy": "The bot is already working here. Interrupt it, or wait for it to finish.",
   "serverError.threadLimit": "This bot has reached its limit of parallel threads. Wait for one to finish.",

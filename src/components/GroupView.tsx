@@ -1291,8 +1291,8 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
   // (folders.roomWorkingFolder, held by every member); the server checks
   // the path and keeps the folder fixed after the first turn (pinnedCwd).
   const folderEditable = roomFolderEditable(group, state.config);
-  // #1480: anyone listed in their own name leaves, owner included (the
-  // group passes on); the same confirmation everywhere (LeaveGroupDialog).
+  // #1480 / #2119: anyone listed in their own name leaves when others remain;
+  // the sole remaining person deletes instead. Same confirmation everywhere.
   const mayLeave = canLeaveGroup(group, state.config, remoteClient);
   const [leaving, setLeaving] = useState(false);
   // On an organization server each person reads as their Perspicax display

@@ -80,13 +80,22 @@ object RoomOwnership {
     fun isListed(room: Room, viewer: RoomViewer): Boolean =
         (room.humanIds ?: emptyList()).any { isViewer(it, viewer) }
 
-    /** Listed in their own name, or the recorded owner. */
+    /** Listed in their own name, or the recorded owner. #2119: the sole
+     * remaining person cannot leave (bots and teams do not count); Delete
+     * is offered instead. */
     fun mayLeave(room: Room, viewer: RoomViewer): Boolean {
-        if (isListed(room, viewer)) return true
-        val owner = RoomViewer.norm(room.ownerId)?.takeIf { it.isNotEmpty() } ?: return false
-        return owner == viewer.actorId || viewer.normalizedEmail == owner
+        val listed = when {
+            isListed(room, viewer) -> true
+            else -> {
+                val owner = RoomViewer.norm(room.ownerId)?.takeIf { it.isNotEmpty() } ?: return false
+                owner == viewer.actorId || viewer.normalizedEmail == owner
+            }
+        }
+        if (!listed) return false
+        return leaveOutcome(room, viewer) != LeaveOutcome.LAST
     }
 
+    /** LAST means leave is refused (#2119). */
     enum class LeaveOutcome { MEMBER, OWNER, LAST }
 
     fun leaveOutcome(room: Room, viewer: RoomViewer): LeaveOutcome {

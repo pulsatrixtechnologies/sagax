@@ -586,15 +586,13 @@ export function createGroupsHttpRoutes(deps: GroupsHttpDeps): RouteHandler {
         humanIds: plan.humanIds,
         memberIds: plan.memberIds,
         ...(plan.createdBy ? { createdBy: plan.createdBy } : {}),
-        ...(plan.archive ? { archivedAt: Date.now() } : {}),
       });
       if (!left) return json(res, 404, { error: "no such group" });
       // a turn waiting on a bot that left with them ends, as a roster edit does
       if (turnWasOpen) failTurnIfMemberLeft(left, beforeHumanIds, beforeMemberIds);
-      if (plan.archive) disableRoutinesForGroup(group.id);
       // their own devices drop the group: they no longer see its frames
       broadcast({ kind: "group.left", roomId: group.id, audience: actor.id });
-      return json(res, 200, { ok: true, archived: plan.archive, ...(plan.createdBy ? { owner: plan.createdBy } : {}), removedBotIds: plan.removedBotIds });
+      return json(res, 200, { ok: true, ...(plan.createdBy ? { owner: plan.createdBy } : {}), removedBotIds: plan.removedBotIds });
     }
     m = path.match(/^\/api\/groups\/([\w-]+)\/read$/);
     if (m && method === "POST") {

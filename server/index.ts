@@ -462,6 +462,7 @@ import { listBriefApps, readBriefTool } from "./proactive/background-brief-apps.
 import { createBackgroundBriefRoutes } from "./routes/background-brief.ts";
 import { briefMessageText, briefNoticeLines, startBriefTimer } from "./proactive/background-brief-schedule.ts";
 import { createMemoryUpkeep, upkeepEnabled } from "./memory/memory-upkeep.ts";
+import { createSkillReview, turnToolSteps } from "./skills/skill-review.ts";
 import { CompanyMemoryCache, companyTextForBots } from "./memory/memory-company.ts";
 import { COMPANY_TOPIC } from "./memory/memory-dream.ts";
 import { procedureSignal, recordProcedure } from "./memory/memory-procedures.ts";
@@ -546,6 +547,8 @@ import {
   routineGroupSettingsEnabled,
   claudeUserMcpEnabled,
   skillAuthoringEnabled,
+  skillReviewEnabled,
+  skillReviewSteps,
   autoRecallEnabled,
   semanticEmbeddingEndpoint,
   semanticRecallEnabled,
@@ -1177,6 +1180,8 @@ import {
   rejectStagedSkillWrite,
   removeSkill,
   setSkillEnabled,
+  stageSkillWrite,
+  applySkillWriteWithReceipt,
   skillPackageStamps,
   syncSkillLinks,
   resolvedSkillFiles,
@@ -1198,7 +1203,7 @@ import { relayAccountLabel } from "./run-with-engine.ts";
 import { approvalLevelPrompt, peerContactPrompt } from "./approvals/approval-level-prompt.ts";
 // #1905: Full access, one decision for every approval and choice card
 import { fullAccessActs, fullAccessChoiceAnswer, fullAccessChoiceLine, fullAccessDecision, peerContactCardRequired } from "./approvals/full-access-gate.ts";
-import { expandLearnTurnText } from "./skills/skill-learn.ts";
+import { expandLearnTurnText, learnSource } from "./skills/skill-learn.ts";
 import { expandSetupTurnText, setupModeActive, setupSystemPrompt } from "./setup-mode.ts";
 import { onDemandPromptParts, promptReferencesAvailable } from "./context/prompt-references.ts";
 import type { SkillRequestCardData } from "../shared/skill-request.ts";
@@ -17309,6 +17314,101 @@ bus.subscribe((event: RuntimeEvent) => {
   }
 });
 
+// Learn skills automatically (server/skills/skill-review.ts): tool steps are counted
+// per bot and conversation, and past the threshold the bot's own engine
+// reviews the conversation in the background. Its changes go through the
+// skill_manage staging path and show as receipts with Undo. Same gates as a
+// bot writing its own skills: skill authoring on, an engine that mounts the
+// agents tools, a turn the person started (not a peer hop, routine or
+// unattended run), and a conversation that is the bot's own.
+const skillReview = createSkillReview({
+  enabled: () => skillReviewEnabled(cfg),
+  threshold: () => skillReviewSteps(cfg),
+  bot: (botId) => store.bot(botId) ?? undefined,
+  engine: (botId) => {
+    const bot = store.bot(botId);
+    const instance = bot ? registry.get(bot.modelSelection.instanceId) : undefined;
+    if (!bot || !instance || policyModelRefusal(instance) || instance.adapter.capabilities.agentsMcp !== true) return null;
+    const generate = (instance.generateText ?? instance.generateMemoryText)?.bind(instance);
+    if (!generate) return null;
+    return {
+      generateText: async (prompt, options) => {
+        // a workspace at its spend limit runs no review
+        assertWithinBudget(cfg, DATA_DIR);
+        const threadId = `skill-review-${randomUUID()}`;
+        return generate(prompt, { ...options, onUsage: (usage) => bookTurnUsage({
+          botId: bot.id,
+          botName: bot.name,
+          threadId,
+          instanceId: instance.instanceId,
+          driverKind: instance.driverKind,
+          model: usage.model,
+          input: usage.input ?? 0,
+          output: usage.output ?? 0,
+          ...(usage.cachedInput !== undefined ? { cachedInput: usage.cachedInput } : {}),
+          costUsd: usage.costUsd ?? null,
+          trigger: { kind: "bot", botId: bot.id },
+        }, usage.input !== undefined && usage.output !== undefined, bot.threadId) });
+      },
+    };
+  },
+  busy: (botId) => workspaceMaintenance.active || botHasActiveTurn(botId),
+  transcript: (botId, threadId) => {
+    const owned = connectorThread(botId, threadId);
+    if (!owned || selfApplyBlocked(threadId)) return null;
+    return { messages: store.activePath(threadId), room: Boolean(owned.group) };
+  },
+  skills: (botId) => listSkills(botId).map((skill) => ({
+    name: skill.name,
+    description: skill.description,
+    editable: skill.editable,
+    enabled: skill.enabled,
+    sha256: skill.sha256,
+    ...(skill.editable ? { body: readSkillFile(botId, skill.name) } : {}),
+  })),
+  currentSha: (botId, name) => listSkills(botId).find((skill) => skill.name === name)?.sha256 ?? null,
+  apply: (botId, threadId, change) => {
+    const bot = store.bot(botId);
+    if (!bot) return { ok: false, error: "unknown bot" };
+    // A bot's own skill applies with a receipt and Undo; a change that would
+    // need a person's review is not raised from the background.
+    const direct = appliesDirectly(botId, threadId, botId);
+    if (!direct) return { ok: false, error: "this conversation cannot apply skill changes without review" };
+    const staged = stageSkillWrite(botId, {
+      action: change.action,
+      targetName: change.action === "update" ? change.name : undefined,
+      files: [{ path: "SKILL.md", content: change.skillMd }],
+      gist: change.gist || undefined,
+      source: learnSource("automatic review of this conversation"),
+    });
+    if ("error" in staged) return { ok: false, error: staged.error };
+    const applied = applyOwnStagedSkill(bot, threadId, staged, direct);
+    return "error" in applied ? { ok: false, error: applied.error } : { ok: true };
+  },
+  statePath: join(DATA_DIR, "skill-review.json"),
+  log: (line) => console.log(line),
+});
+
+bus.subscribe((event: RuntimeEvent) => {
+  if (shouldIgnoreProviderEvent(event)) return;
+  if (event.type !== "turn.completed" || !event.turnId) return;
+  try {
+    const messages = store.activePath(event.threadId);
+    const reply = messages.findLast((message) => message.role === "bot" && message.kind === "text" && message.turnId === event.turnId);
+    const room = store.groupByThread(event.threadId);
+    const bot = room ? (reply?.from ? store.bot(reply.from.botId) : undefined) : store.botByThread(event.threadId);
+    if (!bot) return;
+    // Only a turn that delivered its reply to the person counts: not a
+    // failed or stopped turn, a peer hop, a routine run, or unattended work.
+    const counts = event.ok && Boolean(reply?.text?.trim()) && !isInternalTurn(event.threadId)
+      && !isUnattended(bot.id, event.threadId) && !routines?.runForThread(event.threadId);
+    if (counts) skillReview.noteTurn(bot.id, event.threadId, turnToolSteps(messages, event.turnId, bot.id, Boolean(room)));
+    skillReview.botSettled(bot.id);
+  } catch (error) {
+    console.warn(`skill review: could not count a turn: ${(error as Error).message}`);
+  }
+});
+
 // A confidential thread's browser lasts one turn: its cookies and storage
 // are dropped when the turn ends (server/threads/confidential-threads.ts).
 bus.subscribe((event: RuntimeEvent) => {
@@ -17395,6 +17495,7 @@ function clearTurnDigestState(threadId: string): void {
   liveTurnByThread.delete(threadId);
   liveVoiceUtteranceByThread.delete(threadId);
   memoryRowsByThread.delete(threadId);
+  skillReview.dropThread(threadId);
 }
 
 const TOOL_RESULTS_DIR = join(DATA_DIR, "tool-results");
@@ -26138,6 +26239,7 @@ async function deleteBotWithLifecycle(botId: string, revalidate: () => void = ()
             .map((task) => ({ threadId: task.threadId, keys: threadEngineKeys(bot.id, task.threadId) }));
           botWaits.removeForBot(bot.id);
           store.deleteBot(bot.id, setupRequest);
+          skillReview.dropBot(bot.id);
           purgeDeletedThreadEngines(confidentialEngines, "bot deleted");
           // Removing schedules is not a security revocation. Keep them intact
           // if the bot/receipt write fails, so a failed deletion is retryable.
@@ -28435,6 +28537,28 @@ function skillCardCopy(staged: { action: "create" | "update"; name: string; gist
   };
 }
 
+/** Apply a skill the bot staged for itself, with the one-line receipt and
+ * Undo in the conversation (skill_manage and the automatic review). A failed
+ * apply withdraws the staged write. */
+function applyOwnStagedSkill(
+  from: BotRecord,
+  threadId: string,
+  staged: Exclude<ReturnType<typeof stageSkillWrite>, { error: string }>,
+  direct: DirectApply,
+): ReturnType<typeof applySkillWriteWithReceipt> {
+  // What an update replaces, so Undo can put it back.
+  const previousSkillMd = staged.action === "update" ? readSkillFile(from.id, staged.name) : null;
+  const previousSource = listSkills(from.id).find((skill) => skill.name === staged.name)?.source;
+  const previous = previousSkillMd !== null && previousSource ? { preview: previousSkillMd, source: previousSource } : undefined;
+  const applied = applySkillWriteWithReceipt(from.id, staged, () => {
+    const receipt = appendSkillRequestCard({ botId: from.id, threadId, staged, applied: true, previous });
+    appendDecision(DATA_DIR, { threadId, requestId: receipt.requestId, botId: from.id, botName: from.name,
+      tool: "stage_skill", summary: receipt.summary, decision: "auto-approved", source: direct });
+  });
+  if ("error" in applied) rejectStagedSkillWrite(from.id, staged.id);
+  return applied;
+}
+
 function appendSkillRequestCard(args: {
   /** What Always allow keeps on this card (skillRuleCandidate). */
   ownerRule?: { tool: string; scope: Record<string, string>; description: string };
@@ -28473,6 +28597,8 @@ function appendSkillRequestCard(args: {
     ...(args.applied && args.previous ? { previous: args.previous } : {})
   };
   const from = store.bot(args.botId);
+  // The bot changed its skills here: automatic review starts counting again.
+  skillReview.noteSkillChange(args.botId, args.threadId);
   // a skill proposal, applied at Full (args.applied); full-access: proposal
   store.appendMessage(args.threadId, {
     role: "bot",
@@ -29314,6 +29440,8 @@ function configStatus() {
     },
     features: {
       skillAuthoring: skillAuthoringEnabled(cfg),
+      skillReview: skillReviewEnabled(cfg),
+      skillReviewSteps: skillReviewSteps(cfg),
       skillsLibrary: skillsLibraryEnabled(cfg),
       showToolCalls: showToolCallsEnabled(cfg),
       routinesInConversation: routinesInConversationEnabled(cfg),
@@ -32323,6 +32451,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     keptCardRule: (bot, threadId, candidate, classes) =>
       keptCardRule(bot as unknown as BotRecord, threadId, candidate, classes as Parameters<typeof keptCardRule>[3]),
     appendSkillRequestCard: (args) => appendSkillRequestCard(args),
+    applyOwnStagedSkill: (from, threadId, staged, direct) =>
+      applyOwnStagedSkill(from as unknown as BotRecord, threadId, staged, direct),
     appendDecision: (row) => appendDecision(DATA_DIR, row as Parameters<typeof appendDecision>[1])
   }),
   createInternalRequestsRoutes({
@@ -48411,6 +48541,7 @@ const gracefulShutdown = createGracefulShutdown({
       headlessTasks.stop();
       calendarCalls?.stop();
       memoryUpkeep.stop();
+      skillReview.stop();
       limitReset.stop();
       cacheKeepWarm.dispose();
       webhookIngress?.server.close();

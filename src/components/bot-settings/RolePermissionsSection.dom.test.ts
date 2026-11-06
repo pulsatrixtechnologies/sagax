@@ -14,6 +14,7 @@ vi.mock("@/state/store-selector", () => ({ useStoreDispatch: () => dispatchMock 
 vi.mock("@/state/store", () => ({ api: (...args: unknown[]) => apiMock(...args) }));
 
 const { setLocale } = await import("@/lib/i18n");
+const { setShowThreads } = await import("@/lib/thread-preferences");
 const { RolePermissionsSection, RolePermissionsView, placeNodes, easternTime } = await import("./RolePermissionsSection");
 
 const AT = Date.UTC(2026, 10, 5, 19, 3);
@@ -94,7 +95,26 @@ describe("Details > Permissions", () => {
     expect(details.textContent).not.toContain("Perspicax");
   });
 
-  it("reads the bot's roles, shows an edge's history and opens its conversation", async () => {
+  async function edgeHistory(): Promise<Element> {
+    apiMock.mockResolvedValue({ ...body, missing: body.missing.map((entry) => ({ ...entry, lastAt: Date.now() })) });
+    flushSync(() => root.render(createElement(RolePermissionsSection, { botId: "nova" })));
+    await settle();
+    flushSync(() => {});
+    openDetails();
+    flushSync(() => (host.querySelector('[data-role-edge="service-desk→"]') as unknown as HTMLElement).dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    return host.querySelector("[data-role-edge-history]")!;
+  }
+
+  it("never links to another thread in the unified chat (Show threads off)", async () => {
+    setShowThreads(false);
+    const history = await edgeHistory();
+    expect(history.textContent).toContain("Lecture refusée, relue une fois en Moi");
+    expect(history.querySelector("[data-role-thread]")).toBeNull();
+    expect(history.textContent).not.toContain("Ouvrir la conversation");
+  });
+
+  it("reads the bot's roles, shows an edge's history and opens its conversation in thread mode", async () => {
+    setShowThreads(true);
     apiMock.mockResolvedValue({ ...body, missing: body.missing.map((entry) => ({ ...entry, lastAt: Date.now() })) });
     flushSync(() => root.render(createElement(RolePermissionsSection, { botId: "nova" })));
     await settle();
@@ -109,6 +129,7 @@ describe("Details > Permissions", () => {
     flushSync(() => (history.querySelector("[data-role-thread]") as HTMLButtonElement).click());
     expect(dispatchMock).toHaveBeenCalledWith({ type: "switchTask", botId: "nova", threadId: "th-1" });
     expect(dispatchMock).toHaveBeenCalledWith({ type: "revealThread", threadId: "th-1" });
+    setShowThreads(false);
   });
 
   it("shows nothing when the roles cannot be read", async () => {

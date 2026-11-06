@@ -11,6 +11,7 @@ import { ChevronDown, Send, ShieldAlert } from "lucide-react";
 import { activeLocale, documentLanguage, t } from "@/lib/i18n";
 import { api } from "@/state/store";
 import { useStoreDispatch } from "@/state/store-selector";
+import { useShowThreads } from "@/lib/thread-preferences";
 import { readableError } from "@/lib/plain-error";
 import { cn } from "@/lib/cn";
 import { stepToolName } from "@/lib/step-label";
@@ -332,9 +333,12 @@ export function RolePermissionsSection({ botId }: { botId: string }) {
       .catch(() => { if (alive) setBody(null); });
     return () => { alive = false; };
   }, [botId]);
+  // unified chat (Show threads off, JC's mode): everything lives in the
+  // bot's one chat, so the edge history never links to another thread
+  const showThreads = useShowThreads();
   const openThread = (threadId: string) => {
     dispatch({ type: "switchTask", botId, threadId });
     dispatch({ type: "revealThread", threadId });
   };
-  return <RolePermissionsView botId={botId} body={body} onOpenThread={openThread} />;
+  return <RolePermissionsView botId={botId} body={body} {...(showThreads ? { onOpenThread: openThread } : {})} />;
 }

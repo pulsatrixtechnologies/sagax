@@ -117,7 +117,7 @@ function Permissions() {
   return (
     <div className="flex w-[380px] flex-col gap-6 self-center rounded-2xl border border-hairline bg-panel px-4 pb-6 pt-4" data-gallery-panel="">
       <p className="text-[13px] text-ink-secondary">{none ? "Details (no recent refusal: no Permissions row)" : "Details"}</p>
-      <RolePermissionsView botId="nova" body={none ? { ...tabBody, missing: [] } : tabBody} now={AT + 600_000} open={open} onOpenThread={() => {}} />
+      <RolePermissionsView botId="nova" body={none ? { ...tabBody, missing: [] } : tabBody} now={AT + 600_000} open={open} />
       {open && <OpenFirstEdge />}
     </div>
   );

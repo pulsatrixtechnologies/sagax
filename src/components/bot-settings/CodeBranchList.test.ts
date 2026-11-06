@@ -251,7 +251,7 @@ describe("Coding branches: the card", () => {
   });
 
   it("words a refusal by its code, else the server's message", () => {
-    expect(branchErrorText(new ApiError("x", 403, { code: "github_not_connected" }))).toBe("Connect your own GitHub account on the GitHub plugin's page (Capabilities > Sources > GitHub connection)");
+    expect(branchErrorText(new ApiError("x", 403, { code: "github_not_connected" }))).toBe("Connect your own GitHub account on the GitHub plugin's page (Plugins > Sources > GitHub connection)");
     expect(branchErrorText(new ApiError("x", 409, { code: "rejected" }))).toContain("nothing is forced");
     expect(branchErrorText(new ApiError("Something else", 500, { code: "odd" }))).toBe("Something else");
     // the computer is there but busy, in plain words; no "bot's computer" for the person's own
@@ -292,7 +292,7 @@ describe("Coding branches: the card", () => {
   it("asks the bot to do this action, naming it, and never says the bot's computer where it is the person's", () => {
     for (const key of Object.keys(en).filter((entry) => entry.startsWith("botPanel.branch.away.")) as Array<keyof typeof en>) {
       expect(en[key], key).toMatch(/ask \{bot\} to do this action/i);
-      expect((fr as Record<string, string>)[key], key).toMatch(/demandez à \{bot\} de faire cette action/i);
+      expect((fr as Record<string, string>)[key], key).toMatch(/demande à \{bot\} de faire cette action/i);
       expect(en[key], key).not.toMatch(/\{bot\}'s computer|bot's computer/);
     }
     // a computer that is off: ask once it is back (the bot cannot reach it either)

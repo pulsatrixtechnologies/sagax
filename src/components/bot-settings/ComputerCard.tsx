@@ -154,7 +154,13 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
     <section data-bot-settings-section="computer" aria-labelledby={`bot-computer-${bot.id}`} className="flex flex-col gap-2">
       {/* JC 2026-11-06: no dropdown beside the section title; the Works on
           choices are the row's right-click menu, like the other rows. */}
-      <h3 id={`bot-computer-${bot.id}`} className={cn(PANEL_LABEL, "min-w-0 truncate")}>{t("botPanel.tab.computer")}</h3>
+      <div className="flex items-center gap-2">
+        <h3 id={`bot-computer-${bot.id}`} className={cn(PANEL_LABEL, "min-w-0 flex-1 truncate")}>{t("botPanel.tab.computer")}</h3>
+        {/* JC 2026-11-06: the same bare "..." as Upcoming, on the section header row, always visible. */}
+        {menuEnabled && <button type="button" data-computer-card-more="" aria-haspopup="menu" aria-label={t("botPanel.computerCard.choose")} title={t("botPanel.computerCard.choose")}
+          onClick={(event) => openMenu(event.currentTarget)}
+          className="ui-icon-button"><MoreHorizontal size={15} /></button>}
+      </div>
       <div className={PANEL_CARD}>
         {/* JC 2026-11-06: same row as Upcoming (RoutineList): the thumbnail card
             plus a "..." at its right that opens the right-click menu. */}
@@ -181,9 +187,6 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
             {src && broken !== src && <img src={src} alt="" loading="lazy" onError={() => setBroken(src)} className="size-full object-cover" />}
           </span>
         </button>
-        {menuEnabled && <button type="button" data-computer-card-more="" aria-haspopup="menu" aria-label={t("botPanel.computerCard.choose")} title={t("botPanel.computerCard.choose")}
-          onClick={(event) => openMenu(event.currentTarget)}
-          className="hidden size-7 shrink-0 items-center justify-center rounded-md text-ink-tertiary hover:bg-raised hover:text-ink focus-visible:flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 group-hover/routine:flex touch:flex"><MoreHorizontal size={15} /></button>}
         </div>
       </div>
       {menu && createPortal(

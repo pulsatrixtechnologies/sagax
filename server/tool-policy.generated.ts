@@ -613,6 +613,8 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"POST","kind":"pattern","route":"^\\/api\\/groups\\/([\\w-]+)\\/queue\\/([\\w-]+)\\/steer$","tier":"write","readOnly":false,"scope":"groups:write","defaultEnabled":true},
   {"method":"DELETE","kind":"pattern","route":"^\\/api\\/groups\\/([\\w-]+)\\/queue\\/([\\w-]+)$","tier":"admin","readOnly":false,"scope":"groups:admin","defaultEnabled":false,"destructive":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/groups\\/([\\w-]+)\\/read$","tier":"write","readOnly":false,"scope":"groups:write","defaultEnabled":true},
+  {"method":"DELETE","kind":"pattern","route":"^\\/api\\/groups\\/([\\w-]+)\\/tasks\\/([\\w-]+)$","tier":"admin","readOnly":false,"scope":"groups:admin","defaultEnabled":false,"destructive":true},
+  {"method":"PATCH","kind":"pattern","route":"^\\/api\\/groups\\/([\\w-]+)\\/tasks\\/([\\w-]+)$","tier":"write","readOnly":false,"scope":"groups:write","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/groups\\/([\\w-]+)\\/tasks\\/([\\w-]+)$","tier":"write","readOnly":false,"scope":"groups:write","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/groups\\/([\\w-]+)\\/tasks$","tier":"write","readOnly":false,"scope":"groups:write","defaultEnabled":true},
   {"method":"DELETE","kind":"pattern","route":"^\\/api\\/groups\\/([\\w-]+)$","tier":"admin","readOnly":false,"scope":"groups:admin","defaultEnabled":false,"destructive":true},

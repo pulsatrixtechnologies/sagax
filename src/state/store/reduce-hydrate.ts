@@ -9,6 +9,9 @@ export type ReduceFn = (state: AppState, action: Action) => AppState;
 export function reduceHydrate(state: AppState, action: Action, _reduce: ReduceFn): AppState | undefined {
   switch (action.type) {
     case "hydrate": {
+      // A snapshot with a missing list (a gallery page whose /api/bots is not
+      // answered, an older server) hydrates as an empty one, never a crash.
+      action = { ...action, bots: action.bots ?? [], groups: action.groups ?? [] };
       const known = (id: string) => action.bots.some((b) => b.id === id) || action.groups.some((g) => g.id === id);
       const resume = action.resumeId;
       // A remembered conversation only counts while it still resolves to a

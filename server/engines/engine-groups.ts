@@ -67,7 +67,7 @@ export function noteEngineGroupStarted(pgid: number | undefined): void {
     if (!started || groups.get(pgid) !== record) return;
     record.started = started;
     persist();
-  });
+  }).catch(() => {});
 }
 
 /** The group led by `pgid` is gone (every member exited or was stopped). */

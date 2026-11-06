@@ -137,6 +137,6 @@ export function settleSignInRefusal(recheck: SignInRecheck | null | undefined, i
     return timer;
   });
   setTimer(() => settle(false), input.holdMs ?? SIGN_IN_REFUSAL_HOLD_MS);
-  void recheck.refused(input.principalId, input.driver, slot).then(settle, () => settle(false));
+  void recheck.refused(input.principalId, input.driver, slot).then(settle, () => settle(false)).catch(() => {});
   return true;
 }

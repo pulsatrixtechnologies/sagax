@@ -166,7 +166,7 @@ function runNpm(args: string[], env: NodeJS.ProcessEnv, cwd: string, timeoutMs: 
         rejectRun(new Error(stopped
           ? "The install took too long and was stopped. Check the server's network connection and try again."
           : "The install took too long, but npm could not be confirmed stopped. Ask the server administrator to stop the install process before trying again."));
-      });
+      }).catch(() => {});
     }, timeoutMs);
     timer.unref();
     child.once("error", (error: NodeJS.ErrnoException) => {

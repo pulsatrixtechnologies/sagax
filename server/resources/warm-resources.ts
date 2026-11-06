@@ -80,7 +80,7 @@ export class WarmResourceBudget {
     this.measure(entry);
     this.entries.add(entry);
     if (!this.timer && this.options.intervalMs !== 0) {
-      this.timer = setInterval(() => { void this.refresh(); }, this.options.intervalMs ?? 15_000);
+      this.timer = setInterval(() => { void this.refresh().catch(() => {}); }, this.options.intervalMs ?? 15_000);
       this.timer.unref();
     }
     this.enforce();

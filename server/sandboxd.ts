@@ -54,7 +54,7 @@ async function main(): Promise<void> {
   const sweep = setInterval(() => {
     void service.sweepIdle().then((stopped) => {
       if (stopped.length) console.log(`sandboxd: stopped ${stopped.length} idle environment(s)`);
-    }, (error: unknown) => console.error(`sandboxd: idle sweep failed: ${error instanceof Error ? error.message : String(error)}`));
+    }, (error: unknown) => console.error(`sandboxd: idle sweep failed: ${error instanceof Error ? error.message : String(error)}`)).catch(() => {});
   }, 60_000);
   sweep.unref();
   const shutdown = () => server.close(() => process.exit(0));

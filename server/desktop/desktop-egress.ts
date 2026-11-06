@@ -428,7 +428,7 @@ export async function startEgressProxy(deps: {
     }, (error: Error) => {
       deps.audit({ person: grant.person, botId: grant.botId, threadId: grant.threadId, host: dest.host, port: dest.port, via: "desktop", ok: false, error: error.message });
       res.writeHead(502, { connection: "close" }).end(error.message);
-    });
+    }).catch(() => {});
   });
 
   server.on("connect", (req: IncomingMessage, client: Duplex, head: Buffer) => {
@@ -451,7 +451,7 @@ export async function startEgressProxy(deps: {
     }, (error: Error) => {
       deps.audit({ person: grant.person, botId: grant.botId, threadId: grant.threadId, host: dest.host, port: dest.port, via: "desktop", ok: false, error: error.message });
       client.end(refuse(502, error.message));
-    });
+    }).catch(() => {});
   });
 
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

@@ -107,7 +107,7 @@ export function createInactivityWatchdog(options: {
   const fire = () => {
     probing = true;
     touchedWhileProbing = false;
-    void options.probe().then(settleProbe, () => settleProbe(false));
+    void options.probe().then(settleProbe, () => settleProbe(false)).catch(() => {});
   };
 
   arm();
@@ -296,7 +296,7 @@ export function runMcpBridge(options: BridgeOptions): void {
     inbound.flush();
     // A final tools/call can still be awaiting the control endpoint. Do not
     // close the far end before the serialized gate has forwarded it.
-    void pendingInput.finally(() => child.stdin.end());
+    void pendingInput.finally(() => child.stdin.end()).catch(() => {});
   });
 
   // Injected responses and refusals must never land inside one of the

@@ -599,7 +599,7 @@ class Runner {
       const timer = setTimeout(() => { killGroup("SIGTERM"); setTimeout(() => killGroup("SIGKILL"), 5_000).unref?.(); }, options.timeoutMs);
       let settled = false;
       const onStop = () => { if (!settled) killGroup("SIGTERM"); };
-      void this.stopped.promise.then(onStop);
+      void this.stopped.promise.then(onStop).catch(() => {});
       const done = (code: number | null) => {
         if (settled) return;
         settled = true;

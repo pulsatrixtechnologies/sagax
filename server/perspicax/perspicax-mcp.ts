@@ -764,7 +764,7 @@ export class PerspicaxMcp {
       if (entry.threadId === threadId) this.disarmKeepAlive(entry);
     }
     if (this.options.keepWarm?.(threadId) === true) return;
-    void this.endWarm(threadId);
+    void this.endWarm(threadId).catch(() => {});
   }
 
   /** Engine session is warm again (idle pool): re-arm pings on kept entries. */
@@ -1134,7 +1134,7 @@ export class PerspicaxMcp {
     // state never crosses into this turn; only the account token is reused.
     const stay = this.sessionShouldStay(input.threadId);
     // the call or warm engine ended without saying so: its kept tokens go
-    if (!stay) void this.endWarm(input.threadId);
+    if (!stay) void this.endWarm(input.threadId).catch(() => {});
     if (stay) {
       const at = warmKey(input.threadId, principalId, source);
       const kept = this.warm.get(at);
@@ -1143,7 +1143,7 @@ export class PerspicaxMcp {
         this.warm.delete(at);
         kept.generation = input.generation;
         const previous = this.entries.get(key(input.threadId, input.generation));
-        if (previous && previous !== kept) void this.close(previous);
+        if (previous && previous !== kept) void this.close(previous).catch(() => {});
         this.entries.set(key(input.threadId, input.generation), kept);
         this.applyTurnRole(kept, source === "delegation");
         plan.mounted.push({ name: "Perspicax" });
@@ -1196,7 +1196,7 @@ export class PerspicaxMcp {
     }
     const at = key(input.threadId, input.generation);
     const previous = this.entries.get(at);
-    if (previous) void this.close(previous);
+    if (previous) void this.close(previous).catch(() => {});
     const entry: Entry = {
       threadId: input.threadId,
       generation: input.generation,
@@ -2218,7 +2218,7 @@ export class PerspicaxMcp {
     const result = signIn.ok ? await link.exchangeToken(signIn.token) : null;
     if (entry.source === "delegation" && result && !result.ok && result.error === "subject") this.options.delegationRefused?.(entry.principalId);
     if (entry.ended) {
-      if (result?.ok) void this.revoke(result.token);
+      if (result?.ok) void this.revoke(result.token).catch(() => {});
       return false;
     }
     if (!signIn.ok || !result?.ok) {
@@ -2235,7 +2235,7 @@ export class PerspicaxMcp {
       entry.profileChoiceRestoreFailed = false;
     }
     this.clearToolCatalog(entry);
-    void this.revoke(old);
+    void this.revoke(old).catch(() => {});
     return true;
   }
 

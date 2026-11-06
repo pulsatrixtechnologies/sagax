@@ -226,7 +226,7 @@ export class DesktopLocalModels {
     if (this.server) return Promise.resolve();
     return new Promise((resolve, reject) => {
       const server = createServer((req, res) => {
-        void this.handle(req, res);
+        void this.handle(req, res).catch(() => {});
       });
       // Chat completions wait on the bridge job (up to its own timeout).
       // The bridge returns one body, so this socket has to stay open that long.

@@ -280,7 +280,7 @@ export function scrubThreadDecisions(dataDir: string, threadId: string): Promise
   writeQueues.set(dataDir, queued);
   void queued.finally(() => {
     if (writeQueues.get(dataDir) === queued) writeQueues.delete(dataDir);
-  });
+  }).catch(() => {});
   return queued.then(() => changed);
 }
 
@@ -442,7 +442,7 @@ export function appendDecision(dataDir: string, row: Omit<DecisionRow, "at">): v
   writeQueues.set(dataDir, queued);
   void queued.finally(() => {
     if (writeQueues.get(dataDir) === queued) writeQueues.delete(dataDir);
-  });
+  }).catch(() => {});
 }
 
 /** Test/shutdown seam: wait until every decision already queued for this

@@ -79,7 +79,7 @@ const settle = (
         emit({ ...base(threadId, racedTurnId), type: "runtime.error", message: claudeSignInExpired(message), setup: true });
         emit({ ...base(threadId, racedTurnId), type: "turn.completed", ok: false, stopReason: "auth_required", cost: null });
       }
-    })();
+    })().catch(() => {});
     return;
   }
   if (!ok && stopReason === "auth_required" && t.authFailureDeferred && t.authFailureText) {

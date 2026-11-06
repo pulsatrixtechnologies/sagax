@@ -180,7 +180,7 @@ export class ContentKeyring {
       return cached ?? this.unwrapSync(row);
     }
     if (!this.active.wrapSync) {
-      void this.ensureOwner(owner);
+      void this.ensureOwner(owner).catch(() => {});
       return null;
     }
     const keyId = randomBytes(8).toString("hex");

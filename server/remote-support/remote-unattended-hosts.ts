@@ -233,7 +233,7 @@ export function createUnattendedHosts(deps: {
       ids.add(out.session);
       openedFor.set(hostId, ids);
       auditOpen(true, seat.botId);
-      void follow(seat, local, hostId, out.code);
+      void follow(seat, local, hostId, out.code).catch(() => {});
       return { ok: true, code: out.code, botId: seat.botId, threadId: seat.threadId };
     },
 

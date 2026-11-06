@@ -230,7 +230,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
 
   const track = (work: Promise<unknown>) => {
     pending.add(work);
-    void work.finally(() => pending.delete(work));
+    void work.finally(() => pending.delete(work)).catch(() => {});
   };
   const same = (left: ModelSelection | null | undefined, right: ModelSelection | null | undefined) =>
     Boolean(left && right && left.instanceId === right.instanceId && left.model === right.model);
@@ -405,7 +405,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
     if (!started) return;
     const next = store.nextResumeAt();
     if (next === null) return;
-    timer = after(Math.max(1_000, next - deps.now()), () => { void host.tick(); });
+    timer = after(Math.max(1_000, next - deps.now()), () => { void host.tick().catch(() => {}); });
   };
 
   /** `modelOnly`: the refusal held nothing on the engine, it bound only the

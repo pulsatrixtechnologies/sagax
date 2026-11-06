@@ -112,7 +112,7 @@ export class MyChromeService {
         resolveChrome: () => (this.options.locate ?? ((address) => locateChrome(address)))(this.settings.get().chromeAddress),
         allows: (url) => this.allows(url),
         onChange: () => this.options.onChange?.(),
-        onStopFromTab: () => { void this.stop(); },
+        onStopFromTab: () => { void this.stop().catch(() => {}); },
       });
       await gate.start();
       if (this.settings.get().stopped) await gate.stop();
@@ -136,7 +136,7 @@ export class MyChromeService {
   private liveRecording(now = Date.now()): MyChromeRecording | null {
     const recording = this.recording;
     if (recording && recording.ended === null && now - recording.touchedAt > MY_CHROME_RECORDING_IDLE_MS) {
-      void recording.stop("idle");
+      void recording.stop("idle").catch(() => {});
     }
     // an idle recording is dropped whole: nothing is kept past the idle time
     if (recording && recording.ended === "idle") { this.recording = null; return null; }

@@ -128,7 +128,7 @@ export class ProviderAuthSessions {
       flow.busy = true;
       void Promise.resolve().then(() => flow.instance.cancelAuthentication?.()).catch(() => {}).finally(() => {
         if (this.flows.get(id) === flow) this.flows.delete(id);
-      });
+      }).catch(() => {});
     }
   }
 

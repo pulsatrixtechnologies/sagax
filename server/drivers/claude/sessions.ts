@@ -67,7 +67,7 @@ export function createSessionHelpers(deps: SessionHelperDeps) {
   const stopSession = (session: ClaudeSession) => {
     void killCliTree(session.child).then((stopped) => {
       if (stopped) void session.finishClose?.();
-    });
+    }).catch(() => {});
   };
 
   const closeSession = (threadId: string, why: string) => {

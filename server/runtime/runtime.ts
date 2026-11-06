@@ -706,7 +706,7 @@ export class Runtime {
         this.log(`run(${n.id}) threw: ${String(error)}`);
         this.turnEnded(n.id, { kind: "failed", outcome: "provider_error", text: clip(String(error), 1000) }, live);
       },
-    ).finally(() => this.turns.delete(n.id));
+    ).finally(() => this.turns.delete(n.id)).catch(() => {});
     return true;
   }
 

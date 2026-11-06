@@ -39,7 +39,7 @@ export function createGracefulShutdown({
       runCleanup(cleanup, exit, timeoutMs);
       return;
     }
-    void bounded(Promise.resolve().then(drain), drainTimeoutMs).then(() => runCleanup(cleanup, exit, timeoutMs));
+    void bounded(Promise.resolve().then(drain), drainTimeoutMs).then(() => runCleanup(cleanup, exit, timeoutMs)).catch(() => {});
   };
 }
 
@@ -55,5 +55,5 @@ function runCleanup(cleanup: GracefulShutdownOptions["cleanup"], exit: (code: nu
   void Promise.race([settled, deadline]).finally(() => {
     if (timer) clearTimeout(timer);
     exit(0);
-  });
+  }).catch(() => {});
 }

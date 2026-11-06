@@ -181,7 +181,7 @@ export class LinkSignInController {
       void this.confirmed(env).then((ok) => {
         if (flow.status.phase !== "waiting") return;
         this.finish(flow, ok ? "succeeded" : "failed", ok ? undefined : this.failure(output));
-      });
+      }).catch(() => {});
     });
   }
 
@@ -190,7 +190,7 @@ export class LinkSignInController {
       if (flow.status.phase !== "waiting") return;
       void this.confirmed(env).then((ok) => {
         if (ok && flow.status.phase === "waiting") this.finish(flow, "succeeded");
-      });
+      }).catch(() => {});
     };
     flow.pollTimer = setInterval(poll, this.options.pollMs ?? 2_000);
     flow.pollTimer.unref();

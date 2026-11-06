@@ -99,7 +99,7 @@ export function createRemoteSupportWatcher(deps: {
       return;
     }
     const delay = at - watch.started < WATCH_FAST_FOR_MS ? WATCH_FAST_MS : WATCH_SLOW_MS;
-    watch.cancel = schedule(() => void tick(code), delay);
+    watch.cancel = schedule(() => void tick(code).catch(() => {}), delay);
   }
 
   async function tick(code: string) {

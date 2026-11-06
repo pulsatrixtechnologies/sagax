@@ -194,6 +194,6 @@ export function makeCapContinuationSubscriber(deps: CapContinuationDeps): (event
           });
         } catch { /* the escalation message itself failed; nothing else to do */ }
       }
-    })();
+    })().catch(() => {});
   };
 }

@@ -362,7 +362,7 @@ export class LocalSemanticIndex implements SemanticIndex {
     } catch (error) {
       console.warn(`semantic index: ${(error as Error).message}`);
     }
-    if (!this.embedding && this.embedQueue.size) void this.embedSome();
+    if (!this.embedding && this.embedQueue.size) void this.embedSome().catch(() => {});
   }
 
   /** Catch one thread up to its newest message. True when it is current. */

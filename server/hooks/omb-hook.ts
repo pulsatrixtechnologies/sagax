@@ -95,4 +95,4 @@ async function main(): Promise<void> {
   }
 }
 
-void main();
+void main().catch(() => {});

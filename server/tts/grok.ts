@@ -111,7 +111,7 @@ function onRefused(socket: WebSocket, failWith: (message: string) => void): void
     void readRefusal(res).then((message) => {
       failWith(message);
       try { node.terminate?.(); } catch { /* already gone */ }
-    });
+    }).catch(() => {});
   });
 }
 

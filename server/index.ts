@@ -4807,7 +4807,7 @@ function resyncOpenCodeProviderKeys(): void {
   for (const instance of registry.instances()) {
     if (instance.driverKind !== "opencodeGo") continue;
     void registry.refreshModels(instance.instanceId)
-      .then(() => broadcast({ kind: "config", ...configStatus() }), () => {});
+      .then(() => broadcast({ kind: "config", ...configStatus() }), () => {}).catch(() => {});
   }
 }
 await registry.load(providerConfigs(), decorateHostedProvider);
@@ -5063,7 +5063,7 @@ utilityParentPort?.on("message", event => {
   const requestId = typeof message.requestId === "string" && message.requestId.length <= 100 ? message.requestId : undefined;
   void companyRuntimeStarted.then(() => managedDesktop.migrateIdentity(message.identity)).then(() => true, () => false).then(ok => {
     utilityParentPort.postMessage({ type: "openmausbot:managed-desktop-result", requestId, ok });
-  });
+  }).catch(() => {});
 });
 utilityParentPort?.on("message", event => {
   const message = event.data as { type?: unknown; requestId?: unknown; policy?: unknown } | undefined;
@@ -5098,7 +5098,7 @@ utilityParentPort?.on("message", event => {
     utilityParentPort.postMessage({ type: "openmausbot:managed-desktop-result", requestId, ok: true });
   }, () => {
     utilityParentPort.postMessage({ type: "openmausbot:managed-desktop-result", requestId, ok: false, error: "Company connection could not be applied. Reconnect from desktop Settings." });
-  });
+  }).catch(() => {});
 });
 
 // ── peer-agent comms wiring ────────────────────────────────────────────
@@ -6978,7 +6978,7 @@ function holdTurnAttachments(threadId: string, texts: readonly (string | undefin
     if (!now.size) return;
     const opening = holdPlain(holder, [...now]).catch(() => undefined);
     if (wait.size) await waitPlain([...wait]).catch(() => undefined);
-    void opening;
+    void opening.catch(() => {});
   };
   // the turn waits only when something is read by path before the engine starts
   const mustWait = Boolean(options.picturesByPath && images.length) || (solo && texts.some((text) => storedNamesIn(text).some(isArchiveAttachment)));
@@ -6992,7 +6992,7 @@ function holdTurnAttachments(threadId: string, texts: readonly (string | undefin
  * so the turn finds them ready (the hold lets go on its own when no turn
  * follows). */
 function openForComingTurn(botId: string, threadId: string): void {
-  void holdBotMemoryPlain(botId, turnHolder(threadId));
+  void holdBotMemoryPlain(botId, turnHolder(threadId)).catch(() => {});
   void holdTurnAttachments(threadId, [], []);
 }
 
@@ -7395,7 +7395,7 @@ async function perspicaxTurnPrepare(input: {
   // Handshake beside setup: open/verify the MCP session now, so the engine's
   // later tools/list hits the same-session cache. Roles are never auto-picked.
   if (plan.mounted.length) await perspicaxMcp.ensureTurnSessions(input.threadId, input.generation);
-  if (plan.mounted.length) void perspicaxMcp?.refreshApiNames({ threadId: input.threadId, generation: input.generation, botId: live.id });
+  if (plan.mounted.length) void perspicaxMcp?.refreshApiNames({ threadId: input.threadId, generation: input.generation, botId: live.id }).catch(() => {});
   return { live, speakerPrincipalId, routine, plan };
 }
 
@@ -8412,7 +8412,7 @@ for (const pending of startupCatalogs) {
       console.warn(`[engines] refreshing the new-bot default after model discovery failed: ${error instanceof Error ? error.message : String(error)}`);
     }
     broadcast({ kind: "config", ...configStatus() });
-  }, () => {});
+  }, () => {}).catch(() => {});
 }
 store.seedIfEmpty();
 hostedModels?.reconcile(store);
@@ -8676,7 +8676,7 @@ const sandboxTidier = userSandbox ? new WorkspaceTidier({
 }) : null;
 if (userSandbox) {
   principals.onDisabledChanged((person, disabled) => {
-    if (disabled) void userSandbox.personOut(person.id);
+    if (disabled) void userSandbox.personOut(person.id).catch(() => {});
     else userSandbox.personBack(person.id);
   });
 }
@@ -9311,7 +9311,7 @@ async function syncPluginsForTurn(principalId: string, generation: string, botId
   const previous = pluginSyncChains.get(principalId) ?? Promise.resolve();
   const copying = previous.catch(() => undefined).then(() => syncPluginFoldersForTurn(principalId, botId));
   pluginSyncChains.set(principalId, copying);
-  void copying.catch(() => undefined).finally(() => { if (pluginSyncChains.get(principalId) === copying) pluginSyncChains.delete(principalId); });
+  void copying.catch(() => undefined).finally(() => { if (pluginSyncChains.get(principalId) === copying) pluginSyncChains.delete(principalId); }).catch(() => {});
   pluginSyncedGenerations.set(key, copying);
   if (pluginSyncedGenerations.size > 2_000) pluginSyncedGenerations.delete(pluginSyncedGenerations.keys().next().value!);
   return copying;
@@ -12319,7 +12319,7 @@ function reviewHolds(node: HandoffView): boolean {
     // full-access: peer-contact
     void requestPeerApproval(approvalBus, from, target, node.text, node.consult ? "ask_bot" : "delegate_bot", parent.threadId).then(verdict =>
       decided(verdict === "allow" ? undefined : verdict === "deny" ? "Denied by user; no work sent." : `${peerApprovalFailure(verdict).error}; no work sent.`),
-    () => decided("The review card could not be shown; no work sent."));
+    () => decided("The review card could not be shown; no work sent.")).catch(() => {});
   }
   return true;
 }
@@ -14331,7 +14331,7 @@ function makeThreadConfidential(botId: string, threadId: string): void {
   // words held for routing keep no copy once the thread is confidential
   routableSteers.forgetThread(threadId);
   memoryUpkeep.dropThread(threadId);
-  void scrubThreadDecisions(DATA_DIR, threadId);
+  void scrubThreadDecisions(DATA_DIR, threadId).catch(() => {});
   // its settled teammate work (runtime.db) keeps no words of it
   forgetConfidentialCoordination(threadId);
   // the engines' own transcripts of it so far (server/engines/engine-transcripts.ts):
@@ -14509,7 +14509,7 @@ function wipeConfidentialThread(botId: string, threadId: string, attachmentNames
   // this thread's words may still sit in free pages and index segments
   try { writeFileSync(join(DATA_DIR, CONFIDENTIAL_FORGOTTEN_MARKER), "", { mode: 0o600 }); } catch { /* the backup then strips by the roster only */ }
   void forgetConfidentialBrowser(threadId).catch(() => undefined);
-  void scrubThreadDecisions(DATA_DIR, threadId);
+  void scrubThreadDecisions(DATA_DIR, threadId).catch(() => {});
   // its own Data database and sheet (data/scope.ts)
   const dataKey = threadScopeKeyFor(botId, threadId);
   try { dataSheets.deleteScope(dataKey); } catch { /* already gone */ }
@@ -15239,7 +15239,7 @@ function notifyAccess(notification: Notification | null, access: WireAccessCard,
     engine: refusedBot?.modelSelection?.instanceId ?? null,
     reason: access.cause === "payer_disabled" || access.cause === "server_engine_not_allowed" ? access.cause : access.reason,
     detail: refusedConfidential ? CONFIDENTIAL_INCIDENT_TEXT : redactSecretsInText(notification.body ?? "")
-  });
+  }).catch(() => {});
   if (IDENTITY.kind !== "perspicax") return notify(notification);
   const bot = store.bot(access.botId);
   const inRoom = Boolean(store.groupByThread(notification.threadId));
@@ -16314,7 +16314,7 @@ const limitFailover = createLimitFailoverHost({
   clearRoutineRun: (runId) => {
     const prior = routines?.listRuns().find((run) => run.id === runId);
     if (prior && ["queued", "waiting"].includes(prior.status)) {
-      void routines!.cancelRun(prior.id, "Waiting for the engine's usage limit to reset");
+      void routines!.cancelRun(prior.id, "Waiting for the engine's usage limit to reset").catch(() => {});
     }
   },
 });
@@ -16972,7 +16972,7 @@ const watchdog = new TurnWatchdog({
     };
     void Promise.resolve(runningTurnInstance(bot, turn.threadId)?.adapter.interruptTurn(turn.threadId))
       .catch(() => {})
-      .then(() => { if (stillStalledTurn()) closeOpenApprovals(turn.threadId); });
+      .then(() => { if (stillStalledTurn()) closeOpenApprovals(turn.threadId); }).catch(() => {});
     const minutes = Math.round(silentMs / 60_000), cause = stallCause(silentMs);
     // its calls and sub-agents end with it, even if the engine never settles
     closeCutToolRows(turn.threadId, endedToolOutput({ stopped: false }));
@@ -17378,7 +17378,7 @@ function forgetTurnCheckpoint(threadId: string): void {
   const checkpoint = turnCheckpoints.get(threadId);
   if (!checkpoint) return;
   turnCheckpoints.delete(threadId);
-  void checkpoints.release(checkpoint.botId, checkpoint.cwd, checkpoint.pin);
+  void checkpoints.release(checkpoint.botId, checkpoint.cwd, checkpoint.pin).catch(() => {});
 }
 
 /** The usage row's duration (2026-10-08, the console's latency per engine):
@@ -17555,7 +17555,7 @@ async function scheduleTurnDigest(input: {
   } finally {
     // The pre-turn commit has had its last reader (the diff above is queued
     // ahead of this in the shadow repo); the next snapshot may reclaim it.
-    if (checkpoint) void checkpoints.release(checkpoint.botId, checkpoint.cwd, checkpoint.pin);
+    if (checkpoint) void checkpoints.release(checkpoint.botId, checkpoint.cwd, checkpoint.pin).catch(() => {});
     void runLifecycleEvent(input.botId, input.threadId, "after_agent_response", { text: input.reply.slice(0, 2_000) }).catch(() => {});
     void runLifecycleEvent(input.botId, input.threadId, "stop", {}).catch(() => {});
   }
@@ -18657,7 +18657,7 @@ async function localVmAutoLifecycle(action: "run" | "start" | "remove") {
 }
 
 // At launch: bring the Local VM up in the background.
-if (localVmAuto) setTimeout(() => { void localVmAuto.ensure("launch"); }, 3_000).unref?.();
+if (localVmAuto) setTimeout(() => { void localVmAuto.ensure("launch").catch(() => {}); }, 3_000).unref?.();
 
 async function localVmInventoryPayload() {
   const runtime = await containerRuntimeStatus();
@@ -20044,7 +20044,7 @@ bus.subscribe((event: RuntimeEvent) => {
               startedBy: turnStartFor(event.threadId),
               call: { tool: event.mcpTool ?? event.tool, ...(typeof event.input === "string" ? { input: event.input } : {}), summary: event.summary },
               language: languageOfPerson(cardAnswerer)
-            }).then(finishReview, () => finishReview({ kind: "none" }));
+            }).then(finishReview, () => finishReview({ kind: "none" })).catch(() => {});
           }
         }
       }
@@ -20652,9 +20652,9 @@ bus.subscribe((event: RuntimeEvent) => {
           }).catch(() => {}).finally(() => {
             clearTimeout(timeout);
           });
-          void Promise.all([screenSettled, digestSettled]).finally(() => settleDirectTurn(true));
+          void Promise.all([screenSettled, digestSettled]).finally(() => settleDirectTurn(true)).catch(() => {});
         } else {
-          void digestSettled.finally(() => settleDirectTurn(true));
+          void digestSettled.finally(() => settleDirectTurn(true)).catch(() => {});
         }
       } else if (group && speaker) {
         // Room/goal turns run on a shared thread, but their spend still counts
@@ -20698,7 +20698,7 @@ bus.subscribe((event: RuntimeEvent) => {
             reply, from: speaker,
             isCurrent: () => store.groupByThread(event.threadId)?.id === group.id,
             usage: { input: tokens?.input ?? 0, output: tokens?.output ?? 0, costUsd: event.cost ?? null }
-          });
+          }).catch(() => {});
         }
         liveTurnByThread.delete(event.threadId);
       }
@@ -21552,7 +21552,7 @@ function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: s
     // or the stop reason is stored, never a message text (decision T7).
     ...(failedCause === null && input.kind === "failed" ? { reason: problemReason("failed", `${input.detail} ${incidentContext(threadId).lastReply ?? ""}`) } : {}),
     detail: redactSecretsInText(failedCause ?? input.detail)
-  });
+  }).catch(() => {});
   // A thread another bot opened and is watching is that bot's to handle:
   // the delegator is woken with the failure already (wakeDelegationSource).
   if (task?.openedBy?.delegationId || delegationWatch.has(threadId) || coordinator.activeDirect(threadId)) return;
@@ -22533,7 +22533,7 @@ function scheduleUnfinishedTurn(botId: string, threadId: string, turnId: string 
         started = true;
         void startTurn(botId, unfinishedTurnPrompt(kind), { threadId, cardContinuation: true, ...(speaker ? { speaker } : {}) })
           .catch((error) => console.warn(`[unfinished-turn] thread ${threadId}: the continuation could not start: ${error instanceof Error ? error.message : String(error)}`))
-          .finally(release);
+          .finally(release).catch(() => {});
       } catch (error) {
         console.warn("[unfinished-turn] continuation failed", error);
       } finally {
@@ -23836,7 +23836,7 @@ function startScreenPoller(
     botId,
     touched: screenIsTheWork
   });
-  entry.timer = setInterval(() => void entry.capture(), SCREEN_POLL_MS);
+  entry.timer = setInterval(() => void entry.capture().catch(() => {}), SCREEN_POLL_MS);
   screenPollers.set(threadId, entry);
 }
 
@@ -24983,7 +24983,7 @@ routines = new RoutineManager({
     if (!principal) return;
     const place = decideWorkplace({ desktopTargeted: false, routine: true, principal, personAsked: false });
     if (place.target !== "user-sandbox" && routine.runOn !== "cloud" && !cloudOnlyBot(routine.botId)) return;
-    void userSandbox.prewake(principal, routine.botId);
+    void userSandbox.prewake(principal, routine.botId).catch(() => {});
   },
   // Pre-warm (server/threads/thread-prewarm.ts): a scheduled bot run's engine starts
   // PREWARM_ENGINE_LEAD_MS ahead in the task its run will take, with the
@@ -30976,7 +30976,7 @@ async function describeInstances() {
   // Reading the engines is where this server learns one became available
   // (an install, a sign-in, a key or a Company engine), so a bot still on the
   // removed Computer engine moves now rather than at the next start.
-  void retryComputerEngineMove();
+  void retryComputerEngineMove().catch(() => {});
   const engines = selectableInstances(await registry.describe());
   await refreshUnsetModelSelections(engines);
   return engines.map((instance) => {
@@ -32664,7 +32664,7 @@ ROUTES.push(createBotInboundMailReadRoutes({
 /** v2 (S3): a bot deleted or given to another owner: Perspicax's list follows. */
 function botMailResync(): void {
   try {
-    void botMailAddresses.resync();
+    void botMailAddresses.resync().catch(() => {});
   } catch {
     /* before start-up finished: the first read syncs */
   }
@@ -34461,7 +34461,7 @@ cloudAgentManager = new CloudAgentManager({
 });
 
 const CLOUD_AGENT_SYNC_MS = 15_000;
-setInterval(() => { void cloudAgentManager.syncActive(); }, CLOUD_AGENT_SYNC_MS).unref?.();
+setInterval(() => { void cloudAgentManager.syncActive().catch(() => {}); }, CLOUD_AGENT_SYNC_MS).unref?.();
 setPersonalCapOrganization(IDENTITY.kind === "perspicax");
 // The disk holding the data folder is nearly full (server/process/low-disk-alert.ts).
 startLowDiskWatch({ dir: DATA_DIR, notify: (text) => broadcast({ kind: "notify", notification: { kind: "spend", botId: "", botName: "", threadId: "", title: text.title, body: text.body } }, { adminOnly: true }) });
@@ -38115,7 +38115,7 @@ function refreshStreamDigests(botId: string, threadId: string): void {
       console.info(`[stream] ${botId} ${stale.threadId}: ${drafted.by} digest, ${drafted.text.length} chars`);
     })
     .catch((error) => console.warn(`[stream] digest failed for ${stale.threadId}: ${error instanceof Error ? error.message : String(error)}`))
-    .finally(() => segmentDigestDrafts.delete(stale.threadId));
+    .finally(() => segmentDigestDrafts.delete(stale.threadId)).catch(() => {});
 }
 
 /** Whether a turn in `threadId` is a person's single-stream turn: the thread
@@ -40440,7 +40440,7 @@ const voiceModeDeps: VoiceModeDeps = {
         const person = sandboxPrincipalForTurn({
           botOwnerPrincipalId: effectiveBotOwner(bot), confidentialOwnerPrincipalId: confidentialThreadOwner(target.threadId), routine: false, speakerPrincipalId: orgSpeakerPrincipal(bot, speakerFor(auth))
         })?.trim().toLowerCase();
-        if (person) void userSandbox.markUsed(person, bot.id);
+        if (person) void userSandbox.markUsed(person, bot.id).catch(() => {});
       }
       voiceWarmup.begin(target.threadId, callId, (signal) => new Promise<void>((resolve) => {
         void startTurn(bot.id, "", {
@@ -41035,8 +41035,8 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
     onDirectory: () => {
       void orgFlowPlugins.sync("directory").catch(() => undefined);
       // lot 4: the organization's declarations, installed once here
-      void syncOrgCapabilities("directory");
-      void syncPersonalProviderDirectory();
+      void syncOrgCapabilities("directory").catch(() => {});
+      void syncPersonalProviderDirectory().catch(() => {});
     },
     version
   });
@@ -41045,7 +41045,7 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
   // a newer Flow version: the sync fetches the marketplaces again when due
   setInterval(() => { void orgFlowPlugins.sync("schedule").catch(() => undefined); }, 30 * 60_000).unref();
   // at start: what is missing or older than the last directory read
-  setTimeout(() => { void orgFlowPlugins.sync("start").catch(() => undefined); void syncOrgCapabilities("start"); }, 15_000).unref();
+  setTimeout(() => { void orgFlowPlugins.sync("start").catch(() => undefined); void syncOrgCapabilities("start").catch(() => {}); }, 15_000).unref();
   // Slice 5: per-turn MCP tokens for the person who speaks.
   const directory = perspicaxDirectory;
   perspicaxMemory = new PerspicaxMemory({ link: () => directory });
@@ -42984,8 +42984,8 @@ ROUTES.push(createTemporaryAgentRoutes({
     if (bot) temporaryAudit(pinned ? "agents.temporary.pinned" : "agents.temporary.unpinned", bot, {}, { principalId });
   }
 }));
-setTimeout(() => { void sweepTemporaryAgents(); }, 30_000).unref?.();
-setInterval(() => { void sweepTemporaryAgents(); }, TEMP_AGENT_SWEEP_MS).unref?.();
+setTimeout(() => { void sweepTemporaryAgents().catch(() => {}); }, 30_000).unref?.();
+setInterval(() => { void sweepTemporaryAgents().catch(() => {}); }, TEMP_AGENT_SWEEP_MS).unref?.();
 const agentApiCallerBot = (caller: AgentCaller) => (caller.kind === "bot" ? store.bot(caller.id) ?? null : null);
 /** One workspace-relative file of a bot caller, resolved inside one of its roots. */
 function agentApiSourceFile(from: BotRecord, sourceThreadId: string, relative: string): { path: string; bytes: number } | Refusal {
@@ -44025,7 +44025,7 @@ const liveCalls = new LiveCallController({
         excerpt: callTitleExcerpt,
         title: liveCallTitle,
         scrub: redactSecretsInText
-      }, { threadId: input.threadId, row });
+      }, { threadId: input.threadId, row }).catch(() => {});
     }
   },
   log: (line) => console.log(line)
@@ -44497,7 +44497,7 @@ async function applyConfigHttpPatch({ res, url, auth, body, json }: ConfigWriteC
       if (configWriteCommitted) {
         for (const request of browserCleanupRequests) {
           const committed = browserCleanup.commit(request);
-          void browserCleanup.ensure(committed);
+          void browserCleanup.ensure(committed).catch(() => {});
         }
       } else {
         for (const request of browserCleanupRequests) browserCleanup.abort(request);
@@ -47713,7 +47713,7 @@ if (LOOPBACK.warning) console.warn(`local requests: ${LOOPBACK.warning}`);
 // mixed when this server started keeps its narrowest audience from here on.
 for (const group of store.groups) settleRoomFloor(group);
 const pruneDecisionLog = () => {
-  void pruneDecisions(DATA_DIR, decisionRetentionDays(cfg.decisions?.retentionDays));
+  void pruneDecisions(DATA_DIR, decisionRetentionDays(cfg.decisions?.retentionDays)).catch(() => {});
   // The admin activity log keeps its months for the same window.
   void Promise.resolve(pruneAdminActivity(DATA_DIR, decisionRetentionDays(cfg.decisions?.retentionDays))).catch(() => {});
   void Promise.resolve(pruneProblemLog(DATA_DIR)).catch(() => {});
@@ -47997,7 +47997,7 @@ const onListening = async () => {
 };
 if (earlyListener) {
   earlyListener.adopt(handleRequest);
-  void onListening();
+  void onListening().catch(() => {});
 } else {
   server.listen(PORT, "127.0.0.1", onListening);
 }
@@ -48388,7 +48388,7 @@ const gracefulShutdown = createGracefulShutdown({
       // any cleanup function reaches an await.
       revokeAllInternalCapabilities();
       sharedComputers.close();
-      void widgetRenderer.close();
+      void widgetRenderer.close().catch(() => {});
       desktopBridges.close();
       desktopTerminals.close();
       terminalFeature.sessions.stop();
@@ -48465,7 +48465,7 @@ const gracefulShutdown = createGracefulShutdown({
     }, (error: unknown) => {
       console.error("bus: canonical event log flush failed; the newest thread history may be incomplete.", error);
       finish(code);
-    });
+    }).catch(() => {});
   }
 });
 

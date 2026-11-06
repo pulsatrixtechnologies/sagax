@@ -150,6 +150,6 @@ export function synthesize(text: string, voiceId: string, key: string, api: stri
       firstAudio.reject(error);
       audio.reject(error);
     }
-  })();
+  })().catch(() => {});
   return { firstAudio: firstAudio.promise, audio: audio.promise };
 }

@@ -266,7 +266,7 @@ export class EventBus {
     // this one: the log keeps publication order.
     this.enqueue(event);
     this.deliver(event);
-    if (isTerminalEvent(event)) void this.flushDisk();
+    if (isTerminalEvent(event)) void this.flushDisk().catch(() => {});
   }
 
   private enqueue(event: RuntimeEvent) {
@@ -315,7 +315,7 @@ export class EventBus {
         this.pumping = false;
         if (this.queued.length > 0) this.kick();
         else this.settleDrain();
-      });
+      }).catch(() => {});
     });
   }
 
@@ -424,6 +424,6 @@ export class EventBus {
   detach(instanceId: string) {
     this.unsubscribes.get(instanceId)?.();
     this.unsubscribes.delete(instanceId);
-    void this.flush();
+    void this.flush().catch(() => {});
   }
 }

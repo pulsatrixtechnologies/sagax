@@ -101,7 +101,7 @@ export function createDesktopViewer(deps: {
       void handle(req, res).catch(() => {
         if (!res.headersSent) res.writeHead(500).end();
         else socket.destroy();
-      }).finally(() => clearTimeout(timeout));
+      }).finally(() => clearTimeout(timeout)).catch(() => {});
     });
   }
 

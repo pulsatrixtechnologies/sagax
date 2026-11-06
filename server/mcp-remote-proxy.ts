@@ -250,7 +250,7 @@ function raced<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const abort = () => reject(new Error("aborted"));
     signal.addEventListener("abort", abort, { once: true });
-    void promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+    void promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort)).catch(() => {});
   });
 }
 
@@ -269,7 +269,7 @@ function currentCatalog(signal: AbortSignal): Promise<Catalog> {
       return built;
     });
     loading = read;
-    void read.catch(() => {}).finally(() => { if (loading === read) loading = undefined; });
+    void read.catch(() => {}).finally(() => { if (loading === read) loading = undefined; }).catch(() => {});
   }
   return raced(loading, signal);
 }
@@ -381,7 +381,7 @@ input.on("line", (line) => {
   if (!isRecord(value)) { error(null, -32600, "Invalid JSON-RPC frame"); return; }
   const task = handle(value);
   tasks.add(task);
-  void task.finally(() => tasks.delete(task));
+  void task.finally(() => tasks.delete(task)).catch(() => {});
 });
 async function shutdown(): Promise<void> {
   if (closing) return;
@@ -393,6 +393,6 @@ async function shutdown(): Promise<void> {
   await client.close();
   process.exit(0);
 }
-input.on("close", () => { void shutdown(); });
-process.on("SIGTERM", () => { void shutdown(); });
-process.on("SIGINT", () => { void shutdown(); });
+input.on("close", () => { void shutdown().catch(() => {}); });
+process.on("SIGTERM", () => { void shutdown().catch(() => {}); });
+process.on("SIGINT", () => { void shutdown().catch(() => {}); });

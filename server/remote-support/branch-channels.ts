@@ -217,7 +217,7 @@ export function serialLanes(): <T>(key: string, work: () => Promise<T>) => Promi
     const run = previous.then(work, work);
     const tail = run.then(() => undefined, () => undefined);
     tails.set(key, tail);
-    void tail.then(() => { if (tails.get(key) === tail) tails.delete(key); });
+    void tail.then(() => { if (tails.get(key) === tail) tails.delete(key); }).catch(() => {});
     return run;
   };
 }

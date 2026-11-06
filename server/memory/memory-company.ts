@@ -76,14 +76,14 @@ export class CompanyMemoryCache {
 
   get(botId: string): string | null {
     const entry = this.entries.get(botId);
-    if (!entry || this.now() - entry.at >= this.refreshMs) void this.load(botId);
+    if (!entry || this.now() - entry.at >= this.refreshMs) void this.load(botId).catch(() => {});
     return entry?.text ?? null;
   }
 
   /** A server-side write of `name` for this bot: company.md is read again,
    * and that read wins over one already running. */
   written(botId: string, name: string): void {
-    if (name === COMPANY_TOPIC) void this.load(botId, true);
+    if (name === COMPANY_TOPIC) void this.load(botId, true).catch(() => {});
   }
 
   forget(botId: string): void {

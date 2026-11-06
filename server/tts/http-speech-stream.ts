@@ -117,7 +117,7 @@ export function openHttpSpeechStream(options: HttpSpeechOptions, handlers: Speec
       }
       if (closed || mine !== generation) return;
       pump();
-    })();
+    })().catch(() => {});
   };
 
   const push = (text: string) => {

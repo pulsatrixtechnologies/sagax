@@ -158,10 +158,10 @@ export async function createAcpInstance(
     try {
       session.child.stdin.end();
     } catch {}
-    if (support.restartOnMcpChange) void retireChild(threadId, session.child);
+    if (support.restartOnMcpChange) void retireChild(threadId, session.child).catch(() => {});
     else {
       const kill = setTimeout(() => {
-        void killCliTree(session.child);
+        void killCliTree(session.child).catch(() => {});
       }, 5_000);
       kill.unref?.();
     }
@@ -327,7 +327,7 @@ export async function createAcpInstance(
         // idle pooled sessions have no running turn — close them too
         for (const threadId of Array.from(sessions.keys())) closeSession(threadId, "stopAll");
         for (const [threadId, children] of retiring) {
-          for (const child of children) void retireChild(threadId, child);
+          for (const child of children) void retireChild(threadId, child).catch(() => {});
         }
       },
       onEvent: (listener) => {
@@ -347,7 +347,7 @@ export async function createAcpInstance(
         settle(threadId, session, true, "cancelled");
       }
       for (const [threadId, children] of retiring) {
-        for (const child of children) void retireChild(threadId, child);
+        for (const child of children) void retireChild(threadId, child).catch(() => {});
       }
       listeners.clear();
     },

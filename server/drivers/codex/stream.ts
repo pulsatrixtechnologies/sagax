@@ -43,7 +43,7 @@ s.handleNotification = (msg: any) => {
       // bounded prefix, then filter against the authoritative response.
       if (s.startingNativeTurn) {
         if (s.earlyNotifications.length >= 1024) {
-          void s.settle(false, "too_many_events_before_turn_start");
+          void s.settle(false, "too_many_events_before_turn_start").catch(() => {});
         } else {
           s.earlyNotifications.push(msg);
         }
@@ -264,7 +264,7 @@ s.handleNotification = (msg: any) => {
       void s.settle(t.status === "completed", t.status === "completed" ? null :
         (s.state.contextFullStop ? "context_full"
           : classifyError({ text: s.state.lastError }).reason === "provider_safety" ? "provider_safety"
-            : (s.state.lastError || t.status || "failed")));
+            : (s.state.lastError || t.status || "failed"))).catch(() => {});
       break;
     }
     case "error": {
@@ -358,7 +358,7 @@ s.child.stderr!.on("data", stderr);
 const error = (e: Error) => {
   if (s.abandoned) return;
   s.emit({ ...s.base(s.threadId, s.turnId), type: "runtime.error", ...describeSpawnFailure(e, s.config.cli, turn.cwd ?? homedir()) });
-  void s.settle(false, "spawn_error");
+  void s.settle(false, "spawn_error").catch(() => {});
 };
 s.child.on("error", error);
 const close = (code: number | null, signal: NodeJS.Signals | null) => {
@@ -367,14 +367,14 @@ const close = (code: number | null, signal: NodeJS.Signals | null) => {
   if (s.state.settled) {
     // Root exit alone cannot release a turn after an uncertain stop.
     // Recheck its group; an explicit later Stop can also retry this.
-    void s.stop();
+    void s.stop().catch(() => {});
     return;
   }
   // An intentional stop killed (or outlived) the child before the
   // turn acknowledged its own end. That is the stop doing its job, not
   // a crash: settle quietly so Stop never reports the raw signal.
   if (s.stopRequested) {
-    void s.settle(false, "interrupted");
+    void s.settle(false, "interrupted").catch(() => {});
     return;
   }
   // The child died before the turn completed. Attribute the exit
@@ -395,7 +395,7 @@ const close = (code: number | null, signal: NodeJS.Signals | null) => {
     return;
   }
   s.emit({ ...s.base(s.threadId, s.turnId), type: "runtime.error", message: exitMessage });
-  void s.settle(false, "exit_before_result");
+  void s.settle(false, "exit_before_result").catch(() => {});
 };
 s.child.on("close", close);
 s.detachStream = () => {

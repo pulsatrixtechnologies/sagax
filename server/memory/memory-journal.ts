@@ -233,7 +233,7 @@ function enqueue(botId: string, entry: MemoryJournalEntry): void {
   writeQueues.set(botId, queued);
   void queued.finally(() => {
     if (writeQueues.get(botId) === queued) writeQueues.delete(botId);
-  });
+  }).catch(() => {});
 }
 
 /** Test/route seam: a GET right after a write must see the row. */

@@ -403,7 +403,7 @@ export function defaultRunner(args: string[], options: VpsCommandOptions = {}): 
         child.stderr.destroy();
         settle(() => reject(error));
       };
-      void killCliTree(child, COMMAND_TIMEOUT_TERM_GRACE_MS).then(cleaned, cleaned);
+      void killCliTree(child, COMMAND_TIMEOUT_TERM_GRACE_MS).then(cleaned, cleaned).catch(() => {});
     };
     timeout = setTimeout(() => fail(new Error("Docker-over-SSH command timed out")), options.timeoutMs ?? 120_000);
     timeout.unref?.();
@@ -1103,7 +1103,7 @@ async function withVpsLifecycleLock<T>(key: string, operation: () => Promise<T>,
       void previous.then(() => {
         release();
         if (lifecycleLocks.get(key) === current) lifecycleLocks.delete(key);
-      });
+      }).catch(() => {});
       throw Object.assign(new Error("the VPS is being prepared — try again shortly"), { status: 409 });
     }
   }

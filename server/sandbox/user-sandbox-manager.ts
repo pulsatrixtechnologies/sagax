@@ -622,7 +622,7 @@ export class UserSandboxManager {
 
   start(intervalMs = 5 * 60_000): void {
     if (this.timer) return;
-    this.timer = setInterval(() => { void this.sweepDeletions(); }, intervalMs);
+    this.timer = setInterval(() => { void this.sweepDeletions().catch(() => {}); }, intervalMs);
     this.timer.unref?.();
     void this.sweepDeletions().catch(() => {});
   }

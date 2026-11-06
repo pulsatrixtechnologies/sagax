@@ -64,7 +64,7 @@ export class SendSequencer {
     const clear = () => {
       if (this.inFlight.get(key) === entry) this.inFlight.delete(key);
     };
-    void current.then(clear, clear);
+    void current.then(clear, clear).catch(() => {});
     return current;
   }
 }

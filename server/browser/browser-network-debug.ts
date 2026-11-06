@@ -320,7 +320,7 @@ export class BrowserNetworkDebug {
 
   private touch(capture: Capture): void {
     clearTimeout(capture.idle);
-    capture.idle = setTimeout(() => { void this.stopCapture(capture); }, this.idleMs);
+    capture.idle = setTimeout(() => { void this.stopCapture(capture).catch(() => {}); }, this.idleMs);
     capture.idle.unref?.();
   }
 

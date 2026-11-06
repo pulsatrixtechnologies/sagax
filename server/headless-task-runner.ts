@@ -139,7 +139,7 @@ export function createHeadlessTaskRunner(deps: HeadlessTaskRunnerDeps) {
     }
     for (const task of taken) {
       if (running.has(task.id)) continue;
-      void runOne(task);
+      void runOne(task).catch(() => {});
     }
   }
 

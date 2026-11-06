@@ -264,7 +264,7 @@ export class GithubConnect {
 
   private schedule(principalId: string, flow: PendingDevice, clientId: string): void {
     const delay = Math.max(flow.interval * 1000, this.options.minIntervalMs ?? 1000);
-    flow.timer = setTimeout(() => { void this.poll(principalId, flow, clientId); }, delay);
+    flow.timer = setTimeout(() => { void this.poll(principalId, flow, clientId).catch(() => {}); }, delay);
     flow.timer.unref?.();
   }
 

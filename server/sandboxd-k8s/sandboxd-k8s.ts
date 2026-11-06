@@ -336,7 +336,7 @@ export function kubernetesApi(sandbox: SandboxdConfig, k8s: K8sSandboxConfig, cl
   async function createPod(key: string): Promise<void> {
     await create(`/api/v1/namespaces/${ns}/pods`, podBody(key));
     audit.record({ action: "sandbox.pod.create", outcome: "ok", key });
-    void syncSpare();
+    void syncSpare().catch(() => {});
   }
 
   async function waitRunning(key: string): Promise<void> {
@@ -455,7 +455,7 @@ export function kubernetesApi(sandbox: SandboxdConfig, k8s: K8sSandboxConfig, cl
       if (problems.length) throw new Error(`sandbox spec refused: ${problems.join(", ")}`);
       await create(`/api/v1/namespaces/${ns}/pods`, pod);
       audit.record({ action: "sandbox.pod.create", outcome: "ok", key });
-      void syncSpare();
+      void syncSpare().catch(() => {});
     },
     async startContainer(name: string) {
       const key = sandboxKeyFromContainerName(name);
@@ -476,7 +476,7 @@ export function kubernetesApi(sandbox: SandboxdConfig, k8s: K8sSandboxConfig, cl
       }
       await remove(podPath(names.container));
       emit("sandbox.pod.stop", key);
-      void syncSpare();
+      void syncSpare().catch(() => {});
     },
     async pauseContainer(name: string) {
       const key = sandboxKeyFromContainerName(name);
@@ -485,7 +485,7 @@ export function kubernetesApi(sandbox: SandboxdConfig, k8s: K8sSandboxConfig, cl
       await merge(pvcPath(names.volume), { metadata: { annotations: { [PAUSED_ANNOTATION]: "true" } } });
       await remove(podPath(names.container));
       emit("sandbox.pod.pause", key);
-      void syncSpare();
+      void syncSpare().catch(() => {});
     },
     async unpauseContainer(name: string) {
       const key = sandboxKeyFromContainerName(name);
@@ -505,7 +505,7 @@ export function kubernetesApi(sandbox: SandboxdConfig, k8s: K8sSandboxConfig, cl
       cancelExecs(name);
       await remove(podPath(name));
       emit("sandbox.pod.delete", key);
-      void syncSpare();
+      void syncSpare().catch(() => {});
     },
     async inspectNetwork(name: string) {
       const policy = await read(netPath(name));
@@ -739,7 +739,7 @@ export async function startKubernetesProvisioner(env: NodeJS.ProcessEnv = proces
     const denyTick = setInterval(() => {
       void refresh().then((patched) => {
         if (patched) console.log(`sandboxd: the API moved, ${patched} sandbox polic(ies) updated`);
-      }, (error: unknown) => console.error(`sandboxd: deny hosts refresh failed: ${error instanceof Error ? error.message : String(error)}`));
+      }, (error: unknown) => console.error(`sandboxd: deny hosts refresh failed: ${error instanceof Error ? error.message : String(error)}`)).catch(() => {});
     }, DENY_HOSTS_TICK_MS);
     denyTick.unref();
   }
@@ -760,13 +760,13 @@ export async function startKubernetesProvisioner(env: NodeJS.ProcessEnv = proces
   const sweep = setInterval(() => {
     void service.sweepIdle().then((stopped) => {
       if (stopped.length) console.log(`sandboxd: stopped ${stopped.length} idle environment(s)`);
-    }, (error: unknown) => console.error(`sandboxd: idle sweep failed: ${error instanceof Error ? error.message : String(error)}`));
+    }, (error: unknown) => console.error(`sandboxd: idle sweep failed: ${error instanceof Error ? error.message : String(error)}`)).catch(() => {});
   }, 60_000);
   sweep.unref();
   if (k8s.dedicated?.spare) {
     // Catches pods that ended outside the provisioner (node loss, eviction).
-    void backend.syncSpare();
-    const spareSweep = setInterval(() => { void backend.syncSpare(); }, 30_000);
+    void backend.syncSpare().catch(() => {});
+    const spareSweep = setInterval(() => { void backend.syncSpare().catch(() => {}); }, 30_000);
     spareSweep.unref();
   }
   // 2026-10-26: the reserve node follows the people at work (server/sandboxd-k8s/sandboxd-k8s-spare.ts).
@@ -777,8 +777,8 @@ export async function startKubernetesProvisioner(env: NodeJS.ProcessEnv = proces
     console.log("sandboxd: SAGAX_SANDBOX_K8S_SPARE_DEPLOYMENT ignored: the dedicated-node reserve drives the reserve");
   } else if (spare) {
     const scaler = new SpareScaler(client, k8s.namespace, sandbox.instance, spare);
-    void scaler.reconcile();
-    const spareTick = setInterval(() => { void scaler.reconcile(); }, SPARE_TICK_MS);
+    void scaler.reconcile().catch(() => {});
+    const spareTick = setInterval(() => { void scaler.reconcile().catch(() => {}); }, SPARE_TICK_MS);
     spareTick.unref();
     console.log(`sandboxd: spare reserve ${spare.namespace}/${spare.deployment}: ${spare.count} while someone works, none from ${spare.maxActive} at work`);
   }

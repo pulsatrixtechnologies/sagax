@@ -140,7 +140,7 @@ export class ReachTelegram {
       timer.unref?.();
       return () => clearInterval(timer);
     });
-    this.stop = schedule(() => void this.poll(), TELEGRAM_POLL_MS);
+    this.stop = schedule(() => void this.poll().catch(() => {}), TELEGRAM_POLL_MS);
   }
 
   /** What waits on Telegram right now: links to finish and chats with an open card. */

@@ -542,7 +542,7 @@ function releaseCollection(shadow: string): void {
   const collect = pendingCollections.get(shadow);
   if (collect === undefined) return;
   pendingCollections.delete(shadow);
-  void serialize(shadow, collect);
+  void serialize(shadow, collect).catch(() => {});
 }
 
 /** Throttle for collectObsolete (see GC_EVERY_COMMITS). */

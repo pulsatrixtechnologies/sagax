@@ -181,7 +181,7 @@ export function createSandboxdUpgradeHandler(service: SandboxService, verifier: 
           if (!Array.isArray(frames)) { socket.destroy(); return; }
           for (const frame of frames) {
             if (frame.type === "data") stream.write(frame.payload);
-            else void terminal.resize({ cols: frame.cols, rows: frame.rows });
+            else void terminal.resize({ cols: frame.cols, rows: frame.rows }).catch(() => {});
           }
         };
         if (head.length) onFrames(head);
@@ -199,7 +199,7 @@ export function createSandboxdUpgradeHandler(service: SandboxService, verifier: 
         if (error instanceof SandboxError) return refuseUpgrade(socket, error.status, error.code);
         console.error(`sandboxd: terminal failed: ${error instanceof Error ? error.message : String(error)}`);
         refuseUpgrade(socket, 500, "internal");
-      });
+      }).catch(() => {});
       return;
     }
     const match = DESKTOP_PATH.exec(url.pathname);
@@ -219,6 +219,6 @@ export function createSandboxdUpgradeHandler(service: SandboxService, verifier: 
       if (error instanceof SandboxError) return refuseUpgrade(socket, error.status, error.code);
       console.error(`sandboxd: desktop stream failed: ${error instanceof Error ? error.message : String(error)}`);
       refuseUpgrade(socket, 500, "internal");
-    });
+    }).catch(() => {});
   };
 }

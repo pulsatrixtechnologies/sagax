@@ -357,7 +357,7 @@ export class PrincipalEngineLogins {
     const key = this.flowKey(principalId, instanceId);
     if (this.warming.has(key)) return;
     this.warming.add(key);
-    void this.accountModels(principalId, instanceId).catch(() => null).finally(() => this.warming.delete(key));
+    void this.accountModels(principalId, instanceId).catch(() => null).finally(() => this.warming.delete(key)).catch(() => {});
   }
 
   private accountEnv(principalId: string, instanceId: string, slot: LoginSlot = "primary"): { cli: string; env: Record<string, string | undefined> } | null {

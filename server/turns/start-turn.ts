@@ -68,7 +68,7 @@ export function createStartTurn(host: StartTurnHost) {
     } finally {
       await finishFinally(state);
     }
-  })();
+  })().catch(() => {});
   return state.userMessage;
 };
 

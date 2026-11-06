@@ -3029,7 +3029,7 @@ export class RoutineManager {
       if (this.warmReadiness.get(routine.id) !== entry) return;
       entry.result = result;
       this.tickInBackground();
-    });
+    }).catch(() => {});
     return false;
   }
 
@@ -3082,7 +3082,7 @@ export class RoutineManager {
       this.watchSettled.set(run.id, settled);
       if (this.ticking) this.passAgain = true;
       else this.tickInBackground();
-    });
+    }).catch(() => {});
   }
 
   async tick(): Promise<void> {
@@ -4243,7 +4243,7 @@ export class RoutineManager {
       if (run.status !== "queued") return;
       this.readinessSettled.set(run.id, result);
       this.tickInBackground();
-    });
+    }).catch(() => {});
   }
 
   private async precheckRun(routine: Routine, precheck: RoutinePrecheck): Promise<

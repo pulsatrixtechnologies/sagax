@@ -841,10 +841,10 @@ export function createMemoryUpkeep(deps: UpkeepDeps): MemoryUpkeep {
           log(`memory upkeep: could not queue turns saved at the last shutdown: ${(error as Error).message}`);
         }
       }
-      timer = setInterval(() => void tick(), TIDY_CHECK_MS);
+      timer = setInterval(() => void tick().catch(() => {}), TIDY_CHECK_MS);
       timer.unref?.();
       // a first pass shortly after start catches a night the computer slept through
-      const first = setTimeout(() => void tick(), 60_000);
+      const first = setTimeout(() => void tick().catch(() => {}), 60_000);
       first.unref?.();
     },
     stop() {

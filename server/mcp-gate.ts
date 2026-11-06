@@ -382,7 +382,7 @@ let reaping = false;
 const reapChild = () => {
   if (reaping) return;
   reaping = true;
-  void killCliTree(child);
+  void killCliTree(child).catch(() => {});
 };
 process.on("SIGTERM", () => {
   reapChild();
@@ -486,7 +486,7 @@ function loadSearch(): Promise<SearchCatalog> {
       return built;
     });
     searchLoading = read;
-    void read.catch(() => {}).finally(() => { if (searchLoading === read) searchLoading = undefined; });
+    void read.catch(() => {}).finally(() => { if (searchLoading === read) searchLoading = undefined; }).catch(() => {});
   }
   return searchLoading;
 }
@@ -655,7 +655,7 @@ function forward(line: string, message: Json | undefined, id: string | undefined
   child.stdin.write(`${line}\n`);
 }
 process.stdin.on("end", () => {
-  void Promise.allSettled(heldCalls).then(() => child.stdin.end());
+  void Promise.allSettled(heldCalls).then(() => child.stdin.end()).catch(() => {});
 });
 
 // server -> client: the one direction that gets rewritten

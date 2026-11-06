@@ -176,7 +176,7 @@ export async function renewWithCli(input: RenewInput): Promise<void> {
       if (done) return;
       done = true;
       clearTimeout(timer);
-      void killCliTree(child, 1_000).finally(() => resolve());
+      void killCliTree(child, 1_000).finally(() => resolve()).catch(() => {});
     };
     const timer = setTimeout(finish, timeoutMs);
     timer.unref?.();

@@ -284,7 +284,7 @@ export class WidgetRenderer {
     const late = new Promise<WidgetCheckResult>((resolve) => {
       timer = setTimeout(() => {
         this.options.log?.("[widget-check] check passed its deadline; browser closed");
-        void this.close();
+        void this.close().catch(() => {});
         resolve({ status: "unavailable", defects: [], reason: "the widget took too long to draw", ms: deadline });
       }, deadline);
       timer.unref?.();
@@ -345,7 +345,7 @@ export class WidgetRenderer {
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.idleTimer = null;
     if (!on) return;
-    this.idleTimer = setTimeout(() => { void this.close(); }, this.idleMs);
+    this.idleTimer = setTimeout(() => { void this.close().catch(() => {}); }, this.idleMs);
     this.idleTimer.unref?.();
   }
 

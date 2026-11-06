@@ -42,7 +42,7 @@ export function reviewCodexPermission(input: {
     pending.clear();
     void killCliTree(child).catch(() => undefined).finally(() => {
       try { rmSync(cwd, { recursive: true, force: true }); } catch { /* the OS reclaims a temp folder */ }
-    });
+    }).catch(() => {});
     if (error) reject(error);
     else if (!text?.trim()) reject(new Error("Codex review returned no text"));
     else resolve(text.trim());

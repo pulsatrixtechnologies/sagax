@@ -47,5 +47,5 @@ function isEntry(): boolean {
 
 if (isEntry()) {
   const server = join(dirname(fileURLToPath(import.meta.url)), "index.js");
-  void superviseServer(() => spawn(process.execPath, [server], { stdio: "inherit" })).then((code) => { process.exitCode = code; });
+  void superviseServer(() => spawn(process.execPath, [server], { stdio: "inherit" })).then((code) => { process.exitCode = code; }).catch(() => {});
 }

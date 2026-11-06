@@ -2112,7 +2112,7 @@ export async function closeMessageSearch(): Promise<void> {
 
 /** Test/shutdown hook — closes the handle so a wiped DATA_DIR starts clean. */
 export function closeMessageDb(): void {
-  void closeMessageSearch();
+  void closeMessageSearch().catch(() => {});
   try { if (handle && handlePath === DB_FILE() && existsSync(DB_FILE())) { flushContentIndex(); flushMemoryIndex(); } } catch { /* a closing database: the migration reindexes what has no index row */ }
   if (migration.timer) { clearTimeout(migration.timer); migration.timer = null; }
   if (indexTimer) { clearTimeout(indexTimer); indexTimer = null; }

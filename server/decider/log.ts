@@ -75,7 +75,7 @@ export function appendDeciderLog(dataDir: string, row: DeciderLogRow): void {
   writeQueues.set(dataDir, queued);
   void queued.finally(() => {
     if (writeQueues.get(dataDir) === queued) writeQueues.delete(dataDir);
-  });
+  }).catch(() => {});
 }
 
 /** Test seam: wait until every queued row for this directory is on disk. */

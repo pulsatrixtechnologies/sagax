@@ -134,7 +134,7 @@ export class LimitResetClock {
 
   private refreshSoon(): void {
     if (this.soon) clearTimeout(this.soon);
-    this.soon = setTimeout(() => { this.soon = null; void this.refresh(true); }, SOON_AFTER_REFUSAL_MS);
+    this.soon = setTimeout(() => { this.soon = null; void this.refresh(true).catch(() => {}); }, SOON_AFTER_REFUSAL_MS);
     this.soon.unref?.();
   }
 
@@ -184,7 +184,7 @@ export class LimitResetClock {
 
   start(): void {
     if (this.timer) return;
-    this.timer = setInterval(() => { if (this.options.waiting?.()) void this.ensureFresh(LIMIT_POLL_MS - 1_000); }, 60_000);
+    this.timer = setInterval(() => { if (this.options.waiting?.()) void this.ensureFresh(LIMIT_POLL_MS - 1_000).catch(() => {}); }, 60_000);
     this.timer.unref?.();
   }
 

@@ -89,7 +89,7 @@ function queueHistoryRows(botId: string, rows: HistoryRow[]): void {
   writeQueues.set(botId, queued);
   void queued.finally(() => {
     if (writeQueues.get(botId) === queued) writeQueues.delete(botId);
-  });
+  }).catch(() => {});
 }
 
 /** Record every field that differs between `before` and `after`. */

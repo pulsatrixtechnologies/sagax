@@ -101,7 +101,7 @@ export class VoiceFirstSentenceJobs {
     void run(abort.signal).finally(() => {
       const job = this.jobs.get(threadId);
       if (job?.utteranceId === utteranceId) this.jobs.delete(threadId);
-    });
+    }).catch(() => {});
   }
 
   isCurrent(threadId: string, utteranceId: string): boolean {

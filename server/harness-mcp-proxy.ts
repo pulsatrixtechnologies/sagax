@@ -134,7 +134,7 @@ function run(kind: HarnessMcpKind): void {
         continue;
       }
       pending++;
-      void harnessMcpRequest(frame, connection).then(output).finally(() => { pending--; });
+      void harnessMcpRequest(frame, connection).then(output).finally(() => { pending--; }).catch(() => {});
     }
     if (input.length > MAX_INPUT_BYTES) { process.stdin.destroy(); process.exitCode = 1; }
   });

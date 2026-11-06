@@ -993,7 +993,7 @@ export async function runServe(options: CliOptions, log: (line: string) => void 
     })();
     return stopping;
   };
-  const onSignal = () => { void stop(); };
+  const onSignal = () => { void stop().catch(() => {}); };
   process.on("SIGINT", onSignal);
   process.on("SIGTERM", onSignal);
 
@@ -1020,7 +1020,7 @@ export async function runServe(options: CliOptions, log: (line: string) => void 
         log(`https: Caddy serves ${publicUrl} → http://127.0.0.1:${options.port}; it gets the certificate from Let's Encrypt once DNS for ${options.domain} points at this machine`);
         void caddy.exited.then((code) => {
           if (!stopping) log(`caddy: stopped (exit ${code ?? "signal"}); ${publicUrl} is no longer served. Stop and start the server again.`);
-        });
+        }).catch(() => {});
       } catch (error) {
         console.error(`--domain: ${message(error)}`);
         await stop();

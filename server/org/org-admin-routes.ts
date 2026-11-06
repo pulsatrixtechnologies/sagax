@@ -630,7 +630,7 @@ export function createOrgAdminRoutes(deps: OrgAdminRouteDeps): (req: IncomingMes
       const status = enumParam(params, "status", ["active", "archived"] as const);
       if (isAnswer(page) || isAnswer(status)) {
         const reply = isAnswer(page) ? page : status as ConsoleAnswer;
-        void answer(res, reply);
+        void answer(res, reply).catch(() => {});
         return true;
       }
       const engine = params.get("engine") || null;

@@ -288,7 +288,7 @@ process.stdin.on("data", (chunk) => {
     inBuf = inBuf.slice(nl + 1);
     if (!line.trim()) continue;
     try {
-      void handle(JSON.parse(line));
+      void handle(JSON.parse(line)).catch(() => {});
     } catch {
       /* ignore malformed lines */
     }

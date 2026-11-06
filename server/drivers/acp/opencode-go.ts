@@ -328,7 +328,7 @@ export async function probeOpenCodeSession(
       try {
         child.stdin.end();
       } catch {}
-      void killCliTree(child);
+      void killCliTree(child).catch(() => {});
       if (error) reject(error);
       else resolve(value);
     };
@@ -381,7 +381,7 @@ export async function probeOpenCodeSession(
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
       });
       return request("session/new", { cwd, mcpServers: [] });
-    })().then((result) => finish(null, result), (error: Error) => finish(error));
+    })().then((result) => finish(null, result), (error: Error) => finish(error)).catch(() => {});
   }));
 }
 

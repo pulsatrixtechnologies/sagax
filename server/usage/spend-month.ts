@@ -61,7 +61,7 @@ export function noteSpend(
       read.fileUsd += costUsd;
       read.keys.add(key);
     }
-  });
+  }).catch(() => {});
 }
 
 export function resetSpendCacheForTests(): void {

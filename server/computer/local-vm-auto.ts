@@ -221,7 +221,7 @@ export class LocalVmAutoStarter {
       return this.set({ phase: "problem", step: null, problem, detail, attempts, nextRetryAt: null });
     }
     this.clearRetry();
-    this.retryHandle = this.deps.schedule(() => { void this.ensure("retry"); }, delay);
+    this.retryHandle = this.deps.schedule(() => { void this.ensure("retry").catch(() => {}); }, delay);
     return this.set({ phase: "waiting", step: null, problem, detail, attempts, nextRetryAt: this.deps.now() + delay });
   }
 

@@ -290,7 +290,7 @@ export class ReachMe {
   private track(work: Promise<unknown>): void {
     const run = work.catch((error) => this.log(`reach-me: send failed (${error instanceof Error ? error.message : "error"})`));
     this.inflight.add(run);
-    void run.finally(() => this.inflight.delete(run));
+    void run.finally(() => this.inflight.delete(run)).catch(() => {});
   }
 
   private async dispatch(message: PushMessage, settings: ReachMeSettings): Promise<void> {

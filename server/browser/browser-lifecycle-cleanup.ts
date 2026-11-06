@@ -381,7 +381,7 @@ export class BrowserCleanupCoordinator {
       this.#retryTimers.delete(request.requestId);
       void this.#attempt(request).then((ok) => {
         if (!ok && this.#pending.has(request.requestId)) this.#schedule(request, attempt + 1);
-      });
+      }).catch(() => {});
     }, delay);
     timer.unref?.();
     this.#retryTimers.set(request.requestId, timer);
@@ -467,8 +467,8 @@ export class BrowserSweep {
 
   /** Sweep now, for what an earlier run left, then every interval. */
   start(): this {
-    void this.sweep(true);
-    this.#timer = setInterval(() => void this.sweep(), this.#intervalMs);
+    void this.sweep(true).catch(() => {});
+    this.#timer = setInterval(() => void this.sweep().catch(() => {}), this.#intervalMs);
     this.#timer.unref?.();
     return this;
   }
@@ -593,7 +593,7 @@ export function engineBrowsers(deps: {
           if (await closeIfFree(session, spec).catch(() => false)) return;
           await sleep(2_000);
         }
-      })().finally(() => closing.delete(session));
+      })().finally(() => closing.delete(session)).catch(() => {});
     },
     closeUnused: async () => {
       let closed = 0;

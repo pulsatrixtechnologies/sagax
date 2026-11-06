@@ -192,7 +192,7 @@ export function testStdioMcpCommand(server: StdioTestServer, options: StdioTestO
       });
       child.once("close", (code, signal) => handlers.ended(code !== null ? `exit code ${code}` : `signal ${signal ?? "unknown"}`));
     },
-    close: () => { void killCliTree(child); },
+    close: () => { void killCliTree(child).catch(() => {}); },
   };
   return handshake(channel, secrets, options);
 }

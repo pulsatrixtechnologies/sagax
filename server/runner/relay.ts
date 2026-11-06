@@ -90,7 +90,7 @@ export class EventRelay {
       this.queue.push({ event: masked, bytes });
     }
     this.trim();
-    if (urgent) void this.flush();
+    if (urgent) void this.flush().catch(() => {});
     else this.schedule();
   }
 
@@ -110,7 +110,7 @@ export class EventRelay {
     if (this.timer || this.flushing) return;
     this.timer = setTimeout(() => {
       this.timer = null;
-      void this.flush();
+      void this.flush().catch(() => {});
     }, this.flushDelayMs);
     this.timer.unref?.();
   }

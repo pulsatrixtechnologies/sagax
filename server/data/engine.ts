@@ -390,7 +390,7 @@ class BotDb implements BotDatabase {
         const before: string[] = this.openedRoots === null ? [] : JSON.parse(this.openedRoots) as string[];
         const after = new Set(now ?? []);
         const removed = this.openedRoots === null ? now !== null : before.some((root) => !after.has(root));
-        if (removed || this.inFlight <= 1) void this.close();
+        if (removed || this.inFlight <= 1) void this.close().catch(() => {});
       }
     }
     if (!this.state) {
@@ -442,7 +442,7 @@ class BotDb implements BotDatabase {
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null;
       if (this.inFlight > 0) this.touch();
-      else void this.close();
+      else void this.close().catch(() => {});
     }, this.engine.idleMs);
     this.idleTimer.unref();
   }
@@ -798,7 +798,7 @@ FROM ${from}, omb_range WHERE ${id} IS NOT NULL GROUP BY bin ORDER BY bin`;
 
   interrupt(connection: DataConnection): void {
     if (!this.state) return;
-    void this.state.then((open) => open.lanes[connection].interrupt(), () => undefined);
+    void this.state.then((open) => open.lanes[connection].interrupt(), () => undefined).catch(() => {});
   }
 
   async close(): Promise<void> {

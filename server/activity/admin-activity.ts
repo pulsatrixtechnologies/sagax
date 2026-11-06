@@ -93,7 +93,7 @@ export function appendAdminAction(dataDir: string, row: Omit<AdminActionRow, "at
   writeQueues.set(dataDir, queued);
   void queued.finally(() => {
     if (writeQueues.get(dataDir) === queued) writeQueues.delete(dataDir);
-  });
+  }).catch(() => {});
 }
 
 /** Delete the months the retention window no longer covers. Never throws.

@@ -319,7 +319,7 @@ export const OpenAICompatDriver: ProviderDriver<OpenAICompatConfig> = {
         issue = issueForError(error, false);
       }
     };
-    if (apiKey || config.allowNoKey) void fetchModels();
+    if (apiKey || config.allowNoKey) void fetchModels().catch(() => {});
     const listed = (): ModelCatalog => {
       if (!refused.size) return catalog;
       // Empty is fine: Auto and the host move to another engine (#1696).

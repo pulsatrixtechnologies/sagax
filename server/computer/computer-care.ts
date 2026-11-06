@@ -220,7 +220,7 @@ export class MaintenanceScheduler {
 
   start(intervalMs = 60_000): void {
     if (this.timer) return;
-    this.timer = setInterval(() => { void this.tick(); }, intervalMs);
+    this.timer = setInterval(() => { void this.tick().catch(() => {}); }, intervalMs);
     this.timer.unref?.();
   }
 

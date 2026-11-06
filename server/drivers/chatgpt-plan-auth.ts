@@ -238,7 +238,7 @@ export class ChatGptPlanAuthController {
       flow.consumed = true;
       response.end("Finishing sign-in. You can return to Sagax.");
       server.close();
-      void this.complete(flow, callback.searchParams);
+      void this.complete(flow, callback.searchParams).catch(() => {});
     });
     await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
     if (this.disposed) { server.close(); throw new Error("This provider was removed."); }

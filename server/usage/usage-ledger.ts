@@ -172,7 +172,7 @@ export function appendUsage(dataDir: string, row: Omit<UsageRow, "at"> & { at?: 
   writeQueues.set(dataDir, queued);
   void queued.finally(() => {
     if (writeQueues.get(dataDir) === queued) writeQueues.delete(dataDir);
-  });
+  }).catch(() => {});
   return attempt.then(() => true, () => false);
 }
 

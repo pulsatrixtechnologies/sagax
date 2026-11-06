@@ -119,7 +119,7 @@ export function appendProblem(dataDir: string, input: Omit<ProblemRow, "id" | "a
   writeQueues.set(dataDir, queued);
   void queued.finally(() => {
     if (writeQueues.get(dataDir) === queued) writeQueues.delete(dataDir);
-  });
+  }).catch(() => {});
   return attempt.then(() => true, () => false);
 }
 

@@ -482,7 +482,7 @@ export class TriggerPollers {
 
   start(): void {
     if (this.timer) return;
-    this.timer = setInterval(() => void this.tick(), TICK_MS);
+    this.timer = setInterval(() => void this.tick().catch(() => {}), TICK_MS);
     this.timer.unref?.();
   }
 

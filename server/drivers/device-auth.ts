@@ -287,7 +287,7 @@ export class DeviceAuthController {
       const timer = setTimeout(() => {
         void this.stopChild(child).catch(() => false).then((stopped) => {
           if (!stopped) rejectExec(new Error(`${product} could not be stopped on this server. Ask the server administrator to stop the account command before trying again.`));
-        });
+        }).catch(() => {});
       }, this.options.startupTimeoutMs ?? 30_000);
       timer.unref();
       child.once("error", (error: NodeJS.ErrnoException) => {

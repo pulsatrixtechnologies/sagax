@@ -291,7 +291,7 @@ export class MyChromeRecording {
     if (!message || typeof message !== "object") return;
     const url = sanitizeTeachUrl(message.url);
     switch (message.t) {
-      case "stop": void this.stop("tab"); return;
+      case "stop": void this.stop("tab").catch(() => {}); return;
       case "digest":
         if (typeof message.digest === "string" && /^[0-9a-f]{64}$/.test(message.digest) && this.digests.size < 200) this.digests.add(message.digest);
         return;
@@ -333,7 +333,7 @@ export class MyChromeRecording {
     if (method === "Page.frameNavigated") {
       const frame = (params.frame ?? {}) as { parentId?: unknown; url?: unknown; urlFragment?: unknown };
       if (frame.parentId) return;
-      void this.navigated(`${String(frame.url ?? "")}${typeof frame.urlFragment === "string" ? frame.urlFragment : ""}`);
+      void this.navigated(`${String(frame.url ?? "")}${typeof frame.urlFragment === "string" ? frame.urlFragment : ""}`).catch(() => {});
       return;
     }
     if (method === "Page.navigatedWithinDocument") {
@@ -406,7 +406,7 @@ export class MyChromeRecording {
       await tab.send("Runtime.evaluate", { expression: `(() => { const host = document.getElementById(${JSON.stringify(RECORDER_BANNER_ID)}); if (host) host.remove(); window.__sagaxRecorder = false; })()` }).catch(() => undefined);
       await tab.send("Runtime.removeBinding", { name: RECORDER_BINDING }).catch(() => undefined);
       tab.release();
-    })();
+    })().catch(() => {});
   }
 
   /** Stop recording (the person, the tab's Stop, idle). */

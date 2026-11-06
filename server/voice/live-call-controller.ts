@@ -463,7 +463,7 @@ export class LiveCallController {
       return;
     }
     const idleMs = this.deps.settings().idleMinutes * 60_000;
-    if (this.now() - call.lastActivityAt >= idleMs) void this.hangUp(call, "idle");
+    if (this.now() - call.lastActivityAt >= idleMs) void this.hangUp(call, "idle").catch(() => {});
   }
 
   // ── sideband events ──────────────────────────────────────────────────
@@ -936,7 +936,7 @@ export class LiveCallController {
     this.recordError(call, "signed-out");
     this.append(call, "commentary", why, delegationId);
     call.state.error = why;
-    void this.hangUp(call, "signed-out");
+    void this.hangUp(call, "signed-out").catch(() => {});
     return true;
   }
 

@@ -728,7 +728,7 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
     void executeOpenAIChatTurn({
       deps, turn, turnId, apiKey: apiKey!, abort, approval, turnEntry, resolveDone,
       model, requested, messages, secrets, triedModels, request, retainImages, preview, native, safeText,
-    });
+    }).catch(() => {});
     return { turnId, ...(reused ? { reused: true } : {}) };
 }
 

@@ -113,7 +113,7 @@ export class PerspicaxIdentity {
   private schedule(): void {
     if (this.stopped || !this.wanted) return;
     this.cancelTimer();
-    this.timer = setTimeout(() => { void this.ensure(true); }, Math.max(1_000, this.expiresAt - this.now() - 60_000));
+    this.timer = setTimeout(() => { void this.ensure(true).catch(() => {}); }, Math.max(1_000, this.expiresAt - this.now() - 60_000));
     this.timer.unref?.();
   }
 

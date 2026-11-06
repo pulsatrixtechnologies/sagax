@@ -74,7 +74,7 @@ export function claudeAuthRecovery(
           if (!stopped) return accept(event.threadId, held);
           pending.delete(event.threadId);
           held.settle(new TurnAuthenticationRefusedError(turnId, held.emittedRefusal ?? held.refusal!));
-        }, () => accept(event.threadId, held));
+        }, () => accept(event.threadId, held)).catch(() => {});
       }
       accept(event.threadId, held);
       publish(event);

@@ -234,7 +234,7 @@ export class RemoteMcpClient {
     const operation = this.initializeSession(clientName, signal);
     this.sseInitializing = operation;
     const finished = () => { if (this.sseInitializing === operation) this.sseInitializing = null; };
-    void operation.then(finished, finished);
+    void operation.then(finished, finished).catch(() => {});
     return operation;
   }
 
@@ -478,7 +478,7 @@ export class RemoteMcpClient {
     for (const message of Array.isArray(parsed) ? parsed : parsed ? [parsed] : []) {
       if (typeof message.method !== "string") continue;
       if (message.id === undefined) this.onNotification?.(message);
-      else if (typeof message.id === "string" || typeof message.id === "number") void this.answerRequest(message.id, message.method);
+      else if (typeof message.id === "string" || typeof message.id === "number") void this.answerRequest(message.id, message.method).catch(() => {});
     }
   }
 

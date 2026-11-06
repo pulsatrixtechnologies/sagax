@@ -131,5 +131,5 @@ input.on("line", (line) => {
   queue = queue.then(() => forward(message)).catch(() => {});
 });
 input.on("close", () => {
-  void queue.finally(() => process.exit(0));
+  void queue.finally(() => process.exit(0)).catch(() => {});
 });

@@ -278,7 +278,7 @@ export function createLoopGuard(deps: LoopGuardDeps): LoopGuard {
       void Promise.resolve(deps.steer(threadId, note)).then(
         (outcome) => log(outcome === "steered" ? "steer sent" : `steer ${outcome}`, threadId, streak),
         () => log("steer rejected", threadId, streak),
-      );
+      ).catch(() => {});
     } catch {
       log("steer rejected", threadId, streak);
     }

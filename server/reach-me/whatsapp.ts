@@ -552,7 +552,7 @@ export class ReachWhatsApp {
   private track(work: Promise<unknown>): void {
     const run = work.catch((error) => this.log(`reach-me: a WhatsApp message could not be read (${error instanceof Error ? error.name : "error"})`));
     this.inflight.add(run);
-    void run.finally(() => this.inflight.delete(run));
+    void run.finally(() => this.inflight.delete(run)).catch(() => {});
   }
 
   /** Waits for every message read so far (tests, shutdown). */

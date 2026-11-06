@@ -205,7 +205,7 @@ export function createFleetAgent(options: FleetAgentOptions): Server {
   };
 
   const server = createServer((req, res) => {
-    void handle(req, res);
+    void handle(req, res).catch(() => {});
   });
   return server;
 }

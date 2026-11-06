@@ -223,7 +223,7 @@ export class PerspicaxMemory {
     const set = this.options.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
     const timer = set(() => {
       this.timer = null;
-      void this.flush();
+      void this.flush().catch(() => {});
     }, this.options.flushDelayMs ?? WORK_FLUSH_DELAY_MS);
     timer.unref?.();
     this.timer = timer;

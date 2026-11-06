@@ -117,7 +117,7 @@ export class PerspicaxReachability {
 
   private schedule(ms: number): void {
     if (this.timer) clearTimeout(this.timer);
-    this.timer = setTimeout(() => { this.timer = null; void this.probeNow(); }, ms);
+    this.timer = setTimeout(() => { this.timer = null; void this.probeNow().catch(() => {}); }, ms);
     this.timer.unref?.();
   }
 

@@ -39,7 +39,7 @@ export class LocalVmIdleTimer {
 
   private arm(delayMs: number): void {
     this.cancel();
-    this.timer = setTimeout(() => void this.expire(), delayMs);
+    this.timer = setTimeout(() => void this.expire().catch(() => {}), delayMs);
     this.timer.unref?.();
   }
 

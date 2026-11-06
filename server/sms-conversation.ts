@@ -141,7 +141,7 @@ export class SmsConversation {
     const work = this.answer(event, sent.threadId, sent.messageId)
       .catch((error: unknown) => this.log(`sms-conversation: ${event.botId} reply to ${mask(event.from)} failed (${error instanceof Error ? error.message.slice(0, 80) : "error"})`));
     this.inflight.add(work);
-    void work.finally(() => this.inflight.delete(work));
+    void work.finally(() => this.inflight.delete(work)).catch(() => {});
     return true;
   }
 

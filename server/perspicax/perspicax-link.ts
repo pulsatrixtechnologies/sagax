@@ -908,7 +908,7 @@ export class PerspicaxDirectory {
     const scope = typeof parsed.scope === "string" ? parsed.scope.split(" ") : [];
     if (!scope.includes("pulsabot:routines")) {
       // A refresh token without the marker is not a delegation: it must not live on.
-      void this.revokeRefresh(refreshToken, link);
+      void this.revokeRefresh(refreshToken, link).catch(() => {});
       return { ok: false, error: "unsupported" };
     }
     const seconds = typeof parsed.expires_in === "number" && Number.isFinite(parsed.expires_in) && parsed.expires_in > 0 ? parsed.expires_in : 0;
@@ -1456,8 +1456,8 @@ export class PerspicaxDirectory {
 
   start(intervalMs: number): void {
     this.stop();
-    void this.refresh("boot");
-    this.timer = setInterval(() => void this.refresh("poll"), intervalMs);
+    void this.refresh("boot").catch(() => {});
+    this.timer = setInterval(() => void this.refresh("poll").catch(() => {}), intervalMs);
     this.timer.unref?.();
   }
 

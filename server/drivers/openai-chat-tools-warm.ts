@@ -119,7 +119,7 @@ export function createWarmToolSessions(options?: { maxPerPerson?: number; budget
       const row = sessions.get(threadId);
       if (!row) return undefined;
       if (row.fingerprint !== fingerprint || (person !== undefined && row.person !== person) || !reusable(row.session)) {
-        void evict(threadId);
+        void evict(threadId).catch(() => {});
         return undefined;
       }
       return row.session;
@@ -146,12 +146,12 @@ export function createWarmToolSessions(options?: { maxPerPerson?: number; budget
       // A turn's own fresh mount stays owned by the cache while it runs;
       // its end-of-turn keep (not active) drops it then.
       if (!reusable(session) && meta?.active !== true) {
-        void evict(threadId);
+        void evict(threadId).catch(() => {});
         if (previous?.session !== session) void session.close().catch(() => {});
         return;
       }
       if (previous && previous.session !== session) {
-        void closeRow(previous);
+        void closeRow(previous).catch(() => {});
       }
       sessions.delete(threadId);
       const row: WarmToolSession = {

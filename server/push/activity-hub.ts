@@ -115,7 +115,7 @@ export class LiveActivityHub {
         this.log.warn(`push-activity: send failed (${error instanceof Error ? error.message : String(error)})`);
       });
       this.inflight.add(run);
-      void run.finally(() => this.inflight.delete(run));
+      void run.finally(() => this.inflight.delete(run)).catch(() => {});
     } catch (error) {
       this.log.warn(`push-activity: could not queue (${error instanceof Error ? error.message : String(error)})`);
     }

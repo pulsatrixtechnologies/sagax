@@ -86,7 +86,7 @@ export const GroqDriver: ProviderDriver<GroqConfig> = {
         // A failed or malformed refresh keeps the last usable catalog.
       }
     };
-    if (apiKey) void refreshModels();
+    if (apiKey) void refreshModels().catch(() => {});
     return createOpenAIChatRuntime({
       input, driverKind: "groq", apiKey, apiUrl: config.url,
       tools: config.tools, models: () => catalog, refreshModels, reasoning: true,

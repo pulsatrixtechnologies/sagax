@@ -131,7 +131,7 @@ export class DirectoryRefreshScheduler {
           return;
         }
         this.release();
-      });
+      }).catch(() => {});
   }
 }
 

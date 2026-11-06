@@ -105,7 +105,7 @@ export function startBriefTimer(deps: BriefScheduleDeps, everyMs = 60_000): { st
   const timer = setInterval(() => {
     if (running) return;
     running = true;
-    void runScheduledBriefs(deps).finally(() => { running = false; });
+    void runScheduledBriefs(deps).finally(() => { running = false; }).catch(() => {});
   }, everyMs);
   timer.unref?.();
   return { stop: () => clearInterval(timer) };

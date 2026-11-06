@@ -209,7 +209,7 @@ export class PushHub {
       this.log.warn(`push: settled sync failed (${error instanceof Error ? error.message : String(error)})`);
     });
     this.inflight.add(run);
-    void run.finally(() => this.inflight.delete(run));
+    void run.finally(() => this.inflight.delete(run)).catch(() => {});
   }
 
   /** The silent "read" push, at most READ_SYNC_MAX per person per window. */
@@ -234,7 +234,7 @@ export class PushHub {
       this.log.warn(`push: read sync failed (${error instanceof Error ? error.message : String(error)})`);
     });
     this.inflight.add(run);
-    void run.finally(() => this.inflight.delete(run));
+    void run.finally(() => this.inflight.delete(run)).catch(() => {});
   }
 
   /** Waits for every send started so far (tests, shutdown). */
@@ -279,7 +279,7 @@ export class PushHub {
       this.log.warn(`push: send failed (${error instanceof Error ? error.message : String(error)})`);
     });
     this.inflight.add(run);
-    void run.finally(() => this.inflight.delete(run));
+    void run.finally(() => this.inflight.delete(run)).catch(() => {});
   }
 
   private async deliver(message: PushMessage): Promise<void> {

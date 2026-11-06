@@ -1172,6 +1172,6 @@ export class OidcRelyingParty {
       this.revocations.enqueue(token, hint, why);
       return;
     }
-    void this.revokeToken(token, hint);
+    void this.revokeToken(token, hint).catch(() => {});
   }
 }

@@ -200,11 +200,11 @@ export function runKeepWarmPing(opts: {
       resolve(result);
     };
     const onAbort = () => {
-      void killCliTree(child);
+      void killCliTree(child).catch(() => {});
       finish({ ok: false, reason: "the ping was interrupted" });
     };
     const timer = setTimeout(() => {
-      void killCliTree(child);
+      void killCliTree(child).catch(() => {});
       finish({ ok: false, reason: "the ping timed out" });
     }, opts.timeoutMs ?? KEEP_WARM_TIMEOUT_MS);
     timer.unref?.();
@@ -213,7 +213,7 @@ export function runKeepWarmPing(opts: {
     child.stdout.on("data", (chunk: string) => {
       stdout += chunk;
       if (stdout.length > 1_000_000) {
-        void killCliTree(child);
+        void killCliTree(child).catch(() => {});
         finish({ ok: false, reason: "the ping's output exceeded 1 MB" });
       }
     });

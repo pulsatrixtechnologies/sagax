@@ -147,7 +147,7 @@ function run(): void {
       }
       pending++;
       const relayed = personal ? personalStdioRelayRequest(frame, connection) : userSandboxProxyRequest(frame, connection);
-      void relayed.then(output).finally(() => { pending--; });
+      void relayed.then(output).finally(() => { pending--; }).catch(() => {});
     }
     if (input.length > MAX_INPUT_BYTES) { process.stdin.destroy(); process.exitCode = 1; }
   });

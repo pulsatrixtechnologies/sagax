@@ -154,7 +154,7 @@ export class WorkflowStore {
     const run = previous.catch(() => undefined).then(work);
     const tail = run.catch(() => undefined);
     this.answerLocks.set(id, tail);
-    void tail.then(() => { if (this.answerLocks.get(id) === tail) this.answerLocks.delete(id); });
+    void tail.then(() => { if (this.answerLocks.get(id) === tail) this.answerLocks.delete(id); }).catch(() => {});
     return run;
   }
 

@@ -91,7 +91,7 @@ export const CerebrasDriver: ProviderDriver<CerebrasConfig> = {
         // A failed refresh keeps the last usable catalog, including custom models.
       }
     };
-    if (apiKey) void refreshModels();
+    if (apiKey) void refreshModels().catch(() => {});
     return createOpenAIChatRuntime({
       input, driverKind: "cerebras", apiKey, apiUrl: config.url,
       tools: config.tools, models: () => catalog, refreshModels, reasoning: true,

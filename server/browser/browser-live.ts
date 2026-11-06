@@ -392,7 +392,7 @@ export class BrowserLive {
             return closed;
           }, () => false);
           this.sessionResets.set(viewer.session, reset);
-          void reset.finally(() => { if (this.sessionResets.get(viewer.session) === reset) this.sessionResets.delete(viewer.session); });
+          void reset.finally(() => { if (this.sessionResets.get(viewer.session) === reset) this.sessionResets.delete(viewer.session); }).catch(() => {});
         }
         throw new BrowserLiveError("The browser could not start on this server. Reconnect to retry with a fresh browser session.", 503);
       }

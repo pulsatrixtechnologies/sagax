@@ -111,7 +111,7 @@ const finalizeClose = async (code: number | null) => {
           emit({ ...base(threadId, turnId), type: "runtime.error", message: e instanceof Error ? e.message : String(e) });
           emit({ ...base(threadId, turnId), type: "turn.completed", ok: false, stopReason: "exit_before_result", cost: null });
         }
-      })();
+      })().catch(() => {});
       return;
     }
     renewedTurns.delete(turnId);
@@ -222,7 +222,7 @@ const finalizeClose = async (code: number | null) => {
             cost: null,
           });
         }
-      })();
+      })().catch(() => {});
       return;
     }
     // A --resume that the CLI never acknowledged: it exited without
@@ -282,7 +282,7 @@ const finalizeClose = async (code: number | null) => {
           });
           emit({ ...base(threadId, turnId), type: "turn.completed", ok: false, stopReason: "exit_before_result", cost: null });
         }
-      })();
+      })().catch(() => {});
       return;
     }
     retryState.delete(threadId);
@@ -307,6 +307,6 @@ const finalizeClose = async (code: number | null) => {
   ctx.finalizeClose = finalizeClose;
   child.on("close", (code) => {
     session.finishClose = () => finalizeClose(code);
-    void session.finishClose().finally(markClosed);
+    void session.finishClose().finally(markClosed).catch(() => {});
   });
 }

@@ -9,7 +9,7 @@ export function retireClosedWarmProcess(lease: WarmResourceLease | undefined, ch
   if (!lease) return;
   lease.retiring();
   const timer = setTimeout(() => {
-    void killCliTree(child).then(stopped => { if (stopped) lease.forget(); }, () => {});
+    void killCliTree(child).then(stopped => { if (stopped) lease.forget(); }, () => {}).catch(() => {});
   }, 2_000);
   timer.unref();
 }

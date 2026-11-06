@@ -129,14 +129,14 @@ export class SubscriptionDepositor {
     if (!this.deps.signedIn(principalId, "claudeAgent") && !this.deps.signedIn(principalId, "codex")) return;
     this.watched.set(runId, { principalId, until: this.now() + WATCH_FOR_MS });
     if (!this.watchTimer) {
-      this.watchTimer = setInterval(() => { void this.tickWatched(); }, WATCH_MS);
+      this.watchTimer = setInterval(() => { void this.tickWatched().catch(() => {}); }, WATCH_MS);
       this.watchTimer.unref?.();
     }
   }
 
   start(): void {
     this.stop();
-    this.sweepTimer = setInterval(() => { void this.sweep(); }, SWEEP_MS);
+    this.sweepTimer = setInterval(() => { void this.sweep().catch(() => {}); }, SWEEP_MS);
     this.sweepTimer.unref?.();
   }
 

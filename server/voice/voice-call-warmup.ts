@@ -53,7 +53,7 @@ export class VoiceCallWarmup {
         }
         settle();
       }
-    })();
+    })().catch(() => {});
   }
 
   /** Resolves when the in-flight warm has finished and released the thread.

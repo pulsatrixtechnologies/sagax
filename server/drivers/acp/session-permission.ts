@@ -40,7 +40,7 @@ export function createPermissionHandler(deps: PermissionHandlerDeps) {
         return (msg: any, current: AcpTurn) => {
           current.state.startupActivity = true;
           if (msg.method === "fs/read_text_file" || msg.method === "fs/write_text_file") {
-            void handleClientFileRequest(msg);
+            void handleClientFileRequest(msg).catch(() => {});
             return;
           }
           if (msg.method !== "session/request_permission") {

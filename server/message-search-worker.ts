@@ -56,20 +56,20 @@ export class MessageSearchWorker {
         if (!this.pending.size) worker.unref();
       });
       worker.on("error", () => {
-        if (this.worker === worker) void this.close();
+        if (this.worker === worker) void this.close().catch(() => {});
       });
       worker.on("exit", () => {
-        if (this.worker === worker) void this.close();
+        if (this.worker === worker) void this.close().catch(() => {});
       });
     }
     const worker = this.worker;
     worker.ref();
     const id = ++this.sequence;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { void this.close(); }, this.timeoutMs);
+      const timer = setTimeout(() => { void this.close().catch(() => {}); }, this.timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
       try { worker.postMessage({ id, ...message }); }
-      catch { void this.close(); }
+      catch { void this.close().catch(() => {}); }
     });
   }
 

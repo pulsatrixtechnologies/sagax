@@ -97,7 +97,7 @@ export function createStartQuietWatch(deps: Pick<LifecycleDeps, "support" | "emi
         message: describeQuiet(support.displayName, next, quietMs, promptIdleTimeoutMs()),
       });
     };
-    const timer = setInterval(() => { void tick(); }, tickMs);
+    const timer = setInterval(() => { void tick().catch(() => {}); }, tickMs);
     timer.unref?.();
     current.stopQuietWatch = () => clearInterval(timer);
     return { lastState: () => state };

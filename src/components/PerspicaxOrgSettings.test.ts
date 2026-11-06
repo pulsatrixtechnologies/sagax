@@ -33,7 +33,7 @@ beforeEach(() => setLocale("en"));
 afterEach(() => setLocale("en"));
 
 describe("Settings > Organization without Sharing in the organization", () => {
-  it("draws the same rules for an admin and a member, with no shortcut to Perspicax", async () => {
+  it("draws Manage in Perspicax for everyone, and the same rules for an admin and a member", async () => {
     const { PerspicaxOrgSettings } = await import("./PerspicaxOrgSettings");
     for (const locale of ["en", "fr"] as const) {
       setLocale(locale);
@@ -46,9 +46,11 @@ describe("Settings > Organization without Sharing in the organization", () => {
         // a count not loaded yet draws no row, never its label twice
         expect(html, `${locale} ${role}`).not.toContain('data-settings-row="teamSecrets"');
         expect(html, `${locale} ${role}`).not.toContain('data-settings-row="orgPages"');
-        expect(html, `${locale} ${role}`).not.toContain("<a ");
-        expect(html, `${locale} ${role}`).not.toContain("data-external-link-pill");
-        expect(html, `${locale} ${role}`).not.toContain("/console");
+        // JC 2026-11-06: Manage opens the org console in the browser for everyone
+        expect(html, `${locale} ${role}`).toContain("data-external-link-pill");
+        expect(html, `${locale} ${role}`).toContain('href="https://px.example.test/console/"');
+        expect(html, `${locale} ${role}`).toContain('target="_blank"');
+        expect(html, `${locale} ${role}`).toContain(locale === "fr" ? "Gérer dans Perspicax" : "Manage in Perspicax");
         expect(html, `${locale} ${role}`).not.toContain('data-settings-card="organization.sharing"');
         expect(html, `${locale} ${role}`).not.toContain("data-org-sharing");
       }

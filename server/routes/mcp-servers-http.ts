@@ -59,6 +59,15 @@ export interface McpServersHttpBot {
   mcpAccounts?: Record<string, string>;
 }
 
+/** True when the probe has already finished (every server known): it then
+ * settles within a turn of the event loop, a network probe never does. */
+function settledSoon(probe: Promise<void>): Promise<boolean> {
+  return Promise.race([
+    probe.then(() => true, () => true),
+    new Promise<boolean>((resolve) => setImmediate(() => resolve(false))),
+  ]);
+}
+
 export interface McpServersHttpDeps {
   mcpServers(): Record<string, unknown> | undefined;
   mcpViewer(auth: RequestAuth): string | null;
@@ -111,7 +120,17 @@ export function createMcpServersHttpRoutes(deps: McpServersHttpDeps): RouteHandl
       if (auth.kind === "session" && !auth.scopes.includes("admin") && !deps.callerCan(auth, "host.shell")) {
         return json(res, 200, deps.mcpServerNamesResponse(viewer));
       }
-      await deps.probeMcpOAuth(undefined, url.searchParams.get("reprobe") === "1");
+      const probe = deps.probeMcpOAuth(undefined, url.searchParams.get("reprobe") === "1");
+      // ?probe=background (the panels, #2273): the list answers at once from
+      // what is known; a server still being asked (a first look after a
+      // start can take the probe's 4 s) is marked, and the panel reads again
+      // without it (the same probe, awaited) for its sign-in state.
+      if (url.searchParams.get("probe") === "background" && !(await settledSoon(probe))) {
+        void probe.catch(() => undefined);
+        const listed = deps.mcpServerResponse(viewer);
+        return json(res, 200, listed && typeof listed === "object" ? { ...listed, probing: true } : listed);
+      }
+      await probe;
       return json(res, 200, deps.mcpServerResponse(viewer));
     }
 

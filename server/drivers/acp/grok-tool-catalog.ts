@@ -13,7 +13,16 @@
 //   - a question about connectors or tools is answered with no call;
 //   - a known tool is called with use_tool directly, no search first.
 // Measured on the local bench (perf/instant-tool-turns): see the PR.
-import { gatewayServerNames, GROK_CLOUD_CONNECTORS, grokGatewayServerConnector, grokGatewayToolConnector, isGrokGatewayServer } from "../../../shared/grok-cloud-connectors.ts";
+import { isAgentToolName } from "../../agent-api.ts";
+import {
+  decodeGrokGatewayName,
+  gatewayServerNames,
+  GROK_CLOUD_CONNECTORS,
+  grokGatewayServerConnector,
+  grokGatewayToolConnector,
+  isGrokGatewayServer,
+  parseGrokGatewayToolId,
+} from "../../../shared/grok-cloud-connectors.ts";
 import { GROK_KNOWN_TOOLS_SECTION } from "./grok-tool-usage.ts";
 
 export interface GrokCatalogServer {
@@ -143,12 +152,101 @@ export interface GrokGatewayConnector {
   label: string;
   /** use_tool names, sorted */
   tools: string[];
+  /** When Sagax agent tools were folded onto this connector from others
+   * (Perspicax #1050): said in the catalog section so the model sees them once. */
+  sagaxAgentToolsNote?: string;
+}
+
+export interface GrokGatewayConnectorsOptions {
+  /** Prefer the Perspicax / connector profile whose label matches this slug
+   * when the same Sagax agent tool appears on several gateway connectors.
+   * When omitted, the first connector (sorted) keeps them. */
+  activeProfile?: string;
+}
+
+/** Bare tool name when this gateway use_tool name is a Sagax agent tool
+ * (send_prompt, await_turn, list_agents, sagax_*, ...). Undefined otherwise. */
+export function sagaxAgentToolBareName(toolName: string, servers?: readonly string[]): string | undefined {
+  const parsed = parseGrokGatewayToolId(toolName, servers);
+  if (parsed) return isSagaxAgentBareName(parsed.tool) ? parsed.tool : undefined;
+  const cut = toolName.indexOf("__");
+  if (cut > 0) {
+    const bare = decodeGrokGatewayName(toolName.slice(cut + 2));
+    if (isSagaxAgentBareName(bare)) return bare;
+  }
+  return isSagaxAgentBareName(toolName) ? toolName : undefined;
+}
+
+function isSagaxAgentBareName(name: string): boolean {
+  return isAgentToolName(name) || name.startsWith("sagax_");
+}
+
+function matchesActiveProfile(label: string, activeProfile: string | undefined): boolean {
+  if (!activeProfile?.trim()) return false;
+  const want = activeProfile.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const have = label.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  if (!want || !have) return false;
+  return want === have || have.includes(want) || want.includes(have);
+}
+
+/** Keep each Sagax agent tool on one gateway connector only (Perspicax #1050):
+ * the active profile's connection when known, else the first. Other connectors
+ * lose those names; the keeper carries a note for the catalog section. */
+function collapseDuplicateSagaxAgentTools(
+  groups: readonly GrokGatewayConnector[],
+  activeProfile?: string,
+): GrokGatewayConnector[] {
+  const byBare = new Map<string, Array<{ groupIndex: number; tool: string }>>();
+  for (let i = 0; i < groups.length; i += 1) {
+    const group = groups[i]!;
+    const names = gatewayServerNames(group.tools);
+    for (const tool of group.tools) {
+      const bare = sagaxAgentToolBareName(tool, names);
+      if (!bare) continue;
+      const list = byBare.get(bare) ?? [];
+      list.push({ groupIndex: i, tool });
+      byBare.set(bare, list);
+    }
+  }
+  const drop = new Map<number, Set<string>>();
+  const keptBares = new Map<number, string[]>();
+  for (const [bare, occurrences] of byBare) {
+    const groupIndexes = [...new Set(occurrences.map((entry) => entry.groupIndex))];
+    if (groupIndexes.length < 2) continue;
+    const preferred = groupIndexes.find((index) => matchesActiveProfile(groups[index]!.label, activeProfile));
+    const keeper = preferred ?? groupIndexes[0]!;
+    for (const entry of occurrences) {
+      if (entry.groupIndex === keeper) continue;
+      const set = drop.get(entry.groupIndex) ?? new Set<string>();
+      set.add(entry.tool);
+      drop.set(entry.groupIndex, set);
+    }
+    const folded = keptBares.get(keeper) ?? [];
+    folded.push(bare);
+    keptBares.set(keeper, folded);
+  }
+  if (!drop.size) return [...groups];
+  return groups.flatMap((group, index) => {
+    const remove = drop.get(index);
+    const tools = remove ? group.tools.filter((tool) => !remove.has(tool)) : [...group.tools];
+    if (!tools.length) return [];
+    const folded = keptBares.get(index);
+    const sagaxAgentToolsNote = folded?.length
+      ? `Sagax agent tools (${[...folded].sort((a, b) => a.localeCompare(b)).join(", ")}) kept once on this connector; the same names on other Perspicax connectors were folded.`
+      : undefined;
+    return [{ ...group, tools, ...(sagaxAgentToolsNote ? { sagaxAgentToolsNote } : {}) }];
+  });
 }
 
 /** The grok.com connectors a ready gateway server carries, by connector
  * (Teams, Outlook...), then the gateway's other tools under its own name
- * (Automations). Empty when the catalog has no gateway. */
-export function grokGatewayConnectors(catalog: readonly GrokCatalogServer[]): GrokGatewayConnector[] {
+ * (Automations). Empty when the catalog has no gateway. Sagax agent tools
+ * that several Perspicax connectors share are kept once (active profile, or
+ * the first connector). */
+export function grokGatewayConnectors(
+  catalog: readonly GrokCatalogServer[],
+  options?: GrokGatewayConnectorsOptions,
+): GrokGatewayConnector[] {
   const groups = new Map<string, GrokGatewayConnector>();
   for (const server of catalog) {
     if (!server.gateway || server.status !== "ready") continue;
@@ -166,7 +264,10 @@ export function grokGatewayConnectors(catalog: readonly GrokCatalogServer[]): Gr
       groups.set(key, group);
     }
   }
-  return [...groups.values()].sort((a, b) => Number(!a.id) - Number(!b.id) || a.label.localeCompare(b.label));
+  const sorted = [...groups.values()]
+    .map((group) => ({ ...group, tools: [...new Set(group.tools)].sort((a, b) => a.localeCompare(b)) }))
+    .sort((a, b) => Number(!a.id) - Number(!b.id) || a.label.localeCompare(b.label));
+  return collapseDuplicateSagaxAgentTools(sorted, options?.activeProfile);
 }
 
 /** What the xAI account of a Grok sign-in brought on its last turn, by its
@@ -228,11 +329,14 @@ export function grokCatalogSection(input: {
    * card yet bring no tool this turn: the model is told it has none and must
    * offer open_connector_setup rather than dead-end or claim it can. */
   connectable?: readonly { id: string; label: string }[];
+  /** Prefer this Perspicax / connector profile when folding duplicate Sagax
+   * agent tools across gateway connectors (Perspicax #1050). */
+  activeProfile?: string;
 }): { id: string; text: string } | null {
   const catalog = input.catalog ?? [];
   const favored = new Set([...(input.known ?? []), ...(input.pinned ?? [])]);
   const ready = catalog.filter((server) => !server.gateway && server.status === "ready" && server.tools.length > 0);
-  const gatewayGroups = grokGatewayConnectors(catalog);
+  const gatewayGroups = grokGatewayConnectors(catalog, { activeProfile: input.activeProfile });
   const notReady = catalog.filter((server) => server.status !== "ready");
   const pinnedLines = input.lines?.filter(Boolean) ?? [];
   // A connectable connector already in the catalog (ready or needs sign-in)
@@ -270,7 +374,10 @@ export function grokCatalogSection(input: {
   // tool names already carry the connector; said by connector, with one
   // exact name to call, never as `<server>__<tool>`.
   const gatewayLine = gatewayGroups.length
-    ? `\nConnected on this xAI account through grok.com (these ARE your tools for them; call use_tool with the full tool name, exactly as written, never prefixed with a server name; search_tool with the connector's name lists the others): ${gatewayGroups.map((group) => `${group.label} (${group.tools.length} tool${group.tools.length === 1 ? "" : "s"}, e.g. ${exampleTool(group.tools)})`).join("; ")}.`
+    ? `\nConnected on this xAI account through grok.com (these ARE your tools for them; call use_tool with the full tool name, exactly as written, never prefixed with a server name; search_tool with the connector's name lists the others): ${gatewayGroups.map((group) => {
+      const base = `${group.label} (${group.tools.length} tool${group.tools.length === 1 ? "" : "s"}, e.g. ${exampleTool(group.tools)})`;
+      return group.sagaxAgentToolsNote ? `${base}. ${group.sagaxAgentToolsNote}` : base;
+    }).join("; ")}.`
     : "";
   const tail =
     gatewayLine +

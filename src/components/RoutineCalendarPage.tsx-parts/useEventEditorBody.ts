@@ -21,7 +21,6 @@ import {
   toLocalTimeInput,
 } from "@/lib/routine-calendar";
 import { readTiming } from "@/components/routines/RoutineTimingFields";
-import { readRoutineEditorMoreOpen, rememberRoutineEditorMoreOpen } from "@/lib/routine-editor-more-pref";
 import {
   imageAttachmentFromFile,
   intakeFiles,
@@ -367,11 +366,10 @@ export function useEventEditorBody({
     requiredSkills, requiredMcp, requiresComputer, timeoutMinutes, overlap, autoPauseAfter, continuity,
     onlyWhenPresent, deleteWhenFinished, mailAlias,
   });
-  const [moreOpen, setMoreOpen] = useState(() => readRoutineEditorMoreOpen());
-  const toggleMore = (open: boolean) => {
-    setMoreOpen(open);
-    rememberRoutineEditorMoreOpen(open);
-  };
+  // #2272: Advanced is always folded when a routine opens. Nothing persisted
+  // reopens it; a toggle only holds while this editor stays open.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const toggleMore = (open: boolean) => setMoreOpen(open);
   const editorSnapshot = JSON.stringify([requiredSkills, requiredMcp, requiresComputer, kind, name, description, recurrence, limitReset, scheduleDraft, date, startTime, weekdays, durationMinutes, timeoutMinutes, overlap, autoPauseAfter, continuity, onlyWhenPresent, deleteWhenFinished, watchDraft, postResults, mailAlias, routineModel, routineSubagentModel, actAs, routineEffort, timingMode, earlyMinutes, lateMinutes, intervalMinutes, intervalDays, intervalWeekdays, intervalWindow, intervalWindowStart, intervalWindowEnd, intervalEnd, intervalEndDate, botIds, routineTarget, groupId, runOn, attachments.map((attachment) => attachment.id), runAs]);
   const openedSnapshot = useRef(editorSnapshot);
   const dirty = editorSnapshot !== openedSnapshot.current;

@@ -585,7 +585,7 @@ describe("pressing", () => {
     expect(posted().body.widgetAction.values).toBeUndefined();
     // the card stays live: another place can still be opened
     await press(button("Open last run")!);
-    expect(dispatch).toHaveBeenLastCalledWith({ type: "openRoutineRunInChat", runId: "run-1", routineId: "r-1" });
+    expect(dispatch).toHaveBeenLastCalledWith({ type: "openRoutineRunWindow", runId: "run-1", routineId: "r-1" });
     expect(find('[data-widget="w1"]')!.getAttribute("data-widget-state")).toBe("live");
   });
 

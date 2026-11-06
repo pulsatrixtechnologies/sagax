@@ -1,10 +1,8 @@
-import { t } from "@/lib/i18n";
-import { personaSharingSummary } from "@/lib/bot-sharing";
 import { useBotUnread } from "../unread-notice";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch } from "react";
 import { BotAvatar } from "../Avatar";
 import { BotChatHeader, BotHeaderPill, botPillActions, type ChatWindowContextValue } from "../BotHeaderPill";
-import { isViewersPrimaryBot, viewerOwnsBot } from "@/lib/primary-bot";
+import { isViewersPrimaryBot } from "@/lib/primary-bot";
 import { viewerActorId } from "@/lib/viewer";
 import { MAUS_COLORS, stateForBot } from "@/lib/mascot";
 import { botBubbleVars } from "@/lib/bubble-colors";
@@ -189,16 +187,12 @@ export function useChatViewPresence({
       }
     />
   );
-  // The main chat's header row, like Grok Bot (#2141): name pill, who sees
-  // the bot, then the gear that toggles the same panel as the pill.
-  const sharingLabel = personaSharingSummary(bot);
-  const shared = sharingLabel !== t("botSettings.sharing.empty");
+  // The main chat's header, like Grok Bot (#2141): the name pill only, which
+  // toggles the bot panel. No sharing pill, no gear (JC 2026-11-06).
   const chatHeader = side ? null : (
     <BotChatHeader
       name={bot.name}
       label={bot.title}
-      audience={!shared && viewerOwnsBot(bot, viewerActorId(state.config)) ? t("chat.header.private") : sharingLabel}
-      shared={shared}
       panelOpen={pillPanelOpen}
       onToggle={() => {
         if (state.panelOwner) dispatch({ type: "toggleSettings", open: true, owner: null });

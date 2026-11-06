@@ -84,18 +84,19 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
     }
     case "routineFocused":
       return state.routineFocus ? { ...state, routineFocus: null } : state;
-    case "openRoutineRunInChat": {
-      // 2026-11-05 (#2098): the run's message in the bot's conversation,
-      // on screen; never a run view beside the chat.
+    case "openRoutineRunWindow": {
+      // #2272: the run opens as its own window over the bot's chat column
+      // (ExchangeSheet, like a bot-to-bot exchange), whether or not its
+      // report is loaded in the conversation. Never a thread or a panel.
       const known = state.routineRuns.find((candidate) => candidate.id === action.runId);
       const botId = action.botId ?? known?.botId;
       const bot = botId ? state.bots.find((candidate) => candidate.id === botId) : undefined;
-      const report = bot?.messages.find((message) => message.kind === "routine.run" && message.routineRun?.runId === action.runId);
-      const next: AppState = {
+      const routineId = action.routineId ?? known?.routineId;
+      return {
         ...state,
         activeView: "chat",
         codingChat: null,
-        // Keep the bot panel if it was already open; otherwise land on chat.
+        routineRunWindow: { runId: action.runId, ...(routineId ? { routineId } : {}), ...(botId ? { botId } : {}) },
         personPanelId: null,
         appSettingsOpen: false,
         pluginsOpen: false,
@@ -103,13 +104,9 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         memoryManagerOpen: false,
         ...(bot && state.selectedId !== bot.id ? { selectedId: bot.id } : {}),
       };
-      if (!bot || !report) return next;
-      return {
-        ...next,
-        freshTopic: withoutFreshTopicFor(next, bot.threadId),
-        focusMessage: { threadId: bot.threadId, messageId: report.id, nonce: (state.focusMessage?.nonce ?? 0) + 1, consumed: false },
-      };
     }
+    case "closeRoutineRunWindow":
+      return state.routineRunWindow ? { ...state, routineRunWindow: null } : state;
     // 2026-11-03: a coding task opens as a chat where the chat is, never in
     // the side panel (the panel stays open as it was, its Coding list the
     // entry point).
@@ -118,6 +115,7 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         ...state,
         activeView: "chat",
         codingChat: action.target,
+        routineRunWindow: null,
         personPanelId: null,
         appSettingsOpen: false,
         pluginsOpen: false,

@@ -16,7 +16,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bot } from "@/state/store";
 import type { Routine } from "../../shared/routines";
-import { ROUTINE_EDITOR_MORE_KEY } from "@/lib/routine-editor-more-pref";
 
 const fixture = vi.hoisted(() => ({ webhooks: [] as unknown[], lastUpsert: null as unknown, dispatch: null as unknown as ReturnType<typeof import("vitest").vi.fn>, calls: [] as string[] }));
 vi.mock("@/hooks/use-modal-dialog", () => ({ useModalDialog: () => {} }));
@@ -397,22 +396,25 @@ describe("the routine panel, edit mode", () => {
     expect(fixture.lastUpsert).toMatchObject({ schedule: { expression: "15 7,13 * * 1-5", timeZone: "America/Toronto" }, onlyWhenPresent: true });
   });
 
-  it("keeps Advanced collapsed by default and remembers the person's choice", () => {
+  it("#2272 always opens with Advanced collapsed, even after the person unfolded it", () => {
+    // An old persisted choice must not reopen it either.
+    localStorage.setItem("sagax.routineEditorMore.v1", "1");
     mount(routine({ type: "cron", expression: "0 9 * * *", timeZone: "UTC" }));
     const more = host.querySelector<HTMLDetailsElement>("[data-routine-editor-more]")!;
     expect(more.open).toBe(false);
-    expect(localStorage.getItem(ROUTINE_EDITOR_MORE_KEY)).toBeNull();
     openAdvanced();
-    expect(localStorage.getItem(ROUTINE_EDITOR_MORE_KEY)).toBe("1");
+    expect(host.querySelector<HTMLDetailsElement>("[data-routine-editor-more]")!.open).toBe(true);
+    // Opening Edit opens the editor again: folded.
+    edit();
+    expect(host.querySelector<HTMLDetailsElement>("[data-routine-editor-more]")!.open).toBe(false);
     flushSync(() => root.unmount());
     host.remove();
     host = document.createElement("div");
     document.body.append(host);
     root = createRoot(host);
     mount(routine({ type: "cron", expression: "0 9 * * *", timeZone: "UTC" }));
-    expect(host.querySelector<HTMLDetailsElement>("[data-routine-editor-more]")!.open).toBe(true);
-    edit();
-    expect(host.querySelector<HTMLDetailsElement>("[data-routine-editor-more]")!.open).toBe(true);
+    expect(host.querySelector<HTMLDetailsElement>("[data-routine-editor-more]")!.open).toBe(false);
+    localStorage.removeItem("sagax.routineEditorMore.v1");
   });
 
   it("puts timezone, extra times, timing and overlap under Advanced, and saves them", async () => {

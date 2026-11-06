@@ -147,6 +147,29 @@ describe("createMcpServersHttpRoutes", () => {
     expect(names).toHaveBeenCalled();
   });
 
+  it("GET ?probe=background answers before a slow sign-in probe (#2273)", async () => {
+    let finish!: () => void;
+    const slow = new Promise<void>((resolve) => { finish = resolve; });
+    const probeMcpOAuth = vi.fn(() => slow);
+    const h = harness({ probeMcpOAuth });
+    // the list does not wait for the probe: it says one is still running
+    const fast = await h.call("GET", "/api/mcp/servers", { search: "?probe=background" });
+    expect(fast.sent).toEqual({ status: 200, body: { servers: [{ name: "notes" }], probing: true } });
+    expect(probeMcpOAuth).toHaveBeenCalledTimes(1);
+    // the plain listing still waits for the probe (other callers, the settle read)
+    let settled = false;
+    const waiting = h.call("GET", "/api/mcp/servers").then((result) => { settled = true; return result; });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(settled).toBe(false);
+    finish();
+    expect((await waiting).sent).toEqual({ status: 200, body: { servers: [{ name: "notes" }] } });
+  });
+
+  it("GET ?probe=background has no probing mark once every server is known", async () => {
+    const h = harness({ probeMcpOAuth: async () => undefined });
+    expect((await h.call("GET", "/api/mcp/servers", { search: "?probe=background" })).sent).toEqual({ status: 200, body: { servers: [{ name: "notes" }] } });
+  });
+
   it("POST creates a remote server; refuses policy and busy writer", async () => {
     const h = harness();
     const created = await h.call("POST", "/api/mcp/servers", {

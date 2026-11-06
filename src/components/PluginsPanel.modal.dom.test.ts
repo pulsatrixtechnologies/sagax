@@ -104,7 +104,7 @@ vi.mock("@/state/store", async () => {
         resolved = { ...resolved!, items: resolved!.items.filter((item) => item.scope !== "bot") };
         return { ...flowSupersededPluginsFixture(false), canChange };
       }
-      return API[path] ?? {};
+      return API[path.split("?")[0]!] ?? {};
     }),
   };
 });

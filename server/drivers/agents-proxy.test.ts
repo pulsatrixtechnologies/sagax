@@ -747,6 +747,7 @@ describe("agents-proxy MCP surface", () => {
       "cancel_wait",
       "post_to_room",
       "message_user",
+      "message_person",
       "react_to_message",
       "remove_reaction",
       "create_bot",

@@ -20,6 +20,7 @@ export function reduceBots(state: AppState, action: Action, reduce: ReduceFn): A
       const base = {
         ...(leaving ? { ...state, threadReturn: null } : state),
         ...(switching && state.codingChat ? { codingChat: null } : {}),
+        ...(switching && state.routineRunWindow ? { routineRunWindow: null } : {}),
       };
       const room = base.groups.find((g) => g.id === action.id);
       if (room) {

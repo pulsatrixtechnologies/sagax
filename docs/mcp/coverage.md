@@ -6,7 +6,7 @@ exposes to a bot or an AI client. The machine-readable form is the registry in
 `server/mcp/mcp-permissions.ts`; `server/mcp/mcp-permissions.test.ts` fails when a
 catalog tool has no permission.
 
-Totals: capabilities 166, covered 166, gaps 0.
+Totals: capabilities 167, covered 167, gaps 0.
 
 Sources read: the agents tool catalog, the internal routes it calls
 (`/api/internal/*`), the member API (`docs/org-member-api.md`), and the
@@ -89,8 +89,8 @@ Reading the table:
 | artifacts:delete | sagax | `delete_artifact` | `artifacts:delete` | covered |
 | artifacts:claude | sagax | `claude_artifact` | `artifacts:claude` | covered |
 | pages:propose | sagax | `propose_page` | `pages:propose` | covered |
+| pages:choose | sagax | `choose_page_target` (#2048) | `pages:choose` | covered |
 | pages:comments | sagax | `page_comments` | `pages:comments` | covered |
-| pages:choose | sagax | `choose_page_target` | `pages:choose` | covered |
 | phone:call | sagax | `place_phone_call` | `phone:call` | covered |
 | phone:contacts | sagax | `phone_line_contact` | `phone:contacts` | covered |
 | phone:dtmf | sagax | `send_dtmf` | `phone:dtmf` | covered |
@@ -102,7 +102,7 @@ Reading the table:
 | rooms:unreact | sagax | `remove_reaction` | `rooms:unreact` | covered |
 | rooms:meme | sagax | `send_meme` | `rooms:meme` | covered |
 | rooms:post | sagax | `post_to_room` | `rooms:post` | covered |
-| people:message | sagax | `message_user` | `people:message` | covered |
+| people:message | sagax | `message_user`, `message_person` (#2118) | `people:message` | covered |
 | threads:close | sagax | `close_thread` | `threads:close` | covered |
 | voice:note | sagax | `send_voice_note` | `voice:note` | covered |
 | voice:end | sagax | `end_call` | `voice:end` | covered |

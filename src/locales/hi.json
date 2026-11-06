@@ -1852,7 +1852,6 @@
   "botPanel.library.pageState.link": "लिंक वाले किसी के भी लिए प्रकाशित",
   "botPanel.library.pageState.revoked": "रद्द",
   "botPanel.library.pageState.expired": "समाप्त",
-  "settings.experimental.browserWindows": "इस Windows मशीन पर अभी उपलब्ध नहीं: `openmausbot browser install` से ब्राउज़र इंजन इंस्टॉल करें।",
   "approvalMode.antigravityLocalOnly": "स्वचालित (पूर्ण पहुँच) इंस्टॉल किए गए डेस्कटॉप ऐप में उपलब्ध है।",
   "approvalMode.trustedLocalOnly": "पूर्ण पहुँच और कस्टम इंस्टॉल किए गए डेस्कटॉप ऐप में उपलब्ध हैं।",
   "computer.askedHands": "ने आपकी मदद माँगी:",

@@ -1862,7 +1862,6 @@
   "botPanel.library.pageState.link": "publicada para cualquiera con el enlace",
   "botPanel.library.pageState.revoked": "revocada",
   "botPanel.library.pageState.expired": "caducada",
-  "settings.experimental.browserWindows": "Aún no disponible en este equipo con Windows: instala el motor del navegador con `openmausbot browser install`.",
   "approvalMode.antigravityLocalOnly": "Automático (acceso total) está disponible en la app de escritorio instalada.",
   "approvalMode.trustedLocalOnly": "Acceso total y Personalizado están disponibles en la app de escritorio instalada.",
   "computer.askedHands": "pidió tu ayuda:",

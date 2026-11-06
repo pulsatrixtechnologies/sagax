@@ -8,6 +8,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppState, Bot, BotSettingsSection } from "@/state/store";
 import { setLocale } from "@/lib/i18n";
+import { CIRCLE_CLOSE_BUTTON, CIRCLE_LABEL } from "@/lib/circle-button";
 
 const fixture = vi.hoisted(() => ({
   state: {} as Partial<AppState>,
@@ -225,7 +226,28 @@ describe("bot profile page shell", () => {
     expect(sectionHtml(visibility, "sharing").open).toBe(true);
     expect(tabsOf(visibility)).not.toContain("visibility");
   });
+  it("draws the banner's X and Private / Shared from the app's round header control, not a black disc", () => {
+    const html = render("overview");
+    const tagOf = (marker: string) => {
+      const at = html.indexOf(marker);
+      return html.slice(html.lastIndexOf("<", at), html.indexOf(">", at) + 1);
+    };
+    const close = tagOf("data-window-close");
+    for (const cls of CIRCLE_CLOSE_BUTTON.split(" ")) expect(close).toContain(cls);
+    expect(close).toContain('aria-label="Close"');
+    const pill = tagOf("data-bot-profile-visibility");
+    for (const cls of CIRCLE_LABEL.split(" ")) expect(pill).toContain(cls);
+    for (const tag of [close, pill]) {
+      expect(tag).not.toContain("bg-black");
+      expect(tag).not.toContain("text-white");
+    }
+    // same glyph as the other header X: 18px, strokeWidth 1.75
+    const x = html.slice(html.indexOf(">", html.indexOf("data-window-close")) + 1, html.indexOf("</button>", html.indexOf("data-window-close")));
+    expect(x).toContain('width="18"');
+    expect(x).toContain('stroke-width="1.75"');
+  });
 });
+
 
 describe("General", () => {
   it("lists the channels with their state and the bot's accounts", () => {

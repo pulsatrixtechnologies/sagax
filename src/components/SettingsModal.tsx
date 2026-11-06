@@ -11,7 +11,7 @@ import { brand } from "@/lib/brand";
 import { requestReleaseNotes } from "@/lib/release-notes-ui";
 import { useUpdaterState } from "@/lib/updater";
 import { openUpdatePrompt, requestUpdateCheck } from "@/lib/update-prompt";
-import { GeneralAdvancedSettings, generalAdvancedShown, isSoloDesktop } from "./settings/AdvancedSettings";
+import { generalAdvancedShown, isSoloDesktop } from "./settings/AdvancedSettings";
 import { CompactRow, GROUP_CARD, LinkRow, PillSelect, type PillOption, SettingRow, SettingsAdvancedScope, SettingsGroup, Switch } from "./SettingsPrimitives";
 import { TimeZoneRows } from "./settings/TimeZoneSettings";
 import { AppPageExtras } from "./settings/AppPage";
@@ -21,7 +21,6 @@ import {
   DecisionModelSettings,
   EnginesSettings,
   ExperimentalSettings,
-  ImportSettings,
   LocalComputerSection,
   NotificationSettings,
   OrganizationSettings,
@@ -51,7 +50,7 @@ import { NAV_GROUPS } from "./settings/settings-nav";
 // pull AppearanceSettings.tsx (Refs #1971).
 export { chooseThreadsView } from "@/lib/thread-preferences";
 
-export { GeneralAdvancedSettings, generalAdvancedShown, isSoloDesktop };
+export { generalAdvancedShown, isSoloDesktop };
 
 export {
   ORGANIZATION_ADVANCED_KEYWORDS,
@@ -396,7 +395,6 @@ export function SettingsModal() {
                       onOpen={() => openSubPage("general.aboutMe")}
                     />
                   )}
-                  <LinkedGrokBotSettings />
                 </SettingsGroup>
                 <SettingsGroup title={t("settings.group.languageRegion")} groupId="languageRegion">
                   <LanguageRow />
@@ -465,7 +463,13 @@ export function SettingsModal() {
             {section === "experimental" && <ExperimentalSettings />}
 
             {/* Providers (2026-10-30) */}
-            {section === "providers" && <ProvidersSettings />}
+            {section === "providers" && (
+              <>
+                <ProvidersSettings />
+                {/* Linked Grok is a provider link, not identity (JC 2026-11-06). */}
+                <LinkedGrokBotSettings />
+              </>
+            )}
 
             {section === "engines" && (
               <div className="flex min-w-0 flex-col gap-6">
@@ -479,13 +483,8 @@ export function SettingsModal() {
             {/* Voice (2026-10-28, out of Models and voice) */}
             {section === "voice" && <VoiceSettingsPage />}
 
-            {/* Backups and import (#2080): Import is a card of this page. Updates stay on their own page (#2090). */}
-            {section === "backups" && (
-              <>
-                <WorkspaceBackupSettings />
-                <ImportSettings />
-              </>
-            )}
+            {/* Backups (#2080): export and restore only. Grok Bot / primary-bot preference import left this page (JC 2026-11-06). Updates stay on their own page (#2090). */}
+            {section === "backups" && <WorkspaceBackupSettings />}
 
             {section === "computer" && <LocalComputerSection />}
 

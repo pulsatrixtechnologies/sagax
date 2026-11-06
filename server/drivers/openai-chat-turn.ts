@@ -534,7 +534,7 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
       }
       // The whole batch is refused before any of it runs.
       if (seenCalls.size > MAX_TURN_TOOL_CALLS) throw new ChatProtocolError(stoppedAfter(`${MAX_TURN_TOOL_CALLS} tool calls`));
-messages.push({ ...assistantReply(completion, completion.text || null), tool_calls: completion.toolCalls });
+      messages.push({ ...assistantReply(completion, completion.text || null), tool_calls: completion.toolCalls });
       // A failure stays pending only until the bot runs tools again: one that went on to use more tools has read the error
       // and reacted (a wrong guess, a bad query, then the right call), so its turn is not failed for it, on any model. The
       // failed step still shows as failed; a failure in the last calls before the answer, or a person's no, still ends it.

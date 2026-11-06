@@ -40,11 +40,8 @@ type Rule = keyof typeof RULES;
 
 /** The pages not migrated yet, by rule. Remove a file once its lot lands. */
 const NOT_MIGRATED: Record<Rule, string[]> = {
-  accentLink: [
-    "WorkspaceBackupSettings.tsx",
-  ],
+  accentLink: [],
   cardImport: [
-    "settings/LinkedGrokBotSettings.tsx",
     "settings/MyConnectionsSettings.tsx",
     "settings/OrgSharing.tsx",
     "CacheKeepWarmSettings.tsx",

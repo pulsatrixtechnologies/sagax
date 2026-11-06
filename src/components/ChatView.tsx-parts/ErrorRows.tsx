@@ -153,9 +153,10 @@ export function FailedTurnRow({ tool, engine, onRetry, botId, threadId }: {
 }) {
   "use memo";
   const config = useStoreSelector((current) => current.config);
+  // Hook before any early return (rules of hooks); unused when the limit row is hidden.
+  const resume = useLimitResetContinue(botId, threadId, tool.limitResetsAt);
   // An engine at its limit or out of credit: the composer says so, not the chat.
   if (isEngineLimitFailure(tool)) return null;
-  const resume = useLimitResetContinue(botId, threadId, tool.limitResetsAt);
   if (tool.place && botId) return <PlaceFailedRow place={tool.place} botId={botId} threadId={threadId} onRetry={onRetry} />;
   const signedOut = signedOutEngine(tool, engine);
   // A signed-out engine: its sign-in card is the whole answer, no error row or

@@ -27,7 +27,15 @@ await loadLocale(params.get("lang") ?? "fr");
 const view = params.get("view") ?? "editor";
 const trigger = params.get("trigger") ?? "clock";
 const mode = params.get("mode") === "edit" ? "edit" : "view";
-try { localStorage.setItem("sagax.routineEditorMore.v1", params.get("advanced") === "1" ? "1" : "0"); } catch { /* private window */ }
+// #2272: the editor always opens with Advanced folded; advanced=1 unfolds it
+// after the first paint, as a person's click would.
+if (params.get("advanced") === "1") {
+  const unfold = () => {
+    const more = document.querySelector<HTMLElement>("[data-routine-editor-more] > summary");
+    if (more) more.click(); else setTimeout(unfold, 50);
+  };
+  setTimeout(unfold, 50);
+}
 
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {

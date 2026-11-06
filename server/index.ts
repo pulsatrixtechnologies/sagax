@@ -1763,6 +1763,7 @@ import {
   reachSummaryPrompt,
   registerReachProvider
 } from "./turns/turn-reach.ts";
+import { setTurnActiveProfileResolver } from "./turns/turn-active-profile.ts";
 import { turnConnectorsRecord } from "./turns/turn-connectors.ts";
 import { remoteSessionReach } from "./remote-support/remote-session-reach.ts";
 import {
@@ -2800,6 +2801,7 @@ import { createInternalBotChatRoutes } from "./routes/internal-bot-chat.ts";
 import { createInternalRoomsRoutes } from "./routes/internal-rooms.ts";
 import { createInternalMessageUserRoutes } from "./routes/internal-message-user.ts";
 import type { ReachablePerson } from "./people/bot-message-user.ts";
+import { createInternalMessagePersonRoutes } from "./routes/internal-message-person.ts";
 import { createInternalIntegrationsRoutes } from "./routes/internal-integrations.ts";
 // IMPORT-ANCHOR:testing-routes
 // IMPORT-ANCHOR:team-map
@@ -33994,6 +33996,36 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       }
     }
   }),
+  // #2118: a bot writes to another person via owner + person + bot group chat
+  createInternalMessagePersonRoutes({
+    organization: () => IDENTITY.kind === "perspicax",
+    store: store as never,
+    approvalBus,
+    connectorThread: (botId, threadId) => {
+      const owner = connectorThread(botId, threadId);
+      return owner ? { group: owner.group } : null;
+    },
+    effectiveBotOwner: (bot) => effectiveBotOwner(bot as never),
+    resolvePerson: (ref) => {
+      const resolved = resolveOrgGrantee(ref);
+      if (!resolved.ok) return { ok: false, code: "unknown_person" };
+      const principal = principals.byId(resolved.id);
+      const listed = principal?.subject ? perspicaxDirectory?.directory()?.people.find((entry) => entry.sub === principal.subject!.sub) : undefined;
+      if (listed && (listed.kind === "service" || listed.type === "service")) return { ok: false, code: "service_account" };
+      return { ok: true, id: resolved.id, name: personDisplayName(principal) || listed?.login || "" };
+    },
+    displayName: (principalId) => personDisplayName(principals.byId(principalId)) || "",
+    createChannel: (value) => createChannel(value) as never,
+    markCreatedBy: (groupId, ownerId) => { store.patchGroup(groupId, { createdBy: ownerId }); },
+    notify: (notification) => notify(notification),
+    isUnattended,
+    requireActive: (capability) => {
+      if (!internalCapabilityIsActive(capability as InternalCapability)) {
+        throw Object.assign(new Error("the internal turn capability has expired"), { status: 401 });
+      }
+    },
+    peerReviewRequired: (bot, threadId) => peerReviewRequired(bot as never, threadId),
+  }),
   createInternalIntegrationsRoutes({
     bot: (id) => store.bot(id) ?? undefined,
     isPerspicax: () => IDENTITY.kind === "perspicax",
@@ -42930,6 +42962,9 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
     },
     version
   });
+  // #2258: Grok's gateway catalog keeps Sagax agent tools on the active
+  // Perspicax profile's connector (act-as / profile_use / identity).
+  setTurnActiveProfileResolver((threadId, botId) => perspicaxMcp?.activeProfileFor(threadId, botId));
 }
 
 const oidcLogin = IDENTITY.kind === "perspicax" && oidcRp && idpSessions

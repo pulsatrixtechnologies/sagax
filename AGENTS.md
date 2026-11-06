@@ -1,3 +1,13 @@
+## A bot writes to another person (#2118, 2026-11-06)
+
+`message_person` (agents tool, `POST /api/internal/message-person`) posts into
+a triad group chat: the bot's owner, the recipient and the bot. It finds an
+existing room with exactly those three or creates one, then posts on the
+group's main thread (unified chat). The owner approves a card with Always
+allow (`message_person:<principalId>`). Organization servers only; writing
+to the owner is refused (use this conversation). Helpers:
+`server/people/message-person.ts`. Confidential threads refuse the route.
+
 ## Background threads stay out of thread mode (#2015, 2026-11-05)
 
 `shared/background-threads.ts` (vectors in `background-threads.vectors.json`,
@@ -1252,8 +1262,8 @@ routine" (or "New routine"). The name sits up top with a one-line summary:
 the schedule sentence, where results go and who it runs as. Sections follow
 (`EditorSection`): What (instructions, attachments), When (repeat picker +
 one time / essentials; webhook panel when triggered), Where (bot, run-as,
-where it runs, post results). Then More options, folded by default and
-remembered per person (`sagax.routineEditorMore.v1`): time zone, next-runs
+where it runs, post results). Then More options, always folded when a
+routine opens (#2272, never remembered): time zone, next-runs
 preview, Add a time, timing (exact/flexible), clock-change note, watch
 fields, interval days/window/end, run limit, overlap, auto-pause,
 continuity, only when I'm here, mail alias. Every option stays reachable.
@@ -10048,19 +10058,19 @@ real tool path: cards for delete, payment and send, refusals, Stop.
 ## Import a bot shared on x.ai (2026-10-19)
 
 Port of OpenMausBot #3073, without its optional Cursor sign-in (a third-party
-account token Sagax does not keep). Settings > Import
-(`src/components/settings/ImportSettings.tsx`, section `import`, hidden like
-Backups for whoever cannot manage backups, and in Simple mode), and the export of
-a bot shared on x.ai dropped on Bot templates > Import (`TemplateTools` readFile).
-`src/components/GrokImportBox.tsx` reads an `https://x.ai/bot/<id>` link or a
-marketplace page through `POST /api/team-library/grok`
-(`server/routes/team-library-grok.ts`, client scope since 2026-10-26; `server/team/team-library.ts`
-`fetchGrokTemplateCard` fetches only x.ai, redirects must stay there, 20 s,
-2 MB) and shows the public card (name, creator, description) with Start
-from the description (`grokStarterPackage`). The full setup comes from the
-person's own bot on x.ai: Copy export prompt (`GROK_EXPORT_PROMPT`), then paste
-its JSON reply or choose it saved as a `.json` file (`openmaus.grok/1`, or
-pi-grokbot-import's `grokbot-bundle/v1`; the format ids stay upstream's).
+account token Sagax does not keep). New bot / first run (`AgentImport.tsx`) and
+the export of a bot shared on x.ai dropped on Bot templates > Import
+(`TemplateTools` readFile). Settings > Backups no longer holds a Grok Bot row
+(JC 2026-11-06). `src/components/GrokImportBox.tsx` reads an
+`https://x.ai/bot/<id>` link or a marketplace page through
+`POST /api/team-library/grok` (`server/routes/team-library-grok.ts`, client
+scope since 2026-10-26; `server/team/team-library.ts` `fetchGrokTemplateCard`
+fetches only x.ai, redirects must stay there, 20 s, 2 MB) and shows the public
+card (name, creator, description) with Start from the description
+(`grokStarterPackage`). The full setup comes from the person's own bot on
+x.ai: Copy export prompt (`GROK_EXPORT_PROMPT`), then paste its JSON reply or
+choose it saved as a `.json` file (`openmaus.grok/1`, or pi-grokbot-import's
+`grokbot-bundle/v1`; the format ids stay upstream's).
 `shared/grok-import.ts` turns it into an `openmaus.package` v2 with one bot:
 instructions (cut at the soul limit, with a note), skills off, routines with
 a cron or a plain time paused, apps as connector requirements (connector
@@ -10071,7 +10081,7 @@ original text. The preview and Add are the templates' own
 `shared/grok-import.test.ts`, `server/team/team-library.test.ts` (fixtures
 `server/fixtures/grok-share-page*.html`),
 `server/routes/team-library-grok.test.ts`,
-`src/components/settings/ImportSettings.dom.test.ts` (the export fixture
+`src/components/AgentImport.test.ts` (the export fixture
 `shared/fixtures/grok-import/shared-grok-bot.json`).
 
 ### Import an agent: New bot and the first run (2026-10-26)
@@ -10590,13 +10600,12 @@ and `server/browser/browser-teach.test.ts`:
 
 Paste preference lines onto the person's own primary bot
 (`shared/preference-import.ts`, `POST /api/me/preference-import/preview`
-then `apply`). The card lists each line as add, already there, or replace.
-Apply writes only the ids the person checked. A replace is not written
-unless that line was checked. Lines left unchecked, and preferences that
-were not in the paste, stay. This is not the agent import. Not an admin
-route: another bot, or a bot that is not their primary, is 404
-`not_primary`. The card is `PreferenceImportCard` under Settings > Import.
-Covered by `shared/preference-import.test.ts`.
+then `apply`). Apply writes only the ids the person checked. A replace is
+not written unless that line was checked. Lines left unchecked, and
+preferences that were not in the paste, stay. This is not the agent import.
+Not an admin route: another bot, or a bot that is not their primary, is 404
+`not_primary`. The Settings > Backups card was removed (JC 2026-11-06); the
+API stays. Covered by `shared/preference-import.test.ts`.
 
 ## Bot task list
 

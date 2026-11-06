@@ -209,14 +209,14 @@ describe("Bot > Model, solo", () => {
     expect(fixture.dispatch, "shown, not written, until the list changes").not.toHaveBeenCalled();
   });
 
-  it("shows the server default labelled, read-only, and Customize copies it into the bot", async () => {
+  it("shows the server default labelled with Backup model editable, and Customize copies it into the bot", async () => {
     fixture.config = { ...fixture.config!, automaticRecovery: { enabled: true, backup: { instanceId: "spare", model: "s" } } } as ConfigStatus;
     await render(bot());
     expect(recoveryCard()!.dataset.botRecovery).toBe("on");
     expect($('[data-settings-row="botBackup.1"]')?.textContent).toContain("1. Spare");
-    expect($('[data-settings-row="botBackup.1"]')?.textContent).toContain("Spare model");
-    expect($('[data-settings-row="botBackup.1"] [data-backup-remove]'), "not edited in place").toBeNull();
-    expect($('[data-settings-row="botBackup.add"]')).toBeNull();
+    expect($('[data-settings-row="botBackup.1"] [aria-label="Backup model"]')).not.toBeNull();
+    expect($('[data-settings-row="botBackup.1"] [data-backup-remove]')).not.toBeNull();
+    expect($('[data-settings-row="botBackup.add"]')).not.toBeNull();
     expect($('[data-settings-row="botBackup.default"]')?.textContent).toContain("Server default");
     await click($("[data-backup-customize]"));
     expect(fixture.dispatch).toHaveBeenCalledWith({ type: "updateBot", botId: "bot-1", patch: { fallback: [{ instanceId: "spare", model: "s" }] } });

@@ -38,7 +38,7 @@ import { ChatViewSheets } from "./ChatViewSheets";
 /** Chat chrome: header, banners, transcript, composer, page panel. */
 export function ChatViewShell(m: Record<string, any>) {
   const {
-    side, bot, profile, storeBots, engine, state, sheetRun, sheetRoutine, dispatch,
+    side, bot, profile, storeBots, engine, state, dispatch,
     showInspector, advanced, remoteClient, showThreads, confidential, privateHint,
     exchangeColumnNode, exchangeColumnRef, pageHostRef, pageChatWide, pageChatSurface, setPageChatSurface,
     openPage, pageBeside, pageCover, pageStage, pageOpenerRef, composerDockRef, composerDock,
@@ -359,8 +359,6 @@ export function ChatViewShell(m: Record<string, any>) {
     <ChatViewSheets
       side={side}
       state={state}
-      sheetRun={sheetRun}
-      sheetRoutine={sheetRoutine}
       storeBots={storeBots}
       dispatch={dispatch}
     />

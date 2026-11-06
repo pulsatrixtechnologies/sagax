@@ -52,6 +52,7 @@ export function useChatViewSession(stored: Bot, side?: SideChat) {
   const dispatch = useStoreDispatch();
   const state = useStoreSelector((current) => ({
     codingChat: current.codingChat,
+    routineRunWindow: current.routineRunWindow,
     computerOpen: current.computerOpen,
     config: current.config,
     connected: current.connected,

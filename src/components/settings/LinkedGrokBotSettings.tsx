@@ -1,4 +1,4 @@
-// Settings > Account > Linked Grok (#2193): the person's own webhook URL
+// Settings > Providers > Linked Grok (#2193, moved from Account 2026-11-06): the person's own webhook URL
 // and sealed key. Their Sagax bots reach only this link. Never shows the key
 // after save. Test sends a signed envelope. Phone opt-ins for owner call/text.
 import { useCallback, useEffect, useState } from "react";
@@ -12,7 +12,7 @@ import {
   testGrokBridge,
   type GrokBridgeLinkView,
 } from "@/lib/grok-bridge";
-import { Card, DescribedRow, FIELD, PILL, Switch } from "../SettingsPrimitives";
+import { DescribedRow, FIELD, PILL, SettingsGroup, Switch } from "../SettingsPrimitives";
 import { cn } from "@/lib/cn";
 
 const inputClass = cn(FIELD, "w-full max-w-md");
@@ -105,7 +105,7 @@ export function LinkedGrokBotSettings({ initial }: { initial?: GrokBridgeLinkVie
 
   if (!view) {
     return (
-      <div data-settings-card="account.linkedGrokBot">
+      <div data-settings-card="providers.linkedGrokBot">
         <p className="text-[12.5px] text-ink-secondary">{error ?? t("grokBridge.loading")}</p>
       </div>
     );
@@ -114,12 +114,9 @@ export function LinkedGrokBotSettings({ initial }: { initial?: GrokBridgeLinkVie
   const orgBlocked = view.orgAllowed === false;
 
   return (
-    <div data-grok-bridge={view.linked ? (view.enabled ? "on" : "off") : "none"}>
-      <Card
-        cardId="account.linkedGrokBot"
-        title={t("grokBridge.title")}
-        subtitle={orgBlocked ? t("grokBridge.orgDisabled") : t("grokBridge.intro")}
-      >
+    <div data-settings-card="providers.linkedGrokBot" data-grok-bridge={view.linked ? (view.enabled ? "on" : "off") : "none"}>
+      <SettingsGroup title={t("grokBridge.title")} groupId="linkedGrokBot">
+        <p className="px-3.5 pt-2.5 text-[12.5px] text-ink-secondary">{orgBlocked ? t("grokBridge.orgDisabled") : t("grokBridge.intro")}</p>
         {error && <p role="alert" className="mb-2 text-[12.5px] text-danger">{error}</p>}
         {testNote && <p role="status" className="mb-2 text-[12.5px] text-ink-secondary">{testNote}</p>}
 
@@ -142,7 +139,7 @@ export function LinkedGrokBotSettings({ initial }: { initial?: GrokBridgeLinkVie
             dir="ltr"
             value={webhookUrl}
             onChange={(e) => setWebhookUrl(e.target.value)}
-            placeholder="https://…"
+            placeholder={t("grokBridge.urlPlaceholder")}
             aria-label={t("grokBridge.webhook")}
             autoComplete="off"
             disabled={busy || orgBlocked}
@@ -225,7 +222,7 @@ export function LinkedGrokBotSettings({ initial }: { initial?: GrokBridgeLinkVie
             {t("grokBridge.inboundHint", { path: `/api/bridge/grok/${view.linkId}` })}
           </p>
         )}
-      </Card>
+      </SettingsGroup>
     </div>
   );
 }

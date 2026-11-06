@@ -64,7 +64,7 @@ interface Pending {
   message: string;
   /** Where the card lives, so answering it can settle it. A card that is
    * never settled keeps matching the client's "unanswered" filter, and the
-   * composer stays disabled behind it — the thread is unusable from then on. */
+   * composer stays disabled behind it  -  the thread is unusable from then on. */
   threadId: string;
   messageId: string;
   bus: ApprovalBus;
@@ -81,7 +81,7 @@ function settleCard(pending: Pending, behavior: string, source: "user" | "system
   pending.bus.store.patchMessage(pending.threadId, pending.messageId, {
     card: { ...existing.card, answered: behavior, dismissed: source !== "user" },
   });
-  // answered (by whoever): the turn is working again — the same hand-back
+  // answered (by whoever): the turn is working again  -  the same hand-back
   // the request.resolved fold does for a provider's card
   const store = pending.bus.store;
   const task = store.projectBotForTask(pending.fromBotId, pending.threadId);
@@ -93,7 +93,7 @@ function settleCard(pending: Pending, behavior: string, source: "user" | "system
   }
 }
 
-/** requestId → pending ask. Lives only in memory — restarting the
+/** requestId → pending ask. Lives only in memory  -  restarting the
  * server cancels every in-flight approval, like provider permissions do. */
 const pendingComms = new Map<string, Pending>();
 
@@ -107,7 +107,8 @@ function allowKeyAllowed(from: BotRecord, allowKey: string): boolean {
 }
 
 /** Who a peer action is aimed at. A bot for ask_bot and delegate_bot, a
- * room for post_to_room — the gate only ever needs its id and its name. */
+ * room for post_to_room, a person for message_person  -  the gate only ever
+ * needs its id and its name. */
 export interface PeerApprovalTarget {
   id: string;
   name: string;
@@ -118,7 +119,14 @@ const ACTION_VERB: Record<PeerAction, string> = {
   ask_bot: "contact",
   delegate_bot: "delegate to",
   post_to_room: "post in",
+  message_person: "message",
 };
+
+function peerTargetLabel(action: PeerAction, target: PeerApprovalTarget): string {
+  if (action === "post_to_room") return `“${target.name}”`;
+  if (action === "message_person") return target.name;
+  return `@${target.name}`;
+}
 
 function pushApprovalCard(
   bus: ApprovalBus,
@@ -135,8 +143,8 @@ function pushApprovalCard(
     role: "bot",
     kind: "options",
     card: {
-      // a room is named as a room; only a bot gets an @
-      title: `@${from.name} wants to ${ACTION_VERB[action]} ${action === "post_to_room" ? `“${target.name}”` : `@${target.name}`}`,
+      // a room is quoted; a person is named; a bot gets an @
+      title: `@${from.name} wants to ${ACTION_VERB[action]} ${peerTargetLabel(action, target)}`,
       subtitle,
       options: ["Allow", "Deny", "Always allow"],
       requestId,
@@ -147,8 +155,8 @@ function pushApprovalCard(
   return note;
 }
 
-/** This card is the one bot-to-bot event that blocks on a person — for up
- * to fifteen minutes — so it gets exactly what a provider's card gets: the
+/** This card is the one bot-to-bot event that blocks on a person  -  for up
+ * to fifteen minutes  -  so it gets exactly what a provider's card gets: the
  * bot shows as waiting rather than working, and a "needs approval" frame
  * goes out aimed at the thread the card is in. Without this the sidebar
  * read "Working…" with no dot and no banner until the timer denied it, and
@@ -156,7 +164,7 @@ function pushApprovalCard(
  * asked for. A bot speaking in a room is not reachable in its own thread,
  * so the room the card landed in is named, the way takeover does. */
 function announceCard(bus: ApprovalBus, from: BotRecord, card: Message, sourceThreadId: string): void {
-  // the bot is not working now — it is waiting on a person. A delegation
+  // the bot is not working now  -  it is waiting on a person. A delegation
   // drained after its turn has already settled is idle, and stays so.
   const task = bus.store.projectBotForTask(from.id, sourceThreadId);
   const room = bus.store.groupByThread(sourceThreadId);
@@ -192,9 +200,11 @@ export function requestPeerApproval(
   }
   // 2026-10-21 (parité 1C, Decision: « hors liste = carte, dans la liste = part
   // sans carte »): a bot on the sender's allowed recipients is reached with
-  // no card. A room (post_to_room) is not a recipient. A standing grant: off
-  // while the organization turned standing grants off.
-  if (action !== "post_to_room" && standingGrantsAllowed() && botRecipientAllowed(from.allowedRecipients, target.id)) {
+  // no card. A room (post_to_room) and a person (message_person) are not
+  // recipients. A standing grant: off while the organization turned standing
+  // grants off.
+  if (action !== "post_to_room" && action !== "message_person"
+    && standingGrantsAllowed() && botRecipientAllowed(from.allowedRecipients, target.id)) {
     return Promise.resolve("allow");
   }
   return new Promise((resolve) => {
@@ -272,7 +282,7 @@ export function cancelPeerApprovalsForThread(threadId: string): void {
 
 /** Every thread a peer card can be raised in. A card lands in the thread
  * the CALLER is speaking from, and since a bot's turn can now run in a room
- * — ask_bot and post_to_room are both callable from there — that thread is
+ *  -  ask_bot and post_to_room are both callable from there  -  that thread is
  * as often a room's as a bot's. A walk that knew only about bot threads
  * would leave a room's composer blocked behind a card nothing can answer. */
 function peerCardThreads(bus: ApprovalBus): Set<string> {
@@ -288,7 +298,7 @@ function peerCardThreads(bus: ApprovalBus): Set<string> {
   return threadIds;
 }
 
-/** Cards left on disk by a previous run can never be answered — their
+/** Cards left on disk by a previous run can never be answered  -  their
  * in-memory approval died with the process. Settle them at boot so a
  * crashed run doesn't leave a thread with a permanently blocked composer. */
 export function dismissStalePeerCards(bus: ApprovalBus): number {

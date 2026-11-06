@@ -14,6 +14,7 @@ import { fromMarkdown } from "mdast-util-from-markdown";
 import { atRestStream, describeHandle, plainSizeFor, readAllFromHandle } from "../encryption/content-at-rest.ts";
 import { windowsPathDestinations } from "../../shared/markdown-windows-paths.ts";
 import { isSharedHost } from "../host-kind.ts";
+import { inSecretFolder, SECRET_FILE_REFUSAL } from "../secret-folder.ts";
 
 /** Message-authorized downloads use the same durable transport ceilings as
  * composer uploads. Previewers keep their own smaller in-memory ceilings.
@@ -465,6 +466,7 @@ export async function openMessageFile(href: string, roots: readonly string[]): P
       sawOutsideRoot = true;
       continue;
     }
+    if (inSecretFolder(canonicalBefore)) throw statusError(403, SECRET_FILE_REFUSAL, "secret_file");
 
     let handle: FileHandle | undefined;
     try {
@@ -475,6 +477,7 @@ export async function openMessageFile(href: string, roots: readonly string[]): P
       if (!opened.isFile()) throw statusError(400, "the link does not point to a regular file");
       const canonicalAfter = await realpath(candidate);
       if (!containedBy(root, canonicalAfter)) throw outsideWorkspace();
+      if (inSecretFolder(canonicalAfter)) throw statusError(403, SECRET_FILE_REFUSAL, "secret_file");
       const after = await stat(canonicalAfter);
       if (opened.dev !== after.dev || opened.ino !== after.ino) {
         throw statusError(409, "the linked file changed while it was being opened");
@@ -657,6 +660,7 @@ async function readMessageFolder(
       sawOutsideRoot = true;
       continue;
     }
+    if (inSecretFolder(folder)) throw statusError(403, SECRET_FILE_REFUSAL, "secret_file");
     if (!(await stat(folder)).isDirectory()) throw statusError(400, "the link does not point to a folder");
 
     const names = (await readdir(folder)).sort((a, b) => a.localeCompare(b));

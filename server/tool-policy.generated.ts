@@ -532,6 +532,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"DELETE","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/saved-steps\\/([^/]+)$","tier":"admin","readOnly":false,"scope":"bots:admin","defaultEnabled":false,"destructive":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/secret-cards\\/([\\w-]+)\\/(provided|resume|dismiss)$","tier":"admin","readOnly":false,"scope":"bots:admin","defaultEnabled":false},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/secret-cards\\/([\\w-]+)\\/provide$","tier":"admin","readOnly":false,"scope":"bots:admin","defaultEnabled":false},
+  {"method":"POST","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/secret-cards\\/([\\w-]+)\\/save$","tier":"admin","readOnly":false,"scope":"bots:admin","defaultEnabled":false},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/send-state\\/fix$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},
   {"method":"GET","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/send-state$","tier":"read","readOnly":true,"scope":"bots:read","defaultEnabled":true},
   {"method":"POST","kind":"pattern","route":"^\\/api\\/bots\\/([\\w-]+)\\/shown-path$","tier":"write","readOnly":false,"scope":"bots:write","defaultEnabled":true},

@@ -51,6 +51,8 @@ export const CREDENTIAL_TARGETS = {
 } as const;
 
 export type CredentialTargetId = keyof typeof CREDENTIAL_TARGETS;
+/** Every current allowlisted target is saved in the desktop encrypted store (or /api/config when there is no desktop). */
+export type DesktopCredentialSlot = CredentialTargetId;
 export type CredentialConfig = {
   xai?: { key?: string };
   // The persisted config section keeps its historical name: cfg.box.
@@ -60,8 +62,21 @@ export type CredentialConfig = {
   imageGen?: { key?: string };
 };
 
+/** A secret Sagax does not keep itself: the bot names it, and gets a one-use reference or a private file. */
+export const CUSTOM_SECRET_TARGET = "customSecret";
+export type SecretDelivery = "ref" | "file";
+export const SECRET_DELIVERIES: readonly SecretDelivery[] = ["ref", "file"];
+export const CUSTOM_SECRET_LABEL_MAX = 80;
+export const CUSTOM_SECRET_REASON_MAX = 240;
+
 export function isCredentialTargetId(value: unknown): value is CredentialTargetId {
   return typeof value === "string" && Object.prototype.hasOwnProperty.call(CREDENTIAL_TARGETS, value);
+}
+
+/** The desktop's encrypted-store slot for this key; null only for targets Settings keeps in the server's config alone.
+ * Sagax's current allowlist is all desktop slots. */
+export function desktopCredentialSlot(id: CredentialTargetId): DesktopCredentialSlot | null {
+  return isCredentialTargetId(id) ? id : null;
 }
 
 export function credentialConfigPatch(id: CredentialTargetId, value: string): CredentialConfig {
@@ -122,6 +137,29 @@ export function isPendingCredentialRequest(
   return (
     message.kind === "secret" &&
     message.secret?.target === target &&
+    message.secret.provided !== true &&
+    message.secret.dismissed !== true &&
+    message.secret.superseded !== true &&
+    (!roomThread || message.from?.botId === requestingBotId)
+  );
+}
+
+/** A still-pending card from this bot for a custom secret with the same name, which a newer request supersedes. */
+export function isPendingCustomSecretRequest(
+  message: {
+    kind?: unknown;
+    secret?: { target?: unknown; label?: unknown; provided?: unknown; dismissed?: unknown; superseded?: unknown };
+    from?: { botId?: unknown };
+  },
+  label: string,
+  requestingBotId: string,
+  roomThread: boolean,
+): boolean {
+  return (
+    message.kind === "secret" &&
+    message.secret?.target === CUSTOM_SECRET_TARGET &&
+    typeof message.secret.label === "string" &&
+    message.secret.label.toLowerCase() === label.toLowerCase() &&
     message.secret.provided !== true &&
     message.secret.dismissed !== true &&
     message.secret.superseded !== true &&

@@ -61,6 +61,32 @@ describe("SecretRequestCard superseded requests", () => {
   });
 });
 
+describe("SecretRequestCard on a page reached through a desktop paired to another computer", () => {
+  const remote = (secret: Record<string, unknown>) => {
+    vi.stubGlobal("window", { ogb: { remoteClient: { active: true } } });
+    return view(secret);
+  };
+
+  it("offers the field for a custom secret the server keeps", () => {
+    const html = remote({
+      target: "customSecret",
+      label: "Mailbox password",
+      delivery: "ref",
+      placeholder: "",
+      helpUrl: "",
+      reason: "To check mail.",
+    });
+    expect(html).toContain('type="password"');
+    expect(html).not.toContain("must be saved on the host computer");
+  });
+
+  it("sends a key the host computer keeps in its own encrypted store to that computer", () => {
+    const html = remote({ target: "boxToken", label: "Boat token" });
+    expect(html).toContain("must be saved on the host computer");
+    expect(html).not.toContain('type="password"');
+  });
+});
+
 describe("SecretRequestCard ask card", () => {
   it("waits as a compact ask card with a masked field", () => {
     const html = view({});
@@ -85,5 +111,22 @@ describe("SecretRequestCard ask card", () => {
     expect(html).toContain("Try again");
     expect(html).toContain("The bot could not be resumed.");
     expect(html).not.toContain('type="password"');
+  });
+
+  it("shows a custom secret card with the delivery note and no help link", () => {
+    const html = view({
+      target: "customSecret",
+      label: "Stripe secret key",
+      reason: "To create a webhook for the shop.",
+      delivery: "ref",
+      placeholder: "sk_live_…",
+      helpUrl: "",
+      description: "To create a webhook for the shop. Scout gets a one-use reference for Sagax's own tools and never sees it.",
+    });
+    expect(html).toContain("Stripe secret key");
+    expect(html).toContain("To create a webhook for the shop.");
+    expect(html).toContain("one use by its own tools");
+    expect(html).toContain('type="password"');
+    expect(html).not.toContain("Where to get this key");
   });
 });

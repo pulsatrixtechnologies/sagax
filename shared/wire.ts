@@ -41,7 +41,7 @@ import type { RemoteSessionView } from "./remote-session.ts";
 import type { ResourceUsageView } from "./resource-usage.ts";
 import type { ConnectorSetupView } from "./connector-setup.ts";
 import type { BotPublicProfile } from "./bot-public-profile.ts";
-import type { CredentialTargetId } from "./credential-request.ts";
+import { CUSTOM_SECRET_TARGET, type CredentialTargetId, type SecretDelivery } from "./credential-request.ts";
 import type { VaultLoginTarget, VaultRequestCardData } from "./credential-vault.ts";
 import type { TeamSetupRequest } from "./team-setup.ts";
 import type { RoutineRequestCardData } from "./routine-request.ts";
@@ -1400,14 +1400,22 @@ export interface LiveSettings {
 }
 
 export interface SecretRequestCardData {
-  /** Fixed allowlisted credential id; never an arbitrary config path.
+  /** Fixed allowlisted credential id, never a config path; CUSTOM_SECRET_TARGET: a secret the bot names, kept off Settings.
    * vaultLogin: a bot asks to use a login from the credential vault
    * (shared/credential-vault.ts); the card carries `vault` and no field. */
-  target: CredentialTargetId | VaultLoginTarget;
+  target: CredentialTargetId | VaultLoginTarget | typeof CUSTOM_SECRET_TARGET;
   label: string;
   description: string;
   placeholder: string;
   helpUrl: string;
+  /** A custom secret's use the person agrees to: "ref", Sagax's own tools swap it once; "file", a private workspace file for a day. */
+  delivery?: SecretDelivery;
+  /** Why the bot needs a custom secret (shown on the card). */
+  reason?: string;
+  /** When a custom secret was saved behind this card (ms); never the value. */
+  savedAt?: number;
+  /** Local VM target key when a file secret should land in that VM's workspace. */
+  vm?: string;
   requestKey: string;
   phoneOperationId?: string;
   provided?: boolean;

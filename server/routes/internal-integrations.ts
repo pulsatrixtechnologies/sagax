@@ -6,10 +6,13 @@
 import { randomUUID } from "node:crypto";
 import {
   CREDENTIAL_TARGETS,
+  CUSTOM_SECRET_TARGET,
   isCredentialTargetId,
   isPendingCredentialRequest,
+  isPendingCustomSecretRequest,
   type CredentialTargetId,
 } from "../../shared/credential-request.ts";
+import { deliveryNote, parseCustomSecretRequest } from "../host/custom-secrets.ts";
 import { CONFIDENTIAL_PEER_REFUSED } from "../threads/confidential-threads.ts";
 import {
   botAddedMcpServerEnabled,
@@ -86,6 +89,8 @@ export interface InternalIntegrationsDeps {
   /** #2109: post (or reuse) the GitHub sign-in card in this chat; its id. */
   githubPostCard?(principalId: string, threadId: string, start: { userCode: string; verificationUri: string; expiresAt: number }, from?: Record<string, unknown>): string | undefined;
   credentialConfigured(credentialId: CredentialTargetId): boolean;
+  /** Swap secretRef values in an add_mcp_server body before it is saved. */
+  redeemMcpBody?<T>(body: T, botId: string, threadId: string): { ok: true; value: T; commit(): void } | { ok: false; error: string };
   appendMessage(threadId: string, message: Record<string, unknown>): { id: string };
   activePath(threadId: string): ReadonlyArray<{
     id: string;
@@ -202,7 +207,14 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
       // not interleave a read of cfg.mcpServers with a save.
       if (!deps.tryBeginMcpConfigUpdate()) return json(res, 409, { error: "MCP servers are already being updated." });
       try {
-        const body = await readBody();
+        let body = await readBody();
+        let commitRedeem: (() => void) | undefined;
+        if (deps.redeemMcpBody) {
+          const redeemed = deps.redeemMcpBody(body, sender.id, capability.threadId);
+          if (!redeemed.ok) return json(res, 400, { error: redeemed.error });
+          body = redeemed.value;
+          commitRedeem = redeemed.commit;
+        }
         const added = deps.botAddMcpServer
           ? deps.botAddMcpServer(deps.mcpServers(), body, sender.id)
           : deps.addDisabledMcpServer(deps.mcpServers(), body);
@@ -225,6 +237,7 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
         });
         const stored = enabled ? { ...server, enabled: true } : server;
         deps.persistMcpServers({ ...added.next, [added.name]: stored });
+        commitRedeem?.();
         deps.healthChanged?.(added.name);
         if (remote) {
           return json(res, 201, {
@@ -319,8 +332,32 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
       const fromThreadId = capability.threadId;
       const owner = deps.ownsThread(from.id, fromThreadId);
       if (!owner) return json(res, 403, { error: "source conversation does not belong to sender" });
+      // Custom secret: label + reason + delivery, kept off Settings.
       if (!isCredentialTargetId(body.credentialId)) {
-        return json(res, 400, { error: "unsupported credential id" });
+        const custom = parseCustomSecretRequest(body);
+        if ("error" in custom) return json(res, 400, { error: custom.error });
+        const message = deps.appendMessage(fromThreadId, {
+          role: "bot",
+          kind: "secret",
+          text: credentialDesktopHandoff(custom.label),
+          ...(owner.group ? { from: { botId: from.id, name: from.name, color: from.color } } : {}),
+          secret: {
+            target: CUSTOM_SECRET_TARGET,
+            label: custom.label,
+            description: `${custom.reason} ${deliveryNote(from.name, custom.delivery)}`,
+            placeholder: custom.placeholder || "Paste the secret",
+            helpUrl: "",
+            reason: custom.reason,
+            delivery: custom.delivery,
+            requestKey: randomUUID(),
+          },
+        });
+        for (const prior of deps.activePath(fromThreadId)) {
+          if (prior.id === message.id) continue;
+          if (!prior.secret || !isPendingCustomSecretRequest(prior, custom.label, from.id, Boolean(owner.group))) continue;
+          deps.patchMessage(fromThreadId, prior.id, { secret: { ...prior.secret, superseded: true } });
+        }
+        return json(res, 201, { messageId: message.id, label: custom.label, delivery: custom.delivery });
       }
       const credentialId: CredentialTargetId = body.credentialId;
       const target = CREDENTIAL_TARGETS[credentialId];

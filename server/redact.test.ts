@@ -157,12 +157,14 @@ describe("redactSecretsInText", () => {
       [`slack ${"xox" + "b-"}${"123456789012"}-${"1234567890123"}-${alpha.slice(0, 24)}`, /xoxb-/],
       [`slack app ${"xa" + "pp-"}1-A0123456789-${"1234567890123"}-${alpha.slice(0, 24)}`, /xapp-|A0123456789/],
       [`aws ${"AKIA" + "IOSFODNN7EXAMPLE"} and more`, /IOSFODNN7EXAMPLE/],
+      [`aws temporary ${"ASIA" + "IOSFODNN7EXAMPLE"} and more`, /IOSFODNN7EXAMPLE/],
       [`google ${"AIza" + "SyA-"}${alpha.slice(0, 32)}`, /AIza/],
       [`npm ${"npm" + "_"}${alpha}`, /npm_[a-z]/],
       [`xai ${"xai-"}${alpha}`, /xai-/],
       [`groq ${"gsk_"}${alpha}ABCD`, /gsk_/],
       [`meta ${"LLM|"}607358788850350|${alpha}`, /LLM\|6073/],
       [`huggingface ${"hf_"}${alpha}`, /hf_/],
+      [`pypi ${"py" + "pi-"}AgEIcHlwaS5vcmcCJDAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMAACKlszLCJhYmNkZWYiXQAABiBy${alpha}`, /pypi-|AgEIcHlwaS5vcmc/],
       [`stripe ${"sk_" + "live_"}${alpha}`, /sk_live_[a-z]/],
       [`stripe test ${"sk_" + "test_"}${alpha}`, /sk_test_[a-z]/],
       [`stripe restricted ${"rk_" + "live_"}${alpha}`, /rk_live_[a-z]/],
@@ -173,6 +175,17 @@ describe("redactSecretsInText", () => {
       const out = redactSecretsInText(input);
       expect(out, input).not.toMatch(leak);
       expect(out).toMatch(/«redacted \d+ chars»/);
+    }
+  });
+
+  it("masks SendGrid API keys", () => {
+    // SG.<22-char key id>.<43-char secret>, assembled at runtime like the cases above.
+    const key = `${"S" + "G."}${"abcdefghij0123456789_-"}.${"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij0123456"}`;
+    expect(redactSecretsInText(`sendgrid ${key} sent`)).toBe(`sendgrid «redacted ${key.length} chars» sent`);
+    expect(holdsCredential(`mail via ${key}`)).toBe(true);
+    for (const ordinary of ["SG.example.com", `${"S" + "G."}${"a".repeat(22)}.${"b".repeat(20)}`, `${"S" + "G."}${"a".repeat(22)}.${"b".repeat(44)}`, "Use the SG. prefix for the key"]) {
+      expect(redactSecretsInText(ordinary)).toBe(ordinary);
+      expect(holdsCredential(ordinary)).toBe(false);
     }
   });
 
@@ -344,10 +357,12 @@ describe("redactSecrets: webhook secrets and cut key starts (Lot A0)", () => {
 describe("holdsCredential (Lot A0 / upstream tip)", () => {
   it("knows a provider key or a private key block, never a name, a placeholder or code that reads one", () => {
     for (const text of [
+      `TWINE_PASSWORD: ${"py" + "pi-"}AgENdGVzdC5weXBpLm9yZwIkMDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAwAAIqWzMsImFiY2RlZiJdAAAGIA`,
       '{"apiKey": "sk-ant-api03-0123456789abcdefABCD"}',
       "GITHUB_TOKEN=ghp_0123456789abcdefghij0123",
       "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n",
       "aws_access_key_id = AKIAABCDEFGHIJKLMNOP",
+      `temporary aws key ${"ASIA" + "ABCDEFGHIJKLMNOP"}`,
       `git clone https://oauth2:${"glp" + "at-"}0123456789abcdefABCD@gitlab.example.com/x.git`,
       `SLACK_APP_TOKEN: ${"xa" + "pp-"}1-A0123456789-1234567890123-abcdef0123456789`,
       `stripe.secret = "${"sk_" + "live_"}0123456789abcdefABCD"`,
@@ -360,6 +375,7 @@ describe("holdsCredential (Lot A0 / upstream tip)", () => {
       "Keep credentials out of the repo.",
       "-----BEGIN PUBLIC KEY-----",
       "GITLAB_TOKEN=glpat-your-token-here",
+      `release notes mention ${"py" + "pi-"}AgE${"x".repeat(60)}`,
     ]) expect(holdsCredential(text), text).toBe(false);
   });
 });

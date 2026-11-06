@@ -106,6 +106,8 @@ const REFUSED_INTERNAL_ROUTES: Record<string, string> = {
   "/api/internal/delegate-bot": "peer",
   "/api/internal/coordinate-bots": "peer",
   "/api/internal/post-to-room": "peer",
+  "/api/internal/message-person": "peer",
+  "/api/internal/message-user": "peer",
   "/api/internal/create-room": "peer",
   "/api/internal/manage-room": "peer",
   // a new bot's instructions (its soul) are words from the thread, and

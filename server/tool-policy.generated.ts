@@ -123,6 +123,7 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"POST","kind":"exact","route":"/api/internal/mcp-servers","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},
   {"method":"POST","kind":"exact","route":"/api/internal/memory","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},
   {"method":"POST","kind":"exact","route":"/api/internal/memory/log","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},
+  {"method":"POST","kind":"exact","route":"/api/internal/message-person","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},
   {"method":"ANY","kind":"exact","route":"/api/internal/messages/mcp","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},
   {"method":"POST","kind":"exact","route":"/api/internal/messages/mcp","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},
   {"method":"POST","kind":"exact","route":"/api/internal/model-requests","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},

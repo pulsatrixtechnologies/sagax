@@ -1,3 +1,13 @@
+## A bot writes to another person (#2118, 2026-11-06)
+
+`message_person` (agents tool, `POST /api/internal/message-person`) posts into
+a triad group chat: the bot's owner, the recipient and the bot. It finds an
+existing room with exactly those three or creates one, then posts on the
+group's main thread (unified chat). The owner approves a card with Always
+allow (`message_person:<principalId>`). Organization servers only; writing
+to the owner is refused (use this conversation). Helpers:
+`server/people/message-person.ts`. Confidential threads refuse the route.
+
 ## Background threads stay out of thread mode (#2015, 2026-11-05)
 
 `shared/background-threads.ts` (vectors in `background-threads.vectors.json`,

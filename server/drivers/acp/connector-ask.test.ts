@@ -35,7 +35,7 @@ describe("an engine connector call in an ACP ask (review of #943)", () => {
 
   // c09f3dfa2 (#1905): peer contact inside Sagax uses approvePeerComms,
   // so it no longer raises the outbound guard as well.
-  it.each(["send_to_bot", "post_to_room", "coordinate_bots", "ask_bot", "delegate_bot"])("keeps mounted agents__%s on the peer approval path", (tool) => {
+  it.each(["send_to_bot", "post_to_room", "message_person", "coordinate_bots", "ask_bot", "delegate_bot"])("keeps mounted agents__%s on the peer approval path", (tool) => {
     const target = `agents__${tool}`;
     expect(connectorAsk(useTool(target, { text: "hi" }), mounted)).toMatchObject({ engineConnector: false, outward: false });
     expect(connectorAsk({ kind: "other", title: target, rawInput: { text: "hi" } }, mounted)).toMatchObject({ engineConnector: false, outward: false });

@@ -17,7 +17,7 @@
 // A person without the Sagax permission `apps.ownIntegrations` gets that
 // 403 on every change, except signing in again to a server they already
 // have (`oauth/start`), so a token can be refreshed, and their own GitHub
-// account (#2109, JC 2026-11-05: no admin door on a person's own GitHub).
+// account (#2109: no admin door on a person's own GitHub).
 //
 // Only a signed-in person, only for themselves (the session's principal,
 // never an id from the request), only on an organization server. Member

@@ -162,7 +162,8 @@ describe("an organization member", () => {
     expect(nav).not.toContain(">API keys<");
     expect(nav).not.toContain(">Decision model<");
     expect(nav).toContain(">Usage<");
-    expect(nav).not.toContain(">Backups<");
+    // #2080 L3: Backups and import stays visible; the page gates Full backup on manageBackups.
+    expect(nav).toContain(">Backups<");
     // General is out of the navigation (2026-10-26); Account is first
     expect(nav).not.toContain(">General<");
     expect(nav).toContain(">Account<");

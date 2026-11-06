@@ -37,6 +37,8 @@ import { AGENT_API_TOOLS } from "./agents-tools/agent-api.ts";
 export { AGENT_API_TOOL_NAMES } from "./agents-tools/agent-api.ts";
 import { PERSPICAX_TOOLS, CLAIM_TOOLS } from "./agents-tools/perspicax.ts";
 export { PERSPICAX_TOOLS, PERSPICAX_TOOL_NAMES, CLAIM_TOOLS } from "./agents-tools/perspicax.ts";
+import { GROK_BRIDGE_TOOLS } from "./agents-tools/grok-bridge.ts";
+export { GROK_BRIDGE_TOOLS, GROK_BRIDGE_TOOL_NAMES } from "./agents-tools/grok-bridge.ts";
 import * as agentApiTools from "./agents-tools/agent-api.ts";
 import * as cloudAgentsTools from "./agents-tools/cloud-agents.ts";
 import * as computersTools from "./agents-tools/computers.ts";
@@ -113,6 +115,9 @@ export interface CatalogProfile {
   /** The claim tools (server/perspicax/perspicax-claims.ts): the Perspicax
    * account connection is mounted for the person speaking. Absent is off. */
   claims?: boolean;
+  /** Per-person Grok bridge tools (#2193): the speaker has a live link.
+   * Absent is off, so the wire goldens stay. */
+  grokBridge?: boolean;
   /** The tools a phone of the person speaking offers right now (phone_tool,
    * agents-phone-tools.ts). Absent or empty is off, so the wire goldens stay. */
   phoneTools?: PhoneToolId[];
@@ -159,6 +164,7 @@ export function catalogProfileFromEnv(env: NodeJS.ProcessEnv): CatalogProfile {
     agentApi: env.SAGAX_AGENT_API === "1",
     perspicax: !externalRuntime && env.SAGAX_PERSPICAX_TOOLS === "1",
     claims: env.SAGAX_CLAIMS === "1",
+    grokBridge: !externalRuntime && env.SAGAX_GROK_BRIDGE === "1",
     phoneTools: externalRuntime ? [] : phoneToolsFromEnv(env.SAGAX_PHONE_TOOLS),
     ...(!externalRuntime && env.SAGAX_WEB_SEARCH === "1" ? { webSearch: true } : {}),
     vaultHttp: !externalRuntime && env.SAGAX_VAULT_HTTP === "1",
@@ -544,6 +550,7 @@ function catalogTools(profile: CatalogProfile) {
       ? [PLACE_PHONE_CALL_TOOL_SPEC, PLACE_CALL_TOOL_SPEC, SEND_DTMF_TOOL_SPEC, TRANSFER_CALL_TOOL_SPEC, HANG_UP_TOOL_SPEC]
       : []),
     ...(profile.claims && !profile.externalRuntime ? CLAIM_TOOLS : []),
+    ...(profile.grokBridge && !profile.externalRuntime ? GROK_BRIDGE_TOOLS : []),
     ...(profile.phoneTools?.length && !profile.externalRuntime ? [phoneToolDefinition(profile.phoneTools)] : []),
     ...(profile.webSearch === true && !profile.externalRuntime ? [WEB_SEARCH_TOOL_DEFINITION] : []),
     ...(profile.openapiTools?.length && !profile.externalRuntime ? profile.openapiTools.map(openApiToolDefinition) : []),
@@ -569,7 +576,7 @@ export function knownAgentToolName(name: string): boolean {
       externalRuntime: false, ownThreadCreation: true, skillAuthoring: true, sharedComputers: true,
       voiceNotes: true, meetings: true, singleStream: true, routeMessages: true, githubConnect: true, cloudHome: false,
       memoryEnabled: true, groupMemory: true, chief: true, createBots: true, botId: WATCHER_OPTIONS_CARD_BOT_ID,
-      agentApi: true, perspicax: true, claims: true, phoneTools: [...PHONE_TOOLS], webSearch: true, vaultHttp: true,
+      agentApi: true, perspicax: true, claims: true, grokBridge: true, phoneTools: [...PHONE_TOOLS], webSearch: true, vaultHttp: true,
     };
     everyAgentTool = new Set([false, true].flatMap((voiceCall) => [false, true].flatMap((coordinating) =>
       availableTools({ ...widest, voiceCall, coordinating }).map((tool) => tool.name))));

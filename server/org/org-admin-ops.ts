@@ -91,6 +91,8 @@ export interface SettingsChanges {
   memberAutoApproval?: boolean;
   /** 2026-10-18: people may export their credential vault in clear. */
   allowVaultExport?: boolean;
+  /** Per-person Grok bridge (#2193). Absent or true allows it; false kills it org-wide without touching keys. */
+  allowGrokBridge?: boolean;
   pluginMarketplaces?: { mode: "any" } | { mode: "list"; allow: string[] };
   allowedEngines?: string[] | null;
   ownAccountsOutsideList?: boolean;
@@ -122,7 +124,7 @@ export async function timed(check: () => Promise<TestResult | null>): Promise<{ 
 }
 
 function settingsChanges(body: Record<string, unknown>): SettingsChanges | string {
-  const extra = onlyKeys(body, ["allowFullAccess", "memberEnvironmentAutonomy", "memberAutoApproval", "allowVaultExport", "pluginMarketplaces", "allowedEngines", "ownAccountsOutsideList", "disabledModels", "defaults", "interimAttachDays", "pendingApprovalExpireDays"]);
+  const extra = onlyKeys(body, ["allowFullAccess", "memberEnvironmentAutonomy", "memberAutoApproval", "allowVaultExport", "allowGrokBridge", "pluginMarketplaces", "allowedEngines", "ownAccountsOutsideList", "disabledModels", "defaults", "interimAttachDays", "pendingApprovalExpireDays"]);
   if (extra) return extra;
   if (!Object.keys(body).length) return "Send at least one setting.";
   const out: SettingsChanges = {};
@@ -141,6 +143,10 @@ function settingsChanges(body: Record<string, unknown>): SettingsChanges | strin
   if (body.allowVaultExport !== undefined) {
     if (typeof body.allowVaultExport !== "boolean") return "allowVaultExport is true or false.";
     out.allowVaultExport = body.allowVaultExport;
+  }
+  if (body.allowGrokBridge !== undefined) {
+    if (typeof body.allowGrokBridge !== "boolean") return "allowGrokBridge is true or false.";
+    out.allowGrokBridge = body.allowGrokBridge;
   }
   if (body.pluginMarketplaces !== undefined) {
     const value = objectBody(body.pluginMarketplaces);

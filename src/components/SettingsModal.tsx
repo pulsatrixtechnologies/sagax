@@ -34,6 +34,7 @@ import { shortcutLabel } from "./ShortcutHint";
 import { aboutMeFirstLine } from "./AboutMeSettings";
 import { SettingsSubPage, SettingsSubPageRow } from "./SettingsSubPage";
 import { AccountCard } from "./settings/AccountCard";
+import { LinkedGrokBotSettings } from "./settings/LinkedGrokBotSettings";
 import { MyApprovalRules } from "./settings/MyApprovalRules";
 import { MyToolGrants } from "./settings/MyToolGrants";
 import { cn } from "@/lib/cn";
@@ -394,6 +395,7 @@ export function SettingsModal() {
                       onOpen={() => openSubPage("general.aboutMe")}
                     />
                   )}
+                  <LinkedGrokBotSettings />
                 </SettingsGroup>
                 <SettingsGroup title={t("settings.group.languageRegion")} groupId="languageRegion">
                   <LanguageRow />

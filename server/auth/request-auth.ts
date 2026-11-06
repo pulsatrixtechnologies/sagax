@@ -554,6 +554,9 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // The person's visit signature (server/routes/web-bot-auth.ts): on unless
   // they turn it off. No admin right. The private key is never answered.
   { methods: ["GET", "PUT"], path: /^\/api\/me\/web-bot-auth$/ },
+  // Linked Grok (#2193): the person's own webhook URL and sealed key.
+  // No admin right. The key is never answered back.
+  { methods: ["GET", "PUT", "DELETE", "POST"], path: /^\/api\/me\/grok-bridge(?:\/(?:test|dead|leases))?$/ },
   // Connect apps > Tailscale: the person's bot computer joins their tailnet.
   { methods: ["GET", "DELETE"], path: /^\/api\/me\/tailscale$/ },
   { methods: ["POST"], path: /^\/api\/me\/tailscale\/(setup|join|refresh|disconnect)$/ },

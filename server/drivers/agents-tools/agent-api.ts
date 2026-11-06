@@ -62,6 +62,7 @@ export const AGENT_API_TOOLS = [
       priority: { type: "string", enum: ["now", "normal"], description: "now wakes an idle recipient at once or moves this to the front of its queue. It never interrupts a running turn. Default normal. At most 10 now sends per sender per hour; past that it is delivered as normal." },
       files: { type: "array", maxItems: 8, items: { type: "string" }, description: "Workspace-relative paths, 25 MiB each; copied to the agent's workspace." },
       thread_id: { type: "string", description: "Optional: continue one of your conversations with this agent (the thread_id a turn answer gave)." },
+      bridge_thread_id: { type: "string", maxLength: 128, description: "Optional (#2193): opaque Grok bridge thread id. When set, the prompt is treated as a bridge message (fenced, never a GO) and lands in the person's unified chat with this agent, never a separate open thread." },
     }, required: ["agent_id", "prompt"] },
   },
   {

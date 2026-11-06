@@ -12,6 +12,8 @@ import { createRoot } from "react-dom/client";
 import { OrgPhoneCalls } from "../components/settings/OrgPhoneCalls";
 import { OrgTeamSecrets } from "../components/settings/OrgTeamSecrets";
 import { OrgVaultExportPolicy } from "../components/settings/OrgVaultExportPolicy";
+import { OrgGrokBridgePolicy } from "../components/settings/OrgGrokBridgePolicy";
+import { LinkedGrokBotSettings } from "../components/settings/LinkedGrokBotSettings";
 import { CredentialsSettings } from "../components/settings/CredentialsSettings";
 import { ExportPanel } from "../components/settings/CredentialsTransfer";
 import { ComputerCareSettings } from "../components/settings/ComputerCareSettings";
@@ -51,7 +53,21 @@ window.fetch = async (input, init) => {
   if (path === "/api/org/phone-calls") {
     return json({ settings: { enabled: false, doNotCall: ["+15145550142", "+14385550199"] } });
   }
-  if (path === "/api/org/settings") return json({ settings: { allowVaultExport: true } });
+  if (path === "/api/org/settings") return json({ settings: { allowVaultExport: true, allowGrokBridge: true } });
+  if (path === "/api/me/grok-bridge") {
+    return json({
+      linked: true,
+      enabled: true,
+      webhookUrl: "https://grok.example/hook",
+      keySet: true,
+      linkId: "link_gallery",
+      bots: ["cryptic"],
+      mayCallOwner: false,
+      mayTextOwner: false,
+      orgAllowed: true,
+      stats: { sentToday: 0, receivedToday: 0, deadLetters: 0, circuitOpen: false },
+    });
+  }
   if (path === "/api/me/credentials/list") {
     return json({
       items: [
@@ -133,7 +149,24 @@ function Gallery() {
       <Sample id="org-bots">
         <SettingsGroup title={t("organization.group.bots")} groupId="organizationBots">
           <OrgVaultExportPolicy initial />
+          <OrgGrokBridgePolicy initial />
           <OrgTeamSecrets />
+        </SettingsGroup>
+      </Sample>
+      <Sample id="linked-grok-bot">
+        <SettingsGroup title={t("grokBridge.title")} groupId="linkedGrokBot">
+          <LinkedGrokBotSettings initial={{
+            linked: true,
+            enabled: true,
+            webhookUrl: "https://grok.example/hook",
+            keySet: true,
+            linkId: "link_gallery",
+            bots: ["cryptic"],
+            mayCallOwner: false,
+            mayTextOwner: true,
+            orgAllowed: true,
+            stats: { sentToday: 1, receivedToday: 0, deadLetters: 0, circuitOpen: false },
+          }} />
         </SettingsGroup>
       </Sample>
       <Sample id="experimental-phone-calls-off">

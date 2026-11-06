@@ -35,6 +35,7 @@ import { parseGateSearch, pinnedToolNames, searchedCatalog } from "./mcp/mcp-gat
 import { QUERY_TOOL, QUERY_TOOL_NAME, ResultStore, answerQuery, describeShape, exampleQuery } from "./mcp/mcp-shape.ts";
 import { DEFAULT_RESULT_BUDGET, type HeldResult, trimResultText } from "./mcp/mcp-trim.ts";
 import { ToolNameAliases, mapJsonStrings } from "./mcp/mcp-tool-names.ts";
+import { parseAgentsWithhold, resolvedServerLog } from "./mcp/agents-tool-priority.ts";
 import { killCliTree } from "./procs.ts";
 import { misuseGateBlockText } from "../shared/misuse-guardrails.ts";
 import { BRIDGE_FIND_TOOL, BRIDGE_SERVER, readBridgeCall } from "../shared/searched-tool-call.ts";
@@ -53,9 +54,10 @@ function gateEnvironment(): NodeJS.ProcessEnv {
     const value = JSON.parse(process.env[key] ?? "");
     const scoped = typeof value?.SAGAX_GATE_TOOL_SCOPE === "string" && value.SAGAX_GATE_TOOL_SCOPE.length > 0;
     const searched = typeof value?.SAGAX_GATE_SEARCH === "string" && value.SAGAX_GATE_SEARCH.length > 0;
+    const withheld = typeof value?.SAGAX_GATE_WITHHOLD === "string" && value.SAGAX_GATE_WITHHOLD.length > 0;
     if (!value || typeof value !== "object" || Array.isArray(value)
       || !["SAGAX_GATE_NAME", "SAGAX_GATE_UPSTREAM"].every(name => typeof value[name] === "string")
-      || (!scoped && !searched)
+      || (!scoped && !searched && !withheld)
       || !Object.entries(value).every(([name, setting]) => GATE_ENV_KEYS.includes(name) && typeof setting === "string")) throw new Error();
     return value;
   } catch {
@@ -63,7 +65,7 @@ function gateEnvironment(): NodeJS.ProcessEnv {
   }
 }
 /** The gate's own settings never reach the upstream server's environment. */
-const GATE_ENV_KEYS = ["SAGAX_GATE_NAME", "SAGAX_GATE_SPILL_DIR", "SAGAX_GATE_BUDGET", "SAGAX_GATE_UPSTREAM", "SAGAX_GATE_SPILL_HINT", "SAGAX_GATE_TOOL_SCOPE", "SAGAX_GATE_DIRECTORY", "SAGAX_GATE_TOOL_NAMES", "SAGAX_GATE_REPORT_DIR", "SAGAX_GATE_APPROVAL_SOCKET", "SAGAX_GATE_APPROVAL_TOKEN", "SAGAX_GATE_READ_ONLY", "SAGAX_GATE_MISUSE_MODE", "SAGAX_GATE_SEARCH"];
+const GATE_ENV_KEYS = ["SAGAX_GATE_NAME", "SAGAX_GATE_SPILL_DIR", "SAGAX_GATE_BUDGET", "SAGAX_GATE_UPSTREAM", "SAGAX_GATE_SPILL_HINT", "SAGAX_GATE_TOOL_SCOPE", "SAGAX_GATE_DIRECTORY", "SAGAX_GATE_TOOL_NAMES", "SAGAX_GATE_REPORT_DIR", "SAGAX_GATE_APPROVAL_SOCKET", "SAGAX_GATE_APPROVAL_TOKEN", "SAGAX_GATE_READ_ONLY", "SAGAX_GATE_MISUSE_MODE", "SAGAX_GATE_SEARCH", "SAGAX_GATE_WITHHOLD"];
 const gateEnv = gateEnvironment();
 const NAME = gateEnv.SAGAX_GATE_NAME || "mcp";
 const SPILL_DIR = gateEnv.SAGAX_GATE_SPILL_DIR || "";
@@ -97,6 +99,9 @@ const SEARCH = parseGateSearch(gateEnv.SAGAX_GATE_SEARCH, (message) => fail(mess
  * any tool still unregistrable is logged loudly and written to the report. */
 const ALIASES = gateEnv.SAGAX_GATE_TOOL_NAMES === "grok" ? new ToolNameAliases(NAME) : undefined;
 const REPORT_DIR = gateEnv.SAGAX_GATE_REPORT_DIR || "";
+/** #2189: bare names the agents server already owns for this turn. Left out
+ * of tools/list and refused on tools/call so the model uses agents. */
+const WITHHOLD = parseAgentsWithhold(gateEnv.SAGAX_GATE_WITHHOLD);
 /** Sagax gates this server's calls itself (mcp-gate-approval.ts): every
  * `tools/call` not on READ_ONLY waits for an approval from the server over
  * this socket. Fail closed throughout. */
@@ -476,7 +481,7 @@ function loadSearch(): Promise<SearchCatalog> {
   if (!searchLoading) {
     const started = searchGeneration;
     const read = readUpstreamCatalog().then((upstream) => {
-      const allowed = (name: string) => !scope || allowsTool(scope, { kind: "mcp", server: NAME, name });
+      const allowed = (name: string) => !WITHHOLD.has(name) && (!scope || allowsTool(scope, { kind: "mcp", server: NAME, name }));
       const directory = new ToolDirectory(upstream.filter((tool) => allowed(tool.name)), {
         withheld: upstream.filter((tool) => !allowed(tool.name)).map((tool) => tool.name),
         check: argumentProblems,
@@ -558,8 +563,27 @@ function routeLine(line: string): void {
   // never reaches upstream, so no selection, alias or approval applies.
   if (BUDGET > 0 && message?.method === "tools/call" && params?.name === QUERY_TOOL_NAME) {
     if (!id) return;
+    process.stderr.write(resolvedServerLog(NAME, QUERY_TOOL_NAME));
     process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: message.id, result: answerQuery(heldResults, params.arguments, BUDGET) })}\n`);
     return;
+  }
+  // #2189: a name agents already owns is not served here.
+  if (WITHHOLD.size && message?.method === "tools/call" && typeof params?.name === "string") {
+    const called = callTarget(params.name, params.arguments) ?? params.name;
+    if (WITHHOLD.has(called) || WITHHOLD.has(params.name)) {
+      process.stderr.write(resolvedServerLog("agents", called));
+      if (id) {
+        process.stdout.write(`${JSON.stringify({
+          jsonrpc: "2.0",
+          id: message.id,
+          result: {
+            content: [{ type: "text", text: `Tool "${called}" is served by the agents server on this turn, not by "${NAME}". Call it on agents.` }],
+            isError: true,
+          },
+        })}\n`);
+      }
+      return;
+    }
   }
   // An alias resolves through the map, before any check sees the name.
   if (ALIASES && message?.method === "tools/call" && params && typeof params.name === "string") {
@@ -649,7 +673,8 @@ function forward(line: string, message: Json | undefined, id: string | undefined
       const name = typeof params?.name === "string" ? params.name : "tool";
       const target = callTarget(name, params?.arguments);
       pending.set(id, { kind: "call", tool: target ?? name, trim: target !== undefined });
-    } else if (scope || ((ALIASES || BUDGET > 0) && message.method === "tools/list")) {
+      process.stderr.write(resolvedServerLog(NAME, target ?? name));
+    } else if (scope || WITHHOLD.size || ((ALIASES || BUDGET > 0) && message.method === "tools/list")) {
       pending.set(id, { kind: message.method === "tools/list" ? "list" : "other" });
     }
   }
@@ -709,6 +734,10 @@ createInterface({ input: child.stdout }).on("line", (line) => {
     }
     result.tools = result.tools.filter((tool: Json) => (DIRECTORY && isDirectoryTool(tool.name))
       || allowsTool(scope, { kind: "mcp", server: NAME, name: tool.name as string }));
+  }
+  // #2189: drop connector tools whose bare name agents already owns.
+  if (WITHHOLD.size && request?.kind === "list" && message.error === undefined && isRecord(result) && Array.isArray(result.tools)) {
+    result.tools = result.tools.filter((tool: unknown) => !isRecord(tool) || typeof tool.name !== "string" || !WITHHOLD.has(tool.name));
   }
   if (ALIASES && request?.kind === "list" && message.error === undefined && isRecord(result) && Array.isArray(result.tools)) {
     const tools = result.tools.filter((tool: unknown): tool is Json & { name: string } => isRecord(tool) && typeof tool.name === "string" && tool.name.length > 0);

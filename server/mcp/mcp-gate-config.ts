@@ -216,6 +216,9 @@ export function gateServer(input: {
   /** #1276: the gate searches a big catalog itself (mcp-gate-search.ts) and
    * lists whole only `pinned`. Mounts the gate always, stdio or URL. */
   search?: { pinned?: readonly string[]; pinnedSuffixes?: readonly string[]; maxTools?: number; maxChars?: number };
+  /** #2189: bare tool names the agents server already owns. The gate leaves
+   * them out of tools/list and refuses a call, so the model uses agents. */
+  withhold?: readonly string[];
 }): { command: string; args: string[]; env: Record<string, string> } | null {
   const { name, server, budget } = input;
   const parsed = parseToolScope(input.toolScope);
@@ -225,8 +228,11 @@ export function gateServer(input: {
   const approval = input.approval;
   if (approval && (!approval.socket || !approval.token)) throw new Error("An approval gate needs its socket and token.");
   const search = input.search && !aliased ? gateSearchEnv(input.search) : undefined;
-  if (budget <= 0 && !scoped && !aliased && !approval && !search) return null;
-  if (!scoped && !aliased && !approval && !search && input.gateRemote !== true && remoteMcpSpec(server)) return null;
+  const withhold = name !== "agents"
+    ? [...new Set((input.withhold ?? []).filter((tool) => typeof tool === "string" && tool.length > 0 && !tool.includes("__")))].sort()
+    : [];
+  if (budget <= 0 && !scoped && !aliased && !approval && !search && !withhold.length) return null;
+  if (!scoped && !aliased && !approval && !search && !withhold.length && input.gateRemote !== true && remoteMcpSpec(server)) return null;
   // The directory is the remote proxy's; it sits inside the gate, which
   // knows to look through call_tool at the tool underneath.
   // The gate's own search replaces the remote proxy's directory.
@@ -257,8 +263,9 @@ export function gateServer(input: {
     } : {}),
     SAGAX_GATE_MISUSE_MODE: process.env.SAGAX_MISUSE_GUARDRAILS?.trim() || "shadow",
     ...(search ? { SAGAX_GATE_SEARCH: search } : {}),
+    ...(withhold.length ? { SAGAX_GATE_WITHHOLD: JSON.stringify(withhold) } : {}),
   };
-  if (input.configEnvName && ((!scoped && !search) || !/^SAGAX_GATE_CONFIG_[a-f0-9]{64}$/.test(input.configEnvName))) {
+  if (input.configEnvName && ((!scoped && !search && !withhold.length) || !/^SAGAX_GATE_CONFIG_[a-f0-9]{64}$/.test(input.configEnvName))) {
     throw new Error("Invalid private MCP gate configuration.");
   }
   return {

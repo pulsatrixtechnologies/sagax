@@ -11,6 +11,7 @@ import { writeFileAtomicIfChanged } from "../../atomic.ts";
 import { commandVariablesDigest } from "../../vault/credential-command-env.ts";
 import { customServerGate, gateQueryTools, gateServer } from "../../mcp/mcp-gate-config.ts";
 import { compactGateSearch } from "../../mcp/mcp-gate-search.ts";
+import { agentsPreferredToolNames, withholdForConnector } from "../../mcp/agents-tool-priority.ts";
 import { canUseMcpServer } from "../../../shared/tool-scope.ts";
 import { harnessMcpHttpSpec, loopbackNoProxy } from "../../mcp/harness-mcp-http.ts";
 import { isPerspicaxBridge, PERSPICAX_FLOW_COMPUTE_TOOLS } from "../acp/grok-read-only-tools.ts";
@@ -220,6 +221,8 @@ if (isolated && turn.cwd && !turn.guestConfined) {
 // gate's own tool search (mcp-gate-search.ts): a big catalog lists only
 // the bot's most used tools whole.
 const searchedMounts = new Set<string>(turn.compactPrompt && turn.integrations?.agents ? ["agents"] : []);
+// #2189: agents bare names win over the same name on a connector.
+const agentsPreferred = turn.integrations?.agents ? agentsPreferredToolNames(turn.integrations.agents.env) : [];
 for (const name of turn.toolScope === undefined ? botOwned : Object.keys(mcpServers)) {
   if (!canUseMcpServer(turn.toolScope, name)) { delete mcpServers[name]; continue; }
   // a server may be named like an Object property ("constructor"): own keys only
@@ -230,7 +233,8 @@ for (const name of turn.toolScope === undefined ? botOwned : Object.keys(mcpServ
   const profile = Object.hasOwn(turn.integrations?.custom ?? {}, name) && isPerspicaxBridge(turn.integrations!.custom![name]);
   const search = turn.compactPrompt && botOwned.has(name) ? compactGateSearch(used, profile) : undefined;
   if (search) searchedMounts.add(name);
-  const gated = gateServer({ name, server: mcpServers[name], threadId, nodeEnv: NODE_ENV_FLAG, toolScope: turn.toolScope, ...(search ? { search } : {}), ...customServerGate(name, botOwned.has(name), turn.integrations?.customResultBudgets, turnEnvironment) });
+  const withhold = withholdForConnector(name, agentsPreferred);
+  const gated = gateServer({ name, server: mcpServers[name], threadId, nodeEnv: NODE_ENV_FLAG, toolScope: turn.toolScope, ...(search ? { search } : {}), ...(withhold.length ? { withhold } : {}), ...customServerGate(name, botOwned.has(name), turn.integrations?.customResultBudgets, turnEnvironment) });
   if (gated) mcpServers[name] = { ...gated, ...((mcpServers[name] as { alwaysLoad?: unknown })?.alwaysLoad === true ? { alwaysLoad: true } : {}) };
 }
 // an allowed name is mcp__<server> or mcp__<server>__<tool> (agentsAllowedTools)

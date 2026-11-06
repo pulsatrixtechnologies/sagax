@@ -16,13 +16,13 @@ import {
   formWord,
   indexCut,
   kilobytes,
-  orderedCapabilities,
   reasonText,
   receivedGroups,
   receiptWords,
   scopeWord,
   stateTone,
   stateWord,
+  visibleCapabilities,
   type BotCapabilities,
   type Capability,
 } from "@/lib/capabilities";
@@ -76,7 +76,7 @@ export function CapabilitiesBody({ botName, data, error = null, actionError = nu
       </div>
     );
   }
-  const items = orderedCapabilities(data.items);
+  const items = visibleCapabilities(data.items);
   const activeCount = items.filter((item) => item.state === "on" || item.state === "imposed").length;
   const groups = receivedGroups(items);
   const index = data.promptIndex;

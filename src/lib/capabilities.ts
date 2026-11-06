@@ -157,6 +157,17 @@ export function orderedCapabilities(items: readonly Capability[]): Capability[] 
   return [...items].sort((a, b) => SCOPE_ORDER[a.scope] - SCOPE_ORDER[b.scope] || capabilityName(a).localeCompare(capabilityName(b)));
 }
 
+/** #2189: hide a name_taken duplicate when another row already shows the
+ * same form and readable name (two GitHub / Superpowers, one off name_taken). */
+export function visibleCapabilities(items: readonly Capability[]): Capability[] {
+  const ordered = orderedCapabilities(items);
+  const winners = new Set<string>();
+  for (const item of ordered) {
+    if (item.reason !== "name_taken") winners.add(`${item.form}\0${capabilityName(item).toLowerCase()}`);
+  }
+  return ordered.filter((item) => item.reason !== "name_taken" || !winners.has(`${item.form}\0${capabilityName(item).toLowerCase()}`));
+}
+
 /** The plugin key of a bot plugin row (`plugin:bot:name@market`), for its switch. */
 export function botPluginKey(item: Pick<Capability, "key" | "form" | "scope">): string | null {
   return item.form === "plugin" && item.scope === "bot" && item.key.startsWith("plugin:bot:") ? item.key.slice("plugin:bot:".length) : null;

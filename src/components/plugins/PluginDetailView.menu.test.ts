@@ -1,10 +1,9 @@
 // @vitest-environment happy-dom
-// Connect apps, simplified (2026-10-14): a plugin's Update, Test, Edit and
-// Uninstall sit in one "..." menu. Discover (the view Connect apps opens on
-// since 2026-10-27) filters with Browse Bots' pills (All, then each
-// category, every one on the row) and View all filters it in place; a
-// detail and Browse Bots open in the same window under a breadcrumb, with
-// Escape and Cmd+[ to go back.
+// Connect apps, simplified (2026-10-14): a plugin's Test, Edit and Uninstall
+// sit by the name (Uninstall as its own pill; Test/Edit in "..."). Update
+// waits in the Details card. Discover filters with category pills and View
+// all filters it in place; a detail and Browse Bots open in the same window
+// under a breadcrumb, with Escape and Cmd+[ to go back.
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -52,18 +51,22 @@ describe("plugin detail menu", () => {
       onUpdate, onTest, onEdit: noop, onUninstall, details: [],
     })));
     expect(host.querySelector('[role="menu"]')).toBeNull();
-    // an update waiting shows as a dot on the button
-    expect(host.querySelector("[data-plugin-update-dot]")).not.toBeNull();
+    // Update lives in Details (no header pill, no menu entry), like Grok Bot
+    expect(host.querySelector('[data-plugins-detail-primary="update"]')).toBeNull();
+    expect(host.querySelector("[data-plugin-update-row]")).not.toBeNull();
+    expect(host.querySelector("[data-plugin-update-dot]")).toBeNull();
     // Uninstall is the header's own pill, as in Grok Bot's Connect Apps
     expect(host.querySelector('[role="menu"] [data-plugin-action="uninstall"]')).toBeNull();
     click(host.querySelector('[data-plugin-action="uninstall"]'));
     expect(onUninstall).toHaveBeenCalledTimes(1);
     click(host.querySelector("[data-plugin-actions]"));
     const actions = [...host.querySelectorAll('[role="menu"] [data-plugin-action]')].map((node) => node.getAttribute("data-plugin-action"));
-    expect(actions).toEqual(["update", "test", "edit"]);
+    expect(actions).toEqual(["test", "edit"]);
     click(host.querySelector('[data-plugin-action="test"]'));
     expect(onTest).toHaveBeenCalledTimes(1);
     expect(host.querySelector('[role="menu"]')).toBeNull();
+    click(host.querySelector('[data-plugin-action="update-details"]'));
+    expect(onUpdate).toHaveBeenCalledTimes(1);
   });
 
   it("has no menu when the plugin offers no action", () => {

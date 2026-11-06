@@ -1,12 +1,13 @@
 // Plugins > one plugin: its switch, its accounts, its tools (each with a
 // switch for an MCP server: off means no bot sees it) and where it comes
-// from. Update, Test, Edit and Uninstall sit in one "..." menu by the name.
+// from. Test, Edit and Copy link sit in one "..." menu by the name; Update
+// waits in the Details card (Grok Bot has no Update pill in the header).
 // 2026-10-28: the page opens inside its Connect apps tab (a back row, no
 // second title): one header with the app's real mark and its name for
 // people, the technical id and source as small metadata, where it is
 // installed (everyone, this bot) and the main action beside it.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { CheckCircle2, ChevronDown, ChevronRight, ChevronUp, FlaskConical, KeyRound, Link2, Loader2, LogOut, MoreHorizontal, Pencil, Plus, RefreshCw } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, ChevronUp, FlaskConical, KeyRound, Link2, Loader2, LogOut, MoreHorizontal, Pencil, Plus } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { copyText } from "@/lib/copy-text";
@@ -58,7 +59,7 @@ export interface PluginDetailProps {
   subtitle: string;
   /** where it is installed (a marketplace plugin) */
   installState?: DetailInstallState[];
-  /** the page's main action beside the name (Install for <bot>, Update) */
+  /** the page's main action beside the name (Install for <bot>) */
   primaryAction?: ReactNode;
   onBack: () => void;
   /** the pages above this one in the panel (the breadcrumb) */
@@ -138,9 +139,7 @@ export function PluginDetailView(props: PluginDetailProps) {
             <PluginActionsMenu
               name={name}
               busy={busy}
-              updateAvailable={Boolean(onUpdate)}
               actions={[
-                onUpdate && { id: "update", icon: updating ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />, label: t("connectApps.plugin.update"), onSelect: onUpdate },
                 onTest && { id: "test", icon: testing ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />, label: t("mcp.test"), onSelect: onTest },
                 onEdit && { id: "edit", icon: <Pencil size={13} />, label: t("connectApps.detail.edit"), onSelect: onEdit },
                 Boolean(link) && { id: "copy-link", icon: <Link2 size={13} />, label: t("connectApps.detail.copyLink"), onSelect: () => { void copyText(link!).then((result) => setLinkCopied(result === "copied")); } },
@@ -216,7 +215,11 @@ export function PluginDetailView(props: PluginDetailProps) {
                             <span className="block truncate text-[13px] leading-5 text-ink">{tool.name}</span>
                             {tool.detail && <span className="block truncate text-[12px] leading-[16px] text-ink-secondary">{tool.detail}</span>}
                           </span>
-                          {tool.status && <PluginStatusLabel status={tool.status} className="text-[13px] font-normal" />}
+                          {tool.status === "connected" ? (
+                            <span data-plugin-status="installed" className="shrink-0 text-[13px] font-normal text-ink-secondary">{t("connectApps.status.installed")}</span>
+                          ) : tool.status ? (
+                            <PluginStatusLabel status={tool.status} className="text-[13px] font-normal" />
+                          ) : null}
                           <ChevronRight size={15} className="shrink-0 text-ink-tertiary" aria-hidden="true" />
                         </button>
                       </li>
@@ -248,12 +251,12 @@ export function PluginDetailView(props: PluginDetailProps) {
         )}
 
         {(more || (installState && installState.length > 0)) && (
-          <details className="group rounded-[14px] border-[0.5px] border-ink/10 px-4 sm:px-5" data-plugin-more>
-            <summary className="flex min-h-[44px] cursor-pointer list-none items-center gap-2 text-[13px] leading-5 text-ink [&::-webkit-details-marker]:hidden">
+          <details className="group" data-plugin-more>
+            <summary className="flex min-h-[44px] cursor-pointer list-none items-center gap-2 px-[14px] text-[13px] leading-5 text-ink [&::-webkit-details-marker]:hidden">
               <span className="flex-1">{t("connectApps.detail.more")}</span>
               <ChevronDown size={16} className="text-ink-secondary transition-transform group-open:rotate-180 motion-reduce:transition-none" aria-hidden="true" />
             </summary>
-            <div className="space-y-4 pb-4">
+            <div className="space-y-4 px-[14px] pb-2">
               {installState && installState.length > 0 && (
                 <ul className="mt-1.5 flex flex-wrap gap-1.5" data-plugins-install-state>
                   {installState.map((state) => (
@@ -286,6 +289,15 @@ export function PluginDetailView(props: PluginDetailProps) {
               </div>
             ))}
           </dl>
+          {onUpdate && (
+            <div className="flex min-h-[38px] items-center justify-between gap-3 border-t-[0.5px] border-ink/10 py-1.5" data-plugin-update-row>
+              <span className="text-[13px] text-ink-secondary">{t("connectApps.plugin.updateAvailable")}</span>
+              <button type="button" disabled={busy || updating} onClick={onUpdate} data-plugin-action="update-details" className={cn(PLUGINS.fillPill, "h-7 px-3.5 text-[12.5px]")}>
+                {updating ? <Loader2 size={13} className="animate-spin" aria-hidden="true" /> : null}
+                {t("connectApps.plugin.update")}
+              </button>
+            </div>
+          )}
           {enabled && (
             <label className="flex min-h-[38px] items-center justify-between gap-3 border-t-[0.5px] border-ink/10 py-1.5 text-[13px] text-ink-secondary" data-plugin-enabled>
               {t("connectApps.detail.enabled")}

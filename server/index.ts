@@ -30107,15 +30107,15 @@ function resumeSecretCard(botId: string, threadId: string, messageId: string, ou
   const message = secretMessage(botId, threadId, messageId);
   if (!message?.secret) return false;
   if (message.secret.resumed) return true;
-  // a vault login card carries its own note to the bot (routes/credential-vault.ts)
-  void answerCardNode(threadId, messageId, prompt ?? credentialUpdateText(message.secret.label, outcome));
+  // Vault login cards carry their own note (routes/credential-vault.ts). Mirror
+  // sign-in: mark resumed only when a parked root takes the answer (R4).
+  const resumed = answerCardNode(threadId, messageId, prompt ?? credentialUpdateText(message.secret.label, outcome));
   store.patchMessage(threadId, message.id, {
     secret: {
       ...message.secret,
       provided: outcome === "provided" ? true : message.secret.provided,
       dismissed: outcome === "dismissed" ? true : message.secret.dismissed,
-      resumed: true,
-      error: undefined
+      ...(resumed ? { resumed: true, error: undefined } : { error: undefined }),
     }
   });
   return true;

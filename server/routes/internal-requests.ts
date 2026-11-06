@@ -68,6 +68,8 @@ export interface InternalRequestsRoutine {
   timeoutMinutes?: number;
   nextRunAt: number | null;
   continuity?: boolean;
+  /** Also run once each time Sagax starts (interval/cron/weekly; never once). */
+  runOnStartup?: boolean;
   overlap?: string;
   skippedRuns?: number;
   lastSkippedAt?: number;
@@ -272,6 +274,7 @@ function agentRoutine(routine: InternalRequestsRoutine, latestRun?: InternalRequ
     instructions: safeInstructions.slice(0, 2_000),
     instructionsTruncated: safeInstructions.length > 2_000,
     continuity: routine.continuity === true,
+    ...(routine.runOnStartup === true ? { runOnStartup: true } : {}),
     overlap: routine.overlap ?? "skip",
     skippedRuns: routine.skippedRuns ?? 0,
     lastSkippedAt: routineTimestamp(routine.lastSkippedAt),

@@ -12733,6 +12733,7 @@
   "routineEditor.whenToRun": "Quand l’exécuter",
   "routineEditor.changeWhen": "Changer quand elle s’exécute",
   "routineEditor.advanced": "Avancé",
+  "routineEditor.more": "Plus",
   "routineEditor.advancedDefault": "Réglages par défaut",
   "routineEditor.runsOn": "S’exécute sur",
   "routineEditor.summary.resultsPosted": "Résultats publiés",

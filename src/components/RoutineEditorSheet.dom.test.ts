@@ -483,3 +483,55 @@ describe("the routine panel, edit mode", () => {
     expect(button("Schedule routine")).toBeDefined();
   });
 });
+
+describe("the routine panel page layout (2026-11-06, JC)", () => {
+  const pageSlots = () => ({
+    status: createElement("div", { "data-test-status": "" }),
+    runs: createElement("section", { "data-routine-runs": "" }),
+    runAs: createElement("div", { "data-test-run-as": "" }, "Runs as"),
+    badge: createElement("span", { "data-routine-state-badge": "warning" }, "Failing"),
+  });
+  const mountPage = () => mount(routine({ type: "cron", expression: "30 8 * * 1-5", timeZone: "America/Toronto" }), vi.fn(), { presentation: "panel", page: pageSlots(), onDuplicate: vi.fn() });
+
+  it("puts Runs as inside Advanced only, Runs before Advanced, the state badge in the header", () => {
+    mountPage();
+    const advanced = host.querySelector("[data-routine-editor-more]")!;
+    const runAs = host.querySelectorAll("[data-test-run-as]");
+    expect(runAs.length).toBe(1);
+    expect(advanced.contains(runAs[0]!)).toBe(true);
+    const runs = host.querySelector("[data-routine-runs]")!;
+    expect(runs.compareDocumentPosition(advanced) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(advanced.contains(runs)).toBe(false);
+    expect(host.querySelector("[data-routine-state-badge]")?.textContent).toBe("Failing");
+  });
+
+  it("gives Instruction at least 45% of the panel height, the scroll area being a size container", () => {
+    mountPage();
+    const instruction = host.querySelector("[data-routine-instruction-fill]")!;
+    expect(instruction.className).toContain("min-h-[45cqh]");
+    expect(host.querySelector("[data-routine-editor-scroll]")!.className).toContain("[container-type:size]");
+  });
+
+  it("drops Next runs, folds Required skills, MCP, Mail tag, Duplicate and the server note under More in Advanced", () => {
+    mountPage();
+    expect(host.textContent).not.toContain("Next runs");
+    expect(host.textContent).not.toContain("Clock changes");
+    const advanced = openAdvanced();
+    const more = advanced.querySelector("[data-routine-advanced-more]")!;
+    expect(more).not.toBeNull();
+    expect(more.tagName).toBe("DETAILS");
+    expect(more.querySelector("[data-routine-mail-alias]")).not.toBeNull();
+    expect(more.querySelector("[data-routine-duplicate]")).not.toBeNull();
+    expect(more.textContent).toContain("Required skills");
+    expect(more.textContent).toContain("Required MCP servers");
+    expect(host.querySelectorAll("[data-routine-mail-alias]").length).toBe(1);
+    expect(host.querySelectorAll("[data-routine-duplicate]").length).toBe(1);
+  });
+
+  it("keeps the old layout outside the page (no More fold)", () => {
+    mount(routine({ type: "cron", expression: "30 8 * * 1-5", timeZone: "America/Toronto" }), vi.fn(), { presentation: "panel", onDuplicate: vi.fn() });
+    openAdvanced();
+    expect(host.querySelector("[data-routine-advanced-more]")).toBeNull();
+    expect(host.querySelector("[data-routine-instruction-fill]")).toBeNull();
+  });
+});

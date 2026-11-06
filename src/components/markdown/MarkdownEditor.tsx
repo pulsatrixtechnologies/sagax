@@ -195,8 +195,8 @@ export interface MarkdownEditorProps {
   /** hard cap in characters, like a textarea's maxLength; the count shows
    * it when showCount is on */
   maxLength?: number;
-  /** minimum height of the writing area in px (default 160) */
-  minHeight?: number;
+  /** minimum height of the writing area in px, or a CSS length (default 160) */
+  minHeight?: number | string;
   /** maximum height before the writing area scrolls (default 60vh) */
   maxHeight?: number | string;
   autoFocus?: boolean;
@@ -332,7 +332,7 @@ export function MarkdownEditor({
     "--md-font-size": "13px",
     ...(full
       ? { "--md-min-h": "calc(100vh - 9rem)", "--md-max-h": "calc(100vh - 9rem)" }
-      : { "--md-min-h": `${minHeight}px`, "--md-max-h": typeof maxHeight === "number" ? `${maxHeight}px` : maxHeight }),
+      : { "--md-min-h": typeof minHeight === "number" ? `${minHeight}px` : minHeight, "--md-max-h": typeof maxHeight === "number" ? `${maxHeight}px` : maxHeight }),
   } as CSSProperties;
 
   const markEditing = (next: boolean) => {

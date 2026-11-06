@@ -83,8 +83,9 @@ export async function clearRoutineRuns(
 
 export type RoutinePatch = { schedule?: RoutineScheduleInput; precheck?: Routine["precheck"] | null; runAs?: string; actAs?: string | null };
 
-/** Who the routine runs as, changed in place (its own row since 2026-11-03). */
-function RunAsRow({ routine, editable, onPatch }: { routine: Routine; editable: boolean; onPatch?: (patch: RoutinePatch) => Promise<void> }) {
+/** Who the routine runs as, changed in place (its own row since 2026-11-03;
+ * the side panel's page sets it in Advanced since 2026-11-06). */
+export function RoutineRunAsRow({ routine, editable, onPatch }: { routine: Routine; editable: boolean; onPatch?: (patch: RoutinePatch) => Promise<void> }) {
   const options = useRunAsOptions({ botId: routine.botId, routineId: routine.id, target: routine.target, ...(routine.target === "room-goal" && routine.groupId ? { groupId: routine.groupId } : {}) });
   const [value, setValue] = useState<string | undefined>(undefined);
   if (!options || (!options.canChoose && !options.current)) return null;
@@ -122,7 +123,7 @@ function TriggerRow({ routine, bot, editable, onPatch }: { routine: Routine; bot
  * notes under them (auto-paused, deleted when finished, the check's
  * answer). The Automations page puts its Trigger row first (`leading`); the
  * panel's single pane sets the trigger in its own When to run. */
-export function RoutineStatusRows({ routine, runs, now = Date.now(), editable = true, working = false, error, canRun = false, readiness, onToggle, onPatch, leading }: {
+export function RoutineStatusRows({ routine, runs, now = Date.now(), editable = true, working = false, error, canRun = false, readiness, onToggle, onPatch, leading, runAs = true, active = true, week = true }: {
   routine: Routine;
   runs: RoutineRun[];
   now?: number;
@@ -134,17 +135,24 @@ export function RoutineStatusRows({ routine, runs, now = Date.now(), editable = 
   onToggle?: () => void;
   onPatch?: (patch: RoutinePatch) => Promise<void>;
   leading?: ReactNode;
+  /** The Runs as row (the side panel's page sets it in Advanced). */
+  runAs?: boolean;
+  /** The Active toggle (the side panel's page has Pause in its bar and the
+   * state as a badge by the title). */
+  active?: boolean;
+  /** The This week row. */
+  week?: boolean;
 }) {
   const state = routineState(routine, runs);
   const skips = routine.awaySkips && !routine.awaySkips.reportedAt ? routine.awaySkips.count : 0;
   return <>
     <PanelRows data-routine-summary="">
       {leading}
-      <RunAsRow routine={routine} editable={editable} onPatch={onPatch} />
+      {runAs && <RoutineRunAsRow routine={routine} editable={editable} onPatch={onPatch} />}
       <ActAsRow routine={routine} editable={editable} onPatch={onPatch} {...(canRun ? { readiness } : {})} />
-      <PanelToggle data-routine-active="" label={t("routineDetail.active")} hint={state.tone === "info" ? state.label : state.tone === "warning" ? state.label : undefined} viewing={!editable || !onToggle} checked={routine.enabled} disabled={working} onChange={() => onToggle?.()} />
+      {active && <PanelToggle data-routine-active="" label={t("routineDetail.active")} hint={state.tone === "info" ? state.label : state.tone === "warning" ? state.label : undefined} viewing={!editable || !onToggle} checked={routine.enabled} disabled={working} onChange={() => onToggle?.()} />}
       <PanelRow label={t("routineDetail.nextRun")}><PanelValue><span data-routine-next>{routineNextText(routine, now)}</span></PanelValue></PanelRow>
-      {routine.weekRuns && <PanelRow label={t("routineDetail.week")}><PanelValue><span data-routine-week-runs>{routineWeekRunsText(routine.weekRuns)}</span></PanelValue></PanelRow>}
+      {week && routine.weekRuns && <PanelRow label={t("routineDetail.week")}><PanelValue><span data-routine-week-runs>{routineWeekRunsText(routine.weekRuns)}</span></PanelValue></PanelRow>}
       {(routine.skippedRuns ?? 0) > 0 && <PanelRow label={t("routineDetail.skipped")}><PanelValue>{routine.skippedRuns}{routine.lastSkippedAt ? ` · ${t("routines.lastSkipped", { date: routineDateTime(routine.lastSkippedAt) })}` : ""}</PanelValue></PanelRow>}
       {skips > 0 && <PanelRow label={t("routines.away.title")}><PanelValue>{t(skips === 1 ? "routines.away.skippedOne" : "routines.away.skippedMany", { count: skips, name: routine.name })}</PanelValue></PanelRow>}
     </PanelRows>
@@ -155,6 +163,17 @@ export function RoutineStatusRows({ routine, runs, now = Date.now(), editable = 
     {readiness.error && <p role="alert" className="text-[12px] text-danger">{readiness.error}</p>}
     {readiness.answer && <RoutineReadinessList checks={readiness.answer.checks} checkedAt={readiness.answer.checkedAt} />}
   </>;
+}
+
+/** The routine's state when it needs a look (2026-11-06, JC: the panel's
+ * Active toggle is gone, Pause is in the bar): failing, paused by itself,
+ * suspended, running. Nothing when all is well, paused or finished. */
+export function RoutineStateBadge({ routine, runs }: { routine: Routine; runs: RoutineRun[] }) {
+  const state = routineState(routine, runs);
+  if (state.tone !== "warning" && state.tone !== "info") return null;
+  return <span data-routine-state-badge={state.tone} title={state.label} className={cn("inline-flex min-w-0 max-w-[45%] shrink items-center truncate rounded-full px-2 py-0.5 text-[11px] font-medium", STATE_TONES[state.tone])}>
+    <span className="truncate">{state.label}</span>
+  </span>;
 }
 
 /** "Runs (n)", Clear run logs at its right, then the runs, newest first. */

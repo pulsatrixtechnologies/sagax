@@ -9,7 +9,6 @@ import { activityPreview, failedTurnCause } from "@/lib/failed-turn";
 import { roomActivityVisible } from "@/lib/room-activity";
 
 const dispatch = vi.fn();
-const fixture = vi.hoisted(() => ({ dataWindow: true }));
 const store = vi.hoisted(() => ({
   state: {
     bots: [{ id: "bot", name: "Pepper" }],

@@ -46,7 +46,7 @@ async function handleBotRespond(deps: BotsMessagesRouteDeps, ctx: RouteContext):
     if (stepUpRefusal) return json(res, stepUpRefusal.status, stepUpRefusal.body);
     if (delegatedRequest() && store.isConfidentialThread(bot.threadId)) return json(res, 403, { error: CONFIDENTIAL_CARD_DELEGATED, code: "confidential_thread" });
     if (isConfidentialMemoryCard(bot.threadId, String(body.requestId))) {
-      const settled = await settleConfidentialMemoryCard(auth, bot.threadId, String(body.requestId), behavior);
+      const settled = await settleConfidentialMemoryCard(auth, bot.threadId, String(body.requestId), behavior, body.rule === "allow" ? "allow" : undefined);
       return json(res, settled.status, settled.body);
     }
     if (isBotActCard(bot.threadId, String(body.requestId))) {
@@ -200,7 +200,7 @@ async function handleThreadRespond(deps: BotsMessagesRouteDeps, ctx: RouteContex
     // never a bot acting for them, never an AI client
     if (delegatedRequest() && store.isConfidentialThread(threadId)) return json(res, 403, { error: CONFIDENTIAL_CARD_DELEGATED, code: "confidential_thread" });
     if (isConfidentialMemoryCard(threadId, requestId)) {
-      const settled = await settleConfidentialMemoryCard(auth, threadId, requestId, behavior);
+      const settled = await settleConfidentialMemoryCard(auth, threadId, requestId, behavior, body.rule === "allow" ? "allow" : undefined);
       return json(res, settled.status, settled.body);
     }
     if (isBotActCard(threadId, requestId)) {

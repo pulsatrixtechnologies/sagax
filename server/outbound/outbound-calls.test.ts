@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CALL_APPROVAL_MS, callAnswerNote, callCard, OutboundCalls, placePhoneCall, type PlaceCallDeps } from "./outbound-calls.ts";
+import { CALL_APPROVAL_MS, callAnswerNote, callCard, OutboundCalls, placePhoneCall, type PlaceCallDeps, STANDING_CALL_VIA } from "./outbound-calls.ts";
 
 const ARGS = { to: "+1 514 555 0142", from: "+1 438 555 0100", purpose: "Confirmer le rendez-vous", message: "Jean confirme mardi 10 h." };
 const CTX = { principalId: "jean@example.com", botId: "bot-rocket", threadId: "t-1" };
@@ -96,7 +96,32 @@ describe("placePhoneCall", () => {
     expect(twilio.mock.calls.every(([args]) => (args as Record<string, unknown>)._dry_run === true)).toBe(true);
     expect(() => calls.answer(CTX.principalId, row.id, "call", undefined, "+15145550142", true)).toThrow(/already answered/);
     expect(() => calls.answer("someone@else", row.id, "call")).toThrow(/No such call/);
-    expect(() => calls.answer(CTX.principalId, row.id, "always")).toThrow(/call or deny/);
+    expect(() => calls.answer(CTX.principalId, row.id, "maybe" as never)).toThrow(/call, always or deny/);
+  });
+
+  it("Always call keeps the number: the next call to it is placed without a card (#2091)", async () => {
+    await placePhoneCall(deps(), CTX, ARGS);
+    const row = calls.pending(CTX.principalId)[0]!;
+    // Always still wants the number confirmed on the card (ÉFVP 2026-10-22)
+    expect(() => calls.answer(CTX.principalId, row.id, "always")).toThrow(/confirm/i);
+    const answered = calls.answer(CTX.principalId, row.id, "always", undefined, "+15145550142", true);
+    expect(answered.status).toBe("approved");
+    const placed = await placePhoneCall(deps(), CTX, ARGS);
+    expect(placed.text).toContain("Call placed");
+    // a later call to the same number: no card, approved by the standing Always
+    const shown: { status: string; via?: string }[] = [];
+    const next = await placePhoneCall({ ...deps(), card: (row, existing) => { shown.push({ status: row.status, ...(row.via ? { via: row.via } : {}) }); return existing ?? "m-2"; } }, CTX, { ...ARGS, purpose: "Reporter le rendez-vous" });
+    expect(next.text).toContain("Call placed");
+    expect(calls.pending(CTX.principalId)).toHaveLength(0);
+    expect(shown).toEqual([{ status: "placed", via: STANDING_CALL_VIA }]);
+    // another number still asks
+    await placePhoneCall(deps(), CTX, { ...ARGS, to: "+1 514 555 0199" });
+    expect(calls.pending(CTX.principalId)).toHaveLength(1);
+    // forgetting the number asks again
+    calls.forgetStanding(CTX.principalId, "+15145550142");
+    await placePhoneCall(deps(), CTX, { ...ARGS, purpose: "Encore" });
+    // one pending card per thread: the new ask replaced the other number's
+    expect(calls.pending(CTX.principalId).map((row) => row.request.purpose)).toEqual(["Encore"]);
   });
 
   it("a refused dry run or no Perspicax opens no card", async () => {

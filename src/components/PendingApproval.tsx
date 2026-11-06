@@ -20,6 +20,8 @@ import { describeApproval, isTechnicalText } from "@/lib/approval-describe";
 import { reviewedSkillSha256 } from "../../shared/skill-request";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { useOrgApprovalPolicy } from "@/lib/org-approval-policy";
+import { usePerspicaxOrg } from "@/lib/perspicax-org";
+import { perspicaxConsoleUrl } from "./PerspicaxOrgSettings";
 import { CustomRuleNoticeLine, riskList } from "./CustomRuleNotice";
 import { customRuleError } from "./bot-settings/CustomRulesCard";
 import { recipientKeysForSendCard } from "../../shared/send-card-recipients";
@@ -361,6 +363,19 @@ export const PendingApprovalPanel = memo(function PendingApprovalPanel({
   );
 });
 
+/** The only card without Always allow: the organization's Refuse / Ask
+ * first rule, decided in Perspicax (server/rules/custom-rules-org.ts). It
+ * says so in plain words, with the way to where that was decided (#2091). */
+function OrgAlwaysAllowOff() {
+  const orgIssuer = usePerspicaxOrg()?.org.identity.issuer ?? "";
+  return (
+    <span className="text-[11.5px] text-ink-tertiary" data-org-always-allow-off="">
+      {t("approval.orgOnce")}
+      {orgIssuer ? <>{" "}<a href={perspicaxConsoleUrl(orgIssuer)} target="_blank" rel="noreferrer noopener" data-perspicax-link="approvals" className="font-medium text-accent-text hover:underline">Perspicax</a></> : null}
+    </span>
+  );
+}
+
 export function PendingApprovalActions({
   pending,
   threadId,
@@ -386,7 +401,9 @@ export function PendingApprovalActions({
   const { dispatch } = useStore();
   const ownerOrAdmin = useOwnerOrAdmin();
   // 2026-10-21: the organization may keep every approval to one card
-  // (server/rules/custom-rules-org.ts): no Always allow, and the card says why
+  // (server/rules/custom-rules-org.ts): no Always allow, and the card says
+  // why in plain words, with the way to Perspicax where that was decided
+  // (#2091: the only card without Always allow is this organization one)
   const orgPolicy = useOrgApprovalPolicy();
   const isRoutineRequest = isRoutineApproval(pending);
   const isSkillRequest = isSkillApproval(pending);
@@ -476,7 +493,7 @@ export function PendingApprovalActions({
   // this file (the exact path) and the whole folder (and its subfolders)
   const ownerRuleFolder = ownerRule && !durableRequest ? pending.message.card?.ownerRuleFolder : undefined;
   const widening = !orgPolicy.alwaysAllow && !durableRequest ? (
-    <span className="text-[11.5px] text-ink-tertiary" data-org-always-allow-off="">{t("approval.orgOnce")}</span>
+    <OrgAlwaysAllowOff />
   ) : recipientKeys && bot ? (
     <AlwaysAllowRecipients
       bot={bot}

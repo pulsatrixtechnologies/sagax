@@ -727,7 +727,8 @@ import {
   ruleCoversExactScope,
   ruleInputFor,
   scopeKeepable,
-  scopeRemembers,
+  WHOLE_CALL_KEY,
+  wholeCallDigest,
   type OwnerRule
 } from "./approvals/owner-approval.ts";
 import { OwnerApprovalStore } from "./approvals/owner-approval-store.ts";
@@ -2547,6 +2548,7 @@ import {
   perspicaxUnavailableWhy,
   type PerspicaxUnavailableReason
 } from "./perspicax/perspicax-mcp.ts";
+import { parseGoMessage } from "./perspicax/go-message.ts";
 import { withClaimsFlag } from "./perspicax/perspicax-claims.ts";
 import { createPerspicaxClaimsInternalRoutes } from "./routes/perspicax-claims-internal.ts";
 import { dispatchInternalRoutes, type InternalCapabilityView, type InternalRouteHandler } from "./routes/internal-route.ts";
@@ -12029,6 +12031,28 @@ function writeWorkerTurn(input: { deviceId: string; userId: string; messageId: s
   }
   if (parsed.kind === "approval") {
     machineApprovals.set(parsed.requestId, { threadId: view.threadId, requestId: parsed.requestId, tool: parsed.tool, summary: parsed.summary });
+    // #2091 (decided 2026-11-05): Always allow keeps this tool on the person's
+    // own computer for this bot; kept, the worker's ask is answered at once
+    const machineRule = { tool: `machine:${parsed.tool}`, scope: {}, description: `Run "${parsed.tool}" on your computer` };
+    const keptMachine = keptCardRule(bot, view.threadId, machineRule);
+    if (keptMachine) {
+      machineApprovals.get(parsed.requestId)!.behavior = "allow";
+      // the answered receipt of a rule-settled ask; full-access: exempt
+      store.appendMessage(view.threadId, {
+        role: "bot",
+        kind: "options",
+        from,
+        card: {
+          title: "Approval needed", subtitle: parsed.summary || parsed.tool, options: ["Allow", "Deny"], requestId: parsed.requestId,
+          // full-access: exempt
+          requestType: "permission",
+          tool: parsed.tool, answered: "allow", ownerRule: machineRule,
+          ruleSaved: { id: keptMachine.id, behavior: keptMachine.behavior, description: keptMachine.description }
+        }
+      });
+      appendDecision(DATA_DIR, { threadId: view.threadId, requestId: parsed.requestId, botId: bot.id, botName: bot.name, tool: parsed.tool, summary: parsed.summary || parsed.tool, decision: "auto-approved", source: "owner-rule", rule: keptMachine.id });
+      return { status: 200, body: { ok: true } };
+    }
     // a worker on the person's own computer asks; its level is that
     // computer's (server/machine-run.ts); full-access: engine-bridge
     store.appendMessage(view.threadId, {
@@ -12042,7 +12066,8 @@ function writeWorkerTurn(input: { deviceId: string; userId: string; messageId: s
         requestId: parsed.requestId,
         // full-access: engine-bridge
         requestType: "permission",
-        tool: parsed.tool
+        tool: parsed.tool,
+        ownerRule: machineRule
       }
     });
     store.setTaskActivity(bot.id, view.threadId, "waiting-on-you");
@@ -15067,8 +15092,9 @@ async function answerInboxCard(auth: RequestAuth, threadId: string, requestId: s
   if (!message || !card || !isApprovalCardMessage(message)) return { ok: false, status: 404, code: "gone", message: "No such approval." };
   if (card.answered || card.dismissed || card.expired) return { ok: false, status: 409, code: "gone", message: "This approval was already answered or has expired." };
   // 2026-10-19: a bulk Always allow keeps each card's own rule (its exact
-  // scope); a card with none, or an admin's, is answered on its own card
-  if (rule && (decision !== "allow" || !card.ownerRule || card.ownerRule.from === "admin")) return { ok: false, status: 409, code: "no-rule", message: "This approval cannot be remembered in a bulk answer." };
+  // scope; an admin's strict card too, saveOwnerRuleFromCard); a card with
+  // none is answered on its own card
+  if (rule && (decision !== "allow" || !card.ownerRule)) return { ok: false, status: 409, code: "no-rule", message: "This approval cannot be remembered in a bulk answer." };
   // a bulk answer carries no key: an Always allow the person protects with
   // one (always-grant) is refused here, like an Allow that needs one
   if (stepUpGate(ruleManager(auth), threadId, requestId, decision, rule ? { always: false, rememberCommand: false, rule } : {}, undefined)) return { ok: false, status: 403, code: "needs-key", message: "This approval needs your security key." };
@@ -15118,7 +15144,8 @@ async function answerInboxCard(auth: RequestAuth, threadId: string, requestId: s
  * allow or deny, with the same refusals as Sagax: the owner for an owner
  * card, an organization admin for an admin card, and only on the fleet
  * host. #2100: `rule: "allow"` keeps that card's own Always allow, like
- * bulk Approvals (never a session allow or a remembered command). */
+ * bulk Approvals (never a session allow or a remembered command). The
+ * person's Sagax cards also offer Always allow (#2091). */
 async function answerCardFromConsole(viewer: OrgAdminViewer, threadId: string, requestId: string, decision: "allow" | "deny", rule?: "allow"): Promise<ApprovalAnswer> {
   const message = store.messagesFor(threadId).find((row) => row.card?.requestId === requestId);
   const card = message?.card;
@@ -19670,7 +19697,10 @@ bus.subscribe((event: RuntimeEvent) => {
       // level. Only the person's own answer on a draft's or a widget's card
       // is never asked again.
       const personAnswered = baseVerdict?.source === "email-draft-approval" || baseVerdict?.source === "widget-approval";
-      const ownerLayer = Boolean(permission && asker && event.requestId && !personAnswered && !strictCard && !guestDriven
+      // #2091 (decided 2026-11-05): a guest's or botmail turn keeps its owner
+      // layer: its card offers Always allow like every other one (situation
+      // "origin", so only a rule saved from such a card answers it)
+      const ownerLayer = Boolean(permission && asker && event.requestId && !personAnswered && !strictCard
         && !/^(?:mcp__[^_]+__)?(?:askuserquestion|ask_user)$/i.test(ownerTool) && memberOwnScopeTool(ownerTool) !== "conversation");
       // 2026-10-21 (review of #938): what a rule reads of this call, the
       // engine's shell line included when it reports one beside no input
@@ -19739,7 +19769,7 @@ bus.subscribe((event: RuntimeEvent) => {
           call: ownerCall,
           personMustAnswer: safetyEffect?.kind === "hold" || event.requiresExplicitApproval === true,
           stepUpRequired: ownerStepUp.length > 0,
-          autonomyRefused: ownerOriginRefused,
+          autonomyRefused: ownerOriginRefused || guestDriven,
           // #1065: the owner's real computer from their own turn on their
           // own bot, which Bypass answers (never another origin or person)
           ownComputerOwnTurn: Boolean(ownDestination && !ownEnvironment && destination?.byOwner && destinationOrigin === "owner"),
@@ -19814,12 +19844,13 @@ bus.subscribe((event: RuntimeEvent) => {
       const heldCard = safetyEffect?.kind === "hold" || event.requiresExplicitApproval === true;
       const ruleFrom: OwnerRule["from"] = strictCall ? "admin"
         : heldCard ? "hold"
-          : ownerOriginRefused ? "origin" : undefined;
+          : ownerOriginRefused || guestDriven || foreignDestination ? "origin" : undefined;
       // owner-approval.ts cardRuleCandidate: a card that never had a rule
       // keeps the whole request; an engine's own shell line on an admin's
-      // card that is not held keeps its program for this bot (2026-10-21,
-      // ); a call with no readable arguments offers nothing
-      const ownerRuleCandidate = (owner?.kind === "card" && owner.reason !== "admin" && owner.reason !== "cross-person") || (strictCall && !baseVerdict?.approve)
+      // card that is not held keeps its program for this bot (2026-10-21).
+      // #2091: a call with no readable arguments keeps the whole tool, and a
+      // cross-person or guest card offers its rule like every other one.
+      const ownerRuleCandidate = (owner?.kind === "card" && owner.reason !== "admin") || (strictCall && !baseVerdict?.approve)
         ? cardRuleCandidate({
           tool: ownerTool,
           ...(typeof event.input === "string" ? { input: event.input } : {}),
@@ -23514,7 +23545,7 @@ setSafetyFullAccess(({ botId, threadId }) => {
  * a notification. Approve for me does not answer it; a turn at Full access
  * never reaches it (#1905: safety-review.ts reads the one Full access
  * decision before it holds anything). */
-async function confirmHeldCard(request: { threadId?: string; botId?: string; tool?: string; summary: string; allowKey?: string; fingerprint?: string }): Promise<"allow" | "deny" | "timeout"> {
+async function confirmHeldCard(request: { threadId?: string; botId?: string; tool?: string; summary: string; allowKey?: string; fingerprint?: string; toolInput?: string; ruleDescription?: string; toolHints?: { product: string; productId: string } }): Promise<"allow" | "deny" | "timeout"> {
   const threadId = request.threadId;
   if (!threadId) return "deny";
   const bot = (request.botId ? store.bot(request.botId) : undefined) ?? store.botByThread(threadId);
@@ -23522,8 +23553,10 @@ async function confirmHeldCard(request: { threadId?: string; botId?: string; too
   // 2026-10-19 ("Toujours permettre" on every card): Always allow keeps
   // this exact held action (its fingerprint) for this bot; kept, it passes
   // and the journal names the rule
-  const candidate = { tool: `safety:${request.tool ?? "action"}`, scope: { action: request.fingerprint ?? "" }, description: summary || "This exact action" };
-  const kept = bot && request.fingerprint ? keptCardRule(bot, threadId, candidate, autoAnswerStepUp(bot, threadId, { tool: request.tool ?? "action", summary })) : undefined;
+  // #2091: a held action without a fingerprint keeps the digest of its summary
+  const fingerprint = request.fingerprint ?? wholeCallDigest(summary || request.tool || "action");
+  const candidate = { tool: `safety:${request.tool ?? "action"}`, scope: { action: fingerprint }, description: request.ruleDescription ?? (summary || "This exact action") };
+  const kept = bot ? keptCardRule(bot, threadId, candidate, autoAnswerStepUp(bot, threadId, { tool: request.tool ?? "action", summary })) : undefined;
   if (bot && kept) {
     appendDecision(DATA_DIR, { threadId, requestId: `safety-rule-${randomUUID()}`, botId: bot.id, botName: bot.name, tool: request.tool ?? "action", summary, decision: "auto-approved", source: "owner-rule", rule: kept.id });
     return "allow";
@@ -23540,10 +23573,12 @@ async function confirmHeldCard(request: { threadId?: string; botId?: string; too
       options: ["Allow", "Deny"],
       requestId: held.requestId,
       ...(request.tool ? { tool: request.tool } : {}),
+      ...(request.toolInput ? { toolInput: request.toolInput } : {}),
+      ...(request.toolHints ? { toolHints: request.toolHints } : {}),
       ...(request.allowKey ? { allowKey: request.allowKey } : {}),
       held: HELD_NOTE["approval.held.native"],
       heldCode: "approval.held.native",
-      ...(bot && request.fingerprint ? { ownerRule: { ...candidate, from: "hold" as const } } : {})
+      ...(bot ? { ownerRule: { ...candidate, from: "hold" as const } } : {})
     }
   });
   const holdNeedsKey = Boolean(bot && autoAnswerStepUp(bot, threadId, { tool: request.tool ?? "action", summary }).length);
@@ -26512,6 +26547,11 @@ const teamSetupRequests = new TeamSetupRequestService({
   // create_bot from a bot that is not a Primary Bot (server/bots/bot-creation.ts)
   mayCreateBots: (bot) => botCreationOffered(bot, ownerBotsReadOnly(bot)),
   autoApply: (botId, threadId, request) => teamSetupDirectSource(botId, threadId, request) !== null,
+  // #2091: a team-setup rule the person kept applies the request at once
+  keptRule: (botId, threadId, candidate) => {
+    const bot = store.bot(botId);
+    return bot ? keptCardRule(bot, threadId, candidate, candidate.tool === "sagax:delete_bot" ? ["destructive"] : []) : undefined;
+  },
   validateChange: (before, fields) => assertTeamComputerChangeIdle(before, { ...before, ...fields }),
   ownsThread: (botId, threadId) => Boolean(connectorThread(botId, threadId)),
   targetBusy: (botId, sourceThreadId) => {
@@ -31660,6 +31700,11 @@ const meetingService: MeetingService = createMeetingService({
   store,
   dataDir: DATA_DIR,
   enabled: () => meetingNotetakerEnabled(cfg),
+  // #2091: a meeting rule the person kept joins at once, as that person
+  keptRule: (botId, threadId, candidate) => {
+    const bot = store.bot(botId);
+    return bot ? keptCardRule(bot, threadId, candidate) : undefined;
+  },
   browserRefusal: meetingBrowserRefusal,
   openBrowser: openMeetingBrowser,
   transcriber: async ({ botId, threadId, speaker }) => {
@@ -32284,6 +32329,19 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     },
     appendMessage: (threadId, message) => store.appendMessage(threadId, message as never),
     appendDecision: (row) => appendDecision(DATA_DIR, row as never),
+    // #2091: a team-memory rule the person kept accepts the entry at once
+    settleTeamMemoryByRule: (botId, threadId, proposed, section) => {
+      const bot = store.bot(botId);
+      if (!bot) return undefined;
+      return settleProposalByRule(bot, threadId, proposed, () => {
+        const result = teamMemory.resolve(teamStorageKeyFor(section, effectiveBotOwner(bot)), proposed.requestId, "accept");
+        if (result.claimed && result.state === "accepted") {
+          const row = store.messagesFor(threadId).find((message) => message.id === proposed.messageId);
+          if (row?.card) store.patchMessage(threadId, row.id, { card: { ...row.card, answered: "allow" } });
+        }
+        return { claimed: result.claimed && result.state === "accepted" };
+      });
+    },
     notify
   }),
   createInternalEnvironmentsRoutes({
@@ -35754,9 +35812,10 @@ function primaryApprovals(): ReturnType<typeof createPrimaryApprovals> {
         });
       }
       const vaultPerson = IDENTITY.kind === "perspicax" ? turn.person.toLowerCase() : LOCAL_VAULT_PRINCIPAL;
-      // a phone call: Call or Do not call, never an Always allow
+      // a phone call: Do not call here; Call and Always are confirmed on
+      // the card with the number (ÉFVP 2026-10-22)
       out.push(...outbound.primaryPending(vaultPerson, securityKeys.required(vaultPerson, ["money"]).length > 0));
-      // a purchase: allow this once or deny, never always (2026-10-22)
+      // a purchase: allow this once, always on this site (#2091), or deny
       for (const purchase of credentialVault.pendingPurchases(vaultPerson)) {
         out.push(primaryPurchaseCard(purchase, store.bot(purchase.botId)?.name || "Bot", securityKeys.required(vaultPerson, ["money"]).length > 0));
       }
@@ -35766,7 +35825,7 @@ function primaryApprovals(): ReturnType<typeof createPrimaryApprovals> {
       if (card.requestId.startsWith("call_") || card.requestId.startsWith("pay_")) {
         const call = card.requestId.startsWith("call_");
         const answer = primaryOutboundDecision(call ? "call" : "purchase", body);
-        if ("refused" in answer) return Promise.resolve({ status: 400, body: { error: answer.refused, code: "no_always" } });
+        if ("refused" in answer) return Promise.resolve({ status: 400, body: { error: answer.refused, code: "card_only" } });
         const route = call ? `/api/me/phone-calls/${card.requestId}/answer` : `/api/me/credentials/purchases/${card.requestId}/answer`;
         return replay(turn, "POST", route, { decision: answer.decision }, card.threadId);
       }
@@ -35932,13 +35991,17 @@ async function requestCwAction(auth: RequestAuth, threadId: string, body: Record
   // keeps here (this bot, this kind of ConnectWise change), and whether the
   // person already kept it (no security key of theirs protecting the write)
   const described = ruleCandidateFor({ tool: "cw_psa_write", input: card.toolInput }, serverApprovalWords(personal));
-  const candidate = { ...described, tool: CW_WIDGET_RULE_TOOL };
+  // #2091 (decided 2026-11-05): a scope too long to keep exactly keeps the whole
+  // request (its digest), like every other card; never a card without Always
+  const candidate = scopeKeepable(described.scope)
+    ? { ...described, tool: CW_WIDGET_RULE_TOOL }
+    : { ...described, tool: CW_WIDGET_RULE_TOOL, scope: { [WHOLE_CALL_KEY]: wholeCallDigest(card.toolInput) } };
   const answerer = approvalOwnerId(bot, threadId);
   const stepUp = autoAnswerStepUp(bot, threadId, { tool: "cw_psa_write", input: card.toolInput, summary: card.summary });
   // 2026-10-20 (security review): the answerer's rule answers only the
   // answerer's own request, never another member's in a group channel
   const ownRequest = Boolean(answerer) && actorPrincipalId(auth).trim().toLowerCase() === answerer.trim().toLowerCase();
-  const kept = ownRequest && !stepUp.length && scopeKeepable(candidate.scope)
+  const kept = ownRequest && !stepUp.length
     ? cwWidgetRule(ownerApprovals.rulesOf(answerer, bot.id).filter((rule) => rule.botId === bot.id), answerer, bot.id, card.toolInput)
     : undefined;
   // the ConnectWise widget's own approval card; its write is then answered
@@ -35958,7 +36021,7 @@ async function requestCwAction(auth: RequestAuth, threadId: string, body: Record
       toolInput: card.toolInput,
       ...(plain ? { plain } : {}),
       cwActionRequest: card.cwActionRequest,
-      ...(scopeKeepable(candidate.scope) ? { ownerRule: candidate } : {})
+      ownerRule: candidate
     }
   });
   if (kept?.behavior === "allow") {
@@ -36082,6 +36145,19 @@ function confidentialPerspicaxRefusal(capability: { threadId: string; botId: str
   if (confidentialMemoryPasses.take(capability.threadId, digest)) return null;
   const bot = store.bot(capability.botId);
   if (!bot) return PERSPICAX_MEMORY_REFUSED;
+  // #2091 (decided 2026-11-05): Always allow keeps this kind of confidential
+  // write (the person's memory, or this tool leaving the thread) for this
+  // bot; kept, the call passes and the journal names the rule
+  const confidentialRule = {
+    tool: "sagax:confidential_memory",
+    scope: (memory ? { kind: "memory" } : { kind: "outbound", tool }) as Record<string, string>,
+    description: memory ? "Save notes from this confidential thread to your personal memory" : `Let "${tool}" leave this confidential thread`
+  };
+  const keptConfidential = keptCardRule(bot, capability.threadId, confidentialRule);
+  if (keptConfidential) {
+    appendDecision(DATA_DIR, { threadId: capability.threadId, requestId: `confidential-rule-${randomUUID()}`, botId: bot.id, botName: bot.name, tool, summary: memory ? "Personal memory write from a confidential thread" : `${tool} leaves a confidential thread`, decision: "auto-approved", source: "owner-rule", rule: keptConfidential.id });
+    return null;
+  }
   const requestId = randomUUID();
   if (pendingConfidentialMemory.size >= 256) pendingConfidentialMemory.delete(pendingConfidentialMemory.keys().next().value!);
   pendingConfidentialMemory.set(requestId, { threadId: capability.threadId, botId: bot.id, digest });
@@ -36109,7 +36185,8 @@ function confidentialPerspicaxRefusal(capability: { threadId: string; botId: str
       options: ["Allow", "Deny"],
       requestId,
       tool,
-      confidentialMemoryRequest: { id: requestId }
+      confidentialMemoryRequest: { id: requestId },
+      ownerRule: confidentialRule
     }
   });
   return memory
@@ -36122,7 +36199,7 @@ function isConfidentialMemoryCard(threadId: string, requestId: string): boolean 
 }
 
 /** Allow or Deny on that card: its thread's owner only. */
-async function settleConfidentialMemoryCard(auth: RequestAuth, threadId: string, requestId: string, behavior: string): Promise<{ status: number; body: Record<string, unknown> }> {
+async function settleConfidentialMemoryCard(auth: RequestAuth, threadId: string, requestId: string, behavior: string, rule?: "allow"): Promise<{ status: number; body: Record<string, unknown> }> {
   const message = store.messagesFor(threadId).find((row) => row.card?.requestId === requestId && row.card.confidentialMemoryRequest);
   const card = message?.card;
   if (!message || !card) return { status: 404, body: { error: "No such request." } };
@@ -36131,6 +36208,11 @@ async function settleConfidentialMemoryCard(auth: RequestAuth, threadId: string,
   const owner = confidentialThreadOwner(threadId);
   const caller = approvalCallerUserId(auth).trim().toLowerCase();
   if (!owner || !caller || caller !== owner) return { status: 403, body: { error: "Only this thread's owner can answer this request." } };
+  // #2091: Always allow on this card keeps its rule before the answer goes out
+  if (rule === "allow") {
+    const refused = saveOwnerRuleFromCard(auth, threadId, requestId, "allow", behavior);
+    if (refused) return { status: refused.status, body: { error: refused.error } };
+  }
   const pending = pendingConfidentialMemory.get(requestId);
   pendingConfidentialMemory.delete(requestId);
   const actor = cwActionActor(auth);
@@ -37377,11 +37459,9 @@ function strictCardRule(
   kind: "admin" | "holder",
   stepUpCall: Parameters<typeof callStepUpClasses>[0],
 ): OwnerRule | undefined {
-  // review of #938: a rule kept before main fixed it with the fingerprint
-  // of no arguments (an engine's shell line reported beside no input)
-  // covered every command of the bot: it answers nothing. An empty scope is
-  // only ever its person's explicit "any target" (PATCH anyTarget).
-  const rules = ownerApprovals.adminRulesForBot(bot.id).filter((rule) => (!Object.keys(rule.scope).length || scopeRemembers(rule.scope)) && strictRuleQualifies(rule.ownerId, bot, kind));
+  // #2091 (decided 2026-11-05): every rule the person kept answers, the whole
+  // tool included; no scope is filtered out "by caution"
+  const rules = ownerApprovals.adminRulesForBot(bot.id).filter((rule) => strictRuleQualifies(rule.ownerId, bot, kind));
   if (!rules.length) return undefined;
   const classes = callStepUpClasses(stepUpCall, threadActionClassContext(bot.id, threadId));
   for (const rule of rules) {
@@ -37396,9 +37476,9 @@ function strictCardRule(
  * the person who answers this bot's cards kept for a card that is not an
  * engine's own tool call (a held action, a send, a proposal), the very same
  * scope key for key; none while a security key of theirs protects one of
- * the classes, or on a guest's turn. */
+ * the classes. #2091 (decided 2026-11-05): a guest's turn is answered by the
+ * rule like any other. */
 function keptCardRule(bot: BotRecord, threadId: string, candidate: { tool: string; scope: Record<string, string> }, classes: readonly StepUpClass[] = []): OwnerRule | undefined {
-  if (cloudGuestDriven(threadId) || botmailConfined(threadId)) return undefined;
   const answerer = approvalOwnerId(bot, threadId);
   if (!answerer) return undefined;
   if (classes.length && securityKeys.required(answerer, [...classes], answerer).length) return undefined;
@@ -37440,6 +37520,28 @@ function proposalRuleCandidate(card: NonNullable<Message["card"]> | undefined): 
       tool: "sagax:model",
       scope: { target: model.targetBotId, model: `${model.selection.instanceId}/${model.selection.model}` },
       description: `Switch ${store.bot(model.targetBotId)?.name ?? model.targetName} to ${model.selection.model}`,
+      classes: []
+    };
+  }
+  // #2091 (decided 2026-11-05): a rule proposal and a team-memory proposal offer
+  // their rule too (every card does)
+  const ruleRequest = card?.ruleRequest;
+  if (ruleRequest) {
+    const action = ruleRequest.operation.action;
+    const verb: Record<string, string> = { add: "Add", change: "Change", remove: "Remove" };
+    return {
+      tool: "sagax:rule",
+      scope: { action, ...(ruleRequest.scopeBotId ? { for: ruleRequest.scopeBotId } : {}) },
+      description: `${verb[action] ?? "Change"} approval rules${ruleRequest.scopeBotId ? ` for ${store.bot(ruleRequest.scopeBotId)?.name ?? ruleRequest.scopeBotName}` : ""}`,
+      classes: ["always-grant"]
+    };
+  }
+  const teamMemoryRequest = card?.teamMemoryRequest;
+  if (teamMemoryRequest) {
+    return {
+      tool: "sagax:team_memory",
+      scope: { section: teamMemoryRequest.section, kind: teamMemoryRequest.kind },
+      description: `Remember ${teamMemoryRequest.kind} entries for the team`,
       classes: []
     };
   }
@@ -37526,10 +37628,8 @@ function saveOwnerRuleFromCard(auth: RequestAuth, threadId: string, requestId: s
   const ownerId = strict ? caller! : cardAnswererId(bot, threadId, card);
   if (!caller || caller.toLowerCase() !== ownerId.toLowerCase()) return { status: 403, error: "Only the bot owner can save a rule." };
   const candidate: NonNullable<typeof card.ownerRule> = wholeFolder ? card.ownerRuleFolder! : card.ownerRule;
-  // 2026-10-21 (review of #938): an empty scope is the whole tool, and the
-  // fingerprint of no arguments every such call: never saved from a card
-  // ("any target" stays an explicit edit of one's own rule)
-  if (!scopeRemembers(candidate.scope)) return { status: 409, error: "This approval cannot be remembered as a rule." };
+  // #2091 (decided 2026-11-05): whatever the card offers is saved, the whole
+  // tool included; no "cannot be remembered" refusal by caution
   let saved: OwnerRule;
   try {
     saved = ownerApprovals.add({
@@ -41286,7 +41386,22 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
     // 2026-10-26: a Perspicax server guard's GO (Flow: dry run, GO, read
     // back) is an approval card on the thread; Full access and Approve for
     // me never answer it, only the person (confirmHeldCard).
-    askGo: ({ threadId, botId, message }) => confirmHeldCard({ threadId, botId, tool: "perspicax", summary: message }),
+    // #2091 (decided 2026-11-05): the card names the tool and the action ("create
+    // a note in CW PSA", never "wants to perspicax"), shows a human line and
+    // the arguments once, and its Always allow keeps a rule per tool and
+    // action that answers the next GO without a card
+    askGo: ({ threadId, botId, message }) => {
+      const go = parseGoMessage(message);
+      const tool = `mcp__perspicax__${go.tool ?? "flow_action"}`;
+      const hints = declaredToolProduct(botId, tool, go.args);
+      return confirmHeldCard({
+        threadId, botId, tool, summary: go.summary,
+        ...(go.args ? { toolInput: go.args } : {}),
+        ...(go.fingerprint ? { fingerprint: go.fingerprint } : {}),
+        ...(go.ruleDescription ? { ruleDescription: go.ruleDescription } : {}),
+        ...(hints ? { toolHints: hints } : {}),
+      });
+    },
     // remote_support_open / status / close: the session shows in Sagax (server/remote-support/remote-session-register.ts)
     onRemoteSupport: (call) => {
       const principalId = call.principalId || remoteSessionSpeaker(call.threadId);

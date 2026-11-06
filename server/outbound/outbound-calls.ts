@@ -50,6 +50,8 @@ const MAX_RECORDS = 2_000;
 export const TRANSCRIPT_RETENTION_MS = CALL_RETENTION_MS;
 /** Numbers one person's callees asked not to be called again. */
 export const MAX_STOPPED = 2_000;
+/** Who answered a call the person's Always call approved (the card's "Answered by"). */
+export const STANDING_CALL_VIA = "your Always call for this number";
 
 /** Pilot limits per person and day (ÉFVP 2026-10-22, review): cards asked
  * (each one is a Twilio dry run) and calls placed. */
@@ -122,6 +124,9 @@ export class OutboundCalls {
   private config: OutboundCallSettings | null = null;
   /** principal id -> numbers whose callee asked to stop (the person's own). */
   private stopped: Record<string, string[]> = {};
+  /** principal id -> numbers the person chose Always call for (#2091): a
+   * new call there is approved as it opens, and the card says by what. */
+  private standing: Record<string, string[]> = {};
 
   constructor(dataDir: string, now: () => number = Date.now) {
     this.file = join(dataDir, "outbound-calls.json");
@@ -133,11 +138,16 @@ export class OutboundCalls {
     let records: Record<string, OutboundCallRecord> = {};
     try {
       if (existsSync(this.file)) {
-        const parsed = JSON.parse(readFileSync(this.file, "utf8")) as { records?: Record<string, OutboundCallRecord>; settings?: Partial<OutboundCallSettings>; stopped?: Record<string, unknown> };
+        const parsed = JSON.parse(readFileSync(this.file, "utf8")) as { records?: Record<string, OutboundCallRecord>; settings?: Partial<OutboundCallSettings>; stopped?: Record<string, unknown>; standing?: Record<string, unknown> };
         if (parsed && typeof parsed.records === "object" && parsed.records) records = parsed.records;
         if (parsed?.stopped && typeof parsed.stopped === "object" && !Array.isArray(parsed.stopped)) {
           for (const [principal, numbers] of Object.entries(parsed.stopped)) {
             if (Array.isArray(numbers)) this.stopped[principal] = numbers.filter((n): n is string => typeof n === "string" && normalizePhone(n) === n).slice(0, MAX_STOPPED);
+          }
+        }
+        if (parsed?.standing && typeof parsed.standing === "object" && !Array.isArray(parsed.standing)) {
+          for (const [principal, numbers] of Object.entries(parsed.standing)) {
+            if (Array.isArray(numbers)) this.standing[principal] = numbers.filter((n): n is string => typeof n === "string" && normalizePhone(n) === n).slice(0, MAX_STOPPED);
           }
         }
         const saved = parsed?.settings;
@@ -166,7 +176,7 @@ export class OutboundCalls {
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, MAX_RECORDS);
     this.records = Object.fromEntries(kept.map((row) => [row.id, row]));
-    writeFileAtomic(this.file, JSON.stringify({ version: 1, records: this.records, settings: this.settings(), stopped: this.stopped }), { mode: 0o600 });
+    writeFileAtomic(this.file, JSON.stringify({ version: 1, records: this.records, settings: this.settings(), stopped: this.stopped, standing: this.standing }), { mode: 0o600 });
   }
 
   settings(): OutboundCallSettings {
@@ -268,9 +278,23 @@ export class OutboundCalls {
       request: input.request, digest, status: "pending", createdAt: this.now(),
       ...(input.request.mode === "conversation" && input.names?.personName ? { personName: input.names.personName } : {}),
     };
+    // #2091: the person's Always call for this number approves the call as
+    // it opens; the card says by what (the caller places it at once)
+    if (this.standingFor(input.principalId, input.request.to)) {
+      record.status = "approved";
+      record.answeredAt = record.createdAt;
+      record.expiresAt = record.createdAt + CALL_APPROVAL_MS;
+      record.via = STANDING_CALL_VIA;
+    }
     records[id] = record;
     this.save();
     return { record, already: false, replaced };
+  }
+
+  /** The person chose Always call for this number (#2091). */
+  standingFor(principalId: string, number: string): boolean {
+    this.load();
+    return (this.standing[principalId] ?? []).includes(number);
   }
 
   attachMessage(id: string, messageId: string): void {
@@ -281,22 +305,37 @@ export class OutboundCalls {
   }
 
   /** The person's answer: call (this once, the number confirmed on the
-   * card) or deny. */
+   * card), always (#2091: this call, and every next call to this confirmed
+   * number is approved as it opens) or deny. */
   answer(principalId: string, id: string, decision: unknown, via?: string, confirmedTo?: unknown, confirmed?: unknown): OutboundCallRecord {
-    if (decision !== "call" && decision !== "deny") throw new OutboundCallError("decision must be call or deny", "invalid_decision");
+    if (decision !== "call" && decision !== "always" && decision !== "deny") throw new OutboundCallError("decision must be call, always or deny", "invalid_decision");
     const row = this.load()[id];
     if (!row || row.principalId !== principalId) throw new OutboundCallError("No such call", "unknown_call", 404);
-    if (decision === "call" && (confirmed !== true || typeof confirmedTo !== "string" || normalizePhone(confirmedTo) !== row.request.to)) {
+    const places = decision === "call" || decision === "always";
+    if (places && (confirmed !== true || typeof confirmedTo !== "string" || normalizePhone(confirmedTo) !== row.request.to)) {
       throw new OutboundCallError("Check and confirm the number on the card before calling.", "confirm_number");
     }
     if (row.status !== "pending") throw new OutboundCallError("This call was already answered.", "not_pending", 409);
     if (!this.live(row)) throw new OutboundCallError("This call card is more than a day old. Ask the bot again.", "expired", 409);
-    row.status = decision === "call" ? "approved" : "denied";
+    row.status = places ? "approved" : "denied";
     row.answeredAt = this.now();
-    if (decision === "call") row.expiresAt = this.now() + CALL_APPROVAL_MS;
+    if (places) row.expiresAt = this.now() + CALL_APPROVAL_MS;
     if (via) row.via = via.slice(0, 80);
+    if (decision === "always") {
+      const numbers = this.standing[principalId] ?? [];
+      if (!numbers.includes(row.request.to)) this.standing[principalId] = [...numbers, row.request.to].slice(-MAX_STOPPED);
+    }
     this.save();
     return row;
+  }
+
+  /** The person withdraws an Always call for a number (#2091). */
+  forgetStanding(principalId: string, number: string): void {
+    this.load();
+    const normalized = normalizePhone(number) ?? number;
+    this.standing[principalId] = (this.standing[principalId] ?? []).filter((n) => n !== normalized);
+    if (this.standing[principalId]!.length === 0) delete this.standing[principalId];
+    this.save();
   }
 
   /** Take the approval before the call leaves: a second, concurrent try
@@ -560,6 +599,9 @@ export async function placePhoneCall(deps: PlaceCallDeps, context: { principalId
   if (dry.isError) return { text: `Twilio's dry run refused this call: ${shortError(dry.value, "refused")}. Fix it, then call place_phone_call again. Nothing was placed.`, isError: true };
   const opened = deps.calls.open({ ...context, request, names });
   for (const old of opened.replaced) deps.card(old, old.messageId);
+  // #2091: the person's Always call approved it as it opened: the same
+  // path as an approved card places it now (approvedFor finds this record)
+  if (!opened.already && opened.record.status === "approved") return placePhoneCall(deps, context, args);
   const messageId = deps.card(opened.record, opened.record.messageId);
   if (messageId && !opened.record.messageId) deps.calls.attachMessage(opened.record.id, messageId);
   return {
@@ -619,12 +661,17 @@ async function placeConversation(
   if (!dry.ok || dry.isError) return { text: voiceRefusal(dry), isError: true };
   const opened = deps.calls.open({ ...context, request, names });
   for (const old of opened.replaced) deps.card(old, old.messageId);
-  // Auto may skip the per-call request card once consent is on file
-  if (deps.autoPlace && !opened.already) {
-    try {
-      deps.calls.autoApprove(context.principalId, opened.record.id);
-    } catch {
-      // fall through to the card if auto-approve cannot run
+  // Auto may skip the per-call request card once consent is on file; the
+  // person's Always call for this number approved it as it opened (#2091)
+  const standing = opened.record.status === "approved";
+  if ((deps.autoPlace || standing) && !opened.already) {
+    const how = standing ? opened.record.via ?? "your Always call" : "Auto";
+    if (!standing) {
+      try {
+        deps.calls.autoApprove(context.principalId, opened.record.id);
+      } catch {
+        // fall through to the card if auto-approve cannot run
+      }
     }
     const approved = deps.calls.approvedFor({ ...context, request, names });
     if (approved && deps.calls.claim(approved.id)) {
@@ -637,9 +684,9 @@ async function placeConversation(
         : undefined;
       deps.card(settled, settled.messageId, live);
       if (!placed) return { text: `The call to ${maskPhone(request.to)} was not placed: ${settled.error ?? "no answer from Perspicax"}. Tell the person; do not retry without a new approval.`, isError: true };
-      if (!conversation) return { text: `Call placed to ${maskPhone(request.to)} from the person's own line (Auto). Tell the person it was placed.` };
+      if (!conversation) return { text: `Call placed to ${maskPhone(request.to)} from the person's own line (${how}). Tell the person it was placed.` };
       return {
-        text: `Conversation call placed to ${maskPhone(request.to)} (Auto). End your turn now. Watch the live card; when it ends you get the result.`,
+        text: `Conversation call placed to ${maskPhone(request.to)} (${how}). End your turn now. Watch the live card; when it ends you get the result.`,
       };
     }
   }

@@ -104,11 +104,12 @@ export const revealCredentialNotes = (id: string) => api<{ notes: string }>(`${I
 /** One secret, for the signed-in person. The server never puts it on a list. */
 export const revealCredential = (id: string, field: "password" | "apiKey" | "notes" | "pan" | "cvv") =>
   api<{ value: string }>(`${ITEM(id)}/reveal`, { method: "POST", body: JSON.stringify({ field }) });
-/** Each purchase is its own approval (2026-10-22): no Always allow. */
 /** Shop Pay or Link: the account the person already has. Nothing is charged. */
 export const chooseSingleUseWallet = (wallet: "shop_pay" | "link", chosen: boolean) =>
   api<{ wallets: WalletLinkView }>("/api/me/credentials/wallets", { method: "POST", body: JSON.stringify({ wallet, chosen }) });
-export const answerPurchase = (id: string, decision: "deny" | "once") =>
+/** deny, once, or always (#2091): the site joins the bot's Always allow
+ * list in Settings > Vault > Payments and its next purchases open approved. */
+export const answerPurchase = (id: string, decision: "deny" | "once" | "always") =>
   api<{ purchase: PurchaseListing }>(`/api/me/credentials/purchases/${encodeURIComponent(id)}/answer`, { method: "POST", body: JSON.stringify({ decision }) });
 /** Patch default method and per-bot allowances. null defaultMethod clears it. */
 export const patchPayments = (patch: {

@@ -103,6 +103,8 @@ const card = {
   tool: "propose_rule",
   answered,
   ...(answered === "allow" ? { ruleRequest: { ...request, appliedAt: 2 } } : { ruleRequest: request }),
+  // #2091: what the server offers to Always allow on a rule proposal
+  ownerRule: { tool: "sagax:rule", scope: { action }, description: `${action === "remove" ? "Remove" : action === "change" ? "Change" : "Add"} approval rules` },
 } as NonNullable<Message["card"]>;
 
 const message = {

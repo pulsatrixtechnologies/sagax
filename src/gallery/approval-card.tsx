@@ -27,6 +27,9 @@ const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   if (url.includes("/api/auth/session")) return new Response(JSON.stringify({}), { status: 200, headers: { "content-type": "application/json" } });
+  // card=org-once: the organization's Perspicax policy keeps every approval to
+  // one card (#2091: the only card without Always allow)
+  if (url.includes("/api/custom-rules/policy")) return new Response(JSON.stringify({ alwaysAllow: which !== "org-once", orgRules: which === "org-once" ? 1 : 0 }), { status: 200, headers: { "content-type": "application/json" } });
   if (url.includes("/api/custom-rules")) {
     window.__rules.push(JSON.parse(String(init?.body ?? "{}")));
     return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json" } });
@@ -93,9 +96,29 @@ cards.app = {
   } as unknown as NonNullable<Message["card"]>,
 };
 
+// card=flow-go: a Pulsatrix Flow GO (a pack guard's elicitation for one
+// ConnectWise write) as confirmHeldCard builds it (#2091, the reported example):
+// the title names the write, the human line reads once, the raw arguments
+// fold once, and Always allow keeps a rule for this tool and action
+const GO_ARGS = JSON.stringify({ action: "create", parent: 299334, resource: "service.tickets.notes", set: { text: "Suivi: le client confirme que le poste redémarre." } });
+cards["flow-go"] = {
+  tool: "mcp__perspicax__cw_psa_write",
+  card: {
+    requestId: "req-4",
+    tool: "mcp__perspicax__cw_psa_write",
+    title: "Approval needed",
+    subtitle: "Create service.tickets.notes under 299334 with cw_psa_write. Pulsatrix Flow asks your GO before this write is sent. Why: the pack asks a GO for every note.",
+    toolInput: GO_ARGS,
+    toolHints: { product: "ConnectWise PSA", productId: "cw_psa" },
+    options: ["Allow", "Deny"],
+    ownerRule: { tool: "safety:mcp__perspicax__cw_psa_write", scope: { action: "go:cw_psa_write:create" }, description: "Send cw_psa_write create writes through Pulsatrix Flow", from: "hold" },
+  } as unknown as NonNullable<Message["card"]>,
+};
+
 // card=candidate: the command card without an owner rule, whose Always allow
 // saves the server's proposed custom rule in one click
 if (which === "candidate") cards.candidate = { ...cards.command!, card: { ...cards.command!.card, ownerRule: undefined } };
+if (which === "org-once") cards["org-once"] = cards.command!;
 const chosen = cards[which] ?? cards.command!;
 const message = { id: "m1", role: "bot", kind: "options", at: 0, text: "", card: chosen.card } as unknown as Message;
 const pending: Pending = {
@@ -114,7 +137,7 @@ function Gallery() {
     <div className="min-h-screen bg-canvas p-6 text-ink">
       <div className="mx-auto max-w-[760px]">
         <div className="mb-3 rounded-2xl bg-card px-4 py-3 text-[14px]">Ottoline : je regarde ce qui est installé dans ton ordinateur cloud.</div>
-        <PendingApprovalBox approvals={[pending]} threadId="thread-main" botFor={() => bot} onCancelTurn={() => window.__decisions.push({ type: "cancelTurn" })} />
+        <div data-shot="approval-card"><PendingApprovalBox approvals={[pending]} threadId="thread-main" botFor={() => bot} onCancelTurn={() => window.__decisions.push({ type: "cancelTurn" })} /></div>
         <div className="h-12 rounded-[22px] border-[0.5px] border-border bg-composer px-4 py-3 text-[14px] text-ink-secondary">Écris à Ottoline</div>
       </div>
     </div>

@@ -135,6 +135,9 @@ export interface InternalMemoryDeps {
     meta: { botId: string; botName: string; threadId: string; at: number },
   ): { entry: { id: string; kind: string; name: string; detail: string; aliases: string[] } };
   appendMessage(threadId: string, message: Record<string, unknown>): { id: string };
+  /** #2091: the Always allow the person kept for team-memory proposals of
+   * this kind settles the card at once (index.ts settleProposalByRule). */
+  settleTeamMemoryByRule?(botId: string, threadId: string, proposed: { requestId: string; messageId: string }, section: string): { rule: { id: string } } | undefined;
   appendDecision(row: {
     threadId: string;
     requestId: string;
@@ -417,8 +420,12 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
           requestId: proposed.entry.id,
           tool: "propose_team_memory",
           teamMemoryRequest: { section, entryId: proposed.entry.id, kind: proposed.entry.kind },
+          // #2091: what Always allow keeps on this card
+          ownerRule: { tool: "sagax:team_memory", scope: { section, kind: proposed.entry.kind }, description: `Remember ${proposed.entry.kind} entries for the team` },
         },
       });
+      const byRule = deps.settleTeamMemoryByRule?.(from.id, body.fromThreadId, { requestId: proposed.entry.id, messageId: card.id }, section);
+      if (byRule) return json(res, 201, { status: "accepted", requestId: proposed.entry.id, messageId: card.id, summary, appliedBy: "rule" });
       deps.appendDecision({
         threadId: body.fromThreadId, requestId: proposed.entry.id, botId: from.id, botName: from.name,
         tool: "propose_team_memory", summary, decision: "card-shown", source: "team-memory",

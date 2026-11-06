@@ -17080,12 +17080,10 @@
       "settings.intro.organization": "77e4eb88bcb0bb14a05f7444e404f65548813d1aa5ddededb40e8e834cca190e",
       "settings.intro.computer": "4ae3e01c4f09d25a9f79d9e8ec125691996d58665bbcc9a42eb7401a0eb9dca5",
       "settings.intro.backups": "dc779ab946458a4b4cd49020d6fe76e7f882b451e73d58be4e8c606509daa58c",
-      "settings.intro.about": "519ffc435ea4cefe5f71e138c0763383910a0c5497e5a999f897f6ebb251569c",
+      "settings.intro.updates": "ed4c626f51083a29215b4622b9dc1bb140a196f3f6fe11fc6c7bba600b5ae774",
       "settings.intro.experimental": "0a5077b27b71d34d8d5090669770b1e1fd7c74cb62def3522c2ffa73ce80fe9a",
-      "settings.section.app": "0d04bfeb7d64b71c74fc925cca93d683154e8cc7e6e5838faced498e34c9984d",
-      "settings.section.backupsAndImport": "c840f82c0a42d54562d59ce8de29ab4d5f193acfd8fd278fad20113e0e1af70b",
+      "settings.section.backupsAndImport": "3334fee2c77fef827371cc6c0e618fad0717a345db95b74f74a0facf51eaa647",
       "settings.advanced.title": "9f088dbebd6c3c70a5ddbc2c943b11e4ca9acea5757b0b4f2b32479f0dbb747e",
-      "settings.app.openAbout": "679bcae590defcbad1ad635fa2216714a5de2ff2dd761c7367527c25350a77db",
       "settings.org.managed": "c7800880deff5b5984d8a808cfe09f68b252a89e4a81492c5f286f0178eb8dbb",
       "settings.selection.count": "529aacfdfd2b17bf9fe56ebad9a24339a2d1151327dd420c52c5f163aeb9acc6",
       "settings.selection.clear": "83b12c2216efb4fdc924e1deb5182e905e4926ed0c1c324d467107f46d5a26a9",
@@ -17298,7 +17296,10 @@
       "toolDetail.unverified": "c6008b5b55ecb54f1981d0bafe236067280deb6bcec190ce7aab6915ea5d5948",
       "codingChat.working": "a92f0449a9f7235bf69dc2e8ff7070bfae3f00ec8f8f26e5457a9beac53466ac",
       "codingChat.title.collapse": "286d73f3ea10679db46f29895da99923eb83d5a6eb134b7c03e699df17a405fb",
-      "codingChat.title.expand": "d7952d0f6b0b3251584d6115729904feee7cf0219e0998541d5f6682cb6345d9"
+      "codingChat.title.expand": "d7952d0f6b0b3251584d6115729904feee7cf0219e0998541d5f6682cb6345d9",
+      "settings.intro.about": "519ffc435ea4cefe5f71e138c0763383910a0c5497e5a999f897f6ebb251569c",
+      "settings.section.app": "0d04bfeb7d64b71c74fc925cca93d683154e8cc7e6e5838faced498e34c9984d",
+      "settings.app.openAbout": "679bcae590defcbad1ad635fa2216714a5de2ff2dd761c7367527c25350a77db"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

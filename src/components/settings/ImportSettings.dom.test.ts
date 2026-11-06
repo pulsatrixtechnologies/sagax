@@ -17,6 +17,8 @@ vi.mock("@/state/store", () => ({
 vi.mock("@/lib/analytics", () => ({ track: () => {} }));
 
 import { ImportSettings } from "./ImportSettings";
+import { PreferenceImportCard } from "./PreferenceImportCard";
+import { SettingsAdvancedScope } from "../SettingsPrimitives";
 
 const EXPORT = readFileSync(join(import.meta.dirname, "..", "..", "..", "shared", "fixtures", "grok-import", "shared-grok-bot.json"), "utf8");
 
@@ -89,5 +91,34 @@ describe("Settings > Import a Grok Bot", () => {
     await act(async () => { (link.form as HTMLFormElement).requestSubmit(); });
     expect(fixture.api).not.toHaveBeenCalled();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("Paste a Grok Bot link");
+  });
+});
+
+// #2090: the two import cards are not on the page by default (Simple mode):
+// they sit in the page's Advanced fold, and Advanced mode or a search shows them.
+describe("Backups and import: the import cards are in the Advanced fold", () => {
+  const page = (fold: boolean, searching = false) => act(() => root.render(createElement(SettingsAdvancedScope, {
+    pageId: "backups", fold, searching,
+    children: [createElement(ImportSettings, { key: "grok" }), createElement(PreferenceImportCard, { key: "pref" })],
+  })));
+  const body = () => {
+    const pill = container.querySelector('[data-settings-card="backups.advancedFold"] button[aria-controls]')!;
+    return document.getElementById(pill.getAttribute("aria-controls")!)!;
+  };
+
+  it("by default both cards are inside the closed fold", () => {
+    page(true);
+    expect(body().hidden).toBe(true);
+    expect(body().querySelector('[data-settings-group="import"]')).not.toBeNull();
+    expect(body().querySelector('[data-settings-group="preference-import"]')).not.toBeNull();
+  });
+
+  it("a search opens the fold, and Advanced mode draws the cards in place", () => {
+    page(true, true);
+    expect(body().hidden).toBe(false);
+    page(false);
+    expect(container.querySelector('[data-settings-card="backups.advancedFold"]')).toBeNull();
+    expect(container.querySelector('[data-settings-group="import"]')).not.toBeNull();
+    expect(container.querySelector('[data-settings-group="preference-import"]')).not.toBeNull();
   });
 });

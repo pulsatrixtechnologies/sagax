@@ -55,7 +55,7 @@ export function PreferenceImportCard() {
   };
 
   return (
-    <SettingsGroup title={t("prefImport.title")} groupId="preference-import">
+    <SettingsGroup title={t("prefImport.title")} groupId="preference-import" advanced>
       <div className="flex flex-col gap-2 px-3.5 py-3" data-preference-import="">
         <p className="text-[12.5px] text-ink-secondary">{t("prefImport.intro")}</p>
         {primaries.length === 0 ? <p className="text-[12.5px] text-ink">{t("prefImport.noPrimary")}</p> : null}

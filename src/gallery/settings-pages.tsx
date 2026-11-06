@@ -20,6 +20,8 @@ const params = new URLSearchParams(location.search);
 const skinParam = params.get("skin") as SkinId | null;
 applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? skinParam : readSkin());
 await loadLocale(params.get("lang") ?? "en");
+// ?mode=simple (2026-11-05): Simple interface mode, to see the Advanced fold.
+if (params.get("mode") === "simple") { try { localStorage.setItem("sagax.interfaceMode.v1", "simple"); localStorage.setItem("sagax.advancedModeMigratedAt.v1", "2026-10-16"); } catch { /* private window */ } }
 
 const DAY = 86_400_000;
 const NOW = Date.UTC(2026, 9, 28, 14);

@@ -113,6 +113,7 @@ describe("Settings search", () => {
     for (const query of ["nettoyage", "journaux", "diagnostic"]) expect(sectionMatches(section("about"), query), query).toBe(true);
     // 2026-10-26: no Full access card any more
     expect(cardsMatching("accès complet")).not.toContain("organization.fullAccess");
-    expect(cardsMatching("restaurer")).toContain("backups.import");
+    // #2090: Grok Bot / preferences import card is gone; restore stays a section keyword.
+    expect(cardsMatching("restaurer")).not.toContain("backups.import");
   });
 });

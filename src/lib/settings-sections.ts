@@ -16,10 +16,8 @@ const MERGED: Partial<Record<AppSettingsSection, { section: AppSettingsSection; 
   decisionModel: { section: "engines", cardId: "engines.decisionModel" },
   privacy: { section: "notifications", cardId: "notifications.privacy" },
   memory: { section: "organization", cardId: "organization.memory" },
-  // #2080 (L0): Import is a card of Backups and import, Updates the first
-  // card of App (id "about").
+  // #2080 (L0): Import is a card of Backups and import.
   import: { section: "backups", cardId: "backups.import" },
-  updates: { section: "about", cardId: "about.updates" },
   // 2026-10-26 to 2026-10-28 Security keys and the vault were cards of
   // Account; since 2026-10-28 Security ("security") and Vault
   // ("credentials") are pages again (CARD_HOME below sends the old links).

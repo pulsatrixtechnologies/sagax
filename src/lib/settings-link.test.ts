@@ -26,12 +26,12 @@ describe("settings links", () => {
     // Security and Vault are pages again (2026-10-28); Published pages are in Capabilities
     expect(settingsSectionLabel("security")).toBe("Security");
     expect(settingsSectionLabel("credentials")).toBe("Vault");
-    expect(settingsSectionLabel("pages")).toBe("Capabilities");
+    expect(settingsSectionLabel("pages")).toBe("Plugins");
     expect(settingsSectionLabel("experimental")).toBe("Experimental");
-    // #2080 (L0): About is the App page; Updates and Import live in App and Backups
+    // #2090: Updates is its own page; #2080: about is the App page; Import label is Backups
     expect(settingsSectionLabel("about")).toBe("App");
-    expect(settingsSectionLabel("updates")).toBe("App");
-    expect(settingsSectionLabel("import")).toBe("Backups and import");
+    expect(settingsSectionLabel("updates")).toBe("Updates");
+    expect(settingsSectionLabel("import")).toBe("Backups");
     setLocale("fr");
     expect(settingsSectionLabel("engines")).toBe("Modèles");
     expect(settingsSectionLabel("voice")).toBe("Voix");

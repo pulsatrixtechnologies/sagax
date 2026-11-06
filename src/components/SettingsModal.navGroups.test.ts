@@ -47,12 +47,12 @@ describe("Settings nav groups", () => {
     expect(at.every((value) => value >= 0)).toBe(true);
     expect([...at].sort((x, y) => x - y)).toEqual(at);
     expect(SECTIONS.map((entry) => entry.id)).toEqual([
-      // #2080 (L0): the final rail of 13 pages; Import lives in Backups,
-      // Updates in App (their old ids stay aliases)
+      // #2080 (L0): the final rail; Import lives in Backups (its old id stays
+      // an alias). #2090: Updates is its own page; App (about) keeps L2 extras.
       "account", "appearance", "notifications", "security", "credentials",
       "providers", "engines", "voice", "usage",
       "organization", "computer", "backups",
-      "about", "experimental",
+      "updates", "experimental", "about",
     ]);
   });
 
@@ -68,9 +68,9 @@ describe("Settings nav groups", () => {
     for (const page of ["Account", "Security", "Vault", "Appearance", "Notifications"]) expect(you, page).toContain(`>${page}</button>`);
     expect(rail).not.toContain("data-settings-automations");
     const app = rail.slice(rail.indexOf('data-settings-nav-group="app"'));
-    // #2080 (L0): App is a page of its own, Updates is one of its cards
-    expect(app.indexOf(">App</button>")).toBeLessThan(app.indexOf(">Experimental</button>"));
-    expect(app).not.toContain(">Updates</button>");
+    // #2090: Updates (desktop) then Experimental; #2080: App keeps L2 extras
+    expect(app.indexOf(">Updates</button>")).toBeLessThan(app.indexOf(">Experimental</button>"));
+    expect(app.indexOf(">Experimental</button>")).toBeLessThan(app.indexOf(">App</button>"));
     expect(app).not.toContain(">About</button>");
     // each group is labelled by its heading for assistive tech
     expect(rail).toMatch(/role="group" aria-labelledby="app-settings-nav-you"/);
@@ -142,11 +142,11 @@ describe("Settings nav groups", () => {
   it("groups the small-screen menu the same way", () => {
     const html = render();
     expect(html).toContain('<optgroup label="Personal"><option value="account" selected="">Account</option>');
-    expect(html).toContain('<optgroup label="App"><option value="about">App</option>');
-    expect(html).not.toContain('<option value="updates"');
+    expect(html).toContain('<optgroup label="App"><option value="updates">Updates</option>');
+    expect(html).toContain('<option value="about">App</option>');
   });
 
-  it("keeps the App page without an updater; About is never a row", () => {
+  it("keeps the App page without an updater; Updates hides; About is never a row label", () => {
     vi.stubGlobal("window", {});
     const rail = nav(render());
     expect(rail).toContain('data-settings-nav-group="app"');
@@ -161,14 +161,17 @@ describe("Settings nav groups", () => {
     expect(member).not.toContain(">Experimental</button>");
   });
 
-  it("draws the updates first on App, then the way to About", () => {
-    fixture.section = "about";
+  it("titles the Updates page's card; App keeps the About link", () => {
+    fixture.section = "updates";
     const html = render();
-    expect(html).toContain('data-settings-card="about.updates"');
+    expect(html).toContain('data-settings-card="updates"');
     expect(html).toMatch(/<h3[^>]*>This app<\/h3>/);
     expect(html).toContain("Check for updates");
-    expect(html.indexOf('data-settings-card="about.updates"')).toBeLessThan(html.indexOf('data-settings-card="about.about"'));
     expect(html).not.toContain("data-about-section");
+    fixture.section = "about";
+    const app = render();
+    expect(app).toContain('data-settings-card="about.about"');
+    expect(app).not.toContain('data-settings-card="updates"');
   });
 
   it("reads in French, with no long dash", () => {

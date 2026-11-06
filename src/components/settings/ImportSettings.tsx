@@ -15,7 +15,7 @@ export function ImportSettings() {
   const [done, setDone] = useState("");
   return (
     <div data-settings-card="import" className="flex flex-col gap-2">
-      <SettingsGroup title={t("grokImport.title")} groupId="import">
+      <SettingsGroup title={t("grokImport.title")} groupId="import" advanced>
         <div className="px-3.5 py-3">
           {done ? <p role="status" className="mb-3 text-[12.5px] text-ink">{done}</p> : null}
           {pending ? (

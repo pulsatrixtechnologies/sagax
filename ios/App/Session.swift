@@ -168,11 +168,6 @@ final class Session: ObservableObject {
         didSet { if case let .bot(bot)? = notificationChat { freshTopics[bot.id] = nil } }
     }
 
-    /// A routine-run push: the run's detail, not its report thread (#1700).
-    /// The roster and the iPad shell present it, then call
-    /// `consumeNotificationRoutineRun`.
-    @Published private(set) var notificationRoutineRun: OpenedRoutineRun?
-
     /// A chat a deep link asked for, consumed by the roster's
     /// NavigationStack the same way a notification response is.
     @Published private(set) var pendingChat: Chat? {
@@ -1307,7 +1302,6 @@ final class Session: ObservableObject {
         endpointRefreshTask = nil
         restorePending = false
         pendingNotification = nil
-        notificationRoutineRun = nil
         pendingWidgetDestination = nil
         pendingPanelDoor = nil
         pairingInvite = CompanionPairingInvitePolicy.nextInvite(
@@ -1359,7 +1353,6 @@ final class Session: ObservableObject {
         restorePending = false
         endLinger()
         pendingNotification = nil
-        notificationRoutineRun = nil
         pendingWidgetDestination = nil
         pendingPanelDoor = nil
         screenWatchers = 0
@@ -3755,19 +3748,69 @@ final class Session: ObservableObject {
         if let citation = plan.citation {
             pendingComposerCitations[plan.composerThreadId, default: []].append(citation)
         }
-        // Continue stays on the conversation, never the run detail (#1700).
-        await openNotification(plan.target, runDetail: false)
+        await openNotification(plan.target)
         if let messageId = plan.focusMessageId {
             await jump(to: messageId, inThread: plan.target.threadId)
         }
     }
 
-    /// Opens what a notification named. A routine run's push (or a link to
-    /// its execution thread) opens the run's detail when this phone knows
-    /// the run (#1700, desktop `openNotificationTarget`); otherwise the
-    /// conversation. `runDetail: false` keeps "Open thread" / Continue on
-    /// the conversation itself.
-    func openNotification(_ target: NotificationTarget, runDetail: Bool = true) async {
+    /// 2026-11-05 (#2098, the operator: a run opens ALWAYS in the main chat): every
+    /// way into a run (a card's View run, the Runs list, a notification, a
+    /// routine's page, a widget) lands on the bot's unified conversation, at
+    /// the run's own message when this phone holds it (desktop
+    /// `openRoutineRunInChat`). Nothing opens beside the chat any more.
+    /// Opening a failed or missed run acknowledges it (AU9).
+    func openRoutineRunInChat(_ run: RoutineRun) async {
+        if run.seenAt == nil, run.status == "failed" || run.status == "missed", run.redacted != true {
+            _ = await markRoutineRunSeen(run)
+        }
+        guard let target = RoutineResults.conversationTarget(for: run, bots: state.bots) else {
+            // a run whose bot this phone no longer lists: its routines page is
+            // the closest the conversation gets
+            if let client, state.bot(run.botId) == nil { try? await hydrate(using: client) }
+            if let target = RoutineResults.conversationTarget(for: run, bots: state.bots) {
+                await openRunTarget(target, run: run)
+            }
+            return
+        }
+        await openRunTarget(target, run: run)
+    }
+
+    private func openRunTarget(_ target: NotificationTarget, run: RoutineRun) async {
+        await openNotification(target)
+        let loaded = state.messages[target.threadId] ?? []
+        if let report = RoutineResults.reportMessage(for: run, in: loaded) {
+            await jump(to: report.id, inThread: target.threadId)
+        }
+    }
+
+    /// A run opened by its id (an attention card, a notification payload):
+    /// the run as the computer lists it, then the chat.
+    func openRoutineRunInChat(id runId: String) async {
+        let listing = await loadRoutines()
+        guard let run = listing.runs.first(where: { $0.id == runId }) else { return }
+        await openRoutineRunInChat(run)
+    }
+
+    /// #2096: Stop on the running card in the chat cancels the run.
+    func cancelRoutineRun(id runId: String) async {
+        guard let client else { return }
+        do { _ = try await client.cancelRoutineRun(id: runId) }
+        catch { actionError = error.localizedDescription }
+    }
+
+    /// #2081 (one conversation): the person's answer to a bot's question goes
+    /// into the thread the bot asked in, as their own message, which the
+    /// runtime takes as the answer (desktop AttentionCard onReply).
+    func answerAttention(_ card: PersonAttentionCard, text: String) async throws {
+        guard let client else { throw APIError.transport("This computer is offline.") }
+        _ = try await client.send(text: text, toBot: card.botId, threadId: card.threadId)
+    }
+
+    /// Opens what a notification named: the conversation it points at. A
+    /// routine run's push lands on the run's message in the bot's chat
+    /// (#2098; `openRoutineRunInChat`), never a run view.
+    func openNotification(_ target: NotificationTarget) async {
         guard let client else {
             // Do not carry a stale destination into a future, unrelated
             // pairing. Only a saved connection waiting for Keychain access is
@@ -3787,17 +3830,16 @@ final class Session: ObservableObject {
                 try await hydrate(using: client)
                 bot = state.bot(target.botId)
             }
-            if runDetail {
+            // A run's push (#1700, #2098): its message in the bot's chat.
+            if target.routineRunId != nil || RoutineResults.runId(ofThread: target.threadId, bots: state.bots, rooms: state.rooms) != nil {
                 let listing = await loadRoutines()
                 let known = Set(listing.runs.map(\.id))
                 if let runId = RoutineResults.runId(
                     for: target, bots: state.bots, rooms: state.rooms, knownRunIds: known
-                ), let run = listing.runs.first(where: { $0.id == runId }) {
-                    notificationChat = nil
-                    notificationRoutineRun = OpenedRoutineRun(
-                        run: run,
-                        routine: listing.routines.first { $0.id == run.routineId }
-                    )
+                ), let run = listing.runs.first(where: { $0.id == runId }),
+                   let chatTarget = RoutineResults.conversationTarget(for: run, bots: state.bots),
+                   chatTarget != target {
+                    await openRunTarget(chatTarget, run: run)
                     return
                 }
             }
@@ -3805,7 +3847,6 @@ final class Session: ObservableObject {
             // it (desktop opens that bot's Coding activity for the run).
             if target.threadId.isEmpty {
                 if let selected = bot {
-                    notificationRoutineRun = nil
                     notificationChat = .bot(selected)
                 }
                 return
@@ -3825,7 +3866,6 @@ final class Session: ObservableObject {
                         // current task instead of leaving the person nowhere.
                     }
                 }
-                notificationRoutineRun = nil
                 notificationChat = .room(room)
                 return
             }
@@ -3836,7 +3876,6 @@ final class Session: ObservableObject {
             // the stream opens beside it; the conversation never gives way.
             if !SidebarPrefsModel.shared.showThreads,
                let landed = await land(bot: selected, threadId: target.threadId, using: client) {
-                notificationRoutineRun = nil
                 notificationChat = .bot(landed)
                 return
             }
@@ -3850,7 +3889,6 @@ final class Session: ObservableObject {
                     // banner and no navigation at all.
                 }
             }
-            notificationRoutineRun = nil
             notificationChat = .bot(selected)
         } catch is CancellationError {
             // A refresh from the previous computer must not alert on the
@@ -3859,7 +3897,6 @@ final class Session: ObservableObject {
     }
 
     func consumeNotificationChat() { notificationChat = nil }
-    func consumeNotificationRoutineRun() { notificationRoutineRun = nil }
 
     // MARK: - Thread chips
 

@@ -31,6 +31,7 @@ import { FloatingWindowsHost } from "@/components/floating/FloatingWindowsHost";
 import { CallEngineHost } from "@/components/CallView";
 import { RetroBootSlot, RetroChromeSlot } from "@/components/RetroChromeHost";
 import { t } from "@/lib/i18n";
+import { useShowThreads } from "@/lib/thread-preferences";
 import { viewerBotsReadOnly, viewerCanCreateBots } from "@/lib/viewer";
 import { botsReadOnlyText } from "@/lib/permissions";
 import { ModelWindowHost } from "@/components/ModelWindowHost";
@@ -50,6 +51,7 @@ function GroupSurface({ id, children }: { id: string; children: (group: Group) =
 
 /** Shell chrome and main column: sidebar, conversation surfaces, panels, modals. */
 export function ShellLayout(shell: ShellNavigation) {
+  const showThreads = useShowThreads();
   const {
     dispatch,
     state,
@@ -200,8 +202,9 @@ export function ShellLayout(shell: ShellNavigation) {
       {composeOpen && <ComposeToPicker key={composeGroup ? "group" : "browse"} startInGroup={composeGroup} onClose={() => setComposeOpen(false)} />}
       </div>
       {/* A bot thread opened beside the main chat (Open beside, or
-          Option-click on a thread row); one at a time. */}
-      <SideThreadPanel />
+          Option-click on a thread row); one at a time. Threads shown only:
+          with one conversation (#2081) no thread opens anywhere beside it. */}
+      {showThreads && <SideThreadPanel />}
       {/* The panels below are siblings, so their keys must differ even
           though each is remounted per bot. Two siblings keyed `bot.id`
           collide in React's keyed reconciliation whenever both are open

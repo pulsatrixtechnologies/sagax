@@ -33,10 +33,6 @@ struct MessageRow: View {
     /// Block's confirmation, and a blocked line opened with Show.
     @State private var confirmingBlock = false
     @State private var revealedBlocked = false
-    /// View run (2026-10-29): the run's detail, as the routines screens show
-    /// it, never the execution conversation. Continue in the conversation
-    /// stays in the detail.
-    @State private var openedRun: OpenedRoutineRun?
     @Environment(\.messageActions) private var context
     /// Cite in the Select Text sheet (CO8); nil where nothing can be sent.
     @Environment(\.citeIntoComposer) private var citeIntoComposer
@@ -163,10 +159,6 @@ struct MessageRow: View {
         .sheet(item: $digest) {
             DigestSheet(summary: $0)
         }
-        .routineRunDetail(item: $openedRun) { opened in
-            RoutineRunDetailView(run: opened.run, routine: opened.routine)
-                .environmentObject(session)
-        }
         .sheet(isPresented: $reporting) {
             ReportMessageSheet(
                 message: message,
@@ -266,12 +258,15 @@ struct MessageRow: View {
             // a phone call or a purchase on its card (OutboundCard.tsx)
             OutboundCardView(card: outbound, accent: Theme.readable(MausPalette.color(chat.color)))
         } else if let attention = message.attention, message.role == .bot, message.kind == .text {
-            // 2026-11-05: what a bot's turn elsewhere left for you (AttentionCard.tsx)
+            // 2026-11-05: what a bot's turn elsewhere left for you
+            // (AttentionCard.tsx). One conversation (#2081, #2098): the answer
+            // is typed right here; Open thread exists only with threads shown.
             AttentionCardView(
                 card: attention,
                 tint: MausPalette.color(chat.color),
-                openThread: openThread,
-                openRun: attention.routineRunId.map { runId in attentionRunOpener(runId) }
+                openThread: threadsShown ? openThread : nil,
+                openRun: attention.routineRunId.map { runId in { Task { await session.openRoutineRunInChat(id: runId) } } },
+                reply: threadsShown ? nil : { text in try await session.answerAttention(attention, text: text) }
             )
         } else {
             kindContent
@@ -408,13 +403,15 @@ struct MessageRow: View {
                     tint: MausPalette.color(chat.color),
                     bot: runBot,
                     openRun: routineRunOpener(card),
+                    // #2096: Stop sits on the running card, beside View run
+                    stop: card.knownStatus == .running ? { Task { await session.cancelRoutineRun(id: card.runId) } } : nil,
                     resume: card.autoPausedAfter == nil ? nil : {
                         // 2026-10-26: back on, the failure count from zero
                         Task {
                             if await session.resumeRoutine(id: card.routineId) != nil { afterResume?() }
                         }
                     },
-                    openThread: openThread
+                    openThread: threadsShown ? openThread : nil
                 )
                 // 2026-11-05: items only the person can do, each with its ticket
                 if let attention = message.attention, !attention.items.isEmpty, card.knownStatus == .completed {
@@ -485,20 +482,9 @@ struct MessageRow: View {
     /// takes, so it lands on screen without joining the thread list. No
     /// route — the run was deleted, or the phone holds no bot owning it —
     /// means no button.
-    /// View run opens the run's detail (a run of a deleted routine too, to
-    /// read). A run the computer no longer lists falls back to its
-    /// execution conversation when this phone has a route to it.
-    /// A card's run, opened by its id (the card carries no RoutineRunCard).
-    private func attentionRunOpener(_ runId: String) -> () -> Void {
-        {
-            Task {
-                let listing = await session.loadRoutines()
-                if let run = listing.runs.first(where: { $0.id == runId }) {
-                    openedRun = OpenedRoutineRun(run: run, routine: listing.routines.first { $0.id == run.routineId })
-                }
-            }
-        }
-    }
+    /// The threads setting (SidebarPrefs): with threads off, the chat is one
+    /// conversation and no row offers a thread (#2081).
+    private var threadsShown: Bool { SidebarPrefsModel.shared.showThreads }
 
     /// The bot a role banner names ("Nova s'est arrêté").
     private var roleNoticeBotName: String? {
@@ -507,14 +493,18 @@ struct MessageRow: View {
         return nil
     }
 
+    /// View run (#2098): the run's message in the bot's chat, from wherever
+    /// the card sits (a room's card too). A run the computer no longer lists
+    /// falls back to its execution thread when threads are shown and this
+    /// phone has a route to it.
     private func routineRunOpener(_ card: RoutineRunCard) -> (() -> Void)? {
         let fallback = session.state.routineExecutionRef(for: card)
-        let openThread = openThread
+        let openThread = threadsShown ? openThread : nil
         return {
             Task {
                 let listing = await session.loadRoutines()
                 if let run = listing.runs.first(where: { $0.id == card.runId }) {
-                    openedRun = OpenedRoutineRun(run: run, routine: listing.routines.first { $0.id == run.routineId })
+                    await session.openRoutineRunInChat(run)
                 } else if let openThread, let fallback {
                     openThread(fallback)
                 }
@@ -534,12 +524,4 @@ extension MessageRow: Equatable {
             && lhs.endsRun == rhs.endsRun
             && (lhs.openThread == nil) == (rhs.openThread == nil)
     }
-}
-
-/// A run opened from its card in the chat, with its routine when it still
-/// exists. Also the destination of a routine-run push (#1700).
-struct OpenedRoutineRun: Identifiable, Equatable {
-    let run: RoutineRun
-    let routine: Routine?
-    var id: String { run.id }
 }

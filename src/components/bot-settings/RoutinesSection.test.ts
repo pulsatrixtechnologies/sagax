@@ -166,8 +166,10 @@ describe("RoutinesSection", () => {
     // 2026-11-03: Duplicate from Edit > Advanced, Delete after a confirmation,
     // Clear run logs on the page; a run's logs stay one click away in its sheet.
     for (const needle of ["RoutinePanelActions", "onDuplicate={(routine) => setEditing({ copyOf: routine })}", "deleteRoutine", "confirm(", "clearRoutineRuns"]) expect(detail).toContain(needle);
-    expect(detail).toContain("onOpenRun={(run) => { setOpenedRun(run);");
-    expect(source).toContain("<RoutineRunExchange");
+    // 2026-11-05 (#2098): a run opens in the chat, never in a sheet beside it.
+    expect(detail).toContain("onOpenRun={(run) => { openRun(run);");
+    expect(source).toContain("openRoutineRun(dispatch, { runId: run.id");
+    expect(source).not.toContain("RoutineRunExchange");
     // The bar includes Check routine; each run opens its own conversation.
     const bar = source.slice(source.indexOf("export function RoutinePanelActions"));
     for (const needle of ["RunNowButton", "data-routine-check", "botPanel.routines.edit", "routines.disable", "routines.enable", "data-routine-delete"]) expect(bar).toContain(needle);

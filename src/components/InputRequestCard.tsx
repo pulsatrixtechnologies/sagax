@@ -71,13 +71,13 @@ export function InputRequestCard({ message }: { message: Message }) {
               >
                 {t("chat.inputRequest.send")}
               </button>
-              <button
+              {showThreads && <button
                 type="button"
                 className="rounded-md border border-border px-3 py-1 text-xs"
                 onClick={() => openThread(dispatch, { botId: request.botId, threadId: request.threadId }, state, showThreads)}
               >
                 {t("chat.inputRequest.open")}
-              </button>
+              </button>}
             </div>
           </div>
         )}

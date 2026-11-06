@@ -1,8 +1,10 @@
 // One conversation per bot (Settings > Conversation threads > One
 // conversation): no other thread is ever a destination nor a sidebar line.
-// A parallel task's detail, a bot's job or a run opens in the side column
-// beside the conversation, which stays on screen where it was; Close or
-// Escape is the way back. The conversation on screen reads the topics it
+// 2026-11-05 (#2081, owner: "there is a unified chat mode and you keep
+// putting threads everywhere"): a parallel task's detail or a bot's job
+// opens nothing beside the conversation either; what they hold for the
+// person reaches the conversation on its own, so the conversation is shown
+// and stays where it was. The conversation on screen reads the topics it
 // holds, and a bot-opened job with no sidebar row (#1770) so the bot's
 // unread dot cannot stick after the person has read.
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -34,19 +36,17 @@ const helper = (): Bot => ({
 } as Bot);
 
 describe("a sub-task's detail with threads hidden", () => {
-  it("opens beside the conversation and never switches the conversation on screen", () => {
+  it("shows the conversation, opens no side column and never switches the conversation on screen (#2081)", () => {
     const bot = helper();
     const actions: Action[] = [];
     const opened = openThread((action) => actions.push(action), { botId: bot.id, threadId: "sub-b" }, { bots: [bot], groups: [] } as never, false);
     expect(opened).toBe(true);
     expect(actions.some((action) => action.type === "switchTask")).toBe(false);
-    expect(currentSideThread()).toEqual({ botId: "helper", threadId: "sub-b" });
-    // the second sub-task replaces the first in the column; the conversation stays
-    openThread((action) => actions.push(action), { botId: bot.id, threadId: "sub-a" }, { bots: [bot], groups: [] } as never, false);
+    expect(actions).toContainEqual({ type: "select", id: "helper" });
+    expect(currentSideThread()).toBeNull();
+    // a bot-opened job: the same, the conversation and nothing beside it
+    openThread((action) => actions.push(action), { botId: bot.id, threadId: "job" }, { bots: [bot], groups: [] } as never, false);
     expect(actions.some((action) => action.type === "switchTask")).toBe(false);
-    expect(currentSideThread()).toEqual({ botId: "helper", threadId: "sub-a" });
-    // the way back: closing the column leaves the conversation where it was
-    closeSideThread();
     expect(currentSideThread()).toBeNull();
   });
 

@@ -2680,7 +2680,6 @@
   "routines.results.help": "各実行は新しいコンテキストで始まります。日付付きの結果をここにまとめ、詳しい実行内容は実行ログに残します。結果専用のスレッドは毎回の実行で再利用され、フォルダーに移動できます。",
   "routines.results.back": "結果に戻る",
   "routines.results.showReport": "レポートを表示",
-  "routines.executionDetails": "実行の詳細 · {name}",
   "routines.logsFor": "{name} の実行ログ",
   "routines.logsHint": "各ボットの最近の保存済み実行です。実行を開くと、結果、エラー、実行スレッドを確認できます。",
   "routines.markAllSeen": "すべて既読にする",

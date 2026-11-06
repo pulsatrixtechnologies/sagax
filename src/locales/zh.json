@@ -1759,7 +1759,6 @@
   "routines.results.help": "每次运行都会以全新的脉络开始。附有日期的结果会收集在这里；完整的运行细节则留在“运行记录”中。专用的结果对话会在每次运行时重复使用，并可移入文件夹。",
   "routines.results.back": "返回结果",
   "routines.results.showReport": "显示报告",
-  "routines.executionDetails": "运行详细数据 · {name}",
   "routines.logsFor": "{name} 的运行记录",
   "routines.logsHint": "各个机器人最近已保存的运行记录。打开某次运行即可查看其结果、错误与运行的对话串。",
   "routines.markAllSeen": "全部标示为已读",

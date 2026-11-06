@@ -79,14 +79,16 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
     }
     case "routineFocused":
       return state.routineFocus ? { ...state, routineFocus: null } : state;
-    case "openRoutineRunSheet": {
+    case "openRoutineRunInChat": {
+      // 2026-11-05 (#2098): the run's message in the bot's conversation,
+      // on screen; never a run view beside the chat.
       const known = state.routineRuns.find((candidate) => candidate.id === action.runId);
       const botId = action.botId ?? known?.botId;
       const bot = botId ? state.bots.find((candidate) => candidate.id === botId) : undefined;
+      const report = bot?.messages.find((message) => message.kind === "routine.run" && message.routineRun?.runId === action.runId);
       const next: AppState = {
         ...state,
         activeView: "chat",
-        routineRunSheet: { runId: action.runId, ...(action.routineId ?? known?.routineId ? { routineId: action.routineId ?? known?.routineId } : {}) },
         codingChat: null,
         // Keep the bot panel if it was already open; otherwise land on chat.
         personPanelId: null,
@@ -94,14 +96,15 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         pluginsOpen: false,
         triggersOpen: false,
         memoryManagerOpen: false,
+        ...(bot && state.selectedId !== bot.id ? { selectedId: bot.id } : {}),
       };
-      if (bot && state.selectedId !== bot.id) {
-        return { ...next, selectedId: bot.id };
-      }
-      return next;
+      if (!bot || !report) return next;
+      return {
+        ...next,
+        freshTopic: withoutFreshTopicFor(next, bot.threadId),
+        focusMessage: { threadId: bot.threadId, messageId: report.id, nonce: (state.focusMessage?.nonce ?? 0) + 1, consumed: false },
+      };
     }
-    case "closeRoutineRunSheet":
-      return state.routineRunSheet ? { ...state, routineRunSheet: null } : state;
     // 2026-11-03: a coding task opens as a chat where the chat is, never in
     // the side panel (the panel stays open as it was, its Coding list the
     // entry point).
@@ -110,7 +113,6 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         ...state,
         activeView: "chat",
         codingChat: action.target,
-        routineRunSheet: null,
         personPanelId: null,
         appSettingsOpen: false,
         pluginsOpen: false,

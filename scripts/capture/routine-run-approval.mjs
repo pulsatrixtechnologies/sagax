@@ -39,21 +39,12 @@ const vite = spawn(
 let browser;
 try {
   const origin = `http://127.0.0.1:${port}/src/gallery`;
-  await waitForServer(`${origin}/routine-run-exchange.html`);
+  await waitForServer(`${origin}/approvals-page.html`);
   const { chromium } = await import(process.env.SAGAX_VERIFY_PLAYWRIGHT || "playwright");
   await mkdir(outDir, { recursive: true });
   browser = await chromium.launch({ headless: true, ...(process.env.SAGAX_CHROMIUM ? { executablePath: process.env.SAGAX_CHROMIUM } : {}) });
   for (const { id, label } of skins) {
     for (const lang of ["en", "fr"]) {
-      const sheet = await browser.newPage({ viewport: { width: 960, height: 820 }, deviceScaleFactor: 2 });
-      await sheet.goto(`${origin}/routine-run-exchange.html?skin=${id}&lang=${lang}&status=waiting`, { waitUntil: "domcontentloaded" });
-      await sheet.waitForSelector("[data-exchange-pinned] [data-task-waiting-approvals]", { timeout: 60_000 });
-      await new Promise((r) => setTimeout(r, 400));
-      const sheetFile = join(outDir, `run-sheet-${lang}-${label}.png`);
-      await sheet.screenshot({ path: sheetFile });
-      console.log(sheetFile);
-      await sheet.close();
-
       const inbox = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 });
       await inbox.goto(`${origin}/approvals-page.html?skin=${id}&lang=${lang}&n=3&routine=1`, { waitUntil: "domcontentloaded" });
       await inbox.waitForSelector("[data-approval-row]", { timeout: 60_000 });

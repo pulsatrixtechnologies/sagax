@@ -1,7 +1,7 @@
 // A coding task opened as a chat where the chat is (JC, 2026-11-03): the bot
 // panel's Coding list is the entry point, a row opens this sheet over the
-// chat column, the way a routine run opens (RoutineRunExchange in the
-// ExchangeSheet shell), but drawn for development.
+// chat column (ExchangeSheet shell), drawn for development. A routine run
+// no longer opens a sheet: it opens in the chat (#2098).
 //
 // Drawn like the Claude Code terminal (JC, 2026-11-05, #2099):
 // - Header: a back arrow (the chat is one chat: no thread to close), the

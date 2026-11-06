@@ -674,20 +674,18 @@ private struct DesktopShellRouting: ViewModifier {
     @ObservedObject var model: DesktopShellModel
     @EnvironmentObject private var session: Session
     @ObservedObject private var sidebarPrefs = SidebarPrefsModel.shared
-    @State private var openedNotificationRun: OpenedRoutineRun?
     @State private var openedWidgetRoutine: Routine?
 
     func body(content: Content) -> some View {
         content
             .onValueChange(of: session.notificationChat) { chat in
                 guard let chat else { return }
+                // a run opened from Automations or a routine's page lands in
+                // the chat (#2098): those close
+                if model.modal == .automations { model.modal = nil }
+                openedWidgetRoutine = nil
                 model.open(chat)
                 session.consumeNotificationChat()
-            }
-            .onValueChange(of: session.notificationRoutineRun) { opened in
-                guard let opened else { return }
-                openedNotificationRun = opened
-                session.consumeNotificationRoutineRun()
             }
             .onValueChange(of: session.pendingChat) { chat in
                 guard let chat else { return }
@@ -698,10 +696,6 @@ private struct DesktopShellRouting: ViewModifier {
                 guard let destination else { return }
                 session.consumePendingWidgetDestination()
                 Task { await openWidgetDestination(destination) }
-            }
-            .routineRunDetail(item: $openedNotificationRun) { opened in
-                RoutineRunDetailView(run: opened.run, routine: opened.routine)
-                    .environmentObject(session)
             }
             .sheet(item: $openedWidgetRoutine) { routine in
                 NavigationStack {
@@ -728,10 +722,6 @@ private struct DesktopShellRouting: ViewModifier {
                 if let chat = session.notificationChat {
                     model.open(chat)
                     session.consumeNotificationChat()
-                }
-                if let opened = session.notificationRoutineRun {
-                    openedNotificationRun = opened
-                    session.consumeNotificationRoutineRun()
                 }
                 if let chat = session.pendingChat {
                     model.open(chat)
@@ -778,13 +768,11 @@ private struct DesktopShellRouting: ViewModifier {
             } else {
                 model.modal = .automations
             }
-        case let .run(runId, routineId):
+        case let .run(runId, _):
+            // #2098: the run's message in the bot's chat
             let listing = await session.loadRoutines()
             if let run = listing.runs.first(where: { $0.id == runId }) {
-                openedNotificationRun = OpenedRoutineRun(
-                    run: run,
-                    routine: listing.routines.first { $0.id == (routineId ?? run.routineId) }
-                )
+                await session.openRoutineRunInChat(run)
             } else {
                 model.modal = .automations
             }

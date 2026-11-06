@@ -581,7 +581,9 @@ export const Transcript = memo(function Transcript({
     // (TransientNotice), never a row (shared/transient-notices.ts)
     // one row per bot and failure since that bot last answered (shared/failure-dedup.ts)
     const repeats = repeatedFailureIds(messages);
-    const visible = withoutDeadThreadChips(messages, owners).filter((message) => !repeats.has(message.id) && !isTransientChatNotice(message) && (
+    const visible = withoutDeadThreadChips(messages, owners).filter((message) => !repeats.has(message.id) && !isTransientChatNotice(message)
+      // one conversation (#2081): an opened thread's receipt is no line, so no "Go to conversation" chip either
+      && (showThreads || !(message.threadRef && message.tool)) && (
       message.kind !== "activity" || (!isHiddenStatusActivity(message) && roomActivityVisible(message, showToolCalls))));
     const collapsed = collapseBotExchanges(visible, {
       pairChannel,
@@ -614,7 +616,7 @@ export const Transcript = memo(function Transcript({
     // tool steps are already out; a folded run with Tool calls off draws nothing.
     return collapseGotoLines(listed, (item) =>
       item.kind === "run" && !showToolCalls && !item.messages.some((step) => shownCwWidget(step.tool))) as RoomItem[];
-  }, [messages, showToolCalls, pairChannel, members, transcript, owners]);
+  }, [messages, showToolCalls, pairChannel, members, transcript, owners, showThreads]);
   const windowIds = useMemo(() => new Set(messages.map((message) => message.id)), [messages]);
   // Seen by: each participant once, under the last line they have read.
   const seen = useMemo(() => {

@@ -74,7 +74,7 @@ import { SIDEBAR_CIRCLE_BUTTON } from "@/lib/circle-button";
 import { searchMatchesThreads, useSearchDisclosure } from "@/lib/search-disclosure";
 import { useHeldMenuMotion } from "./MenuMotion";
 import { navigate } from "@/lib/view-transitions";
-import { lastNonReceipt } from "@/lib/receipts";
+import { lastSpokenLine } from "@/lib/receipts";
 import { activityPreview, botEngine } from "@/lib/failed-turn";
 import { activeLocale, t } from "@/lib/i18n";
 import { copyText } from "@/lib/copy-text";
@@ -241,7 +241,8 @@ export function groupPreview(group: Group, bots: Bot[], config: ConfigStatus | n
     });
   }
   if (group.working) return t("sidebar.preview.teamWorking");
-  const last = lastNonReceipt(group.messages);
+  // the bot's last words, never a silent run receipt (#2081)
+  const last = lastSpokenLine(group.messages);
   if (!last) return t("sidebar.preview.noMessages");
   if (last.kind === "nudge" && last.nudge) return nudgeLineText(last.nudge, viewerId);
   if (last.kind === "text" && last.role !== "user" && isClientCancellation(last.text ?? "")) {
@@ -252,7 +253,11 @@ export function groupPreview(group: Group, bots: Bot[], config: ConfigStatus | n
     ? activityPreview(last.tool, botEngine(bots.find((bot) => bot.id === last.from?.botId), instances), last.dataResult)
     : last.kind === "goal.run" && last.goalRun
       ? sidebarGoalRunPreview(last.goalRun)
-      : (last.text ?? "");
+      : last.kind === "routine.run" && last.routineRun?.summary
+        ? last.routineRun.summary
+        : last.attention?.items.length
+          ? last.attention.items[0]!.text
+          : (last.text ?? "");
   const readable = plainPreviewText(citationPreviewText(text));
   if (last.role === "user") {
     // Someone else's words (src/lib/viewer.ts): a direct conversation's row
@@ -1691,6 +1696,7 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
   bot: Bot; selected: boolean; density?: SidebarDensity; query?: string; hidden?: boolean;
 }) {
   const dispatch = useStoreDispatch();
+  const showThreads = useShowThreads();
   const pendingQueued = useStoreSelector((current) => current.pendingQueued);
   const generatedTitles = useStoreSelector((current) => llmThreadTitlesEnabled(current.config));
   // The person's own conversations (shared/background-threads.ts): a
@@ -1733,7 +1739,8 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
       onPin: (task: Row, pinned: boolean) => patch(task, { pinned }),
       onSnooze: (task: Row, snoozedUntil: number | null) => patch(task, { snoozedUntil }),
       onLink: (task: Row, link: string | null) => patch(task, { link }),
-      onOpenAside: (task: Row) => openSideThread({ botId, threadId: task.threadId }),
+      // Open beside is a threads-shown way in; one conversation has no side column (#2081).
+      onOpenAside: showThreads ? (task: Row) => openSideThread({ botId, threadId: task.threadId }) : undefined,
       onMakeConfidential: (task: Row) => dispatch({ type: "makeTaskConfidential", botId, threadId: task.threadId }),
       onRefreshPermissions: (task: Row) => {
         const current = latest.current;

@@ -80,7 +80,6 @@ struct RoutineDetailView: View {
     @State private var starting = false
     @State private var saving = false
     @State private var confirmingDelete = false
-    @State private var openRun: RoutineRun?
     @Environment(\.dismiss) private var dismissScreen
 
     private let margin = Theme.Profile.routineMargin
@@ -187,31 +186,19 @@ struct RoutineDetailView: View {
             RoutineRunHistoryView(
                 routine: routine,
                 runs: $runs,
-                onOpen: { openRun = $0 },
+                onOpen: { run in Task { await session.openRoutineRunInChat(run) } },
                 onCancel: { run in await cancel(run) }
             )
         }
 #if DEBUG
         // captures only (`-parityOpenRoutineEditor YES`): the editor open
         .task { if UserDefaults.standard.bool(forKey: "parityOpenRoutineEditor") { try? await Task.sleep(nanoseconds: 1_500_000_000); editing = true } }
-        // captures only (`-parityOpenRoutineRun completed|waiting|failed`):
-        // that run's detail open
-        .task {
-            guard let status = UserDefaults.standard.string(forKey: "parityOpenRoutineRun") else { return }
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            openRun = runs.first { $0.status == status }
-        }
 #endif
         .sheet(isPresented: $editing) {
             RoutineEditorView(routine: routine) { await reload() }
         }
         .sheet(isPresented: $duplicating) {
             RoutineEditorView(routine: nil, copyOf: routine) { await onChange() }
-        }
-        .routineRunDetail(item: $openRun) { run in
-            RoutineRunDetailView(run: run, routine: routine) { updated in
-                runs = RoutineRunLog.replacing(runs, with: [updated])
-            }
         }
         .confirmationDialog(
             String(localized: "Delete \(routine.name)?"),
@@ -252,7 +239,8 @@ struct RoutineDetailView: View {
         defer { starting = false }
         guard let started = await session.runRoutine(routine) else { return }
         runs = [started] + runs.filter { $0.id != started.id }
-        openRun = started
+        // #2098: the started run, in the bot's chat
+        await session.openRoutineRunInChat(started)
     }
 
     private func cancel(_ run: RoutineRun) async {
@@ -269,8 +257,8 @@ struct RoutineDetailView: View {
     }
 }
 
-/// Lot 5: the routine's run history as its own page. A run opens as a
-/// bot-to-bot exchange (RoutineRunDetailView).
+/// Lot 5: the routine's run history as its own page. A run opens in the
+/// bot's chat, at its message (#2098).
 struct RoutineRunHistoryView: View {
     @Environment(\.themePalette) var themePalette
     let routine: Routine

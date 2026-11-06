@@ -6,6 +6,9 @@ The sidebar and Team map use the same persisted team list. Existing bot and
 group-chat labels migrate automatically; clearing a team's shared instructions
 or moving its last bot does not remove the team.
 
+Per-person isolation on an organization server (issue #2045): see
+[teams-isolation-2045.md](./teams-isolation-2045.md).
+
 Run the isolated lifecycle checks:
 
 ```sh

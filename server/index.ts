@@ -46553,6 +46553,15 @@ ROUTES.push(createTeamComputersRoutes({
   },
   setProblem: (id, problem) => teamComputers.setProblem(id, problem),
   sections: () => store.sections,
+  // #2045: assignment and the inventory list use this caller's teams only.
+  sectionsFor: (auth) => (sectionChannels
+    ? orgVisibleSections(orgSectionNames(), auth.kind === "session" ? auth.session.principalId?.trim() || undefined : localPrincipalId())
+    : store.sections),
+  sectionIdsFor: (auth) => {
+    if (!sectionChannels) return [];
+    const owner = (auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId()).trim().toLowerCase();
+    return sectionChannels.list().filter((record) => record.ownerPrincipalId.trim().toLowerCase() === owner).map((record) => record.id);
+  },
   sectionKey,
   bots: () => store.bots,
   botHasActiveTurn,

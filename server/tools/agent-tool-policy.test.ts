@@ -37,6 +37,7 @@ describe("built-in agent tool read policy", () => {
       "cloud_agent_transcript",
       "list_cloud_agent_artifacts",
       "claim_list",
+      "bridge_list_leases",
       "list_artifacts",
     ]);
     for (const name of READ_ONLY_AGENT_TOOL_NAMES) {

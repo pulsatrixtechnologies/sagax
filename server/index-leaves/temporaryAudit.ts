@@ -5,7 +5,7 @@ export type Host = Record<string, any>;
 
 export function createTemporaryAudit(getHost: () => Host): any {
 function temporaryAudit(action: "agents.temporary.expired" | "agents.temporary.purged" | "agents.temporary.pinned" | "agents.temporary.unpinned", bot: BotRecord, after: Record<string, unknown>, actor?: { principalId: string }) {
-  void getHost();
+  const host = getHost();
 
   host.appendAdminAction(DATA_DIR, {
     category: "client",

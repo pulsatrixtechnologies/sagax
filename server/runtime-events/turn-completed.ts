@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** handleTurnCompleted (#1388). Pure move from server/index.ts bus.subscribe. */
+import { isEngineEmptyFailure } from "../peers/incidents.ts";
 export function handleTurnCompleted(event: any, ctx: any, host: any): void {
   const { DATA_DIR, deleteAttachment, deliverableNotification, endedToolOutput, flushUsageLedger } = host;
   const {
@@ -448,7 +449,7 @@ export function handleTurnCompleted(event: any, ctx: any, host: any): void {
       // Either one carries the note on approvals nobody answered: a failed
       // turn's requester reads only its failure.
       const delegationFailureName = host.unansweredApprovals.annotate(event.threadId, event.turnId, !event.ok && host.delegationWatch.has(event.threadId)
-        ? `Delegated turn did not finish — ${stoppedTurnText(event.threadId, completedTurnId, undefined, event.stopReason)}`
+        ? `Delegated turn did not finish — ${host.stoppedTurnText(event.threadId, completedTurnId, undefined, event.stopReason)}`
         : "Delegated turn did not finish", false);
       host.finalizeDelegationWatch(event.threadId, event.ok, host.unansweredApprovals.annotate(event.threadId, event.turnId, reply, event.ok), delegationFailureName);
       // group busy/unread settle in the group turn engine, which knows

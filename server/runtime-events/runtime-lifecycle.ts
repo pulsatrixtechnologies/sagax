@@ -1,5 +1,10 @@
 // @ts-nocheck
 /** handleRuntimeLifecycle (#1388). Pure move from server/index.ts bus.subscribe. */
+import { driverKeyBacked } from "../config.ts";
+import { keyVia } from "../engines/engine-credentials.ts";
+import { isModelRefusal } from "../models/model-auto.ts";
+import { deliverableNotification } from "../notify.ts";
+import { redactSecretsInText } from "../redact.ts";
 export function handleRuntimeLifecycle(event: any, ctx: any, host: any): void {
   const {
     bot, group, speaker, pushMessage, pushStoppedTurn,

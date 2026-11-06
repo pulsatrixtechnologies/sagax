@@ -1,6 +1,7 @@
 // @ts-nocheck
 /** agentsIntegration (#1388). Pure move from server/index.ts. */
 import { join } from "node:path";
+import { mcpPolicyEnv } from "../mcp/mcp-permissions.ts";
 export type Host = Record<string, any>;
 
 export function createAgentsIntegration(getHost: () => Host): any {

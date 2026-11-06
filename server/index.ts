@@ -26243,11 +26243,13 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   localPrincipalId,
   localVmActiveThreads,
   localVmIdleFor,
-  localVmImageBusy,
+  get localVmImageBusy() { return localVmImageBusy; },
+  set localVmImageBusy(value) { localVmImageBusy = value; },
   localVmLeaseFor,
   localVmLifecycleBusy,
   localVmMode,
-  localVmModeChangeBusy,
+  get localVmModeChangeBusy() { return localVmModeChangeBusy; },
+  set localVmModeChangeBusy(value) { localVmModeChangeBusy = value; },
   localVmOwnerBusy,
   localVmSeatPool,
   localVmTargetForBot,
@@ -26623,11 +26625,13 @@ const startTurnRunner = createStartTurn({
   localPrincipalId,
   localVmActiveThreads,
   localVmIdleFor,
-  localVmImageBusy,
+  get localVmImageBusy() { return localVmImageBusy; },
+  set localVmImageBusy(value) { localVmImageBusy = value; },
   localVmLeaseFor,
   localVmLifecycleBusy,
   localVmMode,
-  localVmModeChangeBusy,
+  get localVmModeChangeBusy() { return localVmModeChangeBusy; },
+  set localVmModeChangeBusy(value) { localVmModeChangeBusy = value; },
   localVmOwnerBusy,
   localVmPoolSeatHolder,
   localVmSeatPool,
@@ -28427,9 +28431,12 @@ Object.assign(leafHostBindings, {
   COMPUTER_CALL_POLL_MS,
   localVmSeen,
   noteLocalVmSeen,
-  localVmImageBusy,
-  localVmProvisionBusy,
-  localVmModeChangeBusy,
+  get localVmImageBusy() { return localVmImageBusy; },
+  set localVmImageBusy(value) { localVmImageBusy = value; },
+  get localVmProvisionBusy() { return localVmProvisionBusy; },
+  set localVmProvisionBusy(value) { localVmProvisionBusy = value; },
+  get localVmModeChangeBusy() { return localVmModeChangeBusy; },
+  set localVmModeChangeBusy(value) { localVmModeChangeBusy = value; },
   activeVpsThreads,
   vpsThreadStarted,
   vpsThreadEnded,
@@ -32390,6 +32397,116 @@ Object.assign(leafHostBindings, {
   writeSectionContext,
   writesManagedProfile,
   z
+});
+
+// #1388: primitives must stay live on the leaf host (Object.assign copies values).
+Object.defineProperty(leafHostBindings, "lastSeq", {
+  configurable: true,
+  enumerable: true,
+  get: () => lastSeq,
+  set: (value) => { lastSeq = value; },
+});
+Object.defineProperty(leafHostBindings, "providerConfigBusy", {
+  configurable: true,
+  enumerable: true,
+  get: () => providerConfigBusy,
+  set: (value) => { providerConfigBusy = value; },
+});
+Object.defineProperty(leafHostBindings, "mcpConfigBusy", {
+  configurable: true,
+  enumerable: true,
+  get: () => mcpConfigBusy,
+  set: (value) => { mcpConfigBusy = value; },
+});
+Object.defineProperty(leafHostBindings, "localVmModeChangeBusy", {
+  configurable: true,
+  enumerable: true,
+  get: () => localVmModeChangeBusy,
+  set: (value) => { localVmModeChangeBusy = value; },
+});
+Object.defineProperty(leafHostBindings, "localVmImageBusy", {
+  configurable: true,
+  enumerable: true,
+  get: () => localVmImageBusy,
+  set: (value) => { localVmImageBusy = value; },
+});
+Object.defineProperty(leafHostBindings, "localVmProvisionBusy", {
+  configurable: true,
+  enumerable: true,
+  get: () => localVmProvisionBusy,
+  set: (value) => { localVmProvisionBusy = value; },
+});
+Object.defineProperty(leafHostBindings, "companyShutdown", {
+  configurable: true,
+  enumerable: true,
+  get: () => companyShutdown,
+  set: (value) => { companyShutdown = value; },
+});
+Object.defineProperty(leafHostBindings, "audienceChangedAt", {
+  configurable: true,
+  enumerable: true,
+  get: () => audienceChangedAt,
+  set: (value) => { audienceChangedAt = value; },
+});
+Object.defineProperty(leafHostBindings, "mcpProbesInFlight", {
+  configurable: true,
+  enumerable: true,
+  get: () => mcpProbesInFlight,
+  set: (value) => { mcpProbesInFlight = value; },
+});
+Object.defineProperty(leafHostBindings, "followupsReady", {
+  configurable: true,
+  enumerable: true,
+  get: () => followupsReady,
+  set: (value) => { followupsReady = value; },
+});
+Object.defineProperty(leafHostBindings, "customDomainRevision", {
+  configurable: true,
+  enumerable: true,
+  get: () => customDomainRevision,
+  set: (value) => { customDomainRevision = value; },
+});
+Object.defineProperty(leafHostBindings, "routineReadinessConfigRevision", {
+  configurable: true,
+  enumerable: true,
+  get: () => routineReadinessConfigRevision,
+  set: (value) => { routineReadinessConfigRevision = value; },
+});
+Object.defineProperty(leafHostBindings, "providerFleetReloading", {
+  configurable: true,
+  enumerable: true,
+  get: () => providerFleetReloading,
+  set: (value) => { providerFleetReloading = value; },
+});
+Object.defineProperty(leafHostBindings, "dataDirLeaseReleaseAttempted", {
+  configurable: true,
+  enumerable: true,
+  get: () => dataDirLeaseReleaseAttempted,
+  set: (value) => { dataDirLeaseReleaseAttempted = value; },
+});
+Object.defineProperty(leafHostBindings, "browserCleanupReferencesReconciled", {
+  configurable: true,
+  enumerable: true,
+  get: () => browserCleanupReferencesReconciled,
+  set: (value) => { browserCleanupReferencesReconciled = value; },
+});
+Object.defineProperty(leafHostBindings, "githubCredentialsMigrated", {
+  configurable: true,
+  enumerable: true,
+  get: () => githubCredentialsMigrated,
+  set: (value) => { githubCredentialsMigrated = value; },
+});
+Object.defineProperty(leafHostBindings, "engineUnavailableLogged", {
+  configurable: true,
+  enumerable: true,
+  get: () => engineUnavailableLogged,
+  set: (value) => { engineUnavailableLogged = value; },
+});
+Object.defineProperty(leafHostBindings, "dataUnavailableLogged", {
+  configurable: true,
+  enumerable: true,
+  get: () => dataUnavailableLogged,
+  set: (value) => { dataUnavailableLogged = value; },
 });
 // Organization server, once: every bot thread from before private threads
 // gets its owner (server/threads/thread-privacy.ts), before anyone can read one.

@@ -1,5 +1,49 @@
 // @ts-nocheck
 /** handleRequestOpened (#1388). Pure move from server/index.ts bus.subscribe. */
+import { realpathSync } from "node:fs";
+import {
+  approvalHeldNote,
+  approvalHeldReason,
+  autoVerdict,
+  deliverFullAccessApproval,
+} from "../approvals/auto-approve.ts";
+import { memberAutoApprovalAllowed } from "../approvals/member-auto-approval.ts";
+import {
+  ownerModeForTurn,
+  perspicaxSelfAnswer,
+  perspicaxSelfAnswerAt,
+} from "../approvals/owner-autonomy.ts";
+import {
+  cardRuleCandidate,
+  folderRuleCandidate,
+  matchOwnerRule,
+  ownerDecision,
+  ownerVerdictOver,
+  ruleInputFor,
+} from "../approvals/owner-approval.ts";
+import { appendDecision, decisionCall } from "../decision-log.ts";
+import { cardStandingGrants, orgServerExecRouting } from "../exec-target.ts";
+import { providerLabel } from "../memes/providers.ts";
+import { deliverableNotification } from "../notify.ts";
+import {
+  memberEnvironmentAutonomyAllowed,
+  ownAttachmentRead,
+  ownEnvironmentAutonomy,
+  ownEnvironmentTool,
+} from "../people/member-environment.ts";
+import {
+  customRuleCandidate,
+  customRuleNotice,
+  reviewCustomRules,
+  serverHome,
+} from "../rules/custom-rules-review.ts";
+import {
+  safetyArm,
+  safetyPermissionEffect,
+  stashSafetyNote,
+} from "../safety/safety-review.ts";
+import { confidentialCardAnswerable } from "../threads/confidential-threads.ts";
+import { workspaceDir } from "../workspace/workspace.ts";
 export function handleRequestOpened(event: any, ctx: any, host: any): void {
   const {
     bot, group, speaker, pushMessage, routineRun,
@@ -295,7 +339,7 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
         const instance = event.providerInstanceId ? host.registry.get(event.providerInstanceId) : host.registry.get(asker.modelSelection.instanceId);
         const message = host.unknownAgentToolRefusal(madeUpTool);
         void instance?.adapter.respondToRequest(event.threadId, event.requestId, { behavior: "deny", message }).catch(host.reportBackgroundError);
-        appendDecision(DATA_DIR, {
+        appendDecision(host.DATA_DIR, {
           threadId: event.threadId, requestId: event.requestId, botId: asker.id, botName: asker.name,
           tool: event.tool, decision: "auto-denied", source: "unknown-tool"
         });
@@ -310,7 +354,7 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
         const instance = event.providerInstanceId ? host.registry.get(event.providerInstanceId) : host.registry.get(asker.modelSelection.instanceId);
         void instance?.adapter.respondToRequest(event.threadId, event.requestId, { behavior: "deny", message: CONFIDENTIAL_CARD_REFUSED }).catch(host.reportBackgroundError);
         pushMessage({ role: "bot", kind: "activity", tool: { name: CONFIDENTIAL_CARD_REFUSED, ok: false } });
-        appendDecision(DATA_DIR, {
+        appendDecision(host.DATA_DIR, {
           threadId: event.threadId, requestId: event.requestId, botId: asker.id, botName: asker.name,
           tool: event.tool, decision: "auto-denied", source: "confidential"
         });
@@ -336,7 +380,7 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
         const instance = event.providerInstanceId ? host.registry.get(event.providerInstanceId) : host.registry.get(asker.modelSelection.instanceId);
         void instance?.adapter.respondToRequest(event.threadId, event.requestId, { behavior: "deny", message: host.EXEC_USE_BOT_COMPUTER }).catch(host.reportBackgroundError);
         pushMessage({ role: "bot", kind: "activity", tool: { name: host.EXEC_USE_BOT_COMPUTER, ok: false } });
-        appendDecision(DATA_DIR, {
+        appendDecision(host.DATA_DIR, {
           threadId: event.threadId, requestId: event.requestId, botId: asker.id, botName: asker.name,
           tool: event.tool, decision: "auto-denied", source: "exec-target"
         });
@@ -384,7 +428,7 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
           role: "bot", kind: "activity",
           tool: { name: `Refused ${event.summary.slice(0, 120)}: your rule "${customDecision.rule.when.slice(0, 120)}".`, ok: false, ...(notice ? { ruleNotice: notice } : {}) }
         });
-        appendDecision(DATA_DIR, {
+        appendDecision(host.DATA_DIR, {
           threadId: event.threadId, requestId: event.requestId, botId: asker.id, botName: asker.name,
           tool: event.tool, summary: event.summary, decision: "auto-denied", source: "custom-rule-deny", rule: customDecision.rule.id,
           ...(customCall ? { call: decisionCall(customCall) } : {})
@@ -571,7 +615,7 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
         const instance = event.providerInstanceId ? host.registry.get(event.providerInstanceId) : host.registry.get(asker.modelSelection.instanceId);
         void instance?.adapter.respondToRequest(event.threadId, event.requestId, { behavior: "deny", message: "Refused by the owner's rule." }).catch(host.reportBackgroundError);
         pushMessage({ role: "bot", kind: "activity", tool: { name: `Refused ${event.summary.slice(0, 120)}: your rule "${owner.rule.description.slice(0, 120)}".`, ok: false } });
-        appendDecision(DATA_DIR, {
+        appendDecision(host.DATA_DIR, {
           threadId: event.threadId, requestId: event.requestId, botId: asker.id, botName: asker.name,
           tool: event.tool, summary: event.summary, decision: "auto-denied", source: "owner-rule-deny", rule: owner.rule.id,
           ...(customCall ? { call: decisionCall(customCall) } : {})
@@ -699,7 +743,7 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
             ...("rule" in verdict && typeof verdict.rule === "string" ? { rule: verdict.rule } : {})
           }, verdict.source === "custom-rule" && customNotice ? customNotice : undefined);
           // Log only once the provider has actually taken the answer.
-          appendDecision(DATA_DIR, {
+          appendDecision(host.DATA_DIR, {
             threadId: event.threadId,
             requestId,
             botId: asker.id,
@@ -772,7 +816,7 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
               return;
             }
             pushMessage({ role: "bot", kind: "activity", tool: { name: line, ok: true, autoApproval: { source: "full-access" } } });
-            appendDecision(DATA_DIR, {
+            appendDecision(host.DATA_DIR, {
               threadId: event.threadId, requestId, botId: asker.id, botName: asker.name,
               tool: event.tool, summary: line, decision: "auto-approved", source: "full-access",
             });
@@ -876,7 +920,7 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
       // rule may ever answer; a permission card without a verdict (no known
       // asker, or no requestId to answer through) can only mean nothing was
       // granted.
-      appendDecision(DATA_DIR, {
+      appendDecision(host.DATA_DIR, {
         threadId: event.threadId,
         requestId: event.requestId,
         botId: asker?.id,

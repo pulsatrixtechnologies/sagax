@@ -6,7 +6,7 @@ export type Host = Record<string, any>;
 
 export function createClaudeArtifactWorkspaceFile(getHost: () => Host): any {
 function claudeArtifactWorkspaceFile(botId: string, file: string) {
-  void getHost();
+  const host = getHost();
 
   try {
     const root = realpathSync(host.workspaceDir(botId));

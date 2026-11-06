@@ -1,5 +1,7 @@
 // @ts-nocheck
 /** handleRequestResolved (#1388). Pure move from server/index.ts bus.subscribe. */
+import { appendDecision } from "../decision-log.ts";
+import { safetySettleRequest, takeSafetyNote } from "../safety/safety-review.ts";
 export function handleRequestResolved(event: any, ctx: any, host: any): void {
   const {
     bot, speaker,
@@ -25,7 +27,7 @@ export function handleRequestResolved(event: any, ctx: any, host: any): void {
         // timeout is a decision too, so the approvals history can say
         // "expired" (GET /api/org/admin/approvals/history).
         if (event.source === "timeout" && existing?.card?.requestType === "permission" && !existing.card.answered) {
-          appendDecision(DATA_DIR, {
+          appendDecision(host.DATA_DIR, {
             threadId: event.threadId,
             requestId: event.requestId,
             botId: waiting?.id,

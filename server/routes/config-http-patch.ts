@@ -140,7 +140,7 @@ export function createApplyConfigHttpPatch(getHost: () => ConfigHttpPatchHost): 
     const currentVpsAlias = vpsSshAlias(host.cfg);
     const nextVpsAlias = patch.vps === undefined
       ? currentVpsAlias
-      : vpsSshAlias({ ...cfg, vps: patch.vps });
+      : vpsSshAlias({ ...host.cfg, vps: patch.vps });
     const changingVpsAlias = patch.vps !== undefined && nextVpsAlias !== currentVpsAlias;
     const transitioningProviders: RemoteComputerProvider[] = [
       ...(changingBoatToken ? ["box" as const] : []),

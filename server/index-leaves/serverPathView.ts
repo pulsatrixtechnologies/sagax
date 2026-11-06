@@ -6,7 +6,7 @@ export type Host = Record<string, any>;
 
 export function createServerPathView(getHost: () => Host): any {
 function serverPathView(botId: string): { dataDirs: string[]; botWorkspaces: string[] } {
-  void getHost();
+  const host = getHost();
 
   let real = DATA_DIR;
   try { real = realpathSync(DATA_DIR); } catch { /* not created yet */ }

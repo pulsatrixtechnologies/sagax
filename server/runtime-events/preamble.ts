@@ -1,5 +1,11 @@
 // @ts-nocheck
 /** Preamble for the main runtime bus subscriber (#1388). Pure move. */
+import { groupGoalCompletionTurnId, parseGroupGoalDecision } from "../groups/group-goal-run.ts";
+import { withoutFinishUntilMarker } from "../finish-until.ts";
+import { soloGoalLine, withoutSoloGoalMarker } from "../solo-goal.ts";
+import { clearHeldSteersForThread } from "../turns/held-steers.ts";
+import { noteFirstResponse } from "../turns/turn-trace.ts";
+import { dropCancelledVoiceEvent, isStaleAssistantOutput } from "../voice/voice-call-duplex.ts";
 export function runRuntimeEventPreamble(event: any, host: any): any | null {
   if (host.shouldIgnoreProviderEvent(event)) return;
   const localVmTarget = host.localVmThreadTargets.get(event.threadId);
@@ -204,7 +210,7 @@ export function runRuntimeEventPreamble(event: any, host: any): any | null {
   // Clear the durable held journal for this thread so a later crash does not
   // start a second follow-up for words the session already settled.
   if (bot && event.type === "turn.completed") {
-    try { clearHeldSteersForThread(DATA_DIR, event.threadId); } catch (error) {
+    try { clearHeldSteersForThread(host.DATA_DIR, event.threadId); } catch (error) {
       console.warn(`held-steers: could not clear completed turn: ${error instanceof Error ? error.message : String(error)}`);
     }
   }

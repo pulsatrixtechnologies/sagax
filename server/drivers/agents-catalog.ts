@@ -212,6 +212,7 @@ const toolDefinitions = (externalRuntime: boolean) => [
   ...APPROVALS_TOOL_DEFINITIONS,
   ...WAIT_TOOL_DEFINITIONS,
   roomsTools.DEF_POST_TO_ROOM,
+  roomsTools.DEF_MESSAGE_USER,
   coreTools.DEF_REACT_TO_MESSAGE,
   extrasTools.DEF_REMOVE_REACTION,
   teamTools.DEF_CREATE_BOT,

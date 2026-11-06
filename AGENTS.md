@@ -2037,7 +2037,24 @@ the app (Show the token): a bot's replay of `POST /api/webhooks/:id/rotate`
 (`WebhookManager.rotatePending`) and never answers it. Tests:
 `server/settings-actions.test.ts`, `server/triggers/webhooks.test.ts`.
 
-## Leave a group chat (#1480, 2026-10-28)
+## A bot writes to a person via a group (#2118, 2026-11-06)
+
+A bot messages another person of the organization with `message_user`
+(rooms family, permission `people:message`, member scope `own-account`):
+the person's own approval card and level (Allow, Always allow, Ask, Deny,
+Full access), no extra guard. Sagax posts the message as the bot in the
+group whose people are exactly the bot's owner and that person, with the
+bot in it (`server/people/bot-message-user.ts` `findBotPersonGroup`); when
+missing, `POST /api/internal/message-user` creates it in the same request
+as the post (`"<Owner>, <Person> et <Bot>"`, owned by the owner, no
+section, default responder the bot), so there is never an empty group.
+Person resolution: id, exact name / login / email, then a unique partial
+name; self, unknown and ambiguous are refused and create nothing. Both
+people get unread and the usual message notification; the person's answer
+lands in that group where the bot is a member. Activity rows reuse the
+"posting in a group" label. Tests: `server/routes/internal-message-user.test.ts`.
+
+## Leave a group chat (#1480, #2119, 2026-10-28 / 2026-11-06)
 
 On an organization server a person listed in a group in their own name
 leaves it on their own, owner included, without an admin:
@@ -2045,15 +2062,18 @@ leaves it on their own, owner included, without an admin:
 session names who leaves, never the body. They leave `humanIds` under every
 id they are listed by; their private bots (owned by them, no grant) leave
 with them, a shared bot stays. The owner hands the group to the person
-listed longest (first non-team entry left), and the last person archives it
-(`archivedAt`, server-private: kept, listed to no one, its routines off).
-Their past messages stay. The others get one neutral line, message kind
-`roster` (`WireMessage.roster`, drawn by RosterLine, `text` is the English
-fallback); their own devices get `group.left` (`roomId`, their streams
-only) and drop the group. Leave group sits in the sidebar menu, the
-conversation's « … » and the group panel on desktop (LeaveGroupDialog
-confirms), and in the row menu and Room info on iOS. They can be added back
-like anyone. Tests: `server/groups/group-leave.test.ts`, `src/lib/group-leave.test.ts`,
+listed longest (first non-team entry left). #2119: leaving that would leave
+zero people is refused (`sole_member`; bots and `team:` seats do not count);
+the sole remaining person deletes instead of leaving, so the group never
+becomes a ghost. Only the owner (or an org admin for moderation) may delete
+(`mayDeleteGroup`); an invited member may only Leave. Their past messages
+stay. The others get one neutral line, message kind `roster`
+(`WireMessage.roster`, drawn by RosterLine, `text` is the English fallback);
+their own devices get `group.left` (`roomId`, their streams only) and drop
+the group. Leave group sits in the sidebar menu, the conversation's « … »
+and the group panel on desktop (LeaveGroupDialog confirms), and in the row
+menu and Room info on iOS. They can be added back like anyone. Tests:
+`server/groups/group-leave.test.ts`, `src/lib/group-leave.test.ts`,
 `src/components/Sidebar.member-menu.test.ts`, iOS `GroupLeaveTests`.
 
 ## Shopping cards, order tracking, subscription templates (2026-10-29)

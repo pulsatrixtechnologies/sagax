@@ -211,7 +211,7 @@ export function workingStepFor(call: WorkingStepCall): WorkingStep | null {
 
   // Sub-agents and other bots.
   if (/^(task|agent|spawn_agent|subagent|run_subagent|run_with_engine)$/.test(bare)) return { key: "subagent" };
-  if (/(ask_bot|delegate_bot|coordinate_bots|list_bots|post_to_room|send_prompt|await_turn|list_agents|find_agents)/.test(bare)) return { key: "teammate" };
+  if (/(ask_bot|delegate_bot|coordinate_bots|list_bots|post_to_room|message_user|send_prompt|await_turn|list_agents|find_agents)/.test(bare)) return { key: "teammate" };
   if (bare === "send_message" && (!server || /^agents$/i.test(server))) return { key: "teammate" };
   if (/^memory_|(^|_)memory$|recall_topic|remember/.test(bare)) return { key: "memory" };
 

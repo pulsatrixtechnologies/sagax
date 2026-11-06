@@ -30,6 +30,7 @@ import { join } from "node:path";
 import type { CacheWarmPingResult } from "../contracts.ts";
 import { killCliTree, spawnCli } from "../procs.ts";
 import { USAGE_LIMIT } from "./retry.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 /** The fixed prompt of every ping. Short, and asks for one word back. */
 export const KEEP_WARM_PROMPT = "Reply with the single word: warm";
@@ -200,11 +201,11 @@ export function runKeepWarmPing(opts: {
       resolve(result);
     };
     const onAbort = () => {
-      void killCliTree(child);
+      void killCliTree(child).catch(reportBackgroundError);
       finish({ ok: false, reason: "the ping was interrupted" });
     };
     const timer = setTimeout(() => {
-      void killCliTree(child);
+      void killCliTree(child).catch(reportBackgroundError);
       finish({ ok: false, reason: "the ping timed out" });
     }, opts.timeoutMs ?? KEEP_WARM_TIMEOUT_MS);
     timer.unref?.();
@@ -213,7 +214,7 @@ export function runKeepWarmPing(opts: {
     child.stdout.on("data", (chunk: string) => {
       stdout += chunk;
       if (stdout.length > 1_000_000) {
-        void killCliTree(child);
+        void killCliTree(child).catch(reportBackgroundError);
         finish({ ok: false, reason: "the ping's output exceeded 1 MB" });
       }
     });

@@ -17,6 +17,7 @@ import { buildLiveActivityRequest } from "./activity-payload.ts";
 import type { ApnsConfigResult } from "./config.ts";
 import { maskSecret } from "./config.ts";
 import { PushRateLimiter } from "./decide.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 /** High-priority Live Activity pushes per person in the window (Apple budget). */
 const HIGH_PRIORITY_MAX = 12;
@@ -115,7 +116,7 @@ export class LiveActivityHub {
         this.log.warn(`push-activity: send failed (${error instanceof Error ? error.message : String(error)})`);
       });
       this.inflight.add(run);
-      void run.finally(() => this.inflight.delete(run));
+      void run.finally(() => this.inflight.delete(run)).catch(reportBackgroundError);
     } catch (error) {
       this.log.warn(`push-activity: could not queue (${error instanceof Error ? error.message : String(error)})`);
     }

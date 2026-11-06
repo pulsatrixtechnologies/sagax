@@ -20,6 +20,7 @@ import { threadLogsForgotten } from "../threads/forgotten-threads.ts";
 import { redactSecrets } from "../redact.ts";
 import { capThreadLog, currentThreadLogCap } from "../threads/thread-log-rotation.ts";
 import { newId, type ProviderInstance, type RuntimeEvent, type RuntimeEventListener } from "../contracts.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 const INCOMPLETE_LOG_MESSAGE =
   "Canonical event history is incomplete: Sagax could not write one or more events to disk. Live updates will continue.";
@@ -266,7 +267,7 @@ export class EventBus {
     // this one: the log keeps publication order.
     this.enqueue(event);
     this.deliver(event);
-    if (isTerminalEvent(event)) void this.flushDisk();
+    if (isTerminalEvent(event)) void this.flushDisk().catch(reportBackgroundError);
   }
 
   private enqueue(event: RuntimeEvent) {
@@ -315,7 +316,7 @@ export class EventBus {
         this.pumping = false;
         if (this.queued.length > 0) this.kick();
         else this.settleDrain();
-      });
+      }).catch(reportBackgroundError);
     });
   }
 
@@ -424,6 +425,6 @@ export class EventBus {
   detach(instanceId: string) {
     this.unsubscribes.get(instanceId)?.();
     this.unsubscribes.delete(instanceId);
-    void this.flush();
+    void this.flush().catch(reportBackgroundError);
   }
 }

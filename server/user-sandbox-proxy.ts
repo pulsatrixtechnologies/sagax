@@ -4,6 +4,7 @@
 // runs the call in the sandbox of the person the turn's capability names
 // (the speaker, or the bot owner for routines).
 import { pathToFileURL } from "node:url";
+import { reportBackgroundError } from "./background-error.ts";
 
 const MAX_INPUT_BYTES = 2_097_152;
 const MAX_OUTPUT_BYTES = 16_777_216;
@@ -147,7 +148,7 @@ function run(): void {
       }
       pending++;
       const relayed = personal ? personalStdioRelayRequest(frame, connection) : userSandboxProxyRequest(frame, connection);
-      void relayed.then(output).finally(() => { pending--; });
+      void relayed.then(output).finally(() => { pending--; }).catch(reportBackgroundError);
     }
     if (input.length > MAX_INPUT_BYTES) { process.stdin.destroy(); process.exitCode = 1; }
   });

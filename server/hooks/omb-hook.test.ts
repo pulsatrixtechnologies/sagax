@@ -25,7 +25,10 @@ afterAll(async () => {
 function run(stdin: string, env: Record<string, string>): Promise<{ code: number | null; stdout: string; stderr: string; ms: number }> {
   return new Promise((resolve) => {
     const started = Date.now();
-    const child = spawn(process.execPath, [HELPER], { env: { ...process.env, ...env }, stdio: ["pipe", "pipe", "pipe"] });
+    // Drop harness color flags: Node warns on stderr when both FORCE_COLOR and
+    // NO_COLOR are set, and this helper's contract is an empty stderr.
+    const { FORCE_COLOR: _fc, NO_COLOR: _nc, ...cleanEnv } = process.env;
+    const child = spawn(process.execPath, [HELPER], { env: { ...cleanEnv, ...env }, stdio: ["pipe", "pipe", "pipe"] });
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     let stdout = "";

@@ -18,6 +18,7 @@ import {
   noModelLeftMessage,
 } from "./openai-chat-shared.ts";
 import { createWarmToolSessions } from "./openai-chat-tools-warm.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export { ModelUnsupportedError } from "./openai-chat-completion.ts";
 
@@ -178,7 +179,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
     if (warmPing) return;
     const ms = Number(process.env.FAKE_GROK_WARM_PING_MS ?? "2500");
     if (!Number.isFinite(ms) || ms <= 0) return;
-    warmPing = setInterval(() => { void pingModels(); }, ms);
+    warmPing = setInterval(() => { void pingModels().catch(reportBackgroundError); }, ms);
     warmPing.unref?.();
   };
 
@@ -196,7 +197,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
 
   const releaseWarm = (threadId: string) => {
     warmThreads.delete(threadId);
-    if (!active.has(threadId)) void warmToolSessions.release(threadId);
+    if (!active.has(threadId)) void warmToolSessions.release(threadId).catch(reportBackgroundError);
     if (warmThreads.size === 0) stopWarmPing();
   };
 

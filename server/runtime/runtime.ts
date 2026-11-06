@@ -26,6 +26,7 @@ import { asking, awaited, childrenSince, clip, CUT_TWICE, duration, isTerminal, 
 import { DEFAULT_LIMITS, INPUT_REMIND_REPEAT_MS, type Assignment, type Assignee, type Clock, type EnqueueRequest, type EnqueueResult, type EnvelopeNames,
   type EventKind, type InboxItem, type InboxKind, type Level, type Limits, type LiveEdge, type Origin, type Outcome, type Owner,
   type Reply, type Requester, type RunInput, type RunResult, type StatusView, type TurnEvidence, type TurnRunner } from "./types.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export type { Attempt } from "./attempts.ts";
 export type RetryResult =
@@ -706,7 +707,7 @@ export class Runtime {
         this.log(`run(${n.id}) threw: ${String(error)}`);
         this.turnEnded(n.id, { kind: "failed", outcome: "provider_error", text: clip(String(error), 1000) }, live);
       },
-    ).finally(() => this.turns.delete(n.id));
+    ).finally(() => this.turns.delete(n.id)).catch(reportBackgroundError);
     return true;
   }
 

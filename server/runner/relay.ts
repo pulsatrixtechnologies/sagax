@@ -12,6 +12,7 @@ import {
   type ControlClient,
   type RunnerEvent,
 } from "./protocol.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 /** Above this many queued events the oldest terminal output is dropped
  * first, so a long silence from Perspicax cannot exhaust the Pod's memory. */
@@ -90,7 +91,7 @@ export class EventRelay {
       this.queue.push({ event: masked, bytes });
     }
     this.trim();
-    if (urgent) void this.flush();
+    if (urgent) void this.flush().catch(reportBackgroundError);
     else this.schedule();
   }
 
@@ -110,7 +111,7 @@ export class EventRelay {
     if (this.timer || this.flushing) return;
     this.timer = setTimeout(() => {
       this.timer = null;
-      void this.flush();
+      void this.flush().catch(reportBackgroundError);
     }, this.flushDelayMs);
     this.timer.unref?.();
   }

@@ -5,6 +5,7 @@ import { localModelFailureMessage, providerReason } from "./engine-errors.ts";
 import { appendNative } from "./native.ts";
 import { killCliTree } from "../procs.ts";
 import type { PiPrepared, PiSendCtx } from "./pi-turn-ctx.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export function attachPiRpc(ctx: PiPrepared): PiSendCtx {
   const { hooks, emit, base } = ctx.deps;
@@ -69,8 +70,8 @@ export function attachPiRpc(ctx: PiPrepared): PiSendCtx {
         // a conversation's first turn warms the bot's next one (the standby sends it)
         warm: typeof ctx.turn.resumeCursor === "string" ? undefined : hooks.readPiToolCache(ctx.mcpTempDir, ctx.deps.warmName),
       };
-      if (ctx.child.exitCode !== null || ctx.child.signalCode !== null) void hooks.startPiStandby(resume);
-      else ctx.child.once("exit", () => { void hooks.startPiStandby(resume); });
+      if (ctx.child.exitCode !== null || ctx.child.signalCode !== null) void hooks.startPiStandby(resume).catch(reportBackgroundError);
+      else ctx.child.once("exit", () => { void hooks.startPiStandby(resume).catch(reportBackgroundError); });
       // and a pi for the bot's next new conversation, if none waits yet
       if (ctx.mounts && ctx.turn.cwd) {
         void hooks.startPiFresh({
@@ -80,7 +81,7 @@ export function attachPiRpc(ctx: PiPrepared): PiSendCtx {
           args: ctx.childArgs,
           cwd: ctx.turn.cwd,
           env: ctx.spawnEnv,
-        });
+        }).catch(reportBackgroundError);
       }
     }
     if (ctx.agentEndTimer) {

@@ -19,6 +19,7 @@ import { composeReachText, reachAckText, type ReachChannel, type ReachOutbound, 
 import type { ReachMeSecrets } from "./secrets.ts";
 import type { ReachReplyOutcome } from "./service.ts";
 import type { ReachMeStore, ReachTelegramLink } from "./store.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export const TELEGRAM_API = "https://api.telegram.org";
 export const TELEGRAM_LINK_TTL_MS = 15 * 60_000;
@@ -140,7 +141,7 @@ export class ReachTelegram {
       timer.unref?.();
       return () => clearInterval(timer);
     });
-    this.stop = schedule(() => void this.poll(), TELEGRAM_POLL_MS);
+    this.stop = schedule(() => void this.poll().catch(reportBackgroundError), TELEGRAM_POLL_MS);
   }
 
   /** What waits on Telegram right now: links to finish and chats with an open card. */

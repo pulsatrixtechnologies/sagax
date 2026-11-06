@@ -25,6 +25,7 @@ import type { ResolvedSender, SteerQueueReason, WireMessage as Message } from ".
 import type { UsageTrigger } from "../usage/usage-ledger.ts";
 import { MessageSearchWorker } from "../message-search-worker.ts";
 import { searchMessagesInDatabase, type SealedKeyMaterial, type SearchHit } from "./message-search-query.ts";
+import { reportBackgroundError } from "../background-error.ts";
 export type { SearchHit } from "./message-search-query.ts";
 
 const DB_FILE = () => join(DATA_DIR, "messages.db");
@@ -2112,7 +2113,7 @@ export async function closeMessageSearch(): Promise<void> {
 
 /** Test/shutdown hook — closes the handle so a wiped DATA_DIR starts clean. */
 export function closeMessageDb(): void {
-  void closeMessageSearch();
+  void closeMessageSearch().catch(reportBackgroundError);
   try { if (handle && handlePath === DB_FILE() && existsSync(DB_FILE())) { flushContentIndex(); flushMemoryIndex(); } } catch { /* a closing database: the migration reindexes what has no index row */ }
   if (migration.timer) { clearTimeout(migration.timer); migration.timer = null; }
   if (indexTimer) { clearTimeout(indexTimer); indexTimer = null; }

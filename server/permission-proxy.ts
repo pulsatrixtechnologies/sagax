@@ -25,6 +25,7 @@ import { randomUUID } from "node:crypto";
 import { parseAskQuestions, questionAnswersByQuestion, type AskQuestion } from "../shared/ask-question.ts";
 import { allowsTool, parseToolScope } from "../shared/tool-scope.ts";
 import { permissionRoute, preallowedFromEnv, searchedServersFromEnv } from "../shared/searched-tool-call.ts";
+import { reportBackgroundError } from "./background-error.ts";
 
 // #1276: the servers whose catalog is searched; a call_tool there is asked
 // about as the tool it runs (shared/searched-tool-call.ts).
@@ -288,7 +289,7 @@ process.stdin.on("data", (chunk) => {
     inBuf = inBuf.slice(nl + 1);
     if (!line.trim()) continue;
     try {
-      void handle(JSON.parse(line));
+      void handle(JSON.parse(line)).catch(reportBackgroundError);
     } catch {
       /* ignore malformed lines */
     }

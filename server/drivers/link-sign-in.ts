@@ -12,6 +12,7 @@ import { cursorSignInPrompt, stripSignInSecrets } from "../../shared/cli-sign-in
 import type { ProviderAuthenticationStart, ProviderAuthenticationStatus } from "../contracts.ts";
 import { killCliTree, spawnCli } from "../procs.ts";
 import { canonicalPath } from "./device-auth.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 const MAX_OUTPUT = 16_384;
 const linkHomes = new Set<string>();
@@ -181,7 +182,7 @@ export class LinkSignInController {
       void this.confirmed(env).then((ok) => {
         if (flow.status.phase !== "waiting") return;
         this.finish(flow, ok ? "succeeded" : "failed", ok ? undefined : this.failure(output));
-      });
+      }).catch(reportBackgroundError);
     });
   }
 
@@ -190,7 +191,7 @@ export class LinkSignInController {
       if (flow.status.phase !== "waiting") return;
       void this.confirmed(env).then((ok) => {
         if (ok && flow.status.phase === "waiting") this.finish(flow, "succeeded");
-      });
+      }).catch(reportBackgroundError);
     };
     flow.pollTimer = setInterval(poll, this.options.pollMs ?? 2_000);
     flow.pollTimer.unref();
@@ -232,7 +233,7 @@ export class LinkSignInController {
       if (!child || child.exitCode !== null || child.signalCode !== null) release();
       else child.once("close", release);
     });
-    if (phase === "succeeded") void this.options.onAuthenticated?.().catch(() => {});
+    if (phase === "succeeded") void this.options.onAuthenticated?.().catch(reportBackgroundError);
   }
 
   private async stopChild(child: ChildProcess | null): Promise<boolean> {

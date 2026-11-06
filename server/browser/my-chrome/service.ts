@@ -8,6 +8,7 @@ import { MY_CHROME_RECORDING_IDLE_MS, MyChromeRecording, type MyChromeRecordingS
 import { MyChromeSettingsStore, type MyChromeSettings } from "./settings.ts";
 import { myChromeSiteAllows } from "./sites.ts";
 import type { TeachReplay, TeachStep } from "../../../shared/teach-recording.ts";
+import { reportBackgroundError } from "../../background-error.ts";
 
 /** A recording handed back on Stop: the steps, and where the path is
  * replayed unless the person changes it: out of sight in the bot's own
@@ -112,7 +113,7 @@ export class MyChromeService {
         resolveChrome: () => (this.options.locate ?? ((address) => locateChrome(address)))(this.settings.get().chromeAddress),
         allows: (url) => this.allows(url),
         onChange: () => this.options.onChange?.(),
-        onStopFromTab: () => { void this.stop(); },
+        onStopFromTab: () => { void this.stop().catch(reportBackgroundError); },
       });
       await gate.start();
       if (this.settings.get().stopped) await gate.stop();
@@ -136,7 +137,7 @@ export class MyChromeService {
   private liveRecording(now = Date.now()): MyChromeRecording | null {
     const recording = this.recording;
     if (recording && recording.ended === null && now - recording.touchedAt > MY_CHROME_RECORDING_IDLE_MS) {
-      void recording.stop("idle");
+      void recording.stop("idle").catch(reportBackgroundError);
     }
     // an idle recording is dropped whole: nothing is kept past the idle time
     if (recording && recording.ended === "idle") { this.recording = null; return null; }

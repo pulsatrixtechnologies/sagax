@@ -21,6 +21,7 @@ import { probeEnvironment, STDIO_PROBE_TIMEOUT_MS } from "./mcp-probe.ts";
 import type { TestResult } from "../org/org-admin-ops.ts";
 import { killCliTree, spawnCli } from "../procs.ts";
 import { redactSecretsInText } from "../redact.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export interface StdioTestServer {
   command: string;
@@ -192,7 +193,7 @@ export function testStdioMcpCommand(server: StdioTestServer, options: StdioTestO
       });
       child.once("close", (code, signal) => handlers.ended(code !== null ? `exit code ${code}` : `signal ${signal ?? "unknown"}`));
     },
-    close: () => { void killCliTree(child); },
+    close: () => { void killCliTree(child).catch(reportBackgroundError); },
   };
   return handshake(channel, secrets, options);
 }

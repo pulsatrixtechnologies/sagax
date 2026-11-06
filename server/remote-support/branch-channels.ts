@@ -40,6 +40,7 @@
 import type { RemoteBranchDeps, RemoteBranchReach } from "../routes/bot-code-branches.ts";
 import { EXEC_ENV_KEY_RE, type SandboxExecInput, type SandboxExecOutput } from "../sandbox/sandboxd-core.ts";
 import type { RemoteExec, RemoteGitResult } from "./remote-code-branches.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 const SECOND = 1000;
 const DEFAULT_TIMEOUT_MS = 60 * SECOND;
@@ -217,7 +218,7 @@ export function serialLanes(): <T>(key: string, work: () => Promise<T>) => Promi
     const run = previous.then(work, work);
     const tail = run.then(() => undefined, () => undefined);
     tails.set(key, tail);
-    void tail.then(() => { if (tails.get(key) === tail) tails.delete(key); });
+    void tail.then(() => { if (tails.get(key) === tail) tails.delete(key); }).catch(reportBackgroundError);
     return run;
   };
 }

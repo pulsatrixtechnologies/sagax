@@ -30,6 +30,7 @@
 //     token when there is one (`subject`, PerspicaxDirectory.linkPostJson);
 //   - no token, prompt or answer body is ever logged.
 import type { LinkPostLimits, LinkPostResult } from "../perspicax/perspicax-link.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export const WORK_PATH = "/api/v1/memory/work";
 export const DUPLICATES_PATH = "/api/v1/memory/duplicates";
@@ -223,7 +224,7 @@ export class PerspicaxMemory {
     const set = this.options.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
     const timer = set(() => {
       this.timer = null;
-      void this.flush();
+      void this.flush().catch(reportBackgroundError);
     }, this.options.flushDelayMs ?? WORK_FLUSH_DELAY_MS);
     timer.unref?.();
     this.timer = timer;

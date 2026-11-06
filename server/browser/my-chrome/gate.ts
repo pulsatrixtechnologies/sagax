@@ -29,6 +29,7 @@ import { WebSocket, WebSocketServer, type RawData } from "ws";
 
 import { cdpMethodVerdict, maybeSameSite, sanitizeNetworkEvent, sessionEventAllowed } from "./cdp-policy.ts";
 import { isBlankPage } from "./sites.ts";
+import { reportBackgroundError } from "../../background-error.ts";
 
 export const PILOT_WORLD = "sagax-pilot";
 export const PILOT_STOP_BINDING = "__sagaxPilotStop";
@@ -327,7 +328,7 @@ export class MyChromeGate {
       if (existing.label === label) this.dropClient(existing);
     }
     this.clients.add(client);
-    ws.on("message", (data: RawData) => { void this.fromClient(client, data); });
+    ws.on("message", (data: RawData) => { void this.fromClient(client, data).catch(reportBackgroundError); });
     ws.on("close", () => this.dropClient(client));
     ws.on("error", () => this.dropClient(client));
     this.options.onChange?.();
@@ -336,7 +337,7 @@ export class MyChromeGate {
   private dropClient(client: Client): void {
     if (!this.clients.delete(client)) return;
     try { client.ws.terminate(); } catch { /* gone */ }
-    void this.releaseAll([client]);
+    void this.releaseAll([client]).catch(reportBackgroundError);
     this.options.onChange?.();
   }
 
@@ -766,7 +767,7 @@ export class MyChromeGate {
     }, () => {
       this.tabs.delete(tab.targetId);
       if (heldSession) this.gateSend("Runtime.runIfWaitingForDebugger", {}, heldSession).catch(() => undefined);
-    });
+    }).catch(reportBackgroundError);
   }
 
   private sessionEvent(session: Session, method: string, params: Json): void {
@@ -861,7 +862,7 @@ export class MyChromeGate {
     }
     if (method === "Runtime.bindingCalled" && params.name === PILOT_STOP_BINDING) {
       this.options.onStopFromTab?.();
-      void this.stop();
+      void this.stop().catch(reportBackgroundError);
     }
   }
 

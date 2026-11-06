@@ -20,6 +20,7 @@ import { connect as netConnect, isIP, type Socket } from "node:net";
 import { Duplex } from "node:stream";
 
 import type { BotWorkplaceNetwork } from "../../shared/bot-workplace.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 // ── a minimal server side of RFC 6455 (binary messages only) ─────────────
 
@@ -428,7 +429,7 @@ export async function startEgressProxy(deps: {
     }, (error: Error) => {
       deps.audit({ person: grant.person, botId: grant.botId, threadId: grant.threadId, host: dest.host, port: dest.port, via: "desktop", ok: false, error: error.message });
       res.writeHead(502, { connection: "close" }).end(error.message);
-    });
+    }).catch(reportBackgroundError);
   });
 
   server.on("connect", (req: IncomingMessage, client: Duplex, head: Buffer) => {
@@ -451,7 +452,7 @@ export async function startEgressProxy(deps: {
     }, (error: Error) => {
       deps.audit({ person: grant.person, botId: grant.botId, threadId: grant.threadId, host: dest.host, port: dest.port, via: "desktop", ok: false, error: error.message });
       client.end(refuse(502, error.message));
-    });
+    }).catch(reportBackgroundError);
   });
 
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

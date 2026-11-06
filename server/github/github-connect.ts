@@ -16,6 +16,7 @@
 import { createHash } from "node:crypto";
 
 import type { GithubConnection } from "../people/person-connections.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export const GITHUB_SCOPES = "repo read:org gist workflow";
 /** How long a successful /user probe keeps the connection "Connected" without asking GitHub again. */
@@ -264,7 +265,7 @@ export class GithubConnect {
 
   private schedule(principalId: string, flow: PendingDevice, clientId: string): void {
     const delay = Math.max(flow.interval * 1000, this.options.minIntervalMs ?? 1000);
-    flow.timer = setTimeout(() => { void this.poll(principalId, flow, clientId); }, delay);
+    flow.timer = setTimeout(() => { void this.poll(principalId, flow, clientId).catch(reportBackgroundError); }, delay);
     flow.timer.unref?.();
   }
 

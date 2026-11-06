@@ -1,5 +1,6 @@
 import type { Message } from "../store.ts";
 import { z } from "zod";
+import { reportBackgroundError } from "../background-error.ts";
 
 const sendIdSchema = z.string().regex(/^[A-Za-z0-9_-]{16,80}$/).optional();
 
@@ -64,7 +65,7 @@ export class SendSequencer {
     const clear = () => {
       if (this.inFlight.get(key) === entry) this.inFlight.delete(key);
     };
-    void current.then(clear, clear);
+    void current.then(clear, clear).catch(reportBackgroundError);
     return current;
   }
 }

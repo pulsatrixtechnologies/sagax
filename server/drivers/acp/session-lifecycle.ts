@@ -6,6 +6,7 @@ import {
 import { ACP_STUCK_AFTER_MS, envOr, promptIdleTimeoutMs } from "./constants.ts";
 import { turnLatencyLine } from "./turn-latency.ts";
 import type { AcpSession, AcpSupport, AcpTurn } from "./types.ts";
+import { reportBackgroundError } from "../../background-error.ts";
 
 export type LifecycleDeps = {
   support: AcpSupport;
@@ -97,7 +98,7 @@ export function createStartQuietWatch(deps: Pick<LifecycleDeps, "support" | "emi
         message: describeQuiet(support.displayName, next, quietMs, promptIdleTimeoutMs()),
       });
     };
-    const timer = setInterval(() => { void tick(); }, tickMs);
+    const timer = setInterval(() => { void tick().catch(reportBackgroundError); }, tickMs);
     timer.unref?.();
     current.stopQuietWatch = () => clearInterval(timer);
     return { lastState: () => state };

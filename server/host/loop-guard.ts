@@ -15,6 +15,7 @@ import { quoteInNote } from "../peers/peer-provenance.ts";
 import { RepeatDetector, callKey, toolItemKey } from "../safety/repeat-detector.ts";
 import { RepeatStreak, failureDigest } from "../safety/repeat-streak.ts";
 import { COMMAND_SUMMARY_MAX, previewIsPartial } from "../tools/tool-summary.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 const COUNT_MIN = 2;
 const COUNT_MAX = 1000;
@@ -278,7 +279,7 @@ export function createLoopGuard(deps: LoopGuardDeps): LoopGuard {
       void Promise.resolve(deps.steer(threadId, note)).then(
         (outcome) => log(outcome === "steered" ? "steer sent" : `steer ${outcome}`, threadId, streak),
         () => log("steer rejected", threadId, streak),
-      );
+      ).catch(reportBackgroundError);
     } catch {
       log("steer rejected", threadId, streak);
     }

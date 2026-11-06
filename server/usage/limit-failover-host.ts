@@ -11,6 +11,7 @@ import { ENGINE_REFUSAL_TTL_MS, type EngineRefusal } from "../engines/engine-ref
 import type { RoutineUsageLimit } from "../routines/routine-limit-words.ts";
 import { limitBackupAllowed, pickLimitBackup, type LimitCandidate, type LimitEngine, type LimitFailover, type LimitFailoverStore } from "./limit-failover.ts";
 import { limitKindOf, limitResetFromText, limitResetOrEstimate, type LimitKind } from "./limit-reset-time.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 /** What a turn ran on, noted when it was dispatched. */
 export interface LimitDispatch {
@@ -230,7 +231,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
 
   const track = (work: Promise<unknown>) => {
     pending.add(work);
-    void work.finally(() => pending.delete(work));
+    void work.finally(() => pending.delete(work)).catch(reportBackgroundError);
   };
   const same = (left: ModelSelection | null | undefined, right: ModelSelection | null | undefined) =>
     Boolean(left && right && left.instanceId === right.instanceId && left.model === right.model);
@@ -405,7 +406,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
     if (!started) return;
     const next = store.nextResumeAt();
     if (next === null) return;
-    timer = after(Math.max(1_000, next - deps.now()), () => { void host.tick(); });
+    timer = after(Math.max(1_000, next - deps.now()), () => { void host.tick().catch(reportBackgroundError); });
   };
 
   /** `modelOnly`: the refusal held nothing on the engine, it bound only the

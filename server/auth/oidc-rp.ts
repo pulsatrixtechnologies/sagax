@@ -22,6 +22,7 @@ import type { RevocationSink, RevokeAttempt } from "./idp-revoke-types.ts";
 export type { RevokeAttempt };
 import { TokenCallPacer, tokenBudget } from "./idp-token-pacer.ts";
 import { authorizationServerMetadataUrls, pkcePair, readBounded, safeEndpoint } from "../mcp/mcp-oauth.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export const OIDC_PENDING_FLOW_TTL_MS = 10 * 60_000;
 export const OIDC_MAX_PENDING_FLOWS = 20;
@@ -1106,7 +1107,7 @@ export class OidcRelyingParty {
       return { kind: "retry", why: `the provider could not be reached: ${error instanceof Error ? error.message : String(error)}` };
     }
     if (response.ok) {
-      void response.body?.cancel().catch(() => {});
+      void response.body?.cancel().catch(reportBackgroundError);
       return { kind: "done" };
     }
     let error: string | undefined;
@@ -1172,6 +1173,6 @@ export class OidcRelyingParty {
       this.revocations.enqueue(token, hint, why);
       return;
     }
-    void this.revokeToken(token, hint);
+    void this.revokeToken(token, hint).catch(reportBackgroundError);
   }
 }

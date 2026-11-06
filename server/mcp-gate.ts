@@ -39,6 +39,7 @@ import { killCliTree } from "./procs.ts";
 import { misuseGateBlockText } from "../shared/misuse-guardrails.ts";
 import { BRIDGE_FIND_TOOL, BRIDGE_SERVER, readBridgeCall } from "../shared/searched-tool-call.ts";
 import { gateArgsSummary, gateDeclinedText, type GateAnswer, type GateAsk } from "./approvals/mcp-gate-approval.ts";
+import { reportBackgroundError } from "./background-error.ts";
 
 type Json = Record<string, unknown>;
 
@@ -382,7 +383,7 @@ let reaping = false;
 const reapChild = () => {
   if (reaping) return;
   reaping = true;
-  void killCliTree(child);
+  void killCliTree(child).catch(reportBackgroundError);
 };
 process.on("SIGTERM", () => {
   reapChild();
@@ -486,7 +487,7 @@ function loadSearch(): Promise<SearchCatalog> {
       return built;
     });
     searchLoading = read;
-    void read.catch(() => {}).finally(() => { if (searchLoading === read) searchLoading = undefined; });
+    void read.catch(reportBackgroundError).finally(() => { if (searchLoading === read) searchLoading = undefined; }).catch(reportBackgroundError);
   }
   return searchLoading;
 }
@@ -655,7 +656,7 @@ function forward(line: string, message: Json | undefined, id: string | undefined
   child.stdin.write(`${line}\n`);
 }
 process.stdin.on("end", () => {
-  void Promise.allSettled(heldCalls).then(() => child.stdin.end());
+  void Promise.allSettled(heldCalls).then(() => child.stdin.end()).catch(reportBackgroundError);
 });
 
 // server -> client: the one direction that gets rewritten

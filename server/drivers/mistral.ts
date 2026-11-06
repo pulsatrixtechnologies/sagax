@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { ModelCatalog, ProviderDriver } from "../contracts.ts";
 import { createOpenAIChatRuntime } from "./openai-chat.ts";
 import { imageTransportAllowed } from "./chat-images.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 const DEFAULT_URL = "https://api.mistral.ai/v1";
 const DEFAULT_MODELS: ModelCatalog = {
@@ -109,7 +110,7 @@ export const MistralDriver: ProviderDriver<MistralConfig> = {
         // A failed refresh keeps the last usable catalog, including custom models.
       }
     };
-    if (apiKey) void refreshModels();
+    if (apiKey) void refreshModels().catch(reportBackgroundError);
     return createOpenAIChatRuntime({
       input, driverKind: "mistral", apiKey, apiUrl: config.url,
       tools: config.tools, models: () => catalog, refreshModels, contentText,

@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { WebSocket as WsWebSocket } from "ws";
 import type { Audio, Voice } from "./elevenlabs.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 const API = (process.env.SAGAX_XAI_TTS_API || "https://api.x.ai/v1").replace(/\/+$/, "");
 const voicesSchema = z.object({
@@ -111,7 +112,7 @@ function onRefused(socket: WebSocket, failWith: (message: string) => void): void
     void readRefusal(res).then((message) => {
       failWith(message);
       try { node.terminate?.(); } catch { /* already gone */ }
-    });
+    }).catch(reportBackgroundError);
   });
 }
 
@@ -129,7 +130,7 @@ async function readLimitedText(response: Response, max: number): Promise<string>
   } catch {
     /* what came is enough */
   } finally {
-    void reader.cancel().catch(() => {});
+    void reader.cancel().catch(reportBackgroundError);
   }
   return text.slice(0, max);
 }
@@ -371,7 +372,7 @@ export function openTranscriptionStream(
     resolveReady = resolve;
     rejectReady = reject;
   });
-  ready.catch(() => {});
+  ready.catch(reportBackgroundError);
   const stopPing = () => {
     if (!ping) return;
     clearInterval(ping);
@@ -511,7 +512,7 @@ export function openSpeechStream(
     resolveReady = resolve;
     rejectReady = reject;
   });
-  ready.catch(() => {});
+  ready.catch(reportBackgroundError);
   const stopPing = () => {
     if (!ping) return;
     clearInterval(ping);

@@ -1,6 +1,7 @@
 // Month-to-date spend from the usage ledger, shared by the workspace cap
 // (server/usage/spend.ts) and the personal cap (server/usage/personal-spend-cap.ts).
 import { readUsage, usageRowKey } from "./usage-ledger.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 const CACHE_MS = 15_000;
 // Every turn start asks; reading the month file each time would be silly.
@@ -61,7 +62,7 @@ export function noteSpend(
       read.fileUsd += costUsd;
       read.keys.add(key);
     }
-  });
+  }).catch(reportBackgroundError);
 }
 
 export function resetSpendCacheForTests(): void {

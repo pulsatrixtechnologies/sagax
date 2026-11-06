@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 import { NEAR_LIMIT_PERCENT, type EngineLimit, type EngineLimitsReport, type LimitWindowName } from "../../shared/limit-reset.ts";
 import { loadPlanUsage, type PlanAccount, type PlanProviderRow, type PlanUsageReport, type PlanWindow } from "./plan-usage.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 /** How often a waiting limit-reset automation checks usage again, and how fresh a shown limit must be. */
 export const LIMIT_POLL_MS = 5 * 60_000;
@@ -134,7 +135,7 @@ export class LimitResetClock {
 
   private refreshSoon(): void {
     if (this.soon) clearTimeout(this.soon);
-    this.soon = setTimeout(() => { this.soon = null; void this.refresh(true); }, SOON_AFTER_REFUSAL_MS);
+    this.soon = setTimeout(() => { this.soon = null; void this.refresh(true).catch(reportBackgroundError); }, SOON_AFTER_REFUSAL_MS);
     this.soon.unref?.();
   }
 
@@ -184,7 +185,7 @@ export class LimitResetClock {
 
   start(): void {
     if (this.timer) return;
-    this.timer = setInterval(() => { if (this.options.waiting?.()) void this.ensureFresh(LIMIT_POLL_MS - 1_000); }, 60_000);
+    this.timer = setInterval(() => { if (this.options.waiting?.()) void this.ensureFresh(LIMIT_POLL_MS - 1_000).catch(reportBackgroundError); }, 60_000);
     this.timer.unref?.();
   }
 

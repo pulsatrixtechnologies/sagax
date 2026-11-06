@@ -6592,7 +6592,6 @@
   "grokImport.file": "Choose a .json file",
   "grokImport.tooLarge": "That file is larger than 4 MB.",
   "grokImport.leftOut": "Left out (set these up by hand)",
-  "grokImport.added": "{name} was added.",
   "agentImport.title": "Import an agent",
   "agentImport.intro": "Bring an agent you already use into Sagax. It arrives inert: skills off, routines paused, and no key, token or sign-in comes over.",
   "agentImport.sourceLabel": "Import from",

@@ -1,0 +1,59 @@
+// @ts-nocheck
+/** resumeTurnsCutByRestart (#1388). Pure move from server/index.ts. */
+export type Host = Record<string, any>;
+
+export function createResumeTurnsCutByRestart(getHost: () => Host): any {
+function resumeTurnsCutByRestart() {
+  const host = getHost();
+  const { DATA_DIR, ROUTINE_RESTARTED } = host;
+
+  // Pre-at-rest held journal (DATA_DIR/held-steers.json) → per-thread sealed files.
+  try { migrateLegacyHeldSteers(DATA_DIR); }
+  catch (error) { console.warn(`held-steers: legacy migrate failed: ${error instanceof Error ? error.message : String(error)}`); }
+  for (const run of host.routines?.takeRestartResumes() ?? []) {
+    const threadId = run.threadId!;
+    if (!host.store.taskByThread(run.botId, threadId)) { host.routines?.failRunById(run.id, ROUTINE_RESTARTED); continue; }
+    // Its teammate work goes on under the runtime's restart policy, which
+    // resumes this thread itself: no second resume here.
+    if (host.coordinator.continuesAfterRestart(threadId)) continue;
+    // The resumed turn decides again: handoffs the cut turn left queued (an
+    // older release's queue) would start work it may no longer want.
+    host.legacyHandoffsDropped.add(threadId);
+    host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: "Resuming after a restart", ok: true } });
+    void host.startTurn(run.botId, ROUTINE_RESUME_PROMPT, { threadId, cardContinuation: true })
+      .catch((error) => host.routines?.failRunById(run.id, `${ROUTINE_RESTARTED}: ${error instanceof Error ? error.message : String(error)}`));
+  }
+  let cut: ReturnType<typeof takeInterruptedTurns>;
+  try {
+    cut = takeInterruptedTurns(DATA_DIR);
+  } catch (error) {
+    console.error(`startup: the turns cut by the last stop could not be read: ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
+  const failed = (threadId: string, why: string) =>
+    host.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: host.failedTurnTool(why) });
+  for (const turn of cut.stale) if (host.store.taskByThread(turn.botId, turn.threadId)) failed(turn.threadId, "turn interrupted — Sagax restarted");
+  const resumedThreads = new Set<string>();
+  for (const turn of cut.resume) {
+    if (!host.store.taskByThread(turn.botId, turn.threadId) || host.threadBusy(turn.botId, turn.threadId)) continue;
+    host.store.appendMessage(turn.threadId, { role: "bot", kind: "activity", tool: { name: "Resuming after a restart", ok: true } });
+    // Messages accepted into the cut turn stay answered once: fold them into
+    // this resume (D2), then drop the durable rows so crash recovery does not
+    // start a second follow-up for the same words.
+    let held: ReturnType<typeof takeHeldSteersForThread> = [];
+    try { held = takeHeldSteersForThread(DATA_DIR, turn.threadId); }
+    catch (error) { console.warn(`held-steers: could not take for resume: ${error instanceof Error ? error.message : String(error)}`); }
+    const prompt = resumePromptWithHeld(TURN_RESUME_PROMPT, held);
+    resumedThreads.add(turn.threadId);
+    void host.startTurn(turn.botId, prompt, {
+      threadId: turn.threadId, cardContinuation: true,
+      ...(turn.speaker ? { speaker: turn.speaker as TurnSpeaker } : {})
+    }).catch((error) => failed(turn.threadId, `turn interrupted — Sagax restarted; resuming failed: ${error instanceof Error ? error.message : String(error)}`));
+  }
+  // Crash path (no interrupted-turns.json): held rows that no resume took
+  // become one follow-up turn per thread, like busy lines draining together.
+  host.resumeHeldSteersAfterCrash(resumedThreads);
+
+}
+  return resumeTurnsCutByRestart;
+}

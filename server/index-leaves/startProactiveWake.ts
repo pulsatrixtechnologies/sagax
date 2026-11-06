@@ -1,0 +1,40 @@
+// @ts-nocheck
+/** startProactiveWake (#1388). Pure move from server/index.ts. */
+export type Host = Record<string, any>;
+
+export function createStartProactiveWake(getHost: () => Host): any {
+function startProactiveWake(batch: ProactiveWakeBatch, accepted = false, runAs?: string) {
+  const host = getHost();
+  const { peerWakeDigest, proactiveWakePrompt, wakeAlwaysReports } = host;
+  // A person's yes that cannot start says so (answerProactiveProposal).
+  if (!host.routines) {
+    if (accepted) throw new Error("Routines are not ready yet");
+    return;
+  }
+  const bot = host.store.bot(batch.botId);
+  if (!bot) return;
+  // Person isolation: explicit runAs when known (e.g. failed run's person),
+  // else the bot owner. Never an arbitrary member's credentials.
+  const person = runAs || host.effectiveBotOwner(bot) || undefined;
+  const sources = [...new Set(batch.events.map((event) => event.source))];
+  const peerDigest = peerWakeDigest(batch.events, batch.more);
+  const alwaysReport = wakeAlwaysReports(batch.events);
+  host.routines.enqueueProactive({
+    botId: batch.botId,
+    name: `Proactive: ${sources.map((source) => PROACTIVE_RUN_NAMES[source]).join(", ")}`,
+    prompt: proactiveWakePrompt(batch, { accepted }),
+    proactive: {
+      mode: batch.mode,
+      hops: batch.hops,
+      sources,
+      ...(batch.confined ? { confined: true as const } : {}),
+      ...(accepted ? { accepted: true as const } : {}),
+      ...(peerDigest ? { peerDigest } : {}),
+      ...(alwaysReport ? { alwaysReport: true as const } : {})
+    },
+    ...(person ? { runAs: person } : {})
+  });
+
+}
+  return startProactiveWake;
+}

@@ -28,7 +28,6 @@ import { DANGER_PILL, DescribedRow, HelpTip, SettingsGroup } from "../SettingsPr
 import { BotWorkplaceSettings } from "./BotWorkplaceSettings";
 import { ComputerMacControlRow } from "./ComputerMacControlRow";
 import { ServerModeComputerAccess } from "../ServerModeSettings";
-// TODO(L1): LocalModelsSettings moves to Providers (Settings > Providers).
 import { serverEnvironmentStateText } from "./MyServerEnvironment";
 
 export function OrgComputerSettings({ bridge, initialLocal = null, initialServer = null, confirm = defaultConfirm, localVmAllowed = true, botsExtra }: {

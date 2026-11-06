@@ -62,6 +62,7 @@ export function claudeElicitations(write: (frame: unknown) => Promise<boolean>, 
       emit({
         type: "request.opened",
         requestId: CARD_PREFIX + id,
+        // judged in index.ts request.opened; full-access: engine-bridge
         requestType: "permission",
         tool: serverName ? `mcp__${serverName}` : "mcp",
         summary: message ? `${server}: ${message}` : `${server} asks to continue`,

@@ -265,6 +265,7 @@ describe("ACP turns (fake CLI)", () => {
     delete process.env.FAKE_ACP_ASK_PARAMS;
     delete process.env.FAKE_ACP_ASK_ANSWER;
     delete process.env.FAKE_ACP_ASK_TIMING;
+    delete process.env.FAKE_ACP_AUTH_METHOD;
     delete process.env.FAKE_ACP_CANCEL_REPLY;
     delete process.env.FAKE_ACP_IGNORE_CANCEL;
     delete process.env.FAKE_ACP_DUMP;
@@ -2245,7 +2246,14 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     await recorder.until((e) => e.type === "turn.completed");
   });
 
-  it("grok fails closed when the CLI advertises no cached_token (needs login)", async () => {
+  it("grok accepts the grok.com authentication method offered by current CLI versions", async () => {
+    process.env.FAKE_ACP_AUTH_METHOD = "grok.com";
+    await create(GrokAgentDriver);
+    await instance.adapter.sendTurn({ threadId: "t-grok-current-auth", text: "go" });
+    expect(await recorder.until((e) => e.type === "turn.completed")).toMatchObject({ ok: true });
+  });
+
+  it("grok fails closed when the CLI advertises no supported authentication method", async () => {
     await create(GrokAgentDriver, "no-auth");
     await instance.adapter.sendTurn({ threadId: "t-auth", text: "go" });
     const done = await recorder.until((e) => e.type === "turn.completed");

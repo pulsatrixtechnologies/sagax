@@ -16,7 +16,6 @@ import { classifyError, RETRY_MAX_ATTEMPTS } from "../retry.ts";
 import { renewalPrompt } from "../../context/context-renewal.ts";
 import { boundedLabel } from "./plain.ts";
 import { codexQuestionReply } from "./questions.ts";
-import { boundedLabel } from "./plain.ts";
 
 export const DENY_TIMEOUT_NOTE =
   "Sagax: nobody answered this permission request in time. Skip this action and finish what you can without it.";

@@ -110,6 +110,10 @@ describe("Settings search", () => {
     expect(sectionMatches(section("security"), "approbations")).toBe(true);
     expect(sectionMatches(section("organization"), "approbations")).toBe(false);
     for (const query of ["sauvegarde", "restaurer"]) expect(sectionMatches(section("backups"), query), query).toBe(true);
+    // JC 2026-11-06: Grok Bot / primary-bot preference import left Backup; those words no longer open it
+    for (const query of ["grok import", "import grok", "x.ai", "share link", "lien de partage"]) {
+      expect(sectionMatches(section("backups"), query), query).toBe(false);
+    }
     // #2080 (L0): one word, one page; a password is found on the Vault
     expect(sectionMatches(section("credentials"), "mot de passe")).toBe(true);
     for (const query of ["nettoyage", "journaux", "diagnostic"]) expect(sectionMatches(section("about"), query), query).toBe(true);

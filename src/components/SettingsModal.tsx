@@ -21,7 +21,6 @@ import {
   DecisionModelSettings,
   EnginesSettings,
   ExperimentalSettings,
-  ImportSettings,
   LocalComputerSection,
   NotificationSettings,
   OrganizationSettings,
@@ -484,13 +483,8 @@ export function SettingsModal() {
             {/* Voice (2026-10-28, out of Models and voice) */}
             {section === "voice" && <VoiceSettingsPage />}
 
-            {/* Backups and import (#2080): Import is a card of this page. Updates stay on their own page (#2090). */}
-            {section === "backups" && (
-              <>
-                <WorkspaceBackupSettings />
-                <ImportSettings />
-              </>
-            )}
+            {/* Backups (#2080): export and restore only. Grok Bot / primary-bot preference import left this page (JC 2026-11-06). Updates stay on their own page (#2090). */}
+            {section === "backups" && <WorkspaceBackupSettings />}
 
             {section === "computer" && <LocalComputerSection />}
 

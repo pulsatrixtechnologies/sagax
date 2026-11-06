@@ -105,7 +105,7 @@ stays as the fallback.
 - `src/lib/claude-code-folder.ts`: which picked files are read.
 - `src/components/AgentImport.tsx`: the dialog (New bot, guided first run).
   It reuses `GrokImportBox` and the bot import panel (`BotZipImport.tsx`).
-- Settings > Import (`ImportSettings.tsx`) keeps its Grok Bot import too.
+- Settings > Backups no longer holds a Grok Bot import row (JC 2026-11-06).
 - Tests: `shared/claude-code-import.test.ts`, `shared/grok-import.test.ts`,
   `src/components/AgentImport.test.ts`, `src/components/BotZipImport.test.ts`,
   `src/components/onboarding/GuidedFirstRun.test.ts`,

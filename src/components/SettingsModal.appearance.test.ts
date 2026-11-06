@@ -376,6 +376,14 @@ describe("Settings → Appearance", () => {
     // one card, two actions; each form opens in place (2026-10-14)
     expect(html).toContain('data-backup-action="export"');
     expect(html).toContain('data-backup-action="import"');
+    // JC 2026-11-06: Grok Bot import and primary-bot preference import are gone from Backup
+    expect(html).not.toContain('data-settings-card="import"');
+    expect(html).not.toContain('data-settings-card="backups.import.grok"');
+    expect(html).not.toContain('data-settings-card="backups.import.prefs"');
+    expect(html).not.toContain("data-grok-import-panel");
+    expect(html).not.toContain("data-preference-import");
+    expect(html).not.toContain("A Grok Bot");
+    expect(html).not.toContain("Primary bot preferences");
   });
 
   it("renders Appearance and its controls in Japanese", () => {

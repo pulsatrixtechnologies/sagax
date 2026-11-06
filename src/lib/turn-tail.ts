@@ -43,3 +43,14 @@ export function awaitedMemberId(
   if (lastMessage?.kind !== "activity" || !lastMessage.tool || lastMessage.tool.ok !== undefined) return undefined;
   return lastMessage.from?.botId;
 }
+
+/** A member's "finishing another conversation" wait chip (server
+ * waitForChatRoomMember), still waiting or kept once the turn started.
+ * JC 2026-11-06: it is never a row in the transcript; the bottom working
+ * line above the composer says it instead, and the bot's reply replaces it.
+ * The cap's verdict ("stayed busy ... skipped this round", ok false) is a
+ * different name and still shows. */
+export function isBusyElsewhereWait(message: Message | undefined): boolean {
+  if (message?.kind !== "activity" || !message.tool || message.tool.ok === false) return false;
+  return / is finishing another conversation\b/.test(message.tool.name);
+}

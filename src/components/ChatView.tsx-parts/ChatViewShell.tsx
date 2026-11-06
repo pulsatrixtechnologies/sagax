@@ -228,18 +228,6 @@ export function ChatViewShell(m: Record<string, any>) {
             </div>
           )}
           <LiveReply threadId={bot.threadId} botId={bot.id} mentionPeers={mentionPeers} hidden={onCall} shownRef={liveShown} />
-          <TurnPresence
-            ultracode={ultracodeFromSelection(bot.modelSelection)}
-            bot={bot}
-            streamThreadId={bot.threadId}
-            visible={presenceVisible}
-            phrases={activity.phrases}
-            phase={activity.phase}
-            quietSince={activity.stepSince ?? null}
-            seed={`${bot.id}:${bot.threadId ?? ""}:${busySince ?? ""}`}
-            since={busySince}
-            answering={popping !== null}
-          />
         </div>
       </div>
 
@@ -302,6 +290,26 @@ export function ChatViewShell(m: Record<string, any>) {
           avatar={<BotAvatar bot={bot} primary={isViewersPrimaryBot(bot, viewerActorId(state.config))} state={stateForBot({ ...bot, messages })} size={22} />}
         />
       )}
+      {/* JC 2026-11-06: the working line (dots or mascot, phrase, timer) sits
+          at the bottom of the chat, just above the composer, on the message
+          column, whatever the scroll. Part of the dock, so the transcript pad
+          (measured from the dock) keeps the last message clear of it. */}
+      <div data-turn-presence-slot="" className="px-5 [&:not(:has(.turn-presence))]:hidden">
+        <div className={cn(chatColumnClassName, "pb-1.5")}>
+          <TurnPresence
+            ultracode={ultracodeFromSelection(bot.modelSelection)}
+            bot={bot}
+            streamThreadId={bot.threadId}
+            visible={presenceVisible}
+            phrases={activity.phrases}
+            phase={activity.phase}
+            quietSince={activity.stepSince ?? null}
+            seed={`${bot.id}:${bot.threadId ?? ""}:${busySince ?? ""}`}
+            since={busySince}
+            answering={popping !== null}
+          />
+        </div>
+      </div>
       {canWrite === false ? (
         <NewConversationInstead onNew={() => dispatch({ type: "newTask", botId: bot.id })} />
       ) : (

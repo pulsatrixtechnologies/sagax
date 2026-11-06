@@ -70,6 +70,7 @@ import { t } from "@/lib/i18n";
 import { formatTokens } from "@/lib/usage";
 import { avatarBot, useExchangePortalHost } from "../BotExchangeChip";
 import { Composer } from "../Composer";
+import { TurnPresence } from "../TurnPresence";
 import { ACTIVITY_DEV_PODS, DevPodsPanel } from "../dev-pods/DevPods";
 
 import { BotChatHeader, useChatWindow } from "../BotHeaderPill";
@@ -497,6 +498,15 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
 
       <ChangesBand files={files} tests={tests} place={place} onJump={jump} />
 
+      {/* JC 2026-11-06: the working line, as in the chat: just above the
+          composer, on the message column. */}
+      {live && rows.length > 0 && (
+        <div data-turn-presence-slot="" className="shrink-0 bg-app px-5">
+          <div className={cn(chatColumnClassName, "pb-1.5")}>
+            <TurnPresence bot={party} visible label={statusLead} seed={`${shown.botId}:${shown.startedAt}`} since={shown.startedAt} />
+          </div>
+        </div>
+      )}
       {composer ? (
         <div data-exchange-footer="" data-coding-actions data-coding-composer className="relative bg-app">
           {composer}

@@ -6,6 +6,7 @@
 // failed, and a settled turn's narration) folds into a single group that
 // names the work; text the bot left visible breaks the group, so the bot's
 // words always separate one group from the next.
+import { isBusyElsewhereWait } from "@/lib/turn-tail";
 import type { Message } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { autoWorkerLine } from "@/lib/auto-model";
@@ -132,6 +133,8 @@ export function isHiddenStatusActivity(message: Message): boolean {
   // A usage-limit switch and the return after it are transparent (2026-10-29):
   // rows stored before as `recovery:` lines are left out too; a wait stays.
   const limit = message.tool?.limitFailover?.kind;
+  // the wait on a busy member speaks through the working line (turn-tail.ts)
+  if (isBusyElsewhereWait(message)) return true;
   return isQuietWorkspaceLine(name) || isTechnicalNoticeName(name) || limit === "switched" || limit === "back";
 }
 

@@ -7540,7 +7540,7 @@ Tests: `src/components/plugins/ConnectAppsView.test.ts`,
 `src/components/PluginsPanel.layout.test.ts`, `src/lib/installed-model.test.ts`,
 `src/components/plugins/OrgSourcesAccess.test.ts`,
 `src/components/settings/MyConnectionsSettings.test.ts`; captures:
-`scripts/capture/connect-apps-manage.mjs` (`--role admin`, `--scheme light`;
+`scripts/capture/connect-apps-grokbot.mjs` (`--role admin`, `--scheme light`;
 gallery `connect-apps.html?view=manage|org-settings`).
 
 - Discover (where a person lands; `DiscoverView`): the catalog that can

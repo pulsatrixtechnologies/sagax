@@ -1,15 +1,16 @@
-// Connect apps > Installed (2026-10-26, a tab of the one Connect apps page
-// since 2026-10-27): one line per thing the person has (installedEntries
-// folds a server added by hand, the same address brought by a plugin and
-// the plugin itself into one), its real logo, a readable name, what it
-// brings, its state and a "..." menu (Update, For which bots, Remove); then
-// the private skills, only when there are some. In a bot's scope (lot 1b,
+// Plugins > Installed (2026-10-26; the first tab since #2104): one line per
+// thing the person has (installedEntries folds a server added by hand, the
+// same address brought by a plugin and the plugin itself into one), its real
+// logo, a readable name, what it brings, its state and a "..." menu (Update,
+// For which bots, Remove); one "+ Add" menu for everything added by hand
+// (#2104: an MCP server, a pasted config, a skill); then the private skills,
+// only when there are some; "This Mac"; the engine accounts' connectors. In a bot's scope (lot 1b,
 // 2026-10-30), what the organization and Perspicax put on the bot, read
 // from the bot's one resolved list (GET /api/bots/:id/capabilities): the
 // organization's Flow ("imposed by the organization") and its Perspicax
 // Roles ("held" / "not held"). Every empty section is hidden.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { BookOpen, Building2, ClipboardPaste, KeyRound, MoreHorizontal, Plus, RotateCw, Settings2, Trash2, Users } from "lucide-react";
+import { Building2, FileText, KeyRound, MoreHorizontal, Plus, RotateCw, Settings2, Trash2, Users } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -17,6 +18,7 @@ import { entryIcon, type InstalledBrings, type InstalledEntry } from "@/lib/inst
 import type { PluginItem } from "@/lib/plugins-model";
 import { botPluginKey, capabilityName, formWord, installationServerName, reasonText, stateWord, type BotCapabilities, type Capability } from "@/lib/capabilities";
 import { PluginIcon, PluginStatusLabel } from "./PluginParts";
+import { PLUGINS } from "./plugins-style";
 import { CapabilitiesBody } from "../bot-settings/CapabilitiesTab";
 
 /** What an entry brings, in one short line: "app + 2 connectors",
@@ -47,11 +49,9 @@ export interface InstalledViewProps {
   onOpenEntry: (entry: InstalledEntry) => void;
   onOpenSkill: (skill: PluginItem) => void;
   entryActions: (entry: InstalledEntry) => EntryActions;
-  /** add an MCP server by hand, paste a config (absent: not offered) */
-  onAddServer?: () => void;
-  onPasteConfig?: () => void;
-  addDisabled?: boolean;
-  onNewSkill?: () => void;
+  /** the one "+ Add" menu (#2104): add an MCP server, paste a config, write
+   * a skill; empty or absent: no button */
+  add?: AddAction[];
   /** the add and paste forms, reserved-name warnings and messages */
   forms?: ReactNode;
   loading?: boolean;
@@ -78,39 +78,75 @@ export interface InstalledViewProps {
   removingSuperseded?: string | null;
   /** Connect apps > Mac: native apps on this person's Mac (Messages…). */
   macApps?: ReactNode;
+  /** the "+ Add" menu sits in Manage's title row: not drawn here */
+  addInTitle?: boolean;
+  /** the organization's declarations (an admin, Perspicax): folded at the end */
+  organizationAdmin?: ReactNode;
+}
+
+const INSTALLED_PREVIEW = 6;
+
+/** one entry of the "+ Add" menu */
+export interface AddAction {
+  id: string;
+  label: string;
+  icon?: ReactNode;
+  onPick: () => void;
+  disabled?: boolean;
+}
+
+/** The one "+ Add" button of Installed (#2104): a menu with every way to add
+ * something by hand, where three buttons stood side by side. */
+export function AddMenu({ actions }: { actions: AddAction[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (event: MouseEvent) => { if (!ref.current?.contains(event.target as Node)) setOpen(false); };
+    const esc = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", esc, true);
+    return () => { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", esc, true); };
+  }, [open]);
+  return (
+    <div ref={ref} className="relative">
+      <button type="button" onClick={() => setOpen((value) => !value)} aria-haspopup="menu" aria-expanded={open} data-plugins-add
+        className={cn(PLUGINS.quietPill, "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong")}>
+        <Plus size={14} /> {t("connectApps.add")}
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 top-10 z-20 min-w-52 rounded-xl border border-border bg-raised p-1 shadow-lg">
+          {actions.map((action) => (
+            <button key={action.id} type="button" role="menuitem" data-plugins-add-action={action.id} disabled={action.disabled}
+              onClick={() => { setOpen(false); action.onPick(); }}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-[14px] text-ink hover:bg-hover disabled:opacity-40">
+              {action.icon}
+              {action.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function EmptyLine({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-inset px-4 py-3 text-[12.5px] text-ink-secondary" data-plugins-empty>
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-border px-4 py-3 text-[14px] text-ink-secondary" data-plugins-empty>
       <span>{children}</span>
       {action}
     </div>
   );
 }
 
-export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, onAddServer, onPasteConfig, addDisabled, onNewSkill, forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization, onRemoveSuperseded, removingSuperseded = null, macApps }: InstalledViewProps) {
-  const tools = onAddServer || onPasteConfig || onNewSkill;
+export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, add = [], forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization, onRemoveSuperseded, removingSuperseded = null, macApps, addInTitle = false, organizationAdmin }: InstalledViewProps) {
+  const [all, setAll] = useState(false);
+  const shownEntries = all ? entries : entries.slice(0, INSTALLED_PREVIEW);
   return (
     <div data-plugins-installed-tab>
-      {macApps}
-      {tools && (
-        <div className="mb-3 flex flex-wrap items-center gap-2" data-plugins-installed-tools>
-          {onAddServer && (
-            <button type="button" onClick={onAddServer} disabled={addDisabled} data-plugins-add-server className="flex items-center gap-1.5 rounded-lg bg-control px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised-hover disabled:opacity-40">
-              <Plus size={14} /> {t("connectApps.manage.addServer")}
-            </button>
-          )}
-          {onPasteConfig && (
-            <button type="button" onClick={onPasteConfig} disabled={addDisabled} data-plugins-paste-config className="flex items-center gap-1.5 rounded-lg bg-control px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised-hover disabled:opacity-40">
-              <ClipboardPaste size={14} /> {t("mcp.import")}
-            </button>
-          )}
-          {onNewSkill && (
-            <button type="button" onClick={onNewSkill} data-plugins-new-skill className="flex items-center gap-1.5 rounded-lg bg-control px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised-hover">
-              <Plus size={14} /> {t("connectApps.skill.new")}
-            </button>
-          )}
+      {add.length > 0 && !addInTitle && (
+        <div className="mb-3 flex items-center justify-end" data-plugins-installed-tools>
+          <AddMenu actions={add} />
         </div>
       )}
       {forms}
@@ -147,19 +183,25 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
       )}
       {resolved === undefined && entries.length > 0 && (
         <section data-plugins-installed>
-          <ul className="divide-y divide-hairline/60 rounded-2xl border border-border bg-card">
-            {entries.map((entry) => (
+          <h3 className={PLUGINS.label}>{t("connectApps.manage.installed")}</h3>
+          <ul className={cn(PLUGINS.grid, "mt-1")}>
+            {shownEntries.map((entry) => (
               <li key={entry.key}>
                 <InstalledRow entry={entry} onOpen={() => onOpenEntry(entry)} actions={entryActions(entry)} />
               </li>
             ))}
           </ul>
+          {entries.length > INSTALLED_PREVIEW && (
+            <button type="button" onClick={() => setAll((value) => !value)} className={cn(PLUGINS.sectionLink, "mt-2")} data-plugins-show-all>
+              {all ? t("connectApps.manage.showFewer") : t("connectApps.manage.showAll", { count: entries.length })}
+            </button>
+          )}
         </section>
       )}
       {resolved === undefined && organization.length > 0 && (
         <section className="mt-6 first:mt-0" data-plugins-organization>
-          <h3 className="mb-2 text-[13px] font-semibold text-ink">{t("capabilities.installed.organization")}</h3>
-          <ul className="divide-y divide-hairline/60 rounded-2xl border border-border bg-card">
+          <h3 className={cn(PLUGINS.label, "mb-2")}>{t("capabilities.installed.organization")}</h3>
+          <ul className={cn(PLUGINS.card, "divide-y divide-hairline-weak")}>
             {organization.map((item) => (
               <li key={item.key}><OrganizationRow item={item} /></li>
             ))}
@@ -167,57 +209,56 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
         </section>
       )}
       {resolved === undefined && skills.length > 0 && (
-        <section className="mt-6" data-plugins-skills>
-          <h3 className="mb-2 text-[13px] font-semibold text-ink">{t("connectApps.manage.skills")}</h3>
-          <ul className="divide-y divide-hairline/60 rounded-2xl border border-border bg-card">
+        <section className="mt-8" data-plugins-skills>
+          <h3 className={PLUGINS.label}>{t("connectApps.manage.privateSkills")}</h3>
+          <ul className="mt-1">
             {skills.map((skill) => (
               <li key={skill.key}>
-                <button type="button" data-plugin-skill={skill.id} onClick={() => onOpenSkill(skill)} className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-hover">
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-raised text-ink-secondary"><BookOpen size={15} aria-hidden="true" /></span>
+                <button type="button" data-plugin-skill={skill.id} onClick={() => onOpenSkill(skill)} className="-mx-2 flex w-[calc(100%+16px)] items-center gap-3 rounded-xl px-2 py-[11px] text-left hover:bg-hover">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-card text-ink-secondary"><FileText size={18} aria-hidden="true" /></span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-medium text-ink">{skill.name}</span>
-                    <span className="block truncate text-[11.5px] text-ink-secondary">
+                    <span className={PLUGINS.rowName}>{skill.name}</span>
+                    <span className={PLUGINS.rowSub}>
                       {skill.source === "local" ? t("connectApps.skill.createdLocally") : t("connectApps.skill.from", { source: sourceLabel(skill.source) })}
                       {skill.description ? ` · ${skill.description}` : ""}
                     </span>
                   </span>
-                  {skill.status === "off" && <span className="shrink-0 text-[12px] text-ink-secondary">{t("connectApps.status.off")}</span>}
+                  {skill.status === "off" && <span className="shrink-0 text-[14px] text-ink-secondary">{t("connectApps.status.off")}</span>}
                 </button>
               </li>
             ))}
           </ul>
         </section>
       )}
+      {macApps}
       {providers && (
-        <section className="mt-6 first:mt-0" id="plugins-providers" data-plugins-providers aria-labelledby="plugins-providers-title">
-          <h3 id="plugins-providers-title" className="mb-2 text-[13px] font-semibold text-ink">{t("connectApps.manage.tab.providers")}</h3>
-          <p className="-mt-1 mb-3 text-[12px] leading-[18px] text-ink-secondary" data-plugins-providers-note>{t("connectApps.providers.note")}</p>
+        <section className="mt-8 first:mt-0" id="plugins-providers" data-plugins-providers>
           {providers}
         </section>
       )}
+      {organizationAdmin && <div className="mt-8" data-plugins-organization-admin>{organizationAdmin}</div>}
     </div>
   );
 }
-
 /** One installed entry: logo, name, what it brings, its state, "...". */
 export function InstalledRow({ entry, onOpen, actions }: { entry: InstalledEntry; onOpen: () => void; actions: EntryActions }) {
   const icon = entryIcon(entry);
   return (
-    <div className="flex items-center gap-3 px-3 py-2" data-installed-entry={entry.key}>
-      <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-0.5 text-left hover:bg-hover" aria-label={t("connectApps.openAria", { name: entry.name })}>
-        <PluginIcon item={icon} className="size-9" />
+    <div className="group flex items-center gap-2 py-[11px]" data-installed-entry={entry.key}>
+      <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left" aria-label={t("connectApps.openAria", { name: entry.name })}>
+        <PluginIcon item={icon} className="size-10 rounded-[10px]" />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-medium text-ink">{entry.name}</span>
-          <span className="block truncate text-[11.5px] text-ink-secondary" data-installed-brings>{bringsLabel(entry.brings)}</span>
+          <span className={PLUGINS.rowName}>{entry.name}</span>
+          <span className={PLUGINS.rowSub} data-installed-brings>{bringsLabel(entry.brings)}</span>
         </span>
+        <PluginStatusLabel status={entry.status} className="text-[14px] font-normal" />
       </button>
-      <PluginStatusLabel status={entry.status} />
-      <EntryMenu name={entry.name} actions={actions} updateWaiting={entry.updateAvailable} />
+      <EntryMenu name={entry.name} actions={actions} updateWaiting={entry.updateAvailable} hoverOnly />
     </div>
   );
 }
 
-function EntryMenu({ name, actions, updateWaiting }: { name: string; actions: EntryActions; updateWaiting: boolean }) {
+function EntryMenu({ name, actions, updateWaiting, hoverOnly = false }: { name: string; actions: EntryActions; updateWaiting: boolean; hoverOnly?: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -253,13 +294,13 @@ function EntryMenu({ name, actions, updateWaiting }: { name: string; actions: En
         aria-expanded={open}
         aria-label={t("connectApps.entry.menuAria", { name })}
         onClick={() => setOpen((value) => !value)}
-        className="ui-icon-button relative"
+        className={cn("ui-icon-button relative", hoverOnly && !open && "opacity-0 focus-visible:opacity-100 group-hover:opacity-100")}
       >
         <MoreHorizontal size={16} />
         {updateWaiting && actions.update && <span data-entry-update-dot className="absolute right-1 top-1 size-1.5 rounded-full bg-accent" aria-hidden="true" />}
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 top-8 z-20 min-w-44 rounded-xl border border-border bg-card p-1 shadow-lg">
+        <div role="menu" className="absolute right-0 top-8 z-20 min-w-44 rounded-xl border border-border bg-raised p-1 shadow-lg">
           {items.map((item) => (
             <button
               key={item.id}
@@ -267,7 +308,7 @@ function EntryMenu({ name, actions, updateWaiting }: { name: string; actions: En
               role="menuitem"
               data-entry-action={item.id}
               onClick={() => { setOpen(false); item.run(); }}
-              className={cn("flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-[12.5px] hover:bg-hover", item.danger ? "text-danger" : "text-ink")}
+              className={cn("flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-[14px] hover:bg-hover", item.danger ? "text-danger" : "text-ink")}
             >
               {item.icon}
               {item.label}

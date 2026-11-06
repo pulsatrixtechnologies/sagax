@@ -44,7 +44,7 @@ export function BotsForView({ name, bots, busy, onToggle, onBack, trail }: {
         {bots.length === 0 ? (
           <p className="rounded-xl bg-inset px-4 py-3 text-[12.5px] text-ink-secondary">{t("connectApps.entry.botsNone")}</p>
         ) : (
-          <ul className="divide-y divide-hairline/60 rounded-2xl border border-border bg-card">
+          <ul className="divide-y divide-hairline/60 rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015]">
             {bots.map((bot) => (
               <li key={bot.id} className="flex min-h-[44px] items-center justify-between gap-3 px-4 py-2" data-bots-for={bot.id}>
                 <span className="min-w-0 truncate text-[13px] text-ink">{bot.name}</span>

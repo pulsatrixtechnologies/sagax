@@ -1,15 +1,15 @@
 // @vitest-environment happy-dom
-// Capabilities, 2026-10-28 regressions:
-//   - the install scope stays under the title on every tab (it vanished on
-//     Providers and the tabs jumped up); on Providers it shows turned
-//     off, with the reason;
-//   - no "N connected" button any more (the owner: it repeated Installed):
-//     Discover is the first tab, the count sits on Installed and My
-//     accounts, the close button keeps clear of the title row;
-//   - a plugin's page opens inside its tab (title, scope and tabs kept, a
-//     back row as a Settings sub-page), with the app's real mark, its name
-//     once, the technical id as metadata, where it is installed and its main
-//     action.
+// Plugins (Capabilities before #2104), regressions kept through the Grok Bot
+// Connect Apps redesign (2026-11-06):
+//   - the install scope sits under Manage's title, once, beside + Add (it
+//     vanished on Providers before); on Pages it shows turned off, with the
+//     reason;
+//   - "N connected" on the home opens Manage; no tab row any more, the
+//     close button keeps clear of the title row;
+//   - a plugin's page takes the whole pane under its own back bar, with the
+//     app's real mark, its name once, the technical id as metadata, where it
+//     is installed and its main action; the view it came from is on the
+//     back button's label.
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -31,7 +31,7 @@ const items = buildPluginItems({
   marketplaces: [{ name: "claude-plugins-official", plugins: [{ name: "github", installed: true, servers: ["github-github"], skills: [] }] }],
 });
 const noop = () => {};
-const TABS: ConnectAppsTab[] = ["installed", "discover", "pages", "sources"];
+const TABS: ConnectAppsTab[] = ["installed", "sources"];
 
 let host: HTMLDivElement;
 let root: Root;
@@ -52,12 +52,15 @@ const view = (tab: ConnectAppsTab, extra: Record<string, unknown> = {}) => rende
   installed: "I", discover: "D", pages: "G", sources: "S", ...extra,
 }));
 
-describe("the scope bar on every tab", () => {
-  it("draws the scope above the tabs on each tab", () => {
+describe("the scope bar on Manage and Sources", () => {
+  it("draws the scope once under the big title; the home and Pages have none", () => {
     for (const tab of TABS) {
       const html = view(tab);
-      expect(html, tab).toMatch(/data-plugins-scope-slot[\s\S]*?data-test-scope[\s\S]*?role="tablist"/);
+      expect(html, tab).toMatch(/id="plugins-title"[\s\S]*?data-plugins-scope-slot[\s\S]*?data-test-scope/);
+      expect(html.match(/data-plugins-scope-slot/g), tab).toHaveLength(1);
     }
+    expect(view("pages")).not.toContain("data-test-scope");
+    expect(view("discover")).not.toContain("data-test-scope");
   });
 
   it("on Pages the toggle is shown turned off, with the line that says why", () => {
@@ -74,21 +77,26 @@ describe("the scope bar on every tab", () => {
   });
 });
 
-describe("the header and the tab row", () => {
-  it("Discover first, then Installed (Providers inside), Pages and Sources; no N connected button", () => {
-    expect(CONNECT_APPS_TABS).toEqual(["discover", "bots", "installed", "pages", "sources"]);
-    const html = view("discover", { counts: { installed: 6 } });
-    expect(html).not.toContain("data-plugins-connected");
-    expect(html).toMatch(/<header[^>]*><h2 id="plugins-title"[^>]*>Capabilities<\/h2><div class="[^"]*" data-plugins-scope-row="true"><div class="shrink-0" data-plugins-scope-slot/);
+describe("the header", () => {
+  it("the home: \"N connected\" opens Manage; no tab row (#2104)", () => {
+    expect(CONNECT_APPS_TABS).toEqual(["installed", "discover", "bots", "pages", "sources"]);
+    const onTab = vi.fn();
+    flushSync(() => root.render(createElement(ConnectAppsView, { tab: "discover", onTab, connected: { count: 6, icons: [] }, refreshing: false, onRefresh: noop })));
+    expect(host.querySelector('[role="tablist"]')).toBeNull();
+    const connected = host.querySelector<HTMLButtonElement>("[data-plugins-connected]")!;
+    expect(connected.textContent).toContain("6 connected");
+    flushSync(() => connected.click());
+    expect(onTab).toHaveBeenCalledWith("installed");
   });
 
-  it("a click on a tab with a counter opens that tab", () => {
+  it("Manage: one refresh button, one scope slot, a back row to the home (#2104)", () => {
     const onTab = vi.fn();
-    flushSync(() => root.render(createElement(ConnectAppsView, { tab: "discover", onTab, counts: { installed: 6 }, refreshing: false, onRefresh: noop })));
-    const installed = host.querySelector<HTMLButtonElement>('[data-plugins-tab="installed"]')!;
-    expect(installed.querySelector("[data-plugins-tab-count]")?.textContent).toBe("6");
-    flushSync(() => installed.click());
-    expect(onTab).toHaveBeenCalledWith("installed");
+    const html = view("installed");
+    expect(html.match(/data-plugins-scope-slot/g)).toHaveLength(1);
+    expect(html.match(/aria-label="Refresh[^"]*"/g)).toHaveLength(1);
+    flushSync(() => root.render(createElement(ConnectAppsView, { tab: "installed", onTab, refreshing: false, onRefresh: noop })));
+    flushSync(() => host.querySelector<HTMLButtonElement>("[data-plugins-home]")!.click());
+    expect(onTab).toHaveBeenCalledWith("discover");
   });
 
   it("the title row keeps clear of the close button at every width", () => {
@@ -98,11 +106,12 @@ describe("the header and the tab row", () => {
 });
 
 describe("a plugin's page in its tab", () => {
-  it("keeps the title, the scope and the tabs; the tab it came from stays marked", () => {
+  it("takes the whole pane: the view's list and scope are not drawn under it, the title stays for screen readers", () => {
     const html = view("installed", { page: createElement("div", { "data-test-page": "" }, "PAGE") });
-    expect(html).toMatch(/id="plugins-title"[^>]*>Capabilities<\/h2>[\s\S]*?data-test-scope[\s\S]*?role="tablist"[\s\S]*?data-plugins-subpage[\s\S]*?data-test-page/);
-    expect(html).toMatch(/aria-selected="true"[^>]*aria-current="page"[^>]*data-plugins-tab="installed"/);
-    // the tab's own list is not drawn under the page
+    expect(html).toMatch(/data-plugins-main="installed"[^>]*data-plugins-subpage=""[\s\S]*?data-test-page/);
+    expect(html).not.toContain("data-test-scope");
+    // the window keeps its accessible name, hidden from view
+    expect(html).toMatch(/<h2 id="plugins-title" class="sr-only">Plugins<\/h2>/);
     expect(html).not.toMatch(/>I</);
   });
 
@@ -115,7 +124,7 @@ describe("a plugin's page in its tab", () => {
     expect(identity.icon.logo || identity.icon.domain).toBeTruthy();
   });
 
-  it("shows the name once, where it is installed and the main action; the back row names the tab", () => {
+  it("shows the name once, where it is installed and the main action; the back button names the view", () => {
     const entries = installedEntries(items);
     const plugin = items.find((item) => item.kind === "plugin")!;
     const identity = detailIdentity(plugin, entries);
@@ -130,7 +139,7 @@ describe("a plugin's page in its tab", () => {
     const visibleNames = [...host.querySelectorAll("h2, [data-breadcrumb-current]")].filter((node) => node.textContent === "GitHub");
     expect(visibleNames).toHaveLength(1);
     expect(host.querySelector("[data-breadcrumb-current]")).toBeNull();
-    expect(host.querySelector("[data-breadcrumb-crumb='0']")?.textContent).toBe("Installed");
+    expect(host.querySelector("[data-plugins-back]")?.getAttribute("aria-label")).toBe("Back to Installed");
     // the real mark, not the generic plugin piece
     expect(host.querySelector("[data-plugins-detail-head] img")).not.toBeNull();
     // the technical name and source as small metadata

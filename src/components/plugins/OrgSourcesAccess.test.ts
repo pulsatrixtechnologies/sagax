@@ -1,4 +1,4 @@
-// Organization sources and access: since 2026-10-27 in Capabilities >
+// Organization sources and access: since 2026-10-27 in Plugins (Capabilities before #2104) >
 // Sources, its admin part; Settings > Organization keeps one link there. An
 // organization admin only, as before. Since 2026-10-28 the organization's
 // GitHub tokens are in the one list of the GitHub plugin's page, and the GitHub
@@ -36,11 +36,11 @@ const org = (viewerRole: "admin" | "member"): PerspicaxOrg => ({
 });
 
 describe("Organization sources and access", () => {
-  it("Settings > Organization: an admin finds one link to Capabilities > Sources and the GitHub OAuth App's client id, a member nothing", () => {
+  it("Settings > Organization: an admin finds one link to Plugins > Sources and the GitHub OAuth App's client id, a member nothing", () => {
     const admin = renderToStaticMarkup(createElement(PerspicaxOrgSettings, { org: org("admin"), onChanged: () => {} }));
     expect(admin).toContain('data-settings-card="organization.plugins"');
     expect(admin).toContain("data-org-sources-moved");
-    expect(admin).toContain("managed in Capabilities &gt; Sources");
+    expect(admin).toContain("managed in Plugins &gt; Sources");
     expect(admin).toContain("Open Sources");
     expect(admin).not.toContain("data-org-plugin-policy");
     expect(admin).not.toContain("data-github-token-add");
@@ -77,7 +77,7 @@ describe("Organization sources and access", () => {
     });
   });
 
-  it("an old link to the card opens Capabilities on Sources", () => {
+  it("an old link to the card opens Plugins on Sources", () => {
     const actions: unknown[] = [];
     openSettings((action) => actions.push(action), "organization", "organization.plugins");
     expect(actions).toEqual([{ type: "togglePlugins", open: true, page: "sources" }]);

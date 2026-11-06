@@ -20,7 +20,22 @@ export function segmentOptionClass(active: boolean, disabled = false): string {
   );
 }
 
-export function ScopeToggle({ scope, botName, onScope, disabled = false, describedBy, organization = true }: {
+/** Manage's quiet scope (#2104, Grok Bot's look): gray pills side by side,
+ * the chosen one a shade lighter, no accent. */
+export const QUIET_SEGMENT_GROUP = "flex w-fit max-w-full items-center gap-1";
+
+export function quietSegmentClass(active: boolean, disabled = false): string {
+  return cn(
+    "flex h-7 min-w-0 items-center gap-1.5 rounded-full px-3 text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-strong motion-reduce:transition-none disabled:cursor-default",
+    active ? "bg-ink/[0.12] text-ink" : disabled ? "text-ink-tertiary" : "bg-ink/[0.05] text-ink-secondary hover:bg-ink/10 hover:text-ink",
+  );
+}
+
+export function ScopeToggle({ scope, botName, onScope, disabled = false, describedBy, organization = true, quiet = false, title }: {
+  /** Manage's title row: gray pills, no accent */
+  quiet?: boolean;
+  /** what the chosen scope means, on hover */
+  title?: string;
   scope: PluginScope;
   botName?: string;
   organization?: boolean;
@@ -38,7 +53,7 @@ export function ScopeToggle({ scope, botName, onScope, disabled = false, describ
       disabled={disabled}
       data-plugins-scope-option={value}
       onClick={() => onScope(value)}
-      className={segmentOptionClass(scope === value, disabled)}
+      className={quiet ? quietSegmentClass(scope === value, disabled) : segmentOptionClass(scope === value, disabled)}
     >
       {icon}
       <span className="truncate">{label}</span>
@@ -52,11 +67,12 @@ export function ScopeToggle({ scope, botName, onScope, disabled = false, describ
       aria-describedby={describedBy}
       data-plugins-scope={scope}
       data-plugins-scope-disabled={disabled ? "" : undefined}
-      className={SEGMENT_GROUP}
+      className={quiet ? QUIET_SEGMENT_GROUP : SEGMENT_GROUP}
+      title={title}
     >
-      {botName && option("bot", t("connectApps.scope.bot", { name: botName }), <Bot size={13} aria-hidden="true" />)}
-      {option("me", t("connectApps.scope.me"), <User size={13} aria-hidden="true" />)}
-      {organization && option("workspace", t("connectApps.scope.workspace"), <Users size={13} aria-hidden="true" />)}
+      {botName && option("bot", t("connectApps.scope.bot", { name: botName }), <Bot size={13} aria-hidden="true" className={quiet ? "hidden" : undefined} />)}
+      {option("me", t("connectApps.scope.me"), <User size={13} aria-hidden="true" className={quiet ? "hidden" : undefined} />)}
+      {organization && option("workspace", t("connectApps.scope.workspace"), <Users size={13} aria-hidden="true" className={quiet ? "hidden" : undefined} />)}
     </div>
   );
 }

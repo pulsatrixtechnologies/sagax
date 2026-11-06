@@ -1,6 +1,7 @@
 /** Isolated gallery for Playwright screenshots of Connect apps and Browse
  * bots in their window (no server). Not shipped in the app.
  * ?view=manage|org-settings|bots|bots-in-apps&skin=<id>&lang=<code>&role=member|admin&app=none
+ *   &page=bots|pages opens Plugins on that tab (#2104: a deep link to Bots or Pages)
  * manage: the real Connect apps panel (PluginsPanel) on a stand-in /api
  * shaped like an organization member's (2026-10-26): GitHub added by hand
  * and again by a marketplace plugin, five plugins, the person's Claude
@@ -10,7 +11,7 @@
  * Organization for that person. settings-subpage: a Settings sub-page in
  * the same window size, the navigation Connect apps' pages follow
  * (2026-10-28). The bot Rocket has its own plugins (For Rocket).
- * scripts/capture/connect-apps-manage.mjs clicks through the tabs. */
+ * scripts/capture/connect-apps-grokbot.mjs clicks through the screens. */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { X } from "lucide-react";
@@ -135,13 +136,27 @@ const MANAGE_API: Record<string, unknown> = {
     { name: "time-review", description: "", source: "example-ops", enabled: true },
     { name: "tenant-rules", description: "", source: "example-ops", enabled: true },
     { name: "weekly-summary", description: "Friday recap of my threads", source: "local-import", enabled: true },
-  ] },
+    { name: "meeting-notes", description: "Turns a call transcript into notes and actions", source: "local-import", enabled: true },
+    { name: "release-checklist", description: "Steps before a version ships", source: "local-import", enabled: true },
+  ].map((skill) => ({ tags: [], version: null, importedAt: 1_761_600_000_000, warnings: [], assignedBots: [], ...skill })) },
   "/api/plugins/search": { featured: [
     { id: "notion", name: "Notion", description: "Pages, databases and notes", url: "https://mcp.notion.com/mcp", domain: "mcp.notion.com", site: "notion.so", auth: "oauth", category: "productivity" },
     { id: "linear", name: "Linear", description: "Issues, projects and cycles", url: "https://mcp.linear.app/mcp", domain: "mcp.linear.app", site: "linear.app", auth: "oauth", category: "productivity" },
     { id: "slack", name: "Slack", description: "Channels and messages", url: "https://mcp.slack.com/mcp", domain: "mcp.slack.com", site: "slack.com", auth: "oauth", category: "communication" },
     { id: "figma", name: "Figma", description: "Design files and comments", url: "https://mcp.figma.com/mcp", domain: "mcp.figma.com", site: "figma.com", auth: "oauth", category: "design" },
     { id: "stripe", name: "Stripe", description: "Payments and customers", url: "https://mcp.stripe.com", domain: "mcp.stripe.com", site: "stripe.com", auth: "oauth", category: "finance" },
+    { id: "asana", name: "Asana", description: "Tasks, projects and goals", url: "https://mcp.asana.com/mcp", domain: "mcp.asana.com", site: "asana.com", auth: "oauth", category: "productivity" },
+    { id: "atlassian", name: "Atlassian", description: "Jira issues and Confluence pages", url: "https://mcp.atlassian.com/mcp", domain: "mcp.atlassian.com", site: "atlassian.com", auth: "oauth", category: "productivity" },
+    { id: "dropbox", name: "Dropbox", description: "Files and shared folders", url: "https://mcp.dropbox.com/mcp", domain: "mcp.dropbox.com", site: "dropbox.com", auth: "oauth", category: "productivity" },
+    { id: "zoom", name: "Zoom", description: "Meetings and recordings", url: "https://mcp.zoom.com/mcp", domain: "mcp.zoom.com", site: "zoom.com", auth: "oauth", category: "communication" },
+    { id: "intercom", name: "Intercom", description: "Customer conversations", url: "https://mcp.intercom.com/mcp", domain: "mcp.intercom.com", site: "intercom.com", auth: "oauth", category: "communication" },
+    { id: "hubspot", name: "HubSpot", description: "Contacts, deals and tickets", url: "https://mcp.hubspot.com/mcp", domain: "mcp.hubspot.com", site: "hubspot.com", auth: "oauth", category: "sales" },
+    { id: "airtable", name: "Airtable", description: "Bases, tables and records", url: "https://mcp.airtable.com/mcp", domain: "mcp.airtable.com", site: "airtable.com", auth: "oauth", category: "productivity" },
+    { id: "box", name: "Box", description: "Content and file workflows", url: "https://mcp.box.com/mcp", domain: "mcp.box.com", site: "box.com", auth: "oauth", category: "productivity" },
+    { id: "calendly", name: "Calendly", description: "Scheduling links and events", url: "https://mcp.calendly.com/mcp", domain: "mcp.calendly.com", site: "calendly.com", auth: "oauth", category: "productivity" },
+    { id: "square", name: "Square", description: "Payments, orders and catalog", url: "https://mcp.square.com/mcp", domain: "mcp.square.com", site: "square.com", auth: "oauth", category: "finance" },
+    { id: "vercel", name: "Vercel", description: "Deployments and projects", url: "https://mcp.vercel.com/mcp", domain: "mcp.vercel.com", site: "vercel.com", auth: "oauth", category: "development" },
+    { id: "cloudflare", name: "Cloudflare", description: "Workers, DNS and analytics", url: "https://mcp.cloudflare.com/mcp", domain: "mcp.cloudflare.com", site: "cloudflare.com", auth: "oauth", category: "development" },
   ], results: [], nextCursor: null, registryAvailable: true },
   "/api/me/harness-connectors": { manageUrl: "https://claude.ai/customize/connectors", canManage: true, enabled: true, claude: { available: true, connectors: [
     { name: "Gmail", status: "connected" },
@@ -149,6 +164,8 @@ const MANAGE_API: Record<string, unknown> = {
     { name: "Google Calendar", status: "connected" },
     { name: "Canva", status: "needs_auth" },
   ] }, codex: { available: false } },
+  "/api/me/org-capabilities": { owner: "perspicax", items: [] },
+  "/api/org/capabilities": { owner: "perspicax", capabilities: [], installed: {} },
   "/api/pages": { pages: [
     { id: "pg-kpi", title: "Weekly KPIs", status: "published", access: "org", expiresAt: null, currentVersion: 2, botId: "bot-a", threadId: "t1", createdAt: 1_761_600_000_000, updatedAt: 1_761_650_000_000, expired: false, url: "https://sagax.example/p/pg-kpi", reachable: true, versions: [
       { n: 1, kind: "html", title: "Weekly KPIs", createdAt: 1_761_600_000_000, state: "published", bytes: 4200, botId: "bot-a" },
@@ -300,6 +317,15 @@ if (["manage", "org-settings", "settings-subpage"].includes(params.get("view") ?
       };
       return json(galleryTailscale);
     }
+    const skillDetail = /^\/api\/(?:me\/)?skills-library\/([^/]+)$/.exec(url.pathname);
+    if (skillDetail && method === "GET") {
+      const name = decodeURIComponent(skillDetail[1]);
+      const listed = (MANAGE_API["/api/skills-library"] as { skills: Array<{ name: string; description: string; source: string; enabled: boolean }> }).skills.find((skill) => skill.name === name);
+      if (listed) {
+        const text = `---\nname: ${name}\ndescription: ${listed.description || name}\n---\n\nRead the week's threads, then write a short recap: what moved, what waits, what needs a decision.\n`;
+        return json({ name, text, description: listed.description, source: listed.source, enabled: listed.enabled, changedAfterReview: false, reviewedText: null, warnings: [], files: [], editable: true, origin: "library" });
+      }
+    }
     const body = MANAGE_API[url.pathname];
     if (body !== undefined && method === "GET") return json(body);
     if (url.pathname.startsWith("/api/bots/") && url.pathname.endsWith("/plugins")) return json({ error: "not here" }, 404);
@@ -307,12 +333,17 @@ if (["manage", "org-settings", "settings-subpage"].includes(params.get("view") ?
   }) as typeof window.fetch;
 }
 
+const deepLinkPage = params.get("page") === "bots" || params.get("page") === "pages" ? params.get("page") as "bots" | "pages" : null;
+
 function Manage() {
   const { state, dispatch } = useStore();
   const ready = state.bots.some((bot) => bot.id === "bot-a");
   useEffect(() => {
     if (superseded && ready) dispatch({ type: "togglePlugins", open: true, surface: "mcp", botId: "bot-a" });
   }, [ready, dispatch]);
+  useEffect(() => {
+    if (deepLinkPage) dispatch({ type: "togglePlugins", open: true, page: deepLinkPage });
+  }, [dispatch]);
   if (superseded && (!ready || state.pluginsBotId !== "bot-a")) return <Frame>{null}</Frame>;
   return (
     <Frame>

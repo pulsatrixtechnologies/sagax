@@ -31,33 +31,22 @@ vi.mock("@/lib/i18n", () => ({
 
 import { setMessagesEnabled } from "@/lib/mac-messages-setup";
 import { MessagesSetupView } from "./MessagesSetupView";
-import { MacAppsView, MacAppsInstalledSection } from "./MacAppsView";
+import { MacAppsInstalledSection } from "./MacAppsView";
 
 describe("Mac Messages setup surface", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("renders the Mac hub with a Messages row", () => {
-    const html = renderToStaticMarkup(createElement(MacAppsView, {
-      onBack: () => {},
-      trail: [],
-      onOpenMessages: () => {},
-      messagesEnabled: false,
-      messagesAvailable: true,
-    }));
-    expect(html).toContain('data-mac-apps=""');
-    expect(html).toContain('data-mac-app="messages"');
-    expect(html).toContain("connectApps.mac.messages.rowOff");
-  });
-
   it("renders the Installed Mac section", () => {
     const html = renderToStaticMarkup(createElement(MacAppsInstalledSection, {
-      onOpenMac: () => {},
       onOpenMessages: () => {},
       messagesEnabled: true,
     }));
     expect(html).toContain("data-plugins-mac");
+    expect(html).toContain('data-mac-app="messages"');
+    // no "See all" to a page with the same one row (#2104)
+    expect(html).not.toContain("connectApps.mac.seeAll");
     expect(html).toContain("connectApps.mac.messages.rowOn");
   });
 

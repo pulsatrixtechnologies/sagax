@@ -53,7 +53,7 @@ export function SourcesView({ onOpenGithub, githubSummary, marketplaces, organiz
       )}
       {marketplaces}
       {organization && (
-        <section className="mt-8 rounded-2xl border border-border bg-card px-4 py-4 sm:px-5" data-plugins-sources-admin>
+        <section className="mt-8 rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015] px-4 py-4 sm:px-5" data-plugins-sources-admin>
           <div className="mb-1 flex flex-wrap items-center gap-2">
             <h3 className="text-[13px] font-semibold text-ink">{t("connectApps.orgAccess.title")}</h3>
             <span className="rounded-full bg-hover px-2 py-0.5 text-[11px] text-ink-secondary">{t("connectApps.sources.adminsOnly")}</span>

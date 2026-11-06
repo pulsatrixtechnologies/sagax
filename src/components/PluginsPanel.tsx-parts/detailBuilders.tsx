@@ -197,7 +197,7 @@ export function mcpDetail(item: PluginItem, { mcp, mcpAccountDraft, setMcpAccoun
     ],
     children: (
       <>
-        {remote && isWhopServer(server) && <p className="rounded-2xl border border-border bg-card px-4 py-3 text-[12px] leading-relaxed text-ink-secondary sm:px-5">{t("whop.notice")}</p>}
+        {remote && isWhopServer(server) && <p className="rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015] px-4 py-3 text-[12px] leading-relaxed text-ink-secondary sm:px-5">{t("whop.notice")}</p>}
         <McpMessages mcp={mcp} />
         {mcp.editing === name && <McpServerEditor mcp={mcp} />}
       </>
@@ -266,7 +266,7 @@ export function pluginDetail(item: PluginItem, { items, marketplaces, installing
       <>
         {github}
         {botCard}
-        <section className="rounded-2xl border border-border bg-card px-4 py-3.5 sm:px-5">
+        <section className="rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015] px-4 py-3.5 sm:px-5">
           <h3 className="mb-1 text-[13px] font-semibold text-ink">{t("connectApps.plugin.brings")}</h3>
           {item.description && <p className="mb-2 text-[12.5px] leading-relaxed text-ink-secondary">{item.description}</p>}
           {children.length === 0 ? (

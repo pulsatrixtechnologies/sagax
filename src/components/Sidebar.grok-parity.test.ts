@@ -1,7 +1,7 @@
 // The desktop sidebar measured on the reference design (owner, 2026-10-15): one row per
 // bot (portrait, name, role pill, last message), its threads under it in
 // the sidebar mode only, the Primary Bot at the top with its star and role, "My team" and
-// "Built-in" sections, and a foot of the avatar and the Capabilities pill.
+// "Built-in" sections, and a foot of the avatar and the Plugins pill.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -137,15 +137,15 @@ describe("sections", () => {
 });
 
 describe("foot", () => {
-  it("is the avatar then the Capabilities pill; Browse bots left the avatar's menu for Capabilities", () => {
+  it("is the avatar then the Plugins pill; Browse bots left the avatar's menu for Plugins", () => {
     fixture.state = { bots: [bot("atlas")], sections: [] };
     const html = render();
     const foot = html.slice(html.indexOf("data-sidebar-foot"));
     expect(foot).toContain('data-test-account="avatar"');
     expect(foot.indexOf("data-test-account")).toBeLessThan(foot.indexOf("data-sidebar-connect-apps"));
-    // the full name's pill, then the small Capabilities pill (its words show
+    // the full name's pill, then the small Plugins pill (its words show
     // only when the profile is the avatar alone: SidebarFoot.test.ts)
-    expect(foot).toContain('aria-label="Capacités"');
+    expect(foot).toContain('aria-label="Plugins"');
     expect(foot).not.toContain("data-sidebar-place=");
     expect(fixture.places.map((place) => place.key)).toEqual([]);
   });

@@ -39,7 +39,7 @@ export function GithubAccountSection({ connection }: {
   connection?: ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-border bg-card px-4 py-4 sm:px-5" data-accounts-github>
+    <section className="rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015] px-4 py-4 sm:px-5" data-accounts-github>
       <div className="mb-1 flex items-center gap-2">
         <GitBranch size={16} aria-hidden="true" className="text-ink" />
         <h3 className="text-[13px] font-semibold text-ink">{t("myConnections.github.title")}</h3>

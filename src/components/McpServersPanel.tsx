@@ -982,7 +982,7 @@ export function McpServerEditor({ mcp }: { mcp: McpServers }) {
               <McpResultBudgetField value={draft.resultBudget} onChange={(resultBudget) => setDraft((current) => ({ ...current, resultBudget }))} />
             </div>
             <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={closeEditor} className="rounded-lg px-3 py-2 text-[12.5px] text-ink-secondary hover:bg-raised">{t("mcp.cancel")}</button>
+              <button type="button" onClick={closeEditor} className="rounded-lg px-3 py-2 text-[12.5px] text-ink-secondary hover:bg-raised" data-mcp-editor-cancel>{t("mcp.cancel")}</button>
               <button
                 type="button"
                 disabled={busy !== null}

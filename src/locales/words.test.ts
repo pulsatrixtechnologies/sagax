@@ -116,9 +116,9 @@ it("iOS string catalogs have no em or en dashes", () => {
   expect(offending).toEqual([]);
 });
 
-// Capabilities (2026-10-30): one name for the page that adds plugins, skills,
+// Plugins (2026-10-30 Capabilities; renamed #2104): one name for the page that adds plugins, skills,
 // MCP servers and connectors, and no text that points to a tab that is gone.
-it("names the Capabilities page and no retired tab", () => {
+it("names the Plugins page and no retired tab", () => {
   const fr = JSON.parse(readFileSync(new URL("./fr.json", import.meta.url), "utf8")) as Record<string, string>;
   const retiredEn = [/Connect apps/i, /Connected apps/i, /Plugins →/, /Manage > Advanced/, /> Manage\b/, /Managed on Grok/, /under Plugins/];
   const retiredFr = [/Connecter des app/i, /Applications connectées/i, /plugiciel/i, /Gérer > Avancé/, /Géré dans Grok/];

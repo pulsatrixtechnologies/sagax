@@ -6,7 +6,7 @@
 // people, the technical id and source as small metadata, where it is
 // installed (everyone, this bot) and the main action beside it.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { CheckCircle2, ChevronDown, ChevronRight, FlaskConical, KeyRound, Link2, Loader2, LogOut, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronUp, FlaskConical, KeyRound, Link2, Loader2, LogOut, MoreHorizontal, Pencil, Plus, RefreshCw } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { copyText } from "@/lib/copy-text";
@@ -15,6 +15,7 @@ import type { PluginItem } from "@/lib/plugins-model";
 import { Switch } from "../SettingsPrimitives";
 import type { Crumb } from "../Breadcrumb";
 import { PluginCard, PluginIcon, PluginPageHeader, PluginStatusLabel } from "./PluginParts";
+import { PLUGINS } from "./plugins-style";
 
 export interface DetailTool {
   name: string;
@@ -108,14 +109,14 @@ export function PluginDetailView(props: PluginDetailProps) {
   return (
     <>
       <PluginPageHeader title={name} trail={trail} onBack={onBack} named />
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pb-7 pt-3 sm:px-8" data-plugins-detail={item.key}>
-        <div className="flex flex-wrap items-center gap-3 px-1" data-plugins-detail-head>
-          <PluginIcon item={icon ?? item} className="size-12" />
-          <div className="min-w-0 flex-[1_1_220px]">
-            <h2 className="truncate text-[17px] font-semibold leading-6 tracking-[-0.008em] text-ink" data-plugins-detail-name>{name}</h2>
+      <div className="min-h-0 flex-1 space-y-7 overflow-y-auto px-4 pb-8 pt-[34px] sm:px-[34px]" data-plugins-detail={item.key}>
+        <div className="flex flex-wrap items-center gap-3" data-plugins-detail-head>
+          <PluginIcon item={icon ?? item} className="size-14 rounded-[14px]" />
+          <div className="min-w-0 flex-[1_1_220px] pl-0.5">
+            <h2 className="truncate text-[17px] font-normal leading-6 tracking-[-0.008em] text-ink" data-plugins-detail-name>{name}</h2>
             {(technical || subtitle) && (
-              <div className="truncate text-[12px] leading-[18px] text-ink-secondary" data-plugins-detail-meta title={[technical, subtitle].filter(Boolean).join(" · ")}>
-                {technical && <span className="font-mono text-[11.5px]">{technical}</span>}
+              <div className="truncate text-[14px] leading-5 text-ink-secondary" data-plugins-detail-meta title={[technical, subtitle].filter(Boolean).join(" · ")}>
+                {technical && <span className="font-mono text-[12.5px]">{technical}</span>}
                 {technical && subtitle && <span aria-hidden="true"> · </span>}
                 {subtitle}
               </div>
@@ -128,8 +129,8 @@ export function PluginDetailView(props: PluginDetailProps) {
                     data-install-state={state.id}
                     data-install-on={state.on ? "yes" : "no"}
                     className={cn(
-                      "flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11.5px] leading-[16px]",
-                      state.on ? "bg-success/10 text-success" : "bg-ink/[0.06] text-ink-secondary",
+                      "flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[12px] leading-[16px]",
+                      state.on ? "bg-success/10 text-success" : "bg-card text-ink-secondary",
                     )}
                   >
                     <span aria-hidden="true" className={cn("size-1.5 rounded-full", state.on ? "bg-success" : "bg-ink-tertiary")} />
@@ -142,7 +143,7 @@ export function PluginDetailView(props: PluginDetailProps) {
           <div className="ml-auto flex items-center gap-2">
             {primaryAction}
             {enabled && (
-              <label className="flex items-center gap-2 text-[12.5px] text-ink-secondary" data-plugin-enabled>
+              <label className="flex items-center gap-2 text-[13.5px] text-ink-secondary" data-plugin-enabled>
                 {t("connectApps.detail.enabled")}
                 <Switch checked={enabled.value} disabled={busy} onClick={enabled.onToggle} aria-label={enabled.label} />
               </label>
@@ -156,11 +157,15 @@ export function PluginDetailView(props: PluginDetailProps) {
                 onTest && { id: "test", icon: testing ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />, label: t("mcp.test"), onSelect: onTest },
                 onEdit && { id: "edit", icon: <Pencil size={13} />, label: t("connectApps.detail.edit"), onSelect: onEdit },
                 Boolean(link) && { id: "copy-link", icon: <Link2 size={13} />, label: t("connectApps.detail.copyLink"), onSelect: () => { void copyText(link!).then((result) => setLinkCopied(result === "copied")); } },
-                onUninstall && { id: "uninstall", icon: <Trash2 size={13} />, label: t("connectApps.detail.uninstall"), onSelect: onUninstall, danger: true },
               ]}
             />
+            {onUninstall && (
+              <button type="button" disabled={busy} onClick={onUninstall} data-plugin-action="uninstall" className={cn(PLUGINS.fillPill, "h-9 px-6 text-[15px]")}>
+                {t("connectApps.detail.uninstall")}
+              </button>
+            )}
           </div>
-          {linkCopied && <p role="status" data-plugin-link-copied className="basis-full text-right text-[11.5px] text-success">{t("connectApps.detail.linkCopied")}</p>}
+          {linkCopied && <p role="status" data-plugin-link-copied className="basis-full text-right text-[12px] text-success">{t("connectApps.detail.linkCopied")}</p>}
         </div>
 
         {notice}
@@ -169,19 +174,19 @@ export function PluginDetailView(props: PluginDetailProps) {
 
         {accounts && (
           <PluginCard title={t("connectApps.detail.accounts")}>
-            <ul className="divide-y divide-hairline/60">
+            <ul data-plugin-accounts>
               {accounts.map((account) => (
-                <li key={account.id} className="flex items-center gap-3 py-2">
+                <li key={account.id} className="flex min-h-[38px] items-center gap-3 py-1.5">
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] text-ink">{account.label}</div>
-                    {account.detail && <div className="truncate text-[11px] text-ink-secondary">{account.detail}</div>}
+                    <div className="truncate text-[14px] leading-5 text-ink">{account.label}</div>
+                    {account.detail && <div className="truncate text-[12.5px] leading-[18px] text-ink-secondary">{account.detail}</div>}
                   </div>
-                  <PluginStatusLabel status={account.status} />
+                  <PluginStatusLabel status={account.status} className="text-[14px] font-normal" />
                   {account.action}
                   {account.onRemove && (
                     <button type="button" disabled={busy} onClick={account.onRemove} aria-label={account.removeLabel} title={account.removeLabel}
                       className="rounded-md p-1.5 text-ink-secondary hover:bg-danger/10 hover:text-danger disabled:opacity-40">
-                      <LogOut size={13} />
+                      <LogOut size={14} />
                     </button>
                   )}
                 </li>
@@ -193,35 +198,33 @@ export function PluginDetailView(props: PluginDetailProps) {
         )}
 
         {tools && (
-          <PluginCard>
+          <PluginCard title={t("connectApps.detail.tools")}>
             <button
               type="button"
               aria-expanded={toolsOpen}
               onClick={() => setToolsOpen((open) => !open)}
-              className="flex w-full items-center gap-2 text-left"
+              className="flex min-h-[38px] w-full items-center gap-2 py-1.5 text-left"
               data-plugin-tools-toggle
             >
-              <span className="flex-1 text-[13px] font-semibold text-ink">{t("connectApps.detail.tools")}</span>
-              <span className="text-[12px] text-ink-secondary">
+              <span className="flex-1 text-[14px] leading-5 text-ink">
                 {toolList ? t("connectApps.detail.toolsEnabled", { enabled: enabledCount, total: toolList.length }) : tools.loading ? t("connectApps.detail.toolsLoading") : t("connectApps.detail.toolsUnknown")}
               </span>
-              {toolsOpen ? <ChevronDown size={15} className="text-ink-secondary" /> : <ChevronRight size={15} className="text-ink-secondary" />}
+              {toolsOpen ? <ChevronUp size={16} className="text-ink-secondary" /> : <ChevronDown size={16} className="text-ink-secondary" />}
             </button>
             {toolsOpen && (
-              <div className="mt-2">
-                {tools.note && <p className="mb-2 text-[11.5px] leading-relaxed text-ink-secondary">{tools.note}</p>}
-                {tools.error && <p role="alert" className="mb-2 rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger">{tools.error}</p>}
+              <div>
+                {tools.note && <p className="mb-2 text-[12.5px] leading-relaxed text-ink-secondary">{tools.note}</p>}
+                {tools.error && <p role="alert" className="mb-2 rounded-lg bg-danger/10 px-3 py-2 text-[13px] text-danger">{tools.error}</p>}
                 {tools.loading && !toolList && (
-                  <div className="flex items-center gap-2 py-2 text-[12px] text-ink-secondary"><Loader2 size={13} className="animate-spin" /> {t("connectApps.detail.toolsLoading")}</div>
+                  <div className="flex items-center gap-2 py-2 text-[13px] text-ink-secondary"><Loader2 size={13} className="animate-spin" /> {t("connectApps.detail.toolsLoading")}</div>
                 )}
-                {toolList && toolList.length === 0 && <p className="py-1 text-[12px] text-ink-secondary">{t("mcp.probe.noTools")}</p>}
+                {toolList && toolList.length === 0 && <p className="py-1 text-[13px] text-ink-secondary">{t("mcp.probe.noTools")}</p>}
                 {toolList && toolList.length > 0 && (
-                  <ul className="divide-y divide-hairline/60" data-plugin-tools>
+                  <ul data-plugin-tools>
                     {toolList.map((tool) => (
-                      <li key={tool.name} className="flex items-center gap-3 py-2">
+                      <li key={tool.name} className="flex min-h-[38px] items-center gap-3 py-1.5" title={tool.description ? `${tool.name}: ${tool.description}` : tool.name}>
                         <div className="min-w-0 flex-1">
-                          <div className="truncate font-mono text-[12px] text-ink">{tool.name}</div>
-                          {tool.description && <div className="line-clamp-2 text-[11px] text-ink-secondary">{tool.description}</div>}
+                          <div className="truncate text-[14px] leading-5 text-ink">{toolLabel(tool.name)}</div>
                         </div>
                         {tools.onToggle ? (
                           <Switch
@@ -231,14 +234,14 @@ export function PluginDetailView(props: PluginDetailProps) {
                             aria-label={t(tool.enabled ? "connectApps.detail.toolOffAria" : "connectApps.detail.toolOnAria", { name: tool.name })}
                           />
                         ) : (
-                          <CheckCircle2 size={14} className="shrink-0 text-ink-tertiary" aria-hidden="true" />
+                          <CheckCircle2 size={15} className="shrink-0 text-ink-tertiary" aria-hidden="true" />
                         )}
                       </li>
                     ))}
                   </ul>
                 )}
                 {!toolList && !tools.loading && tools.onLoad && (
-                  <button type="button" onClick={tools.onLoad} className="ui-button text-[12px]">{t("connectApps.detail.loadTools")}</button>
+                  <button type="button" onClick={tools.onLoad} className={cn(PLUGINS.fillPill, "my-1.5")}>{t("connectApps.detail.loadTools")}</button>
                 )}
               </div>
             )}
@@ -246,11 +249,11 @@ export function PluginDetailView(props: PluginDetailProps) {
         )}
 
         <PluginCard title={t("connectApps.detail.details")}>
-          <dl className="grid grid-cols-[minmax(90px,auto)_1fr] gap-x-4 gap-y-1.5 text-[12.5px]">
+          <dl className="grid grid-cols-[minmax(90px,auto)_1fr] gap-x-4 text-[14px] leading-5" data-plugin-details>
             {details.map((row) => (
               <div key={row.label} className="contents">
-                <dt className="text-ink-secondary">{row.label}</dt>
-                <dd className={cn("min-w-0 break-all text-right text-ink", row.mono && "font-mono text-[11.5px]")}>{row.value}</dd>
+                <dt className="py-[9px] text-ink-tertiary">{row.label}</dt>
+                <dd className={cn("min-w-0 break-all py-[9px] text-right text-ink-secondary", row.mono && "font-mono text-[12.5px]")}>{row.value}</dd>
               </div>
             ))}
           </dl>
@@ -258,6 +261,13 @@ export function PluginDetailView(props: PluginDetailProps) {
       </div>
     </>
   );
+}
+
+/** "bookstack_query" reads "Bookstack query", as Grok Bot shows a tool. The
+ * real name stays on the row's tooltip. */
+export function toolLabel(name: string): string {
+  const words = name.replace(/[_\-.]+/g, " ").trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : name;
 }
 
 interface PluginAction {
@@ -342,8 +352,8 @@ export function PluginActionsMenu({ name, busy, actions, updateAvailable }: {
 /** "+ Add another account" under the accounts. */
 export function AddAccountButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
   return (
-    <button type="button" disabled={disabled} onClick={onClick} className="mt-1 flex items-center gap-1.5 rounded-lg px-1 py-1.5 text-[12.5px] font-medium text-ink-secondary hover:text-ink disabled:opacity-40">
-      <Plus size={14} /> {label}
+    <button type="button" disabled={disabled} onClick={onClick} data-plugin-add-account className="flex min-h-[38px] items-center gap-2 py-1.5 text-[14px] leading-5 text-ink-secondary hover:text-ink disabled:opacity-40">
+      <Plus size={15} /> {label}
     </button>
   );
 }

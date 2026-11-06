@@ -13,7 +13,7 @@ import { t } from "@/lib/i18n";
 import { itemCreator, itemDescription, itemName } from "@/lib/bot-catalog";
 import { GROUP_PREVIEW, moveActive, visibleResults, type SearchGroup, type SearchGroupId, type SearchResult } from "@/lib/connect-apps-search";
 import type { LocaleKey } from "@/locales";
-import { CATEGORY_MODAL } from "../category-modal";
+import { PLUGINS } from "./plugins-style";
 import { CatalogMascot, itemLook, nameColor } from "../bot-catalog/BotCatalogView";
 import { PluginIcon } from "./PluginParts";
 
@@ -32,9 +32,8 @@ export function searchGroupTitle(id: SearchGroupId): string {
   return t(GROUP_KEY[id]);
 }
 
-/** Compact, to sit on the scope's line (2026-10-29): the field of the other
- * panes, with less padding. */
-const SEARCH_BOX = "flex min-w-0 flex-1 items-center gap-2 rounded-[14px] border border-transparent bg-hover px-3 py-1.5 focus-within:border-border-strong";
+/** The home's round search (#2104, Grok Bot's Connect Apps). */
+const SEARCH_BOX = PLUGINS.search;
 
 const LISTBOX_ID = "connect-apps-search-results";
 const optionId = (index: number) => `connect-apps-result-${index}`;
@@ -77,12 +76,12 @@ export function ConnectAppsSearchField({ query, onQuery, groups, opened, active,
   };
   return (
     <label className={SEARCH_BOX} data-plugins-search-box>
-      <Search size={16} className="shrink-0 text-ink-secondary" aria-hidden="true" />
+      <Search size={15} className="shrink-0 text-ink-secondary" aria-hidden="true" />
       <input
         value={query}
         onChange={(event) => { onQuery(event.target.value); onActive(-1); }}
         onKeyDown={onKeyDown}
-        placeholder={t("connectApps.search.placeholder")}
+        placeholder={t("connectApps.search.short")}
         aria-label={t("connectApps.search.placeholder")}
         role="combobox"
         aria-autocomplete="list"
@@ -90,7 +89,7 @@ export function ConnectAppsSearchField({ query, onQuery, groups, opened, active,
         aria-controls={searching ? LISTBOX_ID : undefined}
         aria-activedescendant={searching && active >= 0 && active < rows.length ? optionId(active) : undefined}
         data-plugins-search
-        className={CATEGORY_MODAL.searchInput}
+        className={PLUGINS.searchInput}
       />
       {query !== "" && (
         <button type="button" onClick={() => onQuery("")} aria-label={t("connectApps.search.clear")} title={t("connectApps.search.clear")} data-plugins-search-clear
@@ -132,15 +131,15 @@ export function ConnectAppsSearchResults({ query, groups, opened, onOpenGroup, a
         const shown = opened.has(group.id) ? group.results : group.results.slice(0, GROUP_PREVIEW);
         return (
           <section key={group.id} role="group" aria-labelledby={`connect-apps-group-${group.id}`} data-plugins-search-group={group.id} className="mb-4">
-            <div className={CATEGORY_MODAL.sectionHead}>
-              <h3 id={`connect-apps-group-${group.id}`} className={CATEGORY_MODAL.sectionTitle}>{searchGroupTitle(group.id)}</h3>
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <h3 id={`connect-apps-group-${group.id}`} className={PLUGINS.sectionTitle}>{searchGroupTitle(group.id)}</h3>
               {group.results.length > shown.length && (
-                <button type="button" tabIndex={-1} onMouseDown={(event) => event.preventDefault()} onClick={() => onOpenGroup(group.id)} className={CATEGORY_MODAL.sectionLink} data-plugins-search-more={group.id}>
+                <button type="button" tabIndex={-1} onMouseDown={(event) => event.preventDefault()} onClick={() => onOpenGroup(group.id)} className={PLUGINS.sectionLink} data-plugins-search-more={group.id}>
                   {t("connectApps.showMore", { count: group.results.length - shown.length })}
                 </button>
               )}
             </div>
-            <div className={CATEGORY_MODAL.grid}>
+            <div className={PLUGINS.grid}>
               {shown.map((result) => {
                 index += 1;
                 const at = index;

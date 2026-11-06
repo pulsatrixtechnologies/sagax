@@ -300,7 +300,7 @@ export function richOutputPrompt(emailDrafts = true): string {
 }
 
 export const CREDENTIAL_PROMPT =
-  " If a supported API key is missing for the service actually needed, use request_credential to create a secure credential request. Before requesting a computer-provider key, inspect the configured targets with select_computer; an existing self-hosted VPS does not need Boat credentials. Do not request a different provider's key merely because a task mentions cloud. A freshly QR-paired mobile app or the desktop app can show the secure entry card. Never claim it opened unless the request succeeded, and never ask the user to paste credentials into chat.";
+  " If a supported API key is missing for the service actually needed, use request_credential to create a secure credential request. Before requesting a computer-provider key, inspect the configured targets with select_computer; an existing self-hosted VPS does not need Boat credentials. Do not request a different provider's key merely because a task mentions cloud. For any other secret (a Stripe or npm token, a webhook signing secret), give request_credential a label, reason and delivery: ref for add_mcp_server, file for your own commands. A freshly QR-paired mobile app or the desktop app can show the secure entry card. Never claim it opened unless the request succeeded, and never ask the user to paste credentials into chat.";
 /** Emoji reactions (react_to_message, shared/reactions.ts): when a bot
  * reacts to the person's message and when it does not (2026-10-18).
  * Left out of a voice call turn, where the tools are not shown either. */

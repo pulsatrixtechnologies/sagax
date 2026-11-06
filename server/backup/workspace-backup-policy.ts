@@ -53,6 +53,8 @@ export function excludedWorkspaceAuthPath(path: string): boolean {
   if (/^(?:github-credentials|marketplace-tokens)\.enc(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;
   // Team secrets of the organization (server/org/org-bot-secrets.ts).
   if (/^org-bot-secrets\.enc(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;
+  // Private one-day secret files a person gave a bot for its own commands (server/secret-folder.ts).
+  if (/(?:^|\/)\.(?:sagax|openmausbot)-secrets(?:\/|$)/.test(path)) return true;
   // File-backed provider keys (server/engines/engine-api-keys.ts), solo and per person.
   if (/^engine-api-keys\.(?:enc|json)(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;
   if (/^principals\/[^/]+\/engine-api-keys\.enc(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;

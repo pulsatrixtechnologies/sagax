@@ -31,10 +31,10 @@ export interface ConfirmDialogProps {
   threadOverlay?: boolean;
 }
 
-/** In-app replacement for window.confirm, following the FullAccessWarning
- * pattern: backdrop, focus trap, Escape cancels, Cancel focused by default so
- * a stray Enter never confirms. Portalled to <body> because the sidebar
- * translates below md and would otherwise become the containing block. */
+/** In-app replacement for window.confirm: backdrop, focus trap, Escape
+ * cancels, Cancel focused by default so a stray Enter never confirms.
+ * Portalled to <body> because the sidebar translates below md and would
+ * otherwise become the containing block. */
 export function ConfirmDialog(props: ConfirmDialogProps) {
   const { open, onCancel, returnFocusRef } = props;
   const dialogRef = useRef<HTMLDivElement>(null);

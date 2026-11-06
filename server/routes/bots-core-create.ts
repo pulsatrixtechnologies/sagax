@@ -107,8 +107,10 @@ export function createBotsCoreCreateRoutes(deps: BotsCoreRouteDeps): RouteHandle
       const namedThisComputer = settings.computer === "local";
       if (Object.hasOwn(settings, "computer")) settings.computer = requestedWorksOn(settings.computer) ?? undefined;
       body = { ...body, ...settings, name: settings.name };
-      if (settings.approvalMode === "full" || settings.approvalMode === "custom") {
-        return json(res, 403, { error: "This approval level requires the desktop permission flow. Use the bot creation dialog or explicitly choose Ask/Auto for API creation.", code: "approval_desktop_required" });
+      // Full is applied like any other level (omb #2701). Custom still comes
+      // only through the desktop's private channel.
+      if (settings.approvalMode === "custom") {
+        return json(res, 403, { error: "Custom approval requires the desktop permission flow. Use the bot creation dialog or choose another level for API creation.", code: "approval_desktop_required" });
       }
       if (namedThisComputer && settings.approvalMode === "auto" && body.acknowledgeLocalAuto !== true) {
         return json(res, 400, { error: "Auto mode on this computer requires confirming the warning first (acknowledgeLocalAuto)" });

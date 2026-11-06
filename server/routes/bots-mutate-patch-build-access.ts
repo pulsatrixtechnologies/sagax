@@ -218,13 +218,16 @@ export async function buildBotPatchAccess(env: BotsMutateEnv, state: BotPatchSta
     });
     return true;
   }
+  // Full access applies at once from any client that can reach this API
+  // (PRO-RÈGLE / omb #2701): no desktop channel, no consent field. Custom
+  // keeps the packaged desktop's private channel, into it and out of it,
+  // because it holds restrictions the person wrote themselves.
   const requiresPrivateApprovalTransition =
-    ((requestedApprovalMode === "full" || requestedApprovalMode === "custom") &&
-      currentApprovalMode !== requestedApprovalMode) ||
+    (requestedApprovalMode === "custom" && currentApprovalMode !== "custom") ||
     (currentApprovalMode === "custom" && requestedApprovalMode !== "custom");
   if (requiresPrivateApprovalTransition) {
     env.json(env.res, 403, {
-      error: "Full access and Custom approval are turned on in the Sagax desktop app on the computer that runs this server"
+      error: "Custom approval is turned on in the Sagax desktop app on the computer that runs this server"
     });
     return true;
   }

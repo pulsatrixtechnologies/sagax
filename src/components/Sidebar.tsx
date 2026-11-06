@@ -128,7 +128,6 @@ import { folderUnreadThreadIds, markFolderRead, markGroupFolderRead } from "@/li
 import { personPickerThreads } from "@/lib/person-threads";
 import { approvalModeFor, botApprovalSetting } from "../../shared/approval-mode";
 import { liveActivityLabel } from "@/lib/live-activity";
-import { FullAccessWarning } from "./FullAccessWarning";
 import { LocalComputerAutoWarning } from "./LocalComputerAutoWarning";
 import {
   orderedThreadList,
@@ -1710,7 +1709,7 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
   const tasks = personThreads(bot.tasks ?? [{ threadId: bot.threadId, title: t("task.newShort"), createdAt: 0 }], bot.threadId)
     .map((task) => ({ ...task, queued: Boolean(pendingQueued[task.threadId]?.length) }));
   const background = backgroundThreads(bot.tasks ?? []);
-  const [permissionRefresh, setPermissionRefresh] = useState<{ threadId: string; kind: "full" | "local-auto" } | null>(null);
+  const [permissionRefresh, setPermissionRefresh] = useState<{ threadId: string; kind: "local-auto" } | null>(null);
   // the same live verb the chat pane derives from the visible tail
   // ("Reading a file"), passed to the active thread's row while it works
   const activeActivityLabel = liveActivityLabel(visibleMessages(bot).at(-1));
@@ -1751,7 +1750,7 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
         const current = latest.current;
         const mode = botApprovalSetting(current);
         const threadMode = approvalModeFor(currentTaskBot(current, task.threadId));
-        if (mode === "full" && threadMode !== "full") { setPermissionRefresh({ threadId: task.threadId, kind: "full" }); return; }
+        // Full applies at once with no confirmation (omb #2701).
         if (mode === "auto" && current.computer === "local" && threadMode !== "auto") { setPermissionRefresh({ threadId: task.threadId, kind: "local-auto" }); return; }
         dispatch({ type: "refreshTaskPermissions", botId, threadId: task.threadId });
       },
@@ -1785,16 +1784,6 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
       {folderDialog && <NewTaskFolderDialog bot={bot} onClose={() => setFolderDialog(false)} onReturnFocus={() => {
         document.querySelector<HTMLElement>(`[data-sidebar-bot-row="${CSS.escape(bot.id)}"]`)?.focus();
       }} />}
-      <FullAccessWarning
-        open={permissionRefresh?.kind === "full"}
-        scope="thread"
-        onCancel={() => setPermissionRefresh(null)}
-        onConfirm={() => {
-          const threadId = permissionRefresh?.threadId;
-          setPermissionRefresh(null);
-          if (threadId) dispatch({ type: "refreshTaskPermissions", botId: bot.id, threadId });
-        }}
-      />
       <LocalComputerAutoWarning
         open={permissionRefresh?.kind === "local-auto"}
         onCancel={() => setPermissionRefresh(null)}

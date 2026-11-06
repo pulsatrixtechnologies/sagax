@@ -46,6 +46,7 @@ export function createBotsCoreTaskPatchRoutes(deps: BotsCoreRouteDeps): RouteHan
       stricterApprovalStopError,
       primaryAskedReplay,
       memberOwnedInOrg,
+      localPrincipalId,
     } = deps;
     const IDENTITY = deps.identity;
     const DESKTOP_MANAGED = deps.desktopManaged;
@@ -157,6 +158,7 @@ export function createBotsCoreTaskPatchRoutes(deps: BotsCoreRouteDeps): RouteHan
       if (!organization.ok) return json(res, 400, { error: organization.error });
       const patch: Record<string, unknown> = { ...organization.patch };
       let orgFullGrant = false;
+      let fullConsentPrincipal: string | null = null;
       if (body.title !== undefined) {
         if (typeof body.title !== "string") return json(res, 400, { error: "title must be a string" });
         patch.title = body.title;
@@ -206,10 +208,17 @@ export function createBotsCoreTaskPatchRoutes(deps: BotsCoreRouteDeps): RouteHan
           orgFullGrant = true;
         }
         if (!orgFullGrant && (mode === "full" || mode === "custom") && memberOwnedInOrg(current)) return json(res, 409, MEMBER_BOT_FULL_ACCESS);
-        // Elevated modes still require the trusted desktop transition. A
-        // thread settings PATCH cannot manufacture that grant.
-        if (!orgFullGrant && mode !== "ask" && mode !== "auto" && mode !== "edits") return json(res, 403, { error: "Full access and Custom approval are turned on in the Sagax desktop app on the computer that runs this server" });
+        // Full applies over HTTP like any other level (omb #2701). Custom
+        // still needs the packaged desktop's private channel.
+        if (!orgFullGrant && mode === "custom") return json(res, 403, { error: "Custom approval is turned on in the Sagax desktop app on the computer that runs this server" });
         if (approvalModeFor(current) === "custom") return json(res, 403, { error: "Leaving Custom approval requires confirmation in the packaged desktop app" });
+        if (mode === "full" && !orgFullGrant) {
+          // Solo (and any non-org path): record who set Full so new
+          // conversations and turn-time checks see the same consent marker.
+          fullConsentPrincipal = sessionPrincipal(auth)
+            ?? (auth.kind === "loopback" && auth.trust !== "service" ? localPrincipalId().trim().toLowerCase() : null);
+          if (fullConsentPrincipal) orgFullGrant = true;
+        }
         if (!supportsApprovalMode((patch.modelSelection as ModelSelection | undefined) ?? current.modelSelection, mode as ApprovalMode)) {
           return json(res, 400, { error: "This provider does not support the selected approval level" });
         }
@@ -239,7 +248,10 @@ export function createBotsCoreTaskPatchRoutes(deps: BotsCoreRouteDeps): RouteHan
       const liveApprovalBefore = patch.approvalMode && patch.approvalMode !== modeBefore
         && liveApprovalChange(modeBefore, patch.approvalMode as ApprovalMode) && threadBusy(current.id, current.threadId)
         ? runningTurnLevels(m[1]) : null;
-      if (orgFullGrant) store.patchBot(m[1], { fullAccessConsent: { principalId: sessionPrincipal(auth)!, at: Date.now() } });
+      if (orgFullGrant) {
+        const principalId = fullConsentPrincipal ?? sessionPrincipal(auth);
+        if (principalId) store.patchBot(m[1], { fullAccessConsent: { principalId, at: Date.now() } });
+      }
       const task = patch.modelSelection
         ? store.switchTaskModel(m[1], m[2], patch.modelSelection as ModelSelection, body.updateBotDefault === true,
           { ...patch, ...hostedModels?.resetTask?.(current.modelSelection, patch.modelSelection as ModelSelection) })!

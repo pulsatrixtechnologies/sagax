@@ -109,27 +109,22 @@ export function desktopApprovalBridge(): TrustedApprovalBridge | undefined {
 }
 
 /** Composer changes use the same private bridge as bot settings, but never
- * change profile defaults. Confirmation is UI state, never an HTTP credential. */
+ * change profile defaults. Full access goes over HTTP like any other level
+ * (omb #2701); Custom still needs the packaged desktop channel. */
 export async function persistTaskApproval(
   botId: string, threadId: string, patch: TaskUpdatePatch,
   bridge: TrustedApprovalBridge | undefined,
   request: (path: string, init?: RequestInit) => Promise<{ bot: BotAnnouncement }> = api,
 ): Promise<BotAnnouncement> {
-  const { approvalMode, autoApprove, confirmFullAccess, organizationFullAccess, acknowledgeLocalAuto, ...ordinary } = patch;
+  const { approvalMode, autoApprove, confirmFullAccess: _confirm, organizationFullAccess: _orgFull, acknowledgeLocalAuto, ...ordinary } = patch;
   const mode = approvalMode ?? (autoApprove === undefined ? undefined : autoApprove ? "auto" : "ask");
-  // #1674: no private desktop channel (the desktop app on a remote server,
-  // a browser) is no reason to refuse Full here: the server decides. An
-  // organization server grants it to the bot's owner; any other answers why.
-  if (mode === "full" && (organizationFullAccess === true || !bridge)) {
-    // Organization server: no desktop channel; the server decides (policy,
-    // owner, the one-time confirmation it remembers for the bot).
+  if (mode === "full") {
     const result = await request(`/api/bots/${botId}/tasks/${threadId}`, { method: "PATCH",
-      body: JSON.stringify({ ...ordinary, approvalMode: "full", ...(confirmFullAccess === true ? { confirmFullAccess: true } : {}) }) });
+      body: JSON.stringify({ ...ordinary, approvalMode: "full" }) });
     return result.bot;
   }
-  if (mode === "full" && confirmFullAccess !== true) throw new Error("Confirm Full access for this thread first");
   if (mode === "custom" && !bridge) throw new Error("Custom approval, and leaving it, are set in the Sagax desktop app on the computer that runs this server");
-  if (mode && bridge) {
+  if (mode === "custom" && bridge) {
     if (Object.keys(ordinary).length) await request(`/api/bots/${botId}/tasks/${threadId}`, { method: "PATCH", body: JSON.stringify(ordinary) });
     return bridge.setMode(botId, mode, { threadId, threadOnly: true, acknowledgeLocalAuto: acknowledgeLocalAuto === true });
   }
@@ -137,10 +132,10 @@ export async function persistTaskApproval(
   return result.bot;
 }
 
-/** Persist one coalesced bot edit without ever putting Full/Custom authority
- * on the bot-accessible HTTP surface. Entering a trusted mode writes ordinary
- * fields first, then grants authority. Leaving Custom reverses that order so a
- * coalesced provider switch is validated after the bot is back in Ask/Auto.
+/** Persist one coalesced bot edit. Full access goes over HTTP like any other
+ * level (omb #2701). Custom still uses the packaged desktop's private channel.
+ * Leaving Custom reverses that order so a coalesced provider switch is
+ * validated after the bot is back in Ask/Auto.
  * Exported for a small ordering/security contract test. */
 export async function persistBotUpdate(
   botId: string,
@@ -152,7 +147,7 @@ export async function persistBotUpdate(
 ): Promise<BotAnnouncement> {
   const {
     approvalMode,
-    confirmFullAccess,
+    confirmFullAccess: _confirm,
     applyToAllThreads,
     organizationFullAccess,
     ...withThread
@@ -162,37 +157,38 @@ export async function persistBotUpdate(
   // names it, on its own request. Anywhere else it would be refused.
   const { threadId: openThreadId, ...withoutThread } = withThread;
   const ordinaryPatch: typeof withThread = withThread.modelSelection !== undefined ? withThread : withoutThread;
-  // #1674: without the private desktop channel (a remote server) Full goes
-  // to the server, which grants it on an organization server.
-  if (approvalMode === "full" && (organizationFullAccess === true || !trustedApprovals)) {
-    // Organization server: ordinary fields first, then the Full grant alone
-    // (the server refuses anything riding along with it). The open
-    // conversation is named so the level on screen is the one just saved.
-    if (Object.keys(ordinaryPatch).length) {
-      await request(`/api/bots/${botId}`, { method: "PATCH", body: JSON.stringify(ordinaryPatch), signal });
-    }
-    const result = await request(`/api/bots/${botId}`, { method: "PATCH", signal,
-      body: JSON.stringify({
-        approvalMode: "full",
-        ...(confirmFullAccess === true ? { confirmFullAccess: true } : {}),
-        ...(typeof openThreadId === "string" ? { threadId: openThreadId } : {}),
-      }) });
-    return result.bot;
-  }
-  const trustedMode = approvalMode === "full" || approvalMode === "custom"
-    ? approvalMode
-    : null;
   // Leaving Custom on any thread when the change reaches every thread still
   // needs the private bridge (team dialog applyToAllThreads).
   const leavesCustom = approvalMode !== undefined && approvalMode !== "custom" &&
     (approvalModeFor(currentBot ?? {}) === "custom" ||
       (applyToAllThreads === true && threadApprovalModes(currentBot ?? {}).includes("custom")));
+  // Full: HTTP for every client (omb #2701), except when leaving Custom, which
+  // still needs the packaged desktop's private channel first. Organization
+  // Full still goes alone after ordinary fields (#1674).
+  if (approvalMode === "full" && !leavesCustom) {
+    if (organizationFullAccess === true) {
+      if (Object.keys(ordinaryPatch).length) {
+        await request(`/api/bots/${botId}`, { method: "PATCH", body: JSON.stringify(ordinaryPatch), signal });
+      }
+      const result = await request(`/api/bots/${botId}`, { method: "PATCH", signal,
+        body: JSON.stringify({
+          approvalMode: "full",
+          ...(typeof openThreadId === "string" ? { threadId: openThreadId } : {}),
+        }) });
+      return result.bot;
+    }
+    const result = await request(`/api/bots/${botId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ ...ordinaryPatch, approvalMode: "full" }),
+      signal,
+    });
+    return result.bot;
+  }
+  const trustedMode = approvalMode === "custom" ? approvalMode : null;
 
   if (!trustedMode && !leavesCustom) {
     const result = await request(`/api/bots/${botId}`, {
       method: "PATCH",
-      // The Full confirmation is renderer-local and has already been removed
-      // above, including when a rapid later Ask/Auto choice was coalesced.
       // The all-threads scope rides along for Ask/Edits/Auto (team dialog).
       body: JSON.stringify(
         approvalMode === undefined ? ordinaryPatch : {
@@ -206,9 +202,6 @@ export async function persistBotUpdate(
     return result.bot;
   }
 
-  if (approvalMode === "full" && confirmFullAccess !== true) {
-    throw new Error("Confirm the Full access warning before enabling it");
-  }
   if (!trustedApprovals || approvalMode === undefined) {
     throw new Error("Custom approval, and leaving it, are set in the Sagax desktop app on the computer that runs this server");
   }
@@ -221,18 +214,14 @@ export async function persistBotUpdate(
   const rejectCancelledTrustedGrant = async () => {
     if (!signal.aborted) return;
     // IPC cannot cancel a grant that already reached the embedded server. If
-    // a newer selection or an unmount aborted this operation while
-    // Full/Custom was in flight, revoke it through the same private channel
-    // before reporting cancellation. The server permits this one fail-closed
-    // downgrade even if a turn happened to start in the response gap.
-    if (approvalMode === "full" || approvalMode === "custom") {
+    // a newer selection or an unmount aborted this operation while a private
+    // channel grant was in flight, revoke it before reporting cancellation.
+    if (trustedMode || leavesCustom) {
       try {
         await trustedApprovals.setMode(botId, "ask", { acknowledgeLocalAuto: false, ...(applyToAllThreads ? { allThreads: true } : {}) });
       } catch (error) {
         throw new Error(
-          `The cancelled ${approvalMode === "full" ? "Full access" : "Custom approval"} grant could not be revoked: ${
-            readableError(error)
-          }`,
+          `The cancelled ${approvalMode === "custom" ? "Custom approval" : "approval"} grant could not be revoked: ${readableError(error)}`,
         );
       }
     }

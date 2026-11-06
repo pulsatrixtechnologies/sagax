@@ -7,11 +7,12 @@
 // approvals ~1013-1050).
 //
 // The Auto branch of LocalComputerAutoWarning (choosing Auto while
-// bot.computer === "local") and the FullAccessWarning live here with their
-// triggers; the Works-on-picker branch (turning computer to "local" while
-// already on Auto) stays with AccessSection, next to that picker. The
-// warnings remember which bot they were opened for, so a bot switch while
-// one is up never applies the choice to the newly selected bot.
+// bot.computer === "local") lives here with its trigger; the Works-on-picker
+// branch (turning computer to "local" while already on Auto) stays with
+// AccessSection, next to that picker. The warning remembers which bot it was
+// opened for, so a bot switch while it is up never applies the choice to the
+// newly selected bot. Full access has no warning: it applies at once
+// (omb #2701 / PRO-RÈGLE).
 import { RoleRulesCard } from "./RoleRulesCard";
 import { useEffect, useState } from "react";
 import { Lock } from "lucide-react";
@@ -21,7 +22,7 @@ import { useAdvancedMode } from "@/lib/interface-mode";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
-import { fullAccessNeedsConfirmation, orgFullAccessFor } from "@/lib/full-access";
+import { orgFullAccessFor } from "@/lib/full-access";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { EMPTY_PERSONAL_SECTIONS, personalSectionNames, usePersonalSections } from "@/lib/personal-sections";
 import { viewerActorId } from "@/lib/viewer";
@@ -37,7 +38,6 @@ import { ApprovalModeSelector } from "../ApprovalModeSelector";
 import { AllowedRecipientsRow } from "./AllowedRecipientsRow";
 import { LifecycleHooksRow } from "./LifecycleHooksRow";
 import { CommandAllowlistDialog } from "../CommandAllowlistDialog";
-import { FullAccessWarning } from "../FullAccessWarning";
 import { LocalComputerAutoWarning } from "../LocalComputerAutoWarning";
 import { DescribedRow, HelpTip, PILL, PillSelect, SettingsGroup, Switch, SwitchRow, UnitField } from "../SettingsPrimitives";
 import { ManagedTeamsSettings } from "./ManagedTeamsSettings";
@@ -70,7 +70,6 @@ export function PermissionsSection({
   const ownerOrAdmin = useOwnerOrAdmin();
   const { draft, bulk, mixedFields } = useBotEditor();
   const [localAutoWarning, setLocalAutoWarning] = useState<string | null>(null);
-  const [fullAccessTarget, setFullAccessTarget] = useState<string | null>(null);
   const [commandAllowlistTarget, setCommandAllowlistTarget] = useState<{ botId: string; botName: string } | null>(null);
   const [primaryError, setPrimaryError] = useState<string | null>(null);
   // #1373: Full and Custom still wait for the turn to end. The selector
@@ -109,17 +108,21 @@ export function PermissionsSection({
   const orgFullAccess = draft && !bulk ? undefined : orgFullAccessFor(perspicaxOrg, bot, viewerId);
   // The menu shows the open conversation. The grant names that conversation
   // so the saved level is the one still on screen after the reply.
-  const grantOrgFull = (target: string, confirm: boolean) => {
-    dispatch({
-      type: "updateBot",
-      botId: target,
-      patch: {
-        approvalMode: "full",
-        organizationFullAccess: true,
-        ...(confirm ? { confirmFullAccess: true } : {}),
-        ...(bot.id === target ? { threadId: bot.threadId } : {}),
-      },
-    });
+  const applyFull = (target: string) => {
+    if (orgFullAccess !== undefined) {
+      if (orgFullAccess !== "allowed") return;
+      dispatch({
+        type: "updateBot",
+        botId: target,
+        patch: {
+          approvalMode: "full",
+          organizationFullAccess: true,
+          ...(bot.id === target ? { threadId: bot.threadId } : {}),
+        },
+      });
+      return;
+    }
+    dispatch({ type: "updateBot", botId: target, patch: { approvalMode: "full" } });
   };
   const levelNow = approvalMode;
   const approvalMixed = Boolean(bulk && mixedFields?.has("approvalMode"));
@@ -134,14 +137,8 @@ export function PermissionsSection({
       return;
     }
     setApprovalNotice(null);
-    if (mode === "full" && orgFullAccess !== undefined) {
-      if (orgFullAccess !== "allowed") return;
-      if (bulk || fullAccessNeedsConfirmation(bot, viewerId, true)) setFullAccessTarget(bot.id);
-      else grantOrgFull(bot.id, false);
-      return;
-    }
     if (mode === "full") {
-      setFullAccessTarget(bot.id);
+      applyFull(bot.id);
       return;
     }
     if (mode === "auto" && bot.computer === "local") {
@@ -150,10 +147,9 @@ export function PermissionsSection({
     }
     patch({ approvalMode: mode });
   };
-  // Full access the server does not apply yet (its owner's confirmation is
-  // missing): the same flow as choosing it, confirmation included.
+  // Re-apply Full to every thread that still holds an exception.
   const setApprovalModeAgain = () => {
-    if (orgFullAccess === undefined || orgFullAccess === "allowed") setFullAccessTarget(bot.id);
+    if (orgFullAccess === undefined || orgFullAccess === "allowed") applyFull(bot.id);
   };
   // How autonomously this bot may act on its own. A level next to the approval
   // level, not a Chief orchestrator: the server enforces it per bot
@@ -427,23 +423,6 @@ export function PermissionsSection({
           setLocalAutoWarning(null);
           if (!target) return;
           dispatch({ type: "updateBot", botId: target, patch: { approvalMode: "auto", acknowledgeLocalAuto: true } });
-        }}
-      />
-      <FullAccessWarning
-        open={fullAccessTarget !== null}
-        scope={orgFullAccess !== undefined ? "organization" : "bot"}
-        onCancel={() => setFullAccessTarget(null)}
-        onConfirm={() => {
-          const target = fullAccessTarget;
-          setFullAccessTarget(null);
-          if (!target) return;
-          // Edit N bots keeps the level as each bot's own change; its save
-          // takes the organization's route where there is no desktop channel
-          if (orgFullAccess !== undefined && !bulk) {
-            grantOrgFull(target, true);
-            return;
-          }
-          dispatch({ type: "updateBot", botId: target, patch: { approvalMode: "full", confirmFullAccess: true } });
         }}
       />
     </div>

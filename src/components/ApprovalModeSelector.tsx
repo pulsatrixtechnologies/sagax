@@ -56,10 +56,10 @@ export function approvalModeOptionsFor(driverKind: string, trustedModesAvailable
       // Antigravity has no native reviewer. Offer its explicit full-access
       // grant as Auto instead of a second choice that actually behaves as Ask.
       && (driverKind !== "antigravityAgent" || option.mode !== "auto")
-      && (trustedModesAvailable || option.mode === "ask" || option.mode === "edits" || option.mode === "auto" ||
-        // Organization server: the bot's owner sees Full (greyed when the
-        // organization turned it off); Custom stays desktop only.
-        (option.mode === "full" && orgFullAccess !== undefined && orgFullAccess !== "hidden")))
+      // Full is available from any client (omb #2701). Custom stays desktop
+      // only. Organization: the owner sees Full (greyed when turned off).
+      && (option.mode !== "custom" || trustedModesAvailable)
+      && (option.mode !== "full" || orgFullAccess !== "hidden"))
     .map((option) => {
       if (driverKind === "antigravityAgent" && option.mode === "full") {
         return {

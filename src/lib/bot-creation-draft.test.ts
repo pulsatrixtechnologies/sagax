@@ -20,7 +20,10 @@ describe("isolated creation draft", () => {
   it("keeps profile, memory and routine edits local until commitment", async () => {
     const network = vi.fn();
     const draft = new BotCreationDraft(EMPTY_BOT_DEFAULTS, vi.fn(), network as typeof api);
-    draft.patch({ name: "Ada", approvalMode: "full", confirmFullAccess: true });
+    // Full is a plain preference: no consent rides along, and the all-threads
+    // scope of bot settings never lands in the template.
+    draft.patch({ name: "Ada", approvalMode: "full", applyToAllThreads: true });
+    expect(draft.consent).toEqual({});
     draft.setMemory("MEMORY.md", "A synthetic preference");
     await draft.request("/api/routines", { method: "POST", body: JSON.stringify({ botId: draft.id,
       name: "Status", prompt: "Check status", schedule: { type: "daily", time: "09:00", weekdays: [1] } }) });

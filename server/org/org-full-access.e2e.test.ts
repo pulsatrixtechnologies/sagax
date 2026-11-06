@@ -167,24 +167,21 @@ posixOnly("organization Full access", () => {
     if (home) removeTempDir(home);
   });
 
-  it("FA-1: the owner confirms once, the turn bypasses prompts, host tools stay withheld", async () => {
-    // 2026-10-26 (owner): no organization switch, the owner's confirmation is the gate
+  it("FA-1: the owner turns Full on at once, the turn bypasses prompts, host tools stay withheld", async () => {
+    // 2026-10-26 (owner): no organization switch; omb #2701: Full needs no confirmation dialog
     expect((await api("GET", "/api/org", alice)).body.settings.allowFullAccess).toBe(true);
     const thread = `/api/bots/${zed.id}/tasks/${zed.threadId}`;
-    const unconfirmed = await api("PATCH", thread, erin, { approvalMode: "full" });
-    expect(unconfirmed.status, unconfirmed.text).toBe(409);
-    expect(unconfirmed.body.code).toBe("full_access_confirm_required");
     // the admin is not the owner
     // the admin never reaches the owner's private thread, and is not the
     // bot's owner either
-    expect((await api("PATCH", thread, alice, { approvalMode: "full", confirmFullAccess: true })).status).toBe(404);
-    const byAdmin = await api("PATCH", `/api/bots/${zed.id}`, alice, { approvalMode: "full", confirmFullAccess: true });
+    expect((await api("PATCH", thread, alice, { approvalMode: "full" })).status).toBe(404);
+    const byAdmin = await api("PATCH", `/api/bots/${zed.id}`, alice, { approvalMode: "full" });
     expect(byAdmin.body.code, byAdmin.text).toBe("full_access_owner_only");
-    const granted = await api("PATCH", thread, erin, { approvalMode: "full", confirmFullAccess: true });
+    const granted = await api("PATCH", thread, erin, { approvalMode: "full" });
     expect(granted.status, granted.text).toBe(200);
     expect(granted.body.task.approvalMode).toBe("full");
     expect(granted.body.bot.fullAccessConsent.principalId).toBe(erinId);
-    // confirmed once: the next grant for this bot needs no confirmation
+    // turning Full off and on again still needs no confirmation
     expect((await api("PATCH", thread, erin, { approvalMode: "ask" })).status).toBe(200);
     expect((await api("PATCH", thread, erin, { approvalMode: "full" })).status).toBe(200);
 

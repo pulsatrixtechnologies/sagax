@@ -53,8 +53,8 @@ it("takes cron through the real routine tools, applying the bot's own routine at
     };
     const schedule = { type: "cron" as const, expression: "0 9 1 * *", timeZone: "America/New_York" };
     const create = await proposal("propose_routine", {
-      name: "Monthly report", instructions: "Summarize last month's fixture activity; no external services.", schedule, overlap: "queue", enabled: false,
-    }, "Schedule a report at 9am New York time on the first of each month.");
+      name: "Monthly report", instructions: "Summarize last month's fixture activity; no external services.", schedule, overlap: "queue", enabled: false, run_on_startup: true,
+      }, "Schedule a report at 9am New York time on the first of each month, and also whenever the app starts.");
     expect(create.routineRequest).toMatchObject({ version: 1, operation: { action: "create", routine: { schedule } }, undo: { name: "Monthly report", schedule } });
     // The creator asked for it paused (new routines start live by default).
     expect(create.subtitle).toContain("Created paused; resume it when ready.");
@@ -64,17 +64,18 @@ it("takes cron through the real routine tools, applying the bot's own routine at
     expect(create.subtitle).not.toContain("0 9 1 * *");
     const { resultId: routineId } = applied(create);
     const current = async () => (await api("GET", "/api/routines")).routines.find((routine: any) => routine.id === routineId);
-    expect(await current()).toMatchObject({ schedule, enabled: false, nextRunAt: null, runOn: "maus", overlap: "queue" });
+    expect(await current()).toMatchObject({ schedule, enabled: false, nextRunAt: null, runOn: "maus", overlap: "queue", runOnStartup: true });
     expect(create.subtitle).toContain("Queue one scheduled run");
+    expect(create.subtitle).toContain("On startup: Also runs once each time Sagax starts");
     const firstResume = await proposal("propose_routine_action", { action: "resume", routine_id: routineId }, "Resume the monthly report now.");
     expect(firstResume.subtitle).toContain("Next 3 runs (America/New_York)");
     applied(firstResume);
-    expect(await current()).toMatchObject({ schedule, enabled: true });
+    expect(await current()).toMatchObject({ schedule, enabled: true, runOnStartup: true });
     expect((await current()).nextRunAt).toBe(nextCronRuns(schedule, firstResume.routineRequest.createdAt, 1)[0]);
 
     const cardCount = (await messages()).filter(message => message.card?.routineRequest).length;
     await proposal("propose_routine", {
-      name: "Renamed monthly report", instructions: "Summarize last month's fixture activity; no external services.", schedule, overlap: "queue",
+      name: "Renamed monthly report", instructions: "Summarize last month's fixture activity; no external services.", schedule, overlap: "queue", run_on_startup: true,
     }, "Try scheduling the same work again under a different name.", true);
     const duplicateResponse = providerEvidence().at(-1).evidence.find((entry: any) => entry.step?.tool === "propose_routine").response;
     expect(duplicateResponse.result.content[0].text).toContain(routineId);
@@ -84,18 +85,22 @@ it("takes cron through the real routine tools, applying the bot's own routine at
 
     const lastDay = { ...schedule, expression: "0 9 L * *" };
     const update = await proposal("propose_routine_action", {
-      action: "update", routine_id: routineId, changes: { schedule: lastDay, overlap: "skip" },
+      action: "update", routine_id: routineId, changes: { schedule: lastDay, overlap: "skip", run_on_startup: false },
     }, "Change that report to the last day of each month at the same time and zone.");
     const listed = providerEvidence().at(-1).evidence.find((entry: any) => entry.step?.tool === "list_routines").response.result.content[0].text;
     // The compact listing (#1646): one JSON row per routine, a failure
     // streak only when there is one.
     expect(listed).toContain('"type":"cron"');
     expect(listed).toContain('"timeZone":"America/New_York"');
+    expect(listed).toContain('"overlap":"queue"');
+    expect(listed).toContain('"runOnStartup":true');
     expect(listed).not.toContain('"failureStreak"');
     applied(update);
-    expect(update.routineRequest.undo.before).toMatchObject({ schedule, overlap: "queue" });
+    expect(update.routineRequest.undo.before).toMatchObject({ schedule, overlap: "queue", runOnStartup: true });
+    expect(update.subtitle).toContain("On startup: Runs only on its schedule");
     expect((await current()).schedule).toEqual(lastDay);
     expect((await current()).overlap).toBeUndefined();
+    expect((await current()).runOnStartup).toBeUndefined();
     const pause = await proposal("propose_routine_action", { action: "pause", routine_id: routineId }, "Pause the monthly report.");
     applied(pause);
     expect(await current()).toMatchObject({ enabled: false, nextRunAt: null, schedule: lastDay });

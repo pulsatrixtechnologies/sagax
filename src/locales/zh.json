@@ -395,8 +395,6 @@
   "approvalMode.learnMore": "了解更多",
   "approvalMode.customLocalOnly": "自定义批准只能在已安装的桌面应用中更改",
   "approvalMode.customLocalOnlyDot": "自定义批准只能在已安装的桌面应用中更改。",
-  "approvalMode.antigravityLocalOnly": "自动（完全访问）可在已安装的桌面应用中使用。",
-  "approvalMode.trustedLocalOnly": "完全访问和自定义可在已安装的桌面应用中使用。",
   "approval.someone": "有人",
   "approval.tool.action": "执行操作",
   "approval.tool.runCommand": "执行命令",
@@ -976,9 +974,7 @@
   "computer.vpsAliasHint": "请在{settings}中配置 VPS 的 SSH 别名。自动只会复用已存在且就绪的容器。",
   "computer.twoDesktopsTitle": "同时观看两个本地虚拟机桌面，且不暂停任何机器人",
   "computer.twoDesktops": "打开两个桌面",
-  "computer.askedHands": "请求你接手：",
   "computer.takeControl": "接管控制",
-  "computer.dismiss": "忽略",
   "computer.youHaveWheel": "现在由你操作——在你交还之前，机器人的点击和按键都会被拒绝。",
   "computer.useOpenDesktop": "请使用“打开实时桌面”来操作。",
   "computer.useOpenDesktopVm": "请使用“打开实时桌面”来操作——这里的预览仅供观看。",
@@ -2629,5 +2625,9 @@
   "botPanel.library.pageState.revoked": "已撤销",
   "botPanel.library.pageState.expired": "已过期",
   "settings.experimental.browserWindows": "此 Windows 机器上尚不可用：用 `openmausbot browser install` 安装浏览器引擎。",
-  "settings.experimental.skillAuthoring": "允许机器人草拟技能供你审核"
+  "settings.experimental.skillAuthoring": "允许机器人草拟技能供你审核",
+  "approvalMode.antigravityLocalOnly": "自动（完全访问）可在已安装的桌面应用中使用。",
+  "approvalMode.trustedLocalOnly": "完全访问和自定义可在已安装的桌面应用中使用。",
+  "computer.askedHands": "请求你接手：",
+  "computer.dismiss": "忽略"
 }

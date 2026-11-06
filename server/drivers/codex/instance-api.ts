@@ -1,22 +1,67 @@
 /** Snapshot, auth and lifecycle surface for a Codex provider instance. */
+import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
-import type { ProviderInstance, ProviderSnapshot } from "../../contracts.ts";
-import { cliVersionReader, execCli } from "../../procs.ts";
+import { join } from "node:path";
+import type { ProviderInstance, ProviderSnapshot, TextGenerationOptions } from "../../contracts.ts";
+import { cliVersionReader, execCli, killCliTree, spawnCli } from "../../procs.ts";
 import { serverVersion } from "../../environment.ts";
 import { probeCodexSkills } from "../harness-command-probe.ts";
 import { reviewCodexPermission } from "../codex-review.ts";
-import { CODEX_SIGN_IN_EXPIRED } from "../codex-errors.ts";
+import { CODEX_SIGN_IN_EXPIRED, codexUserError } from "../codex-errors.ts";
 import { codexAccountEmail } from "../codex-identity.ts";
 import { codexLoginStatus } from "../codex-login.ts";
+import { decodeCodexSelection } from "../codex-catalog.ts";
+import { codexBackgroundModel, runCodexOneShot } from "../codex-background-text.ts";
+import { codexLocalProviderArgs } from "../local-inject.ts";
 import { DRIVER_KIND } from "./config.ts";
-import { codexAccessLaunch, codexReleaseUpdate } from "./launch-args.ts";
+import { chatgptPlanCodexArgs, codexAccessLaunch, codexReleaseUpdate, managedCodexArgs } from "./launch-args.ts";
 
 export function buildCodexInstanceApi(bag: Record<string, any>): ProviderInstance {
   const {
-    instanceId, input, config, plan, planUnavailable, planAuth, childEnv,
+    instanceId, input, config, plan, planUnavailable, planAuth, planDirectory, childEnv,
     refreshModels, startupModelRefresh, authentication, loginMark, loginAccepted, loginRejected,
     active, sessions, listeners, sendTurn, turnReviewers,
   } = bag;
+
+  /** Memory upkeep / skill review one-shot: `codex exec` with no tools, empty folder
+   * (./codex-background-text.ts). Offered as generateMemoryText only. */
+  const generateMemoryText = async (prompt: string, options: TextGenerationOptions = {}): Promise<string> => {
+    if (startupModelRefresh) await startupModelRefresh;
+    if (bag.disposed) throw new Error("This provider was removed.");
+    if (planUnavailable) throw new Error(planUnavailable);
+    const env = childEnv();
+    let providerArgs: string[] = [];
+    if (planAuth) {
+      if (bag.planSigningOut) throw new Error("This ChatGPT account is being disconnected.");
+      if (!bag.models.options.length) await refreshModels();
+      env.SAGAX_CHATGPT_TOKEN = await planAuth.accessToken();
+      if (bag.planSigningOut || bag.disposed) throw new Error("This ChatGPT account is being disconnected.");
+      mkdirSync(join(planDirectory, "codex"), { recursive: true, mode: 0o700 });
+      providerArgs = chatgptPlanCodexArgs();
+    } else if (config.managed) {
+      if (!input.environment.SAGAX_COMPANY_API_KEY || !input.environment.CODEX_HOME) {
+        throw new Error("Company model access is unavailable. Reconnect your organization; personal billing will not be used.");
+      }
+      providerArgs = managedCodexArgs(config.managed);
+    }
+    const id = codexBackgroundModel(bag.models);
+    if (!id) throw new Error("Codex lists no model for background calls. Refresh models in Settings → Model providers → Codex.");
+    const selection = planAuth || config.managed ? { model: id, modelProvider: null as string | null } : decodeCodexSelection(id);
+    if (!planAuth && !config.managed) providerArgs = codexLocalProviderArgs(env, id);
+    const route = planAuth ? "plan" as const : config.managed ? "other" as const : "own" as const;
+    return runCodexOneShot({
+      spawn: spawnCli,
+      kill: killCliTree,
+      cli: config.cli,
+      env,
+      prompt,
+      model: selection.model ?? id,
+      modelProvider: selection.modelProvider,
+      providerArgs,
+      options,
+      describeError: (message) => codexUserError(message, route),
+    });
+  };
 
     const versionOf = cliVersionReader(config.cli);
     const snapshot = async (): Promise<ProviderSnapshot> => {
@@ -104,6 +149,7 @@ export function buildCodexInstanceApi(bag: Record<string, any>): ProviderInstanc
     } finally { bag.planSigningOut = false; }
   },
   snapshot,
+  generateMemoryText,
   reviewPermission: (prompt, signal) => reviewCodexPermission({
     cli: config.cli,
     env: childEnv(),

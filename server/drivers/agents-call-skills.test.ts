@@ -4,7 +4,7 @@ import { callTool, type ToolCallContext } from "./agents-call.ts";
 function context(reply: unknown) {
   const paths: string[] = [];
   const ctx: ToolCallContext = { botId: "fixture", threadId: "fixture-thread", depth: 0,
-    externalRuntime: false, coordinating: false, sharedComputers: false,
+    coordinating: false, externalRuntime: false, sharedComputers: false,
     client: { api: async (path) => { paths.push(path); return reply as Record<string, unknown>; },
       apiResponse: async () => ({ ok: true, status: 200, body: {} }) } };
   return { ctx, paths };

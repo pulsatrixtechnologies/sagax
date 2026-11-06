@@ -12,8 +12,8 @@ function context(body: Record<string, unknown>, calls: Call[], status = 200): To
     botId: "bot-ws",
     threadId: "thread-ws",
     depth: 0,
-    externalRuntime: false,
     coordinating: false,
+    externalRuntime: false,
     sharedComputers: false,
     client: {
       api: async () => ({}),

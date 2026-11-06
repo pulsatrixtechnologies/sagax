@@ -175,7 +175,9 @@ describe("scopes", () => {
       ["POST", "/api/workers/laptop/turns/m1"],
       ["GET", "/api/threads/t/files"], ["GET", `/api/threads/t/files/${"a1".repeat(12)}`],
       ["POST", `/api/threads/t/files/${"a1".repeat(12)}/pin`],
-      // 2026-10-22: a webhook runs on the bot's own computer, so its
+      // the person a bot asks to sign in answers its card
+      ["POST", "/api/bots/x/sign-in-cards/m/done"], ["POST", "/api/bots/x/sign-in-cards/m/cancel"],
+      // 2026-10-22 (JC): a webhook runs on the bot's own computer, so its
       // owner creates and manages it without the server-settings right; the
       // handler (webhookDelegateRefusal, webhookExecTargetAdminOnly) keeps the
       // limits (an admin's bot, a Microsoft trigger, a server run target).
@@ -222,6 +224,9 @@ describe("scopes", () => {
       ["POST", "/api/org"], ["POST", "/api/org/invites"], ["GET", "/api/org/invites"],
       ["GET", "/api/mail/settings"], ["PUT", "/api/mail/settings"], ["POST", "/api/mail/test"], // mail transport: admin only
       ["GET", "/api/something-new"], // anything unlisted is admin until listed
+      ["POST", "/api/bots/x/sign-in-cards/m/provide"], ["POST", "/api/browser-engine/install"],
+      // the sign-in card answers done or cancel only: no saved-login store here
+      ["POST", "/api/bots/x/sign-in-cards/m/save-login"],
     ] as const) expect(requiredScope(method, path), `${method} ${path}`).toBe("admin");
   });
 
@@ -684,7 +689,7 @@ describe("resolveRequestAuth", () => {
     }
     expect(resolveRequestAuth(
       request({ host: "127.0.0.1:8799" }, "POST"),
-      options("/api/internal/ask-bot"),
+      options("/api/internal/coordinate-bots"),
     ).auth?.kind).toBe("loopback");
   });
 
@@ -905,7 +910,7 @@ describe("loopback trust: owner on one person's machine, service on a shared wor
     ["GET", "/api/auth/session"],
     ["GET", "/api/edition"],
     ["GET", "/api/brand"],
-    ["POST", "/api/internal/ask-bot"],
+    ["POST", "/api/internal/coordinate-bots"],
     ["GET", "/api/internal/agents"],
     ["POST", "/api/internal/hook"],
     ["POST", "/api/testing/internal-capability"],

@@ -60,6 +60,7 @@ const ENGINES: Readonly<Record<string, EngineRow>> = {
   kimiAgent: { resume: true }, // acp/kimi.ts:500 (loadSession:true, :6)
   droidAgent: { resume: true }, // acp/droid.ts:217 (loadSession:true, :5)
   cursorAgent: { resume: true }, // acp/cursor.ts:387
+  museCode: { resume: true }, // muse-code.ts session/resume with the Muse session id
   opencodeGo: { resume: true }, // acp/opencode-go.ts:838
   qwenAgent: { resume: true }, // acp/qwen.ts:219
   hermesAgent: { resume: true }, // acp/hermes.ts:418
@@ -74,6 +75,7 @@ const ENGINES: Readonly<Record<string, EngineRow>> = {
   mistral: CHAT_ROW, // mistral.ts:48
   cerebras: CHAT_ROW, // cerebras.ts:41
   groq: CHAT_ROW, // groq.ts:41
+  meta: CHAT_ROW, // meta.ts:54
 };
 
 /** True when the engine replays the thread itself from SendTurnInput.transcript

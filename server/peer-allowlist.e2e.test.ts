@@ -262,6 +262,9 @@ describe("peer allow-list", () => {
       expect(await peerNames(clive.id, token)).toEqual(["Engineer"]);
       const state = (await api("GET", "/api/bots?messages=0")).body.bots.find((bot: any) => bot.id === clive.id);
       expect(state.managedSections ?? []).toEqual([]);
+      // Primary again it covers every bot on a solo server (main 2026-10-20,
+      // peer-roster.ts primaryCovers), with no grant restored.
+      expect(await peerNames(clive.id, token)).toEqual(["Engineer"]);
     } finally {
       for (const bot of [clive, specialist]) {
         await api("POST", `/api/bots/${bot.id}/interrupt`, {}).catch(() => undefined);

@@ -69,8 +69,8 @@ export function toolCallContextFromEnv(env: NodeJS.ProcessEnv): ToolCallContext 
         return launchedDepth;
       }
     },
-    externalRuntime: profile.externalRuntime,
-    coordinating: profile.coordinating,
+    externalRuntime: profile.externalRuntime === true,
+    coordinating: profile.coordinating === true,
     sharedComputers: profile.sharedComputers,
     client: harnessClientFromEnv(env),
     remoteSupport: remoteSupportFromEnv(env),

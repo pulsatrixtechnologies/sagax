@@ -157,7 +157,12 @@ export function createPrepareClaimStartTurn(host: StartTurnHost) {
   // never acquire authority by guessing the latest user as its origin.
   const pendingSource = state.requestMessageId ?? store.activePath(state.threadId).findLast((message: any) => message.role === "user")?.id;
   if (!state.warmOnly && pendingSource) store.patchMessage(state.threadId, pendingSource, { requestPending: true });
-  if (!state.warmOnly && state.opts?.coordination) directCoordinationSettlers.set(state.dispatchClaimId, state.opts.coordination.settle);
+  if (!state.warmOnly && state.opts?.coordination) {
+    directCoordinationSettlers.set(state.dispatchClaimId, {
+      nodeId: state.opts.coordination.id,
+      settle: state.opts.coordination.settle,
+    });
+  }
   // Ordinary sources need the same exact completion ownership as queued
   // follow-ups: any normal turn may ask teammates to coordinate work.
   // A warm has no turn to settle.

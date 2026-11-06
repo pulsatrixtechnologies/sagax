@@ -220,7 +220,7 @@ describe("reachability guard: what a person's direct chat is told", () => {
   // server/index.ts startTurn: a person's own message, boundedCoordination on
   const team = [{ id: "chief", name: "Atlas" }, { id: "b2", name: "Nova" }];
   const PROMPTS: Record<string, string> = {
-    chief: chiefOfStaffSystemPrompt("chief", team, true, true),
+    chief: chiefOfStaffSystemPrompt("chief", team, true),
     roster: peerRosterSystemPrompt(team.slice(1), true, false),
     rosterCreator: peerRosterSystemPrompt(team.slice(1), true, true),
     connectorsNone: engineConnectorsPrompt({ driver: "codex", claudeAi: false, grokCloud: false }),

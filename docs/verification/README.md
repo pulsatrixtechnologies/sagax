@@ -143,7 +143,8 @@ and HTTP tailnet endpoint refresh without touching a real Tailscale installation
 
 The [external runtimes recipe](external-runtime.md) proves a bot's standing
 comms capability from `external-runtimes.json` against a disposable server and
-the fake engine: scope, on-demand token reads, and immediate delegation drain.
+the fake engine: scope, on-demand token reads, `coordinate_bots` roots polled
+through `assignment_status`, and immediate dispatch to a free teammate.
 
 The [cloud preview fixture](cloud-preview.md) mounts the real Computer panel
 against an isolated server for image decoding, loading, and recovery UI checks.
@@ -328,3 +329,13 @@ state. A green unit test alone does not prove a user workflow.
 Interrupt the `launch` process with Ctrl-C. It stops the exact child it owns and
 removes only its temporary data directory. The server log remains at the
 printed path. Never kill processes by name and never delete a broad temp root.
+
+## Also
+
+- [Claude cold prewarm](claude-cold-prewarm.md)
+- [Cursor secondary monitors](cursor-secondary-monitors.md)
+- [Flow superseded tenants](flow-superseded.md)
+- [Grok ACP cold start](grok-acp-cold-start.md)
+- [HTTP MCP prewarm](http-mcp-prewarm.md)
+- [Prompt diet](prompt-diet.md)
+- [Routine smoke](routine-smoke.md)

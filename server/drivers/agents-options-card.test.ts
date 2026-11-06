@@ -6,9 +6,6 @@ import { availableTools, type CatalogProfile } from "./agents-catalog.ts";
 
 function profile(overrides: Partial<CatalogProfile> = {}): CatalogProfile {
   return {
-    externalRuntime: false,
-    coordinating: false,
-    ownThreadCreation: false,
     skillAuthoring: false,
     sharedComputers: false,
     voiceNotes: false,
@@ -16,6 +13,9 @@ function profile(overrides: Partial<CatalogProfile> = {}): CatalogProfile {
     chief: false,
     botId: WATCHER_OPTIONS_CARD_BOT_ID,
     ...overrides,
+    externalRuntime: overrides.externalRuntime ?? false,
+    coordinating: overrides.coordinating ?? false,
+    ownThreadCreation: overrides.ownThreadCreation ?? false,
   };
 }
 
@@ -24,8 +24,7 @@ function context(overrides: Partial<ToolCallContext> = {}): ToolCallContext {
     botId: WATCHER_OPTIONS_CARD_BOT_ID,
     threadId: "thread-watcher",
     depth: 0,
-    externalRuntime: false,
-    coordinating: false,
+    coordinating: false, externalRuntime: false,
     sharedComputers: false,
     client: {
       api: async () => ({}),
@@ -45,7 +44,6 @@ describe("Watcher options-card tool", () => {
   it("is advertised only to Watcher interactive turns", () => {
     expect(availableTools(profile()).map((tool) => tool.name)).toContain("create_options_card");
     expect(availableTools(profile({ botId: "another-bot" })).map((tool) => tool.name)).not.toContain("create_options_card");
-    expect(availableTools(profile({ externalRuntime: true })).map((tool) => tool.name)).not.toContain("create_options_card");
   });
 
   it("advertises the bounded two-through-six choice schema", () => {

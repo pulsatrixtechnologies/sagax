@@ -58,7 +58,7 @@ function expectMemoryInTurn(request: ChatRequest, text: string) {
   expect(turn.slice(-text.length)).toBe(text);
 }
 
-it.each(["openaiCompat", "groq"] as const)("%s runs structured MCP calls through real harness approval and continuation, preserving text and cancellation", async instanceId => {
+it.each(["openaiCompat", "groq", "meta"] as const)("%s runs structured MCP calls through real harness approval and continuation, preserving text and cancellation", async instanceId => {
   const requests: ChatRequest[] = [];
   let scenario = "allow";
   const upstream = createServer(async (req, res) => {
@@ -143,7 +143,7 @@ it.each(["openaiCompat", "groq"] as const)("%s runs structured MCP calls through
         await api("PATCH", "/api/instances/claude", { tools: false }, 400);
         const changed = await api("PATCH", `/api/instances/${instanceId}`, { tools: false });
         const instance = changed.instances.find((item: any) => item.instanceId === instanceId);
-        expect(instance.capabilities).toMatchObject({ agentsMcp: false });
+        expect(instance.capabilities).toMatchObject({ agentsMcp: false }); // Composio removed (main): no composioMcp
       }
       await api("PATCH", `/api/mcp/servers/${mode}`, { enabled: true });
       const { bot } = await control(["new-bot", "--name", `API tool ${mode}`]);

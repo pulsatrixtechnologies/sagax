@@ -193,6 +193,10 @@ beforeAll(async () => {
       // a hidden conversation's approval expires; seconds here, not minutes
       SAGAX_HIDDEN_APPROVAL_TTL_MS: "4000",
       SAGAX_TEST_INTERNAL_CAPABILITY_KEY: TEST_CAPABILITY_KEY,
+      // The sign-in case names the bot's browser as its place; Works on is
+      // read as Auto otherwise (AGENTS.md "Workspace: always Auto").
+      SAGAX_TEST_FIXED_WORKSPACE: "1",
+      SAGAX_TEST_SEAMS: "1",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });

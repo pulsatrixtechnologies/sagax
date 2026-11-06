@@ -30,6 +30,7 @@ describe("agents catalog: the agent-to-agent tools", () => {
     const direct = names({ SAGAX_AGENT_API: "1" });
     expect(direct).toContain("list_bots");
     expect(direct).toContain("delegate_bot");
+    expect(direct).not.toContain("coordinate_bots");
   });
 
   it("annotates exactly the read tools read-only, matching the core policy", () => {

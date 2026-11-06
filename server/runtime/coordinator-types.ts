@@ -1,6 +1,29 @@
 import type { WorkOrigin } from "../peers/peer-provenance.ts";
-import type { EnvelopeNames, Level, Limits } from "./types.ts";
-export type HandoffStatus = "source" | "queued" | "running" | "waiting" | "resume" | "completed" | "failed" | "cancelled" | "expired";
+import type { LegacyThreadResolver } from "./import-legacy.ts";
+import type {
+  EnvelopeNames,
+  Level,
+  Limits,
+  Mode,
+  Origin,
+  Outcome,
+  Owner,
+  Reply,
+  Requester,
+  StatusView,
+  TurnEvidence,
+} from "./types.ts";
+
+export type HandoffStatus =
+  | "source"
+  | "queued"
+  | "running"
+  | "waiting"
+  | "resume"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "expired";
 
 /** A coordinated turn as the server reads it: who runs it where, what it
  * was asked, how far it got. Projected from an Assignment row. */
@@ -31,6 +54,22 @@ export interface HandoffView {
   restarts: number;
   /** Its next turn, or the one running now, follows a restart (runtime types.ts). */
   restart?: "rerun" | "cut" | "teammates";
+  /** work: do it; consult: answer, act on nothing; notify: one-way. */
+  mode: Mode;
+  /** resume: the requester is woken; poll: it reads its inbox; none: nothing comes back. */
+  reply: Reply;
+  outcome?: Outcome;
+  outcomeDetail?: string;
+  /** While parked: the exact question for the person. */
+  question?: string;
+  /** While parked on the person's cards (a root): the cards' message ids. */
+  cards?: string[];
+  /** While queued to continue in place (after a step cap, or a seat the
+   * host holds it for): why, where the steps so far are, and how many
+   * continuations so far including this one. */
+  continuation?: { note: string; handoffPath?: string; count: number };
+  /** A root that is one step of a room goal run: that run's id. */
+  goalRunId?: string;
   /** The requester only passes it on: its reply goes to the person as is (Assignment.relay). */
   relay?: boolean;
   /** A one-way notice (send_to_bot, an aside): nothing returns to the
@@ -40,6 +79,65 @@ export interface HandoffView {
   consult?: boolean;
   /** Admitted ahead of other queued work (send_to_bot priority now). */
   priority?: "now";
+}
+
+/** A person's or a routine's own turn, as a root (one per request). */
+export interface BeginTurnRequest {
+  /** The turn's dispatch claim id: the root id, and what coordinate_bots keys its hand-offs on. */
+  id: string;
+  address: RoomAddress;
+  /** The person's message or the routine's instructions. */
+  brief: string;
+  level: Level;
+  opener?: HandoffOpener;
+  origin?: WorkOrigin;
+  /** A room goal run's step: the run's id (HandoffView.goalRunId). */
+  goalRunId?: string;
+  /** Who the tree acts for (a principal id, or the solo owner): harness-set,
+   * never shown. Two trees join one request only for the same known person
+   * (runtime Assignment.person). */
+  person?: string;
+}
+
+/** How a host-run turn ended. `cap` continues the same node in place (a
+ * step cap, a seat the turn could not get); `cards` parks it on the person. */
+export interface HostTurnResult {
+  ok: boolean;
+  text: string;
+  evidence?: TurnEvidence;
+  stalled?: boolean;
+  cap?: { note: string; handoffPath?: string };
+  cards?: { question: string; ids: string[] };
+}
+
+/** Who hands the work on, as the host knows it from the turn's capability:
+ * a person's chat, a routine run, a webhook, an external runtime, a Cloud
+ * guest. Written on a fresh root and copied down its tree. */
+export interface HandoffOpener {
+  requester: Requester;
+  origin: Origin;
+}
+
+export interface HandoffOptions {
+  /** "auto" (main 2026-10-19, consultation of the requester): a
+   * consultation when the target is up the requester's own tree, else work.
+   * A consultation may go back up its tree; work may not. */
+  mode?: Mode | "auto";
+  reply?: Reply;
+  /** Where the host put the work: the teammate's standing thread, or a
+   * (new) work thread, which is the default. The host picks the thread;
+   * this is recorded as the row's destination kind. */
+  thread?: "standing" | "new";
+  /** A peer-review card allowed this before it was sent. */
+  approvalGranted?: boolean;
+  /** Run a finished teammate again with new work. */
+  rework?: boolean;
+  /** A room brief shown once per call. */
+  requestBatchKey?: string;
+  doneWhen?: string;
+  /** The requester only passes it on: its reply goes to the person as is
+   * (Assignment.relay). Only a direct thread relays: a room shows every reply. */
+  relay?: boolean;
 }
 
 /** coordinator.handedOutOutcome: what a conversation's handed-out work came to. */
@@ -62,6 +160,8 @@ export interface ComposedTurn {
   text: string;
   note: string;
   restartNote: string;
+  /** Which execution of the node this is (runtime types.ts RunInput.turn). */
+  turn: "first" | "resume" | "rerun" | "answered" | "continued";
   /** A resume a teammate's question made due while other work is still
    * out: the bots whose questions it passes on. */
   asked?: string[];
@@ -91,16 +191,11 @@ export interface CoordinatorHost {
    */
   slotUse?(node: HandoffView): { used: number; max: number; hardBlocked: boolean } | undefined;
   /** Run one turn of the assignee with the composed text; resolves when the
-   * engine settles. `stalled`: the host's stall watchdog stopped the turn
-   * (a room turn too, during its setup), so it fails as `stalled`, not as a
-   * provider error. */
-  run(node: HandoffView, resumed: boolean, signal: AbortSignal, composed: ComposedTurn): Promise<{
-    ok: boolean;
-    text: string;
-    stalled?: boolean;
-    /** Harness-observed tools/commands for done_when checks (#1818). */
-    evidence?: { toolCalls?: number; tools?: string[]; commands?: number; summary?: string };
-  }>;
+   * engine settles. For a root (no parentId) this is the person's own
+   * conversation continuing: person-visible, never internal. `stalled`: the
+   * host's stall watchdog stopped the turn (a room turn too, during its
+   * setup), so it fails as `stalled`, not as a provider error. */
+  run(node: HandoffView, resumed: boolean, signal: AbortSignal, composed: ComposedTurn): Promise<HostTurnResult>;
   /** A resume whose settled children all only relay (HandoffView.relay):
    * show their replies to the person as the answer, in the requester's
    * conversation, and return true; the requester then runs no turn. False
@@ -113,7 +208,8 @@ export interface CoordinatorHost {
   names(node: HandoffView, parent?: HandoffView): EnvelopeNames;
   /** A teammate ended its turn on a question for the person: show it where
    * the work was asked for. `restored` is the restart's re-park: it shows the
-   * question again only if no card for it is still open. */
+   * question again only if no card for it is still open. For a root parked
+   * on its own cards, the cards already show; show nothing more. */
   park(node: HandoffView, question: string, restored?: boolean): void;
   /** Still parked (runtime inputRemindMs, then daily): the same question
    * again, in full, where the person reads. The work keeps waiting. */
@@ -126,10 +222,19 @@ export interface CoordinatorHost {
   unparked?(node: HandoffView, reason: string, defaulted: boolean): void;
   /** The permission level the target thread will actually run with, after
    * the host applied any delegated level, and its engine kind. Recorded on
-   * the assignment so the envelope states the truth (invariant I6). */
-  levelOf(target: RoomAddress): { level: Level; driverKind?: string };
+   * the assignment so the envelope states the truth (invariant I6). For a
+   * hand-off, `source` is the requesting node's address: a Chief's level
+   * flows into a room with the hand-off (never onto the shared thread), so
+   * the host resolves it from the source, as the room turn will. */
+  levelOf(target: RoomAddress, source?: RoomAddress): { level: Level; driverKind?: string };
   /** The conversation is a Chief of Staff's. */
   chiefOf(address: RoomAddress): boolean;
+  /** What the cut turn of this node already did outward (sent, posted,
+   * pushed, paid), as short labels, read from the thread's activity since
+   * the turn began. Asked once at startup for a running node a restart
+   * cut, before any rerun: a turn that acted outward is not run again.
+   * Optional; absent or empty means nothing known. */
+  outward?(node: HandoffView): string[];
 }
 
 export interface Coordinator {
@@ -144,11 +249,36 @@ export interface Coordinator {
    * (no room groupId). Indexed store read for the activity panel; identical
    * membership to scanning all() for those parents. */
   directChildrenOf(botId: string, threadId: string): HandoffView[];
-  /** Throws an Error whose message is the typed refusal the caller shows the model. */
+  /** Hand work on from a running node: the requester's own root (its turn's
+   * generation, begun by beginTurn) or a teammate's node (`parentId`).
+   * `joined`: the request joined another tree's identical live request for
+   * the same person (runtime Assignment.joins). Throws an Error whose
+   * message is the typed refusal the caller shows the model. */
   enqueue(source: RoomAddress, generation: string, parentId: string | undefined, target: RoomAddress, key: string, text: string,
     approvalGranted?: boolean, rework?: boolean, sourceText?: string, requestBatchKey?: string, origin?: WorkOrigin,
     mode?: "work" | "consult" | "notify" | "auto", person?: string, relay?: boolean, doneWhen?: string, request?: string,
     extra?: { priority?: "now"; defaultAnswer?: string }): { node: HandoffView; duplicate: boolean; joined?: boolean };
+  /** One assignment with its children and inbox (assignment_status). */
+  status(id: string): StatusView | undefined;
+  /** Undelivered inbox items for a polling requester, marked delivered. */
+  poll(owner: Owner): { items: StatusView["inbox"]; assignments: HandoffView[] };
+  /** Non-terminal work the conversation in this thread is waiting on, rooms included. */
+  outstandingFor(threadId: string): HandoffView[];
+  /** A person's or routine's own turn begins: its root, running. */
+  beginTurn(req: BeginTurnRequest): HandoffView;
+  /** That turn ended (completed, failed, parked on cards, or continuing in place). */
+  endTurn(id: string, result: HostTurnResult): void;
+  /** The person acted on a parked node's cards (a root or a child): the
+   * node runs its next execution with the harness text. False when the
+   * node is not parked. */
+  answerNode(id: string, text: string): boolean;
+  /** The same as answerNode; kept one release for the card paths that
+   * were written against it. */
+  answerRoot(id: string, text: string): boolean;
+  /** The root parked on the person's cards in this thread, if any. */
+  parkedDirect(threadId: string): HandoffView | undefined;
+  /** Remove terminal trees that finished before `before`. */
+  prune(before: number): number;
   sharedRequest(node: HandoffView): { id: string; botIds: string[] };
   /** The host's own turn ended; `stalled` when its stall watchdog stopped it. */
   sourceSettled(generation: string, ok: boolean, stalled?: boolean): void;
@@ -232,4 +362,8 @@ export interface CoordinatorOptions {
   /** The confidential threads, read once when the runtime opens: their
    * teammate work is forgotten (docs/confidential-threads.md). */
   confidentialThreads?: () => Iterable<string>;
+  /** Names the threads the one-time delegation-ledger import cannot (a
+   * target's standing thread, a source thread's bot); without it those
+   * rows carry an empty thread id the host's validate refuses. */
+  legacyThreads?: LegacyThreadResolver;
 }

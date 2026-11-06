@@ -158,6 +158,7 @@ import { openSideThread } from "@/lib/side-thread";
 import { moveRailFocus } from "@/lib/sidebar-rail";
 import { isClientCancellation } from "../../shared/client-cancel";
 import { readableError } from "@/lib/plain-error";
+import { roomSpeakerIds, roomThreadSpeakerId, roomThreadWorking } from "@/lib/room-threads";
 
 import {
   COMPOSE_DISMISS,
@@ -236,9 +237,10 @@ function openBotContextMenu(onMenu: (menu: MenuState) => void, botId: string, ev
  * a received direct message included. */
 export function groupPreview(group: Group, bots: Bot[], config: ConfigStatus | null, instances: InstanceInfo[]): string {
   const viewerId = viewerActorId(config);
-  if (group.busyBotId) {
+  const speakerId = group.busyBotId ?? roomSpeakerIds(group)[0];
+  if (speakerId) {
     return t("sidebar.preview.botWorking", {
-      name: bots.find((b) => b.id === group.busyBotId)?.name ?? t("sidebar.preview.aBot"),
+      name: bots.find((b) => b.id === speakerId)?.name ?? t("sidebar.preview.aBot"),
     });
   }
   if (group.working) return t("sidebar.preview.teamWorking");
@@ -472,12 +474,14 @@ export function GroupThreadList({ group, selected, density = "comfortable", quer
   }), (a, b) => equalRows(a.bots, b.bots) && Object.is(a.revealThread, b.revealThread));
   const now = useRelativeNow();
   const [showAll, setShowAll] = useState(false);
-  const busy = Boolean(group.working || group.busyBotId);
-  const waiting = state.bots.find((bot) => bot.id === group.busyBotId)?.activity === "waiting-on-you";
-  const tasks = (group.tasks ?? [{ threadId: group.threadId, title: group.name, createdAt: group.createdAt }]).map((task) => ({
-    ...task, busy: task.threadId === group.threadId && busy, unread: task.threadId === group.threadId && group.unread,
-    activity: task.threadId === group.threadId && waiting ? "waiting-on-you" as const : undefined,
-  }));
+  const tasks = (group.tasks ?? [{ threadId: group.threadId, title: group.name, createdAt: group.createdAt }]).map((task) => {
+    const speakerId = roomThreadSpeakerId(group, task.threadId);
+    const waiting = Boolean(speakerId) && state.bots.find((bot) => bot.id === speakerId)?.activity === "waiting-on-you";
+    return {
+      ...task, busy: roomThreadWorking(group, task.threadId), unread: task.threadId === group.threadId && group.unread,
+      activity: waiting ? "waiting-on-you" as const : undefined,
+    };
+  });
   const visible = orderedThreadList(visibleSidebarThreads(tasks, group.threadId, query, [], showAll));
   useRevealedThreadRow(state.revealThread, selected ? group.threadId : null);
   // One set of row actions per room; they read the room as it is when used.

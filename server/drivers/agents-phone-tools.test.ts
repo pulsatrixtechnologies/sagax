@@ -5,7 +5,7 @@ import { availableTools, catalogProfileFromEnv, DEFERRED_AGENT_TOOL_NAMES, type 
 import type { HarnessClient } from "./agents-client.ts";
 import { phoneOutcomeText } from "./agents-phone-tools.ts";
 
-const PROFILE: CatalogProfile = { externalRuntime: false, coordinating: true, ownThreadCreation: false, skillAuthoring: false, sharedComputers: false, voiceNotes: false, cloudHome: false, chief: false, botId: "bot-scout" };
+const PROFILE: CatalogProfile = { externalRuntime: false, coordinating: false, ownThreadCreation: false, skillAuthoring: false, sharedComputers: false, voiceNotes: false, cloudHome: false, chief: false, botId: "bot-scout" };
 
 function phoneTool(profile: CatalogProfile) {
   return availableTools(profile).find((tool) => tool.name === "phone_tool") as { inputSchema: { properties: { tool: { enum: string[] } } }; description: string } | undefined;
@@ -33,7 +33,7 @@ describe("phone_tool", () => {
 
   it("sends only the chosen tool's arguments to the harness", async () => {
     const apiResponse = vi.fn<HarnessClient["apiResponse"]>(async () => ({ ok: true, status: 200, body: { status: "done", tool: "contacts", result: { contacts: [{ name: "Marie" }] } } }));
-    const context: ToolCallContext = { botId: "bot-scout", threadId: "t", depth: 0, externalRuntime: false, coordinating: true, sharedComputers: false, client: { api: vi.fn(), apiResponse } };
+    const context: ToolCallContext = { botId: "bot-scout", threadId: "t", depth: 0, coordinating: false, externalRuntime: false, sharedComputers: false, client: { api: vi.fn(), apiResponse } };
     const result = await callTool("phone_tool", { tool: "contacts", query: "Marie", fields: ["phone"], title: "ignored", reason: "appeler" }, context);
     expect(apiResponse).toHaveBeenCalledWith("/api/internal/phone-tools", expect.objectContaining({ method: "POST" }));
     expect(JSON.parse(String(apiResponse.mock.calls[0]![1]!.body))).toEqual({ tool: "contacts", args: { query: "Marie", fields: ["phone"], reason: "appeler" } });
@@ -42,7 +42,7 @@ describe("phone_tool", () => {
 
   it("keeps waiting on a request id", async () => {
     const apiResponse = vi.fn<HarnessClient["apiResponse"]>(async () => ({ ok: true, status: 200, body: { status: "denied" } }));
-    const context: ToolCallContext = { botId: "b", threadId: "t", depth: 0, externalRuntime: false, coordinating: true, sharedComputers: false, client: { api: vi.fn(), apiResponse } };
+    const context: ToolCallContext = { botId: "b", threadId: "t", depth: 0, coordinating: false, externalRuntime: false, sharedComputers: false, client: { api: vi.fn(), apiResponse } };
     const result = await callTool("phone_tool", { request_id: "abc-1" }, context);
     expect(JSON.parse(String(apiResponse.mock.calls[0]![1]!.body))).toEqual({ request_id: "abc-1" });
     expect(result).toMatchObject({ isError: true });

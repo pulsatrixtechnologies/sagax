@@ -11,7 +11,7 @@ function context(answers: Record<string, { ok: boolean; status: number; body: Js
     return answers[path] ?? { ok: false, status: 404, body: { error: "unknown" } };
   };
   const ctx = {
-    botId: "b1", threadId: "t1", depth: 0, externalRuntime: false, coordinating: false, sharedComputers: false,
+    botId: "b1", threadId: "t1", depth: 0, coordinating: false, externalRuntime: false, sharedComputers: false,
     client: { api: async (path: string, init?: RequestInit) => (await apiResponse(path, init)).body, apiResponse },
   } as unknown as ToolCallContext;
   return { ctx, calls };

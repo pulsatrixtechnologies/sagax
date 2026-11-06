@@ -61,6 +61,8 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("connectors:setup", "read", "open_connector_setup"),
   p("delegation:check", "read", "check_delegation"),
   p("delegation:wait", "read", "wait_delegation"),
+  // the runtime's read of a hand-off (docs/runtime-contract.md §9)
+  p("assignment:status", "read", "assignment_status"),
   p("sessions:search", "read", "session_search"),
   p("sessions:read", "read", "session_read"),
   p("topics:recall", "read", "recall_topic"),
@@ -103,6 +105,8 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("artifacts:claude", "own", "claude_artifact"),
   p("pages:propose", "own", "propose_page"),
   p("pages:comments", "own", "page_comments"),
+  // #2048: pick which surface to publish with before propose_page / save_artifact / claude_artifact
+  p("pages:choose", "own", "choose_page_target"),
   // place_call is the same tool under its compatibility name
   p("phone:call", "own", "place_phone_call", "sagax", ["place_call"]),
   // mid-call controls on the person's own live call (server/outbound/outbound-calls.ts)
@@ -155,6 +159,8 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   // own GitHub account (device flow).
   p("phone:tool", "own", "phone_tool"),
   p("github:connect", "own", "connect_github"),
+  // a sign-in request card for the speaker in this conversation
+  p("credentials:signin", "own", "request_sign_in"),
   p("computers:select", "own", "select_computer"),
   p("pairing:manage", "own", "manage_pairing"),
   // Dispatch
@@ -359,6 +365,7 @@ export const ROLE_OVERRIDES: Partial<Record<McpRole, Record<string, McpScope | n
   // docs are lasting instructions untrusted text must not write.
   service: {
     "vm:exec": null, "actions:invoke": null, "settings:manage": null, "pairing:manage": null, "credentials:login": null,
+    "credentials:signin": null,
     "teamsetup:propose": null, "rules:update": null, "docs:update": null,
   },
 };

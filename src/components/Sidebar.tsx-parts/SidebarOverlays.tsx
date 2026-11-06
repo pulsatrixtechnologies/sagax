@@ -13,6 +13,7 @@ import { BulkEditBotsDialog } from "../lazy-screens";
 import { LeaveGroupDialog } from "../LeaveGroupDialog";
 import { ShareTeamDialog } from "../ShareTeamDialog";
 import { TeamDialog } from "../TeamDialog";
+import { TeamSettingsDialog } from "../TeamSettingsDialog";
 import { OrgSectionMenuItems, orgSectionMenuItems, type OrgSectionMenuActions } from "../OrgSectionMenu";
 import { navigateThreadMenu } from "../BotProjects";
 import {
@@ -21,6 +22,7 @@ import {
   writePersonalSections,
 } from "@/lib/personal-sections";
 import { saveCollapsedSections } from "@/lib/sidebar-preferences";
+import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { viewerActorId } from "@/lib/viewer";
 import { SectionPicker } from "./SectionPicker";
 import { TeamMenuItems } from "./TeamMenuItems";
@@ -56,8 +58,9 @@ export function SidebarOverlays(props: {
     assignSection, teamMotion, closeTeamMenu, teamMenuReturn, shareTeamAnchor,
     orgMenu, closeOrgMenu, setSectionEdit, deletingTeam, setDeletingTeam,
     teamDeletePending, setTeamDeletePending, teamDeleteRunning, moveToTeam, setMoveToTeam,
-    renameTeam, setRenameTeam, shareTeam, setShareTeam, renamedTeam,
+    renameTeam, setRenameTeam, shareTeam, setShareTeam, teamSettings, setTeamSettings, renamedTeam,
   } = sections;
+  const teamSettingsAllowed = useOwnerOrAdmin();
   const {
     selectedBotIds, batchEdit, setBatchEdit, batchSectionPicker, setBatchSectionPicker,
     batchArchiveConfirm, setBatchArchiveConfirm, clearSelection, archivableByViewer,
@@ -125,6 +128,7 @@ export function SidebarOverlays(props: {
               setShareTeam(teamMotion.value!.name);
             }}
             onDelete={() => { closeTeamMenu(); setDeletingTeam(teamMotion.value!.name); }}
+            onSetForAll={teamSettingsAllowed === true ? () => { closeTeamMenu(); setTeamSettings(teamMotion.value!.name); } : undefined}
           />
         </div>
       </div>, document.body)}
@@ -157,6 +161,7 @@ export function SidebarOverlays(props: {
         anchorRef={shareTeamAnchor}
         onClose={() => setShareTeam(null)}
       />
+      {teamSettings !== null && <TeamSettingsDialog team={teamSettings} onClose={() => setTeamSettings(null)} />}
       {batchEdit && (
         <BulkEditBotsDialog
           botIds={selectedBotIds}

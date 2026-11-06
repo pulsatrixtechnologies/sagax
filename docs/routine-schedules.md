@@ -69,7 +69,9 @@ use an appropriate event/webhook workflow instead of a fake weekly schedule.
 - Existing catch-up policy remains: up to 12 hours late, one missed occurrence
   can be dispatched; older work receives a missed-run receipt. The next date
   advances without replaying every missed minute. Queued/running/waiting work
-  for the same cron routine does not accumulate overlapping copies.
+  for the same cron routine does not accumulate overlapping copies (a run is
+  waiting while teammates still owe it results on the job runtime,
+  docs/runtime-contract.md §9).
 - A run waiting on the person (a question, an approval) gives way to its
   routine's next occurrence once it has waited more than 30 minutes before that
   occurrence came due and no hand-off to another bot is still open: it stops

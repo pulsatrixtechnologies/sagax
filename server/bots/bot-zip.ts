@@ -124,11 +124,11 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   instructionsLead: { drop: "recomputed from SOUL.md" },
   modelSelection: "settings",
   fallback: "settings",
+  cacheKeepWarm: "settings",
   maxConcurrentThreads: "settings",
   maxParallelPerPerson: "settings",
   busySend: "settings",
   automaticRecovery: "settings",
-  cacheKeepWarm: "settings",
   turnLimits: "settings",
   // #1137: who pays is its owner's choice on this server, and the default is computed
   turnPayer: { drop: "who pays is the owner's choice on this server" },

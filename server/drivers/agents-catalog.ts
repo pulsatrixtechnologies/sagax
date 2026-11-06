@@ -129,7 +129,10 @@ export interface CatalogProfile {
 }
 
 /** The profile a spawned proxy was given. Everything is off unless the
- * harness says "1". */
+ * harness says "1". SAGAX_ROOM_TURN marks coordinating (a person's direct
+ * chat or a room). SAGAX_GROUP_TURN marks a real room (profile.room), which
+ * alone drops ROOM_ABSENT_TOOLS. SAGAX_EXTERNAL_RUNTIME narrows the list to
+ * the peer tools. */
 export function catalogProfileFromEnv(env: NodeJS.ProcessEnv): CatalogProfile {
   const externalRuntime = env.SAGAX_EXTERNAL_RUNTIME === "1";
   return {

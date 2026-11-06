@@ -16,7 +16,7 @@ describe("connect_github", () => {
 
   it("asks the server for the turn's person and hands the bot the code and link to show", async () => {
     const api = vi.fn<HarnessClient["api"]>(async () => ({ state: "pending", userCode: "ABCD-1234", verificationUri: "https://github.com/login/device", expiresAt: Date.UTC(2026, 9, 20, 1, 15) }));
-    const context: ToolCallContext = { botId: "bot-scout", threadId: "thread-scout", depth: 0, externalRuntime: false, coordinating: false, sharedComputers: false, client: { api, apiResponse: vi.fn() } };
+    const context: ToolCallContext = { botId: "bot-scout", threadId: "thread-scout", depth: 0, coordinating: false, externalRuntime: false, sharedComputers: false, client: { api, apiResponse: vi.fn() } };
     const result = await callTool("connect_github", { reconnect: true }, context);
     expect(api).toHaveBeenCalledWith("/api/internal/github-connect", expect.objectContaining({ method: "POST" }));
     expect(JSON.parse(String(api.mock.calls[0]![1]!.body))).toMatchObject({ reconnect: true });

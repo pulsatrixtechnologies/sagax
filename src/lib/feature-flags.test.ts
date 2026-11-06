@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { builtInBrowserEnabled, dataWindowEnabled, decisionModelEnabled, llmThreadTitlesEnabled, parseSkillReviewSteps, routinesInConversationEnabled, sharedComputersEnabled, showToolCallsEnabled, skillAuthoringEnabled, skillReviewEnabled, skillReviewSteps, skillsLibraryEnabled } from "./feature-flags";
+import { builtInBrowserEnabled, dataWindowEnabled, decisionModelEnabled, llmThreadTitlesEnabled, parseSkillReviewSteps, roomMemoryCaptureEnabled, routinesInConversationEnabled, sharedComputersEnabled, showToolCallsEnabled, skillAuthoringEnabled, skillReviewEnabled, skillReviewSteps, skillReviewUnavailableEngines, skillsLibraryEnabled } from "./feature-flags";
 
 describe("experimental feature flags", () => {
   it("offers linked skills unless explicitly switched off", () => {
@@ -17,6 +17,20 @@ describe("experimental feature flags", () => {
 
   it("switches skill authoring off only on an explicit opt-out", () => {
     expect(skillAuthoringEnabled({ features: { skillAuthoring: false } })).toBe(false);
+  });
+
+  it("names the engines in use that cannot run the skill review: no background call, or no agents tools", () => {
+    const instances = [
+      { instanceId: "codex", displayName: "Codex", capabilities: { backgroundText: true, agentsMcp: true } },
+      { instanceId: "pi", displayName: "Pi", capabilities: { backgroundText: false, agentsMcp: true } },
+      { instanceId: "chat", displayName: "Groq", capabilities: { backgroundText: true, agentsMcp: false } },
+      { instanceId: "old", displayName: "Old server engine" },
+      { instanceId: "unused", displayName: "Unused", capabilities: { backgroundText: false } },
+    ];
+    const on = (...ids: string[]) => ids.map((instanceId) => ({ modelSelection: { instanceId } }));
+    expect(skillReviewUnavailableEngines(on("codex", "codex"), instances)).toEqual([]);
+    expect(skillReviewUnavailableEngines(on("codex", "pi", "pi", "chat", "old", "missing"), instances)).toEqual(["Pi", "Groq", "Old server engine"]);
+    expect(skillReviewUnavailableEngines([], instances)).toEqual([]);
   });
 
   it("learns skills automatically only after an opt-in, and never without skill authoring", () => {
@@ -84,5 +98,11 @@ describe("experimental feature flags", () => {
     expect(llmThreadTitlesEnabled({ features: {} })).toBe(false);
     expect(llmThreadTitlesEnabled({ features: { llmThreadTitles: false } })).toBe(false);
     expect(llmThreadTitlesEnabled({ features: { llmThreadTitles: true } })).toBe(true);
+  });
+
+  it("keeps Learn from group chats off until it is switched on", () => {
+    expect(roomMemoryCaptureEnabled(null)).toBe(false);
+    expect(roomMemoryCaptureEnabled({ features: {} })).toBe(false);
+    expect(roomMemoryCaptureEnabled({ features: { roomMemoryCapture: true } })).toBe(true);
   });
 });

@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 
 import { DATA_INSTRUCTIONS } from "./data/instructions.ts";
 import { reportBackgroundError } from "./background-error.ts";
+import { harnessMcpTokenEnv } from "./harness-mcp-token.ts";
 
 const MAX_INPUT_BYTES = 1_048_576;
 const MAX_OUTPUT_BYTES = 16_777_216;
@@ -104,7 +105,7 @@ export async function harnessMcpRequest(
 }
 
 function run(kind: HarnessMcpKind): void {
-  const connection = { url: process.env.SAGAX_HARNESS_URL ?? "", token: process.env.SAGAX_MCP_TOKEN ?? "", kind };
+  const connection = { url: process.env.SAGAX_HARNESS_URL ?? "", token: process.env[harnessMcpTokenEnv(kind)] ?? "", kind };
   let input = Buffer.alloc(0);
   let pending = 0;
   const output = (message: unknown) => {

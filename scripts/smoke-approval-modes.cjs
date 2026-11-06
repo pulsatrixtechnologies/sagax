@@ -155,6 +155,12 @@ app.whenReady().then(async () => {
   const revoked = await coordinator.request(child, whole.id, "ask", { allThreads: true });
   assert.equal(revoked.approvalMode, "ask");
   assert.ok(revoked.tasks.every(task => task.approvalMode === "ask"));
+  // Auto and Edits reach every thread the same way, in one write with no
+  // grant phases (how a team-wide level leaves Custom).
+  const autoEverywhere = await coordinator.request(child, whole.id, "auto", { allThreads: true });
+  assert.equal(autoEverywhere.approvalMode, "auto");
+  assert.ok(autoEverywhere.tasks.every(task => task.approvalMode === "auto"));
+  assert.ok((await coordinator.request(child, whole.id, "ask", { allThreads: true })).tasks.every(task => task.approvalMode === "ask"));
   console.log(JSON.stringify({ allThreads: true, mixedProviders: true, archivedIncluded: true, futureInherits: true, unrelatedBotUnchanged: true, persisted: true }));
   if (process.argv.includes("--all-threads-only")) { await verifyUi(); return; }
   const created = await api("/api/bots", "POST", { modelSelection: { instanceId: "claude", model: "claude-sonnet-5" } });
@@ -199,6 +205,10 @@ app.whenReady().then(async () => {
     }
     assert.equal((await readScoped()).tasks.find((task) => task.threadId === old.threadId).approvalMode, "ask");
     assert.equal((await api(`/api/bots/${scoped.id}/tasks/${old.threadId}`, "PATCH", { approvalMode: "full" })).status, 403);
+    if (instanceId === "codex") {
+      assert.equal((await api(`/api/bots/${scoped.id}`, "PATCH", { approvalMode: "custom" })).status, 403);
+      assert.equal((await api(`/api/bots/${scoped.id}/tasks/${old.threadId}`, "PATCH", { approvalMode: "custom" })).status, 403);
+    }
     await coordinator.request(child, scoped.id, "full", { threadId: old.threadId });
     await until(async () => (await readScoped()).tasks.find((task) => task.threadId === old.threadId).approvalMode === "full");
     assert.equal((await readScoped()).tasks.find((task) => task.threadId === other.threadId).approvalMode, "ask");
@@ -382,21 +392,25 @@ app.whenReady().then(async () => {
   // introducing another fake-agent workflow or weakening production auth.
   const peerTarget = (await api("/api/bots", "POST", { modelSelection: { instanceId: "agy", model: "gemini-3.8-flash-high" } })).body.bot;
   await coordinator.request(child, peerTarget.id, "ask");
-  const peerThread = (await api(`/api/bots/${peerTarget.id}/tasks`, "POST", { title: "Existing delegated conversation" })).body.task;
+  const peerThread = (await api(`/api/bots/${peerTarget.id}/tasks`, "POST", { title: "Unrelated selected conversation" })).body.task;
   await coordinator.request(child, peerTarget.id, "full");
   await coordinator.request(child, peerTarget.id, "full", { threadId: peerThread.threadId });
   assert.equal((await api(`/api/bots/${id}`, "PATCH", { approvePeerComms: false })).status, 200);
   const capability = await api("/api/testing/internal-capability", "POST", { botId: id, threadId: created.body.bot.threadId }, { "x-openmausbot-test-capability": testCapabilityKey });
   assert.equal(capability.status, 201);
-  const peerRequest = api("/api/internal/ask-bot", "POST", { toBotId: peerTarget.id, message: "Peer-initiated permission fixture" }, { authorization: `Bearer ${capability.body.token}` });
-  void peerRequest.catch(() => {});
+  const peerResponse = await api("/api/internal/coordinate-bots", "POST", { botIds: [peerTarget.id], message: "Peer-initiated permission fixture", consult: true }, { authorization: `Bearer ${capability.body.token}` });
+  assert.equal(peerResponse.status, 200);
+  // Coordination opens its own work thread without selecting it in the UI.
+  const peerWorkThreadId = peerResponse.body.receipts[0].threadId;
+  assert.ok(peerWorkThreadId);
+  assert.notEqual(peerWorkThreadId, peerThread.threadId);
   const peerDecisions = await until(async () => {
-    const rows = (await api("/api/decisions")).body.decisions.filter((row) => row.botId === peerTarget.id);
+    const rows = (await api("/api/decisions")).body.decisions.filter((row) => row.botId === peerTarget.id && row.threadId === peerWorkThreadId);
     return rows.some((row) => row.source === "full-access") && rows;
   });
-  assert.equal((await peerRequest).status, 200);
-  const completedPeer = (await api("/api/bots")).body.bots.find((bot) => bot.id === peerTarget.id);
-  assert.ok(!pendingCard(completedPeer));
+  await until(async () => (await api("/api/bots?messages=0")).body.bots.find((bot) => bot.id === peerTarget.id)
+    .tasks.find((task) => task.threadId === peerWorkThreadId)?.busy === false);
+  assert.ok(!pendingCard((await api(`/api/threads/${peerWorkThreadId}/messages`)).body));
   assert.ok(!peerDecisions.some((row) => row.decision === "card-shown"));
   assert.equal(lastPrompt().mode, "yolo");
   console.log(JSON.stringify({ provider: "antigravity", mode: "full", peerInitiated: true, native: "yolo", autoApproved: true, humanApproved: false }));
@@ -405,25 +419,37 @@ app.whenReady().then(async () => {
   // delegated session, even when the sender itself has Full access.
   await coordinator.request(child, id, "full");
   await coordinator.request(child, peerTarget.id, "ask");
-  assert.equal((await api(`/api/bots/${peerTarget.id}/tasks/${peerThread.threadId}`, "PATCH", { approvalMode: "ask" })).status, 200);
-  const askPeerRequest = api("/api/internal/ask-bot", "POST", { toBotId: peerTarget.id, message: "Ask target must not inherit sender Full" }, { authorization: `Bearer ${capability.body.token}` });
-  void askPeerRequest.catch(() => {});
-  const peerCard = await until(async () => pendingCard((await api("/api/bots")).body.bots.find((bot) => bot.id === peerTarget.id)));
+  assert.equal((await api(`/api/bots/${peerTarget.id}/tasks/${peerWorkThreadId}`, "PATCH", { approvalMode: "ask" })).status, 200);
+  const revokedPeer = (await api("/api/bots?messages=0")).body.bots.find((bot) => bot.id === peerTarget.id);
+  assert.equal(revokedPeer.tasks.find((task) => task.threadId === peerWorkThreadId).approvalMode, "ask");
+  assert.equal(revokedPeer.tasks.find((task) => task.threadId === peerThread.threadId).approvalMode, "full");
+  const askPeerResponse = await api("/api/internal/coordinate-bots", "POST", { botIds: [peerTarget.id], message: "Ask target must not inherit sender Full", consult: true }, { authorization: `Bearer ${capability.body.token}` });
+  assert.equal(askPeerResponse.status, 200);
+  assert.equal(askPeerResponse.body.receipts[0].threadId, peerWorkThreadId);
+  const peerCard = await until(async () => pendingCard((await api(`/api/threads/${peerWorkThreadId}/messages`)).body));
   assert.equal(lastPrompt().mode, "default");
-  assert.equal((await api(`/api/bots/${peerTarget.id}/respond`, "POST", { requestId: peerCard.requestId, behavior: "allow" })).status, 200);
-  assert.equal((await askPeerRequest).status, 200);
+  const askDecision = (await api("/api/decisions")).body.decisions.find((row) => row.threadId === peerWorkThreadId && row.requestId === peerCard.requestId);
+  assert.equal(askDecision.decision, "card-shown");
+  assert.notEqual(askDecision.source, "full-access");
+  assert.equal((await api(`/api/threads/${peerWorkThreadId}/respond`, "POST", { requestId: peerCard.requestId, behavior: "allow" })).status, 200);
+  await until(async () => (await api("/api/bots?messages=0")).body.bots.find((bot) => bot.id === peerTarget.id)
+    .tasks.find((task) => task.threadId === peerWorkThreadId)?.busy === false);
   console.log(JSON.stringify({ provider: "antigravity", mode: "ask", senderMode: "full", peerInitiated: true, native: "default", humanApproved: true }));
 
   // Custom is downgraded for delegated turns. Both the provider dispatch and
   // the residual approval fold must use that same effective Auto mode.
   const customTarget = (await api("/api/bots", "POST", { modelSelection: { instanceId: "codex", model: "gpt-fake-default" } })).body.bot;
   await coordinator.request(child, customTarget.id, "custom");
-  const customRequest = api("/api/internal/ask-bot", "POST", { toBotId: customTarget.id, message: "Delegated Custom uses the native Auto reviewer" }, { authorization: `Bearer ${capability.body.token}` });
-  void customRequest.catch(() => {});
-  const customCard = await until(async () => pendingCard((await api("/api/bots")).body.bots.find((bot) => bot.id === customTarget.id)));
+  const customResponse = await api("/api/internal/coordinate-bots", "POST", { botIds: [customTarget.id], message: "Delegated Custom uses the native Auto reviewer", consult: true }, { authorization: `Bearer ${capability.body.token}` });
+  assert.equal(customResponse.status, 200);
+  const customThreadId = customResponse.body.receipts[0].threadId;
+  assert.ok(customThreadId);
+  assert.notEqual(customThreadId, customTarget.threadId);
+  const customCard = await until(async () => pendingCard((await api(`/api/threads/${customThreadId}/messages`)).body));
   assert.equal(customCard.held, "The provider requires your approval for this action.");
-  assert.equal((await api(`/api/bots/${customTarget.id}/respond`, "POST", { requestId: customCard.requestId, behavior: "allow" })).status, 200);
-  assert.equal((await customRequest).status, 200);
+  assert.equal((await api(`/api/threads/${customThreadId}/respond`, "POST", { requestId: customCard.requestId, behavior: "allow" })).status, 200);
+  await until(async () => (await api("/api/bots?messages=0")).body.bots.find((bot) => bot.id === customTarget.id)
+    .tasks.find((task) => task.threadId === customThreadId)?.busy === false);
   const customCalls = JSON.parse(readFileSync(codexDump, "utf8")).calls;
   assert.equal(customCalls.find((call) => call.method === "turn/start")?.params.approvalsReviewer, "auto_review");
   console.log(JSON.stringify({ provider: "codex", mode: "custom", peerInitiated: true, effectiveMode: "auto", nativeApprovalShown: true }));

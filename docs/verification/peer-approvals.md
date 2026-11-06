@@ -42,7 +42,7 @@ drive a native phone UI or a physical security key.
 Run the focused regression tests and the isolated HTTP workflow:
 
 ```sh
-pnpm exec vitest run server/peers/peer-approval.test.ts server/runtime/runtime.test.ts server/peers/peer-approval.e2e.test.ts server/routines/routine-delegation.e2e.test.ts server/routes/internal-bot-chat.test.ts server/peers/peer-delivery.test.ts
+pnpm exec vitest run server/peers/peer-approval.test.ts server/runtime/runtime.test.ts server/runtime-coordinator.test.ts server/peers/peer-approval.e2e.test.ts server/routines/routine-delegation.e2e.test.ts server/routes/internal-bot-chat.test.ts server/peers/peer-delivery.test.ts
 ```
 
 The HTTP test uses `launchVerificationServer` and `control-omb` with disposable
@@ -66,9 +66,13 @@ The checks cover:
   `failed` with outcome `refused` and no turn started, the row and the
   readback say the card expired without an answer, and the card is dismissed
   by the system, never answered for the person.
+- Every hand-off asks first (`coordinate_bots`, from a routine turn or a
+  chat): the refusal names
+  each teammate's outcome (`approvals[]`: denied by the user, or expired
+  without an answer) and its source, and writes no assignment on the job
+  runtime; nothing can dispatch it later (docs/runtime-contract.md §2, §9).
 - Ordinary chat's multi-target `coordinate_bots` preserves mixed denial/expiry
   results and sends no work when any required approval fails.
-- Receipt metadata survives reload, while old receipts remain readable.
 - A peer hidden and renamed while its approval is open is never dispatched;
   the failure receipt does not disclose its newly private name.
 - Isolation between people, on every receipt path: a teammate hidden,

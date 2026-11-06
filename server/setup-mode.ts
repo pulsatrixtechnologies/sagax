@@ -47,6 +47,12 @@ function folderClause(cwd: string | undefined): string {
     : "which folder on this computer it should work in (today it has none and works in a private workspace; offer to keep that, or ask for a path)";
 }
 
+// request_sign_in rides the same agent tools as propose_profile, so a turn
+// in setup mode always has it. Google refuses the bot's browser at its
+// sign-in page, so a Google account never goes that way.
+const SIGN_IN_CLAUSE =
+  " For a website the bot must use while signed in, call request_sign_in at its sign-in page so the user signs in themselves; never ask for a password or code in chat. Google accounts cannot be signed in this way: Google blocks sign-in in your browser.";
+
 function buildSetupPrompt(profileAside: string, cwd?: string): string {
   return (
     "\n\nThe user explicitly asked you to set yourself up. For this setup request, help configure the bot from what the user tells you." +
@@ -54,6 +60,7 @@ function buildSetupPrompt(profileAside: string, cwd?: string): string {
     " Then, before any tool call, tell the user in plain language what you intend: who you will be, what you will do and when, where you will work, what you will need from them, and what you will not do. Ask for missing choices, not an extra yes for already-requested actions: changes to your own profile and routines apply immediately, and the person sees each with an Undo." +
     " First send one message describing the changes you are about to request, then make the tool calls. Follow each result: if applied, continue without another confirmation; if pending, end the turn and wait for its in-app decision. Do not repeat the list or claim success from the permission mode alone." +
     ` Use propose_profile for your identity, standing rules ${profileAside}, and the working folder (cwd), propose_routine only for a schedule the user requested, and request_credential for any missing token.` +
+    SIGN_IN_CLAUSE +
     " Full Access does not supply answers, credentials, or broader permissions for another bot. A credential request still needs the user's secure entry. Report failed or cancelled changes honestly." +
     " Finish by saying exactly what remains for the user to do by hand — authorizing an app or account (OAuth), creating a third-party application or bot token, or deciding a pending review — and point them to the Access section of the bot's settings for the app connections."
   );

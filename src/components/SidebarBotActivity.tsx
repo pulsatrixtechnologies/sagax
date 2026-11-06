@@ -1,6 +1,7 @@
 import { BellDot, CircleAlert, Clock3, Loader2, Pin, PinOff, type LucideIcon } from "lucide-react";
 import type { Bot, Group, Task } from "@/state/store";
 import { cn } from "@/lib/cn";
+import { roomThreadSpeakerId, roomThreadWorking } from "@/lib/room-threads";
 import { t } from "@/lib/i18n";
 import { taskHiddenFromSidebar } from "@/lib/bot-unread";
 import { isArchived, orderedSidebarThreads, orderedThreadList, threadRecency, threadUpdatedLabel } from "./SidebarThreadRow";
@@ -23,19 +24,36 @@ export function sidebarBotActivityTasks(bot: Bot, queued: Record<string, unknown
     .filter((task) => task.activity === "waiting-on-you" || task.activity === "working" || task.busy || task.waitingForTeammates === true || task.queued || task.unread);
 }
 
-/** The room-level twin of sidebarBotActivityTasks: a room's own aggregate
- * working/busyBotId/unread state, attributed to its primary thread exactly
- * as GroupThreadList's own sidebar row derives it (Sidebar.tsx) — keep the
- * two derivations in sync. A bot⇄bot DM channel mirrors the other side's
- * own thread, so it is never attention here on its own account. */
+/** What stays reachable when the thread tree is folded away: anything that
+ * needs the person, plus a pin, in pin-then-update order. The bell does not
+ * use this — it stays on attention order. */
+export function threadsWhenTreeHidden(bot: Bot, queued: Record<string, unknown[]>) {
+  const attention = sidebarBotActivityTasks(bot, queued);
+  const seen = new Set(attention.map((task) => task.threadId));
+  const pinned = (bot.tasks ?? [])
+    // an automatic routine results thread never surfaces here either, even
+    // pinned (JC 2026-10-22: routines stay out of the unified conversation)
+    .filter((task) => task.pinned === true && !task.routineRunId && task.routineResults !== true && !seen.has(task.threadId))
+    .map((task) => ({ ...task, queued: Boolean(queued[task.threadId]?.length) }));
+  return orderedThreadList([...attention, ...pinned]);
+}
+
+/** The room-level twin of sidebarBotActivityTasks: each of a room's threads
+ * with its own working state and speaker (they run side by side), and the
+ * room's unread on its open thread, exactly as GroupThreadList's own sidebar
+ * rows derive them (Sidebar.tsx); keep the two derivations in sync. A
+ * bot⇄bot DM channel mirrors the other side's own thread, so it is never
+ * attention here on its own account. */
 export function sidebarGroupActivityTasks(group: Group, bots: Bot[], queued: Record<string, unknown[]>): Array<Task & { queued: boolean }> {
   if (group.dm) return [];
-  const busy = Boolean(group.working || group.busyBotId);
-  const waiting = bots.find((bot) => bot.id === group.busyBotId)?.activity === "waiting-on-you";
-  const tasks = (group.tasks ?? [{ threadId: group.threadId, title: group.name, createdAt: group.createdAt }]).map((task) => ({
-    ...task, busy: task.threadId === group.threadId && busy, unread: task.threadId === group.threadId && Boolean(group.unread),
-    activity: task.threadId === group.threadId && waiting ? "waiting-on-you" as const : undefined,
-  }));
+  const tasks = (group.tasks ?? [{ threadId: group.threadId, title: group.name, createdAt: group.createdAt }]).map((task) => {
+    const speakerId = roomThreadSpeakerId(group, task.threadId);
+    const waiting = Boolean(speakerId) && bots.find((bot) => bot.id === speakerId)?.activity === "waiting-on-you";
+    return {
+      ...task, busy: roomThreadWorking(group, task.threadId), unread: task.threadId === group.threadId && Boolean(group.unread),
+      activity: waiting ? "waiting-on-you" as const : undefined,
+    };
+  });
   return tasks.map((task) => ({ ...task, queued: Boolean(queued[task.threadId]?.length) }))
     .filter((task) => task.activity === "waiting-on-you" || task.busy || task.queued || task.unread);
 }

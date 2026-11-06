@@ -163,9 +163,9 @@ describe("moving saved bots off the engine", () => {
     expect(reloaded.bot(custom.id)).toMatchObject({ approvalMode: "ask", autoApprove: false, alwaysAllow: [] });
     expect(reloaded.taskByThread(custom.id, custom.threadId)).toMatchObject({ approvalMode: "ask", autoApprove: false, alwaysAllow: [] });
     expect(moves.find(move => move.botId === custom.id)?.askNow).toBe(true);
-    // A level the new engine has as well carries across, as on any switch.
+    // A level the new engine has as well carries across, as on any switch (Full included, #2697).
     expect(reloaded.bot(full.id)).toMatchObject({ approvalMode: "full", alwaysAllow: ["Bash(ls:*)"] });
-    expect(reloaded.taskByThread(full.id, full.threadId)?.approvalMode).toBe("full");
+    expect(reloaded.taskByThread(full.id, full.threadId)).toMatchObject({ approvalMode: "full", alwaysAllow: ["Bash(ls:*)"] });
     expect(moves.find(move => move.botId === full.id)?.askNow).toBe(false);
     expect(reloaded.bot(auto.id)?.approvalMode).toBe("auto");
     expect(reloaded.taskByThread(auto.id, auto.threadId)?.approvalMode).toBe("auto");

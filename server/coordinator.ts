@@ -1,5 +1,20 @@
 import type { CoordinatorOptions, Coordinator } from "./runtime/coordinator-types.ts";
-export type { HandoffStatus, HandoffView, HandedOutOutcome, RoomAddress, ComposedTurn, LiveHandoffEdge, CoordinatorHost, Coordinator, CoordinatorOptions } from "./runtime/coordinator-types.ts";
+export type {
+  HandoffStatus,
+  HandoffView,
+  HandedOutOutcome,
+  RoomAddress,
+  ComposedTurn,
+  LiveHandoffEdge,
+  CoordinatorHost,
+  Coordinator,
+  CoordinatorOptions,
+  BeginTurnRequest,
+  HostTurnResult,
+  HandoffOpener,
+  HandoffOptions,
+} from "./runtime/coordinator-types.ts";
+export type { LegacyThreadResolver } from "./runtime/import-legacy.ts";
 // The seam between the server and the coordinator that runs teammate work:
 // the job runtime (server/runtime/, docs/runtime-contract.md), reached
 // through RuntimeCoordinator. index.ts talks to this interface only; the

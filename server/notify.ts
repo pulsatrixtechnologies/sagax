@@ -90,6 +90,7 @@ export function buildNotification(
     group?: { id: string; name: string };
     title?: string;
     requestId?: string;
+    site?: string;
     needsKey?: boolean;
     routineRunId?: string;
     routineName?: string;
@@ -113,8 +114,8 @@ export function buildNotification(
       ? `${who} needs approval`
       : kind === "question"
         ? `${who} has a question`
-        : kind === "takeover"
-          ? `${who} needs your hands`
+        : kind === "sign-in"
+          ? `${who} needs you to sign in to ${extra?.site ?? "a website"}`
           : kind === "routine-failed"
             ? `${who}'s routine failed`
             : kind === "routine-deferred"
@@ -129,6 +130,8 @@ export function buildNotification(
                     ? `${who}'s wait is done`
                   : kind === "needs-you"
                     ? `${who} needs you`
+                  : kind === "takeover"
+                    ? `${who} needs your hands`
                   : `${who} finished`;
 
   // A "finished" with nothing to say is not worth a notification — the
@@ -200,6 +203,7 @@ export function deliverableNotification(
     group?: { id: string; name: string };
     title?: string;
     requestId?: string;
+    site?: string;
     needsKey?: boolean;
     routineRunId?: string;
     routineName?: string;

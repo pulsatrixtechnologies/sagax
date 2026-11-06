@@ -13,7 +13,7 @@ import { engineErrorMessage } from "@/lib/engine-error-text";
 import { teamSetupErrorMessage } from "@/lib/team-setup-error-text";
 import { serverErrorMessage } from "@/lib/server-error-text";
 import { bindModerationApi } from "@/lib/moderation";
-import { ApiError, PERSON_THREADS_HEADER, type Action, type Bot, type BotAnnouncement, type TaskUpdatePatch } from "./model";
+import { ApiError, PERSON_THREADS_HEADER, threadApprovalModes, type Action, type Bot, type BotAnnouncement, type TaskUpdatePatch } from "./model";
 import type { BotUpdatePatch } from "../bot-patch-queue";
 
 export async function createBotWithRole(role?: BotRole, request: typeof api = api, visibility?: BotVisibility, section?: string, settings?: Record<string, unknown>): Promise<{ bot: Bot; profileError?: string }> {
@@ -101,6 +101,13 @@ type TrustedApprovalBridge = {
   ): Promise<BotAnnouncement>;
 };
 
+/** The packaged desktop's private approval channel, when this window has a
+ * working one. Team settings and bot panels pass it into persistBotUpdate. */
+export function desktopApprovalBridge(): TrustedApprovalBridge | undefined {
+  if (typeof window === "undefined" || !window.ogb?.approvals) return undefined;
+  return stepUpApprovals(window.ogb.approvals);
+}
+
 /** Composer changes use the same private bridge as bot settings, but never
  * change profile defaults. Confirmation is UI state, never an HTTP credential. */
 export async function persistTaskApproval(
@@ -140,8 +147,7 @@ export async function persistBotUpdate(
   patch: BotUpdatePatch,
   signal: AbortSignal,
   request: (path: string, init?: RequestInit) => Promise<{ bot: BotAnnouncement }> = api,
-  trustedApprovals: TrustedApprovalBridge | undefined =
-    typeof window === "undefined" ? undefined : stepUpApprovals(window.ogb?.approvals),
+  trustedApprovals: TrustedApprovalBridge | undefined = desktopApprovalBridge(),
   currentBot?: BotAnnouncement,
 ): Promise<BotAnnouncement> {
   const {
@@ -176,17 +182,24 @@ export async function persistBotUpdate(
   const trustedMode = approvalMode === "full" || approvalMode === "custom"
     ? approvalMode
     : null;
-  const leavesCustom = approvalMode !== undefined &&
-    approvalModeFor(currentBot ?? {}) === "custom" &&
-    approvalMode !== "custom";
+  // Leaving Custom on any thread when the change reaches every thread still
+  // needs the private bridge (team dialog applyToAllThreads).
+  const leavesCustom = approvalMode !== undefined && approvalMode !== "custom" &&
+    (approvalModeFor(currentBot ?? {}) === "custom" ||
+      (applyToAllThreads === true && threadApprovalModes(currentBot ?? {}).includes("custom")));
 
   if (!trustedMode && !leavesCustom) {
     const result = await request(`/api/bots/${botId}`, {
       method: "PATCH",
       // The Full confirmation is renderer-local and has already been removed
       // above, including when a rapid later Ask/Auto choice was coalesced.
+      // The all-threads scope rides along for Ask/Edits/Auto (team dialog).
       body: JSON.stringify(
-        approvalMode === undefined ? ordinaryPatch : { ...ordinaryPatch, approvalMode },
+        approvalMode === undefined ? ordinaryPatch : {
+          ...ordinaryPatch,
+          approvalMode,
+          ...(applyToAllThreads ? { applyToAllThreads: true } : {}),
+        },
       ),
       signal,
     });

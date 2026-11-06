@@ -25,6 +25,7 @@ const KEY_PREFIXES: RegExp[] = [
   /\bxai-[A-Za-z0-9_-]{20,}/g, // xai (grok)
   /\bgsk_[A-Za-z0-9]{40,}/g, // groq
   /\bcsk-[A-Za-z0-9]{32,}/g, // cerebras
+  /\bLLM\|\d{6,}\|[A-Za-z0-9_-]{16,}/g, // meta model api
   /\bhf_[A-Za-z0-9]{30,}/g, // hugging face
   /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}/g, // github classic
   /\bgithub_pat_[A-Za-z0-9_]{20,}/g, // github fine-grained
@@ -115,6 +116,7 @@ export function addHeldSecretScrubber(scrub: (text: string) => string): () => vo
   return () => { heldSecretScrubbers.delete(scrub); };
 }
 
+/** Replace every held secret value in `text` with the mask. */
 export function scrubHeldSecrets(text: string): string {
   if (!text || heldSecretScrubbers.size === 0) return text;
   let out = text;

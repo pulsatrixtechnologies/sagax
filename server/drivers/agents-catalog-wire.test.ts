@@ -229,6 +229,7 @@ const BUDGET_BASELINE: Record<string, number> = {
   "room+own-thread+skills+voice+non-chief": 77984,
   "room+own-thread+skills+shared+non-chief": 79018,
   "room+own-thread+skills+shared+voice+non-chief": 79985,
+  // Annotations on check_delegation / wait_delegation (read-only policy).
   "external": 5083,
   "external+everything": 5083,
 };

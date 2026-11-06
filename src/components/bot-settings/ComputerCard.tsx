@@ -1,12 +1,14 @@
 // Activity > Computer (reference design, #2125 / #2187): one row, "Bot's
-// computer" over Awake (or Working while the bot is busy), the last screen
-// the bot sent as a thumbnail on the right. A click opens the live desktop
+// computer" over Awake (or Working while the bot is busy), a recent capture
+// of the computer the bot works on now as a thumbnail on the right
+// (useComputerThumbnail: switching computers switches the picture at once;
+// an old or offline capture is greyed out; a click on it opens it larger). A click opens the live desktop
 // window at once (SandboxDesktopModal: Watching / You have control), never
 // the ComputerPanel in the right-hand column. The section label carries a
 // PillSelect (Voice "Ara ⌄" style) listing the same computers as the chat
 // Computer menu / LocalComputerSection (`computerChoices`); picking one
 // changes the bot's Works on and refreshes the card.
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { Check, MoreHorizontal } from "lucide-react";
 
@@ -31,7 +33,13 @@ import { SandboxDesktopModal } from "../computer/SandboxDesktopModal";
 import { LocalLiveScreen } from "../computer/LocalLiveScreen";
 import { worksOnMode } from "../computer/WorksOnSetting";
 import { activeComputer } from "../computer/OrgComputerTab";
-import { screenFramePreview } from "../ScreenFrame";
+import { ViewerDialog } from "../ViewerDialog";
+import {
+  COMPUTER_THUMBNAIL_STALE_MS,
+  thumbnailComputerFor,
+  thumbnailDesktop,
+  useComputerThumbnail,
+} from "@/lib/computer-thumbnail";
 
 type ComputerSelectValue = "auto" | "off" | "cloud" | "local" | "vm" | "browser";
 
@@ -44,17 +52,6 @@ const EMPTY_BRIDGE: DesktopBridgeStatus = {
   workplace: { ...DEFAULT_BOT_WORKPLACE },
   activity: [],
 };
-
-/** The last screen the bot sent in its conversation, if the server holds one. */
-export function lastScreenSrc(bot: Pick<Bot, "messages" | "threadId">): string | null {
-  for (let index = bot.messages.length - 1; index >= 0; index -= 1) {
-    const message = bot.messages[index]!;
-    if (message.kind === "screen" && (message.hasImage || message.png)) {
-      return screenFramePreview({ threadId: bot.threadId, messageId: message.id }, message.mime).src;
-    }
-  }
-  return null;
-}
 
 /** Works on value shown in the section's PillSelect. */
 export function computerSelectValue(computer: Bot["computer"] | null | undefined): ComputerSelectValue {
@@ -127,7 +124,23 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
   const bridge = useDesktopBridgeStatus();
   const [broken, setBroken] = useState<string | null>(null);
   const [liveOpen, setLiveOpen] = useState(false);
-  const src = lastScreenSrc(bot);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const thumbButton = useRef<HTMLButtonElement>(null);
+  const thumbComputer = thumbnailComputerFor(bot.computer, bridge, organization);
+  const ownDesktop = organization ? thumbnailDesktop(bridge) : null;
+  // Refreshed after each bot action (a new message, busy flipping) and when
+  // the live window closes.
+  const thumbnail = useComputerThumbnail(bot.id, thumbComputer, {
+    desktopName: ownDesktop?.desktop.name ?? null,
+    refreshKey: `${bot.messages.length}:${bot.busy ? 1 : 0}:${liveOpen ? 1 : 0}`,
+  });
+  const src = thumbnail.src && broken !== thumbnail.src ? thumbnail.src : null;
+  const capturedAt = thumbnail.at;
+  const stale = capturedAt !== null && (Date.now() - capturedAt > COMPUTER_THUMBNAIL_STALE_MS
+    || (thumbComputer?.startsWith("local") === true && ownDesktop !== null && !ownDesktop.online));
+  const capturedLabel = capturedAt !== null
+    ? t("botPanel.computerCard.capturedAt", { time: new Date(capturedAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) })
+    : undefined;
   const status = bot.busy ? t("botPanel.computerCard.working") : t("botPanel.computerCard.awake");
   const selectValue = computerSelectValue(bot.computer);
   const options = useMemo(() => computerSelectOptions(bridge, organization), [bridge, organization]);
@@ -183,9 +196,23 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
               {status}
             </span>
           </span>
-          <span aria-hidden="true" data-computer-thumb={src && broken !== src ? "screen" : "wallpaper"} className="h-[29px] w-[46px] shrink-0 overflow-hidden rounded-[5px]" style={src && broken !== src ? undefined : { background: WALLPAPER }}>
-            {src && broken !== src && <img src={src} alt="" loading="lazy" onError={() => setBroken(src)} className="size-full object-cover" />}
-          </span>
+        </button>
+        {/* The thumbnail is its own button: a capture opens larger in the
+            viewer, the wallpaper (no capture yet) opens the live window. */}
+        <button
+          ref={thumbButton}
+          type="button"
+          data-computer-thumb={src ? "screen" : "wallpaper"}
+          data-computer-thumb-stale={src && stale ? "" : undefined}
+          aria-label={src ? t("botPanel.computerCard.preview") : caption}
+          title={src ? capturedLabel : undefined}
+          aria-disabled={!src && !canOpenLive ? true : undefined}
+          onClick={() => { if (src) setPreviewOpen(true); else if (canOpenLive) setLiveOpen(true); }}
+          className="h-[29px] w-[46px] shrink-0 overflow-hidden rounded-[5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 aria-disabled:cursor-default"
+          style={src ? undefined : { background: WALLPAPER }}
+        >
+          {src && <img src={src} alt="" loading="lazy" onError={() => setBroken(src)}
+            className={cn("size-full object-cover", stale && "opacity-60 grayscale")} />}
         </button>
         </div>
       </div>
@@ -210,6 +237,12 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
             ))}
           </div>
         </div>, document.body)}
+      {previewOpen && thumbnail.fullSrc && (
+        <ViewerDialog title={capturedLabel ? `${caption} \u00b7 ${capturedLabel}` : caption} onClose={() => setPreviewOpen(false)} returnFocus={thumbButton.current}
+          bodyClassName="flex items-center justify-center bg-black/80 p-4">
+          <img data-computer-thumb-full="" src={thumbnail.fullSrc} alt={caption} className="max-h-full max-w-full object-contain" />
+        </ViewerDialog>
+      )}
       {liveOpen && (
         <SandboxDesktopModal
           title={caption}
@@ -227,7 +260,7 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
 /** Same item as the bot panel's other row menus (BotTaskSection). */
 const MENU_ITEM = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover focus-visible:bg-hover focus-visible:outline-none disabled:opacity-50";
 
-/** The desktop wallpaper shown before the bot sent any screen. */
+/** The desktop wallpaper shown while no capture of the computer exists. */
 const WALLPAPER = "radial-gradient(120% 90% at 20% 15%, #6d8cff 0%, transparent 55%), radial-gradient(110% 100% at 85% 90%, #c86bd6 0%, transparent 60%), linear-gradient(135deg, #24305e 0%, #3b2a63 55%, #1c1f3a 100%)";
 
 export type { ComputerSelectValue, ComputerPatch };

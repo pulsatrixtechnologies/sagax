@@ -319,6 +319,8 @@ const __BASE_VERSION__: string;
       /** Arms one user-initiated display capture request from this frame. */
       beginScreenPreviewIntent(): boolean;
       screenFrame(): Promise<string | null>;
+      /** A 320x200 JPEG of this computer once Screen Recording is granted (never prompts). */
+      screenThumbnail?(): Promise<{ image: string; at: number; host: string } | null>;
       androidDevice?: {
         status(): Promise<AndroidDeviceStatus>;
         frame(serial: string): Promise<{ serial: string; dataUrl: string }>;

@@ -31,7 +31,16 @@ function startScreenPoller(   botId: string,   threadId: string,   captures: { c
       held: host.botComputerControlSnapshot(botId, host.teamComputerTurns.get(threadId)?.computerId).held,
       revision: host.computerControlRevision.get(botId) ?? 0
     }),
-    onFrame: (frame) => host.broadcast({ kind: "screen", botId, threadId, ...frame }),
+    onFrame: (frame) => {
+      host.broadcast({ kind: "screen", botId, threadId, ...frame });
+      // The bot panel's Computer row shows this computer's newest frame
+      // (server/computer/computer-thumbnails.ts); a browser frame is not it.
+      const thumbnail = host.thumbnailComputerForResource?.(computer?.resource);
+      const mime = host.thumbnailMime?.(frame.mime);
+      if (thumbnail && mime && captures.computer && (entry.surface === "computer" || !captures.browser)) {
+        void host.computerThumbnails?.record(botId, thumbnail, { bytes: Buffer.from(frame.png, "base64"), mime }).catch(host.reportBackgroundError);
+      }
+    },
     minGapMs: host.SCREEN_MIN_GAP_MS
   }), {
     timer: null as ReturnType<typeof setInterval> | null,

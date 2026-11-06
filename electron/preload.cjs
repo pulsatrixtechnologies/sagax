@@ -77,8 +77,10 @@ const REMOTE_SAFE = new Set(["platform", "windowControls", "windowFullscreen", "
 // confirmed in a native dialog). Main checks
 // every one of these channels again (local-origin.cjs desktopUiOnly, and
 // sharingUiOnly for the server-mode server only). Nothing that reads this
-// computer's files, screen, logins or secrets is handed to the page.
-const BUNDLED_EXTRA = new Set(["floatingBots", "dataWindow", "artifactWindow", "retroAssistant", "windowControls", "windowFullscreen", "onOpenAppSettings", "onOpenAbout", "openExternal", "openConnectorSetup", "confirm", "updater", "serverMode", "computerSharing", "appIcon", "orgMemory", "securityKey", "onChatLink", "desktopLanguage", "openPdf", "shellPreferences", "localModels", "accounts", "macApps"]);
+// computer's files, logins or secrets is handed to the page, and its screen
+// only as the bot panel's 320x200 Computer thumbnail, once the person
+// granted Screen Recording (screen:thumbnail, never a prompt).
+const BUNDLED_EXTRA = new Set(["floatingBots", "dataWindow", "artifactWindow", "retroAssistant", "windowControls", "windowFullscreen", "onOpenAppSettings", "onOpenAbout", "openExternal", "openConnectorSetup", "confirm", "updater", "serverMode", "computerSharing", "appIcon", "orgMemory", "securityKey", "onChatLink", "desktopLanguage", "openPdf", "shellPreferences", "localModels", "accounts", "macApps", "screenThumbnail"]);
 let bundledPage = false;
 // main.mjs always answers this channel: a sendSync nobody answers would
 // block this page for good (a test harness must answer it too).
@@ -232,6 +234,8 @@ const bridge = {
   beginScreenPreviewIntent: () => ipcRenderer.sendSync("screen:preview-intent"),
   /** One frame of this computer's screen as a data: URL when supported. */
   screenFrame: () => ipcRenderer.invoke("screen:frame"),
+  /** A small capture of this computer for the bot panel, only once Screen Recording is granted. */
+  screenThumbnail: () => ipcRenderer.invoke("screen:thumbnail"),
   /** Physical USB Android devices. Network ADB is deliberately excluded. */
   androidDevice: {
     status: () => ipcRenderer.invoke("android-device:status"),

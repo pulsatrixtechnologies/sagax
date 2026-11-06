@@ -1074,6 +1074,8 @@ import { diskSpace, folderBytes } from "./process/disk-usage.ts";
 import { createBotSettingsStore, defaultOrgTimeZone, hostTimeZone } from "./bots/bot-settings.ts";
 import { turnClockEnabled, turnTimeZone, withTurnClock } from "./turns/turn-clock.ts";
 import { createComputerInputRoutes, createVmScreenshotRoute } from "./routes/computer-input.ts";
+import { createComputerThumbnailRoutes } from "./routes/computer-thumbnail.ts";
+import { ComputerThumbnails, thumbnailComputerForResource, thumbnailMime } from "./computer/computer-thumbnails.ts";
 import { createComputerTeachRoutes } from "./routes/computer-teach.ts";
 import { ComputerTeachRecordings } from "./computer/computer-teach.ts";
 import { createLocalComputerAutoRoutes } from "./routes/local-computer-auto.ts";
@@ -17908,6 +17910,16 @@ ROUTES.push(createBotLibraryRoutes<BotRecord>({
 // the computer panel shows, driven through the same command path its own
 // backend already uses; the person must hold control.
 const computerInputAudited = new Map<string, number>();
+// The bot panel's Computer row thumbnail (server/routes/computer-thumbnail.ts):
+// the newest capture of each computer, from the screen poller and the
+// person's desktop app.
+const computerThumbnails = new ComputerThumbnails();
+ROUTES.push(createComputerThumbnailRoutes<BotRecord>({
+  thumbnails: computerThumbnails,
+  bot: (id) => store.bot(id) ?? undefined,
+  viewerId: (auth) => channelFilterViewerId(auth) ?? "",
+  mayViewShared: (auth, bot) => IDENTITY.kind !== "perspicax" || ownerOrAdminOf(auth, bot)
+}));
 // A Local VM bot's frame for the phone's viewer (cloud bots answer in the
 // computer route chain below).
 ROUTES.push(createVmScreenshotRoute<BotRecord>({
@@ -28938,6 +28950,9 @@ Object.assign(leafHostBindings, {
   acceptDirectSend,
   deliverLateQuestionAnswer,
   startOrQueueOpenedThread,
+  computerThumbnails,
+  thumbnailComputerForResource,
+  thumbnailMime,
   screenPollers,
   SCREEN_POLL_MS,
   SCREEN_MIN_GAP_MS,

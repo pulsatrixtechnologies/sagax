@@ -64,7 +64,8 @@ const usageRows: UsageRow[] = [
 
 let server: ReturnType<typeof createServer>;
 let base = "";
-const answers: Array<{ viewer: OrgAdminViewer; threadId: string; requestId: string; decision: string }> = [];
+const answers: Array<{ viewer: OrgAdminViewer; threadId: string; requestId: string; decision: string; rule?: "allow" }> = [];
+let orgAlwaysAllow = true;
 const recorded: Array<{ principalId: string; entry: ConsoleAuditEntry }> = [];
 const auditCalls: Array<Record<string, unknown>> = [];
 const tokens = new Map<string, ConsoleAssertion>();
@@ -113,11 +114,15 @@ beforeAll(async () => {
       ];
       return viewer.principalId === ALICE ? list : [];
     },
-    answer: async (viewer, threadId, requestId, decision) => {
-      answers.push({ viewer, threadId, requestId, decision });
+    answer: async (viewer, threadId, requestId, decision, rule) => {
+      answers.push({ viewer, threadId, requestId, decision, ...(rule ? { rule } : {}) });
       if (requestId === "gone") return { ok: false, status: 404, code: "not_found", message: "No such approval." };
+      if (rule === "allow" && !orgAlwaysAllow) {
+        return { ok: false, status: 403, code: "org_always_allow_off", message: "Your organization requires an approval each time: Always allow is turned off by an organization admin." };
+      }
       return { ok: true };
     },
+    orgAlwaysAllow: () => orgAlwaysAllow,
     auditCategories: ["rights", "bot", "people"],
     version: () => "0.4.14",
     engines: () => [
@@ -229,13 +234,35 @@ describe("org admin API: answers", () => {
     expect(await call("/api/org/admin/usage?from=2026-01-01&to=2026-09-30", assertion("alice", "admin"))).toMatchObject({ status: 400, body: { code: "bad_request" } });
   });
 
-  it("approvals: oldest first; POST answers allow or deny once, nothing else", async () => {
+  it("approvals: oldest first; POST answers allow or deny once, or Always allow with rule allow", async () => {
+    orgAlwaysAllow = true;
     const list = await call("/api/org/admin/approvals", assertion("alice", "admin"));
     expect(list.body.approvals.map((a: AdminApproval) => a.requestId)).toEqual(["r1", "r2"]);
+    expect(list.body.alwaysAllow).toBe(true);
+    const employeeList = await call("/api/org/admin/approvals", assertion("bob", "employee"));
+    expect(employeeList).toMatchObject({ status: 200, body: { alwaysAllow: true, approvals: [] } });
     const post = (body: string, request = "r2") => call(`/api/org/admin/approvals/t2/${request}`, assertion("alice", "admin"), { method: "POST", body, headers: { "content-type": "application/json" } });
     expect(await post(JSON.stringify({ decision: "allow" }))).toMatchObject({ status: 200, body: { answered: true, decision: "allow" } });
     expect(answers.at(-1)).toMatchObject({ threadId: "t2", requestId: "r2", decision: "allow", viewer: { principalId: ALICE, orgAdmin: true, role: "admin" } });
-    for (const bad of [JSON.stringify({ decision: "always" }), JSON.stringify({ decision: "allow", always: true }), JSON.stringify({ decision: "allow", rememberCommand: true }), "not json", "", JSON.stringify(["allow"]), JSON.stringify({ decision: "allow", pad: "x".repeat(20_000) })]) {
+    expect(answers.at(-1)).not.toHaveProperty("rule");
+    // #2100: Perspicax console Always allow ({ decision, rule: "allow" })
+    expect(await post(JSON.stringify({ decision: "allow", rule: "allow" }), "r1")).toMatchObject({ status: 200, body: { answered: true, decision: "allow" } });
+    expect(answers.at(-1)).toMatchObject({ threadId: "t2", requestId: "r1", decision: "allow", rule: "allow" });
+    orgAlwaysAllow = false;
+    expect(await post(JSON.stringify({ decision: "allow", rule: "allow" }), "r1")).toMatchObject({ status: 403, body: { code: "org_always_allow_off" } });
+    orgAlwaysAllow = true;
+    for (const bad of [
+      JSON.stringify({ decision: "always" }),
+      JSON.stringify({ decision: "allow", always: true }),
+      JSON.stringify({ decision: "allow", rememberCommand: true }),
+      JSON.stringify({ decision: "deny", rule: "allow" }),
+      JSON.stringify({ decision: "allow", rule: "deny" }),
+      JSON.stringify({ decision: "allow", rule: "allow", pad: 1 }),
+      "not json",
+      "",
+      JSON.stringify(["allow"]),
+      JSON.stringify({ decision: "allow", pad: "x".repeat(20_000) }),
+    ]) {
       expect(await post(bad)).toMatchObject({ status: 400, body: { code: "bad_request" } });
     }
     expect(await post(JSON.stringify({ decision: "deny" }), "gone")).toMatchObject({ status: 404, body: { code: "not_found" }, admin: "1" });
@@ -300,7 +327,7 @@ describe("org admin API: the console routes (2026-10-08)", () => {
   const T_MANAGER = [{ id: "T", name: "T", manager: true }];
   it("capabilities: any role, the release version and every route", async () => {
     const got = await call("/api/org/admin/capabilities", assertion("bob", "employee"));
-    expect(got).toMatchObject({ status: 200, body: { version: "0.4.14", api: 6, mascotFamilies: ["classics", "shapes", "animals"] } });
+    expect(got).toMatchObject({ status: 200, body: { version: "0.4.14", api: 7, mascotFamilies: ["classics", "shapes", "animals"] } });
     expect(got.body.mascots.map((entry: { id: string; family: string }) => `${entry.id}:${entry.family}`)).toEqual(["owl:classics", "crab:animals", "shape:shapes", "trombi:classics", "bunbu:animals", "shiba:animals", "grump:animals", "ogre:animals", "frog:animals"]);
     // api 4: the engines, grouped Cloud and Local by the server
     expect(got.body.engines).toEqual([

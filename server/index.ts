@@ -726,7 +726,7 @@ import {
   type OwnerRule
 } from "./approvals/owner-approval.ts";
 import { OwnerApprovalStore } from "./approvals/owner-approval-store.ts";
-import { CustomRuleStore } from "./rules/custom-rules-store.ts";
+import { CustomRuleStore, registeredCustomRuleStore } from "./rules/custom-rules-store.ts";
 import {
   customRuleCandidate,
   customRuleNotice,
@@ -1375,7 +1375,7 @@ import { OutboundCounts } from "./outbound/outbound-counts.ts";
 import { OutboundRequestService } from "./outbound/outbound-requests.ts";
 import { isOutboundTool, normalizeOutboundPolicy } from "../shared/outbound.ts";
 import { normalizeAllowedRecipients, sendRecipientsAllowed } from "../shared/allowed-recipients.ts";
-import { standingGrantsAllowed } from "./rules/custom-rules-org.ts";
+import { ORG_ALWAYS_ALLOW_OFF, standingGrantsAllowed } from "./rules/custom-rules-org.ts";
 import { bindThreadLogCapProvider } from "./threads/thread-log-rotation.ts";
 import { listenWebhookIngress, resolveWebhookPublicUrl, type WebhookIngress } from "./triggers/webhook-ingress.ts";
 import { assertModelVariantSupported, memberTurnSelection } from "./turns/member-turn.ts";
@@ -15066,10 +15066,11 @@ async function answerInboxCard(auth: RequestAuth, threadId: string, requestId: s
 }
 
 /** Slice 7: answer a plain tool card from the Perspicax console, once,
- * allow or deny (never always, never a remembered command), with the same
- * refusals as Sagax: the owner for an owner card, an organization admin for
- * an admin card, and only on the fleet host. */
-async function answerCardFromConsole(viewer: OrgAdminViewer, threadId: string, requestId: string, decision: "allow" | "deny"): Promise<ApprovalAnswer> {
+ * allow or deny, with the same refusals as Sagax: the owner for an owner
+ * card, an organization admin for an admin card, and only on the fleet
+ * host. #2100: `rule: "allow"` keeps that card's own Always allow, like
+ * bulk Approvals (never a session allow or a remembered command). */
+async function answerCardFromConsole(viewer: OrgAdminViewer, threadId: string, requestId: string, decision: "allow" | "deny", rule?: "allow"): Promise<ApprovalAnswer> {
   const message = store.messagesFor(threadId).find((row) => row.card?.requestId === requestId);
   const card = message?.card;
   if (!message || !card || !isApprovalCardMessage(message)) return { ok: false, status: 404, code: "not_found", message: "No such approval." };
@@ -15085,8 +15086,29 @@ async function answerCardFromConsole(viewer: OrgAdminViewer, threadId: string, r
     return { ok: false, status: 403, code: "not_decidable", message: "Open this approval in Sagax to answer it." };
   }
   // The console carries no security key: a card that needs one is answered in Sagax.
-  if (stepUpGate(viewer.principalId, threadId, requestId, decision, {}, undefined)) {
+  // Always allow widens the grant: org Always allow off answers 403
+  // org_always_allow_off (same as bulk Approvals / a card in Sagax).
+  const widen = rule ? { always: false, rememberCommand: false, rule } : {};
+  const gated = stepUpGate(viewer.principalId, threadId, requestId, decision, widen, undefined);
+  if (gated) {
+    const code = typeof gated.body === "object" && gated.body && "code" in gated.body ? String((gated.body as { code?: unknown }).code ?? "") : "";
+    if (code === "org_always_allow_off") {
+      return { ok: false, status: 403, code: "org_always_allow_off", message: ORG_ALWAYS_ALLOW_OFF.error };
+    }
     return { ok: false, status: 403, code: "not_decidable", message: "This approval needs a security key. Open it in Sagax to answer it." };
+  }
+  if (rule) {
+    const ruleRefusal = saveOwnerRuleFromCard(consoleRuleAuth(viewer), threadId, requestId, rule, decision);
+    if (ruleRefusal) {
+      const status = ruleRefusal.status === 400 || ruleRefusal.status === 403 || ruleRefusal.status === 404 || ruleRefusal.status === 409
+        ? ruleRefusal.status
+        : 403;
+      const code = status === 404 ? "not_found" as const
+        : status === 409 ? "card_not_pending" as const
+        : status === 403 ? "forbidden" as const
+        : "bad_request" as const;
+      return { ok: false, status, code, message: ruleRefusal.error };
+    }
   }
   const answerer = `${viewer.name} (console)`;
   const actor: DecisionActor = { kind: "session", sessionId: "console", label: answerer, userId: viewer.principalId };
@@ -15102,10 +15124,31 @@ async function answerCardFromConsole(viewer: OrgAdminViewer, threadId: string, r
   }
   orgAudit({
     category: "approval", action: "approval.answer", target: auditBotTarget(bot.id),
-    after: { decision, threadId, requestId, kind },
+    after: { decision, threadId, requestId, kind, ...(rule ? { rule } : {}) },
     actor: { kind: "person", principalId: viewer.principalId, via: "console" }
   });
   return { ok: true };
+}
+
+/** A session-shaped auth for the console person so saveOwnerRuleFromCard
+ * sees the same principal as the assertion (never persisted). */
+function consoleRuleAuth(viewer: OrgAdminViewer): RequestAuth {
+  const scopes = (viewer.orgAdmin ? ["admin", "client"] : ["client"]) as Scope[];
+  return {
+    kind: "session",
+    via: "bearer",
+    scopes,
+    session: {
+      id: "console",
+      tokenHash: "0".repeat(64),
+      label: `${viewer.name} (console)`,
+      scopes: [...scopes],
+      createdAt: 0,
+      lastSeenAt: 0,
+      expiresAt: Number.MAX_SAFE_INTEGER,
+      principalId: viewer.principalId,
+    },
+  };
 }
 
 /** An organization admin answering a pending admin approval by thread may
@@ -42604,6 +42647,13 @@ const orgAdmin = createOrgAdminRoutes({
   usageRows: (range) => readUsage(DATA_DIR, range),
   approvalsFor: (viewer) => pendingApprovalsFor(viewer),
   answer: answerCardFromConsole,
+  orgAlwaysAllow: () => {
+    try {
+      return registeredCustomRuleStore()?.orgPolicy().alwaysAllow ?? true;
+    } catch {
+      return true;
+    }
+  },
   audit: (input) => readOrgAuditPage(DATA_DIR, input),
   auditCategories: ADMIN_ACTIVITY_CATEGORIES,
   version: releaseVersion,

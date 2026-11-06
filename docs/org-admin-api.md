@@ -45,8 +45,8 @@ module per area (`server/org/org-admin-*.ts`).
 | `GET overview` | manager | health, engines, sandboxes, presence, turns, routines, errors, latency, host, deploy, backup |
 | `GET bots` | manager | every bot in reach; paged and filtered when asked |
 | `GET usage?from&to` | manager | usage per day, bot, speaker and engine |
-| `GET approvals` | employee | the cards the caller may decide |
-| `POST approvals/{thread}/{request}` | employee | `{decision: "allow" or "deny"}` |
+| `GET approvals` | employee | the cards the caller may decide; `{ approvals, alwaysAllow }` when the org policy is available |
+| `POST approvals/{thread}/{request}` | employee | `{decision: "allow" or "deny"}`, or `{decision: "allow", rule: "allow"}` for Always allow |
 | `GET audit?from&to&limit&before&category&target` | admin | the admin activity log, newest first |
 | `GET files/{bot}/roots,list,stat,read,download` | manager | a bot's files, read only |
 
@@ -59,7 +59,7 @@ GET /api/org/admin/capabilities
 ```json
 {
   "version": "0.4.15",
-  "api": 6,
+  "api": 7,
   "routes": ["GET audit", "GET bots", "GET capabilities", "GET overview", "GET usage"],
   "permissionsVersion": 1,
   "permissionGroups": [{ "id": "bots", "label": { "en": "Bots", "fr": "Bots" } }],
@@ -789,6 +789,7 @@ expired before that day has no row.
 
 | Method and path | Role | What |
 |---|---|---|
+| `GET org-approvals/policy` | employee | `{ alwaysAllow, orgRules }` (count of enabled org rules; #2100) |
 | `GET org-approvals` | admin | `{ alwaysAllow, rules }` |
 | `POST org-approvals` | admin | `{ alwaysAllow: true \| false }` |
 | `POST org-approvals/rules` | admin | `{ when, behavior: "ask" \| "deny" }`, 201 `{ rule }` |
@@ -813,6 +814,9 @@ on, and the standing grants people already saved stop answering while it is
 off (they answer again when it is back on). Each change is an `approval`
 row of the admin activity (`org.approvals.*`). Kept in
 `custom-approval-rules.json` under `org`; `server/rules/custom-rules-org.ts`.
+Members (every role) read the switch through `GET org-approvals/policy` or
+the `alwaysAllow` field on `GET approvals` (#2100), so the console can
+explain a disabled Always allow without an admin call.
 
 ## Connections
 

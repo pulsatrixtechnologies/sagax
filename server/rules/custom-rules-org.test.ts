@@ -248,6 +248,19 @@ describe("the console's org-approvals routes", () => {
     await admin.call("POST", "org-approvals", { body: { alwaysAllow: true } });
     expect(standingGrantsAllowed()).toBe(true);
   });
+
+  it("#2100: GET org-approvals/policy is readable by every role (alwaysAllow + orgRules count)", async () => {
+    const { store, console: admin } = console();
+    expect(opsRoutes({ orgApprovals: store } as unknown as OpsDeps)
+      .find((route) => route.path === "org-approvals/policy")).toMatchObject({ method: "GET", min: "employee" });
+    expect(opsRoutes({ orgApprovals: store } as unknown as OpsDeps)
+      .find((route) => route.path === "org-approvals" && route.method === "GET")).toMatchObject({ min: "admin" });
+    expect((await admin.call("GET", "org-approvals/policy")).body).toEqual({ alwaysAllow: true, orgRules: 0 });
+    await admin.call("POST", "org-approvals/rules", { body: { when: "la suppression de fichiers", behavior: "deny" } });
+    await admin.call("POST", "org-approvals", { body: { alwaysAllow: false } });
+    const member = await admin.call("GET", "org-approvals/policy", { role: "employee", principalId: "pr_bob" });
+    expect(member).toMatchObject({ status: 200, body: { alwaysAllow: false, orgRules: 1 } });
+  });
 });
 
 describe("ruleTextDiff", () => {

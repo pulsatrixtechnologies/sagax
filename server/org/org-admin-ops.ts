@@ -192,6 +192,22 @@ export function opsRoutes(deps: OpsDeps): ConsoleRoute[] {
     // Rules ask first or refuse, for every person and bot, and members can
     // neither change nor remove them; alwaysAllow false keeps every approval
     // to one card at a time (server/rules/custom-rules-org.ts).
+    // #2100: every role may read the Always allow switch (and how many org
+    // rules are on), so the console can explain a disabled Always allow
+    // without an admin. The full rules list stays admin-only below.
+    {
+      method: "GET",
+      path: "org-approvals/policy",
+      min: "employee",
+      handle() {
+        const store = approvals();
+        if (!store) return notImplemented("Organization approval rules are not available on this server.");
+        return ok({
+          ...store.orgPolicy(),
+          orgRules: store.orgRules().filter((rule) => rule.enabled).length,
+        });
+      },
+    },
     {
       method: "GET",
       path: "org-approvals",

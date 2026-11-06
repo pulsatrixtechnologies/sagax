@@ -1375,6 +1375,7 @@ import { OutboundCounts } from "./outbound/outbound-counts.ts";
 import { OutboundRequestService } from "./outbound/outbound-requests.ts";
 import { isOutboundTool, normalizeOutboundPolicy } from "../shared/outbound.ts";
 import { normalizeAllowedRecipients, sendRecipientsAllowed } from "../shared/allowed-recipients.ts";
+import { FOREIGN_MAILBOX_REFUSAL, foreignMailboxRefusal } from "../shared/mailbox-user.ts";
 import { standingGrantsAllowed } from "./rules/custom-rules-org.ts";
 import { bindThreadLogCapProvider } from "./threads/thread-log-rotation.ts";
 import { listenWebhookIngress, resolveWebhookPublicUrl, type WebhookIngress } from "./triggers/webhook-ingress.ts";
@@ -19411,6 +19412,27 @@ bus.subscribe((event: RuntimeEvent) => {
       // the bot's allowed recipients goes with no card (shared/allowed-recipients.ts).
       const recipientsListed = Boolean(permission && asker && event.requestId && !strictCard && !guestDriven && !foreignDestination
         && sendRecipientsAllowed((botForThread(asker.id, event.threadId) ?? asker).allowedRecipients, event.mcpTool ?? event.tool, event.input));
+      // #1943: a mail / account-connector call that names another mailbox
+      // (userId / user_id) must not ride the owner's delegated token. Refuse
+      // with a retry hint so the primary bot stays on /me with the owner's
+      // credentials (shared/mailbox-user.ts).
+      const foreignMailbox = permission && asker && event.requestId
+        ? foreignMailboxRefusal(event.mcpTool ?? event.tool, event.input, { accountConnector: event.accountConnector === true })
+        : null;
+      if (foreignMailbox && asker && event.requestId) {
+        const instance = event.providerInstanceId ? registry.get(event.providerInstanceId) : registry.get(asker.modelSelection.instanceId);
+        void instance?.adapter.respondToRequest(event.threadId, event.requestId, { behavior: "deny", message: FOREIGN_MAILBOX_REFUSAL }).catch(() => {});
+        pushMessage({
+          role: "bot", kind: "activity",
+          tool: { name: `Refused ${event.summary.slice(0, 120)}: another mailbox (${foreignMailbox.userId.slice(0, 80)}). Use /me without userId.`, ok: false }
+        });
+        appendDecision(DATA_DIR, {
+          threadId: event.threadId, requestId: event.requestId, botId: asker.id, botName: asker.name,
+          tool: event.tool, summary: event.summary, decision: "auto-denied", source: "foreign-mailbox",
+          ...(customCall ? { call: decisionCall(customCall) } : {})
+        });
+        break;
+      }
       // 2026-10-30: a plain read of the person's own engine account
       // connector (their grok.com Outlook, Teams, calendar): no card at any
       // level; a write keeps its card (outbound)

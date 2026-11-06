@@ -53,6 +53,17 @@ describe("autoVerdict", () => {
     }
   });
 
+  it("#1943 refuses another mailbox on the owner's own connector, even under Full access", () => {
+    for (const mode of ["ask", "edits", "auto", "custom", "full"] as const) {
+      expect(autoVerdict(mode, "other", {
+        toolName: "outlook__list_messages",
+        connectorRead: true,
+        foreignMailbox: true,
+      })).toEqual({ approve: null, source: "foreign-mailbox" });
+      expect(autoVerdict(mode, "outlook__list_messages", { foreignMailbox: true }).source).toBe("foreign-mailbox");
+    }
+  });
+
   it("forces a draft card for unrequested mail sends and lets person-asked mail follow the level", () => {
     for (const mode of ["ask", "edits", "auto", "custom"] as const) {
       expect(autoVerdict(mode, "outlook__send_email", { outbound: true }).source).toBe("email-draft-required");

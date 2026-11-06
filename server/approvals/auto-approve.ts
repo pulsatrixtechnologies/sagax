@@ -208,6 +208,9 @@ export type AutoVerdictSource =
   /** 2026-10-30: a read of the person's own engine account connector (their
    * grok.com Outlook, Teams, calendar...), at any level. */
   | "connector-read"
+  /** #1943: a mail / account-connector call named another mailbox through
+   * userId / user_id. The owner's own credentials open /me only. */
+  | "foreign-mailbox"
   | "no-grant";
 
 export interface AutoVerdict {
@@ -316,6 +319,9 @@ export function autoVerdict(
      * Answered at any level after the safety hold and the person's own deny
      * and ask rules, never a widening or a call a security key protects. */
     connectorRead?: boolean;
+    /** #1943: the call named another mailbox (userId / user_id). Refused at
+     * every level, Full access included: the owner's credentials stay on /me. */
+    foreignMailbox?: boolean;
     /** The call is one of Sagax's own tools that must never answer itself:
      * a rule change (rules_update and the like, "rule-change" class). */
     ruleChange?: boolean;
@@ -359,6 +365,9 @@ export function autoVerdict(
       ...(context.customRule?.behavior === "allow" ? { customRule: undefined } : {}),
     };
   }
+  // #1943: another mailbox through userId is never the owner's own /me,
+  // whatever the approval level (isolation between mailboxes).
+  if (context?.foreignMailbox) return { approve: null, source: "foreign-mailbox" };
   // An organization admin's Refuse rule (server/rules/custom-rules-org.ts) is
   // mandatory: even a draft the person approved is refused.
   if (context?.customRule?.behavior === "deny" && context.customRule.id.startsWith("orule_")) return { approve: null, source: "custom-rule-deny" };

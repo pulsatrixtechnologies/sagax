@@ -135,6 +135,8 @@ const __BASE_VERSION__: string;
     artifactWindowSelf?: {
       isAlwaysOnTop(): Promise<boolean>;
       setAlwaysOnTop(on: boolean): Promise<boolean>;
+      /** The cursor entered or left this window (#2336). */
+      onPointer?(cb: (inside: boolean) => void): () => void;
       fitContent(size: { width: number; height: number }): Promise<{ width: number; height: number } | null>;
     };
     ogb?: {

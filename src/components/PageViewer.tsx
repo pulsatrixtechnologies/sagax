@@ -32,6 +32,7 @@ import { Check, Ellipsis, Globe, Highlighter, History, Loader2, Maximize2, Messa
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { relativeTime } from "@/lib/memory";
 import { useOsFullscreen } from "@/hooks/use-os-fullscreen";
 import { pagePlace, rememberPagePlace } from "@/lib/open-page";
 import { acceptPageOpen } from "@/lib/sandboxed-open";
@@ -206,6 +207,52 @@ export function PageFrame({ src, title = "", theme, thumbnail = false, frameRef,
   );
 }
 
+const menuIsOpen = () => typeof document !== "undefined" && document.querySelector("[role=menu]") !== null;
+
+/** A page in a window of its own shows only its content until the pointer is
+ * over the window or the keyboard focus is inside it (#2336). `pinned` keeps
+ * the chrome while a menu, the share popover or a side panel is open. */
+export function useHoverChrome(enabled: boolean, pinned: boolean, onPointer?: (cb: (inside: boolean) => void) => () => void) {
+  const [hover, setHover] = useState(false);
+  const [focus, setFocus] = useState(false);
+  // The desktop window's content is a frame that swallows pointer events, so
+  // main tells whether the cursor is over the window (preload onPointer).
+  useEffect(() => {
+    if (!enabled || !onPointer) return;
+    return onPointer((inside) => setHover(inside || menuIsOpen()));
+  }, [enabled, onPointer]);
+  const shown = !enabled || hover || focus || pinned;
+  return {
+    shown,
+    rootProps: enabled ? {
+      onPointerEnter: () => setHover(true),
+      // an open menu is drawn outside the page (a popover): its pointer and
+      // focus are the header's too, so the header stays while it is open
+      onPointerLeave: () => setHover(menuIsOpen()),
+      onFocus: () => setFocus(true),
+      onBlur: (event: { currentTarget: Element; relatedTarget: EventTarget | null }) => {
+        if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) setFocus(menuIsOpen());
+      },
+    } : {},
+  };
+}
+
+/** The last refresh, left of the hover header: relative, exact in the tooltip. */
+function PageRefreshed({ at }: { at: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(timer);
+  }, []);
+  const exact = new Date(at).toLocaleString();
+  return (
+    <span data-page-refreshed title={t("pages.lastRefreshAt", { at: exact })}
+      className="pointer-events-auto hidden min-w-0 shrink-0 truncate rounded-full border border-hairline/50 bg-raised px-3 py-2 text-[12px] text-ink-secondary shadow-sm @min-[48rem]/pagehead:block">
+      {t("pages.lastRefresh", { when: relativeTime(at, now) })}
+    </span>
+  );
+}
+
 export interface PageSurfaceProps {
   pageId: string;
   /** The version to show first; else the newest. */
@@ -279,7 +326,9 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
   // loading the page never runs again because of it
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const [refreshedAt, setRefreshedAt] = useState<number | null>(null);
   const update = useCallback((next: PublishedPageSummary) => {
+    setRefreshedAt(Date.now());
     setPage(next);
     onChangeRef.current?.(next);
   }, []);
@@ -309,7 +358,7 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
     const ask = () => {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       api<{ page: PublishedPageSummary }>(`/api/pages/${encodeURIComponent(pageId)}`)
-        .then((answer) => { if (live) setFollowed(answer.page.versions.at(-1)?.n); })
+        .then((answer) => { if (live) { setFollowed(answer.page.versions.at(-1)?.n); setRefreshedAt(Date.now()); } })
         .catch(() => { /* the next ask tries again */ });
     };
     const timer = setInterval(ask, PAGE_FOLLOW_MS);
@@ -341,6 +390,11 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
   }, [pageId, version, reloads]);
 
   const annotating = panel === "annotate";
+  const isMac = typeof window !== "undefined" && window.ogb?.platform === "darwin";
+  // Hidden only in the desktop window (it has no native title bar there); in a
+  // browser tab the browser's own chrome stays and so does the header.
+  const hideChrome = follow && Boolean(windowSelf);
+  const chrome = useHoverChrome(hideChrome, sharing || panel !== null, windowSelf?.onPointer);
   const innerFrame = () => {
     // the page's own frame, inside this viewer's wrapper, and nothing else
     try {
@@ -428,19 +482,23 @@ export function PageSurface({ pageId, version: initialVersion, initialTitle = ""
     // under the page took every click on × and the round buttons (0.8.11:
     // no way out of a page). The page runs to the top edge, so none of it
     // drags the window.
-    <div ref={rootRef} data-page-surface={pageId} className={cn("window-no-drag relative flex h-full min-h-0 w-full min-w-0 flex-col bg-app text-ink", className)}>
+    <div ref={rootRef} data-page-surface={pageId} data-page-chrome={hideChrome ? (chrome.shown ? "shown" : "hidden") : undefined} {...chrome.rootProps} className={cn("window-no-drag relative flex h-full min-h-0 w-full min-w-0 flex-col bg-app text-ink", className)}>
       {/* floats over the page, as the reference design draws it: the page
           runs to the top edge; only the round buttons and the pill catch
           the pointer */}
       {/* @container: on a narrow page (a phone, a split pane) Share keeps only
           its icon and the title pill takes the room between the buttons, so
           the pill never runs under « … » (390 px, lot 5). */}
-      <header className="@container/pagehead pointer-events-none absolute inset-x-0 top-0 z-[2] flex h-14 items-center gap-2 px-3 [&>*]:pointer-events-auto">
+      <header data-page-header className={cn("@container/pagehead pointer-events-none absolute inset-x-0 top-0 z-[2] flex h-14 items-center gap-2 px-3 [&>*]:pointer-events-auto",
+        hideChrome && "transition-opacity duration-150 motion-reduce:transition-none", hideChrome && !chrome.shown && "opacity-0", hideChrome && isMac && "ps-20")}>
+        {/* own window, no native title bar (#2336): the header moves the window */}
+        {hideChrome && chrome.shown && <div data-page-drag aria-hidden="true" className="window-drag !pointer-events-none absolute inset-0 -z-10" />}
         <button type="button" data-page-close aria-label={t("pages.backToChat")} title={t("pages.backToChat")} onClick={onClose} className={cn(ROUND, "window-no-drag")}>
           <X size={17} />
         </button>
+        {follow && refreshedAt !== null && <PageRefreshed at={refreshedAt} />}
         <div className="!pointer-events-none absolute inset-x-28 flex justify-center @max-[34rem]/pagehead:start-14 @max-[34rem]/pagehead:end-[9.5rem]">
-          <div className="pointer-events-auto min-w-0 max-w-full">
+          <div className="pointer-events-auto window-no-drag min-w-0 max-w-full">
             <PageTitlePill title={title} busy={busy} onRename={rename} />
           </div>
         </div>

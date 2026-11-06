@@ -27,7 +27,7 @@ require("./artifact-window-preload.cjs");
 test("artifact window preload exposes always-on-top, fit-to-content and OS fullscreen", async () => {
   assert.deepEqual([...exposed.keys()].sort(), ["artifactWindowSelf", "ogb"]);
   const self = exposed.get("artifactWindowSelf");
-  assert.deepEqual(Object.keys(self).sort(), ["fitContent", "isAlwaysOnTop", "setAlwaysOnTop"]);
+  assert.deepEqual(Object.keys(self).sort(), ["fitContent", "isAlwaysOnTop", "onPointer", "setAlwaysOnTop"]);
   assert.equal(await self.isAlwaysOnTop(), true);
   assert.equal(await self.setAlwaysOnTop(true), true);
   assert.equal(await self.fitContent({ width: 640, height: 360 }), true);

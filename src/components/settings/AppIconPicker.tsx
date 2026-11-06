@@ -20,7 +20,7 @@ import {
   UPLOAD_APP_ICON,
   appIconHintKey,
   appIconTargets,
-  primaryBotChoice,
+  withPrimaryChoice,
   type AppIconChoice,
 } from "@/lib/app-icon-choices";
 import { appIconGlyphSvg } from "@/lib/app-icon-glyphs";
@@ -52,10 +52,7 @@ export function AppIconPicker() {
   const unlocks = useUnlocks();
   const viewer = viewerActorId(state.config);
   const primary = state.bots.find((bot) => isViewersPrimaryBot(bot, viewer)) ?? null;
-  const choices = useMemo(() => {
-    const extra = primaryBotChoice(primary);
-    return extra ? [...APP_ICON_CHOICES, extra] : [...APP_ICON_CHOICES];
-  }, [primary]);
+  const choices = useMemo(() => withPrimaryChoice(primary), [primary]);
   const { template, sizes } = appIconTargets(platform);
 
   useEffect(() => {

@@ -61,6 +61,17 @@ const owl = (skin: MascotSkinId, color: MascotColorName, background: readonly [s
   fit: "contain",
 });
 
+// Finished character pictures (2026-11-06): the app serves each one from public/brand/character-icons.
+export const CHARACTER_APP_ICON_IDS = ["block", "droplet", "teardrop", "spiky", "triangle", "sprout", "oblong", "ghost", "blob"] as const;
+const CHARACTER_ICON_PREFIX = "character:";
+const characterIcon = (name: (typeof CHARACTER_APP_ICON_IDS)[number]): AppIconChoice => ({
+  id: `${CHARACTER_ICON_PREFIX}${name}`,
+  labelKey: `settings.appIcon.character.${name}` as LocaleKey,
+  background: ["#1C1C1E", "#0C0C0D"],
+  art: { kind: "image", src: `/brand/character-icons/${name}.png` },
+  fit: "cover",
+});
+
 export const APP_ICON_CHOICES: readonly AppIconChoice[] = [
   { id: DEFAULT_APP_ICON_ID, labelKey: "settings.appIcon.default", background: ["#0A1A44", "#020818"], art: { kind: "default" }, fit: "cover" },
   { id: SAGAX_OWL_APP_ICON_ID, labelKey: "floatingBots.mascot.owl", background: ["#3A3842", "#3A3842"], art: { kind: "image", src: "/brand/sagax-owl-app-icon.svg" }, fit: "cover" },
@@ -87,7 +98,16 @@ export const APP_ICON_CHOICES: readonly AppIconChoice[] = [
   { id: "ogre:plain", labelKey: "floatingBots.mascot.ogre", background: ["#F3EBD2", "#C9D79A"], art: { kind: "ogre", skin: "plain", color: "green" }, fit: "contain" },
   { id: "frog:plain", labelKey: "floatingBots.mascot.frog", background: ["#EEF6DC", "#BFDDA0"], art: { kind: "frog", skin: "plain", color: "green" }, fit: "contain" },
   { id: "crab:plain", labelKey: "floatingBots.mascot.crab", background: ["#F8E6DC", "#E8B89A"], art: { kind: "crab", skin: "coral", color: "orange" }, fit: "contain" },
+  ...CHARACTER_APP_ICON_IDS.map(characterIcon),
 ];
+
+/** The choices in the picker's order: the Primary Bot (when there is one) sits before the character pictures. */
+export function withPrimaryChoice(primary: { id: string } | null | undefined): AppIconChoice[] {
+  const extra = primaryBotChoice(primary);
+  if (!extra) return [...APP_ICON_CHOICES];
+  const at = APP_ICON_CHOICES.findIndex((choice) => choice.id.startsWith(CHARACTER_ICON_PREFIX));
+  return at < 0 ? [...APP_ICON_CHOICES, extra] : [...APP_ICON_CHOICES.slice(0, at), extra, ...APP_ICON_CHOICES.slice(at)];
+}
 
 /** The Primary Bot's look, when the person has one. */
 export function primaryBotChoice(bot: { id: string } | null | undefined): AppIconChoice | null {

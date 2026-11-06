@@ -9,91 +9,72 @@ import {
   type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
-  type CSSProperties,
 } from "react";
 import {
-  CalendarClock,
-  CalendarDays,
-  CheckCheck,
   ChevronLeft,
-  ChevronRight,
-  CircleAlert,
   Clock3,
   ExternalLink,
   FileText,
-  List,
   Loader2,
   Paperclip,
-  Pause,
-  Plus,
   Trash2,
   UserRoundPlus,
   UsersRound,
   Video,
-  Webhook,
   X,
 } from "lucide-react";
-
 import { BotAvatar } from "@/components/Avatar";
 import { discardConfirmRequest, useConfirm } from "@/components/ConfirmProvider";
 import { AnchoredPopover } from "@/components/AnchoredPopover";
 import { DetailPanel } from "@/components/DetailPanel";
-import { CalendarSidebar } from "@/components/routines/CalendarSidebar";
-import { RightRailStrip, useRightRailOpen } from "@/components/RightRail";
-import { RoutineList } from "@/components/routines/RoutineList";
-import { RoutineGroupedList } from "@/components/routines/RoutineGroupedList";
-import { routineGroupBy, saveRoutineGroupBy, type RoutineGroupBy } from "@/lib/routine-grouping";
-import { RoutineMenuPortal, routineRowActions, RoutineRowMenuItems, RoutineTitle } from "@/components/routines/RoutineRowMenu";
-import { PAGE_COLUMN, PAGE_FIELD_LABEL, PAGE_FILTER_RESET, PAGE_HEADER_BUTTON, PAGE_INDICATOR, PAGE_MENU_COUNT, PAGE_POPOVER, PAGE_SCROLL, PageFilters, PageHeader, PageHeading, PageMenu, PageMenuItem, PageMenuSeparator, PageSegment, PageTopStrip, useDismissMenus } from "@/components/content-page";
-import { RoutineLogs } from "@/components/routines/RoutineLogs";
-import { RoutineOwnerBadge, RoutineScopeBar } from "@/components/routines/RoutineScopeBar";
-import { useRoutineScope } from "@/lib/use-routine-scope";
-import { useAdvancedMode } from "@/lib/interface-mode";
-import { RoutineAwayBanner } from "@/components/routines/RoutineAwayBanner";
+import { RoutineTitle } from "@/components/routines/RoutineRowMenu";
+import { RoutineOwnerBadge } from "@/components/routines/RoutineScopeBar";
 import { clearRoutineRuns, RoutineDetail } from "@/components/routines/RoutineDetail";
 import { canRunRoutineNow, routineRunInFlight } from "@/components/routines/RunNowButton";
-import { routineRunLabel, scheduleRepeatsEventDate, upcomingRoutines } from "@/lib/routine-display";
+import { routineRunLabel, scheduleRepeatsEventDate } from "@/lib/routine-display";
 import { t, activeLocale } from "@/lib/i18n";
-import { useCaptionChrome, useDesktopCapabilities } from "@/components/DesktopCapabilities";
-import { TriggersPanel } from "@/components/TriggersPanel";
 import type { CalendarCall, CalendarCallInput } from "@/lib/calendar-calls";
 import { cn } from "@/lib/cn";
 import { mausInk } from "@/lib/mascot";
 import {
   addDays,
-  atLocalTime,
   CALENDAR_SLOT_MINUTES,
-  calendarRangeLabel,
   formatGmtOffset,
   packCalendarCollisions,
-  scheduledRoutineItems,
   groupCalendarSlots,
-  scheduleAt,
   slotAt,
   startOfDay,
-  startOfWeek,
 } from "@/lib/routine-calendar";
-import { cachedDateFormat, dayNames, intervalLabel, niceDate, niceTime, scheduleLabel } from "@/lib/schedule-label";
+import {
+  cachedDateFormat,
+  dayNames,
+  intervalLabel,
+  niceDate,
+  niceTime,
+  scheduleLabel,
+} from "@/lib/schedule-label";
 import { PillSelect, Switch } from "./SettingsPrimitives";
 import { MarkdownEditor } from "./markdown/MarkdownEditor";
 import {
-  isRoutineProblemRun,
   type Routine,
   type RoutineInput,
   type RoutineRunOn,
   type RoutineRun,
-  type RoutineRunStatus,
-  type RoutineRunStatusFilter,
 } from "@/lib/routines";
-import { api, openRoutineRun, useStore, type AppState, type Bot, type Group } from "@/state/store";
-import { shallowEqual, useStoreDispatch, useStoreSelector } from "@/state/store-selector";
+import {
+  api,
+  openRoutineRun,
+  useStore,
+  type AppState,
+  type Bot,
+  type Group,
+} from "@/state/store";
+import { useStoreSelector } from "@/state/store-selector";
 import { viewerCanCreateBots } from "@/lib/viewer";
 import { createAnswerErrorMessage, recoverCreatedRoutineAfterLostAnswer } from "@/lib/routine-save-recovery";
-import { limitResetWhen, resetMarkers, useEngineLimits, type ResetMarker } from "@/lib/limit-resets";
-import { LimitWarnings } from "@/components/automations/LimitWarnings";
+import { limitResetWhen, type ResetMarker } from "@/lib/limit-resets";
 import { LimitResetMarker, type ResetDrop } from "@/components/routines/LimitResetMarkers";
 import { readableError } from "@/lib/plain-error";
-
 import {
   HOUR_HEIGHT,
   BOT_DRAG_TYPE,
@@ -106,14 +87,15 @@ import type {
   EventEditorProps,
 } from "./RoutineCalendarPage.tsx-parts/types";
 import {
-  nextHour,
-  projectCalls,
+  routineEditorAt,
   statusState,
 } from "./RoutineCalendarPage.tsx-parts/helpers";
 import { AttachmentChips, BotPicker, formatWithAiRequest } from "./RoutineCalendarPage.tsx-parts/editorWidgets";
 import { EventEditorBody } from "./RoutineCalendarPage.tsx-parts/EventEditorBody";
+import { useRoutinesPage } from "./RoutineCalendarPage.tsx-parts/useRoutinesPage";
+import { RoutinesPageView } from "./RoutineCalendarPage.tsx-parts/RoutinesPageView";
 
-export { formatWithAiRequest };
+export { formatWithAiRequest, routineEditorAt };
 
 function routineConfigSignature(routine: Routine | undefined): string {
   if (!routine) return "";
@@ -1023,20 +1005,6 @@ export function PausedList({
   );
 }
 
-/** The moment the editor opens a routine on: its one-time date, its next
- * run, or the next hour. */
-export function routineEditorAt(routine: Routine | undefined): number {
-  return routine?.schedule.type === "once"
-    ? routine.schedule.at
-    : routine?.schedule.type === "daily"
-      ? atLocalTime(Date.now(), routine.schedule.time)
-      : routine?.schedule.type === "interval"
-        ? routine.schedule.anchorAt
-      : routine?.schedule.type === "cron"
-        ? routine.nextRunAt ?? nextHour()
-      : nextHour();
-}
-
 export function RoutineEditor({
   routine,
   copyOf,
@@ -1082,580 +1050,9 @@ export function RoutineEditor({
   return <EventEditor seed={{ kind: "routine", at, durationMinutes: source?.durationMinutes ?? 30, botIds: lockedBotId ? [lockedBotId] : source ? [source.botId] : group?.leadBotId ? [group.leadBotId] : [], routine, ...(copyOf && !routine ? { copyOf } : {}), ...(group && !source ? { groupId: group.id } : {}), ...(folder && !routine ? { folder } : {}), ...(mode ? { mode } : {}), ...(!manage ? { unmanaged: true } : {}) }} bots={bots} lockedBotId={lockedBotId} defaultRunOn={defaultRunOn} presentation={presentation} onClose={onClose} onDismiss={onDismiss} onDeleted={onDeleted} onDuplicate={onDuplicate} onSavedCall={() => {}} />;
 }
 
-/** The slices of the store the Automations page reads (2026-11-02): it
- * renders when one of them changes, not on every store frame (a bot's
- * stream, an unread mark, the sidebar). */
-function selectRoutinesPage(state: AppState) {
-  return {
-    routines: state.routines,
-    routineRuns: state.routineRuns,
-    bots: state.bots,
-    groups: state.groups,
-    config: state.config,
-    routinesFocus: state.routinesFocus,
-    routinesLoadState: state.routinesLoadState,
-    webhooks: state.webhooks,
-  };
-}
-
-const IN_FLIGHT_STATUSES: ReadonlySet<RoutineRunStatus> = new Set(["queued", "running", "waiting"]);
-/** The in-flight runs, kept as the same array while that set (ids and
- * statuses) does not change: the upcoming panel reads only these. */
-function useInFlightRuns(runs: RoutineRun[]): RoutineRun[] {
-  const held = useRef<{ key: string; runs: RoutineRun[] }>({ key: "", runs: [] });
-  return useMemo(() => {
-    const inFlight = runs.filter((run) => IN_FLIGHT_STATUSES.has(run.status));
-    const key = inFlight.map((run) => `${run.id}:${run.routineId}:${run.status}`).join("|");
-    if (key !== held.current.key) held.current = { key, runs: inFlight };
-    return held.current.runs;
-  }, [runs]);
-}
-
-/** The latest render's function behind a stable one: a memoized child keeps
- * the same prop while the function reads this render's state. */
-function useStableHandler<A extends unknown[], R>(handler: (...args: A) => R): (...args: A) => R {
-  const ref = useRef(handler);
-  ref.current = handler;
-  return useCallback((...args: A) => ref.current(...args), []);
-}
-
-export const RoutinesPage = memo(function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fill = false }: { onBack: () => void; onOpenRoom: (id: string) => void; embedded?: boolean; fill?: boolean }) {
-  const confirm = useConfirm();
-  const state = useStoreSelector(selectRoutinesPage, shallowEqual);
-  const dispatch = useStoreDispatch();
-  const { capabilities } = useDesktopCapabilities();
-  const advanced = useAdvancedMode();
-  const routinesOnly = window.ogb?.remoteClient?.active === true;
-  const newMenuRef = useRef<HTMLDetailsElement>(null);
-  const navMenuRef = useRef<HTMLDetailsElement>(null);
-  const filtersMenuRef = useRef<HTMLDetailsElement>(null);
-  const { dragProps, noDragStyle, controlsShiftStyle } = useCaptionChrome();
-  const [section, setSection] = useState<"calendar" | "logs" | "webhooks">(state.routinesFocus?.section === "logs" || state.routinesFocus?.section === "webhooks" ? state.routinesFocus.section : "calendar");
-  const [scheduleView, setScheduleView] = useState<"calendar" | "list">(state.routinesFocus?.view ?? "calendar");
-  // Mine, My teams or Everyone and the filters (src/lib/use-routine-scope.ts).
-  const scoped = useRoutineScope({ config: state.config, routines: state.routines, runs: state.routineRuns, ignoreStatus: section === "calendar" && scheduleView === "calendar" });
-  const [viewDays, setViewDays] = useState<1 | 3 | 7>(7);
-  const [anchor, setAnchor] = useState(() => startOfDay(Date.now()));
-  const [botFilter, setBotFilterState] = useState(state.routinesFocus?.botId ?? scoped.prefs.botId ?? "all");
-  const setBotFilter = (botId: string) => {
-    setBotFilterState(botId);
-    scoped.setPrefs({ ...scoped.prefs, botId: botId === "all" ? undefined : botId });
-  };
-  const [routineFilter, setRoutineFilter] = useState<string | undefined>(state.routinesFocus?.routineId);
-  const [statusFilter, setStatusFilter] = useState<RoutineRunStatusFilter>(state.routinesFocus?.runStatus ?? "all");
-  const [calls, setCalls] = useState<CalendarCall[]>([]);
-  const [quick, setQuick] = useState<EventSeed | null>(null);
-  const [editor, setEditor] = useState<EventSeed | null>(null);
-  const [selected, setSelected] = useState<CalendarEventItem | null>(null);
-  const [pausedOpen, setPausedOpen] = useState(false);
-  const [botsOpen, setBotsOpen] = useRightRailOpen();
-  const [webhookCreateRequest, setWebhookCreateRequest] = useState(0);
-  const [error, setError] = useState("");
-  const visibleBots = state.bots.filter((bot) => !bot.hidden);
-  const rangeStart = viewDays === 7 ? startOfWeek(anchor) : startOfDay(anchor);
-  const rangeEnd = addDays(rangeStart, viewDays);
-  const engineLimits = useEngineLimits();
-  const markers = useMemo(() => resetMarkers(engineLimits, rangeStart, rangeEnd), [engineLimits, rangeStart, rangeEnd]);
-
-  useEffect(() => {
-    const focus = state.routinesFocus;
-    setSection(focus?.section === "logs" || focus?.section === "webhooks" ? focus.section : "calendar");
-    setScheduleView(focus?.view ?? "calendar");
-    setBotFilterState(focus?.botId ?? scoped.prefs.botId ?? "all");
-    setRoutineFilter(focus?.routineId);
-    setStatusFilter(focus?.runStatus ?? "all");
-  }, [state.routinesFocus]);
-  const scopedRoutines = scoped.routines;
-  const scopedRuns = scoped.runs;
-  // The bots the "All bots" select lists: the person's own, or the bots of
-  // the routines in a wider scope.
-  const botChoices = scoped.scope === "mine" ? visibleBots.map((bot) => ({ id: bot.id, name: bot.name })) : scoped.facets.botChoices;
-
-  const loadCalls = useCallback(async () => {
-    try {
-      const response = await api("/api/calendar-calls");
-      setCalls(response.calls ?? []);
-    } catch (cause) {
-      setError(readableError(cause));
-    }
-  }, []);
-  useEffect(() => {
-    if (!routinesOnly) void loadCalls();
-  }, [loadCalls, routinesOnly]);
-  useDismissMenus([newMenuRef, navMenuRef, filtersMenuRef]);
-
-  // The plans come from the schedules alone (scheduledRoutineItems ignores
-  // the runs): a live run frame never recomputes them.
-  // An item that reads the same as the last one drawn (same routine or call
-  // record, time and length) stays the same object, so its card skips the
-  // render when another routine changes.
-  const heldItems = useRef(new Map<string, CalendarEventItem>());
-  const items = useMemo<CalendarEventItem[]>(() => {
-    const routineItems = scheduledRoutineItems(scopedRoutines, [], rangeStart, rangeEnd).map((item) => ({ ...item, kind: "routine" as const }));
-    const callItems = projectCalls(calls, rangeStart, rangeEnd).map((item) => ({ ...item, kind: "call" as const }));
-    const next = [...routineItems, ...callItems]
-      .filter((item) => botFilter === "all" || (item.kind === "call" ? item.call.botIds.includes(botFilter) : (item.routine?.botId ?? item.run?.botId) === botFilter))
-      .sort((left, right) => left.at - right.at);
-    const held = heldItems.current;
-    const kept = new Map<string, CalendarEventItem>();
-    const shared = next.map((item) => {
-      const old = held.get(item.id);
-      const same = old && old.kind === item.kind && old.at === item.at && old.durationMinutes === item.durationMinutes
-        && (item.kind === "call" ? old.kind === "call" && old.call === item.call : old.kind === "routine" && old.routine === item.routine && old.run === item.run);
-      const value = same ? old : item;
-      kept.set(item.id, value);
-      return value;
-    });
-    heldItems.current = kept;
-    return shared;
-  }, [scopedRoutines, calls, rangeStart, rangeEnd, botFilter]);
-
-  // The ranges either side are projected while the page is idle, one day per
-  // idle slice (no long task), so Previous and Next (and Day, 3 days, Week)
-  // find their cron runs already computed (the per-day cache in
-  // routine-calendar.ts).
-  const calendarShown = section === "calendar" && scheduleView === "calendar";
-  useEffect(() => {
-    if (!calendarShown) return;
-    const idle = window.requestIdleCallback ?? ((callback: IdleRequestCallback) => window.setTimeout(() => callback({ didTimeout: true, timeRemaining: () => 8 } as IdleDeadline), 200));
-    const cancel = window.cancelIdleCallback ?? window.clearTimeout;
-    const days: number[] = [];
-    for (let day = startOfWeek(addDays(rangeStart, -7)); day < rangeStart; day = addDays(day, 1)) days.push(day);
-    for (let day = rangeEnd; day < addDays(startOfWeek(rangeEnd), 14); day = addDays(day, 1)) days.push(day);
-    let handle = 0;
-    const step = (deadline: IdleDeadline) => {
-      while (days.length && deadline.timeRemaining() > 4) {
-        const day = days.shift()!;
-        scheduledRoutineItems(scopedRoutines, [], day, addDays(day, 1));
-      }
-      if (days.length) handle = idle(step);
-    };
-    handle = idle(step);
-    return () => cancel(handle);
-  }, [calendarShown, scopedRoutines, rangeStart, rangeEnd]);
-
-  const liveSelected = selected?.kind === "call"
-    ? (() => { const call = calls.find((candidate) => candidate.id === selected.call.id); return call ? { ...selected, call } : null; })()
-    : selected?.kind === "routine"
-      ? {
-          ...selected,
-          routine: selected.routine ? scopedRoutines.find((routine) => routine.id === selected.routine?.id) ?? null : null,
-          run: selected.run ? scopedRuns.find((run) => run.id === selected.run?.id) ?? selected.run : null,
-        }
-      : null;
-  // The pills count within the scope; the sidebar's own count stays the
-  // person's (the store).
-  const paused = scopedRoutines.filter((routine) => !routine.enabled && (routine.schedule.type !== "once" || routine.schedule.at > Date.now()));
-  const running = scopedRuns.filter((run) => ["queued", "running", "waiting"].includes(run.status)).length;
-  const unseenFailures = scopedRuns.filter((run) => isRoutineProblemRun(run) && !run.seenAt).length;
-  const filteredRoutines = useMemo(() => scopedRoutines.filter((routine) => botFilter === "all" || routine.botId === botFilter), [scopedRoutines, botFilter]);
-  const upcoming = useMemo(() => upcomingRoutines(filteredRoutines), [filteredRoutines]);
-  const inFlightRuns = useInFlightRuns(scopedRuns);
-  const filteredRuns = scopedRuns.filter((run) => botFilter === "all" || run.botId === botFilter);
-  const routineOwnerOf = (run: RoutineRun) => scopedRoutines.find((routine) => routine.id === run.routineId);
-  const clearLogs = () => {
-    // Mine without filters: the store's own Clear logs, as before.
-    if (scoped.live && botFilter === "all" && !scoped.prefs.status) {
-      dispatch({ type: "clearRoutineRuns" });
-      return;
-    }
-    api(`/api/routine-runs?${scoped.clearSearch(botFilter === "all" ? undefined : botFilter)}`, { method: "DELETE" })
-      .then(({ removed }) => {
-        dispatch({ type: "routineRunsRemoved", ids: Array.isArray(removed) ? removed : [] });
-        void scoped.reload();
-      })
-      .catch((cause) => setError(readableError(cause)));
-  };
-  // 2026-10-29: a routine's row menu in the list (right click, its "…"):
-  // Run now or Stop, Pause or Resume, Rename in place, Open, Duplicate, Delete.
-  const [rowMenu, setRowMenu] = useState<{ routine: Routine; x: number; y: number; trigger: HTMLElement } | null>(null);
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  // 2026-11-03 (JC): the List view grouped by bot, by folder, or flat.
-  const viewerId = state.config?.viewer?.principalId ?? null;
-  const [groupBy, setGroupByState] = useState<RoutineGroupBy>(() => routineGroupBy(viewerId));
-  const setGroupBy = (next: RoutineGroupBy) => { setGroupByState(next); saveRoutineGroupBy(viewerId, next); };
-  const createInGroup = (botId: string, folder?: string) => { setSelected(null); setPausedOpen(false); setQuick(null); setEditor({ kind: "routine", at: nextHour(), durationMinutes: 30, botIds: [botId], ...(folder ? { folder } : {}) }); };
-  const closeRowMenu = (focus = true) => {
-    const trigger = rowMenu?.trigger;
-    setRowMenu(null);
-    if (focus) requestAnimationFrame(() => trigger?.isConnected && trigger.focus());
-  };
-  const duplicateRoutine = (routine: Routine) => setEditor({ kind: "routine", at: routineEditorAt(routine), durationMinutes: routine.durationMinutes, botIds: [routine.botId], copyOf: routine });
-  const renameRoutine = (routine: Routine, name: string) => {
-    setRenamingId(null);
-    dispatch({ type: "routinePatched", routine: { ...routine, name } });
-    dispatch({ type: "updateRoutine", routineId: routine.id, patch: { name } });
-  };
-  const openRoutine = (routine: Routine) => setSelected({ kind: "routine", id: routine.id, at: routine.nextRunAt ?? (routine.schedule.type === "once" ? routine.schedule.at : routine.schedule.type === "interval" ? routine.schedule.anchorAt : routine.schedule.type === "webhook" || routine.schedule.type === "event" ? Date.now() : routine.schedule.type === "cron" ? nextHour() : routine.schedule.type === "limit_reset" ? (routine.schedule.at ?? Date.now()) : atLocalTime(Date.now(), routine.schedule.time)), durationMinutes: routine.durationMinutes, routine, run: null });
-  // An upcoming row: the calendar moves to its next run, and its details open.
-  const showUpcoming = (routine: Routine) => {
-    if (routine.nextRunAt != null) setAnchor(startOfDay(routine.nextRunAt));
-    openRoutine(routine);
-  };
-  const openLogs = (routine: Routine) => { setRoutineFilter(routine.id); setSection("logs"); };
-  // 2026-11-05 (#2098): a run opens in the chat, at its message.
-  const openRun = (run: RoutineRun) => {
-    openRoutineRun(dispatch, { runId: run.id, routineId: run.routineId, botId: run.botId });
-    if (["failed", "missed"].includes(run.status) && !run.seenAt && !run.redacted) dispatch({ type: "markRoutineRunSeen", runId: run.id });
-  };
-  // 2026-10-28: "Running" on a bot panel row lands on that run, open.
-  useEffect(() => {
-    const runId = state.routinesFocus?.runId;
-    // 2026-10-29: View run and a run's notification land here too; a run
-    // outside the current scope (or of a deleted routine) still opens.
-    const run = runId ? scopedRuns.find((candidate) => candidate.id === runId) ?? state.routineRuns.find((candidate) => candidate.id === runId) : undefined;
-    if (run) openRun(run);
-  }, [state.routinesFocus, state.routineRuns.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
-  // 2026-11-02: Configuration in a run's ⋯ menu opens the routine's editor
-  // in the side panel (a routine is edited there).
-  useEffect(() => {
-    const editId = state.routinesFocus?.editRoutineId;
-    const routine = editId ? scopedRoutines.find((candidate) => candidate.id === editId) ?? state.routines.find((candidate) => candidate.id === editId) : undefined;
-    if (!routine) return;
-    setSelected(null);
-    setPausedOpen(false);
-    setEditor({ kind: "routine", at: routineEditorAt(routine), durationMinutes: routine.durationMinutes, botIds: [routine.botId], routine });
-  }, [state.routinesFocus, state.routines.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
-  const macInset = capabilities.windowChrome === "mac-inset";
-  const windowDragStyle = macInset
-    ? ({ WebkitAppRegion: "drag" } as CSSProperties)
-    : undefined;
-  const windowNoDragStyle = macInset
-    ? ({ WebkitAppRegion: "no-drag" } as CSSProperties)
-    : undefined;
-
-  const setView = (days: 1 | 3 | 7) => {
-    setViewDays(days);
-    setAnchor((current) => startOfDay(current));
-  };
-  const goToday = useCallback(() => setAnchor(startOfDay(Date.now())), []);
-  const handleWebhookCreateHandled = useCallback(() => setWebhookCreateRequest(0), []);
-  const openCreate = useCallback((seed?: Partial<EventSeed>) => {
-    setSelected(null);
-    setPausedOpen(false);
-    // 2026-11-01 (no modals): quick create hangs off what opened it, the slot
-    // that was clicked or the New button, never the middle of the window.
-    const button = newMenuRef.current?.querySelector("summary")?.getBoundingClientRect();
-    const anchor = seed?.anchor ?? (button ? { x: button.right, y: button.bottom } : undefined);
-    setQuick({ kind: "routine", at: nextHour(), durationMinutes: 30, botIds: [], ...seed, ...(anchor ? { anchor } : {}) });
-  }, []);
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.matches("input, textarea, select, [contenteditable=true]")) return;
-      // A panel (the editor asking about unsaved changes) or the quick create
-      // popover already handled this Escape.
-      if (event.defaultPrevented) return;
-      if (event.key === "Escape") { for (const menu of [newMenuRef.current, navMenuRef.current, filtersMenuRef.current]) menu?.removeAttribute("open"); setEditor(null); setSelected(null); setPausedOpen(false); return; }
-      if (section !== "calendar" || event.metaKey || event.ctrlKey || event.altKey) return;
-      if (event.key.toLowerCase() === "c") { event.preventDefault(); openCreate(); }
-      if (event.key.toLowerCase() === "t") goToday();
-      if (event.key === "1") setView(1);
-      if (event.key === "3") setView(3);
-      if (event.key.toLowerCase() === "w") setView(7);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [section, openCreate, goToday, anchor]);
-
-  const upsertCall = (call: CalendarCall) => setCalls((current) => current.some((candidate) => candidate.id === call.id) ? current.map((candidate) => candidate.id === call.id ? call : candidate) : [call, ...current]);
-  const moveEvent = async (dragged: { kind: EventKind; id: string; at: number }, nextAt: number) => {
-    if (nextAt === dragged.at) return;
-    try {
-      if (dragged.kind === "routine") {
-        const routine = scopedRoutines.find((candidate) => candidate.id === dragged.id);
-        if (!routine || routine.canEdit === false) return;
-        if (routine.schedule.type === "cron") throw new Error(t("routineCalendar.openRoutineForCron"));
-        if (routine.schedule.type !== "once" && !(await confirm({
-          title: t("routineCalendar.moveSeries"),
-          confirmLabel: t("common.confirm"),
-          tone: "neutral",
-        }))) return;
-        const response = await api(`/api/routines/${routine.id}`, { method: "PATCH", body: JSON.stringify({ schedule: scheduleAt(routine.schedule, dragged.at, nextAt) }) });
-        dispatch({ type: "routinePatched", routine: response.routine });
-      } else {
-        const call = calls.find((candidate) => candidate.id === dragged.id);
-        if (!call) return;
-        if (call.schedule.type === "daily" && !(await confirm({
-          title: t("routineCalendar.moveSeries"),
-          confirmLabel: t("common.confirm"),
-          tone: "neutral",
-        }))) return;
-        const response = await api(`/api/calendar-calls/${call.id}`, { method: "PATCH", body: JSON.stringify({ schedule: scheduleAt(call.schedule, dragged.at, nextAt) }) });
-        upsertCall(response.call);
-      }
-    } catch (cause) {
-      setError(readableError(cause));
-    }
-  };
-  /** A bot dropped on a reset opens the quick composer for a limit-reset automation; an automation dropped there runs
-   * at that reset instead of its time. */
-  const dropOnReset = async (drop: ResetDrop, marker: ResetMarker) => {
-    if ("botId" in drop) {
-      setSelected(null);
-      setQuick({ kind: "routine", at: marker.at, durationMinutes: 30, botIds: [drop.botId], limitReset: { engine: marker.engine } });
-      return;
-    }
-    if (drop.event.kind !== "routine") {
-      setError(t("limits.callNotOnReset"));
-      return;
-    }
-    try {
-      const response = await api(`/api/routines/${drop.event.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ schedule: { type: "limit_reset", engine: marker.engine, repeat: "once" } }),
-      });
-      dispatch({ type: "routinePatched", routine: response.routine });
-    } catch (cause) {
-      setError(readableError(cause));
-    }
-  };
-  const resizeEvent = async (item: CalendarEventItem, durationMinutes: number) => {
-    try {
-      if (item.kind === "routine" && item.routine) {
-        const response = await api(`/api/routines/${item.routine.id}`, { method: "PATCH", body: JSON.stringify({ durationMinutes }) });
-        dispatch({ type: "routinePatched", routine: response.routine });
-      } else if (item.kind === "call") {
-        const response = await api(`/api/calendar-calls/${item.call.id}`, { method: "PATCH", body: JSON.stringify({ durationMinutes }) });
-        upsertCall(response.call);
-      }
-    } catch (cause) {
-      setError(readableError(cause));
-    }
-  };
-
-  // The header (2026-10-27): one row. On the left the title, the view (List
-  // or Calendar) and, in Calendar, ‹ Today › and the range; on the right the
-  // run indicators (active, problem runs), Filters, the ☰ menu and New.
-  // Filters holds the scope (Mine, My teams, Everyone), Team, Owner, Status,
-  // the bot and the calendar's range (Day, 3 days, Week); its badge counts
-  // what narrows the page. ☰ holds the sections (Schedule, Run logs,
-  // Webhooks), Paused routines and Mark all as read. Team map moved to the
-  // avatar menu's Tools (2026-10-27). Under 60rem of header the labels of
-  // the view switch and Filters fold to their icons (a tooltip keeps the
-  // name); under 44rem the view and dates take a second line. The right
-  // group clears the Windows caption buttons (useCaptionChrome, #1204).
-  // Its pieces (PageHeader, PageSegment, PageFilters, PageMenu) live in
-  // content-page.tsx, shared with the Achievements page (2026-10-28).
-  const scopeShown = section !== "webhooks" && scoped.available;
-  const calendarGrid = section === "calendar" && scheduleView === "calendar";
-  const hideStatus = calendarGrid;
-  const scopeFilters = scopeShown
-    ? (scoped.scope !== "mine" ? 1 : 0)
-      + (scoped.scope !== "mine" && scoped.prefs.teamId ? 1 : 0)
-      + (scoped.prefs.ownerId ? 1 : 0)
-      + (advanced && !hideStatus && scoped.prefs.status ? 1 : 0)
-    : 0;
-  const activeFilters = scopeFilters + (botFilter !== "all" ? 1 : 0);
-  const clearFilters = () => {
-    setBotFilterState("all");
-    scoped.setPrefs({ scope: "mine" });
-    setRoutineFilter(undefined);
-  };
-  const closeNavMenu = () => navMenuRef.current?.removeAttribute("open");
-  const FIELD_LABEL = PAGE_FIELD_LABEL;
-
-  const filtersMenu = section !== "webhooks" && (
-    <PageFilters name="automations" menuRef={filtersMenuRef} activeCount={activeFilters}>
-        {scopeShown && <div>
-          <span className={FIELD_LABEL}>{t("routines.scope.label")}</span>
-          <RoutineScopeBar stacked prefs={scoped.prefs} allowed={scoped.allowed} teams={scoped.facets.teams} owners={scoped.facets.owners} advanced={advanced} hideStatus={hideStatus} viewerPrincipalId={state.config?.viewer?.principalId ?? null} onChange={(next) => { scoped.setPrefs(next); setRoutineFilter(undefined); }} />
-        </div>}
-        <div className="block">
-          <span className={FIELD_LABEL}>{t("routineCalendar.filterBot")}</span>
-          <PillSelect
-            ariaLabel={t("routineCalendar.filterByBot")}
-            value={botFilter}
-            onChange={(next) => { setBotFilter(next); setRoutineFilter(undefined); }}
-            options={[{ value: "all", label: t("usage.allBots") }, ...botChoices.map((bot) => ({ value: bot.id, label: bot.name }))]}
-          />
-        </div>
-        {section === "calendar" && scheduleView === "list" && <div className="block" data-routine-group-by="">
-          <span className={FIELD_LABEL}>{t("routines.group.label")}</span>
-          <PillSelect
-            ariaLabel={t("routines.group.label")}
-            value={groupBy}
-            onChange={(next) => setGroupBy(next as RoutineGroupBy)}
-            options={[
-              { value: "bot", label: t("routines.group.bot") },
-              { value: "folder", label: t("routines.group.folder") },
-              { value: "none", label: t("routines.group.none") },
-            ]}
-          />
-        </div>}
-        {calendarGrid && <div className="block">
-          <span className={FIELD_LABEL}>{t("routineCalendar.scheduleRange")}</span>
-          <PillSelect
-            ariaLabel={t("routineCalendar.scheduleRange")}
-            value={String(viewDays)}
-            onChange={(next) => setView(Number(next) as 1 | 3 | 7)}
-            options={[
-              { value: "1", label: t("routines.view.day") },
-              { value: "3", label: t("routineCalendar.threeDays") },
-              { value: "7", label: t("routines.view.week") },
-            ]}
-          />
-        </div>}
-        {activeFilters > 0 && <button type="button" data-routine-filter-reset onClick={clearFilters} className={PAGE_FILTER_RESET}>{t("routines.scope.reset")}</button>}
-    </PageFilters>
-  );
-
-  const automationActions = (
-    <>
-          <PageMenu name="automations" menuRef={navMenuRef} label={t("routineCalendar.automationMenu")} title={paused.length > 0 ? `${t("routineCalendar.automationMenu")} (${t("routineCalendar.pausedMenu")} ${paused.length})` : t("routineCalendar.automationMenu")} badge={paused.length}>
-              <PageMenuItem icon={CalendarDays} current={section === "calendar"} onClick={() => { closeNavMenu(); setSection("calendar"); }}>{routinesOnly ? t("routineCalendar.scheduledRoutines") : t("routines.drawer.schedule")}</PageMenuItem>
-              <PageMenuItem icon={FileText} current={section === "logs"} trailing={unseenFailures > 0 ? <span className="ml-auto rounded-full bg-danger/10 px-1.5 text-[11px] text-danger">{unseenFailures}</span> : undefined} onClick={() => { closeNavMenu(); setSection("logs"); setRoutineFilter(undefined); }}>{t("routines.logs")}</PageMenuItem>
-              {!routinesOnly && <PageMenuItem icon={Webhook} current={section === "webhooks"} trailing={state.webhooks.length > 0 ? <span className={PAGE_MENU_COUNT}>{state.webhooks.length}</span> : undefined} onClick={() => { closeNavMenu(); setSection("webhooks"); }}>{t("routines.webhooks")}</PageMenuItem>}
-              <PageMenuSeparator />
-              {paused.length > 0 && <PageMenuItem icon={Pause} aria-label={t("routineCalendar.viewPaused")} trailing={<span className={PAGE_MENU_COUNT}>{paused.length}</span>} onClick={() => { closeNavMenu(); setQuick(null); setEditor(null); setSelected(null); setPausedOpen(true); }}>{t("routineCalendar.pausedMenu")}</PageMenuItem>}
-              <PageMenuItem icon={CheckCheck} onClick={() => { closeNavMenu(); dispatch({ type: "markAllRoutineRunsSeen" }); }}>{t("routines.markAllSeen")}</PageMenuItem>
-          </PageMenu>
-          <details ref={newMenuRef} className="group relative">
-            <summary role="button" data-automations-create aria-label={t("routineCalendar.createAutomation")} title={t("routineCalendar.createAutomation")} className={cn(PAGE_HEADER_BUTTON, "h-9 w-auto gap-1.5 border-transparent bg-accent px-3 text-[12px] font-medium text-white hover:bg-accent/90")}>
-              <Plus size={15} aria-hidden="true" /><span className="@max-[30rem]/page-header:sr-only">{t("sidebar.new")}</span>
-            </summary>
-            <div role="group" aria-label={t("routineCalendar.newAutomation")} className={cn(PAGE_POPOVER, "w-[280px] min-w-[200px] gap-0.5 p-1.5")}>
-              <button type="button" aria-label={t("routineCalendar.createTaskAria")} onClick={() => { newMenuRef.current?.removeAttribute("open"); setSection("calendar"); openCreate({ kind: "routine" }); }} className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-hover">
-                <Clock3 size={16} className="mt-0.5 shrink-0 text-accent" aria-hidden="true" />
-                <span><span className="block text-[13px] font-medium text-ink">{t("routineCalendar.scheduledTask")}</span><span className="mt-0.5 block text-[11px] leading-relaxed text-ink-secondary">{t("routineCalendar.scheduledTaskHelp")}</span></span>
-              </button>
-              {!routinesOnly && <button type="button" aria-label={t("routineCalendar.createCallAria")} onClick={() => { newMenuRef.current?.removeAttribute("open"); setSection("calendar"); openCreate({ kind: "call" }); }} className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-hover">
-                <Video size={16} className="mt-0.5 shrink-0 text-accent" aria-hidden="true" />
-                <span><span className="block text-[13px] font-medium text-ink">{t("routineCalendar.scheduledCall")}</span><span className="mt-0.5 block text-[11px] leading-relaxed text-ink-secondary">{t("routineCalendar.scheduledCallHelp")}</span></span>
-              </button>}
-              {!routinesOnly && <button type="button" aria-label={t("routineCalendar.createWebhookAria")} disabled={visibleBots.length === 0} onClick={() => { newMenuRef.current?.removeAttribute("open"); setSection("webhooks"); setWebhookCreateRequest((request) => request + 1); }} className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40">
-                <Webhook size={16} className="mt-0.5 shrink-0 text-accent" aria-hidden="true" />
-                <span><span className="block text-[13px] font-medium text-ink">{t("routines.trigger.webhook")}</span><span className="mt-0.5 block text-[11px] leading-relaxed text-ink-secondary">{t("routineCalendar.webhookHelp")}</span></span>
-              </button>}
-            </div>
-          </details>
-    </>
-  );
-  const sectionName = section === "logs" ? t("routines.logs") : section === "webhooks" ? t("routines.webhooks") : null;
-  // The calendar's handlers keep their identity, so the memoized grid, its
-  // cards and the side panel skip a render that changes none of their data.
-  // 2026-11-05 (#2098): a run on the grid opens in the chat, at its message;
-  // a routine or a call opens its details beside the calendar.
-  const openGridItem = useStableHandler((item: CalendarEventItem) => {
-    if (item.kind === "routine" && item.run) {
-      openRoutineRun(dispatch, { runId: item.run.id, routineId: item.run.routineId, botId: item.run.botId });
-      if (["failed", "missed"].includes(item.run.status) && !item.run.seenAt && !item.run.redacted) dispatch({ type: "markRoutineRunSeen", runId: item.run.id });
-      return;
-    }
-    setSelected(item);
-  });
-  const moveGridItem = useStableHandler((item: { kind: EventKind; id: string; at: number }, at: number) => void moveEvent(item, at));
-  const resizeGridItem = useStableHandler((item: CalendarEventItem, duration: number) => void resizeEvent(item, duration));
-  const dropGridReset = useStableHandler((drop: ResetDrop, marker: ResetMarker) => void dropOnReset(drop, marker));
-  const selectSidebarDate = useCallback((at: number) => setAnchor(startOfDay(at)), []);
-  const openSidebarRoutine = useStableHandler(showUpcoming);
-  const collapseSidebar = useCallback(() => setBotsOpen(false), []);
-  const pendingSlot = useMemo(() => quick && !quick.limitReset ? { at: quick.at, durationMinutes: quick.durationMinutes, kind: quick.kind } : null, [quick]);
-
-  return (
-    <main className={cn("flex h-full min-w-0 flex-col bg-app", fill ? "flex-1" : embedded ? "w-[min(820px,48vw)] min-w-[420px] shrink-0 border-l border-hairline/40" : "flex-1 animate-workspace-in")}>
-      {fill && <PageTopStrip />}
-      <PageHeader
-        name="automations"
-        icon={CalendarDays}
-        title={t("sidebar.nav.automations")}
-        section={sectionName}
-        titleProps={{ "data-tour": "automations-page" }}
-        {...(fill ? dragProps : {})}
-        topbar={fill}
-        inset={!embedded && !fill && macInset}
-        style={embedded ? undefined : fill ? dragProps.style : windowDragStyle}
-        primaryStyle={noDragStyle ?? windowNoDragStyle}
-        actionsStyle={{ ...(noDragStyle ?? windowNoDragStyle), ...controlsShiftStyle }}
-        primary={section === "calendar" && <>
-            <PageSegment label={t("routines.view.label")} value={scheduleView} onChange={setScheduleView} options={[
-              { value: "list", label: t("routines.view.list"), icon: List },
-              { value: "calendar", label: t("connectApps.capabilities.calendar"), icon: CalendarDays },
-            ]} />
-            {scheduleView === "calendar" && <>
-              <div className="flex shrink-0 items-center">
-                <button type="button" onClick={() => setAnchor((current) => addDays(current, -viewDays))} className="rounded-md p-1.5 text-ink-secondary hover:bg-raised hover:text-ink" aria-label={t("routines.previous")} title={t("routines.previous")}><ChevronLeft size={16} /></button>
-                <button type="button" onClick={goToday} className="rounded-md border border-hairline/50 px-2.5 py-1 text-[12px] font-medium text-ink hover:bg-raised">{t("routines.today")}</button>
-                <button type="button" onClick={() => setAnchor((current) => addDays(current, viewDays))} className="rounded-md p-1.5 text-ink-secondary hover:bg-raised hover:text-ink" aria-label={t("routines.next")} title={t("routines.next")}><ChevronRight size={16} /></button>
-              </div>
-              <div data-automations-range className="min-w-0 truncate text-[14px] font-medium text-ink">{calendarRangeLabel(rangeStart, viewDays)}</div>
-            </>}
-          </>}
-        actions={<>
-            {section !== "webhooks" && running > 0 && <span role="status" data-automations-running title={t("routineCalendar.activeCount", { count: running })} aria-label={t("routineCalendar.activeCount", { count: running })} className={cn(PAGE_INDICATOR, "text-accent")}><Loader2 size={13} className="animate-spin" aria-hidden="true" />{running}</span>}
-            {unseenFailures > 0 && <button type="button" data-automations-problems onClick={() => dispatch({ type: "showRoutines", section: "logs", runStatus: "problems" })} className="flex h-9 items-center gap-1 rounded-lg px-2 text-[12px] font-medium text-danger hover:bg-danger/10" title={t("routineCalendar.openProblemLogs")} aria-label={t("routineCalendar.openProblemLogs")}><CircleAlert size={14} aria-hidden="true" />{unseenFailures}</button>}
-            {filtersMenu}
-            {automationActions}
-          </>}
-        below={<>
-        {scopeShown && scoped.error && <p role="alert" className="mt-1 text-[12px] text-danger">{t("routines.scope.loadError")}</p>}
-        {section !== "webhooks" && (error || (calendarGrid && state.routinesLoadState !== "ready")) && <div className="mt-2 flex flex-wrap items-center gap-2" style={windowNoDragStyle}>
-          {error && <button onClick={() => setError("")} className="flex items-center gap-1.5 rounded-lg bg-danger/10 px-2.5 py-1.5 text-[11px] text-danger"><CircleAlert size={11} />{error}<X size={11} /></button>}
-          {calendarGrid && state.routinesLoadState === "error" && <p role="alert" className="w-full text-[12px] text-danger">{t("routines.loadError")}</p>}
-          {calendarGrid && state.routinesLoadState === "loading" && state.routines.length === 0 && <p role="status" className="w-full text-[12px] text-ink-secondary">{t("routines.loading")}</p>}
-        </div>}
-        {section === "webhooks" && error && <div className="mt-2"><button onClick={() => setError("")} className="flex items-center gap-1.5 rounded-lg bg-danger/10 px-2.5 py-1.5 text-[11px] text-danger"><CircleAlert size={11} />{error}<X size={11} /></button></div>}
-        </>}
-      />
-      <RoutineAwayBanner routines={state.routines} dispatch={dispatch} />
-      {/* `display: contents` outside `fill` mode: the wrapper takes no part
-          in layout, so embedded/standalone keep their exact original flex
-          children. Only `fill` (the one mode rendered inside the content
-          frame) opts into the card treatment. */}
-      <div data-automations-row="" className="relative flex min-h-0 min-w-0 flex-1">
-      <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", fill && "content-card-body")}>
-      <RoutineWakeBar />
-
-      {section === "webhooks" ? <TriggersPanel bots={visibleBots} createRequest={webhookCreateRequest} onCreateHandled={handleWebhookCreateHandled} /> : section === "logs" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto"><RoutineLogs runs={filteredRuns} bots={state.bots} ownerOf={routineOwnerOf} viewerPrincipalId={state.config?.viewer?.principalId ?? null} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRuns.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} routineId={routineFilter} status={statusFilter} onStatusChange={setStatusFilter} onClearRoutine={() => setRoutineFilter(undefined)} onRoutineChange={setRoutineFilter} onClearLogs={clearLogs} onOpen={openRun} /></div>
-      ) : scheduleView === "list" ? (
-        <div className={PAGE_SCROLL}><div className={PAGE_COLUMN}>
-          <PageHeading title={t("routines.title")} subtitle={t("routineCalendar.allSchedules")} />
-          <LimitWarnings botFilter={botFilter} />
-          {groupBy === "none" ? <RoutineList routines={filteredRoutines} viewerPrincipalId={state.config?.viewer?.principalId ?? null} runs={scopedRuns} bots={state.bots} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRoutines.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpen={openRoutine} onLogs={openLogs}
-            onRowMenu={(routine, at, trigger) => setRowMenu({ routine, x: at.x, y: at.y, trigger })}
-            renamingId={renamingId} onRenameStart={(routine) => setRenamingId(routine.id)} onRenameSave={renameRoutine} onRenameCancel={() => setRenamingId(null)} />
-            : <RoutineGroupedList key={groupBy} groupBy={groupBy} routines={filteredRoutines} allRoutines={scopedRoutines} viewerPrincipalId={viewerId} runs={scopedRuns} bots={state.bots} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRoutines.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpen={openRoutine}
-              onCreate={createInGroup} onDuplicate={duplicateRoutine}
-              onRowMenu={(routine, at, trigger) => setRowMenu({ routine, x: at.x, y: at.y, trigger })}
-              renamingId={renamingId} onRenameStart={(routine) => setRenamingId(routine.id)} onRenameSave={renameRoutine} onRenameCancel={() => setRenamingId(null)} />}
-          {rowMenu && <RoutineMenuPortal x={rowMenu.x} y={rowMenu.y} kind="row" label={rowMenu.routine.name} onClose={closeRowMenu}>
-            <RoutineRowMenuItems routine={rowMenu.routine} actions={routineRowActions({
-              routine: rowMenu.routine, bot: state.bots.find((bot) => bot.id === rowMenu.routine.botId), state: { config: state.config, routineRuns: state.routineRuns }, dispatch, close: closeRowMenu,
-              onOpen: () => openRoutine(rowMenu.routine),
-              onDuplicate: () => duplicateRoutine(rowMenu.routine),
-              onRename: () => setRenamingId(rowMenu.routine.id),
-            })} />
-          </RoutineMenuPortal>}
-          {!routinesOnly && calls.some((call) => botFilter === "all" || call.botIds.includes(botFilter)) && <section className="space-y-2" aria-label={t("routineCalendar.scheduledCalls")}><h2 className="text-[15px] font-semibold text-ink">{t("routineCalendar.scheduledCalls")}</h2>{calls.filter((call) => botFilter === "all" || call.botIds.includes(botFilter)).map((call) => <button key={call.id} type="button" onClick={() => setSelected({ kind: "call", id: call.id, at: call.schedule.type === "once" ? call.schedule.at : atLocalTime(Date.now(), call.schedule.time), durationMinutes: call.durationMinutes, call })} className="flex w-full items-center gap-3 rounded-xl border border-hairline/40 bg-card p-4 text-left hover:bg-raised"><Video size={17} className="text-accent" /><span><span className="block text-[13px] font-medium text-ink">{call.name}</span><span className="mt-1 block text-[12px] text-ink-secondary">{scheduleLabel(call.schedule)}</span></span></button>)}</section>}
-        </div></div>
-      ) : (
-        <div className="flex min-h-0 flex-1">
-          <CalendarGrid anchor={rangeStart} days={viewDays} items={items} bots={state.bots} groups={state.groups} onOpen={openGridItem} onCreate={openCreate} onMove={moveGridItem} onResize={resizeGridItem} markers={markers} onDropOnReset={dropGridReset} pending={pendingSlot} />
-          {botsOpen ? (
-            <CalendarSidebar anchor={anchor} onSelectDate={selectSidebarDate} routines={upcoming} runs={inFlightRuns} bots={state.bots} viewerPrincipalId={state.config?.viewer?.principalId ?? null} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && upcoming.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpenRoutine={openSidebarRoutine} filteredOut={filteredRoutines.length > 0} onCollapse={collapseSidebar} hideNarrow />
-          ) : (
-            <RightRailStrip onOpen={() => setBotsOpen(true)} showLabel={t("routines.upcoming.show")} title={t("routines.upcoming.title")} icon={<CalendarClock size={16} />} text={t("routines.upcoming.title")} hideNarrow />
-          )}
-        </div>
-      )}
-      </div>
-
-      {quick && <QuickComposer seed={quick} bots={visibleBots} routinesOnly={routinesOnly} onClose={() => setQuick(null)} onMore={(seed) => { setQuick(null); setSelected(null); setPausedOpen(false); setEditor(seed); }} onSavedRoutine={(routine) => dispatch({ type: "routinePatched", routine })} onSavedCall={upsertCall} />}
-      {/* 2026-11-01 (no modals): the editor, an event's details and the paused
-          list share the one right detail panel (DetailPanel.tsx); the editor
-          opened from the details goes back to them when it closes. */}
-      {editor && (
-        <DetailPanel bare label={editor.routine || editor.call ? t("routineCalendar.editEventAria") : t("routineCalendar.createEventAria")} onClose={() => setEditor(null)} data-calendar-editor-panel="">
-          <EventEditor key={`${editor.kind}:${editor.routine?.id ?? editor.call?.id ?? editor.copyOf?.id ?? "new"}`} seed={editor} bots={visibleBots} routinesOnly={routinesOnly} presentation="panel" onClose={() => setEditor(null)} onDismiss={() => { setEditor(null); setSelected(null); }} onDeleted={() => { setEditor(null); setSelected(null); }} onDuplicate={duplicateRoutine} onSavedCall={upsertCall} />
-        </DetailPanel>
-      )}
-      {!editor && liveSelected && <EventDetails key={`${liveSelected.kind}:${liveSelected.id}`} item={liveSelected} bots={state.bots} onClose={() => setSelected(null)} onEdit={(mode = "edit") => { const seed: EventSeed = liveSelected.kind === "call" ? { kind: "call", at: liveSelected.at, durationMinutes: liveSelected.call.durationMinutes, botIds: liveSelected.call.botIds, call: liveSelected.call } : { kind: "routine", at: liveSelected.at, durationMinutes: liveSelected.routine?.durationMinutes ?? liveSelected.run?.durationMinutes ?? 30, botIds: [liveSelected.routine?.botId ?? liveSelected.run?.botId ?? ""].filter(Boolean), routine: liveSelected.routine ?? undefined, mode }; setEditor(seed); }} onCallChanged={(id) => { if (id) setCalls((current) => current.filter((call) => call.id !== id)); else void loadCalls(); }} onOpenRoom={onOpenRoom} />}
-      {!editor && !liveSelected && pausedOpen && <PausedList routines={paused} bots={state.bots} groups={state.groups} onClose={() => setPausedOpen(false)} onEdit={(routine) => { const at = routine.schedule.type === "once" ? routine.schedule.at : routine.schedule.type === "interval" ? routine.schedule.anchorAt : routine.schedule.type === "webhook" || routine.schedule.type === "event" ? Date.now() : routine.schedule.type === "cron" ? routine.nextRunAt ?? nextHour() : routine.schedule.type === "limit_reset" ? (routine.schedule.at ?? Date.now()) : atLocalTime(Date.now(), routine.schedule.time); setEditor({ kind: "routine", at, durationMinutes: routine.durationMinutes, botIds: [routine.botId], routine, mode: "edit" }); }} onOpenRoom={onOpenRoom} />}
-      </div>
-    </main>
-  );
+export const RoutinesPage = memo(function RoutinesPage(props: { onBack: () => void; onOpenRoom: (id: string) => void; embedded?: boolean; fill?: boolean }) {
+  const m = useRoutinesPage(props);
+  return RoutinesPageView(m, { CalendarGrid, QuickComposer, EventEditor, EventDetails, PausedList, RoutineWakeBar });
 });
 
 /** Desktop only: the one lever the app has against a sleeping computer.

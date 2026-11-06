@@ -6,7 +6,7 @@ import {
   toLocalTimeInput,
 } from "@/lib/routine-calendar";
 import type { CalendarCall } from "@/lib/calendar-calls";
-import type { RoutineRunStatus, RoutineSchedule, RoutineScheduleInput } from "@/lib/routines";
+import type { Routine, RoutineRunStatus, RoutineSchedule, RoutineScheduleInput } from "@/lib/routines";
 import type { MausState } from "@/lib/mascot";
 import type { Bot, Group } from "@/state/store";
 import { scheduleDraftFor } from "@/components/routines/schedule-editor";
@@ -30,6 +30,20 @@ export function nextHour(): number {
   const date = new Date(Date.now() + 60 * 60_000);
   date.setMinutes(0, 0, 0);
   return date.getTime();
+}
+
+/** The moment the editor opens a routine on: its one-time date, its next
+ * run, or the next hour. */
+export function routineEditorAt(routine: Routine | undefined): number {
+  return routine?.schedule.type === "once"
+    ? routine.schedule.at
+    : routine?.schedule.type === "daily"
+      ? atLocalTime(Date.now(), routine.schedule.time)
+      : routine?.schedule.type === "interval"
+        ? routine.schedule.anchorAt
+      : routine?.schedule.type === "cron"
+        ? routine.nextRunAt ?? nextHour()
+      : nextHour();
 }
 
 /** "15 minutes", "2 hours": an interval preset in words. */

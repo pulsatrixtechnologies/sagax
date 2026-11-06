@@ -114,6 +114,7 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("rooms:react", "own", "react_to_message"),
   p("rooms:unreact", "own", "remove_reaction"),
   p("rooms:post", "own", "post_to_room"),
+  p("people:message", "own", "message_user"),
   p("threads:close", "own", "close_thread"),
   p("voice:note", "own", "send_voice_note"),
   p("voice:end", "own", "end_call"),

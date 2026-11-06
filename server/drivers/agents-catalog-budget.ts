@@ -178,8 +178,8 @@ export const AGENT_TOOL_GROUPS: readonly AgentToolGroup[] = [
   },
   {
     id: "rooms",
-    title: "Posts into rooms from a direct chat",
-    tools: ["list_rooms", "post_to_room"],
+    title: "Posts into rooms and messages to people from a direct chat",
+    tools: ["list_rooms", "post_to_room", "message_user"],
   },
   {
     id: "extras",

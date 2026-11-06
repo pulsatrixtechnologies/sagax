@@ -99,6 +99,8 @@ const BARE: Record<string, Kind> = {
   list_bots: "whosAround", list_room_targets: "whosAround", list_agents: "whosAround", find_agents: "whosAround", list_team_setup: "whosAround",
   list_rooms: "rooms",
   post_to_room: "postRoom",
+  // #2118: a message to a person lands in their group with the owner
+  message_user: "postRoom",
   start_thread: "startThread",
   // a part of the work on another engine (server/run-with-engine.ts)
   run_with_engine: "subagent",
@@ -286,7 +288,7 @@ function kindAim(kind: Kind, args: Record<string, unknown> | undefined, tool: St
     }
     case "postRoom":
     case "startThread": {
-      const target = oneLine(str(args, "title", "room", "room_name") ?? "") || undefined;
+      const target = oneLine(str(args, "title", "room", "room_name", "user") ?? "") || undefined;
       return target ? { target } : {};
     }
     default:

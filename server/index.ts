@@ -2745,6 +2745,8 @@ import { createInternalSessionsRoutes } from "./routes/internal-sessions.ts";
 import { createInternalRequestsRoutes } from "./routes/internal-requests.ts";
 import { createInternalBotChatRoutes } from "./routes/internal-bot-chat.ts";
 import { createInternalRoomsRoutes } from "./routes/internal-rooms.ts";
+import { createInternalMessageUserRoutes } from "./routes/internal-message-user.ts";
+import type { ReachablePerson } from "./people/bot-message-user.ts";
 import { createInternalIntegrationsRoutes } from "./routes/internal-integrations.ts";
 // IMPORT-ANCHOR:testing-routes
 // IMPORT-ANCHOR:team-map
@@ -32884,7 +32886,39 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     perspicaxMounted: (capability) => Boolean(perspicaxMcp?.hasMounted(capability.threadId, capability.generation, capability.botId)),
     perspicaxRelay: (input) => perspicaxMcp!.relay(input)
   }),
+  // message_user (#2118): a bot writes to one person in the group of its
+  // owner, that person and the bot, created when missing.
+  createInternalMessageUserRoutes({
+    store: store as unknown as Parameters<typeof createInternalMessageUserRoutes>[0]["store"],
+    connectorThread,
+    ownerOf: (bot) => { const record = store.bot(bot.id); return record ? effectiveBotOwner(record) : ""; },
+    reachablePeople: (ownerId) => messageUserReachablePeople(ownerId),
+    personName: (id) => personDisplayName(principals.byId(id)) || "",
+    broadcastGroup: (group) => broadcast({ kind: "group", group: publicGroupState(group as unknown as GroupRecord) }),
+    notifyMessage: ({ bot, group, text, audience }) => notify({
+      kind: "message", botId: bot.id, botName: bot.name, threadId: group.threadId, groupId: group.id,
+      title: group.name, body: summarize(text), audience,
+    } satisfies Notification)
+  }),
 ];
+/** The people a bot owner can reach with message_user (#2118): on an
+ * organization server, the active people of the directory (never a service
+ * account); on a solo server, the server's people still signed up. */
+function messageUserReachablePeople(ownerId: string): ReachablePerson[] {
+  const organization = IDENTITY.kind === "perspicax";
+  const listed = organization ? perspicaxDirectory?.directory()?.people : undefined;
+  const people: ReachablePerson[] = [];
+  for (const principal of principals.list()) {
+    if (principal.disabledAt != null || principal.mergedInto) continue;
+    if (organization) {
+      if (principal.id !== ownerId && !resolveOrgGrantee(principal.id).ok) continue;
+      const entry = principal.subject ? listed?.find((person) => person.sub === principal.subject!.sub) : undefined;
+      if (entry && (entry.kind === "service" || entry.type === "service")) continue;
+    }
+    people.push({ id: principal.id, names: [personDisplayName(principal), principal.name ?? "", principal.login ?? "", principal.email ?? ""] });
+  }
+  return people;
+}
 ROUTES.push(createHostedSlackRoutes({ bot: (id) => store.bot(id), hostedReady: () => Boolean(workspaceAccess) && hostedAccessEntitled() }));
 // 2026-10-21 (B21 / iOS CO5): the bots' own email addresses, from the
 // Perspicax relay (server/mail/bot-mail-addresses.ts, contract B), and the

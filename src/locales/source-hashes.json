@@ -16716,6 +16716,7 @@
       "perspicax.identity.params_invalid": "ddd5939e5d8db45c6929fa06f99809265c9ba50369730830e40a075854851144",
       "perspicax.identity.failed": "a51416baee3720add5781e4d5f5b19136d120a67c3994bab705d9aed307bb3d9",
       "codingChat.aria": "1e86b37fed8a5a8c85bd5a32e225d6e5f035903696c05fce7cfc095efa57d7ce",
+      "codingChat.back": "d3a4824104cb5386285124cce0302a3b4010662c35e55d3f879394814c9f73f2",
       "codingChat.bot": "41e35ba1a1fd8b4cdc7f899b3b8f9442a7542f445170e8782e219732cc25c10f",
       "codingChat.changes.files": "959e8066b8ff808055f39a12c6d56194475c3dcc4b6ab51e7e1cb9dcb4845748",
       "codingChat.changes.files.one": "9c46d354c31df529756eb1d9cadb9ae7845e299c58f615c2a5edf1343573e247",
@@ -17294,7 +17295,10 @@
       "page.broken.reload": "bdc090ec61e3fcfc65f469951dfe00f3f2ecfc6003c44deac8e05b7237092de6",
       "chat.verify.unverified": "73fecd862e13d45b00c367857594e1921a12f6496ccbdf51ce910cd1d1d13ba9",
       "inspector.run.unverified": "c6008b5b55ecb54f1981d0bafe236067280deb6bcec190ce7aab6915ea5d5948",
-      "toolDetail.unverified": "c6008b5b55ecb54f1981d0bafe236067280deb6bcec190ce7aab6915ea5d5948"
+      "toolDetail.unverified": "c6008b5b55ecb54f1981d0bafe236067280deb6bcec190ce7aab6915ea5d5948",
+      "codingChat.working": "a92f0449a9f7235bf69dc2e8ff7070bfae3f00ec8f8f26e5457a9beac53466ac",
+      "codingChat.title.collapse": "286d73f3ea10679db46f29895da99923eb83d5a6eb134b7c03e699df17a405fb",
+      "codingChat.title.expand": "d7952d0f6b0b3251584d6115729904feee7cf0219e0998541d5f6682cb6345d9"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

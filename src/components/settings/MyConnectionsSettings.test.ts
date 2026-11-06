@@ -38,11 +38,12 @@ describe("Mes connexions", () => {
     expect(servers).not.toContain("data-github-state");
   });
 
-  it("offers Connect GitHub and a token, and Add an MCP server", () => {
+  it("offers Connect GitHub with the token under Advanced, and Add an MCP server", () => {
     const html = renderToStaticMarkup(createElement(MyConnectionsSettings, { initial: base }));
     expect(html).toContain('data-github-state="none"');
     expect(html).toContain("Connect GitHub");
-    expect(html).toContain("Use a token");
+    expect(html).not.toContain("Use a token");
+    expect(html).toContain("Advanced: use a personal access token");
     expect(html).toContain("Add an MCP server");
     expect(html).toContain("No MCP server of your own yet.");
   });

@@ -20,7 +20,7 @@
 // It is shown on the GitHub plugin's page (PluginsPanel, `openGithub`), not
 // in Providers (owner, 2026-10-29).
 import { useState, type ReactNode } from "react";
-import { GitBranch } from "lucide-react";
+import { ChevronRight, GitBranch } from "lucide-react";
 
 import { t } from "@/lib/i18n";
 import { readableError } from "@/lib/plain-error";
@@ -38,6 +38,10 @@ export function GithubAccountSection({ connection }: {
   /** the person's GitHub connection (MyGithubConnection), organization server */
   connection?: ReactNode;
 }) {
+  // #2109: Connect GitHub (link plus pairing code) leads; the tokens for
+  // other organizations or hosts are the last resort, under Advanced. A
+  // server without the person's connection has only the tokens: open.
+  const [advanced, setAdvanced] = useState(!connection);
   return (
     <section className="rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015] px-4 py-4 sm:px-5" data-accounts-github>
       <div className="mb-1 flex items-center gap-2">
@@ -51,7 +55,17 @@ export function GithubAccountSection({ connection }: {
           {connection}
         </div>
       )}
-      <GithubCredentialList />
+      <button
+        type="button"
+        className="inline-flex w-fit items-center gap-1 text-[12px] font-medium text-ink-secondary hover:text-ink"
+        aria-expanded={advanced}
+        data-github-credentials-advanced
+        onClick={() => setAdvanced((open) => !open)}
+      >
+        <ChevronRight aria-hidden="true" size={12} className={advanced ? "rotate-90 transition-transform" : "transition-transform"} />
+        {t("sources.github.advanced")}
+      </button>
+      {advanced && <div className="mt-3"><GithubCredentialList /></div>}
     </section>
   );
 }

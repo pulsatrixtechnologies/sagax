@@ -9706,7 +9706,7 @@
   "settings.intro.engines": "Which model each bot uses.",
   "settings.intro.voice": "How your bots speak and listen.",
   "settings.intro.usage": "What your bots used and what it costs.",
-  "settings.intro.organization": "The server you work on and what it shares.",
+  "settings.intro.organization": "Your organization's server, and what it decides for your bots.",
   "settings.intro.computer": "The computer your bots work on.",
   "settings.intro.backups": "Save, restore and bring in your data.",
   "settings.intro.updates": "Version and update channel of this app.",

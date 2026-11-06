@@ -104,9 +104,9 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("artifacts:delete", "own", "delete_artifact"),
   p("artifacts:claude", "own", "claude_artifact"),
   p("pages:propose", "own", "propose_page"),
-  p("pages:comments", "own", "page_comments"),
-  // #2048: pick which surface to publish with before propose_page / save_artifact / claude_artifact
+  // #2199 / #2048: pick which surface hosts a page or artifact the member asked for
   p("pages:choose", "own", "choose_page_target"),
+  p("pages:comments", "own", "page_comments"),
   // place_call is the same tool under its compatibility name
   p("phone:call", "own", "place_phone_call", "sagax", ["place_call", "phone_call_owner"]),
   // #2194: allowlisted SMS contact persona (numbers live on Perspicax)

@@ -89,7 +89,8 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   claude_artifact: "conversation",
   // a page proposal: a card in the member's own conversation; publishing is theirs
   propose_page: "conversation",
-  // #2048: pick a publish surface; card in the member's own conversation
+  // #2199 / #2048: pick which surface hosts a new page or artifact; stays in
+  // the member's own conversation (same family as ask_choice / propose_page)
   choose_page_target: "conversation",
   // the annotations of the member's own page, answered in their own conversation
   page_comments: "conversation",

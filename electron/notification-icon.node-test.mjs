@@ -35,7 +35,7 @@ test("the packaged icon sources named by electron-builder exist", () => {
   assert.ok(fs.existsSync(path.join(root, "build/icon.icon/icon.json")));
 });
 
-test("notification options never reference an asset (old mascot or otherwise) on macOS", () => {
+test("macOS keeps the app bundle icon on the left: the generic deps.icon is never attached", () => {
   const made = [];
   class FakeNotification {
     constructor(options) { made.push(options); }
@@ -53,7 +53,29 @@ test("notification options never reference an asset (old mascot or otherwise) on
     });
     attention.notify({ id: "a", title: "Quasar finished", body: "done" });
   }
+  // darwin: no right-hand attachment from the generic app icon
   assert.equal(made[0].icon, undefined);
+  // win/linux may use the app icon when no avatar was sent
+  assert.equal(made[1].icon, "/old/ghost.png");
+  assert.equal(made[2].icon, "/old/ghost.png");
+});
+
+test("a sender avatar may attach on macOS as the content image", () => {
+  const made = [];
+  class FakeNotification {
+    constructor(options) { made.push(options); }
+    show() {}
+    on() {}
+  }
+  createDesktopAttention({
+    platform: "darwin",
+    app: { setBadgeCount() {}, dock: { bounce: () => 1, cancelBounce() {} } },
+    Notification: FakeNotification,
+    getWindow: () => null,
+    onClick: () => {},
+    icon: "/old/ghost.png",
+  }).notify({ id: "a", title: "Scout", body: "hi", icon: "/tmp/scout-avatar.png" });
+  assert.equal(made[0].icon, "/tmp/scout-avatar.png");
 });
 
 test("no main-process source names a removed mascot asset as an icon", () => {

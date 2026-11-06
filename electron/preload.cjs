@@ -61,7 +61,7 @@ const isLocalPage = !localOrigin || location.origin === localOrigin;
 // windowControls stays on every remote page: a Windows window with a hidden
 // title bar draws its own caption buttons, including when the page is not
 // this app's bundled UI (electron/window-controls-remote.node-test.mjs).
-const REMOTE_SAFE = new Set(["platform", "windowControls", "windowFullscreen", "getCapabilities", "onCapabilitiesChanged", "applySkin", "setUnreadCount", "nudgeWindow", "notify", "withdrawNotification", "onNotificationClick", "systemIdle", "permStatus", "workspaces", "takeSignInReturn", "pulsatrixSignIn", "orgJoin"]);
+const REMOTE_SAFE = new Set(["platform", "windowControls", "windowFullscreen", "getCapabilities", "onCapabilitiesChanged", "applySkin", "setUnreadCount", "nudgeWindow", "notify", "withdrawNotification", "onNotificationClick", "onNotificationReply", "systemIdle", "permStatus", "workspaces", "takeSignInReturn", "pulsatrixSignIn", "orgJoin"]);
 // An organization server's page drawn from THIS app's bundle
 // (electron/bundled-ui.cjs) is the desktop's own UI on that server, so it
 // also gets the desktop-UI parts that hold no local data: floating bots and
@@ -418,6 +418,16 @@ const bridge = {
     const listener = (_event, id, target) => { if (typeof id === "string") cb(id, target && typeof target === "object" ? target : null); };
     ipcRenderer.on("desktop:notification-click", listener);
     return () => ipcRenderer.removeListener("desktop:notification-click", listener);
+  },
+  /** Inline reply from Notification Center (macOS / Windows): send into that chat. */
+  onNotificationReply: (cb) => {
+    const listener = (_event, id, reply, target) => {
+      if (typeof id === "string" && typeof reply === "string") {
+        cb(id, reply, target && typeof target === "object" ? target : null);
+      }
+    };
+    ipcRenderer.on("desktop:notification-reply", listener);
+    return () => ipcRenderer.removeListener("desktop:notification-reply", listener);
   },
   /** The menu bar's bot list (macOS, Windows): [{id, name, color, working, unread}], at most nine. */
   setTrayRoster: (roster, labels) => ipcRenderer.send("desktop:tray-roster", Array.isArray(roster) ? roster : [], labels && typeof labels === "object" ? labels : undefined),

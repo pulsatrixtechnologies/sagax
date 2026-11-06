@@ -204,14 +204,24 @@ final class TeamMapPeopleTests: XCTestCase {
         XCTAssertEqual(sheet.sharedBots.map(\.id), ["hers"])
         XCTAssertEqual(sheet.directRoom?.id, "dm")
         XCTAssertTrue(sheet.canMessage)
-        XCTAssertEqual(sheet.manageURL?.absoluteString, "https://console.test/people/sam")
-        XCTAssertNil(PersonSheetModel(personId: "pr_sam", directory: directory, state: state, viewerId: "pr_me", viewerIsAdmin: false).manageURL)
+        XCTAssertTrue(sheet.hasInCommon)
+        // #2117: no Manage in Perspicax / console link on the person panel.
         XCTAssertFalse(PersonSheetModel(personId: "pr_off", directory: directory, state: state, viewerId: "pr_me", viewerIsAdmin: false).canMessage)
         XCTAssertFalse(PersonSheetModel(personId: "pr_me", directory: directory, state: state, viewerId: "pr_me", viewerIsAdmin: false).canMessage)
         let unknown = PersonSheetModel(personId: "pr_x", directory: directory, state: state, viewerId: "pr_me", viewerIsAdmin: true)
         XCTAssertNil(unknown.person)
         XCTAssertEqual(unknown.name, "pr_x")
         XCTAssertFalse(unknown.canMessage)
+    }
+
+    func testThePersonSheetHidesInCommonWhenThereIsNothingToShare() throws {
+        var state = CompanionState()
+        state.rooms = [room("dm", humans: ["pr_me", "pr_sam"], peopleDm: true)]
+        state.bots = [try bot("mine", owner: "pr_me")]
+        let sheet = PersonSheetModel(personId: "pr_sam", directory: directory, state: state, viewerId: "pr_me")
+        XCTAssertTrue(sheet.sharedRooms.isEmpty)
+        XCTAssertTrue(sheet.sharedBots.isEmpty)
+        XCTAssertFalse(sheet.hasInCommon)
     }
 
     func testThePersonSheetOffersNoMessageInsideTheirConversation() {

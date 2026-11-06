@@ -272,20 +272,24 @@ public extension CompanionClient {
 // MARK: - A colleague's public card (src/lib/public-achievements.ts)
 
 /// What a person shows the others of their achievements: their points (when
-/// "Show my points" is on) and their title (when "Show my title" is on).
-/// The server leaves out what they hid, for everyone.
+/// "Show my points" is on), their title (when "Show my title" is on), and the
+/// unlocked list for the person panel's Achievements tab (#2117). The server
+/// leaves out what they hid, for everyone.
 public struct PublicAchievementCard: Decodable, Hashable, Sendable {
     public var points: Int?
     public var level: Int?
     public var title: String?
+    /// Unlocked achievements only; an older payload without the list is empty.
+    public var unlocked: [AchievementUnlock]
 
-    public init(points: Int? = nil, level: Int? = nil, title: String? = nil) {
+    public init(points: Int? = nil, level: Int? = nil, title: String? = nil, unlocked: [AchievementUnlock] = []) {
         self.points = points
         self.level = level
         self.title = title
+        self.unlocked = unlocked
     }
 
-    private enum CodingKeys: String, CodingKey { case points, level, title }
+    private enum CodingKeys: String, CodingKey { case points, level, title, unlocked }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -296,6 +300,7 @@ public struct PublicAchievementCard: Decodable, Hashable, Sendable {
         self.level = points == nil ? nil : level
         let title = try? values.decodeIfPresent(String.self, forKey: .title)
         self.title = (title?.isEmpty ?? true) ? nil : title
+        unlocked = (try? values.decodeIfPresent([AchievementUnlock].self, forKey: .unlocked)) ?? []
     }
 
     /// The title's name in the catalog, nil when unknown.
@@ -306,6 +311,9 @@ public struct PublicAchievementCard: Decodable, Hashable, Sendable {
         }
         return nil
     }
+
+    /// Whether the card carries anything the person panel can draw.
+    public var isEmpty: Bool { points == nil && title == nil && unlocked.isEmpty }
 }
 
 private struct PublicAchievementList: Decodable {

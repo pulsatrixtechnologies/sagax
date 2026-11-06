@@ -186,6 +186,19 @@ droite, mascotte, nom, bouton pilule Modifier, les trois onglets. Les sections d
 Détails sont des cartes groupées ; un compteur bleu à droite du titre de section
 (« 1 actif ») ; « Ajouter une routine » en lien bleu avec un +.
 
+### 2.3b Panneau d'une personne
+
+**Bureau et iPad / iPhone (#2117, 2026-11-05).** Panneau (ou feuille) d'un
+membre de l'organisation : avatar, nom, étiquette, Message. Trois onglets texte
+(Profil, Bibliothèque, Succès). Pas de section Connexions, pas de lien
+« Gérer dans Perspicax ». Titre et points vivent dans Succès, jamais sous le
+nom. **Profil** : À propos (courriel, login, équipes) puis En commun seulement
+quand il y a au moins un groupe partagé ou un de leurs bots visibles ; chaque
+partie absente reste absente. **Bibliothèque** : les fichiers des salles que
+les deux personnes partagent (`GET /api/people/:id/library`), même allure que
+la Bibliothèque d'un bot. **Succès** : carte publique (niveau, titre, barre,
+déblocages récents, grille) ; si la personne ne partage rien, une note privée.
+
 ### 2.4 Pages d'édition du bot
 
 - Décision de JC du 2026-11-04 : aucun réglage de profil Perspicax par bot,

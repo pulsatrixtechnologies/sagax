@@ -8352,7 +8352,22 @@ const store = new Store(
 // Preserve the payer of legacy solo choices before serving or probing them.
 // Persist bot/thread references first and the marker last so a failed write retries.
 if (claudeRetirement) retireEveryClaudeBot(cfg, store, saveConfig, claudeRetirement);
-setTurnTimingWriter((threadId, timing) => store.noteConversationTiming(threadId, timing));
+// The timing lands on the conversation after the current tick: the first
+// response is noted on the first delta, and a synchronous bots save there
+// would hold that delta's SSE frame behind an fsync. Notes of one tick merge
+// into one save per conversation.
+const pendingTurnTimings = new Map<string, { queueMs?: number; firstResponseMs?: number }>();
+setTurnTimingWriter((threadId, timing) => {
+  if (!pendingTurnTimings.size) setImmediate(() => {
+    const due = [...pendingTurnTimings];
+    pendingTurnTimings.clear();
+    for (const [id, next] of due) {
+      try { store.noteConversationTiming(id, next); }
+      catch (error) { console.warn(`[turn-timing] ${id}: ${error instanceof Error ? error.message : String(error)}`); }
+    }
+  });
+  pendingTurnTimings.set(threadId, { ...pendingTurnTimings.get(threadId), ...timing });
+});
 // One-time notice (migration): Composio was removed this release. Connected
 // apps now come only from the engines' own connectors (Claude, Grok) and
 // Pulsatrix MCP. Tell admins once, in the server log the console's Logs tab

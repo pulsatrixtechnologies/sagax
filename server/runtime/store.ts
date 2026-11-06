@@ -12,7 +12,7 @@
 // event land together or not at all (write-before-act).
 import { chmodSync, closeSync, mkdirSync, openSync } from "node:fs";
 import { dirname } from "node:path";
-import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import { DatabaseSync, type SQLInputValue, type StatementSync } from "node:sqlite";
 import { z } from "zod";
 
 import { APPROVAL_MODES } from "../../shared/approval-mode.ts";
@@ -317,6 +317,7 @@ export function openRuntimeStore(path: string): RuntimeStore {
   };
   const invalidate = (id: string) => { validated.delete(id); };
 
+  const allStatements = new Map<string, StatementSync>();
   const statements = {
     get: db.prepare("SELECT id, json FROM assignments WHERE id = ?"),
     children: db.prepare("SELECT id, json FROM assignments WHERE parent_id = ? ORDER BY created_at, rowid"),
@@ -423,7 +424,11 @@ export function openRuntimeStore(path: string): RuntimeStore {
       if (filter.nonTerminal) where.push(LIVE);
       if (filter.ownerThreadId !== undefined) { where.push("requester_thread_id = ?"); params.push(filter.ownerThreadId); }
       const sql = `SELECT id, json FROM assignments${where.length ? ` WHERE ${where.join(" AND ")}` : ""} ORDER BY created_at, rowid`;
-      return (db.prepare(sql).all(...params) as Row[]).map(readAssignment);
+      // At most eight shapes, and the coordinator asks on every bus event,
+      // so each shape is prepared once.
+      let statement = allStatements.get(sql);
+      if (!statement) { statement = db.prepare(sql); allStatements.set(sql, statement); }
+      return (statement.all(...params) as Row[]).map(readAssignment);
     },
     insert(a, event) {
       transaction(() => {

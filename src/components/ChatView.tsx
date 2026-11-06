@@ -152,7 +152,7 @@ import { SecretRequestCard } from "./SecretRequestCard";
 import { RoutineRunCard } from "./RoutineRunCard";
 import { AttentionCard } from "./AttentionCard";
 import { CallRecordRow } from "./CallRecordRow";
-import { AttachmentGallery, collectMessageFiles, replyAttachmentGroup, splitMessageAttachments } from "./AttachmentGallery";
+import { AttachmentGallery, collectMessageFiles, imagePathOf, replyAttachmentGroup, splitMessageAttachments } from "./AttachmentGallery";
 import { ConversationGalleryProvider } from "./ConversationGallery";
 import { prefersWideBubble } from "@/lib/rich-blocks";
 import { chatBubbleWidth, useChatBubbleWidthClasses, useChatColumnClass } from "@/lib/chat-bubble-width";
@@ -668,7 +668,7 @@ const Bubble = memo(function Bubble({
   const attached = useMemo(() => splitMessageAttachments(message.attachments), [message.attachments]);
   const generatedPaths = attached.images;
   const linkedFiles = useMemo(
-    () => user ? [] : [...attached.files, ...collectMessageFiles(text, [...attached.images, ...attached.files.map((file) => file.path)])],
+    () => user ? [] : [...attached.files, ...collectMessageFiles(text, [...attached.images.map(imagePathOf), ...attached.files.map((file) => file.path)])],
     [user, text, attached],
   );
   // a reply with text lists its files under the text, without the ones it links inline

@@ -18,6 +18,8 @@ import { ComposerPendingStrip } from "./ComposerPendingStrip";
 import { ComposerEditor } from "./ComposerEditor";
 import { ComposerActionBar } from "./ComposerActionBar";
 import { ComposerWarningDialogs } from "./ComposerWarningDialogs";
+import { composeMessage } from "@/lib/composer-attachments";
+import type { MemeAttachmentPick } from "../MemePicker";
 
 type AnyProps = Record<string, any>;
 
@@ -95,6 +97,26 @@ export function ComposerShell({
   const composerAria = pageTitle?.trim()
     ? t("composer.placeholder.page", { title: pageTitle.trim() })
     : t("composer.placeholder.bot", { name: group ? group.name : (bot?.name ?? "") });
+
+  const sendMeme = (pick: MemeAttachmentPick) => {
+    const attachment = {
+      kind: "image" as const,
+      id: crypto.randomUUID(),
+      path: pick.path,
+      name: pick.name ?? "meme.gif",
+      size: 0,
+      mime: pick.mime,
+      ...(pick.meme ? { meme: pick.meme } : {}),
+    };
+    const body = composeMessage("", [attachment]);
+    if (!body) return;
+    const sendId = crypto.randomUUID();
+    if (group) {
+      dispatch({ type: "sendGroup", groupId: group.id, text: body, sendId, threadId, mode: "chat" });
+    } else if (bot) {
+      dispatch({ type: "send", botId: bot.id, text: body, sendId, threadId });
+    }
+  };
 
   const composerShellClass = useChatComposerShellClass();
   return (
@@ -199,6 +221,7 @@ export function ComposerShell({
           composerRowRef={composerRowRef}
           fileInput={fileInput}
           onPickFiles={(files) => { void pickFiles(files); }}
+          onSendMeme={locked ? undefined : sendMeme}
           plusItems={plusItems}
           teachChooser={teachChooser}
           setTeachChooser={setTeachChooser}

@@ -180,6 +180,7 @@ export function PermissionsSection({
   // 2026-10-21 (parité 1C): who it writes to without a card
   const showRecipientsUi = !only && advanced && !draft && canEditBotField(state.config, bot, "allowedRecipients");
   const showDrafts = !only && advanced && !draft && canEditBotField(state.config, bot, "emailDrafts");
+  const showMemeReplies = !only && advanced && !draft && canEditBotField(state.config, bot, "memeReplies");
   const showLoopGuard = !only && advanced && !draft && canEditBotField(state.config, bot, "loopGuard");
   const showHooks = !only && !draft && canEditBotField(state.config, bot, "allowedRecipients");
   // the owner always manages their own bot's permission mode and rules
@@ -189,7 +190,7 @@ export function PermissionsSection({
   // checks the same (server/routes/bot-runtime-settings.ts).
   const showToolAccess = !only && advanced && !draft && canEditBotField(state.config, bot, "toolScope");
   const showParallel = !only && advanced && !draft && canEditBotField(state.config, bot, "maxConcurrentThreads");
-  if (!showPrimaryUi && !showApproval && !showContactUi && !showRecipientsUi && !showDrafts && !showLoopGuard && !showHooks && !showOutboundUi && !showOwnerPermissions && !showToolAccess && !showParallel) return null;
+  if (!showPrimaryUi && !showApproval && !showContactUi && !showRecipientsUi && !showDrafts && !showMemeReplies && !showLoopGuard && !showHooks && !showOutboundUi && !showOwnerPermissions && !showToolAccess && !showParallel) return null;
 
   const approvalSelector = showApproval && (
     <ApprovalModeSelector
@@ -318,6 +319,24 @@ export function PermissionsSection({
             checked={bot.emailDrafts !== false}
             aria-label={t("botPanel.emailDrafts")}
             onClick={() => patch({ emailDrafts: bot.emailDrafts === false })}
+          />
+        </DescribedRow>
+      )}
+      {showMemeReplies && (
+        <DescribedRow
+          label={t("botPanel.memeReplies")}
+          help={t("botPanel.memeReplies.help")}
+          description={bot.memeReplies === "off" ? t("botPanel.memeReplies.off") : t("botPanel.memeReplies.auto")}
+          rowId="memeReplies"
+        >
+          <PillSelect<"auto" | "off">
+            value={bot.memeReplies === "off" ? "off" : "auto"}
+            ariaLabel={t("botPanel.memeReplies")}
+            options={[
+              { value: "auto", label: t("botPanel.memeReplies.autoLabel") },
+              { value: "off", label: t("botPanel.memeReplies.offLabel") },
+            ]}
+            onChange={(next) => patch({ memeReplies: next })}
           />
         </DescribedRow>
       )}

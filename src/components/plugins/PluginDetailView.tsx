@@ -6,12 +6,12 @@
 // people, the technical id and source as small metadata, where it is
 // installed (everyone, this bot) and the main action beside it.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { CheckCircle2, ChevronDown, ChevronUp, FlaskConical, KeyRound, Link2, Loader2, LogOut, MoreHorizontal, Pencil, Plus, RefreshCw } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, ChevronUp, FlaskConical, KeyRound, Link2, Loader2, LogOut, MoreHorizontal, Pencil, Plus, RefreshCw } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { copyText } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
-import type { PluginItem } from "@/lib/plugins-model";
+import type { PluginItem, PluginStatus } from "@/lib/plugins-model";
 import { Switch } from "../SettingsPrimitives";
 import type { Crumb } from "../Breadcrumb";
 import { PluginCard, PluginIcon, PluginPageHeader, PluginStatusLabel } from "./PluginParts";
@@ -21,6 +21,12 @@ export interface DetailTool {
   name: string;
   description?: string;
   enabled: boolean;
+  /** a word under the name (Skill, MCP connector) */
+  detail?: string;
+  /** a row that opens its own page (what a marketplace plugin brought) */
+  onOpen?: () => void;
+  /** the state shown at the end of an opening row */
+  status?: PluginStatus;
 }
 
 export interface DetailAccount {
@@ -72,6 +78,8 @@ export interface PluginDetailProps {
   /** "+ Add another account" (connected apps), or a sign-in (MCP) */
   accountAction?: ReactNode;
   accountExtra?: ReactNode;
+  /** the Accounts card's text when it holds no account */
+  accountsEmpty?: string;
   tools?: {
     list: DetailTool[] | null;
     loading: boolean;
@@ -89,10 +97,13 @@ export interface PluginDetailProps {
   /** a warning under the header (lot 1b: the bot's engine would receive
    * nothing of it) */
   notice?: ReactNode;
+  /** the rest, below Tools behind a disclosure (Grok Bot shows Accounts then
+   * Tools first): the per-bot scope, what it adds, the notes */
+  more?: ReactNode;
 }
 
 export function PluginDetailView(props: PluginDetailProps) {
-  const { item, displayName, icon, subtitle, installState, primaryAction, onBack, trail, busy, onUninstall, onUpdate, updating, onEdit, onTest, testing, enabled, accounts, accountAction, accountExtra, tools, details, link, children, notice } = props;
+  const { item, displayName, icon, subtitle, installState, primaryAction, onBack, trail, busy, onUninstall, onUpdate, updating, onEdit, onTest, testing, enabled, accounts, accountAction, accountExtra, tools, details, link, children, notice, accountsEmpty, more } = props;
   const name = displayName ?? item.name;
   // the technical name, when people read another one
   const technical = name !== item.name ? item.name : null;
@@ -113,41 +124,17 @@ export function PluginDetailView(props: PluginDetailProps) {
         <div className="flex flex-wrap items-center gap-3" data-plugins-detail-head>
           <PluginIcon item={icon ?? item} className="size-14 rounded-[14px]" />
           <div className="min-w-0 flex-[1_1_220px] pl-0.5">
-            <h2 className="truncate text-[17px] font-normal leading-6 tracking-[-0.008em] text-ink" data-plugins-detail-name>{name}</h2>
+            <h2 className="truncate text-[16px] font-normal leading-6 tracking-[-0.008em] text-ink" data-plugins-detail-name>{name}</h2>
             {(technical || subtitle) && (
-              <div className="truncate text-[14px] leading-5 text-ink-secondary" data-plugins-detail-meta title={[technical, subtitle].filter(Boolean).join(" · ")}>
+              <div className="truncate text-[13px] leading-5 text-ink-secondary" data-plugins-detail-meta title={[technical, subtitle].filter(Boolean).join(" · ")}>
                 {technical && <span className="font-mono text-[12.5px]">{technical}</span>}
                 {technical && subtitle && <span aria-hidden="true"> · </span>}
                 {subtitle}
               </div>
             )}
-            {installState && installState.length > 0 && (
-              <ul className="mt-1.5 flex flex-wrap gap-1.5" data-plugins-install-state>
-                {installState.map((state) => (
-                  <li
-                    key={state.id}
-                    data-install-state={state.id}
-                    data-install-on={state.on ? "yes" : "no"}
-                    className={cn(
-                      "flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[12px] leading-[16px]",
-                      state.on ? "bg-success/10 text-success" : "bg-card text-ink-secondary",
-                    )}
-                  >
-                    <span aria-hidden="true" className={cn("size-1.5 rounded-full", state.on ? "bg-success" : "bg-ink-tertiary")} />
-                    {state.label}
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
           <div className="ml-auto flex items-center gap-2">
             {primaryAction}
-            {enabled && (
-              <label className="flex items-center gap-2 text-[13.5px] text-ink-secondary" data-plugin-enabled>
-                {t("connectApps.detail.enabled")}
-                <Switch checked={enabled.value} disabled={busy} onClick={enabled.onToggle} aria-label={enabled.label} />
-              </label>
-            )}
             <PluginActionsMenu
               name={name}
               busy={busy}
@@ -160,7 +147,7 @@ export function PluginDetailView(props: PluginDetailProps) {
               ]}
             />
             {onUninstall && (
-              <button type="button" disabled={busy} onClick={onUninstall} data-plugin-action="uninstall" className={cn(PLUGINS.fillPill, "h-9 px-6 text-[15px]")}>
+              <button type="button" disabled={busy} onClick={onUninstall} data-plugin-action="uninstall" className={cn(PLUGINS.fillPill, "h-8 px-5")}>
                 {t("connectApps.detail.uninstall")}
               </button>
             )}
@@ -178,10 +165,10 @@ export function PluginDetailView(props: PluginDetailProps) {
               {accounts.map((account) => (
                 <li key={account.id} className="flex min-h-[38px] items-center gap-3 py-1.5">
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[14px] leading-5 text-ink">{account.label}</div>
+                    <div className="truncate text-[13px] leading-5 text-ink">{account.label}</div>
                     {account.detail && <div className="truncate text-[12.5px] leading-[18px] text-ink-secondary">{account.detail}</div>}
                   </div>
-                  <PluginStatusLabel status={account.status} className="text-[14px] font-normal" />
+                  <PluginStatusLabel status={account.status} className="text-[13px] font-normal" />
                   {account.action}
                   {account.onRemove && (
                     <button type="button" disabled={busy} onClick={account.onRemove} aria-label={account.removeLabel} title={account.removeLabel}
@@ -192,6 +179,7 @@ export function PluginDetailView(props: PluginDetailProps) {
                 </li>
               ))}
             </ul>
+            {accounts.length === 0 && accountsEmpty && <p className="py-2 text-[13px] leading-5 text-ink-secondary" data-plugin-accounts-empty>{accountsEmpty}</p>}
             {accountAction}
             {accountExtra}
           </PluginCard>
@@ -206,7 +194,7 @@ export function PluginDetailView(props: PluginDetailProps) {
               className="flex min-h-[38px] w-full items-center gap-2 py-1.5 text-left"
               data-plugin-tools-toggle
             >
-              <span className="flex-1 text-[14px] leading-5 text-ink">
+              <span className="flex-1 text-[13px] leading-5 text-ink">
                 {toolList ? t("connectApps.detail.toolsEnabled", { enabled: enabledCount, total: toolList.length }) : tools.loading ? t("connectApps.detail.toolsLoading") : t("connectApps.detail.toolsUnknown")}
               </span>
               {toolsOpen ? <ChevronUp size={16} className="text-ink-secondary" /> : <ChevronDown size={16} className="text-ink-secondary" />}
@@ -214,17 +202,28 @@ export function PluginDetailView(props: PluginDetailProps) {
             {toolsOpen && (
               <div>
                 {tools.note && <p className="mb-2 text-[12.5px] leading-relaxed text-ink-secondary">{tools.note}</p>}
-                {tools.error && <p role="alert" className="mb-2 rounded-lg bg-danger/10 px-3 py-2 text-[13px] text-danger">{tools.error}</p>}
+                {tools.error && <p role="alert" className="mb-2 rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger">{tools.error}</p>}
                 {tools.loading && !toolList && (
-                  <div className="flex items-center gap-2 py-2 text-[13px] text-ink-secondary"><Loader2 size={13} className="animate-spin" /> {t("connectApps.detail.toolsLoading")}</div>
+                  <div className="flex items-center gap-2 py-2 text-[12px] text-ink-secondary"><Loader2 size={13} className="animate-spin" /> {t("connectApps.detail.toolsLoading")}</div>
                 )}
-                {toolList && toolList.length === 0 && <p className="py-1 text-[13px] text-ink-secondary">{t("mcp.probe.noTools")}</p>}
+                {toolList && toolList.length === 0 && <p className="py-1 text-[12px] text-ink-secondary">{t("mcp.probe.noTools")}</p>}
                 {toolList && toolList.length > 0 && (
                   <ul data-plugin-tools>
-                    {toolList.map((tool) => (
+                    {toolList.map((tool) => tool.onOpen ? (
+                      <li key={tool.name}>
+                        <button type="button" onClick={tool.onOpen} className="flex min-h-[38px] w-full items-center gap-3 py-1.5 text-left" data-plugin-tool-open={tool.name} title={tool.description ? `${tool.name}: ${tool.description}` : tool.name}>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[13px] leading-5 text-ink">{tool.name}</span>
+                            {tool.detail && <span className="block truncate text-[12px] leading-[16px] text-ink-secondary">{tool.detail}</span>}
+                          </span>
+                          {tool.status && <PluginStatusLabel status={tool.status} className="text-[13px] font-normal" />}
+                          <ChevronRight size={15} className="shrink-0 text-ink-tertiary" aria-hidden="true" />
+                        </button>
+                      </li>
+                    ) : (
                       <li key={tool.name} className="flex min-h-[38px] items-center gap-3 py-1.5" title={tool.description ? `${tool.name}: ${tool.description}` : tool.name}>
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-[14px] leading-5 text-ink">{toolLabel(tool.name)}</div>
+                          <div className="truncate text-[13px] leading-5 text-ink">{toolLabel(tool.name)}</div>
                         </div>
                         {tools.onToggle ? (
                           <Switch
@@ -248,8 +247,38 @@ export function PluginDetailView(props: PluginDetailProps) {
           </PluginCard>
         )}
 
+        {(more || (installState && installState.length > 0)) && (
+          <details className="group rounded-[14px] border-[0.5px] border-ink/10 px-4 sm:px-5" data-plugin-more>
+            <summary className="flex min-h-[44px] cursor-pointer list-none items-center gap-2 text-[13px] leading-5 text-ink [&::-webkit-details-marker]:hidden">
+              <span className="flex-1">{t("connectApps.detail.more")}</span>
+              <ChevronDown size={16} className="text-ink-secondary transition-transform group-open:rotate-180 motion-reduce:transition-none" aria-hidden="true" />
+            </summary>
+            <div className="space-y-4 pb-4">
+              {installState && installState.length > 0 && (
+                <ul className="mt-1.5 flex flex-wrap gap-1.5" data-plugins-install-state>
+                  {installState.map((state) => (
+                    <li
+                      key={state.id}
+                      data-install-state={state.id}
+                      data-install-on={state.on ? "yes" : "no"}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[12px] leading-[16px]",
+                        state.on ? "bg-success/10 text-success" : "bg-card text-ink-secondary",
+                      )}
+                    >
+                      <span aria-hidden="true" className={cn("size-1.5 rounded-full", state.on ? "bg-success" : "bg-ink-tertiary")} />
+                      {state.label}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {more}
+            </div>
+          </details>
+        )}
+
         <PluginCard title={t("connectApps.detail.details")}>
-          <dl className="grid grid-cols-[minmax(90px,auto)_1fr] gap-x-4 text-[14px] leading-5" data-plugin-details>
+          <dl className="grid grid-cols-[minmax(90px,auto)_1fr] gap-x-4 text-[13px] leading-5" data-plugin-details>
             {details.map((row) => (
               <div key={row.label} className="contents">
                 <dt className="py-[9px] text-ink-tertiary">{row.label}</dt>
@@ -257,6 +286,12 @@ export function PluginDetailView(props: PluginDetailProps) {
               </div>
             ))}
           </dl>
+          {enabled && (
+            <label className="flex min-h-[38px] items-center justify-between gap-3 border-t-[0.5px] border-ink/10 py-1.5 text-[13px] text-ink-secondary" data-plugin-enabled>
+              {t("connectApps.detail.enabled")}
+              <Switch checked={enabled.value} disabled={busy} onClick={enabled.onToggle} aria-label={enabled.label} />
+            </label>
+          )}
         </PluginCard>
       </div>
     </>
@@ -352,7 +387,7 @@ export function PluginActionsMenu({ name, busy, actions, updateAvailable }: {
 /** "+ Add another account" under the accounts. */
 export function AddAccountButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
   return (
-    <button type="button" disabled={disabled} onClick={onClick} data-plugin-add-account className="flex min-h-[38px] items-center gap-2 py-1.5 text-[14px] leading-5 text-ink-secondary hover:text-ink disabled:opacity-40">
+    <button type="button" disabled={disabled} onClick={onClick} data-plugin-add-account className="flex min-h-[38px] items-center gap-2 py-1.5 text-[13px] leading-5 text-ink-secondary hover:text-ink disabled:opacity-40">
       <Plus size={15} /> {label}
     </button>
   );

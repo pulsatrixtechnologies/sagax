@@ -2962,6 +2962,8 @@
   "connectApps.count.connectorOne": "1 connector",
   "connectApps.count.skillMany": "{count} skills",
   "connectApps.count.skillOne": "1 skill",
+  "connectApps.detail.more": "More about this plugin",
+  "connectApps.detail.noAccounts": "No account needed",
   "connectApps.detail.accounts": "Accounts",
   "connectApps.detail.accountsCount": "Accounts",
   "connectApps.detail.addAccount": "Add another account",

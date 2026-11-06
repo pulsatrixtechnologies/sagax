@@ -96,7 +96,7 @@ export function DiscoverView({ items, loading = false, filter, onFilter, type, o
                     <span className={PLUGINS.rowName}>{row.name}</span>
                     <span className={PLUGINS.rowSub}>{row.sub}</span>
                   </span>
-                  {row.status === "connected" ? <ConnectedMark /> : <PluginStatusLabel status={row.status} className="text-[14px] font-normal" />}
+                  {row.status === "connected" ? <ConnectedMark /> : <PluginStatusLabel status={row.status} className="text-[13px] font-normal" />}
                 </button>
               </div>
             ))}
@@ -104,11 +104,11 @@ export function DiscoverView({ items, loading = false, filter, onFilter, type, o
         </section>
       )}
       {loading && items.length === 0 ? (
-        <div className="flex items-center justify-center gap-2 py-24 text-[13px] text-ink-secondary">
+        <div className="flex items-center justify-center gap-2 py-24 text-[12px] text-ink-secondary">
           <Loader2 size={14} className="animate-spin" /> {t("connectors.loadingCatalog")}
         </div>
       ) : sections.every((section) => section.items.length === 0) ? (
-        <div className="mt-6 rounded-xl bg-card px-4 py-3 text-[13px] text-ink-secondary" data-plugins-empty>
+        <div className="mt-6 rounded-xl bg-card px-4 py-3 text-[12px] text-ink-secondary" data-plugins-empty>
           {t("connectApps.discover.empty")}
         </div>
       ) : sections.filter((section) => section.items.length > 0).map((section) => {
@@ -141,7 +141,7 @@ export function DiscoverView({ items, loading = false, filter, onFilter, type, o
       })}
       {onAddCustom && (
         <div className="mt-10 flex justify-center">
-          <button type="button" onClick={onAddCustom} className={cn(PLUGINS.fillPill, "h-[37px] px-5 text-[15px]")} data-plugins-add-custom>
+          <button type="button" onClick={onAddCustom} className={cn(PLUGINS.fillPill, "h-[37px] px-5 text-[14px]")} data-plugins-add-custom>
             {t("connectApps.addCustomConnector")}
           </button>
         </div>
@@ -178,7 +178,7 @@ function MoreChips({ chips, chosen, label, onPick }: { chips: readonly PluginFil
         <div role="menu" className="absolute left-0 top-full z-20 mt-1.5 min-w-[180px] rounded-xl border border-border bg-raised p-1 shadow-lg">
           {chips.map((chip) => (
             <button key={chip} type="button" role="menuitemradio" aria-checked={chosen === chip} onClick={() => { setOpen(false); onPick(chip); }}
-              className={cn("flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[14px] text-ink hover:bg-hover", chosen === chip && "bg-hover")} data-plugins-chip={chip}>
+              className={cn("flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[13px] text-ink hover:bg-hover", chosen === chip && "bg-hover")} data-plugins-chip={chip}>
               {label(chip)}
             </button>
           ))}

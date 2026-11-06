@@ -122,6 +122,11 @@ const MANAGE_API: Record<string, unknown> = {
       { name: "code-review", description: "Reviews a pull request", installed: true, servers: [], skills: ["code-review"], category: "development", updateAvailable: true, installedVersion: "1.0.0", version: "1.1.0", homepage: "https://github.com/anthropics/claude-plugins-official" },
       { name: "pdf-tools", description: "Read and fill PDF forms", installed: false, servers: [], skills: ["pdf"], category: "productivity" },
       { name: "sentry", description: "Errors and releases", installed: false, servers: ["sentry"], skills: [], category: "monitoring" },
+      // enough installed plugins for Manage's "Show all" (Grok Bot shows 6 rows, #2146)
+      { name: "playwright", description: "Drives a browser for end-to-end checks", installed: true, servers: [], skills: ["browser-check"], category: "development" },
+      { name: "commit-commands", description: "Commit, push and open a pull request", installed: true, servers: [], skills: ["commit"], category: "development" },
+      { name: "security-guidance", description: "Warns before risky edits", installed: true, servers: [], skills: ["security-review"], category: "security" },
+      { name: "data-notebooks", description: "Explores CSV and notebook files", installed: true, servers: [], skills: ["notebook"], category: "productivity" },
     ] },
     { name: "example-ops", source: "example-org/ops-marketplace", visibility: "org", mine: true, hasToken: true, credential: { chosen: { id: "gt_0000000000000011", label: "Second GitHub organization", owner: "mine" }, used: { via: "credential", label: "Second GitHub organization", at: 1 } }, plugins: [
       { name: "ops-flow", description: "Service desk routines", installed: true, servers: [], skills: ["triage", "dispatch", "time-review"], category: "productivity", homepage: "https://www.wikipedia.org" },
@@ -138,6 +143,10 @@ const MANAGE_API: Record<string, unknown> = {
     { name: "weekly-summary", description: "Friday recap of my threads", source: "local-import", enabled: true },
     { name: "meeting-notes", description: "Turns a call transcript into notes and actions", source: "local-import", enabled: true },
     { name: "release-checklist", description: "Steps before a version ships", source: "local-import", enabled: true },
+    { name: "browser-check", description: "", source: "claude-plugins-official", enabled: true },
+    { name: "commit", description: "", source: "claude-plugins-official", enabled: true },
+    { name: "security-review", description: "", source: "claude-plugins-official", enabled: true },
+    { name: "notebook", description: "", source: "claude-plugins-official", enabled: true },
   ].map((skill) => ({ tags: [], version: null, importedAt: 1_761_600_000_000, warnings: [], assignedBots: [], ...skill })) },
   "/api/plugins/search": { featured: [
     { id: "notion", name: "Notion", description: "Pages, databases and notes", url: "https://mcp.notion.com/mcp", domain: "mcp.notion.com", site: "notion.so", auth: "oauth", category: "productivity" },

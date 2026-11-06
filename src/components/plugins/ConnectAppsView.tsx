@@ -227,7 +227,7 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
               <button
                 type="button"
                 onClick={() => onTab("installed")}
-                className="-mr-1 flex shrink-0 items-center gap-2 rounded-full py-1 pl-1 pr-1.5 text-[14px] text-ink-secondary hover:bg-hover hover:text-ink"
+                className="-mr-1 flex shrink-0 items-center gap-2 rounded-full py-1 pl-1 pr-1.5 text-[13px] text-ink-secondary hover:bg-hover hover:text-ink"
                 data-plugins-connected={connected.count}
               >
                 <span className="flex -space-x-1.5" aria-hidden="true">
@@ -270,7 +270,7 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
       <button
         type="button"
         onClick={() => onTab("discover")}
-        className="-ml-0.5 flex h-8 items-center gap-1 rounded-full pl-1 pr-2.5 text-[14px] text-ink hover:bg-hover"
+        className="-ml-0.5 flex h-8 items-center gap-1 rounded-full pl-1 pr-2.5 text-[13px] text-ink hover:bg-hover"
         data-plugins-home=""
         data-breadcrumb-back=""
       >
@@ -337,7 +337,7 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
 /** "✓ Connected" on the home's rows: gray words, a green check. */
 export function ConnectedMark() {
   return (
-    <span className="inline-flex shrink-0 items-center gap-1 text-[14px] text-ink-secondary" data-plugin-status="connected">
+    <span className="inline-flex shrink-0 items-center gap-1 text-[13px] text-ink-secondary" data-plugin-status="connected">
       <Check size={15} className="text-success" aria-hidden="true" />
       {t("connectApps.status.connected")}
     </span>
@@ -367,7 +367,7 @@ export function PluginRow({ item, onOpen, action, below, meta }: { item: PluginI
             </span>
           </span>
         </button>
-        {action ?? (item.installed ? (item.status === "connected" ? <ConnectedMark /> : <PluginStatusLabel status={item.status} className="text-[14px] font-normal" />) : null)}
+        {action ?? (item.installed ? (item.status === "connected" ? <ConnectedMark /> : <PluginStatusLabel status={item.status} className="text-[13px] font-normal" />) : null)}
       </div>
       {below}
     </div>

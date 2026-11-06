@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Loader2 } from "lucide-react";
+import { ChevronRight, Loader2 } from "lucide-react";
 
 import { confirmAsync } from "@/components/ConfirmProvider";
 import { t } from "@/lib/i18n";
@@ -15,7 +15,7 @@ import {
   McpServerEditor,
 } from "../McpServersPanel";
 import { PluginStatusLabel } from "../plugins/PluginParts";
-import { AddAccountButton, SignInButton, type DetailAccount } from "../plugins/PluginDetailView";
+import { AddAccountButton, SignInButton, type DetailAccount, type DetailTool } from "../plugins/PluginDetailView";
 import { grokConnectorDetail } from "./GrokConnectors";
 import { pluginSourceLabel, safeHost } from "./helpers";
 import type { DetailBase, DetailContext } from "./types";
@@ -228,31 +228,68 @@ export function pluginDetail(item: PluginItem, { items, marketplaces, installing
     { label: t("connectApps.detail.id"), value: item.id, mono: true },
     ...(market?.source && market.source !== marketplace ? [{ label: t("connectApps.detail.repository"), value: market.source, mono: true }] : []),
   ];
+  // Grok Bot's plugin page: Accounts, then Tools, first (2026-11-06, #2146).
+  // Accounts: the connectors it brought, each with its sign-in state (the
+  // GitHub plugin holds the GitHub connection there). Tools: everything it
+  // brought, each row opening its own page. The rest (the bot's install,
+  // what it adds, the notes) stays lower, behind a disclosure.
+  const connectors = children.filter((child) => child.kind !== "skill");
+  const accounts: DetailAccount[] = connectors.map((child) => ({
+    id: child.key,
+    label: child.name,
+    status: child.status === "available" ? "off" : child.status,
+    detail: t("connectApps.filter.mcp"),
+    action: (
+      <button type="button" onClick={() => openItem(child)} aria-label={child.name} title={child.name} className="rounded-md p-1.5 text-ink-secondary hover:bg-hover hover:text-ink">
+        <ChevronRight size={14} aria-hidden="true" />
+      </button>
+    ),
+  }));
+  const githubAccount = !github && children.some((child) => child.githubAccount) ? (
+    <div className="mt-1 flex flex-wrap items-center gap-2 rounded-lg bg-inset px-3 py-2" data-plugin-github-account={children.some((child) => child.githubAccount === "missing") ? "missing" : "connected"}>
+      <span className="min-w-0 flex-1 text-[12px] text-ink-secondary">
+        {children.some((child) => child.githubAccount === "missing") ? t("connectApps.detail.githubMissing") : t("connectApps.detail.githubConnected")}
+      </span>
+      <button type="button" className="ui-button text-[12px]" onClick={openGithub}>{t("connectApps.detail.openGithub")}</button>
+    </div>
+  ) : null;
+  const toolRows: DetailTool[] = children.map((child) => ({
+    name: child.name,
+    description: child.description,
+    detail: child.kind === "skill" ? t("connectApps.filter.skills") : t("connectApps.filter.mcp"),
+    enabled: child.status === "connected",
+    status: child.status,
+    onOpen: () => openItem(child),
+  }));
+  const shared = {
+    item,
+    subtitle,
+    busy: installing !== null,
+    accounts,
+    accountsEmpty: github || githubAccount ? undefined : t("connectApps.detail.noAccounts"),
+    accountExtra: <>{github}{githubAccount}</>,
+    tools: { list: toolRows, loading: false, note: children.length === 0 ? t("connectApps.plugin.bringsNothing") : undefined },
+  };
   // For a bot the page is that bot's install: the card says what it brings,
   // and its Update installs the marketplace's files again in place.
   if (scope !== "workspace") {
     return {
-      item,
-      subtitle,
-      busy: installing !== null,
+      ...shared,
       details: [
         { label: t("connectApps.detail.source"), value: marketplace },
         ...sourceDetails,
         ...versionDetails,
       ],
-      children: (
+      more: (
         <>
           {item.description && <p className="px-1 text-[12.5px] leading-relaxed text-ink-secondary">{item.description}</p>}
-          {github}
           {botCard}
         </>
       ),
     };
   }
   return {
-    item,
-    subtitle,
-    busy: installing !== null,
+    ...shared,
     onUninstall: () => uninstallPlugin(item),
     ...(item.installed && item.updateAvailable ? { onUpdate: () => updatePlugin(item), updating: installing === item.id } : {}),
     details: [
@@ -262,11 +299,10 @@ export function pluginDetail(item: PluginItem, { items, marketplaces, installing
       { label: t("connectApps.plugin.connectors"), value: String(entry?.servers.length ?? 0) },
       { label: t("connectApps.filter.skills"), value: String(entry?.skills.length ?? 0) },
     ],
-    children: (
+    more: (
       <>
-        {github}
         {botCard}
-        <section className="rounded-[14px] border-[0.5px] border-ink/10 bg-ink/[0.015] px-4 py-3.5 sm:px-5">
+        <section>
           <h3 className="mb-1 text-[13px] font-semibold text-ink">{t("connectApps.plugin.brings")}</h3>
           {item.description && <p className="mb-2 text-[12.5px] leading-relaxed text-ink-secondary">{item.description}</p>}
           {children.length === 0 ? (
@@ -285,14 +321,6 @@ export function pluginDetail(item: PluginItem, { items, marketplaces, installing
                 </li>
               ))}
             </ul>
-          )}
-          {!github && children.some((child) => child.githubAccount) && (
-            <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-inset px-3 py-2" data-plugin-github-account={children.some((child) => child.githubAccount === "missing") ? "missing" : "connected"}>
-              <span className="min-w-0 flex-1 text-[12px] text-ink-secondary">
-                {children.some((child) => child.githubAccount === "missing") ? t("connectApps.detail.githubMissing") : t("connectApps.detail.githubConnected")}
-              </span>
-              <button type="button" className="ui-button text-[12px]" onClick={openGithub}>{t("connectApps.detail.openGithub")}</button>
-            </div>
           )}
           <p className="mt-2 text-[11.5px] text-ink-secondary">{t("connectApps.plugin.note")}</p>
         </section>

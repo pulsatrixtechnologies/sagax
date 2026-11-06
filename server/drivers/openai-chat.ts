@@ -156,12 +156,15 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
   const auth = (apiKey: string): Record<string, string> =>
     options.authHeaders ? options.authHeaders(apiKey) : { authorization: `Bearer ${apiKey}` };
 
+  /** Keep-alive ping: a stalled /models must not pin the interval forever. */
+  const WARM_PING_TIMEOUT_MS = 5_000;
   const pingModels = async (turn?: SendTurnInput) => {
     const apiKey = resolveKey(turn);
     try {
       const response = await fetch(modelsUrl(), {
         method: "GET",
         headers: auth(apiKey),
+        signal: AbortSignal.timeout(WARM_PING_TIMEOUT_MS),
       });
       // Drain so undici returns the socket to the keep-alive pool.
       await response.arrayBuffer().catch(() => undefined);

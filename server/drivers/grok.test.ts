@@ -278,6 +278,23 @@ describe("GrokDriver turns (fake fetch)", () => {
     await new Promise((resolve) => setTimeout(resolve, 120));
     expect(requestedUrls.filter((url) => url.endsWith("/models")).length).toBe(afterHangup);
   });
+
+  it("bounds each warm /models ping so a stalled provider cannot pin the interval", async () => {
+    process.env.FAKE_GROK_WARM_PING_MS = "40";
+    script = [];
+    const signals: AbortSignal[] = [];
+    globalThis.fetch = (async (url, init) => {
+      requestedUrls.push(String(url));
+      if (init?.signal) signals.push(init.signal);
+      return new Response(JSON.stringify({ data: [] }), { status: 200, headers: { "content-type": "application/json" } });
+    }) as typeof fetch;
+    await create();
+    await instance.adapter.sendTurn({ threadId: "t-ping-bound", text: "", keepWarm: true, warmOnly: true });
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    instance.adapter.releaseWarmSession?.("t-ping-bound");
+    expect(signals.length).toBeGreaterThan(0);
+    expect(signals.every((signal) => signal instanceof AbortSignal)).toBe(true);
+  });
 });
 
 

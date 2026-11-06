@@ -31,7 +31,7 @@ const KEY_PREFIXES: RegExp[] = [
   /\bxox[abposr]-[A-Za-z0-9-]{20,}/g, // slack
   /\bxapp-\d-[A-Za-z0-9-]{20,}/g, // slack app-level (socket mode) tokens
   /\bgl(?:pat|dt|rtr?)-[A-Za-z0-9_-]{20,}(?:\.[A-Za-z0-9_-]+)*/g, // gitlab personal, deploy and runner tokens (upstream #3926)
-  /\bAKIA[0-9A-Z]{16}\b/g, // aws access key id
+  /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, // aws access key id, long-term (AKIA) or temporary STS (ASIA)
   /\bAIza[0-9A-Za-z_-]{30,}/g, // google api key
   /\bnpm_[A-Za-z0-9]{20,}/g, // npm
   /\bwhsec_[A-Za-z0-9_-]{20,}/g, // webhook secrets, alone or in an automation's address (upstream tip)
@@ -91,7 +91,7 @@ const URL_USERINFO = /(\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@'"]+:)([^\s/@'"«»]+)(@)/
 /** A key shape cut by a "…": what a title or a preview kept of a key once
  * it was shortened. Too short for KEY_PREFIXES, still part of the key.
  * Includes xapp-, glpat- family and whsec_ (Lot A0). */
-const CUT_KEY = /\b(?:om[dg]_|sk-|[sr]k_(?:live|test)_|xai-|gsk_|csk-|hf_|gh[pousr]_|github_pat_|xox[abposr]-|xapp-|gl(?:pat|dt|rtr?)-|AKIA|AIza|npm_|whsec_|eyJ)[A-Za-z0-9_.-]*(?=…)/g;
+const CUT_KEY = /\b(?:om[dg]_|sk-|[sr]k_(?:live|test)_|xai-|gsk_|csk-|hf_|gh[pousr]_|github_pat_|xox[abposr]-|xapp-|gl(?:pat|dt|rtr?)-|A[KS]IA|AIza|npm_|whsec_|eyJ)[A-Za-z0-9_.-]*(?=…)/g;
 
 /** Mask the start of a key left in front of an ellipsis by a cut made
  * before any redaction (an older automatic task title, say). */

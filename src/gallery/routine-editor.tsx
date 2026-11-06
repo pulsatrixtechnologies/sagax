@@ -111,7 +111,9 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <StoreProvider>
       <Seed>
-        {view === "panel-editor"
+        {view === "panel-new"
+          ? <aside data-gallery-card style={{ width: 400 }} className="relative h-[560px] overflow-hidden border border-hairline/40 bg-panel text-ink"><RoutineEditor bots={[bot]} lockedBotId={bot.id} presentation="panel" onClose={() => {}} /></aside>
+          : view === "panel-editor"
           ? <aside data-gallery-card style={{ width: 400 }} className="relative h-[880px] overflow-hidden border border-hairline/40 bg-panel text-ink"><RoutineEditor routine={routine} mode={mode} bots={[bot]} lockedBotId={bot.id} presentation="panel" onClose={() => {}} onDismiss={() => {}} /></aside>
           : view === "panel"
           ? <aside data-gallery-card style={{ width: 400 }} className="relative h-[820px] border border-hairline/40 bg-panel text-ink"><LiveRoutines /></aside>

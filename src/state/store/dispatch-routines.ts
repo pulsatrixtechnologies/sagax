@@ -84,11 +84,17 @@ export function dispatchRoutinesEffects(action: Action, env: DispatchEnv): void 
           // checks the routine is that bot's and the thread the person's).
           const open = stateRef.current.bots.find((candidate) => candidate.id === stateRef.current.selectedId);
           const conversation = action.patch.enabled !== undefined && open?.threadId ? open.threadId : null;
+          // The switch moves at once; a refused request puts it back (#2320).
+          const before = action.patch.enabled !== undefined ? stateRef.current.routines.find((routine) => routine.id === action.routineId) : undefined;
+          if (before && action.patch.enabled !== undefined) rawDispatch({ type: "routinePatched", routine: { ...before, enabled: action.patch.enabled } });
           api(`/api/routines/${action.routineId}`, {
             method: "PATCH",
             body: JSON.stringify(action.patch),
             ...(conversation ? { headers: { "content-type": "application/json", [PERSON_THREADS_HEADER]: "1", [ROUTINE_CONVERSATION_HEADER]: conversation } } : {}),
-          }).catch(showError);
+          }).catch((error) => {
+            if (before) rawDispatch({ type: "routinePatched", routine: before });
+            showError(error);
+          });
           break;
         }
         case "deleteRoutine":

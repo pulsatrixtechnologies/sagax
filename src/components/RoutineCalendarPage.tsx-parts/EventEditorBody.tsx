@@ -34,6 +34,7 @@ export function EventEditorBody(props: EventEditorBodyProps) {
         aria-modal={panel ? "false" : "true"}
         aria-label={existingRoutine || existingCall ? t("routineCalendar.editEventAria") : t("routineCalendar.createEventAria")}
         tabIndex={-1}
+        data-popover-floor-scope=""
         data-routine-editor-presentation={presentation}
         onKeyDown={panel ? (event) => {
           if (event.key !== "Escape" || event.defaultPrevented || event.nativeEvent.isComposing) return;
@@ -120,7 +121,7 @@ export function EventEditorBody(props: EventEditorBodyProps) {
         </div>
         </div>
 
-        {pageBar ?? <div data-routine-editor-actions={viewing ? "view" : "edit"} className={cn("sticky bottom-0 z-20 flex items-center justify-end gap-2", panel ? "bg-panel px-4 pb-4 pt-2" : "border-t border-hairline/40 bg-elevated px-6 py-4")}>
+        {pageBar ?? <div data-routine-editor-actions={viewing ? "view" : "edit"} data-popover-floor="" className={cn("sticky bottom-0 z-20 flex items-center justify-end gap-2", panel ? "bg-panel px-4 pb-4 pt-2" : "border-t border-hairline/40 bg-elevated px-6 py-4")}>
           {viewing ? <>
             {/* 2026-11-03 (JC, Grok Bot): [Pause or Resume] [Edit] [trash]. */}
             {readOnly

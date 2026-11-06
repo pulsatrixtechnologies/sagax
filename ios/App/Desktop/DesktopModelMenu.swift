@@ -28,6 +28,8 @@ struct DesktopModelMenu: View {
     @State private var query = ""
     @State private var saving = false
     @State private var effortOpen = false
+    /// #2106: Auto's Optimize for Intelligence / Balance / Cost under the Auto row.
+    @State private var autoEditOpen = false
     @FocusState private var searching: Bool
 
     private var organization: Bool { session.surfaceGate.allows(.people) }
@@ -93,10 +95,16 @@ struct DesktopModelMenu: View {
             simple = ModelMenu.isSimple(stored: stored)
             loaded = true
         }
-        // Escape: the effort page, then the search, then the menu
+        .onValueChange(of: selection.auto) { on in
+            if on != true { autoEditOpen = false }
+        }
+        // Escape: the effort page, then Auto Edit, then the search, then the menu
         .background {
             Button("Close") {
-                if effortOpen { effortOpen = false } else if !query.isEmpty { query = "" } else { close() }
+                if effortOpen { effortOpen = false }
+                else if autoEditOpen { autoEditOpen = false }
+                else if !query.isEmpty { query = "" }
+                else { close() }
             }
             .keyboardShortcut(.escape, modifiers: [])
             .opacity(0)
@@ -171,55 +179,114 @@ struct DesktopModelMenu: View {
     }
 
     /// ModelSearchRow: the label 13 (its tags on the field fill), its detail
-    /// 11.5, the check in the accent, a star on a model.
+    /// 11.5, the check in the accent, a star on a model. Auto (#2106) gets
+    /// Edit and an Optimize for panel under the row.
     private func modelRow(_ row: ModelMenuRow) -> some View {
-        HStack(spacing: 6) {
-            Button { pick(row) } label: {
-                HStack(spacing: 6) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        HStack(spacing: 6) {
-                            Text(verbatim: row.label).font(theme.font(13)).foregroundStyle(theme.ink).lineLimit(1)
-                            ForEach(row.tags, id: \.self) { tag in
-                                Text(verbatim: tag)
-                                    .font(theme.font(10.5))
-                                    .foregroundStyle(theme.inkSecondary)
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 1)
-                                    .background(theme.inset, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Button { pick(row) } label: {
+                    HStack(spacing: 6) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            HStack(spacing: 6) {
+                                Text(verbatim: row.label).font(theme.font(13)).foregroundStyle(theme.ink).lineLimit(1)
+                                ForEach(row.tags, id: \.self) { tag in
+                                    Text(verbatim: tag)
+                                        .font(theme.font(10.5))
+                                        .foregroundStyle(theme.inkSecondary)
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 1)
+                                        .background(theme.inset, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                                }
+                            }
+                            if let detail = row.detail {
+                                Text(verbatim: detail).font(theme.font(11.5)).foregroundStyle(theme.inkSecondary).lineLimit(2)
+                            }
+                            if row.notResponding {
+                                Text("Not responding").font(theme.font(11.5)).foregroundStyle(theme.warning)
                             }
                         }
-                        if let detail = row.detail {
-                            Text(verbatim: detail).font(theme.font(11.5)).foregroundStyle(theme.inkSecondary).lineLimit(2)
-                        }
-                        if row.notResponding {
-                            Text("Not responding").font(theme.font(11.5)).foregroundStyle(theme.warning)
+                        Spacer(minLength: 4)
+                        if row.current {
+                            DesktopIconView(icon: .check, size: 14).foregroundStyle(theme.accent)
                         }
                     }
-                    Spacer(minLength: 4)
-                    if row.current {
-                        DesktopIconView(icon: .check, size: 14).foregroundStyle(theme.accent)
-                    }
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .hoverEffect(.highlight)
-            .accessibilityIdentifier("desktop-model-row.\(row.instanceId ?? row.kind.rawValue).\(row.modelId ?? "")")
-            if row.kind == .model {
-                let starred = favorites.keys.contains(row.key)
-                Button { favorites.toggle(row.key, session: session) } label: {
-                    Image(systemName: starred ? "star.fill" : "star")
-                        .font(.system(size: 12))
-                        .foregroundStyle(starred ? theme.warning : theme.inkTertiary)
-                        .frame(width: 24, height: 24)
-                        .contentShape(Rectangle())
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(starred ? Text("Remove \(row.label) from favorites") : Text("Add \(row.label) to favorites"))
+                .hoverEffect(.highlight)
+                .accessibilityIdentifier("desktop-model-row.\(row.instanceId ?? row.kind.rawValue).\(row.modelId ?? "")")
+                if row.kind == .auto {
+                    Button { autoEditOpen.toggle() } label: {
+                        Text("Edit")
+                            .font(theme.font(12))
+                            .foregroundStyle(theme.inkSecondary)
+                            .padding(.horizontal, 8)
+                            .frame(height: 24)
+                            .background(autoEditOpen ? theme.inset : .clear, in: Capsule())
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text("Edit"))
+                    .accessibilityIdentifier("desktop-model-auto-edit")
+                }
+                if row.kind == .model {
+                    let starred = favorites.keys.contains(row.key)
+                    Button { favorites.toggle(row.key, session: session) } label: {
+                        Image(systemName: starred ? "star.fill" : "star")
+                            .font(.system(size: 12))
+                            .foregroundStyle(starred ? theme.warning : theme.inkTertiary)
+                            .frame(width: 24, height: 24)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(starred ? Text("Remove \(row.label) from favorites") : Text("Add \(row.label) to favorites"))
+                }
+            }
+            if row.kind == .auto, autoEditOpen {
+                autoOptimizePanel
             }
         }
+    }
+
+    /// #2106: Optimize for Intelligence / Balance / Cost under the Auto row.
+    private var autoOptimizePanel: some View {
+        let current = selection.autoOptimize ?? .balance
+        return VStack(alignment: .leading, spacing: 0) {
+            Text("Optimize for")
+                .font(theme.font(11.5))
+                .foregroundStyle(theme.inkSecondary)
+                .padding(.horizontal, 8)
+                .padding(.top, 4)
+                .padding(.bottom, 2)
+            ForEach(ModelAutoOptimize.allCases, id: \.self) { value in
+                Button {
+                    setAutoOptimize(value)
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(LocalizedStringKey(value.labelKey))
+                            .font(theme.font(13))
+                            .foregroundStyle(theme.ink)
+                            .lineLimit(1)
+                        Spacer(minLength: 4)
+                        DesktopIconView(icon: .check, size: 14)
+                            .foregroundStyle(theme.accent)
+                            .opacity(current == value ? 1 : 0)
+                    }
+                    .padding(.horizontal, 8)
+                    .frame(height: 30)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .hoverEffect(.highlight)
+                .accessibilityIdentifier("desktop-model-auto-optimize.\(value.rawValue)")
+            }
+        }
+        .padding(.bottom, 4)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text("Optimize for"))
+        .accessibilityIdentifier("desktop-model-auto-optimize")
     }
 
     // MARK: Settings
@@ -292,6 +359,8 @@ struct DesktopModelMenu: View {
             guard selection.auto != true else { return close() }
             var next = selection
             next.auto = true
+            // Absent means Balance; store it so Edit shows the live choice.
+            next.autoOptimize = selection.autoOptimize ?? .balance
             apply(next, updateBotDefault: true)
         case .follow:
             guard follows == false else { return close() }
@@ -299,8 +368,17 @@ struct DesktopModelMenu: View {
         case .model:
             guard let instance = instances.first(where: { $0.instanceId == row.instanceId }), let model = row.modelId else { return }
             if row.current && selection.auto != true { return close() }
+            // Pinning a model clears Auto and its Optimize preference.
             apply(ModelPickerRules.selectionForPick(selection, instance: instance, model: model), updateBotDefault: true)
         }
+    }
+
+    private func setAutoOptimize(_ value: ModelAutoOptimize) {
+        var next = selection
+        next.auto = true
+        next.autoOptimize = value
+        autoEditOpen = false
+        apply(next, updateBotDefault: true, keepOpen: true)
     }
 
     private func apply(_ next: ModelSelection, updateBotDefault: Bool, keepOpen: Bool = false) {

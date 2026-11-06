@@ -90,6 +90,7 @@ export function ShellLayout(shell: ShellNavigation) {
     openCalendarRoom,
     nativeViewOverlayOpen,
   } = shell;
+  const profileFillsMain = !remoteClient && state.personaEditor !== null;
 
   return (
     <div className="flex h-full flex-col" data-app-shell="">
@@ -119,10 +120,14 @@ export function ShellLayout(shell: ShellNavigation) {
       <div className="app-content-frame relative flex h-full min-w-0 flex-1 flex-col" data-sidebar-follower="">
       {/* nothing answers this person on an organization server: say so above
           the conversation, with the way back to the first-run step */}
-      {org && (group || bot) && !calendarFillsMain && !mainIsTeamMap && !mainIsMemory && !mainIsCode && !mainIsApprovals && !mainIsRemoteSessions && !mainIsAchievements && !mainIsApps && <OrgEngineNotice />}
+      {org && (group || bot) && !profileFillsMain && !calendarFillsMain && !mainIsTeamMap && !mainIsMemory && !mainIsCode && !mainIsApprovals && !mainIsRemoteSessions && !mainIsAchievements && !mainIsApps && <OrgEngineNotice />}
       {/* The split view (#1504): the main view below is one section; others
           show more conversations beside it (src/lib/split-view.ts). */}
-      <SplitWorkspace panelSlot={panelSlot} main={composeOpen && (group || bot) ? (
+      <SplitWorkspace panelSlot={panelSlot} main={profileFillsMain ? (
+        // The bot's profile page fills the main panel in place of the chat
+        // (#2136); X or Escape goes back to the bot's chat.
+        <PersonaEditorModal />
+      ) : composeOpen && (group || bot) ? (
         group ? <GroupSurface key={`${group.id}:${uiLocale}`} id={group.id}>{(current) => <GroupView group={current} />}</GroupSurface> : bot ? <BotSurface key={uiLocale} id={bot.id}>{(current) => <ChatView bot={current} />}</BotSurface> : null
       ) : calendarFillsMain ? (
         <RoutinesPage fill onBack={closeCalendar} onOpenRoom={openCalendarRoom} />
@@ -221,9 +226,9 @@ export function ShellLayout(shell: ShellNavigation) {
       {!remoteClient && state.activityOpen && bot && <BotSurface key={`activity:${bot.id}`} id={bot.id}>{(current) => <ActivityPanel bot={current} />}</BotSurface>}
       {state.appSettingsOpen && <SettingsModal />}
       {!remoteClient && <ModelWindowHost />}
-      {/* Restored centred windows: Edit bot, New bot wizard, Browse Bots,
-          archived bots, org import. Capabilities stays a decided modal. */}
-      {!remoteClient && state.personaEditor && <PersonaEditorModal />}
+      {/* Restored centred windows: New bot wizard, Browse Bots, archived
+          bots, org import. Capabilities stays a decided modal. Edit bot is
+          the main panel's profile page above (#2136). */}
       {!remoteClient && state.botWizard && <BotWizard />}
       {state.botCatalogOpen && <BotCatalogModal />}
       {state.archivedBotsOpen && (

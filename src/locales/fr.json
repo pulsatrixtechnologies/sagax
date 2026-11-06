@@ -13440,5 +13440,7 @@
   "botProfile.accounts.error": "Impossible de charger les comptes",
   "botProfile.retry": "Réessayer",
   "botProfile.memoryPage": "Ouvrir la page Mémoire",
-  "botProfile.channel.email": "Courriel"
+  "botProfile.channel.email": "Courriel",
+  "botProfile.private": "Privé",
+  "botProfile.shared": "Partagé"
 }

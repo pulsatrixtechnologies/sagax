@@ -1,14 +1,16 @@
 /** Isolated gallery for the Edit bot window (#2092): the real
  * PersonaEditorModal on every page, and the real bot panel on each tab, on a
  * stand-in /api. Fictional bot, neutral names. Not shipped in the app.
- * ?view=editor&section=<page> | ?view=panel&tab=<details|library|computer>
+ * ?view=editor&section=<page> (the profile page in the main panel, beside
+ * the real sidebar) | ?view=panel&tab=<details|library|computer>
  * &org=1 (an organization server with the person's server environment)
  * &skin=<id>&lang=<code>
  * scripts/capture/edit-bot.mjs shoots every page and tab, light and dark. */
-import { StrictMode, useEffect } from "react";
+import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { PersonaEditorModal } from "../components/persona/PersonaEditorModal";
 import { BotSettingsDialog } from "../components/BotSettingsDialog";
+import { AppSidebar } from "../components/AppSidebar";
 import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { StoreProvider, useStore, type Bot, type BotSettingsSection } from "../state/store";
@@ -36,6 +38,12 @@ const bot = {
   alwaysAllow: ["mcp:mail:read_notes"],
   ...(org ? { workFolder: "/workspace/bots/scout" } : {}),
 } as unknown as Bot;
+
+// Two more fictional bots, so the sidebar beside the page looks lived in.
+const neighbours = [
+  { ...bot, id: "atlas", threadId: "t-atlas", name: "Atlas", title: "Planification", color: "blue", soul: "" },
+  { ...bot, id: "nova", threadId: "t-nova", name: "Nova", title: "Courriels", color: "purple", soul: "" },
+] as Bot[];
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const realFetch = window.fetch.bind(window);
@@ -98,9 +106,13 @@ const section = (params.get("section") ?? "overview") as BotSettingsSection;
 function Open() {
   const { dispatch } = useStore();
   useEffect(() => {
-    dispatch({ type: "hydrate", bots: [bot], groups: [], sections: [], computerControl: {} } as never);
+    dispatch({ type: "hydrate", bots: [bot, ...neighbours], groups: [], sections: [], computerControl: {} } as never);
     dispatch({ type: "instances", instances: [{ instanceId: "claude", driverKind: "grokAgent", displayName: "Grok", snapshot: { status: "ready" }, capabilities: { browserMcp: true, computerMcp: true }, models: { default: "sonnet", options: [{ id: "sonnet", label: "Sonnet" }] } }] } as never);
-    if (view === "editor") dispatch({ type: "openPersonaEditor", botId: bot.id, section });
+    if (view === "editor") {
+      // select first: selecting a bot leaves the profile, so the page opens after
+      dispatch({ type: "select", id: bot.id } as never);
+      dispatch({ type: "openPersonaEditor", botId: bot.id, section });
+    }
     else dispatch({ type: "select", id: bot.id } as never);
   }, [dispatch]);
   return null;
@@ -113,12 +125,27 @@ function Panel() {
   return <div className="relative ml-auto flex h-screen w-[400px] border-l border-hairline" data-edit-bot-panel=""><BotSettingsDialog bot={current} /></div>;
 }
 
+/** The profile page fills the main panel beside the real sidebar (#2136). */
+function Shell() {
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  return (
+    <div className="flex h-dvh min-w-0 flex-1 flex-col" data-app-shell="">
+      <div className="app-shell-row relative flex min-h-0 flex-1">
+        <AppSidebar drawerOpen={drawerOpen} onDrawerOpenChange={setDrawerOpen} composeOpen={false} onCompose={() => {}} />
+        <div className="app-content-frame relative flex h-full min-w-0 flex-1 flex-col" data-sidebar-follower="">
+          <PersonaEditorModal />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <StoreProvider>
       <div className="flex h-screen bg-app text-ink" data-gallery-edit-bot="">
         <Open />
-        {view === "editor" ? <PersonaEditorModal /> : <Panel />}
+        {view === "editor" ? <Shell /> : <Panel />}
       </div>
     </StoreProvider>
   </StrictMode>,

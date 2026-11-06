@@ -42,7 +42,24 @@ function reduce(state: AppState, action: Action): AppState {
 }
 
 export function reducer(state: AppState, action: Action): AppState {
-  const next = reduce(state, action);
+  let next = reduce(state, action);
+  // The bot profile page fills the main panel (#2136): navigating anywhere
+  // else from the sidebar (another bot, the chat, a view, memory, plugins)
+  // leaves it.
+  if (state.personaEditor && next.personaEditor === state.personaEditor && leavesProfile(state, next, action)) {
+    next = { ...next, personaEditor: null };
+  }
   // A section's panel lasts as long as the panel: closed, it is gone.
   return next.panelOwner && !next.settingsOpen && !next.computerOpen ? { ...next, panelOwner: null } : next;
+}
+
+function leavesProfile(state: AppState, next: AppState, action: Action): boolean {
+  return (
+    action.type === "select" ||
+    action.type === "showChat" ||
+    next.activeView !== state.activeView ||
+    next.selectedId !== state.selectedId ||
+    (next.memoryManagerOpen && !state.memoryManagerOpen) ||
+    (next.pluginsOpen && !state.pluginsOpen)
+  );
 }

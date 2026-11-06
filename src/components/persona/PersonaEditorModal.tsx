@@ -1,6 +1,7 @@
-// The bot editor ("Edit bot"): since #2126 the bot's profile page
-// (bot-profile/BotProfilePage.tsx, Grok Bot's layout) in the wide right-hand
-// panel. This module keeps the store wiring (store action openPersonaEditor:
+// The bot editor ("Edit bot"): the bot's profile page
+// (bot-profile/BotProfilePage.tsx, Grok Bot's layout) filling the main panel
+// in place of the chat (#2136); X or Escape goes back to the bot's chat. This
+// module keeps the store wiring (store action openPersonaEditor:
 // "..." > Edit bot, a click on the mascot, the bot panel's gear, a deep link)
 // and the section names the rest of the app imports.
 import { useEffect } from "react";
@@ -42,5 +43,10 @@ export function PersonaEditorModal() {
   const gone = editor !== null && bot === undefined;
   useEffect(() => { if (gone) dispatch({ type: "closePersonaEditor" }); }, [gone, dispatch]);
   if (!editor || !bot) return null;
-  return <BotProfilePage key={bot.id} bot={bot} section={editor.section} onClose={() => dispatch({ type: "closePersonaEditor" })} />;
+  // Closing lands on this bot's chat, whichever conversation was open before.
+  const close = () => {
+    if (state.selectedId === bot.id) dispatch({ type: "closePersonaEditor" });
+    else dispatch({ type: "select", id: bot.id });
+  };
+  return <BotProfilePage key={bot.id} bot={bot} section={editor.section} onClose={close} />;
 }

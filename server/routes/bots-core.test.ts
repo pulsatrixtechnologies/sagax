@@ -302,6 +302,25 @@ describe("bots-core happy paths", () => {
     }));
   });
 
+  it("suggestedName ignores another person's bot names (#2045)", async () => {
+    // Peer took the first curated name ("Scout"). With owner scoping it stays
+    // free for the viewer; Math.random pinned so the pick is deterministic.
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    const peerScout = { ...bot, id: "b-peer", name: "Scout", ownerUserId: "pr_other" } as unknown as BotRecord;
+    const handler = createBotsCoreRoutes(baseDeps({
+      store: storeStub({ bots: [bot, peerScout] }),
+      viewerId: () => "pr_owner",
+      effectiveBotOwner: (b) => String(b.ownerUserId ?? ""),
+      requesterPrincipal: () => "pr_owner",
+    }));
+    const { ctx, json } = context("/api/bot-defaults", "GET", sessionOwner);
+    await handler(ctx);
+    random.mockRestore();
+    expect(json).toHaveBeenCalledWith(expect.anything(), 200, expect.objectContaining({
+      suggestedName: "Scout",
+    }));
+  });
+
   it("sets primary on POST", async () => {
     const setPrimaryBot = vi.fn(() => [bot]);
     const handler = createBotsCoreRoutes(baseDeps({

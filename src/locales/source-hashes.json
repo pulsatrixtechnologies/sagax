@@ -17254,7 +17254,14 @@
       "chat.codingJob.stopAria": "427b5bdce0f1f48dacc94b5969c6cf6d4fde3e3196545179484142feced2df74",
       "chat.codingJob.pr": "02e9ffb0c8db2bea5caa9fb7765f6751a639f79dee4c898d64936bf3a924d13e",
       "chat.codingJob.prPlain": "f3dba6629c69d91bd65527f178591b6ab2ac3843cfbf76943801e8dd45bcb7d6",
-      "chat.codingJob.openPrAria": "9ba32b78d590bb1c4fba98bc0d63f510552628c7dddef6f151eb85430aee347e"
+      "chat.codingJob.openPrAria": "9ba32b78d590bb1c4fba98bc0d63f510552628c7dddef6f151eb85430aee347e",
+      "model.auto.optimize.intelligence": "78ea5ef30f1e6270b71278c1e2c091384430b690d20179d5b5c88f57242c21c2",
+      "model.auto.optimize.balance": "d05e07b7c14e596a5fe0b7dc50ab6be1607bdd1311fd559382122ea76ceab4c3",
+      "model.auto.optimize.cost": "204a5eb2cd28bcfdf3be9f8c765948e9e831609e3c57048cdbd6b8a94cf49126",
+      "model.auto.optimizeTitle": "e9da5c7e03d2286677e59c907be22de276edd2f397ed3c27111c5f77ce91b09a",
+      "model.auto.edit": "464c4ffd019e1e9691dcf0537c797353ef2b1c1d4833d3d463e5b74ae4547344",
+      "model.access.account": "7e1b0d5641f2640ce9a953ec231eea2c27a2a7633f7d3c273e5735e2b30c10b7",
+      "model.access.api": "c8e5998f6a3955c21d858936fe05c69621724d7f825c6e17793002a0fa798bf9"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

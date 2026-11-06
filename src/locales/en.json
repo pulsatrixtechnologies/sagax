@@ -13493,5 +13493,12 @@
   "connectApps.skill.publish": "Publish",
   "connectApps.skill.saveMd": "Save as a .md file",
   "orgCapabilities.member.loadFailed": "The organization's plugins did not load: {error}",
-  "orgCapabilities.member.retry": "Try again"
+  "orgCapabilities.member.retry": "Try again",
+  "model.auto.optimize.intelligence": "Intelligence",
+  "model.auto.optimize.balance": "Balance",
+  "model.auto.optimize.cost": "Cost",
+  "model.auto.optimizeTitle": "Optimize for",
+  "model.auto.edit": "Edit",
+  "model.access.account": "Account",
+  "model.access.api": "API"
 }

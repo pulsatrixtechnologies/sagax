@@ -13493,5 +13493,12 @@
   "connectApps.skill.publish": "Publier",
   "connectApps.skill.saveMd": "Enregistrer en fichier .md",
   "orgCapabilities.member.loadFailed": "Les plugins de l'organisation n'ont pas chargé : {error}",
-  "orgCapabilities.member.retry": "Réessayer"
+  "orgCapabilities.member.retry": "Réessayer",
+  "model.auto.optimize.intelligence": "Intelligence",
+  "model.auto.optimize.balance": "Équilibre",
+  "model.auto.optimize.cost": "Coût",
+  "model.auto.optimizeTitle": "Optimiser pour",
+  "model.auto.edit": "Modifier",
+  "model.access.account": "Compte",
+  "model.access.api": "API"
 }

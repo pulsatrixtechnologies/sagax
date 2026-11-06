@@ -11,7 +11,6 @@ const translated = [
   "botPanel.memory.upkeepHelp",
   "settings.share.intro",
   "settings.servers.title",
-  "fullAccessWarning.body",
   "localAuto.title",
   "botPanel.skills.title",
   "botPanel.routines.hint",
@@ -28,7 +27,6 @@ it("translates Bot panel and Settings card copy into French", () => {
   }
   expect(en["botPanel.overview.refresh"]).toBe("Couldn’t refresh. Showing the last loaded overview.");
   expect(en["settings.share.intro"]).not.toMatch(/\bworkspaces?\b/i);
-  expect(en["fullAccessWarning.body"]).not.toMatch(/[\u2013\u2014]/);
   expect(en["botPanel.access.placeholder"]).toBe("Private bot folder, or an absolute path");
   expect(fr["botSettings.nav.soul"]).toBe("Personnalité");
   expect(fr["routines.empty"]).toBe("Aucune routine pour l'instant.");

@@ -68,13 +68,19 @@ describe("resize handles", () => {
 
     it.each(["BotSettingsDialog.tsx", "PersonPanel.tsx", "GroupPanel.tsx"])("%s uses the shared hook and handle, with no copy of its own", (file) => {
       const source = read(file);
-      expect(source).toContain("useDockedPanelWidth()");
+      expect(source).toMatch(/useDockedPanelWidth\((BOT_PANEL_BOUNDS)?\)/);
       expect(source).toContain("<DockedPanelResizeHandle");
       expect(source).toContain("style={{ width: dockedPanel.width }}");
       // Below lg the overlay must fill inset-0; `!` beats the inline width (#1662).
       expect(source).toContain("max-lg:w-auto!");
       expect(source).not.toContain('role="separator"');
       expect(source).not.toContain("omb-settings-panel-width");
+    });
+
+    it("opens the bot panel at 308 px like Grok Bot, other panels unchanged (#2141)", () => {
+      expect(shared).toMatch(/BOT_PANEL_BOUNDS[^}]*key: BOT_PANEL_WIDTH_KEY,\s*min: 308,[^}]*fallback: 308/);
+      expect(read("BotSettingsDialog.tsx")).toContain("useDockedPanelWidth(BOT_PANEL_BOUNDS)");
+      for (const file of ["PersonPanel.tsx", "GroupPanel.tsx"]) expect(read(file)).toContain("useDockedPanelWidth()");
     });
   });
 });

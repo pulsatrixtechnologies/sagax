@@ -8518,6 +8518,7 @@
   "chat.openPanel": "Open the bot panel",
   "chat.openPanelAria": "Open {name}'s panel",
   "chat.closePanel": "Close the bot panel",
+  "chat.header.private": "Private",
   "chat.closePanelAria": "Close {name}'s panel",
   "settings.sidebarHidden.whereHint": "Show them again from the Hidden row at the foot of the sidebar.",
   "botPanel.history.all": "All history",

@@ -90,7 +90,8 @@ import { isProviderReplyCut } from "../../shared/provider-reply-cut";
 import { isProviderSafetyBlock, PROVIDER_SAFETY_GUIDANCE, PROVIDER_SAFETY_HELP_URL } from "../../shared/provider-safety";
 import { isCancelledTranscriptRow } from "../../shared/client-cancel";
 import { BotAvatar } from "./Avatar";
-import { BotHeaderPill, botPillActions } from "./BotHeaderPill";
+import { BotChatHeader, BotHeaderPill, botPillActions } from "./BotHeaderPill";
+import { personaSharingSummary } from "@/lib/bot-sharing";
 import { TurnPresence } from "./TurnPresence";
 import { LiveReply } from "./LiveReply";
 import { ultracodeFromSelection } from "@/lib/ultracode-chrome";
@@ -176,7 +177,7 @@ import { t, activeLocale } from "@/lib/i18n";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { showPrivateConversationHint } from "@/lib/private-threads";
 import { viewerActorId, viewerCan } from "@/lib/viewer";
-import { isViewersPrimaryBot } from "@/lib/primary-bot";
+import { isViewersPrimaryBot, viewerOwnsBot } from "@/lib/primary-bot";
 import { repeatedFailureIds } from "../../shared/failure-dedup";
 import { groupTranscript, isHiddenStatusActivity, isStatusActivity, isTurnStoppedNotice, type TranscriptItem } from "@/lib/activity-runs";
 import { collapseBotExchanges, exchangeJumpStays, startsNewStretch, visibleEdge, type ExchangeRun } from "@/lib/bot-exchange";
@@ -2497,6 +2498,35 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
       }
     />
   );
+  // The main chat's header row, like Grok Bot (#2141): name pill, who sees
+  // the bot, then the gear that toggles the same panel as the pill.
+  const sharingLabel = personaSharingSummary(bot);
+  const shared = sharingLabel !== t("botSettings.sharing.empty");
+  const chatHeader = side ? null : (
+    <BotChatHeader
+      name={bot.name}
+      label={bot.title}
+      audience={!shared && viewerOwnsBot(bot, viewerActorId(state.config)) ? t("chat.header.private") : sharingLabel}
+      shared={shared}
+      panelOpen={pillPanelOpen}
+      onToggle={() => {
+        if (state.panelOwner) dispatch({ type: "toggleSettings", open: true, owner: null });
+        else for (const action of botPillActions(pillPanelOpen)) dispatch(action);
+      }}
+      avatar={
+        <BotAvatar
+          bot={bot}
+          primary={isViewersPrimaryBot(bot, viewerActorId(state.config))}
+          primaryRingClassName="ring-elevated"
+          state={stateForBot({ ...bot, messages })}
+          size={20}
+          motion={mascotMotion?.kind ?? "none"}
+          motionKey={mascotMotion?.nonce ?? 0}
+          animated={mascotRowAnimated(bot, pendingQueued, mascotMotion?.kind)}
+        />
+      }
+    />
+  );
   // My bubble (and its inline editor) in the bot's colour, whatever the
   // skin's accent (src/lib/bubble-colors.ts, botBubbleVars).
   const bubbleStyle = botBubbleVars(MAUS_COLORS[bot.color]) as React.CSSProperties;
@@ -2549,8 +2579,8 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
           "pl-11 sm:pl-5",
         )}
       >
-        <div className="absolute left-1/2 top-1/2 flex max-w-[50%] -translate-x-1/2 -translate-y-1/2 items-center gap-2" style={headerNoDragStyle}>
-          {botPill}
+        <div className="absolute left-1/2 top-1/2 flex max-w-[60%] -translate-x-1/2 -translate-y-1/2 items-center gap-2" style={headerNoDragStyle}>
+          {chatHeader}
         </div>
         <div
           data-chathead-controls

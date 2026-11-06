@@ -168,62 +168,82 @@ export class SectionChannels {
     return this.byNameForOwner(name, ownerPrincipalId) !== null;
   }
 
-  /** The access facts of a section by name; null for a private one (no
-   * member) or an unknown name. */
-  accessFor(name: string): SectionAccess | null {
-    const found = this.records.find((record) => record.name === name.trim());
+  private accessOf(found: SectionRecord | undefined | null): SectionAccess | null {
     if (!found || !found.members.length) return null;
     return { ownerPrincipalId: found.ownerPrincipalId, members: found.members.map((member) => ({ ...member })), defaultLevel: found.defaultLevel };
   }
 
+  /** The access facts of a section by name; null for a private one (no
+   * member) or an unknown name. Prefer {@link accessForId} when the id is known. */
+  accessFor(name: string): SectionAccess | null {
+    return this.accessOf(this.records.find((record) => record.name === name.trim()));
+  }
+
+  /** #2045: access facts by stable section id. */
+  accessForId(sectionId: string): SectionAccess | null {
+    return this.accessOf(this.records.find((record) => record.id === sectionId.trim()));
+  }
+
   /** The access facts of a section for one bot: null when the section is
    * private, or when the bot's owner never consented to it (see the header). */
-  accessForBot(name: string, bot: { id: string; ownerPrincipalId: string }): SectionAccess | null {
-    const found = this.records.find((record) => record.name === name.trim());
+  accessForBot(name: string, bot: { id: string; ownerPrincipalId: string }, sectionId?: string | null): SectionAccess | null {
+    const found = sectionId?.trim()
+      ? this.records.find((record) => record.id === sectionId.trim())
+      : this.records.find((record) => record.name === name.trim());
     if (!found || !found.members.length) return null;
     const owner = bot.ownerPrincipalId.trim().toLowerCase();
     const consented = found.ownerPrincipalId.trim().toLowerCase() === owner ||
       (found.placedBots ?? []).some((entry) => entry.botId === bot.id && entry.ownerPrincipalId.trim().toLowerCase() === owner);
-    return consented ? this.accessFor(name) : null;
+    return consented ? this.accessOf(found) : null;
   }
 
   /** The access facts of a section for one room: null when the section is
    * private, or when the room is neither its own conversation nor placed
-   * in it with consent (see the header). */
-  accessForRoom(name: string, roomId: string): SectionAccess | null {
-    const found = this.records.find((record) => record.name === name.trim());
+   * in it with consent (see the header). Prefer sectionId when stamped. */
+  accessForRoom(name: string, roomId: string, sectionId?: string | null): SectionAccess | null {
+    const found = sectionId?.trim()
+      ? this.records.find((record) => record.id === sectionId.trim())
+      : this.records.find((record) => record.name === name.trim());
     if (!found || !found.members.length) return null;
     const placed = found.roomId === roomId || (found.placedRooms ?? []).includes(roomId);
-    return placed ? this.accessFor(name) : null;
+    return placed ? this.accessOf(found) : null;
   }
 
-  /** A room placed in a section with consent. */
-  recordRoomPlacement(name: string, roomId: string): void {
-    const found = this.records.find((record) => record.name === name.trim());
+  /** A room placed in a section with consent. Prefer sectionId when stamped. */
+  recordRoomPlacement(name: string, roomId: string, sectionId?: string | null): void {
+    const found = sectionId?.trim()
+      ? this.records.find((record) => record.id === sectionId.trim())
+      : this.records.find((record) => record.name === name.trim());
     if (!found || (found.placedRooms ?? []).includes(roomId)) return;
     found.placedRooms = [...(found.placedRooms ?? []), roomId];
     this.save();
   }
 
   /** Forget a room's placement in a section (moved out). */
-  forgetRoomPlacement(name: string, roomId: string): void {
-    const found = this.records.find((record) => record.name === name.trim());
+  forgetRoomPlacement(name: string, roomId: string, sectionId?: string | null): void {
+    const found = sectionId?.trim()
+      ? this.records.find((record) => record.id === sectionId.trim())
+      : this.records.find((record) => record.name === name.trim());
     if (!found?.placedRooms?.includes(roomId)) return;
     found.placedRooms = found.placedRooms.filter((id) => id !== roomId);
     this.save();
   }
 
   /** A bot placed in a section by someone who manages it, for its owner. */
-  recordPlacement(name: string, botId: string, ownerPrincipalId: string): void {
-    const found = this.records.find((record) => record.name === name.trim());
+  recordPlacement(name: string, botId: string, ownerPrincipalId: string, sectionId?: string | null): void {
+    const found = sectionId?.trim()
+      ? this.records.find((record) => record.id === sectionId.trim())
+      : this.records.find((record) => record.name === name.trim());
     if (!found || !ownerPrincipalId) return;
     found.placedBots = [...(found.placedBots ?? []).filter((entry) => entry.botId !== botId), { botId, ownerPrincipalId }];
     this.save();
   }
 
   /** Forget a bot's placement in a section (taken out, or placed elsewhere). */
-  forgetPlacement(name: string, botId: string): void {
-    const found = this.records.find((record) => record.name === name.trim());
+  forgetPlacement(name: string, botId: string, sectionId?: string | null): void {
+    const found = sectionId?.trim()
+      ? this.records.find((record) => record.id === sectionId.trim())
+      : this.records.find((record) => record.name === name.trim());
     if (!found?.placedBots?.some((entry) => entry.botId === botId)) return;
     found.placedBots = found.placedBots.filter((entry) => entry.botId !== botId);
     this.save();

@@ -183,7 +183,10 @@ export function createBotsCoreCreateRoutes(deps: BotsCoreRouteDeps): RouteHandle
       const created = body.visibility === undefined ? null : parseVisibility(body.visibility);
       if (created && !created.ok) return json(res, 400, { error: created.error });
       if (created?.ok) created.visibility = ownerChosenVisibility(auth, created.visibility);
-      const bot = store.createBot({ ...profile.patch, soul: settings.soul, section, modelSelection: selection,
+      const sectionId = section && typeof deps.resolveSectionId === "function"
+        ? deps.resolveSectionId(section, auth)
+        : undefined;
+      const bot = store.createBot({ ...profile.patch, soul: settings.soul, section, ...(sectionId ? { sectionId } : {}), modelSelection: selection,
         ownerUserId: creatingBotOwnerId(auth),
         toolScope: settings.toolScope ?? undefined,
         ...(temporary ? { temporary } : {}),

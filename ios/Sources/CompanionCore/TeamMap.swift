@@ -90,19 +90,27 @@ public enum TeamMap {
         var members: [String: [Bot]] = [:]
         if general { order.append(""); members[""] = [] }
         for bot in bots where bot.hidden != true {
-            let key = trim(bot.section ?? "")
+            // #2045: prefer the stable id so two people with the same team
+            // name stay in separate columns when both bots are visible.
+            let trimmedId = trim(bot.sectionId ?? "")
+            let key = trimmedId.isEmpty ? trim(bot.section ?? "") : trimmedId
             if members[key] == nil { order.append(key) }
             members[key, default: []].append(bot)
         }
         for name in names {
             let key = trim(name)
-            if !key.isEmpty, members[key] == nil { order.append(key); members[key] = [] }
+            guard !key.isEmpty else { continue }
+            let already = members.values.contains { list in list.contains { trim($0.section ?? "") == key } }
+            if already || members[key] != nil { continue }
+            order.append(key)
+            members[key] = []
         }
         return order.map { key in
             let list = members[key] ?? []
+            let label = list.first.flatMap { trim($0.section ?? "") }.flatMap { $0.isEmpty ? nil : $0 } ?? key
             return TeamMapSection(
                 key: key,
-                name: key.isEmpty ? generalName : key,
+                name: key.isEmpty ? generalName : (label.isEmpty ? key : label),
                 chiefs: list.filter { $0.chiefOfStaff == true },
                 members: list.filter { $0.chiefOfStaff != true }
             )
@@ -125,7 +133,9 @@ public enum TeamMap {
         }.map(\.element)
     }
 
-    /// The team a bot belongs to: its trimmed section, "" for Unassigned.
+    /// The team a bot belongs to: its trimmed section name, "" for Unassigned.
+    /// The stable `sectionId` is the membership link on the server; labels
+    /// and sidebar APIs still speak the display name (#2045).
     public static func teamKey(of bot: Bot) -> String { trim(bot.section ?? "") }
 }
 

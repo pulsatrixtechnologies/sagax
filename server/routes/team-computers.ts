@@ -30,11 +30,13 @@ export interface TeamComputersRouteDeps {
   listPayload(): Promise<TeamComputersPayload>;
   get(id: string): TeamComputerRecord | undefined;
   create(name: string, requestId: string): TeamComputerRecord;
-  assign(id: string, section: string | null): void;
+  assign(id: string, section: string | null, sectionId?: string | null): void;
+  /** #2045: resolve the caller's stable section id for a display name. */
+  resolveSectionId?(section: string, auth: import("../auth/request-auth.ts").RequestAuth): string | undefined;
   setProblem(id: string, problem?: string): void;
   sections(): readonly string[];
   sectionKey(section: string | undefined): string;
-  bots(): readonly { id: string; section?: string }[];
+  bots(): readonly { id: string; section?: string; sectionId?: string }[];
   botHasActiveTurn(botId: string): boolean;
   activeRunForBot(botId: string): unknown;
   botComputerControlSnapshot(botId: string): { held: boolean };
@@ -108,14 +110,20 @@ export function createTeamComputersRoutes(deps: TeamComputersRouteDeps): RouteHa
       const parsed = teamComputerAssignment.safeParse(body);
       if (!parsed.success) return json(res, 400, { error: "Confirm shared desktop access with section and acknowledgeSharedAccess: true" });
       const section = parsed.data.section;
+      const sectionId = section === null ? undefined : deps.resolveSectionId?.(section, auth);
       const checkAssignment = () => {
         assertCurrentOwner();
         if (section !== null && section !== "" && !deps.sections().includes(section)) {
           throw Object.assign(new Error("Create the team before assigning a computer"), { status: 404 });
         }
-        if (section !== null && deps.bots().some((bot) => deps.sectionKey(bot.section) === section && (
-          deps.botHasActiveTurn(bot.id) || deps.activeRunForBot(bot.id) || deps.botComputerControlSnapshot(bot.id).held || deps.boatLifecycleBusy(bot.id)
-        ))) {
+        if (section !== null && deps.bots().some((bot) => {
+          const same = sectionId
+            ? bot.sectionId === sectionId || (!bot.sectionId && deps.sectionKey(bot.section) === section)
+            : deps.sectionKey(bot.section) === section;
+          return same && (
+            deps.botHasActiveTurn(bot.id) || deps.activeRunForBot(bot.id) || deps.botComputerControlSnapshot(bot.id).held || deps.boatLifecycleBusy(bot.id)
+          );
+        })) {
           throw Object.assign(new Error("Stop the target team's work and release computer control before assigning this computer"), { status: 409 });
         }
       };
@@ -127,7 +135,7 @@ export function createTeamComputersRoutes(deps: TeamComputersRouteDeps): RouteHa
         }
         checkAssignment();
         if (deps.teamComputerInUse(found)) return json(res, 409, { error: "This team computer became busy; stop its work before assigning it" });
-        deps.assign(found.id, section);
+        deps.assign(found.id, section, sectionId);
         return json(res, 200, { ok: true });
       } finally { release(); }
     }

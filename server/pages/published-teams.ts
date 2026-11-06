@@ -7,9 +7,12 @@
 // come from names once they exist: renaming a bot, a room, a routine or the
 // team would otherwise read as "everything removed, everything added". So
 // the first export records them here, keyed by record id, and every later
-// export of the same team reuses them. Teams are name strings in OMB, so the
-// team entry is renamed with the section (section-context.ts calls
-// renamePublishedTeam from the one function every rename goes through).
+// export of the same team reuses them.
+//
+// #2045: team entries are keyed by stable section id (`sec_<uuid>`) when
+// known. Legacy name keys still read until the next write or rename moves
+// them. section-context.ts still calls renamePublishedTeam on the legacy
+// empty-name path; org renames also call it with the section id.
 //
 // Server-private: nothing here is on the wire, and nothing here is a secret.
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
@@ -18,6 +21,7 @@ import { z } from "zod";
 
 import { writeFileAtomic } from "../atomic.ts";
 import { DATA_DIR } from "../config.ts";
+import { isSectionId } from "../rooms/section-link.ts";
 
 export const PUBLISHED_TEAMS_FILE = join(DATA_DIR, "published-teams.json");
 
@@ -55,23 +59,55 @@ function save(teams: Map<string, PublishedTeam>): void {
   writeFileAtomic(PUBLISHED_TEAMS_FILE, JSON.stringify({ version: 1, teams: out }, null, 2), { mode: 0o600 });
 }
 
-export function readPublishedTeam(section: string): PublishedTeam | null {
-  return load().get(section) ?? null;
+/** Prefer a stable section id; fall back to a legacy display-name key. */
+export function readPublishedTeam(section: string, sectionId?: string | null): PublishedTeam | null {
+  const teams = load();
+  const id = sectionId?.trim();
+  if (id && isSectionId(id)) {
+    const byId = teams.get(id);
+    if (byId) return byId;
+  }
+  return teams.get(section) ?? null;
 }
 
-export function writePublishedTeam(section: string, entry: PublishedTeam): void {
+export function writePublishedTeam(section: string, entry: PublishedTeam, sectionId?: string | null): void {
   const teams = load();
-  teams.set(section, entry);
+  const id = sectionId?.trim();
+  const key = id && isSectionId(id) ? id : section;
+  teams.set(key, entry);
+  // Drop a leftover name key once the record lives under the id.
+  if (key !== section && teams.has(section)) teams.delete(section);
   save(teams);
 }
 
-/** Follow a team rename; null forgets the team (it was deleted). */
-export function renamePublishedTeam(name: string, nextName: string | null): void {
+/** Follow a team rename; null forgets the team (it was deleted).
+ * When `sectionId` is set, the record is found/stored under that id so
+ * another person's same display name is left alone (#2045). */
+export function renamePublishedTeam(
+  name: string,
+  nextName: string | null,
+  sectionId?: string | null,
+): void {
   const teams = load();
-  const entry = teams.get(name);
-  if (!entry || name === nextName) return;
-  teams.delete(name);
-  if (nextName !== null) teams.set(nextName, entry);
+  const id = sectionId?.trim();
+  const fromKey = id && isSectionId(id) && teams.has(id) ? id : name;
+  const entry = teams.get(fromKey) ?? (id && isSectionId(id) ? teams.get(name) : undefined);
+  if (!entry || (nextName !== null && name === nextName && fromKey === (id && isSectionId(id) ? id : name))) {
+    // Still migrate a name-keyed record onto the id when the label is unchanged.
+    if (entry && id && isSectionId(id) && fromKey === name && teams.has(name)) {
+      teams.delete(name);
+      teams.set(id, entry);
+      save(teams);
+    }
+    return;
+  }
+  teams.delete(fromKey);
+  if (fromKey !== name) teams.delete(name);
+  if (nextName !== null) {
+    const toKey = id && isSectionId(id) ? id : nextName;
+    teams.set(toKey, entry);
+    if (toKey !== nextName) teams.delete(nextName);
+  }
   save(teams);
 }
 

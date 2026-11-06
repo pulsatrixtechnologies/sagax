@@ -526,6 +526,8 @@ export interface WireBot {
   catalog?: BotCatalogListing;
   /** Optional labeled divider used to organize this bot in the sidebar. */
   section?: string;
+  /** #2045: stable owner-scoped team id (`sec_<uuid>`). Display name stays in `section`. */
+  sectionId?: string;
   /** the one message pinned to the top of this bot's active thread */
   pinnedMessageId?: string;
   /** This is its owner's Primary Bot: their main contact, who coordinates
@@ -1494,6 +1496,8 @@ export interface WireGroup {
   pinnedMessageId?: string;
   /** sidebar section heading this room is filed under. */
   section?: string;
+  /** #2045: stable owner-scoped team id (`sec_<uuid>`). Display name stays in `section`. */
+  sectionId?: string;
   /** Set at creation: rooms have no pending setup step any more. */
   setupCompletedAt?: number | null;
   setupSkippedAt?: number | null;

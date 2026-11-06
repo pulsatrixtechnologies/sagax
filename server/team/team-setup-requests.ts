@@ -130,7 +130,7 @@ interface SetupStore {
 interface Options {
   store: SetupStore;
   teams(): string[];
-  canAccessTeam(from: BotRecord, target?: string): boolean;
+  canAccessTeam(from: BotRecord, target?: string, targetSectionId?: string): boolean;
   /** 2026-10-20: a Primary Bot covers every bot of its person whatever the
    * team (peer-roster.ts primaryCovers); their teams are in its scope too. */
   covers?(from: BotRecord, target: BotRecord): boolean;
@@ -232,10 +232,12 @@ export class TeamSetupRequestService {
     if (immediate && (request.suggestion || !this.options.autoApply?.(request.botId, request.threadId, request))) throw new TeamSetupError("This conversation's approval level no longer applies this setup directly", 409);
     if (confirming && !immediate && !this.options.store.messagesFor(request.threadId).some((message) => message.card?.requestId === request.requestId && !message.card.answered && !message.card.dismissed)) throw new TeamSetupError("This setup card is no longer pending", 409);
     if (confirming && teamSetupRevision(chief, this.requesterScope(request)) !== request.requesterRevision) throw new TeamSetupError("The Primary Bot's settings changed. This setup was cancelled; review a new proposal.", 409);
+    // #2045: "exists" means this Primary Bot's person already has that team.
+    // Another person's same display name must not block the proposal.
     const existingTeams = new Set(this.options.teams().map(section));
     if (new Set([...(chief.managedSections ?? []), ...request.newTeams]).size > 100) throw new TeamSetupError("A Primary Bot may coordinate at most 100 additional teams", 409);
     for (const name of request.newTeams) if (existingTeams.has(name)) throw new TeamSetupError(`Team ${JSON.stringify(name)} now exists. Review a new proposal.`, 409);
-    const covered = (bot: BotRecord) => this.options.canAccessTeam(chief, bot.section) || Boolean(this.options.covers?.(chief, bot));
+    const covered = (bot: BotRecord) => this.options.canAccessTeam(chief, bot.section, bot.sectionId) || Boolean(this.options.covers?.(chief, bot));
     const coveredTeams = new Set(this.options.store.bots.filter((bot) => !bot.hidden && this.options.covers?.(chief, bot)).map((bot) => section(bot.section)));
     const allowed = (name?: string) => request.newTeams.includes(section(name)) || this.options.canAccessTeam(chief, name) || coveredTeams.has(section(name));
     const targets = new Set<string>();
@@ -267,7 +269,8 @@ export class TeamSetupRequestService {
     for (const name of request.newTeams) if (!request.operations.some((op) => section(op.fields.section) === name)) throw new TeamSetupError(`New team ${JSON.stringify(name)} needs a specialist in this setup`);
     for (const operation of request.operations) {
       const candidate = projected.find((bot) => bot.id === operation.botId)!;
-      if (projected.some((bot) => bot.id !== candidate.id && !bot.hidden && bot.section === candidate.section && bot.name.trim().toLowerCase() === candidate.name.trim().toLowerCase())) throw new TeamSetupError(`@${candidate.name} already exists in that team`, 409);
+      // #2045: bot names are unique per (owner, team), not per display name alone.
+      if (projected.some((bot) => bot.id !== candidate.id && !bot.hidden && bot.owner === candidate.owner && bot.section === candidate.section && bot.name.trim().toLowerCase() === candidate.name.trim().toLowerCase())) throw new TeamSetupError(`@${candidate.name} already exists in that team`, 409);
       // One Primary Bot per person (a solo server has one person): a plan
       // that appoints another must also step the current one down.
       if (candidate.chiefOfStaff && projected.some((bot) => bot.id !== candidate.id && bot.chiefOfStaff && bot.owner === candidate.owner)) throw new TeamSetupError("A person has one Primary Bot. Include the current Primary Bot's step-down in this plan.", 409);

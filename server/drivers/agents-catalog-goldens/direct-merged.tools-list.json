@@ -1098,6 +1098,29 @@
       }
     },
     {
+      "name": "message_person",
+      "description": "Write to another person of the organization through Sagax. Finds the group chat that is exactly you, your owner and that person, or creates it, then posts there (unified chat, main thread). Your owner approves a card the first time (Always allow remembers that person). Pass principal_id from list_bots owner.principal_id or the directory. Not for your owner (reply here instead), and not for work another bot must run. Organization servers only. If refused, do not retry: say what you wanted to send.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "principal_id": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "The person's principal id from the organization directory or a bot's owner.principal_id."
+          },
+          "message": {
+            "type": "string",
+            "description": "The complete message for that person to read as it stands."
+          }
+        },
+        "required": [
+          "principal_id",
+          "message"
+        ]
+      }
+    },
+    {
       "name": "react_to_message",
       "description": "React with one emoji to a message in this conversation, like a colleague in a chat, when a short acknowledgement says it: 👍 noted, ✅ a small thing you were asked is done, 👀 you are starting on something that takes a while, ❤️ or 🙏 for a thank-you, 🎉 for good news. Sparingly: most messages get none, one per message at most, never on your own messages. Never instead of an answer the person needs, and never together with a sentence that says the same thing: if the reaction says it all, end the turn without text (no empty reply is shown). Omit message_id for the message you are answering.",
       "inputSchema": {

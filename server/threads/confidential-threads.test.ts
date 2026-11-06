@@ -336,7 +336,7 @@ describe("security review: Perspicax outbound calls and the personal scope", () 
   });
 
   it("refuses the routes that hand content to another bot, room or channel", () => {
-    for (const path of ["/api/internal/ask-bot", "/api/internal/delegate-bot", "/api/internal/coordinate-bots", "/api/internal/post-to-room", "/api/internal/create-room", "/api/internal/manage-room", "/api/internal/act", "/api/internal/create-bot", "/api/internal/team-setup-requests"]) {
+    for (const path of ["/api/internal/ask-bot", "/api/internal/delegate-bot", "/api/internal/coordinate-bots", "/api/internal/post-to-room", "/api/internal/message-person", "/api/internal/message-user", "/api/internal/create-room", "/api/internal/manage-room", "/api/internal/act", "/api/internal/create-bot", "/api/internal/team-setup-requests"]) {
       expect(confidentialInternalRefusal(path, "POST"), path).toMatchObject({ code: "confidential_thread" });
     }
     expect(confidentialInternalRefusal("/api/internal/room-targets", "GET")).toBeNull();

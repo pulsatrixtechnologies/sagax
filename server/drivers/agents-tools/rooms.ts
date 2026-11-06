@@ -1,5 +1,5 @@
 // Agents tool family: Room list and post from a direct chat, and
-// message_user (#2118): write to one person through Sagax.
+// message_user / message_person (#2118): write to one person through Sagax.
 // Definitions and handlers. Assembled in order by agents-catalog.ts;
 // dispatched by agents-call.ts. Never import server/index.ts.
 
@@ -45,7 +45,22 @@ export const DEF_MESSAGE_USER = {
     },
   };
 
-export const ROOMS_TOOL_NAMES: ReadonlySet<string> = new Set(['list_rooms', 'post_to_room', 'message_user'] as const);
+export const DEF_MESSAGE_PERSON = {
+    name: "message_person",
+    description:
+      "Write to another person of the organization through Sagax. Finds the group chat that is exactly you, your owner and that person, or creates it, then posts there (unified chat, main thread). Your owner approves a card the first time (Always allow remembers that person). Pass principal_id from list_bots owner.principal_id or the directory. Not for your owner (reply here instead), and not for work another bot must run. Organization servers only. If refused, do not retry: say what you wanted to send.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        principal_id: { type: "string", maxLength: 200, description: "The person's principal id from the organization directory or a bot's owner.principal_id." },
+        message: { type: "string", description: "The complete message for that person to read as it stands." },
+      },
+      required: ["principal_id", "message"],
+    },
+  };
+
+export const ROOMS_TOOL_NAMES: ReadonlySet<string> = new Set(['list_rooms', 'post_to_room', 'message_user', 'message_person'] as const);
 
 /** Handle a tool of this family, or return null when the name is not ours. */
 export async function callRoomsTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult | null> {
@@ -104,6 +119,24 @@ export async function callRoomsTool(name: string, args: Json, context: ToolCallC
     const where = String(r.groupName ?? "the group");
     return {
       text: `${r.created ? `Created the group ${where} and sent` : `Sent in ${where}`} your message to ${String(r.person || user)}. Their answer will arrive in that group, where you are a member. Tell the user it is sent.`,
+    };
+  }
+  if (name === "message_person") {
+    const principalId = String(args.principal_id ?? "").trim();
+    const message = String(args.message ?? "").trim();
+    if (!principalId || !message) {
+      return { text: "message_person needs principal_id and message.", isError: true };
+    }
+    const r = await api("/api/internal/message-person", {
+      method: "POST",
+      body: JSON.stringify({ fromBotId: BOT_ID, fromThreadId: THREAD_ID, principalId, message }),
+    });
+    if (r.error) return { text: String(r.error), isError: true };
+    const where = r.roomName ? `"${r.roomName}"` : "the group chat";
+    return {
+      text: r.created
+        ? `Opened ${where} with that person and posted. Nobody's turn was started - tell the user it is sent.`
+        : `Posted in ${where}. Nobody's turn was started - tell the user it is sent.`,
     };
   }
   return null;

@@ -179,7 +179,7 @@ const FULL = { direct: "direct+skills+shared+voice", room: "room+own-thread+skil
 // person's own Claude account) joins the catalog; baselines move to the
 // measured wire.
 const BUDGET_BASELINE: Record<string, number> = {
-  // #2118: message_user joins the direct catalog (measured wire).
+  // #2118: message_user and message_person join the direct catalog (measured wire).
 
   "direct": 97901,
   "direct+voice": 98868,

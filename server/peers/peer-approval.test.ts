@@ -191,7 +191,7 @@ describe("peer approval card lifecycle", () => {
     store.patchBot(from.id, { approvalMode: "full" });
     bus = { store, broadcast: () => {}, notify: frame => frames.push(frame),
       autoApply: (botId, threadId) => botId === from.id && threadId === fullThread };
-    for (const action of ["ask_bot", "delegate_bot", "post_to_room"] as const) {
+    for (const action of ["ask_bot", "delegate_bot", "post_to_room", "message_person"] as const) {
       await expect(requestPeerApproval(bus, from, target, "ping", action, fullThread)).resolves.toBe("allow");
     }
     expect(store.messagesFor(fullThread).some(message => message.card?.requestId)).toBe(false);

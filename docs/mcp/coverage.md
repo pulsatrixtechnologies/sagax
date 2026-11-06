@@ -102,7 +102,7 @@ Reading the table:
 | rooms:unreact | sagax | `remove_reaction` | `rooms:unreact` | covered |
 | rooms:meme | sagax | `send_meme` | `rooms:meme` | covered |
 | rooms:post | sagax | `post_to_room` | `rooms:post` | covered |
-| people:message | sagax | `message_user` | `people:message` | covered |
+| people:message | sagax | `message_user`, `message_person` (#2118) | `people:message` | covered |
 | threads:close | sagax | `close_thread` | `threads:close` | covered |
 | voice:note | sagax | `send_voice_note` | `voice:note` | covered |
 | voice:end | sagax | `end_call` | `voice:end` | covered |

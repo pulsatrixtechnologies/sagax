@@ -324,7 +324,8 @@ const describeCard = (hit: CardHit) => `${hit.file}:${hit.line}: ${hit.text.slic
 describe("every approval card offers Always allow, which keeps a rule (#2091)", () => {
   it("finds the card emitters at all", () => {
     expect(cards.length).toBeGreaterThan(15);
-    expect(cards.some((hit) => hit.file === "server/index.ts")).toBe(true);
+    // #1388: approval card emitters left server/index.ts for index-leaves/
+    expect(cards.some((hit) => hit.file.startsWith("server/index-leaves/"))).toBe(true);
     expect(cards.some((hit) => hit.file === "server/outbound/outbound-wiring.ts")).toBe(true);
   });
 
@@ -340,15 +341,17 @@ describe("every approval card offers Always allow, which keeps a rule (#2091)", 
   });
 
   it("a proposal card gets its rule from proposalRuleCandidate, for every proposal kind", () => {
-    const index = readRoot("server/index.ts");
-    const start = index.indexOf("function proposalRuleCandidate(");
+    // #1388: proposalRuleCandidate and settleProposalByRule live in index-leaves/
+    const candidateSrc = readRoot("server/index-leaves/proposalRuleCandidate.ts");
+    const start = candidateSrc.indexOf("function proposalRuleCandidate(");
     expect(start).toBeGreaterThan(0);
-    const body = index.slice(start, index.indexOf("\nfunction settleProposalByRule", start));
+    const body = candidateSrc.slice(start);
     for (const key of ["routineRequest", "profileRequest", "ruleRequest", "teamMemoryRequest", "modelRequest"]) {
       expect(body, `proposalRuleCandidate reads no ${key}`).toContain(key);
     }
     // the candidate is put on the card before a kept rule settles it
-    expect(index).toMatch(/store\.patchMessage\(threadId, message\.id, \{ card: \{ \.\.\.card, ownerRule: \{ tool: candidate\.tool/);
+    const settleSrc = readRoot("server/index-leaves/settleProposalByRule.ts");
+    expect(settleSrc).toMatch(/store\.patchMessage\(threadId, message\.id, \{ card: \{ \.\.\.card, ownerRule: \{ tool: candidate\.tool/);
   });
 
   it("a send card's Always allow keeps the recipients: an email draft and an iMessage", () => {
@@ -369,7 +372,10 @@ describe("every approval card offers Always allow, which keeps a rule (#2091)", 
     expect(askGo).toMatch(/fingerprint: go\.fingerprint/);
     expect(askGo).toMatch(/toolInput: go\.args/);
     // the held card always carries a rule: a fingerprint, or the digest of its summary
-    const held = index.slice(index.indexOf("async function confirmHeldCard("), index.indexOf("\n}\n", index.indexOf("async function confirmHeldCard(")));
+    // #1388: confirmHeldCard lives in index-leaves/
+    const heldSrc = readRoot("server/index-leaves/confirmHeldCard.ts");
+    const heldStart = heldSrc.indexOf("async function confirmHeldCard(");
+    const held = heldSrc.slice(heldStart, heldSrc.indexOf("\n}\n", heldStart));
     expect(held).toMatch(/const fingerprint = request\.fingerprint \?\? wholeCallDigest\(/);
     expect(held).toMatch(/ownerRule: \{ \.\.\.candidate, from: "hold"/);
   });
@@ -400,8 +406,9 @@ describe("every approval card offers Always allow, which keeps a rule (#2091)", 
     // every other card: a rule on the card is an Always allow button
     expect(pending).toMatch(/const alwaysAllow[^\n]*= ownerRule\n\s*\? \{ run: \(\) => decide\("allow", false, false, "allow"\)/);
     // the bulk answer saves the rule for whoever answers (no admin clause)
-    const index = readRoot("server/index.ts");
-    expect(index).toMatch(/if \(rule && \(decision !== "allow" \|\| !card\.ownerRule\)\)/);
+    // #1388: answerInboxCard lives in index-leaves/
+    const inbox = readRoot("server/index-leaves/answerInboxCard.ts");
+    expect(inbox).toMatch(/if \(rule && \(decision !== "allow" \|\| !card\.ownerRule\)\)/);
   });
 });
 
@@ -441,8 +448,9 @@ describe("every approval reads the one settings-linked decision (Full access, ru
   it("the Full access decision itself is read from the app settings, not hard-coded", () => {
     const gate = readRoot("server/approvals/full-access-gate.ts");
     expect(gate).toMatch(/export function fullAccessDecision\(/);
-    const index = readRoot("server/index.ts");
-    expect(index).toMatch(/const fullTurn = fullAccessDecision\(effectiveApprovalMode\)/);
+    // #1388: request.opened (and its Full access read) lives in runtime-events/
+    const opened = readRoot("server/runtime-events/request-opened.ts");
+    expect(opened).toMatch(/const fullTurn = host\.fullAccessDecision\(effectiveApprovalMode\)/);
   });
 });
 

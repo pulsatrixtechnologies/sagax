@@ -32,9 +32,12 @@ const EMITTERS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
  * module and read it. An engine bridge only emits (request.opened judges
  * it); an exempt card blocks nothing. */
 const DECIDED_IN: Record<FullAccessSurface, string | null> = {
-  "tool-approval": "server/index.ts",
-  "question": "server/index.ts",
+  // #1388: request.opened (tool-approval / question) lives in runtime-events/
+  "tool-approval": "server/runtime-events/request-opened.ts",
+  "question": "server/runtime-events/request-opened.ts",
   "safety-review": "server/safety/safety-review.ts",
+  // safety-confirm card is in index-leaves/confirmHeldCard.ts; Full access is
+  // still wired from index.ts via setSafetyFullAccess (central, like send)
   "safety-confirm": "server/index.ts",
   "ask-choice": "server/widgets/chat-widgets.ts",
   "peer-contact": "server/index.ts",
@@ -90,7 +93,10 @@ const describeHit = (hit: Hit) => `${hit.file}:${hit.line} (${hit.emitter}): ${h
 describe("every approval or choice card reads the Full access decision", () => {
   it("finds the surfaces at all (the scan is not empty)", () => {
     expect(hits.length).toBeGreaterThan(20);
-    expect(hits.some((hit) => hit.file === "server/index.ts" && hit.emitter === "options card")).toBe(true);
+    // #1388: options cards that lived in index.ts now emit from request.opened
+    // and index-leaves (confirmHeldCard, send, proposal, …)
+    expect(hits.some((hit) => hit.file === "server/runtime-events/request-opened.ts" && hit.emitter === "options card")).toBe(true);
+    expect(hits.some((hit) => hit.file.startsWith("server/index-leaves/") && hit.emitter === "options card")).toBe(true);
     expect(hits.some((hit) => hit.file === "server/widgets/chat-widgets.ts")).toBe(true);
     expect(hits.some((hit) => hit.file === "server/drivers/openai-chat-turn.ts" && hit.emitter === "permission request")).toBe(true);
   });
@@ -113,18 +119,23 @@ describe("every approval or choice card reads the Full access decision", () => {
   it("the file that decides each surface imports the gate and reads its decision", () => {
     const gateImport = /from "(?:\.\.\/)*(?:\.\/)?(?:approvals\/)?full-access-gate\.ts"/;
     const gateCall = /\bfullAccess(?:Decision|Acts|ChoiceAnswer)\(|\bpeerContactCardRequired\(|\bsetSafetyFullAccess\(|\bfullAccessResolver\b/;
+    // #1388 leaf modules read the gate through the host (host.fullAccessDecision)
+    const hostGateCall = /\bhost\.fullAccess(?:Decision|Acts|ChoiceAnswer)\(/;
     for (const [surface, file] of Object.entries(DECIDED_IN) as Array<[FullAccessSurface, string | null]>) {
       if (!file) continue;
       const text = readFileSync(join(ROOT, file), "utf8");
-      // the safety review carries the decision in from the gate's resolver
-      const reads = gateImport.test(text) || (surface === "safety-review" && /fullAccess\?: boolean|fullAccessResolver/.test(text));
+      // the safety review carries the decision in from the gate's resolver;
+      // request.opened reads it via the leaf host after #1388
+      const reads = gateImport.test(text)
+        || hostGateCall.test(text)
+        || (surface === "safety-review" && /fullAccess\?: boolean|fullAccessResolver/.test(text));
       expect(reads, `${file} decides ${surface} but does not import full-access-gate.ts`).toBe(true);
-      expect(gateCall.test(text), `${file} decides ${surface} but never reads the decision`).toBe(true);
+      expect(gateCall.test(text) || hostGateCall.test(text), `${file} decides ${surface} but never reads the decision`).toBe(true);
     }
     // a surface decided and emitted in one file never sits elsewhere; the
     // central ones (decided in index.ts or the review, emitted by the
-    // route modules) may be emitted anywhere
-    const central = new Set<string>(["proposal", "peer-contact", "safety-review", "send", "engine-bridge", "isolation", "exempt"]);
+    // route modules / index-leaves) may be emitted anywhere
+    const central = new Set<string>(["proposal", "peer-contact", "safety-review", "safety-confirm", "send", "engine-bridge", "isolation", "exempt"]);
     for (const hit of hits) {
       if (!hit.marker || central.has(hit.marker)) continue;
       const decidedIn = DECIDED_IN[hit.marker as FullAccessSurface];
@@ -133,11 +144,12 @@ describe("every approval or choice card reads the Full access decision", () => {
   });
 
   it("the one permission handler reads the decision before the safety review and before any card", () => {
-    const index = readFileSync(join(SERVER, "index.ts"), "utf8");
-    const opened = index.indexOf('case "request.opened": {');
+    // #1388: request.opened handler lives in runtime-events/request-opened.ts
+    const openedSrc = readFileSync(join(SERVER, "runtime-events/request-opened.ts"), "utf8");
+    const opened = openedSrc.indexOf('case "request.opened":');
     expect(opened).toBeGreaterThan(0);
-    const handler = index.slice(opened, index.indexOf("\n    case ", opened + 10));
-    expect(handler).toMatch(/const fullTurn = fullAccessDecision\(effectiveApprovalMode\)/);
+    const handler = openedSrc.slice(opened);
+    expect(handler).toMatch(/const fullTurn = host\.fullAccessDecision\(effectiveApprovalMode\)/);
     expect(handler).toMatch(/fullAccessChoiceAnswer\(effectiveApprovalMode/);
     expect(handler).toMatch(/fullAccess: fullTurn\.acts/);
     // the level is read before the safety review runs, so the review sees it

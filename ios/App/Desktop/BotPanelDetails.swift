@@ -153,6 +153,10 @@ struct BotPanelDetails: View {
     @AppStorage("sagax.showAllHistory.v1") private var showAllHistory = false
     /// The overview's setup checklist for the Suggestions card.
     @State private var suggestionsSetup: [BotSetupStep]?
+    /// The Admin link that adds this bot to Slack, for Suggested > Add to Slack.
+    @State private var slackURL: URL?
+    /// Suggested > Add to meeting: a new routine from the Upcoming card.
+    @State private var meetingRequest = 0
 
     init(bot: Bot) {
         self.bot = bot
@@ -168,18 +172,24 @@ struct BotPanelDetails: View {
         // empty child's box only when it is not rendered at all
         PanelSectionStack(spacing: 24) {
             // Activity: Upcoming, Suggested, Computer card, Voice chat (#2127).
-            AnyView(BotPanelRoutines(bot: bot))
-            DesktopBotSuggestionsCard(bot: bot, setup: suggestionsSetup) { action in
+            AnyView(BotPanelRoutines(bot: bot, createRequest: meetingRequest))
+            DesktopBotSuggestionsCard(
+                bot: bot,
+                setup: suggestionsSetup,
+                slackURL: slackURL,
+                onSlack: { shell.showPersona(.slack) },
+                onAddToMeeting: { meetingRequest += 1 }
+            ) { action in
                 switch action {
                 case let .openThread(threadId): session.openChat(threadId: threadId)
-                case .openSection("routines"): break
+                case .openSection("routines"): meetingRequest += 1
                 case let .openSection(name): shell.showPersona(DesktopPanelSection(rawValue: name))
                 }
             }
             BotPanelComputerCard(bot: bot) {
                 DesktopComputerWindow.open(botId: bot.id, openWindow: openWindow, model: shell)
             }
-            BotPanelVoiceChatCard(bot: bot)
+            BotPanelVoiceChat(bot: bot)
             // Progressive disclosure: tasks, coding, remote sessions stay.
             BotTaskListCard(bot: bot) { threadId in session.openChat(threadId: threadId) }
             if showsActivity {
@@ -202,6 +212,11 @@ struct BotPanelDetails: View {
         // instructions or routines change
         .task(id: "\(bot.id)|\(session.connection?.id ?? "")|\(bot.name)|\(bot.title)") {
             suggestionsSetup = (try? await session.settingsClient?.overview(botId: bot.id))?.setup
+        }
+        .task(id: session.connection?.id) {
+            if session.surfaceGate.allows(.botSlack) {
+                slackURL = await session.profileClient?.slackManagementURL(botId: bot.id)
+            }
         }
         .task(id: session.connection?.id) {
             if showsActivity { activity.start(client: session.profileClient) }
@@ -625,6 +640,8 @@ struct BotPanelRoutines: View {
     @EnvironmentObject private var session: Session
     @EnvironmentObject private var model: DesktopShellModel
     let bot: Bot
+    /// Bumped by Suggested > Add to meeting: opens the new-routine editor.
+    var createRequest: Int = 0
 
     @State private var routines: [Routine] = []
     @State private var loaded = false
@@ -671,6 +688,7 @@ struct BotPanelRoutines: View {
             }
         }
         .task { await load() }
+        .onValueChange(of: createRequest) { _ in adding = true }
         .sheet(isPresented: $adding) {
             RoutineEditorView(routine: nil, presetBotId: bot.id) { await load() }
                 .environmentObject(session)
@@ -867,22 +885,27 @@ struct BotPanelRoutines: View {
 }
 
 
-// MARK: - Details > Suggestions
+// MARK: - Details > Suggested
 
-/// Details > Suggestions as the desktop draws it (`SuggestionsSection.tsx`):
-/// the 12/17 tertiary title and Hide (12.5 secondary) over one grouped card
-/// (rounded-xl, hairline-weak ring, `card` fill; rows px 12 py 10 split by
-/// hairlines) of a 15 pt sparkles glyph, the title 13/20 semibold and the
-/// subtitle 12/16 secondary. No chevron: the whole row is the button.
+/// Activity > Suggested as the desktop panel draws it (`SuggestionsSection.tsx`
+/// with `panel`, #2125): the PANEL_LABEL title (13/18 tertiary, no Hide) over
+/// one PANEL_CARD; rows (px 12, py 8) of a 16 pt glyph in ink-secondary, the
+/// title 14/20 ink, the subtitle 12/16 secondary on two lines and a 15 pt
+/// chevron right in ink-tertiary. After the bot's own suggestions come Add to
+/// Slack (the Admin link when the server has one, else the Slack section) and
+/// Add to meeting (a new routine). Settings > Appearance still turns it off.
 struct DesktopBotSuggestionsCard: View {
     @Environment(\.desktopTheme) private var theme
-    @EnvironmentObject private var session: Session
+    @Environment(\.openURL) private var openURL
     @ObservedObject private var prefs = SidebarPrefsModel.shared
     let bot: Bot
     /// The overview's setup checklist, loaded by the Details tab: a Group
     /// with nothing in it hands its `.task` to no child, so the card could
     /// never ask for it itself (the card never showed).
     let setup: [BotSetupStep]?
+    var slackURL: URL?
+    var onSlack: () -> Void = {}
+    var onAddToMeeting: (() -> Void)?
     let run: (BotSuggestion.Action) -> Void
 
     private var items: [BotSuggestion] {
@@ -891,67 +914,124 @@ struct DesktopBotSuggestionsCard: View {
 
     var body: some View {
         Group {
-            if prefs.showSuggestions, !items.isEmpty {
+            if prefs.showSuggestions {
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Suggestions")
-                            .font(theme.font(12))
-                            .foregroundStyle(theme.inkTertiary)
-                        Spacer(minLength: 0)
-                        Button {
-                            prefs.setShowSuggestions(session, false)
-                        } label: {
-                            Text("Hide").font(theme.font(12.5)).foregroundStyle(theme.inkSecondary)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("panel-suggestions-hide")
-                    }
-                    .padding(.horizontal, 2)
+                    Text("Suggested")
+                        .font(theme.font(13))
+                        .foregroundStyle(theme.inkTertiary)
+                        .padding(.horizontal, 2)
+                        .accessibilityAddTraits(.isHeader)
                     VStack(spacing: 0) {
-                        ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                            Button { run(item.action) } label: {
-                                HStack(alignment: .top, spacing: 10) {
-                                    DesktopIconView(icon: .sparkles, size: 15)
-                                        .foregroundStyle(theme.inkSecondary)
-                                        .padding(.top, 2)
-                                    VStack(alignment: .leading, spacing: 0) {
-                                        Text(LocalizedStringKey(item.title))
-                                            .font(theme.font(13, .semibold))
-                                            .foregroundStyle(theme.ink)
-                                            .lineLimit(1)
-                                            .frame(height: 20, alignment: .leading)
-                                        Text(subtitle(item))
-                                            .font(theme.font(12))
-                                            .foregroundStyle(theme.inkSecondary)
-                                            .lineLimit(2)
-                                            .fixedSize(horizontal: false, vertical: true)
-                                    }
-                                    Spacer(minLength: 0)
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 10)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("panel-suggestion.\(item.id)")
-                            if index < items.count - 1 {
-                                Rectangle().fill(theme.hairlineWeak).frame(height: 1)
-                            }
+                        ForEach(items, id: \.id) { item in
+                            row(id: item.id, title: String(localized: String.LocalizationValue(item.title)), subtitle: subtitle(item)) {
+                                DesktopIconView(icon: .sparkles, size: 16)
+                            } action: { run(item.action) }
+                        }
+                        row(id: "slack", title: String(localized: "Add to Slack"), subtitle: nil) {
+                            SlackMark().frame(width: 16, height: 16)
+                        } action: {
+                            if let slackURL { openURL(slackURL) } else { onSlack() }
+                        }
+                        if let onAddToMeeting {
+                            row(id: "meeting", title: String(localized: "Add to meeting"), subtitle: nil, glyph: {
+                                Image(systemName: "calendar.badge.plus")
+                                    .font(.system(size: 14))
+                                    .frame(width: 16, height: 16)
+                            }, action: {
+                                onAddToMeeting()
+                            })
                         }
                     }
+                    .padding(.vertical, 4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .background(theme.card, in: RoundedRectangle(cornerRadius: theme.radiusXl, style: .continuous))
                     .clipShape(RoundedRectangle(cornerRadius: theme.radiusXl, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: theme.radiusXl, style: .continuous).strokeBorder(theme.hairlineWeak, lineWidth: 1))
                 }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("bot-panel.suggested")
             }
         }
+    }
+
+    private func row<Glyph: View>(
+        id: String,
+        title: String,
+        subtitle: String?,
+        @ViewBuilder glyph: () -> Glyph,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(alignment: .center, spacing: 10) {
+                glyph()
+                    .foregroundStyle(theme.inkSecondary)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(verbatim: title)
+                        .font(theme.font(14))
+                        .foregroundStyle(theme.ink)
+                        .lineLimit(1)
+                        .frame(minHeight: 20, alignment: .leading)
+                    if let subtitle, !subtitle.isEmpty {
+                        Text(verbatim: subtitle)
+                            .font(theme.font(12))
+                            .foregroundStyle(theme.inkSecondary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(theme.inkTertiary)
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("bot-panel.suggestion.\(id)")
     }
 
     private func subtitle(_ item: BotSuggestion) -> String {
         let format = String(localized: String.LocalizationValue(item.subtitle))
         guard let argument = item.argument else { return format }
         return String(format: format, argument)
+    }
+}
+
+/// The Slack mark in its four colors (`SlackLogo.tsx`, viewBox 122.8).
+private struct SlackMark: View {
+    var body: some View {
+        Canvas { context, size in
+            let k = min(size.width, size.height) / 122.8
+            func rr(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) -> Path {
+                Path(roundedRect: CGRect(x: x * k, y: y * k, width: w * k, height: h * k), cornerRadius: 12.9 * k)
+            }
+            // each color: a small square-ish lobe and a long bar (r 12.9)
+            let red = Color(red: 0xe0 / 255, green: 0x1e / 255, blue: 0x5a / 255)
+            let blue = Color(red: 0x36 / 255, green: 0xc5 / 255, blue: 0xf0 / 255)
+            let green = Color(red: 0x2e / 255, green: 0xb6 / 255, blue: 0x7d / 255)
+            let yellow = Color(red: 0xec / 255, green: 0xb2 / 255, blue: 0x2e / 255)
+            var redPath = rr(0, 64.7, 25.8, 25.8)
+            redPath.addPath(Path(CGRect(x: 12.9 * k, y: 64.7 * k, width: 12.9 * k, height: 25.8 * k)))
+            redPath.addPath(rr(32.3, 64.7, 25.8, 58.1))
+            context.fill(redPath, with: .color(red))
+            var bluePath = rr(32.3, 0, 25.8, 25.8)
+            bluePath.addPath(Path(CGRect(x: 32.3 * k, y: 12.9 * k, width: 25.8 * k, height: 12.9 * k)))
+            bluePath.addPath(rr(0, 32.3, 58.1, 25.8))
+            context.fill(bluePath, with: .color(blue))
+            var greenPath = rr(97, 32.3, 25.8, 25.8)
+            greenPath.addPath(Path(CGRect(x: 97 * k, y: 32.3 * k, width: 12.9 * k, height: 25.8 * k)))
+            greenPath.addPath(rr(64.7, 0, 25.8, 58.1))
+            context.fill(greenPath, with: .color(green))
+            var yellowPath = rr(64.7, 97, 25.8, 25.8)
+            yellowPath.addPath(Path(CGRect(x: 64.7 * k, y: 97 * k, width: 25.8 * k, height: 12.9 * k)))
+            yellowPath.addPath(rr(64.7, 64.7, 58.1, 25.8))
+            context.fill(yellowPath, with: .color(yellow))
+        }
+        .accessibilityHidden(true)
     }
 }
 

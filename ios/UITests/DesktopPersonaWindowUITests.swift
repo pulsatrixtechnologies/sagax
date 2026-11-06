@@ -127,10 +127,13 @@ final class DesktopPersonaWindowUITests: XCTestCase {
         let pill = element(app, "desktop-chat-pill")
         XCTAssertTrue(pill.waitForExistence(timeout: 10), "the chat pill after X")
         pill.tap()
-        let more = element(app, "desktop-panel-menu")
-        XCTAssertTrue(more.waitForExistence(timeout: 10), "the panel's ... menu")
-        more.tap()
-        let editBot = element(app, "desktop-panel-action.editBot")
+        // No ... in the top bar: the bot's menu is a long press on its identity
+        let identity = element(app, "bot-panel.identity")
+        XCTAssertTrue(identity.waitForExistence(timeout: 10), "the panel's identity")
+        identity.press(forDuration: 1.2)
+        // Context menu rows keep their label; the identifier may not reach them
+        let byId = element(app, "bot-panel.action.editBot")
+        let editBot = byId.waitForExistence(timeout: 3) ? byId : app.buttons["Edit bot"].firstMatch
         XCTAssertTrue(editBot.waitForExistence(timeout: 5), "Edit bot in the menu")
         editBot.tap()
         XCTAssertTrue(element(app, "desktop-bot-profile-host").waitForExistence(timeout: 10), "Edit bot opens the profile")

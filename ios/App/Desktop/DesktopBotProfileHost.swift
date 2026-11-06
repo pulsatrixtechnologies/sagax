@@ -23,6 +23,8 @@ struct DesktopBotProfileHost: View {
     /// Avatar / deep links open that Edit bot page in the main column.
     private var sectionPage: DesktopPersonaPage? {
         if model.personaPage == .overview && model.panelSection == nil { return nil }
+        // Appearance unfolds inside the profile page (#1939 r7), like the desktop.
+        if model.personaPage == .appearance && model.panelSection == nil { return nil }
         return model.personaPage
     }
 
@@ -118,7 +120,12 @@ struct DesktopBotProfileHost: View {
                 actions: editActions,
                 slackURL: slackURL,
                 mailRow: mailRow,
-                fillsMain: true
+                fillsMain: true,
+                openAppearance: model.personaPage == .appearance && model.panelSection == nil,
+                onAppearanceOpened: {
+                    // The pane is open in the page: the request is spent.
+                    model.personaPage = .overview
+                }
             )
         }
         .environment(\.desktopTheme, theme)

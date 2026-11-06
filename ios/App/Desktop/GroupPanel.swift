@@ -31,7 +31,7 @@ extension Chat {
 
 /// `GROUP_PANEL_TABS`.
 private enum GroupPanelTab: String, CaseIterable, Identifiable {
-    case details, members, instructions, memory, advanced
+    case details, members, library, instructions, memory, advanced
     var id: String { rawValue }
 
     /// `GROUP_PANEL_HIDDEN_TABS` (desktop 46d28805db): Instructions and
@@ -45,6 +45,7 @@ private enum GroupPanelTab: String, CaseIterable, Identifiable {
         // desktop #2333: Details reads Activity, the roster sits under Members
         case .details: "Activity"
         case .members: "Members"
+        case .library: "Library"
         case .instructions: "Instructions"
         case .memory: "Memory"
         case .advanced: "Advanced"
@@ -81,6 +82,8 @@ private struct DesktopGroupPanelContent: View {
     @State private var jevOn = false
     /// The server's profile (`config.profile`): the viewer's name and email.
     @State private var profile: Profile?
+    /// A team goal written inline over the panel (New team goal, Add to meeting, Duplicate).
+    @State private var goalDraft: GroupPanelGoalDraft?
     @StateObject private var actions = RoomActions()
 
     private var room: Room { session.state.rooms.first { $0.id == roomId } ?? fallback }
@@ -134,8 +137,21 @@ private struct DesktopGroupPanelContent: View {
                     .transition(.move(edge: .trailing))
             }
         }
+        // desktop GroupDetailsTab: the routine editor stays inside the group panel
+        .overlay {
+            if let draft = goalDraft {
+                GroupPanelRoutineEditor(room: room, draft: draft, bots: session.state.bots) {
+                    withAnimation(.easeOut(duration: 0.2)) { goalDraft = nil }
+                }
+                .id(draft.id)
+                .transition(.move(edge: .trailing))
+            }
+        }
         .onValueChange(of: model.panelOpen) { open in
-            if !open { model.panelRoutineId = nil }
+            if !open {
+                model.panelRoutineId = nil
+                goalDraft = nil
+            }
         }
         .task(id: session.connection?.id) {
             let config = await session.configStatus()
@@ -157,6 +173,8 @@ private struct DesktopGroupPanelContent: View {
             .compactMap { GroupPanelTab(rawValue: $0.rawValue) }
             .filter { !GroupPanelTab.hidden.contains($0) && $0 != .advanced }
         out.insert(.members, at: min(1, out.count))
+        // desktop GroupPanel: the group's files and pages after Members
+        out.insert(.library, at: min(2, out.count))
         return out
     }
 
@@ -329,16 +347,20 @@ private struct DesktopGroupPanelContent: View {
     private func tabBody(_ tab: GroupPanelTab, access: RoomInfoAccess) -> some View {
         switch tab {
         case .details:
-            GroupPanelDetails(part: .activity, room: room, access: access, directory: directory, profile: profile, roster: $roster, leave: { actions.leaving = room })
+            GroupPanelDetails(part: .activity, room: room, access: access, directory: directory, profile: profile, roster: $roster, leave: { actions.leaving = room },
+                              docked: docked, openMembers: { self.tab = .members }, newGoal: { source in withAnimation(.easeOut(duration: 0.2)) { goalDraft = GroupPanelGoalDraft(copyOf: source) } })
         case .members:
             VStack(alignment: .leading, spacing: 0) {
-                GroupPanelDetails(part: .members, room: room, access: access, directory: directory, profile: profile, roster: $roster, leave: { actions.leaving = room })
+                GroupPanelDetails(part: .members, room: room, access: access, directory: directory, profile: profile, roster: $roster, leave: { actions.leaving = room },
+                                  docked: docked, openMembers: { self.tab = .members }, newGoal: { source in withAnimation(.easeOut(duration: 0.2)) { goalDraft = GroupPanelGoalDraft(copyOf: source) } })
                 if Self.showsAdvanced(access: access, gate: session.surfaceGate) {
                     GroupAdvancedDisclosure {
                         GroupPanelAdvanced(room: room, members: members, access: access, jevOn: jevOn)
                     }
                 }
             }
+        case .library:
+            GroupPanelLibrary(room: room, docked: docked)
         case .instructions:
             GroupPanelInstructions(room: room, editable: access.editable)
         case .memory:
@@ -549,6 +571,11 @@ private struct GroupPanelDetails: View {
     let profile: Profile?
     @Binding var roster: RoomRosterFocus?
     let leave: () -> Void
+    let docked: Bool
+    /// Members tab (the Add a second bot suggestion).
+    let openMembers: () -> Void
+    /// The inline team goal editor: a new one (nil) or a copy (Duplicate).
+    let newGoal: (Routine?) -> Void
 
     private struct Person: Identifiable {
         let id: String
@@ -584,8 +611,13 @@ private struct GroupPanelDetails: View {
         VStack(alignment: .leading, spacing: 24) {
             // Desktop GroupDetailsTab: the bot's Upcoming, then its Computer
             if part == .activity {
-                GroupPanelUpcoming(room: room)
+                // desktop GroupDetailsTab: Upcoming, Suggested, Computer, Tasks
+                GroupPanelUpcoming(room: room, docked: docked, newGoal: newGoal)
+                GroupPanelSuggestions(room: room, access: access, ownBots: ownBots, openMembers: openMembers, newGoal: { newGoal(nil) })
                 GroupPanelComputer(bots: ownBots.filter { $0.computer != "off" }, leadBotId: room.defaultResponder.botId)
+                if !ownBots.isEmpty {
+                    GroupPanelTasks(room: room, ownBots: ownBots, docked: docked)
+                }
             } else {
                 memberSections
             }
@@ -1195,12 +1227,19 @@ private struct GroupPanelUpcoming: View {
     @EnvironmentObject private var session: Session
     @EnvironmentObject private var model: DesktopShellModel
     let room: Room
+    let docked: Bool
+    /// The inline team goal editor: a new one (nil) or a copy (Duplicate).
+    let newGoal: (Routine?) -> Void
 
     @State private var routines: [Routine] = []
+    @State private var runs: [RoutineRun] = []
     @State private var loaded = false
-    @State private var adding = false
     @State private var toggling: Set<String> = []
+    @State private var working: Set<String> = []
     @State private var expanded = false
+    @State private var renaming: Routine?
+    @State private var renameText = ""
+    @State private var deleting: Routine?
 
     /// `groupRoutines`: its team goals and the routines posting in one of
     /// its conversations.
@@ -1224,6 +1263,11 @@ private struct GroupPanelUpcoming: View {
         return mineIds.first
     }
 
+    /// The routine's run still going (queued, running or waiting), if any.
+    private func activeRun(_ routine: Routine) -> RoutineRun? {
+        runs.first { $0.routineId == routine.id && ["queued", "running", "waiting"].contains($0.status) }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
@@ -1234,7 +1278,7 @@ private struct GroupPanelUpcoming: View {
                     .padding(.horizontal, 2)
                 if newGoalBot != nil, room.dm != true {
                     Menu {
-                        Button(String(localized: "New team goal"), systemImage: "plus") { adding = true }
+                        Button(String(localized: "New team goal"), systemImage: "plus") { newGoal(nil) }
                     } label: {
                         DesktopIconView(icon: .ellipsis, size: 15)
                             .foregroundStyle(theme.inkSecondary)
@@ -1283,9 +1327,32 @@ private struct GroupPanelUpcoming: View {
             }
         }
         .task { await load() }
-        .sheet(isPresented: $adding) {
-            RoutineEditorView(routine: nil, presetBotId: newGoalBot) { await load() }
-                .environmentObject(session)
+        .onReceive(NotificationCenter.default.publisher(for: .groupPanelRoutinesChanged)) { _ in
+            Task { await load() }
+        }
+        .onValueChange(of: model.panelRoutineId) { id in
+            // back from a routine's page: what it changed shows here
+            if id == nil { Task { await load() } }
+        }
+        .alert(Text("Rename"), isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+            TextField(String(localized: "Name"), text: $renameText)
+                .accessibilityIdentifier("group-panel.routine-rename-field")
+            Button(String(localized: "Rename")) {
+                if let routine = renaming { Task { await rename(routine) } }
+            }
+            .accessibilityIdentifier("group-panel.routine-rename-save")
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        }
+        .confirmationDialog(Text("Delete this routine?"), isPresented: Binding(
+            get: { deleting != nil }, set: { if !$0 { deleting = nil } }
+        ), titleVisibility: .visible, presenting: deleting) { routine in
+            Button(String(localized: "Delete"), role: .destructive) {
+                Task { await delete(routine) }
+            }
+            .accessibilityIdentifier("group-panel.routine-delete-confirm")
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: { routine in
+            Text(verbatim: routine.name)
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("group-panel-routines")
@@ -1293,6 +1360,7 @@ private struct GroupPanelUpcoming: View {
 
     private func row(_ routine: Routine) -> some View {
         let bot = session.state.bot(routine.botId)
+        let busy = working.contains(routine.id)
         return HStack(spacing: 10) {
             Button { model.panelRoutineId = routine.id } label: {
                 HStack(spacing: 10) {
@@ -1318,6 +1386,20 @@ private struct GroupPanelUpcoming: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("group-panel-routine.\(routine.name)")
+            if busy {
+                ProgressView().controlSize(.mini).frame(width: 28, height: 28)
+            } else {
+                Menu { menuItems(routine) } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(theme.inkTertiary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("More actions for \(routine.name)"))
+                .accessibilityIdentifier("group-panel.routine-menu.\(routine.name)")
+            }
             PanelSwitch(label: routine.enabled ? "Pause" : "Resume", isOn: routine.enabled,
                         disabled: toggling.contains(routine.id) || routine.schedule.type == .unknown,
                         onColor: bot.flatMap { BubbleColors.user(botColor: $0.color)?.fill.color }) { on in
@@ -1328,6 +1410,41 @@ private struct GroupPanelUpcoming: View {
         .padding(.vertical, 10)
         .contentShape(Rectangle())
         .hoverEffect(.highlight)
+        .contextMenu { menuItems(routine) }
+    }
+
+    /// The desktop routine row menu: run or stop, pause or resume, rename,
+    /// open, duplicate, delete.
+    @ViewBuilder
+    private func menuItems(_ routine: Routine) -> some View {
+        if let run = activeRun(routine) {
+            Button(String(localized: "Stop"), systemImage: "stop.circle") { Task { await stop(routine, run: run) } }
+                .accessibilityIdentifier("group-panel.routine-action.stop")
+        } else {
+            Button(String(localized: "Run now"), systemImage: "play") { Task { await runNow(routine) } }
+                .accessibilityIdentifier("group-panel.routine-action.run")
+        }
+        if routine.schedule.type != .unknown {
+            if routine.enabled {
+                Button(String(localized: "Pause"), systemImage: "pause") { Task { await toggle(routine, on: false) } }
+                    .accessibilityIdentifier("group-panel.routine-action.pause")
+            } else {
+                Button(String(localized: "Resume"), systemImage: "play.circle") { Task { await toggle(routine, on: true) } }
+                    .accessibilityIdentifier("group-panel.routine-action.resume")
+            }
+        }
+        Button(String(localized: "Rename"), systemImage: "pencil") {
+            renameText = routine.name
+            renaming = routine
+        }
+        .accessibilityIdentifier("group-panel.routine-action.rename")
+        Button(String(localized: "Open"), systemImage: "arrow.up.right") { model.panelRoutineId = routine.id }
+            .accessibilityIdentifier("group-panel.routine-action.open")
+        Button(String(localized: "Duplicate"), systemImage: "plus.square.on.square") { newGoal(routine) }
+            .accessibilityIdentifier("group-panel.routine-action.duplicate")
+        Divider()
+        Button(String(localized: "Delete"), systemImage: "trash", role: .destructive) { deleting = routine }
+            .accessibilityIdentifier("group-panel.routine-action.delete")
     }
 
     private func toggle(_ routine: Routine, on: Bool) async {
@@ -1339,9 +1456,52 @@ private struct GroupPanelUpcoming: View {
         }
     }
 
+    private func runNow(_ routine: Routine) async {
+        working.insert(routine.id)
+        defer { working.remove(routine.id) }
+        if let run = await session.runRoutine(routine) {
+            Haptics.success()
+            runs.removeAll { $0.id == run.id }
+            runs.insert(run, at: 0)
+        }
+    }
+
+    private func stop(_ routine: Routine, run: RoutineRun) async {
+        working.insert(routine.id)
+        defer { working.remove(routine.id) }
+        if let stopped = await session.cancelRoutineRun(run),
+           let index = runs.firstIndex(where: { $0.id == stopped.id }) {
+            runs[index] = stopped
+        }
+    }
+
+    private func rename(_ routine: Routine) async {
+        let name = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        renaming = nil
+        guard !name.isEmpty, name != routine.name else { return }
+        working.insert(routine.id)
+        defer { working.remove(routine.id) }
+        if let saved = await session.renameRoutine(routine, name: String(name.prefix(80))),
+           let index = routines.firstIndex(where: { $0.id == saved.id }) {
+            routines[index] = saved
+        }
+    }
+
+    private func delete(_ routine: Routine) async {
+        working.insert(routine.id)
+        defer { working.remove(routine.id) }
+        if await session.deleteRoutine(routine) {
+            Haptics.success()
+            routines.removeAll { $0.id == routine.id }
+            if model.panelRoutineId == routine.id { model.panelRoutineId = nil }
+        }
+    }
+
     private func load() async {
-        routines = await session.loadRoutines().routines
-        loaded = true
+        let loaded = await session.loadRoutines()
+        routines = loaded.routines
+        runs = loaded.runs
+        self.loaded = true
     }
 }
 

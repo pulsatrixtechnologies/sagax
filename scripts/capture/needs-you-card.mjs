@@ -3,7 +3,8 @@
  * Headless captures of the "needs you" card (2026-11-05):
  * src/gallery/needs-you-card.html, the card from a hand-off that reached no
  * card in the chat and a routine run's own card with its items (one card per
- * result, never the same items twice), dark and light, English and French.
+ * result, never the same items twice) and a hand-off's question with its
+ * answers, dark and light, English and French, beside an approval card.
  * Headless Chromium only: no window opens. Its own Vite port (never 5173).
  * Usage: node scripts/capture/needs-you-card.mjs [--out DIR] [--port N]
  */
@@ -60,6 +61,14 @@ try {
       if (errors.length || tickets !== 3) failed = true;
       await page.close();
     }
+    // 2026-11-06: an approval card in the same skin, to hold the question card against
+    const approval = await browser.newPage({ viewport: { width: 760, height: 700 }, deviceScaleFactor: 2 });
+    await approval.goto(`http://127.0.0.1:${port}/src/gallery/approval-card.html?${new URLSearchParams({ skin, lang: "en", card: "command" })}`, { waitUntil: "load" });
+    await approval.waitForTimeout(800);
+    const approvalFile = join(outDir, `approval-card-${skin === "pulsatrix" ? "dark" : "light"}.png`);
+    await approval.screenshot({ path: approvalFile, fullPage: true });
+    console.log(approvalFile);
+    await approval.close();
   }
 } catch (error) {
   failed = true;

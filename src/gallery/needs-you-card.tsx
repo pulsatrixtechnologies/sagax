@@ -2,7 +2,8 @@
  * (2026-11-05): what a bot's turn elsewhere (a hand-off, a thread another bot
  * opened, a routine run) left for the person, drawn in their conversation
  * with that bot through the chat's own rows and the real store: the card
- * from a hand-off that reached no card, and a routine run's own card with its items.
+ * from a hand-off that reached no card, a hand-off's question with its answers,
+ * and a routine run's own card with its items.
  * Neutral fictional bots, clients and tickets. Not shipped in the app.
  * ?width=<px>&height=<px>&skin=<id>&lang=<en|fr> */
 import { StrictMode, useEffect } from "react";
@@ -43,6 +44,14 @@ const handoff: PersonAttentionCard = {
     { text: "**100305** (board 24, Initech) : the client asks for an on-site visit this week. Pick the day; no technician is free before Thursday.", ticketId: 100305, ticketUrl: link(100305) },
   ],
 };
+// 2026-11-06: the question a hand-off left, with its answers in brackets
+const question: PersonAttentionCard = {
+  kind: "question", botId: "atlas", botName: "Atlas", threadId: "atlas-work", threadTitle: "@Nova · work", sourceMessageId: "src-2",
+  openedBy: { botId: "nova", name: "Nova" },
+  items: [
+    { text: "Do we open the ConnectWise ticket to document the Initech firewall audit (create, archive only, or nothing for now)?" },
+  ],
+};
 const runCard: PersonAttentionCard = {
   kind: "human", botId: "atlas", botName: "Atlas", sourceMessageId: "run:r1", routineRunId: "run-1", routineName: "Hourly new tickets", threadId: "atlas-run", threadTitle: "Hourly new tickets",
   items: [
@@ -54,6 +63,7 @@ const runCard: PersonAttentionCard = {
 const messages: Message[] = [
   { id: "ask", role: "user", kind: "text", at: NOW - 30 * M, text: "Import the dispatch routines." } as Message,
   { id: "card", role: "bot", kind: "text", at: NOW - 2 * M, text: "Atlas needs you", attention: handoff, threadRef: { botId: "atlas", threadId: "atlas-work", title: "@Nova · work" } } as unknown as Message,
+  { id: "question", role: "bot", kind: "text", at: NOW - 90_000, text: "Atlas has a question for you", attention: question, threadRef: { botId: "atlas", threadId: "atlas-work", title: "@Nova · work" } } as unknown as Message,
   {
     id: "run", role: "bot", kind: "routine.run", at: NOW - M, from: { botId: "atlas" }, attention: runCard,
     routineRun: { runId: "run-1", routineId: "r1", routineName: "Hourly new tickets", status: "completed", scheduledFor: NOW - M,
@@ -85,7 +95,8 @@ function Shell() {
         <div className="mx-auto flex w-full max-w-[720px] flex-1 flex-col gap-3 overflow-y-auto px-6 py-4">
           <div className="ml-auto w-fit rounded-2xl bg-accent/15 px-4 py-2.5 text-[14px]">{messages[0]!.text}</div>
           <AttentionRow message={messages[1]!} />
-          <RoutineRunRow message={messages[2]!} botId="atlas" />
+          <AttentionRow message={messages[2]!} />
+          <RoutineRunRow message={messages[3]!} botId="atlas" />
         </div>
       </div>
     </div>

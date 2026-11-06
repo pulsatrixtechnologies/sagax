@@ -9488,7 +9488,7 @@
   "settings.intro.backups": "Sauvegarder, restaurer et importer tes données.",
   "settings.intro.updates": "La version de l'app et son canal de mise à jour.",
   "settings.intro.experimental": "Des fonctions encore à l'essai.",
-  "settings.section.backupsAndImport": "Sauvegardes et import",
+  "settings.section.backupsAndImport": "Sauvegardes",
   "settings.advanced.title": "Avancé",
   "settings.org.managed": "Géré dans Perspicax",
   "settings.selection.count": "{count} sélectionnés",

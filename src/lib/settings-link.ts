@@ -44,7 +44,8 @@ const SECTION_LABEL = {
   notifications: "settings.section.notifications",
   memory: "settings.section.organization",
   updates: "settings.updates.title",
-  about: "sidebar.menu.about",
+  // #2080 L2: about is the App page; the About window opens via requestAbout / the App link.
+  about: "settings.section.app",
   security: "settings.section.security",
   // Published pages are a section of Connect apps > Manage (2026-10-26).
   pages: "connectApps.title",

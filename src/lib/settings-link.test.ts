@@ -31,7 +31,7 @@ describe("settings links", () => {
     // #2090: no App page; About and Updates keep their own names
     expect(settingsSectionLabel("about")).toBe("About");
     expect(settingsSectionLabel("updates")).toBe("Updates");
-    expect(settingsSectionLabel("import")).toBe("Backups and import");
+    expect(settingsSectionLabel("import")).toBe("Backups");
     setLocale("fr");
     expect(settingsSectionLabel("engines")).toBe("Modèles");
     expect(settingsSectionLabel("voice")).toBe("Voix");

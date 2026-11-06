@@ -54,8 +54,8 @@ export const SECTIONS: Array<{
   // 2026-10-14: Memory is a card of this page (it was its own section).
   { id: "organization", group: "workspace", labelKey: "settings.section.organization", introKey: "settings.intro.organization", icon: Building2, keywords: ["company", "organization", "organisation", "enroll", "managed", "disconnect", "workspace", "cloud", "hosted", "vps", "server", "serveur", "servers", "connect", "pair", "switch", "local", "memory", "obsidian", "sync", "git", "perspicax", "mémoire", "pending", "domain", "dns", "caddy", "full access", "accès complet", "waiting for an admin", "en attente", "people from before", "rattacher", "invite", "inviter", "invitation", "people", "personnes", "serveurs", "oublier", "forget", ...ORGANIZATION_ADVANCED_KEYWORDS] },
   { id: "computer", group: "workspace", labelKey: "settings.section.computer", introKey: "settings.intro.computer", icon: Monitor, keywords: ["computer", "local vm", "vm", "virtual", "desktop", "ordinateur", "this computer", "cet ordinateur", "your computer", "votre ordinateur", "other computers", "autres ordinateurs", "rename", "renommer", "remove computer", "retirer", "network", "réseau", "traffic", "trafic", "server environment", "environnement serveur", "reset", "réinitialiser", "repair", "réparer", "maintenance", "entretien", "disk", "disque", "disk saver", "économiseur de disque", "cache", "clean", "nettoyer"] },
-  // #2080: Import is a card of this page (backups.import).
-  { id: "backups", group: "workspace", labelKey: "settings.section.backupsAndImport", introKey: "settings.intro.backups", icon: Archive, keywords: ["backups", "export", "exporter", "import", "importer", "restore", "restaurer", "full backup", "recovery", "backup", "sauvegarde", "sauvegardes", "replace", "remplacer", "grok bot", "x.ai", "share link", "lien de partage", "template"] },
+  // #2090: Import (Grok Bot / preferences) is hidden completely (JC 2026-11-05).
+  { id: "backups", group: "workspace", labelKey: "settings.section.backupsAndImport", introKey: "settings.intro.backups", icon: Archive, keywords: ["backups", "export", "exporter", "restore", "restaurer", "full backup", "recovery", "backup", "sauvegarde", "sauvegardes", "replace", "remplacer"] },
   // #2090: Updates is its own page again (desktop only).
   { id: "updates", group: "app", labelKey: "settings.updates.title", introKey: "settings.intro.updates", icon: Download, keywords: ["updates", "update", "version", "mise à jour", "mises à jour", "prerelease", "pre-release", "beta", "bêta", "restart"] },
   { id: "experimental", group: "app", labelKey: "settings.section.experimental", introKey: "settings.intro.experimental", icon: FlaskConical, keywords: ["early", "preview", "learn", "skill", "authoring", "browser", "profiles", "experimental", "expérimental", "data window", "fenêtre data", "decision model", "modèle de décision", "compétences", "navigateur", "unavailable", "indisponible", "phone calls", "appels téléphoniques", "callback number", "numéro de rappel", "do not call", "ne pas appeler"] },
@@ -89,8 +89,7 @@ export const CARD_KEYWORDS: Record<string, string[]> = {
   "connections.webSearch": ["web search", "recherche web", "brave", "exa", "parallel", "firecrawl", "searxng"],
   "usage.breakdown": ["by bot", "by model", "par bot", "par modèle"],
   "organization.memory": ["obsidian", "vault"],
-  "backups.import": ["import", "restore", "restaurer", "grok bot", "share link"],
-  // #2080 L2: App cards (updates moved to its own page in #2090)
+  // #2080 L2: App cards (updates moved to its own page in #2090; Grok import hidden in #2090)
   "about.startup": ["open at login", "ouvrir à la connexion", "startup", "démarrage", "app icon", "hotkey", "raccourci"],
   "about.input": ["send", "enter", "spell check", "spellcheck", "orthographe", "correcteur", "keyboard"],
   "about.help": ["tour", "tours", "visite", "welcome", "bienvenue", "diagnostics", "diagnostic", "journaux", "logs", "download logs", "télécharger les journaux", "feedback", "send feedback", "commentaires", "envoyer des commentaires", "help", "aide"],

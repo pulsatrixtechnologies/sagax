@@ -20,7 +20,6 @@ import {
   DecisionModelSettings,
   EnginesSettings,
   ExperimentalSettings,
-  ImportSettings,
   LocalComputerSection,
   NotificationSettings,
   OrganizationSettings,
@@ -466,15 +465,8 @@ export function SettingsModal() {
             {/* Voice (2026-10-28, out of Models and voice) */}
             {section === "voice" && <VoiceSettingsPage />}
 
-            {/* Backups and import (#2080): Import is a card of this page. */}
-            {section === "backups" && (
-              <>
-                <WorkspaceBackupSettings />
-                <div data-settings-card="backups.import">
-                  <ImportSettings />
-                </div>
-              </>
-            )}
+            {/* Backups (#2090): Import is hidden completely, JC 2026-11-05. */}
+            {section === "backups" && <WorkspaceBackupSettings />}
 
             {section === "computer" && <LocalComputerSection />}
 

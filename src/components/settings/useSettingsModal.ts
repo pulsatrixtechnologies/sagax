@@ -128,6 +128,7 @@ export function useSettingsModal() {
   // A page this viewer cannot see (an old link to Email where People is not
   // shown, a hidden page) draws the first page they can, at once.
   const section: AppSettingsSection = availableSections.some((entry) => entry.id === requested) ? requested : availableSections[0]?.id ?? requested;
+  // #2080 L2: App (about) stays searchable; org-advanced keywords match there on a solo desktop.
   const visibleSections = availableSections.filter((entry) => sectionMatches(entry, q, soloDesktop && entry.id === "about" ? ORGANIZATION_ADVANCED_KEYWORDS : []));
   const pagesHit = Boolean(q) && publishedPagesMatch(q);
   const sectionLabelKey = SECTIONS.find((entry) => entry.id === section)?.labelKey;

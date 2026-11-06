@@ -9501,7 +9501,7 @@
   "settings.intro.backups": "Save, restore and bring in your data.",
   "settings.intro.updates": "Version and update channel of this app.",
   "settings.intro.experimental": "Features still being tried out.",
-  "settings.section.backupsAndImport": "Backups and import",
+  "settings.section.backupsAndImport": "Backups",
   "settings.advanced.title": "Advanced",
   "settings.org.managed": "Managed in Perspicax",
   "settings.selection.count": "{count} selected",

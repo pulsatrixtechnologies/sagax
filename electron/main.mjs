@@ -48,12 +48,10 @@ import { attachFullscreenPush, setWindowFullScreen, windowFullScreenState } from
 import { createWindowNudger } from "./window-nudge.mjs";
 import { createDesktopAttention } from "./desktop-attention.mjs";
 import { createAllWindowsClosedQuit } from "./window-all-closed.mjs";
-import { createStartupScreen } from "./startup-screen.mjs";
 import { createPageContexts } from "./page-contexts.mjs";
-import { createLoadRecovery, isAppPage, loadErrorPage, loadingPage, loadOutcome, recoveryStrings, uiBundleState, waitForUiBundle } from "./load-recovery.mjs";
+import { createLoadRecovery, isAppPage, loadErrorPage, loadingPage, loadOutcome, uiBundleState, waitForUiBundle } from "./load-recovery.mjs";
 import { confirmLanguage } from "./update-confirm.mjs";
 import { createSystemTray, normalizeBotHotkeyConfig, normalizeRoster, slotAccelerator } from "./system-tray.mjs";
-let startupScreen = null;
 let desktopTray = null;
 import { collisionFreeDownloadPath, defaultSaveName, revealDownloadWhenDone, revealInFolder, withSavableFile } from "./save-file.mjs";
 import { openPdfInDefaultApp } from "./open-pdf.mjs";
@@ -460,8 +458,8 @@ let openWindowForLink = null;
 function revealForLink() {
   if (desktopTray?.show()) return;
   // The app window, where the link opens, even when another window (a
-  // desktop viewer) had focus. While the loading screen is up it owns that.
-  const appWindow = !startupScreen && mainWindow && !mainWindow.isDestroyed() ? [mainWindow] : BrowserWindow.getAllWindows();
+  // desktop viewer) had focus.
+  const appWindow = mainWindow && !mainWindow.isDestroyed() ? [mainWindow] : BrowserWindow.getAllWindows();
   if (activateExistingWindow(appWindow)) return;
   openWindowForLink?.();
 }
@@ -756,37 +754,6 @@ const localComputerGrant = createLocalComputerGrant({
 });
 /** Settles once the local server answers /api/health (startServerOn). */
 let localServerAnswering = Promise.resolve();
-// The loading screen, once per launch (see app.whenReady).
-let startupScreenOpened = false;
-function openStartupScreen() {
-  if (startupScreenOpened || desktopShutdownStarted) return;
-  startupScreenOpened = true;
-  if (mainWindow && !mainWindow.isDestroyed()) return;
-  startupScreen = createStartupScreen({
-    BrowserWindow, iconPath: APP_ICON, isQuitting: () => desktopShutdownStarted,
-    onQuit: () => app.quit(),
-    onHide: desktopTray && process.platform === "win32" ? (win) => desktopTray.hide(win) : undefined,
-    isHidden: () => desktopTray?.isHidden() ?? false,
-    onShow: (win) => desktopTray?.windowShown(win),
-    onFinished: () => { startupScreen = null; },
-    onOpenLogs: () => {
-      fs.mkdirSync(LOG_DIR, { recursive: true });
-      void shell.openPath(LOG_DIR).then((error) => { if (error) slog(`startup: open logs failed: ${error}`); });
-    },
-    onRetry: () => {
-      slog("startup: retry requested from the loading screen");
-      app.relaunch();
-      app.quit();
-    },
-  });
-  // The loading screen paints while startup goes on: waiting for it first
-  // held the local server back by the time a window takes to show, on every
-  // launch. Its status lines and the workspace's hand-over work whether it
-  // is on screen yet or not (startup-screen.mjs publishes on load, and
-  // attach() waits for React).
-  void startupScreen.ready.then(() => startupPhase("loading screen shown"));
-}
-
 // The first page load comes from this app's bundle while the server loads
 // (electron/boot-ui.mjs), once per launch.
 let bootUiUsed = false;
@@ -1141,9 +1108,8 @@ const routineWake = createRoutineWakeHold({
 // stalls on someone's machine says where in the log they send us, and the
 // loading screen shows the step it is on.
 const startupClock = Date.now();
-function startupPhase(phase, status) {
+function startupPhase(phase) {
   slog(`startup: ${phase} (+${Date.now() - startupClock}ms)`);
-  if (status) startupScreen?.setStatus(status);
 }
 
 function slog(line) {
@@ -1931,7 +1897,6 @@ async function startServerOn(port, dataDir = runningDataDir ?? startupEnvironmen
     env: childEnv,
     stdio: ["ignore", "pipe", "pipe"],
   });
-  openStartupScreen();
   let resolveServerExit;
   utilityServerExits.set(proc, new Promise((resolve) => {
     resolveServerExit = resolve;
@@ -2025,7 +1990,7 @@ async function startServerOn(port, dataDir = runningDataDir ?? startupEnvironmen
 }
 
 async function startServerPackaged() {
-  startupPhase("starting the local server", "Starting the local server…");
+  startupPhase("starting the local server");
   const started = await startServerPackagedOnce();
   startupPhase(started ? "local server ready" : "local server failed to start");
   return started;
@@ -3906,7 +3871,7 @@ function createWindow({ deferNavigation = false } = {}) {
     // mirrors it over desktop:skin. Keep Windows hidden until that handshake
     // recolors the native caption-button overlay, otherwise a saved light
     // skin still flashes the Midnight-black block on every cold start.
-    show: !waitsForSkinSync && !startupScreen,
+    show: false,
     icon: currentWindowIcon(),
     backgroundColor: "#070707",
     autoHideMenuBar: process.platform !== "darwin",
@@ -3964,8 +3929,17 @@ function createWindow({ deferNavigation = false } = {}) {
   });
   win.setTitle(workspaceWindowTitle(environmentsState, desktopRemoteAccess));
   attachUpdaterWindow(win, { pages: () => contexts.openOrigins().map((origin) => contexts.contentsFor(origin)).filter(Boolean) });
-  if (startupScreen) startupScreen.attach(win, { maximized: restored.maximized });
-  else if (waitsForSkinSync) {
+  if (!waitsForSkinSync) {
+    // No splash: the window opens straight on the app once its first paint
+    // is ready (backgroundColor above avoids a white flash). Some Wayland
+    // compositors never paint a hidden window, so a loaded page shows it too.
+    const showWindow = () => {
+      if (win.isDestroyed() || win.isVisible() || desktopShutdownStarted || desktopTray?.isHidden()) return;
+      win.show();
+    };
+    win.once("ready-to-show", showWindow);
+    win.webContents.once("did-finish-load", () => setTimeout(showWindow, 500).unref?.());
+  } else {
     // A broken renderer or preload must not strand the app as an invisible
     // process. Normal startup shows from desktop:skin almost immediately;
     // this is only the bounded recovery path.
@@ -3979,7 +3953,7 @@ function createWindow({ deferNavigation = false } = {}) {
   }
   installWindowStatePersistence(win);
   applyUnreadBadge(win);
-  if (restored.maximized && !startupScreen) win.maximize();
+  if (restored.maximized) win.maximize();
   win.once("closed", () => {
     if (mainWindow === win) mainWindow = null;
     contexts.reset();
@@ -5594,7 +5568,7 @@ app.whenReady().then(async () => {
     try {
       desktopTray = createSystemTray({
         Tray, Menu, nativeImage, iconPath: APP_ICON,
-        getWindow: () => startupScreen?.window ?? mainWindow,
+        getWindow: () => mainWindow,
         onQuit: () => app.quit(),
         onOpenBot: openBotFromShell,
         templatePath: path.join(__dirname, "resources/trayTemplate.png"),
@@ -5606,31 +5580,20 @@ app.whenReady().then(async () => {
     }
   }
   applyCaptureHotkey();
-  // The loading screen opens just after the local server is forked
-  // (startServerOn): building its window takes the main thread for about a
-  // tenth of a second, and the server's start no longer waits behind it.
-  // When no local server starts (server mode, a remote connection), it opens
-  // a moment later, unless the workspace is already up.
-  setTimeout(openStartupScreen, 150).unref?.();
   if (desktopShutdownStarted) return;
   // Opened while an update was still copying its files (a silent Windows
   // install, 2026-10-19): the window used to come up on a bare "Not Found".
-  // Wait on the loading screen until the bundle is whole, else say so.
+  // Wait until the bundle is whole; if it never is, the window's own load
+  // recovery page says so.
   if (app.isPackaged) {
-    const strings = recoveryStrings(recoveryLanguage());
     const bundle = await waitForUiBundle({
       check: () => uiBundleState({ resourcesPath: process.resourcesPath }),
       onWaiting: (state) => {
         slog(`startup: the app's files are not all in place (${state.missing.slice(0, 5).join(", ")}); waiting, an update may still be installing`);
-        openStartupScreen();
-        startupScreen?.setStatus(strings.installing);
       },
     });
     if (!bundle.complete) {
       slog(`startup: files still missing after the wait (${bundle.missing.slice(0, 5).join(", ")})`);
-      openStartupScreen();
-      startupScreen?.fail(`${strings.bundleTitle}. ${strings.bundleBody}`);
-      return;
     }
     if (bundle.waited) slog("startup: the app's files are in place; starting");
     if (desktopShutdownStarted) return;
@@ -5900,7 +5863,7 @@ app.whenReady().then(async () => {
   void refreshSharedComputersAllowed().then((allowed) => {
     sharingController().start({ maintainer: allowed });
   });
-  startupPhase("opening the workspace", "Opening your workspace…");
+  startupPhase("opening the workspace");
   let restoredOrganizationEntry = false;
   await workspaceMenuAction(async () => { restoredOrganizationEntry = await organizationEntry.restore(); });
   organizationEntryReady = true;
@@ -5974,7 +5937,6 @@ app.on("before-quit", (e) => {
   mascotHotkey.dispose();
   botHotkeys.dispose();
   captureHotkey.dispose();
-  startupScreen?.dispose();
   companyBackupSchedule?.close();
   orgLibrary?.close();
   managedDesktop?.close();

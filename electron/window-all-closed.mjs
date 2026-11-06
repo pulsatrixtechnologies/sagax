@@ -1,11 +1,8 @@
 // The last-window-closed quit policy, kept Electron-free so the startup gate
 // stays unit-testable with plain object fakes.
 //
-// The startup screen owns a real BrowserWindow before the main window
-// exists, and its recovery timers destroy that splash when the loading
-// renderer stalls — by design, so boot is not held hostage by it (see
-// "recover from a stalled loading window"). But the destroy leaves the app
-// with zero windows mid-boot, and an unconditional last-window-closed quit
+// Boot can leave the app with zero windows for a moment (a window destroyed
+// or recreated mid-boot), and an unconditional last-window-closed quit
 // fires before boot can deliver the main window or the error page: the
 // process exits ~10s after launch, before the server child is even forked
 // and before any window ever showed (issue #2028). During startup an empty

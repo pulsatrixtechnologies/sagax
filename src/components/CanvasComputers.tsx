@@ -32,7 +32,9 @@ function seenLabel(iso: string | null): string {
  * lifecycle action is a deliberate button press, never a render effect.
  * Computers are added through Unattended Remote Control (an installed host,
  * always on); existing cloud computers stay listed and placeable. */
-export function CanvasComputers({ open, createRequest, drop, sections, onClose, onDropHandled, onChange }: {
+export function CanvasComputers({ cloud: cloudEnabled = true, open, createRequest, drop, sections, onClose, onDropHandled, onChange }: {
+  /** Server-wide cloud team computers (admin routes); a member sees only their own hosts. */
+  cloud?: boolean;
   open: boolean;
   /** Above zero, opens the Unattended Remote Control add flow. */
   createRequest: number;
@@ -146,7 +148,7 @@ export function CanvasComputers({ open, createRequest, drop, sections, onClose, 
     setLoading(true);
     try {
       const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]);
-      const [cloud, hosts] = await Promise.allSettled([api<Inventory>("/api/team-computers", { signal }), fetchRemoteHosts(signal)]);
+      const [cloud, hosts] = await Promise.allSettled([cloudEnabled ? api<Inventory>("/api/team-computers", { signal }) : Promise.resolve(null), fetchRemoteHosts(signal)]);
       if (controller.signal.aborted || !mounted.current) return;
       const value = cloud.status === "fulfilled" ? cloud.value : null;
       const placed = hosts.status === "fulfilled" ? hosts.value : null;
@@ -163,7 +165,7 @@ export function CanvasComputers({ open, createRequest, drop, sections, onClose, 
     } finally {
       if (!controller.signal.aborted && mounted.current) setLoading(false);
     }
-  }, []);
+  }, [cloudEnabled]);
   useEffect(() => {
     mounted.current = true;
     void refresh();
@@ -283,7 +285,7 @@ export function CanvasComputers({ open, createRequest, drop, sections, onClose, 
           {viewer?.id === computer.id && <a href={viewer.url} target="_blank" rel="noopener noreferrer" className="mt-2 block rounded-lg px-3 py-2 text-[12px] text-accent hover:bg-control">{t("canvasComputers.openSecure")}</a>}
         </article>; })}
       </div>
-      <footer className="border-t border-hairline/40 p-3"><button className={`${control} w-full text-left`} onClick={settings}>{t("canvasComputers.footer")}</button></footer>
+      {cloudEnabled && <footer className="border-t border-hairline/40 p-3"><button className={`${control} w-full text-left`} onClick={settings}>{t("canvasComputers.footer")}</button></footer>}
     </aside>}
     {dragging && createPortal(<div role="status" className="pointer-events-none fixed z-[70] rounded-xl border border-accent/40 bg-card px-4 py-3 text-[12px] text-ink shadow-xl" style={{ left: dragging.x + 14, top: dragging.y + 14 }}>
       <span className="flex items-center gap-2">{dragging.kind === "host" ? <Monitor size={15} /> : <Box size={15} />}{dragging.name}</span>

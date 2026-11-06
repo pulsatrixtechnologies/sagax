@@ -79,7 +79,7 @@ export function canManageRoutineFolders(routines: Routine[], supported: boolean)
 
 const MENU_ITEM = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover focus-visible:bg-hover focus-visible:outline-none disabled:opacity-50";
 
-export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, loading, error, viewerPrincipalId, onOpen, onCreateIn, onDuplicate, controlRef, folderIcon = false }: {
+export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, loading, error, viewerPrincipalId, onOpen, onCreateIn, onDuplicate, controlRef, folderIcon = false, collapseAfter, leadingClock }: {
   bot: Bot;
   routines: Routine[];
   /** 2026-11-03 (audit N-4): every routine of the bot, when `routines` is a
@@ -100,6 +100,10 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
   /** The Automations list (grouped by bot, 2026-11-03): a folder icon before
    * each folder's name, as sub-groups of the bot's section. */
   folderIcon?: boolean;
+  /** The bot panel's Upcoming card (#2125): rows past N behind Show more. */
+  collapseAfter?: number;
+  /** A clock before each row's name. */
+  leadingClock?: boolean;
 }) {
   const { state, dispatch } = useStore();
   const order = state.routineFolders?.[bot.id] ?? EMPTY;
@@ -326,6 +330,8 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
     onRowDragStart={canDrag ? startDrag : undefined}
     onRowStep={canDrag ? step : undefined}
     onOpenRunning={openRunning}
+    collapseAfter={collapseAfter}
+    leadingClock={leadingClock}
     {...rename}
   />;
 
@@ -369,6 +375,8 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
           onRowDragStart={canDrag ? startDrag : undefined}
           onRowStep={canDrag ? step : undefined}
           onOpenRunning={openRunning}
+          collapseAfter={collapseAfter}
+          leadingClock={leadingClock}
           {...rename}
         />
       </div>

@@ -6,3 +6,13 @@ export const GROUPED_CARD = "flex flex-col overflow-hidden rounded-xl border bor
 
 /** A row of a grouped card (its own content lays itself out inside). */
 export const GROUPED_ROW = "border-b border-hairline-weak px-3 py-2.5 last:border-b-0";
+
+/** The bot panel's cards (reference design, #2125): one flat card on the
+ * panel, no border, no line between the rows. */
+export const PANEL_CARD = "flex flex-col overflow-hidden rounded-xl bg-[var(--bot-panel-card)]";
+
+/** A row of a PANEL_CARD. */
+export const PANEL_ROW = "px-3 py-2";
+
+/** A section label above a PANEL_CARD: Upcoming, Suggested, Computer, Voice chat. */
+export const PANEL_LABEL = "px-0.5 text-[13px] font-normal leading-[18px] text-ink-tertiary";

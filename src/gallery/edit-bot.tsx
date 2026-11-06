@@ -14,6 +14,7 @@ import { AppSidebar } from "../components/AppSidebar";
 import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { StoreProvider, useStore, type Bot, type BotSettingsSection } from "../state/store";
+import type { Routine } from "../../shared/routines";
 import "../styles.css";
 
 Object.assign(globalThis, { __APP_VERSION__: "0.8.28", __BASE_VERSION__: "0.26.0" });
@@ -44,6 +45,21 @@ const neighbours = [
   { ...bot, id: "atlas", threadId: "t-atlas", name: "Atlas", title: "Planification", color: "blue", soul: "" },
   { ...bot, id: "nova", threadId: "t-nova", name: "Nova", title: "Courriels", color: "purple", soul: "" },
 ] as Bot[];
+
+// Activity > Upcoming (#2125): six routines so the card shows "Show more"
+const NOW = Date.now();
+const routines = [
+  ["r1", "Résumé du matin des courriels importants", true],
+  ["r2", "Veille des sources sur la cybersécurité", true],
+  ["r3", "Tri de la boîte de réception", false],
+  ["r4", "Rapport hebdomadaire des projets", true],
+  ["r5", "Rappel des factures à suivre", true],
+  ["r6", "Revue des notes de réunion", true],
+].map(([id, title, enabled], index) => ({
+  id, botId: "scout", name: title, prompt: title, enabled, target: "bot",
+  schedule: { type: "cron", expression: `${3 + index} 4 * * *`, timeZone: "America/Toronto" },
+  nextRunAt: NOW + (index + 1) * 3_600_000, createdAt: 1, updatedAt: 1,
+}) as unknown as Routine);
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const realFetch = window.fetch.bind(window);
@@ -95,7 +111,7 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (path.startsWith("/api/remote-sessions")) return json({ sessions: [] });
   if (path.includes("/api/artifacts")) return json({ artifacts: [] });
   if (path.includes("/api/pages")) return json({ pages: [] });
-  if (path.includes("/api/routines")) return json({ routines: [], runs: [] });
+  if (path.includes("/api/routines")) return json({ routines, runs: [] });
   return json({ error: "not in this gallery" }, 404);
 }) as typeof window.fetch;
 (window as unknown as { EventSource: unknown }).EventSource = class { close() {} addEventListener() {} removeEventListener() {} onmessage = null; onerror = null; onopen = null; readyState = 0; };
@@ -107,6 +123,7 @@ function Open() {
   const { dispatch } = useStore();
   useEffect(() => {
     dispatch({ type: "hydrate", bots: [bot, ...neighbours], groups: [], sections: [], computerControl: {} } as never);
+    dispatch({ type: "routinesHydrated", routines, runs: [] } as never);
     dispatch({ type: "instances", instances: [{ instanceId: "claude", driverKind: "grokAgent", displayName: "Grok", snapshot: { status: "ready" }, capabilities: { browserMcp: true, computerMcp: true }, models: { default: "sonnet", options: [{ id: "sonnet", label: "Sonnet" }] } }] } as never);
     if (view === "editor") {
       // select first: selecting a bot leaves the profile, so the page opens after

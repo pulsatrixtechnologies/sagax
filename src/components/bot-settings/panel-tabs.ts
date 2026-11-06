@@ -1,20 +1,27 @@
-// The bot panel's tabs. Details holds what the bot is doing (its coding
-// activity), its routines and who it is (name and label are edited in place
-// at the panel's top; the description stays on the bot and is edited in the
-// persona editor); Library holds its files; Computer is the computer view.
-// What the bot receives is listed in Plugins > Installed for that bot, never
-// as a panel tab (JC, 2026-11-01). No Roles tab either (JC, 2026-11-05): a
-// recent refusal is one row in Details > Permissions (RolePermissionsSection),
-// the roles graph behind its disclosure.
+// The bot panel's tabs, as the reference design draws them (#2125): two pills,
+// Activity and Library. Activity holds what the bot does (upcoming routines,
+// suggestions, its computer, voice chat, then its coding activity, live
+// work, remote sessions, a recent refusal and provenance, each folded when
+// empty); Library holds its files. The computer view is no tab any more:
+// Activity > Computer opens it, and every "open the computer" link still
+// lands on it. What the bot receives is listed in Plugins > Installed for
+// that bot, never as a panel tab (JC, 2026-11-01). No Roles tab either
+// (JC, 2026-11-05): a recent refusal is one row in Activity > Permissions
+// (RolePermissionsSection), the roles graph behind its disclosure.
 // Every other section lives in the persona editor (lib/persona-sections).
-import { simpleHidesPanelTab } from "@/lib/interface-visibility";
 
-export const PANEL_TABS = ["details", "library", "computer"] as const;
+export const PANEL_TABS = ["activity", "library"] as const;
 export type PanelTab = (typeof PANEL_TABS)[number];
 
-/** The tabs the panel shows. Simple hides Computer, and a bot that works
- * nowhere has no computer of its own. A remote session's screen is in the
- * chat (RemoteScreenCard), never in this tab. */
-export function visiblePanelTabs(input: { advanced: boolean; computerOff: boolean }): PanelTab[] {
-  return PANEL_TABS.filter((id) => (input.advanced || !simpleHidesPanelTab(id)) && (id !== "computer" || !input.computerOff));
+/** The tabs the panel shows: both, in every mode. Simple and a bot that
+ * works nowhere lose only the Computer card. A remote session's screen is
+ * in the chat (RemoteScreenCard), never in this panel. */
+export function visiblePanelTabs(_input: { advanced: boolean; computerOff: boolean }): PanelTab[] {
+  return [...PANEL_TABS];
+}
+
+/** Whether Activity shows the Computer card (and the computer view opens in
+ * the panel): Advanced, and a bot that works somewhere. */
+export function showsComputer(input: { advanced: boolean; computerOff: boolean }): boolean {
+  return input.advanced && !input.computerOff;
 }

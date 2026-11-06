@@ -40300,6 +40300,13 @@ async function voiceProviderKeys(provider: Exclude<VoiceTtsProvider, "xai">, spe
 // else the server's xAI key (Settings > Models and voice, xai.key; since
 // 2026-10-14 Grok voice has no key of its own). The key never leaves the
 // server; the spoken turn itself goes through the normal send route.
+// #2125: the bot's voice chat speed and language (bot panel), applied to its speech.
+function botVoiceChat(bot: { voiceSpeed?: number; voiceLanguage?: string }): { speed?: number; language?: string } {
+  return {
+    ...(bot.voiceSpeed !== undefined ? { speed: bot.voiceSpeed } : {}),
+    ...(bot.voiceLanguage !== undefined ? { language: bot.voiceLanguage } : {}),
+  };
+}
 const voiceModeDeps: VoiceModeDeps = {
   organization: IDENTITY.kind === "perspicax",
   notice: (threadId, message) => publishVoiceNotice(threadId, message),
@@ -40324,9 +40331,9 @@ const voiceModeDeps: VoiceModeDeps = {
       }
       // a call named no thread: the person's one conversation (the rule the
       // desktop and the phone read), where its turns show up as they happen
-      return { botId: bot.id, botName: bot.name, threadId: threadId ?? conversationOrStart(bot, viewerId) ?? viewerThreadOf(bot, viewerId) ?? bot.threadId, ownerPrincipalId: effectiveBotOwner(bot) };
+      return { botId: bot.id, botName: bot.name, threadId: threadId ?? conversationOrStart(bot, viewerId) ?? viewerThreadOf(bot, viewerId) ?? bot.threadId, ownerPrincipalId: effectiveBotOwner(bot), ...botVoiceChat(bot) };
     }
-    return { botId: bot.id, botName: bot.name, threadId: threadId ?? conversationOrStart(bot) ?? bot.threadId };
+    return { botId: bot.id, botName: bot.name, threadId: threadId ?? conversationOrStart(bot) ?? bot.threadId, ...botVoiceChat(bot) };
   },
   serverKey: () => IDENTITY.kind === "perspicax" ? cfg.xai?.key : providerAccounts.key(undefined, "xai"),
   hasOwnKey: () => IDENTITY.kind === "perspicax",
@@ -41597,6 +41604,8 @@ const orgBotsDeps: BotsDeps = {
       ...(mode !== "full" && mode !== "custom" ? { approvalMode: mode, autoApprove: mode === sourceMode ? source.autoApprove : false } : {}),
       ...(source.speakReplies !== undefined ? { speakReplies: source.speakReplies } : {}),
       ...(source.voice !== undefined ? { voice: source.voice } : {}),
+      ...(source.voiceSpeed !== undefined ? { voiceSpeed: source.voiceSpeed } : {}),
+      ...(source.voiceLanguage !== undefined ? { voiceLanguage: source.voiceLanguage } : {}),
       ...(source.voiceNotes !== undefined ? { voiceNotes: source.voiceNotes } : {}),
       ...(source.memoryEnabled !== undefined ? { memoryEnabled: source.memoryEnabled } : {}),
       ...(source.loopGuard !== undefined ? { loopGuard: source.loopGuard } : {}),

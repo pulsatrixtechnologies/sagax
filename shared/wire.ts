@@ -506,6 +506,10 @@ export interface WireBot {
   finishUntilMaxRounds?: number;
   /** This bot's own voice id, so a room of bots doesn't sound like one person. */
   voice?: string;
+  /** #2125: this bot's voice chat speed (0.7 to 1.5). Absent = 1x. */
+  voiceSpeed?: number;
+  /** #2125: this bot's voice chat language code, or "auto". Absent = auto-detect. */
+  voiceLanguage?: string;
   /** Whether this bot may send voice notes. Absent/true = allowed; false
    * hides the tool and refuses the route even with a voice configured. */
   voiceNotes?: boolean;

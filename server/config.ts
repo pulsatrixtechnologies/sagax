@@ -583,6 +583,8 @@ const appConfigSchema = z.object({
   cerebras: z.object({ key: optionalText }).optional(),
   groq: z.object({ key: optionalText, url: optionalText }).optional(),
   meta: z.object({ key: optionalText, url: optionalText }).optional(),
+  /** DeepSeek API key for the DeepSeek Harness engine (`dsh`). */
+  deepseek: z.object({ key: optionalText }).optional(),
   xai: z.object({ key: optionalText, url: optionalText }).optional(),
   /** Anthropic API key for Claude Code billed per token, handed only to
    * Claude instances; `url` only for a proxy or a test double. Never a
@@ -884,6 +886,8 @@ export interface AppConfig {
   cerebras?: { key?: string };
   groq?: { key?: string; url?: string };
   meta?: { key?: string; url?: string };
+  /** DeepSeek API key for the DeepSeek Harness engine (`dsh`). */
+  deepseek?: { key?: string };
   /** `everyClaudeBot`: the key runs every Claude bot instead of its login.
    * Unset means true, which is how a key behaved before it had its own
    * `claudeApi` instance; a key first saved from Settings sets false.
@@ -1617,6 +1621,9 @@ export function loadConfig(): AppConfig {
   cfg.meta = { ...cfg.meta };
   // Keep the workspace key separate from a Muse Code login's META_API_KEY.
   if (process.env.SAGAX_META_API_KEY !== undefined) cfg.meta.key = process.env.SAGAX_META_API_KEY;
+  cfg.deepseek = { ...cfg.deepseek };
+  // Keep the workspace key separate from an operator's ambient DEEPSEEK_API_KEY.
+  if (process.env.SAGAX_DEEPSEEK_API_KEY !== undefined) cfg.deepseek.key = process.env.SAGAX_DEEPSEEK_API_KEY;
   cfg.xai = { ...cfg.xai };
   if (process.env.XAI_API_KEY !== undefined) cfg.xai.key = process.env.XAI_API_KEY;
   // Deliberately not ANTHROPIC_API_KEY: a key in the server's own env is
@@ -1705,6 +1712,7 @@ export function syncCredentialEnv(patch: Partial<Omit<AppConfig, "threads">>): v
     [patch.cerebras?.key, "CEREBRAS_API_KEY"],
     [patch.groq?.key, "SAGAX_GROQ_API_KEY"],
     [patch.meta?.key, "SAGAX_META_API_KEY"],
+    [patch.deepseek?.key, "SAGAX_DEEPSEEK_API_KEY"],
     [patch.anthropic?.key, "SAGAX_ANTHROPIC_API_KEY"],
     [patch.openaiCompat?.key, "OPENAI_COMPAT_API_KEY"],
     [patch.openai?.key, "SAGAX_OPENAI_API_KEY"],
@@ -1750,6 +1758,7 @@ export const WORKSPACE_CREDENTIAL_ENV = [
   "CEREBRAS_API_KEY",
   "SAGAX_GROQ_API_KEY",
   "SAGAX_META_API_KEY",
+  "SAGAX_DEEPSEEK_API_KEY",
   "SAGAX_ANTHROPIC_API_KEY",
   "SAGAX_ANTHROPIC_API_URL",
   "SAGAX_HOSTED_MODEL_TOKEN",
@@ -1851,6 +1860,7 @@ export const PROVIDER_CREDENTIAL_ENV = [
   "CEREBRAS_API_KEY",
   "GROQ_API_KEY",
   "META_API_KEY",
+  "DEEPSEEK_API_KEY",
   "CURSOR_API_KEY",
   "CURSOR_AUTH_TOKEN",
 ] as const;
@@ -1870,6 +1880,7 @@ export const OPENCODE_PROVIDER_ENV = [
   "MOONSHOT_API_KEY",
   "MINIMAX_API_KEY",
   "GROQ_API_KEY",
+  "DEEPSEEK_API_KEY",
 ] as const;
 
 /** Keys the owner saves in Settings for OpenCode's other providers (Venice,
@@ -1980,8 +1991,7 @@ export function saveConfig(
   // back after we have successfully recognized the legacy list.
   const storedProfiles = storedBrowserProfilesSchema.safeParse(disk.browserProfiles);
   if (storedProfiles.success) disk.browserProfiles = storedProfiles.data;
-  for (const key of ["xai", "anthropic", "mistral", "cerebras", "groq", "meta", "openai", "openrouter", "openaiCompat", "box", "opencodeGo", "tts", "decider", "imageGen", "live", "profile", "rooms", "mcp", "threads", "context", "memory", "routines", "localVm", "features", "budgets", "billing", "decisions", "loopGuard", "onboarding", "browserEngine"] as const) {
-
+  for (const key of ["xai", "anthropic", "mistral", "cerebras", "groq", "meta", "deepseek", "openai", "openrouter", "openaiCompat", "box", "opencodeGo", "tts", "decider", "imageGen", "live", "profile", "rooms", "mcp", "threads", "context", "memory", "routines", "localVm", "features", "budgets", "billing", "decisions", "loopGuard", "onboarding", "browserEngine"] as const) {
     const section = checkedPatch[key];
     if (!section) continue;
     const current = jsonObjectSchema.safeParse(disk[key]);
@@ -2240,6 +2250,9 @@ export function instanceOwnsRouting(
       return own(entry.environment?.GROQ_API_KEY) || ownUrl("https://api.groq.com/openai/v1", cfg.groq?.url);
     case "meta":
       return own(entry.environment?.META_API_KEY) || ownUrl("https://api.meta.ai/v1", cfg.meta?.url);
+    case "deepseekAgent":
+      // A second DeepSeek Harness account brings its own key; the workspace key fills only an instance without one.
+      return own(entry.environment?.DEEPSEEK_API_KEY);
     case "grok":
       return own(entry.environment?.XAI_API_KEY) || (own(config.apiKeyEnv) && config.apiKeyEnv !== "XAI_API_KEY")
         || ownUrl("https://api.x.ai/v1", cfg.xai?.url);
@@ -2260,6 +2273,7 @@ function injectedEnvironment(cfg: AppConfig, instanceId: string, driver: string)
   if (driver === "cerebras" && cfg.cerebras?.key) environment.set("CEREBRAS_API_KEY", cfg.cerebras.key);
   if (driver === "groq" && cfg.groq?.key) environment.set("GROQ_API_KEY", cfg.groq.key);
   if (driver === "meta" && cfg.meta?.key) environment.set("META_API_KEY", cfg.meta.key);
+  if (driver === "deepseekAgent" && cfg.deepseek?.key) environment.set("DEEPSEEK_API_KEY", cfg.deepseek.key);
   if (driver === "grok" && cfg.xai?.key) environment.set("XAI_API_KEY", cfg.xai.key);
   // Grok Build never runs on it in solo mode (acp/grok.ts strips it); on an
   // organization server it is the organization's key for Grok Build, after
@@ -2336,6 +2350,7 @@ const DRIVER_CREDENTIAL_VARIABLES: Record<string, readonly string[]> = {
   mistral: ["MISTRAL_API_KEY"],
   grok: ["XAI_API_KEY"],
   grokAgent: ["XAI_API_KEY"],
+  deepseekAgent: ["DEEPSEEK_API_KEY"],
   "openai-compat": ["OPENAI_COMPAT_API_KEY", "SAGAX_OPENAI_API_KEY", "SAGAX_OPENROUTER_API_KEY", "SAGAX_COMPAT_SERVER_API_KEY"],
   opencodeGo: ["OPENCODE_API_KEY"],
 };
@@ -2413,6 +2428,7 @@ export function instanceConfigs(cfg: AppConfig): InstanceConfigMap {
     groq: { driver: "groq" },
     meta: { driver: "meta" },
     museCode: { driver: "museCode" },
+    deepseek: { driver: "deepseekAgent" },
     ...API_KEY_FLEET,
     qwen: { driver: "qwenAgent" },
     hermes: { driver: "hermesAgent" },
@@ -2437,6 +2453,7 @@ export function instanceConfigs(cfg: AppConfig): InstanceConfigMap {
     groq: { driver: "groq" },
     meta: { driver: "meta" },
     museCode: { driver: "museCode" },
+    deepseek: { driver: "deepseekAgent" },
     ...API_KEY_FLEET,
     ...CUSTOM_ONLY,
   } as const;

@@ -213,8 +213,9 @@ try {
     // and the process is closed so the retry starts on a fresh
     // one. A process this turn started is current, so there the
     // catalog is the stale one and the fallback applies.
+    // The catalog holds picker ids; `wanted` may be the resolved wire id, so check both.
     staleProcess = Boolean(support.fallbackModel && wanted && !launchedThisTurn && offered.length
-      && !offered.includes(wanted) && models.options.some((option) => option.id === wanted));
+      && !offered.includes(wanted) && models.options.some((option) => option.id === wanted || option.id === turn.model));
     // Visible to finishAcpTurnError if set_config_option throws before this phase returns.
     ctx.staleProcess = staleProcess;
     // A local inject writes its provider for this turn, so a

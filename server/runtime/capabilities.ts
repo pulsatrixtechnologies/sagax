@@ -64,6 +64,7 @@ const ENGINES: Readonly<Record<string, EngineRow>> = {
   opencodeGo: { resume: true }, // acp/opencode-go.ts:838
   qwenAgent: { resume: true }, // acp/qwen.ts:219
   hermesAgent: { resume: true }, // acp/hermes.ts:418
+  deepseekAgent: { resume: true }, // acp/deepseek.ts
   clineAgent: { resume: true }, // acp/cline.ts:56
   customAcp: { resume: true }, // acp/custom.ts:21
   // The chat-completions family (createOpenAIChatRuntime, openai-chat.ts):

@@ -19,7 +19,7 @@ import {
 import { HelpTip } from "../SettingsPrimitives";
 import { azureOpenAIEndpoint } from "../../../shared/azure-openai";
 
-export type KeyRowId = "openai" | "anthropic" | "xai" | "elevenlabs" | "fishAudio" | "openaiImage" | "customImage" | "openrouter" | "mistral" | "azureFoundry" | "openaiCompat" | "opencodeGo";
+export type KeyRowId = "openai" | "anthropic" | "xai" | "elevenlabs" | "fishAudio" | "openaiImage" | "customImage" | "openrouter" | "mistral" | "deepseek" | "azureFoundry" | "openaiCompat" | "opencodeGo";
 
 /** The OpenAI-compatible connection points at an Azure resource: its key is
  * shown on the Azure row, not on "Other (OpenAI-compatible)". */
@@ -37,6 +37,7 @@ const ROWS: Record<KeyRowId, { section: ConfigSection; nameKey: LocaleKey; test?
   customImage: { section: "customImage", nameKey: "providerKeys.customImage", saved: (c) => c.imageGen?.customKeyConfigured === true },
   openrouter: { section: "openrouter", nameKey: "providerKeys.openrouter", test: "openrouter", saved: (c) => c.openrouter?.configured ?? false },
   mistral: { section: "mistral", nameKey: "providerKeys.mistral", test: "mistral", saved: (c) => c.mistral?.configured ?? false },
+  deepseek: { section: "deepseek", nameKey: "providerKeys.deepseek", saved: (c) => c.deepseek?.configured ?? false },
   // One connection, two rows: Azure AI Foundry / Azure OpenAI is the
   // OpenAI-compatible key and URL with an Azure resource's address.
   azureFoundry: { section: "azureFoundry", nameKey: "providerKeys.azureFoundry", test: "openaiCompat", saved: (c) => (c.openaiCompat?.configured ?? false) && compatOnAzure(c) },
@@ -50,7 +51,7 @@ export const MAIN_KEY_ROWS = ["anthropic", "openai", "xai"] as const satisfies r
  * always in the main list, never hidden. The voice keys (ElevenLabs, Fish
  * Audio) and the image keys are here too since 2026-10-15: one place for
  * every key, the Voice section and Image generation only lead to their row. */
-export const MORE_KEY_ROWS = ["openrouter", "mistral", "azureFoundry", "openaiCompat", "opencodeGo", "elevenlabs", "fishAudio", "openaiImage", "customImage"] as const satisfies readonly KeyRowId[];
+export const MORE_KEY_ROWS = ["openrouter", "mistral", "deepseek", "azureFoundry", "openaiCompat", "opencodeGo", "elevenlabs", "fishAudio", "openaiImage", "customImage"] as const satisfies readonly KeyRowId[];
 
 export function keyRowSaved(id: KeyRowId, config: ConfigStatus | null | undefined): boolean {
   return config ? ROWS[id].saved(config) : false;
@@ -130,6 +131,7 @@ export function KeyInKeys({ row, saved, included = false, optional = false, miss
 export function keyRowForEngine(driverKind: string, instanceId: string): KeyRowId | null {
   if (driverKind === "claudeAgent") return "anthropic";
   if (driverKind === "mistral" || instanceId.includes("mistral")) return "mistral";
+  if (driverKind === "deepseekAgent" || instanceId.includes("deepseek")) return "deepseek";
   if (driverKind === "grok" || driverKind === "grokAgent" || instanceId.includes("xai")) return "xai";
   if (instanceId.includes("openrouter")) return "openrouter";
   if (driverKind === "opencodeGo") return "opencodeGo";

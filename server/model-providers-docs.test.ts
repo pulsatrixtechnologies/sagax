@@ -178,7 +178,7 @@ describe("OpenCode config file", () => {
 });
 
 describe("Keys exported on a server", () => {
-  const exported = ["OPENROUTER_API_KEY", "FIREWORKS_API_KEY", "DEEPSEEK_API_KEY"];
+  const exported = ["OPENROUTER_API_KEY", "FIREWORKS_API_KEY", "TOGETHER_API_KEY"];
 
   it("reach every engine, as the page warns", () => {
     // Every engine filters its inherited environment through these two lists

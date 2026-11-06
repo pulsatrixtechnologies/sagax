@@ -15716,7 +15716,7 @@
       "settings.section.providers": "996c32b35f2182a9c83815395113f92344269ebb4ab3525017c4cafaa3d1a8fd",
       "engineConnect.paysWith.serverKey": "2d087c0253e25b501771f963529e99fd2af286f08bc1e07452fd5026d85630ba",
       "providers.title": "996c32b35f2182a9c83815395113f92344269ebb4ab3525017c4cafaa3d1a8fd",
-      "providers.help": "0cda09f56d4e26ffab58bab3539c3db808c283b454d23e3a0646b3ad1901520f",
+      "providers.help": "10e0e61bb20a235ab4646ab60f16538704b8f31711fdc3ff3d23ea4c1a6a54a6",
       "providers.payer.me": "d30af076b0dc85cc5b0074b403f74770b73af84a70c2f77f7a3609d0db23112e",
       "providers.payer.org": "cf84820bab54ec693c5b267c781c6173c91485e5bbdddc2ada6573b93bdf0c63",
       "providers.payer.computer": "26f9f95a152ffb426e3ed80cf650c2b81ac0694df0cfb5c3c01dbc25fd9f73cf",
@@ -17582,7 +17582,12 @@
       "organization.rules.vaultExport.blocked": "18f2a0947f9d6523991b29b450307f22773f57d65f7efb98d48a167df04d6b1d",
       "servers.state.linked": "49d13abd41864a31f6d207d6950964d2ee2a0a236babfda5a96e150417d0e665",
       "servers.state.local": "601b7ae9d3a9212f168cfea775f719c1d6a239758252246dd3bbb3d55863e9a4",
-      "organization.manageInPerspicax": "6b8a7f811c7cf362b232d64ae462e95edc9c5fafa8316016def505954afebac9"
+      "organization.manageInPerspicax": "6b8a7f811c7cf362b232d64ae462e95edc9c5fafa8316016def505954afebac9",
+      "routineRun.details": "45989de49fb7f66dfe17a8fc26f3a02c7abcd74f7e8e6cf9f39fa0e3775780df",
+      "keys.deepseek.label": "d2885c59cd6f6973c998d8d47d56967577edec2f38b14d60b5a7fc11b83037a3",
+      "keys.deepseek.desc": "270b98390794fcafe4c317a99d2af015b46d7572f13ba9e9a2912e79cd567803",
+      "keys.deepseek.link": "23a794ba7450089c877db21d83bbb7182766c3f647abdeec825710d70770f1dc",
+      "providerKeys.deepseek": "0648d2111ec0ca3d37d68ea020ce87e5c89caf06d3836a4388cd10bd1ebfd083"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

@@ -88,7 +88,7 @@ function Gallery() {
         style={narrow ? { left: 8, right: 8, bottom: 16 } : { right: 24, bottom: 24, width: 340 }}
         className="fixed z-50 flex max-h-[min(392px,calc(100dvh-96px))] flex-col overflow-hidden rounded-xl border border-popover-hairline popover-surface bg-popover py-1 text-popover-ink shadow-2xl shadow-black/50">
         <ModelSearchList variant="popover" autoFocus submenus={!flat} sections={sections} onPick={() => {}}
-          custom={params.get("custom") === "1" ? { label: (text: string) => t("code.launch.useModel", { model: text }) } : undefined}
+          custom={params.get("custom") === "1" ? { label: (text: string) => t("code.launch.useModel", { model: text }), onPick: () => {} } : undefined}
           favorites={{ keys, onToggle: (row) => toggleModelFavorite(row.key) }}
           after={footer} />
       </div>

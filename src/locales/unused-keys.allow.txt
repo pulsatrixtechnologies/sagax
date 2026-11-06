@@ -594,9 +594,10 @@ settings.threadsView.hidden
 settings.toolCalls.show
 settings.universalPins.subtitle
 settings.universalPins.title
-settings.updates.prerelease.aria
-settings.updates.prerelease.short
-settings.updates.prerelease.title
+settings.updates.away.short
+settings.updates.channel.short
+settings.updates.latest
+settings.updates.prerelease.subtitle
 settings.userBubbles.aria
 settings.userBubbles.subtitle
 settings.userBubbles.title

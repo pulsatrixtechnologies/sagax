@@ -1,10 +1,12 @@
 /** Claude live idle session reuse path (#1383). */
 import { rmSync } from "node:fs";
 import { dirname } from "node:path";
+import { turnTrace } from "../../turns/turn-trace.ts";
 import { sectionFingerprints } from "../prompt-split.ts";
 import { contractChanges, switchesCover, turnSwitches } from "../spawn-contract.ts";
 import { volatileTurnMessage } from "./messages.ts";
 import type { ClaudeTurnCtx, ClaudeTurnEarly } from "./turn-ctx.ts";
+import { waitClaudePrewarmed } from "./warm-ready.ts";
 
 export async function tryReuseClaudeSession(ctx: ClaudeTurnCtx): Promise<ClaudeTurnEarly | null> {
   const {
@@ -29,6 +31,8 @@ if (!turn.sessionReset && live && !live.turn && !live.closing && live.child.exit
   if (turn.warmOnly === true) {
     dropUnusedMcp();
     holdWarm(threadId, live, turnId, turn.warmSignal);
+    await waitClaudePrewarmed(live, turn.warmSignal);
+    turnTrace(threadId, "claude-prewarmed");
     return { turnId, reused: true };
   }
   // Attach before any await so a hangup abort cannot close a process

@@ -603,10 +603,10 @@ async function runEngineMode(
     });
   }
 
-  if (engine === "http" || engine === "grok") {
-    // Cold opens one thread per turn and prewarms each (#1975 / #2055): raise
-    // the per-person warm rate and cap idle warm sessions so children do not
-    // pile up and stall the stream watch.
+  if (engine === "http" || engine === "grok" || engine === "claude") {
+    // Cold opens one thread per turn and prewarms each (#1975 / #2055 / #1971):
+    // raise the per-person warm rate and cap idle warm sessions so children
+    // do not pile up and stall the stream watch.
     parentEnv.SAGAX_PREWARM_PER_MINUTE = parentEnv.SAGAX_PREWARM_PER_MINUTE ?? "40";
     parentEnv.SAGAX_MAX_IDLE_ENGINE_SESSIONS = parentEnv.SAGAX_MAX_IDLE_ENGINE_SESSIONS ?? "3";
     if (engine === "http") httpFixture = await startHttpFixture();
@@ -699,14 +699,14 @@ async function runEngineMode(
           return id;
         })();
 
-      // HTTP #1975 / Grok ACP #2055: simulate composer focus so cold measures
-      // a turn that already paid spawn+session (and MCP settle), not the cold
-      // start itself. Claude/Codex cold still starts without /warm.
-      if ((engine === "http" || engine === "grok") && justOpened) {
+      // HTTP #1975 / Grok ACP #2055 / Claude #1971: simulate composer focus so
+      // cold measures a turn that already paid spawn+session (and MCP settle),
+      // not the cold start itself. Codex cold still starts without /warm.
+      if ((engine === "http" || engine === "grok" || engine === "claude") && justOpened) {
         await prewarmBenchThread(api, bot.id, threadId, {
           logPath: fixture.info.logPath,
           logOffset,
-          readyStep: engine === "grok" ? "acp-prewarmed" : "tools-prewarmed",
+          readyStep: engine === "grok" ? "acp-prewarmed" : engine === "claude" ? "claude-prewarmed" : "tools-prewarmed",
         });
       }
 
@@ -726,9 +726,9 @@ async function runEngineMode(
         text: `Bench turn ${i}: summarize the fixture plan in one short paragraph.`,
       });
       samples.push(sample);
-      // Cold http/grok: drop the just-measured thread so its warm process or
-      // MCP mount is not held across the rest of the run.
-      if (mode === "cold" && (engine === "http" || engine === "grok") && !warmup) {
+      // Cold http/grok/claude: drop the just-measured thread so its warm
+      // process or MCP mount is not held across the rest of the run.
+      if (mode === "cold" && (engine === "http" || engine === "grok" || engine === "claude") && !warmup) {
         await api.json("DELETE", `/api/bots/${bot.id}/tasks/${threadId}`).catch(() => {});
       }
       // Brief gap so a reused CLI drains its previous result before the next send.

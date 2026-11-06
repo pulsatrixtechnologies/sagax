@@ -167,9 +167,14 @@ if (turn.warmOnly === true && turn.warmSignal?.aborted) {
 
 let child: ReturnType<typeof spawnCli>;
 try {
+  // Fake CLI only: warmOnly launches announce init without a prompt so
+  // waitClaudePrewarmed can return (#1971). Real Claude ignores the flag.
+  const spawnEnv = turn.warmOnly === true
+    ? { ...env, FAKE_CLAUDE_WARM_BOOT_INIT: "1" }
+    : env;
   child = spawnCli(config.cli, args, {
     cwd,
-    env,
+    env: spawnEnv,
     stdio: ["pipe", "pipe", "pipe"],
   }, "bot");
 } catch (error) {

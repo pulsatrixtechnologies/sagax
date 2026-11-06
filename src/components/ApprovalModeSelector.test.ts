@@ -92,10 +92,12 @@ describe("approval mode selector", () => {
     expect(render("full", false, false)).toContain('aria-label="Auto (full access) for Antigravity"');
   });
 
-  it("explains Auto fallbacks and does not elevate unknown providers", () => {
+  it("explains Auto fallbacks for unknown providers and still offers Full", () => {
     expect(approvalModeOptionsFor("grokAgent").find((option) => option.mode === "auto")?.description).toContain("automatic review to approve routine actions");
     expect(approvalModeOptionsFor("customAgent").find((option) => option.mode === "auto")?.description).toContain("behaves like Ask");
-    expect(approvalModeOptionsFor("customAgent").map((option) => option.mode)).toEqual(["ask", "auto"]);
+    // Full is offered on every engine (omb #2701). Auto without a native
+    // reviewer still behaves like Ask; that is the only "non-elevation".
+    expect(approvalModeOptionsFor("customAgent").map((option) => option.mode)).toEqual(["ask", "auto", "full"]);
   });
 
   it("offers Full without the packaged desktop bridge and hides only Custom", () => {

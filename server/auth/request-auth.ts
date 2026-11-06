@@ -890,6 +890,8 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // a person's Perspicax avatar (the "You" row, room members, pickers; on a
   // personal computer, its owner's only, server/people/owner-identity.ts)
   { methods: ["GET"], path: /^\/api\/people\/[\w-]{1,80}\/avatar$/ },
+  // a person's panel Library: files of the rooms the viewer shares with them (server/routes/person-library.ts)
+  { methods: ["GET"], path: /^\/api\/people\/[\w-]{1,80}\/library$/ },
   // Organization server, slice 4: a bot's grants (user or team, with a
   // level). server/bots/bot-grants.ts decides who may read and change them (the
   // owner, manage holders, organization admins, team managers).

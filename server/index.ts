@@ -2300,6 +2300,7 @@ import { launchedAgentsForBot } from "./launched-agents.ts";
 import { createGroupMemoryRoutes } from "./routes/group-memory.ts";
 import { createTtsProviderRoutes } from "./routes/tts-provider.ts";
 import { createPeopleDmRoutes } from "./routes/people-dms.ts";
+import { createPersonLibraryRoutes } from "./routes/person-library.ts";
 import { createModerationRoutes, isReportPath } from "./routes/moderation.ts";
 import { createModerationStore } from "./safety/moderation.ts";
 import { createGroupFolderRoutes } from "./routes/group-folders.ts";
@@ -34874,6 +34875,19 @@ ROUTES.push(createPeopleDmRoutes<GroupRecord>({
   // Opening the conversation answers its default thread, as before threads,
   // each person's own unread state and never the other's.
   project: (group, auth) => peopleDmForViewer({ ...publicGroupState(group), messages: store.messagesFor(group.threadId) }, auth ? groupReaderId(auth) : undefined)
+}));
+// A person's panel, Library tab (#2117): the files of the rooms the viewer
+// and that person both belong to, only rooms the viewer reads.
+ROUTES.push(createPersonLibraryRoutes<GroupRecord>({
+  viewerId: (auth) => groupReaderId(auth),
+  groups: () => store.groups,
+  visible: (group, viewerId) => groupVisible(group, viewerId),
+  threadsOf: (group) => [group.threadId, ...store.groupTasks(group.id).map((task) => task.threadId)],
+  files: async (threadId) => {
+    const files = await listThreadFiles(threadFileRefsFor(threadId), (ref) => statMessageFile(ref.path, threadFileRoots(threadId, ref)));
+    const pinned = threadFilePins.ids(threadId);
+    return files.map((file) => (pinned.has(file.id) ? { ...file, pinned: true } : file));
+  }
 }));
 // Content between people (App Store 1.2, server/safety/moderation.ts): reports to
 // the admins, each person's own blocked people, the terms accepted once.

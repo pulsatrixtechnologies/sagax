@@ -27,7 +27,7 @@ const WEEK_MS = 7 * 24 * 3_600_000;
 export function libraryItems(files: readonly ThreadFile[] | null, artifacts: readonly ArtifactSummary[] | null, pages: readonly PublishedPageSummary[] | null = null): LibraryItem[] {
   return [
     ...(pages ?? []).map((page): LibraryItem => ({ kind: "page", key: `page:${page.id}`, at: page.updatedAt, pinned: page.pinned === true, page })),
-    ...(files ?? []).map((file): LibraryItem => ({ kind: "file", key: `file:${file.id}`, at: file.at, pinned: file.pinned === true, file })),
+    ...(files ?? []).map((file): LibraryItem => ({ kind: "file", key: file.threadId ? `file:${file.threadId}:${file.id}` : `file:${file.id}`, at: file.at, pinned: file.pinned === true, file })),
     ...(artifacts ?? []).map((artifact): LibraryItem => ({ kind: "artifact", key: `artifact:${artifact.id}`, at: artifact.updatedAt, pinned: artifact.favorite === true, artifact })),
   ];
 }

@@ -20,6 +20,12 @@ export interface ThreadFile {
   localPath?: string;
   /** Pinned by the person in the Library tab (kept on the server). */
   pinned?: boolean;
+  /** A person's Library (#2117, GET /api/people/:id/library): the
+   * conversation the file belongs to and its room, since that list spans
+   * several conversations. */
+  threadId?: string;
+  groupId?: string;
+  groupName?: string;
 }
 
 export type FileKind = "image" | "video" | "audio" | "document" | "code" | "archive" | "other";

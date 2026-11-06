@@ -91,6 +91,7 @@ import {
   createCoordinator,
   type ComposedTurn,
   type Coordinator,
+  type HandoffOpener,
   type HandoffView,
   type HostTurnResult
 } from "./coordinator.ts";
@@ -2199,7 +2200,7 @@ function stderrOf(err: unknown): string {
   const s = (err as { stderr?: unknown }).stderr;
   return typeof s === "string" ? s : Buffer.isBuffer(s) ? s.toString("utf8") : "";
 }
-Object.assign(leafHostBindings, { modelName, stderrOf });
+Object.assign(leafHostBindings, { modelName, stderrOf, handoffOpener, personForJoin });
 // #1388: functions the split dropped, restored verbatim from the pre-split server/index.ts.
 export const pendingAgentReplyWakes = new Map<string, { botId: string; agentName: string; speaker?: TurnSpeaker }>();
 function browserSessionSpec(binaryPath: string, session: string, profile: string | undefined) {
@@ -4491,14 +4492,22 @@ function hostTurnResult(node: HandoffView | undefined, generation: string, outco
 
 function settleDirectCoordination(generation: string | undefined, outcome: DirectTurnOutcome) {
   if (!generation) return;
-  coordinator.sourceSettled(generation, outcome.ok, outcome.stalled === true);
   const settler = directCoordinationSettlers.get(generation);
   directCoordinationSettlers.delete(generation);
+  const own = settler ? undefined : coordinator.node(generation);
+  // A root this turn opened with beginTurn (OpenMausBot, #2204) ends through
+  // endTurn below, which parks it on its cards; the legacy sourceSettled
+  // would end it first and drop them. Every other generation keeps it.
+  const ownRoot = own && !own.parentId && (own.status === "source" || own.status === "running");
+  if (!ownRoot) coordinator.sourceSettled(generation, outcome.ok, outcome.stalled === true);
   const node = coordinator.node(settler?.nodeId ?? generation);
   const result = hostTurnResult(node, generation, outcome);
   // A turn the runtime dispatched settles through its run hook; the host's
   // own root turn (a person's, a routine's, a room member's) ends here.
-  if (settler) { settler.settle(result); return; }
+  if (settler) {
+    settler.settle(result);
+    if (settler.nodeId !== generation || !node?.goalRunId) return;
+  }
   if (node && !node.parentId && (node.status === "source" || node.status === "running")) coordinator.endTurn(generation, result);
 }
 
@@ -7938,6 +7947,10 @@ const coordinator: Coordinator = createCoordinator({
     // a card holds says so, once, where it was sent.
     busy: n => {
       if (reviewHolds(n)) return true;
+      // A root parked at the computer wait ceiling waits for its seat, not
+      // only for a free slot (#1651, #2204).
+      const seat = parkedSeats.get(n.id);
+      if (seat && !turnResources.free(seat)) return true;
       // A normal one-way send starts once its sender's turn ends (send_to_bot);
       // priority now starts at once when a slot is free.
       if (n.oneWay && n.priority !== "now" && n.parentId && ["source", "running"].includes(coordinator.node(n.parentId)?.status ?? "")) return true;
@@ -26450,6 +26463,11 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   containerComputerMcp,
   controlIntegration,
   coordinator,
+  directCoordinationSettlers,
+  handoffOpener,
+  requestWorkOrigin,
+  roomTurnBrief,
+  settleDirectCoordination,
   customMcpPrompt,
   dataIntegration,
   decideWorkplace,
@@ -26651,6 +26669,8 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
 
 const startTurnRunner = createStartTurn({
   AUTO_COMPUTER_RULES,
+  handoffOpener,
+  personForJoin,
   BOTMAIL_ENGINE_REFUSAL,
   BUILT_IN_BROWSER_SYSTEM_PROMPT,
   BUILT_IN_DATA_SYSTEM_PROMPT,
@@ -32799,6 +32819,50 @@ function joinPerson(threadId: string): string | undefined {
   const principalId = safetyPrincipal(threadId).principalId;
   if (principalId) return principalId;
   return IDENTITY.kind === "perspicax" ? undefined : "solo-owner";
+}
+
+/** joinPerson as a root's beginTurn field (the runtime joins per tree person). */
+function personForJoin(threadId: string): { person?: string } {
+  const person = joinPerson(threadId);
+  return person ? { person } : {};
+}
+
+/** The id of the external runtime's run, for its requester. */
+function externalRunId(grant: InternalCapability["externalRuntime"]): string {
+  if (grant && typeof grant === "object" && "threadId" in grant) return grant.threadId;
+  return "external";
+}
+
+/** Who hands work on from this turn, for the root the first hand-off of the
+ * turn opens (docs/runtime-contract.md §9): a standing external runtime
+ * (its results wait in its inbox, `reply: poll`), a routine run (a webhook's
+ * is outside lineage), a Cloud guest's conversation. Undefined for a
+ * person's chat, whose origin the request's own record settles (turnOrigin).
+ * Lost in the #1388 split with the test capability's beginTurn (#2204). */
+function handoffOpener(capability: Pick<InternalCapability, "botId" | "threadId" | "externalRuntime">, threadId: string): HandoffOpener | undefined {
+  if (capability.externalRuntime) {
+    return {
+      requester: { kind: "external_runtime", runId: externalRunId(capability.externalRuntime), botId: capability.botId, threadId },
+      origin: { kind: "outside", source: "external_runtime", ref: threadId },
+    };
+  }
+  const run = activeRoutineRunForThread(threadId);
+  if (run) {
+    return {
+      requester: { kind: "routine_run", runId: run.id, botId: run.botId, threadId },
+      origin: run.triggerSource === "webhook"
+        ? { kind: "outside", source: "webhook", ref: run.routineId }
+        : { kind: "routine", source: "routine", ref: run.routineId },
+    };
+  }
+  if (cloudGuestDriven(threadId)) {
+    const guest = threadPersonKey(threadId);
+    return {
+      requester: { kind: "person", botId: capability.botId, threadId },
+      origin: { kind: "outside", source: "guest", ref: threadId, ...(guest ? { onBehalfOf: guest } : {}) },
+    };
+  }
+  return undefined;
 }
 
 /** The admitted request, not a later room line. This changes only the

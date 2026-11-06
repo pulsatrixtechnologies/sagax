@@ -224,6 +224,11 @@ export function createClaimRoomMemberTurn(host: GroupMemberTurnHost) {
     resolveSurface,
     roomStallCompletions,
     roomTurnApprovalMode,
+    roomTurnBrief,
+    coordinator,
+    directCoordinationSettlers,
+    handoffOpener,
+    requestWorkOrigin,
     store,
     toolScopeForTurn,
     turnProvider,
@@ -284,7 +289,7 @@ export function createClaimRoomMemberTurn(host: GroupMemberTurnHost) {
       orchestration.result.outcome = "busy";
       return true;
     }
-    const message = `${readyBot.name}'s settings changed while starting — skipped this round`;
+    const message = `${readyBot.name}'s settings changed while starting  -  skipped this round`;
     store.appendMessage(threadId, {
       role: "bot",
       kind: "activity",
@@ -300,7 +305,7 @@ export function createClaimRoomMemberTurn(host: GroupMemberTurnHost) {
       orchestration.result.outcome = "busy";
       return true;
     }
-    const message = `${bot.name}'s computer provider is being updated — skipped this round`;
+    const message = `${bot.name}'s computer provider is being updated  -  skipped this round`;
     store.appendMessage(threadId, {
       role: "bot",
       kind: "activity",
@@ -315,7 +320,7 @@ export function createClaimRoomMemberTurn(host: GroupMemberTurnHost) {
       orchestration.result.outcome = "busy";
       return true;
     }
-    const message = `${bot.name}'s cloud computer is being changed — skipped this round`;
+    const message = `${bot.name}'s cloud computer is being changed  -  skipped this round`;
     store.appendMessage(threadId, {
       role: "bot",
       kind: "activity",
@@ -333,7 +338,7 @@ export function createClaimRoomMemberTurn(host: GroupMemberTurnHost) {
       orchestration.result.outcome = "busy";
       return true;
     }
-    const message = `${bot.name} became busy in another conversation — skipped this round`;
+    const message = `${bot.name} became busy in another conversation  -  skipped this round`;
     store.appendMessage(threadId, {
       role: "bot",
       kind: "activity",
@@ -351,6 +356,25 @@ export function createClaimRoomMemberTurn(host: GroupMemberTurnHost) {
   groupSpeakers.set(threadId, roomSpeaker);
   store.patchGroup(readyGroup.id, { busyBotId: bot.id });
   orchestration?.onClaimed?.();
+  // Every room turn is a root of the runtime (OpenMausBot beginTurn, #2204):
+  // a node the runtime dispatched settles through its run hook, a hand-off
+  // into the room keeps its own node, any other turn opens its root here and
+  // ends it at the finally (it parks on the computer or on its cards there).
+  if (orchestration?.coordination) {
+    directCoordinationSettlers.set(internalGeneration, { nodeId: orchestration.coordination.id, settle: orchestration.coordination.settle });
+  } else if (!orchestration?.roomHandoffId) {
+    const latestUser = [...store.activePath(threadId)].reverse().find(
+      (message) => message.role === "user" && message.kind === "text" && message.text,
+    );
+    const opener = handoffOpener({ botId: bot.id, threadId }, threadId);
+    coordinator.beginTurn({
+      id: internalGeneration, address: { groupId: readyGroup.id, threadId, botId: bot.id },
+      brief: roomTurnBrief(threadId, bot, hop > 0 && !orchestration ? hop : 0, latestUser),
+      level: preparedApprovalMode, ...(opener ? { opener } : {}), origin: requestWorkOrigin({ line: latestUser }),
+      ...(orchestration?.goalRunId ? { goalRunId: orchestration.goalRunId } : {}),
+    });
+  }
+  ctx.roomRootOpened = !orchestration?.roomHandoffId;
   // The stall completion handler only exists once the provider turn runs
   // (registered at dispatch below), but this watch is armed at claim. Latch
   // a stall that fires during setup  -  browser, boat, and VM mounts can all

@@ -7,6 +7,7 @@ import type { TurnState, PrepareResult } from "./start-turn-state.ts";
 export function createPrepareClaimStartTurn(host: StartTurnHost) {
   const {
     IDENTITY,
+    approvalModeForTurn,
     beginInternalCapabilityGeneration,
     computerSelectionTurns,
     coordinator,
@@ -18,11 +19,13 @@ export function createPrepareClaimStartTurn(host: StartTurnHost) {
     directTurnGenerationByThread,
     effectiveBotOwner,
     guestDrivenTurns,
+    handoffOpener,
     inheritedTeamComputer,
     orgSpeakerPrincipal,
     peerHopTurn,
     peerOwnerPrincipal,
     personAskAt,
+    personForJoin,
     phoneToolTaintedThreads,
     remoteComputerForTurn,
     requestWorkOrigin,
@@ -170,6 +173,17 @@ export function createPrepareClaimStartTurn(host: StartTurnHost) {
   directTurnDispatchClaims.set(state.threadId, { id: state.dispatchClaimId, botId: state.botId, threadId: state.threadId, phase: "setup", ...(state.warmOnly ? { warm: true } : {}) });
   directTurnBots.set(state.threadId, state.bot);
   beginInternalCapabilityGeneration(state.threadId, state.dispatchClaimId);
+  // Every turn a root (OpenMausBot beginTurn, #2204): the request's own
+  // turn opens its root under the dispatch claim id, so the hand-offs it
+  // makes, the cards it leaves and its end all key on it. A coordinated
+  // turn runs its node instead, a card continuation runs the parked root
+  // again (unless it is a goal run's step), and a warm is not work.
+  if (!state.warmOnly && !state.opts?.coordination && !state.opts?.compactOnly && (!state.opts?.cardContinuation || state.opts.goalRunId)) {
+    const opener = handoffOpener({ botId: state.bot.id, threadId: state.threadId }, state.threadId);
+    coordinator.beginTurn({ id: state.dispatchClaimId, address: { botId: state.bot.id, threadId: state.threadId }, brief: state.resolvedImages?.text ?? state.text,
+      level: approvalModeForTurn(state.bot, state.commsDepth > 0, state.threadId), ...(opener ? { opener } : {}), origin: requestOrigin,
+      ...(state.opts?.goalRunId ? { goalRunId: state.opts.goalRunId } : {}), ...personForJoin(state.threadId) });
+  }
   // The surface paragraph is part of the stable prompt. A call warm has no
   // saved user row, so it cannot register a selection, but the first spoken
   // turn will. Predict that paragraph or the engine relaunches on the first

@@ -11,6 +11,7 @@ export function createFinishGroupMemberTurn(host: GroupMemberTurnHost) {
     PlaceUnavailableError,
     activeGroupSpeaker,
     coordinator,
+    directCoordinationSettlers,
     drainComputerResumes,
     drainQueuedSends,
     drainSecretResumes,
@@ -23,6 +24,7 @@ export function createFinishGroupMemberTurn(host: GroupMemberTurnHost) {
     releaseTurnResources,
     retryDelegationsWaitingOn,
     revokeInternalCapabilityGeneration,
+    settleDirectCoordination,
     stopScreenPoller,
     store,
     turnResourceOwners,
@@ -51,7 +53,10 @@ if (providerDispatched) throw error;
     const isVariantError = typeof error === "object" && error !== null && (error as { code?: string }).code === "unsupported_model_variant";
     const isToolScopeError = typeof error === "object" && error !== null && (error as { code?: string }).code === "tool_scope";
     if (error instanceof ComputerWaitParked) {
-      registerComputerResume({
+      // A turn the runtime owns parks on the seat there and continues in
+      // place once it frees (#2204): only a turn outside it registers the
+      // host's own resume.
+      if (!coordinator.node(error.generation) && !directCoordinationSettlers.has(error.generation)) registerComputerResume({
         botId: bot.id,
         threadId,
         resource: error.resource,
@@ -97,7 +102,15 @@ if (providerDispatched) throw error;
     const releaseRoomVmLease = () => releaseRoomLease(ctx);
 unregisterSetupStall();
     revokeInternalCapabilityGeneration(threadId, internalGeneration);
-    coordinator.sourceSettled(internalGeneration, roomHandoffSourceSucceeded, roomHandoffSourceStalled || setupStallCause !== undefined);
+    if (ctx.roomRootOpened) {
+      // The root this turn opened at the claim ends here (OpenMausBot, #2204).
+      const stopReason = ctx.orchestration?.result?.stopReason;
+      settleDirectCoordination(internalGeneration, {
+        ok: roomHandoffSourceSucceeded,
+        ...(roomHandoffSourceStalled || setupStallCause !== undefined ? { stalled: true } : {}),
+        text: roomHandoffSourceSucceeded ? String(ctx.replyText ?? "").trim() : stopReason || ctx.setupStallCause || String(ctx.replyText ?? "").trim() || "The turn did not run",
+      });
+    } else coordinator.sourceSettled(internalGeneration, roomHandoffSourceSucceeded, roomHandoffSourceStalled || setupStallCause !== undefined);
     if (!retainRoomVmLease) releaseRoomVmLease();
     if (!providerDispatched && roomSpeaker && groupSpeakers.get(threadId) === roomSpeaker) {
       groupSpeakers.delete(threadId);

@@ -554,6 +554,12 @@ const __BASE_VERSION__: string;
       /** Points this computer's file manager at a file a bot linked outside
        * its workspace, without opening or reading it. Local app only. */
       revealInFolder?(filePath: string): Promise<"shown" | "missing" | "invalid">;
+      /** Opens a file a bot wrote with this computer's default app (a leading
+       * ~ is the home folder). Local app only. */
+      openLocalFile?(filePath: string): Promise<"opened" | "missing" | "failed" | "invalid">;
+      /** For each path, its absolute form when it exists on this computer,
+       * else null. Local app only; a paired window gets an empty list. */
+      localFilesExist?(filePaths: string[]): Promise<Array<string | null>>;
       /** Opens a PDF the viewer shows in this computer's default PDF app:
        * main writes the bytes to a new private temp .pdf and opens it.
        * Resolves true, or rejects with a short message. */

@@ -532,6 +532,11 @@ const bridge = {
   /** Point the file manager at a file a bot linked outside its workspace,
    * without opening it. Resolves "shown", "missing" or "invalid". */
   revealInFolder: (filePath) => ipcRenderer.invoke("desktop:reveal-file", filePath),
+  /** Open a file a bot wrote with this computer's default app. Resolves
+   * "opened", "missing", "failed" or "invalid". A leading ~ is the home folder. */
+  openLocalFile: (filePath) => ipcRenderer.invoke("desktop:open-file", filePath),
+  /** For each path, its absolute form when it exists on this computer, else null. */
+  localFilesExist: (filePaths) => ipcRenderer.invoke("desktop:files-exist", filePaths),
   /** Store a provider credential with OS-backed encryption. */
   setCredential: (name, value) => ipcRenderer.invoke("credential:set", name, value),
 

@@ -98,9 +98,70 @@ function unique(paths: string[]): string[] {
   return [...new Set(paths)].slice(0, MAX_FILES_PER_CALL);
 }
 
+/** A tool that runs a shell command: Claude's Bash, Codex's exec, pi's bash,
+ * ACP "execute" tools and the usual terminal tool names. */
+export function isShellTool(title: string | undefined, kind?: string): boolean {
+  if (kind === "execute") return true;
+  const bare = (title ?? "").trim().split("__").at(-1)!.toLowerCase();
+  return /^(?:bash|shell|sh|zsh|powershell|pwsh|terminal|exec(?:_command)?|run_(?:terminal|shell)_(?:cmd|command)|local_shell)$/.test(bare);
+}
+
+function shellCommandOf(input: unknown): string {
+  if (typeof input === "string") return input;
+  if (!input || typeof input !== "object") return "";
+  const fields = input as Record<string, unknown>;
+  const command = fields.command ?? fields.cmd ?? fields.script;
+  if (typeof command === "string") return command;
+  // Codex: ["bash", "-lc", "<script>"].
+  if (Array.isArray(command)) return command.filter((part): part is string => typeof part === "string").join(" ");
+  return "";
+}
+
+function shellWord(token: string | undefined): string | null {
+  if (!token) return null;
+  const word = token.replace(/^(['"])(.*)\1$/, "$2");
+  // Variables, substitutions, globs, descriptors and devices are not a file the bot made.
+  if (!word || /[$`*?{}()<>|;&"']/.test(word) || word.startsWith("-") || word.startsWith("/dev/") || /^&?\d+$/.test(word)) return null;
+  return cleanPath(word);
+}
+
+/** The files a shell command visibly writes: redirect targets (> and >>),
+ * tee targets, and -o / --output. Best effort from the command text: a file
+ * a script writes some other way stays unlinked, which only means no link. */
+export function shellWrittenFiles(command: string): string[] {
+  if (!command || command.length > 64_000) return [];
+  const found: string[] = [];
+  // A heredoc body is data, not commands: drop it before reading redirects.
+  const script = command.replace(/<<-?[ \t]*(['"]?)(\w+)\1[^\n]*\n[\s\S]*?\n[ \t]*\2[ \t]*(?=\n|$)/g, (match) => match.slice(0, match.indexOf("\n")));
+  const redirect = /(?:^|[^<>&\d])\d?>>?\|?[ \t]*("[^"\n]+"|'[^'\n]+'|[^\s;&|<>()]+)/g;
+  for (const match of script.matchAll(redirect)) {
+    const path = shellWord(match[1]);
+    if (path) found.push(path);
+  }
+  const tokens = script.split(/\s+/);
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i]!;
+    if (/(?:^|\/)tee$/.test(token)) {
+      for (let j = i + 1; j < tokens.length && !/^[|;&]/.test(tokens[j]!); j += 1) {
+        if (tokens[j]!.startsWith("-")) continue;
+        const path = shellWord(tokens[j]!.replace(/[;&|]+$/, ""));
+        if (path) found.push(path);
+      }
+    } else if (token === "-o" || token === "--output" || token === "--outfile") {
+      const path = shellWord(tokens[i + 1]?.replace(/[;&|]+$/, ""));
+      if (path) found.push(path);
+    } else if (/^--(?:output|outfile)=/.test(token)) {
+      const path = shellWord(token.slice(token.indexOf("=") + 1).replace(/[;&|]+$/, ""));
+      if (path) found.push(path);
+    }
+  }
+  return unique(found);
+}
+
 /** The files a tool call writes, read from its raw arguments at the driver.
  * `kind` is ACP's tool kind, where "edit" marks a write whatever the title. */
 export function writtenFilesFromToolInput(title: string | undefined, input: unknown, kind?: string): string[] {
+  if (isShellTool(title, kind)) return shellWrittenFiles(shellCommandOf(input));
   if (kind !== "edit" && !isWriteTool(title)) return [];
   if (title === "edit" && input && typeof input === "object" && !Array.isArray(input)) {
     // Codex's object form keys each change by its path.
@@ -117,7 +178,15 @@ export function writtenFilesFromToolInput(title: string | undefined, input: unkn
  * the bounded display preview the message kept. A preview cut short is no
  * longer JSON, so the first path field is recovered from its text. */
 export function writtenFilesFromPreview(title: string | undefined, preview: string | undefined): string[] {
-  if (!preview || !isWriteTool(title)) return [];
+  if (!preview) return [];
+  if (isShellTool(title)) {
+    try {
+      return writtenFilesFromToolInput(title, JSON.parse(preview));
+    } catch {
+      return [];
+    }
+  }
+  if (!isWriteTool(title)) return [];
   try {
     return writtenFilesFromToolInput(title, JSON.parse(preview));
   } catch {

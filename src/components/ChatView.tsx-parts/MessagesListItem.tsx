@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { openBot, openThread, type Action, type Bot, type ConfigStatus, type Group, type InstanceInfo, type Message } from "@/state/store";
 import { isCancelledTranscriptRow } from "../../../shared/client-cancel";
 import { isPureLeakedSystemHarnessMessage } from "../../../shared/system-message-guard.ts";
-import { failedTurnCause, isPreSendRefusal } from "@/lib/failed-turn";
+import { failedTurnCause, isEngineLimitFailure, isPreSendRefusal } from "@/lib/failed-turn";
 import { peerLine, peerRequest } from "@/lib/peer-message";
 import { exchangeJumpStays, startsNewStretch, visibleEdge } from "@/lib/bot-exchange";
 import { voiceCallVisibleSpan } from "@/lib/voice-call-transcript";
@@ -289,6 +289,7 @@ export function MessagesListItem({
     if (m.githubConnect && m.role === "bot" && m.kind === "text") {
       return <MessageBoundary fallbackText={m.text ?? ""}><GithubConnectCard card={m.githubConnect} /></MessageBoundary>;
     }
+    // 2026-11-05: what a bot's turn elsewhere left for the person (src/components/AttentionCard.tsx)
     if (m.attention && m.role === "bot" && m.kind === "text") {
       return <MessageBoundary fallbackText={m.text ?? ""}><AttentionRow message={m} /></MessageBoundary>;
     }
@@ -346,6 +347,8 @@ export function MessagesListItem({
         // plain tool runs stay out unless Settings → Tool calls is on.
         if (isTurnStoppedNotice(m)) return null;
         if (m.tool && failedTurnCause(m.tool.name) !== null) {
+          // Limit/credit: the composer says so; hide the chat error row too.
+          if (isEngineLimitFailure(m.tool)) return null;
           // #2013: refused before any prompt went out: the composer says it
           if (isPreSendRefusal(m.tool)) return null;
           return (

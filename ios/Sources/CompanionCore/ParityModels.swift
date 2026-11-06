@@ -132,10 +132,23 @@ public struct ThreadFile: Decodable, Hashable, Identifiable, Sendable {
     /// Pinned in the Library tab; kept on the server, so it follows the
     /// person across devices (`POST /api/threads/:id/files/:fileId/pin`).
     public var pinned: Bool
+    /// A person's Library (#2117, GET /api/people/:id/library): the
+    /// conversation that owns the file. Absent on a bot or group Library.
+    public var threadId: String?
+    /// The room that conversation belongs to (person Library only).
+    public var groupId: String?
+    /// That room's name (person Library only).
+    public var groupName: String?
 
-    private enum CodingKeys: String, CodingKey { case id, messageId, source, name, mime, at, size, available, path, localPath, pinned }
+    private enum CodingKeys: String, CodingKey {
+        case id, messageId, source, name, mime, at, size, available, path, localPath, pinned, threadId, groupId, groupName
+    }
 
-    public init(id: String, messageId: String = "", source: Source, name: String, mime: String? = nil, at: Double, size: Int? = nil, available: Bool = true, path: String = "", localPath: String? = nil, pinned: Bool = false) {
+    public init(
+        id: String, messageId: String = "", source: Source, name: String, mime: String? = nil, at: Double,
+        size: Int? = nil, available: Bool = true, path: String = "", localPath: String? = nil, pinned: Bool = false,
+        threadId: String? = nil, groupId: String? = nil, groupName: String? = nil
+    ) {
         self.id = id
         self.messageId = messageId
         self.source = source
@@ -147,6 +160,9 @@ public struct ThreadFile: Decodable, Hashable, Identifiable, Sendable {
         self.path = path
         self.localPath = localPath
         self.pinned = pinned
+        self.threadId = threadId
+        self.groupId = groupId
+        self.groupName = groupName
     }
 
     public init(from decoder: Decoder) throws {
@@ -162,6 +178,9 @@ public struct ThreadFile: Decodable, Hashable, Identifiable, Sendable {
         path = try values.decodeIfPresent(String.self, forKey: .path) ?? ""
         localPath = try values.decodeIfPresent(String.self, forKey: .localPath)
         pinned = try values.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
+        threadId = try values.decodeIfPresent(String.self, forKey: .threadId)
+        groupId = try values.decodeIfPresent(String.self, forKey: .groupId)
+        groupName = try values.decodeIfPresent(String.self, forKey: .groupName)
     }
 
     /// Media tab when true, Files tab otherwise. Falls back to the extension

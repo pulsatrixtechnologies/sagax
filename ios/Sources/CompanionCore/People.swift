@@ -171,9 +171,25 @@ public extension CompanionClient {
     func openPeopleDM(principalId: String) async throws -> Room {
         try await send(openPeopleDMRequest(principalId: principalId), as: GroupResponse.self).group
     }
+
+    /// `GET /api/people/:id/library` (#2117): files of the rooms both people
+    /// are in, their direct conversation included.
+    func personLibraryRequest(personId: String) throws -> URLRequest {
+        try makeRequest("GET", "/api/people/\(personId)/library")
+    }
+
+    func personLibrary(personId: String) async throws -> [ThreadFile] {
+        try await send(personLibraryRequest(personId: personId), as: ThreadFilesResponse.self).files
+    }
 }
 
-// MARK: - The person sheet (person-panel.ts)
+// MARK: - The person sheet (person-panel.ts, PersonPanel.tsx #2117)
+
+/// Tabs of the person panel, desktop order: Profile, Library, Achievements.
+public enum PersonPanelTab: String, CaseIterable, Identifiable, Sendable {
+    case profile, library, achievements
+    public var id: String { rawValue }
+}
 
 public struct PersonSheetModel: Hashable, Sendable {
     public struct Team: Hashable, Sendable {
@@ -199,10 +215,10 @@ public struct PersonSheetModel: Hashable, Sendable {
     /// the sheet was opened from inside their direct conversation (it would
     /// only reopen it, the owner 2026-10-26). From a group or a list it stays.
     public var canMessage: Bool
-    /// "Manage in Perspicax": an admin only, http(s) only.
-    public var manageURL: URL?
+    /// Groups or bots in common: the In common section draws only then (#2117).
+    public var hasInCommon: Bool { !sharedRooms.isEmpty || !sharedBots.isEmpty }
 
-    public init(personId: String, directory: OrgDirectory?, state: CompanionState, viewerId: String, viewerIsAdmin: Bool, openedFromRoomId: String? = nil) {
+    public init(personId: String, directory: OrgDirectory?, state: CompanionState, viewerId: String, viewerIsAdmin: Bool = false, openedFromRoomId: String? = nil) {
         let id = People.norm(personId)
         let person = directory?.person(personId)
         self.personId = personId
@@ -226,10 +242,71 @@ public struct PersonSheetModel: Hashable, Sendable {
         } else {
             canMessage = false
         }
-        if viewerIsAdmin, let raw = person?.manageUrl, let url = URL(string: raw), url.scheme == "https" || url.scheme == "http" {
-            manageURL = url
-        } else {
-            manageURL = nil
+        // #2117: no Manage in Perspicax / console link on the person panel,
+        // even for an admin. viewerIsAdmin stays on the signature so call
+        // sites keep compiling; it no longer changes what the sheet shows.
+        _ = viewerIsAdmin
+    }
+}
+
+// MARK: - Person panel Achievements tab (AchievementsPanel.tsx)
+
+/// One tile of the person panel's Achievements tab.
+public struct PersonAchievementTile: Hashable, Identifiable, Sendable {
+    public var id: String { item.id }
+    public var item: AchievementDefinition
+    public var unlocked: Bool
+    public var unlockedAt: Double?
+    public var points: Int
+}
+
+public struct PersonAchievementCategory: Hashable, Identifiable, Sendable {
+    public var id: AchievementCategory { category }
+    public var category: AchievementCategory
+    public var tiles: [PersonAchievementTile]
+    public var unlocked: Int
+}
+
+/// Pure helpers for the person panel's Achievements tab (#2117).
+public enum PersonPanelAchievements {
+    /// How many recent unlocks the panel shows (desktop PANEL_RECENT).
+    public static let recentLimit = 4
+
+    /// Every achievement the panel may draw, by category in catalog order:
+    /// unlocked ones in colour, the others locked. A secret that is not
+    /// unlocked stays out, and a category left empty is dropped.
+    public static func categories(_ card: PublicAchievementCard) -> [PersonAchievementCategory] {
+        let unlocked = Dictionary(uniqueKeysWithValues: card.unlocked.map { ($0.id, $0) })
+        var byCategory: [AchievementCategory: PersonAchievementCategory] = [:]
+        var order: [AchievementCategory] = []
+        for item in AchievementDefinition.catalog {
+            let entry = unlocked[item.id]
+            if entry == nil && item.hidden { continue }
+            var group = byCategory[item.category] ?? PersonAchievementCategory(category: item.category, tiles: [], unlocked: 0)
+            if byCategory[item.category] == nil { order.append(item.category) }
+            let tile = PersonAchievementTile(
+                item: item,
+                unlocked: entry != nil,
+                unlockedAt: entry?.unlockedAt,
+                points: entry?.points ?? item.points
+            )
+            group.tiles.append(tile)
+            if entry != nil { group.unlocked += 1 }
+            byCategory[item.category] = group
         }
+        return order.compactMap { byCategory[$0] }.filter { !$0.tiles.isEmpty }
+    }
+
+    /// The last unlocks, newest first.
+    public static func recent(_ card: PublicAchievementCard, limit: Int = recentLimit) -> [PersonAchievementTile] {
+        let known = Dictionary(uniqueKeysWithValues: AchievementDefinition.catalog.map { ($0.id, $0) })
+        return card.unlocked
+            .compactMap { entry -> PersonAchievementTile? in
+                guard let item = known[entry.id] else { return nil }
+                return PersonAchievementTile(item: item, unlocked: true, unlockedAt: entry.unlockedAt, points: entry.points)
+            }
+            .sorted { ($0.unlockedAt ?? 0) > ($1.unlockedAt ?? 0) }
+            .prefix(limit)
+            .map { $0 }
     }
 }

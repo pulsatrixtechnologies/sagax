@@ -86,9 +86,15 @@ public enum LibraryEntry: Identifiable, Hashable, Sendable {
 
     public var id: String {
         switch self {
-        case let .file(file): "file:\(file.id)"
-        case let .artifact(artifact): "artifact:\(artifact.id)"
-        case let .page(page): "page:\(page.id)"
+        // A person's Library can list the same file id in two conversations
+        // (#2117); keep both rows distinct the way the desktop does.
+        case let .file(file):
+            if let threadId = file.threadId, !threadId.isEmpty { return "file:\(threadId):\(file.id)" }
+            return "file:\(file.id)"
+        case let .artifact(artifact):
+            return "artifact:\(artifact.id)"
+        case let .page(page):
+            return "page:\(page.id)"
         }
     }
 

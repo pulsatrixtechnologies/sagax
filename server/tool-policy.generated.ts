@@ -148,7 +148,6 @@ export const TOOL_POLICY_ROWS: readonly ToolPolicy[] = [
   {"method":"POST","kind":"exact","route":"/api/internal/remote-sessions/exec","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},
   {"method":"POST","kind":"exact","route":"/api/internal/remote-sessions/snapshot","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},
   {"method":"POST","kind":"exact","route":"/api/internal/request-credential","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},
-  {"method":"POST","kind":"exact","route":"/api/internal/request-sign-in","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},
   {"method":"POST","kind":"exact","route":"/api/internal/retry-thread","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},
   {"method":"ANY","kind":"exact","route":"/api/internal/room-targets","tier":"write","readOnly":false,"scope":"internal:write","defaultEnabled":true},
   {"method":"GET","kind":"exact","route":"/api/internal/room-targets","tier":"read","readOnly":true,"scope":"internal:read","defaultEnabled":true},

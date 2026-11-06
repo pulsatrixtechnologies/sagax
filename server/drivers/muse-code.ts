@@ -458,6 +458,7 @@ export const MuseCodeDriver: ProviderDriver<MuseConfig> = {
           const subject = approval.subject ?? {};
           const command = subject.command;
           state.pending.set(approval.approvalId, { kind: "approval", sessionId: approval.sessionId, approval });
+          // full-access: engine-bridge (answered in index.ts request.opened)
           emit({
             type: "request.opened", threadId, turnId: active.turnId, requestId: approval.approvalId, requestType: "permission",
             tool: approval.toolName || subject.toolName || subject.kind || "tool",

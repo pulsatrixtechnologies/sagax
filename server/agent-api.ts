@@ -403,6 +403,13 @@ export interface AgentApiDeps {
    * its own conversation with the agent (2026-10-29,
    * shared/agent-conversation.ts), reused across sends. */
   conversation(caller: AgentCaller, agentId: string): Promise<{ threadId: string } | Refusal>;
+  /**
+   * Grok bridge (#2193): when send_prompt carries bridge_thread_id, resolve
+   * the person's unified chat with the agent (never a separate agent thread),
+   * fence the prompt as untrusted bridge data, and bind the opaque bridge id.
+   * Absent: bridge_thread_id is refused.
+   */
+  bridgeConversation?(caller: AgentCaller, agentId: string, bridgeThreadId: string, prompt: string): Promise<{ threadId: string; prompt: string } | Refusal>;
   /** Put the prompt (and the staged files) into the conversation and start or
    * queue its turn. messageId is the stored prompt's id, when known. */
   post(caller: AgentCaller, agentId: string, threadId: string, prompt: string, files: FileInput[], wake?: PriorityDelivery): Promise<{ messageId: string | null } | Refusal>;
@@ -968,7 +975,7 @@ function createAgentApiHandlers(env: {
     },
 
     async send_prompt(caller, args, signal) {
-      const bad = onlyKeys(args, ["agent_id", "prompt", "mode", "timeout_ms", "on_busy", "files", "priority", "thread_id"]);
+      const bad = onlyKeys(args, ["agent_id", "prompt", "mode", "timeout_ms", "on_busy", "files", "priority", "thread_id", "bridge_thread_id"]);
       if (bad) return bad;
       const agentId = agentIdArg(args);
       if (isRefusal(agentId)) return agentId;
@@ -980,7 +987,22 @@ function createAgentApiHandlers(env: {
           hint: "Omit thread_id to use the default conversation, or pass the thread_id a previous send_prompt or await_turn returned.",
         });
       }
-      const prompt = typeof args.prompt === "string" ? args.prompt : "";
+      const bridgeThreadId = args.bridge_thread_id === undefined || args.bridge_thread_id === null || args.bridge_thread_id === ""
+        ? null
+        : args.bridge_thread_id;
+      if (bridgeThreadId !== null && (typeof bridgeThreadId !== "string" || bridgeThreadId.length > 128 || !/^[\w.\-:]+$/.test(bridgeThreadId))) {
+        return refuse(400, "bad_request", "bridge_thread_id is an opaque bridge thread id (at most 128 characters).", {
+          retryable: false,
+          details: { reason: "invalid_bridge_thread_id" },
+        });
+      }
+      if (bridgeThreadId !== null && continued !== null) {
+        return refuse(400, "bad_request", "Pass bridge_thread_id or thread_id, not both.", {
+          retryable: false,
+          details: { reason: "bridge_and_thread" },
+        });
+      }
+      let prompt = typeof args.prompt === "string" ? args.prompt : "";
       if (!prompt.trim() || prompt.length > PROMPT_MAX_CHARS) {
         return refuse(400, "bad_request", `prompt is 1 to ${PROMPT_MAX_CHARS} characters.`, {
           retryable: false,
@@ -1049,9 +1071,21 @@ function createAgentApiHandlers(env: {
       const agent = await reachable(caller, agentId);
       if (isRefusal(agent)) return agent;
       // The conversation the caller's sends go to (deps.conversation), unless
-      // it names one of its own conversations to continue.
+      // it names one of its own conversations to continue. bridge_thread_id
+      // (#2193) forces the person's unified chat and fences the prompt.
       let conversation: { threadId: string } | Refusal;
-      if (continued !== null) {
+      if (bridgeThreadId !== null) {
+        if (!deps.bridgeConversation) {
+          return refuse(400, "bad_request", "bridge_thread_id is not available on this server.", {
+            retryable: false,
+            details: { reason: "bridge_unavailable" },
+          });
+        }
+        const bridged = await deps.bridgeConversation(caller, agentId, bridgeThreadId, prompt);
+        if (isRefusal(bridged)) return bridged;
+        conversation = { threadId: bridged.threadId };
+        prompt = bridged.prompt;
+      } else if (continued !== null) {
         if (!deps.threads(caller, agentId).some((thread) => thread.threadId === continued)) {
           return refuse(404, "unknown_thread", "No conversation of yours with this agent has that id. Use the thread_id send_prompt or await_turn returned, or leave it out to start a new one.", {
             retryable: false,

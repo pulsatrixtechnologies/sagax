@@ -504,6 +504,9 @@ const appConfigSchema = z.object({
      * Absent means allowed; an admin turns it off in Settings >
      * Organization. Organization servers only; a solo server always allows. */
     allowVaultExport: z.boolean().optional(),
+    /** #2193: whether people may use their Linked Grok bridge. Absent
+     * means allowed; an admin turns it off without clearing sealed keys. */
+    allowGrokBridge: z.boolean().optional(),
     /** When the one-time pass, the first time the setting above was off,
      * set members' saved Auto and Auto-accept edits levels back to Ask
      * (server/approvals/member-auto-approval.ts). */
@@ -825,6 +828,8 @@ export interface AppConfig {
     confidentialThreadsByDefault?: boolean;
     memberAutoApproval?: boolean;
     allowVaultExport?: boolean;
+    /** #2193: org kill switch for the per-person Grok bridge. */
+    allowGrokBridge?: boolean;
     memberAutoResetAt?: number;
     pluginMarketplaces?: { mode: "any" } | { mode: "list"; allow: string[] };
     githubClientId?: string;

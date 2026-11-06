@@ -293,14 +293,19 @@ describe("approvals that follow the other engines", () => {
     await f.instance.adapter.respondToRequest(f.threadId, other.requestId!, { behavior: "deny" });
     await f.completed();
 
-    // #2091: a guest's turn meets the same session grants; who may answer the
-    // card is decided in index.ts (situation "origin"), not by stripping
-    // grants here. The kept write therefore runs without a card.
+    // Lot B (#2244): session grants stay with the conversation owner. A guest
+    // turn does not inherit them (person isolation); Always allow on the card
+    // still applies through index.ts request.opened (ownerRule).
     f.recorder.events.splice(0);
     await f.start({ guestConfined: true });
-    expect(await f.completed()).toMatchObject({ ok: true });
-    expect(opened()).toHaveLength(0);
-    expect(f.effects().map((effect) => effect.name)).toEqual(["one", "two", "three", "guest", "guest2"]);
+    const guest = await f.recorder.until((event) => event.type === "request.opened");
+    expect(guest).toMatchObject({ tool: "audit_write", allowSession: false });
+    expect(await f.instance.adapter.respondToRequest(f.threadId, guest.requestId!, { behavior: "allow", always: true })).toBe("allowed-once");
+    const again = await f.recorder.until((event) => event.type === "request.opened" && event.requestId !== guest.requestId);
+    expect(again).toMatchObject({ tool: "audit_write", allowSession: false });
+    await f.instance.adapter.respondToRequest(f.threadId, again.requestId!, { behavior: "deny" });
+    await f.completed();
+    expect(f.effects().map((effect) => effect.name)).toEqual(["one", "two", "three", "guest"]);
 
     // another conversation keeps nothing
     f.recorder.events.splice(0);
@@ -309,7 +314,7 @@ describe("approvals that follow the other engines", () => {
     expect(elsewhere).toMatchObject({ tool: "audit_write" });
     await f.instance.adapter.respondToRequest(elsewhere.threadId, elsewhere.requestId!, { behavior: "deny" });
     await f.completed();
-    expect(f.effects().map((effect) => effect.name)).toEqual(["one", "two", "three", "guest", "guest2"]);
+    expect(f.effects().map((effect) => effect.name)).toEqual(["one", "two", "three", "guest"]);
   });
 });
 

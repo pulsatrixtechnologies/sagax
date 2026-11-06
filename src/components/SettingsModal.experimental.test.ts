@@ -104,13 +104,14 @@ describe("Settings > Experimental", () => {
     const html = await render();
     expect(html).toContain('data-settings-group="experimental"');
     expect(html).not.toContain(">Experimental features</h3>");
-    // skill authoring on; browser moved to Computer (#2080 L3); three served switches off
+    // skill authoring on; browser on Computer (#2080 L3); three served switches off; no Decision model (#2093)
     expect(html).toContain("· 1 of 4 on");
     for (const feature of ["skillAuthoring", "dataWindow", "meetingNotetaker", "llmThreadTitles", "devPods"]) {
       expect(html, feature).toContain(`data-experimental-feature="${feature}"`);
     }
     expect(html).not.toContain('data-experimental-feature="browser"');
     expect(html).not.toContain('data-experimental-feature="decisionModel"');
+    expect(html).not.toContain('data-experimental-feature="browser"');
     expect(html).toContain('data-settings-card="experimental.developer"');
     expect(html).not.toContain("Early features may change");
     expect(html).not.toContain("Save a bot's verification run as a skill");

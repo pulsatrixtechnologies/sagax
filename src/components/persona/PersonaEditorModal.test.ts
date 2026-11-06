@@ -143,7 +143,7 @@ describe("bot profile page shell", () => {
     expect(html).toContain("data-slack-logo");
     expect(html).toContain("data-bot-profile-page");
     expect(html).not.toContain('aria-modal="true"');
-    expect(html).not.toContain("data-bot-profile-banner");
+    expect(html).toContain('data-bot-profile-banner=""');
     expect(html).toContain('data-bot-profile-hero=""');
     expect(html).toContain("data-bot-profile-audience");
     expect(tabsOf(html)).toEqual(TABS_ALL);
@@ -220,10 +220,13 @@ describe("bot profile page shell", () => {
     const html = render("overview");
     const hero = at(html, 'data-bot-profile-hero=""');
     expect(hero).toBeGreaterThan(0);
-    // the hero card itself (tinted stage, big mascot), no banner nor small avatar card
+    // the hero card itself (tinted stage, big mascot) over the lower edge of the mascot-colour banner
     expect(html.slice(hero)).toContain("data-mascot-hero");
-    expect(html).not.toContain("data-bot-profile-banner");
-    expect(html).not.toContain("-mt-[40px]");
+    const banner = at(html, 'data-bot-profile-banner=""');
+    expect(banner).toBeGreaterThan(0);
+    expect(banner).toBeLessThan(hero);
+    expect(html).toMatch(/data-bot-profile-banner="" data-bot-profile-banner-palette="(vivid|neutral)" style="--bot-profile-banner-color:#[0-9a-f]{6}" class="bot-profile-banner /i);
+    expect(html).toContain("-mt-[40px]");
     // name (28px), label under it, then the Appearance button, all inside the hero, before who sees it
     const heading = at(html, "data-mascot-heading");
     expect(heading).toBeGreaterThan(hero);
@@ -255,7 +258,8 @@ describe("bot profile page shell", () => {
     expect(barHtml).toContain("data-window-close");
     expect(barHtml).toContain("data-bot-profile-visibility");
     expect(barHtml).toContain("content-topbar");
-    expect(barHtml).toContain("bg-app");
+    // the bar carries the banner's top colour (opaque), one coloured header with the banner
+    expect(barHtml).toContain("bot-profile-banner-top");
     expect(barHtml).not.toContain("absolute");
   });
 

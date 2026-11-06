@@ -2789,6 +2789,30 @@ body {
   outline: none;
 }
 
+/* The profile banner is a soft wash of the mascot's colour (#2173): the
+   page passes its hex as --bot-profile-banner-color and the wash mixes it
+   with a pale base, darker at the top. The page's top bar carries the top
+   colour (.bot-profile-banner-top) so bar and banner read as one header. A
+   neutral mascot keeps a visible grey. light-dark() picks the base. */
+.bot-profile-banner,
+.bot-profile-banner-top {
+  --bot-profile-banner-base: light-dark(#ffffff, #f4f4f4);
+  --bot-profile-banner-from: color-mix(in srgb, var(--bot-profile-banner-color, #8e949e) 58%, var(--bot-profile-banner-base));
+}
+.bot-profile-banner {
+  background-image: linear-gradient(
+    180deg,
+    var(--bot-profile-banner-from) 0%,
+    color-mix(in srgb, var(--bot-profile-banner-color, #8e949e) 36%, var(--bot-profile-banner-base)) 100%
+  );
+}
+.bot-profile-banner-top {
+  background-color: var(--bot-profile-banner-from);
+}
+.bot-profile-banner[data-bot-profile-banner-palette="neutral"],
+.bot-profile-banner-top[data-bot-profile-banner-palette="neutral"] {
+  --bot-profile-banner-color: #8e949e;
+}
 /* A sidebar group header focused by a click, or handed focus back after its
    right-click menu, shows no frame; Tab and arrow keys still draw it. */
 [data-sidebar-section-header][data-pointer-focus]:focus-visible {

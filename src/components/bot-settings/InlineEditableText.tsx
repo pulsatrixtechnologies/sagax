@@ -116,7 +116,8 @@ export function InlineEditableText({
       )}
     >
       <span className={cn("min-w-0 truncate", (!shown || muted) && "text-ink-secondary")}>{shown || placeholder}</span>
-      <Pencil size={11} aria-hidden="true" className="shrink-0 text-ink-secondary opacity-0 transition-opacity group-hover/inline:opacity-100 group-focus-within/inline:opacity-100 touch:opacity-100" />
+      {/* the pencil overlays the right edge, outside the text: it never takes room at rest (#2126) */}
+      <Pencil size={11} aria-hidden="true" className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 text-ink-secondary opacity-0 transition-opacity group-hover/inline:opacity-100 group-focus-within/inline:opacity-100 touch:opacity-100" />
     </button>
   );
 }

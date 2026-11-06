@@ -426,7 +426,7 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
               onOpen={() => goTo("appearance")}
             />
           </div>
-          <h2 id="bot-profile-title" className="mt-2 flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-[22px] font-semibold leading-8 text-ink">
+          <h2 id="bot-profile-title" className="mt-2 flex min-w-0 flex-wrap items-baseline gap-x-0.5 text-[22px] font-semibold leading-8 text-ink">
             <InlineEditableText
               value={bot.name}
               required

@@ -61,6 +61,14 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   }
   if (/\/api\/bots\/[^/]+\/inbound-mail/.test(path)) return json({ available: true, address: "pepper@example.com", enabled: true });
   if (/\/api\/bots\/[^/]+\/reach-me/.test(path)) return json({ saved: true, settings: { channels: ["push"], hours: { always: true } }, channels: { push: { ready: true, devices: 1 } } });
+  // Knowledge tab: a couple of fictional skills so the list is not empty.
+  if (/\/api\/bots\/[^/]+\/skills$/.test(path)) return json({
+    skills: [
+      { name: "weekly-report", description: "Writes the weekly status report from the open tasks.", enabled: true, source: "taught", warnings: [] },
+      { name: "source-check", description: "Checks every claim against two sources before answering.", enabled: true, source: "imported", warnings: [] },
+    ],
+    staged: [], library: [], assignedSkills: [],
+  });
   if (path === "/api/messages") return json({ available: true, onThisMac: true, useMessages: false, permissions: { fullDiskAccess: "notAsked", automation: "notAsked" } });
   if (/\/api\/bots\/[^/]+\/(activity)/.test(path)) return json({ items: [], subagents: [], launchedAgents: [] });
   if (/\/api\/bots\/[^/]+\/task-list/.test(path)) return json({ tasks: [] });

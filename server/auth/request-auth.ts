@@ -1049,6 +1049,10 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // defaults, and keeps a server folder, visibility and a backup restore
   // an admin's. The organization library's Add stays admin.
   { methods: ["POST"], path: /^\/api\/teams\/import$/ },
+  // #2045: a person exports their own team (handler packs only their bots
+  // and section id). Organization library publish stays admin inside the
+  // handler when the body asks for it.
+  { methods: ["POST"], path: /^\/api\/teams\/export$/ },
   // Slice 8: a person copies their own bots from a solo Sagax (the handler
   // checks the session, the caller's right to create bots and the copy).
   { methods: ["POST"], path: /^\/api\/org\/import$/, feature: "orgDirectory" },

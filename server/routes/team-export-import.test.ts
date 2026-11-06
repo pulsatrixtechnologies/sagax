@@ -134,4 +134,28 @@ describe("createTeamExportImportRoutes", () => {
       body: { error: "Restoring a backup stays an admin's. Import a bot or a team file instead.", code: "admin_only" },
     });
   });
+
+  it("#2045: export sees only the caller's team; another person's same name is 404", async () => {
+    const aliceBot = { id: "a1", name: "Aria", hidden: false, section: "Ops", ownerUserId: "alice" } as BotRecord;
+    const bobBot = { id: "b1", name: "Boris", hidden: false, section: "Ops", ownerUserId: "p1", color: "blue" } as BotRecord;
+    const route = createTeamExportImportRoutes(deps({
+      isPerspicax: () => true,
+      bots: () => [aliceBot, bobBot],
+      sections: () => ["Ops"],
+      sectionsFor: () => ["Ops"],
+      ownsBot: (row, auth) => (row.ownerUserId ?? "").toLowerCase() === (auth.kind === "session" ? auth.session.principalId : ""),
+      readSectionContextFor: () => ({ text: "Bob brief" }),
+    }));
+    const foreign = ctx("/api/teams/export", "POST", { format: "package", version: 2, team: "AliceOnly" }, member);
+    await route(foreign.context);
+    expect(foreign.sent[0]?.status).toBe(404);
+
+    const own = ctx("/api/teams/export", "POST", { format: "package", version: 2, team: "Ops", dryRun: true }, member);
+    await route(own.context);
+    expect(own.sent[0]?.status).toBe(200);
+    const document = (own.sent[0]?.body as { document?: { package?: { agents?: Array<{ name?: string }> } } } | undefined)?.document;
+    const names = document?.package?.agents?.map((agent) => agent.name) ?? [];
+    expect(names).toContain("Boris");
+    expect(names).not.toContain("Aria");
+  });
 });

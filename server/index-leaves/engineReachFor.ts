@@ -10,7 +10,7 @@ function engineReachFor(bot: BotRecord, instance: Parameters<typeof withholdHost
   const host = getHost();
   const input = host.accountConnectorInput(bot, instance, speaker, via, slot);
   if (claudeAiConnectorsForTurn(input)) {
-    const account = host.claudeAccountForPrincipal(connectorPrincipalFor(input));
+    const account = host.claudeAccountForPrincipal(connectorPrincipalFor(input), instance.instanceId);
     if ("unavailable" in account) return [];
     // a cold inventory is unknown: read in the background, never waited on
     const inventory = host.claudeAiInventory.peek(account.key, { cli: account.cli, env: account.env });
@@ -24,7 +24,7 @@ function engineReachFor(bot: BotRecord, instance: Parameters<typeof withholdHost
   if (grokCloudConnectorsForTurn(input) && host.withholdHostToolsFor(instance) && bot.toolScope === undefined) {
     const principal = connectorPrincipalFor(input);
     if (!principal || !isPrincipalId(principal)) return null;
-    const reach = grokAccountReach(host.principalLoginDir(principal, "grokAgent", slot));
+    const reach = grokAccountReach(host.principalLoginDir(principal, "grokAgent", slot, instance.instanceId));
     if (!reach) {
       host.engineLogins?.warmReach(principal, instance.instanceId, slot);
       return null;

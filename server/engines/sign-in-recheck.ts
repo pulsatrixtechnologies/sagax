@@ -19,22 +19,27 @@ export const SIGN_IN_RECHECK_COOLDOWN_MS = 60_000;
 
 export interface SignInRecheckDeps {
   /** One renew of this person's sign-in; true when it left a usable token. */
-  renew(principalId: string, driver: string): Promise<boolean>;
-  markExpired(principalId: string, driver: string, slot: LoginSlot): void;
-  clearExpired(principalId: string, driver: string, slot: LoginSlot): void;
-  expired(principalId: string, driver: string, slot: LoginSlot): boolean;
+  /** #2384: `instanceId` is the account (an added `<prefix>-<uuid>` has its
+   * own folder); undefined is the provider's own account. */
+  renew(principalId: string, driver: string, instanceId?: string): Promise<boolean>;
+  markExpired(principalId: string, driver: string, slot: LoginSlot, instanceId?: string): void;
+  clearExpired(principalId: string, driver: string, slot: LoginSlot, instanceId?: string): void;
+  expired(principalId: string, driver: string, slot: LoginSlot, instanceId?: string): boolean;
+  /** #2384: every account folder of this person for a driver (heal walks
+   * each); without it, the provider's own account only. */
+  accounts?(principalId: string, driver: string): Array<string | undefined>;
   /** The sign-in works again: resume what waited on a reconnect. */
-  onRestored?(principalId: string, driver: string): void;
+  onRestored?(principalId: string, driver: string, instanceId?: string): void;
   now?: () => number;
 }
 
 export interface SignInRecheck {
   /** The provider refused this sign-in: renew once, mark only on failure.
    * True when the sign-in works again (the renew left a usable token). */
-  refused(principalId: string, driver: string, slot?: LoginSlot): Promise<boolean>;
+  refused(principalId: string, driver: string, slot?: LoginSlot, instanceId?: string): Promise<boolean>;
   /** Whether a refusal now gets a renew (a renewable engine, its primary
    * sign-in, no failed renew in the cooldown). False: it marks at once. */
-  renewable(principalId: string, driver: string, slot?: LoginSlot): boolean;
+  renewable(principalId: string, driver: string, slot?: LoginSlot, instanceId?: string): boolean;
   /** At start: one renew for each person whose sign-in is marked expired. */
   heal(people: readonly string[]): Promise<number>;
 }
@@ -44,15 +49,18 @@ export function createSignInRecheck(deps: SignInRecheckDeps): SignInRecheck {
   const inflight = new Map<string, Promise<boolean>>();
   const failedAt = new Map<string, number>();
 
-  const renewOnce = (principalId: string, driver: string): Promise<boolean> => {
-    const key = `${principalId}/${driver}`;
+  const keyOf = (principalId: string, driver: string, instanceId?: string): string =>
+    instanceId ? `${principalId}/${driver}/${instanceId}` : `${principalId}/${driver}`;
+
+  const renewOnce = (principalId: string, driver: string, instanceId?: string): Promise<boolean> => {
+    const key = keyOf(principalId, driver, instanceId);
     const existing = inflight.get(key);
     if (existing) return existing;
-    const flight = deps.renew(principalId, driver).catch(() => false).then((ok) => {
+    const flight = deps.renew(principalId, driver, instanceId).catch(() => false).then((ok) => {
       if (ok) {
         failedAt.delete(key);
-        deps.clearExpired(principalId, driver, "primary");
-        deps.onRestored?.(principalId, driver);
+        deps.clearExpired(principalId, driver, "primary", instanceId);
+        deps.onRestored?.(principalId, driver, instanceId);
       } else {
         failedAt.set(key, now());
       }
@@ -62,31 +70,33 @@ export function createSignInRecheck(deps: SignInRecheckDeps): SignInRecheck {
     return flight;
   };
 
-  const renewable = (principalId: string, driver: string, slot: LoginSlot = "primary"): boolean => {
+  const renewable = (principalId: string, driver: string, slot: LoginSlot = "primary", instanceId?: string): boolean => {
     // No renew path (Grok, Kimi, a second sign-in): the refusal stands.
     if (slot !== "primary" || !RENEWABLE.has(driver)) return false;
-    const key = `${principalId}/${driver}`;
+    const key = keyOf(principalId, driver, instanceId);
     const last = failedAt.get(key);
     return !(last !== undefined && now() - last < SIGN_IN_RECHECK_COOLDOWN_MS && !inflight.has(key));
   };
 
   return {
     renewable,
-    async refused(principalId, driver, slot = "primary") {
-      if (!renewable(principalId, driver, slot)) {
-        deps.markExpired(principalId, driver, slot);
+    async refused(principalId, driver, slot = "primary", instanceId) {
+      if (!renewable(principalId, driver, slot, instanceId)) {
+        deps.markExpired(principalId, driver, slot, instanceId);
         return false;
       }
-      if (await renewOnce(principalId, driver)) return true;
-      deps.markExpired(principalId, driver, slot);
+      if (await renewOnce(principalId, driver, instanceId)) return true;
+      deps.markExpired(principalId, driver, slot, instanceId);
       return false;
     },
     async heal(people) {
       let restored = 0;
       for (const principalId of people) {
         for (const driver of RENEWABLE) {
-          if (!deps.expired(principalId, driver, "primary")) continue;
-          if (await renewOnce(principalId, driver)) restored += 1;
+          for (const instanceId of deps.accounts?.(principalId, driver) ?? [undefined]) {
+            if (!deps.expired(principalId, driver, "primary", instanceId)) continue;
+            if (await renewOnce(principalId, driver, instanceId)) restored += 1;
+          }
         }
       }
       return restored;
@@ -102,6 +112,8 @@ export interface SignInRefusalInput {
   principalId: string;
   driver: string;
   slot?: LoginSlot;
+  /** #2384: the account refused (an added account has its own folder). */
+  instanceId?: string;
   /** Show the expired card (and its notice): the renew really failed. */
   show(): void;
   /** The renew worked: run the refused turn again. False when it cannot
@@ -120,9 +132,9 @@ export interface SignInRefusalInput {
  * caller leaves its failure bookkeeping (incident, notice) to this. */
 export function settleSignInRefusal(recheck: SignInRecheck | null | undefined, input: SignInRefusalInput): boolean {
   const slot = input.slot ?? "primary";
-  if (!recheck || !recheck.renewable(input.principalId, input.driver, slot)) {
+  if (!recheck || !recheck.renewable(input.principalId, input.driver, slot, input.instanceId)) {
     input.show();
-    void recheck?.refused(input.principalId, input.driver, slot).catch(() => false);
+    void recheck?.refused(input.principalId, input.driver, slot, input.instanceId).catch(() => false);
     return false;
   }
   let settled = false;
@@ -138,6 +150,6 @@ export function settleSignInRefusal(recheck: SignInRecheck | null | undefined, i
     return timer;
   });
   setTimer(() => settle(false), input.holdMs ?? SIGN_IN_REFUSAL_HOLD_MS);
-  void recheck.refused(input.principalId, input.driver, slot).then(settle, () => settle(false)).catch(reportBackgroundError);
+  void recheck.refused(input.principalId, input.driver, slot, input.instanceId).then(settle, () => settle(false)).catch(reportBackgroundError);
   return true;
 }

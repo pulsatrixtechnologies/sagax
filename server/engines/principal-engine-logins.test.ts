@@ -371,3 +371,50 @@ describe("loginCliFor", () => {
     expect(loginCliFor("other", undefined, undefined)).toBe("");
   });
 });
+
+// #2384: person-level uses (reconnect, deposit, Connect card, achievements)
+// read only the provider's own account; an added account signed in alone
+// counted as not signed in.
+describe("#2384: person-level reads see every account", () => {
+  for (const provider of PROVIDERS) {
+    it(`${provider.label}: an added account alone counts as signed in, its expiry too`, async () => {
+      const { logins, made } = harness();
+      const b = `${provider.prefix}-${ACCOUNT_B}`;
+      expect(logins.signedInAny(A, provider.driver)).toBe(false);
+      expect(logins.accountInstances(A, provider.driver)).toEqual([undefined]);
+      await logins.start(A, b, "session-a");
+      await made[0]!.finish();
+      expect(logins.signedIn(A, provider.driver)).toBe(false);
+      expect(logins.signedInAny(A, provider.driver)).toBe(true);
+      expect(logins.accountInstances(A, provider.driver)).toEqual([undefined, b]);
+      expect(logins.signedInAccounts(A, provider.driver)).toEqual([b]);
+      expect(logins.preferredAccount(A, provider.driver)).toBe(b);
+      expect(logins.expiredAny(A, provider.driver)).toBe(false);
+      logins.markExpired(A, provider.driver, "primary", b);
+      expect(logins.expiredAny(A, provider.driver)).toBe(true);
+      expect(logins.expired(A, provider.driver)).toBe(false);
+    });
+  }
+
+  it("prefers a working account over an expired one, the provider's own first", async () => {
+    const { logins, made } = harness();
+    const a = `claude-${ACCOUNT_A}`;
+    await logins.start(A, "claude", "session-a");
+    await made[0]!.finish();
+    await logins.start(A, a, "session-a");
+    await made[1]!.finish();
+    expect(logins.preferredAccount(A, "claudeAgent")).toBeUndefined();
+    logins.markExpired(A, "claudeAgent");
+    expect(logins.preferredAccount(A, "claudeAgent")).toBe(a);
+    logins.markExpired(A, "claudeAgent", "primary", a);
+    expect(logins.preferredAccount(A, "claudeAgent")).toBeUndefined();
+  });
+
+  it("an account folder of another driver is not listed", async () => {
+    const { logins, made } = harness();
+    await logins.start(A, `chatgpt-${ACCOUNT_A}`, "session-a");
+    await made[0]!.finish();
+    expect(logins.accountInstances(A, "claudeAgent")).toEqual([undefined]);
+    expect(logins.signedInAny(A, "claudeAgent")).toBe(false);
+  });
+});

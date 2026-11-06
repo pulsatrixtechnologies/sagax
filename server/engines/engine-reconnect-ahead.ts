@@ -98,7 +98,9 @@ export interface EngineReconnectAheadInput {
   /** Who pays for this bot's turns (owner / runAs). */
   botPayer: (botId: string) => string | null | undefined;
   /** Cheap: that person's sign-in for this driver is marked expired. */
-  expired: (principalId: string, driver: string) => boolean;
+  /** #2384: with `botId`, the account that bot runs on; without, any of
+   * the person's accounts on this driver. */
+  expired: (principalId: string, driver: string, botId?: string) => boolean;
   /** Already notified for this expired spell: `${principalId}\0${engineLabel}`. */
   alreadyNotified?: ReadonlySet<string>;
   aheadMs?: number;
@@ -141,7 +143,7 @@ export function engineReconnectAhead(input: EngineReconnectAheadInput): EngineRe
     if (!driver || typeof driver !== "string") continue;
     const engineName = LOGIN_ENGINE_LABEL[driver as LoginDriver] ?? driver;
     const payer = (routine.runAs?.trim() || input.botPayer(routine.botId)?.trim() || "");
-    if (!payer || !input.expired(payer, driver)) continue;
+    if (!payer || !input.expired(payer, driver, routine.botId)) continue;
     pauseBotIds.add(routine.botId);
     pauseEngineByBot.set(routine.botId, engineName);
     const key = notifyKey(payer, engineName);

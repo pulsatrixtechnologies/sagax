@@ -82,6 +82,9 @@ export interface ClaudeAiTurnInput extends ConnectorPrincipalInput {
   via?: AccessVia;
   /** Organization server: whose credentials they are (the plan's payer). */
   payerPrincipalId?: string;
+  /** #2384: the account (provider instance) the turn runs on; an added
+   * account (`<prefix>-<uuid>`) has its own sign-in and connectors. */
+  instanceId?: string;
 }
 
 const ACCOUNT_CONNECTOR_DRIVERS = new Set(["claudeAgent", "grokAgent", "grok"]);
@@ -340,11 +343,12 @@ export interface HarnessConnectorRouteDeps {
   settingsDelegate?(auth: RequestAuth): boolean;
   /** The CLI and environment of the caller's own Claude account, or a
    * reason it has none. */
-  claudeAccountFor(principalId: string): { cli: string; env: NodeJS.ProcessEnv; key: string } | { unavailable: "no_engine" | "not_signed_in" | "key" };
+  claudeAccountFor(principalId: string): { cli: string; env: NodeJS.ProcessEnv; key: string; instanceId?: string } | { unavailable: "no_engine" | "not_signed_in" | "key" };
   inventory: Pick<ClaudeAiConnectorInventory, "read">;
   /** #1533: the person's own Claude sign-in exists, but Claude says it is
    * signed out (its refresh was refused): their engine card says Reconnect. */
-  onSignedOut?(principalId: string): void;
+  /** #2384: `instanceId` is the account the inventory was read on. */
+  onSignedOut?(principalId: string, instanceId?: string): void;
 }
 
 function isAdminScope(auth: RequestAuth): boolean {
@@ -387,7 +391,7 @@ export function createHarnessConnectorRoutes(deps: HarnessConnectorRouteDeps): R
     if ("unavailable" in account) return answer({ available: false, reason: account.unavailable, connectors: [] });
     const inventory = await deps.inventory.read(account.key, { cli: account.cli, env: account.env }, url.searchParams.get("refresh") === "1");
     if (inventory.auth === "none") {
-      if (deps.organization) deps.onSignedOut?.(principalId);
+      if (deps.organization) deps.onSignedOut?.(principalId, account.instanceId);
       return answer({ available: false, reason: "not_signed_in", connectors: [] });
     }
     if (inventory.auth === "key") return answer({ available: false, reason: "key", connectors: [] });

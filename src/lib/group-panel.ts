@@ -15,8 +15,9 @@ export type GroupPanelTab = (typeof GROUP_PANEL_TABS)[number];
 
 /** Tabs hidden for now (JC, 2026-11-06): their code stays; empty this set
  * to bring them back. The instructions stay editable from the (i) beside the
- * group's name, and the group memory stays on unless switched off. */
-export const GROUP_PANEL_HIDDEN_TABS: ReadonlySet<GroupPanelTab> = new Set<GroupPanelTab>(["instructions", "memory"]);
+ * group's name, and the group memory stays on unless switched off. Computer
+ * is no tab: as on a bot, it is a section of Details (GroupComputerSection). */
+export const GROUP_PANEL_HIDDEN_TABS: ReadonlySet<GroupPanelTab> = new Set<GroupPanelTab>(["instructions", "memory", "computer"]);
 
 /** The tabs a group shows. Simple hides Computer, as on a bot; a group with
  * no bot of the viewer's that works somewhere has no computer to show. */

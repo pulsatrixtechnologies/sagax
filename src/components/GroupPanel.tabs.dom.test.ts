@@ -96,9 +96,10 @@ afterEach(() => {
 });
 
 describe("group panel tabs", () => {
-  it("has Details, Members, Instructions, Memory, Library, Computer and no Advanced tab", () => {
+  it("has Activity (details), Members, Library and no Advanced or Computer tab", () => {
     render();
-    expect(tabs()).toEqual(["details", "members", "instructions", "memory", "library", "computer"]);
+    // Instructions and Memory are hidden for now; Computer is a Details section.
+    expect(tabs()).toEqual(["details", "members", "library"]);
     expect(host.querySelector('[data-panel-tab="advanced"]')).toBeNull();
   });
 
@@ -107,10 +108,10 @@ describe("group panel tabs", () => {
     expect(tabs()).not.toContain("advanced");
   });
 
-  it("drops Computer in Simple mode, as on a bot", () => {
+  it("keeps the same tabs in Simple mode", () => {
     setInterfaceMode("simple");
     render();
-    expect(tabs()).toEqual(["details", "members", "instructions", "memory", "library"]);
+    expect(tabs()).toEqual(["details", "members", "library"]);
   });
 });
 
@@ -130,6 +131,15 @@ describe("group panel Details", () => {
     render();
     await vi.waitFor(() => expect(host.querySelector('[data-activity-of="osprey"]')).not.toBeNull(), { timeout: 15_000 });
     expect(host.querySelector('[data-activity-of="wren"]')).not.toBeNull();
+  });
+
+  it("lays Details out in the bot panel's order: Upcoming, Suggested, Computer", async () => {
+    render();
+    await vi.waitFor(() => expect(host.querySelector('[data-group-details] [data-bot-settings-section="computer"]')).not.toBeNull(), { timeout: 15_000 });
+    const order = [...host.querySelectorAll("[data-group-details] [data-bot-settings-section]")].map((el) => el.getAttribute("data-bot-settings-section"));
+    expect(order.slice(0, 3)).toEqual(["routines", "suggestions", "computer"]);
+    const rows = [...host.querySelectorAll('[data-bot-settings-section="suggestions"] [data-suggestion]')].map((el) => el.getAttribute("data-suggestion"));
+    expect(rows).toEqual(expect.arrayContaining(["slack", "meeting"]));
   });
 
   it("does not show the roster or Leave group on Details", () => {

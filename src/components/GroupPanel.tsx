@@ -9,7 +9,7 @@
 // which owns their state. Every group setting lives here: there is no
 // separate setup dialog.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, PanelRight } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 
 import { useStore, type Bot, type Group } from "@/state/store";
 import { DockedPanelResizeHandle, useDockedPanelWidth } from "./DockedPanelResize";
@@ -46,7 +46,9 @@ const tabLabel = (tab: GroupPanelTab) =>
   tab === "instructions" ? t("groupPanel.tab.instructions")
     : tab === "memory" ? t("groupPanel.tab.memory")
       : tab === "members" ? t("groupPanel.tab.members")
-        : t(`botPanel.tab.${tab}`);
+        // The bot panel names the same tab Activity (2026-11-06, JC).
+        : tab === "details" ? t("botPanel.tab.activity")
+          : t(`botPanel.tab.${tab}`);
 
 /** Members > Advanced: every setting that is not the roster, folded by
  * default (JC, 2026-11-03: nothing dropped, full detail one click away). */
@@ -207,7 +209,7 @@ export function GroupPanel({
         <div className="flex items-center gap-2">
           <ExportTranscriptMenu title={group.name} messages={group.messages} isGroup />
           <button type="button" onClick={closePanel} aria-label={t("common.close")} title={t("common.close")} className={CIRCLE_BUTTON}>
-            <PanelRight size={18} strokeWidth={1.75} />
+            <X size={18} strokeWidth={1.75} />
           </button>
         </div>
       </div>

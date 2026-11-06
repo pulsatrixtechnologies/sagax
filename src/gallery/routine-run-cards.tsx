@@ -1,9 +1,9 @@
 /** Isolated gallery for headless screenshots of routine run cards in the chat
- * (2026-11-04): each status a run can show (Done with a report, Nothing to
- * report with a hand-off to a teammate, Completed with problems, Failed and
- * paused, Running live), under a team goal card for comparison, through the
- * chat's own row and the real store. Neutral fictional bots and routines.
- * Not shipped in the app.
+ * (2026-11-04 / #2081): a clean Done report reads as a normal bot message
+ * under a provenance line; status cards stay for Nothing to report (with a
+ * hand-off), Completed with problems, Failed and paused, Running live. Under
+ * a team goal card for comparison, through the chat's own row and the real
+ * store. Neutral fictional bots and routines. Not shipped in the app.
  * ?width=<px>&height=<px>&skin=<id> (pulsatrix: dark, pulsatrix-light: light) */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";

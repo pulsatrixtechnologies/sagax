@@ -39,8 +39,8 @@ describe("RoutineRunCard", () => {
   // 2026-11-04 (JC): a card again: the routine's name as its title, a
   // Done pill, and a View run button.
   // 2026-11-05 (the operator, #2081): a finished report is the bot's message, not a
-  // card: a provenance line (Routine · name · Done · time · View run) and the
-  // bot's own bubble with the report as markdown. No border, no card chrome.
+  // card: a provenance line (Routine · name · Done pill · time · View run) above
+  // the bot's own bubble with the report as markdown. No border, no card chrome.
   it("reads a finished report as the bot's message under a provenance line, never as a card", () => {
     const markup = renderToStaticMarkup(createElement(RoutineRunCard, {
       message: message("completed", { summary: "The brief is ready with **three** follow-ups." }),
@@ -50,6 +50,7 @@ describe("RoutineRunCard", () => {
     expect(markup).toContain("<strong>three</strong>");
     expect(markup).toContain("data-routine-run-plain");
     expect(markup).toContain("data-routine-run-provenance");
+    expect(markup).toMatch(/data-routine-run-provenance[^>]*>[\s\S]*Routine[\s\S]*Morning brief[\s\S]*Done[\s\S]*View run/);
     expect(markup).toMatch(/<h3[^>]*>Morning brief<\/h3>/);
     expect(markup).toMatch(/data-routine-run-status[^>]*>Done<\/span>/);
     expect(markup).toContain("View run");
@@ -68,24 +69,25 @@ describe("RoutineRunCard", () => {
     expect(narrow).toMatch(/data-routine-run-bubble[^>]*class="[^"]*w-fit/);
   });
 
-  // 2026-11-05 (the operator: "I don't need to see the routines, only their result"):
-  // no card for any state. Done with problems or with a hand-off: the
-  // message, the status named in the grey line, the hand-off a grey line.
-  it("never draws a card: problems and hand-offs are grey lines around the message", () => {
+  // #2081: status cards stay for real states (done with problems, nothing to
+  // report, running...). A clean finished report with a hand-off keeps the
+  // plain message; the hand-off is a grey line under it.
+  it("keeps a status card for problems; a clean report with a hand-off stays a message", () => {
     const problems = renderToStaticMarkup(createElement(RoutineRunCard, {
       message: message("completed", { summary: "Counted 42 items.", problems: "One page did not load." }),
       onOpen: vi.fn(),
     }));
     expect(problems).not.toContain("data-routine-run-plain");
-    expect(problems).not.toContain("rounded-2xl border bg-card");
-    expect(problems).toMatch(/data-routine-run-status[^>]*class="[^"]*text-warning[^>]*>Completed with problems<\/span>/);
-    expect(problems).toMatch(/data-routine-run-bubble[^>]*class="[^"]*bg-bubble-bot/);
+    expect(problems).toContain("rounded-2xl border bg-card");
+    expect(problems).toMatch(/data-routine-run-status[^>]*>Completed with problems<\/span>/);
+    expect(problems).toContain("Counted 42 items.");
+    expect(problems).toContain("pl-[42px]");
     const handoff = renderToStaticMarkup(createElement(RoutineRunCard, {
       message: message("completed", { summary: "Sent.", handedTo: [{ botId: "nova", threadId: "nova-work", name: "Nova", status: "running" }] }),
     }));
     expect(handoff).toContain("data-routine-run-plain");
     expect(handoff).not.toContain("rounded-2xl border bg-card");
-    expect(handoff).toMatch(/<li[^>]*data-run-handoff="nova"[^>]*class="[^"]*text-\[11px\]|data-run-handed-to[^>]*class="[^"]*text-\[11px\]/);
+    expect(handoff).toMatch(/data-run-handed-to[^>]*class="[^"]*text-\[11px\]/);
     expect(handoff).toContain("Sent work to Nova");
     expect(handoff).toMatch(/data-run-handoff-status[^>]*>Running</);
     // threads hidden (no onOpenThread): the teammate is named, never linked
@@ -93,22 +95,22 @@ describe("RoutineRunCard", () => {
     expect(handoff).not.toContain("thread");
   });
 
-  // A plain Done says nothing in the line: the status node stays for
-  // screen readers and the flash rule, hidden to the eye.
-  it("hides the Done status and the routine's name from the line; both wait under Details", () => {
+  it("shows Routine, the name, the Done pill, the time and View run on the provenance line", () => {
     const markup = renderToStaticMarkup(createElement(RoutineRunCard, { message: message("completed", { summary: "All good." }), onOpen: vi.fn() }));
-    expect(markup).toMatch(/data-routine-run-status[^>]*class="[^"]*sr-only/);
-    expect(markup).toMatch(/<details[^>]*data-routine-run-provenance/);
-    expect(markup).toMatch(/<summary[^>]*>.*Routine.*Details.*<\/summary>/);
-    expect(markup).not.toMatch(/<summary[^>]*>.*Morning brief.*<\/summary>/);
-    expect(markup).not.toMatch(/<summary[^>]*>.*View run.*<\/summary>/);
-    expect(markup).toMatch(/data-routine-run-details[^>]*>.*Morning brief.*View run/);
+    expect(markup).toContain("data-routine-run-plain");
+    expect(markup).toMatch(/data-routine-run-provenance[^>]*>[\s\S]*Routine[\s\S]*Morning brief[\s\S]*Done/);
+    expect(markup).toMatch(/data-routine-run-status[^>]*rounded-full/);
+    expect(markup).toContain("data-routine-run-open");
+    expect(markup).toContain("View run");
     expect(markup).not.toContain("data-routine-run-quiet");
+    expect(markup).not.toContain("data-routine-run-details");
   });
 
-  it("a quiet run (nothing to report, no text) is the grey line alone", () => {
+  it("a quiet run (nothing to report, no text) stays a status card without a bubble", () => {
     const markup = renderToStaticMarkup(createElement(RoutineRunCard, { message: message("nothing_to_report"), onOpen: vi.fn() }));
     expect(markup).toContain("data-routine-run-quiet");
+    expect(markup).not.toContain("data-routine-run-plain");
+    expect(markup).toContain("rounded-2xl border bg-card");
     expect(markup).not.toContain("data-routine-run-bubble");
     expect(markup).toMatch(/data-routine-run-status[^>]*>Nothing to report</);
   });
@@ -270,15 +272,16 @@ describe("RoutineRunCard", () => {
     expect(html).toContain("For you: Approve sheet 100203");
     expect(html).toContain("data-run-result-details");
   });
-  // With threads shown (onOpenThread given), the hand-off line links the
-  // teammate's thread; one row per run, never a second section.
-  it("shows a hand-off as a grey line with its status and, threads shown, an Open thread link", () => {
+  // Nothing to report stays a status card; with threads shown the hand-off
+  // row links the teammate's thread. One card per run.
+  it("shows a hand-off on a status card with its status and, threads shown, an Open thread link", () => {
     const markup = renderToStaticMarkup(createElement(RoutineRunCard, {
       message: message("nothing_to_report", { handedTo: [{ botId: "nova", threadId: "nova-work", name: "Nova", status: "completed" }] }),
       onOpen: () => {},
       onOpenThread: () => {},
     }));
     expect(markup).toContain("data-routine-run-card");
+    expect(markup).toContain("rounded-2xl border bg-card");
     expect(markup).toContain('data-run-handoff="nova"');
     expect(markup).toContain("Sent work to Nova");
     expect(markup).toContain('data-run-teammate-thread="nova-work"');
@@ -286,19 +289,23 @@ describe("RoutineRunCard", () => {
     expect(markup.match(/data-routine-run-card/g)).toHaveLength(1);
   });
 
-  it("a running run is one live row: a spinner, how long it has run, and a live strip", () => {
+  it("a running run is one live status card: a spinner, how long it has run, and a live strip", () => {
     vi.useFakeTimers();
     vi.setSystemTime(Date.UTC(2026, 10, 4, 21, 0));
     try {
       const markup = renderToStaticMarkup(createElement(RoutineRunCard, {
         message: message("running", { startedAt: Date.UTC(2026, 10, 4, 20, 58) }),
       }));
+      expect(markup).not.toContain("data-routine-run-plain");
+      expect(markup).toContain("rounded-2xl border bg-card");
       expect(markup).toMatch(/data-routine-run-status[^>]*>.*Running<\/span>/);
       expect(markup).toContain("animate-spin");
       expect(markup).toContain("data-routine-run-elapsed");
       expect(markup).toContain("2 min");
       expect(markup).toContain("data-routine-run-live");
       const done = renderToStaticMarkup(createElement(RoutineRunCard, { message: message("completed", { startedAt: Date.UTC(2026, 10, 4, 20, 58), summary: "All good." }) }));
+      expect(done).toContain("data-routine-run-plain");
+      expect(done).not.toContain("rounded-2xl border bg-card");
       expect(done).not.toContain("data-routine-run-live");
       expect(done).not.toContain("data-routine-run-elapsed");
     } finally {

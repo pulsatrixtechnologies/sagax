@@ -20,6 +20,8 @@ import type { Message } from "@/state/store";
 import type { BotActivityDetail, BotActivityItem, BotActivityStep, BotCodeWork } from "../../shared/bot-activity.ts";
 import { parseUnifiedDiff, type DiffFile, type DiffLine } from "../../shared/code-runs.ts";
 import { workingStepFor } from "../../shared/working-step.ts";
+import { t } from "@/lib/i18n";
+import { readStep, stepToolName } from "@/lib/step-label";
 
 export type Tool = NonNullable<Message["tool"]>;
 
@@ -574,4 +576,91 @@ export function languageOf(path: string): string {
     h: "c", hpp: "cpp", hh: "cpp", jsonl: "json", yml: "yaml", zsh: "bash", env: "bash",
   };
   return map[ext] ?? ext;
+}
+
+// --- tool lines (2026-11-05, #2099) ----------------------------------------
+// A call reads as one terminal line, the way Claude Code prints it:
+// `● Bash(pnpm vitest run src/board …)`, below `⎿` the first lines of its
+// result and `… +N lines`. The folder's `cd` is dropped (the header names the
+// folder), a command that only waits (sleep, pgrep) is a muted line, and the
+// bot's current step reads as a sentence ("Running src/board tests").
+
+const ELLIPSIS = "…";
+
+function cutText(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, Math.max(1, max - 1)).trimEnd()}${ELLIPSIS}` : text;
+}
+
+const LEADING_CD = /^\s*cd\s+(?:'[^']*'|"[^"]*"|[^\s;&|]+)\s*(?:&&|;)\s*/;
+const WAIT_WORD = /^(?:sleep|pgrep|pkill|wait|cd|true|:)(?:\s|$)/;
+
+/** A command that only waits or looks (sleep, pgrep, a bare cd): not a step of the work. */
+export function isWaitCommand(command: string): boolean {
+  const parts = command.split(/\s*(?:&&|\|\||;|\|)\s*/).map((part) => part.trim()).filter(Boolean);
+  return parts.length > 0 && parts.every((part) => WAIT_WORD.test(part));
+}
+
+/** The command without its leading `cd <folder> && `, on one line, cut at `max`. */
+export function shortCommand(command: string, max = 72): string {
+  const body = command.replace(LEADING_CD, "").replace(/\s+/g, " ").trim();
+  return cutText(body || command.trim(), max);
+}
+
+const baseName = (path: string) => path.split("/").at(-1) || path;
+
+export interface ToolLine {
+  /** the tool, as Claude Code names it: Bash, Edit, Write, Read, or the tool's display name */
+  name: string;
+  /** what it acted on, short: a command, file names */
+  arg: string;
+  /** the whole argument, for the tooltip */
+  title?: string;
+}
+
+/** The `Name(arg)` of one step. */
+export function toolLineOf(step: CodingStep | { kind: "reads"; paths: readonly string[] }): ToolLine {
+  if (step.kind === "command") return { name: "Bash", arg: shortCommand(step.command), title: step.command };
+  if (step.kind === "edit") {
+    const name = step.files.length > 0 && step.files.every((file) => file.status === "added") ? "Write" : "Edit";
+    const paths = step.files.map((file) => file.path);
+    return { name, arg: cutText(paths.length === 1 ? paths[0]! : paths.map(baseName).join(", "), 72), title: paths.join("\n") };
+  }
+  if (step.kind === "read" || step.kind === "reads") {
+    const paths = step.paths;
+    return { name: "Read", arg: cutText(paths.length === 1 ? paths[0]! : paths.map(baseName).join(", "), 72), title: paths.join("\n") };
+  }
+  const reading = readStep(step.tool);
+  return { name: stepToolName(step.tool), arg: reading.target ? cutText(reading.target, 72) : "", ...(reading.title ?? reading.target ? { title: reading.title ?? reading.target } : {}) };
+}
+
+const TEST_RUNNERS = /\b(?:vitest|jest|pytest|mocha|cargo\s+test|go\s+test|node\s+--test|npm\s+test|pnpm\s+test|yarn\s+test)\b/;
+
+/** The bot's current command as a sentence, for the header and the agent rows. */
+export function humanStep(step: string | undefined): string | undefined {
+  if (!step) return undefined;
+  const command = shortCommand(step, 400);
+  if (isWaitCommand(command)) return t("codingChat.step.waiting");
+  if (TEST_RUNNERS.test(command)) {
+    const target = /(?:vitest|jest|pytest|mocha)\s+(?:run\s+)?((?:src|tests?|spec|lib|app|server|packages)\/[^\s'"]+)/.exec(command)?.[1];
+    return target ? t("codingChat.step.tests", { target: cutText(target, 48) }) : t("codingChat.step.testsAll");
+  }
+  if (/\b(?:tsc|typecheck|type-check)\b/.test(command)) return t("codingChat.step.typecheck");
+  if (/\bgit\s+commit\b/.test(command)) return t("codingChat.step.commit");
+  if (/\bgit\s+push\b/.test(command)) return t("codingChat.step.push");
+  if (/\bgh\s+pr\s+create\b/.test(command)) return t("codingChat.step.pr");
+  if (/\bgh\s+pr\s+merge\b/.test(command)) return t("codingChat.step.merge");
+  if (/\b(?:pnpm|npm|yarn|bun)\s+(?:install|i|add|ci)\b|\bpip\s+install\b|\bcargo\s+(?:add|fetch)\b/.test(command)) return t("codingChat.step.install");
+  if (/\b(?:build|cargo\s+build|tauri\s+build|vite\s+build)\b/.test(command)) return t("codingChat.step.build");
+  if (/(?:^|[\s/])(?:\w*lint|clippy|prettier|biome)\b/.test(command)) return t("codingChat.step.lint");
+  return cutText(command, 56);
+}
+
+/** The first `max` lines of a result and how many follow. */
+export function previewLines(output: string | undefined, max = 3): { lines: string[]; more: number } {
+  if (!output) return { lines: [], more: 0 };
+  const all = output.replace(/\s+$/, "").split("\n");
+  const start = all.findIndex((line) => line.trim().length > 0);
+  if (start < 0) return { lines: [], more: 0 };
+  const kept = all.slice(start);
+  return { lines: kept.slice(0, max).map((line) => cutText(line, 160)), more: Math.max(0, kept.length - max) };
 }

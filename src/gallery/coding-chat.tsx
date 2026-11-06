@@ -1,6 +1,6 @@
 /** Isolated gallery for the coding chat (2026-11-03): a coding task of the
  * bot panel's Coding list opened over the chat column. Synthetic data only.
- * ?skin=<id>&lang=<code>&status=running|finished&compose=1 */
+ * ?skin=<id>&lang=<code>&status=running|finished */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { ExchangeColumnProvider, useExchangeColumn } from "../components/BotExchangeChip";
@@ -101,7 +101,6 @@ function Ready() {
               onClose={() => {}}
               onStop={live ? () => {} : undefined}
               onSend={async () => {}}
-              composing={params.get("compose") === "1"}
             />
           )}
         </ExchangeColumnProvider>

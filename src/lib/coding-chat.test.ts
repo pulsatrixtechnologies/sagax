@@ -1,6 +1,8 @@
 // The coding chat's reading of a task's thread (src/lib/coding-chat.ts):
-// commands as terminal blocks, edits as diffs, reads as chips, test counts,
-// the Changes summary, and no server path or id in what it shows.
+// commands, edits, reads, test counts, the Changes summary, and no server
+// path or id in what it shows; and the terminal lines of #2099: the short
+// argument of `● Bash(…)`, the waiting commands, the step in words, the
+// preview of a result.
 import { describe, expect, it } from "vitest";
 
 import type { Message } from "@/state/store";
@@ -13,13 +15,18 @@ import {
   commandOf,
   commandResult,
   editFiles,
+  humanStep,
+  isWaitCommand,
   languageOf,
   lineDiff,
   parseApplyPatch,
+  previewLines,
   redactPaths,
+  shortCommand,
   shortPath,
   stepMessages,
   testSummary,
+  toolLineOf,
   type Tool,
 } from "./coding-chat";
 
@@ -148,5 +155,53 @@ describe("rows", () => {
     expect(place).toMatchObject({ folder: "dispatch-board", branch: "feat/column", pull: { number: 12 }, commit: { sha: "abcdef1234" } });
     expect(languageOf("src/a.tsx")).toBe("tsx");
     expect(languageOf("Dockerfile")).toBe("dockerfile");
+  });
+});
+
+describe("tool lines (#2099)", () => {
+  it("cuts the leading cd and the length of a command", () => {
+    expect(shortCommand(`cd ${ROOT} && pnpm vitest run src/board`)).toBe("pnpm vitest run src/board");
+    expect(shortCommand("cd 'my dir'; pnpm typecheck")).toBe("pnpm typecheck");
+    expect(shortCommand("git   log\n--oneline")).toBe("git log --oneline");
+    expect(shortCommand("x".repeat(100), 20)).toBe(`${"x".repeat(19)}…`);
+  });
+
+  it("knows a command that only waits", () => {
+    expect(isWaitCommand("sleep 540; pgrep -f vite")).toBe(true);
+    expect(isWaitCommand("cd dispatch-board")).toBe(true);
+    expect(isWaitCommand("sleep 5 && pnpm test")).toBe(false);
+    expect(isWaitCommand("pnpm vitest run")).toBe(false);
+  });
+
+  it("names the tool and its short argument", () => {
+    const run = codingStep("s1", tool("Bash", { command: `cd ${ROOT} && pnpm vitest run src/board` }, { output: "ok" }).tool!, ROOT)!;
+    expect(toolLineOf(run)).toMatchObject({ name: "Bash", arg: "pnpm vitest run src/board" });
+    const edit = codingStep("s2", tool("Edit", { file_path: `${ROOT}/src/board/column.ts`, old_string: "a", new_string: "b" }).tool!, ROOT)!;
+    expect(toolLineOf(edit)).toMatchObject({ name: "Edit", arg: "src/board/column.ts" });
+    const write = codingStep("s3", tool("Write", { file_path: `${ROOT}/src/board/order.ts`, content: "x" }).tool!, ROOT)!;
+    expect(toolLineOf(write)).toMatchObject({ name: "Write", arg: "src/board/order.ts" });
+    expect(toolLineOf({ kind: "reads", paths: ["src/board/column.ts", "src/board/card.ts"] })).toMatchObject({ name: "Read", arg: "column.ts, card.ts" });
+  });
+
+  it("says the step in words, never the raw command", () => {
+    expect(humanStep(`cd ${ROOT} && pnpm vitest run src/board`)).toBe("Running src/board tests");
+    expect(humanStep("pnpm vitest run")).toBe("Running tests");
+    expect(humanStep("sleep 540; pgrep -f vite")).toBe("Waiting");
+    expect(humanStep("pnpm typecheck")).toBe("Type checking");
+    expect(humanStep("git commit -m 'x'")).toBe("Committing");
+    expect(humanStep("git push -u origin feat/x")).toBe("Pushing");
+    expect(humanStep("gh pr create --fill")).toBe("Opening a pull request");
+    expect(humanStep("gh pr merge 142 --squash")).toBe("Merging the pull request");
+    expect(humanStep("pnpm install")).toBe("Installing dependencies");
+    expect(humanStep("pnpm build")).toBe("Building");
+    expect(humanStep("pnpm exec oxlint .")).toBe("Linting");
+    expect(humanStep(`cd ${ROOT} && ls src`)).toBe("ls src");
+    expect(humanStep(undefined)).toBeUndefined();
+  });
+
+  it("previews the first lines of a result and counts the rest", () => {
+    expect(previewLines("\n\nFAIL a\n Tests 1 failed\nbot x\nfour\nfive", 3)).toEqual({ lines: ["FAIL a", " Tests 1 failed", "bot x"], more: 2 });
+    expect(previewLines("one", 3)).toEqual({ lines: ["one"], more: 0 });
+    expect(previewLines(undefined)).toEqual({ lines: [], more: 0 });
   });
 });

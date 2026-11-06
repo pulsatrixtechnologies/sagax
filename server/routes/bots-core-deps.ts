@@ -5,7 +5,7 @@
 import type { IncomingMessage } from "node:http";
 
 import type { ApprovalViewer } from "../approvals/approval-audience.ts";
-import type { LookRefusal } from "../achievements-mastery.ts";
+import type { LookRefusal } from "../achievements/achievements-mastery.ts";
 import type { Level } from "../auth/authz.ts";
 import type { RemoteCwdDeps } from "../bots/bot-cwd.ts";
 import type { NewBotDefaults } from "../bots/new-bot-defaults.ts";

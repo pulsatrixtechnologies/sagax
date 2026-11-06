@@ -1,7 +1,7 @@
 # Achievements: the Mastery tier (Maîtrise)
 
 Achievements (`shared/achievements.ts`, catalog in `shared/achievements-catalog.ts`,
-server store in `server/achievements.ts`) already teach the first habits:
+server store in `server/achievements/achievements.ts`) already teach the first habits:
 send a message, create a routine, answer an approval. The Mastery tier is
 the next step. Its 24 achievements are hard on purpose: each one proves real
 mastery of working with AI and of Sagax, never a vanity count (no "send 500
@@ -94,7 +94,7 @@ imports no art, so it holds before the characters land and after.
 
 ## How the server measures
 
-`server/achievements-mastery.ts` turns what the server already sees into
+`server/achievements/achievements-mastery.ts` turns what the server already sees into
 facts for a person; `shared/achievements-mastery.ts` keeps the bounded state
 and the measures. The hooks in `server/index.ts`:
 

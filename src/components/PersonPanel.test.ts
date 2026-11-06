@@ -195,7 +195,7 @@ describe("PersonPanel", () => {
   });
 
   it("follows the person's own Show my title and Show my points choices", () => {
-    // the server leaves off the card what the person hid (server/achievements.ts)
+    // the server leaves off the card what the person hid (server/achievements/achievements.ts)
     resetPublicAchievementsForTests({
       pr_ada: { points: 220, level: 3, unlocked: [{ id: "hello-bot", points: 10, unlockedAt: 1 }] },
     });

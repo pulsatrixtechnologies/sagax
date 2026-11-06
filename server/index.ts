@@ -2276,7 +2276,7 @@ import {
   createAchievementStore,
   routineRunEvents,
   type AchievementEvent
-} from "./achievements.ts";
+} from "./achievements/achievements.ts";
 import { createAchievementRoutes } from "./routes/achievements.ts";
 import {
   lockedLookChange,
@@ -2287,7 +2287,7 @@ import {
   threadCensus,
   type LookRefusal,
   type PersonFact
-} from "./achievements-mastery.ts";
+} from "./achievements/achievements-mastery.ts";
 import { grandfatheredFromBots, migratedCrabFromBots } from "../shared/achievements.ts";
 import { createBotMemoryRoutes } from "./routes/bot-memory.ts";
 import { createToolGrantRoutes } from "./routes/tool-grants.ts";
@@ -3002,7 +3002,7 @@ const userPreferenceStore = createUserPreferenceStore(DATA_DIR);
 // The bot creation wizard's drafts (server/bots/bot-wizard-store.ts).
 const botWizardStore = createBotWizardStore(DATA_DIR);
 const viewerBotOverrideStore = createViewerBotOverrideStore(DATA_DIR);
-// Each person's achievements (server/achievements.ts). On first use a
+// Each person's achievements (server/achievements/achievements.ts). On first use a
 // person keeps every character and skin their bots already wear
 // (grandfathering): on a solo server every bot, on an organization server
 // the bots they own. People already wearing the crab keep it once
@@ -3117,7 +3117,7 @@ function recordAchievements(person: string | null | undefined, events: readonly 
     /* achievements are a bonus: never fail the request that earned one */
   }
 }
-/** Mastery facts (server/achievements-mastery.ts) for their people. Never throws. */
+/** Mastery facts (server/achievements/achievements-mastery.ts) for their people. Never throws. */
 function recordMastery(facts: readonly PersonFact[]): void {
   for (const item of facts) recordAchievements(item.person, [{ type: "mastery", fact: item.fact, ...(item.id ? { id: item.id } : {}) }]);
 }
@@ -34464,7 +34464,7 @@ function soloClaudeCli(): string {
 }
 /** One `claude auth status` for this process when no marker and no own key. */
 const soloClaudeLinkCache: SoloClaudeLinkCache = { probe: null };
-// A person's achievements (server/achievements.ts), on every server.
+// A person's achievements (server/achievements/achievements.ts), on every server.
 ROUTES.push(createAchievementRoutes({
   store: achievementStore,
   person: (auth) => actorPrincipalId(auth) || null,
@@ -48182,7 +48182,7 @@ async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL,
 
   // New routes live in modules registered in server/routes/table.ts and
   // are tried here, behind the gate above; do not add route `if`s below.
-  // What a successful request earns its person (server/achievements.ts).
+  // What a successful request earns its person (server/achievements/achievements.ts).
   if (method !== "GET" && method !== "HEAD") {
     const achiever = actorPrincipalId(auth);
     if (achiever) {

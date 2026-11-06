@@ -9116,12 +9116,12 @@ PT-4 in `server/org/org-private-threads.e2e.test.ts`):
 ## Achievements (2026-10-02)
 
 Catalog `shared/achievements-catalog.ts` (pure data, ids never renamed),
-engine `shared/achievements.ts`, store `server/achievements.ts` (one
+engine `shared/achievements.ts`, store `server/achievements/achievements.ts` (one
 `achievements.json`, per person on an organization server, the local
 operator on a solo server), routes `server/routes/achievements.ts`, app
 `src/lib/achievements.ts` and `src/components/achievements/`. Keep these
 rules, each covered by `shared/achievements-catalog.test.ts`,
-`server/achievements.test.ts`, `src/lib/achievements.test.ts`,
+`server/achievements/achievements.test.ts`, `src/lib/achievements.test.ts`,
 `src/lib/achievement-toasts.test.ts` or `achievements-ui.test.ts`:
 
 - Server events come from the server's own hooks only (a request's method
@@ -9174,7 +9174,7 @@ rules, each covered by `shared/achievements-catalog.test.ts`,
   public card) sees "This person keeps their achievements private." and no
   private records. With neither title nor points, the member card centres
   the name beside the avatar. Settings > Achievements itself and the unlock
-  toasts are unchanged by these switches. Tests: `server/achievements.test.ts`,
+  toasts are unchanged by these switches. Tests: `server/achievements/achievements.test.ts`,
   `src/lib/public-achievements.test.ts`, `PersonPanel.test.ts`,
   `achievements-ui.test.ts`, `SidebarProfileMenu.footer.test.ts`.
 - People rows in the sidebar sit at the bot rows' inset (`pl-1`, `pl-2` compact) with thread

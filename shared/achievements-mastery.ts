@@ -1,5 +1,5 @@
 // The Mastery tier's measures (docs/achievements.md). Pure: the server feeds
-// facts it saw (server/achievements-mastery.ts) and a nightly pass for
+// facts it saw (server/achievements/achievements-mastery.ts) and a nightly pass for
 // the rules that span days; this file only keeps the bounded state and says
 // how far each measure went. Every measure is the best value ever reached, so
 // a good stretch that ended still counts, and nothing is ever taken back.
@@ -234,7 +234,7 @@ function longestRun(days: Record<string, MasteryDay>, good: (entry: MasteryDay) 
 
 /**
  * The measures that read several days at once: after every fact and in the
- * nightly pass (server/achievements.ts), so a window that closes overnight
+ * nightly pass (server/achievements/achievements.ts), so a window that closes overnight
  * counts without a new fact. `today` is the person's day.
  */
 export function reconcileMastery(state: MasteryState, today: string): void {

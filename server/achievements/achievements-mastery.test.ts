@@ -19,9 +19,9 @@ import {
   toolWrites,
   type FrameLookups,
 } from "./achievements-mastery.ts";
-import { masteryKey } from "../shared/mascot-unlocks.ts";
-import { ACHIEVEMENTS, achievementById } from "../shared/achievements-catalog.ts";
-import { newlyEarned, ruleStatus } from "../shared/achievements.ts";
+import { masteryKey } from "../../shared/mascot-unlocks.ts";
+import { ACHIEVEMENTS, achievementById } from "../../shared/achievements-catalog.ts";
+import { newlyEarned, ruleStatus } from "../../shared/achievements.ts";
 
 const ADA = "pr_11111111-1111-4111-8111-111111111111";
 const BOB = "pr_22222222-2222-4222-8222-222222222222";

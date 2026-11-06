@@ -1,5 +1,5 @@
-import { type ModelFamily } from "../achievements-mastery.ts";
-import type { AchievementEvent } from "../achievements.ts";
+import { type ModelFamily } from "../achievements/achievements-mastery.ts";
+import type { AchievementEvent } from "../achievements/achievements.ts";
 
 export type ClaudeTide = "opus" | "sonnet" | "haiku";
 

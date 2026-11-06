@@ -316,7 +316,7 @@ export interface BotZipHost {
   /** Why no bot can be added now (the workspace's cap), or null. */
   creationRefusal?(): string | null;
   /** Why this person may not give a bot this look (a Mastery look they have
-   * not unlocked, server/achievements-mastery.ts), or null. */
+   * not unlocked, server/achievements/achievements-mastery.ts), or null. */
   lookRefusal?(principalId: string | undefined, look: unknown): string | null;
   browserProfileExists?(id: string): boolean;
   /** A working folder this server can use. */

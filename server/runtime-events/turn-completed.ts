@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** handleTurnCompleted (#1388). Pure move from server/index.ts bus.subscribe. */
+import { INCIDENTS_THREAD_TITLE } from "../peers/incidents.ts";
 import { isEngineEmptyFailure } from "../peers/incidents.ts";
 export function handleTurnCompleted(event: any, ctx: any, host: any): void {
   const { DATA_DIR, deleteAttachment, deliverableNotification, endedToolOutput, flushUsageLedger } = host;

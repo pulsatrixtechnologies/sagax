@@ -1,5 +1,13 @@
 // @ts-nocheck
 /** handleRequestOpened (#1388). Pure move from server/index.ts bus.subscribe. */
+import { modelReviewCardEligible } from "../../shared/custom-rules.ts";
+import { HELD_NOTE } from "../approvals/auto-approve.ts";
+import { TASK_WORKSPACES_DIR } from "../workspace/workspace.ts";
+import { toolChangesRules } from "../../shared/step-up.ts";
+import { approvalPlain, mcpAllowKey } from "../../shared/approval-describe.ts";
+import { CONFIDENTIAL_CARD_REFUSED } from "../threads/confidential-threads.ts";
+import { DATA_DIR } from "../config.ts";
+import { join } from "node:path";
 import { realpathSync } from "node:fs";
 import {
   approvalHeldNote,
@@ -637,7 +645,7 @@ export function handleRequestOpened(event: any, ctx: any, host: any): void {
         })
         : null;
       const verdict = strictRule
-        ? { approve: `approved ${event.tool} (rule of ${strictRuleOwnerName(strictRule.ownerId)})`, source: "admin-rule" as const, rule: strictRule.id }
+        ? { approve: `approved ${event.tool} (rule of ${host.strictRuleOwnerName(strictRule.ownerId)})`, source: "admin-rule" as const, rule: strictRule.id }
         : customAllow?.approve && customDecision?.kind === "allow"
           ? { ...customAllow, rule: customDecision.rule.id }
           : ownerVerdict;

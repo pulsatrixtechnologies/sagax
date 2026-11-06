@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** startMcpSignIn (#1388). Pure move from server/index.ts. */
+import { McpOAuthManager } from "../mcp/mcp-oauth.ts";
 import { DEFAULT_MCP_ACCOUNT, phoneOAuthReturns, McpOAuthError } from "../mcp/mcp-oauth.ts";
 import { randomBytes } from "node:crypto";
 export type Host = Record<string, any>;

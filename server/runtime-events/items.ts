@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** handleItemEvents (#1388). Pure move from server/index.ts bus.subscribe. */
+import { DATA_DIR } from "../config.ts";
 import { saveImage } from "../attachments/attachments.ts";
 import { screenSurfaceForTool, screenTouchingTool } from "../computer/screen-frame-gate.ts";
 import { dropCancelledVoiceEvent } from "../voice/voice-call-duplex.ts";

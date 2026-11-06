@@ -1,4 +1,8 @@
 // @ts-nocheck
+import { drainSteeredMessages } from "./turns/steer-queue.ts";
+import { drainChannelMessages } from "./rooms/channel-queue.ts";
+import { applyHoldDirective, heldMemberLine, rememberHeldMessage } from "./room-holds.ts";
+import { agentBrowserIntegration } from "./browser/browser-engine.ts";
 import { browserProfilePartitionTarget } from "./config.ts";
 import { masteryDelegationFacts } from "./achievements/achievements-mastery.ts";
 import { checkRoutineReadiness, routineEngineRefusal, routineFlowSkills, type RoutineReadinessDeps, type ReadinessRoutine, type ReadinessRun, type ReadinessComputer } from "./routines/routine-readiness.ts";
@@ -2191,6 +2195,7 @@ function stderrOf(err: unknown): string {
 }
 Object.assign(leafHostBindings, { modelName, stderrOf });
 // #1388: functions the split dropped, restored verbatim from the pre-split server/index.ts.
+export const pendingAgentReplyWakes = new Map<string, { botId: string; agentName: string; speaker?: TurnSpeaker }>();
 function browserSessionSpec(binaryPath: string, session: string, profile: string | undefined) {
   return agentBrowserIntegration({
     binaryPath,
@@ -2393,6 +2398,18 @@ function roomHeld(group: GroupRecord | null | undefined, botId: string): boolean
 function runtimeHoldsRoot(threadId: string): boolean {
   return coordinator.all().some((n) => !n.parentId && n.threadId === threadId && !ENDED.has(n.status));
 }
+async function interruptHeldMember(groupId: string, botId: string): Promise<void> {
+  const group = store.group(groupId);
+  const bot = store.bot(botId);
+  if (!group || !bot) return;
+  for (const threadId of roomThreadIds(group)) {
+    if (groupSpeakers.get(threadId)?.botId !== botId) continue;
+    heldInterrupts.add(`${threadId}:${botId}`);
+    await runningTurnInstance(bot, threadId)?.adapter.interruptTurn(threadId).catch(() => {});
+    closeOpenApprovals(threadId);
+  }
+}
+
 // #1388: bindings the leaves read through the host bag. Getters stay lazy
 // (no TDZ at boot); the drain flags and stand-in roots are leaf-owned state.
 for (const [name, read] of Object.entries({
@@ -2424,6 +2441,7 @@ for (const [name, read] of Object.entries({
   noteHeldSkip: () => noteHeldSkip,
   roomHeld: () => roomHeld,
   runtimeHoldsRoot: () => runtimeHoldsRoot,
+  strictRuleOwnerName: () => strictRuleOwnerName,
 })) Object.defineProperty(leafHostBindings, name, { get: read, enumerable: true, configurable: true });
 Object.assign(leafHostBindings, {
   drainingQueuedSends: false, queuedSendsDrainOwed: false,

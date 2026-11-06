@@ -1,5 +1,6 @@
 // @ts-nocheck
 /** authenticate (#1388). Pure move from server/index.ts. */
+import { permissionRefusal } from "../../shared/permissions.ts";
 import { masteryRequestFacts } from "../achievements/achievements-mastery.ts";
 import { achievementRequestEvents, roomPeopleCount } from "../achievements/achievements.ts";
 import { canOnBot } from "../auth/authz.ts";

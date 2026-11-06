@@ -1,7 +1,7 @@
 import { t } from "./i18n";
 
 export interface FeatureFlagConfig {
-  features?: { skillAuthoring?: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; routinesInConversation?: boolean; llmThreadTitles?: boolean; templates?: boolean; vpsComputer?: boolean; boatComputer?: boolean; decisionModel?: boolean; dataWindow?: boolean; meetingNotetaker?: boolean; routineGroupSettings?: boolean; skillsLibrary?: boolean; roomMemoryCapture?: boolean };
+  features?: { skillAuthoring?: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; claudeUserSkills?: boolean; routinesInConversation?: boolean; llmThreadTitles?: boolean; templates?: boolean; vpsComputer?: boolean; boatComputer?: boolean; decisionModel?: boolean; dataWindow?: boolean; meetingNotetaker?: boolean; routineGroupSettings?: boolean; skillsLibrary?: boolean; roomMemoryCapture?: boolean };
   browserEngine?: { kind: "engine" | "unavailable"; reason?: string; installable?: boolean; installing?: boolean; installError?: string };
 }
 
@@ -147,6 +147,10 @@ export function sharedComputersEnabled(config: FeatureFlagConfig | null | undefi
  * (claudeUserMcpEnabled: on by default solo, off on an organization server). */
 export function claudeUserMcpEnabled(config: FeatureFlagConfig | null | undefined): boolean {
   return config?.features?.claudeUserMcp === true;
+}
+
+export function claudeUserSkillsEnabled(config: FeatureFlagConfig | null | undefined): boolean {
+  return config?.features?.claudeUserSkills === true;
 }
 
 /** Generated thread titles, and with them the thread menu's Regenerate

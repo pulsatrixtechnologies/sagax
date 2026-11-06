@@ -2579,6 +2579,34 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(seen.argv[seen.argv.indexOf("--setting-sources") + 1]).toBe("project");
   });
 
+  it("adds the person's own skills folder when the turn asks, keeping everything else isolated", async () => {
+    await create();
+    const dump = join(scratch, "user-skills.json");
+    process.env.FAKE_CLAUDE_DUMP = dump;
+    const skills = join(scratch, "claude-user-skills");
+
+    await instance.adapter.sendTurn({ threadId: "t-user-skills", text: "hi", userSkillsDir: skills });
+    await recorder.until((e) => e.type === "turn.completed");
+
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.argv[seen.argv.indexOf("--add-dir") + 1]).toBe(skills);
+    expect(seen.argv).toContain("--strict-mcp-config");
+    expect(seen.argv[seen.argv.indexOf("--setting-sources") + 1]).toBe("project");
+  });
+
+  it("keeps a bot's tool selection working with the person's own skills", async () => {
+    const dump = join(scratch, "scope-user-skills.json");
+    process.env.FAKE_CLAUDE_DUMP = dump;
+    await create();
+    await instance.adapter.sendTurn({
+      threadId: "scope-user-skills", text: "Fixture",
+      userSkillsDir: join(scratch, "claude-user-skills"),
+      toolScope: { allow: ["native:*"] },
+    });
+    await recorder.until((event) => event.type === "turn.completed");
+    expect(JSON.parse(readFileSync(dump, "utf8")).argv).toContain("--add-dir");
+  });
+
   it("keeps no claude.ai connector on an isolated turn", async () => {
     await create();
     const dump = join(scratch, "no-claude-ai.json");

@@ -365,6 +365,9 @@ const featureConfigSchema = z.object({
    * machine's own Claude Code setup (Capabilities > Installed switch). Off by
    * default: each extra tool costs tokens on every model call. */
   claudeUserMcp: z.boolean().optional(),
+  /** Claude bots also load the skills in ~/.claude/skills, in place via
+   * --add-dir. Off unless true (org-safe like Claude MCP). */
+  claudeUserSkills: z.boolean().optional(),
   /** LLM-generated titles for new bot threads. Off until explicitly
    * enabled; a one-shot that fails or answers junk leaves the first-message
   * snippet in place — see llmThreadTitlesEnabled. */
@@ -934,7 +937,7 @@ export interface AppConfig extends HelperConfig {
    * seats shared by all conversations, with per-thread affinity (#1654). */
   localVm?: { mode?: "shared" | "per-bot" | "pool"; maxInstances?: number; idleTimeoutMinutes?: number };
   /** Opt-in product experiments. Every flag defaults to disabled. */
-  features?: { skillAuthoring?: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; llmThreadTitles?: boolean; autoRecall?: boolean; routinesInConversation?: boolean; templates?: boolean; vpsComputer?: boolean; boatComputer?: boolean; decisionModel?: boolean; dataWindow?: boolean; meetingNotetaker?: boolean; routineGroupSettings?: boolean; skillsLibrary?: boolean; savedSteps?: boolean; roomMemoryCapture?: boolean; connectedApps?: boolean };
+  features?: { skillAuthoring?: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; sharedComputers?: boolean; claudeUserMcp?: boolean; claudeUserSkills?: boolean; llmThreadTitles?: boolean; autoRecall?: boolean; routinesInConversation?: boolean; templates?: boolean; vpsComputer?: boolean; boatComputer?: boolean; decisionModel?: boolean; dataWindow?: boolean; meetingNotetaker?: boolean; routineGroupSettings?: boolean; skillsLibrary?: boolean; savedSteps?: boolean; roomMemoryCapture?: boolean; connectedApps?: boolean };
   /** First-run progress; see onboardingConfigSchema. */
   onboarding?: { completedAt?: string; version?: number; reelSeen?: boolean; hintsSeen?: string[]; launchMode?: "solo" | "server"; firstTurnAt?: string };
   /** Named browser sessions any bot can be pointed at. */

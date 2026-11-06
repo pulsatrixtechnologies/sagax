@@ -367,6 +367,9 @@ export interface SendTurnInput {
    * config.toml and ignores this; the Claude driver drops
    * --strict-mcp-config for the turn. */
   mcpFromUserConfig?: boolean;
+  /** Claude Code loads the person's own `~/.claude/skills` from this folder's
+   * `.claude/skills` (`--add-dir`). */
+  userSkillsDir?: string;
   /** Per-call ceiling (ms) for this turn's MCP tools, from the server config
    * `mcp.callTimeoutMinutes`. Absent = the driver's default (10 min). */
   mcpCallTimeoutMs?: number;

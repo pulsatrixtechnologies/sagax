@@ -595,6 +595,7 @@ import {
   openCodeProviderKeys,
   isCompatServerId,
 } from "./config.ts";
+import { claudeUserSkillsEnabled } from "./turn-settings.ts";
 import { sweepThreadEventLogsPaced, type ThreadLogRetentionCandidate } from "./threads/thread-retention.ts";
 import { ComputerControl } from "./computer/computer-control.ts";
 import { augmentedPath, resetPathCache } from "./env-path.ts";
@@ -30690,6 +30691,8 @@ function configStatus() {
       // Capabilities > Installed switch: Claude bots also see this machine's
       // own Claude Code MCP servers
       claudeUserMcp: claudeUserMcpEnabled(cfg, IDENTITY.kind === "perspicax"),
+      // Off unless true: personal Claude Code skills via --add-dir
+      claudeUserSkills: claudeUserSkillsEnabled(cfg),
       autoRecall: autoRecallEnabled(cfg),
       roomMemoryCapture: roomMemoryCaptureEnabled(cfg),
       // hand-edited config.json only; the thread menu offers Regenerate title from it

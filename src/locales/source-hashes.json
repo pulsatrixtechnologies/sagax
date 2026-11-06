@@ -17587,7 +17587,10 @@
       "keys.deepseek.label": "d2885c59cd6f6973c998d8d47d56967577edec2f38b14d60b5a7fc11b83037a3",
       "keys.deepseek.desc": "270b98390794fcafe4c317a99d2af015b46d7572f13ba9e9a2912e79cd567803",
       "keys.deepseek.link": "23a794ba7450089c877db21d83bbb7182766c3f647abdeec825710d70770f1dc",
-      "providerKeys.deepseek": "0648d2111ec0ca3d37d68ea020ce87e5c89caf06d3836a4388cd10bd1ebfd083"
+      "providerKeys.deepseek": "0648d2111ec0ca3d37d68ea020ce87e5c89caf06d3836a4388cd10bd1ebfd083",
+      "mcp.claudeSkills.title": "e99f0ab7d217d6a2ba3df841bf2301e5746194def1e8150a84b16d127a4021a8",
+      "mcp.claudeSkills.desc": "9e053be515c4d983e68db9cb03b9fdaa04cbc9ddc4bceae44415e33c0281bbd8",
+      "mcp.claudeSkills.aria": "bd6633c9fe16353f8007acda6f957543268fb5b07af38f973c0cce76efdeb106"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

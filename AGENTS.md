@@ -1262,8 +1262,8 @@ routine" (or "New routine"). The name sits up top with a one-line summary:
 the schedule sentence, where results go and who it runs as. Sections follow
 (`EditorSection`): What (instructions, attachments), When (repeat picker +
 one time / essentials; webhook panel when triggered), Where (bot, run-as,
-where it runs, post results). Then More options, folded by default and
-remembered per person (`sagax.routineEditorMore.v1`): time zone, next-runs
+where it runs, post results). Then More options, always folded when a
+routine opens (#2272, never remembered): time zone, next-runs
 preview, Add a time, timing (exact/flexible), clock-change note, watch
 fields, interval days/window/end, run limit, overlap, auto-pause,
 continuity, only when I'm here, mail alias. Every option stays reachable.

@@ -143,3 +143,9 @@ export function routineRunToExchange(args: {
     ends: [routineParty(routineName), party(bot)],
   };
 }
+
+/** #2272: the window of a run not loaded yet (older than the app's window):
+ * same header (routine, bot), no line until the run arrives. */
+export function routineRunPendingExchange(args: { routineName: string; bot: RoutineExchangeBot }): ExchangeRun {
+  return { id: "routine-run", messages: [], party: party(args.bot), ends: [routineParty(args.routineName), party(args.bot)] };
+}

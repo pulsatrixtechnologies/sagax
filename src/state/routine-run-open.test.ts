@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
-// 2026-11-05 (#2098, the operator: "C'EST INNACEPTABLE"): View run under a routine's
-// report, a run's notification, a link to a run's execution thread (an Inbox
-// entry) and a row of a routine's Runs list all open the run IN THE CHAT, at
-// the run's message in the bot's unified conversation. There is no run view
-// beside the chat any more (no sheet, no Continue in the conversation, no
-// Close Chat).
+// #2272 (2026-11-06, JC: "It not doing anything when I click it. This is
+// innacceptable."): View run under a routine's report, a run's notification,
+// a link to a run's execution thread (an Inbox entry) and a row of a
+// routine's Runs list all open the run's WINDOW over the bot's chat column,
+// shaped like a bot-to-bot exchange (X to close). Before, they only scrolled
+// to the report already on screen: nothing visibly happened. Never a thread
+// or a panel beside the chat (#2098).
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
@@ -42,7 +43,7 @@ function report(): Message {
 }
 
 describe("opening a routine run", () => {
-  it("View run lands on the bot's chat and focuses the run's message", () => {
+  it("View run opens the run's window over the bot's chat", () => {
     const actions: Action[] = [];
     const host = document.createElement("div");
     document.body.append(host);
@@ -55,13 +56,14 @@ describe("opening a routine run", () => {
     const button = host.querySelector<HTMLButtonElement>('button[aria-label="View run for Project health watch"]');
     expect(button).not.toBeNull();
     button!.click();
-    expect(actions).toEqual([{ type: "openRoutineRunInChat", runId: "run-1", routineId: "routine-1" }]);
+    expect(actions).toEqual([{ type: "openRoutineRunWindow", runId: "run-1", routineId: "routine-1" }]);
     const withBot = { ...initialState, bots: [{ ...initialState.bots[0], id: "scout", threadId: "main-chat", messages: [report()] } as never], routineRuns: [{ id: "run-1", botId: "scout", routineId: "routine-1" } as never], selectedId: "other" };
     const next = reducer(withBot as typeof initialState, actions[0]!);
     expect(next.activeView).toBe("chat");
     expect(next.selectedId).toBe("scout");
-    expect(next.focusMessage).toMatchObject({ threadId: "main-chat", messageId: "report", consumed: false });
-    expect("routineRunSheet" in next).toBe(false);
+    expect(next.routineRunWindow).toEqual({ runId: "run-1", routineId: "routine-1", botId: "scout" });
+    expect(reducer(next, { type: "closeRoutineRunWindow" }).routineRunWindow).toBeNull();
+    expect(reducer(next, { type: "select", id: "other" }).routineRunWindow).toBeNull();
     root.unmount();
     host.remove();
   });
@@ -76,29 +78,29 @@ describe("opening a routine run", () => {
     root.unmount();
   });
 
-  it("a run's notification opens the run in the chat, not a side view", () => {
+  it("a run's notification opens the run's window, not a side view", () => {
     const actions: Action[] = [];
     openNotificationTarget((action) => actions.push(action), { botId: "scout", threadId: "main-chat", routineRunId: "run-1" }, state, false);
-    expect(actions).toEqual([{ type: "openRoutineRunInChat", runId: "run-1" }]);
+    expect(actions).toEqual([{ type: "openRoutineRunWindow", runId: "run-1" }]);
   });
 
-  it("a link to a run's execution thread (an Inbox entry) opens the run in the chat", () => {
+  it("a link to a run's execution thread (an Inbox entry) opens the run's window", () => {
     const actions: Action[] = [];
     expect(routineRunOfThread(state, "run-thread")).toBe("run-1");
     openNotificationTarget((action) => actions.push(action), { botId: "scout", threadId: "run-thread" }, state, false);
-    expect(actions).toEqual([{ type: "openRoutineRunInChat", runId: "run-1" }]);
+    expect(actions).toEqual([{ type: "openRoutineRunWindow", runId: "run-1" }]);
   });
 
   it("a run this client does not know keeps opening its thread", () => {
     const actions: Action[] = [];
     openNotificationTarget((action) => actions.push(action), { botId: "scout", threadId: "main-chat", routineRunId: "run-gone" }, state, false);
-    expect(actions.some((action) => action.type === "openRoutineRunInChat" || action.type === "showRoutines")).toBe(false);
+    expect(actions.some((action) => action.type === "openRoutineRunWindow" || action.type === "showRoutines")).toBe(false);
   });
 
-  it("a run whose bot this client does not hold still lands on the chat, without a focus", () => {
-    const next = reducer(initialState, { type: "openRoutineRunInChat", runId: "run-unknown" });
+  it("a run this client has not loaded still opens its window (loaded by id)", () => {
+    const next = reducer(initialState, { type: "openRoutineRunWindow", runId: "run-unknown" });
     expect(next.activeView).toBe("chat");
-    expect(next.focusMessage).toBe(initialState.focusMessage);
+    expect(next.routineRunWindow).toEqual({ runId: "run-unknown" });
   });
 
   it("the owner's access notification (no thread) still opens the bot's activity", () => {
@@ -146,11 +148,11 @@ describe("continuing a routine run in the conversation", () => {
     expect(currentSideThread()).toBeNull();
   });
 
-  it("with threads hidden, a link into a run's task opens the run in the chat, not a column", () => {
+  it("with threads hidden, a link into a run's task opens the run's window, not a column", () => {
     closeSideThread();
     const actions: Action[] = [];
     openBotThread((action) => actions.push(action), bot, "run-thread", false);
-    expect(actions).toEqual([{ type: "openRoutineRunInChat", runId: "run-1" }]);
+    expect(actions).toEqual([{ type: "openRoutineRunWindow", runId: "run-1" }]);
     expect(currentSideThread()).toBeNull();
   });
 });

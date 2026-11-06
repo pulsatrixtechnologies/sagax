@@ -102,9 +102,6 @@ export const USER_PREFERENCE_KEYS = [
   "sagax.presenceVisible.v1",
   // the Automations page's scope and filters, per person (src/lib/routine-scope-prefs.ts)
   "sagax.routineScope.v1",
-  // routine editor "More options" disclosure open ("1") or collapsed ("0"/absent)
-  // (src/lib/routine-editor-more-pref.ts); Grok-simple default is collapsed
-  "sagax.routineEditorMore.v1",
   // the models starred in the composer's model menu (src/lib/model-favorites.ts)
   "sagax.modelFavorites.v1",
   // the subscription starred in Usage ›, whose percent the account menu's

@@ -18,10 +18,10 @@ function publishedPageViewer(req: IncomingMessage): PageViewer {
     if (!person || person.kind !== "human" || person.disabledAt !== undefined || person.consoleDisabled) return null;
     return { principalId: person.id, computerOwner: false };
   }
-  const host = typeof req.headers.host === "string" ? req.headers.host : undefined;
+  const hostHeader = typeof req.headers.host === "string" ? req.headers.host : undefined;
   // A browser is never the owner by being on this computer (OpenMausBot
   // #2930 port): the desktop app's window proves itself with its header.
-  if (host.IDENTITY.kind !== "perspicax" && host.LOOPBACK.trust !== "service" && !isProxied(req) && isLoopbackHost(host)
+  if (host.IDENTITY.kind !== "perspicax" && host.LOOPBACK.trust !== "service" && !isProxied(req) && isLoopbackHost(hostHeader)
     && !loopbackBrowserRefused(req, { loopbackMutationToken: host.desktopMutationToken, trustLocalBrowser: host.LOOPBACK.localBrowsers })) return { computerOwner: true };
   return null;
 }

@@ -30,8 +30,8 @@ async function resolveImessageCard(res: ServerResponse, threadId: string, reques
     json(res, 200, { ok: true, outcome: "rejected" });
     return true;
   }
-  const host = messagesOnBotMac({ platform: process.platform, identityKind: host.IDENTITY.kind, bridgeAction: false });
-  if (!host.ok || !readMessagesSettings(DATA_DIR).useMessages) {
+  const macCheck = messagesOnBotMac({ platform: process.platform, identityKind: host.IDENTITY.kind, bridgeAction: false });
+  if (!macCheck.ok || !readMessagesSettings(DATA_DIR).useMessages) {
     host.store.patchMessage(threadId, message.id, { card: { ...card, answered: "deny", subtitle: "Messages is not available on this Mac. Nothing was sent." } });
     json(res, 409, { error: "Messages is not available on this Mac.", code: "messages_not_on_this_mac" });
     return true;

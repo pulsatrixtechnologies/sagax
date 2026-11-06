@@ -1095,6 +1095,7 @@
   "You have no bots yet.": "botModels.empty",
   "Allow control of this computer": "settings.mac.allow",
   "Local computer control is not ready. Sagax needs Accessibility and Screen Recording to use this Mac. Check Driver detail or System Settings, then click Retry.": "computer.mac.permission.generic",
+  "Computer care": "computerCare.title",
   "Recover computer": "computerCare.recover.title",
   "It is not answering. Recover rebuilds it from the current image: your files stay, installed apps and packages are removed.": "computerCare.recover.hint",
   "Recover": "computerCare.recover.button",

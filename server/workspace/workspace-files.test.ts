@@ -28,6 +28,7 @@ import {
   workspaceTree,
 } from "./workspace-files.ts";
 import { applyRulesUpdate, docPath, renameDoc, updateDoc, updateRules } from "./workspace-tools.ts";
+import { resetMtimePromptCache } from "./mtime-prompt-cache.ts";
 import { USAGE_DIR, flushWorkspaceUsage, markWorkspaceUse, promptSectionPaths, resetWorkspaceUsageCache, workspaceUsage } from "./workspace-usage.ts";
 import { ensureWorkspace, searchDocFiles, searchMemoryFiles, workspaceDir, writeMemoryFile } from "./workspace.ts";
 
@@ -46,11 +47,13 @@ beforeEach(() => {
   rmSync(USAGE_DIR, { recursive: true, force: true });
   resetMemoryJournalState();
   resetWorkspaceUsageCache();
+  resetMtimePromptCache();
   ensureWorkspace(BOT);
 });
 afterEach(() => {
   resetMemoryJournalState();
   resetWorkspaceUsageCache();
+  resetMtimePromptCache();
 });
 
 describe("RULES.md", () => {

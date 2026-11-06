@@ -11,6 +11,7 @@ import { FileText, GitBranch, Search, Store, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { itemCreator, itemDescription, itemName } from "@/lib/bot-catalog";
+import { providerMark } from "@/lib/plugins-model";
 import { GROUP_PREVIEW, moveActive, visibleResults, type SearchGroup, type SearchGroupId, type SearchResult } from "@/lib/connect-apps-search";
 import type { LocaleKey } from "@/locales";
 import { PLUGINS } from "./plugins-style";
@@ -209,6 +210,15 @@ function ResultRow({ result }: { result: SearchResult }) {
           <ResultText name={result.page.title} line={result.page.status} />
         </>
       );
+    case "account": {
+      const mark = providerMark(result.account.name);
+      return (
+        <>
+          <PluginIcon item={{ kind: "app", name: result.account.name, logo: mark.logo, domain: mark.site }} className="size-11" />
+          <ResultText name={result.account.name} line={result.account.detail} />
+        </>
+      );
+    }
     case "source":
       return (
         <>

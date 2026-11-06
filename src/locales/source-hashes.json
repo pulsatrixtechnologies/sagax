@@ -14540,7 +14540,6 @@
       "connectApps.entry.botsSwitch": "e7899384c92126e870855f12a0a26c59e0ef31e6c01b6f2bb83b3257ff154536",
       "connectApps.entry.remove": "c3812fc4acb861d5182fc2b8155f327f736fbe5e5eb86a7bd7afcb6dc5497282",
       "connectApps.entry.removeConfirm": "2e2524efe19a09828eda4d585f3547e8c690cad5ca8f8fd359d3fe7cd2f20b13",
-      "connectApps.accounts.harness": "4e917a024030e3ef4cb38c5ed594d30e20dc0edf9434c889d6b9818cce912ca3",
       "connectApps.accounts.claudeCode": "949c93cca9887b176f788839691d7dc6fa3da8f44fd7dacc194cdbe491c5cc5b",
       "connectApps.discover.empty": "c366da714c2a6b5134bf32740e55fe9f988033f4f6f45381a1c2627284f2961c",
       "access.thisBot": "741edb433b41ce50ac4f102e028e4ec26027cdd802d7b5d69a13d2bbd3664754",
@@ -17568,7 +17567,11 @@
       "codingChat.panel.status": "920e413c7d411b61ef3e8c63b1cb6ad058d5f95f8b481dbafe60248387d8c355",
       "codingChat.panel.duration": "4fc52a3c4c558b517c463b22d86d0e3b9cfd4255c98fe3510f9075b37ab419c9",
       "codingChat.panel.tokens": "a039dfb9628b53ddaebcfe8ef0793e3fdf19867601295f00d192acef59050869",
-      "memes.settings.changeKey": "1bc0f4da5f82b4e66d77dcecfb4a8f468718abeb9a0be4d465afb244ec322ea9"
+      "memes.settings.changeKey": "1bc0f4da5f82b4e66d77dcecfb4a8f468718abeb9a0be4d465afb244ec322ea9",
+      "connectApps.section.fromProvider": "c675786fcf7ce52792b88229a34b1b680f3cb17f719dda64bcad8f1635ecaa05",
+      "connectApps.brings.accountConnector": "12f0e944cdc4f8080c2db5564ed98a2bafd1b88563e5a9cec8772672ba24846f",
+      "connectApps.accounts.signIn": "bfd402b2f6f3812529b55596136d3a11c51616317e3b1cd999928e2d4eae7d3f",
+      "connectApps.accounts.reconnect": "bf8a9eab9e7e141bfb81f0ca9244a5f68f476ed0b57f03538410417298169d18"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

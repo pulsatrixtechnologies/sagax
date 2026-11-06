@@ -336,9 +336,8 @@ describe("Plugins, driven like the owner does", () => {
     expect(host.querySelectorAll("[data-accounts-service-pill]")).toHaveLength(0);
     expect(host.querySelectorAll("[data-connect-from-engine]")).toHaveLength(0);
     expect(host.textContent).not.toContain("See all");
-    const manage = [...host.querySelectorAll("[data-harness-manage]")].map((button) => button.getAttribute("data-harness-manage"));
-    expect(manage).toEqual([...new Set(manage)]);
-    expect(manage.length).toBeGreaterThan(0);
+    // Manage on <engine> lives in each account row's menu here, and once per engine on Discover's section heads (#2306)
+    expect(host.querySelectorAll("[data-harness-manage]")).toHaveLength(0);
     // the + Add menu: a server, a pasted config, a skill, each once
     await click($("[data-plugins-add]"));
     expect([...host.querySelectorAll("[data-plugins-add-action]")].map((item) => item.getAttribute("data-plugins-add-action"))).toEqual(["server", "paste", "skill"]);
@@ -350,12 +349,16 @@ describe("Plugins, driven like the owner does", () => {
   it("the home's \"N connected\" counts what Manage lists and opens it", async () => {
     await open();
     // GitHub, Code Review, Frontend Design, Ops Flow, Twilio Docs: five connected entries,
-    // and the Claude account's one connected connector, which Manage lists under Providers
-    expect($("[data-plugins-connected]")?.getAttribute("data-plugins-connected")).toBe("6");
-    expect($("[data-plugins-connected]")?.textContent).toContain("6 connected");
+    // and the engine accounts' connected connectors, which Manage lists as rows of their own (#2306)
+    const count = Number($("[data-plugins-connected]")?.getAttribute("data-plugins-connected"));
+    expect(count).toBeGreaterThanOrEqual(6);
+    expect($("[data-plugins-connected]")?.textContent).toContain(`${count} connected`);
     await click($("[data-plugins-connected]"));
     expect(selected()).toBe("installed");
-    expect(installedNames().length + 1).toBe(6);
+    if ($("[data-plugins-show-all]")) await click($("[data-plugins-show-all]"));
+    const connectedRows = [...host.querySelectorAll<HTMLElement>("[data-installed-entry]")]
+      .filter((row) => !row.getAttribute("data-installed-entry")!.startsWith("account:") || row.querySelector('[data-harness-status="connected"]'));
+    expect(connectedRows.length).toBe(count);
   });
 
   it("an old link to My accounts or Providers opens Manage, with the Providers section; a link to the pages opens Pages", async () => {
@@ -366,7 +369,7 @@ describe("Plugins, driven like the owner does", () => {
         if (selected() !== "installed") await go("installed");
         expect(selected()).toBe("installed");
         expect($('[data-plugins-manage="installed"] [data-plugins-providers]')).not.toBeNull();
-        expect($("[data-plugins-providers] [data-harness-group]")).not.toBeNull();
+        expect($('[data-plugins-manage="installed"] [data-installed-entry^="account:"]')).not.toBeNull();
         await act(async () => root.render(createElement("div")));
       }
       (state as { pluginsPage: string | null }).pluginsPage = "pages";
@@ -396,7 +399,9 @@ describe("Plugins, driven like the owner does", () => {
     await open();
     await go("installed");
     const rows = [...host.querySelectorAll<HTMLElement>("[data-installed-entry]")];
-    expect(installedNames()).toEqual(["Code Review", "Frontend Design", "GitHub", "Ops Flow", "Twilio Docs"]);
+    expect(installedNames().slice(0, 5)).toEqual(["Code Review", "Frontend Design", "GitHub", "Ops Flow", "Twilio Docs"]);
+    // the engine accounts' connectors follow, connected first (#2306)
+    expect(rows[5]?.getAttribute("data-installed-entry")).toBe("account:claude:Gmail");
     const mark = (name: string) => {
       const row = rows.find((candidate) => candidate.querySelector("span.truncate")?.textContent === name)!;
       const img = row.querySelector("img");
@@ -438,8 +443,7 @@ describe("Plugins, driven like the owner does", () => {
     await open();
     await go("installed");
     expect($("[data-accounts-service-pill]")).toBeNull();
-    expect([...host.querySelectorAll("[data-harness-group]")].map((group) => group.getAttribute("data-harness-group"))).toEqual(["claude", "grok"]);
-    expect($('[data-harness-group="claude"]')?.textContent).toContain("Connectors of your Claude account");
+    expect($("[data-harness-group]")).toBeNull();
     expect($('[data-harness-notice="not_signed_in"]')?.textContent).toContain("not signed in to Claude");
     await click($('[data-harness-setup="claude"]'));
     expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "togglePlugins", open: false }));
@@ -449,9 +453,10 @@ describe("Plugins, driven like the owner does", () => {
   it("Manage > engine accounts: the Claude account's connectors listed like Grok's when they are read", async () => {
     await open();
     await go("installed");
-    expect($('[data-harness-connector="claude:Gmail"]')).not.toBeNull();
-    expect($('[data-harness-connector="claude:Canva"] [data-harness-status="needs_auth"]')).not.toBeNull();
-    expect($('[data-harness-group="claude"] [data-harness-notice]')).toBeNull();
+    expect($('[data-installed-entry="account:claude:Gmail"]')).not.toBeNull();
+    if ($("[data-plugins-show-all]")) await click($("[data-plugins-show-all]"));
+    expect($('[data-installed-entry="account:claude:Canva"] [data-harness-signin][data-harness-status="needs_auth"]')).not.toBeNull();
+    expect($("[data-harness-notice]")).toBeNull();
   });
 
   it("GitHub lives on the GitHub plugin's page: not in the engine accounts; Sources and the plugin's server lead there", async () => {

@@ -13680,7 +13680,6 @@
   "botProfile.tabsAria": "Sections du profil du bot",
   "botProfile.tab.general": "Général",
   "botProfile.tab.knowledge": "Connaissances",
-  "botProfile.tab.settings": "Réglages",
   "botProfile.channels": "Canaux",
   "botProfile.channel.slack": "Slack",
   "botProfile.channel.messages": "Messages (Mac)",

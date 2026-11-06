@@ -4,7 +4,7 @@
  * ?view=editor&section=<page> (the profile page in the main panel, beside
  * the real sidebar) | ?view=panel&tab=<details|library|computer>
  * &org=1 (an organization server with the person's server environment)
- * &skin=<id>&lang=<code>
+ * &skin=<id>&lang=<code>&color=<mascot colour> (the banner's wash, #2173)
  * scripts/capture/edit-bot.mjs shoots every page and tab, light and dark. */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -30,7 +30,8 @@ window.addEventListener("unhandledrejection", (event) => {
   if (reason && (reason.name === "AbortError" || String(reason).includes("AbortError"))) event.preventDefault();
 });
 
-const { bot, neighbours, routines, answer } = editBotFixture(org);
+// color= drives the mascot banner wash for gallery captures (#2173)
+const { bot, neighbours, routines, answer } = editBotFixture(org, params.get("color"));
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 const realFetch = window.fetch.bind(window);

@@ -106,6 +106,7 @@ it("moves between Claude and Copilot without an approval reset for Ask and Auto"
     expect(modelSwitchNeedsAsk(mode, "customAcp", "claudeAgent")).toBe(false);
     expect(modelSwitchNeedsAsk(mode, "copilotAgent", "claudeAgent")).toBe(false);
   }
-  // Sagax: Full is only on engines that implement it; bare ACP (Copilot) needs Ask first.
-  expect(modelSwitchNeedsAsk("full", "claudeAgent", "copilotAgent")).toBe(true);
+  // Full access runs on every engine (omb #2808 / PRO-RÈGLE), including bare ACP
+  // Copilot: switching engines keeps Full without an Ask reset.
+  expect(modelSwitchNeedsAsk("full", "claudeAgent", "copilotAgent")).toBe(false);
 });

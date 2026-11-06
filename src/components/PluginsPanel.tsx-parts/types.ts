@@ -47,7 +47,9 @@ export type Page =
   /** Plugins > Installed > This Mac > Messages setup (the one Mac row opens it directly, #2104) */
   | { page: "mac-messages" }
   /** Connect apps > Tailscale: join a bot computer to the person's tailnet */
-  | { page: "tailscale" };
+  | { page: "tailscale" }
+  /** Connect Apps > "Add a custom connector" (Grok Bot's form) */
+  | { page: "connector" };
 
 export interface HarnessAnswer {
   manageUrl?: string;

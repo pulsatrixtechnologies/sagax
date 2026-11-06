@@ -1,13 +1,13 @@
 // Small pieces the three Plugins views share: the icon, the status word and
 // the page header with its back arrow.
 import { useState, type ReactNode } from "react";
-import { BookOpen, Puzzle, ServerCog } from "lucide-react";
+import { BookOpen, ChevronLeft, Puzzle, ServerCog } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { WHOP_KEY, type PluginItem, type PluginStatus } from "@/lib/plugins-model";
-import { Breadcrumb, type Crumb } from "../Breadcrumb";
+import type { Crumb } from "../Breadcrumb";
 import { WhopIcon } from "../WhopIcon";
 
 /** A connectable app's catalog card, as the Connect apps views read it. */
@@ -107,40 +107,50 @@ export function PluginStatusLabel({ status, className }: { status: PluginStatus;
   );
 }
 
-/** The back row of a page opened from a Connect apps tab (2026-10-28), as a
- * Settings sub-page's: the back button, the tab it came from and the pages
- * between, then this page's name. Connect Apps' own title, scope and tabs
- * stay above it, so the page reads as part of the same window and its name
- * is never a second big title. A page that names itself in its own header
- * (a plugin's detail) leaves the name out here (`named`). */
-export function PluginPageHeader({ title, trail, onBack, named = false }: {
+/** The top bar of a page opened in the Plugins window (#2104, Grok Bot's
+ * Connect Apps): the back chevron on the left, the page's name centred, room
+ * for the window's X on the right, a hairline under it. The pages it came
+ * from stay on the back button's tooltip (progressive disclosure). */
+export function PluginPageHeader({ title, trail, onBack }: {
   title: string;
-  /** the tab it came from, then the pages above this one (absent: Connect apps) */
+  /** the view it came from, then the pages above this one (absent: Connect apps) */
   trail?: readonly Crumb[];
   onBack: () => void;
-  /** the page shows its name itself: no current crumb */
+  /** kept for the callers: the name is always in the bar now */
   named?: boolean;
 }) {
   const crumbs = trail ?? [{ label: t("connectApps.title"), onSelect: onBack }];
+  const from = crumbs[crumbs.length - 1]?.label;
   return (
-    <div className="shrink-0 px-4 pt-3 sm:px-8" data-plugins-page-bar>
-      <Breadcrumb trail={crumbs} current={named ? undefined : title} onBack={onBack} backData={{ "data-plugins-back": "" }} />
-      <h3 className="sr-only" data-plugins-page-title>{title}</h3>
+    <div className="relative flex h-12 shrink-0 items-center px-3 pr-14" data-plugins-page-bar data-breadcrumb="">
+      <button
+        type="button"
+        onClick={onBack}
+        aria-label={from ? t("connectApps.backTo", { name: from }) : t("breadcrumb.back")}
+        title={crumbs.map((crumb) => crumb.label).join(" / ")}
+        className="flex size-8 shrink-0 items-center justify-center rounded-full text-ink hover:bg-hover"
+        data-breadcrumb-back=""
+        data-plugins-back=""
+      >
+        <ChevronLeft size={20} aria-hidden="true" />
+      </button>
+      <h3 className="pointer-events-none absolute inset-x-14 truncate text-center text-[15px] font-normal leading-5 text-ink" data-plugins-page-title>{title}</h3>
     </div>
   );
 }
 
-/** One card of the detail page: a title and flat content (one card level). */
+/** One card of a page (#2104): a gray label over a card with a subtle
+ * border on the window's own background. */
 export function PluginCard({ title, children, action }: { title?: ReactNode; children: ReactNode; action?: ReactNode }) {
   return (
-    <section className="rounded-2xl border border-border bg-card px-4 py-3.5 sm:px-5">
+    <section>
       {(title || action) && (
-        <div className="mb-2 flex items-center justify-between gap-3">
-          {title && <h3 className="min-w-0 text-[13px] font-semibold text-ink">{title}</h3>}
+        <div className="mb-2.5 flex items-center justify-between gap-3 px-[14px]">
+          {title && <h3 className="min-w-0 text-[13.5px] font-normal leading-5 text-ink-secondary">{title}</h3>}
           {action}
         </div>
       )}
-      {children}
+      <div className="rounded-[14px] border border-border px-[14px] py-2">{children}</div>
     </section>
   );
 }

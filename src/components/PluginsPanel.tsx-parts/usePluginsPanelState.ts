@@ -62,9 +62,10 @@ export function usePluginsPanelState() {
   const [activeResult, setActiveResult] = useState(-1);
   const [filter, setFilter] = useState<PluginFilter>("all");
   const [type, setType] = useState<PluginTypeFilter>("any");
-  // Installed is where a person lands (#2104, 2026-11-05: what they have,
+  // The Connect Apps home is where a person lands (#2104, 2026-11-06: as
+  // Grok Bot; Installed was the landing on 2026-11-05: what they have,
   // then Discover to add; Discover was first from 2026-10-28 to then).
-  const [tab, setTab] = useState<ConnectAppsTab>("installed");
+  const [tab, setTab] = useState<ConnectAppsTab>("discover");
   const harness = useHarnessConnectors();
   const claudeConnectors = harness.connected;
   const ownerOrAdmin = useOwnerOrAdmin();

@@ -1014,7 +1014,6 @@
   "connectApps.filter.skills": "Habilidades",
   "connectApps.filter.support": "Suporte",
   "connectApps.filtersAria": "Categorias",
-  "connectApps.manage.skills": "Habilidades privadas",
   "connectApps.market.add": "Adicionar marketplace",
   "connectApps.market.intro": "Adicione um marketplace de plugins do Claude Code: um repositório GitHub (owner/repo, com uma branch se quiser), um endereço git https, ou o endereço do seu marketplace.json. Repositórios privados usam as credenciais git deste computador.",
   "connectApps.market.introScopes": "Uma única lista para os dois escopos: um plugin é instalado para todos (seus servidores MCP e habilidades) ou para um bot (o plugin inteiro).",

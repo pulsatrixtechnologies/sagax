@@ -14,6 +14,7 @@ import { PluginDetailView } from "../plugins/PluginDetailView";
 import { SkillPage } from "../plugins/SkillPage";
 import { BotsForView } from "../plugins/BotsForView";
 import { MessagesSetupView } from "../plugins/MessagesSetupView";
+import { CustomConnectorPage } from "../plugins/CustomConnectorPage";
 import { detailProps } from "./detailBuilders";
 import type { Page } from "./types";
 import type { PluginsPanelState } from "./usePluginsPanelState";
@@ -120,6 +121,9 @@ export function PluginsPanelSubpage({
       </>
     );
   }
+  if (page.page === "connector") {
+    return <CustomConnectorPage mcp={mcp} onBack={back} trail={trail} />;
+  }
   if (page.page === "mac-messages") {
     return <MessagesSetupView onBack={back} trail={trail} />;
   }
@@ -178,6 +182,7 @@ export function pageLabel(entry: Page, tab: ConnectAppsTab, items: readonly Plug
     case "skill": return entry.name ?? t("connectApps.skill.new");
     case "github": return t("myConnections.github.title");
     case "mac-messages": return t("connectApps.mac.messages.rowTitle");
+    case "connector": return t("connectApps.addCustomConnector");
     case "tailscale": return t("connectApps.tailscale.title");
   }
 }

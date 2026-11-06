@@ -8,7 +8,8 @@ import { t } from "@/lib/i18n";
 import { readableError } from "@/lib/plain-error";
 import { canEditBotField } from "@/lib/bot-capabilities";
 import { canEditConfig } from "@/lib/viewer";
-import { discoverItems, installedEntries, privateSkills, type InstalledEntry } from "@/lib/installed-model";
+import { discoverItems, entryIcon, installedEntries, privateSkills, type InstalledEntry } from "@/lib/installed-model";
+import { connectedSummary } from "@/lib/plugins-model";
 import { organizationRows } from "@/lib/capabilities";
 import { openSettings } from "@/lib/settings-link";
 import { setMine } from "@/lib/org-capabilities";
@@ -28,8 +29,9 @@ import { catalogSections, type CatalogItem } from "@/lib/bot-catalog";
 import { searchConnectApps, visibleResults, type SearchPage, type SearchResult, type SearchSource } from "@/lib/connect-apps-search";
 import { ConnectAppsSearchField, ConnectAppsSearchResults } from "../plugins/ConnectAppsSearch";
 import type { PublishedPageSummary } from "../../../shared/published-pages";
-import { InstalledView, type EntryActions } from "../plugins/InstalledView";
-import { DiscoverView } from "../plugins/DiscoverView";
+import { AddMenu, bringsLabel, InstalledView, type EntryActions } from "../plugins/InstalledView";
+import { PLUGINS } from "../plugins/plugins-style";
+import { DiscoverView, type FromSagaxRow } from "../plugins/DiscoverView";
 import { AccountsView } from "../plugins/AccountsView";
 import { SourcesView } from "../plugins/SourcesView";
 import { OrgSourcesAccess } from "../plugins/OrgSourcesAccess";
@@ -287,6 +289,20 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     codex: harness.answer?.codex ?? null,
   });
 
+  // one "+ Add" menu (#2104): the server, the pasted config, the skill; an
+  // entry shows only where it may act. It sits in Manage's title row.
+  const addActions = [
+    ...(scope === "workspace" && !mcp.restricted ? [
+      { id: "server", label: t("connectApps.manage.addServer"), icon: <KeyRound size={14} />, onPick: mcp.startAdd, disabled: mcp.busy !== null },
+      { id: "paste", label: t("mcp.import"), icon: <ClipboardPaste size={14} />, onPick: mcp.toggleImport, disabled: mcp.busy !== null },
+    ] : []),
+    ...(scope !== "bot" && skillsOn && (scope === "me" || ownerOrAdmin !== false || libraryEditor) ? [
+      { id: "skill", label: t("connectApps.skill.new"), icon: <BookOpen size={14} />, onPick: () => push({ page: "skill" }) },
+    ] : []),
+  ];
+  // "From Sagax" on the home (Grok Bot's "From Grok"): what is installed
+  const fromSagax: FromSagaxRow[] = entries.map((entry) => ({ key: entry.key, item: entryIcon(entry), name: entry.name, sub: bringsLabel(entry.brings), status: entry.status }));
+
   return (
     <PluginsPanelFrame
       dialogRef={dialogRef}
@@ -308,6 +324,10 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
           counts={connectedCounts({ entries, engineConnected: scope !== "workspace" ? 0 : claudeConnectors })}
           scope={scopeToggle}
           scopeNote={scopeControl}
+          // the header's "N connected" and its icons (Grok Bot's Connect Apps)
+          // counts the rows Manage lists, so the number matches what it opens
+          connected={{ count: connectedCounts({ entries, engineConnected: scope !== "workspace" ? 0 : claudeConnectors }).installed ?? 0, icons: connectedSummary(scopedItems).icons }}
+          manageActions={addActions.length > 0 ? <AddMenu actions={addActions} /> : undefined}
           search={searchField}
           results={searchResults}
           notices={notices}
@@ -337,15 +357,8 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               entryActions={entryActions}
               // one "+ Add" menu (#2104): the server, the pasted config, the
               // skill; an entry shows only where it may act
-              add={[
-                ...(scope === "workspace" && !mcp.restricted ? [
-                  { id: "server", label: t("connectApps.manage.addServer"), icon: <KeyRound size={14} />, onPick: mcp.startAdd, disabled: mcp.busy !== null },
-                  { id: "paste", label: t("mcp.import"), icon: <ClipboardPaste size={14} />, onPick: mcp.toggleImport, disabled: mcp.busy !== null },
-                ] : []),
-                ...(scope !== "bot" && skillsOn && (scope === "me" || ownerOrAdmin !== false || libraryEditor) ? [
-                  { id: "skill", label: t("connectApps.skill.new"), icon: <BookOpen size={14} />, onPick: () => push({ page: "skill" }) },
-                ] : []),
-              ]}
+              add={addActions}
+              addInTitle
               onDiscover={() => setTab("discover")}
               macApps={scope !== "bot" ? (
                 <MacAppsInstalledSection
@@ -395,6 +408,13 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               onOpenItem={openItem}
               renderAction={renderAction}
               renderBelow={renderBelow}
+              fromSagax={fromSagax}
+              onOpenFromSagax={(row) => {
+                const entry = entries.find((candidate) => candidate.key === row.key);
+                if (entry) openItem(entry.primary);
+              }}
+              onViewInstalled={() => chooseTab("installed")}
+              onAddCustom={scope === "workspace" && !mcp.restricted ? () => push({ page: "connector" }) : undefined}
             />
           )}
           // Browse Bots (2026-10-29): its home, View all, a bot's page and the
@@ -463,7 +483,7 @@ function PluginsPanelFrame({
         aria-modal="true"
         aria-labelledby="plugins-title"
         tabIndex={-1}
-        className={cn("animate-pop-in", CATEGORY_MODAL.frame)}
+        className={cn("animate-pop-in", CATEGORY_MODAL.frame, PLUGINS.frame)}
       >
         <div className={CATEGORY_MODAL.content}>
           <button

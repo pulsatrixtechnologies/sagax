@@ -25,6 +25,7 @@ import { botPluginKey, engineGetsNothing, enginesLine } from "@/lib/capabilities
 import type { CapabilityForm, EngineParts } from "../../../shared/capabilities";
 import { WhopAction, WhopBelow } from "../McpServersPanel";
 import { cardActionClass } from "../category-modal";
+import { pluginActionClass } from "../plugins/plugins-style";
 import { GithubAccountSection } from "../plugins/GithubAccountSection";
 import { MyGithubConnection } from "../settings/MyConnectionsSettings";
 import { BotPluginCard } from "../plugins/BotPluginCard";
@@ -374,7 +375,7 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
           type="button"
           data-tailscale-connect
           onClick={() => openItem(item)}
-          className={cn(cardActionClass("quiet"), "min-w-[76px]")}
+          className={pluginActionClass()}
         >
           {t("connectApps.action.connect")}
         </button>
@@ -386,7 +387,7 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
         // switch and install date stay, server/bots/bot-plugins.ts)
         if (!scopedPluginView?.canChange || (item.installed && !item.updateAvailable)) return null;
         return (
-          <button type="button" {...(item.installed ? { "data-bot-plugin-update": item.id } : { "data-bot-plugin-add": item.id })} disabled={botBusy !== null} onClick={() => installForBot(item.id)} className={cn(cardActionClass(item.installed ? "secondary" : "quiet"), "min-w-[76px]")}>
+          <button type="button" {...(item.installed ? { "data-bot-plugin-update": item.id } : { "data-bot-plugin-add": item.id })} disabled={botBusy !== null} onClick={() => installForBot(item.id)} className={pluginActionClass(item.installed ? "outline" : "fill")}>
             {botBusy === `install:${item.id}` ? <Loader2 size={13} className="mx-auto animate-spin" /> : t(item.installed ? "connectApps.plugin.update" : "connectApps.action.add")}
           </button>
         );
@@ -394,20 +395,20 @@ export function usePluginsPanelActions(s: PluginsPanelState) {
       if (item.installed && !item.updateAvailable) return null;
       if (item.installed) {
         return (
-          <button type="button" disabled={installing !== null} onClick={() => void updatePlugin(item)} className={cn(cardActionClass("secondary"), "min-w-[76px]")} data-plugin-update>
+          <button type="button" disabled={installing !== null} onClick={() => void updatePlugin(item)} className={pluginActionClass("outline")} data-plugin-update>
             {installing === item.id ? <Loader2 size={13} className="mx-auto animate-spin" /> : t("connectApps.plugin.update")}
           </button>
         );
       }
       return (
-        <button type="button" disabled={installing !== null} onClick={() => void installPlugin(item)} className={cn(cardActionClass("quiet"), "min-w-[76px]")}>
+        <button type="button" disabled={installing !== null} onClick={() => void installPlugin(item)} className={pluginActionClass()}>
           {installing === item.id ? <Loader2 size={13} className="mx-auto animate-spin" /> : t("connectApps.action.add")}
         </button>
       );
     }
     if (item.kind === "featured") {
       return (
-        <button type="button" disabled={installing !== null} onClick={(event) => void installFeatured(item, undefined, event.currentTarget)} className={cn(cardActionClass("quiet"), "min-w-[76px]")}>
+        <button type="button" disabled={installing !== null} onClick={(event) => void installFeatured(item, undefined, event.currentTarget)} className={pluginActionClass()}>
           {installing === item.id ? <Loader2 size={13} className="mx-auto animate-spin" /> : t(item.action === "connect" ? "connectApps.action.connect" : "connectApps.action.add")}
         </button>
       );

@@ -362,19 +362,12 @@ struct DesktopFindClip: ViewModifier {
 
 // MARK: - Header
 
-/// The bot pill (41 tall, radius full, card fill, hairline ring, mascot 24,
-/// name 14 medium) centred at y 7.5, and 36 pt round buttons 20 pt from the
-/// trailing edge at y 10: Export, then the panel toggle. With the panel
-/// docked open, the panel's own top bar holds them.
-/// The chat header (ChatView.tsx `content-topbar`, measured in
-/// desktop-1376x1032-03-main.json): the bot pill centred (`BotHeaderPill`:
-/// mascot 24, the name 14/20 medium, a 14 pt chevron in the tertiary ink
-/// that turns while the panel is open; the pill opens and closes the panel,
-/// ⌘.), and at the right, 8 apart: one round "More options" (36) for the
-/// conversation (Copy as Markdown, Export ›, Inspector), the thread picker
-/// while threads show in the header, Dev pods, and the round New topic (32)
-/// while threads are off. While the docked panel is open its top bar holds
-/// the same menu.
+/// The chat header like Grok Bot (#2141 / BotChatHeader.tsx): for a bot, one
+/// centred row with the name pill (mascot ~20, "Name · Label" 14 regular),
+/// who sees the bot, then a round gear that toggles the panel (same as the
+/// pill). Groups keep a single pill. Trailing chrome: More options, threads,
+/// Dev pods, New topic. While the docked panel is open its top bar holds the
+/// conversation menu.
 struct DesktopChatHeader: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
@@ -398,47 +391,36 @@ struct DesktopChatHeader: View {
 
     private var panelOpen: Bool { chrome.panelOpen }
 
+    private var bot: Bot? {
+        guard case let .bot(bot) = chat else { return nil }
+        return session.state.bot(bot.id) ?? bot
+    }
+
+    private var audience: (label: String, shared: Bool)? {
+        guard let bot else { return nil }
+        let principal = session.viewer?.principalId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let viewerId = principal.isEmpty ? "local-owner" : principal.lowercased()
+        let owns = PrimaryBotRules.viewerOwns(bot, viewerId: viewerId)
+        return BotSharingSummary.headerAudience(for: bot, viewerOwns: owns)
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
-            Button(action: openProfile) {
-                HStack(spacing: 8) {
-                    // a group wears the desktop's GroupAvatarStack (SplitWorkspace.tsx)
-                    if case let .room(room) = chat, PeopleDirectory.shared.peer(room, session: session) == nil {
-                        DesktopGroupAvatarStack(members: room.memberIds.compactMap { session.state.bot($0) }, size: 24)
+            HStack {
+                Spacer(minLength: 0)
+                Group {
+                    if let bot, let audience {
+                        botChatHeader(bot: bot, audience: audience)
                     } else {
-                        ChatAvatarView(chat: chat, size: 24, state: MausState.forChat(chat, in: session.state), background: theme.chrome)
-                            .frame(width: 24, height: 24)
-                    }
-                    Text(verbatim: PeopleDirectory.shared.name(chat, session: session))
-                        .font(theme.font(14, .medium))
-                        .foregroundStyle(theme.ink)
-                        .lineLimit(1)
-                    if ConfidentialBanner.shows(for: chat) {
-                        ConfidentialMark()
-                    }
-                    do {
-                        DesktopIconView(icon: .chevronRight, size: 14, strokeWidth: 2)
-                            .foregroundStyle(theme.inkTertiary)
-                            .rotationEffect(.degrees(panelOpen ? 90 : 0))
-                            .animation(.easeOut(duration: 0.16), value: panelOpen)
+                        groupOrPersonPill
                     }
                 }
-                .padding(.leading, 8)
-                .padding(.trailing, 12)
-                .frame(height: 41)
-                .background(theme.elevated, in: Capsule())
-                .overlay(Capsule().strokeBorder(theme.hairlineWeak, lineWidth: 0.5))
-                .contentShape(Capsule())
+                Spacer(minLength: 0)
             }
-            .buttonStyle(.plain)
-            .hoverEffect(.highlight)
-            .keyboardShortcut(".", modifiers: .command)
-            .frame(maxWidth: 360)
             .padding(.top, 7.5)
-            .accessibilityLabel(Text(chat.isBot
-                ? (panelOpen ? "Close \(chat.name)'s panel" : "Open \(chat.name)'s panel")
-                : LocalizedStringKey(chat.name)))
-            .accessibilityIdentifier("desktop-chat-pill")
+            // Desktop centres the header in at most 60% of the top bar (#2141).
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 80)
 
             if !(chrome.panelOpen && chrome.panelDocked) {
                 HStack(spacing: 8) {
@@ -473,6 +455,117 @@ struct DesktopChatHeader: View {
             }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// Bot chat header: name pill, audience, gear (`BotChatHeader`, #2141).
+    private func botChatHeader(bot: Bot, audience: (label: String, shared: Bool)) -> some View {
+        HStack(spacing: 8) {
+            Button(action: openProfile) {
+                HStack(spacing: 8) {
+                    ChatAvatarView(chat: chat, size: 20, state: MausState.forChat(chat, in: session.state), background: theme.chrome)
+                        .frame(width: 20, height: 20)
+                    nameAndLabel(bot: bot)
+                    if ConfidentialBanner.shows(for: chat) {
+                        ConfidentialMark()
+                    }
+                }
+                .padding(.leading, 6)
+                .padding(.trailing, 12)
+                .frame(height: 32)
+                .background(theme.elevated, in: Capsule())
+                .overlay(Capsule().strokeBorder(theme.hairlineWeak, lineWidth: 0.5))
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .hoverEffect(.highlight)
+            .keyboardShortcut(".", modifiers: .command)
+            .accessibilityLabel(Text(panelOpen ? "Close \(bot.name)'s panel" : "Open \(bot.name)'s panel"))
+            .accessibilityIdentifier("desktop-chat-pill")
+
+            HStack(spacing: 6) {
+                DesktopIconView(icon: audience.shared ? .users : .lock, size: 13, strokeWidth: 2)
+                    .foregroundStyle(theme.inkSecondary)
+                Text(verbatim: audience.label)
+                    .font(theme.font(13, .regular))
+                    .foregroundStyle(theme.inkSecondary)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 32)
+            .frame(maxWidth: 192)
+            .background(theme.elevated, in: Capsule())
+            .overlay(Capsule().strokeBorder(theme.hairlineWeak, lineWidth: 0.5))
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("desktop-bot-header-audience")
+
+            Button(action: openProfile) {
+                DesktopIconView(icon: .settings, size: 16, strokeWidth: 1.75)
+                    .foregroundStyle(panelOpen ? theme.ink : theme.inkSecondary)
+                    .frame(width: 32, height: 32)
+                    .background(panelOpen ? theme.elevatedHover : theme.elevated, in: Circle())
+                    .overlay(Circle().strokeBorder(theme.hairlineWeak, lineWidth: 0.5))
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .hoverEffect(.highlight)
+            .accessibilityLabel(Text(panelOpen ? "Close \(bot.name)'s panel" : "Open \(bot.name)'s panel"))
+            .accessibilityAddTraits(panelOpen ? .isSelected : [])
+            .accessibilityIdentifier("desktop-bot-header-gear")
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("desktop-bot-chat-header")
+    }
+
+    private func nameAndLabel(bot: Bot) -> some View {
+        let tag = bot.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return HStack(spacing: 0) {
+            Text(verbatim: bot.name)
+                .foregroundStyle(theme.ink)
+            if !tag.isEmpty {
+                Text(verbatim: " · \(tag)")
+                    .foregroundStyle(theme.inkSecondary)
+                    .accessibilityIdentifier("desktop-bot-header-label")
+            }
+        }
+        .font(theme.font(14, .regular))
+        .lineLimit(1)
+    }
+
+    /// Group / person pill: mascot stack, name, chevron (pre-#2141 layout).
+    private var groupOrPersonPill: some View {
+        Button(action: openProfile) {
+            HStack(spacing: 8) {
+                if case let .room(room) = chat, PeopleDirectory.shared.peer(room, session: session) == nil {
+                    DesktopGroupAvatarStack(members: room.memberIds.compactMap { session.state.bot($0) }, size: 24)
+                } else {
+                    ChatAvatarView(chat: chat, size: 24, state: MausState.forChat(chat, in: session.state), background: theme.chrome)
+                        .frame(width: 24, height: 24)
+                }
+                Text(verbatim: PeopleDirectory.shared.name(chat, session: session))
+                    .font(theme.font(14, .medium))
+                    .foregroundStyle(theme.ink)
+                    .lineLimit(1)
+                if ConfidentialBanner.shows(for: chat) {
+                    ConfidentialMark()
+                }
+                DesktopIconView(icon: .chevronRight, size: 14, strokeWidth: 2)
+                    .foregroundStyle(theme.inkTertiary)
+                    .rotationEffect(.degrees(panelOpen ? 90 : 0))
+                    .animation(.easeOut(duration: 0.16), value: panelOpen)
+            }
+            .padding(.leading, 8)
+            .padding(.trailing, 12)
+            .frame(height: 41)
+            .background(theme.elevated, in: Capsule())
+            .overlay(Capsule().strokeBorder(theme.hairlineWeak, lineWidth: 0.5))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .hoverEffect(.highlight)
+        .keyboardShortcut(".", modifiers: .command)
+        .frame(maxWidth: 360)
+        .accessibilityLabel(Text(LocalizedStringKey(chat.name)))
+        .accessibilityIdentifier("desktop-chat-pill")
     }
 
     /// The Inspector row: an admin's, or the bot's owner on an organization server.

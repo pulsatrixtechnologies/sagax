@@ -215,6 +215,7 @@ const toolDefinitions = (externalRuntime: boolean) => [
   roomsTools.DEF_MESSAGE_USER,
   roomsTools.DEF_MESSAGE_PERSON,
   coreTools.DEF_REACT_TO_MESSAGE,
+  coreTools.DEF_SET_REPLY_NOTIFY,
   extrasTools.DEF_REMOVE_REACTION,
   teamTools.DEF_CREATE_BOT,
   teamTools.DEF_LIST_TEAM_SETUP,
@@ -383,7 +384,7 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   // The person's iPhone (agents-phone-tools.ts): rare, and long.
   "phone_tool",
   // A post into a room from a 1:1 chat, or a message to another person: rare.
-  "list_rooms", "post_to_room", "message_user", "message_person",
+  "list_rooms", "post_to_room", "message_user", "message_person", "set_reply_notify",
   // #1997: long or occasional in a chat turn (about 7 KB of schema loaded on
   // every Claude call): a video, an HTML page, a wait on an event, a
   // connector sign-in card. Each one is still one ToolSearch step away.

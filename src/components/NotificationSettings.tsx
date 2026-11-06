@@ -29,6 +29,7 @@ import { NOTIFICATION_SOUND_CHOICES, notificationSoundChoice, playNotificationSo
 import { CompactRow, DescribedRow, PillSelect, SettingsGroup, Switch } from "./SettingsPrimitives";
 import { PrivacySettings } from "./PrivacySettings";
 import { NotificationInvite } from "./NotificationInvite";
+import { NativeNotificationStatusRow } from "./NativeNotificationStatusRow";
 import { BlockedPeopleRow, ReportsRow } from "./settings/ModerationSettings";
 import { DisclosurePill } from "./settings/AppearanceSettings";
 
@@ -121,6 +122,7 @@ export function NotificationSettings({ privacy = false }: { privacy?: boolean })
       </SettingsGroup>
       <SettingsGroup title={t("settings.group.alerts")} groupId="alerts">
         <NotificationInvite />
+        <NativeNotificationStatusRow />
         <SoundRow />
         <DescribedRow label={t("settings.notifications.persistent.title")} description={t("settings.notifications.persistent.mac")} rowId="persistentNotifications">
           <Switch checked={persistent} aria-label={t("settings.notifications.persistent.title")} onClick={() => persistentNotifications.set(!persistent)} />

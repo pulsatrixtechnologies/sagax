@@ -56,6 +56,7 @@ final class NotificationCoordinator: NSObject, UNUserNotificationCenterDelegate 
         if CallQuiet.shared.silences(threadId: notification.threadId) { return }
         // an AI client's conversation over MCP never rings the phone or the watch
         if notification.quietOnPhones == true { return }
+        if notification.notify == false { return }
         let content = UNMutableNotificationContent()
         // a confidential thread's banner never carries its words nor its
         // title (taken from its first message); the bot's name replaces

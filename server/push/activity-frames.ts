@@ -22,7 +22,7 @@ export function liveActivityUpdatesForFrame(
   if (payload.kind === "notify" && payload.notification && typeof payload.notification === "object") {
     const raw = payload.notification as Record<string, unknown>;
     const noteKind = text(raw.kind);
-    if (raw.quietOnPhones === true) return [];
+    if (raw.quietOnPhones === true || raw.notify === false) return [];
     const botId = text(raw.botId);
     if (!botId) return [];
     const botName = text(raw.botName) || "Bot";

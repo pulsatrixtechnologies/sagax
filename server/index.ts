@@ -413,7 +413,8 @@ import {
   routineRunTitle,
   summarize,
   type Notification,
-  buildNoticeNotification
+  buildNoticeNotification,
+  withBotNotify
 } from "./notify.ts";
 import {
   describeAllowRule
@@ -10226,6 +10227,10 @@ const nativeReviewNoticed = new Set<string>();
 // own news on its thread; whatever needs the person — an approval, a
 // question, their hands — still reaches them.
 const quietTurnThreads = new Set<string>();
+/** Threads whose next settled reply the bot chose to post without alerting
+ * anyone (set_reply_notify, send_to_bot `notify` false): read and cleared
+ * when that turn completes (runtime-events/turn-completed.ts). */
+const silentReplyThreads = new Set<string>();
 const QUIET_TURN_NEWS: ReadonlySet<Notification["kind"]> = new Set(["done", "turn-failed", "incident"]);
 
 /** Put a notification on the wire. Clients decide what to do with it — a
@@ -11768,6 +11773,7 @@ installMainRuntimeEventSubscriber(bus, () => ({
   get proactiveWakeForThread() { return proactiveWakeForThread; },
   get publicGroupState() { return publicGroupState; },
   get quietTurnThreads() { return quietTurnThreads; },
+  get silentReplyThreads() { return silentReplyThreads; },
   get raiseHarnessQuestion() { return raiseHarnessQuestion; },
   get reachMeTeams() { return reachMeTeams; },
   get readAndDraft() { return readAndDraft; },
@@ -16641,6 +16647,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     voiceCallActive: (threadId) => Boolean(voiceCalls.active(threadId)),
     botReaction,
     recordPlacedReaction: (threadId, botId, info) => { placedBotReactions.set(`${threadId}:${botId}`, info); },
+    setReplyNotify: (threadId, alert) => { if (alert) silentReplyThreads.delete(threadId); else silentReplyThreads.add(threadId); },
     roomFeedsBot,
     turnSpeaker: (threadId) => turnSpeakerPrincipals.get(threadId),
     localPrincipalId,
@@ -17032,6 +17039,12 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     offerRoomPostToBots: (room, poster, text, messageId, hops) =>
       offerRoomPostToBots(room as unknown as GroupRecord, poster as unknown as BotRecord, text, messageId, hops),
     notePeerNotice,
+    notifyRoomPost: (room, poster, text, alert) => notify(withBotNotify({
+      kind: "message", botId: poster.id, botName: poster.name, threadId: room.threadId, groupId: room.id,
+      title: `${poster.name} in ${room.name}`, body: summarize(text),
+      ...(typeof poster.avatarUrl === "string" && poster.avatarUrl ? { avatarUrl: poster.avatarUrl } : {}),
+    } satisfies Notification, alert)),
+    setReplyNotify: (threadId, alert) => { if (alert) silentReplyThreads.delete(threadId); else silentReplyThreads.add(threadId); },
     proactiveHopsFromThread,
     pollOnlyCaller: (capability) => pollOnlyCaller(capability as InternalCapability),
     peerSpeaker: (fromBotId, fromThreadId) => peerSpeaker(fromBotId, fromThreadId),
@@ -17227,10 +17240,10 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     reachablePeople: (ownerId) => messageUserReachablePeople(ownerId),
     personName: (id) => personDisplayName(principals.byId(id)) || "",
     broadcastGroup: (group) => broadcast({ kind: "group", group: publicGroupState(group as unknown as GroupRecord) }),
-    notifyMessage: ({ bot, group, text, audience }) => notify({
+    notifyMessage: ({ bot, group, text, audience, notify: alert }) => notify(withBotNotify({
       kind: "message", botId: bot.id, botName: bot.name, threadId: group.threadId, groupId: group.id,
       title: group.name, body: summarize(text), audience,
-    } satisfies Notification)
+    } satisfies Notification, alert !== false))
   }),
 ];
 /** The people a bot owner can reach with message_user (#2118): on an

@@ -246,6 +246,10 @@
               "normal"
             ],
             "description": "now wakes an idle recipient at once or moves this to the front of its queue. It never interrupts a running turn. Default normal. At most 10 now sends per sender per hour; past that it is delivered as normal."
+          },
+          "notify": {
+            "type": "boolean",
+            "description": "Default true. false: the teammate's reply there is shown and unread, but no desktop notification or phone push."
           }
         },
         "required": [
@@ -861,6 +865,10 @@
           "attach_voice_note": {
             "type": "boolean",
             "description": "True to attach this turn's send_voice_note recording; the message is its caption. Call send_voice_note first."
+          },
+          "notify": {
+            "type": "boolean",
+            "description": "Default true. false: shown and unread, but no desktop notification or phone push (progress, logs, not urgent)."
           }
         },
         "required": [
@@ -883,6 +891,10 @@
           "text": {
             "type": "string",
             "description": "The complete message, written for that person."
+          },
+          "notify": {
+            "type": "boolean",
+            "description": "Default true. false: shown and unread, but no desktop notification or phone push (progress, logs, not urgent)."
           }
         },
         "required": [
@@ -906,6 +918,10 @@
           "message": {
             "type": "string",
             "description": "The complete message for that person to read as it stands."
+          },
+          "notify": {
+            "type": "boolean",
+            "description": "Default true. false: shown and unread, but no desktop notification or phone push (progress, logs, not urgent)."
           }
         },
         "required": [
@@ -941,6 +957,23 @@
         },
         "required": [
           "emoji"
+        ]
+      }
+    },
+    {
+      "name": "set_reply_notify",
+      "description": "Whether this turn's reply (or routine report) alerts the person. notify false: shown and unread, but no desktop notification or phone push. Not called: it notifies as usual.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "notify": {
+            "type": "boolean",
+            "description": "Default true. false: shown and unread, but no desktop notification or phone push (progress, logs, not urgent)."
+          }
+        },
+        "required": [
+          "notify"
         ]
       }
     },

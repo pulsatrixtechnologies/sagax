@@ -96,5 +96,34 @@ export interface Notification {
    * one (#291). The client that asked reads the answer and the approval;
    * the desktop still shows it. */
   quietOnPhones?: boolean;
+  /** False when the bot wrote this message with `notify: false` (a progress
+   * update, a routine log with nothing urgent): the message is in the chat
+   * and unread as usual, but no native notification shows on any desktop,
+   * no push reaches a phone or a watch. Absent or true: it notifies. */
+  notify?: boolean;
 }
 
+/** Whether a notice may raise a native notification or a push: everything
+ * but what a bot wrote with `notify: false`. */
+export function notificationAlerts(note: { notify?: unknown } | null | undefined): boolean {
+  return note?.notify !== false;
+}
+
+/** A bot tool's `notify` argument: only an explicit false stays quiet. */
+export function botNotifyArg(value: unknown): boolean {
+  return value !== false && value !== "false";
+}
+
+/** The notice as the bot chose it: `notify: false` rides along to every
+ * client, the desktop shell and the push relay, each of which skips it. */
+export function withBotNotify<T extends Notification | null>(note: T, notify: boolean): T {
+  return note && !notify ? { ...note, notify: false } : note;
+}
+
+
+/** The `notify` parameter shared by every tool through which a bot writes. */
+export const BOT_NOTIFY_PARAM = {
+  type: "boolean",
+  description:
+    "Default true. false: shown and unread, but no desktop notification or phone push (progress, logs, not urgent).",
+} as const;

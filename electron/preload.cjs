@@ -421,6 +421,16 @@ const bridge = {
    * from the main window's top frame. */
   notify: (request) => ipcRenderer.send("desktop:notify", request),
   withdrawNotification: (withdrawKey) => ipcRenderer.send("desktop:notify-withdraw", withdrawKey),
+  /** Settings > Notifications: whether notifications reach Notification
+   * Center ({state: "delivered" | "not-delivered" | "unknown", canCheck,
+   * platform, settings}), a test notification that returns the state it
+   * found, and the System Settings pane that allows Sagax notifications. */
+  notificationStatus: () => ipcRenderer.invoke("desktop:notification-status"),
+  testNotification: (text) => ipcRenderer.invoke("desktop:notification-test", {
+    title: text && typeof text.title === "string" ? text.title : "",
+    body: text && typeof text.body === "string" ? text.body : "",
+  }),
+  openNotificationSettings: () => ipcRenderer.invoke("desktop:open-notification-settings"),
   /** The person clicked one of those notifications: its id and the
    * conversation it is about ({botId, threadId, groupId, routineRunId}). */
   onNotificationClick: (cb) => {

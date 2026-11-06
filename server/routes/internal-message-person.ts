@@ -3,7 +3,7 @@
 // room, ask with Always allow, then post on the group's main thread.
 import { peerApprovalFailure, requestPeerApproval } from "../peers/peer-approval.ts";
 import { findMessagePersonGroup, MESSAGE_PERSON_MAX_CHARS } from "../people/message-person.ts";
-import { summarize, type Notification } from "../notify.ts";
+import { summarize, withBotNotify, type Notification } from "../notify.ts";
 import type { InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
 
@@ -162,7 +162,7 @@ export function createInternalMessagePersonRoutes(deps: MessagePersonDeps): Inte
     };
     deps.store.appendMessage(fromThreadId, chip);
 
-    deps.notify({
+    deps.notify(withBotNotify<Notification>({
       kind: "message",
       botId: freshFrom.id,
       botName: freshFrom.name,
@@ -172,7 +172,7 @@ export function createInternalMessagePersonRoutes(deps: MessagePersonDeps): Inte
       body: summarize(message),
       audience: [target.id],
       ...(freshFrom.avatarUrl ? { avatarUrl: freshFrom.avatarUrl } : {}),
-    });
+    }, body.notify !== false));
 
     return json(res, created ? 201 : 200, {
       ok: true,

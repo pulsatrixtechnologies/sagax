@@ -10,6 +10,8 @@ function observePushFrame(payload: Record<string, unknown>) {
   if (kind !== "notify" && kind !== "nudge" && kind !== "achievements") return;
   // a conversation an AI client holds over MCP: never a phone or a watch
   if (kind === "notify" && (payload.notification as { quietOnPhones?: unknown } | undefined)?.quietOnPhones === true) return;
+  // a message the bot wrote with notify false: in the chat, never a push
+  if (kind === "notify" && (payload.notification as { notify?: unknown } | undefined)?.notify === false) return;
   try {
     const messages = host.pushesForFrame(payload, {
       notificationPeople: (note) => {

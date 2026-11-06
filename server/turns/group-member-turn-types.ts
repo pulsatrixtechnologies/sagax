@@ -17,6 +17,7 @@ export type GroupMemberTurnHost = {
   MACHINE_OFFLINE_NOTE: any,
   MAX_GROUP_HOPS: any,
   PlaceUnavailableError: any,
+  MEME_PROMPT: any,
   REACTION_PROMPT: any,
   ROUTINE_PROMPT: any,
   SESSION_SEARCH_SYSTEM_PROMPT: any,

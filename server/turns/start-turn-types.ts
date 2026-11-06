@@ -22,6 +22,7 @@ export type StartTurnHost = {
   LOCAL_RECALL_BUDGET: any,
   LOCAL_RECENT_WORK_LINES: any,
   PlaceUnavailableError: any,
+  MEME_PROMPT: any,
   REACTION_PROMPT: any,
   ROUTINE_EXECUTION_PROMPT: any,
   ROUTINE_PROMPT: any,

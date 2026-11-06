@@ -11751,7 +11751,6 @@
   "pair.signIn.useEmail": "Sign in with your email instead",
   "chat.peer.aiClientName": "AI client",
   "chat.peer.viaAiClient": "sent from an AI client",
-  "composer.parallelQuestion": "Question from the parallel task {title}",
   "botPanel.reachMe.label": "Reach me",
   "botPanel.reachMe.help": "When this bot has a question or an approval for you, it reaches you here. Answer from there and it continues.",
   "botPanel.reachMe.push.label": "Phone notifications",

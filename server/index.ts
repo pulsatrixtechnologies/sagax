@@ -44612,10 +44612,20 @@ ROUTES.push(createTeamExportImportRoutes({
   bots: () => store.bots,
   groups: () => store.groups,
   sections: () => store.sections,
+  // #2045: export lists and packs only the caller's own teams.
+  sectionsFor: (auth) => (sectionChannels ? orgVisibleSections(orgSectionNames(), auth.kind === "session" ? auth.session.principalId?.trim() || undefined : localPrincipalId()) : store.sections),
   sectionKey,
   listRoutines: () => routines!.listRoutines(),
   mcpServers: () => cfg.mcpServers ?? {},
   readSectionContext,
+  readSectionContextFor: (auth, section) => {
+    const key = teamStorageKeyForAuth(auth, section);
+    return key ? readSectionContext(key) : null;
+  },
+  ownsBot: (bot, auth) => {
+    if (IDENTITY.kind !== "perspicax") return true;
+    return effectiveBotOwner(bot).trim().toLowerCase() === creatingBotOwnerId(auth).trim().toLowerCase();
+  },
   readPublishedLibrary,
   writePublishedLibrary,
   readPublishedTeam,

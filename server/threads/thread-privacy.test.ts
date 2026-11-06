@@ -170,6 +170,19 @@ describe("narrowBotForViewer", () => {
     expect(own.messages).toEqual(wire.messages);
   });
 
+  it("#2045: strips the owner's team fields for another viewer of a shared bot", () => {
+    const framed = { ...wire, section: "Equipe A", sectionId: "sec_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" };
+    const bobs = narrowBotForViewer(framed, {
+      viewerId: BOB, botOwnerPrincipalId: ALICE, mine: "b1",
+      mineTask: { threadId: "b1", approvalMode: "ask", busy: false, activity: "idle" },
+    });
+    expect(bobs).not.toHaveProperty("section");
+    expect(bobs).not.toHaveProperty("sectionId");
+    const own = narrowBotForViewer(framed, { viewerId: ALICE, botOwnerPrincipalId: ALICE, mine: "a1" });
+    expect(own.section).toBe("Equipe A");
+    expect(own.sectionId).toBe("sec_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+  });
+
   it("gives another person their thread, their settings, and never the transcript or title of someone else's", () => {
     const bobs = narrowBotForViewer(wire, {
       viewerId: BOB, botOwnerPrincipalId: ALICE, mine: "b1",

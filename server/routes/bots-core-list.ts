@@ -4,6 +4,7 @@
  */
 import { memberBot, memberGroup } from "../bots/bot-visibility.ts";
 import { peopleDmForViewer } from "../people/people-dms.ts";
+import { withoutForeignTeamFields } from "../threads/thread-privacy.ts";
 
 import type { BotsCoreRouteDeps } from "./bots-core-deps.ts";
 import { PASS, type RouteHandler } from "./table.ts";
@@ -57,8 +58,9 @@ export function createBotsCoreListRoutes(deps: BotsCoreRouteDeps): RouteHandler 
       const listed = shownBots.map((bot) => {
         const mine = viewerId && privateThreads() ? ensureViewerThread(bot, viewerId) : undefined;
         const record = mine ? store.projectBotForTask(bot.id, mine) ?? bot : bot;
+        const wired = withoutForeignTeamFields(wireBot(record), viewerId, typeof bot.ownerUserId === "string" ? bot.ownerUserId : undefined);
         return memberBot({
-          ...wireBot(record),
+          ...wired,
           // busy while any of the viewer's threads works, not only the one shown
           ...(viewerId && privateThreads() ? viewerBotActivity(bot, viewerId) : {}),
           tasks: listedTasks(record.threadId, threadsShownTo(bot, store.tasks(bot.id), viewerId)).map((task) => wireTask(task, bot.modelSelection, coordinated)),

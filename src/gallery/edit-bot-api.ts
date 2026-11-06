@@ -15,8 +15,11 @@ export function editBotFixture(org: boolean, color?: string | null) {
     computer: org ? "cloud" : "local", mcpServers: null,
     toolScope: { deny: ["mcp:mail:send"] },
     alwaysAllow: ["mcp:mail:read_notes"],
-    ...(org ? { workFolder: "/workspace/bots/scout" } : {}),
+    ...(org ? { workFolder: "/workspace/bots/scout", ownerUserId: "pr_alex", turnPayerDefault: "owner", grants: [{ target: "user:pr_sam", level: "use" }] } : {}),
   } as unknown as Bot;
+  // &member=1: the bot's owner is an organization member whose profile list
+  // lacks bots.behaviour (#1137 hotfix: who pays still shows)
+  const member = org && new URLSearchParams(location.search).get("member") === "1";
 
   // Two more fictional bots, so the sidebar beside the page looks lived in.
   const neighbours = [
@@ -51,7 +54,7 @@ export function editBotFixture(org: boolean, color?: string | null) {
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   /** The stand-in answer for an /api path, or null when the gallery has none. */
   const answer = (path: string): Response | null => {
-    if (path === "/api/config") return json({ profile: { name: "Alex Example" }, features: {}, onboarding: { completedAt: 1, launchMode: "solo" }, vps: { configured: false }, box: { configured: false }, tts: { configured: false }, imageGen: { configured: false } });
+    if (path === "/api/config") return json({ ...(member ? { viewer: { operator: false, principalId: "pr_alex", name: "Alex Example", role: "member", permissions: [] } } : {}), profile: { name: "Alex Example" }, features: {}, onboarding: { completedAt: 1, launchMode: "solo" }, vps: { configured: false }, box: { configured: false }, tts: { configured: false }, imageGen: { configured: false } });
     if (path === "/api/org") return org
       ? json({ org: { name: "Exemple inc.", identity: { kind: "perspicax", issuer: "https://perspicax.example.test" } }, link: { state: "ok" }, viewerRole: "member", settings: {} })
       : json({ org: null });

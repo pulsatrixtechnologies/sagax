@@ -6,18 +6,43 @@
 // admin (server/routes/bot-runtime-settings.ts). Who pays never changes
 // who reads a conversation. #2080: a grey line under the model chip of
 // Bot > Model ("Paid by the owner") with its one menu, no longer hidden
-// under Advanced.
+// under Advanced. 2026-11-06 hotfix: shown to the bot's owner or an admin
+// (the server's gate, bots.behaviour is always a member's own), never tied
+// to the automaticRecovery right, and also in Shared with.
 import { t } from "@/lib/i18n";
 import { botTurnPayer } from "@/lib/bot-runtime-settings";
-import type { Bot } from "@/state/store";
+import { viewerOwnsBot } from "@/lib/bot-capabilities";
+import { viewerBotsReadOnly } from "@/lib/viewer";
+import { useStore, type Bot, type ConfigStatus } from "@/state/store";
 import type { TurnPayerMode } from "../../../shared/turn-payer";
-import { HelpTip, PillSelect } from "../SettingsPrimitives";
+import { HelpTip, PillSelect, SettingsGroup } from "../SettingsPrimitives";
 import { useBotRuntimeSettings } from "./useBotRuntimeSettings";
+import { useBotEditor } from "./BotEditorContext";
 
 type Choice = TurnPayerMode | "default";
 
 export function payerLabel(mode: TurnPayerMode): string {
   return t(mode === "owner" ? "botPayer.owner" : "botPayer.speaker");
+}
+
+/** Whether this viewer chooses who pays for this bot: its owner or an
+ * admin, on an organization server (the server sends turnPayerDefault),
+ * for a bot that does not run on its owner's computer. */
+export function canChooseBotPayer(config: ConfigStatus | null | undefined, bot: Bot): boolean {
+  return bot.host?.kind !== "machine" && Boolean(bot.turnPayerDefault) && !viewerBotsReadOnly(config) && viewerOwnsBot(config, bot);
+}
+
+/** Who pays, in Shared with: the same line as Bot > Model, where people
+ * look for it once the bot is shared. */
+export function BotPayerCard({ bot }: { bot: Bot }) {
+  const { state } = useStore();
+  const { draft } = useBotEditor();
+  if (draft || !canChooseBotPayer(state.config, bot)) return null;
+  return (
+    <SettingsGroup title={t("botPayer.title")} groupId="botPayerSharing">
+      <div className="pt-2.5"><BotPayerLine key={`payer:${bot.id}`} bot={bot} /></div>
+    </SettingsGroup>
+  );
 }
 
 /** The payer under the model chip: who pays, in grey, and the menu that

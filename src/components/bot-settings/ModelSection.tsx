@@ -24,7 +24,7 @@ import { botWithViewerSettings, useViewerBotOverride, viewerLocalBotSettings } f
 import { useBotEditor } from "./BotEditorContext";
 import { botRecovery, effectiveBackups, type BotRecovery } from "@/lib/bot-runtime-settings";
 import { useBotRuntimeSettings } from "./useBotRuntimeSettings";
-import { BotPayerLine } from "./BotPayerSettings";
+import { BotPayerLine, canChooseBotPayer } from "./BotPayerSettings";
 import { BotHostSettings } from "./BotHostSettings";
 
 type Backup = NonNullable<Bot["fallback"]>[number];
@@ -46,8 +46,9 @@ export function ModelSection({ bot }: { bot: Bot }) {
   // automaticRecovery, the ordered list with fallback (shared/permissions.ts)
   const canSwitch = !draft && canEditBotField(state.config, bot, "automaticRecovery");
   const canOrder = !draft && canEditBotField(state.config, bot, "fallback");
-  // #1137: who pays for this bot's replies (organization server only)
-  const payer = !machine && !draft && Boolean(bot.turnPayerDefault) && canSwitch;
+  // #1137: who pays for this bot's replies (organization server only), the
+  // owner's or an admin's choice: never tied to the automaticRecovery right
+  const payer = !draft && canChooseBotPayer(state.config, bot);
   const keepWarm = !draft && Boolean(state.config?.cacheKeepWarm);
   return (
     <div className="flex flex-col gap-5">

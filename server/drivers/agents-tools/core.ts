@@ -183,6 +183,21 @@ export const DEF_REACT_TO_MESSAGE = {
     },
   };
 
+export const DEF_SEND_MEME = {
+    name: "send_meme",
+    description:
+      "Search reaction memes (animated GIFs and still captioned meme images) and post the best match into this chat. Use sparingly, only when the person's style invites it (they send memes or emojis, playful tone, memory of that preference). Never in serious or work contexts: tickets, invoices, errors, approvals, or anything they are waiting on as a real answer. Optional caption for a still meme (top/bottom style text). A meme never replaces a needed written answer.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        query: { type: "string", minLength: 1, maxLength: 120, description: "What meme to look for, for example \"this is fine\" or \"high five\"." },
+        caption: { type: "string", maxLength: 200, description: "Optional short caption for a still meme template." },
+      },
+      required: ["query"],
+    },
+  };
+
 export const DEF_REQUEST_CREDENTIAL = {
     name: "request_credential",
     description:
@@ -333,7 +348,7 @@ export const DEF_ACT = {
     },
   };
 
-export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set(['tool_result_read', 'list_room_targets', 'coordinate_bots', 'send_to_bot', 'list_bots', 'ask_bot', 'delegate_bot', 'check_delegation', 'wait_delegation', 'select_computer', 'attach_file', 'react_to_message', 'request_credential', 'memory_update', 'memory_log', 'session_search', 'route_message', 'answer_approval', 'act'] as const);
+export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set(['tool_result_read', 'list_room_targets', 'coordinate_bots', 'send_to_bot', 'list_bots', 'ask_bot', 'delegate_bot', 'check_delegation', 'wait_delegation', 'select_computer', 'attach_file', 'react_to_message', 'send_meme', 'request_credential', 'memory_update', 'memory_log', 'session_search', 'route_message', 'answer_approval', 'act'] as const);
 
 /** Handle a tool of this family, or return null when the name is not ours. */
 export async function callCoreTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult | null> {
@@ -348,6 +363,20 @@ export async function callCoreTool(name: string, args: Json, context: ToolCallCo
     });
     if (!ok) return { text: String(body.error ?? "Could not attach that file."), isError: true };
     return { text: `Attached ${String(body.name ?? "the file")} (${Number(body.bytes ?? 0)} bytes). It now appears in the chat with a preview.` };
+  }
+  if (name === "send_meme") {
+    if (typeof args.query !== "string" || !args.query.trim()) {
+      return { text: "query: what meme to look for.", isError: true };
+    }
+    const { ok, body } = await apiResponse("/api/internal/send-meme", {
+      method: "POST",
+      body: JSON.stringify({
+        query: args.query,
+        ...(typeof args.caption === "string" ? { caption: args.caption } : {}),
+      }),
+    });
+    if (!ok) return { text: String(body.error ?? "Could not send that meme."), isError: true };
+    return { text: String(body.text ?? "Sent a meme.") };
   }
   if (name === "act") {
     if (EXTERNAL_RUNTIME) return { text: "Unknown tool: act", isError: true };

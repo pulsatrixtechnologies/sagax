@@ -691,6 +691,8 @@ export interface Bot {
   voiceLanguage?: string;
   /** whether this bot may send voice notes (on unless switched off) */
   voiceNotes?: boolean;
+  /** #2121: Auto (absent) or Off. */
+  memeReplies?: "auto" | "off";
   /** whether this bot may write email draft cards (on unless switched off) */
   emailDrafts?: boolean;
   /** whether this bot uses native memory (on unless switched off) */

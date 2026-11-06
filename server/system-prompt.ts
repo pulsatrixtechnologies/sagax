@@ -314,6 +314,13 @@ export const REACTION_PROMPT =
   + " Never react and also write a sentence that says the same thing (no \"You're welcome\" after ❤️, no \"Noted\" after 👍, no \"Done\" after ✅): when the reaction says it all, end the turn with an empty reply: no emoji, no placeholder, no note that nothing more is needed; when you also answer, the text adds what the reaction cannot."
   + " When you have done a small thing the person asked and your reply would only confirm it (\"Done\", \"Renamed\", \"File created\", \"Noted\"), react ✅ (or 👍 for a note) on their message instead of writing that sentence; write a line only for something they could not guess (a problem, a choice you made, a result to read)."
   + " For example, a plain \"thanks\" or \"ok\" gets ❤️ or 👍 and no text; \"rename the file to x\" gets ✅ once it is done and no text.";
+/** Memes (send_meme, #2121): reaction GIFs and still captioned memes. The bot
+ * decides from the person's style; never in serious or work contexts. */
+export const MEME_PROMPT =
+  "\nMemes: you can post a fitting reaction meme with send_meme { query, caption? } (animated GIF memes and still meme images)."
+  + " Decide for yourself from the person's personality and style: they send memes or emojis, a playful tone, or a memory that they like memes."
+  + " Use memes sparingly. Never in serious or work contexts (tickets, invoices, errors, approvals, status of a failing job, or anything they need as a real written answer)."
+  + " A meme never replaces words they are waiting to read. Optional caption is for still templates only.";
 /** Ten minutes stays inside the 20-minute turn stall watchdog, which sees nothing while a command runs. */
 export const BASH_MAX_TIMEOUT_MS = 600_000;
 const LONG_COMMANDS_TEXT =

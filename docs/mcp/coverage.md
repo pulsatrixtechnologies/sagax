@@ -89,8 +89,8 @@ Reading the table:
 | artifacts:delete | sagax | `delete_artifact` | `artifacts:delete` | covered |
 | artifacts:claude | sagax | `claude_artifact` | `artifacts:claude` | covered |
 | pages:propose | sagax | `propose_page` | `pages:propose` | covered |
+| pages:choose | sagax | `choose_page_target` (#2048) | `pages:choose` | covered |
 | pages:comments | sagax | `page_comments` | `pages:comments` | covered |
-| pages:choose | sagax | `choose_page_target` | `pages:choose` | covered |
 | phone:call | sagax | `place_phone_call` | `phone:call` | covered |
 | phone:contacts | sagax | `phone_line_contact` | `phone:contacts` | covered |
 | phone:dtmf | sagax | `send_dtmf` | `phone:dtmf` | covered |

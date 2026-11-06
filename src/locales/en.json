@@ -4313,6 +4313,8 @@
   "model.favorite.add": "Add {name} to favorites",
   "model.favorite.remove": "Remove {name} from favorites",
   "model.back": "Back",
+  "model.showMore": "Show more",
+  "model.showLess": "Show less",
   "model.setupRequired": "Setup required",
   "model.signInRequired": "Sign-in required",
   "model.simple.apiKey": "API key",

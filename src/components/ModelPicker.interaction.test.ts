@@ -93,7 +93,8 @@ function nodes(value: ReactNode): Node[] {
   return Children.toArray(value).flatMap((child) => {
     if (!isValidElement(child)) return [];
     const node = child as Node;
-    // #2106: the model list carries the menu's footer in its scrolling zone (`after`)
+    // #2181: the menu footer (Effort, Provider) is passed as `after` and drawn
+    // outside the scrolling list.
     return [node, ...nodes(node.props.children), ...nodes(node.props.after as ReactNode), ...nodes(node.props.autoPanel as ReactNode)];
   });
 }

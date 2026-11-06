@@ -23,14 +23,16 @@ export function appRunWindow(newestFirst: readonly RoutineRun[], since: number):
 }
 
 /** `since` asks for the app's window; `from` and `to` for exactly the runs scheduled in that range; `thread` for the
- * runs that worked in one conversation; nothing, for every run. */
+ * runs that worked in one conversation; `run` for one run by id (#2272: its window opens on a run older than the
+ * app's window); nothing, for every run. */
 export function routineRunsFor(listRuns: (from?: number, to?: number) => RoutineRun[], query: URLSearchParams): RoutineRun[] {
   const time = (name: string) => {
     const raw = query.get(name);
     const value = raw === null ? Number.NaN : Number(raw);
     return Number.isFinite(value) ? value : undefined;
   };
-  const since = time("since"), thread = query.get("thread");
+  const since = time("since"), thread = query.get("thread"), runId = query.get("run");
+  if (runId) return listRuns().filter((run) => run.id === runId);
   if (thread) return listRuns().filter((run) => run.threadId === thread);
   return since === undefined ? listRuns(time("from"), time("to")) : appRunWindow(listRuns(), since);
 }

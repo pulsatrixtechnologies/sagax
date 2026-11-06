@@ -72,7 +72,7 @@ describe("Coding list rows", () => {
     expect(opened.settingsOpen).toBe(true);
     expect(opened.activeView).toBe("chat");
     expect(reducer(opened, { type: "closeCodingChat" }).codingChat).toBeNull();
-    expect(reducer(opened, { type: "openRoutineRunInChat", runId: "r1" }).codingChat).toBeNull();
+    expect(reducer(opened, { type: "openRoutineRunWindow", runId: "r1" }).codingChat).toBeNull();
     expect(reducer(opened, { type: "select", id: "wren" }).codingChat).toBeNull();
   });
 });

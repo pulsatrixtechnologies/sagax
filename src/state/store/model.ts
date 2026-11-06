@@ -1405,8 +1405,10 @@ export interface AppState {
   /** 2026-10-15: a routine to show on its page in the bot panel (a routine
    * line in the conversation was clicked); RoutinesSection opens it once. */
   routineFocus: { botId: string; routineId: string } | null;
-  /** 2026-11-01: a routine run open as an exchange sheet over the chat
-   * column (same place as Wren <-> Osprey). ChatView renders it. */
+  /** #2272 (2026-11-06): a routine run open as its own window over the chat
+   * column, shaped like a bot-to-bot exchange (ExchangeSheet, X to close).
+   * ChatView renders it (src/components/routines/RoutineRunWindow.tsx). */
+  routineRunWindow: { runId: string; routineId?: string; botId?: string } | null;
   /** 2026-11-03: a coding task of the bot panel's Coding list open as a chat
    * over the chat column (src/components/coding/CodingChat.tsx), where a
    * routine run opens. ChatView renders it. */
@@ -1884,7 +1886,8 @@ export type Action =
   | { type: "routineFocused" }
   /** 2026-11-05 (#2098): a run opens in the chat, at its message in the
    * bot's conversation. There is no run view beside the chat any more. */
-  | { type: "openRoutineRunInChat"; runId: string; routineId?: string; botId?: string }
+  | { type: "openRoutineRunWindow"; runId: string; routineId?: string; botId?: string }
+  | { type: "closeRoutineRunWindow" }
   | { type: "openCodingChat"; target: import("../../lib/coding-chat").CodingChatTarget }
   | { type: "closeCodingChat" }
   | { type: "openPersonPanel"; personId: string | null }
@@ -1972,17 +1975,17 @@ interface NotificationRoutingState {
 }
 
 /** 2026-11-05 (#2098, the operator: "a run ALWAYS opens in the main chat area, at
- * the run's message in the bot's unified chat"): every entry point (a
- * routine's Runs list, View run, a notification, the Routines page) lands
- * on the bot's conversation and scrolls to the run's message. The run
- * sheet beside the chat (Continue in the conversation, Close Chat) is
- * gone. */
+ * the run's message in the bot's unified chat"), then #2272 (2026-11-06,
+ * maintainer: "open the details of a routine ... like a bot to bot chat"):
+ * every entry point (the bot panel's routines, the chat's run card, the
+ * routine list, the report, a notification, the Automations page) opens
+ * the run's window over the bot's chat column, never a thread or a panel. */
 export function openRoutineRun(
   dispatch: (action: Action) => void,
   run: { runId: string; routineId?: string; botId?: string },
 ) {
   dispatch({
-    type: "openRoutineRunInChat",
+    type: "openRoutineRunWindow",
     runId: run.runId,
     ...(run.routineId ? { routineId: run.routineId } : {}),
     ...(run.botId ? { botId: run.botId } : {}),
@@ -2603,6 +2606,7 @@ export const initialState: AppState = {
   pluginsBotId: null,
   pluginsFocusApps: null,
   routineFocus: null,
+  routineRunWindow: null,
   codingChat: null,
   pluginsPage: null,
   triggersOpen: false,

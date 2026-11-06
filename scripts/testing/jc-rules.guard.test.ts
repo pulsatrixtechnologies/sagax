@@ -88,11 +88,12 @@ const attention: PersonAttentionCard = {
   createdAt: 1,
 } as PersonAttentionCard;
 
-// #2098 (the operator, 2026-11-05: "C'EST INNACEPTABLE"): a run opens ALWAYS in the
-// main chat, at the run's message in the bot's unified conversation, from
-// every entry point. The side run view (Continue in the conversation, Close
-// Chat) is gone.
-describe("#2098 a routine run opens in the chat, never beside it", () => {
+// #2098 (the operator, 2026-11-05: "C'EST INNACEPTABLE"), then #2272 (JC,
+// 2026-11-06: "It not doing anything when I click it"): a run opens from
+// every entry point as its own window over the bot's chat column, shaped
+// like a bot-to-bot exchange (ExchangeSheet, X to close). Never a thread,
+// a side panel or a Continue/Open thread button (one conversation, #2081).
+describe("#2272 a routine run opens as its window over the chat, from every entry point", () => {
   const ENTRY_POINTS = [
     "state/store/model.ts", // View run, notifications, Inbox links, unified thread links
     "components/ChatView.tsx-parts/chips.tsx", // the run card in the chat (#1383 leaf)
@@ -110,35 +111,36 @@ describe("#2098 a routine run opens in the chat, never beside it", () => {
     for (const name of ENTRY_POINTS) expect(readSrc(name), name).toContain("openRoutineRun(");
   });
 
-  it("openRoutineRun lands on the bot's chat and focuses the run's message", () => {
+  it("openRoutineRun opens the run's window on the bot's chat, even when its report is not loaded", () => {
     const actions: Action[] = [];
     openRoutineRun((action) => actions.push(action), { runId: "run-1", routineId: "routine-1", botId: "scout" });
-    expect(actions).toEqual([{ type: "openRoutineRunInChat", runId: "run-1", routineId: "routine-1", botId: "scout" }]);
+    expect(actions).toEqual([{ type: "openRoutineRunWindow", runId: "run-1", routineId: "routine-1", botId: "scout" }]);
     const state = {
       ...initialState,
       activeView: "routines",
       selectedId: "other",
-      bots: [{ ...initialState.bots[0], id: "scout", threadId: "scout-chat", messages: [runMessage("completed")] } as never],
+      bots: [{ ...initialState.bots[0], id: "scout", threadId: "scout-chat", messages: [] } as never],
       routineRuns: [{ id: "run-1", botId: "scout", routineId: "routine-1" } as never],
     } as typeof initialState;
     const next = reducer(state, actions[0]!);
     expect(next.activeView).toBe("chat");
     expect(next.selectedId).toBe("scout");
-    expect(next.focusMessage).toMatchObject({ threadId: "scout-chat", messageId: "report", consumed: false });
+    expect(next.routineRunWindow).toEqual({ runId: "run-1", routineId: "routine-1", botId: "scout" });
   });
 
-  it("no component renders a run view in the side panel", () => {
-    const offenders = files.filter((file) => /RoutineRunExchange|routineRunSheet|openRoutineRunSheet/.test(file.text)).map((file) => file.name);
+  it("the window is the bot-to-bot exchange shell, rendered over the main chat, with no thread button", () => {
+    const window = readSrc("components/routines/RoutineRunWindow.tsx");
+    expect(window).toContain("<ExchangeSheet");
+    expect(window).not.toMatch(/continueRoutineRunInConversation|openGroupThread|openThread|routineRun\.continue/);
+    expect(readSrc("components/ChatView.tsx-parts/ChatViewSheets.tsx")).toContain("<RoutineRunWindow");
+    // The old shapes stay gone.
+    const offenders = files.filter((file) => /RoutineRunExchange|routineRunSheet|openRoutineRunSheet|openRoutineRunInChat/.test(file.text)).map((file) => file.name);
     expect(offenders).toEqual([]);
-    expect(files.some((file) => file.name === "components/routines/RoutineRunExchange.tsx")).toBe(false);
-    // The store has no run sheet to open: the only run action is the chat one.
-    expect("routineRunSheet" in initialState).toBe(false);
   });
 
-  it("the calendar's details draw nothing for a run: it is on its way to the chat", () => {
+  it("the calendar's details draw nothing for a run: its window opens over the chat", () => {
     const page = readSrc("components/RoutineCalendarPage.tsx");
     expect(page).toContain("if (showingRun && run) return null;");
-    expect(page).not.toContain("<RoutineRunExchange");
   });
 });
 

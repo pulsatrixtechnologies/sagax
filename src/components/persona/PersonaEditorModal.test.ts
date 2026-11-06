@@ -70,7 +70,6 @@ vi.mock("../bot-settings/SharingSection", () => ({ SharingSection: marker("shari
 vi.mock("../bot-settings/VisibilitySection", () => ({ VisibilitySection: marker("visibility") }));
 vi.mock("../bot-settings/HistorySection", () => ({ HistorySection: marker("history") }));
 vi.mock("../bot-settings/UsageSection", () => ({ UsageSection: marker("usage") }));
-vi.mock("../BotProfileAvatarCard", () => ({ BotProfileAvatarCard: marker("avatar") }));
 vi.mock("../appearance/AppearancePane", () => ({ AppearancePane: marker("appearance") }));
 vi.mock("@/state/store", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/state/store")>();
@@ -144,8 +143,8 @@ describe("bot profile page shell", () => {
     expect(html).toContain("data-slack-logo");
     expect(html).toContain("data-bot-profile-page");
     expect(html).not.toContain('aria-modal="true"');
-    expect(html).toContain("data-bot-profile-banner");
-    expect(html).toContain('data-section-body="avatar"');
+    expect(html).not.toContain("data-bot-profile-banner");
+    expect(html).toContain('data-bot-profile-hero=""');
     expect(html).toContain("data-bot-profile-audience");
     expect(tabsOf(html)).toEqual(TABS_ALL);
     expect(BOT_PROFILE_TABS).toEqual(TABS_ALL);
@@ -217,17 +216,47 @@ describe("bot profile page shell", () => {
     }
   });
 
-  it("draws the banner in the mascot's colour, 145px tall, over a 1100px column", () => {
+  it("regression #2313: the header is the mascot hero card, the bot's name and label where the character's name was, Appearance where Randomize was", () => {
     const html = render("overview");
-    // the hex goes to the stylesheet as a variable; green is Pepper's
-    expect(html).toMatch(/data-bot-profile-banner="" data-bot-profile-banner-palette="vivid" style="--bot-profile-banner-color:#[0-9a-f]{6}" class="bot-profile-banner relative h-\[145px\] w-full/i);
-    // a neutral mascot keeps a visible grey
-    fixture.state = { bots: [{ ...bot, color: "grey" } as Bot, other], personaEditor: { botId: "pepper", section: "overview" } };
-    const grey = renderToStaticMarkup(createElement(PersonaEditorModal));
-    expect(grey).toContain('data-bot-profile-banner-palette="neutral"');
-    // the mascot over the banner's lower edge, the column 1100px at most (two columns) with a 16px gutter on a phone
+    const hero = at(html, 'data-bot-profile-hero=""');
+    expect(hero).toBeGreaterThan(0);
+    // the hero card itself (tinted stage, big mascot), no banner nor small avatar card
+    expect(html.slice(hero)).toContain("data-mascot-hero");
+    expect(html).not.toContain("data-bot-profile-banner");
+    expect(html).not.toContain("-mt-[40px]");
+    // name (28px), label under it, then the Appearance button, all inside the hero, before who sees it
+    const heading = at(html, "data-mascot-heading");
+    expect(heading).toBeGreaterThan(hero);
+    const title = at(html, 'data-bot-profile-title=""');
+    const label = at(html, 'data-bot-profile-label=""');
+    const toggle = at(html, 'data-bot-profile-appearance-toggle=""');
+    const audience = at(html, "data-bot-profile-audience");
+    expect(heading).toBeLessThan(title);
+    expect(title).toBeLessThan(label);
+    expect(label).toBeLessThan(toggle);
+    expect(toggle).toBeLessThan(audience);
+    expect(html).toMatch(/<h2 id="bot-profile-title" data-bot-profile-title="" class="[^"]*text-\[28px\]/);
+    // Play a move stays, Randomize leaves the header for the Appearance section
+    expect(html.slice(hero, audience)).not.toContain("data-mascot-randomize");
+    expect(html.slice(toggle, html.indexOf("</button>", toggle))).toContain(">Appearance<");
+    // nothing lost under it: who sees it, the description, the colour
+    for (const marker of ["data-bot-profile-audience", 'data-bot-profile-description=""', 'data-bot-profile-colors=""']) expect(at(html, marker)).toBeGreaterThan(toggle);
+    // the column 1100px at most (two columns) with a 16px gutter on a phone
     expect(html).toMatch(/data-bot-profile-column="" class="mx-auto flex w-full max-w-\[1100px\] flex-col px-4 pb-10 sm:px-6"/);
-    expect(html).toMatch(/class="-mt-\[40px\] w-fit"><div data-section-body="avatar"/);
+  });
+
+  it("regression #2313: X and Private / Shared sit on a bar above the scroll, never scrolled away", () => {
+    const html = render("overview");
+    const bar = at(html, "data-bot-profile-topbar");
+    const scroll = at(html, 'data-bot-profile-scroll=""');
+    expect(bar).toBeGreaterThan(0);
+    expect(bar).toBeLessThan(scroll);
+    const barHtml = html.slice(bar, scroll);
+    expect(barHtml).toContain("data-window-close");
+    expect(barHtml).toContain("data-bot-profile-visibility");
+    expect(barHtml).toContain("content-topbar");
+    expect(barHtml).toContain("bg-app");
+    expect(barHtml).not.toContain("absolute");
   });
 
   it("names the tabs, the header and the channels in French", () => {
@@ -277,7 +306,7 @@ describe("bot profile page shell", () => {
     expect(sectionsOf(visibility)).not.toContain("visibility");
   });
 
-  it("draws the banner's X and Private / Shared from the app's round header control, not a black disc", () => {
+  it("draws the top bar's X and Private / Shared from the app's round header control, not a black disc", () => {
     const html = render("overview");
     const tagOf = (marker: string) => {
       const index = html.indexOf(marker);

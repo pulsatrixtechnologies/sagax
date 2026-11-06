@@ -36,7 +36,8 @@
 // its own skin, so switching and back finds it again. Loaded lazily with
 // the pane.
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
-import { Check, Lock, Search } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Check, Lock, Search, Shuffle } from "lucide-react";
 import { characterLock, lockHint, reportAchievement, skinLock, useUnlocks, type LockInfo } from "@/lib/achievements";
 import "@/components/achievements/achievements.css";
 import { cn } from "@/lib/cn";
@@ -61,7 +62,8 @@ import { colorGroupsFor, colorTabFor, colorTabs, nextTab, skinTabFor, skinTierTa
 import { MASCOTS, SHAPE_CHOICES, type CompleteLook, type MascotDefinition } from "./mascots";
 import { characterMoves, type OwlMove } from "./moves";
 import { filterWardrobe, MASCOT_FAMILY_LABEL, wardrobeFilters, wardrobeShelves, wardrobeStep, type WardrobeFilter, type WardrobeShelf } from "./wardrobe";
-import { MascotLookPreview } from "./MascotLookPreview";
+import { MASCOT_HERO_BUTTON, MascotLookPreview } from "./MascotLookPreview";
+import { useMascotHeroSlot } from "./mascot-hero-slot";
 
 export interface MascotLookPatch {
   color?: MausColor;
@@ -77,6 +79,8 @@ export interface MascotLookEditorProps {
   onOwlMove?: (move: Exclude<MausMotion, "none">) => void;
   /** The tab it opens on (Mascot unless told; a gallery or a test opens another). */
   initialTab?: EditorTab;
+  /** Only the hero card, for the bot's own look: the profile page's header while the editor is closed (#2313). */
+  heroOnly?: boolean;
 }
 
 export const CHARACTER_LABEL = {
@@ -660,7 +664,17 @@ export function randomLook({ listed, look, color, owlSkin, characterLocked, skin
   return patch;
 }
 
-export default function MascotLookEditor({ bot, disabled, onPatch: savePatch, onOwlMove, initialTab = "mascot" }: MascotLookEditorProps) {
+export default function MascotLookEditor({ bot, disabled, onPatch: savePatch, onOwlMove, initialTab = "mascot", heroOnly = false }: MascotLookEditorProps) {
+  // On the bot's profile page the hero card is the page's header: the open
+  // editor draws it there (a portal) and keeps Randomize over its tabs.
+  const slot = useMascotHeroSlot();
+  const portalTarget = !heroOnly && slot ? slot.target : null;
+  const claim = slot?.claim;
+  useEffect(() => {
+    if (heroOnly || !claim) return;
+    claim(true);
+    return () => claim(false);
+  }, [heroOnly, claim]);
   const look = completeMascotLook(bot.mascotLook);
   const owlSkin = botMascotSkin(bot.mascotSkin);
   // what this person unlocked (src/lib/achievements.ts); what the bot wears now always stays.
@@ -831,8 +845,7 @@ export default function MascotLookEditor({ bot, disabled, onPatch: savePatch, on
     />
   );
 
-  return (
-    <div data-mascot-look-editor="" className="flex flex-col gap-4">
+  const preview = (
       <MascotLookPreview
         bot={bot}
         shown={shown}
@@ -851,8 +864,29 @@ export default function MascotLookEditor({ bot, disabled, onPatch: savePatch, on
         onUse={() => setLook({ character: shown })}
         onPlay={play}
         onPlayNext={playNext}
-        onRandomize={randomize}
+        onRandomize={slot ? undefined : randomize}
+        heading={slot?.heading}
+        subheading={slot?.subheading}
+        action={slot?.action}
+        liveState={slot?.state}
+        liveMotion={slot?.motion}
       />
+  );
+  if (heroOnly) return preview;
+
+  return (
+    <div data-mascot-look-editor="" className="flex flex-col gap-4">
+      {slot ? (
+        <>
+          {portalTarget && createPortal(preview, portalTarget)}
+          <div className="flex justify-end">
+            <button type="button" data-mascot-randomize="" disabled={disabled} onClick={randomize} className={MASCOT_HERO_BUTTON}>
+              <Shuffle size={13} aria-hidden="true" />
+              {t("appearance.randomize")}
+            </button>
+          </div>
+        </>
+      ) : preview}
 
       {/* the tabs: each its current value under its label, the open one underlined in the bot's color */}
       <div role="tablist" aria-label={t("appearance.tabs")} className="flex gap-1 overflow-x-auto border-b border-hairline-weak" data-appearance-tabs="">

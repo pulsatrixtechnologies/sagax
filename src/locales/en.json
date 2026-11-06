@@ -13669,6 +13669,7 @@
   "botProfile.retry": "Try again",
   "botProfile.memoryPage": "Open the Memory page",
   "botProfile.channel.email": "Email",
+  "botProfile.appearanceButton": "Appearance",
   "botProfile.private": "Private",
   "botProfile.shared": "Shared",
   "connectApps.add": "Add",

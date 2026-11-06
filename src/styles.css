@@ -2789,23 +2789,6 @@ body {
   outline: none;
 }
 
-/* The profile banner is a soft wash of the mascot's colour (#2173): the
-   page passes its hex as --bot-profile-banner-color and the wash mixes it
-   with a pale base (a pink mascot gets a pale pink), darker at the top so
-   the mascot reads over its lower edge. A neutral mascot (white, grey,
-   black, sand, brown...) keeps a visible grey instead of fading into the
-   dark skin. light-dark() picks the base for the skin. */
-.bot-profile-banner {
-  --bot-profile-banner-base: light-dark(#ffffff, #f4f4f4);
-  background-image: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--bot-profile-banner-color, #8e949e) 58%, var(--bot-profile-banner-base)) 0%,
-    color-mix(in srgb, var(--bot-profile-banner-color, #8e949e) 36%, var(--bot-profile-banner-base)) 100%
-  );
-}
-.bot-profile-banner[data-bot-profile-banner-palette="neutral"] {
-  --bot-profile-banner-color: #8e949e;
-}
 /* A sidebar group header focused by a click, or handed focus back after its
    right-click menu, shows no frame; Tab and arrow keys still draw it. */
 [data-sidebar-section-header][data-pointer-focus]:focus-visible {

@@ -101,6 +101,99 @@ describe("GithubConnect", () => {
   });
 });
 
+/** GitHub answering each poll from a script: the device-flow states (#2109). */
+function scriptedGithub(polls: Array<Record<string, unknown>>) {
+  const pollTimes: number[] = [];
+  const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    if (url === "https://github.com/login/device/code") {
+      return Response.json({ device_code: "dev-9", user_code: "WXYZ-0001", verification_uri: "https://github.com/login/device", expires_in: 900, interval: 5 });
+    }
+    if (url === "https://github.com/login/oauth/access_token") {
+      pollTimes.push(Date.now());
+      return Response.json(polls.shift() ?? { error: "authorization_pending" });
+    }
+    if (url === "https://api.github.com/user") {
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer gho_scripted");
+      return Response.json({ login: "octo-scripted" });
+    }
+    return new Response("not found", { status: 404 });
+  });
+  return { fetcher: fetcher as unknown as typeof fetch, pollTimes };
+}
+
+describe("GithubConnect device flow states (#2109)", () => {
+  async function run(polls: Array<Record<string, unknown>>, advanceMs: number, nowOffset = 0) {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      const github = scriptedGithub(polls);
+      const saved = new Map<string, GithubConnection | undefined>();
+      const ended: Array<{ principalId: string; outcome: unknown }> = [];
+      const connected: string[] = [];
+      let offset = 0;
+      const connect = new GithubConnect({
+        clientId: () => "Iv1.client", fetch: github.fetcher,
+        now: () => Date.now() + offset,
+        save: (principalId, connection) => saved.set(principalId, connection),
+        onConnected: (principalId) => connected.push(principalId),
+        onFlowEnded: (principalId, outcome) => ended.push({ principalId, outcome }),
+      });
+      const started = Date.now();
+      await connect.startDeviceFlow("pr_a");
+      offset = nowOffset;
+      await vi.advanceTimersByTimeAsync(advanceMs);
+      return { connect, saved, ended, connected, pollTimes: github.pollTimes.map((t) => t - started) };
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+
+  it("keeps polling while the person has not approved yet (authorization_pending)", async () => {
+    const r = await run([{ error: "authorization_pending" }, { error: "authorization_pending" }], 16_000);
+    expect(r.pollTimes).toEqual([5_000, 10_000, 15_000]);
+    expect(r.connect.status("pr_a", undefined)).toMatchObject({ state: "pending", userCode: "WXYZ-0001" });
+    expect(r.ended).toEqual([]);
+  });
+
+  it("waits five more seconds after slow_down", async () => {
+    const r = await run([{ error: "slow_down" }, { error: "authorization_pending" }], 26_000);
+    expect(r.pollTimes).toEqual([5_000, 15_000, 25_000]);
+    expect(r.ended).toEqual([]);
+  });
+
+  it("saves the token and names the account on success", async () => {
+    const r = await run([{ error: "authorization_pending" }, { access_token: "gho_scripted", scope: "repo" }], 11_000);
+    expect(r.saved.get("pr_a")).toMatchObject({ login: "octo-scripted", via: "device", scopes: ["repo"] });
+    expect(r.connected).toEqual(["pr_a"]);
+    expect(r.ended).toEqual([]);
+    expect(r.connect.status("pr_a", r.saved.get("pr_a"))).toMatchObject({ state: "connected", login: "octo-scripted" });
+  });
+
+  it("stops and says so when GitHub reports the code expired", async () => {
+    const r = await run([{ error: "expired_token" }], 6_000);
+    expect(r.ended).toEqual([{ principalId: "pr_a", outcome: { state: "failed", error: "The code expired. Start again." } }]);
+    expect(r.connect.status("pr_a", undefined)).toMatchObject({ state: "error" });
+  });
+
+  it("stops without asking GitHub once the code is past its expiry", async () => {
+    const r = await run([], 6_000, 901_000);
+    expect(r.pollTimes).toEqual([]);
+    expect(r.ended).toEqual([{ principalId: "pr_a", outcome: { state: "failed", error: "The code expired. Start again." } }]);
+  });
+
+  it("stops when the person refuses on GitHub (access_denied)", async () => {
+    const r = await run([{ error: "access_denied" }], 6_000);
+    expect(r.ended).toEqual([{ principalId: "pr_a", outcome: { state: "failed", error: "The sign-in was cancelled on GitHub." } }]);
+    expect(r.saved.has("pr_a")).toBe(false);
+  });
+
+  it("reports a flow the person cancels", async () => {
+    const r = await run([], 1_000);
+    r.connect.cancel("pr_a");
+    expect(r.ended).toEqual([{ principalId: "pr_a", outcome: { state: "cancelled" } }]);
+  });
+});
+
 describe("where the token goes", () => {
   it("adds the token for GitHub's hosts only", async () => {
     const seen: Array<[string, string | null]> = [];

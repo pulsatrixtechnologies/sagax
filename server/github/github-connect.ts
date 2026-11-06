@@ -84,6 +84,10 @@ export interface GithubConnectOptions {
   save: (principalId: string, connection: GithubConnection | undefined) => void;
   /** After a connection is saved: put it where the person's tools run. */
   onConnected?: (principalId: string, connection: GithubConnection) => void;
+  /** A device flow ended without a connection: refused or expired on
+   * GitHub (`failed`), or replaced by a newer code or a disconnect
+   * (`cancelled`). The chat cards of that flow say so (#2109). */
+  onFlowEnded?: (principalId: string, outcome: { state: "failed"; error: string } | { state: "cancelled" }) => void;
   fetch?: typeof fetch;
   now?: () => number;
   env?: NodeJS.ProcessEnv;
@@ -214,7 +218,7 @@ export class GithubConnect {
     const trimmed = token.trim();
     if (!trimmed || trimmed.length > 4_096 || /\s/.test(trimmed)) throw new GithubConnectError("Paste a GitHub token on one line.", "invalid_token");
     const who = await this.identify(trimmed);
-    this.cancel(principalId);
+    this.cancel(principalId, false);
     const connection: GithubConnection = { token: trimmed, ...who, via: "token", connectedAt: this.now() };
     this.options.save(principalId, connection);
     this.errors.delete(principalId);
@@ -298,7 +302,7 @@ export class GithubConnect {
         this.options.save(principalId, connection);
         this.clearAuthProbe(principalId);
         this.okProbes.set(principalId, { digest: githubTokenDigest(token), at: this.now() });
-        this.finish(principalId, flow, null);
+        this.finish(principalId, flow, null, "connected");
         this.options.onConnected?.(principalId, connection);
       } catch (cause) {
         this.finish(principalId, flow, cause instanceof Error ? cause.message : "GitHub sign-in failed.");
@@ -312,17 +316,19 @@ export class GithubConnect {
     this.schedule(principalId, flow, clientId);
   }
 
-  private finish(principalId: string, flow: PendingDevice, error: string | null): void {
+  /** `notify` false: a connection follows right away (a pasted token), its own onConnected says so. */
+  private finish(principalId: string, flow: PendingDevice, error: string | null, outcome: "connected" | "ended" = "ended", notify = true): void {
     flow.cancelled = true;
     if (flow.timer) clearTimeout(flow.timer);
     if (this.pending.get(principalId) === flow) this.pending.delete(principalId);
     if (error) this.errors.set(principalId, error);
     else this.errors.delete(principalId);
+    if (outcome === "ended" && notify) this.options.onFlowEnded?.(principalId, error ? { state: "failed", error } : { state: "cancelled" });
   }
 
-  cancel(principalId: string): void {
+  cancel(principalId: string, notify = true): void {
     const flow = this.pending.get(principalId);
-    if (flow) this.finish(principalId, flow, null);
+    if (flow) this.finish(principalId, flow, null, "ended", notify);
   }
 
   disconnect(principalId: string): void {

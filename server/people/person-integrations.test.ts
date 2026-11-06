@@ -82,9 +82,6 @@ describe("Mes connexions and apps.ownIntegrations", () => {
     expect(listed.body.managedByAdmin).toBeUndefined();
     expect((listed.body.servers as unknown[]).length).toBe(1);
     for (const [method, path, body] of [
-      ["POST", "/api/me/github/device", {}],
-      ["POST", "/api/me/github/token", { token: "ghp_x" }],
-      ["DELETE", "/api/me/github", undefined],
       ["POST", "/api/me/mcp/servers", { name: "gh", url: "https://api.githubcopilot.com/mcp/", auth: "github" }],
       ["PATCH", "/api/me/mcp/servers/notes", { enabled: false }],
       ["DELETE", "/api/me/mcp/servers/notes", undefined],
@@ -98,6 +95,16 @@ describe("Mes connexions and apps.ownIntegrations", () => {
     // signing in again keeps an existing server working
     expect((await send(base, "POST", "/api/me/mcp/servers/notes/oauth/start", {})).status).toBe(200);
     expect(calls).toEqual(["signin"]);
+  });
+
+  it("without the permission: the person still connects their own GitHub (#2109, no admin door)", async () => {
+    const calls: string[] = [];
+    const base = await serve([connectionRoutes(new Set(["pr_rita"]), calls)], member("pr_rita"));
+    expect((await send(base, "POST", "/api/me/github/device", {})).status).toBe(200);
+    expect((await send(base, "GET", "/api/me/github")).status).toBe(200);
+    expect((await send(base, "POST", "/api/me/github/token", { token: "ghp_x" })).status).toBe(200);
+    expect((await send(base, "DELETE", "/api/me/github")).status).toBe(200);
+    expect(calls).toEqual(["device", "token", "disconnect"]);
   });
 
   it("with the permission: the person does it all without an admin, and the listing says nothing", async () => {

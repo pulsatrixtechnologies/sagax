@@ -1015,7 +1015,7 @@ export class Store {
       const migrated = [...new Set([...(b.alwaysAllow ?? []), ...taskProviderGrants])].slice(0, 200);
       if (JSON.stringify(migrated) === JSON.stringify(b.alwaysAllow ?? [])) continue;
       b.alwaysAllow = migrated;
-      botsMigrated = true;
+      boot.botsMigrated = true;
     }
     // Composio was removed. A bot record from an older release may still
     // carry the connected-apps switch (`composio`) or per-service grants
@@ -1053,7 +1053,7 @@ export class Store {
       if (g.holds !== undefined || g.heldMessages !== undefined) {
         const before = JSON.stringify([g.holds, g.heldMessages]);
         pruneRoomHolds(g);
-        if (JSON.stringify([g.holds, g.heldMessages]) !== before) groupsMigrated = true;
+        if (JSON.stringify([g.holds, g.heldMessages]) !== before) boot.groupsMigrated = true;
       }
       // Bot-to-bot channels intentionally remain one canonical thread.
       if (g.dm) {

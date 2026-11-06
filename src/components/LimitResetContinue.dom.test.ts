@@ -20,6 +20,7 @@ vi.mock("@/state/store", async (importOriginal) => ({
 const { setLocale } = await import("@/lib/i18n");
 const limits = await import("@/lib/limit-resets");
 const { EngineLimitNotice, engineLimitNoticeKey } = await import("./LimitResetContinue");
+const { ComposerSendBlock } = await import("./ComposerSendBlock");
 
 const NOW = Date.parse("2026-10-19T15:00:00Z");
 const RESET = Date.parse("2026-10-19T19:40:00Z");
@@ -92,21 +93,41 @@ describe("EngineLimitNotice banner", () => {
     expect(again.querySelector('[data-testid="engine-limit-notice"]')).toBeNull();
     limits.rememberLimits({ checkedAt: NOW, engines: [claude(100, true)] });
     const blocked = remount(createElement(EngineLimitNotice, { engine: "claude" }));
-    expect(blocked.querySelector('[data-testid="engine-limit-notice"]')?.textContent).toContain("at its limit");
+    expect(blocked.innerHTML).toBe("");
   });
 
-  it("offers Continue at reset when bot and thread are known", async () => {
+  // At the limit, no banner on top (JC 2026-11-06): the composer's line says it
+  // and carries "Continue at <reset>".
+  it("draws no top banner once the engine is at its limit", () => {
     limits.rememberLimits({ checkedAt: NOW, engines: [claude(100, true)] });
+    const container = remount(createElement(EngineLimitNotice, { engine: "claude", botId: "scout", threadId: "t-1" }));
+    expect(container.querySelector('[data-testid="engine-limit-notice"]')).toBeNull();
+  });
+
+  it("offers Continue at reset in the composer line when bot and thread are known", async () => {
     fixture.api.mockImplementation(async (path: unknown) =>
       String(path) === "/api/limit-resets/continue"
         ? { routine: { id: "r1" } }
         : { checkedAt: NOW, engines: [claude(100, true)] });
-    const container = remount(createElement(EngineLimitNotice, {
-      engine: "claude",
+    const block = {
+      reason: "engine_limit" as const,
+      message: "",
+      action: { kind: "switch_engine" as const },
+      name: "Claude",
+      limit: { cause: "usage_limit" as const, resetsAt: RESET },
+    };
+    const container = remount(createElement(ComposerSendBlock, {
+      block,
       botId: "scout",
       threadId: "t-1",
-    }));
-    const continueBtn = container.querySelector('[data-testid="engine-limit-continue"]') as HTMLButtonElement;
+      onConnect: () => {},
+      onRetry: () => {},
+    } as never));
+    // An opaque row on the composer's ground, never transparent over the thread.
+    const line = container.querySelector("[data-composer-send-block]")!;
+    expect(line.className).toContain("bg-raised");
+    expect(line.closest("[data-composer-notice-band]")).not.toBeNull();
+    const continueBtn = container.querySelector("[data-composer-send-block-continue]") as HTMLButtonElement;
     expect(continueBtn?.textContent).toMatch(/Continue at/);
     flushSync(() => continueBtn.click());
     await settle();

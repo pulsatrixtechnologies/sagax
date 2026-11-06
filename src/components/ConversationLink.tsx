@@ -1,8 +1,12 @@
 // The one way a transcript says "Go to conversation": a centered, quiet line
 // (phrase, the bot's mark, the bot's name). Used by the collapsed bot-to-bot
 // exchange and by the opened-thread receipt, so they cannot drift apart.
+// Threads off (the unified chat, the default) draws none of it: no "Go to
+// conversation", no "Open thread", no thread sheet (JC 2026-11-06, the
+// "Sent work to Katarina · Done" card had one under it).
 import type { ReactNode } from "react";
 import { t } from "@/lib/i18n";
+import { useShowThreads } from "@/lib/thread-preferences";
 import { mausInk, type MausColor } from "@/lib/mascot";
 import type { Bot } from "@/state/store";
 import { PartyAvatar } from "./PartyAvatar";
@@ -36,6 +40,8 @@ export function ConversationLink({
   /** Rendered beside the line, e.g. an opened sheet. */
   children?: ReactNode;
 }) {
+  const showThreads = useShowThreads();
+  if (!showThreads) return null;
   return (
     <div className={compact ? "flex justify-start py-0.5" : "flex justify-center py-1"}>
       <button

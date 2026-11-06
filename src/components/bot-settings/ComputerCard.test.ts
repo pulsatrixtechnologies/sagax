@@ -100,21 +100,34 @@ describe("ComputerCard", () => {
     const onPatch = vi.fn();
     act(() => root!.render(createElement(ComputerCard, { bot, onPatch })));
     expect(host!.querySelector("[data-sandbox-takeover]")).toBeNull();
-    expect(host!.querySelector("[data-computer-card-select]")).toBeTruthy();
+    // JC 2026-11-06: no dropdown beside the section title
+    expect(host!.querySelector("[data-computer-card-select]")).toBeNull();
+    expect(host!.querySelector("[data-pill-select]")).toBeNull();
     act(() => host!.querySelector<HTMLButtonElement>("[data-computer-card]")!.click());
     expect(host!.querySelector("[data-sandbox-takeover]")).toBeTruthy();
     expect(host!.querySelector("[data-sandbox-takeover]")!.getAttribute("data-title")).toContain("Scout");
   });
 
-  it("patches the bot computer from the section PillSelect", () => {
+  it("patches the bot computer from the row's right-click menu", () => {
     const onPatch = vi.fn();
     act(() => root!.render(createElement(ComputerCard, { bot, onPatch })));
-    const trigger = host!.querySelector<HTMLButtonElement>("[data-computer-card-select] [data-pill-select]")!;
-    act(() => trigger.click());
-    const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')]
+    const row = host!.querySelector<HTMLButtonElement>("[data-computer-card]")!;
+    act(() => { row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 40 })); });
+    const menu = document.querySelector('[data-computer-card-menu][role="menu"]');
+    expect(menu).toBeTruthy();
+    expect(menu!.querySelector('[data-computer-card-option="cloud"]')!.getAttribute("aria-checked")).toBe("true");
+    const option = [...menu!.querySelectorAll<HTMLElement>('[role="menuitemradio"]')]
       .find((node) => /This computer|Cet ordinateur/i.test(node.textContent ?? ""));
     expect(option).toBeTruthy();
     act(() => option!.click());
     expect(onPatch).toHaveBeenCalledWith({ computer: "local" });
+    expect(document.querySelector("[data-computer-card-menu]")).toBeNull();
+  });
+
+  it("has no menu when the viewer cannot change the computer", () => {
+    act(() => root!.render(createElement(ComputerCard, { bot, readOnly: true })));
+    const row = host!.querySelector<HTMLButtonElement>("[data-computer-card]")!;
+    act(() => { row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })); });
+    expect(document.querySelector("[data-computer-card-menu]")).toBeNull();
   });
 });

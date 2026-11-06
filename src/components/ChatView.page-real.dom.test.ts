@@ -13,6 +13,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Action, AppState, Bot, InstanceInfo, Message } from "@/state/store";
 
+// Thread mode on: these cases cover the Go to conversation chip, which the
+// unified chat (the default) never draws (JC 2026-11-06, unified-chat.guard.test.ts).
+vi.mock("@/lib/thread-preferences", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/thread-preferences")>()),
+  useShowThreads: () => true,
+}));
 vi.mock("./DesktopCapabilities", async (importOriginal) => ({
   ...await importOriginal<typeof import("./DesktopCapabilities")>(),
   useDesktopCapabilities: () => ({ capabilities: { dictation: { available: false }, host: { packaged: true, platform: "other" }, localComputer: { available: false } }, ready: true }),

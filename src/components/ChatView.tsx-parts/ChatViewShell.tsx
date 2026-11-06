@@ -34,6 +34,7 @@ import { ChatViewBanners } from "./ChatViewBanners";
 import { ChatViewHeader } from "./ChatViewHeader";
 import { ChatViewPagePanel } from "./ChatViewPagePanel";
 import { ChatViewSheets } from "./ChatViewSheets";
+import { ChatEdgeFade } from "@/components/ChatEdgeFade";
 
 /** Chat chrome: header, banners, transcript, composer, page panel. */
 export function ChatViewShell(m: Record<string, any>) {
@@ -290,6 +291,7 @@ export function ChatViewShell(m: Record<string, any>) {
           beside keeps it in the side column. */}
       {!pageStage && (
       <div ref={composerDockRef} data-composer-dock="" className="pointer-events-none absolute inset-x-0 bottom-0 z-[2]">
+      <ChatEdgeFade edge="bottom" />
       {confidential && <ConfidentialBanner position="bottom" className="mb-1" />}
       {/* Optional beside: bot status above the side-pane composer. */}
       {pageBeside && openPage && (

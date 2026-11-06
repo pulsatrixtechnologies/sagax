@@ -8,6 +8,7 @@ import { cn } from "@/lib/cn";
 import type { Action, Bot, ConfigStatus, Message } from "@/state/store";
 import { NewTopicButton } from "./stream";
 import type { SideChat } from "./sideChat";
+import { ChatEdgeFade } from "@/components/ChatEdgeFade";
 
 /** Call overlay strip and the floating bot-pill header (or a side header). */
 export function ChatViewHeader({
@@ -74,11 +75,14 @@ export function ChatViewHeader({
           // Pulsatrix Light overrides `position` to `relative` (see
           // styles.css): a normal band, not a float, but still the
           // containing block the centered pill below needs.
-          "@container/chathead absolute inset-x-0 top-0 z-[3] flex min-h-[52px] items-center justify-end px-5 py-2.5",
+          // bg-app + ChatEdgeFade: the transcript fades out under the pill
+          // instead of running sharp beneath it (JC 2026-11-06).
+          "@container/chathead absolute inset-x-0 top-0 z-[3] flex min-h-[52px] items-center justify-end bg-app px-5 py-2.5",
           // Room for the drawer button, which overlays this corner below sm.
           "pl-11 sm:pl-5",
         )}
       >
+        <ChatEdgeFade edge="top" />
         <div className="absolute left-1/2 top-1/2 flex max-w-[60%] -translate-x-1/2 -translate-y-1/2 items-center gap-2" style={headerNoDragStyle}>
           {chatHeader}
         </div>

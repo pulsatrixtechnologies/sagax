@@ -197,6 +197,8 @@ export function ComposerShell({
         {sendBlock && (!locked || sendBlockLocks(sendBlock)) && (
           <ComposerSendBlock
             block={sendBlock}
+            botId={bot?.id}
+            threadId={bot?.threadId}
             onConnect={() => dispatch({ type: "toggleAppSettings", open: true, section: "providers" })}
             onRetry={sendState.recheck}
             onSwitchEngine={bot ? () => openModelWindow(bot.id) : undefined}

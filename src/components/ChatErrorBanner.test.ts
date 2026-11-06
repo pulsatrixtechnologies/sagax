@@ -34,9 +34,8 @@ describe("ChatReconnectBanner", () => {
   });
 
   it("is mounted in the chat and the room", () => {
-    for (const file of ["components/ChatView.tsx", "components/GroupView.tsx"]) {
-      expect(source(file)).toContain("<ChatReconnectBanner");
-    }
+    expect([source("components/ChatView.tsx"), source("components/ChatView.tsx-parts/ChatViewBanners.tsx")].join("\n")).toContain("<ChatReconnectBanner");
+    expect(source("components/GroupView.tsx")).toContain("<ChatReconnectBanner");
   });
 });
 
@@ -74,12 +73,14 @@ describe("ChatErrorBanner", () => {
   });
 
   it("is the banner both the chat and the room render", () => {
-    for (const file of ["components/ChatView.tsx", "components/GroupView.tsx"]) {
-      const text = source(file);
-      expect(text).toContain("<ChatErrorBanner");
-      expect(text).toContain('message={state.error}');
-      expect(text).toContain('dispatch({ type: "error", message: null })');
-    }
+    const chat = [source("components/ChatView.tsx"), source("components/ChatView.tsx-parts/ChatViewBanners.tsx")].join("\n");
+    expect(chat).toContain("<ChatErrorBanner");
+    expect(chat).toMatch(/message=\{state\.error(?: \?\? null)?\}/);
+    expect(chat).toContain('dispatch({ type: "error", message: null })');
+    const room = source("components/GroupView.tsx");
+    expect(room).toContain("<ChatErrorBanner");
+    expect(room).toMatch(/message=\{state\.error(?: \?\? null)?\}/);
+    expect(room).toContain('dispatch({ type: "error", message: null })');
     const store = source("state/store.tsx");
     expect(store).toContain("useChatErrorClear(state.error, clearChatError)");
     expect(store).not.toContain('setTimeout(() => rawDispatch({ type: "error", message: null }), 6000)');
@@ -104,9 +105,8 @@ describe("ChatNotice", () => {
   });
 
   it("shows in the room as well as the chat", () => {
-    for (const file of ["components/ChatView.tsx", "components/GroupView.tsx"]) {
-      expect(source(file)).toContain("<ChatNotice notice={state.notice} />");
-    }
+    expect([source("components/ChatView.tsx"), source("components/ChatView.tsx-parts/ChatViewBanners.tsx")].join("\n")).toMatch(/<ChatNotice notice=\{state\.notice(?: as never)?\} \/>/);
+    expect(source("components/GroupView.tsx")).toMatch(/<ChatNotice notice=\{state\.notice(?: as never)?\} \/>/);
   });
 });
 
@@ -115,7 +115,7 @@ describe("no saved-messages banner", () => {
   it("neither the chat nor a room draws it", async () => {
     const banners = await import("./ChatErrorBanner");
     expect("SavedMessagesNotice" in banners).toBe(false);
-    for (const file of ["components/ChatView.tsx", "components/GroupView.tsx", "components/ChatErrorBanner.tsx"]) {
+    for (const file of ["components/ChatView.tsx", "components/ChatView.tsx-parts/ChatViewBanners.tsx", "components/GroupView.tsx", "components/ChatErrorBanner.tsx"]) {
       expect(source(file), file).not.toContain("chat.savedMessages");
     }
   });

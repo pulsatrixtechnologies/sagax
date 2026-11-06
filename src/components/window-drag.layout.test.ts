@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const styles = read("../styles.css");
 const sidebar = read("./Sidebar.tsx");
-const chatView = read("./ChatView.tsx");
+const chatView = [read("./ChatView.tsx"), read("./ChatView.tsx-parts/ChatViewHeader.tsx"), read("./ChatView.tsx-parts/ChatViewShell.tsx")].join("\n");
 const groupView = read("./GroupView.tsx");
 const botPanel = read("./BotSettingsDialog.tsx");
 const chrome = read("../../electron/window-chrome.mjs");

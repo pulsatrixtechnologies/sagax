@@ -14,7 +14,7 @@ function expectDirAuto(file: string, marker: string) {
 
 describe("chat text follows the writer's direction", () => {
   it("sets dir=auto on the chat inputs and previews that were still forced ltr", () => {
-    expectDirAuto("ChatView.tsx", "value={draft}");
+    expectDirAuto("ChatView.tsx-parts/Bubble.tsx", "value={draft}");
     // OptionCard and QuestionCard answer in words through the shared field
     expectDirAuto("QuestionSheet.tsx", "value={value}");
     expectDirAuto("CitationUI.tsx", "value={comment}");
@@ -27,7 +27,7 @@ describe("chat text follows the writer's direction", () => {
 
     const quotes = source("CitationUI.tsx").match(/<pre dir="auto"[^>]*>\{citation\.quote\}/g) ?? [];
     expect(quotes).toHaveLength(2);
-    const pins = [source("ChatView.tsx"), source("GroupView.tsx")].map((text) => text.includes('dir="auto" className="truncate text-[12.5px] text-ink-secondary"'));
+    const pins = [source("ChatView.tsx-parts/PinnedBanner.tsx"), source("GroupView.tsx")].map((text) => text.includes('dir="auto" className="truncate text-[12.5px] text-ink-secondary"'));
     expect(pins).toEqual([true, true]);
   });
 });

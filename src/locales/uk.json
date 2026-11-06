@@ -729,10 +729,8 @@
   "engineSetup.viewGuide": "Відкрити гід налаштування",
   "settings.experimental.title": "Експериментальні функції",
   "settings.experimental.error": "Не вдалося зберегти налаштування експериментальної функції.",
-  "settings.experimental.skillAuthoring": "Створювати навички для вашого перегляду",
   "settings.experimental.skillAuthoringAria": "Дозволити ботам створювати навички",
   "settings.experimental.browser": "Вбудований браузер",
-  "settings.experimental.browserWindows": "Ще недоступно на цій машині Windows: встановіть браузерний конектор командою `openmausbot browser install`.",
   "settings.experimental.browserAria": "Увімкнути вбудований браузер",
   "browser.notInstalled": "Браузерний конектор ще не встановлений на цьому сервері. Увімкніть перемикачі браузера в {settings} та в налаштуваннях Access бота, потім відкрийте Комп'ютер бота → Браузер, щоб встановити. Або виконайте `openmausbot browser install` на сервері.",
   "browser.noEngine": "На цьому сервері немає браузерного конектора.",
@@ -2356,5 +2354,7 @@
   "botPanel.library.pageState.org": "опубліковано для моєї організації",
   "botPanel.library.pageState.link": "опубліковано для всіх, хто має посилання",
   "botPanel.library.pageState.revoked": "відкликано",
-  "botPanel.library.pageState.expired": "термін минув"
+  "botPanel.library.pageState.expired": "термін минув",
+  "settings.experimental.browserWindows": "Ще недоступно на цій машині Windows: встановіть браузерний конектор командою `openmausbot browser install`.",
+  "settings.experimental.skillAuthoring": "Створювати навички для вашого перегляду"
 }

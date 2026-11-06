@@ -537,7 +537,6 @@
   "settings.experimental.title": "Funciones experimentales",
   "settings.experimental.error": "No se pudo guardar el ajuste de la función experimental.",
   "settings.experimental.browser": "Navegador integrado",
-  "settings.experimental.browserWindows": "Aún no disponible en este equipo con Windows: instala el motor del navegador con `openmausbot browser install`.",
   "settings.experimental.browserAria": "Activar el navegador integrado",
   "browser.notInstalled": "El motor del navegador todavía no está instalado en este servidor. Activa los interruptores del navegador en {settings} y en los ajustes Access del bot. Luego abre Equipo del bot → Navegador para instalarlo. También puedes ejecutar `openmausbot browser install` en el servidor.",
   "browser.noEngine": "Este servidor no tiene motor de navegador.",
@@ -1864,5 +1863,6 @@
   "botPanel.library.pageState.org": "publicada para mi organización",
   "botPanel.library.pageState.link": "publicada para cualquiera con el enlace",
   "botPanel.library.pageState.revoked": "revocada",
-  "botPanel.library.pageState.expired": "caducada"
+  "botPanel.library.pageState.expired": "caducada",
+  "settings.experimental.browserWindows": "Aún no disponible en este equipo con Windows: instala el motor del navegador con `openmausbot browser install`."
 }

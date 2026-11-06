@@ -98,8 +98,9 @@ export function boatComputerEnabled(config: FeatureFlagConfig | null | undefined
   return config?.features?.boatComputer === true;
 }
 
-/** Settings > Decision model. Off unless the experimental switch is on.
- * Absent means off. Does not change decider routing. */
+/** Legacy experimental flag for Decision model (#2093: the Models card
+ * always shows; its master switch is the only control). Kept for older
+ * servers that still send the feature bit. Absent means off. */
 export function decisionModelEnabled(config: FeatureFlagConfig | null | undefined): boolean {
   return config?.features?.decisionModel === true;
 }

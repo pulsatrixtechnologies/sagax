@@ -539,7 +539,6 @@
   "settings.experimental.title": "実験的機能",
   "settings.experimental.error": "実験的機能の設定を保存できませんでした。",
   "settings.experimental.browser": "内蔵ブラウザー",
-  "settings.experimental.browserWindows": "この Windows マシンではまだ使えません。`openmausbot browser install` でブラウザーエンジンをインストールしてください。",
   "settings.experimental.browserAria": "内蔵ブラウザーを有効にする",
   "browser.notInstalled": "このサーバーにはブラウザーエンジンがまだインストールされていません。{settings}とボットの「Access」設定でブラウザーのスイッチをオンにしてから、「ボットのコンピューター → ブラウザー」を開いてインストールしてください。または、サーバーで `openmausbot browser install` を実行してください。",
   "browser.noEngine": "このサーバーにはブラウザーエンジンがありません。",
@@ -2278,7 +2277,6 @@
   "engineSetup.serverInstalling": "サーバーにインストール中です。1 分ほどかかる場合があります。",
   "engineSetup.serverInstalled": "インストールしました。モデルプロバイダーを確認中です。",
   "engineSetup.preferTerminal": "ターミナルを使いますか？",
-  "settings.experimental.skillAuthoring": "ボットが自分のスキルを作成できるようにする",
   "settings.experimental.skillAuthoringAria": "ボットによるスキルの作成を許可",
   "browser.control.yours": "あなたがブラウザーを操作中です",
   "browser.control.yoursHint": "あなたの操作中は {name} のブラウザーツールが一時停止します。数秒間入力がなければ、操作権は {name} に戻ります。",
@@ -3732,5 +3730,7 @@
   "botPanel.library.pageState.org": "組織に公開",
   "botPanel.library.pageState.link": "リンクを知っている全員に公開",
   "botPanel.library.pageState.revoked": "取り消し済み",
-  "botPanel.library.pageState.expired": "期限切れ"
+  "botPanel.library.pageState.expired": "期限切れ",
+  "settings.experimental.browserWindows": "この Windows マシンではまだ使えません。`openmausbot browser install` でブラウザーエンジンをインストールしてください。",
+  "settings.experimental.skillAuthoring": "ボットが自分のスキルを作成できるようにする"
 }

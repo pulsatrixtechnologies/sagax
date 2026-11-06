@@ -537,7 +537,6 @@
   "settings.experimental.title": "实验功能",
   "settings.experimental.error": "无法保存实验功能的设置。",
   "settings.experimental.browser": "内置浏览器",
-  "settings.experimental.browserWindows": "此 Windows 机器上尚不可用：用 `openmausbot browser install` 安装浏览器引擎。",
   "settings.experimental.browserAria": "启用内置浏览器",
   "browser.notInstalled": "此服务器尚未安装浏览器引擎。请在{settings}和机器人的 Access 设置中打开浏览器开关，然后打开 机器人的电脑 → 浏览器 进行安装。也可以在服务器上运行 `openmausbot browser install`。",
   "browser.noEngine": "该服务器没有浏览器引擎。",
@@ -1541,7 +1540,6 @@
   "engineSetup.serverInstalling": "正在服务器上安装。这可能需要一分钟。",
   "engineSetup.serverInstalled": "已安装。正在检查模型提供方。",
   "engineSetup.preferTerminal": "偏好使用终端机？",
-  "settings.experimental.skillAuthoring": "允许机器人草拟技能供你审核",
   "settings.experimental.skillAuthoringAria": "允许机器人草拟技能",
   "settings.profiles.browserSession": "浏览器配置",
   "settings.profiles.sharedEmpty": "尚无共用配置。每个机器人仍有自己的浏览器。",
@@ -2629,5 +2627,7 @@
   "botPanel.library.pageState.org": "已发布给我的组织",
   "botPanel.library.pageState.link": "已发布给任何有链接的人",
   "botPanel.library.pageState.revoked": "已撤销",
-  "botPanel.library.pageState.expired": "已过期"
+  "botPanel.library.pageState.expired": "已过期",
+  "settings.experimental.browserWindows": "此 Windows 机器上尚不可用：用 `openmausbot browser install` 安装浏览器引擎。",
+  "settings.experimental.skillAuthoring": "允许机器人草拟技能供你审核"
 }

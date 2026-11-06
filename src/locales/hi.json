@@ -537,7 +537,6 @@
   "settings.experimental.title": "प्रयोगात्मक सुविधाएँ",
   "settings.experimental.error": "प्रयोगात्मक सुविधा की सेटिंग सहेजी नहीं जा सकी।",
   "settings.experimental.browser": "अंतर्निहित ब्राउज़र",
-  "settings.experimental.browserWindows": "इस Windows मशीन पर अभी उपलब्ध नहीं: `openmausbot browser install` से ब्राउज़र इंजन इंस्टॉल करें।",
   "settings.experimental.browserAria": "अंतर्निहित ब्राउज़र चालू करें",
   "browser.notInstalled": "इस सर्वर पर ब्राउज़र इंजन अभी इंस्टॉल नहीं है। {settings} और बॉट की Access सेटिंग्स में ब्राउज़र के स्विच चालू करें। फिर इंस्टॉल करने के लिए बॉट का कंप्यूटर → ब्राउज़र खोलें। या सर्वर पर `openmausbot browser install` चलाएँ।",
   "browser.noEngine": "इस सर्वर पर ब्राउज़र इंजन नहीं है।",
@@ -1854,5 +1853,6 @@
   "botPanel.library.pageState.org": "मेरे संगठन के लिए प्रकाशित",
   "botPanel.library.pageState.link": "लिंक वाले किसी के भी लिए प्रकाशित",
   "botPanel.library.pageState.revoked": "रद्द",
-  "botPanel.library.pageState.expired": "समाप्त"
+  "botPanel.library.pageState.expired": "समाप्त",
+  "settings.experimental.browserWindows": "इस Windows मशीन पर अभी उपलब्ध नहीं: `openmausbot browser install` से ब्राउज़र इंजन इंस्टॉल करें।"
 }

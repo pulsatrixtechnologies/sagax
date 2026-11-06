@@ -64,7 +64,7 @@ describe("other switches and their consumers", () => {
     ["Skill authoring", "components/Composer.tsx-parts/useComposerCommands.ts", "skillAuthoringEnabled"],
     ["Built-in browser", "components/ComputerPanel.tsx-parts/useComputerPanelSession.ts", "builtInBrowserEnabled"],
     ["Data window", "components/DataWindowButton.tsx", "dataWindowEnabled"],
-    ["Decision model", "components/SettingsModal.tsx", "decisionModelEnabled"],
+    ["Decision model", "components/DecisionModelSettings.tsx", "decider"],
     ["Show tool calls", "components/ChatView.tsx", "showToolCallsEnabled"],
     ["Simple or Advanced", "components/BotSettingsDialog.tsx", "useAdvancedMode"],
   ];

@@ -3,8 +3,15 @@ import { z } from "zod";
 import type { AppConfig } from "../config.ts";
 import type { Message } from "../store.ts";
 import { PHONE_SECRET_PROTOCOL_VERSION, type PhoneSecretContext } from "../phone/phone-secret.ts";
-import { credentialIsConfigured, credentialResumeOutcome, isCredentialTargetId } from "../../shared/credential-request.ts";
+import {
+  CUSTOM_SECRET_TARGET,
+  credentialIsConfigured,
+  credentialResumeOutcome,
+  isCredentialTargetId,
+} from "../../shared/credential-request.ts";
 import { VAULT_LOGIN_TARGET } from "../../shared/credential-vault.ts";
+import { SECRET_VALUE_MAX_BYTES } from "../secret-vault.ts";
+import { isCustomSecret } from "../host/custom-secrets.ts";
 
 const phoneSecretEnvelopeSchema = z.object({
   version: z.literal(PHONE_SECRET_PROTOCOL_VERSION),
@@ -17,6 +24,12 @@ const phoneSecretEnvelopeSchema = z.object({
   ciphertext: z.string().regex(/^[A-Za-z0-9_-]{23,5483}$/)
 }).strict();
 
+function secretSaved(cfg: AppConfig, secret: NonNullable<Message["secret"]>): boolean {
+  if (isCustomSecret(secret)) return secret.savedAt !== undefined;
+  if (!isCredentialTargetId(secret.target)) return false;
+  return credentialIsConfigured(cfg, secret.target);
+}
+
 export interface BotSecretCardRouteDeps {
   getConfig: () => AppConfig;
   provideSecretFromPhone: (context: PhoneSecretContext, deviceId: string) => Promise<{ provided: boolean; resumed: boolean }>;
@@ -25,17 +38,39 @@ export interface BotSecretCardRouteDeps {
   phoneSecretSubmissionKey: (threadId: string, messageId: string, requestKey: string) => string;
   resumeSecretCard: (botId: string, threadId: string, messageId: string, outcome: "provided" | "dismissed") => boolean;
   currentSecretState: (botId: string, threadId: string, messageId: string) => { provided: boolean; resumed: boolean } | null;
+  /** Keep a custom secret behind the card and resume the turn. */
+  saveCustomSecret?: (botId: string, threadId: string, messageId: string, value: unknown) => { status: number; body: Record<string, unknown> };
 }
 
 export function createBotSecretCardRoutes(deps: BotSecretCardRouteDeps): RouteHandler {
   return async ({ req, res, path, method, json, readBody }) => {
     const { getConfig, provideSecretFromPhone, secretMessage, phoneSecretSubmissions, phoneSecretSubmissionKey, resumeSecretCard, currentSecretState } = deps;
 
+    // A custom secret typed in the app: JSON only, value never echoed.
+    let m = path.match(/^\/api\/bots\/([\w-]+)\/secret-cards\/([\w-]+)\/save$/);
+    if (m && method === "POST") {
+      const mediaType = String(req.headers["content-type"] ?? "").split(";", 1)[0]!.trim().toLowerCase();
+      if (mediaType !== "application/json") {
+        json(res, 415, { error: "content-type must be application/json" });
+        return;
+      }
+      if (!deps.saveCustomSecret) {
+        json(res, 501, { error: "custom secrets are unavailable on this server" });
+        return;
+      }
+      const raw = await readBody(req, SECRET_VALUE_MAX_BYTES * 4);
+      const fields = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+      const threadId = String(fields.threadId ?? "");
+      const result = deps.saveCustomSecret(m[1]!, threadId, m[2]!, fields.value);
+      json(res, result.status, result.body);
+      return;
+    }
+
     // Phone credential entry arrives as an HPKE envelope bound to the exact
     // paired device, bot, task, card and allowlisted target. The companion
     // authenticates the bearer and supplies the device id; only the embedded
     // Electron server has the private key needed to open the envelope.
-    let m = path.match(/^\/api\/bots\/([\w-]+)\/secret-cards\/([\w-]+)\/provide$/);
+    m = path.match(/^\/api\/bots\/([\w-]+)\/secret-cards\/([\w-]+)\/provide$/);
     if (m && method === "POST") {
       if (req.headers["x-openmausbot-companion"] !== "1") {
         json(res, 403, { error: "Secure phone entry must come from a paired phone" });
@@ -52,7 +87,8 @@ export function createBotSecretCardRoutes(deps: BotSecretCardRouteDeps): RouteHa
         return;
       }
       const parsed = phoneSecretEnvelopeSchema.safeParse(await readBody(req, 16_384));
-      if (!parsed.success || !isCredentialTargetId(parsed.data?.target)) {
+      // Custom secrets from a phone need a sealed open path not wired here yet; only allowlisted keys.
+      if (!parsed.success || !isCredentialTargetId(parsed.data?.target) || parsed.data.target === CUSTOM_SECRET_TARGET) {
         json(res, 400, { error: "The encrypted credential request is invalid" });
         return;
       }
@@ -98,7 +134,7 @@ export function createBotSecretCardRoutes(deps: BotSecretCardRouteDeps): RouteHa
           json(res, 409, { error: "this credential request was superseded by a newer one" });
           return;
         }
-        if (!credentialIsConfigured(getConfig(), message.secret.target)) {
+        if (!secretSaved(getConfig(), message.secret)) {
           json(res, 409, { error: `${message.secret.label} was not saved yet` });
           return;
         }
@@ -124,7 +160,7 @@ export function createBotSecretCardRoutes(deps: BotSecretCardRouteDeps): RouteHa
           json(res, 409, { error: "this credential request is not ready to resume" });
           return;
         }
-        if (outcome === "provided" && !credentialIsConfigured(getConfig(), message.secret.target)) {
+        if (outcome === "provided" && !secretSaved(getConfig(), message.secret)) {
           json(res, 409, { error: `${message.secret.label} is no longer configured` });
           return;
         }

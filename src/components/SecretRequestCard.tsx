@@ -2,7 +2,7 @@ import { t } from "@/lib/i18n";
 import { useState, type FormEvent } from "react";
 import { ExternalLink, KeyRound, Loader2, LockKeyhole, RefreshCw, X } from "lucide-react";
 
-import { credentialConfigPatch, credentialResumeOutcome, type CredentialTargetId } from "../../shared/credential-request";
+import { CUSTOM_SECRET_TARGET, credentialConfigPatch, credentialResumeOutcome, type CredentialTargetId } from "../../shared/credential-request";
 import { VAULT_LOGIN_TARGET } from "../../shared/credential-vault";
 import { cn } from "@/lib/cn";
 import { api, useStore, type ConfigStatus, type Message } from "@/state/store";
@@ -15,6 +15,8 @@ import { readableError } from "@/lib/plain-error";
 // its value: the value goes straight to the host's settings, not the chat.
 // A login request from the credential vault (target vaultLogin) is its own
 // card: the person allows a saved login instead of typing a key.
+// A custom secret (target customSecret) is kept behind the card as a one-use
+// ref or a private file, never in Settings.
 
 export function SecretRequestCard(props: { botId: string; threadId: string; message: Message }) {
   return props.message.secret?.target === VAULT_LOGIN_TARGET ? <VaultRequestCard {...props} /> : <ApiKeyRequestCard {...props} />;
@@ -31,6 +33,7 @@ function ApiKeyRequestCard({
 }) {
   const { dispatch } = useStore();
   const secret = message.secret!;
+  const custom = secret.target === CUSTOM_SECRET_TARGET;
   const target = secret.target as CredentialTargetId;
   const remoteClient = window.ogb?.remoteClient?.active === true;
   const [value, setValue] = useState("");
@@ -56,13 +59,13 @@ function ApiKeyRequestCard({
       : "Saved securely. Your bot will continue when its current turn settles."
     : declined
       ? "You chose not to provide this credential. Sagax could not resume the bot yet."
-      : secret.description;
+      : custom && secret.reason ? secret.reason : secret.description;
   const footerLabel = stopped
     ? "Stopped"
     : declined
     ? "Continuing without this credential failed"
     : secret.resumed
-      ? "Bot resumed without seeing the key"
+      ? custom && secret.delivery === "file" ? t("secretCard.resumed") : "Bot resumed without seeing the key"
       : error
         ? "The key is safe; resuming failed"
         : "Waiting to resume safely";
@@ -94,8 +97,25 @@ function ApiKeyRequestCard({
     }
   };
 
+  // Kept behind the card on the server, never in Settings; saving it resumes the bot.
+  const saveCustom = async () => {
+    if (saving || !value.trim()) return;
+    setSaving(true);
+    setLocalError(null);
+    try {
+      await api(`${endpoint}/save`, { method: "POST", body: JSON.stringify({ threadId, value: value.trim() }) });
+      setValue("");
+      returnFocusToComposer();
+    } catch (error) {
+      setLocalError(readableError(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const save = async (event?: FormEvent) => {
     event?.preventDefault();
+    if (custom) return saveCustom();
     if (saving || (!value.trim() && !savedLocally)) return;
     setSaving(true);
     setLocalError(null);
@@ -207,16 +227,21 @@ function ApiKeyRequestCard({
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-ink-tertiary">
             <span className="flex items-center gap-1">
-              <LockKeyhole size={11} /> Stored securely by Sagax and never added to chat.
+              <LockKeyhole size={11} />{" "}
+              {!custom
+                ? "Stored securely by Sagax and never added to chat."
+                : secret.delivery === "file" ? t("secretCard.file") : t("secretCard.ref")}
             </span>
-            <a
-              href={secret.helpUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-accent-text hover:underline"
-            >
-              Where to get this key <ExternalLink size={11} />
-            </a>
+            {secret.helpUrl ? (
+              <a
+                href={secret.helpUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-accent-text hover:underline"
+              >
+                Where to get this key <ExternalLink size={11} />
+              </a>
+            ) : null}
           </div>
         </form>
       )}

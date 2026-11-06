@@ -363,8 +363,14 @@ beforeAll(async () => {
       req.on("data", (c) => (data += c));
       req.on("end", () => {
         lastCredentialBody = JSON.parse(data);
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ messageId: "msg-key", label: "OpenCode API key" }));
+        const label = typeof lastCredentialBody.label === "string"
+          ? lastCredentialBody.label
+          : "OpenCode API key";
+        const delivery = typeof lastCredentialBody.delivery === "string"
+          ? lastCredentialBody.delivery
+          : undefined;
+        res.writeHead(delivery ? 201 : 200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ messageId: "msg-key", label, ...(delivery ? { delivery } : {}) }));
       });
       return;
     }
@@ -585,7 +591,7 @@ describe("agents-proxy MCP surface", () => {
       expect(description).toContain("does not elevate another bot's execution permissions");
     }
     const credential = list.result.tools.find((entry: { name: string }) => entry.name === "request_credential");
-    expect(credential.description).toContain("after the user saves or declines");
+    expect(credential.description).toContain("resume when they save or decline");
     expect(credential.description).not.toContain("apply the change immediately");
     for (const name of ["create_room", "manage_room"]) {
       const description = list.result.tools.find((entry: { name: string }) => entry.name === name).description;
@@ -830,8 +836,9 @@ describe("agents-proxy MCP surface", () => {
     expect(delegate.description).toContain("DEFAULT FOR ASSIGNING WORK");
     expect(delegate.description).toContain("delivered automatically");
     expect(wait.description).toContain("Never call it in the same turn as delegate_bot");
-    expect(credential.description).toContain("freshly QR-paired mobile app show a secure entry card");
-    expect(credential.description).toContain("Never claim a secure field opened unless this request succeeds");
+    expect(credential.description).toContain("secure card in the app or a QR-paired phone");
+    expect(credential.description).toContain("never in chat");
+    expect(credential.description).toContain("label, reason, delivery");
   });
 
   it("select_computer inspects actual choices with a GET when no target is given", async () => {
@@ -1432,6 +1439,26 @@ describe("agents-proxy MCP surface", () => {
     const res = await callTool("request_credential", { credential_id: "arbitrary.config.path" });
     expect(res.result.isError).toBe(true);
     expect(lastCredentialBody).toBeNull();
+  });
+
+  it("asks for a custom secret with label, reason and delivery", async () => {
+    lastCredentialBody = null;
+    const res = await callTool("request_credential", {
+      label: "Stripe secret key",
+      reason: "To create a webhook for the shop.",
+      delivery: "ref",
+    });
+    expect(res.result.isError).toBeFalsy();
+    expect(res.result.content[0].text).toContain("secure card for Stripe secret key");
+    expect(res.result.content[0].text).toContain("End this turn now");
+    expect(lastCredentialBody).toEqual({
+      fromBotId: "bot-asker",
+      fromThreadId: "thread-asker-routine",
+      label: "Stripe secret key",
+      reason: "To create a webhook for the shop.",
+      placeholder: undefined,
+      delivery: "ref",
+    });
   });
 
   it("hands back the task id, and relays the harness's refusal to check it in the same turn", async () => {

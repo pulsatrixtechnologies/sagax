@@ -187,7 +187,7 @@ export function useStoreLive(args: UseStoreLiveArgs): void {
           if (!alive) return;
           rawDispatch({
             type: "hydrate",
-            bots,
+            bots: bots ?? [],
             groups: groups ?? [],
             sections: sections ?? [],
             computerControl: computerControl ?? {},

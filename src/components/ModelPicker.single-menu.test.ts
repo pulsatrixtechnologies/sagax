@@ -24,6 +24,8 @@ const SURFACES = [
   "components/settings/BotModelsSettings.tsx",
   "components/bot-settings/ModelSection.tsx",
   "components/bot-wizard/WizardSteps.tsx",
+  "components/TeamSettingsDialog.tsx",
+  "components/code/LaunchComposer.tsx",
 ];
 
 describe("single model menu", () => {
@@ -40,6 +42,13 @@ describe("single model menu", () => {
       expect(file, surface).toBeDefined();
       expect(file!.text, surface).toMatch(/<ModelPicker\b/);
       expect(file!.text, surface).toMatch(/import\s*\{[^}]*\bModelPicker\b[^}]*\}\s*from\s*["'][./]*(components\/)?ModelPicker["']/);
+    }
+  });
+
+  it("no surface keeps a native <select> or a free-text field for a model", () => {
+    for (const surface of ["components/TeamSettingsDialog.tsx", "components/code/LaunchComposer.tsx"]) {
+      const text = files.find(({ path }) => path === surface)!.text;
+      for (const tag of text.match(/<(select|input)\b[^>]*>/g) ?? []) expect(tag, surface).not.toMatch(/model/i);
     }
   });
 

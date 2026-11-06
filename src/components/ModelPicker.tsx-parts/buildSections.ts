@@ -34,6 +34,8 @@ export interface ModelPickerSectionsInput {
   instances: readonly InstanceInfo[];
   selectable: InstanceInfo[];
   viewerLocal: boolean;
+  /** Pick-only surfaces: a leading row (for example "Keep current model"). */
+  keepRow?: ModelMenuRow;
   autoPreview: { modelLabel: string } | null | undefined;
   autoRecord: { modelLabel: string } | null | undefined;
   profile: Bot;
@@ -54,7 +56,7 @@ export interface ModelPickerSections {
 export function buildModelPickerSections(input: ModelPickerSectionsInput): ModelPickerSections {
   const {
     orgMode, accountModels, selection, switches, autoOn, follows, selectedVariantLabel,
-    fallback, instances, selectable, viewerLocal, autoPreview, autoRecord, profile,
+    fallback, instances, selectable, viewerLocal, keepRow, autoPreview, autoRecord, profile,
     botModelInstance, botModelName, health, myEngines, ranOnName, favoriteKeys = [],
   } = input;
 
@@ -177,6 +179,7 @@ export function buildModelPickerSections(input: ModelPickerSectionsInput): Model
     ? (autoShown ? `${t(`model.auto.optimize.${optimize}`)} · ${autoShown.modelLabel}` : t(`model.auto.optimize.${optimize}`))
     : t("model.auto.rowHint");
   const topRows: ModelMenuRow[] = [
+    ...(keepRow ? [keepRow] : []),
     ...(!viewerLocal ? [{
       key: "auto", kind: "auto" as const, label: t("model.auto.label"), current: autoOn,
       detail: autoDetail,

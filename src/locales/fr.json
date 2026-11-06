@@ -10071,6 +10071,7 @@
   "code.launch.promptAria": "Tâche de l'agent cloud",
   "code.launch.engine": "Moteur",
   "code.launch.model": "Modèle",
+  "code.launch.useModel": "Utiliser « {model} »",
   "code.launch.submit": "Lancer le run",
   "code.launch.setupTitle": "Configurer les agents cloud",
   "code.launch.setupBody": "Aucun environnement ne vous est encore ouvert. Un environnement nomme le dépôt, le setup et les secrets d'un run ; il se crée dans la console Perspicax.",

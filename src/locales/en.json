@@ -10089,6 +10089,7 @@
   "code.launch.promptAria": "Task for the cloud agent",
   "code.launch.engine": "Engine",
   "code.launch.model": "Model",
+  "code.launch.useModel": "Use \"{model}\"",
   "code.launch.submit": "Launch the run",
   "code.launch.setupTitle": "Set up cloud agents",
   "code.launch.setupBody": "No environment is open to you yet. An environment names the repository, the setup and the secrets a run starts from; it is created in the Perspicax console.",

@@ -44,7 +44,7 @@ import {
   reactionEmoji,
   type ReactionActor,
 } from "../../shared/reactions.ts";
-import { PASS, type RouteHandler } from "./table.ts";
+import { PASS, type RouteContext, type RouteHandler } from "./table.ts";
 
 export interface ThreadsHttpStore {
   readonly bots: readonly BotRecord[];
@@ -210,104 +210,7 @@ export function createThreadsHttpRoutes(deps: ThreadsHttpRouteDeps): RouteHandle
     let m: RegExpMatchArray | null = null;
 
     if (method === "GET" && path === "/api/events") {
-      const viewer = viewerFor(auth, path);
-      const visibleNow = visibleTo(viewer);
-      // A person of the organization: this stream is one of their clients.
-      const presenceOf = presenceViewer(auth);
-      const presenceClose = presenceOf.ok ? presence.connect(presenceOf.id, presenceOf.sessionId) : null;
-      const client: any = {
-        res,
-        admin: auth.scopes.includes("admin"),
-        screens: url.searchParams.get("screens") !== "off",
-        backpressured: false,
-        pushToken: pushTokenFromHeader(req.headers[PUSH_TOKEN_HEADER]),
-        viewer,
-        // What this person's hydration (GET /api/bots, narrowed the same way) showed them.
-        seen: viewer.kind === "all" ? { bots: new Set(), groups: new Set() } : {
-          bots: new Set(store.bots.filter((bot: any) => visibleNow.bot(bot.id) && listedBotVisible(bot, viewerId)).map((bot: any) => bot.id)),
-          groups: new Set(store.groups.filter((group: any) => visibleNow.group(group.id) && groupVisible(group, viewerId)).map((group: any) => group.id)),
-        },
-        // A comment keeps intermediaries from idling the connection, while a
-        // data frame is visible to EventSource clients and resets their own
-        // liveness watchdog. Heartbeats carry no id and never advance replay.
-        // An expired session's stream ends at the next heartbeat.
-        close: openSseHeartbeat(res, {
-          everyMs: SSE_HEARTBEAT_MS,
-          live: () => !client.sessionId || sessions.isLive(client.sessionId),
-          onBeat: () => { if (presenceOf.ok) presence.touch(presenceOf.id, presenceOf.sessionId); },
-          onClose: () => {
-            sseClients.delete(client);
-            presenceClose?.();
-          },
-        }),
-      };
-      if (auth.kind === "session") {
-        client.sessionId = auth.session.id;
-        client.approvalUserId = channelViewerId(auth) ?? "";
-      } else if (auth.kind === "loopback" && auth.trust !== "service") {
-        client.approvalUserId = localPrincipalId();
-      }
-      if (!(auth.kind === "loopback" && auth.trust === "service")) client.identity = () => viewerIdentity(auth);
-      if (viewerId) client.viewerId = viewerId;
-      if (presenceOf.ok) client.presence = true;
-      res.writeHead(200, {
-        "content-type": "text/event-stream",
-        "cache-control": "no-cache",
-        connection: "keep-alive",
-        // Honoured by nginx-compatible reverse proxies; harmless elsewhere.
-        // Remote clients need each frame now, not when a proxy buffer fills.
-        "x-accel-buffering": "no",
-      });
-
-      // Resume, if the client offered a cursor we can honour. `?since=` is
-      // for clients that read the stream by hand; Last-Event-ID is what a
-      // browser EventSource sends by itself.
-      // Once EventSource has received a numbered frame, its automatic
-      // reconnect carries a newer Last-Event-ID even though the original
-      // URL may still contain an older manual `since` cursor. Prefer the
-      // valid browser cursor or the stale query would replay forever.
-      // Flush merge windows first so pending content.delta text is in the
-      // replay buffer before we judge coverage (#1971 lost-reply on reconnect).
-      deps.flushPendingStreamDeltas?.();
-      const since =
-        cursorSeq(req.headers["last-event-id"]) ??
-        cursorSeq(url.searchParams.get("since") ?? undefined);
-      // The buffer only reaches so far back. If the client's cursor fell off
-      // the end, saying so is the only honest answer — a partial replay
-      // would leave a permanent hole in its state.
-      const resumed =
-        since !== null &&
-        since <= lastSeq() &&
-        replayBuffer.covers(since, lastSeq()) &&
-        // A member whose cursor predates a bot's audience change gets a fresh
-        // snapshot: a replay is judged by today's audience and could neither
-        // withdraw what the change hid nor bring back whole what it showed.
-        !(viewer.kind === "member" && audienceChangedAt() > 0 && since <= audienceChangedAt());
-      res.write(
-        `data: ${JSON.stringify({
-          kind: "hello",
-          cursor: `${STREAM_ID}:${lastSeq()}`,
-          // false means "I could not give you what you missed — hydrate".
-          // A client that offered no cursor gets false too, which is exactly
-          // what a cold start should do.
-          resumed,
-        })}\n\n`,
-      );
-      if (resumed) {
-        for (const buffered of replayBuffer) {
-          if (buffered.seq <= since || !wants(client, buffered.kind)) continue;
-          const frame = sseFrameFor(client, buffered.seq, buffered.payload, buffered.frame, buffered.clientFrame);
-          if (frame) res.write(frame);
-        }
-      }
-
-      // A stream that already failed (its close ran) never joins the fan-out.
-      if (!res.writableEnded && !res.destroyed) sseClients.add(client);
-      // Keep this long-lived response out of socket idle-timeout handling
-      // without weakening timeouts for every other API request.
-      req.socket.setTimeout(0);
-      req.on("close", client.close);
-      return;
+      return handleThreadEventsSse(deps, { req, res, url, path, method, auth, json, readBody }, viewerId);
     }
 
     m = path.match(/^\/api\/threads\/([\w-]+)\/cw-actions$/);
@@ -405,181 +308,7 @@ export function createThreadsHttpRoutes(deps: ThreadsHttpRouteDeps): RouteHandle
       return;
     }
 
-    // Download one local file only when this exact stored message grants it:
-    // a bot must render a Markdown link or carry a generated-image attachment,
-    // while a user message must carry the standalone composer tag. The bot
-    // branch derives conversation/workspace roots; the user branch is limited
-    // to Sagax's private attachment directory. This is deliberately not
-    // a general path reader.
-    m = path.match(/^\/api\/threads\/([\w-]+)\/messages\/([\w-]+)\/file$/);
-    const streamsMessageImage = Boolean(
-      m && method === "GET" && url.searchParams.get("preview") === "1",
-    );
-    if (m && (method === "POST" || streamsMessageImage)) {
-      if (method === "POST" && !String(req.headers["content-type"] ?? "").toLowerCase().startsWith("application/json")) {
-        return json(res, 415, { error: "content-type must be application/json" });
-      }
-      const threadId = m[1]!;
-      const directBot = store.botByThread(threadId);
-      const group = directBot ? undefined : store.groupByThread(threadId);
-      if (!directBot && !group) return json(res, 404, { error: "no such conversation" });
-
-      const message = store.messagesFor(threadId).find((candidate: any) => candidate.id === m![2]);
-      if (!message) return json(res, 404, { error: "no such message" });
-      const body = method === "POST" ? await readBody(req) : null;
-      // A file the bot's own tool wrote is granted by that tool's activity
-      // message, the same way a Markdown link is by its text message.
-      const writtenGrant = method === "POST" && message.role === "bot" && typeof body.path === "string" &&
-        writtenFilesForMessage(message).includes(body.path);
-      if (!writtenGrant && (message.kind !== "text" || (!message.text && !message.attachments?.length))) {
-        return json(res, 403, { error: "that message does not share this file" });
-      }
-      const messageText = message.text ?? "";
-      const rawReference = streamsMessageImage ? url.searchParams.get("ref") : null;
-      if (streamsMessageImage && (!rawReference || !/^\d+$/.test(rawReference))) {
-        return json(res, 400, { error: "ref must identify a rendered image" });
-      }
-      const href = method === "POST"
-        ? (typeof body.path === "string" ? body.path : "")
-        : messageImageTargetAt(messageText, Number(rawReference));
-      if (!href) return json(res, 400, { error: "path is required" });
-
-      let roots: string[];
-      let downloadName: string | undefined;
-      // A file the bot attached with attach_file lives in the private
-      // attachment store; the message itself is the grant, exactly as a
-      // user's attachment tag is for their own uploads.
-      const botAttachment = message.role === "bot"
-        ? message.attachments?.find((attachment: any) => attachment.path === href)
-        : undefined;
-      if (message.role === "user") {
-        downloadName = messageAttachmentName(messageText, href) ?? undefined;
-        if (!downloadName) {
-          return json(res, 403, { error: "that message does not share this file" });
-        }
-        roots = [ATTACHMENTS_DIR];
-      } else if (botAttachment) {
-        // Files and images alike: the stored message is the grant, so the
-        // mobile clients can fetch an attached image through this route too.
-        downloadName = botAttachment.kind === "file" ? botAttachment.name : undefined;
-        roots = [ATTACHMENTS_DIR];
-      } else if (writtenGrant) {
-        const senderId = directBot?.id ?? message.from?.botId;
-        if (!senderId) return json(res, 403, { error: "the file's bot author could not be verified" });
-        roots = messageFileRootsForThread(senderId, threadId);
-      } else {
-        if (!messageReferencesFile(messageText, href)) {
-          return json(res, 403, { error: "that bot message does not link to this file" });
-        }
-        const senderId = directBot?.id ?? message.from?.botId;
-        // The persisted bot-role message is the author record. Membership is
-        // intentionally not consulted: removing a bot must not break files it
-        // already shared in channel history.
-        if (!senderId) {
-          return json(res, 403, { error: "the file's bot author could not be verified" });
-        }
-        roots = messageFileRootsForThread(senderId, threadId);
-      }
-
-      // A link to a folder answers with its files; each one is then fetched
-      // by plain name under the same message grant and file checks.
-      const folderEntry = method === "POST" && body.entry !== undefined
-        ? messageFolderEntryName(body.entry)
-        : undefined;
-      if (folderEntry === null) return json(res, 400, { error: "entry must be one file name" });
-      const wantsLocation = method === "POST" && body?.location === true;
-      if (wantsLocation && folderEntry !== undefined) {
-        return json(res, 400, { error: "a folder entry has no streaming URL" });
-      }
-      let servedHref = href;
-      let file: Awaited<ReturnType<typeof openMessageFile>>;
-      try {
-        file = folderEntry
-          ? await openMessageFolderEntry(href, folderEntry, roots)
-          : await openMessageFile(href, roots);
-      } catch (error) {
-        const code = (error as { code?: unknown } | null)?.code;
-        const status = (error as { status?: unknown } | null)?.status;
-        if (wantsLocation && code === "directory") {
-          return json(res, 400, { error: "the link points to a folder", code: "directory" });
-        }
-        // A reply's file outside the conversation's folders, or gone, that
-        // its bot delivered with attach_file this turn: the stored copy is
-        // what the reply shows and saves, as a chat link's would be.
-        const name = message.role === "bot" && !botAttachment && !folderEntry && (code === "outside_workspace" || status === 404)
-          ? referencedFileName(href)
-          : null;
-        const copy = name ? deliveredCopy(store.messagesFor(threadId), message, name) : null;
-        if (copy) {
-          file = await openMessageFile(copy.path, [ATTACHMENTS_DIR]);
-          downloadName = copy.name;
-          servedHref = copy.path;
-        } else {
-          // Only a client that asks for listings gets one; older clients keep the 400.
-          if (body?.listFolder !== true || folderEntry || code !== "directory") throw error;
-          const listing = await listMessageFolder(href, roots);
-          res.setHeader("x-openmausbot-folder", "1");
-          res.setHeader("cache-control", "private, no-store");
-          return json(res, 200, listing);
-        }
-      }
-      if ((streamsMessageImage || botAttachment?.kind === "image") && !file.mime.startsWith("image/")) {
-        await file.handle.close();
-        return json(res, 415, { error: "only images can be previewed here" });
-      }
-      if (wantsLocation) {
-        // HTML media and the browser download manager need a GET URL. Return
-        // only the opaque file-list capability, never the host path from the
-        // POST body. The GET rechecks current thread and person visibility.
-        const ref = threadFileRefForPath(threadId, servedHref, servedHref === href ? message.id : undefined);
-        if (!ref) {
-          await file.handle.close();
-          return json(res, 404, { error: "this file is not on the visible conversation branch" });
-        }
-        const downloadUrl = `/api/threads/${encodeURIComponent(threadId)}/files/${encodeURIComponent(ref.id)}`;
-        const name = messageFileDownloadName(downloadName, file.name);
-        const answer = { downloadUrl, previewUrl: `${downloadUrl}?preview=1`, name, mime: file.mime, bytes: file.bytes };
-        await file.handle.close();
-        return json(res, 200, answer);
-      }
-      res.writeHead(200, {
-        "content-type": file.mime,
-        "content-length": String(file.bytes),
-        ...(streamsMessageImage
-          ? { "content-disposition": "inline" }
-          : { "content-disposition": messageFileDisposition(messageFileDownloadName(downloadName, file.name)) }),
-        // previews too: access to the thread can be withdrawn
-        "cache-control": "private, no-store",
-        "cdn-cache-control": "no-store",
-        "cloudflare-cdn-cache-control": "no-store",
-        pragma: "no-cache",
-        vary: "Authorization",
-        "x-content-type-options": "nosniff",
-        ...(streamsMessageImage
-          ? {
-              "cross-origin-resource-policy": "same-origin",
-              "referrer-policy": "no-referrer",
-            }
-          : {}),
-      });
-      if (file.bytes === 0) {
-        await file.handle.close();
-        res.end();
-      return;
-      }
-      // The client may have gone while the file was opening: its "close"
-      // already fired, so nothing would ever close the handle, and Node
-      // fails the process when it collects an open FileHandle.
-      if (res.destroyed) {
-        await file.handle.close().catch(() => undefined);
-        return;
-      }
-      const stream = file.stream();
-      stream.on("error", () => res.destroy());
-      res.on("close", () => stream.destroy());
-      stream.pipe(res);
-      return;
-    }
+    if (await handleThreadMessageFile(deps, { req, res, url, path, method, auth, json, readBody }) !== PASS) return;
 
     // The conversation's files for the bot panel's Files tab: every upload,
     // attachment, linked file and tool-written file on the visible branch,
@@ -761,3 +490,315 @@ export function createThreadsHttpRoutes(deps: ThreadsHttpRouteDeps): RouteHandle
       };
     }
 
+
+/** GET /api/events: the authenticated SSE fan-out. */
+async function handleThreadEventsSse(deps: ThreadsHttpRouteDeps, ctx: RouteContext, viewerId: string | undefined): Promise<void> {
+  const {
+    store,
+    sseHeartbeatMs: SSE_HEARTBEAT_MS,
+    streamId: STREAM_ID,
+    viewerFor,
+    visibleTo,
+    presenceViewer,
+    presence,
+    listedBotVisible,
+    groupVisible,
+    channelViewerId,
+    localPrincipalId,
+    viewerIdentity,
+    sessions,
+    sseClients,
+    cursorSeq,
+    lastSeq,
+    audienceChangedAt,
+    replayBuffer,
+    wants,
+    sseFrameFor,
+  } = deps;
+  const { req, res, url, path, auth } = ctx;
+  const viewer = viewerFor(auth, path);
+  const visibleNow = visibleTo(viewer);
+  // A person of the organization: this stream is one of their clients.
+  const presenceOf = presenceViewer(auth);
+  const presenceClose = presenceOf.ok ? presence.connect(presenceOf.id, presenceOf.sessionId) : null;
+  const client: any = {
+    res,
+    admin: auth.scopes.includes("admin"),
+    screens: url.searchParams.get("screens") !== "off",
+    backpressured: false,
+    pushToken: pushTokenFromHeader(req.headers[PUSH_TOKEN_HEADER]),
+    viewer,
+    // What this person's hydration (GET /api/bots, narrowed the same way) showed them.
+    seen: viewer.kind === "all" ? { bots: new Set(), groups: new Set() } : {
+      bots: new Set(store.bots.filter((bot: any) => visibleNow.bot(bot.id) && listedBotVisible(bot, viewerId)).map((bot: any) => bot.id)),
+      groups: new Set(store.groups.filter((group: any) => visibleNow.group(group.id) && groupVisible(group, viewerId)).map((group: any) => group.id)),
+    },
+    // A comment keeps intermediaries from idling the connection, while a
+    // data frame is visible to EventSource clients and resets their own
+    // liveness watchdog. Heartbeats carry no id and never advance replay.
+    // An expired session's stream ends at the next heartbeat.
+    close: openSseHeartbeat(res, {
+      everyMs: SSE_HEARTBEAT_MS,
+      live: () => !client.sessionId || sessions.isLive(client.sessionId),
+      onBeat: () => { if (presenceOf.ok) presence.touch(presenceOf.id, presenceOf.sessionId); },
+      onClose: () => {
+        sseClients.delete(client);
+        presenceClose?.();
+      },
+    }),
+  };
+  if (auth.kind === "session") {
+    client.sessionId = auth.session.id;
+    client.approvalUserId = channelViewerId(auth) ?? "";
+  } else if (auth.kind === "loopback" && auth.trust !== "service") {
+    client.approvalUserId = localPrincipalId();
+  }
+  if (!(auth.kind === "loopback" && auth.trust === "service")) client.identity = () => viewerIdentity(auth);
+  if (viewerId) client.viewerId = viewerId;
+  if (presenceOf.ok) client.presence = true;
+  res.writeHead(200, {
+    "content-type": "text/event-stream",
+    "cache-control": "no-cache",
+    connection: "keep-alive",
+    // Honoured by nginx-compatible reverse proxies; harmless elsewhere.
+    // Remote clients need each frame now, not when a proxy buffer fills.
+    "x-accel-buffering": "no",
+  });
+
+  // Resume, if the client offered a cursor we can honour. `?since=` is
+  // for clients that read the stream by hand; Last-Event-ID is what a
+  // browser EventSource sends by itself.
+  // Once EventSource has received a numbered frame, its automatic
+  // reconnect carries a newer Last-Event-ID even though the original
+  // URL may still contain an older manual `since` cursor. Prefer the
+  // valid browser cursor or the stale query would replay forever.
+  // Flush merge windows first so pending content.delta text is in the
+  // replay buffer before we judge coverage (#1971 lost-reply on reconnect).
+  deps.flushPendingStreamDeltas?.();
+  const since =
+    cursorSeq(req.headers["last-event-id"]) ??
+    cursorSeq(url.searchParams.get("since") ?? undefined);
+  // The buffer only reaches so far back. If the client's cursor fell off
+  // the end, saying so is the only honest answer — a partial replay
+  // would leave a permanent hole in its state.
+  const resumed =
+    since !== null &&
+    since <= lastSeq() &&
+    replayBuffer.covers(since, lastSeq()) &&
+    // A member whose cursor predates a bot's audience change gets a fresh
+    // snapshot: a replay is judged by today's audience and could neither
+    // withdraw what the change hid nor bring back whole what it showed.
+    !(viewer.kind === "member" && audienceChangedAt() > 0 && since <= audienceChangedAt());
+  res.write(
+    `data: ${JSON.stringify({
+      kind: "hello",
+      cursor: `${STREAM_ID}:${lastSeq()}`,
+      // false means "I could not give you what you missed — hydrate".
+      // A client that offered no cursor gets false too, which is exactly
+      // what a cold start should do.
+      resumed,
+    })}\n\n`,
+  );
+  if (resumed) {
+    for (const buffered of replayBuffer) {
+      if (buffered.seq <= since || !wants(client, buffered.kind)) continue;
+      const frame = sseFrameFor(client, buffered.seq, buffered.payload, buffered.frame, buffered.clientFrame);
+      if (frame) res.write(frame);
+    }
+  }
+
+  // A stream that already failed (its close ran) never joins the fan-out.
+  if (!res.writableEnded && !res.destroyed) sseClients.add(client);
+  // Keep this long-lived response out of socket idle-timeout handling
+  // without weakening timeouts for every other API request.
+  req.socket.setTimeout(0);
+  req.on("close", client.close);
+  return;
+}
+
+/** GET/POST /api/threads/:id/messages/:messageId/file, including image preview. */
+async function handleThreadMessageFile(deps: ThreadsHttpRouteDeps, ctx: RouteContext): Promise<typeof PASS | void> {
+  const {
+    store,
+    attachmentsDir: ATTACHMENTS_DIR,
+    messageFileRootsForThread,
+    threadFileRefForPath,
+  } = deps;
+  const { req, res, url, path, method, json, readBody } = ctx;
+  // Download one local file only when this exact stored message grants it:
+  // a bot must render a Markdown link or carry a generated-image attachment,
+  // while a user message must carry the standalone composer tag. The bot
+  // branch derives conversation/workspace roots; the user branch is limited
+  // to Sagax's private attachment directory. This is deliberately not
+  // a general path reader.
+  const m = path.match(/^\/api\/threads\/([\w-]+)\/messages\/([\w-]+)\/file$/);
+  const streamsMessageImage = Boolean(
+    m && method === "GET" && url.searchParams.get("preview") === "1",
+  );
+  if (m && (method === "POST" || streamsMessageImage)) {
+    if (method === "POST" && !String(req.headers["content-type"] ?? "").toLowerCase().startsWith("application/json")) {
+      return json(res, 415, { error: "content-type must be application/json" });
+    }
+    const threadId = m[1]!;
+    const directBot = store.botByThread(threadId);
+    const group = directBot ? undefined : store.groupByThread(threadId);
+    if (!directBot && !group) return json(res, 404, { error: "no such conversation" });
+
+    const message = store.messagesFor(threadId).find((candidate: any) => candidate.id === m![2]);
+    if (!message) return json(res, 404, { error: "no such message" });
+    const body = method === "POST" ? await readBody(req) : null;
+    // A file the bot's own tool wrote is granted by that tool's activity
+    // message, the same way a Markdown link is by its text message.
+    const writtenGrant = method === "POST" && message.role === "bot" && typeof body.path === "string" &&
+      writtenFilesForMessage(message).includes(body.path);
+    if (!writtenGrant && (message.kind !== "text" || (!message.text && !message.attachments?.length))) {
+      return json(res, 403, { error: "that message does not share this file" });
+    }
+    const messageText = message.text ?? "";
+    const rawReference = streamsMessageImage ? url.searchParams.get("ref") : null;
+    if (streamsMessageImage && (!rawReference || !/^\d+$/.test(rawReference))) {
+      return json(res, 400, { error: "ref must identify a rendered image" });
+    }
+    const href = method === "POST"
+      ? (typeof body.path === "string" ? body.path : "")
+      : messageImageTargetAt(messageText, Number(rawReference));
+    if (!href) return json(res, 400, { error: "path is required" });
+
+    let roots: string[];
+    let downloadName: string | undefined;
+    // A file the bot attached with attach_file lives in the private
+    // attachment store; the message itself is the grant, exactly as a
+    // user's attachment tag is for their own uploads.
+    const botAttachment = message.role === "bot"
+      ? message.attachments?.find((attachment: any) => attachment.path === href)
+      : undefined;
+    if (message.role === "user") {
+      downloadName = messageAttachmentName(messageText, href) ?? undefined;
+      if (!downloadName) {
+        return json(res, 403, { error: "that message does not share this file" });
+      }
+      roots = [ATTACHMENTS_DIR];
+    } else if (botAttachment) {
+      // Files and images alike: the stored message is the grant, so the
+      // mobile clients can fetch an attached image through this route too.
+      downloadName = botAttachment.kind === "file" ? botAttachment.name : undefined;
+      roots = [ATTACHMENTS_DIR];
+    } else if (writtenGrant) {
+      const senderId = directBot?.id ?? message.from?.botId;
+      if (!senderId) return json(res, 403, { error: "the file's bot author could not be verified" });
+      roots = messageFileRootsForThread(senderId, threadId);
+    } else {
+      if (!messageReferencesFile(messageText, href)) {
+        return json(res, 403, { error: "that bot message does not link to this file" });
+      }
+      const senderId = directBot?.id ?? message.from?.botId;
+      // The persisted bot-role message is the author record. Membership is
+      // intentionally not consulted: removing a bot must not break files it
+      // already shared in channel history.
+      if (!senderId) {
+        return json(res, 403, { error: "the file's bot author could not be verified" });
+      }
+      roots = messageFileRootsForThread(senderId, threadId);
+    }
+
+    // A link to a folder answers with its files; each one is then fetched
+    // by plain name under the same message grant and file checks.
+    const folderEntry = method === "POST" && body.entry !== undefined
+      ? messageFolderEntryName(body.entry)
+      : undefined;
+    if (folderEntry === null) return json(res, 400, { error: "entry must be one file name" });
+    const wantsLocation = method === "POST" && body?.location === true;
+    if (wantsLocation && folderEntry !== undefined) {
+      return json(res, 400, { error: "a folder entry has no streaming URL" });
+    }
+    let servedHref = href;
+    let file: Awaited<ReturnType<typeof openMessageFile>>;
+    try {
+      file = folderEntry
+        ? await openMessageFolderEntry(href, folderEntry, roots)
+        : await openMessageFile(href, roots);
+    } catch (error) {
+      const code = (error as { code?: unknown } | null)?.code;
+      const status = (error as { status?: unknown } | null)?.status;
+      if (wantsLocation && code === "directory") {
+        return json(res, 400, { error: "the link points to a folder", code: "directory" });
+      }
+      // A reply's file outside the conversation's folders, or gone, that
+      // its bot delivered with attach_file this turn: the stored copy is
+      // what the reply shows and saves, as a chat link's would be.
+      const name = message.role === "bot" && !botAttachment && !folderEntry && (code === "outside_workspace" || status === 404)
+        ? referencedFileName(href)
+        : null;
+      const copy = name ? deliveredCopy(store.messagesFor(threadId), message, name) : null;
+      if (copy) {
+        file = await openMessageFile(copy.path, [ATTACHMENTS_DIR]);
+        downloadName = copy.name;
+        servedHref = copy.path;
+      } else {
+        // Only a client that asks for listings gets one; older clients keep the 400.
+        if (body?.listFolder !== true || folderEntry || code !== "directory") throw error;
+        const listing = await listMessageFolder(href, roots);
+        res.setHeader("x-openmausbot-folder", "1");
+        res.setHeader("cache-control", "private, no-store");
+        return json(res, 200, listing);
+      }
+    }
+    if ((streamsMessageImage || botAttachment?.kind === "image") && !file.mime.startsWith("image/")) {
+      await file.handle.close();
+      return json(res, 415, { error: "only images can be previewed here" });
+    }
+    if (wantsLocation) {
+      // HTML media and the browser download manager need a GET URL. Return
+      // only the opaque file-list capability, never the host path from the
+      // POST body. The GET rechecks current thread and person visibility.
+      const ref = threadFileRefForPath(threadId, servedHref, servedHref === href ? message.id : undefined);
+      if (!ref) {
+        await file.handle.close();
+        return json(res, 404, { error: "this file is not on the visible conversation branch" });
+      }
+      const downloadUrl = `/api/threads/${encodeURIComponent(threadId)}/files/${encodeURIComponent(ref.id)}`;
+      const name = messageFileDownloadName(downloadName, file.name);
+      const answer = { downloadUrl, previewUrl: `${downloadUrl}?preview=1`, name, mime: file.mime, bytes: file.bytes };
+      await file.handle.close();
+      return json(res, 200, answer);
+    }
+    res.writeHead(200, {
+      "content-type": file.mime,
+      "content-length": String(file.bytes),
+      ...(streamsMessageImage
+        ? { "content-disposition": "inline" }
+        : { "content-disposition": messageFileDisposition(messageFileDownloadName(downloadName, file.name)) }),
+      // previews too: access to the thread can be withdrawn
+      "cache-control": "private, no-store",
+      "cdn-cache-control": "no-store",
+      "cloudflare-cdn-cache-control": "no-store",
+      pragma: "no-cache",
+      vary: "Authorization",
+      "x-content-type-options": "nosniff",
+      ...(streamsMessageImage
+        ? {
+            "cross-origin-resource-policy": "same-origin",
+            "referrer-policy": "no-referrer",
+          }
+        : {}),
+    });
+    if (file.bytes === 0) {
+      await file.handle.close();
+      res.end();
+    return;
+    }
+    // The client may have gone while the file was opening: its "close"
+    // already fired, so nothing would ever close the handle, and Node
+    // fails the process when it collects an open FileHandle.
+    if (res.destroyed) {
+      await file.handle.close().catch(() => undefined);
+      return;
+    }
+    const stream = file.stream();
+    stream.on("error", () => res.destroy());
+    res.on("close", () => stream.destroy());
+    stream.pipe(res);
+    return;
+  }
+  return PASS;
+}

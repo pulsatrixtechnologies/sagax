@@ -77,6 +77,7 @@ function deps(overrides: Record<string, unknown> = {}) {
     notify: vi.fn(),
     isUnattended: () => false,
     requireActive: () => undefined,
+    peerReviewRequired: () => false,
     messages,
     bot,
     groups,

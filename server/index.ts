@@ -34024,6 +34024,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
         throw Object.assign(new Error("the internal turn capability has expired"), { status: 401 });
       }
     },
+    peerReviewRequired: (bot, threadId) => peerReviewRequired(bot as never, threadId),
   }),
   createInternalIntegrationsRoutes({
     bot: (id) => store.bot(id) ?? undefined,

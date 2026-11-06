@@ -52,6 +52,8 @@ export interface MessagePersonDeps {
   notify(notification: Notification): void;
   isUnattended(botId: string, threadId: string): boolean;
   requireActive(capability: { botId: string; threadId: string }): void;
+  /** Same Full / peer-review gate post_to_room uses (feeds autoApply). */
+  peerReviewRequired(bot: MessagePersonBot, threadId: string): boolean;
 }
 
 export function createInternalMessagePersonRoutes(deps: MessagePersonDeps): InternalRouteHandler {
@@ -98,17 +100,25 @@ export function createInternalMessagePersonRoutes(deps: MessagePersonDeps): Inte
       });
     }
 
-    // Always ask below Full / Always allow: writing to another person is outward.
-    const verdict = await requestPeerApproval(
-      deps.approvalBus,
-      from as never,
-      { id: target.id, name: target.name || deps.displayName(target.id) || target.id },
-      message,
-      "message_person",
-      fromThreadId,
-    );
-    deps.requireActive(capability);
-    if (verdict !== "allow") return json(res, 200, peerApprovalFailure(verdict));
+    // Writing to another person always asks below Full, even when peer review
+    // for bots is off. Full access is the same autoApply peerReviewRequired
+    // feeds; Always allow is remembered inside requestPeerApproval.
+    let verdict: "allow" | "deny" | "expired" | "cancelled" = "allow";
+    const needsCard = deps.peerReviewRequired(from, fromThreadId)
+      || !deps.approvalBus.autoApply?.(from.id, fromThreadId);
+    if (needsCard) {
+      // full-access: peer-contact
+      verdict = await requestPeerApproval(
+        deps.approvalBus,
+        from as never,
+        { id: target.id, name: target.name || deps.displayName(target.id) || target.id },
+        message,
+        "message_person",
+        fromThreadId,
+      );
+      deps.requireActive(capability);
+      if (verdict !== "allow") return json(res, 200, peerApprovalFailure(verdict));
+    }
 
     const freshFrom = deps.store.bot(capability.botId);
     if (!freshFrom) return json(res, 404, { error: "that bot no longer exists" });

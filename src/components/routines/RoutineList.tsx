@@ -35,6 +35,18 @@ const UPCOMING_TONES = {
   neutral: "bg-inset text-ink-secondary",
 } as const;
 
+/** Bot panel Upcoming (#2174, as Grok Bot): the folder becomes a `[Category]`
+ * prefix on the title. A name that already starts with the same brackets is
+ * left alone. */
+export function routinePanelTitle(routine: Pick<Routine, "name" | "folder">): string {
+  const folder = routine.folder?.trim();
+  if (!folder) return routine.name;
+  const prefix = `[${folder}]`;
+  const name = routine.name.trimStart();
+  if (name.startsWith(`${prefix} `) || name === prefix) return routine.name;
+  return `${prefix} ${routine.name}`;
+}
+
 
 export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, error, onOpen, onToggle, grouped = false, toggle = true, variant = "list", emptyText, onRowMenu, onRowDragStart, onRowStep, onOpenRunning, label, renamingId, onRenameStart, onRenameSave, onRenameCancel, showBot = false, collapseAfter, leadingClock = false }: {
   routines: Routine[];
@@ -140,6 +152,7 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
           // as the reference design; the next run moves to the tooltip.
           const nextLine = leadingClock ? undefined : nextRun;
           const whenTitle = [pausedOnly ? scheduleLine : null, leadingClock && nextRun ? t("routines.list.next", { when: nextRun }) : null, pausedWithSwitch ? routineWhenLabel(routine) : when, fullWhen !== when ? fullWhen : null].filter(Boolean).join("\n");
+          const title = leadingClock ? routinePanelTitle(routine) : routine.name;
           return (
             <div key={routine.id} data-routine-row data-routine-id={routine.id}
               onPointerDown={onRowDragStart && !readOnly ? (event) => {
@@ -160,10 +173,10 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
                 className="min-w-0 flex-1 text-left">
                 {state && state.tone !== "neutral" ? (
                   <span className="flex min-w-0 items-center gap-2">
-                    <span className="min-w-0 flex-1 truncate text-[13px] leading-[18px] text-ink">{routine.name}</span>
+                    <span data-routine-title className="min-w-0 flex-1 truncate text-[13px] leading-[18px] text-ink">{title}</span>
                     <span data-routine-state className={`shrink-0 rounded-md ${UPCOMING_TONES[state.tone]} px-1.5 text-[11px] leading-[16px]`}>{state.label}</span>
                   </span>
-                ) : <span className={cn("block truncate leading-[18px] text-ink", leadingClock ? "text-[14px]" : "text-[13px]")}>{routine.name}</span>}
+                ) : <span data-routine-title className={cn("block truncate leading-[18px] text-ink", leadingClock ? "text-[14px]" : "text-[13px]")}>{title}</span>}
                 {upcoming ? (
                   <span data-routine-when={when} title={[botName ? `${botName} · ${when}` : when, fullWhen !== when ? fullWhen : null].filter(Boolean).join("\n")} className="flex min-w-0 items-center gap-1.5 text-[13px] leading-[18px] text-ink-secondary">
                     {bot && <BotAvatar bot={bot} size={16} animated={false} />}
@@ -215,10 +228,11 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
             </div>
           );
         })}
-        {collapseAfter != null && sorted.length > collapseAfter && (
-          <button type="button" data-routines-show-more={showAll ? "less" : "more"} aria-expanded={showAll} onClick={() => setShowAll((value) => !value)}
+        {/* #2174: like Grok Bot, Show more expands once and then disappears. */}
+        {collapseAfter != null && !showAll && sorted.length > collapseAfter && (
+          <button type="button" data-routines-show-more="more" aria-expanded={false} onClick={() => setShowAll(true)}
             className={cn("w-full py-2 text-center text-[13px] leading-[18px] text-ink-secondary hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60", leadingClock ? "px-3" : grouped && GROUPED_ROW)}>
-            {showAll ? t("botPanel.routines.showLess") : t("botPanel.library.showMore")}
+            {t("botPanel.library.showMore")}
           </button>
         )}
       </div>

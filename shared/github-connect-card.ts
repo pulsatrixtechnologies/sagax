@@ -1,4 +1,4 @@
-// The GitHub sign-in card a bot posts in its chat (#2109, 2026-11-05, JC:
+// The GitHub sign-in card a bot posts in its chat (#2109:
 // "every GitHub connection uses a generated GitHub link plus a pairing code;
 // the token is the last resort"). connect_github starts GitHub's device flow
 // for the person speaking and the server posts this card in the same chat:

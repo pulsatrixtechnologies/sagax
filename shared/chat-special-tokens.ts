@@ -1,7 +1,7 @@
 // Chat-template control tokens a model wrote as text. A local server whose
 // template or tokenizer config does not match the model (oMLX, llama.cpp
 // without --jinja, a GGUF with a stock template) can stream the model's own
-// end marker as content: Katarina's reply read "<|eos|>" (2026-11-06). These
+// end marker as content: a bot's reply read "<|eos|>" (2026-11-06). These
 // tokens are never words a person reads, so they leave the start and the end
 // of a reply. One quoted in the middle of a sentence stays as written.
 

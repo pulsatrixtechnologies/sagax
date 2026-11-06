@@ -985,8 +985,6 @@
   "botPanel.skills.importAria": "Importer une compétence",
   "botPanel.skills.importError": "Impossible d'importer cette compétence.",
   "botPanel.skills.importPlaceholder": "owner/repo, https://github.com/…/SKILL.md ou https://skills.sh/…",
-  "botPanel.skills.importedMany": "{count} compétences importées. Relis-les, puis active-les plus bas.",
-  "botPanel.skills.importedOne": "{count} compétence importée. Relis-la, puis active-la plus bas.",
   "botPanel.skills.importing": "Importation…",
   "skills.import.arrived": "Importé {name} : {what}.",
   "skills.import.files.one": "1 fichier",

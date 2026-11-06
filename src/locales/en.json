@@ -1203,8 +1203,6 @@
   "botPanel.skills.importAria": "Import a skill",
   "botPanel.skills.importError": "Could not import that skill.",
   "botPanel.skills.importPlaceholder": "owner/repo, https://github.com/…/SKILL.md, or https://skills.sh/…",
-  "botPanel.skills.importedMany": "Imported {count} skills. Review and enable below.",
-  "botPanel.skills.importedOne": "Imported {count} skill. Review and enable below.",
   "botPanel.skills.importing": "Importing…",
   "skills.import.arrived": "Imported {name}: {what}.",
   "skills.import.files.one": "1 file",

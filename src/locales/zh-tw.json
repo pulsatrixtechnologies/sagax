@@ -2312,8 +2312,6 @@
   "botPanel.skills.source": "來源：{source}",
   "botPanel.skills.proposalOne": "{count} 則提議正在聊天中等待決定。",
   "botPanel.skills.proposalMany": "{count} 則提議正在聊天中等待決定。",
-  "botPanel.skills.importedOne": "已匯入 {count} 個技能。請在下方複查並啟用。",
-  "botPanel.skills.importedMany": "已匯入 {count} 個技能。請在下方複查並啟用。",
   "botPanel.skills.loadError": "無法載入已學會的技能。",
   "botPanel.skills.assignError": "無法指派該技能。",
   "botPanel.skills.unavailable": "技能內容無法使用。請移除後重新匯入或再學習一次。",

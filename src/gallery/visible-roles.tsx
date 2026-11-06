@@ -1,7 +1,9 @@
 /** Isolated gallery for headless captures of Perspicax roles after #2032/#2033
  * (2026-11-05): no role in the chat. The role lives on Pulsatrix Flow routines
- * ("Au nom de") and on the bot's Roles tab. Not shipped in the app.
- * ?skin=pulsatrix|pulsatrix-light&lang=<code>&view=routine|tab */
+ * ("Au nom de"); a recent refusal is one row in the bot panel's Details >
+ * Permissions (no Roles tab since 2026-11-05). Not shipped in the app.
+ * ?skin=pulsatrix|pulsatrix-light&lang=<code>&view=routine|permissions
+ * &refusals=none (no recent refusal: no row)&open=1 (disclosure open) */
 import { StrictMode, useEffect, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { RoutineActAsField } from "../components/routines/RoutineActAsField";
@@ -9,7 +11,7 @@ import { PanelRows } from "../components/routines/PanelRows";
 import type { RoutineReadinessControl } from "../components/routines/RoutineReadiness";
 import type { HeldRole } from "../../shared/perspicax-roles";
 import { routineRoleCoverageAnswer } from "../../shared/routine-role-coverage";
-import { RolesTabView } from "../components/bot-settings/RolesTab";
+import { RolePermissionsView } from "../components/bot-settings/RolePermissionsSection";
 import type { RolesTabBody } from "../../shared/role-graph";
 import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
@@ -75,7 +77,7 @@ function RoutineRoles() {
   );
 }
 
-// Bot panel Roles tab (?view=tab)
+// Details > Permissions (?view=permissions)
 const AT = Date.UTC(2026, 10, 5, 19, 3);
 const tabBody: RolesTabBody = {
   journal: "perspicax",
@@ -94,6 +96,7 @@ const tabBody: RolesTabBody = {
     { from: "service-desk", to: "full-access", count: 1, history: [{ at: AT - 4 * 3_600_000, source: "sagax", threadId: "th-3", reason: "switch" }] },
   ],
   missing: [
+    { id: "r0", role: { slug: "dispatch-agent", name: "Dispatch Agent" }, permission: { module: "", func: "service.tickets", path: "service.tickets", operation: "Edit" }, kind: "write", tools: ["cw_psa_update_ticket"], lastAt: AT + 300_000, count: 1 },
     { id: "r1", role: desk, permission: { module: "Time & Expense", func: "Time Entry", path: "time/entries", operation: "Add" }, kind: "write", member: "nova", tools: ["cw_psa_log_time"], lastAt: AT - 600_000, count: 3 },
     { id: "r2", role: desk, permission: { module: "Service Desk", func: "Holiday Lists", path: "schedule/holidayLists", operation: "Inquire" }, kind: "read", member: "nova", tools: ["cw_psa_query"], lastAt: AT, count: 4, sentAt: AT + 120_000 },
     { id: "r3", role: { slug: "full-access", name: "Full Access" }, permission: { module: "Companies", func: "Company Maintenance", path: "company/companies", operation: "Edit" }, kind: "write", tools: ["cw_psa_write"], lastAt: AT - 7_200_000, count: 1 },
@@ -108,11 +111,14 @@ function OpenFirstEdge() {
   return null;
 }
 
-function Tab() {
+function Permissions() {
+  const none = params.get("refusals") === "none";
+  const open = params.get("open") === "1";
   return (
-    <div className="w-[380px] self-center rounded-2xl border border-hairline bg-panel">
-      <RolesTabView botId="nova" body={tabBody} onOpenThread={() => {}} />
-      <OpenFirstEdge />
+    <div className="flex w-[380px] flex-col gap-6 self-center rounded-2xl border border-hairline bg-panel px-4 pb-6 pt-4" data-gallery-panel="">
+      <p className="text-[13px] text-ink-secondary">{none ? "Details (no recent refusal: no Permissions row)" : "Details"}</p>
+      <RolePermissionsView botId="nova" body={none ? { ...tabBody, missing: [] } : tabBody} now={AT + 600_000} open={open} />
+      {open && <OpenFirstEdge />}
     </div>
   );
 }
@@ -121,7 +127,7 @@ function Gallery() {
   return (
     <div className="min-h-screen bg-app p-8 text-ink">
       <div className="mx-auto flex max-w-xl flex-col gap-5" data-gallery={view}>
-        {view === "tab" ? <Tab /> : <RoutineRoles />}
+        {view === "permissions" ? <Permissions /> : <RoutineRoles />}
       </div>
     </div>
   );

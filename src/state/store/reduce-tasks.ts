@@ -153,6 +153,8 @@ export function reduceTasks(state: AppState, action: Action, reduce: ReduceFn): 
       return state;
     case "deleteTask":
       return state;
+    case "createFreshTopic":
+      return state;
     case "regenerateTaskTitle":
       return state;
     case "newTask":

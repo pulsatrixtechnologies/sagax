@@ -108,6 +108,24 @@ export function useChatViewStream({
   useEffect(() => {
     if (streamFocusEarlier || streamReach) stopFollowing();
   }, [streamFocusEarlier, streamReach, stopFollowing]);
+  // New topic is made on the server at once (#2312), so a routine's report
+  // or a bot's message lands in it: the topic on screen keeps its Back while
+  // the person has not written in it. Back on an empty one returns to the
+  // topic before and drops the empty one; with something in it, the earlier
+  // topics are drawn above and the view goes there.
+  const previousTopic = streamHasEarlier ? segmentsAbove(bot.tasks, bot.threadId).at(-1)?.threadId : undefined;
+  const newTopicBack = !askedFresh && !preview && Boolean(previousTopic) && !streamDrawn && startedByNewChat(bot.threadId)
+    && !messages.some((message) => message.role === "user");
+  const backFromNewTopic = useCallback(() => {
+    if (!previousTopic) return;
+    if (messages.length === 0 && !bot.busy) {
+      const emptyTopic = bot.threadId;
+      dispatch({ type: "switchTask", botId: bot.id, threadId: previousTopic });
+      dispatch({ type: "deleteTask", botId: bot.id, threadId: emptyTopic });
+      return;
+    }
+    setStreamReach((current) => ({ threadId: previousTopic, nonce: (current?.nonce ?? 0) + 1 }));
+  }, [previousTopic, messages.length, bot.busy, bot.threadId, bot.id, dispatch]);
   useEffect(() => {
     if (streamDrawn) setStreamShownFor(bot.threadId);
   }, [streamDrawn, bot.threadId]);
@@ -116,7 +134,7 @@ export function useChatViewStream({
   useEffect(() => () => setStreamShownFor(null), [bot.id, bot.threadId]);
 
   return {
-    currentTask, streamOn, streamHasEarlier, freshDraft, fresh, askedFresh, resumeTopic,
+    currentTask, streamOn, streamHasEarlier, freshDraft, fresh, askedFresh, resumeTopic, newTopicBack, backFromNewTopic,
     queuedUnder, underAlive, streamReach, clearStreamReach, streamFocus, streamFocusEarlier,
     streamShownFor, quoteEarlier, streamEngine, streamReadBack, streamDrawn,
     earlierConversations, conversationsOpenFor, conversationsOpen, toggleConversations,

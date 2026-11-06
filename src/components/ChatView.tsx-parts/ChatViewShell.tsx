@@ -52,7 +52,7 @@ export function ChatViewShell(m: Record<string, any>) {
     windowedMessages, hiddenCount, laterCount, olderPending, showLater, jumpToLatest, scrollHandlers,
     runOverlayRef, runCardOpen, lastBotTextId, unreadDivider,
     mentionPeers, showToolCalls, rows, place,
-    currentTask, streamOn, streamHasEarlier, askedFresh, resumeTopic, streamReach, clearStreamReach,
+    currentTask, streamOn, streamHasEarlier, askedFresh, resumeTopic, newTopicBack, backFromNewTopic, streamReach, clearStreamReach,
     quoteEarlier, streamEngine, streamDrawn, earlierConversations, conversationsOpen, toggleConversations,
     editingId, setEditingId, startEdit, cancelEdit, submitEdit,
     lastUserMessage, lastUserMessageHasAttachments, activity, onCall, liveShown, popping, presenceVisible,
@@ -163,6 +163,7 @@ export function ChatViewShell(m: Record<string, any>) {
             </>
           ) : (
             <>
+          {newTopicBack && <FreshTopicDivider onResume={backFromNewTopic} />}
           {earlierConversations.length > 0 && <PreviousTopicsLine open={conversationsOpen} onToggle={toggleConversations} />}
           {conversationsOpen && earlierConversations.length > 0 && <EarlierConversationList self={bot} rows={earlierConversations} bots={storeBots} showToolCalls={showToolCalls} />}
           {streamDrawn && (

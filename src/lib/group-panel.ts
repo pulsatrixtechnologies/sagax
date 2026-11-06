@@ -13,10 +13,15 @@ import { simpleHidesPanelTab } from "@/lib/interface-visibility";
 export const GROUP_PANEL_TABS = ["details", "members", "instructions", "memory", "library", "computer"] as const;
 export type GroupPanelTab = (typeof GROUP_PANEL_TABS)[number];
 
+/** Tabs hidden for now (JC, 2026-11-06): their code stays; empty this set
+ * to bring them back. The instructions stay editable from the (i) beside the
+ * group's name, and the group memory stays on unless switched off. */
+export const GROUP_PANEL_HIDDEN_TABS: ReadonlySet<GroupPanelTab> = new Set<GroupPanelTab>(["instructions", "memory"]);
+
 /** The tabs a group shows. Simple hides Computer, as on a bot; a group with
  * no bot of the viewer's that works somewhere has no computer to show. */
 export function visibleGroupPanelTabs(input: { advanced: boolean; hasComputer: boolean }): GroupPanelTab[] {
-  return GROUP_PANEL_TABS.filter((id) => (input.advanced || !simpleHidesPanelTab(id)) && (id !== "computer" || input.hasComputer));
+  return GROUP_PANEL_TABS.filter((id) => !GROUP_PANEL_HIDDEN_TABS.has(id) && (input.advanced || !simpleHidesPanelTab(id)) && (id !== "computer" || input.hasComputer));
 }
 
 /** Every conversation of the group: its open one and each of its tasks. */
@@ -71,7 +76,7 @@ export function groupSuggestions(input: {
   canAddRoutine: boolean;
 }): GroupSuggestion[] {
   const out: GroupSuggestion[] = [];
-  if (input.canEdit && !input.bulletin.trim()) {
+  if (input.canEdit && !input.bulletin.trim() && !GROUP_PANEL_HIDDEN_TABS.has("instructions")) {
     out.push({ id: "instructions", titleKey: "groupPanel.suggestions.instructions.title", subtitleKey: "groupPanel.suggestions.instructions.subtitle", action: "instructions" });
   }
   if (input.canAddBot && input.botCount < 2) {

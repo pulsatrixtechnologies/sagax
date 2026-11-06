@@ -4,7 +4,7 @@
  * group has the bot's Details, a Members tab with the lead on a bot's row and
  * Advanced folded, Library and Computer). Synthetic data only, the server
  * answered by a fetch stub. Not shipped in the app.
- * ?skin=<id>&lang=<code> */
+ * ?skin=<id>&lang=<code>&name=<group name> */
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -85,7 +85,8 @@ window.fetch = ((input: RequestInfo | URL) => {
 (window as unknown as { EventSource: unknown }).EventSource = class { close() {} addEventListener() {} removeEventListener() {} onmessage = null; onerror = null; onopen = null; readyState = 0; };
 
 const baseGroup = {
-  id: "ops", threadId: "t-ops", name: "Opérations", bulletin: "Restez concis.",
+  // ?name= gives the group a long name, to check its title keeps the panel's margin.
+  id: "ops", threadId: "t-ops", name: params.get("name") ?? "Opérations", bulletin: "Restez concis.",
   memberIds: members.map((m) => m.id), humanIds: ["kestrel@example.test"], messages: [], createdAt: 1, unread: false,
   defaultResponder: { kind: "member", botId: "osprey" },
 } as unknown as Group;

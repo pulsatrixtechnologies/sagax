@@ -109,9 +109,10 @@ describe("activity detail modal", () => {
     expect(html).toContain('data-subagent="thread:c1"');
   });
 
-  it("offers Stop only while it runs and the viewer may stop it, and Open thread when it is theirs", () => {
+  it("offers Stop only while it runs and the viewer may stop it, and Open the conversation when it is theirs", () => {
     expect(body({})).toContain(">Stop<");
-    expect(body({})).toContain("Open thread");
+    expect(body({})).toContain("Open the conversation");
+    expect(body({})).toContain("data-activity-open-thread");
     expect(body({ detail: { ...detail, canStop: false } })).not.toContain(">Stop<");
     const done = { ...detail, status: "finished" as const, endedAt: NOW - 1_000 };
     expect(body({ item: { ...running, status: "finished" }, detail: done })).not.toContain(">Stop<");
@@ -124,7 +125,7 @@ describe("activity detail modal", () => {
     const html = body({ item: finished, detail: run, factsOpen: true });
     expect(html).toContain("only its status is shown");
     expect(html).toContain("Routine hourly-dispatch-board-1-si");
-    expect(html).not.toContain("Open thread");
+    expect(html).not.toContain("data-activity-open-thread");
     expect(html).not.toContain("Steps");
   });
 
@@ -142,7 +143,7 @@ describe("activity detail modal", () => {
     expect(html).toContain('href="https://px.example.test/console/me/keys"');
     expect(html).toContain("Add my key in Perspicax");
     expect(html).toContain("the organization&#x27;s key in Settings &gt; Connections");
-    expect(html).not.toContain("Open thread");
+    expect(html).not.toContain("data-activity-open-thread");
     // a run without a card shows none
     expect(body({ item: finished, detail: { ...refused, access: undefined } })).not.toContain("data-activity-access");
   });
@@ -167,7 +168,7 @@ describe("activity detail modal", () => {
     const head = html.slice(0, html.indexOf("data-activity-summary"));
     expect(head).toContain("data-task-actions");
     expect(head).toContain(">Stop<");
-    expect(head).toContain("Open thread");
+    expect(head).toContain("Open the conversation");
     const left = html.slice(html.indexOf("data-activity-summary"), html.indexOf("data-activity-detail-right"));
     expect(left).toContain("Sub-agents");
     expect(left).toContain("Send a message to this task");

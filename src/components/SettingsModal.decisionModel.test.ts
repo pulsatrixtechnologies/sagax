@@ -1,7 +1,6 @@
-// Decision model is an experimental card of Settings > Models and voice
-// (2026-10-14; it was a section of its own). Off, it is nowhere. On, the
-// card shows on that page, findable by what people would type, and an old
-// link to the section opens that page.
+// Decision model is a card of Settings > Models (#2093: always shown; its
+// own master switch is the only control). An old link to the section opens
+// Models. It is never a rail entry and never an Experimental switch.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,7 +10,6 @@ import { resetSettingsCards } from "./SettingsPrimitives";
 
 const fixture = vi.hoisted(() => ({
   section: "appearance" as AppSettingsSection,
-  decisionModel: false,
 }));
 
 vi.mock("@/state/store", async (importOriginal) => ({
@@ -23,7 +21,7 @@ vi.mock("@/state/store", async (importOriginal) => ({
       instances: [],
       bots: [],
       groups: [],
-      config: { features: { skillAuthoring: true, decisionModel: fixture.decisionModel }, rooms: { turnTimeoutMinutes: 5 } },
+      config: { features: { skillAuthoring: true }, rooms: { turnTimeoutMinutes: 5 } },
     },
     dispatch: vi.fn(),
   }),
@@ -36,7 +34,6 @@ vi.mock("@/lib/analytics", () => ({
 
 beforeEach(() => {
   fixture.section = "appearance";
-  fixture.decisionModel = false;
   vi.stubGlobal("window", {});
   vi.stubGlobal("document", { documentElement: { dataset: {} } });
   vi.stubGlobal("localStorage", {
@@ -59,17 +56,13 @@ const render = async () => {
 };
 
 describe("Settings → Decision model", () => {
-  it("is never a menu entry, and a card of Models and voice once the experimental switch is on", async () => {
+  it("is never a menu entry, and always a card of Models (#2093)", async () => {
     fixture.section = "engines";
-    const off = await render();
-    expect(off).not.toContain('<option value="decisionModel">');
-    expect(off).not.toContain("A fast decision model that picks");
-
-    fixture.decisionModel = true;
     const on = await render();
     expect(on).not.toContain('<option value="decisionModel">');
     expect(on).toContain('data-settings-card="engines.decisionModel"');
     expect(on).toContain("A fast decision model that picks");
+    expect(on).toContain("Fast decisions");
 
     // an old link to the section opens the page that holds the card
     fixture.section = "decisionModel";
@@ -78,21 +71,17 @@ describe("Settings → Decision model", () => {
     expect(panel).toContain("A fast decision model that picks");
   });
 
-  it("hides the VPS and Boat switches and counts the seven that remain; Browse Bots moved to Appearance", async () => {
+  it("leaves Experimental without a Decision model switch; VPS and Boat stay gone", async () => {
     fixture.section = "experimental";
-    const off = await render();
-    expect(off).toContain("1 of 7 on");
-    expect(off).toContain('data-experimental-feature="decisionModel"');
-    expect(off).toContain("Decision model");
-    expect(off).not.toContain("data-experimental-browse-bots");
-    expect(off).not.toContain("Browse Bots");
-    expect(off).not.toContain("Templates");
-    expect(off).not.toContain("VPS Computer");
-    expect(off).not.toContain("Boat Computer");
-    expect(off).toContain('aria-checked="false"');
-
-    fixture.decisionModel = true;
-    expect(await render()).toContain("2 of 7 on");
+    const html = await render();
+    expect(html).not.toContain('data-experimental-feature="decisionModel"');
+    expect(html).not.toContain(">Decision model<");
+    expect(html).not.toContain("data-experimental-browse-bots");
+    expect(html).not.toContain("Browse Bots");
+    expect(html).not.toContain("Templates");
+    expect(html).not.toContain("VPS Computer");
+    expect(html).not.toContain("Boat Computer");
+    expect(html).toContain('data-settings-card="experimental.developer"');
   });
 
   // #575 retired the Sidebar shortcuts setting: the Grok-style footer (avatar

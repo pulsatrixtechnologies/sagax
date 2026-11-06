@@ -8740,22 +8740,6 @@
         }
       }
     },
-    "Add, sign in, turn on or off: Capabilities > Providers.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Add, sign in, turn on or off: Capabilities > Providers."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ajouter, se connecter, activer ou désactiver : Capacités > Fournisseurs."
-          }
-        }
-      }
-    },
     "Add: %@": {
       "localizations": {
         "fr": {
@@ -16372,42 +16356,6 @@
         }
       }
     },
-    "Capabilities": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Capabilities"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Capacités"
-          }
-        }
-      }
-    },
-    "Capabilities for members of the organization.": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Capacités pour les membres de l’organisation."
-          }
-        }
-      }
-    },
-    "Capabilities: plugins, skills, MCP servers and the connectors of your engines' accounts. Let's have a look.": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Capacités : les plugins, les compétences, les serveurs MCP et les connecteurs des comptes de vos moteurs. Allons voir."
-          }
-        }
-      }
-    },
     "Card from your bot": {
       "localizations": {
         "en": {
@@ -21144,22 +21092,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Conectar o GitHub"
-          }
-        }
-      }
-    },
-    "Connect GitHub or a token: Capabilities > Sources.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connect GitHub or a token: Capabilities > Sources."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connecter GitHub ou un jeton : Capacités > Sources."
           }
         }
       }
@@ -43500,16 +43432,6 @@
         }
       }
     },
-    "Manage in Capabilities": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gérer dans Capacités"
-          }
-        }
-      }
-    },
     "Manage in Perspicax": {
       "localizations": {
         "en": {
@@ -49404,16 +49326,6 @@
         }
       }
     },
-    "No marketplace yet. Add one in Capabilities > Sources.": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aucune marketplace pour l'instant. Ajoutez-en une dans Capacités > Sources."
-          }
-        }
-      }
-    },
     "No mascot here yet.": {
       "localizations": {
         "fr": {
@@ -55142,16 +55054,6 @@
         }
       }
     },
-    "Open Messages setup in Capabilities": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ouvrir la configuration de Messages dans Capacités"
-          }
-        }
-      }
-    },
     "Open Sagax on your Mac, then go to Connect apps, Mac, Messages.": {
       "localizations": {
         "en": {
@@ -55572,22 +55474,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Abrir em Automações"
-          }
-        }
-      }
-    },
-    "Open in Capabilities": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open in Capabilities"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ouvrir dans Capacités"
           }
         }
       }
@@ -78348,16 +78234,6 @@
         }
       }
     },
-    "Switched off in Capabilities > Installed. Test it and turn it on there first.": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Désactivé dans Capacités > Installées. Testez-le et activez-le là d'abord."
-          }
-        }
-      }
-    },
     "Switched off under Plugins. Test it and turn it on there first.": {
       "localizations": {
         "en": {
@@ -81530,16 +81406,6 @@
         }
       }
     },
-    "The foot of the sidebar: your avatar opens Team map, Automations, Browse Bots and your settings. The Capabilities pill sits right beside it.": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Le pied de la barre latérale : votre avatar ouvre la Carte de l’équipe, les Automatisations, Parcourir les bots et vos réglages. La pilule Capacités est juste à côté."
-          }
-        }
-      }
-    },
     "The full form: a preset or a built-in role, then every setting under More options.": {
       "localizations": {
         "en": {
@@ -83520,16 +83386,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ces zones restent à un administrateur : %@."
-          }
-        }
-      }
-    },
-    "These capabilities serve all of your bots. You manage them here.": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ces capacités servent tous vos bots. Vous les gérez ici."
           }
         }
       }
@@ -113081,6 +112937,182 @@
           "stringUnit": {
             "state": "translated",
             "value": "Take a full copy out, restore it, or bring a bot in from elsewhere."
+          }
+        }
+      }
+    },
+    "These plugins serve all of your bots. You manage them here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "These plugins serve all of your bots. You manage them here."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ces plugins servent tous vos bots. Vous les gérez ici."
+          }
+        }
+      }
+    },
+    "No marketplace yet. Add one in Plugins > Sources.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No marketplace yet. Add one in Plugins > Sources."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune marketplace pour l'instant. Ajoutez-en une dans Plugins > Sources."
+          }
+        }
+      }
+    },
+    "Plugins for members of the organization.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugins for members of the organization."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugins pour les membres de l’organisation."
+          }
+        }
+      }
+    },
+    "Open Messages setup in Plugins": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Messages setup in Plugins"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir la configuration de Messages dans Plugins"
+          }
+        }
+      }
+    },
+    "Manage in Plugins": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage in Plugins"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gérer dans Plugins"
+          }
+        }
+      }
+    },
+    "Switched off in Plugins > Installed. Test it and turn it on there first.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switched off in Plugins > Installed. Test it and turn it on there first."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactivé dans Plugins > Installées. Teste-le et active-le là d'abord."
+          }
+        }
+      }
+    },
+    "The foot of the sidebar: your avatar opens Team map, Automations, Browse Bots and your settings. The Plugins pill sits right beside it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The foot of the sidebar: your avatar opens Team map, Automations, Browse Bots and your settings. The Plugins pill sits right beside it."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le pied de la barre latérale : votre avatar ouvre la Carte de l’équipe, les Automatisations, Parcourir les bots et vos réglages. La pilule Plugins est juste à côté."
+          }
+        }
+      }
+    },
+    "Plugins: plugins, skills, MCP servers and the connectors of your engines' accounts. Let's have a look.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugins: plugins, skills, MCP servers and the connectors of your engines' accounts. Let's have a look."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugins : les plugins, les compétences, les serveurs MCP et les connecteurs des comptes de vos moteurs. Allons voir."
+          }
+        }
+      }
+    },
+    "Open in Plugins": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in Plugins"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir dans Plugins"
+          }
+        }
+      }
+    },
+    "Connect GitHub or a token: Plugins > Sources.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect GitHub or a token: Plugins > Sources."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connectez GitHub ou un jeton : Plugins > Sources."
+          }
+        }
+      }
+    },
+    "Add, sign in, turn on or off: Plugins > Providers.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add, sign in, turn on or off: Plugins > Providers."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter, se connecter, activer ou désactiver : Plugins > Fournisseurs."
           }
         }
       }

@@ -107,8 +107,8 @@ struct DesktopMyConnectionsLinks: View {
         VStack(alignment: .leading, spacing: 16) {
             DesktopText(Text("Your own accounts and MCP servers. Only your conversations and your routines use them; nobody else's turn ever gets them."),
                         line: 21, color: \.inkSecondary)
-            link(Text("GitHub"), Text("Connect GitHub or a token: Capabilities > Sources."), tab: .sources, identifier: "desktop-my-connections.github")
-            link(Text("My MCP servers"), Text("Add, sign in, turn on or off: Capabilities > Providers."), tab: .installed, identifier: "desktop-my-connections.servers")
+            link(Text("GitHub"), Text("Connect GitHub or a token: Plugins > Sources."), tab: .sources, identifier: "desktop-my-connections.github")
+            link(Text("My MCP servers"), Text("Add, sign in, turn on or off: Plugins > Providers."), tab: .installed, identifier: "desktop-my-connections.servers")
         }
         .sheet(item: $opening) { tab in
             ConnectAppsPage(initialTab: tab)
@@ -121,7 +121,7 @@ struct DesktopMyConnectionsLinks: View {
     private func link(_ title: Text, _ detail: Text, tab: ConnectAppsTab, identifier: String) -> some View {
         DesktopSettingsCard(title, subtitle: detail, identifier: identifier) {
             Button { opening = tab } label: {
-                Text(String(localized: "Open in Capabilities"))
+                Text(String(localized: "Open in Plugins"))
             }
             .buttonStyle(DesktopButtonStyle(kind: .control))
             .accessibilityIdentifier("\(identifier).open")

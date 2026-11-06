@@ -1,4 +1,4 @@
-// Capabilities > Installed > Providers in the iPad desktop window, 1:1 with
+// Plugins > Installed > Providers in the iPad desktop window, 1:1 with
 // the desktop (InstalledView.tsx `providers`, AccountsView.tsx,
 // HarnessConnectorGroups.tsx): "Providers" 13 semibold and its note, the
 // pills (All, Claude, Grok), then a section per engine: its mark,

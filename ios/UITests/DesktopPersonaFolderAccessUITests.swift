@@ -149,7 +149,7 @@ final class DesktopPersonaFolderAccessUITests: XCTestCase {
         XCTAssertTrue(element(app, "desktop-persona-window.page.access").waitForExistence(timeout: 30), "the Access page")
         XCTAssertFalse(element(app, "desktop-persona-window").exists, "no centred Edit bot window")
         XCTAssertTrue(element(app, "persona-access.mcp").waitForExistence(timeout: 10), "MCP servers")
-        XCTAssertTrue(element(app, "persona-access.manage-mcp").exists, "Manage in Capabilities")
+        XCTAssertTrue(element(app, "persona-access.manage-mcp").exists, "Manage in Plugins")
         XCTAssertTrue(element(app, "persona-access.brief").exists, "Background brief")
         XCTAssertTrue(element(app, "persona-access.brief-switch").exists, "the brief's switch")
         XCTAssertFalse(element(app, "persona-access.folder").exists, "the working folder is folded")

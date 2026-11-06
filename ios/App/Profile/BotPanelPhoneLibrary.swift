@@ -346,7 +346,7 @@ struct PhoneBotCapabilities: View {
                 if let index = list.promptIndex, index.cuts {
                     ProfileFooter(text: index.incomplete ? "Plugin discovery is partial. Additional references may exist in enabled plugin folders." : "Prompt budgets omit \(index.omitted) whole instruction files.")
                 }
-                ProfileSectionLabel(text: "Capabilities")
+                ProfileSectionLabel(text: "Plugins")
                     .padding(.top, Theme.Profile.cardGap + 4)
                 ProfileCard {
                     if list.items.isEmpty {

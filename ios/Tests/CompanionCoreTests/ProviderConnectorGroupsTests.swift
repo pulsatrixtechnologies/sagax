@@ -1,4 +1,4 @@
-// Capabilities > Providers' sections and pills (desktop
+// Plugins > Providers' sections and pills (desktop
 // src/components/plugins/HarnessConnectorGroups.tsx, AccountsView.tsx).
 import CompanionCore
 import XCTest

@@ -405,7 +405,7 @@ struct DesktopShell: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .desktopOpenSettings)) { note in
             model.menu = nil
-            // a section asked for (Capabilities > Providers' Connect: Models and voice)
+            // a section asked for (Plugins > Providers' Connect: Models and voice)
             if let raw = note.object as? String, let section = DesktopSettingsSection(rawValue: raw) { model.settingsSection = section }
             model.modal = .settings
         }

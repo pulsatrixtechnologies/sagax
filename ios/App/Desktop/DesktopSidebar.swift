@@ -666,9 +666,9 @@ final class DesktopSidebarFlags: ObservableObject {
 /// name (14/18, normal weight, no pill) open the account menu; the
 /// gamertag (a 12 pt gold trophy, the points 13/18) sits under the name and
 /// opens the achievements; at the right a separate 36 pt round button with
-/// the apps grid opens Capabilities. No places: Team map, Automations,
+/// the apps grid opens Plugins. No places: Team map, Automations,
 /// Memory and Browse Bots are rows of the account menu. The rail keeps the
-/// pair button, the round Capabilities button and the avatar, stacked.
+/// pair button, the round Plugins button and the avatar, stacked.
 struct DesktopSidebarFooter: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
@@ -811,7 +811,7 @@ struct DesktopSidebarFooter: View {
     }
 }
 
-/// The foot's round Capabilities button (`FootConnectApps`, SidebarFoot.tsx).
+/// The foot's round Plugins button (`FootConnectApps`, SidebarFoot.tsx).
 struct DesktopFootCapabilitiesButton: View {
     @Environment(\.desktopTheme) private var theme
     let action: () -> Void
@@ -833,7 +833,7 @@ struct DesktopFootCapabilitiesButton: View {
         .onHover { hovering = $0 }
         // `data-tour="nav-apps"` on FootConnectApps (SidebarFoot.tsx)
         .desktopTourAnchor("nav-apps")
-        .accessibilityLabel(Text("Capabilities"))
+        .accessibilityLabel(Text("Plugins"))
         .accessibilityIdentifier("desktop-sidebar-capabilities")
     }
 }

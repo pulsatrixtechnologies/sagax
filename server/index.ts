@@ -1763,6 +1763,7 @@ import {
   reachSummaryPrompt,
   registerReachProvider
 } from "./turns/turn-reach.ts";
+import { setTurnActiveProfileResolver } from "./turns/turn-active-profile.ts";
 import { turnConnectorsRecord } from "./turns/turn-connectors.ts";
 import { remoteSessionReach } from "./remote-support/remote-session-reach.ts";
 import {
@@ -42930,6 +42931,9 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
     },
     version
   });
+  // #2258: Grok's gateway catalog keeps Sagax agent tools on the active
+  // Perspicax profile's connector (act-as / profile_use / identity).
+  setTurnActiveProfileResolver((threadId, botId) => perspicaxMcp?.activeProfileFor(threadId, botId));
 }
 
 const oidcLogin = IDENTITY.kind === "perspicax" && oidcRp && idpSessions

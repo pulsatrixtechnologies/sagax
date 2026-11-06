@@ -26,6 +26,7 @@ import { knownGrokTools, knownGrokToolsSection, recordGrokToolUse, useToolName }
 import { grokCatalogFor, grokCatalogSection, grokMcpAlreadySettled, noteGrokAccountReach, rememberGrokCatalog, rememberGrokMcpSettled, forgetGrokMcpSettled } from "./grok-tool-catalog.ts";
 import { GROK_CLOUD_CONNECTORS } from "../../../shared/grok-cloud-connectors.ts";
 import { turnReachFor } from "../../turns/turn-reach.ts";
+import { turnActiveProfileFor } from "../../turns/turn-active-profile.ts";
 import { allowsTool, canUseMcpServer, narrowsNativeTools, parseToolScope } from "../../../shared/tool-scope.ts";
 import { grokAliasBase, grokToolNameProblem } from "../../mcp/mcp-tool-names.ts";
 import {
@@ -210,6 +211,37 @@ export function grokPermissionMode(input: { fullAuto: boolean; gated: boolean; a
   if (input.gated) return "default";
   if (input.fullAuto) return "bypassPermissions";
   return input.approvalMode === "auto" ? "auto" : input.approvalMode === "edits" ? "acceptEdits" : "default";
+}
+
+/** The volatile catalog section for this Grok turn: known tools, the live
+ * `_x.ai/mcp/list` catalog, reach pins, and connectable cloud connectors.
+ * Passes the turn's active Perspicax profile so duplicate Sagax agent tools
+ * across gateway connectors stay on that connector (#2258). */
+export function grokTurnCatalogSection(input: {
+  botId?: string;
+  serverNames: string[];
+  sessionId?: string;
+  threadId?: string;
+  accountConnectors?: boolean;
+}): { id: string; text: string } | null {
+  const known = knownGrokTools(input.botId, input.serverNames);
+  const catalog = grokCatalogFor(input.sessionId);
+  // computed by the server with the speaker and payer (turn-reach.ts)
+  const reach = turnReachFor(input.threadId) ?? { lines: [], tools: [] };
+  // the xAI cloud connectors an own-account org turn can connect (#966),
+  // so a card connector not yet connected on grok.com is actionable
+  const connectable = grokConnectableConnectors(input.accountConnectors === true);
+  // routine act-as / profile_use / identity on the live Perspicax connection
+  const activeProfile = turnActiveProfileFor(input.threadId, input.botId);
+  if (!catalog && !reach.tools.length && !reach.lines.length && !connectable.length) return knownGrokToolsSection(known);
+  return grokCatalogSection({
+    catalog,
+    known,
+    pinned: reach.tools,
+    lines: reach.lines,
+    connectable,
+    ...(activeProfile ? { activeProfile } : {}),
+  });
 }
 
 /** The xAI cloud connectors this turn could reach through use_tool, named
@@ -1291,17 +1323,8 @@ const support: AcpSupport = {
   // grok-tool-catalog.ts), the section names every ready tool instead, plus
   // what a feature opened for this conversation (turn-reach.ts): a question
   // about connectors needs no call, and a listed tool no search.
-  volatileSection: ({ botId, serverNames, sessionId, threadId, accountConnectors }) => {
-    const known = knownGrokTools(botId, serverNames);
-    const catalog = grokCatalogFor(sessionId);
-    // computed by the server with the speaker and payer (turn-reach.ts)
-    const reach = turnReachFor(threadId) ?? { lines: [], tools: [] };
-    // the xAI cloud connectors an own-account org turn can connect (#966),
-    // so a card connector not yet connected on grok.com is actionable
-    const connectable = grokConnectableConnectors(accountConnectors === true);
-    if (!catalog && !reach.tools.length && !reach.lines.length && !connectable.length) return knownGrokToolsSection(known);
-    return grokCatalogSection({ catalog, known, pinned: reach.tools, lines: reach.lines, connectable });
-  },
+  volatileSection: ({ botId, serverNames, sessionId, threadId, accountConnectors }) =>
+    grokTurnCatalogSection({ botId, serverNames, sessionId, threadId, accountConnectors }),
   onToolCompleted: ({ botId, rawInput }) => recordGrokToolUse(botId, useToolName(rawInput)),
 
   // grok.com sometimes takes 30-90 s to its first token. Normal silent

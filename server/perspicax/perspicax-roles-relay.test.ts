@@ -158,4 +158,19 @@ describe("visible roles in the Perspicax relay", () => {
     await f.relay("cw_psa_find_tickets");
     expect(f.events.at(-1)).toMatchObject({ role: { slug: "service-desk", reason: "switch" } });
   });
+
+  // #2258: Grok's gateway catalog reads this slug for the active connector.
+  it("activeProfileFor exposes the turn's act-as / switched role", async () => {
+    const chat = fixture();
+    await chat.prepare();
+    expect(chat.mcp.activeProfileFor("t", "bot")).toBeUndefined();
+    const routine = fixture({ routine: true, turnRole: { slug: "service-desk", reason: "routine" } });
+    await routine.prepare();
+    expect(routine.mcp.activeProfileFor("t", "bot")).toBe("service-desk");
+    const switched = fixture();
+    await switched.prepare();
+    await switched.init();
+    await switched.relay("identity_switch", { profile: "full-access" });
+    expect(switched.mcp.activeProfileFor("t", "bot")).toBe("full-access");
+  });
 });

@@ -32,11 +32,13 @@ export function StatusText({ tone, children }: { tone: keyof typeof STATUS_TONE;
 }
 
 /** The first card of the Organization page: the organization's name and
- * the person's role on one grey line. No link to Perspicax (JC 2026-11-05). */
-export function OrgBand({ name, role }: { name: string; role?: React.ReactNode }) {
+ * the person's role on one grey line, with optional Manage in Perspicax. */
+export function OrgBand({ name, role, action }: { name: string; role?: React.ReactNode; action?: React.ReactNode }) {
   return (
     <section data-settings-group="orgBand" data-org-band="" className={GROUP_CARD}>
-      <DescribedRow label={name} icon={<Building2 size={14} />} description={role} rowId="orgBand" />
+      <DescribedRow label={name} icon={<Building2 size={14} />} description={role} rowId="orgBand">
+        {action}
+      </DescribedRow>
     </section>
   );
 }

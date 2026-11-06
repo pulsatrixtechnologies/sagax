@@ -2,7 +2,7 @@
 // design's (0.5.6, the owner): grey headings over cards of rows, lists folded behind a
 // count pill, destructive actions in a red pill, no help paragraphs, nothing
 // technical (host names, raw ids), and a search that finds them.
-// #2080 L3: Organization is OrgBand + read-only rules for everyone.
+// #2080 L3: Organization is OrgBand (with Manage in Perspicax) + read-only rules for everyone.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -34,19 +34,19 @@ afterEach(() => {
 });
 
 describe("Settings > Organization (Perspicax)", () => {
-  it("draws OrgBand then read-only rules, same for everyone, with no shortcut to Perspicax", async () => {
+  it("draws OrgBand with Manage in Perspicax, then read-only rules", async () => {
     const { PerspicaxOrgSettings } = await import("./PerspicaxOrgSettings");
     const html = renderToStaticMarkup(createElement(PerspicaxOrgSettings, { org: org("admin"), onChanged: () => {} }));
     expect(html).toContain('data-org-band=""');
     expect(html.indexOf('data-org-band=""')).toBeLessThan(html.indexOf('data-settings-group="organizationRules"'));
     expect(html).toContain("Acme Corp");
     expect(html).toContain("Linked to Pulsatrix · Admin");
-    expect(html).not.toContain("Manage in Perspicax");
+    expect(html).toContain("Manage in Perspicax");
+    expect(html).toContain("data-external-link-pill");
+    expect(html).toContain('href="https://px.example.test/console/"');
     expect(html).toContain('data-settings-group="organizationRules"');
     expect(html).toContain("On by default");
     expect(html).toContain("Blocked");
-    expect(html).not.toContain("data-external-link-pill");
-    expect(html).not.toContain("<a ");
     expect(html).not.toContain('data-settings-card="organization.fullAccess"');
     // the GitHub OAuth App's client id, a server setting, under advanced for the admin
     expect(html).toContain('data-settings-group="organizationGithub"');
@@ -57,11 +57,13 @@ describe("Settings > Organization (Perspicax)", () => {
     expect(html).toContain('data-settings-card="organization.routinesInConversation"');
   });
 
-  it("shows a member the same rules, and a broken link in the warning color", async () => {
+  it("shows a member the same rules, Manage in Perspicax, and a broken link in the warning color", async () => {
     const { PerspicaxOrgSettings } = await import("./PerspicaxOrgSettings");
     const html = renderToStaticMarkup(createElement(PerspicaxOrgSettings, { org: org("member", "missing"), onChanged: () => {} }));
     expect(html).toContain('class="text-warning"');
     expect(html).toContain("· Member");
+    expect(html).toContain("Manage in Perspicax");
+    expect(html).toContain('href="https://px.example.test/console/"');
     expect(html).toContain('data-settings-group="organizationRules"');
     expect(html).not.toContain('data-settings-card="organization.fullAccess"');
     expect(html).not.toContain('data-settings-card="organization.githubApp"');
@@ -73,7 +75,7 @@ describe("Settings > Organization (Perspicax)", () => {
     const html = renderToStaticMarkup(createElement(PerspicaxOrgSettings, { org: org("admin"), onChanged: () => {} }));
     expect(html).toContain("Règles des bots");
     expect(html).toContain("Règles de l&#x27;organisation");
-    expect(html).not.toContain("Perspicax");
+    expect(html).toContain("Gérer dans Perspicax");
   });
 });
 

@@ -21,7 +21,7 @@ import type { SidebarMenuItem } from "../SidebarPopoverMenu";
 import { GENERAL_SECTION_ID } from "./helpers";
 import { preview } from "./preview";
 import { orgViewerId } from "./useSidebarSections";
-import { sidebarListedBots } from "./sidebarListedBots";
+import { sidebarListedBots, sidebarListedGroups } from "./sidebarListedBots";
 
 /** Derived sidebar roster: pinned tiles, section ids, account places. */
 export function useSidebarRoster({
@@ -73,7 +73,7 @@ export function useSidebarRoster({
   // Built-in bots get their own section under the person's teams.
   const builtInBots = matchingBots.filter((bot) => isBuiltInBot(bot) && !inTopGrid(bot));
   const teamBots = matchingBots.filter((bot) => !isBuiltInBot(bot));
-  const visibleGroups = sidebarShown.groups.filter((g) => !q || g.name.toLowerCase().includes(q) || g.tasks?.some((task) => task.title.toLowerCase().includes(q)));
+  const visibleGroups = sidebarListedGroups(sidebarShown.groups, layoutSections).filter((g) => !q || g.name.toLowerCase().includes(q) || g.tasks?.some((task) => task.title.toLowerCase().includes(q)));
   const {
     sectionChiefs,
     sectionedBots,

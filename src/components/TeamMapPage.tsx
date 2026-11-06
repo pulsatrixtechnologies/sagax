@@ -300,7 +300,9 @@ export function TeamMapPage() {
   const sections = useMemo(() => {
     const names = personal
       ? personalSectionNames(personal)
-      : [...new Set([...(state.sections ?? []), ...state.groups.flatMap((group) => group.section ? [group.section] : [])])];
+      // #2045: an organization room (it carries ownerId) never adds a team
+      // name; the server's list is already the viewer's own teams.
+      : [...new Set([...(state.sections ?? []), ...state.groups.flatMap((group) => group.section && group.ownerId === undefined ? [group.section] : [])])];
     const rows = orderSectionTree(names, sectionParents);
     const place = new Map(rows.map((row, index) => [row.name, { index, row }]));
     // Nest and sort by the displayed team name. A collision split may use a

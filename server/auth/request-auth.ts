@@ -1175,11 +1175,11 @@ export function requiredScope(method: string, path: string, features: ClientFeat
  * same fields. */
 export const clientBotPatchViolation = sharedClientBotPatchViolation;
 
-/** What an organization member may set on a bot they own, at creation and
- * afterwards: how it looks, its name and instructions, and which of the
- * server's engines it runs on. Never where it runs, what it may reach or
- * how much it may do unasked (computer, folder, approval level, MCP servers,
- * browser profile, peers, teams): those stay server admin settings. */
+/** What an organization member may set on a bot they own via MEMBER_BOT_FIELDS:
+ * look, name, instructions and model. Reach that leaves their environment
+ * (managed cloud computer cost, shared browser profiles, peers, MCP) needs a
+ * permission key or stays admin. Their own teams and Primary Bot managed
+ * teams use bots.create (#2045); they are not an admin-only surface. */
 export const memberBotFieldViolation = sharedMemberBotFieldViolation;
 
 /** The capabilities block GET /api/config puts on `viewer`. An admin scope

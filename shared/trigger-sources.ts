@@ -30,6 +30,7 @@ export const TRIGGER_FILTER_KEYS = [
   "branch",
   "label",
   "sender",
+  "senderKind",
   "reviewer",
   "assignee",
   "status",
@@ -202,7 +203,8 @@ export const TRIGGER_SOURCES: Record<TriggerSourceType, TriggerSourceDefinition>
     label: "Bot phone",
     secretMode: "relay",
     events: ["sms.received", "call.requested", "call.summary"],
-    filters: ["sender", "keyword"],
+    // senderKind: owner_mobile | allowlisted | verified_caller (#2194)
+    filters: ["sender", "senderKind", "keyword"],
     fence: "TELEPHONY",
   },
 };

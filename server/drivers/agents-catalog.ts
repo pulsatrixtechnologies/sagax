@@ -15,7 +15,8 @@ import { agentToolAnnotations } from "../tools/agent-tool-policy.ts";
 import { PAGE_TOOL_DEFINITIONS } from "./agents-page-tools.ts";
 import { WIDGET_TOOL_DEFINITIONS } from "./agents-widget-tools.ts";
 import { APP_TOOL_DEFINITIONS } from "./agents-app-tools.ts";
-import { PLACE_PHONE_CALL_TOOL_SPEC } from "../../shared/outbound-call.ts";
+import { PHONE_CALL_OWNER_TOOL_SPEC, PLACE_PHONE_CALL_TOOL_SPEC } from "../../shared/outbound-call.ts";
+import { PHONE_LINE_CONTACT_TOOL_SPEC } from "../../shared/phone-line-contacts.ts";
 import {
   HANG_UP_TOOL_SPEC, PLACE_CALL_TOOL_SPEC, SEND_DTMF_TOOL_SPEC, TRANSFER_CALL_TOOL_SPEC,
 } from "../../shared/phone-call-live.ts";
@@ -362,7 +363,7 @@ export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   // #2023 / #1944: fleet Edit-bot writes are occasional; keep them behind ToolSearch.
   "list_agent_models", "update_agent_model", "update_agent_settings", "update_routine",
   "workspace_read", "workspace_search", "session_read", "close_thread", "list_threads",
-  "request_login", "place_phone_call", "place_call", "send_dtmf", "transfer", "hang_up",
+  "request_login", "place_phone_call", "phone_call_owner", "phone_line_contact", "place_call", "send_dtmf", "transfer", "hang_up",
   // The person's iPhone (agents-phone-tools.ts): rare, and long.
   "phone_tool",
   // A post into a room from a 1:1 chat: rare.
@@ -538,7 +539,7 @@ function catalogTools(profile: CatalogProfile) {
     // coordinates too, so this reads room, never coordinating (the route
     // refuses a room only, server/outbound/outbound-wiring.ts placeCall).
     ...(profile.perspicax && !profile.externalRuntime && profile.room !== true
-      ? [PLACE_PHONE_CALL_TOOL_SPEC, PLACE_CALL_TOOL_SPEC, SEND_DTMF_TOOL_SPEC, TRANSFER_CALL_TOOL_SPEC, HANG_UP_TOOL_SPEC]
+      ? [PLACE_PHONE_CALL_TOOL_SPEC, PHONE_CALL_OWNER_TOOL_SPEC, PHONE_LINE_CONTACT_TOOL_SPEC, PLACE_CALL_TOOL_SPEC, SEND_DTMF_TOOL_SPEC, TRANSFER_CALL_TOOL_SPEC, HANG_UP_TOOL_SPEC]
       : []),
     ...(profile.claims && !profile.externalRuntime ? CLAIM_TOOLS : []),
     ...(profile.phoneTools?.length && !profile.externalRuntime ? [phoneToolDefinition(profile.phoneTools)] : []),

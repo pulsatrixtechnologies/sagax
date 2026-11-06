@@ -38,6 +38,7 @@ import {
   callDigestSource, callTwiml, canadianNumber, conversationDisclosure, createCallArgs, formatPhone, maskPhone, parseOutboundCall, voiceCallArgs,
   type CallLanguage, type CallNames, type OutboundCallRequest,
 } from "../../shared/outbound-call.ts";
+import { scrubCallResult } from "../../shared/phone-transcript-scrub.ts";
 import { wrapUntrusted } from "../../shared/safety-review.ts";
 import type { OutboundCallResult, OutboundCard } from "../../shared/wire.ts";
 
@@ -727,14 +728,20 @@ export function applyResult(calls: OutboundCalls, input: { result: IncomingCallR
   if (row.callSid && row.callSid !== input.result.callSid) return { applied: false, reason: "not_yours" };
   if (row.result) return { applied: false, reason: "already" };
   const answered = input.result.outcome === "completed";
+  // #2194: PIN redaction, sensitive-topic drop, strict summary (no inference).
+  const scrubbed = scrubCallResult({
+    points: input.result.points.slice(0, 5),
+    commitments: input.result.commitments.slice(0, 5),
+    ...(input.result.transcript?.length ? { transcript: input.result.transcript } : {}),
+  });
   const result: OutboundCallResult = {
     outcome: input.result.outcome,
     ...(answered && input.result.endedBy ? { endedBy: input.result.endedBy } : {}),
     ...(input.result.doNotCallAgain ? { doNotCallAgain: true } : {}),
     durationSec: Math.max(0, Math.round(input.result.durationSec)),
-    points: input.result.points.slice(0, 5),
-    commitments: input.result.commitments.slice(0, 5),
-    ...(input.result.transcript?.length ? { transcript: input.result.transcript } : {}),
+    points: scrubbed.points,
+    commitments: scrubbed.commitments,
+    ...(scrubbed.transcript?.length ? { transcript: scrubbed.transcript } : {}),
     ...(input.result.truncated ? { truncated: true } : {}),
     endedAt: input.now,
   };

@@ -90,8 +90,12 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   propose_page: "conversation",
   // the annotations of the member's own page, answered in their own conversation
   page_comments: "conversation",
+  // #2048: pick which surface publishes a new page
+  choose_page_target: "conversation",
   // a phone call: a card in the member's own conversation, through their own Twilio profile
   place_phone_call: "conversation",
+  phone_call_owner: "conversation",
+  phone_line_contact: "conversation",
   // Live controls and the compatibility alias use that same person's
   // profile; call lookup also binds bot and thread (d352e1751).
   place_call: "conversation",

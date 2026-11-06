@@ -10,7 +10,7 @@ import { botRoutineRuns } from "@/state/view-slices";
 // with the persona editor. Activity > Computer opens the computer view in
 // this same panel, with a back arrow to Activity.
 import { useEffect, useRef, useState } from "react";
-import { DockedPanelResizeHandle, useDockedPanelWidth } from "./DockedPanelResize";
+import { BOT_PANEL_BOUNDS, DockedPanelResizeHandle, useDockedPanelWidth } from "./DockedPanelResize";
 import { ArrowLeft, Settings, X } from "lucide-react";
 
 import { shallowEqual, useStoreDispatch, useStoreSelector } from "@/state/store-selector";
@@ -93,7 +93,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
     dispatch({ type: "toggleSettings", open: false });
     dispatch({ type: "toggleComputer", open: false });
   };
-  const dockedPanel = useDockedPanelWidth();
+  const dockedPanel = useDockedPanelWidth(BOT_PANEL_BOUNDS);
   // Compact head: once the in-flow tabs reach the top bar, they move into it.
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const tabsRef = useRef<HTMLDivElement | null>(null);

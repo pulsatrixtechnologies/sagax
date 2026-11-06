@@ -13515,6 +13515,7 @@
   "needsYou.fromRoutine": "De la routine {name}",
   "needsYou.fromHandoff": "Du travail confié par {name}",
   "needsYou.fromThread": "De {name}",
+  "needsYou.otherAnswer": "Ou réponds dans tes mots",
   "needsYou.openThread": "Ouvrir le fil",
   "needsYou.openRun": "Ouvrir l'exécution",
   "needsYou.openTicket": "Ouvrir le billet {id}",

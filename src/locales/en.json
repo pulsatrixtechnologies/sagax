@@ -13542,6 +13542,7 @@
   "needsYou.fromRoutine": "From the routine {name}",
   "needsYou.fromHandoff": "From work {name} handed over",
   "needsYou.fromThread": "From {name}",
+  "needsYou.otherAnswer": "Or answer in your own words",
   "needsYou.openThread": "Open thread",
   "needsYou.openRun": "Open run",
   "needsYou.openTicket": "Open ticket {id}",

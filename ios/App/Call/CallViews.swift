@@ -834,7 +834,7 @@ struct CallSettingsPanel: View {
 
     private var voiceName: String {
         let id = call.voiceSettings.forBot(voiceBotId).voice
-        guard !id.isEmpty else { return String(localized: "Not set") }
+        guard !id.isEmpty else { return String(localized: "Provider's default voice") }
         return call.voices?.first { $0.id == id }?.label ?? id
     }
 
@@ -877,7 +877,7 @@ struct CallSettingsPanel: View {
     private var voiceList: some View {
         ScrollView {
             VStack(spacing: 0) {
-                option(id: "", label: String(localized: "Not set"), selected: call.voiceSettings.forBot(voiceBotId).voice.isEmpty) { call.voiceSettings = call.voiceSettings.withVoice("", forBot: voiceBotId) }
+                option(id: "", label: String(localized: "Provider's default voice"), selected: call.voiceSettings.forBot(voiceBotId).voice.isEmpty) { call.voiceSettings = call.voiceSettings.withVoice("", forBot: voiceBotId) }
                 if call.voices == nil && call.voicesError == nil {
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small)

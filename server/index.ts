@@ -288,6 +288,7 @@ import {
   autoVerdict,
   deliverFullAccessApproval,
 } from "./approvals/auto-approve.ts";
+import { readsOwnFiles } from "./own-file-reads.ts";
 import { CommandAllowlistStore, commandAllowlistCandidate, sandboxCommandCandidate } from "./command-allowlist.ts";
 import type { CommandAllowlistCandidate, CommandAllowlistResponse } from "../shared/command-allowlist.ts";
 import { claudeAccountInfo } from "./engines/claude-accounts.ts";
@@ -19682,7 +19683,7 @@ bus.subscribe((event: RuntimeEvent) => {
   if (!privateImageEvent && !dropCancelledVoiceEvent(staleAssistant, event)) {
     // Exact executable input is internal matching metadata, not inspector UI.
     // The event bus's persistence redactor does not scrub its live event.
-    const publicEvent = event.type === "request.opened" ? { ...event, command: undefined } : withoutPrivateFields(event);
+    const publicEvent = event.type === "request.opened" ? { ...event, command: undefined, reads: undefined } : withoutPrivateFields(event);
     broadcast({ kind: "runtime", event: publicEvent });
     // A relayed teammate reply (coordinate_bots relay) streams in the
     // requester's conversation too; only its visible text, never reasoning.
@@ -20424,6 +20425,8 @@ bus.subscribe((event: RuntimeEvent) => {
           ownAttachmentRead: attachmentRead,
           ownComputerChoice: ownComputerChoice && !strictCard,
           ownReadOnlyCommand: readOnlyCommand,
+          // never in a guest's turn: the folder holds its owner's memory
+          ownFilesRead: Boolean(asker) && !guestDriven && !strictCard && readsOwnFiles(DATA_DIR, asker!.id, event),
           ...(perspicaxSelfKind && !strictCard && !foreignDestination && perspicaxSelfAnswerAt(perspicaxSelfKind, effectiveApprovalMode)
             ? { perspicaxSelf: perspicaxSelfKind } : {}),
           ...(event.mcpTool ? { toolName: event.mcpTool } : {}),

@@ -9,8 +9,9 @@
 // app applies are Full access and the person's exact saved commands and
 // explicitly remembered MCP read tools. Approve
 // for me also allows a web search, and that is the one action the app itself
-// grants. Questions never come through here: a bot's question always reaches
-// a human.
+// grants. A bot's plain reads of its own files (own-file-reads.ts) are
+// answered at every level. Questions never come through here: a bot's
+// question always reaches a human.
 
 import { supportsApprovalMode, type ApprovalMode } from "../../shared/approval-mode.ts";
 import { outboundMailNeedsDraftCard } from "../../shared/email-draft-send.ts";
@@ -203,6 +204,9 @@ export type AutoVerdictSource =
   | "perspicax-read"
   | "perspicax-lease"
   | "own-read-only"
+  /** A plain read of the bot's own files (SOUL.md, skills, memory, conversation
+   * folders): answered at every level (server/own-file-reads.ts). */
+  | "own-files"
   /** 2026-10-21 (parité 1C): a message send whose every recipient is on the
    * bot's allowed recipients (shared/allowed-recipients.ts). */
   | "allowed-recipient"
@@ -279,6 +283,11 @@ export function autoVerdict(
      * computer). Answered at any level and from any turn, after the safety
      * hold and the person's own rules, never when a security key protects it. */
     ownReadOnlyCommand?: boolean;
+    /** The request only reads the bot's own files: its SOUL.md, skills, memory
+     * and conversation folders (server/own-file-reads.ts). Answered at any
+     * level after the safety hold and the person's own rules, never when a
+     * security key protects it, and never in a guest's turn. */
+    ownFilesRead?: boolean;
     /** 2026-10-19 (owner setup, server/approvals/owner-autonomy.ts): a Perspicax read
      * or lease on Sagax's own mount that the caller found applies at this
      * level (perspicaxSelfAnswerAt). Answered after the safety hold and the
@@ -415,6 +424,9 @@ export function autoVerdict(
   }
   if (context?.ownReadOnlyCommand && selfAnswerable) {
     return { approve: `approved ${tool} (read-only command on your own computer)`, source: "own-read-only" };
+  }
+  if (context?.ownFilesRead && selfAnswerable) {
+    return { approve: `approved ${tool} (its own files)`, source: "own-files" };
   }
   if (context?.ownComputerChoice && selfAnswerable) {
     return { approve: `approved ${tool} (choosing among your own computers)`, source: "own-computer-choice" };

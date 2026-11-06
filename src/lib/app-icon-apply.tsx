@@ -6,7 +6,7 @@ import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { BotAvatar } from "@/components/Avatar";
 import { appIconLock, currentUnlocks, reportAchievement } from "@/lib/achievements";
-import { APP_ICON_CHOICES, DEFAULT_APP_ICON_ID, appIconTargets, primaryBotChoice, type AppIconArt, type AppIconChoice } from "@/lib/app-icon-choices";
+import { DEFAULT_APP_ICON_ID, appIconTargets, withPrimaryChoice, type AppIconArt, type AppIconChoice } from "@/lib/app-icon-choices";
 import { appIconGlyphSvg } from "@/lib/app-icon-glyphs";
 import { elementToArt, loadImage, renderAppIcon, type IconArt } from "@/lib/app-icon-render";
 
@@ -66,8 +66,7 @@ async function stagedArt(bot: BotLike): Promise<IconArt | null> {
 export async function applyAppIconById(id: string, input: { bots: readonly (BotLike & { id: string })[]; primary: { id: string } | null }): Promise<string> {
   const bridge = window.ogb?.appIcon;
   if (!bridge) throw new Error("This app has no app icon to change.");
-  const primary = primaryBotChoice(input.primary);
-  const choices: readonly AppIconChoice[] = primary ? [...APP_ICON_CHOICES, primary] : APP_ICON_CHOICES;
+  const choices: readonly AppIconChoice[] = withPrimaryChoice(input.primary);
   const choice = choices.find((row) => row.id === id);
   if (!choice) throw new Error(`No such app icon. The choices: ${choices.map((row) => row.id).join(", ")}.`);
   if (appIconLock(currentUnlocks(), choice.id, choice.art as { kind: string; skin?: string }).locked) throw new Error("This app icon is not unlocked yet for this person.");

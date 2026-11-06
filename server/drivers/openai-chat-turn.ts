@@ -737,10 +737,12 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
     if (sessionGrants.size > MAX_DELIVERED_THREADS) sessionGrants.delete(sessionGrants.keys().next().value!);
     const approval = createChatToolApproval({
       signal: abort.signal,
-      // #2091 (decided 2026-11-05): a guest's turn meets the same grants as any
-      // other; what answers it is decided in index.ts request.opened (the
-      // owner's rules, situation "origin"), never a strip added here
-      granted,
+      // Session "Always allow this session" stays with the owner of the
+      // conversation. A guest must not inherit or keep those grants (person
+      // isolation). #2091's Always allow on every card still applies through
+      // index.ts request.opened (ownerRule); this set is only the driver's
+      // in-conversation memory.
+      granted: turn.guestConfined ? undefined : granted,
       // #1982: always emit; Full is answered in index.ts request.opened
       // (org/person rules, safety, isolation still hold). Never short-
       // circuit MCP asks in this driver the way Codex #1977 used to.

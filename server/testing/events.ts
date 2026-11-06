@@ -26,11 +26,22 @@ export function recordEvents(adapter: ProviderAdapter): EventRecorder {
   return {
     events,
     until(pred, timeoutMs = 10_000) {
-      const seen = events.find(pred);
-      if (seen) return Promise.resolve(seen);
+      // Register the waiter before reading the buffer so an event that
+      // arrives between find and push cannot be missed.
       return new Promise((resolve, reject) => {
-        const waiter = { pred, resolve: (e: RuntimeEvent) => (clearTimeout(timer), resolve(e)) };
+        let settled = false;
+        const settle = (event: RuntimeEvent) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          const idx = waiters.indexOf(waiter);
+          if (idx !== -1) waiters.splice(idx, 1);
+          resolve(event);
+        };
+        const waiter = { pred, resolve: settle };
         const timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
           const idx = waiters.indexOf(waiter);
           if (idx !== -1) waiters.splice(idx, 1);
           reject(
@@ -41,6 +52,8 @@ export function recordEvents(adapter: ProviderAdapter): EventRecorder {
         }, timeoutMs);
         timer.unref?.();
         waiters.push(waiter);
+        const seen = events.find(pred);
+        if (seen) settle(seen);
       });
     },
     stop: unsubscribe,

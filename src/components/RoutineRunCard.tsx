@@ -1,6 +1,7 @@
-import { ArrowRight, Loader2, PauseCircle, Play, Square } from "lucide-react";
+import { ArrowRight, CalendarClock, Loader2, PauseCircle, Play, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { BotAvatar } from "@/components/Avatar";
 import { chatBubbleWidth, useChatBubbleWidthClasses } from "@/lib/chat-bubble-width";
 import { cn } from "@/lib/cn";
 import { prefersWideBubble } from "@/lib/rich-blocks";
@@ -130,43 +131,117 @@ export function hasRoutineExecutionTask(
   );
 }
 
+/** 2026-11-04 (JC: the grey text rows were ugly and not intuitive): the
+ * status reads as a colored pill, as the risk chip on an approval card. */
+const PILL: Record<string, string> = {
+  "text-accent": "border-accent/35 bg-accent/10 text-accent",
+  "text-warning": "border-warning/35 bg-warning/10 text-warning",
+  "text-danger": "border-danger/40 bg-danger/10 text-danger",
+  "text-success": "border-success/35 bg-success/10 text-success",
+  "text-ink-secondary": "border-hairline/60 bg-inset text-ink-secondary",
+};
+
+/** The card's outline follows its status, as the team goal card's does. */
+const BORDER: Record<string, string> = {
+  "text-accent": "border-accent/30",
+  "text-warning": "border-warning/35",
+  "text-danger": "border-danger/35",
+  "text-success": "border-success/30",
+  "text-ink-secondary": "border-hairline/45",
+};
+
 const DONE = { label: "routineRun.card.done" as const, tone: "text-success" };
 
-/** The teammates a run handed work to, under the bot's message: one grey
- * line each, "Sent work to <name> · <where it stands>", and, only while
- * threads are shown, a link to the teammate's thread (2026-11-05: in the
- * unified chat the outcome comes back here as a message, so no link). */
-function RunHandoffRows({ handedTo, botOf, onOpenThread }: {
+/** A status as a pill: always mounted (the flash, 2026-11-03), only its
+ * text, color and icon change with the status. */
+export function RunStatusPill({ label, tone, live }: { label: string; tone: string; live?: boolean }) {
+  return (
+    <span
+      data-routine-run-status
+      aria-live="polite"
+      className={cn("inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none", PILL[tone] ?? PILL["text-ink-secondary"])}
+    >
+      {live && <Loader2 aria-hidden="true" className="size-3 animate-spin" />}
+      {label}
+    </span>
+  );
+}
+
+const ACTION_PILL = "inline-flex shrink-0 items-center gap-1 rounded-full border border-hairline/50 px-3 py-1 text-[12.5px] font-medium text-ink transition-colors hover:bg-control focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent";
+const LINE_LINK = "inline-flex items-center gap-0.5 rounded font-medium text-accent transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent";
+
+/** The teammates a run handed work to. On a status card: mascot, name, pill,
+ * optional thread link. Under a plain finished report: one grey line each
+ * (2026-11-05, #2081). Thread link only when onOpenThread is given (threads
+ * shown); unified chat names the teammate without a link. */
+function RunHandoffRows({ handedTo, botOf, onOpenThread, asCard }: {
   handedTo: ReadonlyArray<{ botId: string; threadId: string; name?: string; status: string }>;
   botOf?: (botId: string) => Bot | undefined;
   onOpenThread?: (botId: string, threadId: string) => void;
+  asCard?: boolean;
 }) {
   return (
-    <ul data-run-handed-to className="mt-1.5 flex flex-col gap-0.5 pl-0.5 text-[11px] text-ink-secondary">
+    <ul
+      data-run-handed-to
+      className={cn(
+        "flex flex-col",
+        asCard ? "mt-3 gap-2 border-t border-hairline/40 pt-3" : "mt-1.5 gap-0.5 pl-0.5 text-[11px] text-ink-secondary",
+      )}
+    >
       {handedTo.map((entry) => {
-        const name = entry.name || botOf?.(entry.botId)?.name || t("routineRun.aTeammate");
+        const teammate = botOf?.(entry.botId);
+        const name = entry.name || teammate?.name || t("routineRun.aTeammate");
         const known = (COPY as Record<string, { label: LocaleKey; tone: string }>)[entry.status];
         const state = entry.status === "completed" ? DONE : known;
         return (
-          <li key={entry.threadId} data-run-handoff={entry.botId} className="flex flex-wrap items-center gap-x-1.5">
-            {entry.status === "running" && <Loader2 aria-hidden="true" className="size-3 animate-spin" />}
-            <span className="min-w-0 truncate">{t("routineRun.handedTo", { name })}</span>
-            {state && <>
-              <span aria-hidden="true">·</span>
-              <span data-run-handoff-status className={state.tone === "text-success" || state.tone === "text-accent" ? undefined : state.tone}>{t(state.label)}</span>
-            </>}
-            {onOpenThread && <>
-              <span aria-hidden="true">·</span>
-              <button
-                type="button"
-                data-run-teammate-thread={entry.threadId}
-                onClick={() => onOpenThread(entry.botId, entry.threadId)}
-                className="inline-flex items-center gap-0.5 rounded font-medium text-accent transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-              >
-                {t("routineRun.openTeammateThread", { name })}
-                <ArrowRight aria-hidden="true" size={12} />
-              </button>
-            </>}
+          <li
+            key={entry.threadId}
+            data-run-handoff={entry.botId}
+            className={cn("flex flex-wrap items-center", asCard ? "gap-2.5" : "gap-x-1.5")}
+          >
+            {asCard && (
+              teammate && "color" in teammate && teammate.color
+                ? <BotAvatar bot={teammate} size={22} animated={false} />
+                : <span aria-hidden="true" className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-inset"><ArrowRight size={12} className="text-ink-secondary" /></span>
+            )}
+            {!asCard && entry.status === "running" && <Loader2 aria-hidden="true" className="size-3 animate-spin" />}
+            <span className={cn("min-w-0 truncate", asCard ? "flex-1 text-[13px] text-ink" : undefined)}>
+              {t("routineRun.handedTo", { name })}
+            </span>
+            {state && (
+              asCard
+                ? <RunStatusPill label={t(state.label)} tone={state.tone} live={entry.status === "running"} />
+                : <>
+                    <span aria-hidden="true">·</span>
+                    <span data-run-handoff-status className={state.tone === "text-success" || state.tone === "text-accent" ? undefined : state.tone}>{t(state.label)}</span>
+                  </>
+            )}
+            {onOpenThread && (
+              asCard ? (
+                <button
+                  type="button"
+                  data-run-teammate-thread={entry.threadId}
+                  onClick={() => onOpenThread(entry.botId, entry.threadId)}
+                  className={ACTION_PILL}
+                >
+                  {t("routineRun.openTeammateThread", { name })}
+                  <ArrowRight aria-hidden="true" size={12} />
+                </button>
+              ) : (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <button
+                    type="button"
+                    data-run-teammate-thread={entry.threadId}
+                    onClick={() => onOpenThread(entry.botId, entry.threadId)}
+                    className={LINE_LINK}
+                  >
+                    {t("routineRun.openTeammateThread", { name })}
+                    <ArrowRight aria-hidden="true" size={12} />
+                  </button>
+                </>
+              )
+            )}
           </li>
         );
       })}
@@ -190,22 +265,18 @@ function useNow(active: boolean): number {
 /** One routine run in the conversation it reports to. The run works in the
  * background (2026-10-22) and the server upserts this one message per run,
  * so a running run is one live row patched in place, never a second one.
- * 2026-11-05 (the operator, #2081: "why did you put the routine's report in a routine
- * card", then "I don't need to see the routines, only their result; it
- * must feel natural"): no card, for any state. What the run has to say
- * (its report, else its error or why it waits) is the bot's message, in the
- * bot's own bubble (same markdown, same width rules as any reply). Above it
- * one small grey line, as the label over a delegated reply: Routine · time,
- * the status only when it is not a plain Done (Running with its spinner and
- * elapsed time, Failed, Blocked, Completed with problems...), and Details.
- * Details folds the execution: the routine's name, its status, View run,
- * the teammates it handed work to. A hand-off still in flight is one grey
- * line under the bubble, never a card. A quiet run (nothing to report) is
- * the grey line alone. All states are the same DOM (one section, one bubble
- * node): only classes change, so a Running to Done flip never remounts the
- * report (the flash rule, 2026-11-03). */
+ *
+ * 2026-11-05 (#2081): a finished run that has something to say reads as a
+ * normal bot message (same bubble, same markdown, wide when a table is
+ * present), with a small provenance line above it: Routine · name · Done
+ * pill · time · View run, like "Answer from the parallel task". Cards stay
+ * for real states: queued, running, waiting, blocked, failed, missed,
+ * nothing to report, done with problems, hand-off chrome. One DOM tree for
+ * every state (flash rule, 2026-11-03): only classes change when Running
+ * settles to Done. Unified chat: no thread link unless onOpenThread is set. */
 export function RoutineRunCard({
   message,
+  bot,
   botOf,
   onOpen,
   onResume,
@@ -213,10 +284,9 @@ export function RoutineRunCard({
   onOpenThread,
 }: {
   message: Message;
-  /** The bot that ran the routine; the row is its message, so it draws no
-   * mascot of its own (kept for callers). */
+  /** The bot that ran the routine: its mascot leads the status card. */
   bot?: Bot;
-  /** A teammate a run handed work to, for its name. */
+  /** A teammate a run handed work to, for its name and mascot. */
   botOf?: (botId: string) => Bot | undefined;
   /** Opens the run's detail (2026-10-29: never a conversation beside the
    * chat; Continue in the conversation is in the detail). */
@@ -290,11 +360,12 @@ export function RoutineRunCard({
   const at = run.scheduledFor ?? message.at;
   const pausedAfter = run.autoPausedAfter && run.autoPausedAfter > 0 ? run.autoPausedAfter : null;
   const elapsed = running && run.startedAt ? routineRunDuration({ startedAt: run.startedAt, status: "running" }, now) : undefined;
-  // A plain Done says nothing in the line: the message is the result. Any
-  // other state names itself there (the status node stays, for the flash
-  // rule and for screen readers).
+  // #2081: a clean finished report is the bot's message. Status cards stay
+  // for queued / running / waiting / blocked / failed / missed / nothing to
+  // report / done with problems (and any non-completed goal outcome).
   const plain = reported && !withProblems;
   const quiet = !report && !detail;
+  const wide = Boolean(report && prefersWideBubble(report));
 
   return (
     <section
@@ -304,79 +375,101 @@ export function RoutineRunCard({
       data-routine-run-plain={plain ? "" : undefined}
       data-routine-run-quiet={quiet ? "" : undefined}
       aria-label={t("routineRun.ariaLabel", { name: run.routineName, status: statusLabel })}
-      className="relative w-full"
+      className={cn(
+        "relative w-full",
+        plain
+          ? undefined
+          : cn("max-w-[680px] overflow-hidden rounded-2xl border bg-card px-3.5 py-3 shadow-sm", BORDER[copy.tone] ?? BORDER["text-ink-secondary"]),
+      )}
     >
-      {/* The provenance line: Routine · time · (status) · (elapsed) · Details.
-          Details is a disclosure; its panel holds the execution. */}
-      <details data-routine-run-provenance className={cn("group pl-0.5 text-[11px] text-ink-secondary", quiet ? "" : "mb-1")}>
-        <summary className="flex cursor-pointer select-none list-none flex-wrap items-center gap-x-1.5 gap-y-1 [&::-webkit-details-marker]:hidden">
-          <span>{t("routineRun.openRoutine")}</span>
-          <span aria-hidden="true">·</span>
-          <time dateTime={new Date(at).toISOString()}>{routineDateTime(at)}</time>
-          <span aria-hidden="true" className={plain ? "hidden" : undefined}>·</span>
-          <span
-            data-routine-run-status
-            aria-live="polite"
-            className={cn("inline-flex items-center gap-1", plain ? "sr-only" : (copy.tone === "text-accent" ? "text-ink-secondary" : copy.tone))}
-          >
-            {running && <Loader2 aria-hidden="true" className="size-3 animate-spin" />}
-            {statusLabel}
-          </span>
-          {elapsed && <>
-            <span aria-hidden="true">·</span>
-            <span data-routine-run-elapsed className="tabular-nums">{elapsed}</span>
-          </>}
-          {live && onOpen && <>
-            <span aria-hidden="true">·</span>
-            <button
-              type="button"
-              data-routine-run-open
-              onClick={(event) => { event.preventDefault(); event.stopPropagation(); onOpen(); }}
-              aria-label={t("routines.post.openRunFor", { name: run.routineName })}
-              className="inline-flex items-center gap-0.5 rounded font-medium text-accent transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-            >
-              {t("routines.post.openRun")}
-              <ArrowRight aria-hidden="true" size={11} />
-            </button>
-          </>}
-          {live && onStop && <>
-            <span aria-hidden="true">·</span>
-            <button
-              type="button"
-              data-run-stop
-              onClick={(event) => { event.preventDefault(); event.stopPropagation(); onStop(); }}
-              aria-label={t("routines.post.stopRunFor", { name: run.routineName })}
-              className="inline-flex items-center gap-1 rounded font-medium text-danger transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-            >
-              <Square aria-hidden="true" size={10} fill="currentColor" />
-              {t("routineRun.stop")}
-            </button>
-          </>}
-          <span aria-hidden="true">·</span>
-          <span data-routine-run-details-toggle className="font-medium text-ink-tertiary transition-colors group-hover:text-ink group-open:text-ink">{t("routineRun.details")}</span>
-        </summary>
-        <div data-routine-run-details className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-lg bg-inset/60 px-2.5 py-1.5 text-[11.5px]">
-          <h3 className="min-w-0 truncate font-medium text-ink">{run.routineName}</h3>
-          <span aria-hidden="true">·</span>
-          <span className={plain ? undefined : "hidden"}>{statusLabel}</span>
-          {!live && onOpen && (
-            <button
-              type="button"
-              onClick={onOpen}
-              aria-label={t(review ? "routines.post.reviewFor" : "routines.post.openRunFor", { name: run.routineName })}
-              className={cn("inline-flex items-center gap-0.5 rounded font-medium text-accent transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent", review && "text-warning")}
-            >
-              {actionLabel}
-              <ArrowRight aria-hidden="true" size={12} />
-            </button>
-          )}
+      {/* Same nodes for every state (flash rule). Plain: small grey provenance
+          line above the bot bubble. Card: avatar + title + pill + actions. */}
+      <div
+        data-routine-run-provenance
+        className={cn(
+          "flex",
+          plain
+            ? cn("flex-wrap items-center gap-x-1.5 gap-y-1 pl-0.5 text-[11px] text-ink-secondary", quiet ? undefined : "mb-1")
+            : "items-start gap-3",
+        )}
+      >
+        <div
+          data-routine-run-avatar
+          aria-hidden="true"
+          className={cn("shrink-0", plain && "hidden")}
+        >
+          {bot && "color" in bot && bot.color
+            ? <BotAvatar bot={bot} size={30} animated={false} />
+            : <div className="flex size-[30px] items-center justify-center rounded-xl bg-inset"><CalendarClock size={15} className="text-ink-secondary" /></div>}
         </div>
-      </details>
+        <div className={cn("min-w-0", plain ? "contents" : "flex-1")}>
+          <div className={cn("flex flex-wrap items-center", plain ? "contents" : "gap-x-2 gap-y-1")}>
+            <span className={cn(plain ? undefined : "hidden")}>{t("routineRun.openRoutine")}</span>
+            <span aria-hidden="true" className={cn(plain ? undefined : "hidden")}>·</span>
+            <h3 className={cn("min-w-0 truncate", plain ? "font-medium text-ink-secondary" : "text-[14px] font-semibold leading-snug text-ink")}>
+              {run.routineName}
+            </h3>
+            <span aria-hidden="true" className={cn(plain ? undefined : "hidden")}>·</span>
+            <RunStatusPill label={statusLabel} tone={copy.tone} live={running} />
+          </div>
+          <div className={cn("flex flex-wrap items-center gap-x-1.5", plain ? "contents" : "mt-0.5 text-[11.5px] text-ink-secondary")}>
+            <span className={cn(plain && "hidden")}>{t("routineRun.openRoutine")}</span>
+            <span aria-hidden="true" className={cn(plain && "hidden")}>·</span>
+            <span aria-hidden="true" className={cn(plain ? undefined : "hidden")}>·</span>
+            <time dateTime={new Date(at).toISOString()}>{routineDateTime(at)}</time>
+            {elapsed && <>
+              <span aria-hidden="true">·</span>
+              <span data-routine-run-elapsed className="tabular-nums">{elapsed}</span>
+            </>}
+          </div>
+        </div>
+        <span aria-hidden="true" className={cn(plain && onOpen ? undefined : "hidden")}>·</span>
+        {onOpen && (
+          <button
+            type="button"
+            data-routine-run-open
+            onClick={onOpen}
+            aria-label={t(review ? "routines.post.reviewFor" : "routines.post.openRunFor", { name: run.routineName })}
+            className={cn(
+              plain ? LINE_LINK : ACTION_PILL,
+              !plain && review && "border-warning/40 bg-warning/15 text-warning hover:bg-warning/25",
+              plain && review && "text-warning",
+            )}
+          >
+            {actionLabel}
+            <ArrowRight aria-hidden="true" size={plain ? 11 : 12} />
+          </button>
+        )}
+        <span aria-hidden="true" className={cn(plain && live && onStop ? undefined : "hidden")}>·</span>
+        {live && onStop && (
+          <button
+            type="button"
+            data-run-stop
+            onClick={onStop}
+            aria-label={t("routines.post.stopRunFor", { name: run.routineName })}
+            className={cn(
+              plain
+                ? "inline-flex items-center gap-1 rounded text-[11px] font-medium text-danger transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                : cn(ACTION_PILL, "text-danger"),
+            )}
+          >
+            <Square aria-hidden="true" size={plain ? 10 : 11} fill="currentColor" />
+            {t("routineRun.stop")}
+          </button>
+        )}
+      </div>
       {(report || detail) && (
         <div
           data-routine-run-bubble
-          // the bot's own bubble: ChatView's Bubble classes for a bot reply
-          className={cn("rounded-[18px] bg-bubble-bot px-3 py-[7px] text-[13px] leading-5", detail && failedTone ? "text-danger" : "text-ink", bubbleWidths[chatBubbleWidth({ terminal: false, wide: Boolean(report && prefersWideBubble(report)) })])}
+          className={cn(
+            plain
+              ? cn(
+                  "rounded-[18px] bg-bubble-bot px-3 py-[7px] text-[13px] leading-5",
+                  detail && failedTone ? "text-danger" : "text-ink",
+                  bubbleWidths[chatBubbleWidth({ terminal: false, wide })],
+                )
+              : cn("mt-2.5 pl-[42px] text-[14px] leading-relaxed", detail && failedTone ? "text-danger" : "text-ink"),
+          )}
         >
           {report ? <ChatMarkdown text={report} inert /> : <p className="whitespace-pre-wrap">{detail}</p>}
           {details && <RunResultDetails details={details} />}
@@ -384,16 +477,16 @@ export function RoutineRunCard({
       )}
       {/* 2026-11-05: items only the person can do, each with its ticket. */}
       {reported && message.attention?.items.length ? (
-        <div data-routine-run-attention className="mt-2 pl-0.5">
+        <div data-routine-run-attention className={cn("mt-2", plain ? "pl-0.5" : "pl-[42px]")}>
           <div className="mb-1.5 text-[12px] font-semibold text-warning">{t("needsYou.title", { bot: message.attention.botName })}</div>
           <AttentionItems items={message.attention.items} />
         </div>
       ) : null}
       {/* The failure paused its routine: one line and the way back on. */}
       {pausedAfter && (
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 pl-0.5 text-[11.5px]">
-          <span data-routine-auto-paused={pausedAfter} className="inline-flex items-center gap-1 font-medium text-warning">
-            <PauseCircle aria-hidden="true" size={12} />
+        <div className={cn("mt-2.5 flex flex-wrap items-center gap-2", plain ? "pl-0.5" : "pl-[42px]")}>
+          <span data-routine-auto-paused={pausedAfter} className="inline-flex items-center gap-1 text-[12.5px] font-medium text-warning">
+            <PauseCircle aria-hidden="true" size={13} />
             {routineAutoPausedText(pausedAfter)}
           </span>
           {onResume && (
@@ -402,7 +495,7 @@ export function RoutineRunCard({
               data-routine-resume
               onClick={onResume}
               aria-label={t("routines.autoPause.resumeLabel", { name: run.routineName })}
-              className="inline-flex items-center gap-0.5 rounded font-medium text-accent transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+              className={plain ? LINE_LINK : ACTION_PILL}
             >
               <Play aria-hidden="true" size={11} />
               {t("routines.autoPause.resume")}
@@ -410,7 +503,7 @@ export function RoutineRunCard({
           )}
         </div>
       )}
-      {handedTo.length > 0 && <RunHandoffRows handedTo={handedTo} botOf={botOf} onOpenThread={onOpenThread} />}
+      {handedTo.length > 0 && <RunHandoffRows handedTo={handedTo} botOf={botOf} onOpenThread={onOpenThread} asCard={!plain} />}
       {/* A running run's live strip along the bottom edge: it moves, it
           takes no room, so the row keeps its height when the run ends. */}
       {running && <div aria-hidden="true" data-routine-run-live className="absolute inset-x-0 bottom-0 h-[2px] animate-shimmer bg-[linear-gradient(90deg,transparent_0%,var(--color-accent)_50%,transparent_100%)] bg-[length:200%_100%]" />}

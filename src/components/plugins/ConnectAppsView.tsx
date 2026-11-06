@@ -112,13 +112,15 @@ export function normalizeConnectAppsTab(value: string | null | undefined): Conne
   if (value === "browseBots" || value === "browse-bots" || value === "botCatalog" || value === "templates") return "bots";
   return value === "installed" || value === "discover" || value === "bots" || value === "pages" || value === "sources" ? value : null;
 }
-/** Plugins (#2104, 2026-11-05): three tabs, Installed first (what a person
- * has), then Discover (the catalog) and Sources (where plugins come from).
- * Bots (Browse Bots) and Pages (the published pages) are not plugins: a
- * link that asks for them opens the same window as a pane of its own, with
- * its own title and no tab row (STANDALONE_PANES). */
-export const CONNECT_APPS_TABS: readonly ConnectAppsTab[] = ["installed", "discover", "sources"];
-export const STANDALONE_PANES: readonly ConnectAppsTab[] = ["bots", "pages"];
+/** Plugins (#2104, 2026-11-05, JC's review): five visible tabs, Installed
+ * first (what a person has), Discover (the catalog), Bots (Browse Bots),
+ * Pages (the published pages) and Sources (where plugins come from), as the
+ * Grok Bot reference lays them out (docs/design 2.8). A deep link selects
+ * its tab; the tab row never hides. The install scope is drawn only where
+ * it applies (SCOPELESS_TABS do not depend on it); the one search covers
+ * every tab. */
+export const CONNECT_APPS_TABS: readonly ConnectAppsTab[] = ["installed", "discover", "bots", "pages", "sources"];
+export const SCOPELESS_TABS: readonly ConnectAppsTab[] = ["bots", "pages"];
 
 const TAB_KEY = {
   installed: "connectApps.manage.tab.installed",
@@ -183,29 +185,30 @@ export interface ConnectAppsViewProps {
 
 export function ConnectAppsView(props: ConnectAppsViewProps) {
   const { tab, onTab, onBack, tabs = CONNECT_APPS_TABS, counts = {}, scope, scopeNote, search, results, page, notices, refreshing, onRefresh } = props;
-  // Bots and Pages open alone (a link asked for them): their own title, no
-  // tab row, no install scope (neither depends on it)
-  const standalone = STANDALONE_PANES.includes(tab) && !tabs.includes(tab);
-  const shown = standalone || tabs.includes(tab) ? tab : tabs.includes("installed") ? "installed" : tabs[0] ?? "installed";
+  const shown = tabs.includes(tab) ? tab : tabs.includes("installed") ? "installed" : tabs[0] ?? "installed";
+  // Bots and Pages do not depend on the install scope: the scope and its
+  // note keep their room but are hidden there (visibility, so the tab row
+  // never jumps between tabs); the one search stays (it covers every tab)
+  const scoped = !SCOPELESS_TABS.includes(shown);
   // Bots is a pane of its own (its list scrolls, its pages have a back row),
   // laid out as a page opened from a tab
   const pane = !results && (page !== undefined || shown === "bots");
   const titleBlock = (
     <>
-      <h2 id="plugins-title" className={CATEGORY_MODAL.title}>{standalone ? connectAppsTabLabel(shown) : t("connectApps.title")}</h2>
+      <h2 id="plugins-title" className={CATEGORY_MODAL.title}>{t("connectApps.title")}</h2>
       {/* the scope and the one search share a line (2026-10-29, the owner):
           the search, compact, on the scope's right; narrow, it wraps under it */}
-      {!standalone && (scope || search) && (
+      {(scope || search) && (
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2" data-plugins-scope-row>
-          {scope && <div className="shrink-0" data-plugins-scope-slot>{scope}</div>}
+          {scope && <div className={cn("shrink-0", !scoped && "invisible")} data-plugins-scope-slot data-plugins-scope-off={scoped ? undefined : ""}>{scope}</div>}
           {search && <div className="min-w-[200px] flex-1 sm:ml-auto sm:max-w-[320px]" data-plugins-search-slot>{search}</div>}
         </div>
       )}
-      {!standalone && scopeNote}
+      {scopeNote && <div className={cn(!scoped && "invisible")} data-plugins-scope-off={scoped ? undefined : ""}>{scopeNote}</div>}
     </>
   );
   return (
-    <div className="flex min-h-0 flex-1 flex-col" data-plugins-main={shown} data-plugins-standalone={standalone ? shown : undefined}>
+    <div className="flex min-h-0 flex-1 flex-col" data-plugins-main={shown}>
       <header className={cn(CATEGORY_MODAL.titleBar, onBack && "flex items-start gap-2")}>
         {onBack ? (
           <>
@@ -214,8 +217,9 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
           </>
         ) : titleBlock}
       </header>
-      {!standalone && <div className="flex shrink-0 items-end gap-2 border-b border-hairline-weak px-4 sm:px-8" data-plugins-manage-bar>
-        <div role="tablist" aria-label={t("connectApps.tabsAria")} className="flex min-w-0 flex-1 gap-5 overflow-x-auto" data-plugins-manage-tabs>
+      {/* the tab row, always visible: text tabs, the chosen one a discreet filled pill (reference 2.8) */}
+      <div className="flex shrink-0 items-center gap-2 border-b border-hairline-weak px-4 pb-2 sm:px-8" data-plugins-manage-bar>
+        <div role="tablist" aria-label={t("connectApps.tabsAria")} className="flex min-w-0 flex-1 gap-1 overflow-x-auto" data-plugins-manage-tabs>
           {tabs.map((id) => {
             const count = counts[id] ?? 0;
             return (
@@ -232,8 +236,8 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
                 data-plugins-tab={id}
                 onClick={() => onTab(id)}
                 className={cn(
-                  "-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-0.5 pb-2 pt-1 text-[13px] leading-[18px] transition-colors motion-reduce:transition-none",
-                  shown === id ? "border-ink font-medium text-ink" : "border-transparent text-ink-secondary hover:text-ink",
+                  "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-[13px] leading-[18px] transition-colors motion-reduce:transition-none",
+                  shown === id ? "bg-hover font-medium text-ink" : "text-ink-secondary hover:bg-hover/60 hover:text-ink",
                 )}
               >
                 <span data-plugins-tab-label>{connectAppsTabLabel(id)}</span>
@@ -246,15 +250,15 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
             );
           })}
         </div>
-        <button type="button" onClick={onRefresh} disabled={refreshing} className="ui-icon-button mb-1 disabled:opacity-50" aria-label={t("connectors.refreshTitle")} title={t("connectors.refreshTitle")}>
+        <button type="button" onClick={onRefresh} disabled={refreshing} className="ui-icon-button disabled:opacity-50" aria-label={t("connectors.refreshTitle")} title={t("connectors.refreshTitle")}>
           <RefreshCw size={15} className={cn(refreshing && "animate-spin")} />
         </button>
-      </div>}
+      </div>
       {notices}
       <div
         role="tabpanel"
         id={`plugins-tabpanel-${shown}`}
-        aria-labelledby={standalone ? "plugins-title" : `plugins-tab-${shown}`}
+        aria-labelledby={`plugins-tab-${shown}`}
         tabIndex={-1}
         className={pane ? "flex min-h-0 flex-1 flex-col outline-none" : `${CATEGORY_MODAL.pane} ${CATEGORY_MODAL.list} outline-none`}
         data-plugins-list={pane ? undefined : ""}

@@ -11,9 +11,9 @@
 //     setup directly) and the connectors of their engine accounts in one
 //     list with one "Manage on <engine>" each; Discover (the catalog and the
 //     category pills); Sources (a GitHub connection row, the marketplaces,
-//     and for an organization admin the allowed marketplaces). Bots (Browse
-//     Bots) and Pages (their published pages) are no tabs: every old link
-//     to them opens that pane alone, with its own title and a back arrow.
+//     and for an organization admin the allowed marketplaces); Bots (Browse
+//     Bots) and Pages (their published pages) are visible tabs too, in the
+//     one tab row (JC's review of #2104): a deep link selects its tab.
 //   - Detail: one plugin's accounts, tools (a switch per MCP tool, applied to
 //     every bot) and details, with Uninstall.
 //   - GitHub (owner, 2026-10-29: "Why is GitHub listed as a provider?"):

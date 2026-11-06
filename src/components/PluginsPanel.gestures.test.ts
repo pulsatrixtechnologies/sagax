@@ -130,7 +130,7 @@ const key = async (name: string) => {
   await settle();
 };
 const groups = () => [...host.querySelectorAll<HTMLElement>("[data-plugins-search-group]")].map((group) => group.getAttribute("data-plugins-search-group"));
-const standalone = () => $("[data-plugins-standalone]")?.getAttribute("data-plugins-standalone") ?? null;
+const selected = () => $('[data-plugins-tab][aria-selected="true"]')?.getAttribute("data-plugins-tab") ?? null;
 const tabs = () => [...host.querySelectorAll<HTMLElement>("[data-plugins-tab]")].map((tab) => `${tab.getAttribute("data-plugins-tab")}${tab.getAttribute("aria-selected") === "true" ? "*" : ""}`);
 
 beforeEach(async () => {
@@ -175,11 +175,29 @@ describe("Plugins, driven like the owner did", () => {
     await click($('[data-plugins-scope-option="me"]'));
     expect(host.textContent).toContain("Personal Review");
   });
-  it("three tabs, Installed first; Bots is no tab, it opens alone from a link with a back arrow; Discover has no Browse Bots button (#2104)", async () => {
+  it("every tab is visible and clickable from the first screen: Installed, Discover, Bots, Pages, Sources (#2104, JC's review)", async () => {
     paneProps = null;
     await open();
-    expect(tabs()).toEqual(["installed*", "discover", "sources"]);
-    expect($('[data-plugins-tab="bots"]')).toBeNull();
+    expect(tabs()).toEqual(["installed*", "discover", "bots", "pages", "sources"]);
+    expect($("#plugins-title")?.textContent).toBe("Plugins");
+    for (const tab of ["discover", "bots", "pages", "sources", "installed"] as const) {
+      const button = $(`[data-plugins-tab="${tab}"]`) as HTMLButtonElement | null;
+      expect(button).not.toBeNull();
+      expect(button!.disabled).toBe(false);
+      await click(button);
+      expect(selected()).toBe(tab);
+      expect($(`[data-plugins-manage="${tab}"]`)).not.toBeNull();
+      // the tab row never hides, the title never changes
+      expect(tabs()).toHaveLength(5);
+      expect($("#plugins-title")?.textContent).toBe("Plugins");
+    }
+    expect($("[data-apps-back]")).toBeNull();
+  });
+
+  it("Installed first; Bots is a tab, a link selects it; the scope is not drawn there; Discover has no Browse Bots button (#2104)", async () => {
+    paneProps = null;
+    await open();
+    expect(tabs()).toEqual(["installed*", "discover", "bots", "pages", "sources"]);
     await click($('[data-plugins-tab="discover"]'));
     // no search of its own in Discover, and no Browse Bots button, in either scope
     expect($('[data-plugins-manage="discover"] input')).toBeNull();
@@ -188,22 +206,24 @@ describe("Plugins, driven like the owner did", () => {
     expect($("[data-plugins-browse-bots]")).toBeNull();
     expect(host.textContent).not.toContain("Browse bots");
     await click($('[data-plugins-scope-option="workspace"]'));
-    // a link to the bots (a search result here) opens the Bots pane alone
+    // a link to the bots (a search result here) selects the Bots tab
     await type("quill");
     await click($('[data-plugins-search-group="bots"] [role="option"]'));
-    expect(standalone()).toBe("bots");
-    expect(tabs()).toEqual([]);
-    expect($("#plugins-title")?.textContent).toBe("Bots");
+    expect(selected()).toBe("bots");
+    expect(tabs()).toEqual(["installed", "discover", "bots*", "pages", "sources"]);
+    expect($("#plugins-title")?.textContent).toBe("Plugins");
     expect($("[data-test-bot-pane]")?.textContent).toBe("Bots");
     expect(lastPane()?.sources).toBeTruthy();
-    // the install scope does not apply to bots: not drawn there, no note either
-    expect($("[data-plugins-scope-bar]")).toBeNull();
-    expect($("[data-plugins-scope-note]")).toBeNull();
-    // the back arrow returns to Plugins, on Installed
-    await click($("[data-apps-back]"));
-    expect(standalone()).toBeNull();
-    expect(tabs()).toEqual(["installed*", "discover", "sources"]);
-    expect($("#plugins-title")?.textContent).toBe("Plugins");
+    // the install scope does not apply to bots: hidden there with its note (room kept); the search stays
+    expect($("[data-plugins-scope-slot]")?.classList.contains("invisible")).toBe(true);
+    expect($("[data-plugins-scope-note]")?.closest("[data-plugins-scope-off]")).not.toBeNull();
+    expect($("[data-plugins-search]")).not.toBeNull();
+    // no back arrow: the tabs are the way back
+    expect($("[data-apps-back]")).toBeNull();
+    await click($('[data-plugins-tab="installed"]'));
+    expect(tabs()).toEqual(["installed*", "discover", "bots", "pages", "sources"]);
+    expect($("[data-plugins-scope-slot]")?.classList.contains("invisible")).toBe(false);
+    expect($("[data-plugins-scope-off]")).toBeNull();
   });
 
   it("one search above the tabs looks everywhere, grouped by kind; empty, the tab is back", async () => {
@@ -250,10 +270,10 @@ describe("Plugins, driven like the owner did", () => {
     expect(input.getAttribute("aria-activedescendant")).toBe("connect-apps-result-0");
     expect($("#connect-apps-result-0")?.getAttribute("aria-selected")).toBe("true");
     await key("Enter");
-    expect(standalone()).toBe("bots");
+    expect(selected()).toBe("bots");
     expect(lastPane()?.focus?.key).toBe("bot:bot-c");
-    // back on Plugins, the field is empty
-    await click($("[data-apps-back]"));
+    // back on Installed, the field is empty
+    await click($('[data-plugins-tab="installed"]'));
     expect(($("[data-plugins-search]") as HTMLInputElement).value).toBe("");
     // Escape with text empties the field and keeps the window open
     await type("review");
@@ -272,31 +292,29 @@ describe("Plugins, driven like the owner did", () => {
     expect(host.textContent).toContain("Code Review");
     await type("weekly");
     await click($('[data-plugins-search-group="pages"] [role="option"]'));
-    expect(standalone()).toBe("pages");
-    expect($("#plugins-title")?.textContent).toBe("Pages");
-    await click($("[data-apps-back]"));
+    expect(selected()).toBe("pages");
+    expect($("#plugins-title")?.textContent).toBe("Plugins");
     await type("example-ops");
     await click($('[data-plugins-search-group="sources"] [role="option"]'));
-    expect(standalone()).toBeNull();
-    expect(tabs()).toEqual(["installed", "discover", "sources*"]);
+    expect(tabs()).toEqual(["installed", "discover", "bots", "pages", "sources*"]);
   });
 
-  it("Pages opens alone from its link: Your pages there, nothing about pages left in Installed, no scope (#2104)", async () => {
+  it("Pages is a tab, its link selects it: Your pages there, nothing about pages left in Installed, no scope (#2104)", async () => {
     await open();
     expect($('[data-plugins-tab="providers"]')).toBeNull();
-    expect($('[data-plugins-tab="pages"]')).toBeNull();
+    expect($('[data-plugins-tab="pages"]')).not.toBeNull();
     expect($('[data-plugins-tab="accounts"]')).toBeNull();
     expect($("[data-plugins-pages]")).toBeNull();
     expect($('[data-plugins-manage="installed"]')?.textContent).not.toContain("Your pages");
     expect($('[data-plugins-manage="installed"] [data-settings-card="pages"]')).toBeNull();
     await type("weekly");
     await click($('[data-plugins-search-group="pages"] [role="option"]'));
-    expect(standalone()).toBe("pages");
+    expect(selected()).toBe("pages");
     expect($('[data-plugins-manage="pages"] [data-settings-card="pages"]')).not.toBeNull();
     expect($('[data-plugins-manage="pages"]')?.textContent).toContain("Your pages");
     expect($('[data-plugins-manage="pages"]')?.textContent).toContain("Weekly KPIs");
-    // personal: the install scope is not drawn there (no disabled control, no note)
-    expect($("[data-plugins-scope-slot]")).toBeNull();
+    // personal: the install scope is hidden there (no disabled control, no note read)
+    expect($("[data-plugins-scope-slot]")?.classList.contains("invisible")).toBe(true);
   });
 
   it("every option once: one scope bar, one search, one refresh, one + Add, no service pills, one Manage per engine (#2104)", async () => {
@@ -324,7 +342,7 @@ describe("Plugins, driven like the owner did", () => {
 
   it("opens on Installed, the first tab; the header has no N connected button; the counts sit on the tabs", async () => {
     await open();
-    expect(tabs()).toEqual(["installed*", "discover", "sources"]);
+    expect(tabs()).toEqual(["installed*", "discover", "bots", "pages", "sources"]);
     expect($("[data-plugins-connected]")).toBeNull();
     expect(host.querySelector("header")?.textContent).not.toMatch(/connected/i);
     // GitHub, Code Review, Frontend Design, Ops Flow, Twilio Docs: five connected entries,
@@ -339,20 +357,23 @@ describe("Plugins, driven like the owner did", () => {
       for (const old of ["accounts", "providers"]) {
         (state as { pluginsPage: string | null }).pluginsPage = old;
         await open();
-        expect(tabs()).toEqual(["installed*", "discover", "sources"]);
+        expect(tabs()).toEqual(["installed*", "discover", "bots", "pages", "sources"]);
         expect($('[data-plugins-manage="installed"] [data-plugins-providers]')).not.toBeNull();
         expect($("[data-plugins-providers] [data-harness-group]")).not.toBeNull();
         await act(async () => root.render(createElement("div")));
       }
       (state as { pluginsPage: string | null }).pluginsPage = "pages";
       await open(true);
-      expect(standalone()).toBe("pages");
+      // a deep link selects the tab; the tab row stays
+      expect(selected()).toBe("pages");
+      expect(tabs()).toHaveLength(5);
       expect($('[data-plugins-manage="pages"]')?.textContent).toContain("Your pages");
       await act(async () => root.render(createElement("div")));
       (state as { pluginsPage: string | null }).pluginsPage = "bots";
       await open(true);
-      expect(standalone()).toBe("bots");
-      expect($("#plugins-title")?.textContent).toBe("Bots");
+      expect(selected()).toBe("bots");
+      expect(tabs()).toHaveLength(5);
+      expect($("#plugins-title")?.textContent).toBe("Plugins");
     } finally {
       (state as { pluginsPage: string | null }).pluginsPage = null;
     }
@@ -398,7 +419,7 @@ describe("Plugins, driven like the owner did", () => {
     expect($("[data-plugins-subpage]")).not.toBeNull();
     expect($("#plugins-title")?.textContent).toBe("Plugins");
     expect($("[data-plugins-scope-bar]")).not.toBeNull();
-    expect(tabs()).toEqual(["installed*", "discover", "sources"]);
+    expect(tabs()).toEqual(["installed*", "discover", "bots", "pages", "sources"]);
     expect($('[data-plugins-tab="installed"]')?.getAttribute("aria-current")).toBe("page");
     expect($("[data-plugins-page-bar]")?.textContent).toContain("Installed");
     expect($("[data-plugins-detail-name]")?.textContent).toBe("GitHub");
@@ -460,7 +481,7 @@ describe("Plugins, driven like the owner did", () => {
       expect($("[data-plugins-marketplaces]")).not.toBeNull();
       expect($('[data-plugins-manage="sources"] [data-accounts-github]')).toBeNull();
       await click($("[data-plugins-sources-github-open]"));
-      expect(tabs()).toEqual(["installed", "discover", "sources*"]);
+      expect(tabs()).toEqual(["installed", "discover", "bots", "pages", "sources*"]);
       expect($("[data-plugins-detail]")?.getAttribute("data-plugins-detail")).toBe("plugin:github@claude-plugins-official");
       expect($("[data-accounts-github]")).not.toBeNull();
       // the plugin's server page: Open the GitHub plugin leads there too

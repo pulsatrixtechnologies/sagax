@@ -42,7 +42,7 @@ describe("Plugins panel views", () => {
     expect(html).not.toContain("Manage plugins and skills");
     expect(html).toMatch(/aria-label="Installed, 2 connected"[^>]*data-plugins-tab="installed"/);
     const tabs = [...html.matchAll(/role="tab"[^>]*data-plugins-tab="([a-z]+)"[^>]*><span data-plugins-tab-label="[^"]*">([^<]+)</g)].map((match) => [match[1], match[2]]);
-    expect(tabs).toEqual([["installed", "Installed"], ["discover", "Discover"], ["sources", "Sources"]]);
+    expect(tabs).toEqual([["installed", "Installed"], ["discover", "Discover"], ["bots", "Bots"], ["pages", "Pages"], ["sources", "Sources"]]);
     expect(html).toMatch(/aria-selected="true"[^>]*data-plugins-tab="discover"/);
     // one search (2026-10-29): under the title, above the tabs; none in Discover
     const searched = page({ search: createElement("input", { "data-plugins-search": "", placeholder: "ONE SEARCH" }) });
@@ -56,13 +56,13 @@ describe("Plugins panel views", () => {
     expect(results).toContain("data-plugins-results");
     expect(results).toContain("RESULTS");
     expect(results).not.toContain("data-plugins-discover");
-    // Bots: a pane of its own, with its own title and no tab row (#2104)
-    const bots = page({ tab: "bots", bots: "BOTS", onBack: noop });
+    // Bots: a visible tab whose pane scrolls on its own; title and tab row stay (#2104, JC's review)
+    const bots = page({ tab: "bots", bots: "BOTS" });
     expect(bots).toContain("BOTS");
-    expect(bots).toMatch(/id="plugins-title"[^>]*>Bots<\/h2>/);
+    expect(bots).toMatch(/id="plugins-title"[^>]*>Plugins<\/h2>/);
     expect(bots).toMatch(/data-plugins-manage="bots"/);
-    expect(bots).not.toContain('role="tablist"');
-    expect(bots).toContain("data-apps-back");
+    expect(bots).toMatch(/aria-selected="true"[^>]*data-plugins-tab="bots"/);
+    expect(bots).not.toContain("data-apps-back");
     expect(bots).not.toMatch(/data-plugins-list=""[^>]*data-plugins-manage="bots"/);
     expect(html).not.toContain("INSTALLED");
     expect(page({ tab: "sources" })).toContain("SOURCES");

@@ -18,7 +18,7 @@ import { buildPluginItems } from "@/lib/plugins-model";
 import { installedEntries, privateSkills } from "@/lib/installed-model";
 import { GROK_CLOUD_CONNECTORS } from "../../../shared/grok-cloud-connectors";
 import { bringsLabel, InstalledView, type InstalledViewProps } from "./InstalledView";
-import { ConnectAppsView, connectedCounts, normalizeConnectAppsTab, isProvidersLink, CONNECT_APPS_TABS, STANDALONE_PANES, connectAppsTabLabel } from "./ConnectAppsView";
+import { ConnectAppsView, connectedCounts, normalizeConnectAppsTab, isProvidersLink, CONNECT_APPS_TABS, SCOPELESS_TABS, connectAppsTabLabel } from "./ConnectAppsView";
 import { HarnessConnectorGroups, connectorGroups, noticeAction } from "./HarnessConnectorGroups";
 import { AccountsView } from "./AccountsView";
 import { SourcesView } from "./SourcesView";
@@ -51,9 +51,9 @@ beforeEach(() => setLocale("en"));
 afterEach(() => setLocale("en"));
 
 describe("Plugins tabs", () => {
-  const shell = (tab: "installed" | "discover" | "pages" | "sources") => renderToStaticMarkup(createElement(ConnectAppsView, {
+  const shell = (tab: "installed" | "discover" | "bots" | "pages" | "sources") => renderToStaticMarkup(createElement(ConnectAppsView, {
     tab, onTab: noop, refreshing: false, onRefresh: noop,
-    installed: createElement(InstalledView, props()), discover: "D", pages: "G", sources: "S",
+    installed: createElement(InstalledView, props()), discover: "D", bots: "B", pages: "G", sources: "S",
   }));
 
   it("no N connected button: its count sits on Installed, providers included (2026-10-28)", () => {
@@ -72,25 +72,37 @@ describe("Plugins tabs", () => {
     expect(html).not.toMatch(/data-plugins-tab="discover"[^>]*>[\s\S]*?data-plugins-tab-count[\s\S]*?data-plugins-tab="installed"/);
   });
 
-  it("has three tabs on the Plugins page itself, Installed first, and no Advanced zone (#2104)", () => {
+  it("has five visible tabs on the first screen, Installed first, Bots and Pages among them, and no Advanced zone (#2104, JC's review)", () => {
     const html = shell("installed");
     expect(html).toMatch(/id="plugins-title"[^>]*>Plugins</);
     const tabs = [...html.matchAll(/role="tab"[^>]*data-plugins-tab="([a-z]+)"[^>]*><span data-plugins-tab-label="[^"]*">([^<]+)</g)].map((match) => [match[1], match[2]]);
-    expect(tabs).toEqual([["installed", "Installed"], ["discover", "Discover"], ["sources", "Sources"]]);
+    expect(tabs).toEqual([["installed", "Installed"], ["discover", "Discover"], ["bots", "Bots"], ["pages", "Pages"], ["sources", "Sources"]]);
+    // every tab is a real button a click reaches, none hidden or disabled
+    expect(html.match(/<button[^>]*role="tab"/g)).toHaveLength(5);
+    expect(html).not.toMatch(/role="tab"[^>]*disabled/);
+    // the chosen tab is a discreet filled pill, not an underline (reference 2.8)
+    expect(html).toMatch(/aria-selected="true"[^>]*class="[^"]*rounded-full[^"]*bg-hover/);
+    expect(html).not.toContain("border-b-2");
     expect(html).not.toContain("data-plugins-advanced");
     expect(html).not.toContain("Advanced");
   });
 
-  it("Bots and Pages open alone: their own title, no tab row, no scope (#2104)", () => {
-    for (const [tab, title] of [["bots", "Bots"], ["pages", "Pages"]] as const) {
+  it("Bots and Pages are tabs: the title and the tab row stay, the install scope keeps its room but is hidden there, the one search stays (#2104, JC's review)", () => {
+    for (const tab of ["bots", "pages"] as const) {
       const html = renderToStaticMarkup(createElement(ConnectAppsView, {
         tab, onTab: noop, refreshing: false, onRefresh: noop, scope: createElement("div", { "data-test-scope": "" }),
+        scopeNote: createElement("p", { "data-test-scope-note": "" }), search: createElement("input", { "data-plugins-search": "" }),
         bots: "BOTS", pages: "PAGES",
       }));
-      expect(html).toMatch(new RegExp(`id="plugins-title"[^>]*>${title}<`));
-      expect(html).toContain(`data-plugins-standalone="${tab}"`);
-      expect(html).not.toContain('role="tablist"');
-      expect(html).not.toContain("data-test-scope");
+      expect(html).toMatch(/id="plugins-title"[^>]*>Plugins</);
+      expect(html).toContain('role="tablist"');
+      expect(html).toMatch(new RegExp(`aria-selected="true"[^>]*data-plugins-tab="${tab}"`));
+      expect(html).not.toContain("data-plugins-standalone");
+      expect(html).not.toContain("data-apps-back");
+      // hidden by visibility (out of the tab order), its room kept so the tab row never jumps
+      expect(html).toMatch(/class="shrink-0 invisible"[^>]*data-plugins-scope-slot="true"[^>]*data-plugins-scope-off=""[^>]*><div data-test-scope/);
+      expect(html).toMatch(/class="invisible"[^>]*data-plugins-scope-off=""[^>]*><p data-test-scope-note/);
+      expect(html).toContain("data-plugins-search-slot");
       expect(html).toContain(tab === "bots" ? "BOTS" : "PAGES");
     }
   });
@@ -148,7 +160,7 @@ describe("Plugins tabs", () => {
   });
 
   it("says nothing about an administrator to a member", () => {
-    for (const tab of ["installed", "discover", "pages", "sources"] as const) {
+    for (const tab of ["installed", "discover", "bots", "pages", "sources"] as const) {
       expect(shell(tab)).not.toMatch(/administrator|admin/i);
     }
   });
@@ -203,7 +215,7 @@ describe("the \"...\" menu of an entry", () => {
     click(host.querySelector("[data-entry-menu]"));
     expect([...host.querySelectorAll("[data-entry-action]")].map((node) => node.textContent)).toEqual(["Mettre à jour", "Pour quels bots", "Retirer"]);
     flushSync(() => root.render(createElement(ConnectAppsView, { tab: "installed", onTab: noop, counts: { installed: 2 }, refreshing: false, onRefresh: noop })));
-    expect([...host.querySelectorAll('[role="tab"]')].map((node) => node.textContent)).toEqual(["Installés2", "Découvrir", "Sources"]);
+    expect([...host.querySelectorAll('[role="tab"]')].map((node) => node.textContent)).toEqual(["Installés2", "Découvrir", "Bots", "Pages", "Sources"]);
     expect(host.querySelector('[data-plugins-tab="installed"]')?.getAttribute("aria-label")).toBe("Installés, 2 connectés");
   });
 });
@@ -359,8 +371,8 @@ describe("Engine accounts and Sources: one list, GitHub nowhere in the accounts"
 
 describe("Plugins (once Capabilities), the engine accounts (once Providers) and Pages: names and old links", () => {
   it("the window is Plugins, in both languages; Pages keeps its name", () => {
-    expect(CONNECT_APPS_TABS).toEqual(["installed", "discover", "sources"]);
-    expect(STANDALONE_PANES).toEqual(["bots", "pages"]);
+    expect(CONNECT_APPS_TABS).toEqual(["installed", "discover", "bots", "pages", "sources"]);
+    expect(SCOPELESS_TABS).toEqual(["bots", "pages"]);
     expect(t("connectApps.title")).toBe("Plugins");
     expect(connectAppsTabLabel("pages")).toBe("Pages");
     setLocale("fr");
@@ -372,13 +384,13 @@ describe("Plugins (once Capabilities), the engine accounts (once Providers) and 
     }
   });
 
-  it("the old Providers and My accounts links lead to Installed, on its accounts section; Bots and Pages open alone; the rest stay", () => {
+  it("the old Providers and My accounts links lead to Installed, on its accounts section; Bots and Pages are tabs; the rest stay", () => {
     expect(normalizeConnectAppsTab("accounts")).toBe("installed");
     expect(normalizeConnectAppsTab("providers")).toBe("installed");
     expect(isProvidersLink("providers")).toBe(true);
     expect(isProvidersLink("accounts")).toBe(true);
     expect(isProvidersLink("installed")).toBe(false);
-    for (const tab of [...CONNECT_APPS_TABS, ...STANDALONE_PANES]) expect(normalizeConnectAppsTab(tab)).toBe(tab);
+    for (const tab of CONNECT_APPS_TABS) expect(normalizeConnectAppsTab(tab)).toBe(tab);
     expect(normalizeConnectAppsTab("nope")).toBeNull();
     expect(normalizeConnectAppsTab(null)).toBeNull();
   });

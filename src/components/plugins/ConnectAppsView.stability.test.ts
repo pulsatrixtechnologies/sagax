@@ -76,7 +76,7 @@ describe("the scope bar on every tab", () => {
 
 describe("the header and the tab row", () => {
   it("Installed first, then Discover and Sources (#2104); no N connected button", () => {
-    expect(CONNECT_APPS_TABS).toEqual(["installed", "discover", "sources"]);
+    expect(CONNECT_APPS_TABS).toEqual(["installed", "discover", "bots", "pages", "sources"]);
     const html = view("installed", { counts: { installed: 6 } });
     expect(html).not.toContain("data-plugins-connected");
     expect(html).toMatch(/<header[^>]*><h2 id="plugins-title"[^>]*>Plugins<\/h2><div class="[^"]*" data-plugins-scope-row="true"><div class="shrink-0" data-plugins-scope-slot/);

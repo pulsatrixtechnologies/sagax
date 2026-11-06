@@ -3,12 +3,12 @@
  * Headless screenshots of Plugins (Playwright, no window): the real panel in
  * the gallery (src/gallery/connect-apps.html?view=manage, a stand-in /api
  * shaped like an organization member's, or an admin's with --role admin).
- * #2104 (2026-11-05): three tabs, Installed first (where a person lands),
- * Discover, Sources; the one "+ Add" menu; the "..." menu of an entry and its
- * "For which bots"; a plugin's page; the bot's scope on every tab (the tab row
- * must not move, checked here); Bots and Pages opened alone from a link
- * (?page=bots|pages), with their back arrow; for an admin, Settings >
- * Organization too; and a Settings sub-page in the same window size to compare.
+ * #2104 (2026-11-05, JC's review): five visible tabs, Installed first (where a
+ * person lands), Discover, Bots, Pages, Sources; the one "+ Add" menu; the "..."
+ * menu of an entry and its "For which bots"; a plugin's page; the bot's scope on
+ * every tab (the tab row must not move, checked here); a deep link to Bots or
+ * Pages (?page=bots|pages) selects that tab, the tab row stays; for an admin,
+ * Settings > Organization too; and a Settings sub-page in the same window size.
  * Usage: node scripts/capture/connect-apps-manage.mjs [--out DIR] [--port N]
  *   [--lang fr] [--skin pulsatrix] [--scheme dark|light] [--role member|admin]
  */
@@ -59,8 +59,8 @@ try {
   const query = `skin=${skin}&lang=${lang}&role=${role}`;
   await page.goto(`${base}?view=manage&${query}`, { waitUntil: "networkidle" });
   await page.waitForSelector("[data-plugins-manage]", { timeout: 30_000 });
-  // #2104: Installed first and where the page opens; three tabs; no "N connected" button
-  const TABS = ["installed", "discover", "sources"];
+  // #2104: Installed first and where the page opens; five tabs; no "N connected" button
+  const TABS = ["installed", "discover", "bots", "pages", "sources"];
   const order = await page.locator("[data-plugins-tab]").evaluateAll((tabs) => tabs.map((tab) => tab.getAttribute("data-plugins-tab")));
   if (order.join(",") !== TABS.join(",")) throw new Error(`tab order: ${order.join(",")}`);
   if (await page.locator('[data-plugins-tab="installed"][aria-selected="true"]').count() !== 1) throw new Error("Plugins did not open on Installed");
@@ -182,16 +182,14 @@ try {
     await shot("9b-bot-detail-code-review");
     await page.click('[data-plugins-scope-option="me"]').catch(() => undefined);
   }
-  // Bots and Pages opened alone from a link (#2104): own title, back arrow, no tabs, no scope
+  // a deep link to Bots or Pages (#2104, JC's review): the tab is selected, the tab row stays, no back arrow
   for (const pane of ["bots", "pages"]) {
     await page.goto(`${base}?view=manage&page=${pane}&${query}`, { waitUntil: "networkidle" });
-    await page.waitForSelector(`[data-plugins-standalone="${pane}"]`, { timeout: 30_000 });
-    if (await page.locator("[data-plugins-manage-tabs]").count()) throw new Error(`${pane} alone shows the tab row`);
-    if (await page.locator("[data-plugins-scope]").count()) throw new Error(`${pane} alone shows the scope`);
-    await once("[data-apps-back]", `${pane} back arrow`);
-    await shot(`11-${pane}-alone`);
-    await page.click("[data-apps-back]");
-    await page.waitForSelector('[data-plugins-manage="installed"]');
+    await page.waitForSelector(`[data-plugins-tab="${pane}"][aria-selected="true"]`, { timeout: 30_000 });
+    await once("[data-plugins-manage-tabs]", `${pane} tab row`);
+    if ((await page.locator("[data-plugins-tab]").count()) !== TABS.length) throw new Error(`${pane} deep link hides tabs`);
+    if (await page.locator("[data-apps-back]").count()) throw new Error(`${pane} shows a back arrow`);
+    await shot(`11-${pane}-tab`);
   }
   await page.goto(`${base}?view=settings-subpage&${query}`, { waitUntil: "networkidle" });
   await page.waitForSelector("[data-settings-subpage]");

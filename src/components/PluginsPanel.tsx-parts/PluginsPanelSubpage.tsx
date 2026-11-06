@@ -77,8 +77,8 @@ export function PluginsPanelSubpage({
   };
 
   // A page opened from a tab (2026-10-28): inside that tab's panel, under
-  // the title, scope and tabs. Browse Bots is the Bots pane, opened alone
-  // from its links (#2104).
+  // the title, scope and tabs. Browse Bots is the Bots tab, a pane of its
+  // own (#2104).
   if (page.page === "skill" && (pageSkill || !page.name)) {
     return (
       <SkillPage

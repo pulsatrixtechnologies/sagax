@@ -20,7 +20,7 @@ import {
   McpServerEditor,
 } from "../McpServersPanel";
 import { MyGithubSummary, MyMcpServers } from "../settings/MyConnectionsSettings";
-import { ConnectAppsView, connectAppsTabLabel, connectedCounts, STANDALONE_PANES, type ConnectAppsTab } from "../plugins/ConnectAppsView";
+import { ConnectAppsView, connectAppsTabLabel, connectedCounts, type ConnectAppsTab } from "../plugins/ConnectAppsView";
 import type { Crumb } from "../Breadcrumb";
 import { CATEGORY_MODAL } from "../category-modal";
 import { BotCatalogPane } from "../lazy-bot-catalog";
@@ -81,8 +81,8 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
   // does not apply there, so it shows turned off with the reason in the
   // note's place. Every line keeps its room on every tab (a bot-only notice
   // is kept invisible on Providers), so the tabs never move.
-  // the one install scope (this bot, me, organization), always live (#2104):
-  // Bots and Pages open alone and never show it
+  // the one install scope (this bot, me, organization), always live (#2104);
+  // the view leaves it out on Bots and Pages, which do not depend on it
   const scopeToggle = (
     <div data-plugins-scope-bar>
       <ScopeToggle scope={scope} botName={scopeBot?.name} organization={s.workspaceMarkets && s.mayManageOrganization} onScope={(next) => { setScopeChoice(next); setPanelError(null); }} describedBy="plugins-scope-note" />
@@ -277,8 +277,8 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
   const isOrgAdmin = perspicaxOrg?.viewerRole === "admin";
   const orgHere = isOrgAdmin && scope === "workspace" && perspicaxOrg !== null;
   // Sources: the GitHub connection row and the marketplaces (2026-10-29).
-  // Bots and Pages are not tabs any more (#2104): a link opens them alone.
-  const tabs: ConnectAppsTab[] = ["installed", "discover",
+  // Bots and Pages are visible tabs (#2104, JC's review): a link selects one.
+  const tabs: ConnectAppsTab[] = ["installed", "discover", "bots", "pages",
     ...(githubHere || marketRoute !== null || (marketSummaries?.length ?? 0) > 0 || orgHere ? ["sources" as const] : [])];
   const groups = connectorGroups({
     claude: harness.answer?.claude ? { available: harness.answer.claude.available, reason: harness.answer.claude.reason, connectors: harness.answer.claude.connectors ?? [], manageUrl: harness.answer.manageUrl } : null,
@@ -300,8 +300,6 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
         <ConnectAppsView
           tab={tab}
           onTab={chooseTab}
-          // Bots or Pages opened alone (#2104): a back arrow returns to Plugins
-          onBack={STANDALONE_PANES.includes(tab) && !tabs.includes(tab) ? () => chooseTab("installed") : undefined}
           page={subpage ?? undefined}
           tabs={tabs}
           // what "N connected" counted, on the tabs that list them (2026-10-28):

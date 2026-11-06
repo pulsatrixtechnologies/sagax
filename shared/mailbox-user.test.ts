@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  FOREIGN_MAILBOX_REFUSAL,
-  foreignMailboxRefusal,
+  MAILBOX_ACCESS_DENIED,
+  foreignMailboxAccessDenied,
   foreignMailboxUserId,
   isMailboxTool,
   mailboxToolArgs,
@@ -32,7 +32,9 @@ describe("foreignMailboxUserId (#1943 owner mailbox)", () => {
   });
 });
 
-describe("isMailboxTool / foreignMailboxRefusal", () => {
+const GRAPH_403 = "Managed MCP gateway tool call failed: Microsoft Graph API error: 403 Forbidden: {\"error\":{\"code\":\"ErrorAccessDenied\",\"message\":\"Access is denied. Check credentials and try again.\"}}";
+
+describe("isMailboxTool / foreignMailboxAccessDenied", () => {
   it("recognizes Outlook, Gmail and Microsoft 365 mail tools", () => {
     expect(isMailboxTool("outlook__list_messages")).toBe(true);
     expect(isMailboxTool("mcp__outlook__get_message")).toBe(true);
@@ -42,15 +44,15 @@ describe("isMailboxTool / foreignMailboxRefusal", () => {
     expect(isMailboxTool("sharepoint__get_file")).toBe(false);
   });
 
-  it("refuses another mailbox on a mail tool or an account connector, and keeps the owner's /me", () => {
-    expect(foreignMailboxRefusal("outlook__list_messages", { userId: "ceo@example.com" })).toEqual({ userId: "ceo@example.com" });
-    expect(foreignMailboxRefusal("outlook__list_messages", { userId: "me" })).toBeNull();
-    expect(foreignMailboxRefusal("outlook__list_messages", {})).toBeNull();
-    expect(foreignMailboxRefusal("agents__list_bots", { userId: "ceo@example.com" })).toBeNull();
-    expect(foreignMailboxRefusal("agents__list_bots", { userId: "ceo@example.com" }, { accountConnector: true }))
-      .toEqual({ userId: "ceo@example.com" });
-    expect(FOREIGN_MAILBOX_REFUSAL).toContain("/me");
-    expect(FOREIGN_MAILBOX_REFUSAL).toMatch(/userId/);
-    expect(FOREIGN_MAILBOX_REFUSAL).not.toMatch(/[–—]/);
+  it("maps a vendor 403 on another mailbox to the /me retry, and leaves the owner's mail and other errors alone", () => {
+    expect(foreignMailboxAccessDenied("outlook__list_messages", { userId: "ceo@example.com" }, GRAPH_403)).toBe(MAILBOX_ACCESS_DENIED);
+    expect(foreignMailboxAccessDenied("outlook__list_messages", { user_id: "cryptic@bots.example.org" }, { status: 403, error: { code: "ErrorAccessDenied" } })).toBe(MAILBOX_ACCESS_DENIED);
+    expect(foreignMailboxAccessDenied("mcp__claude_ai_Microsoft_365__outlook_email_search", JSON.stringify({ userId: "owner@contoso.com" }), { content: [{ type: "text", text: GRAPH_403 }], isError: true })).toBe(MAILBOX_ACCESS_DENIED);
+    expect(foreignMailboxAccessDenied("outlook__list_messages", { userId: "me" }, GRAPH_403)).toBeNull();
+    expect(foreignMailboxAccessDenied("outlook__list_messages", {}, { status: 403 })).toBeNull();
+    expect(foreignMailboxAccessDenied("outlook__list_messages", { userId: "ceo@example.com" }, "Microsoft Graph API error: 404 Not Found")).toBeNull();
+    expect(foreignMailboxAccessDenied("agents__list_bots", { userId: "ceo@example.com" }, { status: 403 })).toBeNull();
+    expect(MAILBOX_ACCESS_DENIED).toBe("Access denied for that mailbox; for your own mail retry with /me");
+    expect(MAILBOX_ACCESS_DENIED).not.toMatch(/[–—]/);
   });
 });

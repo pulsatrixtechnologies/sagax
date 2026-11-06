@@ -2,10 +2,11 @@
 //
 // Delegated Graph tokens (Mail.Read without .All) open the signed-in person's
 // own mailbox through /me. Passing userId / user_id as another UPN, or as the
-// bot's inbound address, makes Graph answer 403. Send already refuses another
-// mailbox on the one-shot draft pass (shared/email-draft-send.ts); reads did
-// not. The primary bot acts on the owner's own mailbox with the owner's
-// credentials: omit those fields (or pass "me") so the call stays on /me.
+// bot's inbound address, makes Graph answer 403. The call still goes through:
+// Full access, Ask and Deny decide it like any other tool. When the vendor
+// answers 403 on that other mailbox, the engine hears one retry sentence.
+// The connector prompt tells the bot to omit those fields (or pass "me") for
+// the person's own mail.
 
 /** Values that mean the signed-in person's own mailbox (Graph /me). */
 const OWN = new Set(["", "me"]);
@@ -64,20 +65,52 @@ export function isMailboxTool(name: string | undefined): boolean {
   return false;
 }
 
-/** Whether a permission ask must be refused so the bot retries on /me with
- * the owner's own credentials (#1943). Account-connector reads and any mail
- * tool that names another mailbox. */
-export function foreignMailboxRefusal(
-  tool: string | undefined,
-  input: unknown,
-  opts?: { accountConnector?: boolean },
-): { userId: string } | null {
-  const userId = foreignMailboxUserId(input);
-  if (!userId) return null;
-  if (opts?.accountConnector || isMailboxTool(tool)) return { userId };
-  return null;
+/** What the engine reads when a mail call named another mailbox and the
+ * vendor answered 403. No pre-emptive refusal: the call runs, and only this
+ * answer is rewritten. */
+export const MAILBOX_ACCESS_DENIED =
+  "Access denied for that mailbox; for your own mail retry with /me";
+
+const STATUS_KEYS = ["status", "statusCode", "httpStatus", "httpStatusCode"] as const;
+
+/** A vendor failure is HTTP 403 (a status field, Graph ErrorAccessDenied, or
+ * the words "403 Forbidden"). A bare number is not enough: an id or a count
+ * can be 403. */
+function isVendorForbidden(value: unknown, depth = 0): boolean {
+  if (depth > 6 || value == null || typeof value === "number" || typeof value === "boolean") return false;
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (text === "403") return true;
+    if (/\b403\b/.test(text) && /forbidden|access is denied|erroraccessdenied|graph api error/i.test(text)) return true;
+    if ((text.startsWith("{") || text.startsWith("[")) && text.length < 20_000) {
+      try {
+        return isVendorForbidden(JSON.parse(text), depth + 1);
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+  if (Array.isArray(value)) return value.slice(0, 16).some((item) => isVendorForbidden(item, depth + 1));
+  if (typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  for (const key of STATUS_KEYS) {
+    const status = record[key];
+    if (status === 403 || status === "403") return true;
+  }
+  const code = record.code ?? record.errorCode ?? record.error_code;
+  if (code === "ErrorAccessDenied") return true;
+  if (typeof record.text === "string" && isVendorForbidden(record.text, depth + 1)) return true;
+  for (const nested of [record.error, record.message, record.content, record.output, record.body, record.result, record.structuredContent, record.data]) {
+    if (nested !== undefined && isVendorForbidden(nested, depth + 1)) return true;
+  }
+  return false;
 }
 
-/** What the engine hears when Sagax refuses a foreign-mailbox call. */
-export const FOREIGN_MAILBOX_REFUSAL =
-  "This call targeted another mailbox through userId. The person's own mail uses their own credentials under /me: omit userId and user_id (or pass \"me\"), then try again.";
+/** The retry sentence when this mail call named another mailbox and the
+ * vendor answered 403. Null for the owner's own /me, for any other status,
+ * and for a tool that is not mail: those keep the vendor's own words. */
+export function foreignMailboxAccessDenied(tool: string | undefined, input: unknown, vendor: unknown): string | null {
+  if (!foreignMailboxUserId(input) || !isMailboxTool(tool) || !isVendorForbidden(vendor)) return null;
+  return MAILBOX_ACCESS_DENIED;
+}

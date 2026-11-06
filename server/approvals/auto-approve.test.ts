@@ -53,15 +53,20 @@ describe("autoVerdict", () => {
     }
   });
 
-  it("#1943 refuses another mailbox on the owner's own connector, even under Full access", () => {
-    for (const mode of ["ask", "edits", "auto", "custom", "full"] as const) {
-      expect(autoVerdict(mode, "other", {
-        toolName: "outlook__list_messages",
-        connectorRead: true,
-        foreignMailbox: true,
-      })).toEqual({ approve: null, source: "foreign-mailbox" });
-      expect(autoVerdict(mode, "outlook__list_messages", { foreignMailbox: true }).source).toBe("foreign-mailbox");
-    }
+  it("#1943 a delegated mailbox call goes through under Full access and follows Ask/Deny like any tool", () => {
+    expect(autoVerdict("full", "outlook__list_messages", {
+      toolName: "outlook__list_messages",
+      connectorRead: true,
+    }).source).toBe("connector-read");
+    expect(autoVerdict("full", "outlook__list_messages").source).toBe("full-access");
+    expect(autoVerdict("full", "outlook__list_messages", {
+      connectorRead: true,
+      customRule: { behavior: "ask", id: "r" },
+    })).toEqual({ approve: null, source: "custom-rule-ask" });
+    expect(autoVerdict("full", "outlook__list_messages", {
+      customRule: { behavior: "deny", id: "r" },
+    })).toEqual({ approve: null, source: "custom-rule-deny" });
+    expect(autoVerdict("ask", "outlook__list_messages").source).toBe("no-grant");
   });
 
   it("forces a draft card for unrequested mail sends and lets person-asked mail follow the level", () => {

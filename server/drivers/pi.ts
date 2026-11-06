@@ -31,6 +31,7 @@ import { applyEngineCommandVariables } from "../vault/credential-command-env.ts"
 import { openStartupModelCatalog, writeStartupModelCache } from "../models/startup-model-catalog.ts";
 import { augmentedPath } from "../env-path.ts";
 import { describeSpawnFailure, execCli, killCliTree, spawnCli } from "../procs.ts";
+import { foreignMailboxAccessDenied } from "../../shared/mailbox-user.ts";
 import { SEARCH_CALL_TOOL, searchedToolCall } from "../../shared/searched-tool-call.ts";
 import { PERSPICAX_TOKEN_ENV, warmCommsEnv, warmPerspicaxEnv, withoutTurnTokens } from "./spawn-contract.ts";
 import { MiB, warmResourcePerson, warmResourceTokenThread, warmResources, type WarmResourceLease } from "../resources/warm-resources.ts";
@@ -1382,6 +1383,7 @@ export const PiDriver: ProviderDriver<PiConfig> = {
       let assistantText = "";
       // a tool's resolved name between its start and its end (gateway calls)
       const toolNames = new Map<string, string>();
+      const toolArgs = new Map<string, unknown>();
       const mcpServerNames = Object.keys(mcpServers ?? {});
       const searchedServers = piSearchedServers(mcpServers);
       // set when a compaction event arrives this turn; gates the receipt
@@ -1588,6 +1590,7 @@ export const PiDriver: ProviderDriver<PiConfig> = {
             const toolName = gateway?.kind === "tool" ? gateway.id : typeof evt.toolName === "string" ? evt.toolName : undefined;
             const args = gateway?.kind === "tool" ? gateway.args : evt.args;
             if (typeof evt.toolCallId === "string" && toolName) toolNames.set(evt.toolCallId, toolName);
+            if (typeof evt.toolCallId === "string") toolArgs.set(evt.toolCallId, args);
             emit({
               ...base(threadId, turnId),
               type: "item.started",
@@ -1603,15 +1606,21 @@ export const PiDriver: ProviderDriver<PiConfig> = {
           case "tool_execution_end": {
             const toolName = (typeof evt.toolCallId === "string" ? toolNames.get(evt.toolCallId) : undefined)
               ?? (typeof evt.toolName === "string" ? evt.toolName : undefined);
-            if (typeof evt.toolCallId === "string") toolNames.delete(evt.toolCallId);
+            const args = typeof evt.toolCallId === "string" ? toolArgs.get(evt.toolCallId) : evt.args;
+            if (typeof evt.toolCallId === "string") {
+              toolNames.delete(evt.toolCallId);
+              toolArgs.delete(evt.toolCallId);
+            }
+            const vendorDenied = evt.isError ? foreignMailboxAccessDenied(toolName, args, evt.result) : null;
             emit({
               ...base(threadId, turnId),
               type: "item.completed",
               itemType: "tool",
               itemId: evt.toolCallId,
               ok: !evt.isError,
-              // a failed call's own words (shared/tool-failure-text.ts)
-              output: evt.isError ? toolFailurePreview(evt.result) : toolDetailPreview(evt.result),
+              // a failed call's own words (shared/tool-failure-text.ts).
+              // #1943: a 403 on another mailbox is the retry sentence.
+              output: vendorDenied ?? (evt.isError ? toolFailurePreview(evt.result) : toolDetailPreview(evt.result)),
               ...(evt.isError ? {} : cwToolResult(toolName, evt.result)),
             });
             return;

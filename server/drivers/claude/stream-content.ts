@@ -8,6 +8,7 @@ import {
   isArtifactTool,
   parseArtifactPublish,
 } from "../../../shared/claude-chat-blocks.ts";
+import { foreignMailboxAccessDenied } from "../../../shared/mailbox-user.ts";
 import { isPhoneToolCallName, PHONE_TOOL_OUTPUT_NOT_KEPT } from "../../../shared/phone-tools.ts";
 import { searchedToolCall } from "../../../shared/searched-tool-call.ts";
 import { pushRenewalStep } from "../../context/context-renewal.ts";
@@ -196,7 +197,10 @@ case "assistant": {
     if (b.type === "tool_use") {
       // #1276: a call_tool on a searched server reads as the tool it runs
       const runs = typeof b.name === "string" ? searchedToolCall(b.name, b.input, session.searchedMounts) : { name: b.name, input: b.input };
-      if (typeof b.id === "string" && typeof runs.name === "string") session.toolNames.set(b.id, runs.name);
+      if (typeof b.id === "string" && typeof runs.name === "string") {
+        session.toolNames.set(b.id, runs.name);
+        (session.toolInputs ??= new Map()).set(b.id, runs.input);
+      }
       // the artifact an Artifact* call names, for a wrong-account card
       if (typeof b.id === "string" && isArtifactFamilyTool(runs.name) && runs.input && typeof runs.input === "object") {
         const url = claudeArtifactUrl(String((runs.input as { url?: unknown }).url ?? ""));
@@ -249,15 +253,23 @@ case "user": {
   for (const b of Array.isArray(o.message?.content) ? o.message.content : []) {
     if (b.type === "tool_result") {
       const toolName = typeof b.tool_use_id === "string" ? session.toolNames.get(b.tool_use_id) : undefined;
+      const toolInput = typeof b.tool_use_id === "string" ? session.toolInputs?.get(b.tool_use_id) : undefined;
+      if (typeof b.tool_use_id === "string") session.toolInputs?.delete(b.tool_use_id);
       const step = session.turn?.steps?.find((entry) => entry.id === b.tool_use_id);
       // a failed call's own words, not its content envelope (shared/tool-failure-text.ts)
       // 2026-11-05: a failure whose content block is empty may still carry
       // its words in the message's own `tool_use_result` (Claude Code puts
       // a native tool's structured error there); with none at all, the card
       // says what is known instead of "returned no error message".
-      const preview = b.is_error
-        ? toolFailurePreview(b.content) ?? toolFailurePreview(o.tool_use_result ?? o.toolUseResult) ?? emptyFailureNote(toolName)
-        : toolDetailPreview(b.content);
+      // #1943: a 403 on another mailbox is the retry sentence, not Graph's
+      // own text. The owner's /me keeps whatever the vendor said.
+      const vendorDenied = b.is_error
+        ? foreignMailboxAccessDenied(toolName, toolInput, b.content) ?? foreignMailboxAccessDenied(toolName, toolInput, o.tool_use_result ?? o.toolUseResult)
+        : null;
+      const preview = vendorDenied
+        ?? (b.is_error
+          ? toolFailurePreview(b.content) ?? toolFailurePreview(o.tool_use_result ?? o.toolUseResult) ?? emptyFailureNote(toolName)
+          : toolDetailPreview(b.content));
       if (step) {
         step.ok = !b.is_error;
         if (!isPhoneToolCallName(toolName)) step.output = preview?.slice(0, 400);

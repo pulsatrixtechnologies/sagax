@@ -62,6 +62,26 @@ function frames(toolName: string, input: Record<string, unknown>, result: Record
   return events;
 }
 
+describe("#1943 vendor 403 on another mailbox", () => {
+  const graph = "Managed MCP gateway tool call failed: Microsoft Graph API error: 403 Forbidden: {\"error\":{\"code\":\"ErrorAccessDenied\",\"message\":\"Access is denied.\"}}";
+
+  it("returns the /me retry when the vendor answers 403", () => {
+    const events = frames("mcp__claude_ai_Microsoft_365__outlook_email_search", { userId: "ceo@example.com", query: "invoice" }, {
+      message: { content: [{ type: "tool_result", tool_use_id: "toolu_9", is_error: true, content: graph }] },
+    });
+    const done = events.find((event) => event.itemType === "tool" && event.ok === false);
+    expect(done.output).toBe("Access denied for that mailbox; for your own mail retry with /me");
+  });
+
+  it("keeps the vendor's words for the owner's own /me", () => {
+    const events = frames("outlook__list_messages", { userId: "me" }, {
+      message: { content: [{ type: "tool_result", tool_use_id: "toolu_9", is_error: true, content: graph }] },
+    });
+    const done = events.find((event) => event.itemType === "tool" && event.ok === false);
+    expect(done.output).toBe(graph);
+  });
+});
+
 describe("#2018 claude.ai artifacts", () => {
   it("turns the other-account refusal into an artifact consent fence", () => {
     const refusal = "Claude couldn't check who made this artifact. Let Claude read it?";

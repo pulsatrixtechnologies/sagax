@@ -14,6 +14,7 @@
 import { Type, type TObjectOptions, type TSchema, type TSchemaOptions } from "typebox";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
+import { foreignMailboxAccessDenied } from "../../shared/mailbox-user.ts";
 import { allowsTool, canUseMcpServer, parseToolScope, type ToolIdentity } from "../../shared/tool-scope.ts";
 import { CALL_TOOL, directoryCallTarget, isDirectoryTool } from "../mcp/mcp-directory.ts";
 import { REMOTE_MCP_STARTUP_MS } from "../mcp/mcp-http.ts";
@@ -891,9 +892,13 @@ export default async function (pi: PiExtensionApi): Promise<void> {
                   .filter((item): item is { type: "text"; text: string } => item.type === "text")
                   .map((item) => item.text)
                   .join("\n");
+                // #1943: a 403 on another mailbox is the retry sentence the model reads.
+                const callName = `mcp__${serverName}__${target ?? toolName}`;
+                const callInput = directoryTool && toolName === CALL_TOOL ? (params as { arguments?: unknown } | undefined)?.arguments : params;
+                const denied = foreignMailboxAccessDenied(callName, callInput, message);
                 // Pi marks a custom tool as failed only when execute throws;
                 // returning error-looking text incorrectly produces isError=false.
-                throw new Error(message || `MCP tool ${serverName}:${toolName} returned an error`);
+                throw new Error(denied ?? (message || `MCP tool ${serverName}:${toolName} returned an error`));
               }
               return { content: res.content, details: {} };
             },

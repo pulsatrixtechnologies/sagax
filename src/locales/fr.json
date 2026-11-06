@@ -12394,7 +12394,6 @@
   "routineRun.runAgain": "Relancer",
   "routineRun.continue": "Continuer dans la conversation",
   "routineRun.openRoutine": "Routine",
-  "routineRun.details": "Détails",
   "routineRun.back": "Retour",
   "routineDetail.runs": "Exécutions",
   "routineDetail.trigger": "Déclencheur",

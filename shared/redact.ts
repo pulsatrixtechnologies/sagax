@@ -26,6 +26,7 @@ const KEY_PREFIXES: RegExp[] = [
   /\bgsk_[A-Za-z0-9]{40,}/g, // groq
   /\bcsk-[A-Za-z0-9]{32,}/g, // cerebras
   /\bhf_[A-Za-z0-9]{30,}/g, // hugging face
+  /\bpypi-AgE[A-Za-z0-9_-]{82,}/g, // pypi and testpypi api tokens (macaroons)
   /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}/g, // github classic
   /\bgithub_pat_[A-Za-z0-9_]{20,}/g, // github fine-grained
   /\bxox[abposr]-[A-Za-z0-9-]{20,}/g, // slack
@@ -91,7 +92,7 @@ const URL_USERINFO = /(\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@'"]+:)([^\s/@'"«»]+)(@)/
 /** A key shape cut by a "…": what a title or a preview kept of a key once
  * it was shortened. Too short for KEY_PREFIXES, still part of the key.
  * Includes xapp-, glpat- family and whsec_ (Lot A0). */
-const CUT_KEY = /\b(?:om[dg]_|sk-|[sr]k_(?:live|test)_|xai-|gsk_|csk-|hf_|gh[pousr]_|github_pat_|xox[abposr]-|xapp-|gl(?:pat|dt|rtr?)-|A[KS]IA|AIza|npm_|whsec_|eyJ)[A-Za-z0-9_.-]*(?=…)/g;
+const CUT_KEY = /\b(?:om[dg]_|sk-|[sr]k_(?:live|test)_|xai-|gsk_|csk-|hf_|pypi-AgE|gh[pousr]_|github_pat_|xox[abposr]-|xapp-|gl(?:pat|dt|rtr?)-|A[KS]IA|AIza|npm_|whsec_|eyJ)[A-Za-z0-9_.-]*(?=…)/g;
 
 /** Mask the start of a key left in front of an ellipsis by a cut made
  * before any redaction (an older automatic task title, say). */

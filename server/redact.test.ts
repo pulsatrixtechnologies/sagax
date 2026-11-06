@@ -163,6 +163,7 @@ describe("redactSecretsInText", () => {
       [`xai ${"xai-"}${alpha}`, /xai-/],
       [`groq ${"gsk_"}${alpha}ABCD`, /gsk_/],
       [`huggingface ${"hf_"}${alpha}`, /hf_/],
+      [`pypi ${"py" + "pi-"}AgEIcHlwaS5vcmcCJDAwMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMAACKlszLCJhYmNkZWYiXQAABiBy${alpha}`, /pypi-|AgEIcHlwaS5vcmc/],
       [`stripe ${"sk_" + "live_"}${alpha}`, /sk_live_[a-z]/],
       [`stripe test ${"sk_" + "test_"}${alpha}`, /sk_test_[a-z]/],
       [`stripe restricted ${"rk_" + "live_"}${alpha}`, /rk_live_[a-z]/],
@@ -344,6 +345,7 @@ describe("redactSecrets: webhook secrets and cut key starts (Lot A0)", () => {
 describe("holdsCredential (Lot A0 / upstream tip)", () => {
   it("knows a provider key or a private key block, never a name, a placeholder or code that reads one", () => {
     for (const text of [
+      `TWINE_PASSWORD: ${"py" + "pi-"}AgENdGVzdC5weXBpLm9yZwIkMDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAwAAIqWzMsImFiY2RlZiJdAAAGIA`,
       '{"apiKey": "sk-ant-api03-0123456789abcdefABCD"}',
       "GITHUB_TOKEN=ghp_0123456789abcdefghij0123",
       "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n",
@@ -361,6 +363,7 @@ describe("holdsCredential (Lot A0 / upstream tip)", () => {
       "Keep credentials out of the repo.",
       "-----BEGIN PUBLIC KEY-----",
       "GITLAB_TOKEN=glpat-your-token-here",
+      `release notes mention ${"py" + "pi-"}AgE${"x".repeat(60)}`,
     ]) expect(holdsCredential(text), text).toBe(false);
   });
 });

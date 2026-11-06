@@ -105,8 +105,8 @@ describe("Settings > Experimental", () => {
     expect(html).toContain('data-settings-group="experimental"');
     expect(html).toContain(">Experimental features</h3>");
     // skill authoring and the decision model are on
-    expect(html).toContain("· 2 of 7 on");
-    for (const feature of ["skillAuthoring", "browser", "decisionModel", "dataWindow", "meetingNotetaker", "devPods"]) {
+    expect(html).toContain("· 2 of 6 on");
+    for (const feature of ["skillAuthoring", "decisionModel", "dataWindow", "meetingNotetaker", "devPods"]) {
       expect(html, feature).toContain(`data-experimental-feature="${feature}"`);
     }
     expect(html).not.toContain("Early features may change");

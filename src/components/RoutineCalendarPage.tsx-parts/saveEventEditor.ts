@@ -177,7 +177,9 @@ export async function runEventEditorSave(ctx: EventEditorSaveCtx): Promise<void>
         body: JSON.stringify(input),
       });
       dispatch({ type: "routinePatched", routine: response.routine });
-      if (existingRoutine && onSavedRoutine) {
+      // An existing routine stays open; on the side panel's page a new one
+      // opens its own page (onSavedRoutine is only set for those).
+      if (onSavedRoutine) {
         onSavedRoutine(response.routine);
         return;
       }

@@ -70,14 +70,9 @@ export function ChatViewHeader({
           "content-topbar",
           // @container so the chips on the right can fold to icon bubbles
           // when the column is narrow (side panel open, small window)
-          // Grok-style: no bar. The header floats over the transcript, which
-          // scrolls under it; only the bot pill and the controls show.
-          // Pulsatrix Light overrides `position` to `relative` (see
-          // styles.css): a normal band, not a float, but still the
-          // containing block the centered pill below needs.
-          // bg-app + ChatEdgeFade: the transcript fades out under the pill
-          // instead of running sharp beneath it (JC 2026-11-06).
-          "@container/chathead absolute inset-x-0 top-0 z-[3] flex min-h-[52px] items-center justify-end bg-app px-5 py-2.5",
+          // Grok Bot: no band; the transcript scrolls under the pill and
+          // ChatEdgeFade softens it. Pulsatrix Light makes it `relative`.
+          "@container/chathead absolute inset-x-0 top-0 z-[3] flex min-h-[52px] items-center justify-end px-5 py-2.5",
           // Room for the drawer button, which overlays this corner below sm.
           "pl-11 sm:pl-5",
         )}

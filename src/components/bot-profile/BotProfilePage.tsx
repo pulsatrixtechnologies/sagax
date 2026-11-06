@@ -26,7 +26,7 @@
 // change says why (botSectionLock); nothing is hidden for lack of a
 // permission. The page itself carries no gear: the bot's settings live here
 // and in the right-hand bot panel.
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { BellRing, Brain, ChevronDown, ChevronRight, Cpu, LayoutDashboard, Lock, Mail, MessageCircle, Palette, Plug, Search, Star, Users } from "lucide-react";
 
 import { useStore, type Bot, type BotSettingsSection } from "@/state/store";
@@ -60,14 +60,20 @@ import {
 } from "@/lib/persona-sections";
 import { personaSharingSummary } from "@/lib/bot-sharing";
 import { MAUS_COLORS, swatchStyle } from "@/lib/mascot";
+import { avatarImageFrom, dragMayCarryImage } from "@/lib/avatar-input";
+import { useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
 import { mascotColorGroup, paletteSwatches } from "../../../shared/mascot-colors";
+import { botMascotSkin } from "../../../shared/mascot-skins";
+import { completeMascotLook } from "../../../shared/mascot-look";
 import type { MessagesSetupStatus } from "../../../shared/mac-messages-setup";
 import { BOT_PROFILE_LIMITS } from "../../../shared/bot-profile";
-import { WindowDragStrip, useCaptionChrome } from "../DesktopCapabilities";
+import { useCaptionChrome, useMacInsetChrome } from "../DesktopCapabilities";
 import { WindowCloseButton } from "../WindowCloseButton";
 import { AnchoredPopover, useAnchoredDismissRoot } from "../AnchoredPopover";
 import { PILL } from "../SettingsPrimitives";
-import { BotProfileAvatarCard } from "../BotProfileAvatarCard";
+import { useAvatarSources } from "../appearance/AvatarSources";
+import { MASCOT_HERO_BUTTON, MascotLookPreview } from "../floating-bots/MascotLookPreview";
+import { MascotHeroSlotContext, type MascotHeroSlot } from "../floating-bots/mascot-hero-slot";
 import { InlineEditableText } from "../bot-settings/InlineEditableText";
 import { BOT_SECTIONS } from "../bot-settings/sections";
 import { RulesSection } from "../bot-settings/RulesSection";
@@ -170,11 +176,15 @@ function Block({ id, locked, children }: { id: PersonaCategory; locked: boolean;
   );
 }
 
+// The character registry and its labels: fetched with the page's hero card,
+// the same chunk the Appearance pane's editor loads.
+const MascotLookEditor = lazy(() => import("../floating-bots/MascotLookEditor"));
+
 export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: BotSettingsSection; onClose: () => void }) {
   const { state, dispatch } = useStore();
   const advanced = useAdvancedMode();
   const rootRef = useRef<HTMLElement>(null);
-  const { noDragStyle, controlsShiftStyle } = useCaptionChrome();
+  const { noDragStyle, controlsShiftStyle, dragProps, dragStyle } = useCaptionChrome();
   const searchRef = useRef<HTMLInputElement>(null);
   const { available, slackUrl } = useBotSectionAvailability(bot.id);
   const viewerId = viewerActorId(state.config);
@@ -450,10 +460,115 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
   }, []);
 
   const privateBot = notShared;
-  // The banner is a wash of the mascot's colour (#2173): its hex goes to the
-  // stylesheet as a variable; a neutral mascot keeps a visible grey there.
+  // The banner is a wash of the mascot's colour (#2173, back after #2313):
+  // its hex goes to the stylesheet as a variable; a neutral mascot keeps a
+  // visible grey there. The top bar carries the wash's top colour so the
+  // bar and the banner read as one coloured header.
   const bannerColor = MAUS_COLORS[bot.color] ?? MAUS_COLORS.green;
   const bannerStyle = { "--bot-profile-banner-color": bannerColor } as CSSProperties;
+  const bannerPalette = mascotColorGroup(bot.color);
+
+  // The top bar (#2313): X and Private / Shared never scroll away, on the
+  // sidebar head's centre line with its circles' size. The sidebar's head
+  // is one 48px row in the title bar (macOS inset or the browser's dots, no
+  // logo, circles 24px down), else a 56px row (28px down), under the 36px
+  // inset strip when the logo shows on macOS or in a browser.
+  const { macInset, browser } = useMacInsetChrome();
+  const showLogo = useShowSidebarLogo();
+  const titleBarHead = (macInset || browser) && !showLogo;
+  const insetStrip = (macInset || browser) && showLogo;
+
+  // The header is the Appearance > Mascot hero card (#2313): the open
+  // mascot editor draws it into this slot (so a character picked in its
+  // grid previews here), the page draws it for the bot's own look while the
+  // editor is closed. A picture dropped on it or pasted becomes the bot's.
+  const [heroTarget, setHeroTarget] = useState<HTMLElement | null>(null);
+  const [heroClaimed, setHeroClaimed] = useState(false);
+  const claimHero = useCallback((claimed: boolean) => setHeroClaimed(claimed), []);
+  const heroSources = useAvatarSources(bot, derived.patch);
+  const [heroDropping, setHeroDropping] = useState(false);
+  const heroTitle = (
+    // The name alone on its line at 28px, the label under it, smaller and
+    // secondary (JC: never "Name · Label" on one line).
+    <h2 id="bot-profile-title" data-bot-profile-title="" className="flex min-w-0 max-w-full text-[28px] font-normal leading-9 text-ink">
+      <InlineEditableText
+        value={bot.name}
+        required
+        maxLength={BOT_PROFILE_LIMITS.name}
+        ariaLabel={t("botPanel.name.edit")}
+        onSave={canName ? (name) => derived.patch({ name }) : undefined}
+        className="min-w-0 text-[28px] font-normal leading-9 text-ink"
+      />
+    </h2>
+  );
+  const heroLabel = (bot.title?.trim() || canLabel) ? (
+    <div data-bot-profile-label="" className="flex min-w-0 max-w-full text-[15px] leading-5 text-ink-secondary">
+      <InlineEditableText
+        value={bot.title ?? ""}
+        maxLength={BOT_PROFILE_LIMITS.title}
+        placeholder={t("botPanel.label.add")}
+        ariaLabel={t("botPanel.label.edit")}
+        onSave={canLabel ? (title) => derived.patch({ title }) : undefined}
+        className="min-w-0 text-[15px] leading-5 text-ink-secondary"
+      />
+    </div>
+  ) : undefined;
+  // Where the hero's Randomize was: Appearance unfolds the sources, the
+  // tabs, the grid, Reset and Randomize under the header.
+  const appearanceButton = shown("appearance") ? (
+    <button
+      type="button"
+      data-bot-profile-appearance-toggle=""
+      aria-expanded={appearanceOpen}
+      aria-controls="bot-profile-appearance"
+      onClick={() => setAppearanceOpen((prev) => !prev)}
+      className={cn(MASCOT_HERO_BUTTON, appearanceOpen && "bg-raised-hover")}
+    >
+      <Palette size={13} aria-hidden="true" />
+      {t("botProfile.appearanceButton")}
+      {lockOf("appearance") !== null && <Lock size={11} aria-label={t("persona.lockedBadge")} className="shrink-0 text-ink-tertiary" />}
+      <ChevronDown size={13} aria-hidden="true" className={cn("transition-transform", appearanceOpen && "rotate-180")} />
+    </button>
+  ) : undefined;
+  const heroSlot: MascotHeroSlot = {
+    target: heroTarget,
+    claim: claimHero,
+    heading: heroTitle,
+    subheading: heroLabel,
+    action: appearanceButton,
+    state: derived.activeState,
+    motion: derived.mascotMotion,
+  };
+  const heroLook = completeMascotLook(bot.mascotLook);
+  const heroPicture = (bot.avatarCrop ?? "mascot") !== "mascot" && bot.avatarUrl ? bot : undefined;
+  // The hero before the editor's chunk arrives (and for a picture): the same
+  // card, without the character's summary and moves.
+  const staticHero = (
+    <MascotLookPreview
+      bot={bot}
+      shown={heroLook.character}
+      shownName=""
+      shownLook={heroLook}
+      shownLock={{ locked: false }}
+      summary={heroPicture ? t("appearance.pictureInUse") : ""}
+      tint={MAUS_COLORS[bot.color] ?? MAUS_COLORS.green}
+      owlSkin={botMascotSkin(bot.mascotSkin)}
+      previewSkin={null}
+      inUse
+      moves={[]}
+      owlMotion={null}
+      fxMove={null}
+      onUse={() => {}}
+      onPlay={() => {}}
+      onPlayNext={() => {}}
+      heading={heroTitle}
+      subheading={heroLabel}
+      action={appearanceButton}
+      picture={heroPicture}
+      liveState={derived.activeState}
+      liveMotion={derived.mascotMotion}
+    />
+  );
 
   // A tab's page: two columns of blocks on a wide window, one under 900px.
   // Knowledge stays mounted (hidden) so Rules and the Bot folder keep an
@@ -475,6 +590,7 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
   const column = (id: BotProfileTab, side: 0 | 1) => COLUMNS[id][side].map(block);
 
   return (
+    <MascotHeroSlotContext.Provider value={heroSlot}>
     <main
       ref={rootRef}
       tabIndex={-1}
@@ -491,65 +607,86 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
       }}
       className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col bg-app text-ink outline-none"
     >
-      <WindowDragStrip />
-      <div data-bot-profile-scroll="" className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-        {/* Banner in the mascot's colour, the close button and who sees it
-            on it, the mascot over its lower edge. */}
-        <div
-          data-bot-profile-banner=""
-          data-bot-profile-banner-palette={mascotColorGroup(bot.color)}
-          style={bannerStyle}
-          className="bot-profile-banner relative h-[145px] w-full shrink-0"
+      {/* The top bar (#2313): the close button and who sees the bot stay
+          put while the page scrolls, on an opaque bar, centred like the
+          sidebar head's search and + circles. */}
+      {insetStrip && <div aria-hidden="true" data-bot-profile-inset-strip="" className="content-topbar-strip h-9 shrink-0 bg-app" {...dragProps} />}
+      <div
+        data-bot-profile-topbar=""
+        data-bot-profile-banner-palette={bannerPalette}
+        {...dragProps}
+        style={{ ...dragStyle, ...bannerStyle, minHeight: 0 }}
+        className={cn("content-topbar bot-profile-banner-top relative z-10 flex shrink-0 items-center justify-between gap-2 px-3", titleBarHead ? "h-12" : "h-14")}
+      >
+        <WindowCloseButton onClose={onClose} place="relative max-sm:ml-11" />
+        <span
+          data-bot-profile-visibility={privateBot ? "private" : "shared"}
+          style={controlsShiftStyle ?? noDragStyle}
+          className={CIRCLE_LABEL}
         >
-          <WindowCloseButton onClose={onClose} />
-          <span
-            data-bot-profile-visibility={privateBot ? "private" : "shared"}
-            style={controlsShiftStyle ?? noDragStyle}
-            className={cn(CIRCLE_LABEL, "absolute right-3 top-3")}
-          >
-            {privateBot ? <Lock size={14} strokeWidth={1.75} aria-hidden="true" /> : <Users size={14} strokeWidth={1.75} aria-hidden="true" />}
-            {privateBot ? t("botProfile.private") : t("botProfile.shared")}
-          </span>
-        </div>
+          {privateBot ? <Lock size={14} strokeWidth={1.75} aria-hidden="true" /> : <Users size={14} strokeWidth={1.75} aria-hidden="true" />}
+          {privateBot ? t("botProfile.private") : t("botProfile.shared")}
+        </span>
+      </div>
+      <div data-bot-profile-scroll="" className="content-card-body min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+        {/* Banner in the mascot's colour under the bar, the hero card over its lower edge. */}
+        <div
+          aria-hidden="true"
+          data-bot-profile-banner=""
+          data-bot-profile-banner-palette={bannerPalette}
+          style={bannerStyle}
+          className="bot-profile-banner h-[96px] w-full shrink-0"
+        />
         {/* One centred column, 1100px wide at most, a 16px gutter on a phone. */}
         <div data-bot-profile-column="" className="mx-auto flex w-full max-w-[1100px] flex-col px-4 pb-10 sm:px-6">
-          {/* The header: the bot's appearance and identity, edited in place. */}
+          {/* The header: the mascot hero card with the bot's name and label,
+              then who sees it, its description and its colour, edited in place. */}
           <header data-bot-profile-header="" data-bot-profile-section="overview" data-persona-section="overview" data-open="" className="flex min-w-0 flex-col">
-            <div className="-mt-[40px] w-fit">
-              <BotProfileAvatarCard
-                bot={bot}
-                activeState={derived.activeState}
-                mascotMotion={derived.mascotMotion}
-                onPatch={derived.patch}
-                size={56}
-                onOpen={() => setAppearanceOpen((prev) => !prev)}
-              />
+            <div
+              data-bot-profile-hero=""
+              onDragOver={(event) => {
+                if (heroSources.busy || !dragMayCarryImage(event.dataTransfer)) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "copy";
+                setHeroDropping(true);
+              }}
+              onDragLeave={() => setHeroDropping(false)}
+              onDrop={(event) => {
+                setHeroDropping(false);
+                const file = avatarImageFrom(event.dataTransfer);
+                if (!file) return;
+                // preventDefault tells the chat's window drop target (ComposerAttachments) it is taken
+                event.preventDefault();
+                void heroSources.upload(file);
+              }}
+              onPaste={(event) => {
+                const file = avatarImageFrom(event.clipboardData);
+                if (!file) return;
+                // the chat's own drop and paste targets must not also take it
+                event.preventDefault();
+                event.stopPropagation();
+                void heroSources.upload(file);
+              }}
+              title={t("botPanel.avatar.dropOrPaste")}
+              data-avatar-dropping={heroDropping ? "" : undefined}
+              className={cn("@container relative -mt-[40px] rounded-[18px]", heroDropping && "ring-2 ring-accent")}
+            >
+              <div ref={setHeroTarget} data-bot-profile-hero-slot="" className={heroClaimed ? undefined : "hidden"} />
+              {!heroClaimed && (
+                heroPicture ? staticHero : (
+                  <Suspense fallback={staticHero}>
+                    <MascotLookEditor
+                      heroOnly
+                      bot={bot}
+                      onPatch={derived.patch}
+                      onOwlMove={(kind) => dispatch({ type: "playMascotMotion", botId: bot.id, kind })}
+                    />
+                  </Suspense>
+                )
+              )}
             </div>
-            {/* The name alone on its line, the label under it, smaller and
-                secondary (JC: never "Name · Label" on one line). */}
-            <h2 id="bot-profile-title" data-bot-profile-title="" className="mt-2 flex min-w-0 text-[28px] font-normal leading-9 text-ink">
-              <InlineEditableText
-                value={bot.name}
-                required
-                maxLength={BOT_PROFILE_LIMITS.name}
-                ariaLabel={t("botPanel.name.edit")}
-                onSave={canName ? (name) => derived.patch({ name }) : undefined}
-                className="min-w-0 text-[28px] font-normal leading-9 text-ink"
-              />
-            </h2>
-            {(bot.title?.trim() || canLabel) && (
-              <div data-bot-profile-label="" className="flex min-w-0 text-[15px] leading-5 text-ink-secondary">
-                <InlineEditableText
-                  value={bot.title ?? ""}
-                  maxLength={BOT_PROFILE_LIMITS.title}
-                  placeholder={t("botPanel.label.add")}
-                  ariaLabel={t("botPanel.label.edit")}
-                  onSave={canLabel ? (title) => derived.patch({ title }) : undefined}
-                  className="min-w-0 text-[15px] leading-5 text-ink-secondary"
-                />
-              </div>
-            )}
-            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13.5px] leading-5 text-ink-secondary">
+            {heroSources.error && <p role="alert" className="mt-1 text-[11.5px] text-danger">{heroSources.error}</p>}
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13.5px] leading-5 text-ink-secondary">
               <span data-bot-profile-audience="" className="inline-flex items-center gap-1.5">
                 <Lock size={13} aria-hidden="true" /> {audience}
               </span>
@@ -581,7 +718,7 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
                 {bot.description.trim() || <span className="text-ink-secondary">{t("persona.overview.noDescription")}</span>}
               </p>
             )}
-            {/* The colour dots and the Appearance pill that unfolds the rest. */}
+            {/* The colour dots; the hero's Appearance button unfolds the rest. */}
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
               {canColor && (
                 <div role="radiogroup" aria-label={t("mascot.color.title")} data-bot-profile-colors="" className="flex flex-wrap items-center gap-2">
@@ -602,21 +739,6 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
                     />
                   ))}
                 </div>
-              )}
-              {shown("appearance") && (
-                <button
-                  type="button"
-                  data-bot-profile-appearance-toggle=""
-                  aria-expanded={appearanceOpen}
-                  aria-controls="bot-profile-appearance"
-                  onClick={() => setAppearanceOpen((prev) => !prev)}
-                  className={cn(PILL, "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[13px] leading-5", appearanceOpen ? "bg-hover text-ink" : "text-ink-secondary hover:text-ink")}
-                >
-                  <Palette size={14} strokeWidth={1.5} aria-hidden="true" />
-                  {sectionLabel("appearance")}
-                  {lockOf("appearance") !== null && <Lock size={11} aria-label={t("persona.lockedBadge")} className="shrink-0 text-ink-tertiary" />}
-                  <ChevronDown size={13} aria-hidden="true" className={cn("transition-transform", appearanceOpen && "rotate-180")} />
-                </button>
               )}
             </div>
             {appearanceOpen && shown("appearance") && (
@@ -748,6 +870,7 @@ export function BotProfilePage({ bot, section, onClose }: { bot: Bot; section: B
       </div>
       {dialogs}
     </main>
+    </MascotHeroSlotContext.Provider>
   );
 }
 

@@ -185,11 +185,12 @@ describe("Settings > Models and voice", () => {
     expect(await page("voice")).toContain("Lire les réponses aux messages tapés");
   });
 
-  // 2026-10-14: Decision model is a card of this page while its experiment
-  // is on, no longer a menu entry of its own.
-  it("holds Decision model as a card while its experiment is on", async () => {
+  // 2026-10-14: Decision model is a card of this page, no longer a menu entry
+  // of its own. #2202: the experiment flag no longer gates it, the card is
+  // always there for someone who can edit the configuration.
+  it("holds Decision model as a card of Models, flag or not", async () => {
     let html = await page();
-    expect(html).not.toContain('data-settings-card="engines.decisionModel"');
+    expect(html).toContain('data-settings-card="engines.decisionModel"');
     fixture.config = baseConfig({ features: { decisionModel: true } });
     html = await page();
     expect(html).toContain('data-settings-card="engines.decisionModel"');

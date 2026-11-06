@@ -85,6 +85,7 @@ import type {
   EventKind,
   EventSeed,
   EventEditorProps,
+  RoutinePageSlots,
 } from "./RoutineCalendarPage.tsx-parts/types";
 import {
   routineEditorAt,
@@ -107,7 +108,9 @@ function routineConfigSignature(routine: Routine | undefined): string {
  * view mode (its settings read-only, [Pause or Resume] [Edit] [trash]); Edit
  * makes the same layout editable in place ([Cancel] [Save] [trash]); Cancel
  * and Save come back to the view. A new routine, a copy and a call open in
- * edit mode. No new layer: the same side panel. */
+ * edit mode. No new layer: the same side panel.
+ * 2026-11-06 (JC, one pane): the side panel's routine page (`page`) has no
+ * view mode: everything is editable in place, Save keeps the page open. */
 function EventEditor(props: EventEditorProps) {
   const { state } = useStore();
   const seedRoutine = props.seed.routine;
@@ -117,9 +120,30 @@ function EventEditor(props: EventEditorProps) {
   const readOnly = Boolean(live && (live.canEdit === false || live.redacted));
   const [mode, setMode] = useState<"view" | "edit">(canView && (readOnly || props.seed.mode !== "edit") ? "view" : "edit");
   const [generation, setGeneration] = useState(0);
+  const [dirty, setDirty] = useState(false);
+  const signature = routineConfigSignature(live);
+  // The page follows the server (Format with AI, another window) only while
+  // nothing is unsaved here; a change being typed is never wiped.
+  const kept = useRef(signature);
+  if (!dirty) kept.current = signature;
   const seed = live ? { ...props.seed, routine: live } : props.seed;
+  if (props.page && props.presentation === "panel") {
+    const pageMode = readOnly ? "view" : "edit";
+    return <EventEditorBody
+      key={`page:${generation}:${kept.current}`}
+      {...props}
+      seed={seed}
+      mode={pageMode}
+      onStartEdit={() => { /* the page is always editable */ }}
+      onDirtyChange={setDirty}
+      onCancelEdit={seedRoutine ? () => { setDirty(false); setGeneration((count) => count + 1); } : undefined}
+      onSavedRoutine={seedRoutine
+        ? (routine) => { setSaved(routine); setDirty(false); setGeneration((count) => count + 1); }
+        : props.page.onCreated}
+    />;
+  }
   const shown = canView ? (readOnly ? "view" : mode) : "edit";
-  const key = shown === "view" ? `view:${generation}:${routineConfigSignature(live)}` : `edit:${generation}`;
+  const key = shown === "view" ? `view:${generation}:${signature}` : `edit:${generation}`;
   return <EventEditorBody
     key={key}
     {...props}
@@ -1020,6 +1044,7 @@ export function RoutineEditor({
   onDeleted,
   onDuplicate,
   group,
+  page,
 }: {
   routine?: Routine;
   /** 2026-10-29: a new routine prefilled from this one (Duplicate). */
@@ -1044,10 +1069,12 @@ export function RoutineEditor({
   onDuplicate?: (routine: Routine) => void;
   /** A new routine from a group's panel: that group's team goal, led by `lead`. */
   group?: { id: string; leadBotId?: string };
+  /** 2026-11-06 (JC): the side panel's one routine page (see RoutinePageSlots). */
+  page?: RoutinePageSlots;
 }) {
   const source = routine ?? copyOf;
   const at = routineEditorAt(source);
-  return <EventEditor seed={{ kind: "routine", at, durationMinutes: source?.durationMinutes ?? 30, botIds: lockedBotId ? [lockedBotId] : source ? [source.botId] : group?.leadBotId ? [group.leadBotId] : [], routine, ...(copyOf && !routine ? { copyOf } : {}), ...(group && !source ? { groupId: group.id } : {}), ...(folder && !routine ? { folder } : {}), ...(mode ? { mode } : {}), ...(!manage ? { unmanaged: true } : {}) }} bots={bots} lockedBotId={lockedBotId} defaultRunOn={defaultRunOn} presentation={presentation} onClose={onClose} onDismiss={onDismiss} onDeleted={onDeleted} onDuplicate={onDuplicate} onSavedCall={() => {}} />;
+  return <EventEditor seed={{ kind: "routine", at, durationMinutes: source?.durationMinutes ?? 30, botIds: lockedBotId ? [lockedBotId] : source ? [source.botId] : group?.leadBotId ? [group.leadBotId] : [], routine, ...(copyOf && !routine ? { copyOf } : {}), ...(group && !source ? { groupId: group.id } : {}), ...(folder && !routine ? { folder } : {}), ...(mode ? { mode } : {}), ...(!manage ? { unmanaged: true } : {}) }} bots={bots} lockedBotId={lockedBotId} defaultRunOn={defaultRunOn} presentation={presentation} onClose={onClose} onDismiss={onDismiss} onDeleted={onDeleted} onDuplicate={onDuplicate} onSavedCall={() => {}} {...(page ? { page } : {})} />;
 }
 
 export const RoutinesPage = memo(function RoutinesPage(props: { onBack: () => void; onOpenRoom: (id: string) => void; embedded?: boolean; fill?: boolean }) {

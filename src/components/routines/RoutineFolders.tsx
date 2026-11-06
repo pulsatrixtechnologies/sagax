@@ -380,17 +380,53 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
           onDelete={() => { closeMenu(false); void removeFolder(menu.folder); }} />}
   </RoutineMenuPortal>;
 
+  const loose = groups[0]!;
+  const folderSection = (group: (typeof groups)[number]) => {
+    const folder = group.folder!;
+    const isCollapsed = collapsed.has(routineFolderKey(folder));
+    const index = folders.indexOf(folder);
+    const anyOn = group.routines.some((routine) => routine.enabled);
+    return <div key={folder} data-routine-folder-section={folder}
+      className={cn("flex flex-col rounded-lg", index > 0 || loose.routines.length > 0 ? "pt-1.5" : "", dropTarget === folder && "bg-hover/60 ring-1 ring-accent/50")}>
+      {renaming === folder ? (
+        <FolderNameInput initial={folder} label={t("routineFolders.renameLabel")} onCancel={() => setRenaming(null)} onSave={async (name) => {
+          const answer = await act({ action: "rename", botId: bot.id, from: folder, to: name });
+          if (answer) setRenaming(null);
+        }} />
+      ) : (
+        <RoutineFolderHeader
+          name={folder}
+          count={group.routines.length}
+          paused={group.routines.length > 0 && !anyOn}
+          collapsed={isCollapsed}
+          icon={folderIcon}
+          editable={editable && supported}
+          onToggle={() => toggleFolder(folder)}
+          onMove={(direction) => reorder(folder, direction)}
+          onMenu={(at, trigger) => setMenu({ kind: "folder", folder, x: at.x, y: at.y, trigger })}
+          onCreate={() => onCreateIn(folder)}
+        />
+      )}
+      {!isCollapsed && (group.routines.length > 0
+        ? list(group.routines, folder)
+        : <p data-routine-folder-empty="" className="px-3 pb-1 text-[12px] leading-4 text-ink-tertiary">{t("routineFolders.empty")}</p>)}
+    </div>;
+  };
+
   // Bot panel Upcoming (#2174): one flat card, category as `[Folder]` prefix,
   // five rows then Show more. Folder headers stay on the Routines page.
+  // A folder with no routine has no row to carry its `[Folder]` prefix, so
+  // the flat card lists it under the rows: New folder… shows what it made,
+  // and the folder can be renamed, deleted or filled from there.
   if (leadingClock) {
     return <div className="flex flex-col gap-1" data-routine-folders="" data-routine-upcoming-flat="">
       {notices}
       {list(routines)}
+      {groups.slice(1).filter((group) => group.routines.length === 0).map(folderSection)}
       {menus}
     </div>;
   }
 
-  const loose = groups[0]!;
   return <div className="flex flex-col gap-1" data-routine-folders="">
     {drag && createPortal(<div data-routine-drag-preview="" aria-hidden="true"
       style={{ left: drag.x + 12, top: drag.y + 8 }}
@@ -431,37 +467,7 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
       </div>
     )}
 
-    {groups.slice(1).map((group) => {
-      const folder = group.folder!;
-      const isCollapsed = collapsed.has(routineFolderKey(folder));
-      const index = folders.indexOf(folder);
-      const anyOn = group.routines.some((routine) => routine.enabled);
-      return <div key={folder} data-routine-folder-section={folder}
-        className={cn("flex flex-col rounded-lg", index > 0 || loose.routines.length > 0 ? "pt-1.5" : "", dropTarget === folder && "bg-hover/60 ring-1 ring-accent/50")}>
-        {renaming === folder ? (
-          <FolderNameInput initial={folder} label={t("routineFolders.renameLabel")} onCancel={() => setRenaming(null)} onSave={async (name) => {
-            const answer = await act({ action: "rename", botId: bot.id, from: folder, to: name });
-            if (answer) setRenaming(null);
-          }} />
-        ) : (
-          <RoutineFolderHeader
-            name={folder}
-            count={group.routines.length}
-            paused={group.routines.length > 0 && !anyOn}
-            collapsed={isCollapsed}
-            icon={folderIcon}
-            editable={editable && supported}
-            onToggle={() => toggleFolder(folder)}
-            onMove={(direction) => reorder(folder, direction)}
-            onMenu={(at, trigger) => setMenu({ kind: "folder", folder, x: at.x, y: at.y, trigger })}
-            onCreate={() => onCreateIn(folder)}
-          />
-        )}
-        {!isCollapsed && (group.routines.length > 0
-          ? list(group.routines, folder)
-          : <p data-routine-folder-empty="" className="px-3 pb-1 text-[12px] leading-4 text-ink-tertiary">{t("routineFolders.empty")}</p>)}
-      </div>;
-    })}
+    {groups.slice(1).map(folderSection)}
 
     {menus}
   </div>;

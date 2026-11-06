@@ -13,6 +13,7 @@ import type { Bot, Group } from "@/state/store";
 import type { WebhookTrigger } from "@/lib/webhooks";
 import type { Routine } from "../../../shared/routines";
 import { blurMarkdown, markdownEditorIn, markdownText, typeMarkdown } from "./markdown-editor-test-utils";
+import { GROUP_PANEL_HIDDEN_TABS } from "@/lib/group-panel";
 
 const fixture = vi.hoisted(() => ({
   api: vi.fn(),
@@ -151,13 +152,20 @@ describe("markdown fields", () => {
 
   it("group instructions: mounts with the bulletin and saves it on blur", async () => {
     const group = { id: "room", name: "Ops", bulletin: "Be brief.", memberIds: [], messages: [], defaultResponder: { kind: "auto" } } as unknown as Group;
-    render(createElement(GroupPanel, { group, members: [], roster: null, advanced: null, canEdit: true }));
-    flushSync(() => button(document.body, t("groupPanel.tab.instructions"))!.click());
-    const editor = await markdownEditorIn(document.body, "group-instructions");
-    expect(markdownText(editor)).toBe("Be brief.");
-    typeMarkdown(editor, "**Be brief.**");
-    blurMarkdown(editor);
-    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "patchGroup", groupId: "room", patch: { bulletin: "**Be brief.**" } });
+    // The Instructions tab is hidden for now (GROUP_PANEL_HIDDEN_TABS): show it for this test.
+    const hidden = GROUP_PANEL_HIDDEN_TABS as Set<string>;
+    hidden.delete("instructions");
+    try {
+      render(createElement(GroupPanel, { group, members: [], roster: null, advanced: null, canEdit: true }));
+      flushSync(() => button(document.body, t("groupPanel.tab.instructions"))!.click());
+      const editor = await markdownEditorIn(document.body, "group-instructions");
+      expect(markdownText(editor)).toBe("Be brief.");
+      typeMarkdown(editor, "**Be brief.**");
+      blurMarkdown(editor);
+      expect(fixture.dispatch).toHaveBeenCalledWith({ type: "patchGroup", groupId: "room", patch: { bulletin: "**Be brief.**" } });
+    } finally {
+      hidden.add("instructions");
+    }
   });
 
   it("team instructions: loads the section context and saves it with PUT", async () => {

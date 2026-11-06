@@ -124,6 +124,27 @@ describe("ComputerCard", () => {
     expect(document.querySelector("[data-computer-card-menu]")).toBeNull();
   });
 
+  it("has a ... button that opens the same menu as the right click", () => {
+    const onPatch = vi.fn();
+    act(() => root!.render(createElement(ComputerCard, { bot, onPatch })));
+    const row = host!.querySelector<HTMLButtonElement>("[data-computer-card]")!;
+    act(() => { row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 40 })); });
+    const rightClick = [...document.querySelectorAll("[data-computer-card-option]")].map((n) => `${n.getAttribute("data-computer-card-option")}:${n.textContent}`);
+    act(() => document.querySelector<HTMLElement>("[data-computer-card-menu]")!.parentElement!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })));
+    expect(document.querySelector("[data-computer-card-menu]")).toBeNull();
+    const more = host!.querySelector<HTMLButtonElement>("[data-computer-card-more]");
+    expect(more).toBeTruthy();
+    act(() => more!.click());
+    const viaButton = [...document.querySelectorAll("[data-computer-card-option]")].map((n) => `${n.getAttribute("data-computer-card-option")}:${n.textContent}`);
+    expect(viaButton.length).toBeGreaterThan(0);
+    expect(viaButton).toEqual(rightClick);
+  });
+
+  it("has no ... button when read only", () => {
+    act(() => root!.render(createElement(ComputerCard, { bot, readOnly: true })));
+    expect(host!.querySelector("[data-computer-card-more]")).toBeNull();
+  });
+
   it("has no menu when the viewer cannot change the computer", () => {
     act(() => root!.render(createElement(ComputerCard, { bot, readOnly: true })));
     const row = host!.querySelector<HTMLButtonElement>("[data-computer-card]")!;

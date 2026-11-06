@@ -6,9 +6,9 @@
 // PillSelect (Voice "Ara ⌄" style) listing the same computers as the chat
 // Computer menu / LocalComputerSection (`computerChoices`); picking one
 // changes the bot's Works on and refreshes the card.
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useMemo, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
-import { Check } from "lucide-react";
+import { Check, MoreHorizontal } from "lucide-react";
 
 import type { Bot } from "@/state/store";
 import { PANEL_CARD, PANEL_LABEL, PANEL_ROW } from "@/lib/grouped-card";
@@ -24,11 +24,11 @@ import {
   type ComputerChoice,
   type DesktopBridgeStatus,
 } from "@/lib/desktop-bridge";
-import { desktopLocalVm } from "@/lib/desktop-local-vm";
 import { DEFAULT_BOT_WORKPLACE } from "../../../shared/bot-workplace";
 import type { PillOption } from "../SettingsPrimitives";
 import { navigateThreadMenu } from "../BotProjects";
 import { SandboxDesktopModal } from "../computer/SandboxDesktopModal";
+import { LocalLiveScreen } from "../computer/LocalLiveScreen";
 import { worksOnMode } from "../computer/WorksOnSetting";
 import { activeComputer } from "../computer/OrgComputerTab";
 import { screenFramePreview } from "../ScreenFrame";
@@ -118,30 +118,6 @@ function modeToPatch(mode: ComputerSelectValue): ComputerPatch {
   return { computer: mode };
 }
 
-/** Local computer live picture inside SandboxDesktopModal (Watching / control). */
-function LocalLiveScreen({ desktopId, control }: { desktopId?: string; control: boolean }) {
-  const [frame, setFrame] = useState<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    const grab = async () => {
-      try {
-        const answer = await desktopLocalVm("screenshot", { desktopId });
-        if (!cancelled && answer.image) setFrame(answer.image);
-      } catch { /* keep the last frame */ }
-    };
-    void grab();
-    const timer = window.setInterval(() => void grab(), 4_000);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, [desktopId]);
-  return (
-    <div data-computer-card-local-live={control ? "control" : "watch"} className="absolute inset-0 flex items-center justify-center bg-black">
-      {frame
-        ? <img src={frame} alt="" className="h-full w-full object-contain" draggable={false} />
-        : <p role="status" className="text-[12px] text-white/70">{t("computer.capturingLocal")}</p>}
-    </div>
-  );
-}
-
 export function ComputerCard({ bot, onPatch, readOnly = false }: {
   bot: Bot;
   onPatch?: (patch: ComputerPatch) => void;
@@ -180,6 +156,9 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
           choices are the row's right-click menu, like the other rows. */}
       <h3 id={`bot-computer-${bot.id}`} className={cn(PANEL_LABEL, "min-w-0 truncate")}>{t("botPanel.tab.computer")}</h3>
       <div className={PANEL_CARD}>
+        {/* JC 2026-11-06: same row as Upcoming (RoutineList): the thumbnail card
+            plus a "..." at its right that opens the right-click menu. */}
+        <div className={`group/routine flex items-center gap-2.5 hover:bg-hover ${PANEL_ROW}`}>
         <button
           type="button"
           data-computer-card=""
@@ -190,7 +169,7 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
             if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); openMenu(event.currentTarget); }
           } : undefined}
           aria-haspopup={menuEnabled ? "menu" : undefined}
-          className={`${PANEL_ROW} flex w-full min-w-0 items-center gap-3 text-left hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60 aria-disabled:cursor-default`}
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60 aria-disabled:cursor-default"
         >
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="truncate text-[14px] font-normal leading-5 text-ink">{title}</span>
@@ -202,6 +181,10 @@ export function ComputerCard({ bot, onPatch, readOnly = false }: {
             {src && broken !== src && <img src={src} alt="" loading="lazy" onError={() => setBroken(src)} className="size-full object-cover" />}
           </span>
         </button>
+        {menuEnabled && <button type="button" data-computer-card-more="" aria-haspopup="menu" aria-label={t("botPanel.computerCard.choose")} title={t("botPanel.computerCard.choose")}
+          onClick={(event) => openMenu(event.currentTarget)}
+          className="hidden size-7 shrink-0 items-center justify-center rounded-md text-ink-tertiary hover:bg-raised hover:text-ink focus-visible:flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 group-hover/routine:flex touch:flex"><MoreHorizontal size={15} /></button>}
+        </div>
       </div>
       {menu && createPortal(
         <div className="fixed inset-0 z-40" onMouseDown={() => closeMenu(false)} onContextMenu={(event) => { event.preventDefault(); closeMenu(false); }}>

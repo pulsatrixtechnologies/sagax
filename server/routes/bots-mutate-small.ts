@@ -269,6 +269,12 @@ async function handleBotAlwaysAllow(env: BotsMutateEnv): Promise<boolean> {
     env.store.patchTask(bot.id, bot.threadId, {
       alwaysAllow: [...new Set([...(bot.alwaysAllow ?? []), allowKey])].slice(0, 200)
     });
+    // An exact read-shaped provider tool grant belongs to the bot, not only to
+    // the conversation where the card appeared: a later task inherits it.
+    if (allowKey.startsWith("provider-tool:")) {
+      const owner = env.store.bot(bot.id);
+      if (owner) env.store.patchBot(bot.id, { alwaysAllow: [...new Set([...(owner.alwaysAllow ?? []), allowKey])].slice(0, 200) });
+    }
     const live = env.directTurnBots.get(bot.threadId);
     if (live) live.alwaysAllow = [...new Set([...(live.alwaysAllow ?? []), allowKey])].slice(0, 200);
     const updated = env.store.bot(bot.id)!;

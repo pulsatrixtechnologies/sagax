@@ -169,7 +169,7 @@ describe("outward links", () => {
 describe("profileMenuItems (the reference design's account menu, 2026-10-16)", () => {
   const noop = () => {};
   const handlers = {
-    onAutomations: noop, onMemory: noop, onTeamMap: noop, onRemoteSessions: noop, onSettings: noop, onAchievements: noop, onHelpCenter: noop, onShortcuts: noop, onReleaseNotes: noop, onFeedback: noop, onAbout: noop,
+    onAutomations: noop, onMemory: noop, onTeamMap: noop, onRemoteSessions: noop, onSettings: noop, onAchievements: noop, onShortcuts: noop, onReleaseNotes: noop, onAbout: noop,
     onViewUsage: noop, onSwitch: noop, onRename: noop, onAddOrganization: noop, onSignOut: noop, onMobile: noop,
   };
   const items = (patch: Partial<Parameters<typeof profileMenuItems>[0]> = {}) => profileMenuItems({
@@ -288,7 +288,7 @@ describe("profileMenuItems (the reference design's account menu, 2026-10-16)", (
     }
   });
 
-  it("names the row after the starred plan (Grok Bot: \"Ultra   4% used\"), and stars each plan once in Usage ›", () => {
+  it("names the starred plan beside Usage, and stars each plan once in Usage ›", () => {
     const toggled: string[] = [];
     const lines = [
       { key: "grok:weekly", planId: "grok", planName: "Grok SuperGrok Heavy", label: "Grok SuperGrok Heavy · Weekly", value: "87% used" },
@@ -299,23 +299,22 @@ describe("profileMenuItems (the reference design's account menu, 2026-10-16)", (
       usagePercent: 87, usageName: "Grok", usageLines: lines,
       usageFavorite: { id: "grok", onToggle: (id) => toggled.push(id) },
     }).find((entry) => entry.key === "usage")!;
-    expect([usage.label, usage.value]).toEqual(["Grok", "87% used"]);
+    expect(usage.value).toBe("Grok 87%");
     const stars = usage.submenu!.filter((entry) => entry.favorite);
     expect(stars.map((entry) => [entry.key, entry.favorite!.on])).toEqual([["grok:weekly", true], ["codex:five-hour", false]]);
     expect(stars[1]!.favorite!.label).toBe("Show Codex Business in the Usage menu");
     stars[1]!.favorite!.onToggle();
     expect(toggled).toEqual(["codex"]);
     // the usual figure, unnamed, without a favorite
-    const plain = items({ usagePercent: 100, usageName: null, usageLines: lines }).find((entry) => entry.key === "usage")!;
-    expect([plain.label, plain.value]).toEqual(["Usage", "100% used"]);
+    expect(items({ usagePercent: 100, usageName: null, usageLines: lines }).find((entry) => entry.key === "usage")!.value).toBe("100% used");
   });
 
-  it("puts Help Center, Keyboard shortcuts, Release notes, Check for updates, Send feedback and About under Help", () => {
+  it("puts Keyboard shortcuts, Release notes, Check for updates and About under Help", () => {
     const update = { key: "update", label: "Check for updates", onSelect: noop };
     expect(items({ updateItem: update }).find((entry) => entry.key === "help")!.submenu!.map((entry) => entry.key))
-      .toEqual(["help-center", "shortcuts", "release-notes", "update", "feedback", "about"]);
+      .toEqual(["shortcuts", "release-notes", "update", "about"]);
     expect(items().find((entry) => entry.key === "help")!.submenu!.map((entry) => entry.key))
-      .toEqual(["help-center", "shortcuts", "release-notes", "feedback", "about"]);
+      .toEqual(["shortcuts", "release-notes", "about"]);
   });
 
   it("offers Get Sagax on mobile only with a link", () => {

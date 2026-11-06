@@ -33,6 +33,7 @@ const USE_MODAL_DIALOG_ALLOW = new Set([
   "components/artifacts/ArtifactFrame.tsx", // viewer (GARDER)
   "components/remote-session/RemoteFileBrowser.tsx", // remote file catalog window
   "components/RoutineCalendarPage.tsx", // EventEditor window path until panel-only
+  "components/RoutineCalendarPage.tsx-parts/useEventEditorBody.ts", // the same EventEditor, split out
 ]);
 
 /** Files that may mention window.confirm only in comments (or this guard). */

@@ -69,7 +69,10 @@ export function WindowHeaderPill({ children, label }: { children: ReactNode; lab
 function PillName({ name, label, weight }: { name: string; label?: string; weight: string }) {
   const tag = label?.trim();
   return (
-    <span data-bot-header-text="" className={cn("min-w-0 truncate whitespace-nowrap text-[15px]", weight, "leading-5")}>
+    // One line, ellipsis when it does not fit (a group named after its
+    // members runs long); the chevron beside it never shrinks, and the
+    // whole name shows on hover.
+    <span data-bot-header-text="" title={tag ? `${name} · ${tag}` : name} className={cn("min-w-0 truncate whitespace-nowrap text-[15px]", weight, "leading-5")}>
       <span data-bot-header-name="" className="text-ink">{name}</span>
       {tag && <span data-bot-header-label="" className="text-ink-secondary"> · {tag}</span>}
     </span>

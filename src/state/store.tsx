@@ -431,6 +431,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     writeNewChats(kept);
   }, [state.hydrated, state.freshTopic, state.bots]);
+  // A New chat kept from before this fix (or whose creation failed) is made
+  // on the server once the bots are known, so what arrives lands in it
+  // (#2312). One try per bot per launch; the first message retries.
+  const freshTopicsTried = useRef(new Set<string>());
+  useEffect(() => {
+    if (!state.hydrated) return;
+    for (const [botId, draft] of Object.entries(state.freshTopic)) {
+      if (draft.auto || freshTopicsTried.current.has(botId)) continue;
+      const bot = state.bots.find((candidate) => candidate.id === botId);
+      if (!bot || !freshTopicCovers(bot, draft.threadId)) continue;
+      freshTopicsTried.current.add(botId);
+      dispatch({ type: "createFreshTopic", botId });
+    }
+  }, [state.hydrated, state.freshTopic, state.bots, dispatch]);
 
   // Fresh topic on return (src/lib/fresh-topic.ts): which bot is on screen,
   // when the person left it (another bot or view, the window hidden, the app

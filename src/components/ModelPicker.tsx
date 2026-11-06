@@ -31,7 +31,6 @@ import type { EffortLevel } from "../../shared/wire";
 import {
   COMPOSER_MODEL_EVENT,
   MENU_WIDTH as BASE_MENU_WIDTH,
-  PANES_MENU_WIDTH,
   composerModelLabel,
   engineStatus,
   isDesktopLocalModel,
@@ -110,7 +109,6 @@ export function ModelPicker({
   fallbackAnchor,
   /** Other selected bots that receive the same model and effort. */
   alsoApplyTo,
-  panes = false,
 }: {
   bot: Bot;
   threadId?: string;
@@ -139,9 +137,6 @@ export function ModelPicker({
   /** Headless: what the menu opens above when no row asked (the mascot). */
   fallbackAnchor?: () => HTMLElement | null;
   alsoApplyTo?: readonly string[];
-  /** Settings > Models and Bot > Model (#2050): the two-pane menu
-   * (providers beside models) with the "n turned off · Active models" link. */
-  panes?: boolean;
 }) {
   const { state, dispatch, refreshInstances, refreshModels: refreshInstanceModels } = useStore();
   // #2050: the stars follow the person through /api/me/models
@@ -223,13 +218,17 @@ export function ModelPicker({
     closeAll();
     dispatch({ type: "toggleAppSettings", open: true, section: "providers" });
   };
-  // Settings > Models > Advanced > Active models, from the two-pane menu.
+  // Settings > Models > Advanced > Active models, from the menu's footer row.
   const openActiveModels = () => {
     closeAll();
     requestSettingsCard("models.advanced");
     dispatch({ type: "toggleAppSettings", open: true, section: "engines" });
   };
-  const turnedOff = panes ? turnedOffCount(pickerInstances, switches) : 0;
+  const turnedOff = turnedOffCount(pickerInstances, switches);
+  // One menu everywhere (#2050 two-pane menu retired): the settings surfaces
+  // (Settings > Models, Bot > Model, bulk edit) have no Effort row of their
+  // own, so their chip and menu always carry the effort, as before.
+  const showEffort = advanced || listChip || contained || Boolean(alsoApplyTo?.length);
 
   const profile = state.bots.find((candidate) => candidate.id === bot.id) ?? bot;
   const follows = threadId ? profile.tasks?.find((task) => task.threadId === threadId)?.followsBotModel : undefined;
@@ -378,7 +377,7 @@ export function ModelPicker({
       closeMenu();
       return;
     }
-    const MENU_WIDTH = panes ? PANES_MENU_WIDTH : BASE_MENU_WIDTH;
+    const MENU_WIDTH = BASE_MENU_WIDTH;
     anchorRef.current = anchor;
     setMenuDoneCall(onDone ? { call: onDone } : null);
     const box = anchor ? (anchor.closest<HTMLElement>('[role="menu"]') ?? anchor) : null;
@@ -436,9 +435,9 @@ export function ModelPicker({
     active,
     showActiveAccount,
     selectedVariantLabel,
-    // #2080: the two-pane chip always reads "Model · Effort" (Bot > Model
+    // #2080: the settings chips always read "Model · Effort" (Bot > Model
     // has no Effort row of its own any more)
-    advanced: advanced || panes,
+    advanced: showEffort,
     locked,
   });
 
@@ -465,7 +464,7 @@ export function ModelPicker({
       onRow={onRow}
       favoriteKeys={favoriteKeys}
       openProviders={openProviders}
-      advanced={advanced}
+      advanced={showEffort}
       selection={selection}
       autoOn={autoOn}
       setEffort={setEffort}
@@ -479,7 +478,6 @@ export function ModelPicker({
       closeMenu={closeMenu}
       triggerRef={triggerRef}
       inComposer={inComposer}
-      panes={panes}
       turnedOff={turnedOff}
       openActiveModels={openActiveModels}
     />
@@ -521,7 +519,6 @@ function ModelPickerShell({
   closeMenu,
   triggerRef,
   inComposer,
-  panes,
   turnedOff,
   openActiveModels,
 }: {
@@ -559,7 +556,6 @@ function ModelPickerShell({
   closeMenu: (refocus?: boolean) => void;
   triggerRef: React.RefObject<HTMLButtonElement | null>;
   inComposer: boolean;
-  panes: boolean;
   turnedOff: number;
   openActiveModels?: () => void;
 }) {
@@ -625,9 +621,8 @@ function ModelPickerShell({
         pick,
         effortTitle,
         anchorRef: (!headless && !windowOnly && (listChip || inComposer)) ? triggerRef : undefined,
-        panes,
         turnedOff,
-        openActiveModels: panes ? openActiveModels : undefined,
+        openActiveModels,
       }))}
     </div>
   );

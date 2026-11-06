@@ -11,6 +11,7 @@ import { json, readBody } from "../harness/http.ts";
 import {
   deleteGroupMemory,
   groupMemoryDoc,
+  groupMemoryEnabled,
   groupMemoryFile,
   groupMemorySystemPrompt,
   loadGroupMemory,
@@ -28,6 +29,12 @@ const fresh = () => `gm-test-${process.pid}-${++n}`;
 const NOW = new Date(2026, 9, 1, 12);
 
 describe("group memory storage", () => {
+  it("is on by default: a group with no setting has memory, only an explicit off turns it off", () => {
+    expect(groupMemoryEnabled({ id: "g-default" })).toBe(true);
+    expect(groupMemoryEnabled({ id: "g-on", memoryEnabled: true })).toBe(true);
+    expect(groupMemoryEnabled({ id: "g-off", memoryEnabled: false })).toBe(false);
+  });
+
   it("appends dated entries from a room, like a bot's memory, in its own file", () => {
     const id = fresh();
     const result = updateGroupMemory(id, { action: "append", text: "The launch is on Friday" }, { source: 'room "Launch"', now: NOW });

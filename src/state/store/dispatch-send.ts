@@ -18,46 +18,75 @@ import { meetingRequestBehavior } from "../../../shared/meeting-request";
 import { phoneCallConsentBehavior } from "../../../shared/phone-call-consent";
 import type { DispatchEnv } from "./dispatch-types";
 
+/** The fresh topic creations a message waits on (makeFreshTopic). */
+const freshTopicsSent = new WeakSet<Promise<string>>();
+
 export function dispatchSendEffects(action: Action, env: DispatchEnv): void {
   const {
     rawDispatch, stateRef, showError, botPatchQueue, threadPages, freshTopicsCreating, navigation,
     cardTarget, persistCard, waitForExecutionSettings, dispatch, executionBotsBeforeAction,
     quizBeforeSend, freshSendBefore, botBeforeSend, leafBeforeEdit,
   } = env;
+  // The fresh topic of a bot made on the server (src/lib/fresh-topic.ts):
+  // at New topic (createFreshTopic) or with the first message, once. `sent`
+  // marks a creation a message waits on.
+  const makeFreshTopic = (botId: string, sent: boolean): Promise<string> => {
+    const pending = freshTopicsCreating.get(botId);
+    if (pending) {
+      if (sent) freshTopicsSent.add(pending);
+      return pending;
+    }
+    // asked for (New chat), not put there by coming back
+    const askedNewChat = stateRef.current.freshTopic[botId]?.auto === false;
+    const covered = stateRef.current.freshTopic[botId]?.threadId;
+    const revision = (navigation.get(botId) ?? 0) + 1;
+    navigation.set(botId, revision);
+    const creating: Promise<string> = botPatchQueue.flush(botId)
+      .then(() => api<{ bot: Bot; task?: { threadId?: string } }>(`/api/bots/${botId}/tasks`, { method: "POST", body: JSON.stringify({ stream: true }) }))
+      .then((r) => {
+        const created = r?.task?.threadId ?? r?.bot?.threadId;
+        if (!r?.bot || !created) throw new Error(t("stream.freshFailed"));
+        // Back pressed while New topic was being made, nothing sent: the
+        // person is on the topic they went back to, the empty one goes.
+        const draft = stateRef.current.freshTopic[botId];
+        if (!freshTopicsSent.has(creating) && created !== covered && (!draft || draft.threadId !== covered)) {
+          dispatch({ type: "deleteTask", botId, threadId: created });
+          return created;
+        }
+        if (Array.isArray(r.bot.messages)) threadPages.set(r.bot.threadId, { messages: r.bot.messages, hasMore: r.bot.hasMore, activeLeafId: r.bot.activeLeafId, at: Date.now() });
+        // New chat: the topic opens on its own, never under the
+        // earlier ones drawn back above it (src/lib/fresh-topic.ts).
+        if (askedNewChat) noteNewChatTopic(created);
+        if (navigation.get(botId) === revision) dispatch({ type: "taskSwitched", bot: r.bot });
+        rawDispatch({ type: "freshTopic", botId, threadId: null });
+        return created;
+      })
+      .finally(() => freshTopicsCreating.delete(botId));
+    if (sent) freshTopicsSent.add(creating);
+    freshTopicsCreating.set(botId, creating);
+    return creating;
+  };
   switch (action.type) {
+        case "createFreshTopic": {
+          // Only an asked-for New topic still drawn: a return after a while
+          // stays a draft until the person writes (src/lib/fresh-topic.ts).
+          if (stateRef.current.freshTopic[action.botId]?.auto !== false) break;
+          // A failure leaves the draft: the first message makes it then.
+          makeFreshTopic(action.botId, false).catch(() => {});
+          break;
+        }
         case "send": {
           // persist through the existing card route so an older server that
           // does not auto-dismiss still hides the quiz on this client
           if (quizBeforeSend) persistCard(action.botId, quizBeforeSend.id, { dismissed: true });
           // The first message of a fresh topic (src/lib/fresh-topic.ts): the
-          // server creates the topic now, then the message goes there. No
-          // empty topic is ever made ahead of it.
+          // server creates the topic now unless New topic already did, then
+          // the message goes there.
           if (freshSendBefore) {
             const { replyToId: _reply, ...rest } = action;
             // A second message typed while the topic is being made waits
             // for it and goes there too: one topic, never two.
-            let creating = freshTopicsCreating.get(action.botId);
-            // asked for (New chat), not put there by coming back
-            const askedNewChat = stateRef.current.freshTopic[action.botId]?.auto === false;
-            if (!creating) {
-              const revision = (navigation.get(action.botId) ?? 0) + 1;
-              navigation.set(action.botId, revision);
-              creating = botPatchQueue.flush(action.botId)
-                .then(() => api<{ bot: Bot; task?: { threadId?: string } }>(`/api/bots/${action.botId}/tasks`, { method: "POST", body: JSON.stringify({ stream: true }) }))
-                .then((r) => {
-                  const created = r?.task?.threadId ?? r?.bot?.threadId;
-                  if (!r?.bot || !created) throw new Error(t("stream.freshFailed"));
-                  if (Array.isArray(r.bot.messages)) threadPages.set(r.bot.threadId, { messages: r.bot.messages, hasMore: r.bot.hasMore, activeLeafId: r.bot.activeLeafId, at: Date.now() });
-                  // New chat: the topic opens on its own, never under the
-                  // earlier ones drawn back above it (src/lib/fresh-topic.ts).
-                  if (askedNewChat) noteNewChatTopic(created);
-                  if (navigation.get(action.botId) === revision) dispatch({ type: "taskSwitched", bot: r.bot });
-                  rawDispatch({ type: "freshTopic", botId: action.botId, threadId: null });
-                  return created;
-                })
-                .finally(() => freshTopicsCreating.delete(action.botId));
-              freshTopicsCreating.set(action.botId, creating);
-            }
+            const creating = makeFreshTopic(action.botId, true);
             creating
               .then((threadId) => dispatch({ ...rest, threadId }))
               .catch((error) => {

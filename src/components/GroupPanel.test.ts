@@ -26,7 +26,9 @@ describe("group panel", () => {
     const html = render({ advanced: createElement("p", null, "responder and folder") });
     expect(html).toContain('data-panel-tab="details"');
     expect(html).toContain('data-panel-tab="members"');
-    expect(html).toContain('data-panel-tab="instructions"');
+    // Instructions and Memory are hidden for now (GROUP_PANEL_HIDDEN_TABS).
+    expect(html).not.toContain('data-panel-tab="instructions"');
+    expect(html).not.toContain('data-panel-tab="memory"');
     expect(html).not.toContain("Set up group");
     expect(html).not.toContain('aria-haspopup="dialog"');
   });
@@ -48,6 +50,19 @@ describe("group panel", () => {
     expect(html).not.toContain('id="group-name-room"');
     expect(html).toContain('data-description-info="button"');
     expect(html).toContain('title="Be brief."');
+  });
+
+  it("draws its tabs as the bot panel's pills, on one line", () => {
+    const html = render({});
+    expect(html).toMatch(/role="tablist"[^>]*class="mt-4 flex max-w-full items-center justify-center gap-1"/);
+    expect(html).not.toMatch(/role="tablist"[^>]*flex-wrap/);
+    expect(html).toMatch(/data-panel-tab="details"[^>]*class="rounded-full px-3 py-\[3px\] text-\[14px\][^"]*bg-raised text-ink"/);
+  });
+
+  it("keeps a long name inside the panel's margin, with the (i) beside it", () => {
+    const html = render({ group: { ...group, name: "A very long group name, another person, a third one" } as Group });
+    expect(html).toMatch(/data-group-panel-title-row=""[^>]*class="[^"]*w-full min-w-0 max-w-full/);
+    expect(html).toMatch(/id="group-panel-title"[^>]*class="[^"]*min-w-0 shrink/);
   });
 
   it("shows the name as plain text to someone else", () => {

@@ -60,7 +60,7 @@ describe("Settings nav groups", () => {
     const rail = nav(render());
     const headings = [...rail.matchAll(/data-settings-nav-group="([^"]+)"/g)].map((match) => match[1]);
     expect(headings).toEqual(["you", "ai", "workspace", "app"]);
-    for (const label of ["Personal", "AI", "Workspace", "App"]) expect(rail, label).toContain(`>${label}</div>`);
+    for (const label of ["Personal", "AI", "Organization", "App"]) expect(rail, label).toContain(`>${label}</div>`);
     const ai = rail.slice(rail.indexOf('data-settings-nav-group="ai"'), rail.indexOf('data-settings-nav-group="workspace"'));
     expect(ai).toContain(">Models</button>");
     expect(ai.indexOf(">Models</button>")).toBeLessThan(ai.indexOf(">Voice</button>"));

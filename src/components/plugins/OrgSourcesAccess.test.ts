@@ -47,7 +47,10 @@ describe("Organization sources and access", () => {
     const admin = renderToStaticMarkup(createElement(PerspicaxOrgSettings, { org: org("admin"), onChanged: () => {} }));
     expect(admin).toContain('data-settings-row="orgSources"');
     expect(admin).toContain("Sources and access");
-    expect(admin).not.toContain("data-external-link-pill");
+    // #2263: "Manage in Perspicax" is back on the Organization card (one pill),
+    // but the sources row itself carries no link
+    expect(admin).toContain("data-external-link-pill");
+    expect(admin.match(/data-external-link-pill/g)).toHaveLength(1);
     expect(admin).not.toContain("data-org-plugin-policy");
     expect(admin).not.toContain("data-github-token-add");
     expect(admin).toContain('data-settings-card="organization.githubApp"');

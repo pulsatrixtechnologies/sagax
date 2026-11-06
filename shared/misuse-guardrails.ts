@@ -297,7 +297,12 @@ export interface MisuseOwnPaths {
 }
 
 const OWN_FOLDER = "own-folder";
-const APP_TAG = /<attached-(?:image|file)[\t ]+path="([^"\r\n]*)"(?:[\t ]+name="([^"\r\n]*)")?[\t ]*\/>/g;
+// 2026-11-06: a meme sent from the composer's GIF button carries
+// `meme-provider`, `meme-attribution` and `meme-caption` after the name
+// (src/lib/composer-attachments.ts composeMessage). The tag accepts any
+// further attribute; their values stay in the text the classifier reads.
+const APP_TAG = /<attached-(?:image|file)[\t ]+path="([^"\r\n]*)"(?:[\t ]+name="([^"\r\n]*)")?((?:[\t ]+[a-z][a-z-]*="[^"\r\n]*")*)[\t ]*\/>/g;
+const TAG_VALUE = /="([^"\r\n]*)"/g;
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const trimSlash = (value: string) => value.replace(/\/+$/, "");
@@ -313,9 +318,11 @@ export function maskOwnPaths(input: string, own?: MisuseOwnPaths): string {
   let text = input;
   const store = own.attachmentsDir ? trimSlash(own.attachmentsDir) : "";
   if (store && text.includes("<attached-")) {
-    text = text.replace(APP_TAG, (tag, path: string, name?: string) => {
+    text = text.replace(APP_TAG, (tag, path: string, name: string | undefined, extra: string) => {
       const file = path.startsWith(`${store}/`) ? path.slice(store.length + 1) : "";
-      return file && !file.includes("/") && file !== ".." && file !== "." ? (name ?? "") : tag;
+      if (!file || file.includes("/") || file === ".." || file === ".") return tag;
+      const values = [...extra.matchAll(TAG_VALUE)].map((match) => match[1]!).filter(Boolean);
+      return [name ?? "", ...values].filter(Boolean).join(" ");
     });
   }
   for (const raw of own.roots ?? []) {

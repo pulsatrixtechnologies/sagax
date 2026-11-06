@@ -145,7 +145,6 @@ chat.usage.cardContext
 chat.usage.cardHint
 chat.usage.cardLast
 chat.usage.cardThread
-chat.usage.cardTokens
 chat.usage.cardWindow
 chat.usage.contextNudge
 chat.usage.costAria

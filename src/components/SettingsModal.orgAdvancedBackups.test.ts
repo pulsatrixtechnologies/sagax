@@ -79,16 +79,13 @@ describe("Settings > Organization (Perspicax)", () => {
   });
 });
 
-describe("General > Advanced", () => {
+describe("App > Advanced and Help", () => {
   it("draws event log cleanup and diagnostics as rows under grey headings", async () => {
     vi.stubGlobal("window", { ogb: { exportDiagnostics: async () => null } });
-    const { GeneralAdvancedSettings } = await import("./settings/AdvancedSettings");
-    const html = renderToStaticMarkup(createElement(GeneralAdvancedSettings));
-    expect(html.indexOf('data-settings-group="threadCleanup"')).toBeLessThan(html.indexOf('data-settings-group="diagnostics"'));
-    expect(html.indexOf('data-settings-group="loopGuard"')).toBeLessThan(html.indexOf('data-settings-group="diagnostics"'));
-    expect(html.match(/role="switch"/g)).toHaveLength(4);
-    expect(html).toContain('data-settings-card="general.loopGuard"');
-    expect(html).toContain('data-settings-card="general.usage"');
+    const { AppPageExtras } = await import("./settings/AppPage");
+    const html = renderToStaticMarkup(createElement(AppPageExtras, { remoteActive: false }));
+    expect(html).toContain('data-settings-card="about.help"');
+    expect(html).toContain('data-settings-group="appHelp"');
     expect(html).not.toContain('type="checkbox"');
     expect(html).toContain("Export Diagnostics…");
   });

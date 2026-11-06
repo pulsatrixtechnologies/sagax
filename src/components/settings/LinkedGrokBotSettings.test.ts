@@ -24,7 +24,7 @@ const linked: GrokBridgeLinkView = {
 describe("Linked Grok Bot settings", () => {
   it("draws the linked card with webhook, opt-ins and inbound path", () => {
     const html = renderToStaticMarkup(createElement(LinkedGrokBotSettings, { initial: linked }));
-    expect(html).toContain('data-settings-card="account.linkedGrokBot"');
+    expect(html).toContain('data-settings-card="providers.linkedGrokBot"');
     expect(html).toContain('data-grok-bridge="on"');
     expect(html).toContain("https://grok.example/hook");
     expect(html).toContain('data-settings-row="grokBridgeMayCall"');

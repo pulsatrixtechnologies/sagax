@@ -78,6 +78,7 @@ export function MyToolGrants() {
   if (!rows) return null;
   const field = "h-7 rounded-lg border-[0.5px] border-border bg-inset px-2 text-[13px] text-ink focus:border-focus focus:outline-none";
   return (
+    <div data-settings-card="myToolAccess">
     <SettingsGroup title={t("myToolAccess.title")} groupId="myToolAccess"
       accessory={<HelpTip label={t("settings.moreAbout", { title: t("myToolAccess.title") })}>{t("myToolAccess.help")}</HelpTip>}>
       <div className="flex flex-col" data-my-tool-access={String(rows.length)}>
@@ -158,5 +159,6 @@ export function MyToolGrants() {
         </DescribedRow>
       </div>
     </SettingsGroup>
+    </div>
   );
 }

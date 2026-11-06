@@ -214,13 +214,14 @@ describe("skin picker", () => {
 describe("Settings → Account and General, compact", () => {
   it("keeps Account identity-only and About me as a row; Advanced lives on App (#2080 L2)", async () => {
     device();
-    const { SettingsModal, GeneralAdvancedSettings } = await import("./SettingsModal");
+    const { SettingsModal } = await import("./SettingsModal");
+    const { AppPageExtras } = await import("./settings/AppPage");
     const html = renderToStaticMarkup(createElement(StoreProvider, null, createElement(SettingsModal)));
     expect(html).not.toContain('data-settings-card="general.advanced"');
     for (const id of ["general.threadCleanup", "general.roomTurns", "general.mcpCalls"]) {
       expect(html).not.toContain(`data-settings-card="${id}"`);
     }
-    const advanced = renderToStaticMarkup(createElement(StoreProvider, null, createElement(GeneralAdvancedSettings)));
+    const advanced = renderToStaticMarkup(createElement(StoreProvider, null, createElement(AppPageExtras, { remoteActive: false })));
     // 0.5.6: Grok-style rows under grey headings, nothing folded
     expect(advanced).toContain('data-settings-group="threadCleanup"');
     expect(advanced).toContain('data-settings-card="general.threadCleanup"');

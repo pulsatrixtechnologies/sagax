@@ -321,7 +321,7 @@ function OperatorIdentity({ action }: { action: React.ReactNode }) {
         <input aria-label={t("settings.profile.name")} value={name} onChange={(e) => setName(e.target.value)} onBlur={() => save()} placeholder={t("settings.profile.name")} className="w-full bg-transparent text-[13px] font-medium leading-[18px] text-ink placeholder:text-ink-secondary focus:outline-none" />
         <MyLabelField />
         <div className="flex min-w-0 items-center gap-1">
-          <input type="email" aria-label={t("phone.signIn.email")} value={email} onChange={(e) => setEmail(e.target.value)} onBlur={() => save()} placeholder="you@example.com" className="min-w-[12ch] max-w-full bg-transparent text-[13px] leading-[18px] text-ink-secondary [field-sizing:content] placeholder:text-ink-secondary focus:outline-none" />
+          <input type="email" aria-label={t("phone.signIn.email")} value={email} onChange={(e) => setEmail(e.target.value)} onBlur={() => save()} placeholder={t("settings.profile.emailPlaceholder")} className="min-w-[12ch] max-w-full bg-transparent text-[13px] leading-[18px] text-ink-secondary [field-sizing:content] placeholder:text-ink-secondary focus:outline-none" />
           {email.trim() && <OperatorCopyEmail email={email.trim()} />}
         </div>
       </div>

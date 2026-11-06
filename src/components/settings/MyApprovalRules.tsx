@@ -92,7 +92,7 @@ export function MyApprovalRules() {
     });
 
   return (
-    <>
+    <div data-settings-card="myApprovalRules">
       <SettingsGroup title={t("myRules.title")} groupId="myApprovalRules"
         accessory={<HelpTip label={t("settings.moreAbout", { title: t("myRules.title") })}>{t("myRules.help")}</HelpTip>}>
         <div data-my-rules={String(ordered.length)}>
@@ -184,6 +184,6 @@ export function MyApprovalRules() {
           if (rule) remove(rule);
         }}
       />
-    </>
+    </div>
   );
 }

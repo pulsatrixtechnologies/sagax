@@ -154,8 +154,7 @@ function Gallery() {
         </SettingsGroup>
       </Sample>
       <Sample id="linked-grok-bot">
-        <SettingsGroup title={t("grokBridge.title")} groupId="linkedGrokBot">
-          <LinkedGrokBotSettings initial={{
+        <LinkedGrokBotSettings initial={{
             linked: true,
             enabled: true,
             webhookUrl: "https://grok.example/hook",
@@ -167,7 +166,6 @@ function Gallery() {
             orgAllowed: true,
             stats: { sentToday: 1, receivedToday: 0, deadLetters: 0, circuitOpen: false },
           }} />
-        </SettingsGroup>
       </Sample>
       <Sample id="experimental-phone-calls-off">
         <SettingsGroup title={t("settings.experimental.title")} groupId="experimental">

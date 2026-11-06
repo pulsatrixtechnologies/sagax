@@ -56,15 +56,14 @@ export interface ComposerSlashTrigger {
   end: number;
 }
 
-/** Slash commands configure the whole send, so they are offered only at the
- * beginning of a draft and only while the first token is being typed. */
+/** Slash menu trigger at the caret: built-in commands only at the start of a
+ * draft; skills can be named after a space later in the message. */
 export function composerSlashTrigger(text: string, caretInput: number): ComposerSlashTrigger | null {
   const caret = Math.max(0, Math.min(text.length, Math.floor(caretInput)));
   const prefix = text.slice(0, caret);
-  const match = /^\/([\w.:-]*)$/.exec(prefix);
-  if (match) return { query: match[1] ?? "", start: 0, end: caret };
   // `/goal ` then the start of one of its subcommands keeps the menu open on
-  // them; any other word is the goal itself and closes it.
+  // them; any other word is the goal itself and closes it. Built-ins stay at
+  // the start of the draft only.
   const sub = /^\/goal[ \t]+(\w*)$/i.exec(prefix);
   const word = sub?.[1]?.toLowerCase();
   if (word !== undefined && GOAL_SUBCOMMANDS.some((name) => name.startsWith(word))) {
@@ -75,7 +74,12 @@ export function composerSlashTrigger(text: string, caretInput: number): Composer
   if (loopWord !== undefined && LOOP_SUBCOMMANDS.some((name) => name.startsWith(loopWord))) {
     return { query: `loop ${loopWord}`, start: 0, end: caret };
   }
-  return null;
+  // A slash after a space (or at the start) can open skills mid-message; a path
+  // or link such as "a/b" or "https://x/" must not.
+  const match = /(?:^|\s)\/([\w.:-]*)$/.exec(prefix);
+  if (!match) return null;
+  const query = match[1] ?? "";
+  return { query, start: caret - query.length - 1, end: caret };
 }
 
 /** Why a goal subcommand cannot run now, given the room's latest goal run;
@@ -237,14 +241,19 @@ export function composerGroupSlashTrigger(
   caretInput: number,
   members: readonly GroupCommandMember[],
 ): ComposerGroupSlash | null {
-  const plain = composerSlashTrigger(text, caretInput);
-  if (plain) return { trigger: plain };
   const caret = Math.max(0, Math.min(text.length, Math.floor(caretInput)));
+  // A leading @Bot /command names that bot's engine commands. Check it before
+  // the plain mid-message skill trigger, which would otherwise swallow the slash.
   const mention = leadingMention(text, members);
-  if (!mention || mention.rest > caret || !/\s/u.test(text[mention.rest - 1] ?? "")) return null;
-  const match = /^\/([\w.:-]*)$/.exec(text.slice(mention.rest, caret));
-  if (!match) return null;
-  return { trigger: { query: match[1] ?? "", start: mention.rest, end: caret }, botId: mention.member.id };
+  if (mention && mention.rest <= caret && /\s/u.test(text[mention.rest - 1] ?? "")) {
+    const match = /^\/([\w.:-]*)$/.exec(text.slice(mention.rest, caret));
+    if (match) return { trigger: { query: match[1] ?? "", start: mention.rest, end: caret }, botId: mention.member.id };
+  }
+  const plain = composerSlashTrigger(text, caretInput);
+  // Room built-ins and engine commands stay at the absolute start. Mid-message
+  // skill picks are a 1:1 concern (composerSlashTrigger); rooms do not open them.
+  if (plain && plain.start === 0) return { trigger: plain };
+  return null;
 }
 
 /** Whose engine commands a group's "/" menu lists: the mentioned bot, else
@@ -311,9 +320,14 @@ export function composerGroupCommandMenu(
   return items;
 }
 
-/** What picking a skill row puts in the draft: `/name ` and room for a request. */
-export function skillCommandInsertion(item: Extract<ComposerMenuItem, { kind: "skill" }>): string {
-  return `${item.label} `;
+/** What picking a skill row puts in the draft: `/name` and a trailing space only
+ * when the text after the token does not already start with whitespace. */
+export function skillCommandInsertion(
+  item: Extract<ComposerMenuItem, { kind: "skill" }>,
+  textAfterTrigger = "",
+): string {
+  const spaceAfter = /^\s/.test(textAfterTrigger) ? "" : " ";
+  return `${item.label}${spaceAfter}`;
 }
 
 /** The heading a menu row starts under: its bot in a group, else its group. */

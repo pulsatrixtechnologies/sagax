@@ -58,7 +58,7 @@ import { LEARN_SOURCE_PREFIX } from "./skill-learn.ts";
 import { librarySkillFilePath, listLibrarySkills, readLibrarySkillFile, type LibrarySkillListing } from "./skill-library.ts";
 import { workspaceDir } from "../workspace/workspace.ts";
 import { isSkillName, parseSkillMd, scanSkillText, SKILL_FILE_MAX_BYTES, type ParsedSkill } from "../../shared/skill-md.ts";
-import { parseSkillCommand } from "../../shared/skill-command.ts";
+import { parseSkillCommand, skillCommandTurnText, skillMentions } from "../../shared/skill-command.ts";
 
 // SKILL.md parsing and the static scan live in shared/ so the package
 // format (Admin and the renderer included) validates skills with the exact
@@ -1669,7 +1669,19 @@ export function skillsPromptIndex(botId: string, assignedLibrary?: readonly stri
  * copy, or the library file for an assigned library skill. The same path
  * the prompt index names, so a `/name` turn points at exactly that file. */
 export function enabledSkillFile(botId: string, name: string, assignedLibrary?: readonly string[]): string | null {
-  return resolvedSkillFiles(botId, assignedLibrary).find((entry) => entry.name === name)?.file ?? null;
+  return enabledSkillFiles(botId, [name], assignedLibrary).get(name) ?? null;
+}
+
+/** SKILL.md of each named skill that is on for the bot. */
+export function enabledSkillFiles(botId: string, names: readonly string[], assignedLibrary?: readonly string[]): Map<string, string> {
+  if (!names.length) return new Map();
+  const on = new Set(resolveBotSkills(botId, assignedLibrary).filter((skill) => skill.enabled).map((skill) => skill.name));
+  const files = new Map<string, string>();
+  for (const entry of resolvedSkillFiles(botId, assignedLibrary)) {
+    if (!names.includes(entry.name) || !on.has(entry.name) || !entry.file) continue;
+    files.set(entry.name, entry.file);
+  }
+  return files;
 }
 
 /** Verify the selected library once, rather than re-reading and hashing the
@@ -1698,37 +1710,48 @@ export function skillCommandInline(input: { workspaceFiles: boolean; organizatio
   return !input.workspaceFiles || input.organization;
 }
 
-/** The text the engine reads for a `/name` turn (shared/skill-command.ts).
- * Any other message, or a name that is not an enabled skill of this bot,
- * passes through unchanged, so an engine's own slash commands still work.
- * An engine with file tools is pointed at the SKILL.md; one without them
- * (`inline`: Grok, OpenAI-compatible and the other API engines) gets the
- * skill's instructions in the turn itself, since it could not open the file. */
+/** The text the engine reads for each `/name` in a turn (shared/skill-command.ts).
+ * Mentions may start the message or follow a space; several can run at once.
+ * A name that is not an enabled skill of this bot stays plain text, so an
+ * engine's own slash commands still work. An engine with file tools is pointed
+ * at each SKILL.md; one without them (`inline`: Grok, OpenAI-compatible and the
+ * other API engines) gets the skill instructions in the turn itself. */
 export function expandSkillCommandTurnText(
   botId: string,
   text: string,
   assignedLibrary?: readonly string[],
   options: { inline?: boolean; overrides?: readonly { name: string; file: string; text: string }[] } = {},
 ): string {
-  if (!text.trimStart().startsWith("/")) return text;
-  const names = [...(options.overrides ?? []).map((skill) => skill.name), ...resolveBotSkills(botId, assignedLibrary).filter((skill) => skill.enabled).map((skill) => skill.name)];
-  const command = parseSkillCommand(text, names);
-  if (!command) return text;
-  const request = command.request
-    ? ` Where the skill says {input}, use the request.\n\nRequest: ${command.request}`
-    : " There is no further request, so run it as the skill describes.";
-  if (options.inline) {
-    const raw = options.overrides?.find((skill) => skill.name === command.name)?.text ?? enabledSkillText(botId, command.name, assignedLibrary);
-    if (raw === null) return text;
-    const parsed = parseSkillMd(raw);
-    const body = ("error" in parsed ? raw : parsed.body).trim();
-    const lead = `The user ran your ${command.name} skill with /${command.name}. Follow its instructions below for this turn.`;
-    return `${lead}${request}\n\nSkill instructions (${command.name}):\n<skill>\n${body}\n</skill>`;
+  const mentioned = skillMentions(text);
+  if (!mentioned.length) return text;
+  const overrideByName = new Map((options.overrides ?? []).map((skill) => [skill.name, skill]));
+  const files = enabledSkillFiles(botId, mentioned, assignedLibrary);
+  for (const [name, skill] of overrideByName) {
+    if (mentioned.includes(name)) files.set(name, skill.file);
   }
-  const file = options.overrides?.find((skill) => skill.name === command.name)?.file ?? enabledSkillFile(botId, command.name, assignedLibrary);
-  if (!file) return text;
-  const lead = `The user ran your ${command.name} skill with /${command.name}. Read ${JSON.stringify(file)} with your file tools and follow it for this turn.`;
-  return `${lead}${request}`;
+  const names = mentioned.filter((name) => files.has(name) || (options.inline && (overrideByName.has(name) || enabledSkillText(botId, name, assignedLibrary) !== null)));
+  if (!names.length) return text;
+  if (options.inline) {
+    const bodies: string[] = [];
+    for (const name of names) {
+      const raw = overrideByName.get(name)?.text ?? enabledSkillText(botId, name, assignedLibrary);
+      if (raw === null) continue;
+      const parsed = parseSkillMd(raw);
+      const body = ("error" in parsed ? raw : parsed.body).trim();
+      bodies.push(`Skill instructions (${name}):\n<skill>\n${body}\n</skill>`);
+    }
+    if (!bodies.length) return text;
+    const lead = names.length === 1
+      ? `The user ran your ${names[0]} skill with /${names[0]}. Follow its instructions below for this turn.`
+      : `The user ran ${names.length} of your skills with ${names.map((name) => `/${name}`).join(", ")}. Follow each skill's instructions below for this turn.`;
+    const leading = names.length === 1 ? parseSkillCommand(text, names) : null;
+    const requestText = leading ? leading.request : text.trim();
+    const request = requestText
+      ? ` Where ${names.length === 1 ? "the" : "a"} skill says {input}, use the request.\n\nRequest: ${requestText}`
+      : " There is no further request, so run it as the skill describes.";
+    return `${lead}${request}\n\n${bodies.join("\n\n")}`;
+  }
+  return skillCommandTurnText(text, files);
 }
 
 // --- Skills library composition (features.skillsLibrary) ---

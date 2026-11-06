@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { contextFullMessage } from "../context/context-renewal.ts";
 
-import { claudeApiErrorMessage, claudeAuthFailure, claudeLimitFields, claudeLimitMessage, claudeLimitRefusal, claudeResultError, claudeSignedIn, claudeUsageLimit, claudeVersionTooOld } from "./claude.ts";
+import { claudeApiErrorMessage, claudeAuthFailure, claudeAuthStatus, claudeLimitFields, claudeLimitMessage, claudeLimitRefusal, claudeResultError, claudeSignedIn, claudeUsageLimit, claudeVersionTooOld } from "./claude.ts";
 import { classifyError } from "./retry.ts";
 
 describe("claudeSignedIn", () => {
@@ -26,16 +26,16 @@ describe("claudeSignedIn", () => {
     expect(await claudeSignedIn("claude", {}, run)).toBe(false);
   });
 
-  it("fails closed when the command has no valid status", async () => {
-    const failed = ((_cli, _args, _options, callback) => {
-      callback(new Error("auth status unavailable"), "");
-    }) satisfies typeof import("../procs.ts").execCli;
-    const malformed = ((_cli, _args, _options, callback) => {
-      callback(null, "not json");
+  it("leaves sign-in unknown, not signed out, when the command gives no readable status", async () => {
+    const answering = (error: Error | null, stdout: string) => ((_cli, _args, _options, callback) => {
+      callback(error, stdout);
     }) satisfies typeof import("../procs.ts").execCli;
 
-    expect(await claudeSignedIn("claude", {}, failed)).toBe(false);
-    expect(await claudeSignedIn("claude", {}, malformed)).toBe(false);
+    for (const [error, stdout] of [[new Error("auth status unavailable"), ""], [null, "not json"], [null, "null"], [null, "{}"], [null, '{"loggedIn":"yes"}']] as const) {
+      expect(await claudeAuthStatus("claude", {}, answering(error, stdout)), stdout).toEqual({});
+      expect(await claudeSignedIn("claude", {}, answering(error, stdout)), stdout).toBe(false);
+    }
+    expect(await claudeAuthStatus("claude", {}, answering(new Error("exit code 1"), '{"loggedIn":false}'))).toEqual({ authenticated: false });
   });
 });
 

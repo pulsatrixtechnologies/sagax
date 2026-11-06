@@ -18,6 +18,10 @@ export interface McpProbeTool {
 export type McpProbeResult =
   /** `total` is set when the server advertised more tools than `tools` shows. */
   | { ok: true; tools: McpProbeTool[]; total?: number; engineNames?: EngineToolNames }
+  /** `auth: "required"`: the server wants a sign-in. Either it refused initialize
+   * or tools/list with HTTP 401 and offers OAuth, or it listed tools for a caller
+   * with no credentials and refused a tool call with HTTP 401 from behind an
+   * RFC 9728 protected-resource document. */
   | { ok: false; error: string; auth?: "required" };
 
 /** Tools an engine registers under another name, or cannot register at all
@@ -40,6 +44,14 @@ export function engineToolNames(serverName: string | undefined, names: readonly 
 }
 
 export const SIGN_IN_REQUIRED = "This server needs you to sign in.";
+/** A tool name no server defines, so calling it runs nothing and the answer
+ * says only whether tool calls need a sign-in. Observed 2026-10-31:
+ * mcp.agentcard.sh answers it HTTP 401 with `resource_metadata`;
+ * huggingface.co/mcp, whose sign-in is optional and which also serves an
+ * RFC 9728 document, answers JSON-RPC -32602 "not found". */
+export const SIGN_IN_CHECK_TOOL = "sagax.sign-in-check";
+const SIGN_IN_CHECK_MS = 5_000;
+const DISCOVERY_MS = 5_000;
 
 /** A command that bridges to a big URL server (`npx mcp-remote …`) prints
  * the same 1.2 MB tools list the URL test reads, so it gets the same cap. */
@@ -95,6 +107,53 @@ function publicTools(raw: unknown[], secrets: Record<string, string>, serverName
   return { tools, ...(named.length > tools.length ? { total: named.length } : {}), ...(engineNames ? { engineNames } : {}) };
 }
 
+/** True when the probe carries any header value. Personal entries store ""
+ * placeholders, so an empty value is no credential. */
+export function sendsCredentials(server: Pick<StoredRemoteMcpServer, "headers">): boolean {
+  return Object.values(server.headers).some((value) => value !== "");
+}
+
+/** Which request the server refused with HTTP 401. */
+type RefusedAt = "connect" | "call";
+
+/** Whether a 401 asks for a sign-in rather than for keys. `connect`: any OAuth
+ * metadata counts (a server that refuses initialize is unusable without a
+ * sign-in). `call`: only metadata an RFC 9728 protected-resource document led
+ * to, since discovery's origin fallback would flag any host that merely serves
+ * openid-configuration. `url` is the server's own address, never the broker's. */
+async function asksForSignIn(url: string, refusal: McpHttpError, at: RefusedAt, signal?: AbortSignal): Promise<boolean> {
+  const bound = AbortSignal.timeout(DISCOVERY_MS);
+  const meta = await discoverMcpAuth(url, refusal.wwwAuthenticate ?? null, {
+    signal: signal ? AbortSignal.any([signal, bound]) : bound,
+  }).catch(() => null);
+  return meta !== null && (at === "connect" || meta.source === "protected-resource");
+}
+
+/** After a tools/list that carried no credentials: do tool calls need a
+ * sign-in? One call of SIGN_IN_CHECK_TOOL through the same client. Only HTTP
+ * 401 behind a protected-resource document means yes. Any other answer, a
+ * timeout or a network failure keeps the verdict Connected. A server that
+ * really lists that name is never called. */
+export async function callsNeedSignIn(
+  client: RemoteMcpClient,
+  url: string,
+  listed: unknown[],
+  signal: AbortSignal,
+): Promise<boolean> {
+  if (listed.some((tool) => (tool as { name?: unknown } | null)?.name === SIGN_IN_CHECK_TOOL)) return false;
+  try {
+    await client.request(
+      "tools/call",
+      { name: SIGN_IN_CHECK_TOOL, arguments: {} },
+      AbortSignal.any([signal, AbortSignal.timeout(SIGN_IN_CHECK_MS)]),
+    );
+    return false;
+  } catch (error) {
+    return error instanceof McpHttpError && error.kind === "status" && error.status === 401
+      && await asksForSignIn(url, error, "call", signal);
+  }
+}
+
 /** Prove the MCP handshake and list the tools of one configured server,
  * whichever way it is reached. Neither path returns anything the renderer
  * must not see: child stderr, environment values, header values. */
@@ -128,6 +187,9 @@ async function probeRemoteMcpServer(
     const result = await client.request("tools/list", {}, combined);
     const tools = result && typeof result === "object" ? (result as { tools?: unknown }).tools : undefined;
     if (!Array.isArray(tools)) return { ok: false, error: "The server did not return a valid MCP tools list." };
+    if (!sendsCredentials(server) && await callsNeedSignIn(client, server.url, tools, combined)) {
+      return { ok: false, auth: "required", error: SIGN_IN_REQUIRED };
+    }
     const secrets = server.oauth?.clientSecret ? { ...server.headers, "oauth.clientSecret": server.oauth.clientSecret } : server.headers;
     return { ok: true, ...publicTools(tools, secrets, serverName) };
   } catch (error) {
@@ -135,12 +197,8 @@ async function probeRemoteMcpServer(
     if (timeout.signal.aborted) return { ok: false, error: publicProbeError("timeout") };
     // A 401 that names an OAuth sign-in is not a wrong address or header:
     // the person has to sign in. Anything else keeps the plain status.
-    if (error instanceof McpHttpError && error.status === 401) {
-      const discovery = AbortSignal.timeout(5_000);
-      const meta = await discoverMcpAuth(server.url, error.wwwAuthenticate ?? null, {
-        signal: signal ? AbortSignal.any([signal, discovery]) : discovery,
-      }).catch(() => null);
-      if (meta) return { ok: false, auth: "required", error: SIGN_IN_REQUIRED };
+    if (error instanceof McpHttpError && error.status === 401 && await asksForSignIn(server.url, error, "connect", signal)) {
+      return { ok: false, auth: "required", error: SIGN_IN_REQUIRED };
     }
     if (error instanceof McpHttpError && error.kind === "status") {
       return { ok: false, error: `The server answered HTTP ${error.status}. Check the address and headers.` };

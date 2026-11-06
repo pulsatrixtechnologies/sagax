@@ -186,11 +186,17 @@ export function createMcpServersHttpRoutes(deps: McpServersHttpDeps): RouteHandl
         const server = parsed.server;
         if (!isRemoteMcpServer(server)) return json(res, 200, await probeMcpServer(server, undefined, controller.signal, name));
         await deps.mcpOAuth.refresh(name, server, false, controller.signal).catch(() => false);
-        let result = await probeMcpServer({ ...server, ...deps.mcpOAuth.withAuthHeaders({ [name]: server })[name] }, undefined, controller.signal, name);
+        const withSignIn = { ...server, ...deps.mcpOAuth.withAuthHeaders({ [name]: server })[name] };
+        let result = await probeMcpServer(withSignIn, undefined, controller.signal, name);
         if (!result.ok && /HTTP 401\b/.test(result.error) && await deps.mcpOAuth.refresh(name, server, true, controller.signal).catch(() => false)) {
           result = await probeMcpServer({ ...server, ...deps.mcpOAuth.withAuthHeaders({ [name]: server })[name] }, undefined, controller.signal, name);
         }
-        if (!result.ok && /HTTP 40[13]\b/.test(result.error)) await deps.mcpOAuth.probe(name, server, controller.signal).catch(() => undefined);
+        // Record a sign-in the Test found. probeServer never drops tokens for a
+        // credential-less probe; a Bearer we sent and the server refused still
+        // goes through the refresh / expire path inside probe.
+        if (!result.ok && (result.auth === "required" || /HTTP 40[13]\b/.test(result.error))) {
+          await deps.mcpOAuth.probe(name, server, controller.signal).catch(() => undefined);
+        }
         return json(res, 200, result);
       } finally {
         res.off("close", disconnect);

@@ -24,7 +24,10 @@ import {
   resolveVaultKey,
   type VaultKeySource,
 } from "./mcp-oauth.ts";
+import { startFakeHttpMcp } from "../testing/fake-http-mcp-server.ts";
+import { startFakeOAuth } from "../testing/fake-oauth-server.ts";
 import { startFakeOAuthMcp, type FakeOAuthMcp } from "../testing/fake-oauth-mcp-server.ts";
+import { SIGN_IN_CHECK_TOOL } from "./mcp-probe.ts";
 
 const REDIRECT = "http://127.0.0.1:65000/api/mcp-oauth/callback";
 const FIXED_KEY: VaultKeySource = { kind: "key", key: Buffer.alloc(32, 7) };
@@ -136,6 +139,51 @@ describe("probe and discovery", () => {
     expect(await oauth.probe("notes", remote(fake.mcpUrl, { Authorization: "Bearer static-fake-token" }))).toEqual({ auth: "none" });
     expect(oauth.vault.get("notes")).toBeUndefined();
     expect(oauth.status("notes", remote(fake.mcpUrl, { Authorization: "Bearer static-fake-token" }))).toEqual({ auth: "none" });
+  });
+
+  it("records a sign-in for a server that lists tools to anyone and refuses calls", async () => {
+    const issuer = await startFakeOAuth();
+    const mcp = await startFakeHttpMcp({
+      guard: "tools/call",
+      acceptBearer: issuer.isValid,
+      wwwAuthenticate: issuer.challenge,
+      tools: [{ name: "buy", description: "Buy something" }],
+    });
+    try {
+      const oauth = manager();
+      expect(await oauth.probe("shop", remote(mcp.url))).toMatchObject({ auth: "required" });
+      expect(oauth.vault.get("shop")).toMatchObject({ serverUrl: mcp.url, issuer: issuer.issuer });
+      expect(mcp.refusedCalls).toEqual([{ name: SIGN_IN_CHECK_TOOL, arguments: {} }]);
+      expect(mcp.calls).toEqual([]);
+    } finally {
+      await mcp.close();
+      await issuer.close();
+    }
+  });
+
+  it("never signs a signed-in server out when a credential-carrying probe still connects", async () => {
+    const issuer = await startFakeOAuth();
+    const token = issuer.mint();
+    const mcp = await startFakeHttpMcp({
+      guard: "tools/call",
+      acceptBearer: issuer.isValid,
+      wwwAuthenticate: issuer.challenge,
+      tools: [{ name: "buy" }],
+    });
+    try {
+      const oauth = manager();
+      await oauth.probe("shop", remote(mcp.url));
+      oauth.vault.set("shop", {
+        ...oauth.vault.get("shop")!,
+        tokens: { access: token, expiresAt: clock + 3_600_000 },
+        client: { id: "c1", kind: "manual", redirectUri: REDIRECT, authMethod: "none" },
+      });
+      expect(await oauth.probe("shop", remote(mcp.url))).toMatchObject({ auth: "connected" });
+      expect(oauth.vault.get("shop")?.tokens?.access).toBe(token);
+    } finally {
+      await mcp.close();
+      await issuer.close();
+    }
   });
 });
 

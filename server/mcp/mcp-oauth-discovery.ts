@@ -17,6 +17,11 @@ export interface McpAuthMetadata {
   tokenEndpointAuthMethods?: string[];
   /** The MCP URL, sent as the RFC 8707 `resource` so tokens are audience-bound. */
   resource: string;
+  /** How the authorization server was found. `protected-resource`: an RFC 9728
+   * document (the 401's `resource_metadata` hint, or a well-known address for
+   * this URL or its origin) named it. `origin`: none did, and the MCP server's
+   * own origin was assumed to be the issuer, as MCP 2025-03-26 clients do. */
+  source: "protected-resource" | "origin";
 }
 
 const FETCH_TIMEOUT_MS = 5_000;
@@ -118,7 +123,8 @@ export async function discoverMcpAuth(
   }
   const resource = await protectedResource(target, resourceMetadataUrl(wwwAuthenticate), options);
   const servers = stringList(resource?.authorization_servers);
-  const issuer = servers?.[0] ?? target.origin;
+  const named = servers?.[0];
+  const issuer = named ?? target.origin;
   if (!isAllowedAuthUrl(issuer)) return null;
   const metadata = await authorizationServer(issuer, options);
   if (!metadata) return null;
@@ -148,5 +154,6 @@ export async function discoverMcpAuth(
     ...(scopes?.length ? { scopes } : {}),
     ...(tokenEndpointAuthMethods?.length ? { tokenEndpointAuthMethods } : {}),
     resource: target.toString(),
+    source: named === undefined ? "origin" : "protected-resource",
   };
 }

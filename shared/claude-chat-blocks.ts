@@ -50,6 +50,25 @@ export function isArtifactConsentRefusal(text: string | undefined): boolean {
   return Boolean(text && CONSENT_REFUSAL.test(text));
 }
 
+/**
+ * Chat message that asks the bot to republish a foreign claude.ai page
+ * (#2018 Lot 1). Quebec French: the bot cannot Artifact-read that URL; it
+ * publishes from workspace HTML (or a paste) and returns the new URL so
+ * references can be updated.
+ */
+export function claudeArtifactCopyPrompt(url: string): string {
+  return `Publie une copie de ${url} depuis ton compte avec claude_artifact. Tu ne peux pas lire cette page (autre compte claude.ai) : publie depuis un fichier HTML de ton workspace (ou un collage), puis donne la nouvelle URL pour mettre à jour les références.`;
+}
+
+/**
+ * Tool-result guidance when `claude_artifact` hits `other_account` (catalog
+ * language: English). Same Lot 1 contract as {@link claudeArtifactCopyPrompt}.
+ */
+export function claudeArtifactOtherAccountGuidance(account?: string): string {
+  const who = account ? ` (the person's Claude account is ${account})` : "";
+  return `This artifact belongs to another claude.ai account${who}: you cannot Artifact-read that page. Publish a new copy from an HTML file in your workspace (or a paste) with claude_artifact { tool: "Artifact", input: { action: "publish", ... }, file or html }, then return the new URL so references can be updated.`;
+}
+
 /** A wrong-account card: the artifact the engine could not open, and the
  * claude.ai account the engine is signed in to (when known). */
 export interface ArtifactConsentBlock {

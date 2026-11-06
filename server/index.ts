@@ -2332,6 +2332,7 @@ import { runClaudeArtifact } from "./claude-artifacts/runner.ts";
 import { ArtifactSummaryCache, listClaudeArtifactComments, threadWantsClaude, type PersonArtifactResult } from "./claude-artifacts/service.ts";
 import { TrackedArtifactStore } from "./claude-artifacts/tracked.ts";
 import { CLAUDE_ARTIFACT_COMMENTS_ROUTINE, claudeArtifactCommentsNote } from "./claude-artifacts/comments-routine.ts";
+import { claudeArtifactCopyPrompt } from "../shared/claude-chat-blocks.ts";
 import { createBotTaskInternalRoutes, createBotTaskRoutes } from "./routes/bot-task-list.ts";
 import { createBotTaskStore } from "./bots/bot-task-list.ts";
 import { botTasksFrameAllowed, sameBotTaskOwner } from "../shared/bot-task-list.ts";
@@ -40552,7 +40553,7 @@ ROUTES.push(createClaudeArtifactRoutes({
     try {
       await acceptDirectSend({
         botId, threadId: thread,
-        text: `Publie une copie de ${url} depuis ton compte avec claude_artifact. Tu ne peux pas lire cette page (autre compte claude.ai) : publie depuis un fichier HTML de ton workspace (ou un collage), puis donne la nouvelle URL pour mettre à jour les références.`,
+        text: claudeArtifactCopyPrompt(url),
         sendId: randomUUID().replaceAll("-", ""),
         sender: messageSender(auth),
         trigger: usageTriggerFor(auth),

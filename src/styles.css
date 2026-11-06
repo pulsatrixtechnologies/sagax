@@ -2270,10 +2270,22 @@ button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
   animation-duration: 0.28s;
   animation-timing-function: var(--ease-out-quint);
 }
-/* "Thinking…" label sheen while the model reasons */
+/* Legacy background-position sheen (RoutineRunCard bar and similar). */
 @keyframes shimmer {
   from { background-position: 200% 50%; }
   to { background-position: -200% 50%; }
+}
+/* "Thinking…" label sheen while the model reasons. The band crosses the phrase while the brighter copy inside it
+   crosses back, so the letters hold still and only the light moves. It moves by transform, in a dozen steps, and
+   rests between sweeps: a smooth sweep (or a background-position one) draws the whole page every display frame for
+   as long as a turn runs. */
+@keyframes sheen-band {
+  from { transform: translateX(-70%); animation-timing-function: steps(12, jump-none); }
+  35%, to { transform: translateX(70%); }
+}
+@keyframes sheen-letters {
+  from { transform: translateX(70%); animation-timing-function: steps(12, jump-none); }
+  35%, to { transform: translateX(-70%); }
 }
 @keyframes reduced-loader-pulse {
   0%, 100% { opacity: 0.45; }
@@ -2288,17 +2300,37 @@ button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
   60% { opacity: 0.25; }
 }
 .thinking-shimmer {
-  background: linear-gradient(90deg, var(--color-ink-secondary) 40%, var(--color-ink) 50%, var(--color-ink-secondary) 60%);
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  /* background-clip:text only paints glyphs inside the background box. A
-     tight line box (leading-none) is shorter than ascenders, descenders and
-     arabic marks, so they were cut. Pad the box past the glyphs and pull the
-     margins back so the layout doesn't move. */
+  position: relative;
+  color: var(--color-ink-secondary);
+  /* A truncated phrase clips to its box, and a tight line box (leading-none)
+     is shorter than ascenders, descenders and arabic marks. Pad the box past
+     the glyphs and pull the margins back so the layout doesn't move. */
   padding: 0.35em 0.12em;
   margin: -0.35em -0.12em;
+}
+.thinking-sheen {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+.thinking-sheen > span {
+  position: absolute;
+  inset: 0;
+  -webkit-mask-image: linear-gradient(90deg, transparent 30%, #000 50%, transparent 70%);
+  mask-image: linear-gradient(90deg, transparent 30%, #000 50%, transparent 70%);
+  animation: sheen-band var(--sheen-period) linear var(--sheen-delay) infinite;
+}
+.thinking-sheen > span::before {
+  content: attr(data-text) / "";
+  position: absolute;
+  inset: 0;
+  padding: 0.35em 0.12em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-ink);
+  animation: sheen-letters var(--sheen-period) linear var(--sheen-delay) infinite;
 }
 
 /* Ultracode effort: Claude-console purple, theme-aware and subdued in every skin. */
@@ -2329,16 +2361,10 @@ button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
   color: var(--color-ultracode-ink);
 }
 .ultracode-shimmer {
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--color-ultracode) 55%, var(--color-ink-secondary)) 35%,
-    var(--color-ultracode-ink) 50%,
-    color-mix(in srgb, var(--color-ultracode) 55%, var(--color-ink-secondary)) 65%
-  );
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: color-mix(in srgb, var(--color-ultracode) 55%, var(--color-ink-secondary));
+}
+.ultracode-shimmer .thinking-sheen > span::before {
+  color: var(--color-ultracode-ink);
 }
 .ultracode-sidebar-dot {
   background: var(--color-ultracode);
@@ -2374,15 +2400,17 @@ button[aria-haspopup="menu"]:has(> [data-sidebar-account-pill]):focus-visible {
 .bot-activity-wave > span:nth-child(2) { animation-delay: 0.2s; }
 .bot-activity-wave > span:nth-child(3) { animation-delay: 0.4s; }
 :root[data-reduced-motion="true"] .bot-activity-wave > span { animation: none; }
-:root[data-reduced-motion="true"] .bot-activity .thinking-shimmer { animation: none; background: none; color: var(--color-ink-secondary); }
+:root[data-reduced-motion="true"] .bot-activity .thinking-sheen { display: none; }
+:root[data-reduced-motion="true"] .bot-activity .thinking-shimmer { color: var(--color-ink-secondary); }
 @media (prefers-reduced-motion: reduce) {
   .bot-activity-wave > span { animation: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .animate-caret, .animate-msg-in, .animate-shimmer, .animate-pop-in, .animate-pop-out, .animate-call-dock-in, .animate-card-fade-in, .animate-card-fade-out { animation: none; }
   .animate-status-pulse { animation: none; opacity: 0.6; }
-  .thinking-shimmer { background: none; color: var(--color-ink-secondary); }
-  .ultracode-shimmer { background: none; color: var(--color-ultracode-ink); }
+  .thinking-sheen { display: none; }
+  .thinking-shimmer { color: var(--color-ink-secondary); }
+  .ultracode-shimmer { color: var(--color-ultracode-ink); }
   .ultracode-sidebar-dot { animation: none; opacity: 0.85; }
   .turn-presence.ultracode-active .bot-activity-dots,
   .turn-presence.ultracode-active [data-presence-mascot] { filter: none; }

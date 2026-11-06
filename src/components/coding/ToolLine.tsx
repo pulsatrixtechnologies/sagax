@@ -40,6 +40,7 @@ const DOT: Record<StepPhase, string> = {
   running: "text-accent-text animate-pulse motion-reduce:animate-none",
   done: "text-success",
   failed: "text-danger",
+  unverified: "text-ink-tertiary",
 };
 
 function commandPhase(step: CommandStep): StepPhase {

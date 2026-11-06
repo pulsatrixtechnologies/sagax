@@ -965,7 +965,7 @@ import {
 } from "./messages/send-idempotency.ts";
 import { EventBus, withoutPrivateFields } from "./harness/bus.ts";
 import { enginesByUse, ProviderRegistry } from "./harness/registry.ts";
-import { afterFirstEngineRead, holdUntilFirstEngineRead } from "./first-engine-read.ts";
+import { holdUntilFirstEngineRead } from "./first-engine-read.ts";
 import { ManagedDesktopProviders } from "./computer/managed-desktop.ts";
 import { wasOldestThread } from "./threads/main-thread.ts";
 import {
@@ -2889,8 +2889,10 @@ const sessions = new SessionRegistry({
       return (email: string) => allowedScopes(email, membership);
     }
   }),
-  portalMembership: hostedWorkspaceConfiguration()?.portalMembership === true
+  portalMembership: hostedWorkspaceConfiguration()?.portalMembership === true,
+  recheckMs: 1_000,
 });
+onConfigSaved(() => sessions.membershipChanged());
 const sharedComputers = new SharedComputers(id => sessions.isLive(id));
 // Organization server: a bot reaches the computer of the person who asks,
 // through that person's own desktop app ("user-desktop"), never the server
@@ -14286,7 +14288,8 @@ function fanoutSsePayload(payload: Record<string, unknown>, options: { adminOnly
   const kind = String(payload.kind ?? "");
   // Membership may change through fleet/CLI config writes. Recheck on durable
   // frames only: a content.delta storm must not rescan email sessions.
-  if (!sseKindSkipsMembershipRecheck(kind)) sessions.revalidateEmailSessions();
+  // Throttled to at most once a second unless membershipChanged() ran.
+  if (!sseKindSkipsMembershipRecheck(kind)) sessions.recheckMembership();
   const seq = ++lastSeq;
   const frame = encodeSseDataFrame(STREAM_ID, seq, { ...payload, seq });
   // Store both projections as immutable frames: live and reconnecting clients
@@ -45235,7 +45238,7 @@ ROUTES.push(createBotsMessagesRoutes({
   drainQueuedSends,
   engineReference,
   get enginesRead() { return enginesRead; },
-  engineRead: (instanceId) => registry.engineRead(instanceId),
+  engineRead: (instanceId: string) => registry.engineRead(instanceId),
   finishUntilRuns,
   guardedSendSchema,
   handoffs,

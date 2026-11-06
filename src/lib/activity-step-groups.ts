@@ -87,7 +87,7 @@ function groupsWithMerge(
         label: entry.label,
         steps: originals,
         count: originals.length,
-        phase: entry.phase,
+        phase: entry.phase === "unverified" ? "done" : entry.phase,
         ...(sharedSummary ? { summary: sharedSummary } : {}),
         ...(reading.title && originals.length === 1 ? { title: reading.title } : {}),
         ...(first.where ? { where: first.where } : {}),

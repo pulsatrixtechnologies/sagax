@@ -100,6 +100,7 @@ import { isAppleMobileWebClient, showToolCallRows } from "@/lib/tool-activity-ro
 import { MAUS_COLORS, normalizeState, stateForBot } from "@/lib/mascot";
 import { botBubbleVars } from "@/lib/bubble-colors";
 import { mascotRowAnimated } from "@/lib/mascot-animate";
+import { useBotUnread } from "./unread-notice";
 import { peerLine, peerRequest, type PeerLine } from "@/lib/peer-message";
 import { autoWorkerLine } from "@/lib/auto-model";
 import { showWorkingDots } from "@/lib/turn-tail";
@@ -2063,6 +2064,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   const engine = useStoreSelector((current) => current.instances.find((instance) => instance.instanceId === bot.modelSelection.instanceId));
   const computerStart = useStoreSelector((current) => current.computerStarts[bot.id]);
   const mascotMotion = useStoreSelector((current) => current.mascotMotion?.botId === bot.id ? current.mascotMotion : null);
+  const { noticing } = useBotUnread(bot);
   const pendingQueued = useStoreSelector((current) => Object.fromEntries([bot.threadId, ...(bot.tasks ?? []).map((task) => task.threadId)].map((id) => [id, current.pendingQueued[id]])), shallowEqual);
   const focus = useStoreSelector((current) => current.focusMessage?.threadId === bot.threadId ? current.focusMessage : null);
   const showThreads = useShowThreads();
@@ -2499,7 +2501,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
           size={24}
           motion={mascotMotion?.kind ?? "none"}
           motionKey={mascotMotion?.nonce ?? 0}
-          animated={mascotRowAnimated(bot, pendingQueued, mascotMotion?.kind)}
+          animated={mascotRowAnimated(bot, pendingQueued, mascotMotion?.kind, noticing)}
         />
       }
     />

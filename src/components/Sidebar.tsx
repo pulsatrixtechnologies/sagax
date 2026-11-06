@@ -69,6 +69,7 @@ import { useAdvancedMode } from "@/lib/interface-mode";
 import { SidebarMascotAvatar, SidebarMascotProvider } from "./SidebarMascotAvatar";
 import { stateForBot } from "@/lib/mascot";
 import { mascotRowAnimated } from "@/lib/mascot-animate";
+import { useBotUnread } from "./unread-notice";
 import { cn } from "@/lib/cn";
 import { SIDEBAR_CIRCLE_BUTTON } from "@/lib/circle-button";
 import { searchMatchesThreads, useSearchDisclosure } from "@/lib/search-disclosure";
@@ -148,7 +149,7 @@ import { SidebarFoot, SidebarRailFoot } from "./SidebarFoot";
 import { useShowThreads, useThreadsMode } from "@/lib/thread-preferences";
 import { openBotConversationActions } from "./thread-home";
 import { useShowSidebarLogo } from "@/lib/sidebar-logo-preferences";
-import { botShowsUnread, iconUnreadDotPosition } from "@/lib/bot-unread";
+import { iconUnreadDotPosition } from "@/lib/bot-unread";
 import { sidebarBotActivityTasks } from "./SidebarBotActivity";
 import { citationPreviewText } from "@/lib/citations";
 import { groupMemberBots } from "@/lib/group-members";
@@ -1930,7 +1931,7 @@ export function BotListItem({
   const lineWorking = working && !routineOnlyWork;
   const teammateWait = !waiting && !working && (Boolean(bot.waitingForTeammates) || activityTasks.some((task) => Boolean(task.waitingForTeammates)));
   const queued = activityTasks.some((task) => task.queued);
-  const unread = botShowsUnread(bot);
+  const { unread, noticing } = useBotUnread(bot);
   // quiet rows drop the last-message preview but keep a line that reports
   // something happening now; an idle bot is just its name
   const statusLine = deleting || lineWorking || waiting || teammateWait || queued;
@@ -1958,7 +1959,7 @@ export function BotListItem({
           size={avatarSize}
           motion={mascotMotion?.kind ?? "none"}
           motionKey={mascotMotion?.nonce ?? 0}
-          animated={mascotRowAnimated(bot, pendingQueued, mascotMotion?.kind)}
+          animated={mascotRowAnimated(bot, pendingQueued, mascotMotion?.kind, noticing)}
         />
         {/* status dot (StatusDot, the same one a person's presence wears):
             green while the bot is working, ringed in the row's ground so it

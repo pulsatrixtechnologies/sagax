@@ -106,7 +106,7 @@ import localOriginModule from "./local-origin.cjs";
 import { buildApplicationMenu } from "./menu.mjs";
 import { createComputerSharing, validateSharedFolders } from "./computer-sharing.mjs";
 import { createDesktopBridge } from "./desktop-bridge.mjs";
-import { macAppEnabled, macAppOfTool, macAppsStatus, runMacAppCall, testMacApp, writeMacAppSettings } from "./mac-apps.mjs";
+import { macAppEnabled, macAppOfTool, macAppsStatus, macAppsStatusLive, requestMacAppAutomation, runMacAppCall, testMacApp, writeMacAppSettings } from "./mac-apps.mjs";
 import { applyAppIcon, createAppIconStore, parseAppIconRequest, windowIconImage } from "./app-icon.mjs";
 import { WINDOWS_APP_USER_MODEL_ID, shortcutFolders, updateShortcutIcons } from "./windows-shortcuts.mjs";
 import { createProxyCredentialStore, createProxyCredentials, proxyPasswordAnswerScript, proxyPasswordPage } from "./proxy-credentials.mjs";
@@ -4220,7 +4220,15 @@ ipcMain.handle("clipboard:write-text", localOnly("clipboard:write-text", (_event
 // server that was "needs an API key" turns into a listed one without waiting.
 // Plugins > This Mac with an organization server: the Apple apps live here,
 // so the setup pages read and change them over IPC (electron/mac-apps.mjs).
-ipcMain.handle("mac-apps:status", desktopUiOnly("mac-apps:status", () => macAppsStatus(app.getPath("userData"), { platform: process.platform })));
+// Status reads the real Automation grant from macOS (helper "status", never a
+// prompt), so a grant or refusal made in System Settings shows on focus.
+ipcMain.handle("mac-apps:status", desktopUiOnly("mac-apps:status", () => macAppsStatusLive(app.getPath("userData"), { platform: process.platform })));
+// "Ask for access": the helper (a child of Sagax, so macOS files the grant
+// under Sagax) sends the permission check that shows the macOS prompt.
+ipcMain.handle("mac-apps:ask-automation", desktopUiOnly("mac-apps:ask-automation", async (_event, appId) => {
+  await requestMacAppAutomation(app.getPath("userData"), appId, { platform: process.platform });
+  return macAppsStatusLive(app.getPath("userData"), { platform: process.platform });
+}));
 ipcMain.handle("mac-apps:set", desktopUiOnly("mac-apps:set", (_event, appId, enabled) => {
   if (typeof enabled !== "boolean") throw new Error("enabled must be true or false");
   writeMacAppSettings(app.getPath("userData"), appId, { enabled });

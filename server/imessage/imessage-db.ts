@@ -7,12 +7,21 @@ import { basename, isAbsolute, join, sep } from "node:path";
 
 const APPLE_EPOCH = 978_307_200;
 
-/** Apple's Cocoa timestamp (seconds, or nanoseconds since 2001-01-01). */
+/** Apple's Cocoa timestamp: nanoseconds since 2001-01-01 (a BigInt past
+ * 2^53 in current chat.db), or whole seconds in old databases (< 1e10). */
 export function appleDate(raw: unknown): string | null {
-  const value = typeof raw === "bigint" ? Number(raw) : typeof raw === "number" ? raw : Number(raw);
-  if (!Number.isFinite(value) || value <= 0) return null;
-  const seconds = value > 1e14 ? value / 1e9 : value;
-  return new Date((seconds + APPLE_EPOCH) * 1000).toISOString();
+  let seconds: number;
+  if (typeof raw === "bigint") {
+    if (raw <= 0n) return null;
+    // Divide as BigInt first: Number(raw) would round the nanoseconds.
+    seconds = raw >= 10_000_000_000n ? Number(raw / 1_000_000n) / 1_000 : Number(raw);
+  } else {
+    const value = typeof raw === "number" ? raw : Number(raw);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    seconds = value >= 1e10 ? value / 1e9 : value;
+  }
+  const date = new Date((seconds + APPLE_EPOCH) * 1000);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 /** Readable text out of an attributedBody blob when the text column is empty. */

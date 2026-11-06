@@ -409,7 +409,7 @@ requireDirectoryMode(unpacked, 0o755);
 for (const relative of ["app.asar", "ui/index.html", "server/index.js", "server/desktop-entry.mjs"]) {
   requireFile(path.join(resources, relative));
 }
-for (const forbidden of ["speech-helper", "cua-driver", "cua-sdk"]) {
+for (const forbidden of ["speech-helper", "automation-helper", "cua-driver", "cua-sdk"]) {
   if (statSync(path.join(resources, forbidden), { throwIfNoEntry: false })) {
     fail(`unsupported Linux resource was bundled: ${forbidden}`);
   }

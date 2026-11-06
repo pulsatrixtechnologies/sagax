@@ -308,6 +308,7 @@ const __BASE_VERSION__: string;
         status(): Promise<import("../../shared/mac-apps-setup.ts").MacAppsSetupStatus>;
         set(app: import("../../shared/mac-apps-setup.ts").MacAppSetupId, enabled: boolean): Promise<import("../../shared/mac-apps-setup.ts").MacAppsSetupStatus>;
         test(app: import("../../shared/mac-apps-setup.ts").MacAppSetupId): Promise<import("../../shared/mac-apps-setup.ts").MacAppTestResult>;
+        askAutomation(app: import("../../shared/mac-apps-setup.ts").MacAppSetupId): Promise<import("../../shared/mac-apps-setup.ts").MacAppsSetupStatus>;
         openSettings(pane: "automation" | "fullDiskAccess"): Promise<boolean>;
       };
       localControl: {

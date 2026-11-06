@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { json, readBody } from "../harness/http.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { removeTempDir } from "../testing/cleanup.ts";
+import { macAppsStatus, writeMacAppSettings } from "../../electron/mac-apps.mjs";
 import { createMacAppsRoutes } from "./mac-apps.ts";
 import { PASS } from "./table.ts";
 
@@ -19,12 +20,20 @@ let base = "";
 let dir = "";
 let identityKind: "solo" | "perspicax" = "solo";
 const test = vi.fn(async (_dir: string, _app: string) => ({ ok: true, count: 4, names: ["Work", "Home"] }));
+// The native layer is mocked: no helper, no osascript, never a real TCC prompt.
+const statusLive = vi.fn(async (dataDir: string) => macAppsStatus(dataDir, { platform: "darwin" }));
+const askAutomation = vi.fn(async (dataDir: string, appId: string) => {
+  writeMacAppSettings(dataDir, appId, { automation: "granted" });
+  return "granted";
+});
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), "sagax-mac-apps-route-"));
   identityKind = "solo";
   test.mockClear();
-  const handler = createMacAppsRoutes({ dataDir: dir, host: () => ({ platform: "darwin", identityKind, bridgeAction: false }), test });
+  statusLive.mockClear();
+  askAutomation.mockClear();
+  const handler = createMacAppsRoutes({ dataDir: dir, host: () => ({ platform: "darwin", identityKind, bridgeAction: false }), test, statusLive, askAutomation } as Parameters<typeof createMacAppsRoutes>[0]);
   server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
     void handler({ req, res, url, path: url.pathname, method: req.method ?? "GET", auth: { kind: "loopback" } as unknown as RequestAuth, json, readBody })
@@ -66,5 +75,15 @@ describe("/api/mac-apps", () => {
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({ ok: true, count: 4, names: ["Work", "Home"] });
     expect(test).toHaveBeenCalledWith(dir, "notes");
+  });
+  it("asks macOS for one app's Automation and returns the live status", async () => {
+    const res = await fetch(`${base}/api/mac-apps/permissions/ask`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ app: "mail" }) });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { apps: { id: string; permissions: { automation: string } }[] };
+    expect(askAutomation).toHaveBeenCalledWith(dir, "mail", { platform: "darwin" });
+    expect(body.apps.find((row) => row.id === "mail")?.permissions.automation).toBe("granted");
+    expect(statusLive).toHaveBeenCalled();
+    const bad = await fetch(`${base}/api/mac-apps/permissions/ask`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ app: "terminal" }) });
+    expect(bad.status).toBe(400);
   });
 });

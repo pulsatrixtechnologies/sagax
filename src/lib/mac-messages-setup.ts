@@ -80,6 +80,23 @@ export async function testMessagesSetup(): Promise<MessagesSetupTestResult> {
   );
 }
 
+/** "Ask for access": macOS shows its Automation prompt for Messages, naming
+ * Sagax; the answer comes back in the refreshed status. */
+export async function askMessagesAutomation(): Promise<MessagesSetupStatus> {
+  return viaServerOrDesktop(
+    () => api<MessagesSetupStatus>("/api/messages/permissions/ask", { method: "POST", body: "{}" }),
+    async (macApps) => messagesFromMacApps(await macApps.askAutomation("messages")),
+  );
+}
+
+/** What the Automation row offers: ask first, then System Settings once
+ * macOS holds an answer (a refusal can only be changed there). */
+export function automationAction(state: string): "ask" | "openSettings" | null {
+  if (state === "granted" || state === "unsupported") return null;
+  if (state === "denied") return "openSettings";
+  return "ask";
+}
+
 export async function openMessagesPermissionPane(pane: MessagesPrivacyPane): Promise<void> {
   const macApps = desktopMacApps();
   if (macApps) {

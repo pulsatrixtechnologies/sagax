@@ -16,15 +16,18 @@ let base = "";
 let dir = "";
 let openPrivacyPane = vi.fn(async (_anchor: string) => true);
 let identityKind: "solo" | "perspicax" = "solo";
+const askAutomation = vi.fn(async (_dataDir: string) => "granted");
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), "sagax-messages-route-"));
   openPrivacyPane = vi.fn(async (_anchor: string) => true);
   identityKind = "solo";
+  askAutomation.mockClear();
   const handler = createMessagesRoutes({
     dataDir: dir,
     host: () => ({ platform: "darwin", identityKind, bridgeAction: false }),
     openPrivacyPane: (anchor) => openPrivacyPane(anchor),
+    askAutomation,
   });
   server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
@@ -81,5 +84,11 @@ describe("/api/messages", () => {
     });
     expect(res.status).toBe(200);
     expect(openPrivacyPane).toHaveBeenCalledWith("Privacy_AllFiles");
+  });
+  it("asks macOS for Automation for Messages through the native layer", async () => {
+    const res = await fetch(`${base}/api/messages/permissions/ask`, { method: "POST" });
+    expect(res.status).toBe(200);
+    expect(askAutomation).toHaveBeenCalledWith(dir);
+    await expect(res.json()).resolves.toMatchObject({ available: true, onThisMac: true });
   });
 });

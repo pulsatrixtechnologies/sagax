@@ -12,7 +12,15 @@ import {
   MAC_APP_SCRIPTS,
   MAC_APP_TEST_SCRIPTS,
   MAC_APP_TOOLS,
+  appleDate,
+  automationHelperPath,
+  automationStateOf,
   isMacAppTool,
+  macAppsStatusLive,
+  messagesReadErrorText,
+  probeMacAppAutomation,
+  readMessages,
+  requestMacAppAutomation,
   macAppArgv,
   macAppEnabled,
   macAppErrorText,
@@ -140,4 +148,102 @@ test("the On/Off switch is one private file, off by default", () => {
   const windows = macAppsStatus(dir, { platform: "win32" });
   assert.equal(windows.available, false);
   assert.equal(windows.apps[0].permissions.automation, "unsupported");
+});
+
+// --- chat.db dates past 2^53 and read errors --------------------------------
+const NANOS = 815692699090360064n; // a real message.date from JC's chat.db
+
+test("a nanosecond chat.db date past 2^53 converts without precision errors", () => {
+  assert.equal(appleDate(NANOS), "2026-11-06T21:18:19.090Z");
+  // old databases store whole seconds since 2001
+  assert.equal(appleDate(815692699n), "2026-11-06T21:18:19.000Z");
+  assert.equal(appleDate(815692699), "2026-11-06T21:18:19.000Z");
+  assert.equal(appleDate(0n), null);
+  assert.equal(appleDate(null), null);
+});
+
+test("readMessages reads a real sqlite chat.db whose dates exceed Number.MAX_SAFE_INTEGER", async () => {
+  const { DatabaseSync } = await import("node:sqlite");
+  const dir = tempDir();
+  const db = new DatabaseSync(path.join(dir, "chat.db"));
+  db.exec(`CREATE TABLE message (ROWID INTEGER PRIMARY KEY, guid TEXT, date INTEGER, is_from_me INTEGER, text TEXT, attributedBody BLOB, service TEXT, handle_id INTEGER);
+    CREATE TABLE chat (ROWID INTEGER PRIMARY KEY, guid TEXT, chat_identifier TEXT, display_name TEXT);
+    CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER);
+    CREATE TABLE handle (ROWID INTEGER PRIMARY KEY, id TEXT);
+    INSERT INTO chat VALUES (1, 'iMessage;-;+15145550000', '+15145550000', 'Ada');
+    INSERT INTO handle VALUES (1, '+15145550000');
+    INSERT INTO message VALUES (1, 'g1', ${NANOS}, 0, 'hi', NULL, 'iMessage', 1);
+    INSERT INTO message VALUES (2, 'g2', 815692600, 1, 'old', NULL, 'SMS', 1);
+    INSERT INTO chat_message_join VALUES (1, 1), (1, 2);`);
+  db.close();
+  const rows = await readMessages(dir, { limit: 10 });
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].date, "2026-11-06T21:18:19.090Z");
+  assert.equal(rows[0].from, "+15145550000");
+  assert.equal(rows[1].from, "me");
+  const result = await testMacApp(dir, "messages", { platform: "darwin", messagesDir: dir });
+  assert.deepEqual(result, { ok: true, count: 1, names: ["Ada"] });
+});
+
+test("a chat.db read error reads as a read error, never as Messages refused", async () => {
+  const failed = await testMacApp(tempDir(), "messages", { platform: "darwin", readMessages: async () => { throw new Error("Value is too large to be represented as a JavaScript number: 1"); } });
+  assert.equal(failed.ok, false);
+  assert.match(failed.error, /could not be read from chat\.db/);
+  assert.doesNotMatch(failed.error, /refused/);
+  assert.match(messagesReadErrorText(Object.assign(new Error("x"), { code: "EPERM" })), /Full Disk Access/);
+  assert.doesNotMatch(macAppErrorText("mail", new Error("execution error: boom")).message, /refused/);
+});
+
+// --- Automation: helper status and the Ask button (mocked native layer) -----
+const helperRun = (answers) => {
+  const calls = [];
+  const execFile = async (file, args) => { calls.push({ file, args }); const out = answers[args[0]]; if (out instanceof Error) throw out; return { stdout: `${out}\n` }; };
+  return { calls, execFile };
+};
+
+test("helper output maps to a permission state", () => {
+  assert.equal(automationStateOf("granted\n"), "granted");
+  assert.equal(automationStateOf("denied"), "denied");
+  assert.equal(automationStateOf("notAsked"), "notAsked");
+  assert.equal(automationStateOf("notRunning"), null);
+  assert.equal(automationStateOf("unknown:-50"), null);
+  assert.equal(automationHelperPath({ env: { SAGAX_AUTOMATION_HELPER: "/x/helper" }, exists: (file) => file === "/x/helper" }), "/x/helper");
+  assert.equal(automationHelperPath({ env: {}, resourcesPath: "/R", exists: (file) => file === "/R/automation-helper" }), "/R/automation-helper");
+  assert.equal(automationHelperPath({ env: {}, resourcesPath: undefined, exists: () => false }), null);
+});
+
+test("status reads the grant without prompting; Ask prompts once and saves the answer", async () => {
+  const { calls, execFile } = helperRun({ status: "notAsked", ask: "granted" });
+  assert.equal(await probeMacAppAutomation("messages", { platform: "darwin", helper: "/h", execFile }), "notAsked");
+  assert.deepEqual(calls[0], { file: "/h", args: ["status", "com.apple.MobileSMS"] });
+  const dir = tempDir();
+  assert.equal(await requestMacAppAutomation(dir, "messages", { platform: "darwin", helper: "/h", execFile }), "granted");
+  assert.deepEqual(calls[1].args, ["ask", "com.apple.MobileSMS"]);
+  assert.equal(readMacAppSettings(dir).messages.automation, "granted");
+  assert.equal(await probeMacAppAutomation("messages", { platform: "win32", helper: "/h", execFile }), null);
+  assert.equal(calls.length, 2);
+});
+
+test("Ask without the helper falls back to a read-only tell by bundle id", async () => {
+  const calls = [];
+  const denied = Object.assign(new Error("Command failed"), { stderr: "Not authorized to send Apple events to Notes. (-1743)" });
+  const execFile = async (file, args) => { calls.push({ file, args }); throw denied; };
+  const dir = tempDir();
+  assert.equal(await requestMacAppAutomation(dir, "notes", { platform: "darwin", helper: null, execFile }), "denied");
+  assert.equal(calls[0].file, "osascript");
+  assert.deepEqual(calls[0].args, ["-e", 'tell application id "com.apple.Notes" to get name']);
+  assert.equal(readMacAppSettings(dir).notes.automation, "denied");
+});
+
+test("live status refreshes every app's Automation from macOS and keeps the saved one when unknown", async () => {
+  const dir = tempDir();
+  writeMacAppSettings(dir, "mail", { automation: "granted" });
+  const execFile = async (_file, args) => ({ stdout: args[1] === "com.apple.MobileSMS" ? "denied" : args[1] === "com.apple.mail" ? "notRunning" : "notAsked" });
+  const status = await macAppsStatusLive(dir, { platform: "darwin", helper: "/h", execFile, messagesAccess: () => "granted" });
+  const row = (id) => status.apps.find((item) => item.id === id);
+  assert.equal(row("messages").permissions.automation, "denied");
+  assert.equal(row("mail").permissions.automation, "granted");
+  assert.equal(row("notes").permissions.automation, "notAsked");
+  const windows = await macAppsStatusLive(dir, { platform: "win32", helper: "/h", execFile: async () => { throw new Error("must not run"); } });
+  assert.equal(windows.available, false);
 });

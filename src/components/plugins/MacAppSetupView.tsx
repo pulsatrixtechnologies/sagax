@@ -9,8 +9,9 @@ import { Check, Loader2, RotateCw, Shield, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { readableError } from "@/lib/plain-error";
-import { permissionTone } from "@/lib/mac-messages-setup";
+import { automationAction, permissionTone } from "@/lib/mac-messages-setup";
 import {
+  askMacAppAutomation,
   loadMacApps,
   openMacAppPermissionPane,
   setMacAppEnabled,
@@ -95,7 +96,8 @@ export function MacAppSetupView({ app, onBack, trail, initial }: {
 }) {
   const [status, setStatus] = useState<MacAppsSetupStatus | null>(initial ?? null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"load" | "enable" | "test" | "open" | null>(initial ? null : "load");
+  const [busy, setBusy] = useState<"load" | "enable" | "test" | "open" | "ask" | null>(initial ? null : "load");
+  const [testError, setTestError] = useState<string | null>(null);
   const [test, setTest] = useState<MacAppTestResult | null>(null);
   const [testFailed, setTestFailed] = useState(false);
 
@@ -134,7 +136,7 @@ export function MacAppSetupView({ app, onBack, trail, initial }: {
   const Icon = look.icon;
   const name = macAppName(app);
 
-  const run = async (kind: "enable" | "test" | "open", work: () => Promise<void>) => {
+  const run = async (kind: "enable" | "test" | "open" | "ask", work: () => Promise<void>) => {
     setBusy(kind);
     setError(null);
     try {
@@ -158,17 +160,24 @@ export function MacAppSetupView({ app, onBack, trail, initial }: {
     }
   });
 
+  // The read error shows under the test itself, apart from the permission.
   const runTest = () => run("test", async () => {
     setTest(null);
     setTestFailed(false);
+    setTestError(null);
     try {
       setTest(await testMacApp(app));
     } catch (cause) {
       setTestFailed(true);
-      throw cause;
+      setTestError(readableError(cause));
     } finally {
       await load(true);
     }
+  });
+
+  // "Ask for access": macOS shows its prompt naming Sagax for this app.
+  const askAccess = () => run("ask", async () => {
+    setStatus(await askMacAppAutomation(app));
   });
 
   const autoTone = automation === "granted" ? "ok" : automation === "denied" ? "warn" : "todo";
@@ -246,11 +255,23 @@ export function MacAppSetupView({ app, onBack, trail, initial }: {
                       </span>
                     </div>
                     <p className="mt-0.5 text-[12px] leading-relaxed text-ink-secondary">{t("connectApps.mac.app.automationBody", { app: name })}</p>
-                    {automation !== "granted" && (
-                      <button type="button" data-mac-app-open-automation disabled={busy !== null} onClick={() => void run("open", () => openMacAppPermissionPane("automation"))} className={button}>
-                        {busy === "open" && <Loader2 size={13} className="animate-spin" />}
-                        {t("connectApps.mac.messages.openSettings")}
-                      </button>
+                    {automationAction(automation) === "ask" && (
+                      <>
+                        <button type="button" data-mac-app-ask-automation disabled={busy !== null} onClick={() => void askAccess()} className={button}>
+                          {busy === "ask" && <Loader2 size={13} className="animate-spin" />}
+                          {t("connectApps.mac.askAccess")}
+                        </button>
+                        <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-secondary">{t("connectApps.mac.askAccessHelp")}</p>
+                      </>
+                    )}
+                    {automationAction(automation) === "openSettings" && (
+                      <>
+                        <p className="mt-1.5 text-[11.5px] leading-relaxed text-danger" data-mac-app-automation-denied="">{t("connectApps.mac.deniedHelp")}</p>
+                        <button type="button" data-mac-app-open-automation disabled={busy !== null} onClick={() => void run("open", () => openMacAppPermissionPane("automation"))} className={button}>
+                          {busy === "open" && <Loader2 size={13} className="animate-spin" />}
+                          {t("connectApps.mac.messages.openSettings")}
+                        </button>
+                      </>
                     )}
                   </div>
                 </li>
@@ -264,6 +285,11 @@ export function MacAppSetupView({ app, onBack, trail, initial }: {
                       {busy === "test" && <Loader2 size={13} className="animate-spin" />}
                       {t("connectApps.mac.messages.testRun")}
                     </button>
+                    {testError && (
+                      <p role="alert" className="mt-2 text-[12px] leading-relaxed text-danger" data-mac-app-test-error="">
+                        {t("connectApps.mac.readFailed", { error: testError })}
+                      </p>
+                    )}
                     {test && (
                       <p className="mt-2 text-[12.5px] text-ink" data-mac-app-test-result="" data-mac-app-test-count={test.count}>
                         {test.count === 1 ? t("connectApps.mac.app.testResultOne") : t("connectApps.mac.app.testResultMany", { count: test.count })}

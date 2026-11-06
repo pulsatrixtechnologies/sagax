@@ -29,6 +29,15 @@ export async function testMacApp(app: MacAppSetupId): Promise<MacAppTestResult> 
   return result;
 }
 
+/** "Ask for access": the macOS Automation prompt for this app, then the
+ * refreshed status. */
+export async function askMacAppAutomation(app: MacAppSetupId): Promise<MacAppsSetupStatus> {
+  return viaServerOrDesktop(
+    () => api<MacAppsSetupStatus>("/api/mac-apps/permissions/ask", { method: "POST", body: JSON.stringify({ app }) }),
+    (macApps) => macApps.askAutomation(app),
+  );
+}
+
 export async function openMacAppPermissionPane(pane: "automation" | "fullDiskAccess"): Promise<void> {
   const macApps = desktopMacApps();
   if (macApps) {

@@ -1,11 +1,10 @@
 // Live macOS permission probes for Messages setup. Full Disk Access is
-// whether chat.db opens read-only; Automation is whether a no-op tell to
-// Messages is allowed (never sends). Probes never log message bodies.
+// whether chat.db opens read-only; Automation is the grant macOS holds for
+// Sagax over Messages (read by the helper, never a prompt). Probes never log
+// message bodies.
 import { existsSync, accessSync, constants } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 
 import {
   messagesSetupHostGate,
@@ -15,10 +14,9 @@ import {
   type MessagesSetupTestResult,
 } from "../../shared/mac-messages-setup.ts";
 import type { MessagesHost } from "../../shared/imessage.ts";
+import { probeMacAppAutomation, requestMacAppAutomation } from "../../electron/mac-apps.mjs";
 import { openMessagesReader } from "./imessage-db.ts";
 import { readMessagesSettings } from "./imessage-settings.ts";
-
-const execFileAsync = promisify(execFile);
 
 export function messagesLibraryDir(home = homedir()): string {
   return join(home, "Library", "Messages");
@@ -57,32 +55,24 @@ export function probeFullDiskAccess(home = homedir()): MessagesPermissionState {
   }
 }
 
-/** Probe Automation without sending. A denied tell application "Messages"
- * surfaces as not permitted; success means the grant is on. */
-export async function probeAutomation(run: typeof execFileAsync = execFileAsync): Promise<MessagesPermissionState> {
+/** The real Automation grant Sagax holds for Messages, read from macOS by the
+ * helper (AEDeterminePermissionToAutomateTarget, never a prompt). Before,
+ * a tell to Messages here could itself raise the prompt, or report "not
+ * asked" forever when Messages was closed. */
+export async function probeAutomation(
+  probe: typeof probeMacAppAutomation = probeMacAppAutomation,
+): Promise<MessagesPermissionState> {
   if (process.platform !== "darwin") return "unsupported";
-  try {
-    await run("osascript", ["-e", 'tell application "System Events" to get name of first process whose bundle identifier is "com.apple.MobileSMS"'], {
-      timeout: 8_000,
-      maxBuffer: 64 * 1024,
-    });
-    // System Events seeing Messages is not the Automation grant for
-    // Sagax→Messages. Ask Messages for a read-only property instead.
-  } catch {
-    // fall through to the Messages tell
-  }
-  try {
-    await run("osascript", ["-e", 'tell application "Messages" to get name'], {
-      timeout: 8_000,
-      maxBuffer: 64 * 1024,
-    });
-    return "granted";
-  } catch (cause) {
-    const detail = cause instanceof Error ? cause.message : String(cause);
-    if (/not authorized|not allowed|1002|(-1743)/i.test(detail)) return "denied";
-    if (/Application isn.t running|(-600)|connection is invalid/i.test(detail)) return "notAsked";
-    return "unknown";
-  }
+  return (await probe("messages").catch(() => null)) ?? "unknown";
+}
+
+/** "Ask for access": the helper shows the macOS prompt for Messages once. */
+export async function askMessagesAutomation(
+  dataDir: string,
+  request: typeof requestMacAppAutomation = requestMacAppAutomation,
+): Promise<MessagesPermissionState> {
+  if (process.platform !== "darwin") return "unsupported";
+  return request(dataDir, "messages");
 }
 
 export async function readMessagesPermissions(home = homedir()): Promise<MessagesSetupPermissions> {

@@ -107,6 +107,8 @@ describe("bot activity API", () => {
     const bob = await get(base, "/api/bots/pepper/activity", "bob");
     expect(bob.body.items!.map((item) => item.id)).toEqual(["thread:t-bob"]);
     expect(bob.body.items![0]).toMatchObject({ status: "failed" });
+    // 2026-11-06: a finished conversation spans its newest turn, not the thread's age
+    expect(bob.body.items![0]).toMatchObject({ startedAt: NOW - 6_000, endedAt: NOW - 5_000 });
     expect(JSON.stringify(bob.body)).not.toContain("Refactor the parser");
     expect(JSON.stringify(alice.body)).not.toContain("secret plan");
   });

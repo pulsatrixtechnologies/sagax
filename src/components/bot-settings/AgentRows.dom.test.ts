@@ -113,3 +113,28 @@ describe("AgentRows", () => {
     expect(onIgnore).toHaveBeenCalledWith("thread:a1");
   });
 });
+
+describe("AgentRows parity with the panel's other sections (2026-11-06)", () => {
+  it("draws the rows in the panel card, in the UI font, never mono", () => {
+    flushSync(() => root.render(createElement(AgentRows, { items: [item("p1", "Build the page", "finished", { endedAt: NOW - 2 * M })], onOpen: () => {}, now: NOW })));
+    const list = host.querySelector("ul")!;
+    expect(list.className).toContain("rounded-xl");
+    expect(list.className).toContain("bg-[var(--bot-panel-card)]");
+    expect(host.innerHTML).not.toContain("font-mono");
+    const row = rows()[0]!;
+    expect(row.className).toContain("px-3 py-2");
+    expect(row.className).toContain("hover:bg-hover");
+  });
+
+  it("a finished row shows how long it ran, never the time since it began", () => {
+    const old = item("p2", "Old thread", "finished", { startedAt: NOW - 228 * 60 * M, endedAt: NOW - 228 * 60 * M + 3 * M });
+    flushSync(() => root.render(createElement(AgentRows, { items: [old], onOpen: () => {}, now: NOW })));
+    expect(rows()[0]!.querySelector("[data-agent-right]")?.textContent).toBe("3m");
+  });
+
+  it("a finished row without a known end shows no number", () => {
+    const noEnd = item("p3", "No end", "finished", { startedAt: NOW - 228 * 60 * M });
+    flushSync(() => root.render(createElement(AgentRows, { items: [noEnd], onOpen: () => {}, now: NOW })));
+    expect(rows()[0]!.querySelector("[data-agent-right]")?.textContent).toBe("");
+  });
+});

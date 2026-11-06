@@ -33,8 +33,9 @@ let root: Root;
 const flush = async () => { await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); }); };
 const routines = [routine("r1", "Morning", "Daily"), routine("r2", "Backup", "Dev"), routine("r3", "Loose")];
 const runs: Array<{ id: string; routineId: string; status: string }> = [];
+const onOpen = vi.fn();
 const mount = async (list: Routine[] = routines) => {
-  await act(async () => { root.render(createElement(RoutineFolderList, { bot: bot as never, routines: list, runs: runs as never, grouped: true, viewerPrincipalId: null, onOpen: () => {}, onCreateIn: () => {} })); });
+  await act(async () => { root.render(createElement(RoutineFolderList, { bot: bot as never, routines: list, runs: runs as never, grouped: true, viewerPrincipalId: null, onOpen, onCreateIn: () => {} })); });
   await flush();
 };
 const pointer = (target: Element | Window, type: string, x: number, y: number, extra: Record<string, unknown> = {}) => {
@@ -51,6 +52,7 @@ const drag = (id: string, to: Element) => {
 };
 
 beforeEach(() => {
+  onOpen.mockClear();
   setLocale("en");
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   resetServerFeatures();
@@ -168,7 +170,7 @@ describe("the row's state word (2026-10-28)", () => {
     expect(row("r1").querySelector("[data-routine-running]")).toBeNull();
   });
 
-  it("Running for a live run takes the last-run line, and the row opens that run", async () => {
+  it("Running for a live run takes the last-run line, and the row still opens the routine", async () => {
     runs.push({ id: "run-9", routineId: "r1", status: "running" });
     await mount();
     const line = row("r1").querySelector("[data-routine-running]") as HTMLElement;
@@ -176,8 +178,9 @@ describe("the row's state word (2026-10-28)", () => {
     expect(line.getAttribute("aria-label")).toBe("Running: Morning");
     expect(row("r2").querySelector("[data-routine-running]")).toBeNull();
     act(() => { (line.closest("button") as HTMLButtonElement).click(); });
-    // The run opens as its chat where the chat is, not the Automations page.
-    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "openRoutineRunInChat", runId: "run-9", routineId: "r1", botId: "bot-1" });
+    // Same action running or not (JC 2026-11-06): the routine opens, never the run.
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: "r1" }));
+    expect(fixture.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: "openRoutineRunInChat" }));
   });
 
   it("shows Running instead of the last result: no Completed and no age of the old run", async () => {

@@ -863,130 +863,22 @@ export function turnLabel(agentName: string, prompt: string): string {
   return `${agentName}: ${short}`;
 }
 
-export function createAgentApi(deps: AgentApiDeps): AgentApi {
-  const now = deps.now ?? Date.now;
-  const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
-  const limiter = new AgentRateLimiter();
-  if (deps.secret.length < 32) throw new Error("the agent API secret must be at least 32 bytes");
-  /** #1170: the prompt each caller last started in a conversation. In the
-   * bot's single chat the running turn may be the person's own or another
-   * caller's: supersede stops only a turn this caller started. */
-  const startedBy = new Map<string, { messageId: string; caller: string }>();
-  const ownsRunningTurn = (caller: AgentCaller, threadId: string): boolean => {
-    const mine = startedBy.get(threadId);
-    if (!mine || mine.caller !== callerKey(caller)) return false;
-    const lastUser = [...deps.messages(threadId)].reverse().find((message) => message.role === "user");
-    return lastUser?.id === mine.messageId;
-  };
-
-  const ok = (body: Record<string, unknown>): AgentApiAnswer => ({ status: 200, body });
-  // One error envelope (audit 2026-10-29, B5): {code, message, hint,
-  // details} on every refusal, details.status the HTTP status; the extra
-  // fields a refusal carried before stay at the top level too, and `error`
-  // repeats the message for older clients.
-  const asAnswer = (refusal: Refusal): AgentApiAnswer => {
-    const { hint, details, ...rest } = refusal.extra ?? {};
-    const retryable = typeof rest.retryable === "boolean" ? rest.retryable : isRetryableRefusal(refusal.code);
-    const detailObj = details && typeof details === "object" ? details as Record<string, unknown> : {};
-    return {
-      status: refusal.status,
-      body: {
-        error: refusal.message, code: refusal.code, message: refusal.message,
-        hint: typeof hint === "string" ? hint : "",
-        details: { ...rest, ...detailObj, retryable, status: refusal.status },
-        ...rest,
-        retryable,
-      },
-    };
-  };
-
-  /** The agent, when the caller may reach it; one answer for "no such agent" and "not yours". */
-  const reachable = async (caller: AgentCaller, agentId: string): Promise<AgentSummary | Refusal> => {
-    const agent = (await deps.agents(caller)).find((candidate) => candidate.id === agentId);
-    return agent ?? refuse(404, "unknown_agent", "No agent with that id is reachable. Its id must come from list_agents or find_agents.");
-  };
-
-  const unfinished = (
-    body: HandleBody,
-    handle: string,
-    state: TurnState,
-    reply: string,
-    after: CursorKey | null,
-    status: TurnResult["status"],
-  ): TurnResult => {
-    const live = state === "idle" ? "queued" : state;
-    const { progress, wait_cursor } = buildProgress(body.t, deps.messages(body.t), { id: body.m, at: body.i }, live, reply, after);
-    return {
-      handle,
-      agent_id: body.a,
-      thread_id: body.t,
-      finished: false,
-      status,
-      reply,
-      progress,
-      wait_cursor,
-      recommended_wait_ms: AWAIT_RECOMMENDED_WAIT_MS,
-    };
-  };
-
-  const waitTurn = async (
-    body: HandleBody,
-    handle: string,
-    timeoutMs: number,
-    signal?: AbortSignal,
-    after: CursorKey | null = null,
-  ): Promise<TurnResult> => {
-    const deadline = now() + timeoutMs;
-    let idleLooks = 0;
-    for (;;) {
-      const state = deps.turnState(body.a, body.t);
-      const messages = deps.messages(body.t);
-      const read = turnReply(messages, { id: body.m, at: body.i });
-      if (state === "idle" && read.sawAnchor) {
-        idleLooks += 1;
-        if (read.reply || idleLooks >= IDLE_LOOKS_DONE) {
-          // the reply is collected: an AI client's conversation leaves the
-          // person's list (server/threads/background-sweep.ts)
-          deps.collected?.(body.a, body.t);
-          return { handle, agent_id: body.a, thread_id: body.t, finished: true, status: "finished", reply: read.reply };
-        }
-      } else if (state === "idle") {
-        // The prompt is not in the conversation yet (queued behind a slot).
-        idleLooks += 1;
-        if (idleLooks >= IDLE_LOOKS_DONE * 25) {
-          return unfinished(body, handle, "queued", "", after, "queued");
-        }
-      } else {
-        idleLooks = 0;
-        if (state === "waiting") {
-          // A card waits for a person: waiting longer only burns the timeout.
-          return unfinished(body, handle, state, read.reply, after, "waiting_for_approval");
-        }
-      }
-      // Return still_working before the caller's (or gateway) ceiling so the
-      // answer is a structured resume, never a killed tool call.
-      if (signal?.aborted || now() >= deadline) {
-        return unfinished(body, handle, state === "idle" ? "queued" : state, read.reply, after, "still_working");
-      }
-      await sleep(Math.min(POLL_MS, Math.max(0, deadline - now())));
-    }
-  };
-
-  const stillWorkingNext =
-    "The turn is still going (still_working). Call await_turn again with this handle and pass wait_cursor as cursor; use recommended_wait_ms as timeout_ms. Never send the prompt again.";
-  const timeoutNote = stillWorkingNext;
-  const resultBody = (result: TurnResult): Record<string, unknown> => ({
-    ...result,
-    ...(result.finished
-      ? (result.reply ? {} : { note: "The turn finished without text." })
-      : {
-          next: result.status === "waiting_for_approval"
-            ? "An approval waits in that conversation: a person answers it (in Sagax, or from an AI client with sagax_approve); then call await_turn with this handle and wait_cursor as cursor."
-            : timeoutNote,
-        }),
-  });
-
-  const handlers: Record<AgentToolName, (caller: AgentCaller, args: Args, signal?: AbortSignal) => Promise<AgentApiAnswer | Refusal>> = {
+function createAgentApiHandlers(env: {
+  deps: AgentApiDeps;
+  now: () => number;
+  startedBy: Map<string, { messageId: string; caller: string }>;
+  ownsRunningTurn: (caller: AgentCaller, threadId: string) => boolean;
+  ok: (body: Record<string, unknown>) => AgentApiAnswer;
+  reachable: (caller: AgentCaller, agentId: string) => Promise<AgentSummary | Refusal>;
+  waitTurn: (body: HandleBody, handle: string, timeoutMs: number, signal?: AbortSignal, after?: CursorKey | null) => Promise<TurnResult>;
+  resultBody: (result: TurnResult) => Record<string, unknown>;
+  latest: (caller: AgentCaller, args: Args, withThreads: boolean) => Promise<AgentApiAnswer | Refusal>;
+}): Pick<Record<AgentToolName, (caller: AgentCaller, args: Args, signal?: AbortSignal) => Promise<AgentApiAnswer | Refusal>>,
+  "list_agents" | "find_agents" | "get_agent" | "delete_agent" | "create_agent" | "send_prompt" | "await_turn" |
+  "read_transcript" | "read_transcript_page" | "read_latest_page" | "read_latest_page_with_threads" | "read_transcript_cold"
+> {
+  const { deps, now, startedBy, ownsRunningTurn, ok, reachable, waitTurn, resultBody, latest } = env;
+  return {
     async list_agents(caller, args) {
       const bad = onlyKeys(args, []);
       if (bad) return bad;
@@ -1359,7 +1251,18 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
       const page = pageBefore(collectEntries(deps, deps.threads(caller, agentId)), cursor, COLD_PAGE_SIZE);
       return ok({ agent_id: agentId, entries: page.entries, next_cursor: page.next_cursor, cold: true });
     },
+  };
+}
 
+function createAgentApiConfigHandlers(env: {
+  deps: AgentApiDeps;
+  ok: (body: Record<string, unknown>) => AgentApiAnswer;
+  reachable: (caller: AgentCaller, agentId: string) => Promise<AgentSummary | Refusal>;
+}): Pick<Record<AgentToolName, (caller: AgentCaller, args: Args, signal?: AbortSignal) => Promise<AgentApiAnswer | Refusal>>,
+  "list_agent_models" | "update_agent_model" | "update_agent_settings" | "update_routine"
+> {
+  const { deps, ok, reachable } = env;
+  return {
     async list_agent_models(caller, args) {
       const bad = onlyKeys(args, ["agent_id"]);
       if (bad) return bad;
@@ -1507,6 +1410,130 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
       return ok({ routine_id: routineId, routine: updated.routine });
     },
   };
+}
+
+export function createAgentApi(deps: AgentApiDeps): AgentApi {
+  const now = deps.now ?? Date.now;
+  const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const limiter = new AgentRateLimiter();
+  if (deps.secret.length < 32) throw new Error("the agent API secret must be at least 32 bytes");
+  /** #1170: the prompt each caller last started in a conversation. In the
+   * bot's single chat the running turn may be the person's own or another
+   * caller's: supersede stops only a turn this caller started. */
+  const startedBy = new Map<string, { messageId: string; caller: string }>();
+  const ownsRunningTurn = (caller: AgentCaller, threadId: string): boolean => {
+    const mine = startedBy.get(threadId);
+    if (!mine || mine.caller !== callerKey(caller)) return false;
+    const lastUser = [...deps.messages(threadId)].reverse().find((message) => message.role === "user");
+    return lastUser?.id === mine.messageId;
+  };
+
+  const ok = (body: Record<string, unknown>): AgentApiAnswer => ({ status: 200, body });
+  // One error envelope (audit 2026-10-29, B5): {code, message, hint,
+  // details} on every refusal, details.status the HTTP status; the extra
+  // fields a refusal carried before stay at the top level too, and `error`
+  // repeats the message for older clients.
+  const asAnswer = (refusal: Refusal): AgentApiAnswer => {
+    const { hint, details, ...rest } = refusal.extra ?? {};
+    const retryable = typeof rest.retryable === "boolean" ? rest.retryable : isRetryableRefusal(refusal.code);
+    const detailObj = details && typeof details === "object" ? details as Record<string, unknown> : {};
+    return {
+      status: refusal.status,
+      body: {
+        error: refusal.message, code: refusal.code, message: refusal.message,
+        hint: typeof hint === "string" ? hint : "",
+        details: { ...rest, ...detailObj, retryable, status: refusal.status },
+        ...rest,
+        retryable,
+      },
+    };
+  };
+
+  /** The agent, when the caller may reach it; one answer for "no such agent" and "not yours". */
+  const reachable = async (caller: AgentCaller, agentId: string): Promise<AgentSummary | Refusal> => {
+    const agent = (await deps.agents(caller)).find((candidate) => candidate.id === agentId);
+    return agent ?? refuse(404, "unknown_agent", "No agent with that id is reachable. Its id must come from list_agents or find_agents.");
+  };
+
+  const unfinished = (
+    body: HandleBody,
+    handle: string,
+    state: TurnState,
+    reply: string,
+    after: CursorKey | null,
+    status: TurnResult["status"],
+  ): TurnResult => {
+    const live = state === "idle" ? "queued" : state;
+    const { progress, wait_cursor } = buildProgress(body.t, deps.messages(body.t), { id: body.m, at: body.i }, live, reply, after);
+    return {
+      handle,
+      agent_id: body.a,
+      thread_id: body.t,
+      finished: false,
+      status,
+      reply,
+      progress,
+      wait_cursor,
+      recommended_wait_ms: AWAIT_RECOMMENDED_WAIT_MS,
+    };
+  };
+
+  const waitTurn = async (
+    body: HandleBody,
+    handle: string,
+    timeoutMs: number,
+    signal?: AbortSignal,
+    after: CursorKey | null = null,
+  ): Promise<TurnResult> => {
+    const deadline = now() + timeoutMs;
+    let idleLooks = 0;
+    for (;;) {
+      const state = deps.turnState(body.a, body.t);
+      const messages = deps.messages(body.t);
+      const read = turnReply(messages, { id: body.m, at: body.i });
+      if (state === "idle" && read.sawAnchor) {
+        idleLooks += 1;
+        if (read.reply || idleLooks >= IDLE_LOOKS_DONE) {
+          // the reply is collected: an AI client's conversation leaves the
+          // person's list (server/threads/background-sweep.ts)
+          deps.collected?.(body.a, body.t);
+          return { handle, agent_id: body.a, thread_id: body.t, finished: true, status: "finished", reply: read.reply };
+        }
+      } else if (state === "idle") {
+        // The prompt is not in the conversation yet (queued behind a slot).
+        idleLooks += 1;
+        if (idleLooks >= IDLE_LOOKS_DONE * 25) {
+          return unfinished(body, handle, "queued", "", after, "queued");
+        }
+      } else {
+        idleLooks = 0;
+        if (state === "waiting") {
+          // A card waits for a person: waiting longer only burns the timeout.
+          return unfinished(body, handle, state, read.reply, after, "waiting_for_approval");
+        }
+      }
+      // Return still_working before the caller's (or gateway) ceiling so the
+      // answer is a structured resume, never a killed tool call.
+      if (signal?.aborted || now() >= deadline) {
+        return unfinished(body, handle, state === "idle" ? "queued" : state, read.reply, after, "still_working");
+      }
+      await sleep(Math.min(POLL_MS, Math.max(0, deadline - now())));
+    }
+  };
+
+  const stillWorkingNext =
+    "The turn is still going (still_working). Call await_turn again with this handle and pass wait_cursor as cursor; use recommended_wait_ms as timeout_ms. Never send the prompt again.";
+  const timeoutNote = stillWorkingNext;
+  const resultBody = (result: TurnResult): Record<string, unknown> => ({
+    ...result,
+    ...(result.finished
+      ? (result.reply ? {} : { note: "The turn finished without text." })
+      : {
+          next: result.status === "waiting_for_approval"
+            ? "An approval waits in that conversation: a person answers it (in Sagax, or from an AI client with sagax_approve); then call await_turn with this handle and wait_cursor as cursor."
+            : timeoutNote,
+        }),
+  });
 
   const latest = async (caller: AgentCaller, args: Args, withThreads: boolean): Promise<AgentApiAnswer | Refusal> => {
     const bad = onlyKeys(args, ["agent_id", "limit", "cursor", "thread_id"]);
@@ -1544,6 +1571,13 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
       });
     }
     return ok(body);
+  };
+
+  const handlers: Record<AgentToolName, (caller: AgentCaller, args: Args, signal?: AbortSignal) => Promise<AgentApiAnswer | Refusal>> = {
+    ...createAgentApiHandlers({
+      deps, now, startedBy, ownsRunningTurn, ok, reachable, waitTurn, resultBody, latest,
+    }),
+    ...createAgentApiConfigHandlers({ deps, ok, reachable }),
   };
 
   return {

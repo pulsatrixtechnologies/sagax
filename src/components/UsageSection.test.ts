@@ -158,7 +158,7 @@ describe("the headline", () => {
   });
 
   it("says this month's cost and when it renews, in one line", () => {
-    const html = renderToStaticMarkup(createElement(UsageHeadline, { usage, error: null, now: NOW.getTime() }));
+    const html = renderToStaticMarkup(createElement(UsageHeadline, { usage: usage(12, 10), error: null, now: NOW.getTime() }));
     expect(html).toContain("$12.00 this month");
     expect(html).toContain("Renews Nov");
     expect(html).not.toContain("data-usage-bar");
@@ -168,7 +168,7 @@ describe("the headline", () => {
   it("writes the renewal day the Quebec way", () => {
     setLocale("fr");
     expect(renewalDay(NOW)).toMatch(/^1er\u00a0nov/);
-    const html = renderToStaticMarkup(createElement(UsageHeadline, { usage, error: null, now: NOW.getTime() }));
+    const html = renderToStaticMarkup(createElement(UsageHeadline, { usage: usage(12, 10), error: null, now: NOW.getTime() }));
     expect(html).toContain("ce mois-ci");
     expect(html).toContain("Se renouvelle le 1er");
   });
@@ -288,6 +288,8 @@ describe("Detail", () => {
     expect(html).toContain('data-settings-card="usage.traces"');
     expect(html).toContain("Traces par job");
     expect(html).toContain("Voir");
+  });
+
   it("has no shortcut to the organization's console", () => {
     setLocale("fr");
     // no shortcut to Perspicax in the Settings (2026-11-05)

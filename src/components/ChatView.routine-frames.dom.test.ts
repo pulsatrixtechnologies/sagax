@@ -101,7 +101,7 @@ function route(input: RequestInfo | URL, init?: RequestInit): Promise<Response> 
     return json({ bot: { ...announce([runTask({ routineRunId: RUN_ID }), mainTask]), threadId: switched[1], messages: [] } });
   }
   if (path === "/api/instances") return json({ instances: [] });
-  if (path === "/api/routines") return json({ routines: [], runs: [] });
+  if (path.split("?")[0] === "/api/routines") return json({ routines: [], runs: [] });
   if (path === "/api/webhooks") return json({ webhooks: [], attempts: [] });
   return json({});
 }

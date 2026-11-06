@@ -8,7 +8,7 @@ function skillCardCopy(staged: { action: "create" | "update"; name: string; gist
   subtitle: string;
   tool: string;
 } {
-  const host = getHost();
+  void getHost();
   const warnings = staged.warnings.length ? `\n\nWarnings:\n- ${staged.warnings.join("\n- ")}` : "";
   return {
     title: staged.action === "create"

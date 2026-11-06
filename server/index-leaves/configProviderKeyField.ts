@@ -4,7 +4,7 @@ export type Host = Record<string, any>;
 
 export function createConfigProviderKeyField(getHost: () => Host): any {
 function configProviderKeyField(value: unknown, prefix = "", depth = 0): string | undefined {
-  const host = getHost();
+  void getHost();
   if (!value || typeof value !== "object" || depth > 4) return undefined;
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
     const path = prefix ? `${prefix}.${key}` : key;

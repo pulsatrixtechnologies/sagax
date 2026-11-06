@@ -4,7 +4,7 @@ export type Host = Record<string, any>;
 
 export function createMemberForAgentCaller(getHost: () => Host): any {
 function memberForAgentCaller(caller: AgentCaller): MemberPerson {
-  const host = getHost();
+  void getHost();
   return {
     principalId: caller.id,
     sub: caller.sub ?? "",

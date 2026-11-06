@@ -6,7 +6,7 @@ export type Host = Record<string, any>;
 
 export function createStoredNamesIn(getHost: () => Host): any {
 function storedNamesIn(text: string | undefined): string[] {
-  const host = getHost();
+  void getHost();
   if (!text || !text.includes(ATTACHMENTS_DIR)) return [];
   const out = new Set<string>();
   const prefix = ATTACHMENTS_DIR + sep;

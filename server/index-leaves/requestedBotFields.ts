@@ -5,7 +5,7 @@ export type Host = Record<string, any>;
 
 export function createRequestedBotFields(getHost: () => Host): any {
 function requestedBotFields(req: IncomingMessage, path: string): string[] {
-  const host = getHost();
+  void getHost();
   if (path.endsWith("/always-allow")) return ["alwaysAllow"];
   if (path.endsWith("/model")) return ["modelSelection"];
   const body = parsedBodyOf(req);

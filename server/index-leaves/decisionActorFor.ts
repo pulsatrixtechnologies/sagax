@@ -4,7 +4,7 @@ export type Host = Record<string, any>;
 
 export function createDecisionActorFor(getHost: () => Host): any {
 function decisionActorFor(auth: RequestAuth): DecisionActor {
-  const host = getHost();
+  void getHost();
   if (auth.kind === "loopback") return auth.trust === "service" ? { kind: "worker" } : { kind: "loopback" };
   const session = auth.session;
   return {

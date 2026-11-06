@@ -6,7 +6,7 @@ export type Host = Record<string, any>;
 
 export function createRunRoutes(getHost: () => Host): any {
 async function runRoutes(req: IncomingMessage, res: ServerResponse, url: URL, path: string, method: string, auth: RequestAuth): Promise<boolean> {
-  const host = getHost();
+  void getHost();
   // #1750: after a large body is read, yield once more before the route's
   // zod safeParse so JSON.parse and validation are not one continuous block.
   if (await dispatchRoutes(ROUTES, {

@@ -4,7 +4,7 @@ export type Host = Record<string, any>;
 
 export function createConfigForAccess(getHost: () => Host): any {
 function configForAccess(status: ReturnType<typeof configStatus>, admin: boolean) {
-  const host = getHost();
+  void getHost();
   if (admin) return status;
   // Configured-or-not is fine; an SSH alias, an email, a browser partition
   // id, and the sign-in list are not a client's business. Preserve the

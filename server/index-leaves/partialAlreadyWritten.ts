@@ -4,7 +4,7 @@ export type Host = Record<string, any>;
 
 export function createPartialAlreadyWritten(getHost: () => Host): any {
 function partialAlreadyWritten(messages: Message[], messageId: string): string {
-  const host = getHost();
+  void getHost();
   const index = messages.findIndex((message) => message.id === messageId);
   if (index < 0) return "";
   for (let cursor = messages.length - 1; cursor > index; cursor -= 1) {

@@ -1,11 +1,11 @@
 // @ts-nocheck
 /** startProactiveWake (#1388). Pure move from server/index.ts. */
+import { peerWakeDigest, proactiveWakePrompt, wakeAlwaysReports } from "../proactive/proactive-wake.ts";
 export type Host = Record<string, any>;
 
 export function createStartProactiveWake(getHost: () => Host): any {
 function startProactiveWake(batch: ProactiveWakeBatch, accepted = false, runAs?: string) {
   const host = getHost();
-  const { peerWakeDigest, proactiveWakePrompt, wakeAlwaysReports } = host;
   // A person's yes that cannot start says so (answerProactiveProposal).
   if (!host.routines) {
     if (accepted) throw new Error("Routines are not ready yet");

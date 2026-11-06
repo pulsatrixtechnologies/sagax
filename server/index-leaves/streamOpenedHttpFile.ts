@@ -10,7 +10,7 @@ function streamOpenedHttpFile(
   file: OpenedMessageFile,
   headers: Record<string, string>,
 ): void {
-  const host = getHost();
+  void getHost();
   // no-transform keeps Caddy's encode, Cloudflare and other proxies from
   // compressing a body whose Content-Length and ranges are stored bytes.
   const cacheControl = headers["cache-control"] ?? "private, no-store";

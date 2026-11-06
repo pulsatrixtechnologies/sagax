@@ -4,7 +4,7 @@ export type Host = Record<string, any>;
 
 export function createCapturedReply(getHost: () => Host): any {
 function capturedReply(): { res: ServerResponse; reply: () => { status: number; body: Record<string, unknown> } | null } {
-  const host = getHost();
+  void getHost();
   let status = 0;
   let text = "";
   const res = {

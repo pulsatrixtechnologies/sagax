@@ -8,7 +8,7 @@ function sendSkillResolution(
   res: ServerResponse,
   result: ReturnType<typeof resolveSkillRequest>,
 ): boolean {
-  const host = getHost();
+  void getHost();
   if (!result.claimed) return false;
   if ("error" in result) {
     json(res, result.status, { error: result.error });

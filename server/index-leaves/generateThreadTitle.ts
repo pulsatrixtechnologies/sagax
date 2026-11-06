@@ -10,7 +10,7 @@ async function generateThreadTitle(
   text: string,
   source: ThreadTitleSource = "first-message",
 ): Promise<string | null> {
-  const host = getHost();
+  void getHost();
   const prompt = threadTitlePrompt(text, source);
   const expiry = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;

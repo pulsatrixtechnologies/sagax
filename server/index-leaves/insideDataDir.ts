@@ -7,7 +7,7 @@ export type Host = Record<string, any>;
 
 export function createInsideDataDir(getHost: () => Host): any {
 function insideDataDir(path: string): boolean {
-  const host = getHost();
+  void getHost();
   try {
     const root = realpathSync(DATA_DIR);
     const real = realpathSync(path);

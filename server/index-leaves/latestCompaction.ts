@@ -4,7 +4,7 @@ export type Host = Record<string, any>;
 
 export function createLatestCompaction(getHost: () => Host): any {
 function latestCompaction(messages: readonly Message[], task?: Pick<TaskRecord, "contextSummaries">) {
-  const host = getHost();
+  void getHost();
   const at = new Map(messages.map((message, index) => [message.id, index]));
   let best: (CompactionRecord & { id: string }) | undefined;
   let bestAt = -1;

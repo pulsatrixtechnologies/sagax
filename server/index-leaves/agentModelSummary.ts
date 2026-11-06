@@ -4,7 +4,7 @@ export type Host = Record<string, any>;
 
 export function createAgentModelSummary(getHost: () => Host): any {
 function agentModelSummary(bot: BotRecord): { instance_id: string; model: string; effort?: string; auto?: boolean } | null {
-  const host = getHost();
+  void getHost();
   const selection = bot.modelSelection;
   if (!selection?.instanceId) return null;
   return {

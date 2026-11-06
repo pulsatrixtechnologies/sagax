@@ -4,7 +4,7 @@ export type Host = Record<string, any>;
 
 export function createPhoneCallbackOrigin(getHost: () => Host): any {
 function phoneCallbackOrigin(value: string): string | null {
-  const host = getHost();
+  void getHost();
   try {
     const url = new URL(value);
     if (url.username || url.password || (url.pathname !== "/" && url.pathname !== "") || url.search || url.hash) return null;

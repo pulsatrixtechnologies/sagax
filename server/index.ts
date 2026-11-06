@@ -1,4 +1,6 @@
 // @ts-nocheck
+import { browserProfilePartitionTarget } from "./config.ts";
+import { masteryDelegationFacts } from "./achievements/achievements-mastery.ts";
 import { checkRoutineReadiness, routineEngineRefusal, routineFlowSkills, type RoutineReadinessDeps, type ReadinessRoutine, type ReadinessRun, type ReadinessComputer } from "./routines/routine-readiness.ts";
 import { routineFlowInput } from "./routines/routine-flow-input.ts";
 import { noteEngineRefusal, clearEngineRefusal, activeEngineRefusal } from "./engines/engine-refusals.ts";
@@ -2188,6 +2190,246 @@ function stderrOf(err: unknown): string {
   return typeof s === "string" ? s : Buffer.isBuffer(s) ? s.toString("utf8") : "";
 }
 Object.assign(leafHostBindings, { modelName, stderrOf });
+// #1388: functions the split dropped, restored verbatim from the pre-split server/index.ts.
+function browserSessionSpec(binaryPath: string, session: string, profile: string | undefined) {
+  return agentBrowserIntegration({
+    binaryPath,
+    session,
+    encryptionKey: browserEngineEncryptionKey(),
+    persistent: profile !== "guest",
+    env: { ...process.env, PATH: augmentedPath() },
+    attachCdpUrl: browserEngineAttachCdpUrl(cfg) ?? undefined,
+  });
+}
+
+function grokBridgeAllowed(): boolean {
+  return IDENTITY.kind !== "perspicax" || cfg.organization?.allowGrokBridge !== false;
+}
+
+function memeScopeForThread(threadId: string) {
+  const organization = IDENTITY.kind === "perspicax";
+  return memeScope(organization, organization ? vaultPrincipalForThread(threadId) : null);
+}
+
+function roomRootProblem(node: Pick<HandoffView, "groupId" | "threadId" | "botId">): string | undefined {
+  return roomHandoffProblem(node);
+}
+
+function saveOrgAllowGrokBridge(allowed: boolean, actor: AdminActor): void {
+  const before = grokBridgeAllowed();
+  saveConfig({ organization: { ...cfg.organization, allowGrokBridge: allowed } });
+  cfg.organization = { ...cfg.organization, allowGrokBridge: allowed };
+  orgAudit({
+    category: "org", action: "org.settings", target: { kind: "organization" }, changed: ["allowGrokBridge"],
+    before: { allowGrokBridge: before }, after: { allowGrokBridge: allowed }, actor
+  });
+}
+
+function setRoomHold(groupId: string, botId: string, held: boolean): GroupRecord | null {
+  const group = store.group(groupId);
+  if (!group || group.dm || !group.memberIds.includes(botId)) return null;
+  const directive = held
+    ? { hold: [botId], holdAll: false, release: [], releaseAll: false }
+    : { hold: [], holdAll: false, release: [botId], releaseAll: false };
+  const change = applyHoldDirective(group.holds, directive, group.memberIds, Date.now());
+  if (change.held.length || change.released.length) store.patchGroup(groupId, { holds: change.holds });
+  if (held) void interruptHeldMember(groupId, botId);
+  return store.group(groupId) ?? null;
+}
+
+function turnEvidence(nodeRows: { tool?: { name?: string; ok?: boolean } | null }[]): { toolCalls?: number; tools?: string[]; okToolCalls?: number } {
+  const tools: string[] = [];
+  let okToolCalls = 0;
+  for (const row of nodeRows) {
+    const name = row.tool?.name?.trim();
+    if (!name) continue;
+    if (!tools.includes(name)) tools.push(name);
+    if (row.tool?.ok === true) okToolCalls += 1;
+  }
+  return { toolCalls: tools.length, tools, okToolCalls };
+}
+
+function wakeAfterAgentReply(botId: string, threadId: string, agentName: string, speaker?: TurnSpeaker): void {
+  pendingAgentReplyWakes.set(threadId, { botId, agentName, ...(speaker ? { speaker } : {}) });
+  drainQueuedSends();
+}
+
+function claimGroupMemberBot(botId: string, operation: GroupTurnOperation): GroupMemberBotAvailability {
+  const availability = groupMemberBotAvailability(botId, operation);
+  if (availability === "ready") roomMemberLock.claim(botId, operation.threadId);
+  return availability;
+}
+
+function directRootPending(threadId: string): boolean {
+  return coordinator.all().some((n) => !n.parentId && !n.groupId && n.threadId === threadId &&
+    (n.status === "waiting" || n.status === "resume" || n.status === "queued"));
+}
+
+function drainAgentReplyWakes(): void {
+  if (pendingAgentReplyWakes.size === 0) return;
+  const pending = [...pendingAgentReplyWakes.entries()];
+  pendingAgentReplyWakes.clear();
+  for (const [threadId, wake] of pending) {
+    if (threadBusy(wake.botId, threadId)) { pendingAgentReplyWakes.set(threadId, wake); continue; }
+    void startTurn(wake.botId, `@${wake.agentName} finished. Continue with what you were doing.`, {
+      threadId, cardContinuation: true, ...(wake.speaker ? { speaker: wake.speaker } : {}),
+    }).catch((error) => console.error(`agent-reply wake failed on ${threadId}: ${error instanceof Error ? error.message : String(error)}`));
+  }
+}
+
+function drainQueuedChannelSendsNow(): void {
+  drainChannelMessages(
+    (groupId, threadId) => groupThreadIsWorking(groupId, threadId),
+    ({ groupId, threadId, items }) => {
+      const group = store.group(groupId);
+      const ownsThread = group?.dm
+        ? group.threadId === threadId
+        : Boolean(group && store.groupTaskByThread(group.id, threadId));
+      if (!group || !ownsThread) return;
+      // The burst runs as ONE room turn: the joined text routes responders
+      // and titles the task, while every queued line still lands under its
+      // own queueId (chips and sendId receipts stay per-item).
+      const head = items[0]!;
+      const last = items[items.length - 1]!;
+      const joined = items.map((item) => item.text).join("\n\n");
+      try {
+        startGroupTurn(groupId, joined, resolveReplyTarget(threadId, last.replyToId), last.sendId, last.mode, last.id, {
+          threadId,
+          sender: head.sender,
+          trigger: queuedTurnTrigger({ trigger: head.trigger, sender: head.sender }),
+          queuedGroup: items
+        });
+      } catch (error) {
+        for (const item of items) {
+          if (!store.messagesFor(threadId).some((message) => message.queueId === item.id && message.role === "user")) {
+            store.appendMessage(threadId, { role: "user", kind: "text", text: item.text, replyToId: item.replyToId, sendId: item.sendId, channelMode: item.mode, queueId: item.id, via: item.via, sender: item.sender });
+          }
+        }
+        store.appendMessage(threadId, {
+          role: "bot",
+          kind: "activity",
+          tool: failedTurnTool(`queued channel message could not start — ${error instanceof Error ? error.message : String(error)}`)
+        });
+      }
+      // A message with no eligible responder creates no operation. Continue
+      // draining instead of leaving later user messages behind it forever.
+      queueMicrotask(drainQueuedChannelSends);
+      return groupQueues.get(threadId);
+    },
+  );
+}
+
+function drainQueuedSendsNow() {
+  drainSteeredMessages(store, (botId, threadId, prompt, userMessage, excludeIds, unattended, head) =>
+    // A plain attended turn — no automationSource, no comms depth: exactly
+    // what typing the same words into an idle bot would run. Self-opened
+    // work retains `unattended` and the message's bot-origin provenance
+    // through the wait for a slot.
+    // Drain just appended the held lines; userMessage keeps startTurn
+    // from duplicating the last one, and excludeIds drops every drained
+    // line from the transcript-replay so they are not also in `prompt`.
+    new Promise<void>((resolve, reject) => {
+      // The drained turn is booked to whoever sent the first waiting line.
+      void startTurn(botId, prompt, {
+        threadId, userMessage, excludeMessageIds: excludeIds, unattended,
+        onTurnSettled: () => { resolve(); settleParallelFallback(threadId); },
+        trigger: queuedTurnTrigger(head),
+        // the first waiting line's speaker, as it was when queued; rows
+        // queued before speakers were kept read from their provenance
+        speaker: head.speaker ?? resolveTurnSpeaker({ sender: head.sender, peerAsk: head.peerAsk, trigger: head.trigger }),
+        ...(head.origin ? { origin: head.origin } : {})
+      }).catch((err) => {
+        const why = err instanceof Error ? err.message : String(err);
+        const chief = head.peerAsk?.incident ? store.bot(botId) : null;
+        // Reports that waited are refused like one sent at once: the
+        // person still hears of a failure nobody buzzed them about.
+        if (chief) incidentRefused(chief, threadId, store.activePath(threadId).filter(line => excludeIds.includes(line.id)).map(line => line.peerAsk), why);
+        else store.appendMessage(threadId, {
+          role: "bot", kind: "activity",
+          tool: failedTurnTool(`queued message could not start — ${why}`)
+        });
+        settleParallelTask(threadId, { ok: false, reply: "", why: err instanceof Error ? err.message : String(err) });
+        resolve();
+        // M2: only this group left the queue, and a turn that never
+        // started publishes no completion to wake the groups behind it.
+        queueMicrotask(drainQueuedSends);
+      }).catch(reject);
+    }),
+    // Provider completion can precede its dispatch promise: keep the queue
+    // intact until that exact handshake releases its runtime-only claim.
+    // Team incidents reports never park behind handed-on work (admission's
+    // "incident" surface says why).
+    // A person's queued words in the main chat never wait for a slot.
+    (botId, threadId, head) => threadBusy(botId, threadId) || botAtThreadCapacity(botId, head.peerAsk ? undefined : threadId)
+      || Boolean(activeGroupTurnForBot(botId))
+      || (!head.peerAsk?.incident && parksBehindCoordination(botId, threadId)) || parallelTaskBlocked(botId, threadId),
+  );
+}
+
+function noteHeldSkip(groupId: string, threadId: string, bot: BotRecord, messageId: string | undefined): void {
+  const group = store.group(groupId);
+  const hold = group?.holds?.[bot.id];
+  if (!group || !hold) return;
+  const heldMessages = messageId
+    ? rememberHeldMessage(group.heldMessages, bot.id, { threadId, messageId })
+    : group.heldMessages;
+  store.patchGroup(groupId, {
+    ...(heldMessages !== group.heldMessages ? { heldMessages } : {}),
+    ...(hold.noted ? {} : { holds: { ...group.holds, [bot.id]: { ...hold, noted: true } } }),
+  });
+  if (hold.noted) return;
+  store.appendMessage(threadId, {
+    role: "bot",
+    kind: "activity",
+    from: { botId: bot.id, name: bot.name, color: bot.color },
+    tool: { name: heldMemberLine(bot.name), ok: false },
+  });
+}
+
+function roomHeld(group: GroupRecord | null | undefined, botId: string): boolean {
+  return Boolean(group && !group.dm && group.holds?.[botId]);
+}
+
+function runtimeHoldsRoot(threadId: string): boolean {
+  return coordinator.all().some((n) => !n.parentId && n.threadId === threadId && !ENDED.has(n.status));
+}
+// #1388: bindings the leaves read through the host bag. Getters stay lazy
+// (no TDZ at boot); the drain flags and stand-in roots are leaf-owned state.
+for (const [name, read] of Object.entries({
+  ENDED: () => ENDED,
+  cloudAgentManager: () => cloudAgentManager,
+  computerParks: () => computerParks,
+  customSecretVault: () => customSecretVault,
+  grokBridgeService: () => grokBridgeService,
+  listNativeBotSkills: () => listNativeBotSkills,
+  mcpServersHost: () => mcpServersHost,
+  sideJobs: () => sideJobs,
+  skillReview: () => skillReview,
+  stopParkedCards: () => stopParkedCards,
+  teamSetupDecisionText: () => teamSetupDecisionText,
+  threadContinuationSpeaker: () => threadContinuationSpeaker,
+  browserSessionSpec: () => browserSessionSpec,
+  grokBridgeAllowed: () => grokBridgeAllowed,
+  memeScopeForThread: () => memeScopeForThread,
+  roomRootProblem: () => roomRootProblem,
+  saveOrgAllowGrokBridge: () => saveOrgAllowGrokBridge,
+  setRoomHold: () => setRoomHold,
+  turnEvidence: () => turnEvidence,
+  wakeAfterAgentReply: () => wakeAfterAgentReply,
+  claimGroupMemberBot: () => claimGroupMemberBot,
+  directRootPending: () => directRootPending,
+  drainAgentReplyWakes: () => drainAgentReplyWakes,
+  drainQueuedChannelSendsNow: () => drainQueuedChannelSendsNow,
+  drainQueuedSendsNow: () => drainQueuedSendsNow,
+  noteHeldSkip: () => noteHeldSkip,
+  roomHeld: () => roomHeld,
+  runtimeHoldsRoot: () => runtimeHoldsRoot,
+})) Object.defineProperty(leafHostBindings, name, { get: read, enumerable: true, configurable: true });
+Object.assign(leafHostBindings, {
+  drainingQueuedSends: false, queuedSendsDrainOwed: false,
+  drainingQueuedChannelSends: false, queuedChannelSendsDrainOwed: false,
+  standInRoots: new Set<string>()
+});
 const PORT = Number(process.env.SAGAX_PORT || process.env.OGB_PORT || 8799);
 /** Capabilities lot 4: the organization's declarations as last broadcast
  * (public fields): a change tells every open screen to read its

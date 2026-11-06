@@ -4,7 +4,7 @@ export type Host = Record<string, any>;
 
 export function createMcpServerBody(getHost: () => Host): any {
 function mcpServerBody(body: unknown): Record<string, unknown> {
-  const host = getHost();
+  void getHost();
   const out: Record<string, unknown> = {};
   if (!body || typeof body !== "object") return out;
   const record = body as Record<string, unknown>;

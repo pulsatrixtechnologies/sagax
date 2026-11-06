@@ -12,7 +12,9 @@ import { useCaptionChrome } from "./DesktopCapabilities";
 
 type DataAttributes = { [key: `data-${string}`]: string | boolean | undefined };
 
-export function WindowCloseButton({ onClose, ...data }: { onClose: () => void } & DataAttributes & Pick<HTMLAttributes<HTMLButtonElement>, "id">) {
+/** `place` replaces the default corner (absolute, top left) when the X sits in
+ * a row of its own (the bot's profile page pins it in a top bar, #2313). */
+export function WindowCloseButton({ onClose, place, ...data }: { onClose: () => void; place?: string } & DataAttributes & Pick<HTMLAttributes<HTMLButtonElement>, "id">) {
   const { noDragStyle } = useCaptionChrome();
   return (
     <button
@@ -23,7 +25,7 @@ export function WindowCloseButton({ onClose, ...data }: { onClose: () => void } 
       aria-label={t("common.close")}
       title={t("common.close")}
       style={noDragStyle}
-      className={cn(CIRCLE_CLOSE_BUTTON, "absolute left-3 top-3 max-sm:left-14")}
+      className={cn(CIRCLE_CLOSE_BUTTON, place ?? "absolute left-3 top-3 max-sm:left-14")}
     >
       <X {...CIRCLE_ICON} aria-hidden="true" />
     </button>

@@ -1916,6 +1916,10 @@ export type Action =
   /** `keepAsked` on a clear: a New chat the person asked for stays (only a
    * draft coming back put there goes). */
   | { type: "freshTopic"; botId: string; threadId: string | null; auto?: boolean; keepAsked?: boolean }
+  /** An asked-for New topic made on the server at once (#2312): the
+   * server's newest segment is where a routine's report, a peer's message
+   * or a bot's notice lands, so the topic on screen must exist there. */
+  | { type: "createFreshTopic"; botId: string }
   | { type: "focusMessageConsumed"; nonce: number }
   | { type: "unreadDividerDone"; threadId: string }
   | { type: "toggleAppSettings"; open?: boolean; section?: AppSettingsSection; subPage?: string; phonePairing?: boolean }
@@ -2239,6 +2243,10 @@ export function startNewTopic(
   // only over a topic of the stream: a confidential or routine thread never
   if (!empty && segment) {
     dispatch({ type: "freshTopic", botId: bot.id, threadId: opened });
+    // Made on the server now, not with the first message: until then the
+    // server's conversation is the covered topic, and a routine's report or
+    // a bot's message landed there, under the empty view (#2312).
+    dispatch({ type: "createFreshTopic", botId: bot.id });
   } else if (empty && segment) {
     // An empty newest topic is reused, never a second one: it opens on its
     // own, without the earlier topics drawn above it (src/lib/fresh-topic.ts).

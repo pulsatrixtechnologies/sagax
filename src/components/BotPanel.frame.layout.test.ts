@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const styles = read("../styles.css");
 const retro98 = read("../styles/retro98.css");
-const chatView = [read("./ChatView.tsx"), read("./ChatView.tsx-parts/ChatViewHeader.tsx"), read("./ChatView.tsx-parts/ChatViewShell.tsx")].join("\n");
+const chatView = [read("./ChatView.tsx"), read("./ChatView.tsx-parts/ChatViewHeader.tsx"), read("./ChatView.tsx-parts/ChatViewShell.tsx"), read("./ChatHeaderBar.tsx")].join("\n");
 const botPanel = read("./BotSettingsDialog.tsx");
 const personPanel = read("./PersonPanel.tsx");
 

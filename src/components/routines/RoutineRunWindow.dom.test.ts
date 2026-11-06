@@ -73,6 +73,12 @@ describe("#2272 clicking a routine run opens its window", () => {
     expect(window).not.toBeNull();
     expect(window!.textContent).toContain("Project health watch");
     expect(window!.textContent).not.toMatch(/Open thread|Go to conversation|Continue in the conversation/);
+    // the routine run floats the bot chat's bar, pill and fades (JC 2026-11-06)
+    const bar = window!.querySelector<HTMLElement>("[data-chat-header-bar]")!;
+    expect(bar.className).toMatch(/absolute inset-x-0 top-0/);
+    expect(bar.querySelector('[data-chat-edge-fade="top"]')).not.toBeNull();
+    expect(bar.querySelector("[data-chat-header-center] [data-chat-pill]")?.className).toMatch(/h-10/);
+    expect(window!.querySelector('[data-chat-bottom-edge] [data-chat-edge-fade="bottom"]')).not.toBeNull();
     host.querySelector<HTMLButtonElement>('[data-testid="bot-exchange-close"]')!.click();
     expect(store.state.routineRunWindow).toBeNull();
     expect(host.querySelector('[data-testid="routine-run-window"]')).toBeNull();

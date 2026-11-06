@@ -354,14 +354,24 @@ export function DevPodsToggle({ bot }: { bot: Pick<Bot, "id" | "threadId"> }) {
  * place of the </> popover over the transcript. Same pods, same order, same
  * collapse and menu; each one a grey label above a panel card. Nothing while
  * the Experimental switch is off. */
-export function DevPodsPanel({ bot, messages, computerStart, dispatch }: Omit<DevPodsProps, "composerHeight" | "forced" | "headerHeight">) {
+/** The pods of a coding chat that are not coding work of their own: they stay
+ * in the bot panel's Activity tab, the rest go to its Coding tab. */
+export const ACTIVITY_DEV_PODS: readonly string[] = ["connectors"];
+
+export function DevPodsPanel({ bot, messages, computerStart, dispatch, only }: Omit<DevPodsProps, "composerHeight" | "forced" | "headerHeight"> & {
+  /** Keep only the pods this accepts (the Coding tab, or Activity). */
+  only?: (id: string) => boolean;
+}) {
   const prefs = useDevPodPrefs();
   const threadKey = threadKeyOf(bot);
   const task = bot.tasks?.find((entry) => entry.threadId === bot.threadId);
   const version = useSyncExternalStore(subscribeDevPods, devPodsVersion, devPodsVersion);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const definitions = useMemo(() => devPodDefinitions(), [version]);
-  const arranged = useMemo(() => arrangePods(definitions, prefs.order, prefs.hidden), [definitions, prefs.order, prefs.hidden]);
+  const arranged = useMemo(
+    () => arrangePods(definitions, prefs.order, prefs.hidden).filter((definition) => !only || only(definition.id)),
+    [definitions, prefs.order, prefs.hidden, only],
+  );
   const ids = useMemo(() => arranged.map((definition) => definition.id), [arranged]);
   const ctx: DevPodContext = useMemo(
     () => ({ bot, task, messages, threadKey, computerStart, dispatch }),

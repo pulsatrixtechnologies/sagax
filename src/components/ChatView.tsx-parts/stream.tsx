@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, SquarePen } from "lucide-react";
-import { formatTime, startNewTopic, visibleMessages, type Bot, type InstanceInfo, type Message, type Task } from "@/state/store";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import { formatTime, visibleMessages, type Bot, type InstanceInfo, type Message, type Task } from "@/state/store";
 import { useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import { segmentsAbove, segmentsToReach } from "@/lib/single-stream";
 import { useSegmentTranscript } from "@/lib/use-segment-transcript";
@@ -62,25 +62,6 @@ export function PreviousTopicsLine({ open, onToggle }: { open: boolean; onToggle
         {t(open ? "stream.previousTopicsHide" : "stream.previousTopics")}
       </button>
     </div>
-  );
-}
-
-/** "New topic" in the chat header while threads are off: a fresh empty
- * draft over the live topic; Back restores it, nothing is deleted. */
-export function NewTopicButton({ bot }: { bot: Bot }) {
-  const dispatch = useStoreDispatch();
-  return (
-    <button
-      type="button"
-      data-new-topic={bot.id}
-      // a draft: the server creates the topic with its first message
-      onClick={() => startNewTopic(dispatch, bot)}
-      title={t("stream.newTopic")}
-      aria-label={t("stream.newTopicAria", { name: bot.name })}
-      className="flex h-8 w-8 items-center justify-center rounded-full border-[0.5px] border-hairline-weak bg-elevated text-ink-secondary transition-colors hover:bg-elevated-hover hover:text-ink"
-    >
-      <SquarePen size={15} />
-    </button>
   );
 }
 

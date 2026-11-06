@@ -1,7 +1,8 @@
 /** Isolated gallery for headless screenshots of an open bot-to-bot
  * conversation ("A ⇆ B", Close Chat pill) over the whole chat column, so its
  * layout can be compared with a 1:1 chat at any window width. Neutral bot
- * names. Not shipped in the app. ?skin=<id>&lang=<code> */
+ * names. Not shipped in the app. ?skin=<id>&lang=<code>&routine=1
+ * (routine=1: a routine run's window, its meta line and a pinned card). */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ExchangeColumnProvider, ExchangeSheet, useExchangeColumn } from "../components/BotExchangeChip";
@@ -46,13 +47,25 @@ const run: ExchangeRun = {
   ends: [{ id: "nova", name: "Nova" }, { id: "pixel", name: "Pixel" }],
 };
 
+const routine = params.get("routine") === "1";
+
 function Gallery() {
   const column = useExchangeColumn();
   return (
     <div className="h-screen bg-app text-ink" data-gallery="">
       <div ref={column.ref} className="relative h-full">
         <ExchangeColumnProvider node={column.node}>
-          {column.node && <ExchangeSheet run={run} bots={bots} showToolCalls={false} onClose={() => {}} />}
+          {column.node && (routine
+            ? <ExchangeSheet
+                run={{ ...run, ends: [{ id: "nova", name: "Nova" }] }}
+                bots={bots}
+                showToolCalls
+                onClose={() => {}}
+                testId="bot-exchange-sheet"
+                meta={<span>Weekly reports · Today 9:00 · Done</span>}
+                pinned={<div className="rounded-xl bg-raised px-3 py-2 text-[13px]">Approve sending the summary?</div>}
+              />
+            : <ExchangeSheet run={run} bots={bots} showToolCalls={false} onClose={() => {}} />)}
         </ExchangeColumnProvider>
       </div>
     </div>

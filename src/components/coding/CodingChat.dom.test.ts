@@ -120,20 +120,28 @@ const lines = () => [...column.querySelectorAll<HTMLElement>("[data-coding-row]"
 const headOf = (row: HTMLElement) => `${row.querySelector("[data-tool-name]")?.textContent ?? ""}${row.querySelector("[data-tool-arg]")?.textContent ?? ""}`;
 
 describe("CodingChatSheet", () => {
-  it("opens over the chat column with a compact left header: back, the bot pill, title, folder and branch", () => {
+  it("opens over the chat column with the chat's floating bar: back and title at the left, the bot pill centered, folder and branch atop the transcript", () => {
     const props = mountSheet("running", { item: item("running", { currentStep: "Checking types" }), detail: detail("running", { currentStep: "Checking types" }) });
     const sheet = column.querySelector<HTMLElement>("[data-testid=coding-chat]")!;
     const header = sheet.querySelector<HTMLElement>("[data-coding-header]")!;
     expect(header).not.toBeNull();
-    expect(header.className).not.toMatch(/items-center/);
-    expect(header.querySelector("[data-coding-back]")).not.toBeNull();
+    // the same bar as the bot chat (ChatHeaderBar): floating, the top fade, 40px pill centered
+    expect(header.hasAttribute("data-chat-header-bar")).toBe(true);
+    expect(header.className).toMatch(/absolute inset-x-0 top-0/);
+    expect(header.querySelector('[data-chat-edge-fade="top"]')).not.toBeNull();
+    expect(header.querySelector("[data-chat-header-center] [data-coding-bot] [data-chat-pill]")?.className).toMatch(/h-10/);
+    expect(header.querySelector("[data-bot-header-chevron]")).toBeNull();
+    expect(header.querySelector("[data-chat-header-start] [data-coding-back]")).not.toBeNull();
+    expect(header.querySelector("[data-chat-header-start] [data-coding-title]")).not.toBeNull();
+    expect(sheet.querySelector("[data-testid=coding-chat-scroll]")?.className).toMatch(/pt-\[52px\]/);
+    expect(sheet.querySelector('[data-chat-bottom-edge] [data-chat-edge-fade="bottom"]')).not.toBeNull();
     expect(header.querySelector("[data-coding-bot]")?.textContent).toBe("Wren");
     // the same pill as the chat header (BotHeaderPill)
     expect(header.querySelector("[data-coding-bot] [data-bot-header-pill]")?.className).toMatch(/rounded-full/);
     expect(header.querySelector("[data-coding-title]")?.textContent).toContain("Pour la colonne du board");
     expect(header.querySelector("[data-coding-title]")?.className).toMatch(/truncate/);
-    expect(header.querySelector("[data-coding-folder]")?.textContent).toBe("dispatch-board");
-    expect(header.querySelector("[data-coding-branch]")?.textContent).toBe("feat/column-order");
+    expect(sheet.querySelector("[data-testid=coding-chat-scroll] [data-coding-folder]")?.textContent).toBe("dispatch-board");
+    expect(sheet.querySelector("[data-testid=coding-chat-scroll] [data-coding-branch]")?.textContent).toBe("feat/column-order");
     // #2285: no status, duration or tokens in the header; they are in the panel
     expect(header.querySelector("[data-coding-state]")).toBeNull();
     expect(header.querySelector("[data-coding-elapsed]")).toBeNull();
@@ -280,6 +288,28 @@ describe("CodingChatSheet", () => {
     // the session card comes first, the pods after it
     expect(panel.firstElementChild?.hasAttribute("data-coding-session-card")).toBe(true);
     expect(column.querySelector("[data-coding-tools]")).toBeNull();
+  });
+
+  it("puts the session and pods in the Coding tab's host and Connectors in Activity's (JC 2026-11-06)", () => {
+    const activity = document.createElement("div");
+    document.body.append(activity);
+    setCodingPanelHost("wren", activity, "activity");
+    try {
+      mountSheet("finished", {
+        side: createElement("div", { "data-test-given-pods": "" }),
+        activitySide: createElement("div", { "data-test-connectors": "" }),
+      });
+      expect(panel.querySelector("[data-coding-session-card]")).not.toBeNull();
+      expect(panel.querySelector("[data-test-given-pods]")).not.toBeNull();
+      expect(panel.querySelector("[data-test-connectors]")).toBeNull();
+      expect(activity.querySelector("[data-test-connectors]")).not.toBeNull();
+      expect(activity.querySelector("[data-coding-session-card]")).toBeNull();
+    } finally {
+      flushSync(() => root.unmount());
+      root = createRoot(host);
+      setCodingPanelHost("wren", null, "activity");
+      activity.remove();
+    }
   });
 
   it("draws nothing in a panel when the bot panel is closed", () => {

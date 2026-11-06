@@ -70,13 +70,18 @@ import { t } from "@/lib/i18n";
 import { formatTokens } from "@/lib/usage";
 import { avatarBot, useExchangePortalHost } from "../BotExchangeChip";
 import { Composer } from "../Composer";
-import { DevPodsPanel } from "../dev-pods/DevPods";
-import { BotHeaderPill, useChatWindow } from "../BotHeaderPill";
+import { ACTIVITY_DEV_PODS, DevPodsPanel } from "../dev-pods/DevPods";
+
+import { BotChatHeader, useChatWindow } from "../BotHeaderPill";
+import { CHAT_UNDER_BAR_PAD, ChatBottomEdge, ChatHeaderBar } from "../ChatHeaderBar";
 import { ChatMarkdown } from "../ChatMarkdown";
 import { MessageBoundary } from "../MessageBoundary";
 import { PartyAvatar } from "../PartyAvatar";
 import { WaitingOnYou } from "../task/WaitingOnYou";
 import { TestCounts, ToolLine } from "./ToolLine";
+
+const activityPod = (id: string) => ACTIVITY_DEV_PODS.includes(id);
+const codingPod = (id: string) => !activityPod(id);
 
 const POLL_MS = 3_000;
 /** After a follow-up, keep reading the entry this long so the new turn shows. */
@@ -261,9 +266,12 @@ export interface CodingChatSheetProps {
   /** The chat's composer aimed at the task's thread (CodingChat); the plain
    * follow-up field stands in without it (tests, galleries). */
   composer?: ReactNode;
-  /** The dev pods as sections of the bot panel (#2285), put in the panel
-   * under the "This session" card. */
+  /** The dev pods as sections of the bot panel (#2285), put in its Coding
+   * tab under the "This session" card. */
   side?: ReactNode;
+  /** The pods that are not coding work of their own (Connectors): at the top
+   * of the bot panel's Activity tab. */
+  activitySide?: ReactNode;
 }
 
 /** #2285: what the header used to say on its meta line (status, duration,
@@ -297,7 +305,7 @@ function SessionCard({ glyph, lead, live, elapsed, tokens }: { glyph: string; le
 }
 
 /** The sheet, without fetching: tests and galleries draw it with fixed data. */
-export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMore = false, loadingOlder = false, onLoadOlder, onRetry, now, bot, bots, onClose, onStop, stopping = false, onSend, waiting, composer, side }: CodingChatSheetProps) {
+export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMore = false, loadingOlder = false, onLoadOlder, onRetry, now, bot, bots, onClose, onStop, stopping = false, onSend, waiting, composer, side, activitySide }: CodingChatSheetProps) {
   const chat = useChatWindow();
   const chatColumnClassName = useChatColumnClass();
   const column = useExchangePortalHost();
@@ -362,6 +370,7 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
     : activityStatusLabel(shown.status);
   const tokensLabel = tokens !== undefined && tokens > 0 ? formatTokens(tokens) : undefined;
   const panelHost = useCodingPanelHost(shown.botId);
+  const activityHost = useCodingPanelHost(shown.botId, "activity");
 
   const sheet = (
     <div
@@ -372,22 +381,57 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
       data-testid="coding-chat"
       data-coding-status={shown.status}
     >
-      <header data-coding-header className="relative flex shrink-0 flex-col gap-0.5 border-b border-hairline/40 px-3 py-2">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <button
-            type="button"
-            data-testid="bot-exchange-close"
-            data-coding-close
-            data-coding-back
-            onClick={onClose}
-            aria-label={t("codingChat.back")}
-            title={t("codingChat.back")}
-            className="-ms-1 flex size-7 shrink-0 items-center justify-center rounded-md text-ink-secondary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
-          >
-            <ChevronLeft size={16} aria-hidden="true" />
-          </button>
-          <div data-coding-bot="" className="flex min-w-0 max-w-[45%] shrink-0">
-            <BotHeaderPill
+      {/* The same floating bar as the bot chat (ChatHeaderBar, JC 2026-11-06,
+          hotfix 0.8.57): back and the task title at the left like a split
+          pane's thread title, the bot's 40px pill centered, Stop at the
+          right; the transcript scrolls under it with the chat's top fade. */}
+      <ChatHeaderBar
+        data-coding-header=""
+        className="pl-3 sm:pl-3"
+        startClassName="max-w-[30%]"
+        centerClassName="max-w-[36%]"
+        start={(
+          <>
+            <button
+              type="button"
+              data-testid="bot-exchange-close"
+              data-coding-close
+              data-coding-back
+              onClick={onClose}
+              aria-label={t("codingChat.back")}
+              title={t("codingChat.back")}
+              className="flex size-8 shrink-0 items-center justify-center rounded-full text-ink-secondary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+            >
+              <ChevronLeft size={16} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              data-coding-title-toggle
+              aria-expanded={titleOpen}
+              aria-label={titleOpen ? t("codingChat.title.collapse") : t("codingChat.title.expand")}
+              title={title}
+              onClick={() => setTitleOpen((value) => !value)}
+              className={cn(
+                "flex min-w-0 items-center gap-1 overflow-hidden rounded-md px-1 py-0.5 text-start hover:bg-hover/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+                titleOpen && "items-start",
+              )}
+            >
+              <h2
+                data-coding-title
+                data-chat-thread-title=""
+                dir="auto"
+                className={cn(
+                  "min-w-0 flex-1 text-[12.5px] font-normal leading-5 text-ink-secondary",
+                  titleOpen ? "whitespace-normal break-words" : "truncate",
+                )}
+              >{title}</h2>
+              <ChevronDown size={13} aria-hidden="true" className={cn("mt-0.5 shrink-0 text-ink-tertiary transition-transform", titleOpen && "rotate-180")} />
+            </button>
+          </>
+        )}
+        center={(
+          <div data-coding-bot="" className="flex min-w-0">
+            <BotChatHeader
               name={party.name}
               label={bot?.title}
               panelOpen={chat?.panelOpen ?? false}
@@ -395,54 +439,34 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
               avatar={<PartyAvatar id={party.id} bot={party} size={22} />}
             />
           </div>
+        )}
+      >
+        {canStop && (
           <button
             type="button"
-            data-coding-title-toggle
-            aria-expanded={titleOpen}
-            aria-label={titleOpen ? t("codingChat.title.collapse") : t("codingChat.title.expand")}
-            title={title}
-            onClick={() => setTitleOpen((value) => !value)}
-            className={cn(
-              "flex min-w-0 flex-1 items-center gap-1 overflow-hidden rounded-md px-1 py-0.5 text-start hover:bg-hover/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-              titleOpen && "items-start",
-            )}
+            data-coding-stop
+            data-coding-stop-header
+            onClick={onStop}
+            disabled={stopping}
+            aria-label={t("routineRun.stop")}
+            title={t("routineRun.stop")}
+            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full border-[0.5px] border-hairline-weak bg-elevated px-3 text-[12px] text-ink-secondary hover:bg-elevated-hover hover:text-ink disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
           >
-            <h2
-              data-coding-title
-              dir="auto"
-              className={cn(
-                "min-w-0 flex-1 text-[13px] font-medium leading-5 text-ink",
-                titleOpen ? "whitespace-normal break-words" : "truncate",
-              )}
-            >{title}</h2>
-            <ChevronDown size={13} aria-hidden="true" className={cn("mt-0.5 shrink-0 text-ink-tertiary transition-transform", titleOpen && "rotate-180")} />
+            {stopping ? <Loader2 size={12} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Square size={11} fill="currentColor" aria-hidden="true" />}
+            <span className="hidden sm:inline">{t("routineRun.stop")}</span>
           </button>
-          {canStop && (
-            <button
-              type="button"
-              data-coding-stop
-              data-coding-stop-header
-              onClick={onStop}
-              disabled={stopping}
-              aria-label={t("routineRun.stop")}
-              title={t("routineRun.stop")}
-              className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-[12px] text-ink-secondary hover:bg-hover hover:text-ink disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
-            >
-              {stopping ? <Loader2 size={12} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Square size={11} fill="currentColor" aria-hidden="true" />}
-              <span className="hidden sm:inline">{t("routineRun.stop")}</span>
-            </button>
-          )}
-        </div>
-        {(folderText || place.branch) && <div data-coding-meta className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 ps-8 text-[12px] leading-4 text-ink-secondary">
-          {folderText && <span data-coding-folder className="min-w-0 truncate" title={place.repo ?? place.folder}>{folderText}</span>}
-          {folderText && place.branch && <span aria-hidden="true">·</span>}
-          {place.branch && <span data-coding-branch className="min-w-0 truncate font-mono text-[11.5px]" title={place.branch}>{place.branch}</span>}
-        </div>}
-      </header>
+        )}
+      </ChatHeaderBar>
 
       <div data-coding-pane className="relative flex min-h-0 flex-1 flex-col">
-      <div ref={scroller} onScroll={onScroll} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-5" data-testid="coding-chat-scroll">
+      <div ref={scroller} onScroll={onScroll} className={cn("min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-5", CHAT_UNDER_BAR_PAD)} data-testid="coding-chat-scroll">
         <div className={cn(chatColumnClassName, "flex flex-col gap-2 py-6")} role="log" aria-live="off">
+          {/* The task's folder and branch head the transcript, under the bar. */}
+          {(folderText || place.branch) && <div data-coding-meta className="flex min-w-0 flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-center text-[12px] leading-4 text-ink-secondary">
+            {folderText && <span data-coding-folder className="min-w-0 truncate" title={place.repo ?? place.folder}>{folderText}</span>}
+            {folderText && place.branch && <span aria-hidden="true">·</span>}
+            {place.branch && <span data-coding-branch className="min-w-0 truncate font-mono text-[11.5px]" title={place.branch}>{place.branch}</span>}
+          </div>}
           {hasMore && onLoadOlder && (
             <button type="button" data-coding-older onClick={onLoadOlder} disabled={loadingOlder} className="self-center rounded-full bg-raised px-3 py-1 text-[12.5px] text-ink-secondary hover:bg-raised-hover disabled:opacity-60">
               {loadingOlder ? t("codingChat.loadingOlder") : t("codingChat.loadOlder")}
@@ -466,16 +490,19 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
       </div>
       </div>
 
-      {waiting && <div className="max-h-[40%] shrink-0 overflow-y-auto overscroll-contain px-5 pb-2"><div className={chatColumnClassName}>{waiting}</div></div>}
+      {/* The chat's bottom fade rises over the transcript's end, above
+          whatever the window docks there (ChatBottomEdge). */}
+      <ChatBottomEdge data-coding-bottom="">
+      {waiting && <div className="max-h-[40vh] bg-app overflow-y-auto overscroll-contain px-5 pb-2"><div className={chatColumnClassName}>{waiting}</div></div>}
 
       <ChangesBand files={files} tests={tests} place={place} onJump={jump} />
 
       {composer ? (
-        <div data-exchange-footer="" data-coding-actions data-coding-composer className="relative shrink-0 bg-app">
+        <div data-exchange-footer="" data-coding-actions data-coding-composer className="relative bg-app">
           {composer}
         </div>
       ) : onSend && (
-        <div data-exchange-footer="" data-coding-actions className="flex shrink-0 justify-center bg-app px-4 py-3">
+        <div data-exchange-footer="" data-coding-actions className="flex justify-center bg-app px-4 py-3">
           <FollowUp
             botName={party.name}
             onSend={async (text) => {
@@ -485,10 +512,13 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
           />
         </div>
       )}
+      </ChatBottomEdge>
     </div>
   );
   // #2285: the session card and the dev pods go to the bot panel on the
-  // right, at the top of its Activity tab, while this window is open.
+  // right, in its Coding tab, shown only while this window is open (JC
+  // 2026-11-06); Connectors stay at the top of Activity.
+  const activityPanel = activityHost && activitySide ? createPortal(activitySide, activityHost) : null;
   const panel = panelHost
     ? createPortal(
       <>
@@ -498,7 +528,7 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
       panelHost,
     )
     : null;
-  return <>{column ? createPortal(sheet, column) : sheet}{panel}</>;
+  return <>{column ? createPortal(sheet, column) : sheet}{panel}{activityPanel}</>;
 }
 
 /** The task's thread, read and followed (a child so the hook runs only with a thread). */
@@ -576,8 +606,8 @@ export function CodingChat({ target, onClose }: { target: CodingChatTarget; onCl
   const follow = useCallback(() => setFollowUntil(Date.now() + FOLLOW_MS), []);
   const computerStart = state.computerStarts[target.botId];
   const taskBot = bot && threadId ? { ...bot, threadId } : undefined;
-  const side = (messages: readonly Message[]) => taskBot
-    ? <DevPodsPanel bot={taskBot} messages={messages} computerStart={computerStart} dispatch={dispatch} />
+  const side = (messages: readonly Message[], only: (id: string) => boolean) => taskBot
+    ? <DevPodsPanel bot={taskBot} messages={messages} computerStart={computerStart} dispatch={dispatch} only={only} />
     : undefined;
   // The chat's own composer ("Message <bot>", +, microphone, voice) aimed at
   // the task's thread; a person who may not write there keeps the plain field.
@@ -604,7 +634,8 @@ export function CodingChat({ target, onClose }: { target: CodingChatTarget; onCl
       <CodingChatSheet
         {...common}
         composer={composer}
-        side={side(transcript.messages)}
+        side={side(transcript.messages, codingPod)}
+        activitySide={side(transcript.messages, activityPod)}
         messages={transcript.messages}
         loaded={transcript.loaded}
         failed={transcript.failed}

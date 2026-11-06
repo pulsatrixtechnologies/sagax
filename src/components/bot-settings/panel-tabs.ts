@@ -9,15 +9,18 @@
 // (JC, 2026-11-05): a recent refusal is one row in Activity > Permissions
 // (RolePermissionsSection), the roles graph behind its disclosure.
 // Every other section lives in the persona editor (lib/persona-sections).
+// A third tab, Coding, shows only while this bot's coding chat is the open
+// conversation (JC 2026-11-06): its session and dev pods live there.
 
-export const PANEL_TABS = ["activity", "library"] as const;
+export const PANEL_TABS = ["activity", "library", "coding"] as const;
 export type PanelTab = (typeof PANEL_TABS)[number];
 
-/** The tabs the panel shows: both, in every mode. Simple and a bot that
- * works nowhere lose only the Computer card. A remote session's screen is
- * in the chat (RemoteScreenCard), never in this panel. */
-export function visiblePanelTabs(_input: { advanced: boolean; computerOff: boolean }): PanelTab[] {
-  return [...PANEL_TABS];
+/** The tabs the panel shows: Activity and Library in every mode, Coding only
+ * while this bot's coding chat is open. Simple and a bot that works nowhere
+ * lose only the Computer card. A remote session's screen is in the chat
+ * (RemoteScreenCard), never in this panel. */
+export function visiblePanelTabs(input: { advanced: boolean; computerOff: boolean; coding?: boolean }): PanelTab[] {
+  return PANEL_TABS.filter((tab) => tab !== "coding" || input.coding === true);
 }
 
 /** Whether Activity shows the Computer card (and the computer view opens in

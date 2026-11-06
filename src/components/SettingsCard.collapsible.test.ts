@@ -175,7 +175,8 @@ describe("collapsed card summaries", () => {
     expect(cardsMatching("about")).toEqual(["general.aboutMe"]);
     // 2026-10-30: the keys are on Providers, where nothing folds them
     expect(cardsMatching("openrouter")).toEqual([]);
-    expect(cardsMatching("kimi")).toEqual(["providers.toConnect"]);
+    // #2080: nothing waits under a To connect fold any more (Add a provider covers it)
+    expect(cardsMatching("kimi")).toEqual([]);
     expect(cardsMatching("live call")).toEqual(["voice.advanced"]);
     expect(cardsMatching("avatar")).toEqual(["connections.image"]);
   });

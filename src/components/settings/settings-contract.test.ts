@@ -40,7 +40,6 @@ type Rule = keyof typeof RULES;
 const NOT_MIGRATED: Record<Rule, string[]> = {
   accentLink: [
     "settings/BotModelsSettings.tsx",
-    "settings/ProvidersSettings.tsx",
     "settings/VoiceProviderOptions.tsx",
     "DecisionModelSettings.tsx",
     "EnginesSettings.tsx",

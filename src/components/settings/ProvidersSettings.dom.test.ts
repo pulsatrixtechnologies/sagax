@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
-// Settings > Providers after the 2026-11-05 redesign (option B, #2050): one
-// list, one action per row, the organization band and the rows an
-// organization manages in Perspicax (no key form, Open link), Who pays and
-// the models count behind each row, Other services and the Advanced fold.
+// Settings > Providers after #2080 (JC 2026-11-05): one row per provider,
+// its accounts inside; no filters, no organization band, no row the
+// organization manages in Perspicax, nothing turned off or waiting to be
+// connected (Add a provider, at the top, covers it). Who pays and the models
+// count behind each row, Other services and the Advanced fold.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -111,8 +112,31 @@ describe("Settings > Providers, solo", () => {
     const row = host.querySelector<HTMLElement>('[data-provider-row="key:me:server:mistral"]')!;
     expect(row).not.toBeNull();
     expect(row.querySelector("[data-provider-state]")?.getAttribute("data-provider-state")).toBe("connected");
-    expect(row.querySelector("[data-provider-action]")?.getAttribute("data-provider-action")).toBe("manage");
+    expect(row.querySelector("[data-provider-action]"), "connected: the whole row opens, a chevron").toBeNull();
     expect(row.querySelector("[data-provider-open-perspicax]")).toBeNull();
+    // no filter chips; Add a provider is the card's one primary action, at its top
+    expect(host.querySelector("[data-provider-filter]")).toBeNull();
+    expect(host.querySelector('[data-settings-card="providers.list"] [data-add-provider-open]')).not.toBeNull();
+    // this computer's model servers are one provider of their own, at the bottom
+    expect(host.querySelector('[data-provider-group="local"]')?.textContent).toContain("Off");
+  });
+
+  it("groups several accounts of one provider in one row: N accounts, their state, each account inside", async () => {
+    fixture.instances = [
+      instance("claude", "claudeAgent", "Claude", { access: "subscription" }),
+      instance("claude-work", "claudeAgent", "Claude work", { access: "subscription" }),
+    ];
+    await render();
+    const groups = host.querySelectorAll<HTMLElement>("[data-provider-group]:not([data-provider-group='local'])");
+    expect(groups).toHaveLength(1);
+    const group = groups[0]!;
+    expect(group.textContent).toContain("Claude");
+    expect(group.textContent).toContain("2 accounts");
+    expect(group.querySelector("[data-provider-group-state]")?.getAttribute("data-provider-group-state")).toBe("connected");
+    expect(group.querySelectorAll(":scope > button")).toHaveLength(1);
+    expect(group.querySelector("[data-provider-group-rows]")).toBeNull();
+    await act(async () => { group.querySelector<HTMLButtonElement>(":scope > button")!.click(); });
+    expect(group.querySelectorAll("[data-provider-group-rows] > [data-provider-row]")).toHaveLength(2);
   });
 
   it("opens a row on Who pays (editable in solo), the active models link to Models, and the Advanced fold with the id", async () => {
@@ -143,26 +167,13 @@ describe("Settings > Providers, in an organization", () => {
     ];
   });
 
-  it("shows the organization band with the Perspicax link and the same-page note, for admins too", async () => {
+  it("hides the organization band and the rows the organization pays for (they still apply, out of sight)", async () => {
     await render();
-    const band = host.querySelector<HTMLElement>("[data-providers-org-band]")!;
-    expect(band.textContent).toContain("Example");
-    expect(band.querySelector<HTMLAnchorElement>("[data-providers-org-console]")?.href).toBe("https://px.example.test/console/settings/org.bots?tab=policies");
-    expect(band.querySelector("[data-providers-same-page]")).not.toBeNull();
+    expect(host.querySelector("[data-providers-org-band]")).toBeNull();
+    expect(host.querySelector("[data-org-band]")).toBeNull();
+    expect(host.querySelector('[data-provider-row="key:org:server:mistral"]')).toBeNull();
+    expect(host.querySelector('[data-provider-state="managed"]')).toBeNull();
     expect(host.querySelector("[data-view-as-member]"), "no View as a member").toBeNull();
-  });
-
-  it("marks a provider the organization pays for as Managed in Perspicax: Open link, no key form, Who pays read-only", async () => {
-    await render();
-    const row = host.querySelector<HTMLElement>('[data-provider-row="key:org:server:mistral"]')!;
-    expect(row, "the organization's key row").not.toBeNull();
-    expect(row.querySelector('[data-provider-state="managed"]')?.textContent).toBe("Managed in Perspicax");
-    expect(row.querySelector("[data-provider-action]")?.getAttribute("data-provider-action")).toBe("open");
-    expect(row.querySelector<HTMLAnchorElement>("[data-provider-open-perspicax]")?.href).toContain("/console/settings/org.bots?tab=policies");
-    await act(async () => { row.querySelector<HTMLButtonElement>("button[aria-expanded]")!.click(); });
-    for (let i = 0; i < 4; i += 1) await act(async () => { await Promise.resolve(); });
-    expect(row.querySelector("[data-provider-who-pays='perspicax']")?.textContent).toContain("Chosen in Perspicax");
-    expect(row.querySelector("[data-open-provider-key]")).toBeNull();
   });
 
   it("keeps the person's own subscription row with its own action, and image generation read-only with Set in Perspicax", async () => {
@@ -172,6 +183,7 @@ describe("Settings > Providers, in an organization", () => {
     expect(codex.querySelector('[data-provider-state="managed"]')).toBeNull();
     const services = host.querySelector('[data-settings-card="providers.services"]')!;
     expect(services.querySelector('[data-settings-card="connections.image"]')).toBeNull();
-    expect(services.querySelector<HTMLAnchorElement>('[data-perspicax-link="imageGen"]')?.href).toBe("https://px.example.test/console/");
+    const imageGen = services.querySelector<HTMLElement>('[data-perspicax-link="imageGen"]')!;
+    expect(imageGen.querySelector<HTMLAnchorElement>("[data-external-link-pill]")?.href).toBe("https://px.example.test/console/");
   });
 });

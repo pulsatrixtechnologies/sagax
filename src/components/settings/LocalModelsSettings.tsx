@@ -1,6 +1,6 @@
 // Settings > Computer > Local models. Both switches start off. Only the
 // signed-in person can change their own list. Other people never edit it.
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Eye, EyeOff, Key, Server, Trash2 } from "lucide-react";
 
 import { t } from "@/lib/i18n";
@@ -127,7 +127,9 @@ export function EndpointKeyEditor({ endpoint, hasKey, onChange }: { endpoint: En
 
 const OFF: LocalModelSettings = { expose: false, share: false, endpoints: [], published: [], probes: [], connected: false };
 
-export function LocalModelsSettings() {
+/** `bare` (Settings > Providers, #2080): the rows alone, inside the local
+ * models provider row, without their own card. */
+export function LocalModelsSettings({ bare = false }: { bare?: boolean } = {}) {
   const [settings, setSettings] = useState<LocalModelSettings>(OFF);
   const [loaded, setLoaded] = useState(false);
   const [draft, setDraft] = useState("");
@@ -175,9 +177,9 @@ export function LocalModelsSettings() {
   // 2026-10-18 : a group of rows, as the other pages draw them
   // (SettingsPrimitives); the loopback servers fold under their row.
   return (
-    <div data-settings-card="computer.localModels" data-local-models={settings.expose ? "on" : "off"} data-local-models-share={settings.share ? "on" : "off"}>
-      <SettingsGroup title={t("localModels.title")} groupId="localModels">
-        <SettingsTextRow>{t("localModels.help")}</SettingsTextRow>
+    <div data-settings-card={bare ? "providers.localModels" : "computer.localModels"} data-local-models={settings.expose ? "on" : "off"} data-local-models-share={settings.share ? "on" : "off"} className={bare ? "-mx-3.5 flex flex-col" : undefined}>
+      <Card bare={bare}>
+        {!bare && <SettingsTextRow>{t("localModels.help")}</SettingsTextRow>}
         <DescribedRow label={t("localModels.expose")} description={t("localModels.exposeHelp")} rowId="localModels.expose">
           <Switch checked={settings.expose} aria-label={t("localModels.expose")} onClick={() => save({ expose: !settings.expose })} />
         </DescribedRow>
@@ -231,7 +233,12 @@ export function LocalModelsSettings() {
         {loaded && settings.expose && !settings.connected && <SettingsTextRow live>{t("localModels.offline")}</SettingsTextRow>}
         {loaded && settings.expose && settings.connected && settings.published.length === 0 && <SettingsTextRow live>{t("localModels.none")}</SettingsTextRow>}
         {error && <SettingsTextRow tone="danger">{t("localModels.error")}</SettingsTextRow>}
-      </SettingsGroup>
+      </Card>
     </div>
   );
+}
+
+function Card({ bare, children }: { bare: boolean; children: ReactNode }) {
+  if (bare) return <>{children}</>;
+  return <SettingsGroup title={t("localModels.title")} groupId="localModels">{children}</SettingsGroup>;
 }

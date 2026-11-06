@@ -9,22 +9,23 @@ import { t } from "@/lib/i18n";
 import { brand } from "@/lib/brand";
 import { useUpdaterState } from "@/lib/updater";
 import { openUpdatePrompt, requestUpdateCheck } from "@/lib/update-prompt";
-import { DecisionModelSettings } from "./DecisionModelSettings";
 import { GeneralAdvancedSettings, generalAdvancedShown, isSoloDesktop } from "./settings/AdvancedSettings";
 import { CompactRow, GROUP_CARD, LinkRow, PillSelect, type PillOption, SettingRow, SettingsAdvancedScope, SettingsGroup, Switch } from "./SettingsPrimitives";
-import { OrganizationSettings } from "./OrganizationSettings";
-import { OrgMemorySettings } from "./OrgMemorySettings";
-import { NotificationSettings } from "./NotificationSettings";
 import { TimeZoneRows } from "./settings/TimeZoneSettings";
 import { AppPageExtras } from "./settings/AppPage";
 import {
   AppearanceSettings,
   CredentialsSettings,
+  DecisionModelSettings,
   EnginesSettings,
   ExperimentalSettings,
   ImportSettings,
   LocalComputerSection,
+  NotificationSettings,
+  OrganizationSettings,
+  OrgMemorySettings,
   ProvidersSettings,
+  SecurityKeySettings,
   UsageSection,
   VoiceSettingsPage,
   WorkspaceBackupSettings,
@@ -34,7 +35,6 @@ import { shortcutLabel } from "./ShortcutHint";
 import { aboutMeFirstLine } from "./AboutMeSettings";
 import { SettingsSubPage, SettingsSubPageRow } from "./SettingsSubPage";
 import { AccountCard } from "./settings/AccountCard";
-import { SecurityKeySettings } from "./SecurityKeySettings";
 import { MyApprovalRules } from "./settings/MyApprovalRules";
 import { MyToolGrants } from "./settings/MyToolGrants";
 import { cn } from "@/lib/cn";
@@ -44,7 +44,9 @@ import { useSettingsModal } from "./settings/useSettingsModal";
 import { NAV_GROUPS } from "./settings/settings-nav";
 
 // The threads choice moved with Appearance (0.5.6); old imports still work.
-export { chooseThreadsView } from "./settings/AppearanceSettings";
+// Re-exported from the thin preference module so this shell chunk does not
+// pull AppearanceSettings.tsx (Refs #1971).
+export { chooseThreadsView } from "@/lib/thread-preferences";
 
 export { GeneralAdvancedSettings, generalAdvancedShown, isSoloDesktop };
 

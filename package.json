@@ -57,6 +57,7 @@
     "bench:persistence": "node --experimental-strip-types scripts/bench-persistence.ts",
     "bench:server-hot-paths": "node --experimental-strip-types scripts/bench-server-hot-paths.ts",
     "bench:turn-latency": "node --experimental-strip-types scripts/bench-turn-latency.ts",
+    "bench:ui-hot-paths": "node --experimental-strip-types scripts/bench/ui-hot-paths.ts",
     "bench:turn-context": "node --experimental-strip-types scripts/bench-turn-context.ts",
     "bench:engine-warm": "node --experimental-strip-types scripts/bench-engine-warm.ts",
     "bench:routine-watch": "node --experimental-strip-types --expose-gc scripts/bench-routine-watch.ts",

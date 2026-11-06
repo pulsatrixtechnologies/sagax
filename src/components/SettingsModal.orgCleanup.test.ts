@@ -41,7 +41,12 @@ vi.mock("./LocalComputerSection", () => ({ LocalComputerSection: () => "LOCAL_CO
 beforeAll(async () => {
   // b8333c52c: these pages load on demand; static rendering runs no effects.
   const sections = await import("./lazy-settings-sections");
-  await Promise.all([sections.AppearanceSettings.preload(), sections.LocalComputerSection.preload(), sections.UsageSection.preload()]);
+  await Promise.all([
+    sections.AppearanceSettings.preload(),
+    sections.LocalComputerSection.preload(),
+    sections.NotificationSettings.preload(),
+    sections.UsageSection.preload(),
+  ]);
 }, 60_000);
 
 beforeEach(() => {
@@ -60,8 +65,13 @@ afterEach(() => {
 
 const render = async () => {
   const { SettingsModal } = await import("./SettingsModal");
-  const { AppearanceSettings, LocalComputerSection, UsageSection } = await import("./lazy-settings-sections");
-  await Promise.all([AppearanceSettings.preload(), LocalComputerSection.preload(), UsageSection.preload()]);
+  const { AppearanceSettings, LocalComputerSection, NotificationSettings, UsageSection } = await import("./lazy-settings-sections");
+  await Promise.all([
+    AppearanceSettings.preload(),
+    LocalComputerSection.preload(),
+    NotificationSettings.preload(),
+    UsageSection.preload(),
+  ]);
   return renderToStaticMarkup(createElement(SettingsModal));
 };
 const ORG = { org: { name: "Example", identity: { kind: "perspicax" as const, issuer: "https://px.example.test" } } };

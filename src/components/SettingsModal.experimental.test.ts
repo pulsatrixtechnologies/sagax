@@ -67,8 +67,8 @@ beforeEach(async () => {
 
 const render = async () => {
   const { SettingsModal } = await import("./SettingsModal");
-  const { ExperimentalSettings } = await import("./lazy-settings-sections");
-  await ExperimentalSettings.preload();
+  const { ExperimentalSettings, OrganizationSettings } = await import("./lazy-settings-sections");
+  await Promise.all([ExperimentalSettings.preload(), OrganizationSettings.preload()]);
   return renderToStaticMarkup(createElement(SettingsModal));
 };
 const switchNamed = (label: string) => fixture.switches.filter((props) => props["aria-label"] === label).at(-1);

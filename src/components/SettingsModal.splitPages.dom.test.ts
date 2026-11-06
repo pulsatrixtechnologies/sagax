@@ -73,8 +73,14 @@ async function render(element: Parameters<Root["render"]>[0]) {
 
 async function settings(section: AppSettingsSection): Promise<HTMLElement> {
   fixture.section = section;
-  const { CredentialsSettings, EnginesSettings, ProvidersSettings, VoiceSettingsPage } = await import("./lazy-settings-sections");
-  await Promise.all([CredentialsSettings.preload(), EnginesSettings.preload(), ProvidersSettings.preload(), VoiceSettingsPage.preload()]);
+  const { CredentialsSettings, EnginesSettings, ProvidersSettings, SecurityKeySettings, VoiceSettingsPage } = await import("./lazy-settings-sections");
+  await Promise.all([
+    CredentialsSettings.preload(),
+    EnginesSettings.preload(),
+    ProvidersSettings.preload(),
+    SecurityKeySettings.preload(),
+    VoiceSettingsPage.preload(),
+  ]);
   await render(createElement(SettingsModal));
   return host;
 }

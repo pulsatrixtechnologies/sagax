@@ -6,7 +6,7 @@
 // loud, no green check. Failed: the words turn a quiet danger colour.
 // Every tool step, a folded run of steps, the turn digest and a bot's
 // coordination receipts use this one row so the thread reads as one voice.
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type CSSProperties, type ReactNode } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { StepPhase } from "@/lib/step-label";
@@ -70,11 +70,13 @@ export function StepRow({
         data-step-label
         className={cn(
           "min-w-0 truncate",
-          phase === "running" && "thinking-shimmer animate-shimmer",
+          phase === "running" && "thinking-shimmer",
           phase === "failed" && "text-danger/90",
         )}
+        style={phase === "running" ? ({ "--sheen-period": "2000ms", "--sheen-delay": "0ms" } as CSSProperties) : undefined}
       >
         {label}
+        {phase === "running" && <span aria-hidden="true" className="thinking-sheen"><span data-text={label} /></span>}
       </span>
       {target && <span data-step-target className="min-w-0 shrink-[2] truncate text-ink-tertiary" title={title ?? target}>{target}</span>}
       {extra}

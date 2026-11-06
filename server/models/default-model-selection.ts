@@ -1,4 +1,4 @@
-import type { EffortLevel, EngineAccess, ModelCatalog, ModelSelection, ProviderSnapshot } from "../contracts.ts";
+import type { EffortLevel, EngineAccess, InstanceConfigMap, ModelCatalog, ModelSelection, ProviderSnapshot } from "../contracts.ts";
 import { effortAcceptedByEngine } from "../../shared/ultracode-effort.ts";
 
 export interface SelectableInstance {
@@ -9,6 +9,15 @@ export interface SelectableInstance {
   capabilities?: { effortLevels?: readonly EffortLevel[]; modelVariants?: boolean };
   access?: EngineAccess;
   enabled?: boolean;
+}
+
+/** The saved config's enabled switch and picker group win over what the driver reports. */
+export function withInstanceConfig<T extends SelectableInstance>(instances: readonly T[], configs: InstanceConfigMap): T[] {
+  return instances.map((instance) => ({
+    ...instance,
+    enabled: configs[instance.instanceId]?.enabled ?? instance.enabled,
+    ...(configs[instance.instanceId]?.access ? { access: configs[instance.instanceId].access } : {}),
+  }));
 }
 
 /** What an enrolled organisation adds to the choice. Both are omitted (or

@@ -171,6 +171,8 @@ export type StartTurnHost = {
   engineStartGate: any,
   engineTurnLevel: any,
   enginesRead: any,
+  /** Per-engine start-up probe; preferred over waiting for every engine. */
+  engineRead?: (instanceId: string) => Promise<void> | null,
   ensureTaskWorkspace: any,
   ensureWorkspace: any,
   expandLearnTurnText: any,

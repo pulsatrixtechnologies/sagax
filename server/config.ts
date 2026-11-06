@@ -2,7 +2,7 @@
 //   { "xai": {"key":"xai-…"}, "box": {"token":"…"},
 //     "instances": { "<instanceId>": {"driver":"grok", …} } }
 import { DEFAULT_MAX_PARALLEL_PER_PERSON, MAX_PARALLEL_PER_PERSON } from "../shared/parallel-tasks.ts";
-import { readFileSync, mkdirSync, existsSync, renameSync, statSync } from "node:fs";
+import { readFileSync, mkdirSync, existsSync, renameSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
@@ -11,6 +11,7 @@ import { normalizeImageGenerationUrl, type ImageGenerationConfig } from "../shar
 import { stripOpenAiEndpointSuffix } from "../shared/openai-compat-url.ts";
 
 import { writeFileAtomic } from "./atomic.ts";
+import { settledFileCache, settledFileStamp } from "./settled-file.ts";
 import { applyStoredEngineEnv } from "./engines/engine-api-keys.ts";
 import { migrateConfigPlaintextKeys, readOnboardingEngineKey } from "./engines/onboarding-engine-key.ts";
 import { withoutComputerEngine } from "./computer/computer-engine-removal.ts";
@@ -1541,11 +1542,15 @@ function migrateLegacyNewBotEffort(): void {
 /** The last "config.json is being ignored" warning, so a file that stays
  * broken is reported once rather than on every loadConfig() call. */
 let lastIgnoredConfigWarning = "";
+const storedConfig = settledFileCache(
+  () => join(DATA_DIR, "config.json"),
+  () => parseStoredConfig(parseJson(readFileSync(join(DATA_DIR, "config.json"), "utf8"))),
+);
 
 export function loadConfig(): AppConfig {
   let cfg: AppConfig = {};
   try {
-    cfg = parseStoredConfig(parseJson(readFileSync(join(DATA_DIR, "config.json"), "utf8")));
+    cfg = structuredClone(storedConfig.read());
     lastIgnoredConfigWarning = "";
   } catch (error) {
     // No file yet is a normal first run: env fallbacks below. Any other failure
@@ -1645,14 +1650,7 @@ export function loadConfig(): AppConfig {
 export function cacheUntilConfigChanges<T>(derive: (config: AppConfig) => T): () => T {
   let cached: { stamp: string; value: T } | null = null;
   return () => {
-    let stamp: string | null = null;
-    try {
-      const file = statSync(join(DATA_DIR, "config.json"), { bigint: true });
-      // mode/uid/gid, not ctime: a chmod that leaves ctime alone must still miss.
-      if (Date.now() - Number(file.mtimeMs) >= 2_000) stamp = `${file.ino}:${file.size}:${file.mtimeNs}:${file.ctimeNs}:${file.mode}:${file.uid}:${file.gid}`;
-    } catch {
-      // Missing or out of reach: read it the way loadConfig() always has.
-    }
+    const stamp = settledFileStamp(join(DATA_DIR, "config.json"));
     if (stamp !== null && cached?.stamp === stamp) return cached.value;
     const value = derive(loadConfig());
     // A warning means loadConfig() ignored the file and ran on defaults.
@@ -2084,6 +2082,7 @@ export function saveConfig(
   }
   mkdirSync(DATA_DIR, { recursive: true });
   writeFileAtomic(p, JSON.stringify(disk, null, 2), { mode: 0o600 });
+  storedConfig.forget();
   for (const listener of configSaveListeners) {
     try {
       listener(before, disk);

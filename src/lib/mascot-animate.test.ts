@@ -15,9 +15,10 @@ describe("mascotRowAnimated", () => {
     expect(mascotRowAnimated(bot(), queued)).toBe(false);
   });
 
-  it("moves for real work, an unread, or a motion beat", () => {
+  it("moves for real work, an unread notice, or a motion beat", () => {
     expect(mascotRowAnimated(bot({ busy: true }), queued, "none")).toBe(true);
-    expect(mascotRowAnimated(bot({ unread: true }), queued, "none")).toBe(true);
+    expect(mascotRowAnimated(bot({ unread: true }), queued, "none")).toBe(false);
+    expect(mascotRowAnimated(bot({ unread: true }), queued, "none", true)).toBe(true);
     expect(mascotRowAnimated(bot(), queued, "success")).toBe(true);
   });
 

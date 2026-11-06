@@ -7,7 +7,7 @@
 // (Stop, Open conversation) sit at the right of the title, within reach.
 // Nothing here fetches: a routine run's detail or a parallel task's passes
 // the same props.
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { ChevronLeft } from "lucide-react";
 
 import { cn } from "@/lib/cn";
@@ -165,7 +165,15 @@ export function TaskStatusHeader({ title, titleId = "activity-detail-title", bot
           {words.map((word, index) => (
             <span key={`${index}-${word}`} className="flex min-w-0 items-center gap-1.5">
               {index > 0 && <span aria-hidden="true">·</span>}
-              <span className={cn("min-w-0 truncate", status === "running" && index === (parallel ? 2 : 1) && (step || stepLabel) && "thinking-shimmer animate-shimmer motion-reduce:animate-none")}>{word}</span>
+              <span
+                className={cn("min-w-0 truncate", status === "running" && index === (parallel ? 2 : 1) && (step || stepLabel) && "thinking-shimmer motion-reduce:[&_.thinking-sheen]:hidden")}
+                style={status === "running" && index === (parallel ? 2 : 1) && (step || stepLabel) ? ({ "--sheen-period": "2000ms", "--sheen-delay": "0ms" } as CSSProperties) : undefined}
+              >
+                {word}
+                {status === "running" && index === (parallel ? 2 : 1) && (step || stepLabel) ? (
+                  <span aria-hidden="true" className="thinking-sheen"><span data-text={word} /></span>
+                ) : null}
+              </span>
             </span>
           ))}
         </p>

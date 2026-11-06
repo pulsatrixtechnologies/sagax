@@ -300,6 +300,9 @@ export interface SessionStoreOptions {
   /** One membership snapshot per revalidation pass, not per session. */
   emailScopesSnapshot?: () => EmailScopesResolver;
   portalMembership?: boolean;
+  /** Between membershipChanged() calls, the hot paths (each request, stream frame and liveness check) recheck email
+   * membership at most this often. Default 0: every call. */
+  recheckMs?: number;
 }
 
 export class SessionRegistry {
@@ -329,6 +332,7 @@ export class SessionRegistry {
   private closed = false;
   /** Set on an OMB Cloud home (requireAdmin): only admin scope, anywhere. */
   private adminOnly: string | null = null;
+  private membershipCheckedAt = -Infinity;
 
   // No parameter properties: the server runs this file under Node's
   // strip-only TypeScript mode, which only erases types.
@@ -498,7 +502,7 @@ export class SessionRegistry {
   }
 
   private prune(): void {
-    this.revalidateEmailSessions();
+    this.recheckMembership();
     const now = this.now();
     this.pairings = this.pairings.filter((p) => p.expiresAt > now);
     this.replays = this.replays.filter((r) => r.expiresAt > now);
@@ -762,12 +766,24 @@ export class SessionRegistry {
 
   // ── sessions ───────────────────────────────────────────────────────────
 
+  /** The sign-in lists may have changed: the next recheckMembership() reads them. */
+  membershipChanged(): void {
+    this.membershipCheckedAt = -Infinity;
+  }
+
+  /** revalidateEmailSessions(), unless one ran within `recheckMs` and membershipChanged() has not been called since. */
+  recheckMembership(): void {
+    if (this.now() - this.membershipCheckedAt < (this.options.recheckMs ?? 0)) return;
+    this.revalidateEmailSessions();
+  }
+
   /** Email membership is live, not a thirty-day grant. Losing any issued
    * scope revokes the token and its streams; signing in again obtains the
    * new role. Promotions never widen existing credentials. Pairing sessions
    * have no email and remain independent of the hosted sign-in list. */
   revalidateEmailSessions(): void {
     if (this.closed) throw new Error("Session registry is closed.");
+    this.membershipCheckedAt = this.now();
     // An OpenID Connect session's membership is the identity provider's
     // (refresh and back-channel logout, slice 2), never the email list.
     const eligible = this.sessions.filter(session => session.email !== undefined && session.idp === undefined && !(this.options.portalMembership && session.membershipAuthority === "portal"));
@@ -805,7 +821,7 @@ export class SessionRegistry {
 
   authenticate(token: string | undefined): SessionRecord | null {
     if (!token) return null;
-    this.revalidateEmailSessions();
+    this.recheckMembership();
     const hash = sha256(token);
     const now = this.now();
     const record = this.sessions.find((s) => sameDigest(s.tokenHash, hash));
@@ -827,7 +843,7 @@ export class SessionRegistry {
    * Nothing expired is revived. Writes at most once per half-term, so it
    * adds nothing to the last-seen traffic. Returns whether it renewed. */
   renew(sessionId: string): boolean {
-    this.revalidateEmailSessions();
+    this.recheckMembership();
     const record = this.sessions.find((s) => s.id === sessionId);
     const now = this.now();
     if (!record || record.expiresAt <= now || record.ephemeral) return false;

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { DATA_DIR } from "../config.ts";
-import { factIdentity, isExpired, isMemoryDate, lineFactIdentity, notebookIdentities, parseMemoryEntries, withoutExpired } from "./memory-entries.ts";
+import { factIdentity, isExpired, isMemoryDate, lineFactIdentity, notebookIdentities, parseMemoryEntries, withoutExpired, withoutSuperseded } from "./memory-entries.ts";
 import { parseTopicHeader, renderTopicIndex, TOPIC_INDEX_MAX_TOPICS } from "./memory-topics.ts";
 import { closeMessageDb } from "../messages/message-db.ts";
 import { ensureWorkspace, loadMemory, memorySystemPrompt, searchMemoryFiles, updateMemory, writeMemoryFile, writeMemoryTopic, WORKSPACES_DIR } from "../workspace/workspace.ts";
@@ -51,6 +51,11 @@ describe("memory entry grammar", () => {
     expect(isExpired({ until: null, struck: false }, "2099-01-01")).toBe(false);
     const hidden = withoutExpired("- 2026-09-10 · Exams this weekend · until 2026-09-14\n- 2026-09-10 · Likes tea\n", "2026-09-15");
     expect(hidden).toEqual({ text: "- 2026-09-10 · Likes tea\n", hidden: 1 });
+  });
+
+  it("drops struck-through superseded entries from recall text", () => {
+    const text = "- 2026-09-10 · Likes tea\n- 2026-09-11 · ~~Use blue~~ · superseded 2026-09-12\n- 2026-09-12 · Use orange\n";
+    expect(withoutSuperseded(text)).toBe("- 2026-09-10 · Likes tea\n- 2026-09-12 · Use orange\n");
   });
 
   it("accepts only real calendar dates", () => {
@@ -145,7 +150,7 @@ describe("memory with until dates and topics, on disk", () => {
     writeMemoryTopic(BOT, "dining.md", "---\ntitle: Dining\naliases: [food, lunch, restaurants]\n---\n- Loves pasta\n");
     writeFileSync(join(WORKSPACES_DIR, BOT, "memory", "notes.md"), "plain topic\n");
     const prompt = memorySystemPrompt(BOT, { managedWrites: true, fileTools: true });
-    expect(prompt).toContain("Your topic notes (not loaded; when a request touches one of these topics, read that file with your file tools before you answer):");
+    expect(prompt).toContain(`Your topic notes (not loaded; paths are relative to ${JSON.stringify(join(WORKSPACES_DIR, BOT))}, not your working folder; when a request touches one of these topics, read that file with your file tools before you answer):`);
     expect(prompt).toContain("- memory/dining.md — Dining (also: food, lunch, restaurants)");
     expect(prompt).toContain("- memory/notes.md");
     expect(memorySystemPrompt(BOT, { fileTools: false })).toContain("look it up with session_search before you answer");

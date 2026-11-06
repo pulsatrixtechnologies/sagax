@@ -125,6 +125,13 @@ export function loadEnvironmentId(dataDir: string): string {
   }
 }
 
+let stamp: string | undefined;
+/** This server's release and, on a Cloud, its image: what it runs changes with either, the engines' CLIs included. */
+export function buildStamp(): string {
+  stamp ??= [serverVersion(), process.env.SAGAX_CLOUD_IMAGE?.trim()].filter(Boolean).join(" ");
+  return stamp;
+}
+
 /** The desktop app passes its own version; a checkout reads package.json;
  * an image sets SAGAX_APP_VERSION at build time. */
 export function serverVersion(): string {

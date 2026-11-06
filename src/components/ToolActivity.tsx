@@ -32,7 +32,7 @@ export function botNames(bots: ReadonlyArray<{ id: string; name: string }> | und
  * `place` names where a screen or page tool ran, so a transcript shows the
  * place of every step, not just the current one. Absent for tools that touch
  * no screen. */
-export function ToolActivity({ tool, place = null, nameOf, defaultOpen = false }: { tool: Tool; place?: Place | null; nameOf?: StepNameOf; defaultOpen?: boolean }) {
+export function ToolActivity({ tool, place = null, nameOf, defaultOpen = false, live = false }: { tool: Tool; place?: Place | null; nameOf?: StepNameOf; defaultOpen?: boolean; /** false for a historical incomplete receipt after a restart */ live?: boolean }) {
   // Auto Works on: the bot chose where it works from this step on.
   const switched = tool.ok === true ? computerSelectTarget(tool.name, tool.input) : null;
   if (switched) {
@@ -45,11 +45,11 @@ export function ToolActivity({ tool, place = null, nameOf, defaultOpen = false }
       </span>
     );
   }
-  const phase = stepPhase(tool);
-  const reading = readStep(tool, nameOf);
+  const phase = stepPhase(tool, live);
+  const reading = readStep(tool, nameOf, live);
   // Where the tool ran: the person's server environment or their own computer.
   const target = toolExecutionTarget(tool.name, place);
-  const status = phase === "running" ? t("toolDetail.running") : phase === "failed" ? t("toolDetail.failed") : t("toolDetail.completed");
+  const status = phase === "running" ? t("toolDetail.running") : phase === "unverified" ? t("toolDetail.unverified") : phase === "failed" ? t("toolDetail.failed") : t("toolDetail.completed");
   const row = (
     <StepRow
       testId="tool-activity"
@@ -67,7 +67,7 @@ export function ToolActivity({ tool, place = null, nameOf, defaultOpen = false }
         </span>
       ) : undefined}
     >
-      {() => <ToolStepDetail tool={tool} status={status} nameOf={nameOf} place={place} />}
+      {() => <ToolStepDetail tool={tool} status={status} nameOf={nameOf} place={place} live={live} />}
     </StepRow>
   );
   // 2026-11-05 (JC): no role in the chat, the role lives on Flow routines only
@@ -106,8 +106,8 @@ const MONO_BLOCK = "max-h-52 overflow-auto rounded-md bg-inset px-2 py-1.5 font-
 /** What the open row shows, top to bottom: the tool's name in words with its
  * status and duration, the arguments in a few readable lines, the start of
  * the result, then the whole record as JSON, folded and copyable. */
-export function ToolStepDetail({ tool, status, nameOf, place = null }: { tool: Tool; status: string; nameOf?: StepNameOf; place?: Place | null }) {
-  const phase = stepPhase(tool);
+export function ToolStepDetail({ tool, status, nameOf, place = null, live = false }: { tool: Tool; status: string; nameOf?: StepNameOf; place?: Place | null; live?: boolean }) {
+  const phase = stepPhase(tool, live);
   const args = stepArgs(tool.input, nameOf);
   // 2026-11-02: the tool in words and where it ran ("List files · Your
   // server environment"); its technical id is only in the folded JSON.
@@ -167,7 +167,7 @@ export function ToolStepDetail({ tool, status, nameOf, place = null }: { tool: T
             {result.cut && <p className="mt-0.5 text-[11px] text-ink-tertiary">{t("step.detail.truncated")}</p>}
           </>
         ) : (
-          <p className="text-[12px]">{phase === "running" ? t("toolDetail.waiting") : phase === "failed" ? t("toolDetail.failedNoOutput") : t("toolDetail.noOutput")}</p>
+          <p className="text-[12px]">{phase === "running" ? t("toolDetail.waiting") : phase === "unverified" ? t("toolDetail.unverified") : phase === "failed" ? t("toolDetail.failedNoOutput") : t("toolDetail.noOutput")}</p>
         )}
       </div>
       <JsonFold json={stepJson(tool)} />

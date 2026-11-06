@@ -32,6 +32,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     drainSecretResumes,
     drainTeamSetupResumes,
     engineIsFresh,
+    engineRead,
     expandLearnTurnText,
     expandSetupTurnText,
     expandSkillCommandTurnText,
@@ -86,9 +87,10 @@ export function createSetupStartTurn(host: StartTurnHost) {
       state.instance.adapter.releaseWarmSession?.(state.threadId);
       return { kind: "return" };
     }
-    if (state.enginesRead) {
-      await state.enginesRead;
-      if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) throw new DirectTurnSetupCancelled("turn stopped while the engines were read");
+    const ownEngineRead = typeof engineRead === "function" ? engineRead(state.instance.instanceId) : (state.enginesRead ? state.enginesRead : null);
+    if (ownEngineRead) {
+      await ownEngineRead;
+      if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) throw new DirectTurnSetupCancelled("turn stopped while the engine was read");
     }
     // Perspicax token exchange, session open/verify and tools/list do not
     // need custom mount names. Start them beside

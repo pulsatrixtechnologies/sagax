@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { BROWSER_VIEWPORT_ARGS, browserRuntimeEnv, ownsBrowserViewport, type BrowserRuntime } from "./browser-runtime.ts";
 import { closeBrowserSession } from "./browser-engine.ts";
 import { parseDescribedElement, teachDescribeScript, TeachRecordings, type TeachRecorder } from "./browser-teach.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 const execute = promisify(execFile);
 const MAX_FRAME = 3 * 1024 * 1024;
@@ -392,7 +393,7 @@ export class BrowserLive {
             return closed;
           }, () => false);
           this.sessionResets.set(viewer.session, reset);
-          void reset.finally(() => { if (this.sessionResets.get(viewer.session) === reset) this.sessionResets.delete(viewer.session); }).catch(() => {});
+          void reset.finally(() => { if (this.sessionResets.get(viewer.session) === reset) this.sessionResets.delete(viewer.session); }).catch(reportBackgroundError);
         }
         throw new BrowserLiveError("The browser could not start on this server. Reconnect to retry with a fresh browser session.", 503);
       }

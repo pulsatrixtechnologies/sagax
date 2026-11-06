@@ -13,6 +13,7 @@ import { redactCardNumbers, type SingleUseWallet } from "../../shared/single-use
 import { parseUpdateTrackingCall, UPDATE_ORDER_TRACKING_TOOL, UPDATE_ORDER_TRACKING_TOOL_SPEC, type TrackingInput } from "../../shared/order-tracking.ts";
 import { clearScript, loginOutcomeText, loginStateScript, markerScript, MAX_LOGIN_STEPS, parseLoginState, stepFields, submitScript, type LoginField, type LoginOutcome, type LoginPageState } from "../login-fill.ts";
 import type { VaultFillField } from "../../shared/credential-vault.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export interface BrowserSpawnSpec {
   command: string;
@@ -253,9 +254,9 @@ class BrowserClient {
     });
     this.child.stderr.resume();
     this.child.stdout.on("data", (chunk: Buffer) => this.read(chunk));
-    this.child.stdin.on("error", () => { void this.stop(new TransportError("Browser connection closed.")).catch(() => {}); });
-    this.child.on("error", () => { void this.stop(new TransportError("Could not start the browser engine.")).catch(() => {}); });
-    this.child.on("close", () => { void this.stop(new TransportError("Browser connection closed.")).catch(() => {}); });
+    this.child.stdin.on("error", () => { void this.stop(new TransportError("Browser connection closed.")).catch(reportBackgroundError); });
+    this.child.on("error", () => { void this.stop(new TransportError("Could not start the browser engine.")).catch(reportBackgroundError); });
+    this.child.on("close", () => { void this.stop(new TransportError("Browser connection closed.")).catch(reportBackgroundError); });
     this.ready = this.rpc("initialize", {
       protocolVersion: "2024-11-05", capabilities: {},
       clientInfo: { name: "openmausbot-browser", version: "1" },
@@ -265,7 +266,7 @@ class BrowserClient {
       }
       this.write({ jsonrpc: "2.0", method: "notifications/initialized" });
     }).catch((error: unknown) => {
-      void this.stop(error instanceof Error ? error : new TransportError("Browser handshake failed.")).catch(() => {});
+      void this.stop(error instanceof Error ? error : new TransportError("Browser handshake failed.")).catch(reportBackgroundError);
       throw error;
     });
   }
@@ -276,7 +277,7 @@ class BrowserClient {
     let newline: number;
     while ((newline = this.buffer.indexOf(10)) !== -1) {
       if (newline > MAX_RESPONSE_BYTES) {
-        void this.stop(new TransportError("Browser response exceeded the size limit.")).catch(() => {});
+        void this.stop(new TransportError("Browser response exceeded the size limit.")).catch(reportBackgroundError);
         return;
       }
       const line = this.buffer.subarray(0, newline).toString("utf8");
@@ -287,7 +288,7 @@ class BrowserClient {
         message = JSON.parse(line);
         if (!message || typeof message !== "object" || Array.isArray(message)) throw new Error();
       } catch {
-        void this.stop(new TransportError("Browser engine returned invalid JSON.")).catch(() => {});
+        void this.stop(new TransportError("Browser engine returned invalid JSON.")).catch(reportBackgroundError);
         return;
       }
       const pending = typeof message.id === "number" ? this.pending.get(message.id) : undefined;
@@ -300,14 +301,14 @@ class BrowserClient {
       this.armIdle();
     }
     if (this.buffer.length > MAX_RESPONSE_BYTES) {
-      void this.stop(new TransportError("Browser response exceeded the size limit.")).catch(() => {});
+      void this.stop(new TransportError("Browser response exceeded the size limit.")).catch(reportBackgroundError);
     }
   }
 
   private write(message: unknown): void {
     if (this.stopped) throw new TransportError("Browser connection closed.");
     this.child.stdin.write(`${JSON.stringify(message)}\n`, (error) => {
-      if (error) void this.stop(new TransportError("Browser connection closed.")).catch(() => {});
+      if (error) void this.stop(new TransportError("Browser connection closed.")).catch(reportBackgroundError);
     });
   }
 
@@ -324,12 +325,12 @@ class BrowserClient {
         // the rejection can surface through the ready handshake, which sits
         // outside agentRpc's uncertainty classifier.
         this.onRequestTimeout(params);
-        void this.stop(new TransportError("Browser request timed out; restart the browser before taking control.")).catch(() => {});
+        void this.stop(new TransportError("Browser request timed out; restart the browser before taking control.")).catch(reportBackgroundError);
       }, timeoutMs);
       timer.unref();
       this.pending.set(id, { resolve, reject, timer });
       try { this.write(message); }
-      catch { void this.stop(new TransportError("Browser connection closed.")).catch(() => {}); }
+      catch { void this.stop(new TransportError("Browser connection closed.")).catch(reportBackgroundError); }
     });
   }
 
@@ -338,7 +339,7 @@ class BrowserClient {
     if (!this.stopped && this.pending.size === 0) {
       // Only the stateless MCP transport expires; saved browser state and the
       // browser daemon itself belong to the profile, not this client.
-      this.idleTimer = setTimeout(() => { void this.stop(undefined, "transport").catch(() => {}); }, this.idleMs);
+      this.idleTimer = setTimeout(() => { void this.stop(undefined, "transport").catch(reportBackgroundError); }, this.idleMs);
       this.idleTimer.unref();
     }
   }

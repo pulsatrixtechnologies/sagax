@@ -20,6 +20,7 @@
 // and keeps custom headers, so a redirect would hand `xi-api-key` (and the
 // text being spoken) to whatever host it points at.
 import { elevenLabsProviderApi } from "../included-services.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 const MODEL = "eleven_flash_v2_5";
 // 64kbps mono is indistinguishable for speech and a third of the bytes
@@ -123,7 +124,7 @@ export function synthesize(text: string, voiceId: string, key: string, api: stri
   const firstAudio = withResolvers<Audio>();
   const audio = withResolvers<Audio>();
   // Callers may consume only `audio`: a failure before the first chunk must not become an unhandled rejection.
-  firstAudio.promise.catch(() => {});
+  firstAudio.promise.catch(reportBackgroundError);
   void (async () => {
     try {
       const res = await fetch(`${api}/text-to-speech/${encodeURIComponent(voiceId)}/stream?output_format=${FORMAT}`, {
@@ -150,6 +151,6 @@ export function synthesize(text: string, voiceId: string, key: string, api: stri
       firstAudio.reject(error);
       audio.reject(error);
     }
-  })().catch(() => {});
+  })().catch(reportBackgroundError);
   return { firstAudio: firstAudio.promise, audio: audio.promise };
 }

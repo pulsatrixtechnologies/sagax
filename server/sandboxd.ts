@@ -26,6 +26,7 @@ import { SandboxService } from "./sandbox/sandboxd-core.ts";
 import { dockerApi } from "./sandbox/sandboxd-docker.ts";
 import { sandboxBackendFromEnv } from "./sandboxd-k8s/sandboxd-k8s-spec.ts";
 import { egressHelperSpec, egressUninstallScript, sandboxdConfigFromEnv } from "./sandbox/user-sandbox-spec.ts";
+import { reportBackgroundError } from "./background-error.ts";
 
 async function main(): Promise<void> {
   if (sandboxBackendFromEnv() === "kubernetes") {
@@ -54,7 +55,7 @@ async function main(): Promise<void> {
   const sweep = setInterval(() => {
     void service.sweepIdle().then((stopped) => {
       if (stopped.length) console.log(`sandboxd: stopped ${stopped.length} idle environment(s)`);
-    }, (error: unknown) => console.error(`sandboxd: idle sweep failed: ${error instanceof Error ? error.message : String(error)}`)).catch(() => {});
+    }, (error: unknown) => console.error(`sandboxd: idle sweep failed: ${error instanceof Error ? error.message : String(error)}`)).catch(reportBackgroundError);
   }, 60_000);
   sweep.unref();
   const shutdown = () => server.close(() => process.exit(0));

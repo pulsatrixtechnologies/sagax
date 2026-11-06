@@ -8,6 +8,7 @@ import { browserDaemonPidPath, browserProfilesRoot, closeBrowserSession, running
 import { orphanedBrowsers, stopBrowserProcesses } from "./browser-processes.ts";
 import { browserRuntimeEnv } from "./browser-runtime.ts";
 import type { EngineBrowsers } from "../memory/engine-memory-guard.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 const BOT_ID = /^[A-Za-z0-9_-]{1,120}$/;
 const PROFILE_ID = /^[a-z0-9_-]{1,40}$/;
@@ -381,7 +382,7 @@ export class BrowserCleanupCoordinator {
       this.#retryTimers.delete(request.requestId);
       void this.#attempt(request).then((ok) => {
         if (!ok && this.#pending.has(request.requestId)) this.#schedule(request, attempt + 1);
-      }).catch(() => {});
+      }).catch(reportBackgroundError);
     }, delay);
     timer.unref?.();
     this.#retryTimers.set(request.requestId, timer);
@@ -467,8 +468,8 @@ export class BrowserSweep {
 
   /** Sweep now, for what an earlier run left, then every interval. */
   start(): this {
-    void this.sweep(true).catch(() => {});
-    this.#timer = setInterval(() => void this.sweep().catch(() => {}), this.#intervalMs);
+    void this.sweep(true).catch(reportBackgroundError);
+    this.#timer = setInterval(() => void this.sweep().catch(reportBackgroundError), this.#intervalMs);
     this.#timer.unref?.();
     return this;
   }
@@ -593,7 +594,7 @@ export function engineBrowsers(deps: {
           if (await closeIfFree(session, spec).catch(() => false)) return;
           await sleep(2_000);
         }
-      })().finally(() => closing.delete(session)).catch(() => {});
+      })().finally(() => closing.delete(session)).catch(reportBackgroundError);
     },
     closeUnused: async () => {
       let closed = 0;

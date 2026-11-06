@@ -12,6 +12,7 @@ import { allowsTool, parseToolScope, type ToolScope } from "../../shared/tool-sc
 import { mountChatTools, providerToolLimit, type ChatToolSession } from "./chat-mcp-tools.ts";
 import { PERSPICAX_TOKEN_ENV, warmCommsEnv, warmPerspicaxEnv, withoutTurnTokens } from "./spawn-contract.ts";
 import { MiB, warmResourcePerson, warmResourceTokenThread, warmResources, type WarmResourceBudget, type WarmResourceLease } from "../resources/warm-resources.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export type WarmToolSession = {
   session: ChatToolSession;
@@ -94,7 +95,7 @@ export function createWarmToolSessions(options?: { maxPerPerson?: number; budget
 
   const closeRow = async (row: WarmToolSession): Promise<void> => {
     row.budget?.retiring();
-    await row.session.close().catch(() => {});
+    await row.session.close().catch(reportBackgroundError);
     const usage = row.session.resources?.();
     if (usage?.stopped ?? !usage?.pids.length) row.budget?.forget();
   };
@@ -119,7 +120,7 @@ export function createWarmToolSessions(options?: { maxPerPerson?: number; budget
       const row = sessions.get(threadId);
       if (!row) return undefined;
       if (row.fingerprint !== fingerprint || (person !== undefined && row.person !== person) || !reusable(row.session)) {
-        void evict(threadId).catch(() => {});
+        void evict(threadId).catch(reportBackgroundError);
         return undefined;
       }
       return row.session;
@@ -146,12 +147,12 @@ export function createWarmToolSessions(options?: { maxPerPerson?: number; budget
       // A turn's own fresh mount stays owned by the cache while it runs;
       // its end-of-turn keep (not active) drops it then.
       if (!reusable(session) && meta?.active !== true) {
-        void evict(threadId).catch(() => {});
-        if (previous?.session !== session) void session.close().catch(() => {});
+        void evict(threadId).catch(reportBackgroundError);
+        if (previous?.session !== session) void session.close().catch(reportBackgroundError);
         return;
       }
       if (previous && previous.session !== session) {
-        void closeRow(previous).catch(() => {});
+        void closeRow(previous).catch(reportBackgroundError);
       }
       sessions.delete(threadId);
       const row: WarmToolSession = {
@@ -272,13 +273,13 @@ export function createWarmToolSessions(options?: { maxPerPerson?: number; budget
           limit.toolLimit,
         );
         if (opts.signal?.aborted) {
-          await session.close().catch(() => {});
+          await session.close().catch(reportBackgroundError);
           return "aborted";
         }
         // A real turn or newer prewarm may have installed its mount while
         // this handshake was waiting. Never replace its resources.
         if (sessions.get(turn.threadId) !== before || sessions.get(turn.threadId)?.active) {
-          await session.close().catch(() => {});
+          await session.close().catch(reportBackgroundError);
           return "skipped";
         }
         this.keep(turn.threadId, session, fingerprint, {

@@ -30,6 +30,7 @@ import type { PerspicaxRun } from "../../shared/cloud-agents.ts";
 import type { CodeSubscription } from "../../shared/code-runs.ts";
 import type { SubscriptionTokenBody, SubscriptionTokenDeposit } from "../perspicax/perspicax-link.ts";
 import { ENGINE_DRIVER, ENGINE_PROVIDER, runEngine, type RunEngine, type SubscriptionAccess, type SubscriptionDriver } from "./subscription-access.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 /** What the Code view says about a personal run's subscription: `ok`
  * (handed over, valid until `until`), `missing` (neither a sign-in here nor
@@ -129,14 +130,14 @@ export class SubscriptionDepositor {
     if (!this.deps.signedIn(principalId, "claudeAgent") && !this.deps.signedIn(principalId, "codex")) return;
     this.watched.set(runId, { principalId, until: this.now() + WATCH_FOR_MS });
     if (!this.watchTimer) {
-      this.watchTimer = setInterval(() => { void this.tickWatched().catch(() => {}); }, WATCH_MS);
+      this.watchTimer = setInterval(() => { void this.tickWatched().catch(reportBackgroundError); }, WATCH_MS);
       this.watchTimer.unref?.();
     }
   }
 
   start(): void {
     this.stop();
-    this.sweepTimer = setInterval(() => { void this.sweep().catch(() => {}); }, SWEEP_MS);
+    this.sweepTimer = setInterval(() => { void this.sweep().catch(reportBackgroundError); }, SWEEP_MS);
     this.sweepTimer.unref?.();
   }
 
@@ -229,7 +230,7 @@ export class SubscriptionDepositor {
     const wait = this.renewWait.get(key);
     if (stale(access) && (!wait || wait.until <= now)) {
       const before = access?.accessToken;
-      await this.deps.renew(principalId, engine).catch(() => {});
+      await this.deps.renew(principalId, engine).catch(reportBackgroundError);
       access = (await this.deps.read(principalId, engine)) ?? access;
       if (stale(access) && access?.accessToken === before) {
         const step = Math.min((wait?.step ?? -1) + 1, RENEW_BACKOFF_MS.length - 1);

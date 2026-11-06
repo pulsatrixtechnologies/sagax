@@ -14,6 +14,7 @@ import type { CodexSession } from "./session-types.ts";
 import { homedir } from "node:os";
 import { forgetCodexVolatile } from "../codex-instructions.ts";
 import { CodexRpcError } from "./rpc.ts";
+import { reportBackgroundError } from "../../background-error.ts";
 
 export function attachCodexStream(s: CodexSession): void {
   const turn = s.input;
@@ -43,7 +44,7 @@ s.handleNotification = (msg: any) => {
       // bounded prefix, then filter against the authoritative response.
       if (s.startingNativeTurn) {
         if (s.earlyNotifications.length >= 1024) {
-          void s.settle(false, "too_many_events_before_turn_start").catch(() => {});
+          void s.settle(false, "too_many_events_before_turn_start").catch(reportBackgroundError);
         } else {
           s.earlyNotifications.push(msg);
         }
@@ -264,7 +265,7 @@ s.handleNotification = (msg: any) => {
       void s.settle(t.status === "completed", t.status === "completed" ? null :
         (s.state.contextFullStop ? "context_full"
           : classifyError({ text: s.state.lastError }).reason === "provider_safety" ? "provider_safety"
-            : (s.state.lastError || t.status || "failed"))).catch(() => {});
+            : (s.state.lastError || t.status || "failed"))).catch(reportBackgroundError);
       break;
     }
     case "error": {
@@ -358,7 +359,7 @@ s.child.stderr!.on("data", stderr);
 const error = (e: Error) => {
   if (s.abandoned) return;
   s.emit({ ...s.base(s.threadId, s.turnId), type: "runtime.error", ...describeSpawnFailure(e, s.config.cli, turn.cwd ?? homedir()) });
-  void s.settle(false, "spawn_error").catch(() => {});
+  void s.settle(false, "spawn_error").catch(reportBackgroundError);
 };
 s.child.on("error", error);
 const close = (code: number | null, signal: NodeJS.Signals | null) => {
@@ -367,14 +368,14 @@ const close = (code: number | null, signal: NodeJS.Signals | null) => {
   if (s.state.settled) {
     // Root exit alone cannot release a turn after an uncertain stop.
     // Recheck its group; an explicit later Stop can also retry this.
-    void s.stop().catch(() => {});
+    void s.stop().catch(reportBackgroundError);
     return;
   }
   // An intentional stop killed (or outlived) the child before the
   // turn acknowledged its own end. That is the stop doing its job, not
   // a crash: settle quietly so Stop never reports the raw signal.
   if (s.stopRequested) {
-    void s.settle(false, "interrupted").catch(() => {});
+    void s.settle(false, "interrupted").catch(reportBackgroundError);
     return;
   }
   // The child died before the turn completed. Attribute the exit
@@ -391,11 +392,11 @@ const close = (code: number | null, signal: NodeJS.Signals | null) => {
   // After acknowledgement or native output, resume history with a continuation
   // and the received steps; never replay the original request as a new root.
   if (s.recoverCrash(s.codexThreadId, s.codexTurnId !== null || s.earlyNotifications.length > 0)) {
-    void s.relaunch("app_server_exit", exitMessage, "exit_before_result").catch(() => {});
+    void s.relaunch("app_server_exit", exitMessage, "exit_before_result").catch(reportBackgroundError);
     return;
   }
   s.emit({ ...s.base(s.threadId, s.turnId), type: "runtime.error", message: exitMessage });
-  void s.settle(false, "exit_before_result").catch(() => {});
+  void s.settle(false, "exit_before_result").catch(reportBackgroundError);
 };
 s.child.on("close", close);
 s.detachStream = () => {

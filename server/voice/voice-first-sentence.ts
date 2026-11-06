@@ -24,6 +24,7 @@
 // engine, never the xAI voice key, and never xAI chat from voice-mode.ts.
 
 import type { TextGenerationOptions } from "../contracts.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 /** Stable, short, and the same on every opener so a provider can cache it. */
 export const VOICE_FIRST_SENTENCE_SYSTEM =
@@ -101,7 +102,7 @@ export class VoiceFirstSentenceJobs {
     void run(abort.signal).finally(() => {
       const job = this.jobs.get(threadId);
       if (job?.utteranceId === utteranceId) this.jobs.delete(threadId);
-    }).catch(() => {});
+    }).catch(reportBackgroundError);
   }
 
   isCurrent(threadId: string, utteranceId: string): boolean {

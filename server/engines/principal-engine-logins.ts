@@ -30,6 +30,7 @@ import { DeviceLoginController } from "../drivers/device-login.ts";
 import { probeGrokModels, readGrokModelsCache } from "../drivers/acp/grok.ts";
 import { ProviderAuthSessions } from "./provider-auth-sessions.ts";
 import { isPrincipalId } from "../auth/principals.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export const LOGIN_MARKER = ".pulsabot-login.json";
 /** #1533: the provider refused this sign-in and could not refresh it (a
@@ -357,7 +358,7 @@ export class PrincipalEngineLogins {
     const key = this.flowKey(principalId, instanceId);
     if (this.warming.has(key)) return;
     this.warming.add(key);
-    void this.accountModels(principalId, instanceId).catch(() => null).finally(() => this.warming.delete(key)).catch(() => {});
+    void this.accountModels(principalId, instanceId).catch(() => null).finally(() => this.warming.delete(key)).catch(reportBackgroundError);
   }
 
   private accountEnv(principalId: string, instanceId: string, slot: LoginSlot = "primary"): { cli: string; env: Record<string, string | undefined> } | null {
@@ -383,7 +384,7 @@ export class PrincipalEngineLogins {
     if (!force && this.reachRead.has(key)) return;
     this.reachRead.add(key);
     const home = this.loginDir(principalId, "grokAgent", slot);
-    void probe(env.cli, env.env).then((result) => { if (result) noteGrokAccountReach(home, result, this.now()); }).catch(() => {});
+    void probe(env.cli, env.env).then((result) => { if (result) noteGrokAccountReach(home, result, this.now()); }).catch(reportBackgroundError);
   }
 
   async start(principalId: string, instanceId: string, sessionId: string, slot: LoginSlot = "primary"): Promise<ProviderAuthenticationStart> {

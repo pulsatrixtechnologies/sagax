@@ -6,6 +6,7 @@ import { existsSync } from "node:fs";
 import { Worker } from "node:worker_threads";
 
 import type { Size } from "./webp-scale.ts";
+import { reportBackgroundError } from "./background-error.ts";
 
 export const WEBP_WORKERS = 2;
 const WEBP_JOB_TIMEOUT_MS = 60_000;
@@ -35,13 +36,13 @@ function runInWorker(bytes: Uint8Array, size: Size): Promise<Buffer> {
       // Do not inherit test loaders or inspector ports into the worker.
       execArgv: [],
     });
-    const timer = setTimeout(() => { void worker.terminate().catch(() => {}); reject(new WebpUndecodable("WebP scaling timed out")); }, WEBP_JOB_TIMEOUT_MS);
+    const timer = setTimeout(() => { void worker.terminate().catch(reportBackgroundError); reject(new WebpUndecodable("WebP scaling timed out")); }, WEBP_JOB_TIMEOUT_MS);
     let settled = false;
     const done = (fn: () => void) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      void worker.terminate().catch(() => {});
+      void worker.terminate().catch(reportBackgroundError);
       fn();
     };
     worker.once("message", (reply: { png?: Uint8Array; failed?: string }) => {

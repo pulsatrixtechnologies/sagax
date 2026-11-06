@@ -39,6 +39,7 @@ import { WORKSPACE_OWNER } from "./encryption/content-keys.ts";
 import { JOURNAL_GENESIS, sealLink, type JournalSealFields, type JournalSealLink } from "./encryption/journal-seal.ts";
 import { redactSecrets } from "./redact.ts";
 import { csvCell, monthKey } from "./usage/usage-ledger.ts";
+import { reportBackgroundError } from "./background-error.ts";
 
 /** A verdict's outcome. auto-* rows came from a policy — connector grants,
  * auto-approve rules — with no card in front of a person; user-* rows
@@ -280,7 +281,7 @@ export function scrubThreadDecisions(dataDir: string, threadId: string): Promise
   writeQueues.set(dataDir, queued);
   void queued.finally(() => {
     if (writeQueues.get(dataDir) === queued) writeQueues.delete(dataDir);
-  }).catch(() => {});
+  }).catch(reportBackgroundError);
   return queued.then(() => changed);
 }
 
@@ -442,7 +443,7 @@ export function appendDecision(dataDir: string, row: Omit<DecisionRow, "at">): v
   writeQueues.set(dataDir, queued);
   void queued.finally(() => {
     if (writeQueues.get(dataDir) === queued) writeQueues.delete(dataDir);
-  }).catch(() => {});
+  }).catch(reportBackgroundError);
 }
 
 /** Test/shutdown seam: wait until every decision already queued for this

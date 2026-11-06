@@ -38,6 +38,7 @@ import {
 } from "./openai-chat-shared.ts";
 import { turnTrace } from "../turns/turn-trace.ts";
 import { chatToolsFingerprint, chatToolsTurnLimit, withWarmTokens, type WarmToolSessions } from "./openai-chat-tools-warm.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export type OpenAIChatActiveTurn = {
   abort: AbortController;
@@ -212,7 +213,7 @@ async function finalizeOpenAIChatTurn(ctx: OpenAIChatTurnCtx, state: OpenAIChatT
     stopReason = "error";
     cleanupFailed = true;
     failure = "Tool processes could not be stopped; their execution state is uncertain.";
-    await warmToolSessions.release(turn.threadId).catch(() => {});
+    await warmToolSessions.release(turn.threadId).catch(reportBackgroundError);
   }
   if (abort.signal.aborted) { ok = false; stopReason = "interrupted"; }
   if (!ok && (unread.length || turnEntry.asides.length)) {
@@ -728,7 +729,7 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
     void executeOpenAIChatTurn({
       deps, turn, turnId, apiKey: apiKey!, abort, approval, turnEntry, resolveDone,
       model, requested, messages, secrets, triedModels, request, retainImages, preview, native, safeText,
-    }).catch(() => {});
+    }).catch(reportBackgroundError);
     return { turnId, ...(reused ? { reused: true } : {}) };
 }
 

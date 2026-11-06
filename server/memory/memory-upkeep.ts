@@ -36,6 +36,7 @@ import { dreamTouched, planDream, type DreamPlan } from "./memory-dream.ts";
 import { journalMemoryDelete, journalMemoryWrite, readMemoryJournal, recordMemoryChange } from "./memory-journal.ts";
 import { applyTidy, contradictionCandidates, contradictionPrompt, parseContradictions, planChanges, planTidy, type Contradiction } from "./memory-tidy.ts";
 import { appendMemoryArchive, ARCHIVE_TOPIC, ensureWorkspace, listMemoryTopics, memoryDate, memoryEntry, memoryTopicIndex, readMemoryText, updateMemory, workspaceDir, writeMemoryFile, writeMemoryTopic } from "../workspace/workspace.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export const CAPTURE_MAX_TURNS = 6;
 /** One capture call reads at most this much of one bot's waiting threads;
@@ -841,10 +842,10 @@ export function createMemoryUpkeep(deps: UpkeepDeps): MemoryUpkeep {
           log(`memory upkeep: could not queue turns saved at the last shutdown: ${(error as Error).message}`);
         }
       }
-      timer = setInterval(() => void tick().catch(() => {}), TIDY_CHECK_MS);
+      timer = setInterval(() => void tick().catch(reportBackgroundError), TIDY_CHECK_MS);
       timer.unref?.();
       // a first pass shortly after start catches a night the computer slept through
-      const first = setTimeout(() => void tick().catch(() => {}), 60_000);
+      const first = setTimeout(() => void tick().catch(reportBackgroundError), 60_000);
       first.unref?.();
     },
     stop() {

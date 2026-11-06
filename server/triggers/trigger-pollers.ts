@@ -39,6 +39,7 @@ import { blockedAddressReason } from "../media/media-proxy-guard.ts";
 import type { PollerCredential } from "./trigger-poller-credentials.ts";
 import { openTriggerSeenStore, type TriggerSeenStore } from "./trigger-seen-store.ts";
 import type { AutomationPatch, AutomationTarget, WebhookReceiveResult } from "./webhooks.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 const COMMAND_TIMEOUT_MS = 20_000;
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
@@ -482,7 +483,7 @@ export class TriggerPollers {
 
   start(): void {
     if (this.timer) return;
-    this.timer = setInterval(() => void this.tick().catch(() => {}), TICK_MS);
+    this.timer = setInterval(() => void this.tick().catch(reportBackgroundError), TICK_MS);
     this.timer.unref?.();
   }
 

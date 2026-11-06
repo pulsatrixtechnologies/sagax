@@ -32,6 +32,7 @@
 
 import type { CacheWarmPingResult } from "./contracts.ts";
 import type { CacheKeepWarmStatus } from "../shared/wire.ts";
+import { reportBackgroundError } from "./background-error.ts";
 
 export const CACHE_TTL_MS = 60 * 60_000;
 export const PING_AFTER_MS = 50 * 60_000;
@@ -166,7 +167,7 @@ export function createCacheKeepWarm(deps: KeepWarmDeps) {
     const due = Math.max(1000, w.lastRequestAt + PING_AFTER_MS - now);
     const delay = Math.min(w.deadline - now, untilCold, due);
     w.nextPingAt = now + due < w.deadline && due < untilCold ? now + due : null;
-    w.pending = deps.after(delay, () => { void ping(w).catch(() => {}); });
+    w.pending = deps.after(delay, () => { void ping(w).catch(reportBackgroundError); });
     deps.changed(w.target);
   };
 
@@ -216,7 +217,7 @@ export function createCacheKeepWarm(deps: KeepWarmDeps) {
     const untilCold = w.lastRequestAt + CACHE_TTL_MS - now;
     if (untilCold <= BUSY_RETRY_MS || now + BUSY_RETRY_MS >= w.deadline) return end(w, null);
     w.nextPingAt = now + BUSY_RETRY_MS;
-    w.pending = deps.after(BUSY_RETRY_MS, () => { void ping(w).catch(() => {}); });
+    w.pending = deps.after(BUSY_RETRY_MS, () => { void ping(w).catch(reportBackgroundError); });
     deps.changed(w.target);
   };
 

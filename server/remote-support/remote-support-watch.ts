@@ -1,3 +1,4 @@
+import { reportBackgroundError } from "../background-error.ts";
 // Sagax watches a remote support session the bot opened, so nobody has to
 // say "it is launched" (#1499). From remote_support_open until the end
 // user's computer joins, it asks Perspicax for the state on its own, in the
@@ -86,7 +87,7 @@ export function createRemoteSupportWatcher(deps: {
     if (!watch) return;
     watches.delete(code);
     watch.cancel?.();
-    void Promise.resolve(deps.release?.(watch.target)).catch(() => {});
+    void Promise.resolve(deps.release?.(watch.target)).catch(reportBackgroundError);
   }
 
   function next(code: string) {
@@ -99,7 +100,7 @@ export function createRemoteSupportWatcher(deps: {
       return;
     }
     const delay = at - watch.started < WATCH_FAST_FOR_MS ? WATCH_FAST_MS : WATCH_SLOW_MS;
-    watch.cancel = schedule(() => void tick(code).catch(() => {}), delay);
+    watch.cancel = schedule(() => void tick(code).catch(reportBackgroundError), delay);
   }
 
   async function tick(code: string) {

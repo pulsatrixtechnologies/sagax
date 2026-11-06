@@ -2764,6 +2764,7 @@ import { createInstancesRoutes } from "./routes/instances.ts";
 import { createCliTestRoutes } from "./routes/cli-test.ts";
 import { createMcpServersHttpRoutes } from "./routes/mcp-servers-http.ts";
 import { createConfigHttpRoutes, type ConfigWriteContext } from "./routes/config-http.ts";
+import { reportBackgroundError } from "./background-error.ts";
 
 const PORT = Number(process.env.SAGAX_PORT || process.env.OGB_PORT || 8799);
 /** Capabilities lot 4: the organization's declarations as last broadcast
@@ -4807,7 +4808,7 @@ function resyncOpenCodeProviderKeys(): void {
   for (const instance of registry.instances()) {
     if (instance.driverKind !== "opencodeGo") continue;
     void registry.refreshModels(instance.instanceId)
-      .then(() => broadcast({ kind: "config", ...configStatus() }), () => {}).catch(() => {});
+      .then(() => broadcast({ kind: "config", ...configStatus() }), () => {}).catch(reportBackgroundError);
   }
 }
 await registry.load(providerConfigs(), decorateHostedProvider);
@@ -5063,7 +5064,7 @@ utilityParentPort?.on("message", event => {
   const requestId = typeof message.requestId === "string" && message.requestId.length <= 100 ? message.requestId : undefined;
   void companyRuntimeStarted.then(() => managedDesktop.migrateIdentity(message.identity)).then(() => true, () => false).then(ok => {
     utilityParentPort.postMessage({ type: "openmausbot:managed-desktop-result", requestId, ok });
-  }).catch(() => {});
+  }).catch(reportBackgroundError);
 });
 utilityParentPort?.on("message", event => {
   const message = event.data as { type?: unknown; requestId?: unknown; policy?: unknown } | undefined;
@@ -5098,7 +5099,7 @@ utilityParentPort?.on("message", event => {
     utilityParentPort.postMessage({ type: "openmausbot:managed-desktop-result", requestId, ok: true });
   }, () => {
     utilityParentPort.postMessage({ type: "openmausbot:managed-desktop-result", requestId, ok: false, error: "Company connection could not be applied. Reconnect from desktop Settings." });
-  }).catch(() => {});
+  }).catch(reportBackgroundError);
 });
 
 // ── peer-agent comms wiring ────────────────────────────────────────────
@@ -6978,7 +6979,7 @@ function holdTurnAttachments(threadId: string, texts: readonly (string | undefin
     if (!now.size) return;
     const opening = holdPlain(holder, [...now]).catch(() => undefined);
     if (wait.size) await waitPlain([...wait]).catch(() => undefined);
-    void opening.catch(() => {});
+    void opening.catch(reportBackgroundError);
   };
   // the turn waits only when something is read by path before the engine starts
   const mustWait = Boolean(options.picturesByPath && images.length) || (solo && texts.some((text) => storedNamesIn(text).some(isArchiveAttachment)));
@@ -6992,7 +6993,7 @@ function holdTurnAttachments(threadId: string, texts: readonly (string | undefin
  * so the turn finds them ready (the hold lets go on its own when no turn
  * follows). */
 function openForComingTurn(botId: string, threadId: string): void {
-  void holdBotMemoryPlain(botId, turnHolder(threadId)).catch(() => {});
+  void holdBotMemoryPlain(botId, turnHolder(threadId)).catch(reportBackgroundError);
   void holdTurnAttachments(threadId, [], []);
 }
 
@@ -7395,7 +7396,7 @@ async function perspicaxTurnPrepare(input: {
   // Handshake beside setup: open/verify the MCP session now, so the engine's
   // later tools/list hits the same-session cache. Roles are never auto-picked.
   if (plan.mounted.length) await perspicaxMcp.ensureTurnSessions(input.threadId, input.generation);
-  if (plan.mounted.length) void perspicaxMcp?.refreshApiNames({ threadId: input.threadId, generation: input.generation, botId: live.id }).catch(() => {});
+  if (plan.mounted.length) void perspicaxMcp?.refreshApiNames({ threadId: input.threadId, generation: input.generation, botId: live.id }).catch(reportBackgroundError);
   return { live, speakerPrincipalId, routine, plan };
 }
 
@@ -8412,7 +8413,7 @@ for (const pending of startupCatalogs) {
       console.warn(`[engines] refreshing the new-bot default after model discovery failed: ${error instanceof Error ? error.message : String(error)}`);
     }
     broadcast({ kind: "config", ...configStatus() });
-  }, () => {}).catch(() => {});
+  }, () => {}).catch(reportBackgroundError);
 }
 store.seedIfEmpty();
 hostedModels?.reconcile(store);
@@ -8525,7 +8526,7 @@ store.botOwnerKey = (bot) => effectiveBotOwner(bot);
 // turn's path; a server-side write refreshes it at once (memory-company.ts).
 const companyMemory = new CompanyMemoryCache({ read: (id) => readMemoryTopicAsync(id, COMPANY_TOPIC) });
 onMemoryTopicWritten((botId, name) => companyMemory.written(botId, name));
-void companyMemory.warm(store.bots.filter((bot) => bot.memoryEnabled !== false).map((bot) => bot.id)).catch(() => {});
+void companyMemory.warm(store.bots.filter((bot) => bot.memoryEnabled !== false).map((bot) => bot.id)).catch(reportBackgroundError);
 
 function memoryPromptFor(bot: BotRecord, opts: { managedWrites?: boolean; fileTools?: boolean; withholdHostTools?: boolean; audience?: MemoryDestination } = {}): string {
   return memorySystemPrompt(bot.id, {
@@ -8676,7 +8677,7 @@ const sandboxTidier = userSandbox ? new WorkspaceTidier({
 }) : null;
 if (userSandbox) {
   principals.onDisabledChanged((person, disabled) => {
-    if (disabled) void userSandbox.personOut(person.id).catch(() => {});
+    if (disabled) void userSandbox.personOut(person.id).catch(reportBackgroundError);
     else userSandbox.personBack(person.id);
   });
 }
@@ -9311,7 +9312,7 @@ async function syncPluginsForTurn(principalId: string, generation: string, botId
   const previous = pluginSyncChains.get(principalId) ?? Promise.resolve();
   const copying = previous.catch(() => undefined).then(() => syncPluginFoldersForTurn(principalId, botId));
   pluginSyncChains.set(principalId, copying);
-  void copying.catch(() => undefined).finally(() => { if (pluginSyncChains.get(principalId) === copying) pluginSyncChains.delete(principalId); }).catch(() => {});
+  void copying.catch(() => undefined).finally(() => { if (pluginSyncChains.get(principalId) === copying) pluginSyncChains.delete(principalId); }).catch(reportBackgroundError);
   pluginSyncedGenerations.set(key, copying);
   if (pluginSyncedGenerations.size > 2_000) pluginSyncedGenerations.delete(pluginSyncedGenerations.keys().next().value!);
   return copying;
@@ -9344,7 +9345,7 @@ const githubConnect = new GithubConnect({
   onConnected: (principalId, connection) => {
     const previous = githubReplaced.get(principalId);
     githubReplaced.delete(principalId);
-    void syncGithubToSandbox(principalId, connection, undefined, previous).catch(() => {});
+    void syncGithubToSandbox(principalId, connection, undefined, previous).catch(reportBackgroundError);
   }
 });
 /** The organization admin's historical marketplace list, kept in this
@@ -12319,7 +12320,7 @@ function reviewHolds(node: HandoffView): boolean {
     // full-access: peer-contact
     void requestPeerApproval(approvalBus, from, target, node.text, node.consult ? "ask_bot" : "delegate_bot", parent.threadId).then(verdict =>
       decided(verdict === "allow" ? undefined : verdict === "deny" ? "Denied by user; no work sent." : `${peerApprovalFailure(verdict).error}; no work sent.`),
-    () => decided("The review card could not be shown; no work sent.")).catch(() => {});
+    () => decided("The review card could not be shown; no work sent.")).catch(reportBackgroundError);
   }
   return true;
 }
@@ -12606,7 +12607,7 @@ const coordinator: Coordinator = createCoordinator({
           resolve({ ...outcome, evidence: observed });
         };
         const abort = () => {
-          void interruptDirectThread(bot.id, node.threadId).catch(() => {});
+          void interruptDirectThread(bot.id, node.threadId).catch(reportBackgroundError);
           finish({ ok: false, text: "Coordinated work was stopped" });
         };
         signal.addEventListener("abort", abort, { once: true });
@@ -12653,12 +12654,12 @@ const coordinator: Coordinator = createCoordinator({
       };
       const tracked = (goalWorker
         ? runRoomTurn()
-        : (groupQueues.get(node.threadId) ?? Promise.resolve()).catch(() => {}).then(runRoomTurn)
+        : (groupQueues.get(node.threadId) ?? Promise.resolve()).catch(reportBackgroundError).then(runRoomTurn)
       ).finally(() => {
         signal.removeEventListener("abort", abort);
         finishGroupTurnOperation(group.id, operation);
       });
-      if (!goalWorker) groupQueues.set(node.threadId, tracked.catch(() => {}));
+      if (!goalWorker) groupQueues.set(node.threadId, tracked.catch(reportBackgroundError));
       await tracked;
       const observed = turnToolEvidence(node.threadId, node.startedAt ?? node.createdAt);
       return { ok: result.outcome === "settled", ...(result.outcome === "stalled" ? { stalled: true } : {}),
@@ -13239,7 +13240,7 @@ async function stopGroupThreads(
   for (const { threadId, instance } of interruptTargets) {
     videoGenerations.cancelThread(threadId);
     revokeInternalCapabilitiesForThread(threadId);
-    await instance?.adapter.interruptTurn(threadId).catch(() => {});
+    await instance?.adapter.interruptTurn(threadId).catch(reportBackgroundError);
     closeOpenApprovals(threadId);
   }
 }
@@ -13913,7 +13914,7 @@ const remoteSessions = createRemoteSessionService({
       if (!plan.mounted.length) return;
       await mcp.callTool({ threadId, generation, botId: live.id, name: "remote_support_close", args: { code, outcome: "ended" } });
     } finally {
-      await mcp.endGeneration(threadId, generation).catch(() => {});
+      await mcp.endGeneration(threadId, generation).catch(reportBackgroundError);
     }
   }
 });
@@ -13974,7 +13975,7 @@ const unattendedHosts = createUnattendedHosts({
       ownerPrincipalId: effectiveBotOwner(bot),
     });
     if (!plan.mounted.length) {
-      await mcp.endGeneration(threadId, generation).catch(() => {});
+      await mcp.endGeneration(threadId, generation).catch(reportBackgroundError);
       const first = plan.unavailable[0];
       return { error: first ? `Perspicax: ${perspicaxUnavailableWhy(first.reason, first.detail)}` : "The Perspicax connection could not be used." };
     }
@@ -14121,7 +14122,7 @@ function dropRemoteSupportSeat(target: SupportWatchTarget): void {
   const seat = remoteSupportSeats.get(target.code);
   if (!seat) return;
   remoteSupportSeats.delete(target.code);
-  void perspicaxMcp?.endGeneration(target.threadId, seat.generation).catch(() => {});
+  void perspicaxMcp?.endGeneration(target.threadId, seat.generation).catch(reportBackgroundError);
 }
 const remoteSupportWatcher = createRemoteSupportWatcher({
   check: async (target) => {
@@ -14331,7 +14332,7 @@ function makeThreadConfidential(botId: string, threadId: string): void {
   // words held for routing keep no copy once the thread is confidential
   routableSteers.forgetThread(threadId);
   memoryUpkeep.dropThread(threadId);
-  void scrubThreadDecisions(DATA_DIR, threadId).catch(() => {});
+  void scrubThreadDecisions(DATA_DIR, threadId).catch(reportBackgroundError);
   // its settled teammate work (runtime.db) keeps no words of it
   forgetConfidentialCoordination(threadId);
   // the engines' own transcripts of it so far (server/engines/engine-transcripts.ts):
@@ -14509,7 +14510,7 @@ function wipeConfidentialThread(botId: string, threadId: string, attachmentNames
   // this thread's words may still sit in free pages and index segments
   try { writeFileSync(join(DATA_DIR, CONFIDENTIAL_FORGOTTEN_MARKER), "", { mode: 0o600 }); } catch { /* the backup then strips by the roster only */ }
   void forgetConfidentialBrowser(threadId).catch(() => undefined);
-  void scrubThreadDecisions(DATA_DIR, threadId).catch(() => {});
+  void scrubThreadDecisions(DATA_DIR, threadId).catch(reportBackgroundError);
   // its own Data database and sheet (data/scope.ts)
   const dataKey = threadScopeKeyFor(botId, threadId);
   try { dataSheets.deleteScope(dataKey); } catch { /* already gone */ }
@@ -15239,7 +15240,7 @@ function notifyAccess(notification: Notification | null, access: WireAccessCard,
     engine: refusedBot?.modelSelection?.instanceId ?? null,
     reason: access.cause === "payer_disabled" || access.cause === "server_engine_not_allowed" ? access.cause : access.reason,
     detail: refusedConfidential ? CONFIDENTIAL_INCIDENT_TEXT : redactSecretsInText(notification.body ?? "")
-  }).catch(() => {});
+  }).catch(reportBackgroundError);
   if (IDENTITY.kind !== "perspicax") return notify(notification);
   const bot = store.bot(access.botId);
   const inRoom = Boolean(store.groupByThread(notification.threadId));
@@ -15640,7 +15641,7 @@ async function stopOwnSubagents(botId: string, threadId: string): Promise<number
   for (const child of threads) {
     cancelThreadQueue(botId, child);
     if (threadBusy(botId, child)) {
-      await stopDirectThread(botId, child).catch(() => {});
+      await stopDirectThread(botId, child).catch(reportBackgroundError);
       closeCutToolRows(child);
     }
   }
@@ -15668,7 +15669,7 @@ function preemptAtSafePoint(botId: string, threadId: string): void {
     if (!threadBusy(botId, threadId) || !hasQueuedSteeredMessages(botId, threadId)) return;
     console.log(`[safe-point] ${botId}/${threadId} interrupted to read a waiting message`);
     markThreadStopping(threadId);
-    void interruptDirectThread(botId, threadId, { cause: "safe-point" }).then(() => closeCutToolRows(threadId)).catch(() => {});
+    void interruptDirectThread(botId, threadId, { cause: "safe-point" }).then(() => closeCutToolRows(threadId)).catch(reportBackgroundError);
   });
 }
 
@@ -16168,7 +16169,7 @@ const limitFailover = createLimitFailoverHost({
     // Solo: which engines are signed in comes from the probe cache; read it
     // now when it is empty or stale, a backup is chosen only from what is known.
     if (IDENTITY.kind !== "perspicax" && (!engineProbes.size || [...engineProbes.values()].some((probe) => Date.now() - probe.at > ENGINE_PROBE_TTL_MS))) {
-      await probeEngines().catch(() => {});
+      await probeEngines().catch(reportBackgroundError);
     }
     return limitCandidatesNow(botId, threadId, speaker);
   },
@@ -16306,7 +16307,7 @@ const limitFailover = createLimitFailoverHost({
     if (fromRunId) {
       const prior = routines.listRuns().find((run) => run.id === fromRunId);
       if (prior && ["queued", "waiting"].includes(prior.status)) {
-        void routines.cancelRun(prior.id, "Continued on a backup engine after a usage limit").catch(() => {});
+        void routines.cancelRun(prior.id, "Continued on a backup engine after a usage limit").catch(reportBackgroundError);
       }
     }
     return Boolean(routines.runNow(routineId));
@@ -16314,7 +16315,7 @@ const limitFailover = createLimitFailoverHost({
   clearRoutineRun: (runId) => {
     const prior = routines?.listRuns().find((run) => run.id === runId);
     if (prior && ["queued", "waiting"].includes(prior.status)) {
-      void routines!.cancelRun(prior.id, "Waiting for the engine's usage limit to reset").catch(() => {});
+      void routines!.cancelRun(prior.id, "Waiting for the engine's usage limit to reset").catch(reportBackgroundError);
     }
   },
 });
@@ -16347,7 +16348,7 @@ function resendUserMessage(botId: string, threadId: string, messageId: string, s
         console.warn(`[${tag}] ${threadId}: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
-  })().catch(() => {});
+  })().catch(reportBackgroundError);
 }
 
 // Prompt-cache keep-warm (server/cache-keepwarm.ts; design from Cache Tax,
@@ -16971,8 +16972,8 @@ const watchdog = new TurnWatchdog({
         (!owner || !stalledResourceOwner || owner.generation === stalledResourceOwner.generation);
     };
     void Promise.resolve(runningTurnInstance(bot, turn.threadId)?.adapter.interruptTurn(turn.threadId))
-      .catch(() => {})
-      .then(() => { if (stillStalledTurn()) closeOpenApprovals(turn.threadId); }).catch(() => {});
+      .catch(reportBackgroundError)
+      .then(() => { if (stillStalledTurn()) closeOpenApprovals(turn.threadId); }).catch(reportBackgroundError);
     const minutes = Math.round(silentMs / 60_000), cause = stallCause(silentMs);
     // its calls and sub-agents end with it, even if the engine never settles
     closeCutToolRows(turn.threadId, endedToolOutput({ stopped: false }));
@@ -17378,7 +17379,7 @@ function forgetTurnCheckpoint(threadId: string): void {
   const checkpoint = turnCheckpoints.get(threadId);
   if (!checkpoint) return;
   turnCheckpoints.delete(threadId);
-  void checkpoints.release(checkpoint.botId, checkpoint.cwd, checkpoint.pin).catch(() => {});
+  void checkpoints.release(checkpoint.botId, checkpoint.cwd, checkpoint.pin).catch(reportBackgroundError);
 }
 
 /** The usage row's duration (2026-10-08, the console's latency per engine):
@@ -17416,7 +17417,7 @@ function ingestEngineHook(capability: InternalCapability, body: unknown): { ok: 
     // #1374: a plugin's tool hook sees the tool a use_tool runs, and its arguments
     const bridged = typeof payload.tool_name === "string" ? unwrapAgentsBridge(payload.tool_name, payload.tool_input) : null;
     const hookPayload = bridged?.unwrapped ? { ...payload, tool_name: bridged.name, tool_input: bridged.input } : payload;
-    void runLifecycleEvent(capability.botId, threadId, name, hookPayload, typeof hookPayload.tool_name === "string" ? hookPayload.tool_name : undefined).catch(() => {});
+    void runLifecycleEvent(capability.botId, threadId, name, hookPayload, typeof hookPayload.tool_name === "string" ? hookPayload.tool_name : undefined).catch(reportBackgroundError);
   }
   // The engine compacting its own session (Claude Code's auto-compact in a
   // single very long turn, past the point where Sagax folds between turns)
@@ -17555,9 +17556,9 @@ async function scheduleTurnDigest(input: {
   } finally {
     // The pre-turn commit has had its last reader (the diff above is queued
     // ahead of this in the shadow repo); the next snapshot may reclaim it.
-    if (checkpoint) void checkpoints.release(checkpoint.botId, checkpoint.cwd, checkpoint.pin).catch(() => {});
-    void runLifecycleEvent(input.botId, input.threadId, "after_agent_response", { text: input.reply.slice(0, 2_000) }).catch(() => {});
-    void runLifecycleEvent(input.botId, input.threadId, "stop", {}).catch(() => {});
+    if (checkpoint) void checkpoints.release(checkpoint.botId, checkpoint.cwd, checkpoint.pin).catch(reportBackgroundError);
+    void runLifecycleEvent(input.botId, input.threadId, "after_agent_response", { text: input.reply.slice(0, 2_000) }).catch(reportBackgroundError);
+    void runLifecycleEvent(input.botId, input.threadId, "stop", {}).catch(reportBackgroundError);
   }
 }
 
@@ -18657,7 +18658,7 @@ async function localVmAutoLifecycle(action: "run" | "start" | "remove") {
 }
 
 // At launch: bring the Local VM up in the background.
-if (localVmAuto) setTimeout(() => { void localVmAuto.ensure("launch").catch(() => {}); }, 3_000).unref?.();
+if (localVmAuto) setTimeout(() => { void localVmAuto.ensure("launch").catch(reportBackgroundError); }, 3_000).unref?.();
 
 async function localVmInventoryPayload() {
   const runtime = await containerRuntimeStatus();
@@ -19112,7 +19113,7 @@ bus.subscribe((event: RuntimeEvent) => {
         : null;
       if (cardGuard?.deny && asker && event.requestId) {
         const instance = event.providerInstanceId ? registry.get(event.providerInstanceId) : registry.get(asker.modelSelection.instanceId);
-        void instance?.adapter.respondToRequest(event.threadId, event.requestId, { behavior: "deny" }).catch(() => {});
+        void instance?.adapter.respondToRequest(event.threadId, event.requestId, { behavior: "deny" }).catch(reportBackgroundError);
         pushMessage({ role: "bot", kind: "activity", tool: { name: `Refused ${cardGuardTool}: ${cardGuard.decision.reason === "speaker_not_granted" ? "the person this turn speaks for has" : "this bot has"} no grant for it (Settings → Tool access).`, ok: false } });
         break;
       }
@@ -19176,7 +19177,7 @@ bus.subscribe((event: RuntimeEvent) => {
         if (emailDraftRequest) patchEmailSend(event.threadId, emailDraftRequest, { status: "failed", error: safetyEffect.message });
         stashSafetyNote(event.requestId, safetyEffect.message);
         const instance = event.providerInstanceId ? registry.get(event.providerInstanceId) : asker ? registry.get(asker.modelSelection.instanceId) : undefined;
-        void instance?.adapter.respondToRequest(event.threadId, event.requestId, { behavior: "deny", message: safetyEffect.message }).catch(() => {});
+        void instance?.adapter.respondToRequest(event.threadId, event.requestId, { behavior: "deny", message: safetyEffect.message }).catch(reportBackgroundError);
         pushMessage({ role: "bot", kind: "activity", tool: { name: safetyEffect.message, ok: false } });
         break;
       }
@@ -19370,7 +19371,7 @@ bus.subscribe((event: RuntimeEvent) => {
       if (madeUpTool && asker && event.requestId && !knownAgentToolName(madeUpTool)) {
         const instance = event.providerInstanceId ? registry.get(event.providerInstanceId) : registry.get(asker.modelSelection.instanceId);
         const message = unknownAgentToolRefusal(madeUpTool);
-        void instance?.adapter.respondToRequest(event.threadId, event.requestId, { behavior: "deny", message }).catch(() => {});
+        void instance?.adapter.respondToRequest(event.threadId, event.requestId, { behavior: "deny", message }).catch(reportBackgroundError);
         appendDecision(DATA_DIR, {
           threadId: event.threadId, requestId: event.requestId, botId: asker.id, botName: asker.name,
           tool: event.tool, decision: "auto-denied", source: "unknown-tool"
@@ -19384,7 +19385,7 @@ bus.subscribe((event: RuntimeEvent) => {
         adminApproval, host: approvalHostOf(asker), threadOwner: approvalOwnerId(asker, event.threadId)
       })) {
         const instance = event.providerInstanceId ? registry.get(event.providerInstanceId) : registry.get(asker.modelSelection.instanceId);
-        void instance?.adapter.respondToRequest(event.threadId, event.requestId, { behavior: "deny", message: CONFIDENTIAL_CARD_REFUSED }).catch(() => {});
+        void instance?.adapter.respondToRequest(event.threadId, event.requestId, { behavior: "deny", message: CONFIDENTIAL_CARD_REFUSED }).catch(reportBackgroundError);
         pushMessage({ role: "bot", kind: "activity", tool: { name: CONFIDENTIAL_CARD_REFUSED, ok: false } });
         appendDecision(DATA_DIR, {
           threadId: event.threadId, requestId: event.requestId, botId: asker.id, botName: asker.name,
@@ -19410,7 +19411,7 @@ bus.subscribe((event: RuntimeEvent) => {
           botHasOwnComputer: botHasOwnComputerForTurn(asker, event.threadId)
         }) === "use-bot-computer") {
         const instance = event.providerInstanceId ? registry.get(event.providerInstanceId) : registry.get(asker.modelSelection.instanceId);
-        void instance?.adapter.respondToRequest(event.threadId, event.requestId, { behavior: "deny", message: EXEC_USE_BOT_COMPUTER }).catch(() => {});
+        void instance?.adapter.respondToRequest(event.threadId, event.requestId, { behavior: "deny", message: EXEC_USE_BOT_COMPUTER }).catch(reportBackgroundError);
         pushMessage({ role: "bot", kind: "activity", tool: { name: EXEC_USE_BOT_COMPUTER, ok: false } });
         appendDecision(DATA_DIR, {
           threadId: event.threadId, requestId: event.requestId, botId: asker.id, botName: asker.name,
@@ -19453,7 +19454,7 @@ bus.subscribe((event: RuntimeEvent) => {
         : customReview?.decision;
       if (customDecision?.kind === "deny" && asker && event.requestId) {
         const instance = event.providerInstanceId ? registry.get(event.providerInstanceId) : registry.get(asker.modelSelection.instanceId);
-        void instance?.adapter.respondToRequest(event.threadId, event.requestId, { behavior: "deny", message: "Refused by the person's rule." }).catch(() => {});
+        void instance?.adapter.respondToRequest(event.threadId, event.requestId, { behavior: "deny", message: "Refused by the person's rule." }).catch(reportBackgroundError);
         const notice = customRuleNotice(customDecision);
         if (emailDraftRequest) patchEmailSend(event.threadId, emailDraftRequest, { status: "failed", error: `Refused by your rule "${customDecision.rule.when.slice(0, 120)}".` });
         pushMessage({
@@ -19642,7 +19643,7 @@ bus.subscribe((event: RuntimeEvent) => {
         : undefined;
       if (owner?.kind === "deny" && asker && event.requestId) {
         const instance = event.providerInstanceId ? registry.get(event.providerInstanceId) : registry.get(asker.modelSelection.instanceId);
-        void instance?.adapter.respondToRequest(event.threadId, event.requestId, { behavior: "deny", message: "Refused by the owner's rule." }).catch(() => {});
+        void instance?.adapter.respondToRequest(event.threadId, event.requestId, { behavior: "deny", message: "Refused by the owner's rule." }).catch(reportBackgroundError);
         pushMessage({ role: "bot", kind: "activity", tool: { name: `Refused ${event.summary.slice(0, 120)}: your rule "${owner.rule.description.slice(0, 120)}".`, ok: false } });
         appendDecision(DATA_DIR, {
           threadId: event.threadId, requestId: event.requestId, botId: asker.id, botName: asker.name,
@@ -20044,7 +20045,7 @@ bus.subscribe((event: RuntimeEvent) => {
               startedBy: turnStartFor(event.threadId),
               call: { tool: event.mcpTool ?? event.tool, ...(typeof event.input === "string" ? { input: event.input } : {}), summary: event.summary },
               language: languageOfPerson(cardAnswerer)
-            }).then(finishReview, () => finishReview({ kind: "none" })).catch(() => {});
+            }).then(finishReview, () => finishReview({ kind: "none" })).catch(reportBackgroundError);
           }
         }
       }
@@ -20649,12 +20650,12 @@ bus.subscribe((event: RuntimeEvent) => {
             if (frame && isCurrent()) {
               store.insertMessageAfter(event.threadId, settleLeafId, { role: "bot", kind: "screen", requested: true, png: frame.png, mime: frame.mime });
             }
-          }).catch(() => {}).finally(() => {
+          }).catch(reportBackgroundError).finally(() => {
             clearTimeout(timeout);
           });
-          void Promise.all([screenSettled, digestSettled]).finally(() => settleDirectTurn(true)).catch(() => {});
+          void Promise.all([screenSettled, digestSettled]).finally(() => settleDirectTurn(true)).catch(reportBackgroundError);
         } else {
-          void digestSettled.finally(() => settleDirectTurn(true)).catch(() => {});
+          void digestSettled.finally(() => settleDirectTurn(true)).catch(reportBackgroundError);
         }
       } else if (group && speaker) {
         // Room/goal turns run on a shared thread, but their spend still counts
@@ -20689,7 +20690,7 @@ bus.subscribe((event: RuntimeEvent) => {
           groupUsageReader.refresh();
           const current = store.group(group.id);
           if (current) broadcast({ kind: "group", group: publicGroupState(current) });
-        }).catch(() => {});
+        }).catch(reportBackgroundError);
         if (completedTurnId) {
           void scheduleTurnDigest({
             botId: speaker.botId, botName: speaker.name,
@@ -20698,7 +20699,7 @@ bus.subscribe((event: RuntimeEvent) => {
             reply, from: speaker,
             isCurrent: () => store.groupByThread(event.threadId)?.id === group.id,
             usage: { input: tokens?.input ?? 0, output: tokens?.output ?? 0, costUsd: event.cost ?? null }
-          }).catch(() => {});
+          }).catch(reportBackgroundError);
         }
         liveTurnByThread.delete(event.threadId);
       }
@@ -21532,7 +21533,7 @@ function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: s
       kind: input.kind, botId: bot.id, botName: bot.name, ownerPrincipalId: effectiveBotOwner(bot) || null, threadId,
       title: null, engine: (task.modelSelection ?? bot.modelSelection)?.instanceId ?? null,
       detail: CONFIDENTIAL_INCIDENT_TEXT
-    }).catch(() => {});
+    }).catch(reportBackgroundError);
     if (incidentLedger.note(threadId).muted) return;
     if (input.kind === "could-not-start" || input.kind === "routine-failed") return;
     notify(deliverableNotification("incident", bot, threadId, CONFIDENTIAL_INCIDENT_TEXT, { avatarUrl: bot.avatarUrl }));
@@ -21552,7 +21553,7 @@ function reportIncident(input: { kind: IncidentKind; bot: BotRecord; threadId: s
     // or the stop reason is stored, never a message text (decision T7).
     ...(failedCause === null && input.kind === "failed" ? { reason: problemReason("failed", `${input.detail} ${incidentContext(threadId).lastReply ?? ""}`) } : {}),
     detail: redactSecretsInText(failedCause ?? input.detail)
-  }).catch(() => {});
+  }).catch(reportBackgroundError);
   // A thread another bot opened and is watching is that bot's to handle:
   // the delegator is woken with the failure already (wakeDelegationSource).
   if (task?.openedBy?.delegationId || delegationWatch.has(threadId) || coordinator.activeDirect(threadId)) return;
@@ -22338,13 +22339,13 @@ bus.subscribe(makeLoopStopSubscriber({
     dispatchLoopStop(threadId, { botId, groupId: group?.id }, {
       stopDirect: (id, thread) => {
         note();
-        void stopDirectThread(id, thread).catch(() => {});
+        void stopDirectThread(id, thread).catch(reportBackgroundError);
       },
       stopRoom: (groupId, thread) => {
         note();
         const room = store.group(groupId);
         if (!room) return;
-        void stopGroupThreads(room, [thread], { status: "stopped", detail: reason }).catch(() => {});
+        void stopGroupThreads(room, [thread], { status: "stopped", detail: reason }).catch(reportBackgroundError);
       },
       onUnowned: (thread) => {
         console.warn(`[loop] thread ${thread.slice(0, 8)} is not a direct or room thread; not stopped`);
@@ -22533,7 +22534,7 @@ function scheduleUnfinishedTurn(botId: string, threadId: string, turnId: string 
         started = true;
         void startTurn(botId, unfinishedTurnPrompt(kind), { threadId, cardContinuation: true, ...(speaker ? { speaker } : {}) })
           .catch((error) => console.warn(`[unfinished-turn] thread ${threadId}: the continuation could not start: ${error instanceof Error ? error.message : String(error)}`))
-          .finally(release).catch(() => {});
+          .finally(release).catch(reportBackgroundError);
       } catch (error) {
         console.warn("[unfinished-turn] continuation failed", error);
       } finally {
@@ -22764,7 +22765,7 @@ async function startOrQueueDirectMessage(...args: Parameters<typeof startOrQueue
   const threadId = args[1];
   const ahead = prewarmSends.get(threadId);
   if (ahead) {
-    await ahead.catch(() => {});
+    await ahead.catch(reportBackgroundError);
     return startOrQueueDirectMessageNow(...args);
   }
   if (!threadPrewarm.has(threadId)) return startOrQueueDirectMessageNow(...args);
@@ -23836,7 +23837,7 @@ function startScreenPoller(
     botId,
     touched: screenIsTheWork
   });
-  entry.timer = setInterval(() => void entry.capture().catch(() => {}), SCREEN_POLL_MS);
+  entry.timer = setInterval(() => void entry.capture().catch(reportBackgroundError), SCREEN_POLL_MS);
   screenPollers.set(threadId, entry);
 }
 
@@ -23859,7 +23860,7 @@ function pokeScreenPoller(threadId: string, touches: boolean, surface?: "browser
   // a status read on the computer must not redirect the picture away from a
   // page the browser is still showing.
   if (touches && surface) entry.surface = surface;
-  void Promise.resolve(entry.capture()).catch(() => {});
+  void Promise.resolve(entry.capture()).catch(reportBackgroundError);
 }
 
 function stopScreenPoller(botId: string, threadId?: string) {
@@ -24333,7 +24334,7 @@ async function interruptRoutineGroupGoal(
   revokeInternalCapabilitiesForThread(threadId);
   await (bot ? runningTurnInstance(bot, threadId) : null)
     ?.adapter.interruptTurn(threadId)
-    .catch(() => {});
+    .catch(reportBackgroundError);
   closeOpenApprovals(threadId);
 }
 
@@ -24640,7 +24641,7 @@ async function routineWatchCallTool(routine: WatchRoutine, tool: string, args: R
         await client.initialize("Sagax routine watch", signal);
         return toolResultValue(await client.request("tools/call", { name: parsed.name, arguments: args }, signal));
       } finally {
-        await client.close().catch(() => {});
+        await client.close().catch(reportBackgroundError);
       }
     }
   }
@@ -24983,7 +24984,7 @@ routines = new RoutineManager({
     if (!principal) return;
     const place = decideWorkplace({ desktopTargeted: false, routine: true, principal, personAsked: false });
     if (place.target !== "user-sandbox" && routine.runOn !== "cloud" && !cloudOnlyBot(routine.botId)) return;
-    void userSandbox.prewake(principal, routine.botId).catch(() => {});
+    void userSandbox.prewake(principal, routine.botId).catch(reportBackgroundError);
   },
   // Pre-warm (server/threads/thread-prewarm.ts): a scheduled bot run's engine starts
   // PREWARM_ENGINE_LEAD_MS ahead in the task its run will take, with the
@@ -25320,7 +25321,7 @@ const readAndDraft = createReadAndDraft({
   decide: (row) => appendDecision(DATA_DIR, row),
   release: (threadId) => {
     const bot = store.botByThread(threadId);
-    if (bot) void stopDirectThread(bot.id, threadId).catch(() => {});
+    if (bot) void stopDirectThread(bot.id, threadId).catch(reportBackgroundError);
   },
   mayDraft: (checkKey, threadId, _to) => !(waitDrafted.get(checkKey)?.has(threadId)),
   drafted: (checkKey, threadId) => {
@@ -28057,7 +28058,7 @@ function startGroupTurn(
     }
   });
   const tracked = next.finally(() => finishGroupTurnOperation(groupId, operation));
-  groupQueues.set(threadId, tracked.catch(() => {}));
+  groupQueues.set(threadId, tracked.catch(reportBackgroundError));
   return message;
 }
 
@@ -29759,7 +29760,7 @@ function engineInstalled(instanceId: string): boolean {
   // is not installed whatever a PATH lookup finds.
   if (engineNotAvailableReason(instanceId)) return false;
   const probe = engineProbes.get(instanceId);
-  if (!probe || Date.now() - probe.at > ENGINE_PROBE_TTL_MS) void probeEngines().catch(() => {});
+  if (!probe || Date.now() - probe.at > ENGINE_PROBE_TTL_MS) void probeEngines().catch(reportBackgroundError);
   return probe?.installed ?? true;
 }
 function engineDisplayName(instance: { displayName?: string; driverKind: string }): string {
@@ -30252,7 +30253,7 @@ function autoEnginesFor(bot: BotRecord, speaker: TurnSpeaker, guestConfined = fa
   // Solo: which engines are signed in comes from the probe cache; a stale
   // or empty cache refreshes in the background and counts as unknown.
   if (IDENTITY.kind !== "perspicax" && (!engineProbes.size || [...engineProbes.values()].some((probe) => Date.now() - probe.at > ENGINE_PROBE_TTL_MS))) {
-    void probeEngines().catch(() => {});
+    void probeEngines().catch(reportBackgroundError);
   }
   const payer = autoPayerKey(bot, speaker);
   for (const instance of registry.instances()) {
@@ -30976,7 +30977,7 @@ async function describeInstances() {
   // Reading the engines is where this server learns one became available
   // (an install, a sign-in, a key or a Company engine), so a bot still on the
   // removed Computer engine moves now rather than at the next start.
-  void retryComputerEngineMove().catch(() => {});
+  void retryComputerEngineMove().catch(reportBackgroundError);
   const engines = selectableInstances(await registry.describe());
   await refreshUnsetModelSelections(engines);
   return engines.map((instance) => {
@@ -31023,7 +31024,7 @@ async function describeInstances() {
  * favorite or Settings card of any app can offer it. */
 async function instancesForViewer(person: string | null) {
   const owner = providerAccountOwner(person);
-  if (owner !== null) await syncPersonalProviders(owner).catch(() => {});
+  if (owner !== null) await syncPersonalProviders(owner).catch(reportBackgroundError);
   // #1450: a model the paying account turned off is not offered again for a while
   const compatViewer = IDENTITY.kind === "perspicax"
     ? { principalId: person, admin: false }
@@ -31608,7 +31609,7 @@ async function perspicaxSessionAlone<T>(
       return toolResultValue(body.result);
     });
   } finally {
-    await mcp.endGeneration(threadId, generation).catch(() => {});
+    await mcp.endGeneration(threadId, generation).catch(reportBackgroundError);
   }
 }
 // The dispatch KPI snapshot (server/artifacts/dispatch-kpi.ts): computed by
@@ -32664,7 +32665,7 @@ ROUTES.push(createBotInboundMailReadRoutes({
 /** v2 (S3): a bot deleted or given to another owner: Perspicax's list follows. */
 function botMailResync(): void {
   try {
-    void botMailAddresses.resync().catch(() => {});
+    void botMailAddresses.resync().catch(reportBackgroundError);
   } catch {
     /* before start-up finished: the first read syncs */
   }
@@ -33535,7 +33536,7 @@ function prewakeComputerWhileTyping(botId: string, principalId: string | null | 
   const place = decideWorkplace({ desktopTargeted: false, routine: false, principal, personAsked: false });
   if (place.target !== "user-sandbox" && !cloudOnlyBot(botId)) return;
   if (!typingPrewake.take(principal, botId, Date.now())) return;
-  void userSandbox.prewake(principal, botId).catch(() => {});
+  void userSandbox.prewake(principal, botId).catch(reportBackgroundError);
 }
 // 2026-10-16: a person's custom auto-review rules (server/routes/custom-rules.ts).
 // 2026-10-29: on by default for a Primary Bot; the person turns it off or moves its time.
@@ -34145,7 +34146,7 @@ function deletePersonData(principalId: string): Promise<{ bots: number; threads:
   const previous = personErasures.get(key);
   const run = (previous ? previous.catch(() => undefined) : Promise.resolve(undefined)).then(() => erasePersonDataNow(principalId));
   personErasures.set(key, run);
-  run.finally(() => { if (personErasures.get(key) === run) personErasures.delete(key); }).catch(() => {});
+  run.finally(() => { if (personErasures.get(key) === run) personErasures.delete(key); }).catch(reportBackgroundError);
   return run;
 }
 async function erasePersonDataNow(principalId: string): Promise<{ bots: number; threads: number }> {
@@ -34431,7 +34432,7 @@ const signInRecheck = engineLogins
       if (engine === "claude-code") {
         return (await ensureClaudeSubscriptionFresh({ loginDir, cli: cli.cli, environment: cli.environment, force: true })).ok;
       }
-      await renewWithCli({ engine, cli: cli.cli, environment: cli.environment, loginDir }).catch(() => {});
+      await renewWithCli({ engine, cli: cli.cli, environment: cli.environment, loginDir }).catch(reportBackgroundError);
       const access = await readSubscriptionAccess(engine, loginDir);
       return Boolean(access && (access.expiresAt === null || access.expiresAt > Date.now() + 60_000));
     },
@@ -34445,7 +34446,7 @@ if (signInRecheck && !codeFixture) {
   setTimeout(() => {
     void signInRecheck.heal(principals.list().filter((person) => person.disabledAt === undefined).map((person) => person.id))
       .then((restored) => { if (restored) console.log(`[sign-in] ${restored} expired sign-in(s) restored at start (#2040)`); })
-      .catch(() => {});
+      .catch(reportBackgroundError);
   }, 30_000).unref?.();
 }
 const cloudAgentProviders = createProviderRegistry({ perspicaxBaseUrl: perspicaxBase, personalSubscriptions: () => subscriptionDepositor, perspicaxLink: perspicaxLinkBearer });
@@ -34461,7 +34462,7 @@ cloudAgentManager = new CloudAgentManager({
 });
 
 const CLOUD_AGENT_SYNC_MS = 15_000;
-setInterval(() => { void cloudAgentManager.syncActive().catch(() => {}); }, CLOUD_AGENT_SYNC_MS).unref?.();
+setInterval(() => { void cloudAgentManager.syncActive().catch(reportBackgroundError); }, CLOUD_AGENT_SYNC_MS).unref?.();
 setPersonalCapOrganization(IDENTITY.kind === "perspicax");
 // The disk holding the data folder is nearly full (server/process/low-disk-alert.ts).
 startLowDiskWatch({ dir: DATA_DIR, notify: (text) => broadcast({ kind: "notify", notification: { kind: "spend", botId: "", botName: "", threadId: "", title: text.title, body: text.body } }, { adminOnly: true }) });
@@ -38115,7 +38116,7 @@ function refreshStreamDigests(botId: string, threadId: string): void {
       console.info(`[stream] ${botId} ${stale.threadId}: ${drafted.by} digest, ${drafted.text.length} chars`);
     })
     .catch((error) => console.warn(`[stream] digest failed for ${stale.threadId}: ${error instanceof Error ? error.message : String(error)}`))
-    .finally(() => segmentDigestDrafts.delete(stale.threadId)).catch(() => {});
+    .finally(() => segmentDigestDrafts.delete(stale.threadId)).catch(reportBackgroundError);
 }
 
 /** Whether a turn in `threadId` is a person's single-stream turn: the thread
@@ -39143,7 +39144,7 @@ async function syncPersonalProviderDirectory(): Promise<void> {
   if (IDENTITY.kind !== "perspicax") { await syncPersonalProviders(undefined); return; }
   for (const person of principals.list()) {
     const owner = providerAccountOwner(person.id);
-    if (owner) await syncPersonalProviders(owner).catch(() => {});
+    if (owner) await syncPersonalProviders(owner).catch(reportBackgroundError);
   }
 }
 // Slice 8: the window to attach people from before Perspicax opens at the
@@ -39510,7 +39511,7 @@ async function reachMeVoice(person: string, botId: string, tool: "voice_line" | 
       if (answer.ok && !answer.isError) return { ok: true, value: answer.value };
       last = answer.ok ? (typeof answer.value === "string" ? answer.value : "refused") : answer.error;
     } finally {
-      await perspicaxMcp.endGeneration(threadId, generation).catch(() => {});
+      await perspicaxMcp.endGeneration(threadId, generation).catch(reportBackgroundError);
     }
   }
   return { ok: false, error: last.slice(0, 200) };
@@ -40354,7 +40355,7 @@ const voiceModeDeps: VoiceModeDeps = {
     synthesizeStream: grokVoice.synthesizeStream,
     openTranscription: (key, options, handlers) => grokVoice.openTranscriptionStream(key, options, handlers),
     openSpeech: (key, options, handlers) => grokVoice.openSpeechStream(key, options, handlers),
-    warm: (key) => void grokVoice.listVoices(key).catch(() => {})
+    warm: (key) => void grokVoice.listVoices(key).catch(reportBackgroundError)
   },
   // OpenAI and ElevenLabs (2026-10-29): the person picks who speaks and who
   // hears in Settings > Voice and Edit bot > Voice; each falls back on the
@@ -40440,7 +40441,7 @@ const voiceModeDeps: VoiceModeDeps = {
         const person = sandboxPrincipalForTurn({
           botOwnerPrincipalId: effectiveBotOwner(bot), confidentialOwnerPrincipalId: confidentialThreadOwner(target.threadId), routine: false, speakerPrincipalId: orgSpeakerPrincipal(bot, speakerFor(auth))
         })?.trim().toLowerCase();
-        if (person) void userSandbox.markUsed(person, bot.id).catch(() => {});
+        if (person) void userSandbox.markUsed(person, bot.id).catch(reportBackgroundError);
       }
       voiceWarmup.begin(target.threadId, callId, (signal) => new Promise<void>((resolve) => {
         void startTurn(bot.id, "", {
@@ -41035,17 +41036,17 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
     onDirectory: () => {
       void orgFlowPlugins.sync("directory").catch(() => undefined);
       // lot 4: the organization's declarations, installed once here
-      void syncOrgCapabilities("directory").catch(() => {});
-      void syncPersonalProviderDirectory().catch(() => {});
+      void syncOrgCapabilities("directory").catch(reportBackgroundError);
+      void syncPersonalProviderDirectory().catch(reportBackgroundError);
     },
     version
   });
   perspicaxDirectory.start(intervalMs);
-  void syncPersonalProviderDirectory().catch(() => {});
+  void syncPersonalProviderDirectory().catch(reportBackgroundError);
   // a newer Flow version: the sync fetches the marketplaces again when due
   setInterval(() => { void orgFlowPlugins.sync("schedule").catch(() => undefined); }, 30 * 60_000).unref();
   // at start: what is missing or older than the last directory read
-  setTimeout(() => { void orgFlowPlugins.sync("start").catch(() => undefined); void syncOrgCapabilities("start").catch(() => {}); }, 15_000).unref();
+  setTimeout(() => { void orgFlowPlugins.sync("start").catch(() => undefined); void syncOrgCapabilities("start").catch(reportBackgroundError); }, 15_000).unref();
   // Slice 5: per-turn MCP tokens for the person who speaks.
   const directory = perspicaxDirectory;
   perspicaxMemory = new PerspicaxMemory({ link: () => directory });
@@ -42014,7 +42015,7 @@ async function reachable(url: string): Promise<TestResult> {
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return { ok: false, reason: "bad_address", label: "Only http and https addresses can be tested." };
   try {
     const res = await fetch(parsed, { method: "GET", redirect: "manual", signal: AbortSignal.timeout(8_000) });
-    await res.body?.cancel().catch(() => {});
+    await res.body?.cancel().catch(reportBackgroundError);
     return res.status < 500 ? { ok: true, reason: null, label: null } : { ok: false, reason: "http_error", label: `The server answered ${res.status}.` };
   } catch (error) {
     return { ok: false, reason: "unreachable", label: redactSecretsInText(error instanceof Error ? (error.cause instanceof Error ? error.cause.message : error.message) : String(error)).slice(0, 300) };
@@ -42984,8 +42985,8 @@ ROUTES.push(createTemporaryAgentRoutes({
     if (bot) temporaryAudit(pinned ? "agents.temporary.pinned" : "agents.temporary.unpinned", bot, {}, { principalId });
   }
 }));
-setTimeout(() => { void sweepTemporaryAgents().catch(() => {}); }, 30_000).unref?.();
-setInterval(() => { void sweepTemporaryAgents().catch(() => {}); }, TEMP_AGENT_SWEEP_MS).unref?.();
+setTimeout(() => { void sweepTemporaryAgents().catch(reportBackgroundError); }, 30_000).unref?.();
+setInterval(() => { void sweepTemporaryAgents().catch(reportBackgroundError); }, TEMP_AGENT_SWEEP_MS).unref?.();
 const agentApiCallerBot = (caller: AgentCaller) => (caller.kind === "bot" ? store.bot(caller.id) ?? null : null);
 /** One workspace-relative file of a bot caller, resolved inside one of its roots. */
 function agentApiSourceFile(from: BotRecord, sourceThreadId: string, relative: string): { path: string; bytes: number } | Refusal {
@@ -44025,7 +44026,7 @@ const liveCalls = new LiveCallController({
         excerpt: callTitleExcerpt,
         title: liveCallTitle,
         scrub: redactSecretsInText
-      }, { threadId: input.threadId, row }).catch(() => {});
+      }, { threadId: input.threadId, row }).catch(reportBackgroundError);
     }
   },
   log: (line) => console.log(line)
@@ -44497,7 +44498,7 @@ async function applyConfigHttpPatch({ res, url, auth, body, json }: ConfigWriteC
       if (configWriteCommitted) {
         for (const request of browserCleanupRequests) {
           const committed = browserCleanup.commit(request);
-          void browserCleanup.ensure(committed).catch(() => {});
+          void browserCleanup.ensure(committed).catch(reportBackgroundError);
         }
       } else {
         for (const request of browserCleanupRequests) browserCleanup.abort(request);
@@ -45436,7 +45437,7 @@ ROUTES.push(createLocalComputerRoutes({
           if (groupTurn) {
             cancelGroupTurnOperations(groupTurn.group.id, groupTurn.threadId);
             revokeInternalCapabilitiesForThread(groupTurn.threadId);
-            await runningTurnInstance(bot, groupTurn.threadId)?.adapter.interruptTurn(groupTurn.threadId).catch(() => {});
+            await runningTurnInstance(bot, groupTurn.threadId)?.adapter.interruptTurn(groupTurn.threadId).catch(reportBackgroundError);
             closeOpenApprovals(groupTurn.threadId);
           }
         }),
@@ -47713,10 +47714,10 @@ if (LOOPBACK.warning) console.warn(`local requests: ${LOOPBACK.warning}`);
 // mixed when this server started keeps its narrowest audience from here on.
 for (const group of store.groups) settleRoomFloor(group);
 const pruneDecisionLog = () => {
-  void pruneDecisions(DATA_DIR, decisionRetentionDays(cfg.decisions?.retentionDays)).catch(() => {});
+  void pruneDecisions(DATA_DIR, decisionRetentionDays(cfg.decisions?.retentionDays)).catch(reportBackgroundError);
   // The admin activity log keeps its months for the same window.
-  void Promise.resolve(pruneAdminActivity(DATA_DIR, decisionRetentionDays(cfg.decisions?.retentionDays))).catch(() => {});
-  void Promise.resolve(pruneProblemLog(DATA_DIR)).catch(() => {});
+  void Promise.resolve(pruneAdminActivity(DATA_DIR, decisionRetentionDays(cfg.decisions?.retentionDays))).catch(reportBackgroundError);
+  void Promise.resolve(pruneProblemLog(DATA_DIR)).catch(reportBackgroundError);
 };
 pruneDecisionLog();
 setInterval(pruneDecisionLog, 6 * 60 * 60_000).unref();
@@ -47997,7 +47998,7 @@ const onListening = async () => {
 };
 if (earlyListener) {
   earlyListener.adopt(handleRequest);
-  void onListening().catch(() => {});
+  void onListening().catch(reportBackgroundError);
 } else {
   server.listen(PORT, "127.0.0.1", onListening);
 }
@@ -48388,7 +48389,7 @@ const gracefulShutdown = createGracefulShutdown({
       // any cleanup function reaches an await.
       revokeAllInternalCapabilities();
       sharedComputers.close();
-      void widgetRenderer.close().catch(() => {});
+      void widgetRenderer.close().catch(reportBackgroundError);
       desktopBridges.close();
       desktopTerminals.close();
       terminalFeature.sessions.stop();
@@ -48465,7 +48466,7 @@ const gracefulShutdown = createGracefulShutdown({
     }, (error: unknown) => {
       console.error("bus: canonical event log flush failed; the newest thread history may be incomplete.", error);
       finish(code);
-    }).catch(() => {});
+    }).catch(reportBackgroundError);
   }
 });
 

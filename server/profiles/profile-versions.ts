@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { PROFILE_REQUEST_FIELDS, type ProfileRequestChanges } from "../../shared/profile-request.ts";
 import { botFolder } from "../bots/bot-folder.ts";
 import { redactSecrets } from "../redact.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export type HistoryActor = "user" | "bot" | "file" | "import" | "system";
 
@@ -89,7 +90,7 @@ function queueHistoryRows(botId: string, rows: HistoryRow[]): void {
   writeQueues.set(botId, queued);
   void queued.finally(() => {
     if (writeQueues.get(botId) === queued) writeQueues.delete(botId);
-  }).catch(() => {});
+  }).catch(reportBackgroundError);
 }
 
 /** Record every field that differs between `before` and `after`. */

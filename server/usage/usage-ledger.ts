@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { ACCESS_VIAS, type AccessVia } from "../engines/engine-credentials.ts";
 import type { CostSource } from "../models/model-prices.ts";
 import { billableFor, type PriceList } from "./prices.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 /** Who asked for the turn. A person is named by the email they signed in
  * with when the server knows it (email sign-in), else by their device
@@ -172,7 +173,7 @@ export function appendUsage(dataDir: string, row: Omit<UsageRow, "at"> & { at?: 
   writeQueues.set(dataDir, queued);
   void queued.finally(() => {
     if (writeQueues.get(dataDir) === queued) writeQueues.delete(dataDir);
-  }).catch(() => {});
+  }).catch(reportBackgroundError);
   return attempt.then(() => true, () => false);
 }
 

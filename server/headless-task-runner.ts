@@ -16,6 +16,7 @@ import {
   type HeadlessBot,
   type HeadlessTask,
 } from "./cli/headless-cli.ts";
+import { reportBackgroundError } from "./background-error.ts";
 
 export type HeadlessRunOutcome = { ok: true; text: string } | { ok: false; reason: string };
 
@@ -139,7 +140,7 @@ export function createHeadlessTaskRunner(deps: HeadlessTaskRunnerDeps) {
     }
     for (const task of taken) {
       if (running.has(task.id)) continue;
-      void runOne(task).catch(() => {});
+      void runOne(task).catch(reportBackgroundError);
     }
   }
 
@@ -151,8 +152,8 @@ export function createHeadlessTaskRunner(deps: HeadlessTaskRunnerDeps) {
     },
     start(intervalMs = 1_000): void {
       stopped = false;
-      void Promise.resolve(this.tick()).catch(() => {});
-      timer = setInterval(() => { void Promise.resolve(this.tick()).catch(() => {}); }, intervalMs);
+      void Promise.resolve(this.tick()).catch(reportBackgroundError);
+      timer = setInterval(() => { void Promise.resolve(this.tick()).catch(reportBackgroundError); }, intervalMs);
       timer.unref?.();
     },
     stop(): void {

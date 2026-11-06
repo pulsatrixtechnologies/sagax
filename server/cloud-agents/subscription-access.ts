@@ -21,6 +21,7 @@ import { join, resolve } from "node:path";
 
 import { CLAUDE_KEYCHAIN_SERVICE, decodeKeychainSecret, readDarwinClaudeKeychain } from "../usage/plan-usage.ts";
 import { killCliTree, spawnCli } from "../procs.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 /** The engines a run may use, with the subscription each one needs. */
 export type RunEngine = "claude-code" | "codex";
@@ -176,7 +177,7 @@ export async function renewWithCli(input: RenewInput): Promise<void> {
       if (done) return;
       done = true;
       clearTimeout(timer);
-      void killCliTree(child, 1_000).finally(() => resolve()).catch(() => {});
+      void killCliTree(child, 1_000).finally(() => resolve()).catch(reportBackgroundError);
     };
     const timer = setTimeout(finish, timeoutMs);
     timer.unref?.();

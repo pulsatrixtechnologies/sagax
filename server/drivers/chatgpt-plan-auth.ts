@@ -6,6 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { createLocalJWKSet, jwtVerify, type JSONWebKeySet } from "jose";
 import { writeFileAtomic } from "../atomic.ts";
 import type { ModelCatalog, ProviderAuthenticationStart, ProviderAuthenticationStatus, ProviderSnapshot } from "../contracts.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 const ISSUER = "https://auth.openai.com";
 const RESOURCE = "https://api.openai.com/v1";
@@ -238,7 +239,7 @@ export class ChatGptPlanAuthController {
       flow.consumed = true;
       response.end("Finishing sign-in. You can return to Sagax.");
       server.close();
-      void this.complete(flow, callback.searchParams).catch(() => {});
+      void this.complete(flow, callback.searchParams).catch(reportBackgroundError);
     });
     await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
     if (this.disposed) { server.close(); throw new Error("This provider was removed."); }
@@ -293,7 +294,7 @@ export class ChatGptPlanAuthController {
         this.retryClientId = null;
         this.finish(flow, tokens.scopes.includes(DIRECT_SCOPE) ? "succeeded" : "failed", tokens.scopes.includes(DIRECT_SCOPE) ? undefined : CONSENT);
       });
-      if (flow.status.phase === "succeeded") await this.options.onAuthenticated?.().catch(() => {});
+      if (flow.status.phase === "succeeded") await this.options.onAuthenticated?.().catch(reportBackgroundError);
     } catch (error) {
       this.finish(flow, "failed", error instanceof Error ? error.message : "ChatGPT sign-in could not finish. Try again.");
     }
@@ -303,7 +304,7 @@ export class ChatGptPlanAuthController {
     return { ...this.flow.status };
   }
   async cancel(): Promise<void> {
-    await this.starting?.catch(() => {});
+    await this.starting?.catch(reportBackgroundError);
     if (this.flow) this.finish(this.flow, "cancelled", "ChatGPT sign-in cancelled.");
   }
   async dispose(): Promise<void> { this.disposed = true; await this.cancel(); this.flow = null; }

@@ -1,3 +1,4 @@
+import { reportBackgroundError } from "../background-error.ts";
 // One engine warm per live voice call.
 //
 // The page says the call started (POST /voice/call). This starts the bot's
@@ -53,7 +54,7 @@ export class VoiceCallWarmup {
         }
         settle();
       }
-    })().catch(() => {});
+    })().catch(reportBackgroundError);
   }
 
   /** Resolves when the in-flight warm has finished and released the thread.

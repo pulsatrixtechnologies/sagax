@@ -22,6 +22,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { browserRuntimeEnv } from "./browser-runtime.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 const execute = promisify(execFile);
 export const REDACTED = "[redacted]";
@@ -320,7 +321,7 @@ export class BrowserNetworkDebug {
 
   private touch(capture: Capture): void {
     clearTimeout(capture.idle);
-    capture.idle = setTimeout(() => { void this.stopCapture(capture).catch(() => {}); }, this.idleMs);
+    capture.idle = setTimeout(() => { void this.stopCapture(capture).catch(reportBackgroundError); }, this.idleMs);
     capture.idle.unref?.();
   }
 

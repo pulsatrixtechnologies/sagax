@@ -14,6 +14,7 @@ import { stripVTControlCharacters } from "node:util";
 import { deviceSignInPrompt, type DeviceSignInProvider } from "../../shared/device-sign-in.ts";
 import type { ProviderAuthenticationStart, ProviderAuthenticationStatus } from "../contracts.ts";
 import { killCliTree, spawnCli } from "../procs.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 const MAX_OUTPUT = 16_384;
 // Two configured instances can use the same on-disk login. Only the auth
@@ -187,7 +188,7 @@ export class DeviceAuthController {
     await this.cancel();
     this.flow = null;
     // A sign-out cut short by this is still unwinding: return once it has released the credential home.
-    await this.signingOut?.catch(() => {});
+    await this.signingOut?.catch(reportBackgroundError);
   }
 
   /** Remove the sign-in the CLI stores for this server account so a
@@ -287,7 +288,7 @@ export class DeviceAuthController {
       const timer = setTimeout(() => {
         void this.stopChild(child).catch(() => false).then((stopped) => {
           if (!stopped) rejectExec(new Error(`${product} could not be stopped on this server. Ask the server administrator to stop the account command before trying again.`));
-        }).catch(() => {});
+        }).catch(reportBackgroundError);
       }, this.options.startupTimeoutMs ?? 30_000);
       timer.unref();
       child.once("error", (error: NodeJS.ErrnoException) => {
@@ -364,7 +365,7 @@ export class DeviceAuthController {
       if (!child || child.exitCode !== null || child.signalCode !== null) release();
       else child.once("close", release);
     });
-    if (phase === "succeeded") void this.options.onAuthenticated?.().catch(() => {});
+    if (phase === "succeeded") void this.options.onAuthenticated?.().catch(reportBackgroundError);
   }
 
   private async stopChild(child: ChildProcess | null): Promise<boolean> {

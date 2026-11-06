@@ -1,3 +1,4 @@
+import { reportBackgroundError } from "../background-error.ts";
 /** Renewable idle deadline for one Local VM.
  *
  * Activity resets the full window. The caller decides how to suspend or
@@ -39,7 +40,7 @@ export class LocalVmIdleTimer {
 
   private arm(delayMs: number): void {
     this.cancel();
-    this.timer = setTimeout(() => void this.expire().catch(() => {}), delayMs);
+    this.timer = setTimeout(() => void this.expire().catch(reportBackgroundError), delayMs);
     this.timer.unref?.();
   }
 

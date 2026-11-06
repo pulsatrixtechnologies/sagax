@@ -16,6 +16,7 @@ import { SandboxdRequestError, validSandboxdUrl } from "./user-sandbox-client.ts
 import { sandboxKeyForPrincipal } from "./user-sandbox-spec.ts";
 import { UserSandboxUnavailable } from "./user-sandbox-errors.ts";
 import { provisionerNotReached, provisionerUnreachable, SANDBOX_CUT_WHILE_STARTING_MESSAGE, SANDBOX_STARTING_CODE, SANDBOX_STILL_STARTING_MESSAGE, sandboxStarting, SANDBOX_STARTING_RETRY_DELAY_MS, SANDBOX_STARTING_RETRY_MS, sandboxWakeSettingsFromEnv, type SandboxClusterWaker, type SandboxWakeSettings, type WakeMode } from "./sandbox-k8s-wake.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export const DEFAULT_DELETE_GRACE_MS = 72 * 3600_000;
 
@@ -458,7 +459,7 @@ export class UserSandboxManager {
    * request reaches this (server/routes/desktop-viewer.ts). */
   async openDesktop(principalId: string): Promise<{ full: string; view: string }> {
     const previous = this.desktopOpens.get(principalId) ?? Promise.resolve();
-    const next = previous.catch(() => {}).then(() => this.startDesktop(principalId));
+    const next = previous.catch(reportBackgroundError).then(() => this.startDesktop(principalId));
     this.desktopOpens.set(principalId, next);
     try { return await next; }
     finally { if (this.desktopOpens.get(principalId) === next) this.desktopOpens.delete(principalId); }
@@ -622,9 +623,9 @@ export class UserSandboxManager {
 
   start(intervalMs = 5 * 60_000): void {
     if (this.timer) return;
-    this.timer = setInterval(() => { void this.sweepDeletions().catch(() => {}); }, intervalMs);
+    this.timer = setInterval(() => { void this.sweepDeletions().catch(reportBackgroundError); }, intervalMs);
     this.timer.unref?.();
-    void this.sweepDeletions().catch(() => {});
+    void this.sweepDeletions().catch(reportBackgroundError);
   }
 
   stopTimers(): void {

@@ -15,6 +15,7 @@
 // stdout is the MCP transport. Never log there.
 import { readFileSync } from "node:fs";
 import readline from "node:readline";
+import { reportBackgroundError } from "./background-error.ts";
 
 type Json = Record<string, unknown>;
 
@@ -128,8 +129,8 @@ input.on("line", (line) => {
   } catch {
     return;
   }
-  queue = queue.then(() => forward(message)).catch(() => {});
+  queue = queue.then(() => forward(message)).catch(reportBackgroundError);
 });
 input.on("close", () => {
-  void queue.finally(() => process.exit(0)).catch(() => {});
+  void queue.finally(() => process.exit(0)).catch(reportBackgroundError);
 });

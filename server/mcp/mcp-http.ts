@@ -11,6 +11,7 @@ import { Readable } from "node:stream";
 import type { RemoteMcpSpec } from "../contracts.ts";
 import { guardedFetch } from "../public-fetch.ts";
 import { parseRetryAfter } from "../usage/rate-limit-retry.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export type McpHttpFailure = "network" | "status" | "protocol";
 
@@ -150,7 +151,7 @@ async function readSse(
   const decoder = new TextDecoder();
   let buffer = "";
   let bytes = 0;
-  const onAbort = () => void reader.cancel().catch(() => {});
+  const onAbort = () => void reader.cancel().catch(reportBackgroundError);
   signal.addEventListener("abort", onAbort, { once: true });
   try {
     for (;;) {
@@ -165,7 +166,7 @@ async function readSse(
         buffer = buffer.slice(separator + 2);
         const event = parseSseBlock(block);
         if (event && onEvent(event) === "stop") {
-          await reader.cancel().catch(() => {});
+          await reader.cancel().catch(reportBackgroundError);
           return;
         }
       }
@@ -186,7 +187,7 @@ async function readBounded(response: Response, maxBytes = MAX_REMOTE_MCP_BYTES):
     if (done) return text + decoder.decode();
     bytes += value.byteLength;
     if (bytes > maxBytes) {
-      await reader.cancel().catch(() => {});
+      await reader.cancel().catch(reportBackgroundError);
       throw new McpHttpError("protocol", "response too large");
     }
     text += decoder.decode(value, { stream: true });
@@ -194,7 +195,7 @@ async function readBounded(response: Response, maxBytes = MAX_REMOTE_MCP_BYTES):
 }
 
 function drain(response: Response): void {
-  void response.body?.cancel().catch(() => {});
+  void response.body?.cancel().catch(reportBackgroundError);
 }
 
 export class RemoteMcpClient {
@@ -234,7 +235,7 @@ export class RemoteMcpClient {
     const operation = this.initializeSession(clientName, signal);
     this.sseInitializing = operation;
     const finished = () => { if (this.sseInitializing === operation) this.sseInitializing = null; };
-    void operation.then(finished, finished).catch(() => {});
+    void operation.then(finished, finished).catch(reportBackgroundError);
     return operation;
   }
 
@@ -265,7 +266,7 @@ export class RemoteMcpClient {
     const id = this.nextId++;
     const frame = { jsonrpc: "2.0", id, method, ...(params === undefined ? {} : { params }) };
     const onAbort = () => {
-      void this.notify("notifications/cancelled", { requestId: id, reason: "Request cancelled" }, AbortSignal.timeout(2_000)).catch(() => {});
+      void this.notify("notifications/cancelled", { requestId: id, reason: "Request cancelled" }, AbortSignal.timeout(2_000)).catch(reportBackgroundError);
     };
     signal.addEventListener("abort", onAbort, { once: true });
     const reply = this.target.type === "sse" ? this.sseRequest(id, frame, signal) : this.streamableRequest(id, frame, signal);
@@ -478,7 +479,7 @@ export class RemoteMcpClient {
     for (const message of Array.isArray(parsed) ? parsed : parsed ? [parsed] : []) {
       if (typeof message.method !== "string") continue;
       if (message.id === undefined) this.onNotification?.(message);
-      else if (typeof message.id === "string" || typeof message.id === "number") void this.answerRequest(message.id, message.method).catch(() => {});
+      else if (typeof message.id === "string" || typeof message.id === "number") void this.answerRequest(message.id, message.method).catch(reportBackgroundError);
     }
   }
 

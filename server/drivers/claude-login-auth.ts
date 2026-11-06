@@ -21,6 +21,7 @@ import type { ProviderAuthenticationStart, ProviderAuthenticationStatus } from "
 import { engineStartGate } from "../engines/engine-start-gate.ts";
 import { killCliTree, spawnCli } from "../procs.ts";
 import { canonicalPath } from "./device-auth.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 const MAX_OUTPUT = 32_768;
 /** Where Anthropic's sign-in lives. Anything else in the CLI's output is not a link we show. */
@@ -148,7 +149,7 @@ export class ClaudeLoginController {
           return;
         }
         this.login(flow);
-      }).catch(() => {});
+      }).catch(reportBackgroundError);
     });
   }
 
@@ -196,7 +197,7 @@ export class ClaudeLoginController {
     await this.cancel();
     this.flow = null;
     // A sign-out cut short by this is still unwinding: return once it has released the credential home.
-    await this.signingOut?.catch(() => {});
+    await this.signingOut?.catch(reportBackgroundError);
   }
 
   /** Remove the sign-in Claude Code stores for this server account (its
@@ -265,7 +266,7 @@ export class ClaudeLoginController {
       const timer = setTimeout(() => {
         void this.stopChild(child).catch(() => false).then((stopped) => {
           if (!stopped) rejectDone(new Error("Claude Code could not be stopped on this server. Ask the server administrator to stop the account command before trying again."));
-        }).catch(() => {});
+        }).catch(reportBackgroundError);
       }, this.options.startupTimeoutMs ?? 30_000);
       timer.unref();
       child.once("error", (error: NodeJS.ErrnoException) => {
@@ -381,7 +382,7 @@ export class ClaudeLoginController {
           : code === 0
             ? "Claude Code finished but is not signed in. Start sign-in again."
             : "Claude Code stopped before the sign-in finished. Check the server's connection and try again.");
-      }).catch(() => {});
+      }).catch(reportBackgroundError);
     });
   }
 
@@ -420,7 +421,7 @@ export class ClaudeLoginController {
         if (!child || child.exitCode !== null || child.signalCode !== null) release();
         else child.once("close", release);
       });
-    if (phase === "succeeded") void this.options.onAuthenticated?.().catch(() => {});
+    if (phase === "succeeded") void this.options.onAuthenticated?.().catch(reportBackgroundError);
   }
 
   private async stopChild(child: ChildProcess | null): Promise<boolean> {

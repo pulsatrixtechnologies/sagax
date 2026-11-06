@@ -8,6 +8,7 @@ import { connectorAsk } from "./connector-ask.ts";
 import { gatedMcpAsk } from "./gated-mcp-ask.ts";
 import { sessionOperationKey } from "./helpers.ts";
 import type { AcpSession, AcpSupport, AcpTurn } from "./types.ts";
+import { reportBackgroundError } from "../../background-error.ts";
 
 
 /** A permission's wait: the turn's own (a routine run's), else 15 minutes. */
@@ -40,7 +41,7 @@ export function createPermissionHandler(deps: PermissionHandlerDeps) {
         return (msg: any, current: AcpTurn) => {
           current.state.startupActivity = true;
           if (msg.method === "fs/read_text_file" || msg.method === "fs/write_text_file") {
-            void handleClientFileRequest(msg).catch(() => {});
+            void handleClientFileRequest(msg).catch(reportBackgroundError);
             return;
           }
           if (msg.method !== "session/request_permission") {

@@ -1,3 +1,4 @@
+import { reportBackgroundError } from "../background-error.ts";
 // One identity lease per MCP connection. The parent access token stays private
 // in PerspicaxMcp; this only retains the profile and its expiry, never the token.
 import en from "../../src/locales/en.json" with { type: "json" };
@@ -113,7 +114,7 @@ export class PerspicaxIdentity {
   private schedule(): void {
     if (this.stopped || !this.wanted) return;
     this.cancelTimer();
-    this.timer = setTimeout(() => { void this.ensure(true).catch(() => {}); }, Math.max(1_000, this.expiresAt - this.now() - 60_000));
+    this.timer = setTimeout(() => { void this.ensure(true).catch(reportBackgroundError); }, Math.max(1_000, this.expiresAt - this.now() - 60_000));
     this.timer.unref?.();
   }
 

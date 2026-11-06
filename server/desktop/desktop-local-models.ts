@@ -22,6 +22,7 @@ import {
   upsertDesktopInjectHost,
   type InjectedModel,
 } from "../drivers/local-inject.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export const DESKTOP_MODEL_UNAVAILABLE = "This local model is unavailable. The computer is offline, or it is not shared with you.";
 export const DESKTOP_MODEL_WRONG_ENGINE = "This engine cannot run a model from your computer. Pick it on pi, Codex, Grok or another engine that takes an OpenAI-compatible endpoint.";
@@ -226,7 +227,7 @@ export class DesktopLocalModels {
     if (this.server) return Promise.resolve();
     return new Promise((resolve, reject) => {
       const server = createServer((req, res) => {
-        void this.handle(req, res).catch(() => {});
+        void this.handle(req, res).catch(reportBackgroundError);
       });
       // Chat completions wait on the bridge job (up to its own timeout).
       // The bridge returns one body, so this socket has to stay open that long.

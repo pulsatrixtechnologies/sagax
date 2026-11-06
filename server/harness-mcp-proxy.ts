@@ -6,6 +6,7 @@
 import { pathToFileURL } from "node:url";
 
 import { DATA_INSTRUCTIONS } from "./data/instructions.ts";
+import { reportBackgroundError } from "./background-error.ts";
 
 const MAX_INPUT_BYTES = 1_048_576;
 const MAX_OUTPUT_BYTES = 16_777_216;
@@ -48,7 +49,7 @@ async function boundedJson(response: Response, name: string): Promise<unknown> {
       chunks.push(Buffer.from(value));
     }
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
-  } finally { await reader.cancel().catch(() => {}); }
+  } finally { await reader.cancel().catch(reportBackgroundError); }
 }
 
 /** The stdio proxy always answered 2024-11-05. Over HTTP (harness-mcp-http)
@@ -134,7 +135,7 @@ function run(kind: HarnessMcpKind): void {
         continue;
       }
       pending++;
-      void harnessMcpRequest(frame, connection).then(output).finally(() => { pending--; }).catch(() => {});
+      void harnessMcpRequest(frame, connection).then(output).finally(() => { pending--; }).catch(reportBackgroundError);
     }
     if (input.length > MAX_INPUT_BYTES) { process.stdin.destroy(); process.exitCode = 1; }
   });

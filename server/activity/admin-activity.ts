@@ -25,6 +25,7 @@ import { WORKSPACE_OWNER } from "../encryption/content-keys.ts";
 import { actorLabel, boundRetentionDays, pruneMonthFiles, type DecisionActor, type DecisionRow } from "../decision-log.ts";
 import { redactSecrets } from "../redact.ts";
 import { csvCell, monthKey } from "../usage/usage-ledger.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export const ADMIN_ACTIVITY_CATEGORIES = ["config", "people", "session", "webhook", "mcp", "engine", "bot", "budget", "visibility", "rights", "section", "org", "approval", "computer", "client", "security", "setting"] as const;
 export type AdminActivityCategory = typeof ADMIN_ACTIVITY_CATEGORIES[number];
@@ -93,7 +94,7 @@ export function appendAdminAction(dataDir: string, row: Omit<AdminActionRow, "at
   writeQueues.set(dataDir, queued);
   void queued.finally(() => {
     if (writeQueues.get(dataDir) === queued) writeQueues.delete(dataDir);
-  }).catch(() => {});
+  }).catch(reportBackgroundError);
 }
 
 /** Delete the months the retention window no longer covers. Never throws.

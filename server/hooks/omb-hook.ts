@@ -15,6 +15,7 @@
 //
 // stdout is the hook channel — never console.log anything else here.
 import { readFileSync } from "node:fs";
+import { reportBackgroundError } from "../background-error.ts";
 
 const CONTEXT_EVENTS = new Set(["SessionStart", "UserPromptSubmit"]);
 const requestedBudget = Number(process.env.SAGAX_HOOK_TIMEOUT_MS);
@@ -95,4 +96,4 @@ async function main(): Promise<void> {
   }
 }
 
-void main().catch(() => {});
+void main().catch(reportBackgroundError);

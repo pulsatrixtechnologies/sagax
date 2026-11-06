@@ -77,6 +77,7 @@ import {
   type SealedHeader,
 } from "./content-file-crypto.ts";
 import { contentAutoMigrate, contentEncryptionOn, contentKeyById, contentKeyForBot, contentKeyForOwner, contentKeyForThread, contentOwnerOfThread, onContentAtRest } from "../messages/message-db.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export type ContentScope = { thread: string } | { bot: string } | { owner: string };
 
@@ -442,7 +443,7 @@ function withLock<T>(path: string, work: () => Promise<T>): Promise<T> {
   const run = previous.catch(() => undefined).then(work);
   const tail = run.catch(() => undefined);
   locks.set(path, tail);
-  void tail.then(() => { if (locks.get(path) === tail) locks.delete(path); }).catch(() => {});
+  void tail.then(() => { if (locks.get(path) === tail) locks.delete(path); }).catch(reportBackgroundError);
   return run;
 }
 
@@ -1552,7 +1553,7 @@ function scheduleAtRest(delay = PAUSE_MS): void {
     void runAtRestMigration().then((pass) => {
       if (again || pass.waiting || pass.locked) { again = false; scheduleAtRest(pass.waiting ? graceMs + 50 : SAFETY_PASS_MS); }
       else scheduleAtRest(SAFETY_PASS_MS);
-    }, () => scheduleAtRest(SAFETY_PASS_MS)).catch(() => {});
+    }, () => scheduleAtRest(SAFETY_PASS_MS)).catch(reportBackgroundError);
   }, delay);
   timer.unref?.();
 }

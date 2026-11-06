@@ -31,6 +31,7 @@ import { StringDecoder } from "node:string_decoder";
 import { CONTROL_ACT_WITHIN_MS, CONTROL_UNCONFIRMED, CONTROL_WAITED, controlRefusal, createControlClient, type ControlState } from "../control-client.ts";
 import { augmentedPath, resolveCliSpawn } from "../env-path.ts";
 import { createToolListNormalizer } from "./mcp-tool-schema.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 // 45s of TOTAL silence before the bridge even probes. An MCP session is
 // legitimately quiet between tool calls and a slow screenshot can take tens
@@ -107,7 +108,7 @@ export function createInactivityWatchdog(options: {
   const fire = () => {
     probing = true;
     touchedWhileProbing = false;
-    void options.probe().then(settleProbe, () => settleProbe(false)).catch(() => {});
+    void options.probe().then(settleProbe, () => settleProbe(false)).catch(reportBackgroundError);
   };
 
   arm();
@@ -296,7 +297,7 @@ export function runMcpBridge(options: BridgeOptions): void {
     inbound.flush();
     // A final tools/call can still be awaiting the control endpoint. Do not
     // close the far end before the serialized gate has forwarded it.
-    void pendingInput.finally(() => child.stdin.end()).catch(() => {});
+    void pendingInput.finally(() => child.stdin.end()).catch(reportBackgroundError);
   });
 
   // Injected responses and refusals must never land inside one of the

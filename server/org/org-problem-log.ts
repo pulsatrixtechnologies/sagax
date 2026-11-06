@@ -16,6 +16,7 @@ import { basename, join } from "node:path";
 import { pruneMonthFiles } from "../decision-log.ts";
 import { monthKey } from "../usage/usage-ledger.ts";
 import type { ConsoleLocale } from "./org-admin-console.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export type ProblemKind = "failed" | "stalled" | "could-not-start" | "routine-failed" | "refused";
 export const PROBLEM_KINDS: readonly ProblemKind[] = ["failed", "stalled", "could-not-start", "routine-failed", "refused"];
@@ -119,7 +120,7 @@ export function appendProblem(dataDir: string, input: Omit<ProblemRow, "id" | "a
   writeQueues.set(dataDir, queued);
   void queued.finally(() => {
     if (writeQueues.get(dataDir) === queued) writeQueues.delete(dataDir);
-  }).catch(() => {});
+  }).catch(reportBackgroundError);
   return attempt.then(() => true, () => false);
 }
 

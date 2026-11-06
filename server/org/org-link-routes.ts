@@ -30,6 +30,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { AuthFailureLimiter } from "../triggers/webhook-ingress.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export const ORG_LINK_PREFIX = "/api/org/link/";
 export const DIRECTORY_REFRESH_PATH = "/api/org/link/directory-refresh";
@@ -131,7 +132,7 @@ export class DirectoryRefreshScheduler {
           return;
         }
         this.release();
-      }).catch(() => {});
+      }).catch(reportBackgroundError);
   }
 }
 

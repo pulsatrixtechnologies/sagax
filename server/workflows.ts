@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
 
 import { writeFileAtomic } from "./atomic.ts";
+import { reportBackgroundError } from "./background-error.ts";
 
 const PRINCIPAL = /^[a-z0-9][a-z0-9_.:-]{0,80}$/;
 const NAME = /^[a-z][a-z0-9-]{0,40}$/;
@@ -154,7 +155,7 @@ export class WorkflowStore {
     const run = previous.catch(() => undefined).then(work);
     const tail = run.catch(() => undefined);
     this.answerLocks.set(id, tail);
-    void tail.then(() => { if (this.answerLocks.get(id) === tail) this.answerLocks.delete(id); }).catch(() => {});
+    void tail.then(() => { if (this.answerLocks.get(id) === tail) this.answerLocks.delete(id); }).catch(reportBackgroundError);
     return run;
   }
 

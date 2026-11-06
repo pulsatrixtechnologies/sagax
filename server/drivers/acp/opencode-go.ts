@@ -17,6 +17,7 @@ import type { ModelCatalog, ProviderErrorCode } from "../../contracts.ts";
 import { titleCaseModelId } from "../../contracts.ts";
 import { engineStartGate } from "../../engines/engine-start-gate.ts";
 import { execCli, killCliTree, spawnCli } from "../../procs.ts";
+import { reportBackgroundError } from "../../background-error.ts";
 
 /** Nothing is offered until OpenCode itself answers. An invented default is
  * exactly what broke bots when Zen retired `x-preview-f-free`. */
@@ -328,7 +329,7 @@ export async function probeOpenCodeSession(
       try {
         child.stdin.end();
       } catch {}
-      void killCliTree(child).catch(() => {});
+      void killCliTree(child).catch(reportBackgroundError);
       if (error) reject(error);
       else resolve(value);
     };
@@ -381,7 +382,7 @@ export async function probeOpenCodeSession(
         clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
       });
       return request("session/new", { cwd, mcpServers: [] });
-    })().then((result) => finish(null, result), (error: Error) => finish(error)).catch(() => {});
+    })().then((result) => finish(null, result), (error: Error) => finish(error)).catch(reportBackgroundError);
   }));
 }
 

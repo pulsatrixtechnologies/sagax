@@ -9,6 +9,7 @@ import { resolveClaudeConfigDir } from "./config.ts";
 import { UNDELIVERED_VOLATILE, diagnosticClaudeUserMessage, type ClaudeUserMessage } from "./messages.ts";
 import type { ClaudeSession } from "./session-types.ts";
 import type { ClaudeActiveTurn, HeldVolatile } from "./turn-deps.ts";
+import { reportBackgroundError } from "../../background-error.ts";
 
 /** How long a control request on the CLI's stdin waits for its answer. */
 export const CONTROL_REQUEST_TIMEOUT_MS = 5_000;
@@ -67,7 +68,7 @@ export function createSessionHelpers(deps: SessionHelperDeps) {
   const stopSession = (session: ClaudeSession) => {
     void killCliTree(session.child).then((stopped) => {
       if (stopped) void session.finishClose?.();
-    }).catch(() => {});
+    }).catch(reportBackgroundError);
   };
 
   const closeSession = (threadId: string, why: string) => {

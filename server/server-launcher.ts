@@ -11,6 +11,7 @@ import { realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { restartPolicy } from "./process/restart.ts";
+import { reportBackgroundError } from "./background-error.ts";
 
 export function superviseServer(start: () => ChildProcess, options: { signals?: Pick<NodeJS.Process, "on" | "off">; now?: () => number } = {}): Promise<number> {
   const signals = options.signals ?? process, now = options.now ?? Date.now;
@@ -47,5 +48,5 @@ function isEntry(): boolean {
 
 if (isEntry()) {
   const server = join(dirname(fileURLToPath(import.meta.url)), "index.js");
-  void superviseServer(() => spawn(process.execPath, [server], { stdio: "inherit" })).then((code) => { process.exitCode = code; }).catch(() => {});
+  void superviseServer(() => spawn(process.execPath, [server], { stdio: "inherit" })).then((code) => { process.exitCode = code; }).catch(reportBackgroundError);
 }

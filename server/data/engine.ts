@@ -37,6 +37,7 @@ import {
   type RunOptions,
   type RunResult,
 } from "./types.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 type Binding = typeof DuckDB;
 type Cell = string | number | boolean | null;
@@ -390,7 +391,7 @@ class BotDb implements BotDatabase {
         const before: string[] = this.openedRoots === null ? [] : JSON.parse(this.openedRoots) as string[];
         const after = new Set(now ?? []);
         const removed = this.openedRoots === null ? now !== null : before.some((root) => !after.has(root));
-        if (removed || this.inFlight <= 1) void this.close().catch(() => {});
+        if (removed || this.inFlight <= 1) void this.close().catch(reportBackgroundError);
       }
     }
     if (!this.state) {
@@ -442,7 +443,7 @@ class BotDb implements BotDatabase {
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null;
       if (this.inFlight > 0) this.touch();
-      else void this.close().catch(() => {});
+      else void this.close().catch(reportBackgroundError);
     }, this.engine.idleMs);
     this.idleTimer.unref();
   }
@@ -798,7 +799,7 @@ FROM ${from}, omb_range WHERE ${id} IS NOT NULL GROUP BY bin ORDER BY bin`;
 
   interrupt(connection: DataConnection): void {
     if (!this.state) return;
-    void this.state.then((open) => open.lanes[connection].interrupt(), () => undefined).catch(() => {});
+    void this.state.then((open) => open.lanes[connection].interrupt(), () => undefined).catch(reportBackgroundError);
   }
 
   async close(): Promise<void> {

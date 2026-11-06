@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ModelCatalog, ProviderDriver } from "../contracts.ts";
 import { createOpenAIChatRuntime } from "./openai-chat.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 const DEFAULT_URL = "https://api.groq.com/openai/v1";
 // Production text models: https://console.groq.com/docs/models
@@ -86,7 +87,7 @@ export const GroqDriver: ProviderDriver<GroqConfig> = {
         // A failed or malformed refresh keeps the last usable catalog.
       }
     };
-    if (apiKey) void refreshModels().catch(() => {});
+    if (apiKey) void refreshModels().catch(reportBackgroundError);
     return createOpenAIChatRuntime({
       input, driverKind: "groq", apiKey, apiUrl: config.url,
       tools: config.tools, models: () => catalog, refreshModels, reasoning: true,

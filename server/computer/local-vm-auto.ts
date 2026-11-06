@@ -24,6 +24,7 @@
 // Pure: every effect is a dependency, so the rules are tested with fakes
 // (local-vm-auto.test.ts).
 import type { ContainerComputerStatus } from "./container-computer.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export type LocalVmAutoReason = "launch" | "bot" | "person" | "retry";
 export type LocalVmAutoPhase = "idle" | "checking" | "starting" | "running" | "stopped" | "waiting" | "problem";
@@ -221,7 +222,7 @@ export class LocalVmAutoStarter {
       return this.set({ phase: "problem", step: null, problem, detail, attempts, nextRetryAt: null });
     }
     this.clearRetry();
-    this.retryHandle = this.deps.schedule(() => { void this.ensure("retry").catch(() => {}); }, delay);
+    this.retryHandle = this.deps.schedule(() => { void this.ensure("retry").catch(reportBackgroundError); }, delay);
     return this.set({ phase: "waiting", step: null, problem, detail, attempts, nextRetryAt: this.deps.now() + delay });
   }
 

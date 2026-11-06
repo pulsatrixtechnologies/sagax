@@ -50,6 +50,7 @@ import {
   type ConsoleContext,
   type ConsoleRoute,
 } from "./org-admin-console.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export const ORG_ADMIN_PREFIX = "/api/org/admin/";
 export const ORG_ADMIN_JTI_MAX = 10_000;
@@ -630,7 +631,7 @@ export function createOrgAdminRoutes(deps: OrgAdminRouteDeps): (req: IncomingMes
       const status = enumParam(params, "status", ["active", "archived"] as const);
       if (isAnswer(page) || isAnswer(status)) {
         const reply = isAnswer(page) ? page : status as ConsoleAnswer;
-        void answer(res, reply).catch(() => {});
+        void answer(res, reply).catch(reportBackgroundError);
         return true;
       }
       const engine = params.get("engine") || null;

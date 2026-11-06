@@ -20,6 +20,7 @@ import type { Readable, Writable } from "node:stream";
 import { buildWidgetDocument, WIDGET_MAX_HEIGHT, WIDGET_MESSAGE, WIDGET_MIN_HEIGHT, WIDGET_SANDBOX } from "../../src/lib/rich-blocks.ts";
 import { geistFace } from "../geist-face.ts";
 import { auditWidgetPage, type AuditDefect } from "./widget-check-audit.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export const WIDGET_CHECK_MAX_ATTEMPTS = 3;
 /** The fence a widget that still fails after the last attempt is shown in:
@@ -284,7 +285,7 @@ export class WidgetRenderer {
     const late = new Promise<WidgetCheckResult>((resolve) => {
       timer = setTimeout(() => {
         this.options.log?.("[widget-check] check passed its deadline; browser closed");
-        void this.close().catch(() => {});
+        void this.close().catch(reportBackgroundError);
         resolve({ status: "unavailable", defects: [], reason: "the widget took too long to draw", ms: deadline });
       }, deadline);
       timer.unref?.();
@@ -345,7 +346,7 @@ export class WidgetRenderer {
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.idleTimer = null;
     if (!on) return;
-    this.idleTimer = setTimeout(() => { void this.close().catch(() => {}); }, this.idleMs);
+    this.idleTimer = setTimeout(() => { void this.close().catch(reportBackgroundError); }, this.idleMs);
     this.idleTimer.unref?.();
   }
 

@@ -14,6 +14,7 @@
 // flight and the page says it over POST /voice/stream, where another
 // provider takes over when this one keeps failing.
 import type { SpeechStream, SpeechStreamHandlers } from "./grok.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 /** Held words are spoken once the bot paused this long. */
 export const HOLD_IDLE_MS = 300;
@@ -47,7 +48,7 @@ export function openHttpSpeechStream(options: HttpSpeechOptions, handlers: Speec
   let resolveReady!: () => void;
   let rejectReady!: (error: Error) => void;
   const ready = new Promise<void>((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
-  ready.catch(() => {});
+  ready.catch(reportBackgroundError);
 
   const end = () => {
     if (closed) return;
@@ -106,7 +107,7 @@ export function openHttpSpeechStream(options: HttpSpeechOptions, handlers: Speec
             if (value?.byteLength) emit(value);
           }
         } finally {
-          void reader.cancel().catch(() => {});
+          void reader.cancel().catch(reportBackgroundError);
         }
       } catch (error) {
         if (controller.signal.aborted || closed || mine !== generation) return;
@@ -117,7 +118,7 @@ export function openHttpSpeechStream(options: HttpSpeechOptions, handlers: Speec
       }
       if (closed || mine !== generation) return;
       pump();
-    })().catch(() => {});
+    })().catch(reportBackgroundError);
   };
 
   const push = (text: string) => {

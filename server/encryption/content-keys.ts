@@ -17,6 +17,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { BlindTokenizer, deriveSubkey, keyAad, newContentKey, open, seal } from "./content-crypto.ts";
 import type { VaultKeySource } from "../mcp/mcp-oauth.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 /** The owner of rooms, unowned threads and receipts. Never a principal id. */
 export const WORKSPACE_OWNER = "@workspace";
@@ -180,7 +181,7 @@ export class ContentKeyring {
       return cached ?? this.unwrapSync(row);
     }
     if (!this.active.wrapSync) {
-      void this.ensureOwner(owner).catch(() => {});
+      void this.ensureOwner(owner).catch(reportBackgroundError);
       return null;
     }
     const keyId = randomBytes(8).toString("hex");

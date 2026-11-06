@@ -16,6 +16,7 @@ import { turnCostFromRunningTotal } from "./cost.ts";
 import { sumTurnModels } from "./session-types.ts";
 import { removePrivateTempDir } from "./helpers.ts";
 import type { ClaudeTurnCtx } from "./turn-ctx.ts";
+import { reportBackgroundError } from "../../background-error.ts";
 
 export function attachClaudeFinish(ctx: ClaudeTurnCtx): void {
   const {
@@ -111,7 +112,7 @@ const finalizeClose = async (code: number | null) => {
           emit({ ...base(threadId, turnId), type: "runtime.error", message: e instanceof Error ? e.message : String(e) });
           emit({ ...base(threadId, turnId), type: "turn.completed", ok: false, stopReason: "exit_before_result", cost: null });
         }
-      })().catch(() => {});
+      })().catch(reportBackgroundError);
       return;
     }
     renewedTurns.delete(turnId);
@@ -222,7 +223,7 @@ const finalizeClose = async (code: number | null) => {
             cost: null,
           });
         }
-      })().catch(() => {});
+      })().catch(reportBackgroundError);
       return;
     }
     // A --resume that the CLI never acknowledged: it exited without
@@ -282,7 +283,7 @@ const finalizeClose = async (code: number | null) => {
           });
           emit({ ...base(threadId, turnId), type: "turn.completed", ok: false, stopReason: "exit_before_result", cost: null });
         }
-      })().catch(() => {});
+      })().catch(reportBackgroundError);
       return;
     }
     retryState.delete(threadId);
@@ -307,6 +308,6 @@ const finalizeClose = async (code: number | null) => {
   ctx.finalizeClose = finalizeClose;
   child.on("close", (code) => {
     session.finishClose = () => finalizeClose(code);
-    void session.finishClose().finally(markClosed).catch(() => {});
+    void session.finishClose().finally(markClosed).catch(reportBackgroundError);
   });
 }

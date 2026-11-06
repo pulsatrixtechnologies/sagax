@@ -24,6 +24,7 @@ import { z } from "zod";
 
 import { writeFileAtomic } from "../atomic.ts";
 import { folderBytes } from "../process/disk-usage.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 // ── schedule ────────────────────────────────────────────────────────────
 
@@ -220,7 +221,7 @@ export class MaintenanceScheduler {
 
   start(intervalMs = 60_000): void {
     if (this.timer) return;
-    this.timer = setInterval(() => { void this.tick().catch(() => {}); }, intervalMs);
+    this.timer = setInterval(() => { void this.tick().catch(reportBackgroundError); }, intervalMs);
     this.timer.unref?.();
   }
 

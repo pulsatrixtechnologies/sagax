@@ -3,6 +3,7 @@
 import type { SendTurnInput } from "../contracts.ts";
 import { createHash } from "node:crypto";
 import { processMemory, resourceMemory, type ProcessMemory } from "./process-memory.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export const MiB = 1024 * 1024;
 export type WarmResourceKind = "codex" | "acp" | "claude" | "pi" | "http-mcp" | "perspicax";
@@ -80,7 +81,7 @@ export class WarmResourceBudget {
     this.measure(entry);
     this.entries.add(entry);
     if (!this.timer && this.options.intervalMs !== 0) {
-      this.timer = setInterval(() => { void this.refresh().catch(() => {}); }, this.options.intervalMs ?? 15_000);
+      this.timer = setInterval(() => { void this.refresh().catch(reportBackgroundError); }, this.options.intervalMs ?? 15_000);
       this.timer.unref();
     }
     this.enforce();

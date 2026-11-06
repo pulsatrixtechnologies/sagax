@@ -129,6 +129,7 @@ import {
   type PageTheme,
 } from "../../shared/published-pages.ts";
 import { PASS, type RouteHandler } from "./table.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 /** Who is reading: null for nobody signed in. `principalId` is the person
  * on an organization server; `computerOwner` is the owner of a one-person
@@ -536,7 +537,7 @@ function serveReaderComment(options: PublicPageOptions, req: IncomingMessage, re
     const redact = options.redact ?? redactSecretsInText;
     const added = pages.addReaderComment(opened.page.id, { name: redact(name), text: redact(text), version: opened.version.n });
     return added.ok ? reply(200, true) : reply(409, false);
-  }).catch(() => {});
+  }).catch(reportBackgroundError);
   return true;
 }
 
@@ -695,7 +696,7 @@ function serveStateWrite(options: PublicPageOptions, req: IncomingMessage, res: 
     if (!result.ok) return reply(result.code === "too_many_writes" ? 429 : result.status, { error: result.error, code: result.code });
     options.stateChanged?.(page.id);
     return reply(200, stateAnswer(pages, page, { role: "anon", me: pages.readerHandle(page.id, by), nameOf: stateNamer(options, page, lang) }));
-  }).catch(() => {});
+  }).catch(reportBackgroundError);
   return true;
 }
 

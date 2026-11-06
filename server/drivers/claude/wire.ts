@@ -21,6 +21,7 @@ import { removePrivateTempDir } from "./helpers.ts";
 import { sumTurnModels, type NativeTurnResult } from "./session-types.ts";
 import type { TurnModelUsage } from "../../../shared/runtime-events.ts";
 import type { ClaudeTurnCtx } from "./turn-ctx.ts";
+import { reportBackgroundError } from "../../background-error.ts";
 
 export function attachClaudeWire(ctx: ClaudeTurnCtx): void {
   const {
@@ -79,7 +80,7 @@ const settle = (
         emit({ ...base(threadId, racedTurnId), type: "runtime.error", message: claudeSignInExpired(message), setup: true });
         emit({ ...base(threadId, racedTurnId), type: "turn.completed", ok: false, stopReason: "auth_required", cost: null });
       }
-    })().catch(() => {});
+    })().catch(reportBackgroundError);
     return;
   }
   if (!ok && stopReason === "auth_required" && t.authFailureDeferred && t.authFailureText) {

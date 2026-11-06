@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { Worker } from "node:worker_threads";
 import type { SealedKeyMaterial, SearchHit } from "./messages/message-search-query.ts";
+import { reportBackgroundError } from "./background-error.ts";
 
 export class SearchUnavailable extends Error {
   readonly status = 503;
@@ -56,20 +57,20 @@ export class MessageSearchWorker {
         if (!this.pending.size) worker.unref();
       });
       worker.on("error", () => {
-        if (this.worker === worker) void this.close().catch(() => {});
+        if (this.worker === worker) void this.close().catch(reportBackgroundError);
       });
       worker.on("exit", () => {
-        if (this.worker === worker) void this.close().catch(() => {});
+        if (this.worker === worker) void this.close().catch(reportBackgroundError);
       });
     }
     const worker = this.worker;
     worker.ref();
     const id = ++this.sequence;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { void this.close().catch(() => {}); }, this.timeoutMs);
+      const timer = setTimeout(() => { void this.close().catch(reportBackgroundError); }, this.timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
       try { worker.postMessage({ id, ...message }); }
-      catch { void this.close().catch(() => {}); }
+      catch { void this.close().catch(reportBackgroundError); }
     });
   }
 

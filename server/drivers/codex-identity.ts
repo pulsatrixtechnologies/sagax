@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { userHome } from "../env-path.ts";
 import { killCliTree, spawnCli } from "../procs.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 const MAX_OUTPUT = 16_384;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -54,20 +55,20 @@ export async function codexAccountEmail(
       }
       resolveEmail(stopped ? email : null);
     };
-    const timer = setTimeout(() => { void finish(null).catch(() => {}); }, timeoutMs);
+    const timer = setTimeout(() => { void finish(null).catch(reportBackgroundError); }, timeoutMs);
     timer.unref();
     const send = (message: unknown) => {
-      try { child.stdin.write(`${JSON.stringify(message)}\n`); } catch { void finish(null).catch(() => {}); }
+      try { child.stdin.write(`${JSON.stringify(message)}\n`); } catch { void finish(null).catch(reportBackgroundError); }
     };
-    child.stdin.on("error", () => { void finish(null).catch(() => {}); });
+    child.stdin.on("error", () => { void finish(null).catch(reportBackgroundError); });
     child.stderr.resume(); // Do not retain or log raw CLI errors or credentials.
-    child.on("error", () => { void finish(null).catch(() => {}); });
-    child.on("close", () => { void finish(null).catch(() => {}); });
+    child.on("error", () => { void finish(null).catch(reportBackgroundError); });
+    child.on("close", () => { void finish(null).catch(reportBackgroundError); });
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
       if (finishing) return;
       outputBytes += Buffer.byteLength(chunk);
-      if (outputBytes > MAX_OUTPUT) { void finish(null).catch(() => {}); return; }
+      if (outputBytes > MAX_OUTPUT) { void finish(null).catch(reportBackgroundError); return; }
       buffer += chunk;
       let newline: number;
       while (!finishing && (newline = buffer.indexOf("\n")) !== -1) {
@@ -75,16 +76,16 @@ export async function codexAccountEmail(
         buffer = buffer.slice(newline + 1);
         if (!line.trim()) continue;
         let message: any;
-        try { message = JSON.parse(line); } catch { void finish(null).catch(() => {}); return; }
+        try { message = JSON.parse(line); } catch { void finish(null).catch(reportBackgroundError); return; }
         if (!initialized && message?.id === 1) {
-          if (message.error || !message.result) { void finish(null).catch(() => {}); return; }
+          if (message.error || !message.result) { void finish(null).catch(reportBackgroundError); return; }
           initialized = true;
           send({ method: "initialized", params: {} });
           send({ id: 2, method: "account/read", params: { refreshToken: false } });
         } else if (initialized && message?.id === 2) {
           const account = message.error ? null : message.result?.account;
           const email = account?.type === "chatgpt" ? account.email : null;
-          void finish(typeof email === "string" && email.length <= 254 && EMAIL.test(email) && !/[\p{Cc}\p{Cf}]/u.test(email) ? email : null).catch(() => {});
+          void finish(typeof email === "string" && email.length <= 254 && EMAIL.test(email) && !/[\p{Cc}\p{Cf}]/u.test(email) ? email : null).catch(reportBackgroundError);
         }
       }
     });

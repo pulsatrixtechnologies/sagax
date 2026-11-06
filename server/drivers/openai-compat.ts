@@ -14,6 +14,7 @@ import {
   type ModelListIssue,
 } from "../../shared/azure-openai.ts";
 import { stripOpenAiEndpointSuffix } from "../../shared/openai-compat-url.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 const DRIVER_KIND = "openai-compat";
 const DEFAULT_IDLE_TIMEOUT_MS = 180_000;
@@ -319,7 +320,7 @@ export const OpenAICompatDriver: ProviderDriver<OpenAICompatConfig> = {
         issue = issueForError(error, false);
       }
     };
-    if (apiKey || config.allowNoKey) void fetchModels().catch(() => {});
+    if (apiKey || config.allowNoKey) void fetchModels().catch(reportBackgroundError);
     const listed = (): ModelCatalog => {
       if (!refused.size) return catalog;
       // Empty is fine: Auto and the host move to another engine (#1696).

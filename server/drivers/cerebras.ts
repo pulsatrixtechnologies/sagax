@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { ModelCatalog, ProviderDriver } from "../contracts.ts";
 import { publishedContextWindow } from "../pages/published-context-window.ts";
 import { createOpenAIChatRuntime } from "./openai-chat.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 // Cerebras serves open models on wafer-scale chips: same OpenAI chat
 // contract, several times the tokens per second of a GPU cloud.
@@ -91,7 +92,7 @@ export const CerebrasDriver: ProviderDriver<CerebrasConfig> = {
         // A failed refresh keeps the last usable catalog, including custom models.
       }
     };
-    if (apiKey) void refreshModels().catch(() => {});
+    if (apiKey) void refreshModels().catch(reportBackgroundError);
     return createOpenAIChatRuntime({
       input, driverKind: "cerebras", apiKey, apiUrl: config.url,
       tools: config.tools, models: () => catalog, refreshModels, reasoning: true,

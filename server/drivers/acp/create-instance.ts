@@ -26,6 +26,7 @@ import type {
   AcpSession,
   AcpSupport,
 } from "./types.ts";
+import { reportBackgroundError } from "../../background-error.ts";
 
 export async function createAcpInstance(
   support: AcpSupport,
@@ -158,10 +159,10 @@ export async function createAcpInstance(
     try {
       session.child.stdin.end();
     } catch {}
-    if (support.restartOnMcpChange) void retireChild(threadId, session.child).catch(() => {});
+    if (support.restartOnMcpChange) void retireChild(threadId, session.child).catch(reportBackgroundError);
     else {
       const kill = setTimeout(() => {
-        void killCliTree(session.child).catch(() => {});
+        void killCliTree(session.child).catch(reportBackgroundError);
       }, 5_000);
       kill.unref?.();
     }
@@ -327,7 +328,7 @@ export async function createAcpInstance(
         // idle pooled sessions have no running turn — close them too
         for (const threadId of Array.from(sessions.keys())) closeSession(threadId, "stopAll");
         for (const [threadId, children] of retiring) {
-          for (const child of children) void retireChild(threadId, child).catch(() => {});
+          for (const child of children) void retireChild(threadId, child).catch(reportBackgroundError);
         }
       },
       onEvent: (listener) => {
@@ -347,7 +348,7 @@ export async function createAcpInstance(
         settle(threadId, session, true, "cancelled");
       }
       for (const [threadId, children] of retiring) {
-        for (const child of children) void retireChild(threadId, child).catch(() => {});
+        for (const child of children) void retireChild(threadId, child).catch(reportBackgroundError);
       }
       listeners.clear();
     },

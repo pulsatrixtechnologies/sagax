@@ -23,6 +23,7 @@ import type { LiveCallRecord, LiveCallState, LiveClient, LiveEndReason } from ".
 import { liveCallSummaryLine, LiveSessionError, liveVoice } from "./live-call.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import type { Message, StoreChange } from "../store.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export const DELEGATION_SETTLE_MS = 700;
 export const CONSENT_SETTLE_MS = 1_200;
@@ -463,7 +464,7 @@ export class LiveCallController {
       return;
     }
     const idleMs = this.deps.settings().idleMinutes * 60_000;
-    if (this.now() - call.lastActivityAt >= idleMs) void this.hangUp(call, "idle").catch(() => {});
+    if (this.now() - call.lastActivityAt >= idleMs) void this.hangUp(call, "idle").catch(reportBackgroundError);
   }
 
   // ── sideband events ──────────────────────────────────────────────────
@@ -936,7 +937,7 @@ export class LiveCallController {
     this.recordError(call, "signed-out");
     this.append(call, "commentary", why, delegationId);
     call.state.error = why;
-    void this.hangUp(call, "signed-out").catch(() => {});
+    void this.hangUp(call, "signed-out").catch(reportBackgroundError);
     return true;
   }
 

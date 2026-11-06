@@ -17,6 +17,7 @@
 // a live group's id to a new process), so its remaining members are ours.
 import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { processStarted, processTable, type ListedProcess } from "../browser/browser-processes.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 interface RecordedGroup {
   pgid: number;
@@ -67,7 +68,7 @@ export function noteEngineGroupStarted(pgid: number | undefined): void {
     if (!started || groups.get(pgid) !== record) return;
     record.started = started;
     persist();
-  }).catch(() => {});
+  }).catch(reportBackgroundError);
 }
 
 /** The group led by `pgid` is gone (every member exited or was stopped). */

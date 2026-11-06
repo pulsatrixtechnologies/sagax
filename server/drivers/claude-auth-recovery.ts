@@ -1,5 +1,6 @@
 import { TurnAuthenticationRefusedError, type RuntimeEvent, type SendTurnInput } from "../contracts.ts";
 import { classifyError } from "./retry.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 type Frame = {
   type?: string; subtype?: string; error?: unknown; is_api_error_message?: unknown;
@@ -74,7 +75,7 @@ export function claudeAuthRecovery(
           if (!stopped) return accept(event.threadId, held);
           pending.delete(event.threadId);
           held.settle(new TurnAuthenticationRefusedError(turnId, held.emittedRefusal ?? held.refusal!));
-        }, () => accept(event.threadId, held)).catch(() => {});
+        }, () => accept(event.threadId, held)).catch(reportBackgroundError);
       }
       accept(event.threadId, held);
       publish(event);
@@ -83,7 +84,7 @@ export function claudeAuthRecovery(
       if (!turn.startupRecovery || pending.has(turn.threadId) || busy(turn.threadId)) return dispatch(turn);
       let settle!: Pending["settle"];
       const done = new Promise<void>((resolve, reject) => { settle = error => error ? reject(error) : resolve(); });
-      void done.catch(() => {});
+      void done.catch(reportBackgroundError);
       const held: Pending = { buffered: [], settle };
       pending.set(turn.threadId, held);
       try {

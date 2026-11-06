@@ -16,6 +16,7 @@
 // A pass with nothing new sends nothing. The brief is on by default for a
 // Primary Bot; the person turns it off or moves its time on the bot page.
 import { readConnectedBrief, type BriefAppCall, type BriefStore, type BriefSuggestion } from "./background-brief.ts";
+import { reportBackgroundError } from "../background-error.ts";
 
 export interface ScheduledBriefBot {
   id: string;
@@ -105,7 +106,7 @@ export function startBriefTimer(deps: BriefScheduleDeps, everyMs = 60_000): { st
   const timer = setInterval(() => {
     if (running) return;
     running = true;
-    void runScheduledBriefs(deps).finally(() => { running = false; }).catch(() => {});
+    void runScheduledBriefs(deps).finally(() => { running = false; }).catch(reportBackgroundError);
   }, everyMs);
   timer.unref?.();
   return { stop: () => clearInterval(timer) };

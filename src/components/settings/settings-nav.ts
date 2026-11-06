@@ -134,7 +134,9 @@ export function memberHidesSection(id: AppSettingsSection, input: {
   // admin gave it sees the section without the rest of the installation.
   if (id === "experimental") return !(input.manageExperimental ?? input.editConfig) && input.personalSettings !== true;
   if (id === "decisionModel" || id === "workspaces") return !input.editConfig;
-  if (id === "backups" || id === "import") return !input.manageBackups;
+  // #2080 L3: a person's own space backup and import stay visible; the page
+  // itself gates the installation-wide Full backup on manageBackups.
+  if (id === "backups" || id === "import") return false;
   if (id === "computer") return !input.manageComputers && !input.organization;
   return false;
 }

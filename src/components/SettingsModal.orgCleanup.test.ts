@@ -151,7 +151,7 @@ describe("an organization member", () => {
     expect(memberHidesSection("decisionModel", hidden)).toBe(true);
     // 2026-10-15: Usage is the person's own (GET /api/me/usage): every member sees it
     expect(memberHidesSection("usage", hidden)).toBe(false);
-    expect(memberHidesSection("backups", hidden)).toBe(true);
+    expect(memberHidesSection("backups", hidden)).toBe(false);
     expect(memberHidesSection("general", hidden)).toBe(false);
     expect(memberHidesSection("computer", hidden)).toBe(false);
     expect(memberHidesSection("computer", { ...hidden, organization: false })).toBe(true);

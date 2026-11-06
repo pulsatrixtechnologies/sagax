@@ -178,11 +178,10 @@ function WorkspaceBackupForm() {
       {error && <p role="alert" className="break-words px-3.5 py-1.5 text-[12px] text-danger">{error}</p>}
       {status?.pendingRestore ? <div className="px-3.5 py-2.5"><WorkspaceBackupRestartNotice /></div> : <>
         {status?.lastRestoreReconnect && <div className="px-3.5 pb-1.5"><WorkspaceBackupReconnectList reconnect={status.lastRestoreReconnect} title={t("backup.reconnect.lastTitle")} /></div>}
-        {(!status || status.busy) && <div role="status" className="flex items-center gap-2 px-3.5 py-1.5 text-[12px] text-ink-secondary"><span>{status?.busy ? t("backup.serverBusy") : t("backup.checkStatus")}</span><button type="button" onClick={() => void refresh()} className="cursor-pointer underline">{t("connectors.action.retry")}</button></div>}
         <DescribedRow
           label={t("backup.exportAction")}
           rowId="backupExport"
-          description={t("backup.short")}
+          description={status?.busy ? t("backup.serverBusy") : !status ? t("backup.checkStatus") : t("backup.short")}
           below={open === "export" && <form data-backup-form="export" className="mt-2 flex flex-col gap-2.5" onSubmit={(event) => { event.preventDefault(); void exportBackup(); }}>
             <label className="text-[12px] text-ink-secondary">{t("backup.exportPassword")}<input type="password" autoComplete="new-password" minLength={12} maxLength={1024} required disabled={disabled} value={exportPassword} onChange={(event) => setExportPassword(event.target.value)} className={`${inputClass} mt-1`} /></label>
             <label className="text-[12px] text-ink-secondary">{t("backup.confirmPassword")}<input type="password" autoComplete="new-password" minLength={12} maxLength={1024} required disabled={disabled} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className={`${inputClass} mt-1`} /></label>
@@ -192,7 +191,17 @@ function WorkspaceBackupForm() {
             {download && <a href={download.url} download={download.filename} className="self-end break-all text-[12px] text-accent-text underline">{t("backup.downloadAgain", { filename: download.filename })}</a>}
           </form>}
         >
-          <button type="button" aria-expanded={open === "export"} data-backup-action="export" onClick={() => toggle("export")} className={PILL}>{t("backup.exportPill")}</button>
+          <button
+            type="button"
+            aria-expanded={open === "export"}
+            data-backup-action="export"
+            disabled={Boolean(status?.busy || status?.pendingRestore)}
+            onClick={() => { if (!status) void refresh(); toggle("export"); }}
+            className={`${PILL} gap-1.5`}
+          >
+            {!status && <Loader2 aria-hidden="true" size={12} className="animate-spin" />}
+            {t("backup.exportPill")}
+          </button>
         </DescribedRow>
         <div data-settings-card="backups.import">
           <DescribedRow

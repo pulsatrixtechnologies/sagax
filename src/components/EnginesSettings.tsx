@@ -28,7 +28,7 @@ import { canEditConfig, canManageKeys, viewerCan, viewerIsOrgMember } from "@/li
 import { viewerIsOrgAdmin } from "@/lib/group-owner";
 import { boatComputerEnabled, vpsComputerEnabled } from "@/lib/feature-flags";
 import { OrgHostToolsNote, orgRefusesEngine } from "./OrgHostToolsNote";
-import { DescribedRow, FIELD, FoldRow, PILL, PillSelect, SettingsGroup, Switch } from "./SettingsPrimitives";
+import { DescribedRow, FIELD, FoldRow, PILL, PillSelect, SettingsFoldSection, SettingsGroup, Switch } from "./SettingsPrimitives";
 import { AutoModelSettings } from "./settings/AutoModelSettings";
 import { BotModelsSettings } from "./settings/BotModelsSettings";
 import { CacheKeepWarmSettings } from "./CacheKeepWarmSettings";
@@ -480,44 +480,41 @@ export function EnginesSettings() {
     <div className="flex min-w-0 flex-col gap-6 pb-2" data-models-voice="" data-models-page="">
       {/* #1675: Bot models first (defaults + table + bulk) */}
       <BotModelsSettings />
-      <div data-settings-card="models.advanced">
-        <SettingsGroup title={t("models.advanced.title")} groupId="models-advanced">
-          <FoldRow cardId="models.advanced" label={t("models.advanced.title")} description={t("models.advanced.help")}>
-            <div className="-mx-3.5 flex flex-col gap-4 pt-1" data-models-advanced="">
-              <ModelSwitchesSettings />
-              {/* #2080 (L1): out of Voice, it changes every reply's text */}
-              <SettingsGroup title={t("models.replies.title")} groupId="models-replies">
-                <DescribedRow label={t("voice.noDashes.title")} description={t("voice.noDashes.short")} rowId="voiceNoDashes">
-                  <Switch checked={noDashes} aria-label={t("voice.noDashes.title")} onClick={() => setVoiceDashes(!noDashes)} />
-                </DescribedRow>
-              </SettingsGroup>
-              <SettingsGroup title={t("models.autoNow.title")} groupId="models-auto">
-                <div data-auto-model-explainer=""><AutoModelSettings /></div>
-              </SettingsGroup>
-              {installation && <CacheKeepWarmSettings />}
-              {!installation && keepWarm && (
-                <SettingsGroup title={t("settings.keepWarm.title")} groupId="models-keep-warm">
-                  <DescribedRow label={t("settings.keepWarm.enable")} description={keepWarm.enabled ? t("settings.keepWarm.hours", { hours: Math.round(keepWarm.windowMinutes / 60) }) : t("models.keepWarm.off")} rowId="models.keepWarm">
-                    {org && issuer && (
-                      <span data-perspicax-link="keepWarm"><ExternalLinkPill href={perspicaxConsoleUrl(issuer)}>{t("providers.setInPerspicax")}</ExternalLinkPill></span>
-                    )}
-                  </DescribedRow>
-                </SettingsGroup>
-              )}
-              {installation && (boatComputerEnabled(state.config) || vpsComputerEnabled(state.config)) && (
-                <div data-settings-card="connections.integrations">
-                  <SettingsGroup title={t("keys.integrations.title")} groupId="integrations">
-                    <div className="flex flex-col gap-4 px-3.5 py-2.5">
-                      {boatComputerEnabled(state.config) && <ApiKeyRow section="box" />}
-                      {vpsComputerEnabled(state.config) && <VpsConnection />}
-                    </div>
-                  </SettingsGroup>
+      {/* #2175: a heading with a disclosure, its content sibling groups: never a card in a card */}
+      <SettingsFoldSection cardId="models.advanced" groupId="models-advanced" title={t("models.advanced.title")} description={t("models.advanced.help")}>
+        <div className="flex flex-col gap-6" data-models-advanced="">
+          <ModelSwitchesSettings />
+          {/* #2080 (L1): out of Voice, it changes every reply's text */}
+          <SettingsGroup title={t("models.replies.title")} groupId="models-replies">
+            <DescribedRow label={t("voice.noDashes.title")} description={t("voice.noDashes.short")} rowId="voiceNoDashes">
+              <Switch checked={noDashes} aria-label={t("voice.noDashes.title")} onClick={() => setVoiceDashes(!noDashes)} />
+            </DescribedRow>
+          </SettingsGroup>
+          <SettingsGroup title={t("models.autoNow.title")} groupId="models-auto">
+            <div data-auto-model-explainer=""><AutoModelSettings /></div>
+          </SettingsGroup>
+          {installation && <CacheKeepWarmSettings />}
+          {!installation && keepWarm && (
+            <SettingsGroup title={t("settings.keepWarm.title")} groupId="models-keep-warm">
+              <DescribedRow label={t("settings.keepWarm.enable")} description={keepWarm.enabled ? t("settings.keepWarm.hours", { hours: Math.round(keepWarm.windowMinutes / 60) }) : t("models.keepWarm.off")} rowId="models.keepWarm">
+                {org && issuer && (
+                  <span data-perspicax-link="keepWarm"><ExternalLinkPill href={perspicaxConsoleUrl(issuer)}>{t("providers.setInPerspicax")}</ExternalLinkPill></span>
+                )}
+              </DescribedRow>
+            </SettingsGroup>
+          )}
+          {installation && (boatComputerEnabled(state.config) || vpsComputerEnabled(state.config)) && (
+            <div data-settings-card="connections.integrations">
+              <SettingsGroup title={t("keys.integrations.title")} groupId="integrations">
+                <div className="flex flex-col gap-4 px-3.5 py-2.5">
+                  {boatComputerEnabled(state.config) && <ApiKeyRow section="box" />}
+                  {vpsComputerEnabled(state.config) && <VpsConnection />}
                 </div>
-              )}
+              </SettingsGroup>
             </div>
-          </FoldRow>
-        </SettingsGroup>
-      </div>
+          )}
+        </div>
+      </SettingsFoldSection>
     </div>
   );
 }

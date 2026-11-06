@@ -539,7 +539,10 @@ export async function launchVerificationServer(
       throw new ControlOmbError("Local VM verification requires an explicit loopback Podman machine");
     }
   }
-  const port = await freePortBlock([0, 1]);
+  // SAGAX_VERIFY_PORT_FROM pins the fixture to a small block (e.g. 5400) so a
+  // run on a shared machine stays clear of the ports other tools hold.
+  const portFrom = Number(process.env.SAGAX_VERIFY_PORT_FROM) || 0;
+  const port = portFrom > 0 ? await freePortBlock([0, 1], portFrom, 19) : await freePortBlock([0, 1]);
   if (signal?.aborted) throw new ControlOmbError("verification launch cancelled");
   const url = `http://127.0.0.1:${port}`;
   // Native browser daemons use UNIX sockets; a macOS temp home can exceed

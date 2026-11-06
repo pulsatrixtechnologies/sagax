@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { writeFileAtomic } from "../atomic.ts";
+import { writeFileAtomic, writeFileAtomicIfChanged } from "../atomic.ts";
 import { DATA_DIR } from "../config.ts";
 
 /** The dotted paths of the leaves that differ between two contracts, at
@@ -176,8 +176,11 @@ export function warmCommsEnv(threadId: string, botId: string | undefined, env: R
     // The turn's comms depth rides beside the token: the harness checks it
     // against the token's own (a resumed turn is one deeper). Written first,
     // so a token file never pairs with an older depth.
-    if (env.SAGAX_TURN_DEPTH !== undefined) writeFileAtomic(`${tokenPath}.depth`, env.SAGAX_TURN_DEPTH, { mode: 0o600 });
-    writeFileAtomic(tokenPath, token, { mode: 0o600 });
+    // Both values live only in this process's memory, so a restart voids
+    // the files anyway: no fsync on the send path (#1971), and a depth equal
+    // to last turn's is not rewritten. The rename still keeps every read whole.
+    if (env.SAGAX_TURN_DEPTH !== undefined) writeFileAtomicIfChanged(`${tokenPath}.depth`, env.SAGAX_TURN_DEPTH, { mode: 0o600, durable: false });
+    writeFileAtomic(tokenPath, token, { mode: 0o600, durable: false });
   } catch {
     // A full or read-only disk: the env carries this turn's values, and the
     // contract (withoutTurnTokens) then keeps them, so nothing reuses a
@@ -208,7 +211,7 @@ export function warmPerspicaxEnv(threadId: string, botId: string | undefined, en
   const tokenPath = perspicaxTokenFile(threadId, botId);
   try {
     mkdirSync(dirname(tokenPath), { recursive: true, mode: 0o700 });
-    writeFileAtomic(tokenPath, token, { mode: 0o600 });
+    writeFileAtomic(tokenPath, token, { mode: 0o600, durable: false });
   } catch {
     return env;
   }

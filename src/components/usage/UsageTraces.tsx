@@ -161,7 +161,7 @@ export function UsageTraces({ load = fetchTraces }: { load?: (range: { from: str
   const jobs = serverPaged ? all : all.slice(offset, offset + pageSize);
   const totalJobs = list?.total?.jobs ?? all.length;
   return (
-    <SettingsGroup title={t("usage.trace.title")} groupId="usage-traces" plain>
+    <SettingsGroup groupId="usage-traces" plain>
       <p className="px-1 text-[12px] leading-[17px] text-ink-secondary">{t("usage.trace.caption")}</p>
       <div className="flex flex-col rounded-xl border-[0.5px] border-border bg-elevated">
         {failed ? (

@@ -17,10 +17,15 @@
 //                       keep its original MCP credentials, matching Qwen.
 //   FAKE_ACP_TEXT_REPLY  answer every session/prompt with only this text.
 //   FAKE_ACP_MODE   happy (default) | image | empty-reply | reasoning-only | reasoning-only-error | exit-early | fail-after-text | hang | hang-initialize | stall-after-text | stall-first-prompt | unkeyed-tool | no-auth | auth-required | permission | question
-//                   | ask-question-unsupported (send a cursor/ask_question server→client
-//                     request mid-prompt; the driver must answer -32601 method
-//                     not found, and the prompt completes only after that
-//                     rejection arrives)
+//                   | ask-question (send a vendor question request mid-prompt:
+//                     FAKE_ACP_ASK_METHOD, default cursor/ask_question, with
+//                     the JSON params in FAKE_ACP_ASK_PARAMS. The client's
+//                     reply ({result} or {error}) is written as JSON to
+//                     FAKE_ACP_ASK_ANSWER, and the prompt completes only after
+//                     it arrives. FAKE_ACP_ASK_TIMING=with-result sends the
+//                     prompt result right after the request, so the turn
+//                     settles with the card open; after-result sends the
+//                     request after the prompt result, between turns)
 //                   | interleave (message → tool → message → tool → message)
 //                   | no-session-config (reject session/set_mode + set_model
 //                     with -32601, i.e. an agent predating those methods)
@@ -83,7 +88,8 @@
 //                     the way the agent's own client does, stdio or http,
 //                     with grok 1.0.25's initialize (FAKE_ACP_MCP_HANDSHAKE JSON
 //                     overrides it), list its tools, and reply one line per
-//                     server: "<name>: <tool>,<tool>" or "<name> failed: <why>")
+//                     server: "<name>: <tool>,<tool>" or "<name> failed: <why>";
+//                     FAKE_ACP_MCP_SCHEMA_BYTES=1 adds each schema's length)
 //                   | mcp-call (FAKE_ACP_MCP_CALLS="server:tool,server:tool"; FAKE_ACP_ASK_BEFORE_MCP=use_tool asks first like grok's use_tool:
 //                     call each tool once, in order, on that stdio server from
 //                     session/new's mcpServers, as the agent's own MCP client
@@ -595,8 +601,7 @@ const configCalls: Array<{ method: string; params: unknown }> = [];
 let pendingPermissionId: number | null = null;
 let onPermissionAnswered: ((allowed: boolean) => void) | null = null;
 let lastPermissionCancelled = false;
-// pending server→client cursor/ask_question probe → resolver (the unsupported
-// method the driver must reject rather than guess a shape for)
+// pending server→client vendor question request (ask-question mode) → resolver
 let pendingAskQuestionId: number | null = null;
 let onAskQuestionAnswered: (() => void) | null = null;
 
@@ -848,9 +853,12 @@ process.stdin.on("data", (c) => {
 });
 
 function handle(msg: any) {
-  // client's response to the unsupported cursor/ask_question probe
+  // client's reply to the vendor question request (ask-question mode)
   if (msg.id !== undefined && (msg.result !== undefined || msg.error !== undefined) && msg.id === pendingAskQuestionId) {
     pendingAskQuestionId = null;
+    if (process.env.FAKE_ACP_ASK_ANSWER) {
+      writeFileSync(process.env.FAKE_ACP_ASK_ANSWER, JSON.stringify(msg.error !== undefined ? { error: msg.error } : { result: msg.result }));
+    }
     onAskQuestionAnswered?.();
     return;
   }
@@ -1785,19 +1793,39 @@ function handle(msg: any) {
         });
         return;
       }
-      if (mode === "ask-question-unsupported") {
-        // cursor/ask_question is deliberately unwired in the driver: its wire
-        // shape is unverified, so it must be rejected method-not-found rather
-        // than answered with a guessed shape. Complete only after the
-        // rejection arrives, so a test can await turn.completed.
-        pendingAskQuestionId = 9300;
-        onAskQuestionAnswered = complete;
-        out({
-          jsonrpc: "2.0",
-          id: pendingAskQuestionId,
-          method: "cursor/ask_question",
-          params: { questions: [{ question: "Which color?", options: ["Blue", "Green"] }] },
-        });
+      if (mode === "ask-question") {
+        // A vendor tool that blocks on the person's answer (Grok's
+        // ask_user_question, Cursor's AskQuestion). Complete only after the
+        // client replies, so a test can await turn.completed; between turns
+        // the reply arrives after the prompt result instead.
+        const ask = () => {
+          pendingAskQuestionId = 9300;
+          out({
+            jsonrpc: "2.0",
+            id: pendingAskQuestionId,
+            method: process.env.FAKE_ACP_ASK_METHOD ?? "cursor/ask_question",
+            params: process.env.FAKE_ACP_ASK_PARAMS ? JSON.parse(process.env.FAKE_ACP_ASK_PARAMS) : {
+              toolCallId: "ask-1",
+              title: "Pick a color",
+              questions: [{ id: "color", prompt: "Which color?", options: [{ id: "blue-id", label: "Blue" }, { id: "green-id", label: "Green" }], allowMultiple: false }],
+            },
+          });
+        };
+        const timing = process.env.FAKE_ACP_ASK_TIMING;
+        if (timing === "with-result" || timing === "after-result") {
+          onAskQuestionAnswered = null;
+          if (timing === "with-result") ask();
+          complete();
+          // late enough that the driver has settled the turn, so the request
+          // really arrives between turns rather than in the same read
+          if (timing === "after-result") setTimeout(ask, 300);
+          return;
+        }
+        onAskQuestionAnswered = () => {
+          out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text: "answered the question" } } } });
+          complete();
+        };
+        ask();
         return;
       }
       complete();

@@ -1,6 +1,6 @@
 /** pi RPC event frames for one turn (#1383). */
 import { newId } from "../contracts.ts";
-import { parseAskQuestions, parseChoices, questionAnswersByQuestion } from "../../shared/ask-question.ts";
+import { MAX_QUESTION_TEXT, parseAskQuestions, parseChoices, questionAnswersByQuestion } from "../../shared/ask-question.ts";
 import { readMcpGatewayCall } from "../../shared/mcp-gateway-call.ts";
 import { foreignMailboxAccessDenied } from "../../shared/mailbox-user.ts";
 import { commandSummary, cwToolResult, toolDetailPreview, toolFailurePreview } from "../tools/tool-summary.ts";
@@ -114,7 +114,9 @@ export function handlePiEvent(ctx: PiSendCtx, evt: PiEvent): void {
         const isQuestion = isSelect || evt.method === "input";
         const selectOptions: string[] = isSelect && Array.isArray(evt.options)
           ? evt.options.filter((option): option is string => typeof option === "string") : [];
-        const summary = String(evt.title ?? (isQuestion ? "pi has a question" : "pi wants confirmation")).slice(0, 200);
+        // A question keeps its whole text (the card collapses a long
+        // one); a confirmation title stays a one-line summary.
+        const summary = String(evt.title ?? (isQuestion ? "pi has a question" : "pi wants confirmation")).slice(0, isQuestion ? MAX_QUESTION_TEXT : 200);
         const gatedTool = isQuestion ? undefined : hooks.piGatedMcpTool(evt.title, mcpServers);
         const gatedInput = gatedTool ? hooks.piGatedMcpInput(evt.message, gatedTool) : undefined;
         const searchedCall = gatedTool && gatedInput !== undefined ? hooks.piSearchedCall(gatedTool, gatedInput, searchedServers) : undefined;

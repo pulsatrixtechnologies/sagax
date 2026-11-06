@@ -12,6 +12,7 @@ import type {
 import type { DeviceSignIn } from "../device-auth.ts";
 import type { LinkSignIn } from "../link-sign-in.ts";
 import type { LogSignal } from "./quiet-status.ts";
+import type { AcpQuestionRequest } from "./question-requests.ts";
 import type { TurnLatency } from "./turn-latency.ts";
 import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
@@ -178,6 +179,8 @@ export interface AcpSession {
 
 /** Per-harness specifics — everything that differs between Grok, Gemini, … */
 export interface AcpSupport {
+  /** Vendor question requests by JSON-RPC method (see AcpQuestionRequest). */
+  questionRequests?: Readonly<Record<string, AcpQuestionRequest>>;
   /** Verified native catalog parameters, applied before both new and restored sessions. */
   toolScopeSessionParams?(turn: SendTurnInput, initializeResult: unknown, hasMcp: boolean,
     context: { config: AcpConfig; env: Record<string, string | undefined>; cwd: string }): Record<string, unknown>;

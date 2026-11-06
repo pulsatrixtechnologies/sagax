@@ -52,6 +52,7 @@ export type {
   AcpSupport,
   AccountErrorCode,
 } from "./types.ts";
+export type { AcpQuestionRequest } from "./question-requests.ts";
 
 
 

@@ -1,4 +1,4 @@
-import type { ClipboardEvent, KeyboardEvent, ReactNode, RefObject } from "react";
+import { useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import type { DictationEngine } from "@/lib/composer-dictation";
 import type { ConfigStatus } from "@/state/store";
 import { Target } from "lucide-react";
@@ -12,6 +12,7 @@ import type { RoomMentionPerson } from "@/lib/person-mentions";
 import { MentionTextarea } from "../MentionTextarea";
 import { ComposerReplyStrip } from "../ReplyQuote";
 import { ComposerPlusMenu, type PlusMenuItem } from "../ComposerControls";
+import { MemePicker, MemePickerButton, type MemeAttachmentPick } from "../MemePicker";
 import { TeachChooserDialog, TeachStepsDialog } from "../TeachStepsDialog";
 import { MyChromeRecordDialog } from "../MyChromeRecordDialog";
 import type { MyChromeRecordingResult } from "@/lib/my-chrome";
@@ -63,6 +64,7 @@ export function ComposerEditor({
   channelMode,
   config,
   composerAria,
+  onSendMeme,
   children,
 }: {
   bot?: Bot;
@@ -109,8 +111,12 @@ export function ComposerEditor({
   channelMode: "chat" | "goal";
   config: ConfigStatus | null | undefined;
   composerAria: string;
+  /** #2121: pick a meme and send it now. */
+  onSendMeme?: (attachment: MemeAttachmentPick) => void;
   children?: ReactNode;
 }) {
+  const [memesOpen, setMemesOpen] = useState(false);
+  const memesBtnRef = useRef<HTMLButtonElement>(null);
   return (
     <div className="relative">
       {/* App-ground from the pill midline down, full-bleed. Bubbles may
@@ -155,6 +161,23 @@ export function ComposerEditor({
               level as rows that open beside it (2026-10-15/16; the
               model since 2026-10-18, no workspace row since #743). */}
           <ComposerPlusMenu items={plusItems} />
+          {onSendMeme && (
+            <>
+              <MemePickerButton
+                open={memesOpen}
+                onToggle={() => setMemesOpen((v) => !v)}
+                buttonRef={memesBtnRef}
+                disabled={attachmentPending || locked}
+              />
+              <MemePicker
+                open={memesOpen}
+                onClose={() => setMemesOpen(false)}
+                anchorRef={memesBtnRef}
+                onPick={onSendMeme}
+                onUploadLocal={() => fileInput.current?.click()}
+              />
+            </>
+          )}
           {teachChooser && bot && <TeachChooserDialog botName={bot.name}
             anchorRef={{ get current() { return composerRowRef.current?.querySelector<HTMLElement>("[data-composer-plus]") ?? null; } }}
             onShow={browserTeach ? showInBrowser : undefined}

@@ -187,6 +187,7 @@ import { SidebarOverlays } from "./Sidebar.tsx-parts/SidebarOverlays";
 import { SidebarResizeHandle } from "./Sidebar.tsx-parts/SidebarResizeHandle";
 import { SidebarUnreadPillAbove, SidebarUnreadPillBelow } from "./Sidebar.tsx-parts/SidebarUnreadPills";
 import { hiddenSidebarRows } from "@/lib/sidebar-hidden-entries";
+import { routineRunsWaiting } from "./parallel-approvals";
 
 export type { MenuState, BotConfirmKind };
 export { parseItemDrag, currentArchivableBot, botConfirmCopy, roomDeleteCopy, sidebarListedBots, TeamMenuItems };
@@ -1907,7 +1908,11 @@ export function BotListItem({
     (selected && !threadsListed) || selection?.selected ? "bg-sidebar-selected" : "hover:bg-sidebar-hover",
   );
   const activityTasks = sidebarBotActivityTasks(bot, pendingQueued);
-  const waiting = bot.activity === "waiting-on-you" || activityTasks.some((task) => task.activity === "waiting-on-you");
+  // #2082: a routine run (a proactive wake included) that waits on the
+  // person counts too: its question lives in the run, not over the chat,
+  // and the bot-wide activity leaves runs out.
+  const waiting = bot.activity === "waiting-on-you" || activityTasks.some((task) => task.activity === "waiting-on-you")
+    || routineRunsWaiting(bot).length > 0;
   // Real work in a sibling still outranks an idle coordination wait.
   const working = !waiting && (Boolean(bot.busy) || activityTasks.some((task) => task.busy || task.activity === "working"));
   // A routine run is shown in Automations, not in the sidebar: while the bot's

@@ -11733,7 +11733,6 @@
   "pair.signIn.useEmail": "Se connecter plutôt avec votre courriel",
   "chat.peer.aiClientName": "Client IA",
   "chat.peer.viaAiClient": "envoyé depuis un client IA",
-  "composer.parallelQuestion": "Question de la tâche parallèle {title}",
   "botPanel.reachMe.label": "Me joindre",
   "botPanel.reachMe.help": "Quand ce bot a une question ou une approbation pour vous, il vous joint ici. Répondez de là et il reprend.",
   "botPanel.reachMe.push.label": "Notifications du téléphone",

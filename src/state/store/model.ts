@@ -314,6 +314,7 @@ export interface Message extends Pick<import("../../../shared/wire").WireMessage
   inputRequest?: import("../../../shared/wire").WireMessage["inputRequest"];
   /** 2026-11-05: what a bot's turn elsewhere left for the person (WireMessage.attention). */
   attention?: import("../../../shared/wire").WireMessage["attention"];
+  githubConnect?: import("../../../shared/wire").WireMessage["githubConnect"];
   /** A parallel task this line belongs to (shared/parallel-tasks.ts). */
   parallelTask?: ParallelTaskRef;
   dataResult?: import("../../../shared/wire").WireMessage["dataResult"];

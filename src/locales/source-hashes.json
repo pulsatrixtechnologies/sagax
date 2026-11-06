@@ -17299,7 +17299,21 @@
       "codingChat.title.expand": "d7952d0f6b0b3251584d6115729904feee7cf0219e0998541d5f6682cb6345d9",
       "settings.intro.about": "519ffc435ea4cefe5f71e138c0763383910a0c5497e5a999f897f6ebb251569c",
       "settings.section.app": "0d04bfeb7d64b71c74fc925cca93d683154e8cc7e6e5838faced498e34c9984d",
-      "settings.app.openAbout": "679bcae590defcbad1ad635fa2216714a5de2ff2dd761c7367527c25350a77db"
+      "settings.app.openAbout": "679bcae590defcbad1ad635fa2216714a5de2ff2dd761c7367527c25350a77db",
+      "chat.githubConnect.title": "4027e5b24418520f3efe49fa4bb5381fda41aa2eee28f43e018f971ced6acd2b",
+      "chat.githubConnect.steps": "9180691543417aa27a568accf63b5a4c9b461fdf029c12e29c6a331fa47a1764",
+      "chat.githubConnect.openLink": "aab63f85c7f1cd14d92f057b29a894ee524c891cc75a0e0225709b7685d0a0eb",
+      "chat.githubConnect.copied": "8d525e5f158b9afe05f3122af363ac67763bdc4e1395b46597b320c289766ce3",
+      "chat.githubConnect.expiresIn": "f7b4e5ccb8ba66693d92b2fffca54d19dce6d97310b68743cd02c95f9661ec27",
+      "chat.githubConnect.expired": "f93bbf5e01f10241b599af871322f7a2c542d41e546bbc7195f053472601f5b0",
+      "chat.githubConnect.connected": "aa93877ee55826bf1b5089dc41c324bb59e2397896aafdcd380b6de1fbc06e77",
+      "chat.githubConnect.failed": "b8cc1a305981e190b4454ae41a0c32cbe6a3cf25d2aa5fc21c26ee152b4f35d3",
+      "chat.githubConnect.cancelled": "4a57278bcd306345e2dda711e7b73be183445a94fec15a170fe22641f473baf6",
+      "chat.githubConnect.cancelledHint": "2a412937fd8258a85d0110633a27f13060de055ae010a0ad7e21b1b06f8f3c7e",
+      "myConnections.github.advanced": "a9d156df9f4ea2bce29baa488e906cbb8571937b57c72b82fa7d049fb93ff814",
+      "myConnections.github.noDeviceFlow": "375a640807c32c2e867c4a819e67a0479b7b65067a0d3a6e97c6691e9784d9ac",
+      "myConnections.add.githubHint": "f56060ce45cd83c2ac3844d97f838f720f1ac39f8140386ae1465e6b7165980c",
+      "sources.github.advanced": "26c62de690eb0e65a490517ce2538df54bddd32b2f755147fdbe67f86d8e13ef"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

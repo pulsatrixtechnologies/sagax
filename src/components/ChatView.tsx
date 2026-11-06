@@ -154,6 +154,7 @@ import { ReplyQuote } from "./ReplyQuote";
 import { SecretRequestCard } from "./SecretRequestCard";
 import { RoutineRunCard } from "./RoutineRunCard";
 import { AttentionCard } from "./AttentionCard";
+import { GithubConnectCard } from "./GithubConnectCard";
 import { CallRecordRow } from "./CallRecordRow";
 import { AttachmentGallery, collectMessageFiles, replyAttachmentGroup, splitMessageAttachments } from "./AttachmentGallery";
 import { ConversationGalleryProvider } from "./ConversationGallery";
@@ -1514,6 +1515,10 @@ const MessagesList = memo(function MessagesList({
             return <MessageBoundary fallbackText={m.text ?? ""}><OutboundCard message={m} /></MessageBoundary>;
           }
           // 2026-11-05: what a bot's turn elsewhere left for the person (src/components/AttentionCard.tsx)
+          // #2109: connect_github's sign-in card (code, Copy code, Open link)
+          if (m.githubConnect && m.role === "bot" && m.kind === "text") {
+            return <MessageBoundary fallbackText={m.text ?? ""}><GithubConnectCard card={m.githubConnect} /></MessageBoundary>;
+          }
           if (m.attention && m.role === "bot" && m.kind === "text") {
             return <MessageBoundary fallbackText={m.text ?? ""}><AttentionRow message={m} /></MessageBoundary>;
           }

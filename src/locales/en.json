@@ -13542,5 +13542,19 @@
   "model.auto.optimizeTitle": "Optimize for",
   "model.auto.edit": "Edit",
   "model.access.account": "Account",
-  "model.access.api": "API"
+  "model.access.api": "API",
+  "chat.githubConnect.title": "Connect GitHub",
+  "chat.githubConnect.steps": "Open the link, sign in to GitHub and enter this code. Then authorize Sagax and grant your organizations.",
+  "chat.githubConnect.openLink": "Open link",
+  "chat.githubConnect.copied": "Copied",
+  "chat.githubConnect.expiresIn": "The code works for {minutes} min.",
+  "chat.githubConnect.expired": "This code expired. Ask the bot to connect GitHub again.",
+  "chat.githubConnect.connected": "GitHub connected as @{login}",
+  "chat.githubConnect.failed": "GitHub sign-in stopped",
+  "chat.githubConnect.cancelled": "GitHub sign-in replaced",
+  "chat.githubConnect.cancelledHint": "A newer code replaced this one, or the sign-in was stopped.",
+  "myConnections.github.advanced": "Advanced: use a personal access token",
+  "myConnections.github.noDeviceFlow": "Connect GitHub with a link and a code needs the organization's GitHub OAuth App (Settings > Organization). Until then, use a personal access token.",
+  "myConnections.add.githubHint": "Connect GitHub above (link and code). The server signs in as soon as your account is connected.",
+  "sources.github.advanced": "Advanced: tokens for other organizations or hosts"
 }

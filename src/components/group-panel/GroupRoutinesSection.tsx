@@ -1,21 +1,18 @@
 // Group panel > Details > Routines (2026-11-03, JC): the group's team goals
 // and the routines that post in its conversations, in the bot panel's
 // Routines card (one grouped card, a row per routine with its bot's face,
-// the switch at the right). A row opens the routine's page in place, with the
-// bot panel's bar [Run now] [Edit] [Disable or Enable] [Delete]; + makes a
+// the switch at the right). A row opens the routine's page in place, edited
+// in place, with the bar [Run now] [Check] [Disable or Enable] [Delete]; + makes a
 // new team goal for this group, led by its lead.
 import { CalendarClock, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { api, openRoutineRun, useStore, type Bot, type Group } from "@/state/store";
+import { openRoutineRun, useStore, type Bot, type Group } from "@/state/store";
 import type { Routine, RoutineRun } from "@/lib/routines";
 import { t } from "@/lib/i18n";
 import { RoutineEditor } from "../RoutinesPage";
 import { RoutineList } from "../routines/RoutineList";
-import { canRunRoutineNow, routineRunInFlight } from "../routines/RunNowButton";
-import { clearRoutineRuns, RoutineDetail } from "../routines/RoutineDetail";
-import { useConfirm } from "../ConfirmProvider";
-import { RoutineDetailHeader, RoutinePanelActions } from "../bot-settings/RoutinesSection";
+import { RoutinePanelPage } from "../bot-settings/RoutinePanelPage";
 
 export function GroupRoutinesSection({ group, routines, members, ownBots, leadBotId, newRequest = 0 }: {
   group: Group;
@@ -30,9 +27,8 @@ export function GroupRoutinesSection({ group, routines, members, ownBots, leadBo
   newRequest?: number;
 }) {
   const { state, dispatch } = useStore();
-  const confirm = useConfirm();
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [editing, setEditing] = useState<"new" | "edit" | { copyOf: Routine } | null>(null);
+  const [editing, setEditing] = useState<"new" | { copyOf: Routine } | null>(null);
   // 2026-11-05 (#2098): a run opens in the chat, at its message.
   const openRun = (run: RoutineRun) => openRoutineRun(dispatch, { runId: run.id, routineId: run.routineId, botId: run.botId });
   const runs = state.routineRuns ?? [];
@@ -42,6 +38,8 @@ export function GroupRoutinesSection({ group, routines, members, ownBots, leadBo
   const canCreate = ownBots.length > 0 && !group.dm;
   const toggle = (routine: Routine) => dispatch({ type: "updateRoutine", routineId: routine.id, patch: { enabled: !routine.enabled } });
   const closePanel = () => { setEditing(null); dispatch({ type: "toggleSettings", open: false }); };
+  // A new or copied routine, once created, opens its own page.
+  const opened = (routine: Routine) => { setEditing(null); setDetailId(routine.id); };
 
   useEffect(() => {
     if (newRequest > 0 && canCreate) { setDetailId(null); setEditing("new"); }
@@ -50,43 +48,20 @@ export function GroupRoutinesSection({ group, routines, members, ownBots, leadBo
   if (detail) {
     const bot = botOf(detail);
     const bots = bot ? [bot] : [];
+    // 2026-11-06 (JC, "one single pane"): the routine's page is its editor.
     return <div data-group-routine-detail={detail.id} className="absolute inset-0 z-20 flex flex-col bg-panel">
-      <RoutineDetailHeader
-        name={detail.name}
-        onBack={() => setDetailId(null)}
-        onClose={closePanel}
-        onRename={detail.canEdit !== false ? (name) => { dispatch({ type: "routinePatched", routine: { ...detail, name } }); dispatch({ type: "updateRoutine", routineId: detail.id, patch: { name } }); } : undefined}
-      />
-      <RoutineDetail
-        routine={detail}
-        runs={runs}
-        bots={bots}
-        groups={state.groups ?? []}
-        viewerPrincipalId={state.config?.viewer?.principalId ?? null}
-        compact
-        actions={false}
-        editable={detail.canEdit !== false}
-        canRun={canRunRoutineNow(state.config, detail, bot)}
-        inFlight={Boolean(routineRunInFlight(runs, detail.id))}
-        onOpenRun={(run) => { openRun(run); if (["failed", "missed"].includes(run.status) && !run.seenAt && !run.redacted) dispatch({ type: "markRoutineRunSeen", runId: run.id }); }}
-        onToggle={() => toggle(detail)}
-        onPatch={async (patch) => { const response = await api(`/api/routines/${detail.id}`, { method: "PATCH", body: JSON.stringify(patch) }); if (response.routine) dispatch({ type: "routinePatched", routine: response.routine }); }}
-        onClearRuns={() => void clearRoutineRuns(detail, confirm, dispatch).catch(() => { /* the runs stay listed */ })}
-      />
-      <RoutinePanelActions
+      <RoutinePanelPage
         routine={detail}
         bot={bot}
-        onStarted={openRun}
-        onToggle={() => toggle(detail)}
-        onEdit={() => setEditing("edit")}
-        onDelete={async () => {
-          if (!(await confirm({ title: t("routineCalendar.deleteConfirm", { title: detail.name }), confirmLabel: t("common.delete"), tone: "danger" }))) return;
-          dispatch({ type: "deleteRoutine", routineId: detail.id });
-          setDetailId(null);
-        }}
+        bots={bots}
+        runs={runs}
+        onOpenRun={openRun}
+        onBack={() => setDetailId(null)}
+        onDismiss={closePanel}
+        onDeleted={() => setDetailId(null)}
+        onDuplicate={(routine) => setEditing({ copyOf: routine })}
       />
-      {editing === "edit" && <RoutineEditor key={detail.id} routine={detail} mode="edit" bots={bots} presentation="panel" onClose={() => setEditing(null)} onDismiss={closePanel} onDeleted={() => { setEditing(null); setDetailId(null); }} onDuplicate={(routine) => setEditing({ copyOf: routine })} />}
-      {editing && typeof editing === "object" && <RoutineEditor key={`${detail.id}-copy`} copyOf={editing.copyOf} bots={bots} presentation="panel" onClose={() => setEditing(null)} onDismiss={closePanel} />}
+      {editing && typeof editing === "object" && <div className="absolute inset-0 z-40"><RoutineEditor key={`${detail.id}-copy`} copyOf={editing.copyOf} bots={bots} presentation="panel" onClose={() => setEditing(null)} onDismiss={closePanel} page={{ onCreated: opened }} /></div>}
     </div>;
   }
 
@@ -113,7 +88,7 @@ export function GroupRoutinesSection({ group, routines, members, ownBots, leadBo
       />}
     {editing === "new" && (
       <div className="absolute inset-0 z-30 min-h-[24rem]">
-        <RoutineEditor key={`${group.id}-new`} bots={ownBots} group={{ id: group.id, ...(lead ? { leadBotId: lead } : {}) }} presentation="panel" onClose={() => setEditing(null)} onDismiss={closePanel} />
+        <RoutineEditor key={`${group.id}-new`} bots={ownBots} group={{ id: group.id, ...(lead ? { leadBotId: lead } : {}) }} presentation="panel" onClose={() => setEditing(null)} onDismiss={closePanel} page={{ onCreated: opened }} />
       </div>
     )}
   </section>;

@@ -66,6 +66,8 @@ export function useEventEditorBody({
   onStartEdit,
   onCancelEdit,
   onSavedRoutine,
+  page,
+  onDirtyChange,
 }: EventEditorBodyProps) {
   const confirm = useConfirm();
   const { state, dispatch } = useStore();
@@ -373,6 +375,7 @@ export function useEventEditorBody({
   const editorSnapshot = JSON.stringify([requiredSkills, requiredMcp, requiresComputer, kind, name, description, recurrence, limitReset, scheduleDraft, date, startTime, weekdays, durationMinutes, timeoutMinutes, overlap, autoPauseAfter, continuity, onlyWhenPresent, deleteWhenFinished, watchDraft, postResults, mailAlias, routineModel, routineSubagentModel, actAs, routineEffort, timingMode, earlyMinutes, lateMinutes, intervalMinutes, intervalDays, intervalWeekdays, intervalWindow, intervalWindowStart, intervalWindowEnd, intervalEnd, intervalEndDate, botIds, routineTarget, groupId, runOn, attachments.map((attachment) => attachment.id), runAs]);
   const openedSnapshot = useRef(editorSnapshot);
   const dirty = editorSnapshot !== openedSnapshot.current;
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
   const requestClose = async () => {
     if (dirty && !saving && !(await confirm(discardConfirmRequest(t("routineEditor.discard"))))) return;
     onClose();
@@ -439,6 +442,6 @@ export function useEventEditorBody({
     toggleEnabled, toggleMore, triggered, valid, viewing, watchAllowed,
     watchDraft, weekdays, WhenIcon, whenOpen, whenSentence, advancedSummary,
     at, bots, lockedBotId, seed, onDuplicate, onStartEdit,
-    onCancelEdit, presentation, routinesOnly, setBotIds, setRoutineTarget, setScheduleDraft, setRecurrence, onClose, whenIconName,
+    onCancelEdit, presentation, routinesOnly, page, setBotIds, setRoutineTarget, setScheduleDraft, setRecurrence, onClose, whenIconName,
   };
 }

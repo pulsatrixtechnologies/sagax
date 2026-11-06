@@ -38,8 +38,18 @@ if (params.get("advanced") === "1") {
 }
 
 const realFetch = window.fetch.bind(window);
+(window as unknown as { __routinePatches: unknown[] }).__routinePatches = [];
 window.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  // 2026-11-06: a routine's page saves in place; PATCH and POST answer with
+  // the routine as saved, so the gallery can walk the real flow.
+  const method = init?.method ?? "GET";
+  if (/\/api\/routines(\/routine-1)?$/.test(url) && (method === "PATCH" || method === "POST")) {
+    const body = JSON.parse(String(init?.body ?? "{}")) as Partial<Routine>;
+    saved = { ...saved, ...body, ...(method === "POST" ? { id: "routine-2" } : {}), updatedAt: Date.now() } as Routine;
+    (window as unknown as { __routinePatches: unknown[] }).__routinePatches.push({ method, body });
+    return new Response(JSON.stringify({ routine: saved }), { status: 200, headers: { "content-type": "application/json" } });
+  }
   if (url.includes("/api/")) return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
   return realFetch(input, init);
 };
@@ -65,6 +75,7 @@ const routine = {
   postResults: true, attachments: trigger === "webhook" ? [] : [{ id: "a1", kind: "file", name: "clients.md", path: "/tmp/clients.md", size: 1200 }],
   durationMinutes: 30, timeoutMinutes: 30, nextRunAt: Date.now() + 3_600_000, createdAt: Date.now(), updatedAt: Date.now(),
 } as unknown as Routine;
+let saved = routine;
 const webhooks = [
   { id: "wh-1", endpointId: "wh_7f3k2p9q", routineId: "routine-1", name: "Nouvelle commande", prompt, botId: bot.id, runOn: "maus", enabled: true, createdAt: 1, updatedAt: 1, deliveryCount: 12, lastReceivedAt: Date.now() - 25 * 60_000, tokenLast4: "x8Qa" },
   { id: "wh-2", endpointId: "wh_a1b2c3d4", name: "Alerte de surveillance", prompt: "Analyse l'alerte reçue.", botId: bot.id, runOn: "maus", enabled: false, createdAt: 1, updatedAt: 1, deliveryCount: 0, tokenLast4: "m2Lk" },
@@ -77,6 +88,12 @@ const runs = [0, 1, 2].map((index) => ({
   output: index === 1 ? undefined : "## Résumé\n\n- 3 billets ouverts depuis hier\n- 1 billet en attente du client", error: index === 1 ? "Le connecteur n'a pas répondu à temps." : undefined,
   prompt, runOn: "maus", trigger: "schedule",
 })) as unknown as RoutineRun[];
+
+/** The panel follows the store, as the app does: a save shows on the page. */
+function LiveRoutines() {
+  const { state } = useStore();
+  return <RoutinesSection bot={bot} routines={state.routines.length ? state.routines : [routine]} runs={runs} grouped />;
+}
 
 function Seed({ children }: { children: ReactNode }) {
   const { state, dispatch } = useStore();
@@ -97,7 +114,7 @@ createRoot(document.getElementById("root")!).render(
         {view === "panel-editor"
           ? <aside data-gallery-card style={{ width: 400 }} className="relative h-[880px] overflow-hidden border border-hairline/40 bg-panel text-ink"><RoutineEditor routine={routine} mode={mode} bots={[bot]} lockedBotId={bot.id} presentation="panel" onClose={() => {}} onDismiss={() => {}} /></aside>
           : view === "panel"
-          ? <aside data-gallery-card style={{ width: 400 }} className="relative h-[820px] border border-hairline/40 bg-panel text-ink"><RoutinesSection bot={bot} routines={[routine]} runs={runs} grouped /></aside>
+          ? <aside data-gallery-card style={{ width: 400 }} className="relative h-[820px] border border-hairline/40 bg-panel text-ink"><LiveRoutines /></aside>
           : view === "page"
           ? <div style={{ maxWidth: 720, padding: 16 }} data-gallery-card className="bg-canvas"><RoutineConfiguration routine={routine} bots={[bot]} /></div>
           : view === "bot"

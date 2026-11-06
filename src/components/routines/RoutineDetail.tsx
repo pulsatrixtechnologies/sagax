@@ -12,7 +12,7 @@ import { RoutineCheckButton, RoutineReadinessList, useRoutineReadiness, type Rou
 // Clear run logs at its right. The bar is [Run now] [Edit] [Disable or
 // Enable] [Delete]; Duplicate moved to Edit > Advanced, the logs are the
 // Automations page's Logs.
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { ChevronDown, CirclePlay, Eraser, ExternalLink, Loader2, Pause, Pencil, Play, Trash2, UsersRound } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -117,6 +117,66 @@ function TriggerRow({ routine, bot, editable, onPatch }: { routine: Routine; bot
   </PanelRow>;
 }
 
+/** The routine's state rows (2026-11-06, one pane): Runs as, Au nom de,
+ * Active, Next run, This week, Skipped while busy, the away skips, then the
+ * notes under them (auto-paused, deleted when finished, the check's
+ * answer). The Automations page puts its Trigger row first (`leading`); the
+ * panel's single pane sets the trigger in its own When to run. */
+export function RoutineStatusRows({ routine, runs, now = Date.now(), editable = true, working = false, error, canRun = false, readiness, onToggle, onPatch, leading }: {
+  routine: Routine;
+  runs: RoutineRun[];
+  now?: number;
+  editable?: boolean;
+  working?: boolean;
+  error?: string;
+  canRun?: boolean;
+  readiness: RoutineReadinessControl;
+  onToggle?: () => void;
+  onPatch?: (patch: RoutinePatch) => Promise<void>;
+  leading?: ReactNode;
+}) {
+  const state = routineState(routine, runs);
+  const skips = routine.awaySkips && !routine.awaySkips.reportedAt ? routine.awaySkips.count : 0;
+  return <>
+    <PanelRows data-routine-summary="">
+      {leading}
+      <RunAsRow routine={routine} editable={editable} onPatch={onPatch} />
+      <ActAsRow routine={routine} editable={editable} onPatch={onPatch} {...(canRun ? { readiness } : {})} />
+      <PanelToggle data-routine-active="" label={t("routineDetail.active")} hint={state.tone === "info" ? state.label : state.tone === "warning" ? state.label : undefined} viewing={!editable || !onToggle} checked={routine.enabled} disabled={working} onChange={() => onToggle?.()} />
+      <PanelRow label={t("routineDetail.nextRun")}><PanelValue><span data-routine-next>{routineNextText(routine, now)}</span></PanelValue></PanelRow>
+      {routine.weekRuns && <PanelRow label={t("routineDetail.week")}><PanelValue><span data-routine-week-runs>{routineWeekRunsText(routine.weekRuns)}</span></PanelValue></PanelRow>}
+      {(routine.skippedRuns ?? 0) > 0 && <PanelRow label={t("routineDetail.skipped")}><PanelValue>{routine.skippedRuns}{routine.lastSkippedAt ? ` · ${t("routines.lastSkipped", { date: routineDateTime(routine.lastSkippedAt) })}` : ""}</PanelValue></PanelRow>}
+      {skips > 0 && <PanelRow label={t("routines.away.title")}><PanelValue>{t(skips === 1 ? "routines.away.skippedOne" : "routines.away.skippedMany", { count: skips, name: routine.name })}</PanelValue></PanelRow>}
+    </PanelRows>
+    {routine.autoPaused && !routine.enabled && <p data-routine-auto-paused={routine.autoPaused.failures} className="text-[11.5px] text-warning">{t("routineDetail.autoPausedAt", { date: routineDateTime(routine.autoPaused.at) })}</p>}
+    {routine.deleteWhenFinished && <p data-routine-delete-when-finished="" className="text-[11.5px] text-ink-secondary">{t("routines.deleteWhenFinished.willDelete")}</p>}
+    {error && <div role="alert" className="rounded-lg bg-danger/10 px-3 py-2 text-[11.5px] text-danger">{error}</div>}
+    {readiness.checking && <p role="status" className="text-[12px] text-ink-secondary">{t("routineReadiness.checking")}</p>}
+    {readiness.error && <p role="alert" className="text-[12px] text-danger">{readiness.error}</p>}
+    {readiness.answer && <RoutineReadinessList checks={readiness.answer.checks} checkedAt={readiness.answer.checkedAt} />}
+  </>;
+}
+
+/** "Runs (n)", Clear run logs at its right, then the runs, newest first. */
+export function RoutineRunsSection({ routine, runs, now = Date.now(), onOpenRun, onClearRuns }: {
+  routine: Routine;
+  runs: RoutineRun[];
+  now?: number;
+  onOpenRun: (run: RoutineRun) => void;
+  onClearRuns?: () => void;
+}) {
+  const history = [...runs].filter((run) => run.routineId === routine.id).sort((a, b) => routineRunTime(b) - routineRunTime(a));
+  return <section data-routine-runs="" className="min-w-0 space-y-2">
+    <div className="flex items-center justify-between gap-2 px-1">
+      <h3 className="flex items-center gap-1.5 text-[12px] font-medium text-ink-secondary">{t("routineDetail.runs")}{history.length > 0 && <span className="rounded-full bg-raised px-1.5 text-[10.5px]">{history.length}</span>}</h3>
+      {onClearRuns && history.length > 0 && <button type="button" data-routine-clear-runs onClick={onClearRuns} aria-label={t("routineDetail.clearRuns")} title={t("routineDetail.clearRuns")} className="flex size-7 items-center justify-center rounded-full text-ink-tertiary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><Eraser size={14} aria-hidden="true" /></button>}
+    </div>
+    {history.length === 0
+      ? <p className="rounded-xl border border-dashed border-hairline/50 p-5 text-center text-[12.5px] text-ink-secondary">{t("routines.drawer.noRuns")}</p>
+      : <ol data-routine-history aria-label={t("routineDetail.runs")} className="flex flex-col gap-0.5">{history.map((run) => <RunHistoryRow key={run.id} run={run} now={now} onOpen={onOpenRun} />)}</ol>}
+  </section>;
+}
+
 export function RoutineDetail({ routine, runs, bots, groups = [], now = Date.now(), compact = false, editable = true, canRun = false, inFlight = false, starting = false, working = false, error, onOpenRun, onRunNow, onToggle, onEdit, onDelete, onOpenGroup, onPatch, onClearRuns, actions = true, readiness: externalReadiness }: {
   routine: Routine;
   /** Every run kept for this routine, any order. */
@@ -153,9 +213,6 @@ export function RoutineDetail({ routine, runs, bots, groups = [], now = Date.now
   const bot = bots.find((candidate) => candidate.id === routine.botId);
   const isRoomGoal = routine.target === "room-goal";
   const group = groups.find((candidate) => candidate.id === routine.groupId);
-  const state = routineState(routine, runs);
-  const history = [...runs].filter((run) => run.routineId === routine.id).sort((a, b) => routineRunTime(b) - routineRunTime(a));
-  const skips = routine.awaySkips && !routine.awaySkips.reportedAt ? routine.awaySkips.count : 0;
   return (
     <div data-routine-detail className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -164,31 +221,11 @@ export function RoutineDetail({ routine, runs, bots, groups = [], now = Date.now
             {isRoomGoal && <span className="inline-flex items-center gap-1"><UsersRound size={13} aria-hidden="true" />{group?.name ?? t("routineCalendar.groupUnavailable")}</span>}
             {routine.canEdit === false && <span>{t("routines.scope.readOnly")}</span>}
           </div>}
-          <PanelRows data-routine-summary="">
-            <TriggerRow routine={routine} bot={bot} editable={editable} onPatch={onPatch} />
-            <RunAsRow routine={routine} editable={editable} onPatch={onPatch} />
-            <ActAsRow routine={routine} editable={editable} onPatch={onPatch} {...(canRun ? { readiness } : {})} />
-            <PanelToggle data-routine-active="" label={t("routineDetail.active")} hint={state.tone === "info" ? state.label : state.tone === "warning" ? state.label : undefined} viewing={!editable || !onToggle} checked={routine.enabled} disabled={working} onChange={() => onToggle?.()} />
-            <PanelRow label={t("routineDetail.nextRun")}><PanelValue><span data-routine-next>{routineNextText(routine, now)}</span></PanelValue></PanelRow>
-            {routine.weekRuns && <PanelRow label={t("routineDetail.week")}><PanelValue><span data-routine-week-runs>{routineWeekRunsText(routine.weekRuns)}</span></PanelValue></PanelRow>}
-            {(routine.skippedRuns ?? 0) > 0 && <PanelRow label={t("routineDetail.skipped")}><PanelValue>{routine.skippedRuns}{routine.lastSkippedAt ? ` · ${t("routines.lastSkipped", { date: routineDateTime(routine.lastSkippedAt) })}` : ""}</PanelValue></PanelRow>}
-            {skips > 0 && <PanelRow label={t("routines.away.title")}><PanelValue>{t(skips === 1 ? "routines.away.skippedOne" : "routines.away.skippedMany", { count: skips, name: routine.name })}</PanelValue></PanelRow>}
-          </PanelRows>
-          {routine.autoPaused && !routine.enabled && <p data-routine-auto-paused={routine.autoPaused.failures} className="text-[11.5px] text-warning">{t("routineDetail.autoPausedAt", { date: routineDateTime(routine.autoPaused.at) })}</p>}
-          {routine.deleteWhenFinished && <p data-routine-delete-when-finished="" className="text-[11.5px] text-ink-secondary">{t("routines.deleteWhenFinished.willDelete")}</p>}
-          {error && <div role="alert" className="rounded-lg bg-danger/10 px-3 py-2 text-[11.5px] text-danger">{error}</div>}
-          {readiness.checking && <p role="status" className="text-[12px] text-ink-secondary">{t("routineReadiness.checking")}</p>}
-          {readiness.error && <p role="alert" className="text-[12px] text-danger">{readiness.error}</p>}
-          {readiness.answer && <RoutineReadinessList checks={readiness.answer.checks} checkedAt={readiness.answer.checkedAt} />}
-          <div className="flex items-center justify-between gap-2 pt-1">
-            <h3 className="flex items-center gap-1.5 text-[12px] font-medium text-ink-secondary">{t("routineDetail.runs")}{history.length > 0 && <span className="rounded-full bg-raised px-1.5 text-[10.5px]">{history.length}</span>}</h3>
-            {onClearRuns && history.length > 0 && <button type="button" data-routine-clear-runs onClick={onClearRuns} aria-label={t("routineDetail.clearRuns")} title={t("routineDetail.clearRuns")} className="flex size-7 items-center justify-center rounded-full text-ink-tertiary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><Eraser size={14} aria-hidden="true" /></button>}
-          </div>
+          <RoutineStatusRows routine={routine} runs={runs} now={now} editable={editable} working={working} error={error} canRun={canRun} readiness={readiness} onToggle={onToggle} onPatch={onPatch}
+            leading={<TriggerRow routine={routine} bot={bot} editable={editable} onPatch={onPatch} />} />
         </header>
-        <div className={cn("px-3 pb-4 pt-2 sm:px-4", compact && "px-2")}>
-          {history.length === 0
-            ? <p className="rounded-xl border border-dashed border-hairline/50 p-5 text-center text-[12.5px] text-ink-secondary">{t("routines.drawer.noRuns")}</p>
-            : <ol data-routine-history aria-label={t("routineDetail.runs")} className="flex flex-col gap-0.5">{history.map((run) => <RunHistoryRow key={run.id} run={run} now={now} onOpen={onOpenRun} />)}</ol>}
+        <div className={cn("px-3 pb-4 pt-3 sm:px-4", compact && "px-2")}>
+          <RoutineRunsSection routine={routine} runs={runs} now={now} onOpenRun={onOpenRun} onClearRuns={onClearRuns} />
         </div>
       </div>
       {actions && (

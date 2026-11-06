@@ -13345,6 +13345,7 @@
   "routineTrigger.keptHere": "Ce déclencheur se modifie dans Modifier.",
   "routineEditor.showMore": "Afficher plus",
   "routineEditor.showLess": "Afficher moins",
+  "routineEditor.editInstruction": "Modifier l’instruction",
   "routineEditor.formatAi": "Mettre en forme avec l'IA",
   "routineEditor.formatAiHint": "Ouvre la conversation de {bot} avec une demande pour mettre en forme cette instruction. Rien n'est envoyé avant que vous appuyiez sur Entrée.",
   "routineEditor.formatAiPrompt": "Mets en forme l'instruction de ma routine « {name} » (id {id}) pour qu'elle soit mieux structurée et plus facile à lire : titres, étapes numérotées, phrases courtes. Garde exactement chaque règle, fait, date et décision, et n'en change pas le sens. Ensuite, mets à jour la routine « {name} » (id {id}) avec le résultat au moyen de ton outil de modification de routine (propose_routine_action, action update, changes.instructions), et montre-moi l'avant et l'après.",

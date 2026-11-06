@@ -29,7 +29,7 @@ const routine = (enabled: boolean) => ({
 }) as unknown as Routine;
 const noop = () => {};
 const panel = (enabled: boolean) => renderToStaticMarkup(createElement(RoutinePanelActions, {
-  routine: routine(enabled), bot, onStarted: noop, onToggle: noop, onEdit: noop, onDelete: noop,
+  routine: routine(enabled), bot, onStarted: noop, onToggle: noop, onDelete: noop,
 }));
 const buttons = (markup: string) => [...markup.matchAll(/<button[^>]*>.*?<\/button>/g)].map((match) => match[0]);
 const iconOf = (button: string) => /lucide-([a-z-]+)/.exec(button.replace(/lucide lucide-/, "lucide-"))?.[1];
@@ -38,9 +38,9 @@ describe("a routine's action bar", () => {
   it("names every action in words, folding to an icon with a tooltip only when the bar is tight", () => {
     const markup = panel(false);
     const all = buttons(markup);
-    // 2026-11-03 (JC): exactly [Run now] [Edit] [Disable or Enable] [Delete].
-    expect(all).toHaveLength(5);
-    expect(all.map((button) => /aria-label="([^"]+)"/.exec(button)?.[1])).toEqual(["Run now", "Check routine", "Edit", "Enable", "Delete"]);
+    // 2026-11-06 (JC, one pane): [Run now] [Check] [Disable or Enable] [Delete], no Edit.
+    expect(all).toHaveLength(4);
+    expect(all.map((button) => /aria-label="([^"]+)"/.exec(button)?.[1])).toEqual(["Run now", "Check routine", "Enable", "Delete"]);
     for (const button of all) {
       const label = /aria-label="([^"]+)"/.exec(button)?.[1];
       expect(label).toBeTruthy();
@@ -49,7 +49,7 @@ describe("a routine's action bar", () => {
       expect(button.includes(`<span class="${ACTION_LABEL}">`) || button.includes(`<span class="${ACTION_LABEL_MAIN}">`)).toBe(true);
       expect(button).toMatch(/<span class="[^"]+">[^<]+<\/span>/);
     }
-    // Run now keeps its words longest; Edit, Enable and Delete fold first
+    // Run now keeps its words longest; Enable and Delete fold first
     expect(all[0]).toContain(ACTION_LABEL_MAIN);
     for (const button of all.slice(1)) expect(button).toContain(`class="${ACTION_LABEL}"`);
   });
@@ -62,12 +62,12 @@ describe("a routine's action bar", () => {
     }
     const paused = buttons(panel(false));
     expect(paused[0]).toContain('fill="currentColor"');
-    expect(iconOf(paused[3]!)).toMatch(/circle-play|play-circle/);
+    expect(iconOf(paused[2]!)).toMatch(/circle-play|play-circle/);
   });
 
   it("the routine's page and the run's detail give each action its own icon and a tooltip", () => {
     const page = renderToStaticMarkup(createElement(RoutineDetail, {
-      routine: routine(false), runs: [], bots: [bot], canRun: true, onOpenRun: noop, onRunNow: noop, onToggle: noop, onEdit: noop, onDelete: noop,
+      routine: routine(false), runs: [], bots: [bot], canRun: true, onOpenRun: noop, onRunNow: noop, onToggle: noop, onDelete: noop,
     }));
     const pageButtons = buttons(page.slice(page.indexOf("data-routine-actions")));
     const pageIcons = pageButtons.map(iconOf);

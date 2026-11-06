@@ -1,6 +1,7 @@
 import type { CalendarCall } from "@/lib/calendar-calls";
 import type { Routine, RoutineRunOn } from "@/lib/routines";
 import type { RoutineCalendarItem } from "@/lib/routine-calendar";
+import type { ReactNode } from "react";
 import type { Bot } from "@/state/store";
 
 export type EventKind = "routine" | "call";
@@ -65,6 +66,25 @@ export type EventEditorProps = {
   /** Advanced's Duplicate (2026-11-03: off the routine page's bar). */
   onDuplicate?: (routine: Routine) => void;
   onSavedCall: (call: CalendarCall) => void;
+  /** 2026-11-06 (JC, one pane): the side panel's routine page. Editable in
+   * place from the start (no view mode, no Edit); its state rows and runs
+   * sit in the same pane; Cancel and Save show only while a change is not
+   * saved, else the routine's own bar (`actions`). A new routine opens in
+   * the same pane, without rows, runs or bar. */
+  page?: RoutinePageSlots;
+};
+
+export type RoutinePageSlots = {
+  /** Runs as, Active, Next run, This week, Skipped while busy (under When to run). */
+  status?: ReactNode;
+  /** Runs (n) and its list (under Advanced). */
+  runs?: ReactNode;
+  /** The bar while nothing is unsaved: Run now, check, Pause, Delete. */
+  actions?: ReactNode;
+  /** Opened by an old Edit entry: the instruction is focused. */
+  focusInstruction?: boolean;
+  /** A new routine was saved: its page opens in the same pane. */
+  onCreated?: (routine: Routine) => void;
 };
 
 export type EventEditorBodyProps = EventEditorProps & {
@@ -72,4 +92,6 @@ export type EventEditorBodyProps = EventEditorProps & {
   onStartEdit: () => void;
   onCancelEdit?: () => void;
   onSavedRoutine?: (routine: Routine) => void;
+  /** The page's wrapper keeps the routine in step with the server only while nothing is unsaved. */
+  onDirtyChange?: (dirty: boolean) => void;
 };

@@ -79,7 +79,7 @@ export function PeopleToolAccessSettings({ confirm = defaultConfirm }: { confirm
   // 0.5.6: one Grok-style row (its count pill unfolds the grants);
   // Revoke is a red pill that asks first.
   return (
-    <SettingsGroup title={t("settings.toolAccess.people.title")} groupId="peopleToolAccess">
+    <SettingsGroup advanced title={t("settings.toolAccess.people.title")} groupId="peopleToolAccess">
       <div data-settings-card="general.peopleToolAccess">
         <DescribedRow
           label={t("settings.toolAccess.people.grants")}

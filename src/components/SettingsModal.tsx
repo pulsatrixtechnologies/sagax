@@ -6,7 +6,9 @@ import { FileText, Search, X } from "lucide-react";
 import { useStore, type AppSettingsSection } from "@/state/store";
 import { localeChoices } from "@/locales";
 import { t } from "@/lib/i18n";
+import { APP_NAME, appVersion } from "@/lib/app-links";
 import { brand } from "@/lib/brand";
+import { requestReleaseNotes } from "@/lib/release-notes-ui";
 import { useUpdaterState } from "@/lib/updater";
 import { openUpdatePrompt, requestUpdateCheck } from "@/lib/update-prompt";
 import { GeneralAdvancedSettings, generalAdvancedShown, isSoloDesktop } from "./settings/AdvancedSettings";
@@ -66,9 +68,8 @@ export {
 } from "./settings/settings-nav";
 
 
-/** This app's updates, which download by themselves. Shown once the desktop
- * app answers: on this computer's page, never on another server's, where its
- * buttons would do nothing. */
+/** This app's updates (#2080): version in the row title, one status, one
+ * action. Shown once the desktop app answers on this computer's page. */
 export function UpdatesRow() {
   const s = useUpdaterState();
   const updater = window.ogb?.updater;
@@ -95,13 +96,13 @@ export function UpdatesRow() {
                 ? t("settings.updates.handedOff")
                 : s.status === "error"
                   ? t("settings.updates.failed", { message: s.message ?? t("settings.updates.unknownError") })
-                  : t("settings.updates.latest");
+                  : t("settings.updates.upToDate");
   // A native staging failure (retryable === false) cannot be retried in place:
   // the message tells the person to quit and reopen, so this button must do
   // exactly that and stay clickable, never be greyed out.
   const mustRestart = s.retryable === false;
   return (
-    <SettingRow title={t("settings.updates.title")} subtitle={label}>
+    <SettingRow title={t("settings.updates.rowTitle", { name: APP_NAME, version: appVersion() })} subtitle={label}>
       <button
         // The update dialog follows the check and asks before any restart
         // ("Restart to install" or "Later"); this button never installs.
@@ -153,8 +154,8 @@ function PrereleaseRow() {
   return (
     <SettingRow
       title={t("settings.updates.channel.title")}
-      subtitle={t("settings.updates.channel.short")}
-      help={t("settings.updates.prerelease.subtitle")}
+      subtitle={t("settings.updates.channel.help")}
+      help={t("settings.updates.channel.originHelp")}
     >
       <PillSelect value={channel} options={options} ariaLabel={t("settings.updates.channel.title")} onChange={(next) => void setChannel(next)} />
     </SettingRow>
@@ -170,8 +171,7 @@ function AutoInstallAwayRow() {
   return (
     <SettingRow
       title={t("settings.updates.away.title")}
-      subtitle={t("settings.updates.away.short")}
-      help={t("settings.updates.away.help")}
+      subtitle={t("settings.updates.away.help")}
     >
       <Switch checked={on} aria-label={t("settings.updates.away.title")} onClick={() => void setAway(!on)} />
     </SettingRow>
@@ -427,15 +427,27 @@ export function SettingsModal() {
               </div>
             )}
 
-            {/* #2090: Updates is its own page (desktop only). */}
+            {/* #2080: Updates, untitled card + links (release notes, About). */}
             {section === "updates" && (
-              <div data-settings-card="updates">
-                <SettingsGroup title={t("settings.updates.group")} groupId="updates">
-                  <UpdatesRow />
-                  <PrereleaseRow />
-                  <AutoInstallAwayRow />
-                </SettingsGroup>
-              </div>
+              <>
+                <div data-settings-card="updates">
+                  <SettingsGroup groupId="updates">
+                    <UpdatesRow />
+                    <PrereleaseRow />
+                    <AutoInstallAwayRow />
+                  </SettingsGroup>
+                </div>
+                <div data-settings-card="updates.links">
+                  <SettingsGroup groupId="updatesLinks">
+                    <LinkRow
+                      rowId="releaseNotes"
+                      label={t("settings.updates.links.releaseNotes")}
+                      onClick={() => requestReleaseNotes("browse")}
+                    />
+                    <LinkRow rowId="aboutFromUpdates" label={t("settings.updates.links.about")} onClick={openAbout} />
+                  </SettingsGroup>
+                </div>
+              </>
             )}
 
             {/* #2080 L2: App keeps startup, help, holding; About window opens from the link. */}

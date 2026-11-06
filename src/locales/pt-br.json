@@ -1939,7 +1939,6 @@
   "settings.updates.failed": "Falha na atualização: {message}",
   "settings.updates.handedOff": "Comando copiado — conclua a atualização no seu terminal.",
   "settings.updates.install": "Instalar",
-  "settings.updates.latest": "Você está na versão mais recente que conhecemos.",
   "settings.updates.opening": "Abrindo…",
   "settings.updates.openingTerminal": "Abrindo um terminal…",
   "settings.updates.preparing": "Download concluído. O macOS está preparando a atualização.",

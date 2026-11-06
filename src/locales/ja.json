@@ -41,7 +41,6 @@
   "settings.updates.ready": "{version} の準備ができました — 再起動で適用されます",
   "settings.updates.failed": "アップデートに失敗しました: {message}",
   "settings.updates.unknownError": "不明なエラー",
-  "settings.updates.latest": "把握している中で最新のバージョンです。",
   "settings.updates.restart": "再起動してインストール",
   "settings.updates.check": "アップデートを確認",
   "settings.diagnostics.title": "診断情報",

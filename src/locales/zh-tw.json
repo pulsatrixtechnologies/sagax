@@ -125,7 +125,6 @@
   "settings.updates.ready": "{version} 已就緒，重新啟動即可套用",
   "settings.updates.failed": "更新失敗：{message}",
   "settings.updates.unknownError": "不明錯誤",
-  "settings.updates.latest": "你使用的已是我們所知的最新版本。",
   "settings.updates.restart": "重新啟動並安裝",
   "settings.updates.check": "檢查更新",
   "settings.diagnostics.title": "診斷資訊",

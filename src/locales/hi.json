@@ -41,7 +41,6 @@
   "settings.updates.ready": "{version} तैयार — लागू करने के लिए पुनः आरंभ करें",
   "settings.updates.failed": "अपडेट विफल: {message}",
   "settings.updates.unknownError": "अज्ञात त्रुटि",
-  "settings.updates.latest": "आपके पास हमें ज्ञात सबसे नया संस्करण है।",
   "settings.updates.restart": "पुनः आरंभ कर इंस्टॉल करें",
   "settings.updates.check": "अपडेट जाँचें",
   "settings.diagnostics.title": "डायग्नोस्टिक्स",

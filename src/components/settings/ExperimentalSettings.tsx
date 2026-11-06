@@ -1,10 +1,9 @@
-// Settings > Experimental (#2093): a list of switches and nothing else.
+// Settings > Experimental (#2093 / #2080): a list of switches and nothing else.
 // One row = a label, a consequence line, a switch. Features this server
 // cannot run sit under "Needs a server update". Developer pods sit under
 // "Developer". Decision model lives only on Models (its own master switch).
 // #2080 L3: built-in browser and My Chrome live on Computer.
-// Phone calls show for every org member (read-only for non-admins), never
-// behind an admin-only gate.
+// #2080: phone calls live on Voice (same read-only card for every org member).
 import { useEffect, useState } from "react";
 import { api, useStore, type ConfigStatus } from "@/state/store";
 import { dataWindowEnabled, llmThreadTitlesEnabled, meetingNotetakerEnabled, skillAuthoringEnabled } from "@/lib/feature-flags";
@@ -17,8 +16,6 @@ import { canManageExperimental } from "@/lib/viewer";
 import { useServerFeature } from "@/lib/server-features";
 import { featureMissingOnServer } from "@/lib/server-route";
 import { isPersonalFeature } from "../../../shared/person-settings";
-import { usePerspicaxOrg } from "@/lib/perspicax-org";
-import { OrgPhoneCalls } from "./OrgPhoneCalls";
 import { SkillReviewSettings } from "./SkillReviewSettings";
 
 type ExperimentalFeature = "skillAuthoring" | "dataWindow" | "meetingNotetaker" | "llmThreadTitles";
@@ -111,9 +108,6 @@ export function ExperimentalSettings() {
   // hand edit of config.json; they get their switch here.
   const llmThreadTitles = llmThreadTitlesEnabled(state.config);
   const llmThreadTitlesServed = typeof state.config?.features?.llmThreadTitles === "boolean";
-  const org = usePerspicaxOrg();
-  const orgPresent = Boolean(org);
-  const orgAdmin = org?.viewerRole === "admin";
   const [saving, setSaving] = useState<ExperimentalFeature | null>(null);
   const [error, setError] = useState("");
 
@@ -272,20 +266,6 @@ export function ExperimentalSettings() {
           </DescribedRow>
         </div>
       </FoldRow>
-
-      {orgPresent && (
-        <SettingsGroup groupId="experimentalPhone" title={t("orgCalls.title")}>
-          {orgAdmin ? (
-            <OrgPhoneCalls />
-          ) : (
-            <DescribedRow
-              label={t("orgCalls.title")}
-              rowId="phoneCalls"
-              description={t("settings.experimental.phoneCallsOrg")}
-            />
-          )}
-        </SettingsGroup>
-      )}
 
       {personalMissing && <p role="note" data-needs-server-update="" className="px-1 text-[12px] text-ink-secondary">{t("serverRoute.needsUpdate")}</p>}
       {error ? <p role="alert" className="px-1 text-[12px] text-danger">{error}</p> : null}

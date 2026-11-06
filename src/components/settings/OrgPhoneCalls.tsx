@@ -1,10 +1,9 @@
-// Settings > Experimental (#2093): the phone call pilot (parité R13,
-// EFVP 2026-10-22, server/outbound/outbound-calls.ts). Same page for every
-// org member; admins edit here, members see a read-only row with a Perspicax
-// link (ExperimentalSettings). Off until turned on; every call says the
-// callback number set here; numbers on the do-not-call list are never called.
-// The callback number and the do-not-call list show only while the switch is
-// on; what was typed or saved is kept (the rows are hidden, nothing is cleared).
+// Org phone-call pilot form (parité R13, EFVP 2026-10-22,
+// server/outbound/outbound-calls.ts). Settings > Voice shows a read-only
+// status card for every org member (#2080); this editable form stays for the
+// gallery and layout tests until Perspicax owns the admin editor. Off until
+// turned on; every call says the callback number; numbers on the do-not-call
+// list are never called. Callback and do-not-call rows show only while on.
 import { useCallback, useEffect, useState } from "react";
 
 import { t } from "@/lib/i18n";

@@ -213,7 +213,6 @@
   "chat.findShortcut": "Buscar en la conversación (⌘F)",
   "chat.stop": "Detener",
   "chat.stopTurn": "Detener este turno",
-  "chat.computer": "Equipo del bot",
   "chat.inspector": "Inspector",
   "chat.inspectorHint": "Inspector: eventos de ejecución y protocolo en bruto de esta conversación",
   "chat.conversationWith": "Conversación con {name}",

@@ -348,7 +348,6 @@
   "chat.findShortcut": "Знайти в розмові (⌘F)",
   "chat.stop": "Стоп",
   "chat.stopTurn": "Зупинити цей запит",
-  "chat.computer": "Комп'ютер бота",
   "chat.inspector": "Інспектор",
   "chat.inspectorHint": "Інспектор — події рантайму і сирий протокол цієї гілки",
   "chat.conversationWith": "Розмова з {name}",

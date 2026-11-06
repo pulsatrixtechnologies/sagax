@@ -55,7 +55,7 @@ export const TOUR_STEPS: TourStep[] = [
   { id: "tour.composer", anchor: "composer", placement: "above" },
   // the model lives in the composer's + menu (2026-10-18)
   { id: "tour.model", anchor: "composer-plus", placement: "above" },
-  // Advanced / remote Simple header carries data-tour="computer"; Simple without it skips (Refs #2000).
+  // The chat header has no Computer button since 2026-11-05: this step skips.
   { id: "tour.computer", anchor: "computer", skipIfMissing: true, placement: "below", onExit: "openComputer" },
   // every step that lives inside something the previous step opened also
   // opens it on enter, so a reload mid-tour rebuilds the scene

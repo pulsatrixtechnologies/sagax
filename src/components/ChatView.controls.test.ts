@@ -483,25 +483,17 @@ describe("thread control placement", () => {
     expect(renderToStaticMarkup(createElement(ChatView, { bot: { ...bot, busy: false } }))).not.toContain("primary-bot-badge");
   });
 
-  // Refs #2000: the guided tour's Computer step needs data-tour="computer".
-  it("anchors the guided tour's Computer step on the header control in Advanced mode", () => {
-    setAdvancedMode(true);
+  // JC 2026-11-05: no Computer button in the chat header, in any mode.
+  it("draws no Computer button in the chat header", () => {
     try {
-      const advanced = renderToStaticMarkup(createElement(ChatView, { bot: { ...bot, busy: false } }));
-      expect(advanced).toContain('data-tour="computer"');
+      for (const mode of [true, false]) {
+        setAdvancedMode(mode);
+        const markup = renderToStaticMarkup(createElement(ChatView, { bot: { ...bot, busy: false } }));
+        expect(markup).not.toContain('data-tour="computer"');
+      }
       setAdvancedMode(false);
-      const simple = renderToStaticMarkup(createElement(ChatView, { bot: { ...bot, busy: false } }));
-      expect(simple).not.toContain('data-tour="computer"');
-    } finally {
-      setAdvancedMode(false);
-    }
-  });
-
-  it("keeps the Computer tour anchor for a remote client's Simple header", () => {
-    setAdvancedMode(false);
-    window.ogb = { remoteClient: { active: true } } as NonNullable<Window["ogb"]>;
-    try {
-      expect(renderToStaticMarkup(createElement(ChatView, { bot: { ...bot, busy: false } }))).toContain('data-tour="computer"');
+      window.ogb = { remoteClient: { active: true } } as NonNullable<Window["ogb"]>;
+      expect(renderToStaticMarkup(createElement(ChatView, { bot: { ...bot, busy: false } }))).not.toContain('data-tour="computer"');
     } finally {
       delete window.ogb;
       setAdvancedMode(false);

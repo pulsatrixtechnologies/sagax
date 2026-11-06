@@ -318,7 +318,6 @@
   "chat.findShortcut": "在對話中尋找（⌘F）",
   "chat.stop": "停止",
   "chat.stopTurn": "停止這個回合",
-  "chat.computer": "機器人的電腦",
   "chat.inspector": "檢視器",
   "chat.inspectorHint": "檢視器 — 這個對話的執行階段事件與原始協定",
   "chat.conversationWith": "與 {name} 的對話",

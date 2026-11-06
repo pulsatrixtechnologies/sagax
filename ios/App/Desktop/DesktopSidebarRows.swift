@@ -390,7 +390,7 @@ struct DesktopSidebarRow: View {
                         Circle().fill(theme.accent).frame(width: 6, height: 6)
                     }
                 }
-                .frame(height: 20, alignment: .firstTextBaseline)
+                .frame(height: 20, alignment: .topLeading)
                 if !threadsOpen, !compact || quietStatus {
                     HStack(spacing: 0) {
                         statusLine(status)

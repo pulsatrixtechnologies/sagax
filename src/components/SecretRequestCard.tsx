@@ -2,7 +2,7 @@ import { t } from "@/lib/i18n";
 import { useState, type FormEvent } from "react";
 import { ExternalLink, KeyRound, Loader2, LockKeyhole, RefreshCw, X } from "lucide-react";
 
-import { CUSTOM_SECRET_TARGET, credentialConfigPatch, credentialResumeOutcome, type CredentialTargetId } from "../../shared/credential-request";
+import { CUSTOM_SECRET_TARGET, credentialConfigPatch, credentialResumeOutcome, desktopCredentialSlot, isCredentialTargetId, type CredentialTargetId } from "../../shared/credential-request";
 import { VAULT_LOGIN_TARGET } from "../../shared/credential-vault";
 import { cn } from "@/lib/cn";
 import { api, useStore, type ConfigStatus, type Message } from "@/state/store";
@@ -35,7 +35,12 @@ function ApiKeyRequestCard({
   const secret = message.secret!;
   const custom = secret.target === CUSTOM_SECRET_TARGET;
   const target = secret.target as CredentialTargetId;
-  const remoteClient = window.ogb?.remoteClient?.active === true;
+  // A page reached through a desktop paired to another computer: a key that computer keeps in its own encrypted store can
+  // only be typed there. A custom secret the server keeps is typed here like on any page.
+  const onlyOnHost = window.ogb?.remoteClient?.active === true
+    && secret.target !== CUSTOM_SECRET_TARGET
+    && isCredentialTargetId(secret.target)
+    && desktopCredentialSlot(secret.target) !== null;
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [savedLocally, setSavedLocally] = useState(false);
@@ -185,7 +190,7 @@ function ApiKeyRequestCard({
       onDismiss={dismiss}
       dismissLabel="Not now"
     >
-      {remoteClient ? (
+      {onlyOnHost ? (
         <div className="text-[12.5px] leading-relaxed text-ink-secondary">
           {t("secretRequest.hostOnly")}
         </div>

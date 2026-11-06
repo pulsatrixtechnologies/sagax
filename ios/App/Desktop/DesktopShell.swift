@@ -1,5 +1,5 @@
 // iPad I1: the desktop shell. A row like the Electron window's: the sidebar
-// (280), the content, and the bot panel (360) docked at 1024 pt and wider,
+// (280), the content, and the bot panel (308) docked at 1024 pt and wider,
 // over the leading edge below (spec "SwiftUI architecture", "At each iPad
 // width"). Not `NavigationSplitView`: it cannot say "dock at 1024, overlay
 // below" and brings its own columns, toolbars and glass.
@@ -55,7 +55,8 @@ enum DesktopShellRules {
     static let sidebarWidth: CGFloat = 280
     /// The collapsed sidebar: the icon rail (SIDEBAR_RAIL_WIDTH).
     static let railWidth: CGFloat = 80
-    static let panelWidth: CGFloat = 360
+    /// Bot panel like Grok Bot (`BOT_PANEL_BOUNDS` fallback 308, #2141).
+    static let panelWidth: CGFloat = 308
     /// The desktop's title band: the top inset of the sidebar and the panel.
     static let topBand: CGFloat = 36
     /// The transcript and composer column caps here (ChatView.tsx:1482).
@@ -481,7 +482,7 @@ struct DesktopShell: View {
             // modal, as the desktop's (2026-11-03 references).
             if !docked, botOpen, let bot = selectedBot {
                 // Below 1024 the panel covers the leading edge (measured at
-                // 834: x 0, 360 wide), the chat still visible to its right.
+                // 834: x 0, panel width), the chat still visible to its right.
                 Color.black.opacity(0.001)
                     .onTapGesture { model.togglePanel() }
                 AnyView(BotPanel(bot: bot, docked: false))

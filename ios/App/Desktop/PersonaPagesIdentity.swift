@@ -210,17 +210,8 @@ struct PersonaIdentityPage: View {
         return HumanID.readable(person?.name, person?.login, ownerId, or: AppStrings.localized("Unknown person"))
     }
 
-    /// `personaSharingSummary`: the grants, else who may see it, else not shared.
-    private var sharing: String {
-        let grants = current.grants?.count ?? current.directGrants?.count ?? 0
-        if grants > 0 { return String(format: AppStrings.localized("Shared with %@"), String(grants)) }
-        switch current.visibility {
-        case .everyone: return AppStrings.localized("Everyone who can sign in")
-        case .admins: return AppStrings.localized("Admins only")
-        case .people: return AppStrings.localized("Only these people")
-        case nil: return AppStrings.localized("Not shared with anyone yet.")
-        }
-    }
+    /// `personaSharingSummary` (`BotSharingSummary`, #2141).
+    private var sharing: String { BotSharingSummary.summary(for: current) }
 
     // MARK: Saving
 

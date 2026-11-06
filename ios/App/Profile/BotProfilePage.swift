@@ -79,12 +79,17 @@ struct BotProfilePage: View {
         ScrollView {
             VStack(spacing: 0) {
                 banner
-                identityBlock
-                tabPills
-                    .padding(.top, 16)
-                    .padding(.bottom, 12)
-                tabBody
-                    .padding(.bottom, 48)
+                VStack(spacing: 0) {
+                    identityBlock
+                    tabPills
+                        .padding(.top, 16)
+                        .padding(.bottom, 12)
+                    tabBody
+                        .padding(.bottom, 48)
+                }
+                // Main-column profile: content column ~622 pt like Grok Bot (#2141).
+                .frame(maxWidth: fillsMain ? 622 : .infinity)
+                .frame(maxWidth: .infinity)
             }
         }
         .scrollIndicators(.visible)
@@ -105,16 +110,14 @@ struct BotProfilePage: View {
     // MARK: Header
 
     private var banner: some View {
+        // Quiet grey gradient like Grok Bot (`bot-profile-banner`, #2141),
+        // not the mascot's colour.
         LinearGradient(
-            colors: [
-                Theme.cardRaised,
-                Theme.card,
-                Theme.bg,
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
+            colors: bannerColors,
+            startPoint: .top,
+            endPoint: .bottom
         )
-        .frame(height: 120)
+        .frame(height: fillsMain ? 90 : 120)
         .frame(maxWidth: .infinity)
         .overlay(alignment: .bottomLeading) {
             BotMascotView(
@@ -128,7 +131,22 @@ struct BotProfilePage: View {
             .offset(y: 28)
             .accessibilityIdentifier("bot-profile-mascot")
         }
+        .accessibilityIdentifier("bot-profile-banner")
         .accessibilityHidden(true)
+    }
+
+    private var bannerColors: [Color] {
+        // light-dark(#ececec, #3a3a3a) → light-dark(#e0e0e0, #2a2a2a)
+        if themePalette.isDark {
+            return [
+                Color(red: 0x3a / 255, green: 0x3a / 255, blue: 0x3a / 255),
+                Color(red: 0x2a / 255, green: 0x2a / 255, blue: 0x2a / 255),
+            ]
+        }
+        return [
+            Color(red: 0xec / 255, green: 0xec / 255, blue: 0xec / 255),
+            Color(red: 0xe0 / 255, green: 0xe0 / 255, blue: 0xe0 / 255),
+        ]
     }
 
     private var identityBlock: some View {

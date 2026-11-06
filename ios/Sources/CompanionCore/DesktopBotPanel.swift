@@ -169,16 +169,17 @@ public enum DesktopPanelPlacement: Equatable, Sendable {
     case docked, overlay
 
     public static let dockMinWidth: Double = 1024
-    public static let defaultWidth: Double = 360
-    public static let minWidth: Double = 320
+    /// Bot panel opens at 308 like Grok Bot (`BOT_PANEL_BOUNDS`, #2141).
+    public static let defaultWidth: Double = 308
+    public static let minWidth: Double = 308
     public static let maxWidth: Double = 720
 
     public static func at(windowWidth: Double) -> DesktopPanelPlacement {
         windowWidth >= dockMinWidth ? .docked : .overlay
     }
 
-    /// A stored or dragged width, held to the desktop's 320 to 720
-    /// (`SETTINGS_MIN_WIDTH`, `SETTINGS_MAX_WIDTH`); nothing stored is 360.
+    /// A stored or dragged width, held to the desktop bot panel's 308 to 720
+    /// (`BOT_PANEL_BOUNDS`, #2141).
     public static func clampedWidth(_ width: Double?) -> Double {
         guard let width, width.isFinite, width > 0 else { return defaultWidth }
         return min(maxWidth, max(minWidth, width))

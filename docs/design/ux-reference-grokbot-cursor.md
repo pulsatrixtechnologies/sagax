@@ -127,9 +127,12 @@ d'apps, puis une capsule de recherche large. Rien d'autre à l'écran.
 
 **Bureau.**
 
-- En-tête : une pastille flottante centrée (mascotte, nom du bot, petit chevron) au-dessus
-  du fil ; elle ouvre et ferme le panneau du bot. Le fil défile dessous, l'en-tête n'a
-  pas de bande opaque.
+- En-tête (Grok Bot, #2141) : une rangée centrée au-dessus du fil avec la pilule du
+  nom (mascotte d'environ 20 px, puis « Nom · Étiquette » en 14 regular), une pilule
+  qui dit qui voit le bot (« Privé » ou le libellé de partage, icône cadenas ou
+  personnes), puis un bouton rond engrenage. La pilule et l'engrenage ouvrent et
+  ferment le panneau du bot. Le fil défile dessous, l'en-tête n'a pas de bande opaque.
+  Le panneau du bot s'ouvre à environ 308 px de large.
 - Colonne de lecture étroite et centrée (environ 70 caractères). Les messages du bot sont
   des blocs à fond légèrement plus clair, coins d'environ 12 px, sans avatar répété à
   chaque message. Les messages de la personne s'alignent à droite.

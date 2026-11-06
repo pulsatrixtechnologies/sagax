@@ -22,6 +22,14 @@ describe("the Auto dispatch preview", () => {
     expect(html).toContain("Model turned off");
     expect(html).not.toContain("/api/");
   });
+  it("draws rows of the group's card: no title again, no raw details, folds behind count pills", () => {
+    const html = renderToStaticMarkup(createElement(AutoModelStatus, { status }));
+    expect(html).not.toContain("What Auto would choose now");
+    expect(html).not.toContain("<details");
+    expect(html).not.toContain("<select");
+    expect(html.match(/data-count-pill/g)?.length).toBe(2);
+    expect(html).toContain("Left out");
+  });
   it("says when no model is eligible instead of presenting a base that cannot run", () => {
     const html = renderToStaticMarkup(createElement(AutoModelStatus, { status: { ...status, chain: [] } }));
     expect(html).toContain("No active model");expect(html).not.toContain("data-auto-model-chain");

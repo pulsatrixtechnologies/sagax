@@ -68,7 +68,7 @@ try {
       // a long page: one more shot per screen until its bottom
       for (let shot = 2; shot <= 4; shot += 1) {
         const moved = await page.evaluate(() => {
-          const scrollers = [...document.querySelectorAll("[data-persona-modal] *")].filter((node) => {
+          const scrollers = [...document.querySelectorAll("[data-persona-modal], [data-persona-modal] *")].filter((node) => {
             const style = getComputedStyle(node);
             return /(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 40;
           });

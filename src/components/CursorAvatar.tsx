@@ -1251,6 +1251,7 @@ export const CursorAvatar = React.forwardRef<CursorAvatarHandle, CursorAvatarPro
         motionStrength,
         effects,
         glyphs,
+        sizePx: typeof size === "number" ? size : Number.parseFloat(String(size)) || 160,
       },
     })
     engine.current.props = {
@@ -1266,6 +1267,7 @@ export const CursorAvatar = React.forwardRef<CursorAvatarHandle, CursorAvatarPro
       motionStrength,
       effects,
       glyphs,
+      sizePx: typeof size === "number" ? size : Number.parseFloat(String(size)) || 160,
     }
 
     const selectExpression = (index: number) => {
@@ -1466,6 +1468,13 @@ export const CursorAvatar = React.forwardRef<CursorAvatarHandle, CursorAvatarPro
           return
         }
         e.pausedPaint = ''
+        // Small sidebar faces (≤64px) redraw at 20 fps; larger ones keep display rate
+        // (OpenMausBot #4149). Skipping the draw still re-arms rAF so wake-ups stay prompt.
+        const floorMs = (p.sizePx ?? 160) <= 64 ? 1000 / 20 : 1000 / 60
+        if (now - e.last < floorMs - 4) {
+          frame = requestAnimationFrame(step)
+          return
+        }
         frame = requestAnimationFrame(step)
         const dt = Math.min((now - e.last) / 1000, 0.1)
         e.last = now

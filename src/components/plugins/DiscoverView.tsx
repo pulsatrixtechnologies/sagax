@@ -16,6 +16,7 @@ import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { ConnectedMark, PluginRow, categoryPills, filterLabel, moreCategoryPills, sectionTitle } from "./ConnectAppsView";
 import { PluginIcon, PluginStatusLabel } from "./PluginParts";
 import { PLUGINS, pluginChipClass } from "./plugins-style";
+import { AccountConnectorBody, AccountConnectorStatus, AccountNoticeRow, accountRowMatches, openAccountManage, type AccountConnectorRow, type HarnessConnectorGroup, type HarnessEngine } from "./HarnessConnectorGroups";
 
 const PAGE = 60;
 const FROM_SAGAX = 6;
@@ -52,18 +53,33 @@ export interface DiscoverViewProps {
   onOpenFromSagax?: (row: FromSagaxRow) => void;
   /** View all of From Sagax: Manage */
   onViewInstalled?: () => void;
+  /** "From <provider>" (#2306): the engine accounts' connectors, after From
+   * Sagax, in its rows; Manage on <provider> is the section's link */
+  accounts?: ReadonlyArray<{ group: HarnessConnectorGroup; rows: AccountConnectorRow[] }>;
+  /** an account row with a page of its own (a Grok connector); absent: none */
+  onOpenAccount?: (row: AccountConnectorRow) => (() => void) | undefined;
+  accountsRefreshing?: boolean;
+  onAccountsRefresh?: () => void;
+  onAccountsSetUp?: (engine: HarnessEngine) => void;
   /** the centred "Add a custom connector" at the end */
   onAddCustom?: () => void;
 }
 
-export function DiscoverView({ items, loading = false, filter, onFilter, type, onType, sourceLabel, extraSources = [], focus, onOpenItem, renderAction, renderBelow, fromSagax = [], onOpenFromSagax, onViewInstalled, onAddCustom }: DiscoverViewProps) {
+export function DiscoverView({ items, loading = false, filter, onFilter, type, onType, sourceLabel, extraSources = [], focus, onOpenItem, renderAction, renderBelow, fromSagax = [], onOpenFromSagax, onViewInstalled, accounts = [], onOpenAccount, accountsRefreshing, onAccountsRefresh, onAccountsSetUp, onAddCustom }: DiscoverViewProps) {
   const [limit, setLimit] = useState(PAGE);
   useEffect(() => setLimit(PAGE), [filter, type]);
   const sections = mainSections(items, "", filter, type, extraSources, focus);
   const single = filter !== "all" || type !== "any";
-  const pills = categoryPills(items, filter);
-  const more = moreCategoryPills(items, filter);
+  // the account rows' categories have their pill too
+  const categorized = [...items, ...accounts.flatMap((section) => section.rows)];
+  const pills = categoryPills(categorized, filter);
+  const more = moreCategoryPills(categorized, filter);
   const ours = !single ? fromSagax : [];
+  // a category or a type keeps the account rows it matches; the notices
+  // (no account, nothing read yet) show on All only
+  const accountSections = accounts
+    .map(({ group, rows }) => ({ group, rows: rows.filter((row) => accountRowMatches(row, filter, type)), notice: !single && group.notice ? group : null }))
+    .filter((section) => section.rows.length > 0 || section.notice);
   return (
     <div data-plugins-discover>
       {(pills.length > 1 || more.length > 0) && (
@@ -103,15 +119,37 @@ export function DiscoverView({ items, loading = false, filter, onFilter, type, o
           </div>
         </section>
       )}
+      {accountSections.map(({ group, rows, notice }) => (
+        <section key={group.id} data-plugins-section={`from-${group.id}`} data-harness-group={group.id} className="mt-[30px]">
+          <SectionHead title={t("connectApps.section.fromProvider", { provider: group.source })}
+            link={{ label: t("connectApps.providers.manage", { provider: group.name }), onClick: () => openAccountManage(group.manageUrl), manage: group.id }} />
+          {group.id === "grok" && rows.length > 0 && <p className={cn(PLUGINS.rowSub, "whitespace-normal")} data-harness-grok-note>{t("connectApps.capabilities.grokOrg")}</p>}
+          <div className={PLUGINS.grid}>
+            {notice && <AccountNoticeRow group={notice} refreshing={accountsRefreshing} onRefresh={onAccountsRefresh} onSetUp={onAccountsSetUp} />}
+            {rows.map((row) => {
+              const open = onOpenAccount?.(row);
+              const body = <AccountConnectorBody row={row} />;
+              return (
+                <div key={row.key} data-plugin-row={`account:${row.key}`} data-harness-connector={row.key} className="flex min-w-0 items-center gap-3 py-[13px]">
+                  {open ? (
+                    <button type="button" onClick={open} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left" aria-label={t("connectApps.openAria", { name: row.name })}>{body}</button>
+                  ) : <span className="flex min-w-0 flex-1 items-center gap-3">{body}</span>}
+                  <AccountConnectorStatus row={row} installedMark={<ConnectedMark />} />
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ))}
       {loading && items.length === 0 ? (
         <div className="flex items-center justify-center gap-2 py-24 text-[12px] text-ink-secondary">
           <Loader2 size={14} className="animate-spin" /> {t("connectors.loadingCatalog")}
         </div>
-      ) : sections.every((section) => section.items.length === 0) ? (
+      ) : sections.every((section) => section.items.length === 0) ? (accountSections.some((section) => section.rows.length > 0) ? null : (
         <div className="mt-6 rounded-xl bg-card px-4 py-3 text-[12px] text-ink-secondary" data-plugins-empty>
           {t("connectApps.discover.empty")}
         </div>
-      ) : sections.filter((section) => section.items.length > 0).map((section) => {
+      )) : sections.filter((section) => section.items.length > 0).map((section) => {
         const shown = single ? section.items.slice(0, limit) : section.items;
         return (
           <section key={section.id} data-plugins-section={section.id} className="mt-[30px]">
@@ -150,11 +188,16 @@ export function DiscoverView({ items, loading = false, filter, onFilter, type, o
   );
 }
 
-function SectionHead({ title, id, onViewAll }: { title: string; id?: string; onViewAll?: () => void }) {
+function SectionHead({ title, id, onViewAll, link }: { title: string; id?: string; onViewAll?: () => void; link?: { label: string; onClick: () => void; manage: string } }) {
   return (
     <div className="mb-1 flex items-center justify-between gap-3">
       <h3 className={PLUGINS.sectionTitle}>{title}</h3>
-      {onViewAll && (
+      {link && (
+        <button type="button" data-harness-manage={link.manage} className={PLUGINS.sectionLink} onClick={link.onClick}>
+          {link.label}
+        </button>
+      )}
+      {!link && onViewAll && (
         <button type="button" data-plugins-view-all={id ?? ""} className={PLUGINS.sectionLink} onClick={onViewAll}>
           {t("connectApps.viewAll")}
         </button>

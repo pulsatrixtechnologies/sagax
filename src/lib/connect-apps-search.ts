@@ -33,7 +33,17 @@ export type SearchResult =
   | { kind: "item"; key: string; group: SearchGroupId; item: PluginItem }
   | { kind: "catalog"; key: string; group: SearchGroupId; item: CatalogItem }
   | { kind: "page"; key: string; group: SearchGroupId; page: SearchPage }
-  | { kind: "source"; key: string; group: SearchGroupId; source: SearchSource };
+  | { kind: "source"; key: string; group: SearchGroupId; source: SearchSource }
+  | { kind: "account"; key: string; group: SearchGroupId; account: SearchAccount };
+
+/** An engine account's connector (Claude, Grok, ChatGPT; #2306): a row of
+ * Discover's "From <provider>" and of Installed */
+export interface SearchAccount {
+  key: string;
+  name: string;
+  /** its sub-line: "connector (Claude account)" */
+  detail: string;
+}
 
 export interface SearchGroup {
   id: SearchGroupId;
@@ -48,6 +58,8 @@ export interface SearchInput {
   catalog: readonly CatalogItem[];
   pages: readonly SearchPage[];
   sources: readonly SearchSource[];
+  /** the engine accounts' connectors */
+  accounts?: readonly SearchAccount[];
 }
 
 /** Case and accents ignored, every word somewhere. */
@@ -83,6 +95,9 @@ export function searchConnectApps(input: SearchInput): SearchGroup[] {
     .filter((item) => matchesQuery(item, query) || foldedMatch(`${item.name} ${item.description}`, query))
     .sort((a, b) => Number(b.installed) - Number(a.installed) || a.name.localeCompare(b.name));
   for (const item of items) add({ kind: "item", key: `item:${item.key}`, group: itemGroup(item), item });
+  for (const account of input.accounts ?? []) {
+    if (foldedMatch(account.name, query)) add({ kind: "account", key: `account:${account.key}`, group: "apps", account });
+  }
   for (const item of input.catalog) {
     if (!matchesCatalogQuery(item, query) && !foldedMatch(catalogText(item), query)) continue;
     add({ kind: "catalog", key: `catalog:${item.key}`, group: item.kind === "bot" ? "bots" : "templates", item });

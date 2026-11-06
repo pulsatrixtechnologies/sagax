@@ -36,7 +36,7 @@ import { AccountsView } from "../plugins/AccountsView";
 import { SourcesView } from "../plugins/SourcesView";
 import { OrgSourcesAccess } from "../plugins/OrgSourcesAccess";
 import { OrgCapabilitiesAdmin, OrgCapabilitiesForMe } from "../plugins/OrgCapabilitiesSection";
-import { connectorGroups } from "../plugins/HarnessConnectorGroups";
+import { accountConnectorRows, accountConnectorSub, connectedAccountRows, connectorGroups, type AccountConnectorRow } from "../plugins/HarnessConnectorGroups";
 import { botServersAfter, botUsesServers } from "../plugins/BotsForView";
 import { PublishedPagesSettings } from "../PublishedPages";
 import { MarketplacesSection } from "../plugins/MarketplacesSection";
@@ -54,7 +54,7 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
   const {
     state, dispatch, dialogRef, mcp, stack, page, push, popTo, botsBack, botSources, botFocus, setBotFocus,
     search, setSearch, openedGroups, setOpenedGroups, activeResult, setActiveResult, filter, setFilter,
-    type, setType, tab, setTab, harness, claudeConnectors,
+    type, setType, tab, setTab, harness,
     ownerOrAdmin, libraryEditor, perspicaxOrg, organization, dataCenterFor, setDataCenterFor,
     messagesSetup, skills, setInstalling, panelError, setPanelError, panelNotice,
     scopeBot, setScopeChoice, scope, scopedPluginView, orgRevision, botCapabilities, botView,
@@ -207,7 +207,34 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     ...(githubHere ? [{ id: "github", name: t("myConnections.github.title") }] : []),
     ...(marketSummaries ?? []).map((market) => ({ id: `market:${market.name}`, name: market.name, detail: market.source })),
   ];
-  const searchGroups = searching ? searchConnectApps({ query: search, items: scopedItems, catalog: catalogItems, pages: searchPages ?? [], sources: searchSources }) : [];
+  const groups = connectorGroups({
+    claude: harness.answer?.claude ? { available: harness.answer.claude.available, reason: harness.answer.claude.reason, connectors: harness.answer.claude.connectors ?? [], manageUrl: harness.answer.manageUrl } : null,
+    claudeLoading: harness.loading && !harness.answer,
+    grok: grokConfigured ? { connectors: GROK_CLOUD_CONNECTORS } : null,
+    codex: harness.answer?.codex ?? null,
+  });
+  // the engine accounts' connectors as rows (#2306): "From <provider>" in
+  // Discover, rows of the Installed list in Manage, counted in "N connected"
+  const accountSections = groups.map((group) => ({ group, rows: accountConnectorRows(group, items) }));
+  const accountConnected = connectedAccountRows(groups);
+  const openAccount = (row: AccountConnectorRow) => {
+    if (row.engine !== "grok" || !row.id) return undefined;
+    const item = items.find((candidate) => candidate.key === `grok:${row.id}`);
+    return item ? () => openItem(item) : undefined;
+  };
+  const setUpEngine = () => {
+    close();
+    openSettings(dispatch, "engines");
+  };
+  const searchGroups = searching ? searchConnectApps({
+    query: search,
+    // a Grok connector is found as its account row (#2306)
+    items: scopedItems.filter((item) => item.source !== "grok"),
+    catalog: catalogItems,
+    pages: searchPages ?? [],
+    sources: searchSources,
+    accounts: accountSections.flatMap(({ rows }) => rows.map((row) => ({ key: row.key, name: row.name, detail: accountConnectorSub(row) }))),
+  }) : [];
   const searchLoading = searching && (searchPages === null || mcp.servers === null || (!botSources.data && !botSources.loadFailed));
   const changeSearch = (value: string) => {
     setSearch(value);
@@ -234,6 +261,14 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
     if (result.kind === "catalog") {
       chooseTab("bots");
       setBotFocus({ key: result.item.key, nonce: Date.now() });
+      return;
+    }
+    if (result.kind === "account") {
+      // its row in Discover's "From <provider>", in view
+      chooseTab("discover");
+      setFilter("all");
+      setType("any");
+      revealLater(`[data-plugin-row="${CSS.escape(result.key)}"]`);
       return;
     }
     if (result.kind === "page") {
@@ -280,12 +315,6 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
   // Bots and Pages are visible tabs (#2104, JC's review): a link selects one.
   const tabs: ConnectAppsTab[] = ["installed", "discover", "bots", "pages",
     ...(githubHere || marketRoute !== null || (marketSummaries?.length ?? 0) > 0 || orgHere ? ["sources" as const] : [])];
-  const groups = connectorGroups({
-    claude: harness.answer?.claude ? { available: harness.answer.claude.available, reason: harness.answer.claude.reason, connectors: harness.answer.claude.connectors ?? [], manageUrl: harness.answer.manageUrl } : null,
-    claudeLoading: harness.loading && !harness.answer,
-    grok: grokConfigured ? { connectors: GROK_CLOUD_CONNECTORS } : null,
-    codex: harness.answer?.codex ?? null,
-  });
 
   // one "+ Add" menu (#2104): the server, the pasted config, the skill; an
   // entry shows only where it may act. It sits in Manage's title row.
@@ -316,15 +345,14 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
           onTab={chooseTab}
           page={subpage ?? undefined}
           tabs={tabs}
-          // what "N connected" counted, on the tabs that list them (2026-10-28):
-          // the person's connected entries on Installed, the engine accounts'
-          // connectors on Providers (a bot's scope counts its plugins only)
-          counts={connectedCounts({ entries, engineConnected: scope !== "workspace" ? 0 : claudeConnectors })}
+          // what "N connected" counted (#2306): the connected rows Installed
+          // lists, its plugins and the engine accounts' connectors
+          counts={connectedCounts({ entries, engineConnected: accountConnected })}
           scope={scopeToggle}
           scopeNote={scopeControl}
           // the header's "N connected" and its icons (Grok Bot's Connect Apps)
           // counts the rows Manage lists, so the number matches what it opens
-          connected={{ count: connectedCounts({ entries, engineConnected: scope !== "workspace" ? 0 : claudeConnectors }).installed ?? 0, icons: connectedSummary(scopedItems).icons }}
+          connected={{ count: connectedCounts({ entries, engineConnected: accountConnected }).installed ?? 0, icons: connectedSummary(scopedItems).icons }}
           manageActions={addActions.length > 0 ? <AddMenu actions={addActions} /> : undefined}
           search={searchField}
           results={searchResults}
@@ -367,21 +395,13 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
                   messagesEnabled={messagesSetup?.useMessages}
                 />
               ) : undefined}
+              accounts={{ sections: accountSections, refreshing: harness.loading, onRefresh: () => void harness.load(true), onSetUp: setUpEngine, onOpen: openAccount }}
               providers={(
-            <AccountsView
-              groups={groups}
-              refreshing={harness.loading}
-              onRefresh={() => void harness.load(true)}
-              servers={organization ? <MyMcpServers /> : undefined}
-              claudeCode={!organization && canEditConfig(state.config) ? <ClaudeCodeSwitches /> : undefined}
-              // a section with no account offers to connect it (2026-10-28):
-              // Settings > Models and voice, where each engine signs in
-              onSetUp={() => {
-                close();
-                openSettings(dispatch, "engines");
-              }}
-            />
-          )}
+                <AccountsView
+                  servers={organization ? <MyMcpServers /> : undefined}
+                  claudeCode={!organization && canEditConfig(state.config) ? <ClaudeCodeSwitches /> : undefined}
+                />
+              )}
               forms={scope === "workspace" ? (
                 <>
                   {/* lot 4: the organization's declarations, owned by Perspicax */}
@@ -414,6 +434,11 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
                 if (entry) openItem(entry.primary);
               }}
               onViewInstalled={() => chooseTab("installed")}
+              accounts={accountSections}
+              onOpenAccount={openAccount}
+              accountsRefreshing={harness.loading}
+              onAccountsRefresh={() => void harness.load(true)}
+              onAccountsSetUp={setUpEngine}
               onAddCustom={scope === "workspace" && !mcp.restricted ? () => push({ page: "connector" }) : undefined}
             />
           )}

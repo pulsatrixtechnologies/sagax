@@ -29,6 +29,8 @@ overrides:
   # One zod 4 for every package: the direct dependency is 4.6.6.
   "zod@>=4.0.0 <4.6.6": 4.6.6
   dompurify: 3.4.17
+  # minimatch 7.x to 10.x is open to the globparts DoS (GHSA-g3hv-75wg-m249); 11.0.1 is the fix.
+  "minimatch@>=7.0.0 <11.0.1": 11.0.1
   # ajv 8.20 still allows fast-uri 3.1.8. 3.1.9 fixes the published advisories.
   fast-uri: 3.1.9
   sharp@<0.35.5: 0.35.5

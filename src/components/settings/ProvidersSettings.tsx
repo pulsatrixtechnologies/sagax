@@ -299,7 +299,7 @@ function ProviderDetail({ row, member, issuer, showKey }: { row: ProviderRow; me
         <div key={instance.instanceId} className="flex min-w-0 flex-col gap-1">
           {instances.length > 1 && <span className="text-[12px] font-medium text-ink">{instance.displayName}</span>}
           <EngineRow instance={instance} mine={issuer ? mineAll?.find((engine) => engine.instanceId === instance.instanceId) : undefined} member={member} issuer={issuer} bare keysManaged
-            advancedFold advancedExtra={<>{explain}{copyId}</>} />
+            advancedExtra={<>{explain}{copyId}</>} />
         </div>
       ))}
       {!engineFolds && (

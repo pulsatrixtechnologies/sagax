@@ -517,6 +517,34 @@ export function CountPill({ count, open, onToggle, label, controls }: {
   );
 }
 
+/** A part of a row that opens on demand (#2080): a grey label with the
+ * chevron of a CountPill, never a raw `<details>` triangle. The body stays
+ * mounted while folded, as a `<details>` body did. */
+export function InlineFold({ label, defaultOpen = false, className, children }: {
+  label: React.ReactNode;
+  defaultOpen?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const bodyId = useId();
+  return (
+    <div data-inline-fold={open ? "open" : "closed"} className={cn("min-w-0", className)}>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={bodyId}
+        onClick={() => setOpen(!open)}
+        className="inline-flex min-h-[44px] items-center gap-1 rounded-md text-[12px] font-medium text-ink-secondary outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-accent/70 motion-reduce:transition-none md:min-h-[28px]"
+      >
+        {label}
+        <ChevronDown size={13} aria-hidden="true" className={cn("transition-transform motion-reduce:transition-none", open && "rotate-180")} />
+      </button>
+      <div id={bodyId} hidden={!open} className="mt-1">{children}</div>
+    </div>
+  );
+}
+
 /** A small number field with its unit ("5 min"), for a row's right side.
  * It saves on blur and on Enter, as the forms it replaces did. */
 export function UnitField({

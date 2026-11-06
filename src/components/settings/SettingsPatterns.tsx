@@ -31,6 +31,13 @@ export function StatusText({ tone, children }: { tone: keyof typeof STATUS_TONE;
   return <span data-status-text={tone} className={STATUS_TONE[tone]}>{children}</span>;
 }
 
+/** A read-only value at a row's right ("+1 514 555 0142", "5 min"): the
+ * size and grey of the neighbouring pill values, never status-coloured
+ * large text (#2080). */
+export function RowValue({ children }: { children: React.ReactNode }) {
+  return <span data-row-value="" className="text-[13px] leading-[18px] text-ink-secondary tabular-nums">{children}</span>;
+}
+
 /** The first card of the Organization page: the organization's name and
  * the person's role on one grey line, with optional Manage in Perspicax. */
 export function OrgBand({ name, role, action }: { name: string; role?: React.ReactNode; action?: React.ReactNode }) {

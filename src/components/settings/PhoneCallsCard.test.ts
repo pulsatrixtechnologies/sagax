@@ -31,6 +31,15 @@ describe("PhoneCallsCard (#2080)", () => {
     expect(html).not.toContain('data-settings-row="phoneCallsCallback"');
   });
 
+  it("names the card once and keeps the state on the row's grey line", async () => {
+    const { PhoneCallsCard } = await import("./PhoneCallsCard");
+    const html = renderToStaticMarkup(createElement(PhoneCallsCard));
+    expect(html.split("Phone calls (pilot)").length - 1).toBe(1);
+    expect(html).toContain("Allow phone calls");
+    expect(html).toContain("Set by your organization.");
+    expect(html).not.toContain("On · callback");
+  });
+
   it("draws nothing outside an organization", async () => {
     fixture.org = null as never;
     const { PhoneCallsCard } = await import("./PhoneCallsCard");

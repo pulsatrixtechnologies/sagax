@@ -7,8 +7,8 @@ import { useEffect, useState } from "react";
 import { t } from "@/lib/i18n";
 import { api } from "@/state/store";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
-import { CompactRow, SettingsGroup } from "../SettingsPrimitives";
-import { StatusText } from "./SettingsPatterns";
+import { DescribedRow, SettingsGroup } from "../SettingsPrimitives";
+import { RowValue, StatusText } from "./SettingsPatterns";
 import type { PhoneCallSettings } from "./OrgPhoneCalls";
 
 /** "+15145550142" as "+1 514 555 0142". */
@@ -34,23 +34,25 @@ export function PhoneCallsCard() {
 
   const on = Boolean(settings?.enabled);
   const callback = settings?.callbackNumber ? shown(settings.callbackNumber) : "";
-  const status = !settings
-    ? "…"
-    : on && callback
-      ? t("voice.phoneCalls.onWithCallback", { number: callback })
-      : t(on ? "settings.card.on" : "settings.card.off");
 
+  // #2080: one title (the group's); the state word on the row's grey line
+  // as the neighbouring rows show theirs, the callback number as a plain
+  // value at the right of its own row.
   return (
     <div data-settings-card="voice.phoneCalls">
       <SettingsGroup groupId="voicePhoneCalls" title={t("orgCalls.title")}>
-        <CompactRow
-          label={t("orgCalls.title")}
+        <DescribedRow
+          label={t("orgCalls.enabled")}
           rowId="phoneCalls"
+          help={t("orgCalls.intro")}
           keywords={`${t("orgCalls.callback")} ${t("orgCalls.doNotCall")}`}
-        >
-          <StatusText tone={on ? "success" : "neutral"}>{status}</StatusText>
-        </CompactRow>
-        <p className="px-3.5 pb-2 text-[12px] leading-4 text-ink-secondary">{t("voice.phoneCalls.orgReadonly")}</p>
+          description={<>{t("voice.phoneCalls.orgReadonly")}{settings && <> · <StatusText tone={on ? "success" : "neutral"}>{t(on ? "settings.card.on" : "settings.card.off")}</StatusText></>}</>}
+        />
+        {settings && (
+          <DescribedRow label={t("orgCalls.callback")} rowId="phoneCalls.callback" description={callback ? undefined : t("orgCalls.noCallback")}>
+            {callback && <RowValue>{callback}</RowValue>}
+          </DescribedRow>
+        )}
       </SettingsGroup>
     </div>
   );

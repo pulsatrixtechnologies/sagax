@@ -6,6 +6,7 @@ import { t } from "@/lib/i18n";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { api, useStore, type Bot } from "@/state/store";
 import { readableError } from "@/lib/plain-error";
+import { PillSelect } from "../SettingsPrimitives";
 
 export interface PublishedComputer {
   deviceId: string;
@@ -73,23 +74,19 @@ export function BotHostForm({
         <p className="mt-2 text-[12px] leading-4 text-ink-secondary">{t("botPanel.model.hostNoComputer")}</p>
       )}
       {machineId && options.length > 0 && (
-        <label className="mt-3 block text-[13px] leading-[18px] text-ink">
+        <div className="mt-3 flex items-center justify-between gap-3 text-[13px] leading-[18px] text-ink" data-bot-host-model="">
           {t("botPanel.model.hostEngines")}
-          <select
-            className="mt-1 block w-full"
-            data-bot-host-model=""
+          <PillSelect
+            ariaLabel={t("botPanel.model.hostEngines")}
             disabled={!canEdit}
             value={options.some((option) => option.instanceId === model?.instanceId && option.model === model?.model) ? `${model?.instanceId}\u0000${model?.model}` : options[0]!.key}
-            onChange={(event) => {
-              const [instanceId, modelId] = event.target.value.split("\u0000");
+            onChange={(next) => {
+              const [instanceId, modelId] = next.split("\u0000");
               if (instanceId && modelId) onModel(instanceId, modelId);
             }}
-          >
-            {options.map((option) => (
-              <option key={option.key} value={option.key}>{option.label}</option>
-            ))}
-          </select>
-        </label>
+            options={options.map((option) => ({ value: option.key, label: option.label }))}
+          />
+        </div>
       )}
     </div>
   );

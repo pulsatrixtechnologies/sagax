@@ -19,7 +19,7 @@ import {
 import { composeSkillMd, isSkillName, parseSkillMd } from "../../../shared/skill-md";
 import { AttachmentPreviewDialog, type PreviewImage } from "../AttachmentPreview";
 import { MarkdownEditor } from "../markdown/MarkdownEditor";
-import { PILL, PRIMARY_PILL } from "../SettingsPrimitives";
+import { InlineFold, PILL, PRIMARY_PILL } from "../SettingsPrimitives";
 import { inputCls } from "./field";
 import { PanelPage } from "./PanelPage";
 import { useBotEditor } from "./BotEditorContext";
@@ -248,10 +248,9 @@ export function SkillEditorPage({
               {t("botPanel.skills.readOnlyReason")}
             </p>
           )}
-          <details className="text-[11.5px] text-ink-secondary">
-            <summary className="cursor-pointer select-none">{t("botPanel.skills.sourceLabel", { label: skillSourceLabel(payload.source) })}</summary>
-            <p className="mt-1 break-all font-mono text-[10.5px]" title={payload.source}>{payload.source}</p>
-          </details>
+          <InlineFold label={t("botPanel.skills.sourceLabel", { label: skillSourceLabel(payload.source) })}>
+            <p className="break-all font-mono text-[10.5px] text-ink-secondary" title={payload.source}>{payload.source}</p>
+          </InlineFold>
         </div>
       )}
 

@@ -44,7 +44,6 @@ const NOT_MIGRATED: Record<Rule, string[]> = {
   cardImport: [
     "settings/MyConnectionsSettings.tsx",
     "settings/OrgSharing.tsx",
-    "CacheKeepWarmSettings.tsx",
     "ComputerSharingSettings.tsx",
     "ConnectedWorkspacesSettings.tsx",
     "CustomDomainSettings.tsx",

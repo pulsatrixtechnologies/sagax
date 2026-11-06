@@ -27,7 +27,7 @@ import { canEditConfig, canManageKeys, viewerCan, viewerIsOrgMember } from "@/li
 import { viewerIsOrgAdmin } from "@/lib/group-owner";
 import { boatComputerEnabled, vpsComputerEnabled } from "@/lib/feature-flags";
 import { OrgHostToolsNote, orgRefusesEngine } from "./OrgHostToolsNote";
-import { CompactRow, DescribedRow, FIELD, FoldRow, PILL, PillSelect, SettingsFoldSection, SettingsGroup, Switch } from "./SettingsPrimitives";
+import { DescribedRow, FIELD, FoldRow, PILL, PillSelect, SettingsFoldSection, SettingsGroup, Switch } from "./SettingsPrimitives";
 import { AutoModelSettings } from "./settings/AutoModelSettings";
 import { BotModelsSettings } from "./settings/BotModelsSettings";
 import { CacheKeepWarmSettings } from "./CacheKeepWarmSettings";
@@ -233,10 +233,10 @@ export function personalEngineLine(mine: MyEngine): { ready: boolean; line: stri
  * this engine. The card then shows one line on what pays for their turns and
  * their own Connect or Disconnect (EngineConnect), never the server's account
  * (which serves no one's turns there: server/engines/engine-credentials.ts). */
-/** `advancedFold` (2026-11-05, Providers): the technical block (CLI path,
- * version, update, reset, Set CLI) as a closed Settings fold instead of a
- * `<details>`, with `advancedExtra` (Copy ID...) at its end. */
-export function EngineRow({ instance, mine, member = false, issuer = "", bare = false, keysManaged = false, advancedFold = false, advancedExtra }: { instance: InstanceInfo; mine?: MyEngine; member?: boolean; issuer?: string; bare?: boolean; keysManaged?: boolean; advancedFold?: boolean; advancedExtra?: ReactNode }) {
+/** The technical block (CLI path, version, update, reset, Set CLI) is a
+ * closed Settings fold (2026-11-05, Providers; #2080 everywhere), with
+ * `advancedExtra` (Copy ID...) at its end. */
+export function EngineRow({ instance, mine, member = false, issuer = "", bare = false, keysManaged = false, advancedExtra }: { instance: InstanceInfo; mine?: MyEngine; member?: boolean; issuer?: string; bare?: boolean; keysManaged?: boolean; advancedExtra?: ReactNode }) {
   const { refreshInstances } = useStore();
   const [open, setOpen] = useState(false);
   const cliMotion = useMenuMotion(open);
@@ -412,19 +412,11 @@ export function EngineRow({ instance, mine, member = false, issuer = "", bare = 
       {!member && instance.snapshot.chatgptPlan && !instance.snapshot.authenticationUnavailableReason && (
         <div className="mt-3"><AddProviderAccount /></div>
       )}
-      {advancedFold ? (
-        <div className="-mx-3.5 mt-3 border-t border-hairline/40">
-          <FoldRow cardId={`providers.advanced.${instance.instanceId}`} label={t("engines.library.advanced")} description={t("engines.footer")}>
-            <div data-engine-advanced={instance.instanceId} className="flex flex-col gap-2">{advanced}{advancedExtra}</div>
-          </FoldRow>
-        </div>
-      ) : (
-      <details className="mt-4 border-t border-hairline/40 pt-3">
-        <summary className="cursor-pointer rounded-md py-1 text-[12px] font-medium text-ink-secondary outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-accent">{t("engines.library.advanced")}</summary>
-        <p className="mt-2 text-[12px] leading-relaxed text-ink-secondary">{t("engines.footer")}</p>
-        {advanced}
-      </details>
-      )}
+      <div className="-mx-3.5 mt-3 border-t border-hairline/40">
+        <FoldRow cardId={`providers.advanced.${instance.instanceId}`} label={t("engines.library.advanced")} description={t("engines.footer")}>
+          <div data-engine-advanced={instance.instanceId} className="flex flex-col gap-2">{advanced}{advancedExtra}</div>
+        </FoldRow>
+      </div>
     </EngineCard>
   );
 }
@@ -531,11 +523,7 @@ export function VoiceSettingsPage() {
       </div>
       {installation ? (
         <VoiceProviderOptions installation>
-          <FoldRow cardId="voice.advanced" label={t("voice.live.title")} icon={<Phone size={14} />}>
-            <div data-voice-advanced="">
-              <LiveCallInstallationSettings />
-            </div>
-          </FoldRow>
+          <LiveCallInstallationSettings />
         </VoiceProviderOptions>
       ) : org ? <OrgLiveCallsRow /> : null}
       {/* #2080: org phone calls, same read-only card for every member */}
@@ -545,7 +533,9 @@ export function VoiceSettingsPage() {
 }
 
 /** #2080 (L1): in an organization the installation's live calls are the
- * admins'; the member reads the state (no shortcut to Perspicax, 2026-11-05). */
+ * admins'; the member reads the state (no shortcut to Perspicax, 2026-11-05).
+ * Not a switch here: the state word on the row's grey line, as the
+ * neighbouring rows show theirs. */
 function OrgLiveCallsRow() {
   const { state } = useStore();
   const live = state.config?.live;
@@ -553,9 +543,12 @@ function OrgLiveCallsRow() {
   return (
     <div data-settings-card="connections.voice" data-voice-section="">
       <SettingsGroup title={t("voiceMode.call.advanced")} groupId="voice">
-        <CompactRow label={t("voice.live.title")} rowId="voice.live.org">
-          <StatusText tone={on ? "success" : "neutral"}>{t(on ? "settings.card.on" : "settings.card.off")}</StatusText>
-        </CompactRow>
+        <DescribedRow
+          label={t("voice.live.title")}
+          icon={<Phone size={14} />}
+          rowId="voice.live.org"
+          description={<>{t("voice.phoneCalls.orgReadonly")} · <StatusText tone={on ? "success" : "neutral"}>{t(on ? "settings.card.on" : "settings.card.off")}</StatusText></>}
+        />
       </SettingsGroup>
     </div>
   );

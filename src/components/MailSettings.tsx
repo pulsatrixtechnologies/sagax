@@ -21,7 +21,7 @@ import {
   type MailProvider,
   type MailSettingsView,
 } from "../../shared/mail-settings";
-import { Card } from "./SettingsPrimitives";
+import { Card, PillSelect } from "./SettingsPrimitives";
 
 /** The fields the person edited, as typed. */
 export type MailDraft = Partial<Record<MailField, string>>;
@@ -142,12 +142,12 @@ function SelectField(props: MailSettingsFormProps & { field: MailField; options:
   const current = status.fields[field].value;
   return (
     <div>
-      <label htmlFor={id} className="block text-[13px] font-medium text-ink">{t(FIELD_LABEL[field])}</label>
-      <select id={id} value={draft[field] ?? (current === undefined ? "" : String(current))} disabled={busy !== null}
-        onChange={(event) => onChange(field, event.target.value)} className={cn(inputClass, "mt-1")}>
-        <option value="">{props.empty}</option>
-        {props.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-      </select>
+      <span id={id} className="block text-[13px] font-medium text-ink">{t(FIELD_LABEL[field])}</span>
+      <div className="mt-1">
+        <PillSelect value={draft[field] ?? (current === undefined ? "" : String(current))} disabled={busy !== null}
+          ariaLabel={t(FIELD_LABEL[field])} onChange={(next) => onChange(field, next)}
+          options={[{ value: "", label: props.empty }, ...props.options]} />
+      </div>
       <FieldNote field={field} status={status} busy={busy} onRevert={props.onRevert} />
     </div>
   );

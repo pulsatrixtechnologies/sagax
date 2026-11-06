@@ -239,7 +239,7 @@ export function isBridgeWebhookUrl(value: unknown): value is string {
 
 /** Link key: at least 16 bytes of entropy as a printable secret. */
 export function isBridgeLinkKey(value: unknown): value is string {
-  return typeof value === "string" && value.length >= 16 && value.length <= 512 && !/[\u0000-\u001f]/.test(value);
+  return typeof value === "string" && value.length >= 16 && value.length <= 512 && ![...value].some((ch) => ch.charCodeAt(0) < 0x20);
 }
 
 /** Opaque public link id (never the principal id). */

@@ -18,7 +18,7 @@
 // started it and ended with it (provider-auth-sessions.ts).
 //
 // A subscription only ever serves its owner speaking (engine-credentials.ts).
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import { writeFileAtomic } from "../atomic.ts";
@@ -89,6 +89,16 @@ export function loginCliFor(driver: string, configured: unknown, driverDefault: 
 const LOGIN_DIR: Readonly<Record<LoginDriver, string>> = { claudeAgent: "claude", codex: "codex", grokAgent: "grok", kimiAgent: "kimi" };
 /** The drivers with a second sign-in per person, and its directory. */
 const SECOND_LOGIN_DIR: Readonly<Partial<Record<LoginDriver, string>>> = { grokAgent: "grok-2" };
+/** 2026-11-06 (#2373): an account added next to a driver's first one
+ * (Providers > Add account: `claude-<uuid>`, `chatgpt-<uuid>`,
+ * `antigravity-<uuid>`) keeps its own sign-in per person. Every other
+ * instance of a driver shares the person's first sign-in, the folder it has
+ * always used, so nobody signed in before loses it. */
+const SEPARATE_ACCOUNT = /^[a-z][\w.]*-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function separateAccountInstance(instanceId: string | null | undefined): instanceId is string {
+  return typeof instanceId === "string" && SEPARATE_ACCOUNT.test(instanceId);
+}
+
 export function secondLoginSupported(driver: string): boolean {
   return isLoginDriver(driver) && SECOND_LOGIN_DIR[driver] !== undefined;
 }
@@ -176,41 +186,40 @@ export class PrincipalEngineLogins {
 
   /** The person's login directory for a driver (not created); `slot`
    * "second" is their second sign-in on a driver that keeps one (Grok). */
-  loginDir(principalId: string, driver: LoginDriver, slot: LoginSlot = "primary"): string {
+  loginDir(principalId: string, driver: LoginDriver, slot: LoginSlot = "primary", instanceId?: string): string {
     if (!isPrincipalId(principalId)) throw failure("not a person", 400);
-    if (slot === "second") {
-      const dir = SECOND_LOGIN_DIR[driver];
-      if (!dir) throw failure("This engine keeps one sign-in per person.", 400);
-      return join(this.options.dataDir, "principals", principalId, dir);
-    }
-    return join(this.options.dataDir, "principals", principalId, LOGIN_DIR[driver]);
+    const name = slot === "second" ? SECOND_LOGIN_DIR[driver] : LOGIN_DIR[driver];
+    if (!name) throw failure("This engine keeps one sign-in per person.", 400);
+    // #2373: an added account signs in, refreshes and signs out in its own folder
+    if (separateAccountInstance(instanceId)) return join(this.options.dataDir, "principals", principalId, "accounts", instanceId, name);
+    return join(this.options.dataDir, "principals", principalId, name);
   }
 
-  signedIn(principalId: string, driver: string, slot: LoginSlot = "primary"): boolean {
+  signedIn(principalId: string, driver: string, slot: LoginSlot = "primary", instanceId?: string): boolean {
     if (!isLoginDriver(driver) || !isPrincipalId(principalId)) return false;
     if (slot === "second" && !SECOND_LOGIN_DIR[driver]) return false;
-    return existsSync(join(this.loginDir(principalId, driver, slot), LOGIN_MARKER));
+    return existsSync(join(this.loginDir(principalId, driver, slot, instanceId), LOGIN_MARKER));
   }
 
   /** #1533: signed in, but the provider refused the sign-in since. */
-  expired(principalId: string, driver: string, slot: LoginSlot = "primary"): boolean {
-    if (!this.signedIn(principalId, driver, slot)) return false;
-    return existsSync(join(this.loginDir(principalId, driver as LoginDriver, slot), LOGIN_EXPIRED_MARKER));
+  expired(principalId: string, driver: string, slot: LoginSlot = "primary", instanceId?: string): boolean {
+    if (!this.signedIn(principalId, driver, slot, instanceId)) return false;
+    return existsSync(join(this.loginDir(principalId, driver as LoginDriver, slot, instanceId), LOGIN_EXPIRED_MARKER));
   }
 
   /** #1533: note that the provider refused this person's sign-in. Nothing
    * when they are not signed in. */
-  markExpired(principalId: string, driver: string, slot: LoginSlot = "primary"): void {
-    if (!this.signedIn(principalId, driver, slot)) return;
-    writeFileAtomic(join(this.loginDir(principalId, driver as LoginDriver, slot), LOGIN_EXPIRED_MARKER), JSON.stringify({ at: this.now() }), { mode: 0o600 });
+  markExpired(principalId: string, driver: string, slot: LoginSlot = "primary", instanceId?: string): void {
+    if (!this.signedIn(principalId, driver, slot, instanceId)) return;
+    writeFileAtomic(join(this.loginDir(principalId, driver as LoginDriver, slot, instanceId), LOGIN_EXPIRED_MARKER), JSON.stringify({ at: this.now() }), { mode: 0o600 });
   }
 
   /** #1768: a renew restored the sign-in; drop the expired note so the next
    * turn uses the subscription again without asking to reconnect. */
-  clearExpired(principalId: string, driver: string, slot: LoginSlot = "primary"): void {
+  clearExpired(principalId: string, driver: string, slot: LoginSlot = "primary", instanceId?: string): void {
     if (!isLoginDriver(driver) || !isPrincipalId(principalId)) return;
     if (slot === "second" && !SECOND_LOGIN_DIR[driver]) return;
-    rmSync(join(this.loginDir(principalId, driver, slot), LOGIN_EXPIRED_MARKER), { force: true });
+    rmSync(join(this.loginDir(principalId, driver, slot, instanceId), LOGIN_EXPIRED_MARKER), { force: true });
   }
 
   /** 2026-10-29: what a Grok sign-in of this person is (personal or team)
@@ -221,10 +230,10 @@ export class PrincipalEngineLogins {
     return readGrokAccountIdentity(join(this.loginDir(principalId, "grokAgent", slot), ".grok", "auth.json"));
   }
 
-  private ensureDir(principalId: string, driver: LoginDriver, slot: LoginSlot = "primary"): string {
+  private ensureDir(principalId: string, driver: LoginDriver, slot: LoginSlot = "primary", instanceId?: string): string {
     const personDir = join(this.options.dataDir, "principals", principalId);
     mkdirSync(personDir, { recursive: true, mode: 0o700 });
-    const dir = this.loginDir(principalId, driver, slot);
+    const dir = this.loginDir(principalId, driver, slot, instanceId);
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     try {
       chmodSync(personDir, 0o700);
@@ -235,8 +244,8 @@ export class PrincipalEngineLogins {
     return dir;
   }
 
-  private markSignedIn(principalId: string, driver: LoginDriver, slot: LoginSlot = "primary"): void {
-    const dir = this.ensureDir(principalId, driver, slot);
+  private markSignedIn(principalId: string, driver: LoginDriver, slot: LoginSlot = "primary", instanceId?: string): void {
+    const dir = this.ensureDir(principalId, driver, slot, instanceId);
     writeFileAtomic(join(dir, LOGIN_MARKER), JSON.stringify({ at: this.now() }), { mode: 0o600 });
     rmSync(join(dir, LOGIN_EXPIRED_MARKER), { force: true });
   }
@@ -253,7 +262,7 @@ export class PrincipalEngineLogins {
     const key = this.flowKey(principalId, instanceId, slot);
     let controller = this.controllers.get(key);
     if (!controller) {
-      const dir = this.ensureDir(principalId, driver, slot);
+      const dir = this.ensureDir(principalId, driver, slot, instanceId);
       const environment = () => {
         const env: Record<string, string | undefined> = { ...process.env, ...facts.environment };
         if (driver === "claudeAgent") {
@@ -278,7 +287,7 @@ export class PrincipalEngineLogins {
         return env;
       };
       const onAuthenticated = async () => {
-        this.markSignedIn(principalId, driver, slot);
+        this.markSignedIn(principalId, driver, slot, instanceId);
         if (driver === "claudeAgent") this.options.onClaudeLinked?.(principalId);
         try { this.options.onEngineSignedIn?.(principalId, driver); } catch { /* best effort */ }
         // what this Grok sign-in brings through grok.com, known before its first turn
@@ -302,8 +311,8 @@ export class PrincipalEngineLogins {
         getAuthentication: async (flowId: string) => {
           const status = await bound.get(flowId);
           // The marker follows the CLI's verdict even when the callback raced.
-          if (status.phase === "succeeded" && (!this.signedIn(principalId, driver, slot) || this.expired(principalId, driver, slot))) {
-            this.markSignedIn(principalId, driver, slot);
+          if (status.phase === "succeeded" && (!this.signedIn(principalId, driver, slot, instanceId) || this.expired(principalId, driver, slot, instanceId))) {
+            this.markSignedIn(principalId, driver, slot, instanceId);
             try { this.options.onEngineSignedIn?.(principalId, driver); } catch { /* best effort */ }
           }
           return status;
@@ -316,7 +325,8 @@ export class PrincipalEngineLogins {
           } catch {
             /* the directory goes below either way */
           }
-          rmSync(this.loginDir(principalId, driver, slot), { recursive: true, force: true });
+          // #2373: this account's folder only, never another account's
+          rmSync(this.loginDir(principalId, driver, slot, instanceId), { recursive: true, force: true });
           this.knownModels.delete(key);
           this.reachRead.delete(key);
         },
@@ -363,8 +373,8 @@ export class PrincipalEngineLogins {
 
   private accountEnv(principalId: string, instanceId: string, slot: LoginSlot = "primary"): { cli: string; env: Record<string, string | undefined> } | null {
     const facts = this.options.instance(instanceId);
-    if (!facts || facts.driver !== "grokAgent" || !facts.cli.trim() || !this.signedIn(principalId, "grokAgent", slot)) return null;
-    const dir = this.loginDir(principalId, "grokAgent", slot);
+    if (!facts || facts.driver !== "grokAgent" || !facts.cli.trim() || !this.signedIn(principalId, "grokAgent", slot, instanceId)) return null;
+    const dir = this.loginDir(principalId, "grokAgent", slot, instanceId);
     const env: Record<string, string | undefined> = { ...process.env, ...facts.environment, HOME: dir, GROK_HOME: join(dir, ".grok") };
     delete env.XAI_API_KEY;
     return { cli: facts.cli, env };
@@ -383,7 +393,7 @@ export class PrincipalEngineLogins {
     const key = this.flowKey(principalId, instanceId, slot);
     if (!force && this.reachRead.has(key)) return;
     this.reachRead.add(key);
-    const home = this.loginDir(principalId, "grokAgent", slot);
+    const home = this.loginDir(principalId, "grokAgent", slot, instanceId);
     void probe(env.cli, env.env).then((result) => { if (result) noteGrokAccountReach(home, result, this.now()); }).catch(reportBackgroundError);
   }
 
@@ -423,6 +433,14 @@ export class PrincipalEngineLogins {
         if (existsSync(join(dir, LOGIN_MARKER))) cleared += 1;
         rmSync(dir, { recursive: true, force: true });
       }
+    }
+    // #2373: the added accounts' sign-ins go with them
+    const accounts = join(this.options.dataDir, "principals", principalId, "accounts");
+    if (existsSync(accounts)) {
+      for (const instanceId of readdirSync(accounts)) {
+        for (const name of readdirSync(join(accounts, instanceId))) if (existsSync(join(accounts, instanceId, name, LOGIN_MARKER))) cleared += 1;
+      }
+      rmSync(accounts, { recursive: true, force: true });
     }
     for (const key of this.controllers.keys()) if (key.startsWith(`${principalId}/`)) this.controllers.delete(key);
     for (const key of this.knownModels.keys()) if (key.startsWith(`${principalId}/`)) this.knownModels.delete(key);

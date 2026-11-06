@@ -27,7 +27,7 @@ function autoEnginesFor(bot: BotRecord, speaker: TurnSpeaker, guestConfined = fa
     // picked by name, when the organization lets own accounts through).
     if (!host.consoleEngineAllowed(instance.instanceId)) { omit("adminOff"); continue; }
     if (host.orgEngineTurnRefusal(bot, instance, speaker)) {
-      const expired = payer && isLoginDriver(instance.driverKind) && host.engineLogins?.expired(payer, instance.driverKind);
+      const expired = payer && isLoginDriver(instance.driverKind) && host.engineLogins?.expired(payer, instance.driverKind, "primary", instance.instanceId);
       omit(expired ? "reconnect" : "credentials"); continue;
     }
     // A guest's turn on a Cloud home runs only on an engine that confines it.
@@ -49,7 +49,7 @@ function autoEnginesFor(bot: BotRecord, speaker: TurnSpeaker, guestConfined = fa
     if (host.IDENTITY.kind === "perspicax") {
       const plan = resolveEngineAccess(host.orgEngineInput(bot, instance, speaker));
       if (!plan.ok) {
-        const expired = payer && isLoginDriver(instance.driverKind) && host.engineLogins?.expired(payer, instance.driverKind);
+        const expired = payer && isLoginDriver(instance.driverKind) && host.engineLogins?.expired(payer, instance.driverKind, "primary", instance.instanceId);
         omit(expired ? "reconnect" : "credentials"); continue;
       }
       via = plan.via;

@@ -20,8 +20,8 @@ function orgEngineInput(bot: BotRecord, instance: { instanceId: string; driverKi
       const person = host.principals.byId(principalId);
       return person ? host.orgPersonFacts(person) : undefined;
     },
-    subscriptionSignedIn: (principalId, driver) => host.engineLogins?.signedIn(principalId, driver, slot) ?? false,
-    subscriptionExpired: (principalId, driver) => host.engineLogins?.expired(principalId, driver, slot) ?? false,
+    subscriptionSignedIn: (principalId, driver, instanceId) => host.engineLogins?.signedIn(principalId, driver, slot, instanceId) ?? false,
+    subscriptionExpired: (principalId, driver, instanceId) => host.engineLogins?.expired(principalId, driver, slot, instanceId) ?? false,
     hasKey: (sub, provider) => host.perspicaxDirectory?.providerKeys(sub).includes(provider) ?? false,
     keyBacked: driverKeyBacked(host.cfg, instance.driverKind, instance.instanceId),
     hasLocalKey: (principalId, driver) => fileKeyConfigured(DATA_DIR, { organization: true, principalId }, driver),

@@ -179,7 +179,7 @@ describe("materializeEngineAccess", () => {
         return typeof answer === "function" ? answer(sub, provider) : answer;
       },
       invalidate: (sub: string, provider: string) => { invalidated.push(`${sub}/${provider}`); },
-      loginDir: (principalId: string, driver: string) => `/data/principals/${principalId}/${{ claudeAgent: "claude", codex: "codex", grokAgent: "grok", kimiAgent: "kimi" }[driver]}`,
+      loginDir: (principalId: string, driver: string, instanceId?: string) => `/data/principals/${principalId}/${instanceId?.includes("-") ? `accounts/${instanceId}/` : ""}${{ claudeAgent: "claude", codex: "codex", grokAgent: "grok", kimiAgent: "kimi" }[driver]}`,
     };
   };
   const BOB_PID = BOB.toLowerCase();
@@ -204,6 +204,17 @@ describe("materializeEngineAccess", () => {
     expect(out).toMatchObject({ ok: true, access: { via: "owner-key", identity: `owner-key:${OWNER}:fp2`, environment: { SAGAX_OWNER_OPENAI_API_KEY: "sk-test-openai-000000000001" }, codexHome: join("/data", "principals", OWNER, "codex-key"), codexOwnerKey: true } });
     const bobs = input({ speaker: bob, instance: CODEX, keys: ["SUB-BOB/openai"] });
     expect(await materializeEngineAccess(bobs, resolveEngineAccess(bobs), deps({ ok: true, key: "sk-test-openai-000000000002", fingerprint: "fp3" }))).toMatchObject({ ok: true, access: { via: "speaker-key", codexHome: join("/data", "principals", BOB_PID, "codex-key"), codexOwnerKey: true } });
+  });
+
+  it("#2373: a turn on an added account runs on that account's folder and session, never the first account's", async () => {
+    const account = "claude-22222222-2222-4222-8222-222222222222";
+    const asked: string[] = [];
+    const onB = input({ instance: { instanceId: account, driver: "claudeAgent", installed: true }, subscriptionSignedIn: (_principalId, _driver, instanceId) => { asked.push(instanceId); return instanceId === account; } });
+    expect(await materializeEngineAccess(onB, resolveEngineAccess(onB), deps({ ok: false, error: "no_key" }))).toMatchObject({ ok: true, access: { via: "subscription", identity: `subscription:${OWNER}:${account}`, claudeConfigDir: `/data/principals/${OWNER}/accounts/${account}/claude` } });
+    expect(asked).toContain(account);
+    // signed out of the added account: its turn does not borrow the first account
+    const signedOutB = input({ instance: { instanceId: account, driver: "claudeAgent", installed: true }, subscriptionSignedIn: (_principalId, _driver, instanceId) => instanceId === "claude" });
+    expect(resolveEngineAccess(signedOutB)).not.toMatchObject({ via: "subscription" });
   });
 
   it("a subscription points the driver at the speaker's own login directory", async () => {

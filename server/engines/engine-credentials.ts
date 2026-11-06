@@ -74,6 +74,7 @@
 // section 4 bis.
 import type { PiModelServer } from "../drivers/pi-model-servers.ts";
 import { join } from "node:path";
+import { separateAccountInstance } from "./principal-engine-logins.ts";
 
 import { routineLineage, speakerPrincipal, type EngineAccessRefusal, type TurnSpeaker } from "./engine-access.ts";
 import type { ModelProvider, ProviderKeyResult } from "../perspicax/perspicax-link.ts";
@@ -236,11 +237,11 @@ export interface EngineCredentialInput {
   /** A person other than the owner, by principal id (undefined: unknown). */
   person?: (principalId: string) => PersonFacts | undefined;
   /** The person signed in to this driver with their own subscription (D10). */
-  subscriptionSignedIn: (principalId: string, driver: string) => boolean;
+  subscriptionSignedIn: (principalId: string, driver: string, instanceId: string) => boolean;
   /** 2026-10-30: that sign-in was refused by the provider since (#1533
    * marker, PrincipalEngineLogins.expired): it no longer pays. Absent means
    * never expired. */
-  subscriptionExpired?: (principalId: string, driver: string) => boolean;
+  subscriptionExpired?: (principalId: string, driver: string, instanceId: string) => boolean;
   /** The directory lists this provider for the person (names only). */
   hasKey: (sub: string, provider: ModelProvider) => boolean;
   /** The instance's driver reads a key the server configured (Settings >
@@ -303,10 +304,10 @@ export function resolveEngineAccess(input: EngineCredentialInput, skip: { key?: 
   if (facts?.disabled) return { ok: false, reason: "no_access", cause: "payer_disabled", ...who };
   if (input.instance.personalOwner && key(input.instance.personalOwner) !== key(payer.principalId)) return { ok: false, reason: "no_access", cause: "no_credentials", ...who };
   const driver = input.instance.driver;
-  const signedIn = Boolean(payer.principalId) && !input.instance.keyOnly && subscriptionDriver(driver) && input.subscriptionSignedIn(payer.principalId, driver);
+  const signedIn = Boolean(payer.principalId) && !input.instance.keyOnly && subscriptionDriver(driver) && input.subscriptionSignedIn(payer.principalId, driver, input.instance.instanceId);
   // An expired sign-in is skipped: the payer's key or the organization's
   // serves, else the turn asks them to reconnect.
-  const expired = signedIn && input.subscriptionExpired?.(payer.principalId, driver) === true;
+  const expired = signedIn && input.subscriptionExpired?.(payer.principalId, driver, input.instance.instanceId) === true;
   if (signedIn && !expired) {
     return { ok: true, via: "subscription", ...who };
   }
@@ -339,12 +340,19 @@ export function paidByPerson(plan: EngineCredentialPlan): boolean {
   return plan.ok && (plan.via === "subscription" || keyVia(plan.via));
 }
 
+/** #2373: a turn on an added account is that account's, never the first
+ * account's warm session (the identity keys sessions and caches). */
+export function subscriptionIdentity(payer: string, instanceId: string): string {
+  return separateAccountInstance(instanceId) ? `subscription:${payer}:${instanceId}` : `subscription:${payer}`;
+}
+
 export interface MaterializeDeps {
   dataDir: string;
   resolveKey: (sub: string, provider: ModelProvider) => Promise<ProviderKeyResult>;
   invalidate: (sub: string, provider: ModelProvider) => void;
   /** The person's login directory for a driver (principal-engine-logins.ts). */
-  loginDir: (principalId: string, driver: SubscriptionDriver) => string;
+  /** #2373: an added account (`claude-<uuid>`) has its own directory. */
+  loginDir: (principalId: string, driver: SubscriptionDriver, instanceId: string) => string;
 }
 
 export type MaterializedAccess =
@@ -364,9 +372,9 @@ export async function materializeEngineAccess(input: EngineCredentialInput, plan
   const driver = input.instance.driver;
   const payer = plan.payerPrincipalId ?? "";
   if (plan.via === "subscription" && subscriptionDriver(driver) && payer) {
-    const dir = deps.loginDir(payer, driver);
+    const dir = deps.loginDir(payer, driver, input.instance.instanceId);
     const where = driver === "claudeAgent" ? { claudeConfigDir: dir } : driver === "codex" ? { codexHome: dir } : { engineHome: dir };
-    return { ok: true, plan, access: { via: "subscription", identity: `subscription:${payer}`, ...where } };
+    return { ok: true, plan, access: { via: "subscription", identity: subscriptionIdentity(payer, input.instance.instanceId), ...where } };
   }
   if (keyVia(plan.via) && plan.localKey && payer) {
     return { ok: true, plan, access: { via: plan.via, identity: `${plan.via}:${payer}:local`, localKeyPrincipal: payer } };

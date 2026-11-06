@@ -174,6 +174,43 @@ function call(
 }
 
 describe("createThreadsHttpRoutes", () => {
+  it("flushes pending stream deltas before honouring Last-Event-ID (#1971)", async () => {
+    const flushed: string[] = [];
+    const deps = baseDeps({
+      lastSeq: () => 1,
+      cursorSeq: () => 0,
+      replayBuffer: {
+        covers: () => true,
+        [Symbol.iterator]: function* () {
+          yield { seq: 1, kind: "runtime", payload: { kind: "runtime" }, frame: "id: s:1\ndata: {}\n\n", clientFrame: null };
+        },
+      },
+      sseFrameFor: () => "id: s:1\ndata: {}\n\n",
+      flushPendingStreamDeltas: () => { flushed.push("flush"); },
+    });
+    const writes: string[] = [];
+    const res = {
+      headersSent: false,
+      writableEnded: false,
+      destroyed: false,
+      writeHead: () => res,
+      write: (chunk: string) => { writes.push(String(chunk)); return true; },
+      end: () => res,
+      on: () => res,
+      setHeader: () => res,
+      once: () => res,
+    };
+    await call(deps, {
+      path: "/api/events",
+      headers: { "last-event-id": "s:0" },
+      res: res as never,
+    });
+    expect(flushed).toEqual(["flush"]);
+    expect(writes.some((w) => w.includes('"resumed":true'))).toBe(true);
+    // Stop the SSE heartbeat started by the route.
+    for (const client of deps.sseClients) client.close();
+  });
+
   it("returns PASS for foreign paths", async () => {
     const deps = baseDeps();
     expect((await call(deps, { path: "/api/bots" })).out).toBe(PASS);

@@ -9,6 +9,9 @@ enum BotProfileTab: String, CaseIterable, Hashable, Identifiable {
     case general, knowledge, settings
     var id: String { rawValue }
 
+    /// Visible pills (#2136): Settings is folded into General.
+    static var visible: [BotProfileTab] { [.general, .knowledge] }
+
     var title: LocalizedStringKey {
         switch self {
         case .general: "General"
@@ -27,8 +30,11 @@ struct BotProfilePage: View {
     let actions: BotEditActions
     var slackURL: URL?
     var mailRow: BotInboundMailRow?
+    /// iPad main column (#2136): X sits on the banner; no navigation back.
+    var fillsMain = false
 
     @State private var tab: BotProfileTab
+    @State private var settingsOpen = false
     @StateObject private var owlHandle = OwlMascotHandle()
 
     init(
@@ -37,7 +43,8 @@ struct BotProfilePage: View {
         context: BotEditContext,
         actions: BotEditActions,
         slackURL: URL? = nil,
-        mailRow: BotInboundMailRow? = nil
+        mailRow: BotInboundMailRow? = nil,
+        fillsMain: Bool = false
     ) {
         self.bot = bot
         self.startTab = startTab
@@ -45,7 +52,10 @@ struct BotProfilePage: View {
         self.actions = actions
         self.slackURL = slackURL
         self.mailRow = mailRow
-        _tab = State(initialValue: startTab)
+        self.fillsMain = fillsMain
+        // Settings is no longer a tab (#2136); land on General.
+        _tab = State(initialValue: startTab == .settings ? .general : startTab)
+        _settingsOpen = State(initialValue: startTab == .settings)
     }
 
     private var current: Bot { session.state.bot(bot.id) ?? bot }
@@ -81,11 +91,14 @@ struct BotProfilePage: View {
         .background(Theme.bg.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                ProfileBackButton { actions.close() }
+            if !fillsMain {
+                ToolbarItem(placement: .topBarLeading) {
+                    ProfileBackButton { actions.close() }
+                }
             }
         }
-        .accessibilityElement(children: .contain)
+        .navigationBarHidden(fillsMain)
+        // Keep children queryable for UITests (tabs, Settings disclosure).
         .accessibilityIdentifier("bot-profile-page")
     }
 
@@ -142,7 +155,7 @@ struct BotProfilePage: View {
 
     private var tabPills: some View {
         HStack(spacing: 4) {
-            ForEach(BotProfileTab.allCases) { item in
+            ForEach(BotProfileTab.visible) { item in
                 let on = tab == item
                 Button {
                     Haptics.selection()
@@ -157,6 +170,7 @@ struct BotProfilePage: View {
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(Text(item.title))
                 .accessibilityAddTraits(on ? [.isSelected, .isButton] : .isButton)
                 .accessibilityIdentifier("bot-profile-tab.\(item.rawValue)")
             }
@@ -164,15 +178,15 @@ struct BotProfilePage: View {
         .padding(4)
         .background(Theme.card.opacity(0.55), in: Capsule())
         .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("bot-profile-tabs")
     }
 
     @ViewBuilder
     private var tabBody: some View {
         switch tab {
-        case .general: generalBody
+        case .general, .settings: generalBody
         case .knowledge: knowledgeBody
-        case .settings: settingsBody
         }
     }
 
@@ -182,8 +196,39 @@ struct BotProfilePage: View {
         VStack(alignment: .leading, spacing: 16) {
             channelsCard
             accountsCard
+            // Settings folded under General (#2136): nothing removed.
+            settingsDisclosure
         }
         .padding(.horizontal, Theme.Profile.cardMargin)
+    }
+
+    private var settingsDisclosure: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                Haptics.selection()
+                withAnimation(.snappy(duration: 0.2)) { settingsOpen.toggle() }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: settingsOpen ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.textTertiary)
+                        .frame(width: 14)
+                    Text("Settings")
+                        .font(Theme.Font.label)
+                        .foregroundStyle(Theme.textTertiary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 4)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("bot-profile-settings-toggle")
+            .accessibilityAddTraits(settingsOpen ? [.isSelected, .isButton] : .isButton)
+            if settingsOpen {
+                settingsBody
+                    .padding(.horizontal, -Theme.Profile.cardMargin)
+            }
+        }
     }
 
     private var channelsCard: some View {

@@ -1,6 +1,7 @@
-// Coding chat sheet: a coding task opened like a chat (`CodingChat.tsx`,
-// Android CodingChatSheet). Header, transcript (bubbles / terminal / diffs),
-// Changes band, Continue / Stop / Close.
+// Coding chat window: a coding task opened like a chat (`CodingChat.tsx`,
+// #2149). Header with X back to the bot's chat, transcript (bubbles /
+// terminal / diffs), Changes band, and the composer always there. No
+// Continue, no Close Chat, no Open thread.
 import CompanionCore
 import SwiftUI
 
@@ -293,50 +294,17 @@ struct CodingChatView: View {
 
     // MARK: Footer
 
+    /// Always-on composer (#2149): a message goes to the task's thread. Stop
+    /// stays beside it while the job runs. No Continue / Close Chat.
     private var footer: some View {
         VStack(spacing: 8) {
-            if composing {
-                HStack(spacing: 8) {
-                    TextField(CodingChatRules.followUpPlaceholder(botName: botName), text: $draft, axis: .vertical)
-                        .lineLimit(1...4)
-                        .textFieldStyle(.plain)
-                        .padding(10)
-                        .background(Theme.inset, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .accessibilityIdentifier("coding-chat-compose")
-                    Button {
-                        Task { await sendFollowUp() }
-                    } label: {
-                        if sending { ProgressView().controlSize(.small) }
-                        else { Text(verbatim: CodingChatRules.sendLabel) }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sending)
-                    .accessibilityIdentifier("coding-chat-send")
-                }
-                if sendFailed {
-                    Text(verbatim: CodingChatRules.followUpError)
-                        .font(Theme.Font.label)
-                        .foregroundStyle(Theme.danger)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            HStack(spacing: 10) {
-                if snapshot.canContinue, !composing {
-                    Button(CodingChatRules.continueLabel) {
-                        composing = true
-                        sendFailed = false
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityIdentifier("coding-chat-continue")
-                }
-                if composing {
-                    Button(CodingChatRules.cancelLabel) {
-                        composing = false
-                        draft = ""
-                        sendFailed = false
-                    }
-                    .buttonStyle(.bordered)
-                }
+            HStack(alignment: .bottom, spacing: 8) {
+                TextField(CodingChatRules.followUpPlaceholder(botName: botName), text: $draft, axis: .vertical)
+                    .lineLimit(1...4)
+                    .textFieldStyle(.plain)
+                    .padding(10)
+                    .background(Theme.inset, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .accessibilityIdentifier("coding-chat-compose")
                 if snapshot.canStop {
                     Button(role: .destructive) {
                         stop()
@@ -348,15 +316,27 @@ struct CodingChatView: View {
                     .disabled(stopping)
                     .accessibilityIdentifier("coding-chat-stop")
                 }
-                Spacer(minLength: 0)
-                Button(CodingChatRules.closeLabel) { close() }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("coding-chat-close")
+                Button {
+                    Task { await sendFollowUp() }
+                } label: {
+                    if sending { ProgressView().controlSize(.small) }
+                    else { Text(verbatim: CodingChatRules.sendLabel) }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sending)
+                .accessibilityIdentifier("coding-chat-send")
+            }
+            if sendFailed {
+                Text(verbatim: CodingChatRules.followUpError)
+                    .font(Theme.Font.label)
+                    .foregroundStyle(Theme.danger)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(Theme.card)
+        .onAppear { composing = true }
     }
 
     // MARK: Actions

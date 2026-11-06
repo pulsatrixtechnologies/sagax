@@ -101,7 +101,9 @@ final class DesktopPersonaIdentityPagesUITests: XCTestCase {
         XCTAssertTrue(element(app, "persona-overview.title").waitForExistence(timeout: 5), "back to the text")
 
         element(app, "persona-overview.avatar").tap()
+        XCTAssertTrue(element(app, "desktop-bot-profile-host").waitForExistence(timeout: 5), "Appearance stays in the main column")
         XCTAssertTrue(element(app, "desktop-persona-window.page.appearance").waitForExistence(timeout: 5), "the mascot opens Appearance")
+        XCTAssertFalse(element(app, "desktop-persona-window").exists, "no centred Edit bot window")
     }
 
     @MainActor

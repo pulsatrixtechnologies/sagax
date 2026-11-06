@@ -509,7 +509,6 @@ settings.servers.connectTitle
 settings.sidebarHidden.kind.bot
 settings.sidebarHidden.kind.group
 settings.sidebarHidden.kind.person
-settings.theme.title
 settings.threadDisplay.short
 settings.threadDisplay.show
 settings.threadDisplay.title

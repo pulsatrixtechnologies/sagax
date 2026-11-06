@@ -23,6 +23,14 @@ import { UsageMeterRow } from "./UsageMeterRow";
 import { ThreadCleanupSettings } from "../ThreadCleanupSettings";
 import { PeopleToolAccessSettings } from "../ToolAccessSettings";
 import { canEditConfig } from "@/lib/viewer";
+import {
+  AppIconRow,
+  BotHotkeysRows,
+  HardwareAccelerationRow,
+  InterfaceModeRow,
+  SendKeyRow,
+  SpellcheckRow,
+} from "./AppearanceSettings";
 
 /** Guided tours: one row, two actions kept (app tour and welcome). Mounted
  * on App > Help so Account stays identity-only. */
@@ -79,6 +87,15 @@ export function AppPageExtras({ remoteActive }: { remoteActive: boolean }) {
       <div data-settings-card="about.startup">
         <SettingsGroup title={t("settings.app.startup")} groupId="appStartup">
           <OpenAtLoginRow />
+          <AppIconRow />
+          <BotHotkeysRows />
+        </SettingsGroup>
+      </div>
+
+      <div data-settings-card="about.input">
+        <SettingsGroup title={t("settings.app.input")} groupId="appInput">
+          <SendKeyRow />
+          <SpellcheckRow />
         </SettingsGroup>
       </div>
 
@@ -92,6 +109,11 @@ export function AppPageExtras({ remoteActive }: { remoteActive: boolean }) {
           </SettingsGroup>
         </div>
       )}
+
+      <SettingsGroup title={[t("settings.advancedMode.title"), t("settings.hardwareAcceleration.title")].join(", ")} groupId="appAdvancedShell" advanced>
+        <InterfaceModeRow />
+        <HardwareAccelerationRow />
+      </SettingsGroup>
 
       {showHolding && (
         <div data-settings-card="about.holding">

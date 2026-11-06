@@ -1,6 +1,6 @@
 /** Mutable Codex app-server session bag shared across launch phases. */
 import type { ChildProcess } from "node:child_process";
-import type { RuntimeEvent, SendTurnInput, SteerOutcome, StdioMcpSpec } from "../../contracts.ts";
+import type { RequestOutcome, RuntimeEvent, SendTurnInput, SteerOutcome, StdioMcpSpec } from "../../contracts.ts";
 import type { ApprovalMode } from "../../../shared/approval-mode.ts";
 import type { RenewalStep } from "../../context/context-renewal.ts";
 import type { CodexRoute } from "../codex-errors.ts";
@@ -100,7 +100,7 @@ export type CodexSession = PreparedCodexLaunch & {
     usage?: { input: number; output: number; cachedInput?: number };
     usageBaseline?: { input: number; output: number; cachedInput: number };
   };
-  asks: Map<string, (behavior: "allow" | "deny" | "answer", message?: string, source?: "user" | "timeout" | "system") => void>;
+  asks: Map<string, (behavior: "allow" | "deny" | "answer", message?: string, source?: "user" | "timeout" | "system") => void | Promise<RequestOutcome>>;
   nextId: number;
   sensitiveResponseIds: Set<number>;
   rpcPending: Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>;

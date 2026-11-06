@@ -11,7 +11,7 @@ import type { LocaleKey } from "@/locales";
 import { azureOpenAIEndpoint, looksLikeAzureUrl } from "../../shared/azure-openai";
 import { readableError } from "@/lib/plain-error";
 
-export type ConfigSection = "box" | "opencodeGo" | "anthropic" | "openai" | "openrouter" | "openaiCompat" | "azureFoundry" | "xai" | "mistral" | "cerebras" | "groq" | "meta" | "elevenlabs" | "fishAudio" | "openaiImage" | "customImage";
+export type ConfigSection = "box" | "opencodeGo" | "anthropic" | "openai" | "openrouter" | "openaiCompat" | "azureFoundry" | "xai" | "mistral" | "cerebras" | "groq" | "meta" | "deepseek" | "elevenlabs" | "fishAudio" | "openaiImage" | "customImage";
 /** Sections whose key can be tried against the provider from the server. */
 export type TestableProvider = "anthropic" | "openai" | "openrouter" | "openaiCompat" | "xai" | "mistral" | "cerebras" | "groq" | "meta";
 
@@ -48,6 +48,7 @@ const SECTIONS: Record<
   cerebras: { body: (v) => ({ cerebras: { key: v } }), flag: (c) => c.cerebras?.configured ?? false },
   groq: { body: (v) => ({ groq: { key: v } }), flag: (c) => c.groq?.configured ?? false },
   meta: { body: (v) => ({ meta: { key: v } }), flag: (c) => c.meta?.configured ?? false },
+  deepseek: { body: (v) => ({ deepseek: { key: v } }), flag: (c) => c.deepseek?.configured ?? false },
   xai: { body: (v) => ({ xai: { key: v } }), flag: (c) => c.xai?.configured ?? false },
   // Voice keys (2026-10-14): listed with the model keys, whatever the voice
   // engine. `tts.keys` says which are saved; an older server sends none.
@@ -182,6 +183,14 @@ const CREDENTIALS: Record<
     descriptionKey: "keys.meta.desc",
     href: "https://dev.meta.ai/docs/authentication",
     linkLabelKey: "keys.meta.link",
+    optional: true,
+  },
+  deepseek: {
+    labelKey: "keys.deepseek.label",
+    placeholder: "sk-…",
+    descriptionKey: "keys.deepseek.desc",
+    href: "https://platform.deepseek.com/api_keys",
+    linkLabelKey: "keys.deepseek.link",
     optional: true,
   },
   xai: {

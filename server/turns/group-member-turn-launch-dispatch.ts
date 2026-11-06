@@ -2,6 +2,8 @@
 // #1383: room-member launch, dispatch. Never imports server/index.ts.
 import type { GroupMemberTurnHost } from "./group-member-turn-types.ts";
 import { ATTACHMENTS_DIR } from "../attachments/attachments.ts";
+import { DATA_DIR } from "../config.ts";
+import { claudeUserSkillsDir, claudeUserSkillsEnabled, forgetClaudeUserSkillsDir } from "../turn-settings.ts";
 import type { GroupMemberTurnCtx } from "./group-member-turn-ctx.ts";
 import { roomSubagentModel } from "./group-member-turn-room-model.ts";
 
@@ -273,6 +275,11 @@ const sendRoomTurn = async (roomTurnAccess: TurnAccess | undefined) => {
         ...(() => { const networkProxy = turnNetworkProxy(threadId, readyBot.id, roomPlace); return networkProxy ? { networkProxy } : {}; })(),
         ...(integrations.browser && browserIsThePlace(roomPlan) ? { preloadBrowserTools: true } : {}),
         mcpFromUserConfig: claudeUserMcpEnabled(cfg, IDENTITY.kind === "perspicax") && !managedPolicy.restrictsMcp(),
+        ...(() => {
+          const userSkillsDir = claudeUserSkillsEnabled(cfg) ? claudeUserSkillsDir(DATA_DIR) : null;
+          if (!claudeUserSkillsEnabled(cfg)) forgetClaudeUserSkillsDir(DATA_DIR);
+          return userSkillsDir ? { userSkillsDir } : {};
+        })(),
         claudeAiConnectors: claudeAiConnectorsFor(readyBot, instance, roomSpeaker, roomTurnAccess?.via),
         grokCloudConnectors: grokCloudConnectorsForTurn(accountConnectorInput(readyBot, instance, roomSpeaker, roomTurnAccess?.via)),
         ...pluginDirsFor(readyBot, instance, roomPrincipal ?? undefined),

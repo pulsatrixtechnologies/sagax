@@ -36,7 +36,9 @@ import { QUERY_TOOL, QUERY_TOOL_NAME, ResultStore, answerQuery, describeShape, e
 import { DEFAULT_RESULT_BUDGET, type HeldResult, trimResultText } from "./mcp/mcp-trim.ts";
 import { ToolNameAliases, mapJsonStrings } from "./mcp/mcp-tool-names.ts";
 import { parseAgentsWithhold, resolvedServerLog } from "./mcp/agents-tool-priority.ts";
+import { fitToolList } from "./mcp/mcp-tool-schema.ts";
 import { killCliTree } from "./procs.ts";
+import { toolSchemaProfileFromEnv } from "./tool-schema-profile.ts";
 import { misuseGateBlockText } from "../shared/misuse-guardrails.ts";
 import { BRIDGE_FIND_TOOL, BRIDGE_SERVER, readBridgeCall } from "../shared/searched-tool-call.ts";
 import { gateArgsSummary, gateDeclinedText, type GateAnswer, type GateAsk } from "./approvals/mcp-gate-approval.ts";
@@ -86,6 +88,7 @@ const SPILL_HINT = gateEnv.SAGAX_GATE_SPILL_HINT === "1";
  * runs nothing and is answered by the directory. The proxy guarantees those
  * three names mean nothing else. */
 const DIRECTORY = gateEnv.SAGAX_GATE_DIRECTORY === "1";
+const SCHEMA_PROFILE = toolSchemaProfileFromEnv(process.env);
 /** #1276, a compact prompt for a local model: the gate itself searches this
  * server's catalog (mcp-directory.ts) when it is big, whatever the upstream
  * (a stdio server or the remote proxy), and lists whole only the pinned
@@ -511,7 +514,8 @@ async function searchRoute(line: string, message: Json): Promise<void> {
       if (!id) return rejectRequest(message.id, -32600, "Tool listing needs a request ID");
       if (params?.cursor !== undefined) return rejectRequest(message.id, -32602, "Invalid cursor");
       const { directory, searched } = await loadSearch();
-      const tools: Json[] = searched ? [...directory.pinned(pinnedToolNames(directory.tools, SEARCH!)), ...directory.listed(searchContext)] : [...directory.tools];
+      let tools: Json[] = searched ? [...directory.pinned(pinnedToolNames(directory.tools, SEARCH!)), ...directory.listed(searchContext)] : [...directory.tools];
+      if (SCHEMA_PROFILE) tools = fitToolList(tools, SCHEMA_PROFILE, (note) => process.stderr.write(`mcp-gate(${NAME}): ${note}\n`)) as Json[];
       return reply(message.id, { tools: BUDGET > 0 ? [...withoutOutputSchema(tools.filter((tool) => tool.name !== QUERY_TOOL_NAME)), QUERY_TOOL] : tools });
     }
     const { directory, searched } = await loadSearch();
@@ -674,7 +678,7 @@ function forward(line: string, message: Json | undefined, id: string | undefined
       const target = callTarget(name, params?.arguments);
       pending.set(id, { kind: "call", tool: target ?? name, trim: target !== undefined });
       process.stderr.write(resolvedServerLog(NAME, target ?? name));
-    } else if (scope || WITHHOLD.size || ((ALIASES || BUDGET > 0) && message.method === "tools/list")) {
+    } else if (scope || WITHHOLD.size || ((ALIASES || BUDGET > 0 || SCHEMA_PROFILE) && message.method === "tools/list")) {
       pending.set(id, { kind: message.method === "tools/list" ? "list" : "other" });
     }
   }
@@ -744,6 +748,9 @@ createInterface({ input: child.stdout }).on("line", (line) => {
     const outcome = ALIASES.catalog(tools);
     result.tools = outcome.tools;
     reportToolNames(tools.map((tool) => tool.name), outcome);
+  }
+  if (SCHEMA_PROFILE && request?.kind === "list" && message.error === undefined && isRecord(result) && Array.isArray(result.tools)) {
+    result.tools = fitToolList(result.tools, SCHEMA_PROFILE, (note) => process.stderr.write(`mcp-gate(${NAME}): ${note}\n`));
   }
   // query_result rides the last page of the catalog, in place of any upstream
   // tool of that name; no page keeps an outputSchema (see trimCallResult).

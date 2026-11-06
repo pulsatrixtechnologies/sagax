@@ -19,20 +19,24 @@ The regression fixture emits this result, then asks for WebFetch permission,
 and only finishes the parent after the test releases a file gate.
 
 The small `agents` and `ogb` MCP servers use `alwaysLoad: true` so the first
-prompt includes coordination and approval tools. Other MCP servers retain
-normal deferred loading. This prevents the deferred-lookup dependency; it
-does not magically reconnect a crashed server or override a user's denied
-tool policy.
+prompt includes coordination and approval tools; the browser does too when the
+turn plans to browse. Every other MCP server (connected apps, a bot's own
+servers, data, phone, computer and the rest) loads on demand: each turn's
+private `--settings` file sets `ENABLE_TOOL_SEARCH=true`, unless the person set
+an opt-out such as `false` or `auto:100` in the bot project's or their own
+Claude settings or the environment (`server/drivers/claude/claude-tool-search.ts`).
+Guest turns and instance tool lists without ToolSearch leave it unset. This
+prevents the deferred-lookup dependency; it does not magically reconnect a
+crashed server or override a user's denied tool policy.
 
-Outside a compact prompt, Sagax starts Claude Code with
-`ENABLE_TOOL_SEARCH=true` wherever the turn can search (not a guest's
-confined turn, not an instance tool list without ToolSearch), unless the
-person set the variable themselves. Every MCP server Sagax does not load up
-front then waits for ToolSearch, every turn the same way. The CLI's own
-default (`auto`) sends every schema while they fit in the model's window,
-which on a 1M-token model is always, and changes its mind once they stop
-fitting, so the cached tool list is rewritten. A compact prompt keeps
-`ENABLE_TOOL_SEARCH=false`: Sagax lists and searches its own tools there.
+Wherever the turn can search, Sagax writes that value into the private
+`--settings` `env` so project and person Claude settings cannot defeat it.
+Every MCP server Sagax does not load up front then waits for ToolSearch, every
+turn the same way. The CLI's own default (`auto`) sends every schema while they
+fit in the model's window, which on a 1M-token model is always, and changes its
+mind once they stop fitting, so the cached tool list is rewritten. A compact
+prompt still enables ToolSearch for native deferred tools; Sagax's own catalog
+stays listed through the agents proxy.
 
 Where an engine is shown Sagax's whole agents catalog (Claude Code outside a
 compact prompt, Codex outside a tool selection), each family of tools is
@@ -54,7 +58,7 @@ Sources:
 Regression checks:
 
 ```sh
-pnpm exec vitest run server/drivers/claude.test.ts server/drivers/agents-proxy.test.ts server/harness-mcp-proxy.test.ts
+pnpm exec vitest run server/drivers/claude.test.ts server/drivers/claude/claude-tool-search.test.ts server/drivers/agents-proxy.test.ts server/harness-mcp-proxy.test.ts
 ```
 
 The turn boundary itself — a capability whose owning turn has been replaced

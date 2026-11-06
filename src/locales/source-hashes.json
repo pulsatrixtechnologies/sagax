@@ -8957,6 +8957,8 @@
       "persona.rules.short": "b3c3eeff61d2fc42773ba6a7e43023ae57d3570352085f5a7b87f5a0c791a78c",
       "skills.learned.hintOn": "8173c7bbc56827c465ec257db04ae5262abe99e98521db8f460aaba33bfea7b6",
       "skills.learned.hintOff": "f3477db333415d4fdb93b9f40229ca082915b4e47e1749acaac94588a5836ab7",
+      "skills.origin.native": "ed9f6f25068608efd412958da4dfc19328ca3511251fa6d5f9c42baf230e32f8",
+      "skills.origin.nativeHint": "55efb3490c4ae7b0a63a69f0247cb11d46adf9d295a0526cdb2dd76a6213618d",
       "persona.files.short": "80dc6243ea0fe47eceb5210b71c691a53f6070d19a43c770e45c45193ad7df9e",
       "webhooks.status.waiting": "540795994cbadb0124b6f74fce4354659c9e009362d8f88cb01aa68a7aeaea3f",
       "webhooks.status.ready": "0ac215b0f04708a648bbced649770111c4a8eca1b8598a170bbf12d7cea2d691",
@@ -17582,7 +17584,16 @@
       "organization.rules.vaultExport.blocked": "18f2a0947f9d6523991b29b450307f22773f57d65f7efb98d48a167df04d6b1d",
       "servers.state.linked": "49d13abd41864a31f6d207d6950964d2ee2a0a236babfda5a96e150417d0e665",
       "servers.state.local": "601b7ae9d3a9212f168cfea775f719c1d6a239758252246dd3bbb3d55863e9a4",
-      "organization.manageInPerspicax": "6b8a7f811c7cf362b232d64ae462e95edc9c5fafa8316016def505954afebac9"
+      "organization.manageInPerspicax": "6b8a7f811c7cf362b232d64ae462e95edc9c5fafa8316016def505954afebac9",
+      "routineRun.details": "45989de49fb7f66dfe17a8fc26f3a02c7abcd74f7e8e6cf9f39fa0e3775780df",
+      "settings.app.openAbout": "679bcae590defcbad1ad635fa2216714a5de2ff2dd761c7367527c25350a77db",
+      "keys.deepseek.label": "d2885c59cd6f6973c998d8d47d56967577edec2f38b14d60b5a7fc11b83037a3",
+      "keys.deepseek.desc": "270b98390794fcafe4c317a99d2af015b46d7572f13ba9e9a2912e79cd567803",
+      "keys.deepseek.link": "23a794ba7450089c877db21d83bbb7182766c3f647abdeec825710d70770f1dc",
+      "providerKeys.deepseek": "0648d2111ec0ca3d37d68ea020ce87e5c89caf06d3836a4388cd10bd1ebfd083",
+      "mcp.claudeSkills.title": "e99f0ab7d217d6a2ba3df841bf2301e5746194def1e8150a84b16d127a4021a8",
+      "mcp.claudeSkills.desc": "9e053be515c4d983e68db9cb03b9fdaa04cbc9ddc4bceae44415e33c0281bbd8",
+      "mcp.claudeSkills.aria": "bd6633c9fe16353f8007acda6f957543268fb5b07af38f973c0cce76efdeb106"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

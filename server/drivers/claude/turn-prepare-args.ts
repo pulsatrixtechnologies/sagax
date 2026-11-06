@@ -221,6 +221,9 @@ if (isolated) {
   // user-scope servers, skills and hooks out.
   if (!mcpFromUserConfig && !keepsClaudeAiConnectors && claudeCliSupports(cliVersion, "--strict-mcp-config")) args.push("--strict-mcp-config");
   if (claudeCliSupports(cliVersion, "--setting-sources")) args.push("--setting-sources", "project");
+  // Personal skills only: --add-dir loads ~/.claude/skills in place without
+  // the person's hooks, MCP servers or CLAUDE.md (features.claudeUserSkills).
+  if (turn.userSkillsDir) args.push("--add-dir", turn.userSkillsDir);
 }
 // The bot's plugins (server/bots/bot-plugins.ts): skills, commands and
 // agents only, loaded for this session. A guest's confined turn gets none.

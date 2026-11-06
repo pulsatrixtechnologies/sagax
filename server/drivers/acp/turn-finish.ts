@@ -53,6 +53,8 @@ if (!state.settled) {
   // to leave in the chat: before the prompt ("turn stopped"), or
   // during the handshake, where closing the session rejects the
   // pending request ("session closed").
+  // Cancel-timeout owns settle after it awaits the kill (cancelled or stop_failed).
+  if (state.cancelling) return;
   if (message === "turn stopped" || state.stopped) {
     settle(threadId, session, true, "cancelled");
     return;

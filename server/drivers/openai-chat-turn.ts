@@ -14,6 +14,7 @@ import { ChatProtocolError, object } from "./openai-chat-protocol.ts";
 import { appendNative } from "./native.ts";
 import { classifyError, computeBackoff, interruptibleDelay, RETRY_MAX_ATTEMPTS } from "./retry.ts";
 import { outOfCreditsMessage } from "./engine-errors.ts";
+import { toolSchemaProfileFor } from "../tool-schema-profile.ts";
 import { RequestTooLargeError, sizeChange, smallerResend } from "./chat-size-limit.ts";
 import { requestTooLargeMessage } from "../../shared/request-too-large.ts";
 import { providerReplyCutMessage, providerReplyCutReason } from "../../shared/provider-reply-cut.ts";
@@ -146,11 +147,13 @@ async function mountOpenAIChatTurnTools(ctx: OpenAIChatTurnCtx): Promise<{
   // lands in the same cache under the same fingerprint.
   const warmTurn = options.tools === false ? turn : withWarmTokens(turn, turn.threadId);
   const mountIntegrations = options.tools === false ? undefined : warmTurn.integrations;
+  const schemaProfile = toolSchemaProfileFor({ url: options.apiUrl, model: ctx.model });
   const toolsFp = chatToolsFingerprint(mountIntegrations, {
     computerUse: Boolean(options.computerUse),
     toolScope: turn.toolScope,
     toolLimit,
     callTimeoutMs: turn.mcpCallTimeoutMs,
+    schemaProfile: schemaProfile?.id,
   });
   let tools: ChatToolSession;
   let toolsReused = false;
@@ -165,7 +168,7 @@ async function mountOpenAIChatTurnTools(ctx: OpenAIChatTurnCtx): Promise<{
     warmToolSessions.claim(turn.threadId);
     turnTrace(turn.threadId, "tools-reused");
   } else {
-    tools = await mountChatTools(mountIntegrations, abort.signal, options.computerUse, scope, turn.mcpCallTimeoutMs, toolLimit, resultFolder, safeText);
+    tools = await mountChatTools(mountIntegrations, abort.signal, options.computerUse, scope, turn.mcpCallTimeoutMs, toolLimit, resultFolder, safeText, schemaProfile);
     if (mountIntegrations) {
       warmToolSessions.set(turn.threadId, toolsFp, tools, { person: warmResourcePerson(turn), active: true });
       toolsReused = true; // The cache owns cleanup for new mounts too.
@@ -263,6 +266,11 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
   const { turn, turnId, apiKey, abort, approval, turnEntry, requested, messages, secrets, triedModels, request, retainImages, preview, native, safeText } = ctx;
   const { options, nextModel, emit, base, complete, reasoningReplayRejected, refuseModel, seesImages } = ctx.deps;
   let model = ctx.model;
+  const assistantReply = (completion: Completion, content: string | null): OpenAIChatMessage => ({
+    role: "assistant", content,
+    ...(completion.protocolReasoning && !reasoningReplayRejected.has(model) ? { [options.reasoningReplayField ?? "reasoning_content"]: completion.protocolReasoning } : {}),
+    ...(completion.protocolReasoningDetails.length ? { reasoning_details: completion.protocolReasoningDetails } : {}),
+  });
   let tools: ChatToolSession | undefined;
   let mountIntegrations: SendTurnInput["integrations"] | undefined;
   let toolsFp = "";
@@ -458,8 +466,13 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
           throw new ChatProtocolError(providerReplyCutMessage("generic"));
         }
         if (options.nudgeAnnouncedAction && !nudged && tools.definitions.length && announcesAction(completion.text)) {
+          // The last allowed step cannot take another round for a nudge.
+          if (turnEntry.ending) {
+            stopReason = "incomplete_action";
+            throw new ChatProtocolError(`Stopped after ${MAX_CHAT_ROUNDS} steps without a verified final answer. Earlier operations may have taken effect; inspect their state and continue only the remaining work.`);
+          }
           nudged = true;
-          messages.push({ role: "assistant", content: completion.text }, { role: "user", content: NUDGE_ANNOUNCED_ACTION });
+          messages.push(assistantReply(completion, completion.text), { role: "user", content: NUDGE_ANNOUNCED_ACTION });
           continue;
         }
         if (toolFailed) {
@@ -479,7 +492,7 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
         // Input parked while this final answer streamed: answer it in one
         // more round rather than end the turn with it unread.
         if (turnEntry.asides.length) {
-          messages.push({ role: "assistant", content: reply });
+          messages.push(assistantReply(completion, reply));
           continue;
         }
         ok = true;
@@ -493,10 +506,7 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
       }
       // The whole batch is refused before any of it runs.
       if (seenCalls.size > MAX_TURN_TOOL_CALLS) throw new ChatProtocolError(stoppedAfter(`${MAX_TURN_TOOL_CALLS} tool calls`));
-      messages.push({ role: "assistant", content: completion.text || null, tool_calls: completion.toolCalls,
-        ...(completion.protocolReasoning && !reasoningReplayRejected.has(model) ? { [options.reasoningReplayField ?? "reasoning_content"]: completion.protocolReasoning } : {}),
-        ...(completion.protocolReasoningDetails.length ? { reasoning_details: completion.protocolReasoningDetails } : {}),
-      });
+      messages.push({ ...assistantReply(completion, completion.text || null), tool_calls: completion.toolCalls });
       // After a corrective round, the failure stays pending only until the bot runs tools again.
       if (correctiveRounds && !denials.length) toolFailed = false;
       const screenshotParts: ChatContentPart[] = [];

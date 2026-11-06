@@ -23,6 +23,7 @@ import {
 import { COMPACT_DIRECTORY_TOOLS } from "./prepare-constants.ts";
 import { CLAUDE_HOST_TOOLS } from "../host-tools.ts";
 import { ARTIFACT_TOOLS } from "../../../shared/claude-chat-blocks.ts";
+import { claudeToolSearchSetting } from "./claude-tool-search.ts";
 import { DWEB_PROXY_PATH, HOOK_HELPER_PATH, NODE_ENV_FLAG, PERM_PROXY_PATH } from "./helpers.ts";
 import type { ClaudeTurnCtx, ClaudeTurnEarly } from "./turn-ctx.ts";
 
@@ -320,7 +321,18 @@ if (hooks && hookTokenPath) {
   // in the packaged app process.execPath is Electron — run the helper as node
   if (process.versions.electron) env.ELECTRON_RUN_AS_NODE = "1";
 }
-const settings: Record<string, unknown> = { ...authSettings };
+const cwd = turn.cwd ?? homedir();
+// Every MCP server without alwaysLoad loads on demand behind ToolSearch
+// (claude-tool-search.ts). The value rides the private --settings file so it
+// beats project and person Claude settings; an explicit opt-out still holds.
+// Guest turns and instance tool lists without ToolSearch leave it unset.
+const toolSearch = !turn.guestConfined && (config.tools === undefined || config.tools.includes("ToolSearch"))
+  ? claudeToolSearchSetting(cwd, env)
+  : null;
+const settings: Record<string, unknown> = {
+  ...authSettings,
+  ...(toolSearch !== null ? { env: { ...authSettings.env, ENABLE_TOOL_SEARCH: toolSearch } } : {}),
+};
 // Project-only settings still discover the personal memory through ancestor
 // directories when the bot workspace lives below HOME. Keep project memory.
 if (isolated) settings.claudeMdExcludes = [join(homedir(), ".claude", "CLAUDE.md")];
@@ -347,15 +359,6 @@ if (turn.compactPrompt?.memoryDir) {
   adoptLegacyAutoMemory(turn.compactPrompt.memoryDir, legacyClaudeAutoMemoryDir(configDir, turn.cwd ?? homedir()));
   settings.autoMemoryDirectory = turn.compactPrompt.memoryDir;
 }
-// Tool search is always on where the turn can search: MCP
-// tools Sagax does not load up front (alwaysLoad) wait for ToolSearch.
-// The CLI's own default ("auto") sends every schema while they fit in
-// the model's window, which on a 1M-token model is always, and flips
-// when they stop fitting, so the cached tool list is rewritten.
-// Compact MCP catalogs keep Sagax's directory, but native deferred tools
-// such as ArtifactData still need Claude's ToolSearch. A value the person
-// set for the engine stays theirs.
-if (!env.ENABLE_TOOL_SEARCH && !turn.guestConfined && (config.tools === undefined || config.tools.includes("ToolSearch"))) env.ENABLE_TOOL_SEARCH = "true";
 const authSettingsPath = mcpConfigPath && Object.keys(settings).length
   ? join(dirname(mcpConfigPath), "auth-settings.json") : null;
 if (authSettingsPath) args.push("--settings", authSettingsPath);
@@ -380,7 +383,6 @@ if (turn.networkProxy) Object.assign(env, networkProxyEnvironment(turn.networkPr
 if (["browser", "computer", "data"].some((name) => (mcpServers[name] as { type?: unknown } | undefined)?.type === "http")) {
   Object.assign(env, loopbackNoProxy(env));
 }
-const cwd = turn.cwd ?? homedir();
 const commandCwd = permissionLaunchCwd(cwd);
 // Everything that shapes the process, minus session/turn-specific temp
 // paths. Their contents are represented directly in the key instead.
@@ -406,6 +408,8 @@ const contract = {
   proxy: turn.networkProxy?.url ?? null,
   // hooks on/off changes the settings file the process was launched with
   hooks: Boolean(hooks),
+  // ENABLE_TOOL_SEARCH in --settings: a changed choice restarts the process
+  toolSearch,
   // #1276: a compact prompt is another launch (memory folder, tool search)
   compact: turn.compactPrompt ? { memoryDir: turn.compactPrompt.memoryDir ?? null } : null,
   // Slice 4: another person's credentials never reuse this process.

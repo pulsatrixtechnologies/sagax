@@ -472,6 +472,7 @@ import { createBackgroundBriefRoutes } from "./routes/background-brief.ts";
 import { briefMessageText, briefNoticeLines, startBriefTimer } from "./proactive/background-brief-schedule.ts";
 import { createMemoryUpkeep, upkeepEnabled } from "./memory/memory-upkeep.ts";
 import { createSkillReview, turnToolSteps } from "./skills/skill-review.ts";
+import { createSideJobs, helperSelection } from "./side-jobs.ts";
 import { CompanyMemoryCache, companyTextForBots } from "./memory/memory-company.ts";
 import { COMPANY_TOPIC } from "./memory/memory-dream.ts";
 import { procedureSignal, recordProcedure } from "./memory/memory-procedures.ts";
@@ -594,6 +595,7 @@ import {
   openCodeProviderKeys,
   isCompatServerId,
 } from "./config.ts";
+import { claudeUserSkillsEnabled } from "./turn-settings.ts";
 import { sweepThreadEventLogsPaced, type ThreadLogRetentionCandidate } from "./threads/thread-retention.ts";
 import { ComputerControl } from "./computer/computer-control.ts";
 import { augmentedPath, resetPathCache } from "./env-path.ts";
@@ -1228,6 +1230,13 @@ import {
   skillCommandInline,
   undoSkillWrite
 } from "./skills/skills.ts";
+import {
+  expandNativeSkillCommand,
+  nativeSkillListing,
+  nativeSkills,
+  readNativeSkillFile,
+  type NativeSkill,
+} from "./skills/native-skills.ts";
 import { newBotDefaultsSchema } from "./bots/new-bot-defaults.ts";
 import { greetingLanguage } from "./bots/new-bot-greeting.ts";
 import {
@@ -4886,17 +4895,38 @@ const availableSkills = () => mergeSkills(bundledSkills, loadUserSkills(join(DAT
 // bot records stay inert until it is on.
 const listBotSkills = (bot: BotRecord) =>
   skillsLibraryEnabled(cfg) ? resolveBotSkills(bot.id, bot.assignedSkills) : listSkills(bot.id);
+/** Folder a thread's turns run in, as the store pins it; null when pinned to none. */
+function threadFolderForSkills(bot: BotRecord, threadId: string): string | null {
+  const task = store.taskByThread(bot.id, threadId);
+  if (task && "cwd" in task && task.cwd !== undefined) return task.cwd;
+  return bot.cwd ?? join(TASK_WORKSPACES_DIR, bot.id, threadId);
+}
+function listNativeSkillsForTurn(
+  bot: BotRecord,
+  threadId: string,
+  instance?: { driverKind: string; config?: unknown; environment?: Record<string, string | undefined> } | null,
+): NativeSkill[] {
+  const engine = instance ?? (() => {
+    const found = registry.get(bot.modelSelection.instanceId);
+    return found ? { driverKind: found.driverKind, config: (found as { config?: unknown }).config, environment: (found as { environment?: Record<string, string | undefined> }).environment } : null;
+  })();
+  if (!engine) return [];
+  return nativeSkills(engine, {
+    claudeUserSkills: claudeUserSkillsEnabled(cfg),
+    cwd: threadFolderForSkills(bot, threadId),
+  });
+}
+const listNativeBotSkills = (bot: BotRecord, threadId: string) =>
+  listNativeSkillsForTurn(bot, threadId).map(nativeSkillListing);
 const readBotSkillFile = (bot: BotRecord, name: string): string | null => {
   const own = readSkillFile(bot.id, name);
-  if (own !== null || !skillsLibraryEnabled(cfg)) return own;
+  if (own !== null) return own;
   // A private listing whose stored bytes no longer verify must not fall
-  // through to a same-named library skill: private wins collisions, so a
-  // broken private file stays unreadable instead of exporting another
-  // bot's library instructions under this bot's name.
+  // through to a same-named library or native skill: private wins collisions.
   if (listSkills(bot.id).some((skill) => skill.name === name)) return null;
-  // The library fallback is by assignment only, never by name alone.
-  if (!bot.assignedSkills?.includes(name)) return null;
-  return readLibrarySkillFile(name);
+  if (skillsLibraryEnabled(cfg) && bot.assignedSkills?.includes(name)) return readLibrarySkillFile(name);
+  const native = listNativeSkillsForTurn(bot, bot.threadId).find((skill) => skill.name === name);
+  return native ? readNativeSkillFile(native) : null;
 };
 
 // Electron's utility-process parent port is private to the desktop main
@@ -10868,9 +10898,17 @@ function botCapabilitiesAs(
       return spec ? mcpOAuth.status(name, spec, bot.mcpAccounts?.[name])?.auth : undefined;
     },
     ...(personal ? { personal } : {}),
-    skills: library
-      ? listBotSkillsWithOrigin(bot.id, bot.assignedSkills).skills.map((skill) => ({ name: skill.name, description: skill.description, enabled: skill.enabled, origin: skill.origin, source: skill.source }))
-      : listSkills(bot.id).map((skill) => ({ name: skill.name, description: skill.description, enabled: skill.enabled, origin: "private" as const, source: skill.source })),
+    skills: (() => {
+      const natives = listNativeBotSkills(bot, bot.threadId);
+      if (library) {
+        return listBotSkillsWithOrigin(bot.id, bot.assignedSkills, [], undefined, natives).skills.map((skill) => ({
+          name: skill.name, description: skill.description, enabled: skill.enabled, origin: skill.origin, source: skill.source,
+        }));
+      }
+      const own = listSkills(bot.id).map((skill) => ({ name: skill.name, description: skill.description, enabled: skill.enabled, origin: "private" as const, source: skill.source }));
+      const names = new Set(own.map((skill) => skill.name));
+      return [...own, ...natives.filter((skill) => !names.has(skill.name)).map((skill) => ({ name: skill.name, description: skill.description, enabled: skill.enabled, origin: skill.origin, source: skill.source }))];
+    })(),
     librarySkills: Object.values(readSkillLibraryIndex()).map((skill) => ({ name: skill.name, source: skill.source })),
     skillsLibrary: library,
     ...(prompt ? { promptIndex: prompt.index, capabilityPromptIndex: prompt.byCapability } : {}),
@@ -17909,40 +17947,30 @@ bus.subscribe((event: RuntimeEvent) => {
   }
 });
 
+// Small writing jobs (server/side-jobs.ts): the compaction summary and memory
+// upkeep ask here for their one-off text call. A bot's own engine writes
+// whenever it can (an engine the organisation disallows never receives the
+// text); the optional helper model (config `helper`, SAGAX_HELPER_INSTANCE)
+// writes for a bot whose engine cannot. Sagax has no automatic skill-review
+// job yet, so that resolver job is unused here.
+const sideJobs = createSideJobs({
+  bot: (botId) => store.bot(botId),
+  instance: (instanceId) => registry.get(instanceId),
+  refusal: (instance) => policyModelRefusal(instance),
+  // read from the file as it is now, like the sign-in list: a helper removed from config.json stops being used at once
+  helper: cacheUntilConfigChanges((config) => helperSelection(config)),
+  ...(hostedModels ? { modelAllowed: (selection: ModelSelection) => hostedModels.allows(selection) } : {}),
+  assertWithinBudget: () => assertWithinBudget(cfg, DATA_DIR),
+  book: bookTurnUsage,
+  log: (line) => console.log(line),
+});
+
 // Memory upkeep (server/memory/memory-upkeep.ts): background capture, About me
 // suggestions and the nightly tidy-up, for bots with the switch on.
 const memoryUpkeep = createMemoryUpkeep({
   bots: () => store.bots,
   bot: (id) => store.bot(id) ?? undefined,
-  engine: (botId) => {
-    const bot = store.bot(botId);
-    const instance = bot ? registry.get(bot.modelSelection.instanceId) : undefined;
-    // an engine the organisation disallows never receives memory text
-    if (!bot || !instance || policyModelRefusal(instance)) return null;
-    // generateMemoryText: the ACP engines' and Codex's background-only one-shot, on their own provider
-    const generate = (instance.generateText ?? instance.generateMemoryText)?.bind(instance);
-    return generate ? {
-      generateText: async (prompt, options) => {
-        // Check every capture, organize and contradiction call, including
-        // consecutive calls within one upkeep pass.
-        assertWithinBudget(cfg, DATA_DIR);
-        const threadId = `memory-${randomUUID()}`;
-        return generate(prompt, { ...options, onUsage: (usage) => bookTurnUsage({
-          botId: bot.id,
-          botName: bot.name,
-          threadId,
-          instanceId: instance.instanceId,
-          driverKind: instance.driverKind,
-          model: usage.model,
-          input: usage.input ?? 0,
-          output: usage.output ?? 0,
-          ...(usage.cachedInput !== undefined ? { cachedInput: usage.cachedInput } : {}),
-          costUsd: usage.costUsd ?? null,
-          trigger: { kind: "bot", botId: bot.id }
-        }, usage.input !== undefined && usage.output !== undefined, bot.threadId) });
-      }
-    } : {};
-  },
+  engine: (botId) => sideJobs.text("memory", botId),
   busy: (botId) => botHasActiveTurn(botId),
   addToAboutMe: (from, texts) => {
     const current = cfg.profile?.aboutMe ?? "";
@@ -22879,7 +22907,7 @@ async function compactConversation(input: {
   const controller = new AbortController();
   compactionControllers.set(threadId, { generation, controller });
   try {
-    const summary = await draftSummary(fold.folded, { signal: controller.signal, generateText: instance.generateText?.bind(instance) });
+    const summary = await draftSummary(fold.folded, { signal: controller.signal, generateText: sideJobs.text("compaction", bot.id, { instance })?.generateText });
     if (!directTurnClaimIsCurrent(bot.id, generation, threadId)) throw new DirectTurnSetupCancelled("context summarization stopped");
     controller.signal.throwIfAborted();
     // Appended teammate results remain after the fold. A changed prefix is
@@ -30604,6 +30632,7 @@ function configStatus() {
     cerebras: { configured: Boolean(cfg.cerebras?.key) },
     groq: { configured: Boolean(cfg.groq?.key) },
     meta: { configured: Boolean(cfg.meta?.key) },
+    deepseek: { configured: Boolean(cfg.deepseek?.key) },
     anthropic: { configured: Boolean(cfg.anthropic?.key), everyClaudeBot: cfg.anthropic?.everyClaudeBot !== false },
     openai: { configured: Boolean(cfg.openai?.key) },
     openrouter: { configured: Boolean(cfg.openrouter?.key) },
@@ -30698,6 +30727,8 @@ function configStatus() {
       // Capabilities > Installed switch: Claude bots also see this machine's
       // own Claude Code MCP servers
       claudeUserMcp: claudeUserMcpEnabled(cfg, IDENTITY.kind === "perspicax"),
+      // Off unless true: personal Claude Code skills via --add-dir
+      claudeUserSkills: claudeUserSkillsEnabled(cfg),
       autoRecall: autoRecallEnabled(cfg),
       roomMemoryCapture: roomMemoryCaptureEnabled(cfg),
       // hand-edited config.json only; the thread menu offers Regenerate title from it
@@ -43287,6 +43318,7 @@ const orgBotsDeps: BotsDeps = {
       ...(source.loopGuard !== undefined ? { loopGuard: source.loopGuard } : {}),
       ...(storedTeamMemorySharing(source) ? { teamMemorySharing: "private" as const } : {}),
       ...(source.memoryUpkeep !== undefined ? { memoryUpkeep: source.memoryUpkeep } : {}),
+      ...(source.helperModel !== undefined ? { helperModel: source.helperModel } : {}),
       ...(source.browser !== undefined ? { browser: source.browser } : {}),
       ...(source.computer !== undefined ? { computer: source.computer } : {}),
       ...(source.toolScope !== undefined ? { toolScope: structuredClone(source.toolScope) } : {}),
@@ -47267,6 +47299,7 @@ ROUTES.push(createBotsContentRoutes({
   samePerson,
   personalSkillsList: (person) => personalSkills.list(person),
   listBotSkills,
+  listNativeBotSkills,
   listStagedSkillWrites,
   stagedSkillListing,
   githubCredentialsFor,
@@ -49046,8 +49079,10 @@ const startTurnRunner = createStartTurn({
   ensureTaskWorkspace,
   ensureWorkspace,
   expandLearnTurnText,
+  expandNativeSkillCommand,
   expandSetupTurnText,
   expandSkillCommandTurnText,
+  listNativeSkillsForTurn,
   explainPick,
   extractTurnImages,
   failedTurnTool,
@@ -49220,6 +49255,7 @@ const startTurnRunner = createStartTurn({
   replaysNatively,
   reportIncident,
   requestWorkOrigin,
+  resolveBotSkills,
   resolveComputerPromptKind,
   resolveEngineTurnEffort,
   resolveTurnSpeaker,

@@ -293,18 +293,14 @@ describe("approvals that follow the other engines", () => {
     await f.instance.adapter.respondToRequest(f.threadId, other.requestId!, { behavior: "deny" });
     await f.completed();
 
-    // a guest's turn in the same conversation uses none of the owner's
-    // grants, and an "always" answered there keeps nothing
+    // #2091: a guest's turn meets the same session grants; who may answer the
+    // card is decided in index.ts (situation "origin"), not by stripping
+    // grants here. The kept write therefore runs without a card.
     f.recorder.events.splice(0);
     await f.start({ guestConfined: true });
-    const guest = await f.recorder.until((event) => event.type === "request.opened");
-    expect(guest).toMatchObject({ tool: "audit_write", allowSession: false });
-    expect(await f.instance.adapter.respondToRequest(f.threadId, guest.requestId!, { behavior: "allow", always: true })).toBe("allowed-once");
-    const again = await f.recorder.until((event) => event.type === "request.opened" && event.requestId !== guest.requestId);
-    expect(again).toMatchObject({ tool: "audit_write", allowSession: false });
-    await f.instance.adapter.respondToRequest(f.threadId, again.requestId!, { behavior: "deny" });
-    await f.completed();
-    expect(f.effects().map((effect) => effect.name)).toEqual(["one", "two", "three", "guest"]);
+    expect(await f.completed()).toMatchObject({ ok: true });
+    expect(opened()).toHaveLength(0);
+    expect(f.effects().map((effect) => effect.name)).toEqual(["one", "two", "three", "guest", "guest2"]);
 
     // another conversation keeps nothing
     f.recorder.events.splice(0);
@@ -313,7 +309,7 @@ describe("approvals that follow the other engines", () => {
     expect(elsewhere).toMatchObject({ tool: "audit_write" });
     await f.instance.adapter.respondToRequest(elsewhere.threadId, elsewhere.requestId!, { behavior: "deny" });
     await f.completed();
-    expect(f.effects().map((effect) => effect.name)).toEqual(["one", "two", "three", "guest"]);
+    expect(f.effects().map((effect) => effect.name)).toEqual(["one", "two", "three", "guest", "guest2"]);
   });
 });
 
@@ -1236,6 +1232,33 @@ describe("structured tool execution boundaries", () => {
     })]);
   });
 
+  it.each([
+    ["a failed tool call", "audit_fail", "The operation is complete.", "tool_error"],
+    ["an announced action", "audit_write", "I'll write the next receipt.", "incomplete_action"],
+  ])("ends on %s in the last allowed step without asking for another step", async (_, lastTool, text, stopReason) => {
+    const f = await fixture((_body, response, round) => round < 64
+      ? sse(response, [chunk({ tool_calls: [toolCall(round === 63 ? lastTool : "audit_write", `{"name":"step","value":"${round}"}`, `call_${round}`)] }, "tool_calls")])
+      : answer(response, text));
+    await f.start({ approvalMode: "full", toolErrorCorrectiveRounds: 1 });
+    expect(await f.completed()).toMatchObject({ ok: false, stopReason });
+    expect(f.requests).toHaveLength(64);
+  });
+
+  it.each([
+    ["a steer", "The receipt is stored."],
+    ["an announcement nudge", "I'll write the receipt now."],
+  ])("keeps reasoning_content on an answer resent after %s", async (kind, text) => {
+    const first = deferred<ServerResponse>();
+    const f = await fixture((_body, response, round) => round === 1 ? first.resolve(response) : answer(response));
+    await f.start({ approvalMode: "full" });
+    const response = await first.promise;
+    if (kind === "a steer") await expect(f.instance.adapter.steer!(f.threadId, "One more thing.")).resolves.toBe("steered");
+    sse(response, [chunk({ reasoning: "Synthetic reasoning." }), chunk({ content: text }, "stop")]);
+    expect(await f.completed()).toMatchObject({ ok: true });
+    expect(f.requests[1].messages.find((message) => message.role === "assistant"))
+      .toMatchObject({ content: text, reasoning_content: "Synthetic reasoning." });
+  });
+
   it("stops at 200 tool calls in one turn without running the batch that crosses it", async () => {
     // The turn's total is separate from the 32-per-reply bound.
     const f = await fixture((_body, response, round) => sse(response, [chunk({
@@ -1324,5 +1347,25 @@ describe("a configured MCP server that cannot mount", () => {
     const names = f.requests[0].tools!.map((tool) => tool.function.name);
     expect(names).toContain("audit_write");
     expect(names.some((name) => name.startsWith("slack_"))).toBe(false);
+  });
+});
+
+describe("a provider that streams whole tool calls without an index", () => {
+  it("runs both of Gemini's calls from one chunk and answers each by its id", async () => {
+    const f = await fixture((_body, response, round) => {
+      if (round === 1) sse(response, [chunk({ tool_calls: [
+        { id: "function-call-14076893379878918689", type: "function", function: { name: "audit_write", arguments: '{"name":"first","value":"done"}' } },
+        { id: "function-call-14076893379878916096", type: "function", function: { name: "audit_write", arguments: '{"name":"second","value":"done"}' } },
+      ] }, "stop")]);
+      else answer(response);
+    });
+    await f.start();
+    await f.decide();
+    const second = await f.recorder.until((event) => event.type === "request.opened" && f.recorder.events.filter((seen) => seen.type === "request.opened").indexOf(event) === 1);
+    await f.instance.adapter.respondToRequest(f.threadId, second.requestId!, { behavior: "allow" });
+    expect(await f.completed()).toMatchObject({ ok: true });
+    expect(f.effects()).toEqual([{ name: "first", value: "done" }, { name: "second", value: "done" }]);
+    const results = f.requests[1].messages.filter((message) => message.role === "tool").map((message) => message.tool_call_id);
+    expect(results).toEqual(["function-call-14076893379878918689", "function-call-14076893379878916096"]);
   });
 });

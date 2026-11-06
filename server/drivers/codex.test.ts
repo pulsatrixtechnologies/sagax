@@ -28,6 +28,7 @@ import {
   ownerKeyCodexArgs,
 } from "./codex.ts";
 import { codexCliOverrides } from "./codex-process.ts";
+import * as codexProcess from "./codex-process.ts";
 import { CODEX_SIGN_IN_EXPIRED, codexContextFull, codexNotSignedIn, codexSignInRefused, codexUserError } from "./codex-errors.ts";
 import { contextFullMessage, contextRenewedNotice } from "../context/context-renewal.ts";
 import { CODEX_USAGE_LIMIT_REACHED } from "../../shared/codex-usage-limit.ts";
@@ -436,6 +437,8 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     delete process.env.FAKE_CODEX_APPROVAL_REQUEST;
     delete process.env.FAKE_CODEX_DUMP;
     delete process.env.FAKE_CODEX_ASK_HOLD;
+    delete process.env.FAKE_CODEX_ASYNC_QUESTIONS;
+    delete process.env.FAKE_CODEX_ASYNC_QUESTION_GATE;
     delete process.env.FAKE_CODEX_TRANSIENTS;
     delete process.env.FAKE_CODEX_PARTIAL_FAILS;
     delete process.env.FAKE_CODEX_STATE;
@@ -2813,6 +2816,57 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(decision.error.message).toContain("array of questions");
   });
 
+  it("opens one question card for an async question and steers the answer into the running turn", async () => {
+    const dump = join(scratch, "codex-async.json");
+    const gate = join(scratch, "async-gate");
+    process.env.FAKE_CODEX_DUMP = dump;
+    await create({ mode: "async-question", environment: { FAKE_CODEX_ASYNC_QUESTION_GATE: gate } });
+    await instance.adapter.sendTurn({ threadId: "t-async-question", text: "which source?" });
+    const opened = await recorder.until((e) => e.type === "request.opened");
+    expect(opened).toMatchObject({
+      requestType: "question",
+      tool: "ask_user",
+      summary: "Which source should I use?",
+      choices: ["Directly in Sagax", "The official server in Executor"],
+      questions: [{ question: "Which source should I use?", options: [{ label: "Directly in Sagax" }, { label: "The official server in Executor" }] }],
+    });
+    expect(recorder.events.find((e) => e.type === "item.completed" && e.itemType === "assistant_text")).toMatchObject({
+      text: "Which source should I use?\n- Directly in Sagax\n- The official server in Executor",
+    });
+
+    const answer = "The user answered your questions.\n\nQ: Which source should I use?\nA: Directly in Sagax";
+    await expect(instance.adapter.respondToRequest("t-async-question", opened.requestId!, { behavior: "answer", message: answer })).resolves.toBe("answered");
+    expect(await recorder.until((e) => e.type === "request.resolved")).toMatchObject({ requestId: opened.requestId, behavior: "answer", source: "user" });
+    expect(JSON.parse(readFileSync(dump, "utf8")).calls.find((c: any) => c.method === "turn/steer")?.params?.input).toEqual([{ type: "text", text: answer }]);
+
+    writeFileSync(gate, "");
+    await recorder.until((e) => e.type === "turn.completed");
+    expect(recorder.events.filter((e) => e.type === "request.opened")).toHaveLength(1);
+    await expect(instance.adapter.respondToRequest("t-async-question", opened.requestId!, { behavior: "answer", message: answer })).resolves.toBe("unavailable");
+  });
+
+  it("leaves an async question the turn outlived to the harness's late answer", async () => {
+    await create({ mode: "async-question" });
+    await instance.adapter.sendTurn({ threadId: "t-async-late", text: "which source?" });
+    const opened = await recorder.until((e) => e.type === "request.opened");
+    await recorder.until((e) => e.type === "turn.completed");
+    expect(recorder.events.find((e) => e.type === "request.resolved")).toMatchObject({ requestId: opened.requestId, behavior: "deny", source: "system" });
+    await expect(instance.adapter.respondToRequest("t-async-late", opened.requestId!, { behavior: "answer", message: "Directly" })).resolves.toBe("unavailable");
+  });
+
+  it("keeps an async message as plain text when its questions offer nothing to pick", async () => {
+    for (const questions of ["please", [], [{ title: "   ", options: ["Orphan"] }, { title: "Anything else?", options: null }]]) {
+      await create({ mode: "async-question", environment: { FAKE_CODEX_ASYNC_QUESTIONS: JSON.stringify(questions) } });
+      await instance.adapter.sendTurn({ threadId: "t-async-plain", text: "ask loosely" });
+      await recorder.until((e) => e.type === "turn.completed");
+      const first = recorder.events.find((e) => e.type === "item.completed" && e.itemType === "assistant_text");
+      expect(first).toMatchObject({ text: expect.stringContaining("Which source should I use?") });
+      expect(recorder.events.some((e) => e.type === "request.opened")).toBe(false);
+      recorder.stop();
+      await instance.dispose();
+    }
+  });
+
   it("times out an ask with empty answers and a timeout-sourced resolve", async () => {
     // Hold the ask reply without completing the turn: a completed turn
     // starts the driver's child-reap loop, whose 25ms setTimeout poll would
@@ -3678,6 +3732,25 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(recorder.events.some((e) => e.type === "turn.retrying")).toBe(false);
   }, 20_000);
 
+  it.each(["timeout", "error"])("does not replay a tool completed before a turn/start %s", async (reply) => {
+    const actions = join(scratch, "early-tool-actions.jsonl");
+    const rpcTimeout = codexProcess.codexRpcTimeoutMs;
+    vi.spyOn(codexProcess, "codexRpcTimeoutMs").mockImplementation((method) => method === "turn/start" ? 300 : rpcTimeout(method));
+    vi.stubEnv("FAKE_CODEX_ACTION_LOG", actions);
+    vi.stubEnv("FAKE_CODEX_RETRY_SCALE", "0.001");
+    await create({ mode: `early-tool-${reply}`, environment: { HOME: scratch, CODEX_HOME: join(scratch, ".codex") } });
+    await instance.adapter.sendTurn({ threadId: `t-early-tool-${reply}`, text: "record one action" });
+    const done = await recorder.until((event) => event.type === "turn.completed");
+
+    expect(readFileSync(actions, "utf8").trim().split("\n")).toHaveLength(1);
+    expect(done).toMatchObject({ ok: false, stopReason: "rpc_error" });
+    expect(recorder.events.filter((event) => event.type === "turn.retrying")).toHaveLength(0);
+    expect(recorder.events.filter((event) => event.type === "turn.completed")).toHaveLength(1);
+    expect(recorder.events.filter((event) => event.type === "runtime.error")).toEqual([
+      expect.objectContaining({ message: expect.stringContaining("A tool action may have run. Check its effects before trying again.") }),
+    ]);
+    expect(recorder.events.filter((event) => (event.type === "item.started" || event.type === "item.completed") && event.itemType === "tool")).toHaveLength(0);
+  });
 
   it("retries a transient app-server crash before the turn starts", async () => {
     process.env.FAKE_CODEX_LAUNCH_CRASHES = "1";

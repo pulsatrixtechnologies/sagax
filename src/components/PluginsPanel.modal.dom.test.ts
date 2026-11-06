@@ -27,6 +27,7 @@ vi.mock("@/components/DesktopCapabilities", () => ({
 vi.mock("./ServerModeSettings", () => ({ useServerMode: () => null }));
 vi.mock("./McpServersPanel", () => ({
   useMcpServers: () => ({ servers: [], reserved: [], restricted: false, busy: null, policy: null, editing: null, startAdd: () => {}, toggleImport: () => {} }),
+  ClaudeCodeSwitches: () => null,
   ClaudeMcpSwitch: () => null,
   McpAuthLine: () => null,
   McpClientForm: () => null,

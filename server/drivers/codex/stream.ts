@@ -15,6 +15,7 @@ import { homedir } from "node:os";
 import { forgetCodexVolatile } from "../codex-instructions.ts";
 import { CodexRpcError } from "./rpc.ts";
 import { reportBackgroundError } from "../../background-error.ts";
+import { openAsyncQuestion } from "./questions.ts";
 
 export function attachCodexStream(s: CodexSession): void {
   const turn = s.input;
@@ -147,6 +148,9 @@ s.handleNotification = (msg: any) => {
           s.state.sawStreamDelta = false;
           s.emit({ ...s.base(s.threadId, s.turnId), type: "item.completed", itemType: "assistant_text", text: item.text });
         }
+        // request_user_input_async: questions ride the message and the turn
+        // keeps working. Open the shared question card; the answer steers in.
+        openAsyncQuestion(item, s.asks, s.steerActiveTurn, (event) => s.emit({ ...s.base(s.threadId, s.turnId), ...event }));
       } else if (item.type === "imageGeneration" && item.status !== "failed") {
         // Current Codex app-server (the same schema consumed by T3
         // Code) returns the generated raster as base64 `result` and

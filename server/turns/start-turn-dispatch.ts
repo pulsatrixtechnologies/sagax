@@ -3,6 +3,8 @@
 // Never imports server/index.ts.
 import { resolveClaudeSubagentModel } from "../../shared/claude-subagent-model.ts";
 import { ATTACHMENTS_DIR } from "../attachments/attachments.ts";
+import { DATA_DIR } from "../config.ts";
+import { claudeUserSkillsDir, claudeUserSkillsEnabled, forgetClaudeUserSkillsDir } from "../turn-settings.ts";
 import { deferConnectorsPatch } from "./defer-connectors-patch.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
@@ -207,6 +209,11 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       ...(() => { const networkProxy = state.turnAuto?.auto ? undefined : turnNetworkProxy(state.threadId, state.bot.id, state.turnPlace); return networkProxy ? { networkProxy } : {}; })(),
       ...(state.integrations.browser && browserIsThePlace(state.plan) ? { preloadBrowserTools: true } : {}),
       mcpFromUserConfig: claudeUserMcpEnabled(cfg, IDENTITY.kind === "perspicax") && !managedPolicy.restrictsMcp(),
+      ...(() => {
+        const userSkillsDir = claudeUserSkillsEnabled(cfg) ? claudeUserSkillsDir(DATA_DIR) : null;
+        if (!claudeUserSkillsEnabled(cfg)) forgetClaudeUserSkillsDir(DATA_DIR);
+        return userSkillsDir ? { userSkillsDir } : {};
+      })(),
       claudeAiConnectors: claudeAiConnectorsFor(state.bot, state.instance, state.speaker, turnAccess?.via),
       grokCloudConnectors: grokCloudConnectorsForTurn(accountConnectorInput(state.bot, state.instance, state.speaker, turnAccess?.via)),
       ...pluginDirsFor(state.bot, state.instance, orgSpeakerPrincipal(state.bot, state.speaker)),

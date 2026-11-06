@@ -52,6 +52,14 @@ export async function buildBotPatchAccess(env: BotsMutateEnv, state: BotPatchSta
     }
     patch.memoryUpkeep = body.memoryUpkeep;
   }
+  // false: the helper model never writes for this bot (server/side-jobs.ts)
+  if (body.helperModel !== undefined) {
+    if (typeof body.helperModel !== "boolean") {
+      env.json(env.res, 400, { error: "helperModel must be true or false" });
+      return true;
+    }
+    patch.helperModel = body.helperModel;
+  }
   // Prompt-cache keep-warm: true/false overrides the workspace, null follows it.
   if (body.cacheKeepWarm !== undefined) {
     if (body.cacheKeepWarm !== null && typeof body.cacheKeepWarm !== "boolean") {

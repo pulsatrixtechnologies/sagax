@@ -24,7 +24,8 @@
 // (`generateText`: Claude and the chat-completion engines, or
 // `generateMemoryText`: the ACP engines, server/drivers/acp/background-text.ts,
 // and Codex, server/drivers/codex-background-text.ts); on any other
-// engine they are skipped and only the deterministic tidy steps run.
+// engine the helper model writes them when one is set (server/side-jobs.ts),
+// and otherwise they are skipped and only the deterministic tidy steps run.
 import { captureCallPhase, fileCandidatesPhase, runTidyPhase, type MemoryPhaseHost } from "./memory-upkeep-phases.ts";
 
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
@@ -80,7 +81,9 @@ export function upkeepEnabled(bot: Pick<UpkeepBot, "memoryUpkeep" | "memoryEnabl
 export interface UpkeepDeps {
   bots: () => readonly UpkeepBot[];
   bot: (id: string) => UpkeepBot | undefined;
-  /** The bot's engine when it may receive memory text (policy allows), else null. */
+  /** Whoever writes the bot's model steps: its own engine when it can and
+   * may receive memory text (policy allows), else the helper model when one
+   * is set (server/side-jobs.ts), else null. */
   engine: (botId: string) => UpkeepEngine | null;
   /** A turn is running for the bot: the scheduled tidy waits. */
   busy: (botId: string) => boolean;

@@ -34,9 +34,10 @@ export interface ManagedSkill {
   enabled: boolean;
   source: string;
   warnings: string[];
-  /** Present only under features.skillsLibrary: where the bot reads this
-   * skill from. Private shadows me and library on name collision. */
-  origin?: "private" | "library" | "me";
+  /** Present under features.skillsLibrary (and for engine-native skills always):
+   * where the bot reads this skill from. Private shadows me, library and native
+   * on name collision. "native": loaded by the engine from a folder of its own. */
+  origin?: "private" | "library" | "me" | "native";
   /** Shared skills: bots that still link to the one copy. */
   assignedBots?: Array<{ id: string; name: string }>;
 }
@@ -375,6 +376,7 @@ export function SkillsSection({ bot }: { bot: Bot }) {
   };
 
   const originLabel = (skill: ManagedSkill) => {
+    if (skill.origin === "native") return t("skills.origin.native");
     if (skill.origin === "me" || skill.origin === "library") return t("botPanel.skills.originShared");
     return t("botPanel.skills.originPrivate");
   };
@@ -498,15 +500,18 @@ export function SkillsSection({ bot }: { bot: Bot }) {
                   >
                     <div className="flex min-w-0 items-center gap-1.5">
                       <div className="truncate font-mono text-[12.5px] text-ink">{skill.name}</div>
-                      {libraryOn && (
-                        <span className="shrink-0 rounded bg-control px-1 py-px font-mono text-[9.5px] uppercase tracking-wide text-ink-secondary">
+                      {(libraryOn || skill.origin === "native") && (
+                        <span
+                          className="shrink-0 rounded bg-control px-1 py-px font-mono text-[9.5px] uppercase tracking-wide text-ink-secondary"
+                          title={skill.origin === "native" ? t("skills.origin.nativeHint") : undefined}
+                        >
                           {originLabel(skill)}
                         </span>
                       )}
                     </div>
                     <div className="mt-0.5 line-clamp-2 text-[11.5px] text-ink-secondary">{skill.description}</div>
                   </button>
-                  {skillWrites && (
+                  {skillWrites && skill.origin !== "native" && (
                     <>
                       <Switch
                         checked={skill.enabled}
@@ -551,6 +556,16 @@ export function SkillsSection({ bot }: { bot: Bot }) {
                         )}
                       </PopoverMenu>
                     </>
+                  )}
+                  {skill.origin === "native" && (
+                    <button
+                      type="button"
+                      onClick={() => openSkill(skill)}
+                      className="flex size-8 shrink-0 items-center justify-center rounded-md text-ink-secondary hover:bg-control hover:text-ink"
+                      aria-label={t("botPanel.skills.open")}
+                    >
+                      <Eye size={15} />
+                    </button>
                   )}
                 </div>
                 {skill.source && (

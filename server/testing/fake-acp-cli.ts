@@ -16,11 +16,18 @@
 //   FAKE_ACP_CACHED_LIVE_LOAD  acknowledge session/load of a live session but
 //                       keep its original MCP credentials, matching Qwen.
 //   FAKE_ACP_TEXT_REPLY  answer every session/prompt with only this text.
+//   FAKE_ACP_IGNORE_CANCEL=1  session/cancel is ignored: a hanging prompt
+//                       keeps running so cancel-timeout must end the process
 //   FAKE_ACP_MODE   happy (default) | image | empty-reply | reasoning-only | reasoning-only-error | exit-early | fail-after-text | hang | hang-initialize | stall-after-text | stall-first-prompt | unkeyed-tool | no-auth | auth-required | permission | question
-//                   | ask-question-unsupported (send a cursor/ask_question server→client
-//                     request mid-prompt; the driver must answer -32601 method
-//                     not found, and the prompt completes only after that
-//                     rejection arrives)
+//                   | ask-question (send a vendor question request mid-prompt:
+//                     FAKE_ACP_ASK_METHOD, default cursor/ask_question, with
+//                     the JSON params in FAKE_ACP_ASK_PARAMS. The client's
+//                     reply ({result} or {error}) is written as JSON to
+//                     FAKE_ACP_ASK_ANSWER, and the prompt completes only after
+//                     it arrives. FAKE_ACP_ASK_TIMING=with-result sends the
+//                     prompt result right after the request, so the turn
+//                     settles with the card open; after-result sends the
+//                     request after the prompt result, between turns)
 //                   | interleave (message → tool → message → tool → message)
 //                   | no-session-config (reject session/set_mode + set_model
 //                     with -32601, i.e. an agent predating those methods)
@@ -83,7 +90,8 @@
 //                     the way the agent's own client does, stdio or http,
 //                     with grok 1.0.25's initialize (FAKE_ACP_MCP_HANDSHAKE JSON
 //                     overrides it), list its tools, and reply one line per
-//                     server: "<name>: <tool>,<tool>" or "<name> failed: <why>")
+//                     server: "<name>: <tool>,<tool>" or "<name> failed: <why>";
+//                     FAKE_ACP_MCP_SCHEMA_BYTES=1 adds each schema's length)
 //                   | mcp-call (FAKE_ACP_MCP_CALLS="server:tool,server:tool"; FAKE_ACP_ASK_BEFORE_MCP=use_tool asks first like grok's use_tool:
 //                     call each tool once, in order, on that stdio server from
 //                     session/new's mcpServers, as the agent's own MCP client
@@ -225,9 +233,11 @@ const ONE_PIXEL_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42
 // model is chosen with session/set_config_option, because `opencode acp` takes
 // no -m. Off unless FAKE_ACP_MODELS is set, so every existing mode is byte-
 // identical to before.
-const models = (process.env.FAKE_ACP_MODELS_FILE && existsSync(process.env.FAKE_ACP_MODELS_FILE)
+const modelsText = process.env.FAKE_ACP_MODELS_FILE && existsSync(process.env.FAKE_ACP_MODELS_FILE)
   ? readFileSync(process.env.FAKE_ACP_MODELS_FILE, "utf8")
-  : process.env.FAKE_ACP_MODELS ?? "").split(",").map((id) => id.trim()).filter(Boolean);
+  : process.env.FAKE_ACP_MODELS ?? "";
+// One id per line when the list holds a newline (DeepSeek's wire values are JSON pairs with commas); else comma-separated.
+const models = modelsText.split(modelsText.includes("\n") ? "\n" : ",").map((id) => id.trim()).filter(Boolean);
 const defaultModelEnv = process.env.AGY_ACP_DEFAULT_MODEL;
 if (models.length && defaultModelEnv && !models.includes(defaultModelEnv)) models.push(defaultModelEnv);
 let currentModel: string | null = models.length && defaultModelEnv ? defaultModelEnv : models[0] ?? null;
@@ -389,6 +399,7 @@ const dumpEnv = Object.fromEntries(
     "TMP",
     "SystemRoot",
     "FAKE_ACP_MODE",
+    "FAKE_ACP_IGNORE_CANCEL",
     "FAKE_ACP_RPC_DUMP",
     "FAKE_ACP_IMAGE_CAPABILITY",
     "FAKE_ACP_DUMP_PROMPT",
@@ -443,6 +454,10 @@ const dumpEnv = Object.fromEntries(
     "SAGAX_ACP_BACKGROUND_TEXT",
     "SAGAX_GROK_MODEL_PROBE",
     "SAGAX_GROK_REACH_PROBE",
+    "COPILOT_ALLOW_ALL",
+    "COPILOT_GITHUB_TOKEN",
+    "GH_TOKEN",
+    "GITHUB_TOKEN",
   ].flatMap((key) => (process.env[key] === undefined ? [] : [[key, process.env[key]]] as const)),
 );
 // pid rides along so a test can tell a respawned process (new pid, fresh
@@ -593,8 +608,7 @@ const configCalls: Array<{ method: string; params: unknown }> = [];
 let pendingPermissionId: number | null = null;
 let onPermissionAnswered: ((allowed: boolean) => void) | null = null;
 let lastPermissionCancelled = false;
-// pending server→client cursor/ask_question probe → resolver (the unsupported
-// method the driver must reject rather than guess a shape for)
+// pending server→client vendor question request (ask-question mode) → resolver
 let pendingAskQuestionId: number | null = null;
 let onAskQuestionAnswered: (() => void) | null = null;
 
@@ -623,7 +637,8 @@ const GROK_MCP_HANDSHAKE = { protocolVersion: "2025-11-25", capabilities: { exte
 
 /** Connect one server as the agent's own MCP client would and list its tools. */
 async function listMcpTools(entry: AnyMcpEntry, handshake: unknown): Promise<string[]> {
-  const names = (result: any) => (result?.tools ?? []).map((tool: { name: string }) => tool.name);
+  const names = (result: any) => (result?.tools ?? []).map((tool: { name: string; inputSchema?: unknown }) =>
+    process.env.FAKE_ACP_MCP_SCHEMA_BYTES === "1" ? `${tool.name}=${JSON.stringify(tool.inputSchema ?? {}).length}` : tool.name);
   if (typeof entry.url === "string") {
     const headers: Record<string, string> = { "content-type": "application/json", accept: "application/json, text/event-stream" };
     for (const { name, value } of entry.headers ?? []) headers[name] = value;
@@ -845,9 +860,12 @@ process.stdin.on("data", (c) => {
 });
 
 function handle(msg: any) {
-  // client's response to the unsupported cursor/ask_question probe
+  // client's reply to the vendor question request (ask-question mode)
   if (msg.id !== undefined && (msg.result !== undefined || msg.error !== undefined) && msg.id === pendingAskQuestionId) {
     pendingAskQuestionId = null;
+    if (process.env.FAKE_ACP_ASK_ANSWER) {
+      writeFileSync(process.env.FAKE_ACP_ASK_ANSWER, JSON.stringify(msg.error !== undefined ? { error: msg.error } : { result: msg.result }));
+    }
     onAskQuestionAnswered?.();
     return;
   }
@@ -1782,19 +1800,39 @@ function handle(msg: any) {
         });
         return;
       }
-      if (mode === "ask-question-unsupported") {
-        // cursor/ask_question is deliberately unwired in the driver: its wire
-        // shape is unverified, so it must be rejected method-not-found rather
-        // than answered with a guessed shape. Complete only after the
-        // rejection arrives, so a test can await turn.completed.
-        pendingAskQuestionId = 9300;
-        onAskQuestionAnswered = complete;
-        out({
-          jsonrpc: "2.0",
-          id: pendingAskQuestionId,
-          method: "cursor/ask_question",
-          params: { questions: [{ question: "Which color?", options: ["Blue", "Green"] }] },
-        });
+      if (mode === "ask-question") {
+        // A vendor tool that blocks on the person's answer (Grok's
+        // ask_user_question, Cursor's AskQuestion). Complete only after the
+        // client replies, so a test can await turn.completed; between turns
+        // the reply arrives after the prompt result instead.
+        const ask = () => {
+          pendingAskQuestionId = 9300;
+          out({
+            jsonrpc: "2.0",
+            id: pendingAskQuestionId,
+            method: process.env.FAKE_ACP_ASK_METHOD ?? "cursor/ask_question",
+            params: process.env.FAKE_ACP_ASK_PARAMS ? JSON.parse(process.env.FAKE_ACP_ASK_PARAMS) : {
+              toolCallId: "ask-1",
+              title: "Pick a color",
+              questions: [{ id: "color", prompt: "Which color?", options: [{ id: "blue-id", label: "Blue" }, { id: "green-id", label: "Green" }], allowMultiple: false }],
+            },
+          });
+        };
+        const timing = process.env.FAKE_ACP_ASK_TIMING;
+        if (timing === "with-result" || timing === "after-result") {
+          onAskQuestionAnswered = null;
+          if (timing === "with-result") ask();
+          complete();
+          // late enough that the driver has settled the turn, so the request
+          // really arrives between turns rather than in the same read
+          if (timing === "after-result") setTimeout(ask, 300);
+          return;
+        }
+        onAskQuestionAnswered = () => {
+          out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text: "answered the question" } } } });
+          complete();
+        };
+        ask();
         return;
       }
       complete();
@@ -1806,6 +1844,9 @@ function handle(msg: any) {
         cancelGated = null;
         cancel();
       }
+      // FAKE_ACP_IGNORE_CANCEL=1: keep a hanging prompt running so the
+      // driver's cancel-timeout path must end the process itself.
+      if (process.env.FAKE_ACP_IGNORE_CANCEL === "1") break;
       // the interrupted prompt resolves as cancelled. FAKE_ACP_CANCEL_REPLY
       // = "error" rejects it instead, any other value is the stopReason the
       // agent answers with (agents differ on how a cancel settles).

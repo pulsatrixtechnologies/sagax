@@ -448,8 +448,10 @@ export function hasSavedApiKey(instance: InstanceInfo): boolean {
 
 /** Its setup is a key in Settings → API keys, and that is not done yet. */
 function apiKeySetup(instance: InstanceInfo): boolean {
-  return (isApiKeyEngine(instance) || instance.install?.settings === "connections") && !instance.snapshot.authenticationUnavailableReason
-    && (instance.snapshot.state !== "available" || instance.snapshot.authenticated === false);
+  if (!(isApiKeyEngine(instance) || instance.install?.settings === "connections") || instance.snapshot.authenticationUnavailableReason) return false;
+  // A key engine with its own CLI (DeepSeek Harness) is installed first, then given the key.
+  if (instance.snapshot.state !== "available") return !installCommandFor(instance.install);
+  return instance.snapshot.authenticated === false;
 }
 
 function GrokKeyInstead({ className, unframed }: { className?: string; unframed: boolean }) {
@@ -511,8 +513,9 @@ function ApiKeyEngineSetup({ instance, className, unframed, configured = false }
           </p>
         </div>
       </div>
-      {/* a saved key the provider refused reads as installed but signed out */}
-      {needsSignIn(instance) && (
+      {/* An API-only engine is available only with a saved key, so unauthenticated means rejected.
+          A key engine with its own CLI (DeepSeek Harness) is unauthenticated simply when no key is saved yet. */}
+      {isApiKeyEngine(instance) && needsSignIn(instance) && (
         <p role="alert" className="mt-2 text-[12px] leading-relaxed text-danger">{t("engineSetup.apiKey.rejected")}</p>
       )}
       <EngineApiKeyField instanceId={instance.instanceId} />

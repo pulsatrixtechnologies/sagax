@@ -14,6 +14,7 @@ import {
   acpNativeIncomingLogMessage,
   acpRpcError,
 } from "./helpers.ts";
+import { questionRequestFor } from "./question-requests.ts";
 import { createPermissionHandler } from "./session-permission.ts";
 import { createStreamHandlers } from "./session-stream.ts";
 import type {
@@ -295,11 +296,14 @@ export function createOpenSession(deps: OpenSessionDeps) {
           const current = session.current;
           if (!current) {
             // between turns nothing is brokered: cancel a permission
-            // request and refuse anything else — the agent must never
-            // block on an unanswered request
+            // request or a question and refuse anything else — the agent
+            // must never block on an unanswered request
+            const questionRequest = questionRequestFor(support.questionRequests, msg.method);
             send(msg.method === "session/request_permission"
               ? { jsonrpc: "2.0", id: msg.id, result: { outcome: { outcome: "cancelled" } } }
-              : { jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: "method not found" } });
+              : questionRequest
+                ? { jsonrpc: "2.0", id: msg.id, result: questionRequest.cancelled }
+                : { jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: "method not found" } });
           } else {
             handleServerRequest(msg, current);
           }
@@ -330,6 +334,8 @@ export function createOpenSession(deps: OpenSessionDeps) {
       session.dead = true;
       session.acp.failAll(new Error(`${DRIVER_KIND} exited ${code} before the prompt result${session.stderr ? `: ${session.stderr.trim().slice(-300)}` : ""}`));
       const current = session.current;
+      // Cancel-timeout owns settle (cancelled or stop_failed) after it awaits the kill.
+      if (current?.state.cancelling) return;
       if (current) {
         emit({
           ...base(threadId, current.turnId),

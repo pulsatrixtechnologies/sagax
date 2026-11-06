@@ -376,7 +376,7 @@ try {
   // Three guards hold here: main's abandoned attempt never retries,
   // neither does a Company session already recovered once from canonical
   // history, and a Stop already asked for must not be undone by a relaunch.
-  if (!s.state.settled && !s.abandoned && !s.recoveredMissingSession && !s.stopRequested && !needsAuth && verdict.transient && s.attempt < RETRY_MAX_ATTEMPTS - 1 && s.state.sawStreamDelta === false) {
+  if (!s.state.settled && !s.abandoned && !s.recoveredMissingSession && !s.stopRequested && !needsAuth && s.codexTurnId === null && s.earlyNotifications.length === 0 && verdict.transient && s.attempt < RETRY_MAX_ATTEMPTS - 1 && s.state.sawStreamDelta === false) {
     return s.relaunch(verdict.reason, message, "rpc_error");
   }
   // abandoned marks an attempt retired by a retry; its late rpc
@@ -388,7 +388,8 @@ try {
     s.emit({
       ...s.base(s.threadId, s.turnId),
       type: "runtime.error",
-      message,
+      message: s.earlyNotifications.some((event) => ["commandExecution", "fileChange", "mcpToolCall", "webSearch"].includes(event.params?.item?.type))
+        ? `${message} A tool action may have run. Check its effects before trying again.` : message,
       ...(needsAuth ? { setup: true } : {}),
     });
     await s.settle(false, needsAuth ? "auth_required" : verdict.reason === "provider_safety" ? "provider_safety" : "rpc_error");

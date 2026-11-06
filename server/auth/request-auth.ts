@@ -1220,7 +1220,7 @@ export function capabilitiesForAuth(auth: { scopes: readonly string[] }, options
  * off the phone. */
 const COMPANION_BOT_FIELDS = new Set([
   ...MEMBER_BOT_FIELDS,
-  "memoryEnabled", "memoryUpkeep", "voiceNotes",
+  "memoryEnabled", "memoryUpkeep", "helperModel", "voiceNotes",
   // Permissions / Approval / Proactive (BotPanelPatch)
   "approvalMode", "autoApprove", "acknowledgeLocalAuto", "proactiveMode", "pageTargetDefault", "alwaysAllow",
   "chiefOfStaff", "approvePeerComms",

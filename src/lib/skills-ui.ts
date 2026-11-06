@@ -13,11 +13,12 @@ export function skillSourceLabel(source: string): string {
   return "Source";
 }
 
-export type SkillEditorOrigin = "private" | "library" | "me";
+export type SkillEditorOrigin = "private" | "library" | "me" | "native";
 
 export function skillEditorApiPath(botId: string, name: string, origin: SkillEditorOrigin | undefined): string {
   if (origin === "library") return `/api/skills-library/${encodeURIComponent(name)}`;
   if (origin === "me") return `/api/me/skills-library/${encodeURIComponent(name)}`;
+  // native skills are read through the bot skills route (readBotSkillFile falls back).
   return `/api/bots/${encodeURIComponent(botId)}/skills/${encodeURIComponent(name)}`;
 }
 

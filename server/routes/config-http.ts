@@ -71,7 +71,7 @@ export function createConfigHttpRoutes(deps: ConfigHttpDeps): RouteHandler {
       // points the server at an endpoint they control.
       const record = body as Record<string, unknown>;
       const hostFeature = record.features && typeof record.features === "object"
-        ? ["sharedComputers", "claudeUserMcp", "vpsComputer", "boatComputer"].find((key) => Object.hasOwn(record.features as object, key))
+        ? ["sharedComputers", "claudeUserMcp", "claudeUserSkills", "vpsComputer", "boatComputer"].find((key) => Object.hasOwn(record.features as object, key))
         : undefined;
       // vps (an SSH alias of the server) and box (whose account runs the
       // computers) choose where bots run: an admin's, like an address.

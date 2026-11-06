@@ -158,11 +158,11 @@ describe("bot profile page shell", () => {
     expect(html).toContain('aria-label="Close"');
   });
 
-  it("regression #2271: the header (name, label, description, colour, Appearance) comes before the tabs, the tabs are four at most, the panels two columns from 900px", () => {
+  it("regression #2271: the header (name, label, description, Appearance) comes before the tabs, the tabs are four at most, the panels two columns from 900px", () => {
     const html = render("overview");
     const tabs = at(html, 'data-bot-profile-tabs=""');
     expect(tabs).toBeGreaterThan(0);
-    for (const marker of ['data-bot-profile-title=""', 'data-bot-profile-label=""', 'data-bot-profile-description=""', 'data-bot-profile-colors=""', 'data-bot-profile-appearance-toggle=""']) {
+    for (const marker of ['data-bot-profile-title=""', 'data-bot-profile-label=""', 'data-bot-profile-description=""', 'data-bot-profile-appearance-toggle=""']) {
       expect(at(html, marker)).toBeGreaterThan(0);
       expect(at(html, marker)).toBeLessThan(tabs);
     }
@@ -176,11 +176,8 @@ describe("bot profile page shell", () => {
     expect(label).toContain(">Research<");
     expect(label).toContain("text-ink-secondary");
     expect(label).toContain("text-[15px]");
-    // the description and the colour, edited in place
+    // the description, edited in place
     expect(html).toMatch(/<textarea[^>]*data-bot-profile-description=""[^>]*>Finds sources\.<\/textarea>/);
-    expect(html).toMatch(/role="radiogroup" [^>]*data-bot-profile-colors=""/);
-    expect(html).toContain('data-mascot-color="green"');
-    expect(html).toMatch(/data-mascot-color="green"[^>]*aria-checked="true"|aria-checked="true"[^>]*data-mascot-color="green"/);
     // each tab is a panel of two responsive columns
     for (const tab of TABS_ALL) {
       const panel = html.slice(at(html, `id="bot-profile-panel-${tab}"`), at(html, `id="bot-profile-panel-${tab}"`) + 400);
@@ -205,6 +202,20 @@ describe("bot profile page shell", () => {
     expect(bodiesOf(sectionHtml(html, "appearance").html)).toEqual(["appearance"]);
     expect(at(html, 'id="bot-profile-appearance"')).toBeLessThan(at(html, 'data-bot-profile-tabs=""'));
     expect(tabsOf(html)).not.toContain("appearance");
+  });
+
+  it("regression: nothing of the Appearance shows while it is folded, the description then the tabs (JC 2026-11-06)", () => {
+    const html = render("overview");
+    expect(html).toContain('data-bot-profile-appearance-toggle="" aria-expanded="false"');
+    for (const marker of ["data-mascot-color", "data-bot-profile-colors", "data-appearance-modes", "data-appearance-mode=", "data-appearance-reset", "data-mascot-randomize", "data-appearance-tabs"]) {
+      expect(html).not.toContain(marker);
+    }
+    for (const word of [">Generate<", ">Upload<", ">Reset<", ">Randomize<"]) expect(html).not.toContain(word);
+    // straight from the description to the General / Knowledge / Model & tools / Activity tabs
+    const description = at(html, 'data-bot-profile-description=""');
+    const tabs = at(html, 'data-bot-profile-tabs=""');
+    expect(description).toBeGreaterThan(0);
+    expect(html.slice(description, tabs)).not.toContain("<button");
   });
 
   it("carries no gear: the bot's settings are its tabs and the bot panel's (#2173)", () => {
@@ -242,8 +253,8 @@ describe("bot profile page shell", () => {
     // Play a move stays, Randomize leaves the header for the Appearance section
     expect(html.slice(hero, audience)).not.toContain("data-mascot-randomize");
     expect(html.slice(toggle, html.indexOf("</button>", toggle))).toContain(">Appearance<");
-    // nothing lost under it: who sees it, the description, the colour
-    for (const marker of ["data-bot-profile-audience", 'data-bot-profile-description=""', 'data-bot-profile-colors=""']) expect(at(html, marker)).toBeGreaterThan(toggle);
+    // nothing lost under it: who sees it, the description (the colour lives in Appearance > Color)
+    for (const marker of ["data-bot-profile-audience", 'data-bot-profile-description=""']) expect(at(html, marker)).toBeGreaterThan(toggle);
     // the column 1100px at most (two columns) with a 16px gutter on a phone
     expect(html).toMatch(/data-bot-profile-column="" class="mx-auto flex w-full max-w-\[1100px\] flex-col px-4 pb-10 sm:px-6"/);
   });

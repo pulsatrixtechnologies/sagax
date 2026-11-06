@@ -71128,6 +71128,22 @@
         }
       }
     },
+    "Send feedback": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send feedback"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoyer des commentaires"
+          }
+        }
+      }
+    },
     "Send a message to this task": {
       "localizations": {
         "en": {

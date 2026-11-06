@@ -398,9 +398,9 @@ public enum DesktopSkins {
         "pulsatrix": [
             "code-scheme": "dark", "app": "#121212", "panel": "#161616", "raised": "#1f1f1f",
             "raised-hover": "#2c2c2c", "card": "#1f1f1f", "menu": "#1f1f1f", "inset": "#1b1b1b", "control": "#282828",
-            "hairline": "#353535", "ink": "#f5f5f5", "ink-secondary": "#f5f5f5a8", "ink-tertiary": "#f5f5f58a",
+            "hairline": "#353535", "ink": "#e4e4e7", "ink-secondary": "#9e9ea3", "ink-tertiary": "#f5f5f58a",
             "accent": "#3c76f4", "accent-border": "#4f86f7", "accent-text": "#c8e4ff", "focus": "#4f86f7",
-            "accent-ink": "#121212", "bubble-user": "#3b3b3b", "bubble-user-ink": "#f5f5f5", "success": "#38d591",
+            "accent-ink": "#121212", "bubble-user": "#3b3b3b", "bubble-user-ink": "#e4e4e7", "success": "#38d591",
             "danger": "#fb6364", "danger-ink": "#121212", "success-ink": "#121212", "warning": "#ff9800",
             "composer": "#1f1f1f", "unread": "var(--color-accent)",
         ],

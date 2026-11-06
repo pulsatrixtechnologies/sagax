@@ -86,6 +86,24 @@ public enum PlanUsageRules {
         (report?.providers ?? []).filter(\.ok)
     }
 
+    /// `usagePercent` (src/lib/account-menu.ts): the figure beside the
+    /// account menu's plan row ("4% used"), the HIGHEST of the connected
+    /// plans, each read on its weekly window (its 5-hour window when it
+    /// reports no weekly one), rounded and clamped; nil without a plan that
+    /// reports one.
+    public static func menuPercent(_ report: PlanUsageReport?) -> Int? {
+        var best: Int?
+        for provider in report?.providers ?? [] {
+            if let state = provider.state, state != "windows" { continue }
+            if provider.state == nil, !provider.ok { continue }
+            let window = provider.weekly.available && provider.weekly.usedPercent != nil ? provider.weekly : provider.fiveHour
+            guard window.available, let used = window.usedPercent, used.isFinite else { continue }
+            let value = Int(min(100, max(0, used)).rounded())
+            best = best.map { max($0, value) } ?? value
+        }
+        return best
+    }
+
     /// A deadline that has passed since the report: ask the providers again.
     public static func hasDueReset(_ report: PlanUsageReport, now: Date) -> Bool {
         report.providers.contains { provider in

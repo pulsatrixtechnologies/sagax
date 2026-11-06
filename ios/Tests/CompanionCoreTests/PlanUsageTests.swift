@@ -29,4 +29,24 @@ final class PlanUsageTests: XCTestCase {
         XCTAssertEqual(PlanUsageRules.connected(report).map(\.id), ["claude"])
         XCTAssertTrue(PlanUsageRules.connected(nil).isEmpty)
     }
+
+    /// account-menu.ts `usagePercent`: the highest plan, weekly first, 5-hour
+    /// without a weekly window; nil without a plan that reports one.
+    func testMenuPercentIsTheHighestPlan() throws {
+        let json = #"""
+        {"providers":[
+          {"id":"a","name":"A","ok":true,"state":"windows",
+           "fiveHour":{"available":true,"remainingPercent":72,"usedPercent":27.6,"resetsAt":null},
+           "weekly":{"available":false,"remainingPercent":null,"usedPercent":null,"resetsAt":null},"extra":[]},
+          {"id":"b","name":"B","ok":true,"state":"windows",
+           "fiveHour":{"available":true,"remainingPercent":1,"usedPercent":99,"resetsAt":null},
+           "weekly":{"available":true,"remainingPercent":96,"usedPercent":4,"resetsAt":null},"extra":[]},
+          {"id":"c","name":"C","ok":false,"state":"signed-out",
+           "fiveHour":{"available":true,"remainingPercent":0,"usedPercent":100,"resetsAt":null},
+           "weekly":{"available":false,"remainingPercent":null,"usedPercent":null,"resetsAt":null},"extra":[]}]}
+        """#
+        let report = try JSONDecoder().decode(PlanUsageReport.self, from: Data(json.utf8))
+        XCTAssertEqual(PlanUsageRules.menuPercent(report), 28)
+        XCTAssertNil(PlanUsageRules.menuPercent(nil))
+    }
 }

@@ -49,6 +49,22 @@ test("operations are checked for shape before anything runs", () => {
   assert.equal(validBridgeOperation({ action: "terminal_open", arguments: { ticket: "../x", cols: 100, rows: 30 } }), false);
   assert.equal(validBridgeOperation({ action: "terminal_open", arguments: { ticket: "a".repeat(48) } }), false);
   assert.equal(validBridgeOperation({ action: "terminal_open" }), false);
+  // The Apple apps: a known tool and its arguments, nothing else.
+  assert.equal(validBridgeOperation({ action: "mac_app", tool_name: "mac_notes_create", arguments: { title: "T", body: "B" } }), true);
+  assert.equal(validBridgeOperation({ action: "mac_app", tool_name: "mac_shell", arguments: {} }), false);
+  assert.equal(validBridgeOperation({ action: "mac_app", tool_name: "mac_notes_create" }), false);
+  assert.equal(validBridgeOperation({ action: "mac_app", tool_name: "mac_notes_create", arguments: {}, script: "do shell script" }), false);
+});
+
+test("an Apple app call runs through the app's own runner, and says so when there is none", async () => {
+  const calls = [];
+  const macApp = async (name, args) => { calls.push({ name, args }); return { content: [{ type: "text", text: "ok" }] }; };
+  const done = await executeBridgeOperation({ action: "mac_app", tool_name: "mac_reminders_create", arguments: { title: "Call" } }, { macApp }, undefined);
+  assert.equal(done.content[0].text, "ok");
+  assert.deepEqual(calls, [{ name: "mac_reminders_create", args: { title: "Call" } }]);
+  const missing = await executeBridgeOperation({ action: "mac_app", tool_name: "mac_reminders_create", arguments: { title: "Call" } }, {}, undefined);
+  assert.equal(missing.isError, true);
+  assert.match(missing.content[0].text, /desktop app on a Mac/);
 });
 
 test("a terminal request opens the person's terminal through the app, and says so when it cannot", async () => {

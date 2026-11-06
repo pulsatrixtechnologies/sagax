@@ -291,6 +291,15 @@ const __BASE_VERSION__: string;
         setKey(base: string, key: string): Promise<boolean>;
         clearKey(base: string): Promise<boolean>;
       };
+      /** The Apple apps of this Mac (Plugins > This Mac), read and changed on
+       * this Mac when the app is on an organization server. Absent in older
+       * desktop builds. */
+      macApps?: {
+        status(): Promise<import("../../shared/mac-apps-setup.ts").MacAppsSetupStatus>;
+        set(app: import("../../shared/mac-apps-setup.ts").MacAppSetupId, enabled: boolean): Promise<import("../../shared/mac-apps-setup.ts").MacAppsSetupStatus>;
+        test(app: import("../../shared/mac-apps-setup.ts").MacAppSetupId): Promise<import("../../shared/mac-apps-setup.ts").MacAppTestResult>;
+        openSettings(pane: "automation" | "fullDiskAccess"): Promise<boolean>;
+      };
       localControl: {
         status(): Promise<LinuxLocalControlStatus>;
         enable(): Promise<LinuxLocalControlStatus>;

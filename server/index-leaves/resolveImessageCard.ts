@@ -8,6 +8,7 @@ import { fileInsideRoots } from "../imessage/imessage-db.ts";
 import { readMessagesSettings } from "../imessage/imessage-settings.ts";
 import { workspaceDir, TASK_WORKSPACES_DIR } from "../workspace/workspace.ts";
 import { join } from "node:path";
+import { macAppEnabled, macAppOfTool, runMacAppCall } from "../../electron/mac-apps.mjs";
 export type Host = Record<string, any>;
 
 export function createResolveImessageCard(getHost: () => Host): any {
@@ -31,6 +32,20 @@ async function resolveImessageCard(res: ServerResponse, threadId: string, reques
     return true;
   }
   const macCheck = messagesOnBotMac({ platform: process.platform, identityKind: host.IDENTITY.kind, bridgeAction: false });
+  if (pending.macApp) {
+    // An Apple app write the person allowed (Mail, Calendar, Reminders, Notes).
+    const app = macAppOfTool(pending.macApp.tool);
+    if (!macCheck.ok || !app || !macAppEnabled(DATA_DIR, app)) {
+      host.store.patchMessage(threadId, message.id, { card: { ...card, answered: "deny", subtitle: "That app is off or not on this Mac. Nothing was done." } });
+      json(res, 409, { error: "That Apple app is not available on this Mac.", code: "mac_apps_not_on_this_mac" });
+      return true;
+    }
+    const result = await runMacAppCall(pending.macApp.tool, pending.macApp.args);
+    const detail = result.isError ? String(result.content[0]?.text ?? "It did not work.").slice(0, 300) : `Done: ${pending.to}.`;
+    host.store.patchMessage(threadId, message.id, { card: { ...card, answered: "allow", subtitle: detail } });
+    json(res, 200, { ok: true, outcome: "allowed-once", ...(result.isError ? { send: "failed" } : {}) });
+    return true;
+  }
   if (!macCheck.ok || !readMessagesSettings(DATA_DIR).useMessages) {
     host.store.patchMessage(threadId, message.id, { card: { ...card, answered: "deny", subtitle: "Messages is not available on this Mac. Nothing was sent." } });
     json(res, 409, { error: "Messages is not available on this Mac.", code: "messages_not_on_this_mac" });

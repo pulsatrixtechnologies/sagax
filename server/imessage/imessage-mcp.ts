@@ -19,6 +19,7 @@ import { stageImessageSend, type PendingImessage } from "./imessage-cards.ts";
 import { fileInsideRoots, messagesDbPresent, openMessagesReader, type MessageRow } from "./imessage-db.ts";
 import { probeFullDiskAccess } from "./imessage-permissions.ts";
 import type { ImessageSender } from "./imessage-send.ts";
+import { MAC_APP_TOOLS, isMacAppTool, macAppOfTool, macAppOperation, macAppTarget, macAppToolWrites, type MacAppId, type MacAppToolResult } from "../../electron/mac-apps.mjs";
 
 const SEND_FILE_MAX_BYTES = 8_000_000;
 
@@ -116,6 +117,15 @@ export type MessagesMcpDeps = {
   botId: string;
   threadId: string;
   openCard: (pending: PendingImessage) => void;
+  /** The other Apple apps of this Mac (Mail, Calendar, Contacts, Reminders,
+   * Notes) and mac_messages_read, run in this process (electron/mac-apps.mjs). */
+  macApps?: {
+    /** The app's On/Off switch on its setup page. */
+    enabled: (app: MacAppId) => boolean;
+    run: (tool: string, args: Record<string, unknown>) => Promise<MacAppToolResult>;
+    /** The bot's approval mode acts without asking (auto, full). */
+    unasked: boolean;
+  };
 };
 
 function view(row: MessageRow) {
@@ -220,11 +230,45 @@ async function send(deps: MessagesMcpDeps, args: Record<string, unknown>): Promi
   }
 }
 
+function macAppOn(deps: MessagesMcpDeps, app: MacAppId): boolean {
+  return app === "messages" ? deps.useMessages : deps.macApps?.enabled(app) === true;
+}
+
+/** The mac_* tools of the apps the person turned on. */
+function macAppTools(deps: MessagesMcpDeps) {
+  if (!deps.macApps || !messagesOnBotMac(deps.host).ok) return [];
+  return MAC_APP_TOOLS.filter((tool) => macAppOn(deps, tool.app)).map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
+}
+
+async function macAppCall(deps: MessagesMcpDeps, name: string, args: Record<string, unknown>): Promise<ToolResult> {
+  const app = macAppOfTool(name)!;
+  if (!deps.macApps || !messagesOnBotMac(deps.host).ok) return text("The Apple apps run only on the Mac where this Sagax app runs.", true);
+  if (!macAppOn(deps, app)) return text(`${app[0]!.toUpperCase()}${app.slice(1)} is off in Plugins > This Mac. Nothing was done.`, true);
+  // The Messages send keeps its recipient list and card (send above).
+  if (name === "mac_messages_send") return send(deps, { to: args.to, text: args.text });
+  let op: Record<string, unknown>;
+  try { op = macAppOperation(name, args); } catch (error) { return text(error instanceof Error ? error.message : String(error), true); }
+  // A write follows the bot's approval mode: Ask shows a card, Auto and Full act.
+  if (macAppToolWrites(name) && !deps.macApps.unasked) {
+    const pending = stageImessageSend({
+      threadId: deps.threadId,
+      botId: deps.botId,
+      to: macAppTarget(name, op),
+      text: "",
+      service: "iMessage",
+      macApp: { tool: name, args: op },
+    });
+    deps.openCard(pending);
+    return text(`Not done yet. An approval card is in the conversation for ${pending.to}. Wait for the person. Do not call it again.`);
+  }
+  return deps.macApps.run(name, op);
+}
+
 export async function handleMessagesMcp(body: unknown, deps: MessagesMcpDeps): Promise<{ result: unknown }> {
   const message = body && typeof body === "object" ? body as { method?: unknown; params?: unknown } : {};
   const method = typeof message.method === "string" ? message.method : "";
   const params = message.params && typeof message.params === "object" ? message.params as { name?: unknown; arguments?: unknown } : {};
-  if (method === "tools/list") return { result: { tools: TOOLS } };
+  if (method === "tools/list") return { result: { tools: [...TOOLS, ...macAppTools(deps)] } };
   if (method !== "tools/call") return { result: text("Method not found.", true) };
   const name = typeof params.name === "string" ? params.name : "";
   const args = params.arguments && typeof params.arguments === "object" && !Array.isArray(params.arguments)
@@ -276,5 +320,6 @@ export async function handleMessagesMcp(body: unknown, deps: MessagesMcpDeps): P
     return { result: text(payload, Boolean(found.reason)) };
   }
   if (name === MESSAGES_SEND_TOOL) return { result: await send(deps, args) };
+  if (isMacAppTool(name)) return { result: await macAppCall(deps, name, args) };
   return { result: text(`Unknown tool: ${name}`, true) };
 }

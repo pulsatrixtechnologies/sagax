@@ -25,8 +25,8 @@ import { useBotCatalogSources } from "../bot-catalog/use-bot-catalog-sources";
 import type { SearchGroupId } from "@/lib/connect-apps-search";
 import { isBackShortcut, pageKeyAction } from "@/lib/back-shortcut";
 import { BotCatalogPane } from "../lazy-bot-catalog";
-import { loadMessagesSetup } from "@/lib/mac-messages-setup";
-import type { MessagesSetupStatus } from "../../../shared/mac-messages-setup.ts";
+import { loadMacApps } from "@/lib/mac-apps-setup";
+import { macAppsSectionVisible, type MacAppsSetupStatus } from "../../../shared/mac-apps-setup.ts";
 import { useBotCapabilities } from "@/lib/capabilities";
 import type { DataCenter } from "../plugins/DataCenterDialog";
 import { useHarnessConnectors } from "./useHarnessConnectors";
@@ -77,12 +77,17 @@ export function usePluginsPanelState() {
   const mayManageOrganization = organization ? perspicaxOrg?.viewerRole === "admin" : ownerOrAdmin === true;
   const [featured, setFeatured] = useState<FeaturedListing[] | null>(null);
   const [dataCenterFor, setDataCenterFor] = useState<{ item: PluginItem; regions: DataCenter[]; defaultUrl: string; anchor: HTMLElement } | null>(null);
-  const [messagesSetup, setMessagesSetup] = useState<MessagesSetupStatus | null>(null);
+  // Plugins > This Mac: only in the desktop app on macOS (never on Windows,
+  // Linux or the web); solo reads the local server, an organization server
+  // reads this Mac over IPC (src/lib/mac-apps-setup.ts).
+  const macAppsVisible = macAppsSectionVisible(typeof window === "undefined" ? null : window.ogb);
+  const [macAppsSetup, setMacAppsSetup] = useState<MacAppsSetupStatus | null>(null);
   useEffect(() => {
+    if (!macAppsVisible) return;
     let alive = true;
-    void loadMessagesSetup().then((status) => { if (alive) setMessagesSetup(status); });
+    loadMacApps().then((status) => { if (alive) setMacAppsSetup(status); }, () => { if (alive) setMacAppsSetup(null); });
     return () => { alive = false; };
-  }, [page.page]);
+  }, [page.page, macAppsVisible]);
   useEffect(() => {
     const openMacMessages = () => {
       setTab("installed");
@@ -327,7 +332,7 @@ export function usePluginsPanelState() {
     activeResult, setActiveResult, filter, setFilter, type, setType, tab, setTab,
     harness, claudeConnectors, ownerOrAdmin, libraryEditor,
     perspicaxOrg, organization, mayManageOrganization, featured, setFeatured, dataCenterFor, setDataCenterFor,
-    messagesSetup, skills, setSkills, installing, setInstalling, panelError, setPanelError,
+    macAppsVisible, macAppsSetup, skills, setSkills, installing, setInstalling, panelError, setPanelError,
     mcpAccountDraft, setMcpAccountDraft, marketplaces, setMarketplaces, marketBusy, setMarketBusy,
     marketError, setMarketError, marketNeedsToken, setMarketNeedsToken, panelNotice, setPanelNotice,
     workspaceMarkets, scopeBot, scopeBotId, setScopeChoice, scope, botView, personalView,

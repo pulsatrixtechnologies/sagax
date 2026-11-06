@@ -46,6 +46,7 @@ export type Page =
   | { page: "github" }
   /** Plugins > Installed > This Mac > Messages setup (the one Mac row opens it directly, #2104) */
   | { page: "mac-messages" }
+  | { page: "mac-app"; app: Exclude<import("../../../shared/mac-apps-setup.ts").MacAppSetupId, "messages"> }
   /** Connect apps > Tailscale: join a bot computer to the person's tailnet */
   | { page: "tailscale" }
   /** Connect Apps > "Add a custom connector" (Grok Bot's form) */

@@ -1034,6 +1034,8 @@ import { personalPluginStorage } from "./plugins/person-plugins.ts";
 import { capabilityPrompt, capabilityPromptGroups } from "./capabilities/capability-prompt.ts";
 import { createLifecycleHookRoutes } from "./routes/lifecycle-hooks.ts";
 import { createMessagesRoutes } from "./routes/messages.ts";
+import { createMacAppsRoutes } from "./routes/mac-apps.ts";
+import { macAppEnabled as macAppSettingEnabled, MAC_APP_IDS, runMacAppCall } from "../electron/mac-apps.mjs";
 import { handleMessagesMcp } from "./imessage/imessage-mcp.ts";
 import { bindImessageMessage, takeImessageSend } from "./imessage/imessage-cards.ts";
 import { createOsascriptSender } from "./imessage/imessage-send.ts";
@@ -5182,7 +5184,12 @@ const phoneIntegration = createPhoneIntegration(getLeafHost);
 /** Messages tools, only on the solo Mac this process is. */
 function messagesWanted(): boolean {
   return messagesOnBotMac({ platform: process.platform, identityKind: IDENTITY.kind, bridgeAction: false }).ok
-    && readMessagesSettings(DATA_DIR).useMessages;
+    && MAC_APP_IDS.some((app) => soloMacAppEnabled(app));
+}
+
+/** Plugins > This Mac switch of one Apple app (Messages keeps its own setting). */
+function soloMacAppEnabled(app: string): boolean {
+  return app === "messages" ? readMessagesSettings(DATA_DIR).useMessages : macAppSettingEnabled(DATA_DIR, app);
 }
 
 const messagesIntegration = createMessagesIntegration(getLeafHost);
@@ -7069,21 +7076,27 @@ ROUTES.push(createLifecycleHookRoutes({
     return level === "owner" || level === "manage" || orgAdminCaller(auth);
   }
 }));
+const openMacPrivacyPane: ((anchor: string) => Promise<boolean>) | undefined = process.platform === "darwin"
+  ? async (anchor) => {
+    const { execFile } = await import("node:child_process");
+    await new Promise<void>((resolve, reject) => {
+      execFile("open", [`x-apple.systempreferences:com.apple.preference.security?${anchor}`], (error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+    return true;
+  }
+  : undefined;
 ROUTES.push(createMessagesRoutes({
   dataDir: DATA_DIR,
   host: () => ({ platform: process.platform, identityKind: IDENTITY.kind, bridgeAction: false }),
-  openPrivacyPane: process.platform === "darwin"
-    ? async (anchor) => {
-      const { execFile } = await import("node:child_process");
-      await new Promise<void>((resolve, reject) => {
-        execFile("open", [`x-apple.systempreferences:com.apple.preference.security?${anchor}`], (error) => {
-          if (error) reject(error);
-          else resolve();
-        });
-      });
-      return true;
-    }
-    : undefined,
+  openPrivacyPane: openMacPrivacyPane,
+}));
+ROUTES.push(createMacAppsRoutes({
+  dataDir: DATA_DIR,
+  host: () => ({ platform: process.platform, identityKind: IDENTITY.kind, bridgeAction: false }),
+  openPrivacyPane: openMacPrivacyPane,
 }));
 // Slice 4: the Perspicax team names (who is in a team lives on each person).
 const orgTeams = new OrgTeams({ path: join(DATA_DIR, "org-teams.json") });
@@ -16742,6 +16755,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     desktopConnected: (person) => desktopBridges.connected(person),
     handleDesktopBridgeMcp,
     desktopBridgesRequest: (person, operation, active, onProgress) => desktopBridges.request(person, operation, active, onProgress),
+    desktopBridgeMacApps: (person) => desktopBridges.current(person)?.capabilities.macApps === true,
     bridgeAuditRecord: (row) => bridgeAudit.record(row as never),
     broadcast,
     turnWorkplace: (threadId) => turnWorkplaces.get(threadId) as never,
@@ -16756,6 +16770,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     cloudComputerRpc: (body, opts) => cloudComputerRpc(body as never, opts as never),
     cloudComputerCfg: () => cfg,
     messagesUseMessages: () => readMessagesSettings(DATA_DIR).useMessages,
+    macAppEnabled: (app) => soloMacAppEnabled(app),
+    runMacApp: (tool, args) => runMacAppCall(tool, args),
     standingGrantsAllowed,
     autoAnswerStepUp: (bot, threadId, input) => autoAnswerStepUp(bot as BotRecord, threadId, input),
     imessageSender,

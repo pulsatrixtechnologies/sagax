@@ -226,6 +226,23 @@ describe("the sagax-desktop tools", () => {
     const refused = await handleDesktopBridgeMcp("tools/call", { name: "run_command", arguments: { command: "ls" } }, async () => { throw new Error("Your computer is not connected right now."); });
     expect(refused).toEqual({ content: [{ type: "text", text: "Your computer is not connected right now." }], isError: true });
   });
+  // The Apple apps of the person's Mac (electron/mac-apps.mjs) ride the bridge as one bounded action.
+  it("offers the Apple app tools only when the desktop is a Mac that has them, and sends one bounded mac_app", async () => {
+    const plain = await handleDesktopBridgeMcp("tools/list", {}, async () => null) as { tools: { name: string }[] };
+    expect(plain.tools.some((tool) => tool.name.startsWith("mac_"))).toBe(false);
+    const mac = await handleDesktopBridgeMcp("tools/list", {}, async () => null, { macApps: () => true }) as { tools: { name: string }[] };
+    expect(mac.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining(["mac_messages_send", "mac_mail_send", "mac_calendar_create", "mac_contacts_search", "mac_reminders_create", "mac_notes_create"]));
+    expect(mac.tools.every((tool) => !tool.name.includes("__"))).toBe(true);
+    expect(desktopToolOperation("mac_notes_create", { title: "Plan", body: "x" })).toEqual({ action: "mac_app", tool_name: "mac_notes_create", arguments: { title: "Plan", body: "x" } });
+    expect(() => desktopToolOperation("mac_messages_send", { to: "$(rm -rf ~)", text: "x" })).toThrow();
+    expect(desktopBridgeCapability("mac_app")).toBe("macApps");
+    const sent: Array<Record<string, unknown>> = [];
+    const bad = await handleDesktopBridgeMcp("tools/call", { name: "mac_mail_send", arguments: { to: ["nope"], subject: "s", body: "b" } }, async (operation) => { sent.push(operation); return null; });
+    expect(bad).toMatchObject({ isError: true });
+    expect(sent).toEqual([]);
+    const old = await handleDesktopBridgeMcp("tools/call", { name: "mac_notes_search", arguments: { query: "x" } }, async () => ({ content: [{ type: "text", text: "Unsupported operation" }], isError: true }));
+    expect(old).toMatchObject({ isError: true, content: [{ text: expect.stringContaining("too old to use its Apple apps") }] });
+  });
   // Command variables (server/vault/credential-command-env.ts), read for each command.
   it("adds command variables to run_command after the refusal checks, and an older desktop runs without them", async () => {
     const value = "fake-command-variable-value";

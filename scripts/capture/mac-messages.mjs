@@ -2,8 +2,11 @@
 /**
  * Headless screenshots of Connect apps > Mac > Messages from
  * src/gallery/mac-messages.html. Synthetic permission states only.
+ * Also the other Apple apps of This Mac (view app) and the organization-server
+ * states (server: IPC answers after the 404; error: readable error, never blank).
  * Usage: node scripts/capture/mac-messages.mjs [--out DIR] [--port N]
- *   [--lang en|fr] [--states off,ready,enabled,unavailable] [--views setup,mac]
+ *   [--lang en|fr] [--states off,ready,enabled,unavailable,server,error]
+ *   [--views setup,mac,app] [--apps mail,calendar,contacts,reminders,notes]
  */
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
@@ -18,8 +21,9 @@ const arg = (name, fallback) => {
 const outDir = resolve(arg("--out", join(root, "docs", "screenshots", "mac-messages")));
 const port = Number(arg("--port", "5327"));
 const lang = arg("--lang", "en");
-const states = arg("--states", "off,ready,enabled,unavailable").split(",").filter(Boolean);
-const views = arg("--views", "setup,mac").split(",").filter(Boolean);
+const states = arg("--states", "off,ready,enabled,unavailable,server,error").split(",").filter(Boolean);
+const views = arg("--views", "setup,mac,app").split(",").filter(Boolean);
+const apps = arg("--apps", "mail,calendar,contacts,reminders,notes").split(",").filter(Boolean);
 const settle = Number(arg("--wait", "800"));
 const skins = [{ id: "pulsatrix-light", label: "light" }, { id: "pulsatrix", label: "dark" }];
 
@@ -59,19 +63,22 @@ try {
     });
     page.on("pageerror", (error) => console.error("page error:", error.stack));
     for (const view of views) {
-      for (const state of states) {
-        if (view === "mac" && state !== "off" && state !== "enabled" && state !== "unavailable") continue;
-        const url = `${base}?view=${view}&state=${state}&skin=${skin.id}&lang=${lang}`;
+      for (const state of states) for (const app of view === "app" ? apps : [""]) {
+        if (view === "mac" && state !== "off" && state !== "enabled") continue;
+        if (view === "app" && app !== "mail" && state !== "off" && state !== "server") continue;
+        const url = `${base}?view=${view}&state=${state}&app=${app}&skin=${skin.id}&lang=${lang}`;
         await page.goto(url, { waitUntil: "domcontentloaded" });
         await page.waitForSelector("[data-gallery-mac-messages]", { timeout: 30_000 });
         if (view === "setup") {
-          await page.waitForSelector("[data-messages-setup], [data-messages-setup-unavailable]", { timeout: 30_000 });
+          await page.waitForSelector("[data-messages-setup-steps], [data-messages-load-error], [data-messages-setup-unavailable]", { timeout: 30_000 });
+        } else if (view === "app") {
+          await page.waitForSelector("[data-mac-app-steps], [data-mac-app-load-error], [data-mac-app-unavailable]", { timeout: 30_000 });
         } else {
-          await page.waitForSelector("[data-mac-apps]", { timeout: 30_000 });
+          await page.waitForSelector("[data-plugins-mac]", { timeout: 30_000 });
         }
         // Let mocked fetch + React settle; avoid networkidle (HMR keeps sockets open).
         await page.waitForTimeout(settle);
-        const file = join(outDir, `${view}-${state}-${skin.label}-${lang}.png`);
+        const file = join(outDir, `${view}${app ? `-${app}` : ""}-${state}-${skin.label}-${lang}.png`);
         await page.locator("[data-gallery-mac-messages]").screenshot({ path: file });
         console.log("shot", file);
       }

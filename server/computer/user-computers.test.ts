@@ -182,7 +182,9 @@ describe("the server's own machine on an organization server", () => {
     const source = readFileSync(new URL("../index.ts", import.meta.url), "utf8");
     expect(source).toMatch(/hostComputersAllowed: \(\) => IDENTITY\.kind !== "perspicax"/);
     // every computer claim (host screen, local VMs) passes the policy
-    expect(source).toMatch(/async function bindTurnComputer\([^)]*\)[^{]*\{[\s\S]{0,300}computerPlaceRefusal\(kind\)/);
+    // bindTurnComputer moved to index-leaves/ (#1388): the claim still asks the host's policy.
+    const bind = readFileSync(new URL("../index-leaves/bindTurnComputer.ts", import.meta.url), "utf8");
+    expect(bind).toMatch(/async function bindTurnComputer\([^)]*\)[^{]*\{[\s\S]{0,400}host\.computerPlaceRefusal\(kind\)/);
     expect(source).toMatch(/function computerPlaceRefusal\([\s\S]{0,400}managedPolicy\.computerRefusal\(kind\)/);
     // The VM routes moved out of index.ts in 062d7c42e. Check both the
     // policy injection and the refusal at each extracted host entry point.
@@ -196,7 +198,9 @@ describe("the server's own machine on an organization server", () => {
     // (2026-10-26, #1138: with no person speaking, the turn's own speaker and
     // the bot's owner and routine trigger, so the person's own routine reaches
     // the computer they lent; userComputers decides, see the routine cases above)
-    expect(source).toMatch(/function userComputerSpeaking\(principal: string \| null[\s\S]{0,300}?\{\s*if \(principal\) return \{ speaker: personSpeaker\(principal\), context: \{\} \};/);
+    // userComputerSpeaking moved to index-leaves/ (#1388)
+    const speaking = readFileSync(new URL("../index-leaves/userComputerSpeaking.ts", import.meta.url), "utf8");
+    expect(speaking).toMatch(/function userComputerSpeaking\(principal: string \| null[\s\S]{0,400}?if \(principal\) return \{ speaker: host\.personSpeaker\(principal\), context: \{\} \};/);
     const environments = readFileSync(new URL("../routes/internal-environments-handlers.ts", import.meta.url), "utf8");
     expect(source).toMatch(/userComputerSpeaking: \(principal, capability\) => userComputerSpeaking\(principal, capability\)/);
     expect(source).toMatch(/userComputersList: \(speaker, context\) => userComputers\.list\(speaker as never, context as never\)/);

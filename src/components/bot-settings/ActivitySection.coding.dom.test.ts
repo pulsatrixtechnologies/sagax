@@ -50,9 +50,9 @@ describe("Coding list rows", () => {
     list.value = { items: [coding], subagents: [] };
     const bot = { id: "osprey", name: "Osprey", color: "blue", threadId: "main", tasks: [] } as never;
     flushSync(() => root.render(createElement(ActivitySection, { bot })));
-    const card = host.querySelector<HTMLButtonElement>('[data-activity-card="thread:th-9"]')!;
+    const card = host.querySelector<HTMLElement>('[data-activity-card="thread:th-9"]')!;
     expect(card).not.toBeNull();
-    flushSync(() => card.click());
+    flushSync(() => card.querySelector<HTMLButtonElement>("button[aria-label]")!.click());
     expect(dispatchMock).toHaveBeenCalledWith({ type: "openCodingChat", target: { botId: "osprey", itemId: "thread:th-9", threadId: "th-9", seed: coding } });
     expect(document.querySelector("[data-activity-detail]")).toBeNull();
   });

@@ -1,11 +1,15 @@
-// A parallel task's live card in the conversation it answers
-// (shared/parallel-tasks.ts): its name, where it stands (from the task's own
-// live state: running, waiting for the person's approval, waiting for a
+// A parallel task in the conversation it answers (shared/parallel-tasks.ts).
+//
+// In the one conversation (threads off, #2099, JC 2026-11-05) it is one line
+// like Claude Code's delegation: `● Agent(@Marc · Draft the email)` then
+// `⎿ Backgrounded agent`, the elapsed time and Stop at the right; the work
+// itself is a row of the bot panel's Coding list. Its question, when it has
+// one, stays inline under the line (#2082).
+//
+// With threads on it is the card: its name, where it stands (from the task's
+// own live state: running, waiting for the person's approval, waiting for a
 // slot, done, failed, stopped), how long it has run, Stop while it is not
-// done and Open to read or steer it in its own thread (threads hidden: in
-// the side column, the conversation stays on screen). Its approvals live in
-// that thread; the card says when one waits so the person knows which task
-// asks.
+// done and Open to read or steer it in its own thread.
 import { useEffect, useState } from "react";
 import { ChevronRight, GitFork, Loader2, Square } from "lucide-react";
 
@@ -75,6 +79,45 @@ export function ParallelTaskCard({ message, botId }: { message: Message; botId: 
   if (!ref || !owner) return null;
   const started = task?.turnStartedAt ?? ref.startedAt ?? message.at;
   const elapsed = live ? now - started : (ref.endedAt ?? now) - started;
+  if (!showThreads) {
+    const dot = status === "failed" ? "text-danger" : status === "done" ? "text-success" : status === "stopped" ? "text-ink-tertiary" : status === "waiting" ? "text-accent-text" : "text-accent-text animate-pulse motion-reduce:animate-none";
+    const tail = status === "waiting" ? (asked.length > 0 ? t("chat.parallel.state.waitingAnswer") : STATE_LABEL.waiting()) : status === "running" ? t("chat.parallel.backgrounded") : STATE_LABEL[status]();
+    return (
+      <div className="flex w-full max-w-[640px] flex-col items-start gap-2" data-parallel-card={ref.threadId} data-parallel-state={status}>
+        <div data-parallel-line className="w-full font-mono text-[12.5px] leading-5">
+          <div className="flex items-baseline gap-2">
+            <span data-tool-dot={live ? "running" : status} aria-hidden="true" className={cn("shrink-0 select-none text-[10px] leading-5", dot)}>●</span>
+            <span className="min-w-0 flex-1 truncate" title={t("chat.parallel.title", { title: ref.title })}>
+              <span className="font-semibold text-ink">Agent</span>
+              <span className="text-ink-secondary">(@{owner.name} · {ref.title})</span>
+            </span>
+            {status !== "queued" && elapsed > 0 && <span className="shrink-0 text-[11px] tabular-nums text-ink-tertiary">{formatElapsed(elapsed)}</span>}
+            {live && (
+              <button
+                type="button"
+                data-parallel-stop={ref.threadId}
+                onClick={() => dispatch({ type: "stopParallelTask", botId: owner.id, threadId: ref.threadId })}
+                title={t("chat.parallel.stop")}
+                aria-label={t("chat.parallel.stop")}
+                className="flex size-5 shrink-0 items-center justify-center self-center rounded-full text-ink-secondary hover:bg-danger/10 hover:text-danger"
+              >
+                <Square size={10} className="fill-current" aria-hidden="true" />
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2 text-[12px] text-ink-secondary">
+            <span aria-hidden="true" className="w-[1ch] shrink-0 select-none text-ink-tertiary">⎿</span>
+            <span data-parallel-tail className="truncate">{tail}</span>
+          </div>
+        </div>
+        {questions.map((question) => (
+          <div key={question.id} className="w-full" data-parallel-inline-question={ref.threadId}>
+            <QuestionCard threadId={ref.threadId} bot={{ id: owner.id, name: owner.name }} message={question} />
+          </div>
+        ))}
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col items-start gap-2" data-parallel-card={ref.threadId} data-parallel-state={status}>
       <div className={cn(

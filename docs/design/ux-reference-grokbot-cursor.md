@@ -743,37 +743,52 @@ Code : `server/perspicax/perspicax-mcp.ts`,
 `server/perspicax-mcp-bridge.ts` et les adapters de harness. Tests avec un
 transport synthétique, aucun compte réel.
 
-### 2.24 Chat de code (une tâche de code ouverte)
+### 2.24 Chat de code (une tâche de code ouverte) et section Coding
 
-Décision de JC (2026-11-03) : une tâche de la section Code du panneau du bot ne
-s'ouvre plus dans le panneau. Elle s'ouvre comme un chat, là où est le chat,
-de la même famille que l'exécution de routine (feuille sur la colonne du chat,
-pilule du bot en haut, rangée d'actions en bas avec Fermer le chat en dernier),
-mais pensée pour le développement, comme la vue d'agent d'un éditeur de code.
+Décision de JC (2026-11-03, refaite le 2026-11-05, #2099) : une tâche de la
+section Coding du panneau du bot s'ouvre comme un chat, là où est le chat, et
+ce chat ressemble au terminal de Claude Code. Rien n'est une carte ; tout est
+du texte en lignes.
 
-- En-tête : pilule du bot, titre de la tâche (2 lignes au plus), puis une ligne
-  grise : nom du dossier (jamais le chemin), branche, état avec le temps écoulé,
-  et un carré rouge Arrêter tant qu'elle roule.
-- Fil : les mots en bulles comme le chat ; une commande est un bloc terminal
-  (`$ commande`, compte des tests, durée, coche ou code de sortie en rouge ;
-  la sortie se replie, ouverte pendant la course ou après un échec) ; une
-  modification est un diff unifié par fichier, coloré comme les blocs de code,
-  repliable, longues zones inchangées pliées ; les lectures d'affilée font une
-  ligne de puces de fichiers ; le reste garde la puce d'outil du chat.
-- Bande Changements au-dessus des actions : « N fichiers modifiés +A -R »
-  (déplie la liste ; un clic saute au diff du fichier), le dernier compte de
-  tests, la branche, le commit et la PR (ouvre le navigateur).
-- Actions : Continuer (ouvre un compositeur en ligne ; le suivi va dans le fil
-  de la tâche, rejoint le tour s'il roule), Arrêter tant qu'elle roule,
-  Fermer le chat. Échap ferme (ou replie le compositeur).
+- En-tête (une seule fois) : flèche Retour au chat, pilule du bot, titre de la
+  tâche, puis une ligne grise : dossier (jamais le chemin), branche, un seul
+  état « ● Running · 4m · Running src/board tests » (l'étape en mots, jamais la
+  commande brute), un carré Arrêter tant qu'elle roule.
+- Chaque appel d'outil = une ligne compacte : point de statut (accent en cours,
+  vert fini, rouge échoué), nom d'outil en gras, argument court entre
+  parenthèses coupé « … » : « ● Bash(pnpm vitest run src/board …) ». Dessous,
+  en retrait « ⎿ », 1 à 3 premières lignes du résultat (compte des tests,
+  code de sortie en rouge), puis « … +N lines » cliquable, « Show less » pour
+  replier. Une modification lit « ⎿ +14 -0 · Show the diff » ; le diff reste
+  replié (un saut depuis la bande Changes l'ouvre). Les lectures d'affilée
+  font une ligne « Read(a.ts, b.ts) ». Une commande d'attente (sleep, pgrep)
+  est une ligne grise sans résultat.
+- Message du bot = texte simple. Message humain = rangée légèrement surlignée
+  avec « › ». Aucune bulle.
+- Bande Changes au-dessus du compositeur : « N files changed +A -R » (déplie
+  la liste ; un clic saute au diff et l'ouvre), le dernier compte de tests, la
+  branche, le commit, la PR (ouvre le navigateur).
+- Pied : le compositeur de suivi, toujours visible (aucun bouton Continuer,
+  aucun Fermer le chat, aucun Open thread). Échap revient au chat.
+- Section Coding du panneau du bot (`AgentRows`) : la liste d'agents de Claude
+  Code. Une rangée par tâche ou agent lancé : « ○ » qui tourne (« ● » fini,
+  rouge échoué), tag « @Marc », titre, à droite « 20m 58s · ↓ 102k tokens » ;
+  deuxième ligne = l'étape en mots puis « repo · branche » ; Stop sur la rangée.
+  Au-delà de 5 : « ↓ N more ». Un clic ouvre le chat de code dans la colonne
+  du chat, jamais un panneau latéral.
+- Dans le chat unifié, une délégation = une ligne « ● Agent(@Marc · work)
+  ⎿ Backgrounded agent » (Waiting for your approval quand elle attend), avec
+  Stop ; le détail est dans la rangée Coding.
 - Chemins et identifiants : relatifs au dossier de la tâche, sinon les deux
   derniers segments ; aucun UUID.
 
-Code : `src/components/coding/CodingChat.tsx`, `CodingDiff.tsx`,
-`CodingTerminal.tsx`, lecture pure dans `src/lib/coding-chat.ts`. Captures :
-`node scripts/capture/coding-chat.mjs` (galerie `src/gallery/coding-chat.html`).
-iOS et Android : la section Code liste les tâches en cours seulement ; le chat
-de code y reste à porter.
+Code : `src/components/coding/CodingChat.tsx`, `ToolLine.tsx`, `CodingDiff.tsx`,
+`src/components/bot-settings/AgentRows.tsx`, `src/components/ParallelTaskCard.tsx`
+(mode unifié), lecture pure dans `src/lib/coding-chat.ts` (`toolLineOf`,
+`humanStep`, `previewLines`). Captures : `node scripts/capture/coding-chat.mjs`
+(galeries `src/gallery/coding-chat.html`, `bot-panel-coding.html`). iOS et
+Android : la section Coding liste les tâches en cours seulement ; le chat de
+code y reste à porter.
 
 ---
 

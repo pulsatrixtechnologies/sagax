@@ -35,6 +35,15 @@ describe("parallel task card", () => {
     expect(html).toContain('data-parallel-state="running"');
     expect(html).toContain("Parallel task · Draft the email");
     expect(html).toContain("data-parallel-stop");
+    // the one conversation (#2099): one line like Claude Code's delegation,
+    // `● Agent(@Pepper · Draft the email)` then `⎿ Backgrounded agent`; no
+    // card, no Open, no thread
+    expect(html).toContain("data-parallel-line");
+    expect(html).toContain("Agent</span><span");
+    expect(html).toContain("(@Pepper · Draft the email)");
+    expect(html).toContain("Backgrounded agent");
+    expect(html).not.toContain("data-parallel-open");
+    expect(html).not.toMatch(/Open thread/i);
     fixture.tasks = [{ threadId: "par", title: "Draft the email", busy: true, activity: "waiting-on-you" }];
     html = renderToStaticMarkup(createElement(ParallelTaskCard, { message: card("running"), botId: "pepper" }));
     expect(html).toContain('data-parallel-state="waiting"');

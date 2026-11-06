@@ -2,7 +2,8 @@
 /**
  * Headless screenshots of the coding chat (src/gallery/coding-chat.html),
  * running and finished, light and dark, wide (960), 700 and 390 px, with the
- * Changes list open and the follow-up composer open; and the routine run
+ * Changes list open and a jump to a diff; the bot panel's Coding section
+ * (src/gallery/bot-panel-coding.html); and the routine run
  * sheet (src/gallery/routine-run-exchange.html) at the same sizes, to compare
  * the two sheets of the same family. Headless Chromium only: no window opens.
  * Usage: node scripts/capture/coding-chat.mjs [--out DIR] [--port N]
@@ -46,12 +47,15 @@ try {
   const browser = await chromium.launch({ headless: true, ...(process.env.SAGAX_VERIFY_BROWSER_CHROME ? { executablePath: process.env.SAGAX_VERIFY_BROWSER_CHROME } : {}) });
   const page = await browser.newPage({ viewport: { width: 960, height: 900 }, deviceScaleFactor: 2 });
   page.setDefaultTimeout(20_000);
+  // The gallery has no /api: the live store's own hydrate would resume into
+  // no bots and blank the page, so its calls fail at once instead.
+  await page.route("**/api/**", (route) => route.abort());
   page.on("pageerror", (error) => { console.error("pageerror", error.message); });
   const shot = async (name) => { await page.screenshot({ path: join(outDir, name) }); console.log(name); };
   const settle = async () => {
     await page.waitForSelector("[data-testid=coding-chat]");
-    // the diffs' colours load their grammar
-    await page.waitForFunction(() => document.querySelector("[data-coding-diff] [data-diff-line] span span[style]") !== null, null, { timeout: 15_000 }).catch(() => {});
+    // the tool lines (#2099): diffs stay folded, so wait for the rows only
+    await page.waitForSelector("[data-coding-row]");
     await page.waitForTimeout(300);
   };
   for (const { id, label } of skins) {
@@ -75,9 +79,11 @@ try {
     await page.click('[data-coding-changed-file="src/board/card.ts"]');
     await page.waitForTimeout(700);
     await shot(`coding-finished-jump-${label}.png`);
-    await page.goto(`${base}/coding-chat.html?skin=${id}&lang=en&status=finished&compose=1`, { waitUntil: "load" });
-    await settle();
-    await shot(`coding-finished-compose-${label}.png`);
+    // the bot panel's Coding section: agent rows (#2099)
+    await page.goto(`${base}/bot-panel-coding.html?skin=${id}&lang=en`, { waitUntil: "load" });
+    await page.waitForSelector("[data-agent-rows]");
+    await page.waitForTimeout(300);
+    await shot(`bot-panel-coding-${label}.png`);
     for (const width of [700, 390]) {
       await page.setViewportSize({ width, height: 860 });
       for (const status of ["running", "finished"]) {

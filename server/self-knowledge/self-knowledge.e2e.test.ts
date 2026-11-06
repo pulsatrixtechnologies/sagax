@@ -6,9 +6,9 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { expect, it } from "vitest";
-import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
-import { waitForExit } from "./testing/cleanup.ts";
-import { richOutputPrompt, ROUTINE_EXECUTION_PROMPT } from "./system-prompt.ts";
+import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
+import { waitForExit } from "../testing/cleanup.ts";
+import { richOutputPrompt, ROUTINE_EXECUTION_PROMPT } from "../system-prompt.ts";
 
 it("answers sagax_help from the generated base in a real turn", async () => {
   const fixture = await launchVerificationServer({ FAKE_CLAUDE_MODE: "hang" });

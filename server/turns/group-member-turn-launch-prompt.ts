@@ -101,7 +101,7 @@ export function createBuildRoomMemberPrompt(host: GroupMemberTurnHost) {
       bot, threadId, userName, readyGroup, integrations, orchestration, hop, latestUser, resolvedLatestImages,
       cardContinuation, skillAuthoring, roomContext, roomTeamComputer, roomComputerKind, roomVmTarget, roomPlan,
       roomSpeakerId, groupId, roomPrincipal, roomToolScope, selectedSkills, roomGithubWithheld, roomPerspicaxPrompt,
-      readyBot, instance, internalGeneration,
+      readyBot, instance, internalGeneration, usesNativeImageInput, roomTurnSelection,
     } = ctx;
   const roster = readyGroup.memberIds
     .map((id) => store.bot(id))

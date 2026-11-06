@@ -1,8 +1,8 @@
-// POST /api/internal/self-knowledge: sagax_help (server/self-knowledge.ts).
+// POST /api/internal/self-knowledge: sagax_help (server/self-knowledge/self-knowledge.ts).
 // A few sections of the generated knowledge base, worded for this server
 // (solo or organization) and the person speaking. Reads nothing of anyone's
 // data. Behind the agents capability (see internal-route.ts).
-import { HELP_CALLS_PER_TURN, HelpCallCounter, helpAnswer, type HelpContext, type KnowledgeIndex } from "../self-knowledge.ts";
+import { HELP_CALLS_PER_TURN, HelpCallCounter, helpAnswer, type HelpContext, type KnowledgeIndex } from "../self-knowledge/self-knowledge.ts";
 import type { InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
 import { systemPromptReference } from "../context/prompt-references.ts";

@@ -109,7 +109,7 @@ export function createPrepareRoomMemberTools(host: GroupMemberTurnHost) {
     const {
       bot, instance, threadId, internalGeneration, latestUser, latestInBurst, usesNativeImageInput,
       resolvedLatestImages, burstImages, burstOverrides, skillAuthoring, integrations,
-      roomRoutine, roomPrincipal, roomSpeakerId, userName,
+      roomRoutine, roomPrincipal, roomSpeakerId, userName, cardContinuation,
     } = ctx;
   // Organization server: where this room turn's tools run (the person whose
   // message it answers), and their own attachments pointed there.
@@ -274,7 +274,7 @@ export function createClaimRoomMemberTurn(host: GroupMemberTurnHost) {
       orchestration.result.outcome = "busy";
       return true;
     }
-    const message = `${readyBot.name}'s settings changed while starting  -  skipped this round`;
+    const message = `${readyBot.name}'s settings changed while starting — skipped this round`;
     store.appendMessage(threadId, {
       role: "bot",
       kind: "activity",
@@ -290,7 +290,7 @@ export function createClaimRoomMemberTurn(host: GroupMemberTurnHost) {
       orchestration.result.outcome = "busy";
       return true;
     }
-    const message = `${bot.name}'s computer provider is being updated  -  skipped this round`;
+    const message = `${bot.name}'s computer provider is being updated — skipped this round`;
     store.appendMessage(threadId, {
       role: "bot",
       kind: "activity",
@@ -305,7 +305,7 @@ export function createClaimRoomMemberTurn(host: GroupMemberTurnHost) {
       orchestration.result.outcome = "busy";
       return true;
     }
-    const message = `${bot.name}'s cloud computer is being changed  -  skipped this round`;
+    const message = `${bot.name}'s cloud computer is being changed — skipped this round`;
     store.appendMessage(threadId, {
       role: "bot",
       kind: "activity",
@@ -323,7 +323,7 @@ export function createClaimRoomMemberTurn(host: GroupMemberTurnHost) {
       orchestration.result.outcome = "busy";
       return true;
     }
-    const message = `${bot.name} became busy in another conversation  -  skipped this round`;
+    const message = `${bot.name} became busy in another conversation — skipped this round`;
     store.appendMessage(threadId, {
       role: "bot",
       kind: "activity",

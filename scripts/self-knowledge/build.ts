@@ -1,5 +1,5 @@
 // Builds the Sagax and Perspicax knowledge base that the bots read through
-// sagax_help (server/self-knowledge.ts). Everything comes from the code and
+// sagax_help (server/self-knowledge/self-knowledge.ts). Everything comes from the code and
 // the docs of this checkout: the agents tool catalog and its permissions,
 // the Settings pages and cards with their labels, the account menu, the
 // engines, the server's routes, the release notes, the user docs, docs/ and
@@ -19,7 +19,7 @@ import { MCP_PERMISSIONS } from "../../server/mcp/mcp-permissions.ts";
 import { HOST_LEVEL_AGENT_TOOLS, MEMBER_OWN_SCOPE_AGENT_TOOLS } from "../../server/people/member-tool-scope.ts";
 import { READ_ONLY_AGENT_TOOL_NAMES } from "../../server/tools/agent-tool-policy.ts";
 import { TOOL_POLICY_ROWS } from "../../server/tool-policy.generated.ts";
-import type { KnowledgeBase, KnowledgeSection, PerspicaxSnapshot } from "../../server/self-knowledge-types.ts";
+import type { KnowledgeBase, KnowledgeSection, PerspicaxSnapshot } from "../../server/self-knowledge/self-knowledge-types.ts";
 import { clip, CUSTOMER_TAG_LEFT, docSections, plainText, scrub, slug } from "./markdown.ts";
 import { CARD_HOME } from "../../src/lib/settings-sections.ts";
 import { GUIDES, SETTING_NOTES } from "./guides.ts";

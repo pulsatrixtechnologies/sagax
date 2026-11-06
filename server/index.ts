@@ -602,7 +602,7 @@ import {
   memoryGuardSettings
 } from "./memory/engine-memory-guard.ts";
 import { checkWidgetForTurn, WidgetCheckAttempts, WidgetRenderer } from "./widgets/widget-check.ts";
-import { bundledKnowledgeIndex } from "./self-knowledge.ts";
+import { bundledKnowledgeIndex } from "./self-knowledge/self-knowledge.ts";
 import { createSelfKnowledgeInternalRoutes } from "./routes/self-knowledge-internal.ts";
 import { createWebSearchInternalRoutes } from "./routes/web-search-internal.ts";
 import { createVideoInternalRoutes } from "./routes/video-internal.ts";

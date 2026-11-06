@@ -8,6 +8,7 @@
 // short sections: the best sentences of each, where it is in the app, who
 // may use it. BM25 over title, keywords and text, with French words mapped
 // to the English of the catalog.
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,16 +20,20 @@ export const HELP_MAX_RESULTS = 6;
 /** Characters of one section's excerpt, title and lines aside. */
 const EXCERPT_CHARS = 520;
 
-/** The base sits in self-knowledge/ beside this module in a checkout and
+/** The base sits beside this module in a checkout, and under self-knowledge/
  * beside the bundled server (scripts/bundle-server.mjs copies it). Read
  * without blocking the event loop. */
 export async function readBundledKnowledge(): Promise<KnowledgeBase | null> {
   const here = dirname(fileURLToPath(import.meta.url));
-  try {
-    return JSON.parse(await readFile(join(here, "self-knowledge", KNOWLEDGE_FILE_NAME), "utf8")) as KnowledgeBase;
-  } catch {
-    return null;
+  for (const path of [join(here, KNOWLEDGE_FILE_NAME), join(here, "self-knowledge", KNOWLEDGE_FILE_NAME)]) {
+    if (!existsSync(path)) continue;
+    try {
+      return JSON.parse(await readFile(path, "utf8")) as KnowledgeBase;
+    } catch {
+      // try the next candidate
+    }
   }
+  return null;
 }
 
 // ---------------------------------------------------------------- words

@@ -14,7 +14,7 @@ import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { KnowledgeSection, PerspicaxSnapshot } from "../../server/self-knowledge-types.ts";
+import type { KnowledgeSection, PerspicaxSnapshot } from "../../server/self-knowledge/self-knowledge-types.ts";
 import { scrub } from "./markdown.ts";
 import { PERSPICAX_SNAPSHOT_FILE } from "./build.ts";
 

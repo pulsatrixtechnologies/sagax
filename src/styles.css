@@ -1973,6 +1973,13 @@ body {
   outline-offset: 2px;
 }
 
+/* The bot profile page takes focus as a whole when it opens (so Escape and
+   Tab start inside it); a ring around the entire main panel says nothing,
+   its controls keep their own rings (#2136). */
+[data-bot-profile-page]:focus-visible {
+  outline: none;
+}
+
 /* A sidebar group header focused by a click, or handed focus back after its
    right-click menu, shows no frame; Tab and arrow keys still draw it. */
 [data-sidebar-section-header][data-pointer-focus]:focus-visible {

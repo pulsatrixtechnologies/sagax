@@ -76,4 +76,18 @@ describe("Persona editor state", () => {
       archivedBotsOpen: false,
     });
   });
+
+  it("fills the main panel in place of any view, and sidebar navigation leaves it (#2136)", () => {
+    const bots = [bot, { id: "salt", name: "Salt" } as Bot];
+    const base: AppState = { ...initialState, bots, selectedId: "pepper" };
+    const fromRoutines = reducer({ ...base, activeView: "routines" as const }, { type: "openPersonaEditor", botId: "pepper" });
+    expect(fromRoutines.activeView).toBe("chat");
+    const opened = reducer(base, { type: "openPersonaEditor", botId: "pepper" });
+    expect(reducer(opened, { type: "select", id: "salt" }).personaEditor).toBeNull();
+    expect(reducer(opened, { type: "select", id: "pepper" }).personaEditor).toBeNull();
+    expect(reducer(opened, { type: "showChat" }).personaEditor).toBeNull();
+    expect(reducer(opened, { type: "showRoutines" }).personaEditor).toBeNull();
+    // moving between the page's own sections keeps it open
+    expect(reducer(opened, { type: "personaEditorSection", section: "soul" }).personaEditor?.section).toBe("soul");
+  });
 });

@@ -79,7 +79,7 @@ vi.mock("@/state/store", async (importOriginal) => {
       }, []);
       const bot = { id: "pepper", threadId: "t", name: "Pepper", title: "R", description: "", notifications: true, color: "green", unread: false, messages: [], tasks: [], soul: "x", modelSelection: { instanceId: "claude", model: "opus" } } as unknown as Bot;
       return {
-        state: { ...original.initialState, bots: [bot], personaEditor: { botId: "pepper", section: fixture.section } } as unknown as AppState,
+        state: { ...original.initialState, bots: [bot], selectedId: "pepper", personaEditor: { botId: "pepper", section: fixture.section } } as unknown as AppState,
         dispatch: fixture.dispatch,
         flushBotPatches: vi.fn(async () => null),
       };
@@ -93,7 +93,9 @@ const actions: string[] = [];
 let host: HTMLElement;
 let root: Root;
 const input = () => host.querySelector<HTMLInputElement>("[data-persona-search]")!;
-const selectedTab = () => host.querySelector('[data-bot-profile-tab][aria-selected="true"]')!.getAttribute("data-bot-profile-tab");
+// Settings unfolds under General's cards (#2136): the page says which it shows.
+const selectedTab = () => host.querySelector("[data-bot-profile-tab-current]")!.getAttribute("data-bot-profile-tab-current");
+const shownTab = () => host.querySelector('[data-bot-profile-tab][aria-selected="true"]')!.getAttribute("data-bot-profile-tab");
 const listed = () => [...host.querySelectorAll("#bot-profile-panel-settings [data-bot-profile-section]")].map((el) => el.getAttribute("data-bot-profile-section"));
 const opened = () => [...host.querySelectorAll("#bot-profile-panel-settings [data-bot-profile-section][data-open]")].map((el) => el.getAttribute("data-bot-profile-section"));
 
@@ -139,8 +141,10 @@ afterEach(() => {
 });
 
 describe("bot profile settings search", () => {
-  it("sits at the top of the Settings tab and lists every section when empty", () => {
+  it("sits at the top of Settings, unfolded under General, and lists every section when empty", () => {
     expect(selectedTab()).toBe("settings");
+    expect(shownTab()).toBe("general");
+    expect(host.querySelector("[data-bot-profile-settings-toggle]")!.getAttribute("aria-expanded")).toBe("true");
     expect(host.querySelector("#bot-profile-panel-settings [data-persona-search]")).toBe(input());
     expect(listed().length).toBeGreaterThan(5);
   });
@@ -171,12 +175,13 @@ describe("bot profile settings search", () => {
     expect(host.querySelector("[data-persona-no-match]")!.textContent).toBe("Nothing matches “zzzxq”");
   });
   it("goes to the field with a slash or Command-F from another tab, but not while typing", async () => {
-    act(() => host.querySelector<HTMLElement>('[data-bot-profile-tab="general"]')!.click());
-    expect(selectedTab()).toBe("general");
+    act(() => host.querySelector<HTMLElement>('[data-bot-profile-tab="knowledge"]')!.click());
+    expect(selectedTab()).toBe("knowledge");
     const event = key(document.body, "f", { metaKey: true });
     expect(event.defaultPrevented).toBe(true);
     await frame();
     expect(selectedTab()).toBe("settings");
+    expect(shownTab()).toBe("general");
     expect(document.activeElement).toBe(input());
     const slash = key(input(), "/");
     expect(slash.defaultPrevented).toBe(false);

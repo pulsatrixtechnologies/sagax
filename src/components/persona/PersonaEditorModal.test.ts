@@ -123,22 +123,27 @@ function sectionHtml(html: string, id: string): { open: boolean; html: string } 
 }
 const sectionsOf = (html: string) => [...html.matchAll(/data-bot-profile-section="(\w+)"/g)].map((match) => match[1]);
 const bodiesOf = (html: string) => [...html.matchAll(/data-section-body="(\w+)"/g)].map((match) => match[1]);
-const selectedTab = (html: string) => /data-bot-profile-tab="(\w+)" aria-selected="true"/.exec(html)?.[1];
+// Settings unfolds under General's cards (#2136): the page says which it shows.
+const selectedTab = (html: string) => /data-bot-profile-tab-current="(\w+)"/.exec(html)?.[1];
 
 const SETTINGS_ALL = ["overview", "appearance", "sharing", "summary", "model", "worksOn", "access", "permissions", "voice", "usage", "history"];
 const SETTINGS_SIMPLE = ["overview", "appearance", "sharing", "summary", "model", "permissions", "voice"];
 
 describe("bot profile page shell", () => {
-  it("is a right-hand panel with the banner, the mascot, Name · Label and the three pill tabs", () => {
+  it("fills the main panel with the banner, the mascot, Name · Label and two tabs, Settings folded under General", () => {
     const html = render("overview");
-    expect(html).toContain("data-detail-panel");
+    expect(html).toContain('data-bot-profile-placement="main"');
+    expect(html).not.toContain("data-detail-panel");
+    expect(html).toContain('data-bot-profile-visibility="private"');
+    expect(html).toContain("data-slack-logo");
     expect(html).toContain("data-bot-profile-page");
     expect(html).not.toContain('aria-modal="true"');
     expect(html).toContain("data-bot-profile-banner");
     expect(html).toContain('data-section-body="avatar"');
     expect(html).toMatch(/>Pepper<[\s\S]*>·<[\s\S]*>Research</);
     expect(html).toContain("data-bot-profile-audience");
-    expect([...html.matchAll(/data-bot-profile-tab="(\w+)"/g)].map((match) => match[1])).toEqual(["general", "knowledge", "settings"]);
+    expect([...html.matchAll(/data-bot-profile-tab="(\w+)"/g)].map((match) => match[1])).toEqual(["general", "knowledge"]);
+    expect(html).toContain('data-bot-profile-settings-toggle="" aria-expanded="false"');
     expect(html).toContain('role="tablist"');
     for (const label of [">General<", ">Knowledge<", ">Settings<"]) expect(html).toContain(label);
     expect(selectedTab(html)).toBe("general");

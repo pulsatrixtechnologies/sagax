@@ -13440,5 +13440,7 @@
   "botProfile.accounts.error": "Couldn't load the accounts",
   "botProfile.retry": "Try again",
   "botProfile.memoryPage": "Open the Memory page",
-  "botProfile.channel.email": "Email"
+  "botProfile.channel.email": "Email",
+  "botProfile.private": "Private",
+  "botProfile.shared": "Shared"
 }

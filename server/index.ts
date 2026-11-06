@@ -2393,6 +2393,8 @@ import { createPeopleAvatarRoutes } from "./routes/people-avatar.ts";
 import { createRoutineDelegationStubRoutes } from "./routes/routine-delegation-stub.ts";
 import { createHandleDesktopTrustedApprovalMessage } from "./desktop-trusted-approval.ts";
 import { createOriginGates } from "./request-pipeline/origin-gates.ts";
+import { createAuthenticate, type RequestScopes } from "./request-pipeline/authenticate.ts";
+import { createRunInternal } from "./request-pipeline/run-internal.ts";
 import { adminAuditPlan, type AuditPlan } from "./admin/admin-audit-plan.ts";
 import { externalRuntimeMayCall } from "./admin/external-runtime-may-call.ts";
 import { createShapeAvatarGenerateInternalRoutes, createShapeAvatarGenerateRoutes } from "./routes/shape-avatar-generate.ts";
@@ -46382,14 +46384,6 @@ async function runPreAuth(req: IncomingMessage, res: ServerResponse, url: URL, p
 /** The request-scoped stores authenticate sets. enterWith after an await
  * inside authenticate does not reach its caller's frame, so handleRequest
  * enters them again from here before any route runs (enterRequestScopes). */
-type RequestScopes = {
-  viewer: string | null;
-  delegated: boolean;
-  continuation: ReturnType<typeof takeOwnerContinuation>;
-  actConfirmed: ReturnType<typeof takeActConfirmation> | null;
-  /** The admin whose config saves this request records (beginAdminAudit). */
-  adminActor?: AdminActorScope;
-};
 function enterRequestScopes(scopes: RequestScopes): void {
   // Set for every request (null when none), so a kept-alive connection never inherits one.
   adminActorScope.enterWith(scopes.adminActor ?? null);
@@ -46397,361 +46391,6 @@ function enterRequestScopes(scopes: RequestScopes): void {
   delegatedRequestScope.enterWith(scopes.delegated);
   continuationThreadScope.enterWith(scopes.continuation);
   actConfirmedScope.enterWith(scopes.actConfirmed);
-}
-async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL, path: string, method: string, state: { m?: RegExpMatchArray | null; releaseWorkspaceRequest?: () => void; scopes?: RequestScopes }): Promise<RequestAuth | null> {
-  const gate = resolveRequestAuth(req, {
-    sessions,
-    cookieName: SESSION_COOKIE,
-    streamPath: "/api/events",
-    url,
-    loopbackMutationToken: desktopMutationToken,
-    companionMutationToken,
-    features: { sharedComputers: lendingEnabled(), orgPairing: IDENTITY.kind === "perspicax", orgDirectory: IDENTITY.kind === "perspicax", serverCatalogue: IDENTITY.kind !== "perspicax" },
-    loopbackTrust: LOOPBACK.trust,
-    cliOwnerToken,
-    trustLocalBrowser: LOOPBACK.localBrowsers,
-    workerRelayToken: WORKER_RELAY_TOKEN,
-    permits: sessionPermits
-  });
-  // The browser's cookie carries the term it was set with, and the
-  // session's term slides on use (sessions.ts `renew`), so re-issue the
-  // cookie on every cookie-authenticated request. One small header; and
-  // unlike "send once per renewal" it survives a lost response and a
-  // restart. Later handlers that clear the cookie (logout, self-revoke)
-  // overwrite this header, which is the order we want.
-  if (gate.auth?.kind === "session" && gate.auth.via === "cookie") {
-    const presented = parseCookies(req.headers.cookie).get(SESSION_COOKIE);
-    if (presented) {
-      const secure = HOSTED_WORKSPACE || requestOrigin(req)?.startsWith("https://") === true;
-      res.setHeader("set-cookie", serializeSessionCookie(SESSION_COOKIE, presented, { secure, maxAgeSeconds: cookieMaxAgeSeconds(gate.auth.session) }));
-    }
-  }
-  // Unauthenticated /api/health and /api/brand (signed-in callers PASS to
-  // the post-gate handlers in ROUTES).
-  if (await dispatchPreAuthRoutes(PRE_AUTH_AFTER_RESOLVE, {
-    req, res, url, path, method, auth: gate.auth, json, readBody,
-  })) return null;
-  // Slice 8: an organization copy is always someone's. Loopback (a bot's
-  // shell here) and anyone without a session are told to sign in.
-  if (IDENTITY.kind === "perspicax" && path === "/api/org/import" && gate.auth?.kind !== "session") {
-    json(res, 401, { error: "Sign in with Pulsatrix to copy bots into this organization.", code: "session_required" });
-    return null;
-  }
-  if (!gate.auth) {
-    if (gate.status === 401 && gate.code === "sign_in_required") {
-      json(res, 401, { error: gate.error, code: gate.code });
-      return null;
-    }
-    if (gate.status === 401 && gate.code) {
-      authRefusals.record({ event: "refused", status: 401, code: gate.code, method, path, via: gate.via, userAgent: headerText(req.headers["user-agent"]), sessionId: gate.sessionId });
-      // A cookie that names no session any more is cleared, so the browser
-      // stops presenting it; only for a definitive reason (an unknown one
-      // may be a request that raced a deploy).
-      if (gate.via === "cookie" && gate.code !== "session_unknown") res.setHeader("set-cookie", clearSessionCookie(SESSION_COOKIE));
-      json(res, 401, { error: gate.error, code: gate.code });
-      return null;
-    }
-    json(res, gate.status, gate.permission ? permissionRefusal(gate.permission) : { error: gate.error });
-    return null;
-  }
-  const auth = gate.auth;
-  // Organization server: a person the provider signalled out is not
-  // served, and a session whose grant the provider stopped refreshing ends
-  // (server/auth/idp-session.ts). A grant due for its refresh is refreshed
-  // before the request is served (bounded wait), so the very request that
-  // found it due already carries the provider's answer: a demotion, a
-  // disabled person.
-  if (idpSessions && auth.kind === "session") {
-    const endSession = (status: number, code: "idp_session_ended" | "principal_disabled", error: string, detail: string) => {
-      sessions.revoke(auth.session.id, code);
-      authRefusals.record({ event: "ended", status, code, method, path, via: auth.via, userAgent: headerText(req.headers["user-agent"]), sessionId: auth.session.id, detail });
-      if (auth.via === "cookie") res.setHeader("set-cookie", clearSessionCookie(SESSION_COOKIE));
-      json(res, status, { error, code });
-      return null;
-    };
-    const disabled = () => {
-      const person = auth.session.principalId ? principals.byId(auth.session.principalId) : null;
-      return person?.disabledAt !== undefined || Boolean(person?.consoleDisabled);
-    };
-    if (disabled()) return endSession(401, "principal_disabled", "Your account is disabled in Pulsatrix or on this Sagax server. Ask an administrator.", "the person is disabled or marked out");
-    // What the gate checked the route against, before any refresh.
-    const gated = [...auth.scopes];
-    // 2026-10-19: a session kept across an unclean restart waits for the
-    // provider to confirm it. Refused there, it ends below like any other;
-    // provider not answering yet, a 503 the client retries, never a sign-out.
-    if (sessions.needsRecheck(auth.session.id)) {
-      await settledWithin(idpSessions.recheck(auth.session), IDP_REFRESH_WAIT_MS);
-      const waiting = sessions.byId(auth.session.id);
-      if (waiting && sessions.needsRecheck(waiting.id)) {
-        // No grant left to confirm it (a logout whose write was lost, a
-        // device whose person has no live sign-in): ended, not "retry".
-        if (idpSessions.mustRefuse(waiting) === "idp_session_ended") return endSession(401, "idp_session_ended", "Your Pulsatrix sign-in has ended. Sign in again.", "no sign-in grant left to confirm it after an unclean restart");
-        res.setHeader("retry-after", "5");
-        json(res, 503, { error: "Sagax restarted and is confirming your Pulsatrix sign-in. Try again in a moment.", code: "idp_recheck_pending" });
-        return null;
-      }
-    }
-    await settledWithin(idpSessions.touch(auth.session), IDP_REFRESH_WAIT_MS);
-    const current = sessions.byId(auth.session.id);
-    if (!current || disabled()) {
-      // The refresh that ran for this request ended the session (it logged why).
-      const code = current ? "principal_disabled" : "idp_session_ended";
-      if (current) sessions.revoke(current.id, code);
-      authRefusals.record({ event: "refused", status: 401, code, method, path, via: auth.via, userAgent: headerText(req.headers["user-agent"]), sessionId: auth.session.id });
-      if (auth.via === "cookie") res.setHeader("set-cookie", clearSessionCookie(SESSION_COOKIE));
-      json(res, 401, { error: code === "principal_disabled" ? "Your account is disabled in Pulsatrix or on this Sagax server. Ask an administrator." : "Your Pulsatrix sign-in has ended. Sign in again.", code });
-      return null;
-    }
-    const refusal = idpSessions.mustRefuse(current);
-    if (refusal === "idp_session_ended") return endSession(401, refusal, "Your Pulsatrix sign-in has ended. Sign in again.", "no live sign-in grant for this session");
-    if (refusal === "idp_unreachable") {
-      // 2026-10-20: Perspicax has not answered a refresh for a long time.
-      // The session is not served until it does, but it is never ended for
-      // that: a 503 the client retries, never a sign-out.
-      authRefusals.record({ event: "refused", status: 503, code: refusal, method, path, via: auth.via, userAgent: headerText(req.headers["user-agent"]), sessionId: current.id });
-      res.setHeader("retry-after", "30");
-      json(res, 503, { error: "Sagax cannot reach Pulsatrix to confirm your sign-in. Try again in a moment.", code: "idp_unreachable" });
-      return null;
-    }
-    // A device with no grant of its own never holds more than its person's
-    // organization role now, even when no grant of theirs was refreshed.
-    const person = current.principalId ? principals.byId(current.principalId) : null;
-    const clamped = idpSessions.clampScopes(current, person?.orgRole);
-    if (clamped) {
-      if (!clamped.length) return endSession(401, "idp_session_ended", "Your Pulsatrix sign-in has ended. Sign in again.", "the person's organization role leaves this device no scope");
-      sessions.setScopes(current.id, clamped);
-    }
-    const scopes = clamped ?? current.scopes;
-    const narrowed = gated.some((scope) => !scopes.includes(scope));
-    auth.session.scopes = scopes;
-    auth.scopes = scopes;
-    if (current.idp) auth.session.idp = current.idp;
-    if (narrowed) {
-      const features = { sharedComputers: sharedComputersEnabled(cfg), orgPairing: IDENTITY.kind === "perspicax", orgDirectory: IDENTITY.kind === "perspicax", serverCatalogue: IDENTITY.kind !== "perspicax" };
-      const needed = requiredScope(method, path, features);
-      if (!scopes.includes(needed)) {
-        // 2026-10-09: a route a permission opens (PERMISSION_ROUTES).
-        const grants = needed === "admin" && scopes.includes("client") ? routePermissions(method, path, features) : null;
-        if (!grants) {
-          json(res, 403, { error: `forbidden: this session lacks the ${needed} scope` });
-          return null;
-        }
-        if (!grants.some((key) => sessionPermits(auth.session, key))) {
-          json(res, 403, permissionRefusal(grants[0]));
-          return null;
-        }
-      }
-    }
-  }
-  if (HOSTED_WORKSPACE && auth.kind === "session") {
-    const failure = workspaceAccess
-      ? await workspaceAccess.authorize(req, auth)
-      : { status: 503, error: "Workspace sign-in is unavailable." };
-    if (failure) {
-      json(res, failure.status, { error: failure.error });
-      return null;
-    }
-  }
-  // A portal-issued or older account session never went through email
-  // sign-in: give it its person now, so it owns what it owned by email.
-  // An address that is not an account email stays nobody.
-  if (auth.kind === "session" && !auth.session.principalId && auth.session.email && isAccountEmail(auth.session.email)) {
-    const userId = auth.session.userId;
-    const principal = principals.forAccount({
-      email: auth.session.email,
-      controlPlaneUserId: userId && !userId.startsWith("portal:") ? userId : undefined
-    });
-    sessions.setPrincipal(auth.session.id, principal.id);
-    auth.session.principalId = principal.id;
-  }
-  // Bot visibility: a member reaches a restricted bot, its threads, rooms,
-  // routines and files exactly as they reach an id that does not exist.
-  // Lists and live frames are narrowed where they are built, below.
-  const visible = visibleTo(viewerFor(auth, path));
-  const viewerId = channelFilterViewerId(auth);
-  if (!visible.everything) {
-    const subject = pathSubject(path);
-    if (subject && !subjectVisible(subject, visible)) {
-      json(res, 404, { error: notFoundFor(subject) });
-      return null;
-    }
-    // Every bot a member is sent (a read receipt, a profile or display
-    // edit, a new or switched task) comes without its audience list or
-    // the teammates they cannot see, whichever route answers.
-    onJsonBody(res, (body) => memberBody(body, visible));
-  }
-  // Perspicax #321: an archived temporary agent takes no more work. Its
-  // conversations stay readable to whoever could read them until the purge.
-  if (method !== "GET" && method !== "HEAD" && method !== "DELETE") {
-    const subject = pathSubject(path);
-    const subjectBot = subject?.kind === "bot" ? store.bot(subject.id) : subject?.kind === "thread" ? store.botByThread(subject.id) : undefined;
-    if (subjectBot?.temporary?.archived) {
-      json(res, 410, { error: "This agent was archived.", code: "agent_archived" });
-      return null;
-    }
-  }
-  // A bot's grants are judged by server/bots/bot-grants.ts (slice 4): an admin
-  // or a team manager administers them without seeing the bot.
-  const grantRoute = IDENTITY.kind === "perspicax" && /^\/api\/bots\/[\w-]+\/grants(?:\/[^/]+)?$/.test(path);
-  // Private threads (server/threads/thread-privacy.ts): the helpers routes call
-  // without the request read who is asking from here. Set for every
-  // request, so a kept-alive connection never inherits one.
-  const scopedViewerId = serviceThreadViewer(serviceViewerClosed(auth, path, privateThreads()), viewerId);
-  const scopes: RequestScopes = { viewer: scopedViewerId ?? null, delegated: false, continuation: null, actConfirmed: null };
-  state.scopes = scopes;
-  threadViewerScope.enterWith(scopes.viewer);
-  // On someone's behalf (act, an AI client): a confidential thread is not
-  // there. Named in the path or query: 404; in an answer: cut out, and an
-  // answer that still names one is withheld.
-  // An on-behalf request: a delegated session (a bot act copy, an AI
-  // client), or this server's own act request for the operator (its
-  // header carries a process secret). The follow-up of a card its owner
-  // allowed in person carries a one-shot token for exactly that thread.
-  const onBehalfHeader = req.headers[ON_BEHALF_HEADER];
-  const continuationHeader = req.headers[CONTINUATION_HEADER];
-  const continuation = takeOwnerContinuation(typeof continuationHeader === "string" ? continuationHeader : undefined, method, path);
-  const delegated = !continuation && ((auth.kind === "session" && auth.session.ephemeral === true)
-    || secureTokenMatch(typeof onBehalfHeader === "string" ? onBehalfHeader : undefined, ON_BEHALF_SECRET));
-  scopes.delegated = delegated;
-  scopes.continuation = continuation;
-  delegatedRequestScope.enterWith(delegated);
-  continuationThreadScope.enterWith(continuation);
-  const confirmedHeader = req.headers[ACT_CONFIRMED_HEADER];
-  // only this server's own replay carries it: a bot act copy of the
-  // person's session, or the operator through the desktop owner header
-  scopes.actConfirmed = (auth.kind === "session" && isBotActSession(auth.session)) || (auth.kind === "loopback" && auth.trust !== "service")
-    ? takeActConfirmation(typeof confirmedHeader === "string" ? confirmedHeader : undefined, method, path)
-    : null;
-  actConfirmedScope.enterWith(scopes.actConfirmed);
-  if (delegated) {
-    const confidentialIds = confidentialThreadIds();
-    if (confidentialIds.size) {
-      if (namesConfidentialThread(`${path}?${url.search}`, confidentialIds)) {
-        json(res, 404, { error: "no such conversation" });
-        return null;
-      }
-      // a stored file only confidential threads point at is not there either
-      const file = confidentialFileOf(path);
-      if (file) {
-        // read now, not from the minute-long cache: a message may have just named it
-        const using = threadsReferencing(file);
-        if (using.length && using.every((threadId) => confidentialIds.has(threadId))) {
-          json(res, 404, { error: "no such file" });
-          return null;
-        }
-      }
-      onJsonBody(res, (body) => {
-        const cleaned = scrubConfidentialThreads(body, confidentialIds);
-        return namesConfidentialThread(JSON.stringify(cleaned), confidentialIds) ? { error: "This answer names a confidential thread." } : cleaned;
-      });
-    }
-  }
-  if (scopedViewerId && privateThreads()) {
-    // A bot thread named in the path or the query is its owner's only;
-    // every bot a response carries shows this viewer their threads only.
-    const named = path.match(/^\/api\/threads\/([\w-]+)(?:\/|$)/)?.[1]
-      // A task and its sub-routes (Regenerate title: .../tasks/<id>/title).
-      ?? path.match(/^\/api\/bots\/[\w-]+\/tasks\/([\w-]+)(?:\/|$)/)?.[1]
-      ?? (/^\/api\/bots\/[\w-]+\//.test(path) ? url.searchParams.get("threadId") ?? undefined : undefined);
-    const owner = named ? store.botByThread(named) : null;
-    // The one exception the spec writes down (slice 3, D15): an
-    // organization admin answers a card that waits for an admin, without
-    // reading the thread (POST .../respond only).
-    // Shared bot library (#2019): a person with bot.use may GET one file
-    // (download / preview / thumb) from a non-confidential thread of that
-    // bot, so Links / Media / Files URLs open for a shared viewer.
-    if (named && owner && !adminAnswersPendingApproval(method, path, auth) &&
-      !botThreadReadable(owner, named, scopedViewerId, method === "GET" ? "thread.read" : "thread.post")) {
-      // The bot's main thread (bot.threadId) is in the library too (not a task).
-      const task = named === owner.threadId ? null : store.taskByThread(owner.id, named);
-      const libraryFile = sharedLibraryGetAllowed({
-        method, path, task,
-        mainThread: named === owner.threadId,
-        mayUseBot: Boolean(canOnBot(authzViewerFromId(scopedViewerId), "bot.use", botFacts(owner))),
-      });
-      if (!libraryFile) {
-        json(res, 404, { error: "no such conversation" });
-        return null;
-      }
-    }
-    onJsonBody(res, (body) => bodyForThreadViewer(body, scopedViewerId));
-  }
-  if (scopedViewerId && !grantRoute && !adminAnswersPendingApproval(method, path, auth)) {
-    const subject = pathSubject(path);
-    if (subject && !subjectSeesChannel(subject, scopedViewerId)) {
-      json(res, 404, { error: notFoundFor(subject) });
-      return null;
-    }
-    // Slice 4: a read-only member of a shared section reads its rooms and
-    // changes nothing in them (settings, tasks, queue, interrupt, cards). A reaction and a report
-    // (App Store 1.2) are a reader's, like a read receipt.
-    const room = IDENTITY.kind === "perspicax" && method !== "GET" && method !== "HEAD" && !/^\/api\/(?:groups|threads)\/[\w-]+\/read$/.test(path) && !REACTION_ROUTE.test(path) && !isReportPath(path) ? roomOfSubject(subject) : null;
-    if (room && !groupPostAllowed(room, scopedViewerId)) {
-      json(res, 403, { error: "you may read this channel, not change it", code: "read_only" });
-      return null;
-    }
-  }
-  {
-    // A conversation between two people (server/people/people-dms.ts): only they
-    // reach it, loopback included, and it only takes messages.
-    const subject = pathSubject(path);
-    const dmRoom = roomOfSubject(subject);
-    if (subject && dmRoom?.peopleDm) {
-      if (!isPeopleDmParticipant(dmRoom, channelViewerId(auth))) {
-        json(res, 404, { error: notFoundFor(subject) });
-        return null;
-      }
-      const refusal = peopleDmRouteRefusal(method, path);
-      if (refusal) {
-        json(res, 400, { error: refusal, code: "people_dm" });
-        return null;
-      }
-    }
-  }
-  scopes.adminActor = beginAdminAudit(req, res, method, path, auth);
-
-  if (method === "POST" && path === "/api/workspace-backup/restore" && teamComputers.list().some(computer => computer.section !== null)) {
-    json(res, 409, { error: "Unassign team computers before restoring a workspace; restored team names must not gain access to existing desktops" });
-    return null;
-  }
-  // Count ordinary requests until their asynchronous handler returns, not
-  // merely until the browser disconnects. A cancelled upload can still write.
-  // The backup routes are not counted: they take the workspace themselves
-  // (workspaceMaintenance.run), and an export counted as an open request
-  // would always find one and answer 409 (they ran before this count until
-  // the route-table split).
-  if (path.startsWith("/api/") && path !== "/api/events" && path !== "/api/health" && !path.startsWith("/api/shared-computers/") && !isWorkspaceBackupRoute(path) && !isWorkspaceBackupSessionControl(method, path)) {
-    state.releaseWorkspaceRequest = workspaceMaintenance.request();
-  }
-
-  // New routes live in modules registered in server/routes/table.ts and
-  // are tried here, behind the gate above; do not add route `if`s below.
-  // What a successful request earns its person (server/achievements.ts).
-  if (method !== "GET" && method !== "HEAD") {
-    const achiever = actorPrincipalId(auth);
-    if (achiever) {
-      res.once("finish", () => {
-        recordAchievements(achiever, achievementRequestEvents({ method, path, status: res.statusCode }, {
-          group: (id) => {
-            const group = store.group(id);
-            return group ? { peopleDm: group.peopleDm === true, humans: roomPeopleCount(group.humanIds), bots: group.memberIds?.length ?? 0 } : null;
-          }
-        }));
-        try {
-          recordMastery(masteryRequestFacts({ method, path, status: res.statusCode }, achiever, {
-            catalogPublisher: (botId) => {
-              const catalog = store.bot(botId)?.catalog;
-              return catalog?.published ? catalog.publishedBy ?? null : null;
-            },
-            census: masteryCensus
-          }));
-        } catch {
-          /* a bonus: never fail the request */
-        }
-      });
-    }
-  }
-  return auth;
 }
 
 /** #1388 wave 4 step 2: authenticated ROUTES table dispatch. */
@@ -46775,394 +46414,6 @@ async function runRoutes(req: IncomingMessage, res: ServerResponse, url: URL, pa
   // Isolated fixtures have no Electron parent to relay an organization's
   // library, so a test relays one here instead. Like the capability route
   // below, it exists only when the launcher sets its high-entropy key.
-  return false;
-}
-
-/** #1388 wave 4 step 2: test capability mint and /api/internal/* harness block. */
-async function runInternal(req: IncomingMessage, res: ServerResponse, url: URL, path: string, method: string, auth: RequestAuth): Promise<boolean> {
-  if (method === "POST" && path === "/api/testing/org-library") {
-    const expected = Buffer.from(process.env.SAGAX_TEST_ORG_LIBRARY_KEY ?? "");
-    const header = req.headers["x-openmausbot-test-org-library"];
-    const actual = Buffer.from(Array.isArray(header) ? "" : String(header ?? ""));
-    if (expected.length < 32 || actual.length !== expected.length || !timingSafeEqual(actual, expected) || !orgLibrary) {
-      json(res, 404, { error: "not found" });
-      return true;
-    }
-    const body = await readBody(req);
-    const applied = orgLibrary.applyRelay(body?.library ?? null);
-    await orgLibrary.settled();
-    json(res, applied.ok ? 200 : 400, { ...applied, report: orgLibrary.lastReport() });
-    return true;
-  }
-  if (method === "POST" && path === "/api/testing/internal-capability") {
-    const expected = process.env.SAGAX_TEST_INTERNAL_CAPABILITY_KEY ?? "";
-    const actual = Array.isArray(req.headers["x-openmausbot-test-capability"])
-      ? ""
-      : String(req.headers["x-openmausbot-test-capability"] ?? "");
-    const expectedBytes = Buffer.from(expected);
-    const actualBytes = Buffer.from(actual);
-    if (
-      !expected ||
-      actualBytes.length !== expectedBytes.length ||
-      !timingSafeEqual(actualBytes, expectedBytes)
-    ) {
-      json(res, 404, { error: "not found" });
-      return true;
-    }
-    const parsed = z.object({
-      botId: z.string().regex(/^[\w-]{1,128}$/),
-      threadId: z.string().regex(/^[\w-]{1,128}$/),
-      kind: z.enum(["agents", "connectors", "computer", "data"]).default("agents"),
-      depth: z.number().int().min(0).max(MAX_COMMS_DEPTH).default(0),
-      skillAuthoring: z.boolean().default(false),
-      // a chat turn's capability, so a test can reach coordinate_bots
-      roomCoordination: z.boolean().default(false),
-      deliversSavedFiles: z.boolean().default(false),
-      // the person whose request this turn is, as a real turn records it
-      // (bot creation judges it, server/bots/bot-creation.ts)
-      speakerPrincipalId: z.string().regex(/^[\w:.@-]{1,200}$/).optional()
-    }).strict().safeParse(await readBody(req));
-    if (!parsed.success || !store.bot(parsed.data.botId)) {
-      json(res, 400, { error: "invalid test capability" });
-      return true;
-    }
-    const generation = beginInternalCapabilityGeneration(parsed.data.threadId);
-    const { deliversSavedFiles, speakerPrincipalId, ...grants } = parsed.data;
-    if (speakerPrincipalId) {
-      turnSpeakers.set(parsed.data.threadId, { origin: "person", principalId: speakerPrincipalId });
-      turnSpeakerPrincipals.set(parsed.data.threadId, speakerPrincipalId);
-    }
-    const token = mintInternalCapability({
-      ...grants,
-      ...(deliversSavedFiles ? { deliversSavedFiles } : {}),
-      generation,
-      createdBots: 0,
-      openedThreads: 0
-    });
-    json(res, 201, { token });
-    return true;
-  }
-  // ── internal peer-agent comms (localhost + bot capability only) ───
-  // The agents-proxy (spawned inside a bot's agent process) calls these to
-  // discover peers and hand a message to one. Not part of the public API.
-  if (path.startsWith("/api/internal/")) {
-    // The harness's browser, cloud computer and Data servers over MCP
-    // streamable HTTP (server/mcp/harness-mcp-http.ts): each frame goes to the
-    // route below with its bearer, through every check that follows.
-    const harnessHttpKind = harnessMcpHttpKind(path);
-    if (harnessHttpKind) {
-      await serveHarnessMcpHttp(req, res, harnessHttpKind, `http://127.0.0.1:${PORT}`);
-      return true;
-    }
-    const internalCapability = authorizedInternalCapability(req.headers.authorization);
-    if (!internalCapability) {
-      json(res, 401, { error: "unauthorized" });
-      return true;
-    }
-    const internalSender = store.bot(internalCapability.botId);
-    if (!internalSender) {
-      json(res, 401, { error: "unauthorized" });
-      return true;
-    }
-    // A confidential thread's turn writes nothing other people or threads
-    // read: memory, logs, rules, docs, skills, routines
-    // (server/threads/confidential-threads.ts).
-    if (store.isConfidentialThread(internalCapability.threadId)) {
-      const confidentialRefusal = confidentialInternalRefusal(path, method);
-      if (confidentialRefusal) {
-        json(res, 403, confidentialRefusal);
-        return true;
-      }
-    }
-    // A confined mail-woken run (S2) hands no work on: its confinement
-    // would not follow it to a teammate, a room or a parallel task.
-    if (botmailConfined(internalCapability.threadId)) {
-      const mailRefusal = botmailConfinedInternalRefusal(path, method);
-      if (mailRefusal) {
-        json(res, 403, mailRefusal);
-        return true;
-      }
-    }
-    if (internalCapability.generation === EXTERNAL_RUNTIME_GENERATION && !externalRuntimeMayCall(method, path)) {
-      json(res, 403, { error: "an external runtime can only list, ask and delegate to its peers and read its delegations" });
-      return true;
-    }
-    const requiredCapabilityKind = path === "/api/internal/hook"
-      ? "hooks"
-      : path === "/api/internal/browser/mcp"
-      ? "browser"
-      : path === DATA_INTERNAL_MCP_PATH
-      ? "data"
-      : path === "/api/internal/phone/claim"
-      ? "phone"
-      : path === "/api/internal/messages/mcp"
-      ? "messages"
-      : path === "/api/internal/sandbox/mcp"
-      ? "sandbox"
-      : path === "/api/internal/desktop/mcp"
-      ? "desktop"
-      : path === "/api/internal/workplace/mcp"
-      ? "workplace"
-      : path === "/api/internal/personal-mcp"
-      ? "personal-mcp"
-      : path === "/api/internal/perspicax/mcp"
-      ? "perspicax"
-      : path.startsWith("/api/internal/connectors/")
-      ? "connectors"
-      : path === "/api/internal/computer-control" || path === "/api/internal/computer/mcp" || path === COMPUTER_JOURNAL_PATH
-        ? "computer"
-        : "agents";
-    if (internalCapability.kind !== requiredCapabilityKind) {
-      json(res, 403, { error: "this internal capability cannot access that service" });
-      return true;
-    }
-    // A coordinated direct turn's ask_bot and delegate_bot are aliases of
-    // coordinate_bots on the runtime (their routes' adapter); a routine or
-    // webhook run thread's own direct call keeps the legacy ledger. A room
-    // keeps the single teamwork path.
-    if (internalCapability.roomCoordination && method === "POST" && ["/api/internal/ask-bot", "/api/internal/delegate-bot"].includes(path) &&
-        store.groupByThread(internalCapability.threadId)) {
-      json(res, 409, { error: "Use coordinate_bots for teamwork; it queues actual teammates and resumes you automatically." });
-      return true;
-    }
-    // Query/body sender ids remain on the wire for proxy compatibility,
-    // but the opaque bearer is the authority. Refuse disagreement instead
-    // of letting a Full bot reuse its own token to impersonate a peer.
-    for (const key of ["self", "fromBotId", "botId"] as const) {
-      const claimed = url.searchParams.get(key);
-      if (claimed !== null && claimed !== internalSender.id) {
-        json(res, 403, { error: "the internal capability belongs to a different bot" });
-        return true;
-      }
-    }
-    const claimedThread = url.searchParams.get("fromThreadId");
-    if (claimedThread !== null && claimedThread !== internalCapability.threadId) {
-      json(res, 403, { error: "the internal capability belongs to a different conversation" });
-      return true;
-    }
-    // read once: the confidential MCP gate below may read it before its route
-    let internalBody: Promise<Record<string, unknown>> | undefined;
-    const readInternalBody = () => (internalBody ??= readInternalBodyOnce());
-    const readInternalBodyOnce = async () => {
-      const body = await readBody(req);
-      // The body may arrive slowly. Authorization at header time is not a
-      // lease: if the owning turn settled while bytes were in flight, this
-      // request must die before it reaches any side effect.
-      if (!internalCapabilityIsActive(internalCapability)) {
-        throw Object.assign(new Error("the internal turn capability has expired"), { status: 401 });
-      }
-      if (body && typeof body === "object" && !Array.isArray(body)) {
-        for (const key of ["fromBotId", "botId"] as const) {
-          if (body[key] !== undefined && String(body[key]) !== internalSender.id) {
-            throw Object.assign(new Error("the internal capability belongs to a different bot"), { status: 403 });
-          }
-        }
-        for (const key of ["fromThreadId", "threadId"] as const) {
-          if (body[key] !== undefined && String(body[key]) !== internalCapability.threadId) {
-            throw Object.assign(new Error("the internal capability belongs to a different conversation"), { status: 403 });
-          }
-        }
-      }
-      return body;
-    };
-    const requireActiveInternalCapability = () => {
-      if (!internalCapabilityIsActive(internalCapability)) {
-        throw Object.assign(new Error("the internal turn capability has expired"), { status: 401 });
-      }
-    };
-    // A confidential thread's calls to other MCP servers: reads pass,
-    // anything else waits for the owner's card with its exact arguments,
-    // whatever the approval mode (server/threads/confidential-threads.ts).
-    if (method === "POST" && CONFIDENTIAL_GATED_MCP_PATHS.has(path) && store.isConfidentialThread(internalCapability.threadId)) {
-      const envelope = CONFIDENTIAL_GATED_MCP_PATHS.get(path);
-      const raw: unknown = await readInternalBody();
-      // a personal server's call arrives wrapped: { message: <JSON-RPC> }
-      const frame: unknown = envelope === "message" && raw && typeof raw === "object" ? (raw as { message?: unknown }).message : raw;
-      if (Array.isArray(frame)) {
-        const answer = { jsonrpc: "2.0", id: null, error: { code: -32600, message: CONFIDENTIAL_PEER_REFUSED } };
-        json(res, 200, envelope === "message" ? { message: answer } : answer);
-        return true;
-      }
-      const call = frame && typeof frame === "object" && (frame as { method?: unknown }).method === "tools/call"
-        ? (frame as { params?: { name?: unknown; arguments?: unknown } }).params : undefined;
-      if (call && typeof call.name === "string") {
-        const callArgs = call.arguments && typeof call.arguments === "object" && !Array.isArray(call.arguments) ? call.arguments as Record<string, unknown> : undefined;
-        const refused = confidentialPerspicaxRefusal(internalCapability, call.name, callArgs, (tool) => mcpConfidentialVerdict(tool), path);
-        if (refused) {
-          const answer = { jsonrpc: "2.0", id: (frame as { id?: unknown }).id, result: { content: [{ type: "text", text: refused }], isError: true } };
-          json(res, 200, envelope === "message" ? { message: answer } : envelope === "result" ? { result: answer.result } : answer);
-          return true;
-        }
-      }
-    }
-    // The agent-to-agent API (server/agent-api.ts): the bot is the caller,
-    // reaching the peers its team and allow-list let it reach.
-    const agentApiTool = internalAgentApiTool(method, path);
-    if (agentApiTool) {
-      const body = await readInternalBody();
-      if (!connectorThread(internalSender.id, internalCapability.threadId)) {
-        json(res, 403, { error: "source conversation does not belong to sender" });
-        return true;
-      }
-      const aborted = new AbortController();
-      res.on("close", () => aborted.abort());
-      const answer = await agentApi.call({
-        kind: "bot",
-        id: internalSender.id,
-        name: internalSender.name,
-        scopes: agentApiBotScopes(internalSender),
-        via: "agents-mcp",
-        sourceThreadId: internalCapability.threadId,
-        depth: internalCapability.depth,
-        // the person the source turn speaks for: its completion turn speaks
-        // for them too, so their Perspicax connectors stay mounted (production
-        // 2026-10-12: unknown_speaker on the a2a wake). Never a routine's.
-        ...(!turnRoutineLineage.has(internalCapability.threadId) && turnSpeakerPrincipals.get(internalCapability.threadId)
-          ? { speakerPrincipalId: turnSpeakerPrincipals.get(internalCapability.threadId)! } : {})
-      }, agentApiTool, body ?? {}, aborted.signal);
-      json(res, answer.status, answer.body);
-      return true;
-    }
-    const cloudAgentAction = cloudAgentInternalAction(method, path);
-    if (cloudAgentAction) {
-      const body = await readInternalBody();
-      let principalId = turnSpeakerPrincipals.get(internalCapability.threadId);
-      if (!principalId && IDENTITY.kind !== "perspicax") principalId = localPrincipalId();
-      if (!principalId) {
-        json(res, 403, { error: "Cloud agents need a signed-in person with provider credentials." });
-        return true;
-      }
-      const answer = await handleCloudAgentInternal(
-        cloudAgentAction,
-        (body && typeof body === "object" && !Array.isArray(body) ? body : {}) as Record<string, unknown>,
-        {
-          manager: cloudAgentManager,
-          principalId,
-          botId: internalSender.id,
-          threadId: internalCapability.threadId
-        },
-      );
-      json(res, answer.isError ? 400 : 200, answer);
-      return true;
-    }
-    if (readAndDraft.refusesRoute(internalSender, internalCapability.threadId, method, path)) {
-      json(res, 403, { error: "This work reads and drafts only." });
-      return true;
-    }
-    {
-      const waitHandled = await waitsBoot.routes({
-        method, path, res, json,
-        botId: internalSender.id,
-        threadId: internalCapability.threadId,
-        readBody: readInternalBody,
-        sourceRefusal: () => {
-          const source = connectorThread(internalSender.id, internalCapability.threadId);
-          const origin = turnOrigin(internalCapability);
-          return waitSourceRefusal({
-            owned: source !== null,
-            room: Boolean(source?.group),
-            depth: internalCapability.depth,
-            handedOff: Boolean(internalCapability.roomHandoffId),
-            routineRun: Boolean(activeRoutineRunForThread(internalCapability.threadId)),
-            outsideDriven: origin.kind === "outside" || Boolean(internalCapability.externalRuntime),
-            personStarted: origin.kind === "user",
-            guest: cloudGuestDriven(internalCapability.threadId)
-          });
-        },
-        hostRefusal: () => {
-          const plan = turnSurfacePlan(internalSender, undefined, internalCapability.threadId).computer;
-          const place = plan === "local" || plan === "vm" || plan === "cloud" ? plan : null;
-          return hostWaitRefusal({ cloudHome: false, hosted: HOSTED_WORKSPACE, guest: cloudGuestDriven(internalCapability.threadId), place });
-        },
-        guest: () => cloudGuestDriven(internalCapability.threadId),
-        peer: (name) => findWaitPeer(reachablePeers(store.bots, internalSender), internalSender.id, name)
-      });
-      if (waitHandled !== PASS) return true;
-    }
-    if (path === "/api/internal/act" && method === "POST") {
-      const body = await readInternalBody();
-      const acting = store.projectBotForTask(internalSender.id, internalCapability.threadId) ?? internalSender;
-      const result = await botActs().handle({
-        facts: actTurnFacts(internalCapability.threadId, internalCapability.generation),
-        raw: fillPluginBot(body, internalSender.id),
-        threadId: internalCapability.threadId,
-        botId: internalSender.id,
-        botName: acting.name,
-        botColor: acting.color,
-        mode: approvalModeForTurn(acting, false, internalCapability.threadId)
-      });
-      json(res, result.status, result.body);
-      return true;
-    }
-    if (await dispatchRoutes([savedSteps.journalRoutes({ capability: internalCapability, readBody: readInternalBody })], { req, res, url, path, method, auth, json, readBody })) return true;
-    // The cloud computer's tools (harness-mcp-proxy computer): the turn's
-    // capability names its Boat, and the Boat credential stays here. A
-    // capability minted before the Boat existed (boxId null) acts on the
-    // one its first call's claim created or woke (mountBotBoat).
-    if (method === "POST" && path === DATA_INTERNAL_MCP_PATH) {
-      const body = await readInternalBody();
-      const unavailable = dataEngine.unavailable();
-      if (unavailable !== null) {
-        json(res, 503, { error: `Data tools are unavailable: ${unavailable}` });
-        return true;
-      }
-      const scopeKey = dataScopeForTurn(internalSender, internalCapability.threadId);
-      if (scopeKey === null) {
-        json(res, 403, { error: "This thread's Data belongs to another person." });
-        return true;
-      }
-      const abort = new AbortController();
-      res.once("close", () => { if (!res.writableEnded) abort.abort(); });
-      let database;
-      try {
-        database = await dataEngine.forBot(scopeKey);
-      } catch (error) {
-        if (error instanceof DataFailure) {
-          json(res, 503, { error: error.message });
-          return true;
-        }
-        throw error;
-      }
-      requireActiveInternalCapability();
-      json(res, 200, { result: await dataRpc(body, {
-        database, sheet: dataSheets.for(scopeKey),
-        compileChart, validateVegaLite, renderer: chartRenderer,
-        exportRoots: () => dataExportRoots(internalSender, scopeKey),
-        confinedRoots: () => dataConfinedRoots(scopeKey),
-        downloadDir: () => dataDownloadDir(scopeKey),
-        signal: abort.signal, assertActive: requireActiveInternalCapability,
-        onShow: (card) => {
-          // The receipt names the tool that ran; the card's title lives in
-          // dataResult, where no consumer mistakes it for a status or error.
-          store.appendMessage(internalCapability.threadId, {
-            role: "bot", kind: "activity", tool: { name: "data_show", ok: true },
-            dataResult: { botId: internalSender.id, cardId: card.id, title: card.title, kind: card.kind, sql: card.sql },
-            ...(store.groupByThread(internalCapability.threadId)
-              ? { from: { botId: internalSender.id, name: internalSender.name, color: internalSender.color } } : {})
-          });
-        }
-      }) });
-      return true;
-    }
-    if (await dispatchInternalRoutes(INTERNAL_ROUTES, { res, path, method, json, capability: internalCapability, readBody: readInternalBody, url, headers: req.headers })) return true;
-    // #1388 I1: browser..computer-control moved to internal-environments
-    // #1388 I5: ask-bot..create-room moved to internal-bot-chat / internal-rooms
-    if (isInternalVoiceCallEnd(method, path)) {
-      await readInternalBody();
-      const ending = voiceCalls.requestEnd(internalCapability.threadId);
-      if (!ending) {
-        json(res, 409, { error: "There is no live phone call on this conversation. Do not call end_call." });
-        return true;
-      }
-      // The goodbye is still being written. The session, the warm process
-      // and the other devices wait until this turn finishes.
-      json(res, 200, { ending: true, callId: ending.callId });
-      return true;
-    }
-    // ── computer control: proxies read the hold, bots plead for help ──
-    json(res, 404, { error: "unknown internal endpoint" });
-    return true;
-  }
   return false;
 }
 
@@ -47959,6 +47210,172 @@ const startTurnRunner = createStartTurn({
   serverPathView,
   workspaceMaintenance
 });
+
+const authenticate = createAuthenticate(() => ({
+  ACT_CONFIRMED_HEADER,
+  CONTINUATION_HEADER,
+  HOSTED_WORKSPACE,
+  IDENTITY,
+  IDP_REFRESH_WAIT_MS,
+  ON_BEHALF_HEADER,
+  ON_BEHALF_SECRET,
+  PRE_AUTH_AFTER_RESOLVE,
+  REACTION_ROUTE,
+  SESSION_COOKIE,
+  WORKER_RELAY_TOKEN,
+  LOOPBACK,
+  achievementRequestEvents,
+  actConfirmedScope,
+  actorPrincipalId,
+  adminAnswersPendingApproval,
+  authRefusals,
+  beginAdminAudit,
+  bodyForThreadViewer,
+  botFacts,
+  botThreadReadable,
+  canOnBot,
+  cfg,
+  channelFilterViewerId,
+  channelViewerId,
+  clearSessionCookie,
+  cliOwnerToken,
+  companionMutationToken,
+  confidentialFileOf,
+  confidentialThreadIds,
+  continuationThreadScope,
+  cookieMaxAgeSeconds,
+  delegatedRequestScope,
+  desktopMutationToken,
+  dispatchPreAuthRoutes,
+  groupPostAllowed,
+  headerText,
+  idpSessions,
+  isAccountEmail,
+  isBotActSession,
+  isPeopleDmParticipant,
+  isReportPath,
+  isWorkspaceBackupRoute,
+  isWorkspaceBackupSessionControl,
+  json,
+  lendingEnabled,
+  masteryCensus,
+  masteryRequestFacts,
+  memberBody,
+  namesConfidentialThread,
+  notFoundFor,
+  onJsonBody,
+  parseCookies,
+  pathSubject,
+  peopleDmRouteRefusal,
+  permissionRefusal,
+  principals,
+  privateThreads,
+  readBody,
+  recordAchievements,
+  recordMastery,
+  requestOrigin,
+  requiredScope,
+  resolveRequestAuth,
+  roomOfSubject,
+  roomPeopleCount,
+  routePermissions,
+  scrubConfidentialThreads,
+  secureTokenMatch,
+  serializeSessionCookie,
+  serviceThreadViewer,
+  serviceViewerClosed,
+  sessionPermits,
+  sessions,
+  settledWithin,
+  sharedComputersEnabled,
+  sharedLibraryGetAllowed,
+  store,
+  subjectSeesChannel,
+  subjectVisible,
+  takeActConfirmation,
+  takeOwnerContinuation,
+  teamComputers,
+  threadsReferencing,
+  threadViewerScope,
+  viewerFor,
+  visibleTo,
+  workspaceAccess,
+  workspaceMaintenance,
+  authzViewerFromId,
+}));
+
+const runInternal = createRunInternal(() => ({
+  COMPUTER_JOURNAL_PATH,
+  CONFIDENTIAL_GATED_MCP_PATHS,
+  CONFIDENTIAL_PEER_REFUSED,
+  DATA_INTERNAL_MCP_PATH,
+  EXTERNAL_RUNTIME_GENERATION,
+  HOSTED_WORKSPACE,
+  IDENTITY,
+  INTERNAL_ROUTES,
+  MAX_COMMS_DEPTH,
+  PASS,
+  PORT,
+  activeRoutineRunForThread,
+  actTurnFacts,
+  agentApi,
+  agentApiBotScopes,
+  approvalModeForTurn,
+  authorizedInternalCapability,
+  beginInternalCapabilityGeneration,
+  botActs,
+  botmailConfined,
+  botmailConfinedInternalRefusal,
+  chartRenderer,
+  cloudAgentInternalAction,
+  cloudAgentManager,
+  cloudGuestDriven,
+  compileChart,
+  confidentialInternalRefusal,
+  confidentialPerspicaxRefusal,
+  connectorThread,
+  dataConfinedRoots,
+  dataDownloadDir,
+  dataEngine,
+  dataExportRoots,
+  dataRpc,
+  dataScopeForTurn,
+  dataSheets,
+  DataFailure,
+  dispatchInternalRoutes,
+  dispatchRoutes,
+  externalRuntimeMayCall,
+  fillPluginBot,
+  findWaitPeer,
+  handleCloudAgentInternal,
+  harnessMcpHttpKind,
+  hostWaitRefusal,
+  internalAgentApiTool,
+  internalCapabilityIsActive,
+  isInternalVoiceCallEnd,
+  json,
+  localPrincipalId,
+  mcpConfidentialVerdict,
+  mintInternalCapability,
+  orgLibrary,
+  reachablePeers,
+  readAndDraft,
+  readBody,
+  savedSteps,
+  serveHarnessMcpHttp,
+  store,
+  timingSafeEqual,
+  turnOrigin,
+  turnRoutineLineage,
+  turnSpeakerPrincipals,
+  turnSpeakers,
+  turnSurfacePlan,
+  validateVegaLite,
+  voiceCalls,
+  waitsBoot,
+  waitSourceRefusal,
+  z,
+}));
 
 const originGates = createOriginGates(() => ({
   HOSTED_WORKSPACE,

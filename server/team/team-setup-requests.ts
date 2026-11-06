@@ -129,7 +129,9 @@ interface SetupStore {
 
 interface Options {
   store: SetupStore;
-  teams(): string[];
+  /** #2045: teams of this owner only (display names). Another person's
+   * same name must not block or authorize a proposal. */
+  teams(ownerKey: string): string[];
   canAccessTeam(from: BotRecord, target?: string, targetSectionId?: string): boolean;
   /** 2026-10-20: a Primary Bot covers every bot of its person whatever the
    * team (peer-roster.ts primaryCovers); their teams are in its scope too. */
@@ -245,14 +247,14 @@ export class TeamSetupRequestService {
     if (confirming && teamSetupRevision(chief, this.requesterScope(request)) !== request.requesterRevision) throw new TeamSetupError("The Primary Bot's settings changed. This setup was cancelled; review a new proposal.", 409);
     // #2045: "exists" means this Primary Bot's person already has that team.
     // Another person's same display name must not block the proposal.
-    const existingTeams = new Set(this.options.teams().map(section));
+    const ownerOf = (bot: BotRecord) => this.options.store.botOwnerKey?.(bot) ?? (bot.ownerUserId?.trim().toLowerCase() || "");
+    const existingTeams = new Set(this.options.teams(ownerOf(chief)).map(section));
     if (new Set([...(chief.managedSections ?? []), ...request.newTeams]).size > 100) throw new TeamSetupError("A Primary Bot may coordinate at most 100 additional teams", 409);
     for (const name of request.newTeams) if (existingTeams.has(name)) throw new TeamSetupError(`Team ${JSON.stringify(name)} now exists. Review a new proposal.`, 409);
     const covered = (bot: BotRecord) => this.options.canAccessTeam(chief, bot.section, bot.sectionId) || Boolean(this.options.covers?.(chief, bot));
     const coveredTeams = new Set(this.options.store.bots.filter((bot) => !bot.hidden && this.options.covers?.(chief, bot)).map((bot) => section(bot.section)));
     const allowed = (name?: string) => request.newTeams.includes(section(name)) || this.options.canAccessTeam(chief, name) || coveredTeams.has(section(name));
     const targets = new Set<string>();
-    const ownerOf = (bot: BotRecord) => this.options.store.botOwnerKey?.(bot) ?? (bot.ownerUserId?.trim().toLowerCase() || "");
     const projected = this.options.store.bots.map((bot) => ({ id: bot.id, name: bot.name, section: section(bot.section), chiefOfStaff: bot.chiefOfStaff, hidden: bot.hidden, owner: ownerOf(bot) }));
     for (const operation of request.operations) {
       if (targets.has(operation.botId)) throw new TeamSetupError("A bot appears twice in the prepared setup");

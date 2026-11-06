@@ -117,6 +117,37 @@ describe("Store membership by section id (#2045)", () => {
     expect(alice.sectionId).not.toBe(bob.sectionId);
   });
 
+  it("creates the owner's section when a legacy name is unknown", async () => {
+    const { Store: FreshStore } = await import("../store.ts");
+    const { SectionChannels: FreshChannels, validSectionName, isGeneralName } = await import("./section-channels.ts");
+    const store = new FreshStore(selection);
+    store.createBot({ name: "Ada", section: "Field", ownerUserId: ALICE });
+    store.createBot({ name: "Bea", section: "Field", ownerUserId: BOB });
+    let n = 0;
+    const channels = new FreshChannels({
+      path: join(process.env.SAGAX_DATA_DIR!, "section-channels.json"),
+      newId: () => `sec_00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`,
+    });
+    expect(channels.byNameForOwner("Field", ALICE)).toBeNull();
+    expect(channels.byNameForOwner("Field", BOB)).toBeNull();
+    const moved = store.migrateTeamSectionIds((name, owner) => {
+      if (!validSectionName(name) || isGeneralName(name) || !owner.trim()) return null;
+      return channels.ensure(name, owner).id;
+    });
+    expect(moved).toBe(2);
+    const aliceSec = channels.byNameForOwner("Field", ALICE)!;
+    const bobSec = channels.byNameForOwner("Field", BOB)!;
+    expect(aliceSec.id).not.toBe(bobSec.id);
+    const alice = store.bots.find((bot) => bot.ownerUserId === ALICE)!;
+    const bob = store.bots.find((bot) => bot.ownerUserId === BOB)!;
+    expect(alice).toMatchObject({ section: "Field", sectionId: aliceSec.id });
+    expect(bob).toMatchObject({ section: "Field", sectionId: bobSec.id });
+    // Rename after create-on-unknown keeps each person's membership.
+    expect(store.renameSectionForOwner("Field", "Desk", ALICE, undefined, aliceSec.id)).toBeUndefined();
+    expect(store.bot(alice.id)).toMatchObject({ section: "Desk", sectionId: aliceSec.id });
+    expect(store.bot(bob.id)).toMatchObject({ section: "Field", sectionId: bobSec.id });
+  });
+
   it("setBotsSection stamps sectionId and clear removes it", async () => {
     const { Store: FreshStore } = await import("../store.ts");
     const store = new FreshStore(selection);

@@ -1807,10 +1807,12 @@ import {
 import { LOGIN_ENGINE_LABEL } from "./engines/engine-reconnect-ahead.ts";
 import {
   createSectionChannelRoutes,
+  isGeneralName,
   migrationOwner,
   recordAccess,
   SectionChannels,
-  sectionShareGrants
+  sectionShareGrants,
+  validSectionName,
 } from "./rooms/section-channels.ts";
 import { createBotGrantRoutes, visibleGrants, wireGrants } from "./bots/bot-grants.ts";
 import { identityWarning } from "./perspicax/perspicax-identity.ts";
@@ -26536,7 +26538,42 @@ const ruleRequests = new RuleRequestService({
   autoApply: appliesDirectly,
   canPersist: proposalPersistence
 });
-const teamSetupTeams = () => [...new Set(["", ...readSections(), ...store.bots.map((bot) => sectionKey(bot.section)), ...store.groups.map((group) => sectionKey(group.section))])];
+/** #2045: display names this person already holds (bots, rooms, section channels).
+ * Solo keeps the shared registry: one person owns every name. */
+const teamSetupTeams = (ownerKey: string) => {
+  const owner = ownerKey.trim().toLowerCase();
+  const names = new Set<string>([""]);
+  if (!sectionChannels) {
+    for (const name of readSections()) if (name) names.add(name);
+    for (const bot of store.bots) {
+      const name = sectionKey(bot.section);
+      if (name) names.add(name);
+    }
+    for (const group of store.groups) {
+      const name = sectionKey(group.section);
+      if (name) names.add(name);
+    }
+    return [...names];
+  }
+  for (const bot of store.bots) {
+    if (store.botOwnerKey(bot) !== owner) continue;
+    const name = sectionKey(bot.section);
+    if (name) names.add(name);
+  }
+  for (const group of store.groups) {
+    if (group.dm || group.peopleDm) continue;
+    const name = sectionKey(group.section);
+    if (!name) continue;
+    const members = group.memberIds.map((id) => store.bot(id)).filter((bot): bot is BotRecord => Boolean(bot));
+    if (members.length && members.every((bot) => store.botOwnerKey(bot) === owner)) names.add(name);
+  }
+  if (owner) {
+    for (const record of sectionChannels.list()) {
+      if (record.ownerPrincipalId.trim().toLowerCase() === owner) names.add(record.name);
+    }
+  }
+  return [...names];
+};
 const teamSetupRequests = new TeamSetupRequestService({
   store, teams: teamSetupTeams,
   canAccessTeam: (bot, name, sectionId) => {
@@ -39282,10 +39319,11 @@ if (sectionChannels) {
   const movedBriefs = migrateSectionContextKeys(resolveTeamOwner);
   const movedMemory = teamMemory.migrateSectionKeys(resolveTeamOwner);
   // #2045: bot/group membership links move from display name to section id.
-  // #2045: never fall back to byName — two people may share a display name.
+  // Unknown names create that owner's private section so rename never orphans.
+  // Never fall back to byName: two people may share a display name.
   const movedLinks = store.migrateTeamSectionIds((name, owner) => {
-    const record = sectionChannels.byNameForOwner(name, owner);
-    return record ? record.id : null;
+    if (!validSectionName(name) || isGeneralName(name) || !owner.trim()) return null;
+    return sectionChannels.ensure(name, owner).id;
   });
   // Stamp sectionId onto team computers that still only hold a display name.
   for (const computer of teamComputers.list()) {

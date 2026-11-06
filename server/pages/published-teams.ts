@@ -10,9 +10,10 @@
 // export of the same team reuses them.
 //
 // #2045: team entries are keyed by stable section id (`sec_<uuid>`) when
-// known. Legacy name keys still read until the next write or rename moves
-// them. section-context.ts still calls renamePublishedTeam on the legacy
-// empty-name path; org renames also call it with the section id.
+// known. Legacy name keys still read until migratePublishedTeamKeys (boot)
+// or the next write/rename moves them. section-context.ts still calls
+// renamePublishedTeam on the legacy empty-name path; org renames also call
+// it with the section id.
 //
 // Server-private: nothing here is on the wire, and nothing here is a secret.
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
@@ -57,6 +58,40 @@ function save(teams: Map<string, PublishedTeam>): void {
   const out: Record<string, PublishedTeam> = Object.create(null);
   for (const [section, entry] of teams) out[section] = entry;
   writeFileAtomic(PUBLISHED_TEAMS_FILE, JSON.stringify({ version: 1, teams: out }, null, 2), { mode: 0o600 });
+}
+
+/** #2045: move unambiguous display-name keys onto section ids in memory.
+ * A name held by more than one owner (resolve returns null) stays put.
+ * When the id key already exists, the leftover name key is dropped. */
+export function migratePublishedTeamEntries(
+  teams: Map<string, PublishedTeam>,
+  resolve: (name: string) => string | null,
+): { next: Map<string, PublishedTeam>; moved: number } {
+  const next = new Map(teams);
+  let moved = 0;
+  for (const [key, entry] of teams) {
+    if (isSectionId(key)) continue;
+    const name = key.trim();
+    if (!name) continue;
+    const id = resolve(name)?.trim();
+    if (!id || !isSectionId(id)) continue;
+    next.delete(key);
+    if (!next.has(id)) next.set(id, entry);
+    moved += 1;
+  }
+  return { next, moved };
+}
+
+/** Boot: rewrite leftover name keys when exactly one section channel owns
+ * that display name. Returns how many keys moved or were dropped. */
+export function migratePublishedTeamKeys(
+  resolve: (name: string) => string | null,
+): number {
+  const loaded = load();
+  if (!loaded.size) return 0;
+  const { next, moved } = migratePublishedTeamEntries(loaded, resolve);
+  if (moved) save(next);
+  return moved;
 }
 
 /** Prefer a stable section id; fall back to a legacy display-name key. */

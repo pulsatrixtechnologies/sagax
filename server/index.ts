@@ -1441,7 +1441,7 @@ import {
   readPublishedLibrary,
   writePublishedLibrary
 } from "./presets.ts";
-import { readPublishedTeam, renamePublishedTeam, writePublishedTeam } from "./pages/published-teams.ts";
+import { migratePublishedTeamKeys, readPublishedTeam, renamePublishedTeam, writePublishedTeam } from "./pages/published-teams.ts";
 import { OrgLibrary } from "./org/org-library.ts";
 import { createTeamBackup, importTeamBackup } from "./backup/team-backup.ts";
 import { shouldMountLocalComputer } from "./local-routing.ts";
@@ -39334,8 +39334,14 @@ if (sectionChannels) {
     try { teamComputers.assign(computer.id, computer.section, matches[0]!.id); }
     catch { /* leave the legacy name assignment alone */ }
   }
-  if (movedBriefs || movedMemory || movedLinks) {
-    console.log(`sections: migrated team data to owner/id (${movedBriefs} brief(s), ${movedMemory} memory section(s), ${movedLinks} membership link(s))`);
+  // #2045: leftover published-teams.json name keys move onto the section id
+  // when exactly one channel owns that display name (same rule as briefs).
+  const movedPublished = migratePublishedTeamKeys((name) => {
+    const matches = sectionChannels.list().filter((record) => record.name === name);
+    return matches.length === 1 ? matches[0]!.id : null;
+  });
+  if (movedBriefs || movedMemory || movedLinks || movedPublished) {
+    console.log(`sections: migrated team data to owner/id (${movedBriefs} brief(s), ${movedMemory} memory section(s), ${movedLinks} membership link(s), ${movedPublished} published team key(s))`);
   }
   const channels = sectionChannels;
   ROUTES.push(createSectionChannelRoutes({

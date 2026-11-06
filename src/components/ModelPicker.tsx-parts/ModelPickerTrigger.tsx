@@ -125,7 +125,13 @@ export function ModelPickerTrigger({
       title={bot.busy ? `${summary}${followLine}\n${t(threadId ? "model.threadBusy" : "model.busy")}` : `${summary}${followLine}`}
       className={TABLE_CELL_CONTROL}
     >
-      {(autoInstance ?? active) && <InstanceProviderMark instance={(autoInstance ?? active)!} size={14} />}
+      {/* #2080: the mark sits in a fixed shrink-0 box so a generic glyph
+          (openai-compat, Azure Foundry) never stretches and eats the label. */}
+      {(autoInstance ?? active) && (
+        <span aria-hidden="true" className="flex size-3.5 shrink-0 items-center justify-center">
+          <InstanceProviderMark instance={(autoInstance ?? active)!} size={14} />
+        </span>
+      )}
       <span data-model-list-chip-label="" className="min-w-0 flex-1 truncate text-left">
         {listChipLabel({ autoOn, autoRecord, active, selection })}
       </span>

@@ -10,7 +10,7 @@ import CompanionCore
 enum DesktopIcon: String, CaseIterable {
     case plus, panelLeftClose, panelLeftOpen, search, chevronRight, network, calendarDays, puzzle, library
     case ellipsis, pin, pinOff, folderPlus, folderInput, bellDot, pencil, clipboardCopy, eyeOff, trash
-    case users, share, smartphone, settings, keyboard, info, help, squarePen, star, arrowLeftRight, arrowUp, arrowDown, eye
+    case users, lock, share, smartphone, settings, keyboard, info, help, squarePen, star, arrowLeftRight, arrowUp, arrowDown, eye
     // the bot panel (I4b)
     case panelRight, squareTerminal, activity, calendarClock, fileText
     // the sidebar footer's gamertag (I2b)
@@ -105,6 +105,9 @@ enum DesktopIcon: String, CaseIterable {
         case .users:
             ["M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", "M16 3.128a4 4 0 0 1 0 7.744",
              "M22 21v-2a4 4 0 0 0-3-3.87", Self.circle(9, 7, 4)]
+        case .lock:
+            // lucide Lock (chat header audience, #2141)
+            [Self.rect(5, 11, 14, 10, 2), "M7 11V7a5 5 0 0 1 10 0v4"]
         case .share:
             [Self.circle(18, 5, 3), Self.circle(6, 12, 3), Self.circle(18, 19, 3),
              "M8.59 13.51 15.42 17.49", "M15.41 6.51 8.59 10.49"]
@@ -231,6 +234,7 @@ enum DesktopIcon: String, CaseIterable {
         case .fileText: "doc.text"
         case .trash: "trash"
         case .users: "person.2"
+        case .lock: "lock"
         case .share: "square.and.arrow.up"
         case .smartphone: "iphone"
         case .settings: "gearshape"

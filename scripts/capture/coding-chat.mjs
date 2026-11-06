@@ -52,7 +52,7 @@ try {
   const shot = async (name) => { await page.screenshot({ path: join(outDir, name) }); console.log(name); };
   const settle = async () => {
     await page.waitForSelector("[data-testid=coding-chat]");
-    // the tool lines (#2099): diffs stay folded, so wait for the rows only
+    // the tool lines (#2099): diffs stay folded behind +N -M; wait for the rows
     await page.waitForSelector("[data-coding-row]");
     await page.waitForTimeout(300);
   };

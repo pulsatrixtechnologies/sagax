@@ -107,10 +107,14 @@ describe("Settings search keywords", () => {
     expect(twice).toEqual([]);
   });
 
-  it("draws the pages of the final rail (13, plus Experimental), Import and Updates as cards", async () => {
+  it("draws the pages of the final rail (Updates, Experimental and App), no Grok Import card", async () => {
     const { SECTIONS, CARD_KEYWORDS } = await import("./settings-nav");
-    expect(SECTIONS).toHaveLength(14);
+    expect(SECTIONS).toHaveLength(15);
+    // #2090 Updates + #2080 App (id about); every page has its intro line
     expect(SECTIONS.every((entry) => entry.introKey === `settings.intro.${entry.id}`)).toBe(true);
-    expect(Object.keys(CARD_KEYWORDS)).toEqual(expect.arrayContaining(["backups.import", "about.updates"]));
+    expect(SECTIONS.find((entry) => entry.id === "about")?.introKey).toBe("settings.intro.about");
+    expect(Object.keys(CARD_KEYWORDS)).toEqual(expect.arrayContaining(["about.help", "about.holding"]));
+    expect(Object.keys(CARD_KEYWORDS)).not.toContain("backups.import");
+    expect(Object.keys(CARD_KEYWORDS)).not.toContain("about.updates");
   });
 });

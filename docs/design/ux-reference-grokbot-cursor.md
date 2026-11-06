@@ -127,9 +127,12 @@ d'apps, puis une capsule de recherche large. Rien d'autre à l'écran.
 
 **Bureau.**
 
-- En-tête : une pastille flottante centrée (mascotte, nom du bot, petit chevron) au-dessus
-  du fil ; elle ouvre et ferme le panneau du bot. Le fil défile dessous, l'en-tête n'a
-  pas de bande opaque.
+- En-tête (Grok Bot, #2141) : une rangée centrée au-dessus du fil avec la pilule du
+  nom (mascotte d'environ 20 px, puis « Nom · Étiquette » en 14 regular), une pilule
+  qui dit qui voit le bot (« Privé » ou le libellé de partage, icône cadenas ou
+  personnes), puis un bouton rond engrenage. La pilule et l'engrenage ouvrent et
+  ferment le panneau du bot. Le fil défile dessous, l'en-tête n'a pas de bande opaque.
+  Le panneau du bot s'ouvre à environ 308 px de large.
 - Colonne de lecture étroite et centrée (environ 70 caractères). Les messages du bot sont
   des blocs à fond légèrement plus clair, coins d'environ 12 px, sans avatar répété à
   chaque message. Les messages de la personne s'alignent à droite.
@@ -182,6 +185,19 @@ changement de surface. En haut à droite : partager (export) et fermer, boutons 
 droite, mascotte, nom, bouton pilule Modifier, les trois onglets. Les sections de
 Détails sont des cartes groupées ; un compteur bleu à droite du titre de section
 (« 1 actif ») ; « Ajouter une routine » en lien bleu avec un +.
+
+### 2.3b Panneau d'une personne
+
+**Bureau et iPad / iPhone (#2117, 2026-11-05).** Panneau (ou feuille) d'un
+membre de l'organisation : avatar, nom, étiquette, Message. Trois onglets texte
+(Profil, Bibliothèque, Succès). Pas de section Connexions, pas de lien
+« Gérer dans Perspicax ». Titre et points vivent dans Succès, jamais sous le
+nom. **Profil** : À propos (courriel, login, équipes) puis En commun seulement
+quand il y a au moins un groupe partagé ou un de leurs bots visibles ; chaque
+partie absente reste absente. **Bibliothèque** : les fichiers des salles que
+les deux personnes partagent (`GET /api/people/:id/library`), même allure que
+la Bibliothèque d'un bot. **Succès** : carte publique (niveau, titre, barre,
+déblocages récents, grille) ; si la personne ne partage rien, une note privée.
 
 ### 2.4 Pages d'édition du bot
 

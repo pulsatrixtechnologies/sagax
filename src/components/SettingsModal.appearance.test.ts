@@ -96,6 +96,11 @@ vi.mock("@/lib/notification-preferences", () => {
     nudgeShake: local("omb-nudge-shake"),
     approvalChime: local("omb-approval-chime"),
     connectionNotices: local("omb-connection-notices"),
+    notifyBots: local("omb-notify-bots"),
+    notifyPeople: local("omb-notify-people"),
+    notifyGroups: local("omb-notify-groups"),
+    notifyApprovals: local("omb-notify-approvals"),
+    notifyRoutines: local("omb-notify-routines"),
     useLocalSwitch: (choice: { enabled: () => boolean }) => choice.enabled(),
   };
 });
@@ -367,7 +372,7 @@ describe("Settings → Appearance", () => {
   it("offers full backups in local Settings", () => {
     fixture.section = "backups";
     const html = render();
-    expect(html).toContain('<option value="backups" selected="">Backups and import</option>');
+    expect(html).toContain('<option value="backups" selected="">Backups</option>');
     // one card, two actions; each form opens in place (2026-10-14)
     expect(html).toContain('data-backup-action="export"');
     expect(html).toContain('data-backup-action="import"');
@@ -471,7 +476,7 @@ describe("Settings → Notifications", () => {
     fixture.section = "notifications";
     const html = render();
     const groups = [...html.matchAll(/data-settings-group="([^"]+)"/g)].map((match) => match[1]);
-    expect(groups).toEqual(["alerts", "privacy"]);
+    expect(groups).toEqual(["notificationTypes", "alerts", "privacy"]);
     expect(html).toContain(">Alerts</h3>");
     expect(html).toContain(">Privacy</h3>");
     expect(html).toContain(">Nudges</div>");

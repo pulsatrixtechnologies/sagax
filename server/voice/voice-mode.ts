@@ -459,6 +459,661 @@ function handshake(req: IncomingMessage): { key: string } | { status: number; er
  * server/voice/voice-keyterms.ts, and what SFSpeechRecognizer takes well). */
 export const VOICE_CALL_KEYTERM_MAX = 100;
 
+
+function createSpeechAction(env: any) {
+  const { adapterOf, deps, sayFallback, socketRefusal } = env;
+return async function speech(req: IncomingMessage, res: import("node:http").ServerResponse, url: URL, json: Json, keys: VoiceKeyCandidate[], refusals: VoiceKeyRefusals, who: string, usageFor: UsageFor, voiceFor: (provider: VoiceProviderId) => string | undefined, threadId: string, botVoice: { speed?: number; language?: string } = {}): Promise<void> {
+  const upgrade = deps.upgrade?.(req);
+  const speaks = (candidate: VoiceKeyCandidate) => {
+    const adapter = adapterOf(candidateProvider(candidate));
+    return Boolean(adapter?.openSpeech || adapter?.synthesizeStream);
+  };
+  const usable = keys.filter(speaks);
+  if (!upgrade || !usable.length) { json(res, 426, { error: "WebSocket upgrade required" }); return; }
+  const shake = handshake(req);
+  if ("status" in shake) { json(res, shake.status, { error: shake.error }); return; }
+  const language = botVoice.language ?? url.searchParams.get("language") ?? "auto";
+  if (!isVoiceModeLanguage(language)) { json(res, 400, { error: "unknown language" }); return; }
+  const speed = botVoice.speed ?? Number(url.searchParams.get("speed") ?? "1");
+  if (!Number.isFinite(speed) || speed < VOICE_MODE_MIN_SPEED || speed > VOICE_MODE_MAX_SPEED) {
+    json(res, 400, { error: `speed must be between ${VOICE_MODE_MIN_SPEED} and ${VOICE_MODE_MAX_SPEED}` });
+    return;
+  }
+  let page: ReturnType<typeof webSocketSession> | null = null;
+  const { socket } = upgrade;
+  const tried: VoiceKeyRefusal[] = [];
+  const fellBack: VoiceKeyRefusal[] = [];
+  const ordered = refusals.order(who, usable).map((entry) => entry.candidate);
+  for (let i = 0; i >= 0 && i < ordered.length;) {
+    const candidate = ordered[i]!;
+    const provider = candidateProvider(candidate);
+    const adapter = adapterOf(provider)!;
+    const voice = voiceFor(provider);
+    const options = { voice, speed, language: ttsLanguage(language) };
+    const usage = usageFor(candidate);
+    const session = createSpeechSession({
+      open: (handlers) => adapter.openSpeech
+        ? adapter.openSpeech(candidate.key, options, handlers)
+        : openHttpSpeechStream({
+          synthesize: (text, signal) => adapter.synthesizeStream!(text, voice, candidate.key, { speed, language: options.language }, signal),
+          ...(adapter.verify ? { verify: () => adapter.verify!(candidate.key) } : {}),
+        }, handlers),
+      speakable: (text) => {
+        if (text.length > VOICE_MODE_MAX_TEXT * 4) return "";
+        const joined = deps.utterances(text).join(" ").trim();
+        const read = readForVoice(language, joined);
+        return read.slice(0, VOICE_MODE_MAX_TEXT);
+      },
+      // words appended to an open utterance: their edges kept, read as
+      // French or English when the utterance so far is (voice-reading.ts)
+      speakableDelta: (text, before) => {
+        const clean = speakableDelta(text);
+        return clean ? readForVoice(language, clean, before) : clean;
+      },
+      usage: (characters) => usage(usageModel(provider, "tts"), characters),
+      sendText: (frame) => page?.sendText(JSON.stringify(frame)),
+      sendBinary: (pcm) => page?.sendBinary(pcm),
+      closePage: (code) => page?.close(code),
+      log: (line) => (deps.log ?? console.warn)(line),
+      sampleRate: VOICE_SPEECH_RATE,
+    });
+    const opened = await Promise.race([
+      session.ready,
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), SPEECH_READY_MS).unref()),
+    ]);
+    if (!opened || socket.destroyed) {
+      session.close();
+      if (socket.destroyed) return;
+      const message = scrub(session.lastError ?? "", candidate.key);
+      const failure = grokVoiceFailure(message || "not reachable");
+      const next = session.lastError ? nextCandidateIndex(ordered, i, failure) : -1;
+      if (session.lastError && voiceKeyFailureIsFinal(failure)) refusals.remember(who, voiceKeyRef(candidate), failure);
+      else if (next >= 0) refusals.remember(who, voiceKeyRef(candidate), failure, VOICE_PROVIDER_REFUSAL_TTL_MS);
+      if (next >= 0) {
+        const refusal = { ...voiceKeyRef(candidate), failure };
+        if (candidateProvider(ordered[next]!) === provider) tried.push(refusal);
+        else fellBack.push(refusal);
+        (deps.log ?? console.warn)(`[voice-mode] ${VOICE_PROVIDER_LABELS[provider]} speech refused the ${describeVoiceKey(candidate)} (${failure}): trying the ${describeVoiceKey(ordered[next]!)}`);
+        i = next;
+        continue;
+      }
+      json(res, 502, socketRefusal("speech", session.lastError ? message : undefined, `${VOICE_PROVIDER_LABELS[provider]} streaming speech is not reachable.`, candidate, tried));
+      return;
+    }
+    refusals.forget(who, voiceKeyRef(candidate));
+    sayFallback(threadId, "voice", fellBack, candidate);
+    upgrade.release();
+    const head = upgrade.head;
+    res.detachSocket(socket as import("node:net").Socket);
+    socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${websocketAccept(shake.key)}\r\n\r\n`);
+    page = webSocketSession(socket, {
+      onBinary: () => page?.close(1003),
+      onText: (text) => session.message(text),
+      onClose: () => session.close(),
+    });
+    if (head.length) socket.unshift(head);
+    const sameProvider = tried.filter((entry) => candidateProvider(entry) === provider);
+    page.sendText(JSON.stringify({ type: "ready", sampleRate: VOICE_SPEECH_RATE, key: voiceKeyRef(candidate), ...(sameProvider.length ? { skipped: sameProvider } : {}) }));
+    return;
+  }
+  json(res, 502, { error: "no voice key" });
+}
+
+/** GET /voice/realtime: one call as a realtime voice session
+ * (server/voice/realtime-call.ts). The page sends PCM16 at 24 kHz and JSON
+ * (interrupt, ping, hangup); it gets the voice's PCM16 and the call's
+ * state. The socket is accepted first, so a refusal reaches the page in
+ * words ({"type":"refused","code"}): a browser never reads the body of a
+ * refused upgrade. A key refused for itself gives way to the next xAI
+ * key. Never text to speech: no realtime voice, no call. */
+}
+
+function createRealtimeAction(env: any) {
+  const { deps, now } = env;
+return async function realtime(req: IncomingMessage, res: import("node:http").ServerResponse, url: URL, json: Json, keys: VoiceKeyCandidate[], refusals: VoiceKeyRefusals, who: string, usageFor: UsageFor, target: VoiceTarget, auth: RequestAuth, blocked?: string): Promise<void> {
+  const upgrade = deps.upgrade?.(req);
+  if (!upgrade) { json(res, 426, { error: "WebSocket upgrade required" }); return; }
+  const shake = handshake(req);
+  if ("status" in shake) { json(res, shake.status, { error: shake.error }); return; }
+  const language = url.searchParams.get("language") ?? "auto";
+  if (!isVoiceModeLanguage(language)) { json(res, 400, { error: "unknown language" }); return; }
+  const voice = url.searchParams.get("voice") ?? undefined;
+  const { socket } = upgrade;
+  upgrade.release();
+  const head = upgrade.head;
+  res.detachSocket(socket as import("node:net").Socket);
+  socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${websocketAccept(shake.key)}\r\n\r\n`);
+  let bridge: RealtimeCallBridge | null = null;
+  let gone = false;
+  const page = webSocketSession(socket, {
+    onBinary: (data) => bridge?.audio(new Uint8Array(data)),
+    onText: (text) => bridge?.pageMessage(text),
+    onClose: () => { gone = true; bridge?.end("page"); },
+  });
+  if (head.length) socket.unshift(head);
+  const refuse = (code: string, message: string, extra: Record<string, unknown> = {}) => {
+    page.sendText(JSON.stringify({ type: "refused", code, error: message, ...extra }));
+    page.close(4000);
+  };
+  if (!deps.realtime) return refuse("realtime_unavailable", "Realtime calls are not available on this server.");
+  if (blocked) return refuse("spend_cap", blocked);
+  if (!keys.length) return refuse("realtime_not_configured", "No realtime voice is set up for you. Add an xAI key in Settings > Voice.");
+  const callId = randomUUID();
+  const link = deps.realtime.session(target, auth, callId);
+  const tried: VoiceKeyRefusal[] = [];
+  const ordered = refusals.order(who, keys).map((entry) => entry.candidate);
+  for (const candidate of ordered) {
+    const early: Array<Record<string, unknown>> = [];
+    let live = false;
+    const usage = usageFor(candidate);
+    const attempt = new RealtimeCallBridge({
+      callId,
+      openUpstream: () => deps.realtime!.openUpstream(candidate.key),
+      sendText: (frame) => (live ? page.sendText(JSON.stringify(frame)) : early.push(frame)),
+      sendBinary: (pcm) => { if (live) page.sendBinary(pcm); },
+      closePage: (code) => { if (live) page.close(code); },
+      work: link.work,
+      respond: link.respond,
+      bot: link.bot,
+      history: link.history,
+      ...(voice ? { voice } : {}),
+      language,
+      usage: (seconds) => usage("grok-realtime", Math.round(seconds.input + seconds.output)),
+      log: (line) => (deps.log ?? console.warn)(line),
+      now,
+    });
+    attempt.start();
+    const opened = await Promise.race([
+      attempt.ready,
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), REALTIME_READY_MS).unref()),
+    ]);
+    if (gone) { attempt.end("page"); return; }
+    if (!opened) {
+      attempt.end("upstream");
+      const message = scrub(attempt.lastError ?? "not reachable", candidate.key);
+      const failure = grokVoiceFailure(message);
+      tried.push({ ...voiceKeyRef(candidate), failure });
+      if (voiceKeyFailureIsFinal(failure)) refusals.remember(who, voiceKeyRef(candidate), failure);
+      (deps.log ?? console.warn)(`[voice-realtime] xAI realtime refused the ${describeVoiceKey(candidate)} (${failure})`);
+      continue;
+    }
+    refusals.forget(who, voiceKeyRef(candidate));
+    bridge = attempt;
+    live = true;
+    page.sendText(JSON.stringify({ type: "ready", sampleRate: REALTIME_SAMPLE_RATE, callId, key: voiceKeyRef(candidate), ...(tried.length ? { skipped: tried } : {}) }));
+    for (const frame of early.splice(0)) page.sendText(JSON.stringify(frame));
+    return;
+  }
+  // every key refused for itself: say which to fix, never fall back to text to speech
+  const keyRefused = tried.length > 0 && tried.every((entry) => entry.failure === "key" || entry.failure === "quota");
+  refuse(keyRefused ? "realtime_key_refused" : "realtime_unreachable",
+    keyRefused ? "The realtime voice key was refused. Fix it in Settings > Voice." : "The realtime voice is not reachable. Try the call again.",
+    { tried });
+}
+
+/** GET /voice/listen: one live call's streaming speech to text. The page
+ * sends 16 kHz 16-bit PCM frames while the person speaks (its own voice
+ * activity detector decides when) and `{"type":"finalize"}` when they
+ * stop; the provider's transcripts come back as they are made. A key
+ * refused for credits or for itself gives way to the next one, a
+ * provider that fails to another provider. The keys stay here. */
+}
+
+function createListenAction(env: any) {
+  const { adapterOf, deps, sayFallback, now, socketRefusal } = env;
+return async function listen(req: IncomingMessage, res: import("node:http").ServerResponse, url: URL, json: Json, keys: VoiceKeyCandidate[], refusals: VoiceKeyRefusals, who: string, usageFor: UsageFor, keyterms: readonly string[], threadId: string): Promise<void> {
+  const upgrade = deps.upgrade?.(req);
+  const usable = keys.filter((candidate) => Boolean(adapterOf(candidateProvider(candidate))?.openTranscription));
+  if (!upgrade || !usable.length) { json(res, 426, { error: "WebSocket upgrade required" }); return; }
+  const shake = handshake(req);
+  if ("status" in shake) { json(res, shake.status, { error: shake.error }); return; }
+  const wsKey = shake.key;
+  const language = url.searchParams.get("language") ?? "auto";
+  if (!isVoiceModeLanguage(language)) { json(res, 400, { error: "unknown language" }); return; }
+  let session: ReturnType<typeof webSocketSession> | null = null;
+  let heard = 0;
+  let total = 0;
+  /** when the page last said the person stopped (finalize) */
+  let finalizedAt: number | null = null;
+  // "auto" on a French computer is French with formatting (sttRequest)
+  const stt = sttRequest(language, url.searchParams.get("locale") ?? undefined);
+  const { socket } = upgrade;
+  const tried: VoiceKeyRefusal[] = [];
+  const fellBack: VoiceKeyRefusal[] = [];
+  const ordered = refusals.order(who, usable).map((entry) => entry.candidate);
+  for (let i = 0; i >= 0 && i < ordered.length;) {
+    const candidate = ordered[i]!;
+    const provider = candidateProvider(candidate);
+    const adapter = adapterOf(provider)!;
+    const openTranscription = adapter.openTranscription!;
+    const key = candidate.key;
+    const usage = usageFor(candidate);
+    const book = () => {
+      if (heard > 0) usage(usageModel(provider, "stt"), heard);
+      heard = 0;
+    };
+    adapter.warm?.(key);
+    let warmedAt = now();
+    // the provider's socket is reopened behind the page's when it drops,
+    // and rotated before its session limit (voice-listen-session.ts)
+    const ears = createListenSession({
+      // the page's own detector ends turns (and sends finalize); the
+      // provider's endpointing is only a backstop for a very long pause
+      open: (handlers) => openTranscription(key, { ...stt, endpointingMs: 1500, keyterms }, handlers),
+      sendText: (frame) => {
+        // the end of speech (the page's finalize) to the final words:
+        // the person's wait for their text, in the Events lens
+        if (frame.type === "transcript" && frame.speechFinal && finalizedAt !== null) {
+          const waited = now() - finalizedAt;
+          finalizedAt = null;
+          deps.notice?.(threadId, streamedTranscriptNotice(waited, VOICE_PROVIDER_LABELS[provider]));
+        }
+        session?.sendText(JSON.stringify(frame));
+      },
+      closePage: (code) => session?.close(code),
+      log: (line) => (deps.log ?? console.warn)(line),
+      onUpstreamClosed: book,
+      scrub: (message) => scrub(message, key),
+      now,
+    });
+    const opened = await Promise.race([
+      ears.ready,
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), LISTEN_READY_MS).unref()),
+    ]);
+    if (!opened || socket.destroyed) {
+      ears.close();
+      if (socket.destroyed) return;
+      const failure = grokVoiceFailure(ears.lastError ?? "not reachable");
+      const next = ears.lastError ? nextCandidateIndex(ordered, i, failure) : -1;
+      if (ears.lastError && voiceKeyFailureIsFinal(failure)) refusals.remember(who, voiceKeyRef(candidate), failure);
+      else if (next >= 0) refusals.remember(who, voiceKeyRef(candidate), failure, VOICE_PROVIDER_REFUSAL_TTL_MS);
+      if (next >= 0) {
+        const refusal = { ...voiceKeyRef(candidate), failure };
+        if (candidateProvider(ordered[next]!) === provider) tried.push(refusal);
+        else fellBack.push(refusal);
+        (deps.log ?? console.warn)(`[voice-mode] ${VOICE_PROVIDER_LABELS[provider]} listen socket refused the ${describeVoiceKey(candidate)} (${failure}): trying the ${describeVoiceKey(ordered[next]!)}`);
+        i = next;
+        continue;
+      }
+      json(res, 502, socketRefusal("listen", ears.lastError, `${VOICE_PROVIDER_LABELS[provider]} speech to text is not reachable. Try again.`, candidate, tried));
+      return;
+    }
+    refusals.forget(who, voiceKeyRef(candidate));
+    sayFallback(threadId, "speech to text", fellBack, candidate);
+    upgrade.release();
+    const head = upgrade.head;
+    res.detachSocket(socket as import("node:net").Socket);
+    socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${websocketAccept(wsKey)}\r\n\r\n`);
+    session = webSocketSession(socket, {
+      onBinary: (data) => {
+        total += data.byteLength;
+        if (total > VOICE_LISTEN_MAX_BYTES) { session?.close(1009); return; }
+        heard += data.byteLength;
+        ears.audio(new Uint8Array(data));
+      },
+      onText: (text) => {
+        let message: { type?: unknown; requestId?: unknown } | null = null;
+        try { message = JSON.parse(text) as { type?: unknown; requestId?: unknown }; } catch { /* ignored */ }
+        // The page's keepalive keeps a proxy from dropping the listen
+        // socket. It is never forwarded to the provider.
+        if (message?.type === "keepalive") return;
+        if (message?.type === "finalize") {
+          finalizedAt = now();
+          const requestId = typeof message.requestId === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(message.requestId) ? message.requestId : undefined;
+          ears.finalize(requestId);
+          book();
+          // the answer's first sentence goes to the voice a second or
+          // two from now: have a connection open by then (a pooled one
+          // idles out in a few seconds, and the person spoke longer)
+          const at = now();
+          if (at - warmedAt >= LISTEN_WARM_EVERY_MS) {
+            warmedAt = at;
+            adapter.warm?.(key);
+          }
+        }
+      },
+      onClose: () => { book(); ears.close(); },
+    });
+    if (head.length) socket.unshift(head);
+    const sameProvider = tried.filter((entry) => candidateProvider(entry) === provider);
+    session.sendText(JSON.stringify({ type: "ready", key: voiceKeyRef(candidate), ...(sameProvider.length ? { skipped: sameProvider } : {}) }));
+    return;
+  }
+  json(res, 502, { error: "no voice key" });
+}
+}
+
+async function handleVoiceModeRequest(env: any, ctx: Parameters<RouteHandler>[0]): Promise<typeof PASS | void> {
+  const { adapterOf, deps, sayFallback, now, refusals, speech, realtime, listen, limited } = env;
+  const { req, res, url, path, method, auth, json, readBody } = ctx;
+
+  // Settings > Voice (2026-10-29): the person's providers, a provider's
+  // voices and "Test the voice", for no bot in particular
+  const legacy = LEGACY_ROUTE.exec(path);
+  const own = OWN_ROUTE.exec(path) ?? legacy;
+  const match = own ? [path, "", own[1]] : ROUTE.exec(path);
+  if (!match) return PASS;
+  const [, botId, action] = match as unknown as [string, string, Action];
+  res.setHeader("cache-control", "no-store");
+  const expected = action === "status" || action === "voices" || action === "listen" || action === "speech" || action === "realtime" ? "GET" : "POST";
+  if (method !== expected) return json(res, 405, { error: "method not allowed" });
+
+  const speaker = deps.speaker(auth);
+  if (!speaker || (deps.organization && !speaker.principalId)) return json(res, 403, { error: "sign in as a person first", code: "sign_in" });
+
+  const jsonBody = action === "prepare" || action === "speak" || action === "stream" || action === "call";
+  const body = jsonBody ? await readBody(req).catch(() => null) : null;
+  if (jsonBody && (!body || typeof body !== "object")) return json(res, 400, { error: "a JSON body is required" });
+  // The installed TTS choice remains the default for an older client,
+  // while key resolution, fallback and synthesis use this one path.
+  const preference = deps.preference?.(speaker);
+  if (legacy && preference == null) {
+    const installed = deps.legacyChoice?.(speaker);
+    if (installed) {
+      if (!url.searchParams.has("tts")) url.searchParams.set("tts", installed.provider);
+      if (action === "voices" && !url.searchParams.has("provider")) url.searchParams.set("provider", installed.provider);
+      if (body) {
+        const record = body as Record<string, unknown>;
+        record.tts ??= installed.provider;
+        record.voice ??= record.voiceId ?? installed.voice;
+      }
+    }
+  }
+  const rawThread = action === "transcribe" || action === "listen" || action === "speech" || action === "realtime" ? url.searchParams.get("threadId") ?? undefined : (body as Record<string, unknown> | null)?.threadId;
+  if (rawThread !== undefined && rawThread !== null && (typeof rawThread !== "string" || !THREAD_ID.test(rawThread))) return json(res, 400, { error: "threadId must be a task id" });
+  const target: VoiceTarget | { status: number; error: string } = own
+    ? { botId: "", botName: "", threadId: "" }
+    : deps.target(auth, botId, typeof rawThread === "string" ? rawThread : undefined);
+  if ("status" in target) return json(res, target.status, { error: target.error });
+
+  // the call's start and end need no key: they only say the thread is on a call
+  if (action === "call") {
+    const record = body as Record<string, unknown>;
+    const callId = record.callId;
+    const state = record.state;
+    if (typeof callId !== "string" || !CALL_ID.test(callId)) return json(res, 400, { error: "callId must be a call id" });
+    if (state !== "start" && state !== "alive" && state !== "end" && state !== "heard") return json(res, 400, { error: "state must be start, alive, end or heard" });
+    if (state === "heard") {
+      const audio = parseVoiceAudioTiming(record.audio);
+      if (!audio) return json(res, 400, { error: "audio must carry the stages in milliseconds" });
+      deps.callSession?.heard?.(target, callId, audio);
+      return json(res, 200, { ok: true });
+    }
+    const language = record.language === undefined ? undefined : record.language;
+    if (language !== undefined && !isVoiceModeLanguage(language)) return json(res, 400, { error: "unknown language" });
+    if (!deps.callSession) return json(res, 404, { error: "call sessions are not available" });
+    if (state === "end") deps.callSession.end(target, callId, auth);
+    else deps.callSession.start(target, callId, language as string | undefined, auth, state === "alive");
+    if (state !== "start") return json(res, 200, { ok: true });
+    // the phone recognizes speech itself: the same words the server's
+    // speech to text expects, for its own recognizer (target() already
+    // checked this person may use this thread)
+    let keyterms: string[] = [];
+    try { keyterms = (deps.keyterms?.(target, speaker) ?? []).slice(0, VOICE_CALL_KEYTERM_MAX); } catch { keyterms = []; }
+    return json(res, 200, { ok: true, keyterms });
+  }
+
+  const keysUrl = deps.keysUrl?.();
+  const admin = deps.isAdmin?.(auth) === true;
+  const resolved = await resolveVoiceKeys(deps, speaker);
+  const who = speaker.principalId || "operator";
+  // every provider's keys for this person: xAI's in the order above, then
+  // OpenAI's and ElevenLabs' (2026-10-29), none for a person turned off
+  const byProvider = new Map<VoiceProviderId, VoiceKeyCandidate[]>();
+  if (resolved.ok) byProvider.set("xai", resolved.keys);
+  if (resolved.ok || resolved.cause !== "payer_disabled") {
+    for (const provider of VOICE_TTS_PROVIDERS.filter((id): id is Exclude<VoiceTtsProvider, "xai"> => id !== "xai")) {
+      if (!adapterOf(provider) || !deps.providerKeys) continue;
+      let found: VoiceKeyCandidate[] = [];
+      try { found = await deps.providerKeys(provider, speaker); } catch { found = []; }
+      const tagged = found.filter((candidate) => candidate.key).map((candidate) => ({ ...candidate, provider }));
+      if (tagged.length) byProvider.set(provider, tagged);
+    }
+  }
+  const choice = requestedChoice(action, url, body as Record<string, unknown> | null, preference, target.botId);
+  /** a role's keys, the chosen provider first, then the other providers */
+  const roleKeys = <P extends VoiceProviderId>(role: "tts" | "stt", picked: "auto" | P, all: readonly P[]): VoiceKeyCandidate[] => {
+    const serving = all.filter((provider) => {
+      const adapter = adapterOf(provider);
+      return (byProvider.get(provider)?.length ?? 0) > 0 && Boolean(role === "tts" ? adapter?.synthesize || adapter?.synthesizeStream : adapter?.transcribe || adapter?.openTranscription);
+    });
+    return providerOrder(picked, serving, all).flatMap((provider) => byProvider.get(provider) ?? []);
+  };
+  const ttsKeys = roleKeys("tts", choice.tts, VOICE_TTS_PROVIDERS);
+  const sttKeys = roleKeys("stt", choice.stt, VOICE_STT_PROVIDERS);
+  const voiceFor = (provider: VoiceProviderId): string | undefined => choice.voices[provider as VoiceTtsProvider] || undefined;
+  const refusedCause: VoiceModeRefusalCause | null = ttsKeys.length && sttKeys.length
+    ? null
+    : resolved.ok ? "no_credentials" : resolved.cause === "payer_disabled" || (!ttsKeys.length && !sttKeys.length) ? resolved.cause : "no_credentials";
+  if (action === "status") {
+    const org = deps.organization ? { organization: true } : {};
+    let status: VoiceModeStatus;
+    if (!refusedCause) {
+      const ordered = refusals.order(who, ttsKeys);
+      const first = ordered[0]!.candidate;
+      const keys: VoiceKeyState[] = ordered.map((entry: { candidate: VoiceKeyCandidate; refused: GrokVoiceFailure | null }) => ({ ...voiceKeyRef(entry.candidate), ...(entry.refused ? { refused: entry.refused } : {}) }));
+      // a provider is offered while one of its keys is not refused for itself
+      const offered = <P extends VoiceProviderId>(list: VoiceKeyCandidate[]): P[] => [...new Set(list
+        .filter((candidate) => refusals.failure(who, voiceKeyRef(candidate)) !== "key")
+        .map((candidate) => candidateProvider(candidate) as P))];
+      const firstStt = refusals.order(who, sttKeys)[0]!.candidate;
+      status = {
+        provider: "xai", available: true, ...org, via: first.via, key: voiceKeyRef(first), keys,
+        // a call is a realtime voice session (xAI's Voice Agent API)
+        ...(deps.realtime && (byProvider.get("xai")?.length ?? 0) > 0 ? { realtime: true } : {}),
+        providers: {
+          tts: VOICE_TTS_PROVIDERS.filter((provider) => offered<VoiceTtsProvider>(ttsKeys).includes(provider)),
+          stt: VOICE_STT_PROVIDERS.filter((provider) => offered<VoiceSttProvider>(sttKeys).includes(provider)),
+        },
+        tts: candidateProvider(first) as VoiceTtsProvider,
+        stt: candidateProvider(firstStt) as VoiceSttProvider,
+      };
+    } else {
+      status = { provider: "xai", available: false, ...org, refusal: { cause: refusedCause, ...(admin ? { admin: true } : {}), ...(keysUrl ? { keysUrl } : {}) } };
+      // what the person could still pick (a voice without ears, say)
+      if (ttsKeys.length || sttKeys.length) {
+        status.providers = {
+          tts: VOICE_TTS_PROVIDERS.filter((provider) => ttsKeys.some((candidate) => candidateProvider(candidate) === provider)),
+          stt: VOICE_STT_PROVIDERS.filter((provider) => sttKeys.some((candidate) => candidateProvider(candidate) === provider)),
+        };
+      }
+    }
+    return json(res, 200, status);
+  }
+  if (action === "realtime") {
+    let blocked: string | undefined;
+    try { deps.assertWithinBudget?.(); } catch (error) { blocked = error instanceof Error ? error.message : String(error); }
+    const usageFor: UsageFor = (candidate) => (model, input) => deps.recordUsage({
+      target, speaker, via: candidate.via, model, input,
+      ...(candidate.payerPrincipalId ? { payerPrincipalId: candidate.payerPrincipalId } : {}),
+    });
+    const xaiKeys = speaker.disabled ? [] : byProvider.get("xai") ?? [];
+    return realtime(req, res, url, json, xaiKeys, refusals, who, usageFor, target, auth, blocked);
+  }
+  const roleOf = action === "transcribe" || action === "listen" ? "stt" : "tts";
+  const keys = roleOf === "stt" ? sttKeys : ttsKeys;
+  if (legacy && action === "prepare") {
+    return json(res, 200, { ready: keys.length > 0 && !speaker.disabled, utterances: deps.utterances(String((body as Record<string, unknown>).text ?? "")) });
+  }
+  // a voice alone (read aloud, the voice test) needs no ears
+  if (!keys.length || (refusedCause && (action === "listen" || action === "transcribe" || !ttsKeys.length))) {
+    return json(res, 403, refusalBody(refusedCause ?? "no_credentials", keysUrl, target, speaker, admin));
+  }
+  /** a provider error without any of this person's keys */
+  const allKeys = [...byProvider.values()].flat();
+  const scrubAll = (message: string): string => allKeys.reduce((out, candidate) => scrub(out, candidate.key), message);
+  /** the provider refused or failed this request on every key it could:
+   * logged (the kind of key, never the key) and answered with its
+   * reason, its kind and the key it is about. */
+  const failed = (what: string, error: unknown) => {
+    if (error instanceof VoiceKeyFailure) {
+      (deps.log ?? console.warn)(`[voice-mode] ${VOICE_PROVIDER_LABELS[candidateProvider(error.used)]} ${what} failed (${error.used.via}, ${describeVoiceKey(error.used)}): ${error.message}`);
+      return providerFailureBody(error.message, { key: voiceKeyRef(error.used), tried: error.tried });
+    }
+    const message = scrubAll(error instanceof Error ? error.message : String(error));
+    (deps.log ?? console.warn)(`[voice-mode] ${VOICE_PROVIDER_LABELS[candidateProvider(keys[0]!)]} ${what} failed (${keys[0]!.via}): ${message}`);
+    return providerFailureBody(message, { key: voiceKeyRef(keys[0]!) });
+  };
+  /** run `attempt` on the first key that takes it (server/voice/voice-keys.ts),
+   * another provider taking over silently when one fails */
+  const tryKeys = async <T,>(what: string, list: VoiceKeyCandidate[], attempt: (candidate: VoiceKeyCandidate) => Promise<T>) => {
+    const out = await withVoiceKeys<T>(who, list, refusals as VoiceKeyRefusals, attempt, { log: deps.log ?? console.warn, what, scrub: scrubAll });
+    sayFallback(target.threadId, roleOf === "stt" ? "speech to text" : "voice", out.fellBack, out.used);
+    return out;
+  };
+  /** which key answered, for the page: a header on an HTTP answer */
+  const keyHeaders = (used: VoiceKeyCandidate, skipped: VoiceKeyRefusal[]): Record<string, string> => ({
+    "x-voice-key": voiceKeyHeader(voiceKeyRef(used)),
+    "x-voice-provider": candidateProvider(used),
+    ...(skipped.length ? { "x-voice-key-skipped": skipped.map((entry) => `${voiceKeyHeader(entry)}:${entry.failure}`).join(",") } : {}),
+  });
+
+  if (action === "prepare") {
+    const text = String((body as Record<string, unknown>).text ?? "");
+    return json(res, 200, { ready: true, utterances: deps.utterances(text) });
+  }
+  if (limited(who)) return json(res, 429, { error: "Too many voice requests. Wait a moment." });
+  // Voice costs money like a turn does: a reached spend limit stops it too.
+  try {
+    deps.assertWithinBudget?.();
+  } catch (error) {
+    return json(res, 409, { error: error instanceof Error ? error.message : String(error), code: "spend_cap" });
+  }
+
+  if (action === "voices") {
+    // one provider's voices: the one asked, else the one the voice starts with
+    const asked = url.searchParams.get("provider");
+    const provider = (cleanTtsChoice(asked) && asked !== "auto" ? asked : candidateProvider(refusals.order(who, ttsKeys)[0]!.candidate)) as VoiceTtsProvider;
+    const listing = adapterOf(provider)?.listVoices;
+    const own = ttsKeys.filter((candidate) => candidateProvider(candidate) === provider);
+    if (!listing || !own.length) return json(res, 404, { voices: [], provider, error: `No ${VOICE_PROVIDER_LABELS[provider]} key serves you.` });
+    try {
+      const { value, used, skipped } = await withVoiceKeys(who, own, refusals, (candidate) => listing(candidate.key), { log: deps.log ?? console.warn, what: "voices", scrub: scrubAll });
+      for (const [name, value_] of Object.entries(keyHeaders(used, skipped))) res.setHeader(name, value_);
+      return json(res, 200, { voices: value, provider, key: voiceKeyRef(used), ...(skipped.length ? { skipped } : {}) });
+    } catch (error) {
+      return json(res, 502, { voices: [], provider, ...failed("voices", error) });
+    }
+  }
+
+  const usageFor: UsageFor = (candidate) => (model, input) => deps.recordUsage({
+    target, speaker, via: candidate.via, model, input,
+    ...(candidate.payerPrincipalId ? { payerPrincipalId: candidate.payerPrincipalId } : {}),
+    ...(candidateProvider(candidate) !== "xai" ? { provider: candidateProvider(candidate) } : {}),
+  });
+
+  const keyterms = (): string[] => {
+    try { return deps.keyterms?.(target, speaker) ?? []; } catch { return []; }
+  };
+  if (choice.badVoice && action !== "listen") return json(res, 400, { error: "voice must be a voice id" });
+  if (action === "listen") return listen(req, res, url, json, sttKeys, refusals, who, usageFor, keyterms(), target.threadId);
+  if (action === "speech") return speech(req, res, url, json, ttsKeys, refusals, who, usageFor, voiceFor, target.threadId, { speed: target.speed, language: target.language });
+
+  if (action === "speak" || action === "stream") {
+    const record = body as Record<string, unknown>;
+    const raw = String(record.text ?? "").trim();
+    if (!raw) return json(res, 400, { error: "text required" });
+    // a live call sends the bot's own sentence: made speakable here, like /prepare
+    let text = action === "stream" ? deps.utterances(raw).join(" ").trim() : raw;
+    if (action === "stream" && raw.length > VOICE_MODE_MAX_TEXT * 4) return json(res, 413, { error: `voice sentences are limited to ${VOICE_MODE_MAX_TEXT * 4} characters` });
+    if (text.length > VOICE_MODE_MAX_TEXT) return json(res, 413, { error: `voice utterances are limited to ${VOICE_MODE_MAX_TEXT} characters` });
+    const speed = target.speed ?? (record.speed === undefined ? 1 : record.speed);
+    if (typeof speed !== "number" || !Number.isFinite(speed) || speed < VOICE_MODE_MIN_SPEED || speed > VOICE_MODE_MAX_SPEED) {
+      return json(res, 400, { error: `speed must be between ${VOICE_MODE_MIN_SPEED} and ${VOICE_MODE_MAX_SPEED}` });
+    }
+    const language = target.language ?? (record.language === undefined ? "auto" : record.language);
+    if (!isVoiceModeLanguage(language)) return json(res, 400, { error: "unknown language" });
+    if (action === "stream") {
+      text = readForVoice(language, text);
+      if (text.length > VOICE_MODE_MAX_TEXT) return json(res, 413, { error: `voice utterances are limited to ${VOICE_MODE_MAX_TEXT} characters` });
+    }
+    const options = { speed, language: ttsLanguage(language) };
+    if (action === "stream") {
+      // nothing to say once made speakable (a code block, a link): silence
+      if (!text) { res.writeHead(204, { "cache-control": "no-store" }); res.end(); return; }
+      const streaming = ttsKeys.filter((candidate) => Boolean(adapterOf(candidateProvider(candidate))?.synthesizeStream));
+      if (!streaming.length) return json(res, 404, { error: "streaming speech is not available" });
+      const controller = new AbortController();
+      res.once("close", () => controller.abort());
+      let audio: { body: ReadableStream<Uint8Array>; sampleRate: number };
+      let used: VoiceKeyCandidate;
+      let skipped: VoiceKeyRefusal[];
+      const askedAt = now();
+      try {
+        ({ value: audio, used, skipped } = await tryKeys<{ body: ReadableStream<Uint8Array>; sampleRate: number }>(action, streaming, (candidate) => {
+          const provider = candidateProvider(candidate);
+          return adapterOf(provider)!.synthesizeStream!(text, voiceFor(provider), candidate.key, options, controller.signal);
+        }));
+      } catch (error) {
+        if (controller.signal.aborted) { if (!res.destroyed) res.end(); return; }
+        return json(res, 502, failed(action, error));
+      }
+      const provider = candidateProvider(used);
+      usageFor(used)(usageModel(provider, "tts"), text.length);
+      res.writeHead(200, { "content-type": "audio/pcm", "x-voice-sample-rate": String(audio.sampleRate), "cache-control": "no-store", ...keyHeaders(used, skipped) });
+      // flush every chunk at once: the first one is the first thing heard
+      res.flushHeaders?.();
+      let first = true;
+      try {
+        for await (const chunk of audio.body as unknown as AsyncIterable<Uint8Array>) {
+          if (res.destroyed) break;
+          if (first) {
+            first = false;
+            // xAI's own timing stays with the call turn's line; another
+            // provider's first audio is said, so a slow one shows
+            if (provider !== "xai") deps.notice?.(target.threadId, firstAudioNotice(now() - askedAt, VOICE_PROVIDER_LABELS[provider]));
+          }
+          res.write(Buffer.from(chunk));
+        }
+      } catch {
+        // the person interrupted (aborted), or the provider cut the stream: what was heard stays heard
+      } finally {
+        controller.abort();
+        if (!res.destroyed) res.end();
+      }
+      return;
+    }
+    const speaking = ttsKeys.filter((candidate) => Boolean(adapterOf(candidateProvider(candidate))?.synthesize));
+    try {
+      const { value: audio, used, skipped } = await tryKeys<Audio>(action, speaking, (candidate) => {
+        const provider = candidateProvider(candidate);
+        return adapterOf(provider)!.synthesize!(text, voiceFor(provider), candidate.key, options);
+      });
+      usageFor(used)(usageModel(candidateProvider(used), "tts"), text.length);
+      res.writeHead(200, { "content-type": audio.mime, "content-length": String(audio.bytes.byteLength), "cache-control": "no-store", ...keyHeaders(used, skipped) });
+      res.end(Buffer.from(audio.bytes));
+      return;
+    } catch (error) {
+      return json(res, 502, failed(action, error));
+    }
+  }
+
+  // transcribe
+  const language = url.searchParams.get("language") ?? "auto";
+  if (!isVoiceModeLanguage(language)) return json(res, 400, { error: "unknown language" });
+  const audio = await readRaw(req, VOICE_MODE_MAX_AUDIO_BYTES);
+  if (!audio) return json(res, 413, { error: "the recording is too long" });
+  if (!audio.byteLength) return json(res, 400, { error: "audio required" });
+  const mime = audioMime(audio, String(req.headers["content-type"] ?? ""));
+  if (!mime) return json(res, 415, { error: "send WAV, Ogg or WebM audio" });
+  const hearing = sttKeys.filter((candidate) => Boolean(adapterOf(candidateProvider(candidate))?.transcribe));
+  if (!hearing.length) return json(res, 403, refusalBody("no_credentials", keysUrl, target, speaker, admin));
+  try {
+    const stt = sttRequest(language, url.searchParams.get("locale") ?? undefined);
+    const terms = keyterms();
+    const askedAt = now();
+    const { value: heard, used, skipped } = await tryKeys<{ text: string }>(action, hearing, (candidate) => adapterOf(candidateProvider(candidate))!.transcribe!(new Uint8Array(audio), mime, candidate.key, stt.language, terms, { format: stt.format }));
+    const provider = candidateProvider(used);
+    deps.notice?.(target.threadId, uploadedTranscriptNotice({ bytes: audio.byteLength, mime, ms: now() - askedAt, provider: VOICE_PROVIDER_LABELS[provider] }));
+    usageFor(used)(usageModel(provider, "stt"), audio.byteLength);
+    for (const [name, value] of Object.entries(keyHeaders(used, skipped))) res.setHeader(name, value);
+    // the provider keeps fillers (filler_words); whoever reads this text does not need them
+    return json(res, 200, { text: stripFillers(heard.text), key: voiceKeyRef(used), ...(skipped.length ? { skipped } : {}) });
+  } catch (error) {
+    return json(res, 502, failed(action, error));
+  }
+}
+
 export function createVoiceModeRoutes(deps: VoiceModeDeps): RouteHandler {
   const now = deps.now ?? Date.now;
   /** keys xAI refused lately, per person (server/voice/voice-keys.ts) */
@@ -497,318 +1152,6 @@ export function createVoiceModeRoutes(deps: VoiceModeDeps): RouteHandler {
    * the page gets a 502 and speaks over POST /voice/stream. A key refused
    * for credits or for itself gives way to the next one before that, and a
    * provider that fails to another provider. The keys stay here. */
-  async function speech(req: IncomingMessage, res: import("node:http").ServerResponse, url: URL, json: Json, keys: VoiceKeyCandidate[], refusals: VoiceKeyRefusals, who: string, usageFor: UsageFor, voiceFor: (provider: VoiceProviderId) => string | undefined, threadId: string, botVoice: { speed?: number; language?: string } = {}): Promise<void> {
-    const upgrade = deps.upgrade?.(req);
-    const speaks = (candidate: VoiceKeyCandidate) => {
-      const adapter = adapterOf(candidateProvider(candidate));
-      return Boolean(adapter?.openSpeech || adapter?.synthesizeStream);
-    };
-    const usable = keys.filter(speaks);
-    if (!upgrade || !usable.length) { json(res, 426, { error: "WebSocket upgrade required" }); return; }
-    const shake = handshake(req);
-    if ("status" in shake) { json(res, shake.status, { error: shake.error }); return; }
-    const language = botVoice.language ?? url.searchParams.get("language") ?? "auto";
-    if (!isVoiceModeLanguage(language)) { json(res, 400, { error: "unknown language" }); return; }
-    const speed = botVoice.speed ?? Number(url.searchParams.get("speed") ?? "1");
-    if (!Number.isFinite(speed) || speed < VOICE_MODE_MIN_SPEED || speed > VOICE_MODE_MAX_SPEED) {
-      json(res, 400, { error: `speed must be between ${VOICE_MODE_MIN_SPEED} and ${VOICE_MODE_MAX_SPEED}` });
-      return;
-    }
-    let page: ReturnType<typeof webSocketSession> | null = null;
-    const { socket } = upgrade;
-    const tried: VoiceKeyRefusal[] = [];
-    const fellBack: VoiceKeyRefusal[] = [];
-    const ordered = refusals.order(who, usable).map((entry) => entry.candidate);
-    for (let i = 0; i >= 0 && i < ordered.length;) {
-      const candidate = ordered[i]!;
-      const provider = candidateProvider(candidate);
-      const adapter = adapterOf(provider)!;
-      const voice = voiceFor(provider);
-      const options = { voice, speed, language: ttsLanguage(language) };
-      const usage = usageFor(candidate);
-      const session = createSpeechSession({
-        open: (handlers) => adapter.openSpeech
-          ? adapter.openSpeech(candidate.key, options, handlers)
-          : openHttpSpeechStream({
-            synthesize: (text, signal) => adapter.synthesizeStream!(text, voice, candidate.key, { speed, language: options.language }, signal),
-            ...(adapter.verify ? { verify: () => adapter.verify!(candidate.key) } : {}),
-          }, handlers),
-        speakable: (text) => {
-          if (text.length > VOICE_MODE_MAX_TEXT * 4) return "";
-          const joined = deps.utterances(text).join(" ").trim();
-          const read = readForVoice(language, joined);
-          return read.slice(0, VOICE_MODE_MAX_TEXT);
-        },
-        // words appended to an open utterance: their edges kept, read as
-        // French or English when the utterance so far is (voice-reading.ts)
-        speakableDelta: (text, before) => {
-          const clean = speakableDelta(text);
-          return clean ? readForVoice(language, clean, before) : clean;
-        },
-        usage: (characters) => usage(usageModel(provider, "tts"), characters),
-        sendText: (frame) => page?.sendText(JSON.stringify(frame)),
-        sendBinary: (pcm) => page?.sendBinary(pcm),
-        closePage: (code) => page?.close(code),
-        log: (line) => (deps.log ?? console.warn)(line),
-        sampleRate: VOICE_SPEECH_RATE,
-      });
-      const opened = await Promise.race([
-        session.ready,
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), SPEECH_READY_MS).unref()),
-      ]);
-      if (!opened || socket.destroyed) {
-        session.close();
-        if (socket.destroyed) return;
-        const message = scrub(session.lastError ?? "", candidate.key);
-        const failure = grokVoiceFailure(message || "not reachable");
-        const next = session.lastError ? nextCandidateIndex(ordered, i, failure) : -1;
-        if (session.lastError && voiceKeyFailureIsFinal(failure)) refusals.remember(who, voiceKeyRef(candidate), failure);
-        else if (next >= 0) refusals.remember(who, voiceKeyRef(candidate), failure, VOICE_PROVIDER_REFUSAL_TTL_MS);
-        if (next >= 0) {
-          const refusal = { ...voiceKeyRef(candidate), failure };
-          if (candidateProvider(ordered[next]!) === provider) tried.push(refusal);
-          else fellBack.push(refusal);
-          (deps.log ?? console.warn)(`[voice-mode] ${VOICE_PROVIDER_LABELS[provider]} speech refused the ${describeVoiceKey(candidate)} (${failure}): trying the ${describeVoiceKey(ordered[next]!)}`);
-          i = next;
-          continue;
-        }
-        json(res, 502, socketRefusal("speech", session.lastError ? message : undefined, `${VOICE_PROVIDER_LABELS[provider]} streaming speech is not reachable.`, candidate, tried));
-        return;
-      }
-      refusals.forget(who, voiceKeyRef(candidate));
-      sayFallback(threadId, "voice", fellBack, candidate);
-      upgrade.release();
-      const head = upgrade.head;
-      res.detachSocket(socket as import("node:net").Socket);
-      socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${websocketAccept(shake.key)}\r\n\r\n`);
-      page = webSocketSession(socket, {
-        onBinary: () => page?.close(1003),
-        onText: (text) => session.message(text),
-        onClose: () => session.close(),
-      });
-      if (head.length) socket.unshift(head);
-      const sameProvider = tried.filter((entry) => candidateProvider(entry) === provider);
-      page.sendText(JSON.stringify({ type: "ready", sampleRate: VOICE_SPEECH_RATE, key: voiceKeyRef(candidate), ...(sameProvider.length ? { skipped: sameProvider } : {}) }));
-      return;
-    }
-    json(res, 502, { error: "no voice key" });
-  }
-
-  /** GET /voice/realtime: one call as a realtime voice session
-   * (server/voice/realtime-call.ts). The page sends PCM16 at 24 kHz and JSON
-   * (interrupt, ping, hangup); it gets the voice's PCM16 and the call's
-   * state. The socket is accepted first, so a refusal reaches the page in
-   * words ({"type":"refused","code"}): a browser never reads the body of a
-   * refused upgrade. A key refused for itself gives way to the next xAI
-   * key. Never text to speech: no realtime voice, no call. */
-  async function realtime(req: IncomingMessage, res: import("node:http").ServerResponse, url: URL, json: Json, keys: VoiceKeyCandidate[], refusals: VoiceKeyRefusals, who: string, usageFor: UsageFor, target: VoiceTarget, auth: RequestAuth, blocked?: string): Promise<void> {
-    const upgrade = deps.upgrade?.(req);
-    if (!upgrade) { json(res, 426, { error: "WebSocket upgrade required" }); return; }
-    const shake = handshake(req);
-    if ("status" in shake) { json(res, shake.status, { error: shake.error }); return; }
-    const language = url.searchParams.get("language") ?? "auto";
-    if (!isVoiceModeLanguage(language)) { json(res, 400, { error: "unknown language" }); return; }
-    const voice = url.searchParams.get("voice") ?? undefined;
-    const { socket } = upgrade;
-    upgrade.release();
-    const head = upgrade.head;
-    res.detachSocket(socket as import("node:net").Socket);
-    socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${websocketAccept(shake.key)}\r\n\r\n`);
-    let bridge: RealtimeCallBridge | null = null;
-    let gone = false;
-    const page = webSocketSession(socket, {
-      onBinary: (data) => bridge?.audio(new Uint8Array(data)),
-      onText: (text) => bridge?.pageMessage(text),
-      onClose: () => { gone = true; bridge?.end("page"); },
-    });
-    if (head.length) socket.unshift(head);
-    const refuse = (code: string, message: string, extra: Record<string, unknown> = {}) => {
-      page.sendText(JSON.stringify({ type: "refused", code, error: message, ...extra }));
-      page.close(4000);
-    };
-    if (!deps.realtime) return refuse("realtime_unavailable", "Realtime calls are not available on this server.");
-    if (blocked) return refuse("spend_cap", blocked);
-    if (!keys.length) return refuse("realtime_not_configured", "No realtime voice is set up for you. Add an xAI key in Settings > Voice.");
-    const callId = randomUUID();
-    const link = deps.realtime.session(target, auth, callId);
-    const tried: VoiceKeyRefusal[] = [];
-    const ordered = refusals.order(who, keys).map((entry) => entry.candidate);
-    for (const candidate of ordered) {
-      const early: Array<Record<string, unknown>> = [];
-      let live = false;
-      const usage = usageFor(candidate);
-      const attempt = new RealtimeCallBridge({
-        callId,
-        openUpstream: () => deps.realtime!.openUpstream(candidate.key),
-        sendText: (frame) => (live ? page.sendText(JSON.stringify(frame)) : early.push(frame)),
-        sendBinary: (pcm) => { if (live) page.sendBinary(pcm); },
-        closePage: (code) => { if (live) page.close(code); },
-        work: link.work,
-        respond: link.respond,
-        bot: link.bot,
-        history: link.history,
-        ...(voice ? { voice } : {}),
-        language,
-        usage: (seconds) => usage("grok-realtime", Math.round(seconds.input + seconds.output)),
-        log: (line) => (deps.log ?? console.warn)(line),
-        now,
-      });
-      attempt.start();
-      const opened = await Promise.race([
-        attempt.ready,
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), REALTIME_READY_MS).unref()),
-      ]);
-      if (gone) { attempt.end("page"); return; }
-      if (!opened) {
-        attempt.end("upstream");
-        const message = scrub(attempt.lastError ?? "not reachable", candidate.key);
-        const failure = grokVoiceFailure(message);
-        tried.push({ ...voiceKeyRef(candidate), failure });
-        if (voiceKeyFailureIsFinal(failure)) refusals.remember(who, voiceKeyRef(candidate), failure);
-        (deps.log ?? console.warn)(`[voice-realtime] xAI realtime refused the ${describeVoiceKey(candidate)} (${failure})`);
-        continue;
-      }
-      refusals.forget(who, voiceKeyRef(candidate));
-      bridge = attempt;
-      live = true;
-      page.sendText(JSON.stringify({ type: "ready", sampleRate: REALTIME_SAMPLE_RATE, callId, key: voiceKeyRef(candidate), ...(tried.length ? { skipped: tried } : {}) }));
-      for (const frame of early.splice(0)) page.sendText(JSON.stringify(frame));
-      return;
-    }
-    // every key refused for itself: say which to fix, never fall back to text to speech
-    const keyRefused = tried.length > 0 && tried.every((entry) => entry.failure === "key" || entry.failure === "quota");
-    refuse(keyRefused ? "realtime_key_refused" : "realtime_unreachable",
-      keyRefused ? "The realtime voice key was refused. Fix it in Settings > Voice." : "The realtime voice is not reachable. Try the call again.",
-      { tried });
-  }
-
-  /** GET /voice/listen: one live call's streaming speech to text. The page
-   * sends 16 kHz 16-bit PCM frames while the person speaks (its own voice
-   * activity detector decides when) and `{"type":"finalize"}` when they
-   * stop; the provider's transcripts come back as they are made. A key
-   * refused for credits or for itself gives way to the next one, a
-   * provider that fails to another provider. The keys stay here. */
-  async function listen(req: IncomingMessage, res: import("node:http").ServerResponse, url: URL, json: Json, keys: VoiceKeyCandidate[], refusals: VoiceKeyRefusals, who: string, usageFor: UsageFor, keyterms: readonly string[], threadId: string): Promise<void> {
-    const upgrade = deps.upgrade?.(req);
-    const usable = keys.filter((candidate) => Boolean(adapterOf(candidateProvider(candidate))?.openTranscription));
-    if (!upgrade || !usable.length) { json(res, 426, { error: "WebSocket upgrade required" }); return; }
-    const shake = handshake(req);
-    if ("status" in shake) { json(res, shake.status, { error: shake.error }); return; }
-    const wsKey = shake.key;
-    const language = url.searchParams.get("language") ?? "auto";
-    if (!isVoiceModeLanguage(language)) { json(res, 400, { error: "unknown language" }); return; }
-    let session: ReturnType<typeof webSocketSession> | null = null;
-    let heard = 0;
-    let total = 0;
-    /** when the page last said the person stopped (finalize) */
-    let finalizedAt: number | null = null;
-    // "auto" on a French computer is French with formatting (sttRequest)
-    const stt = sttRequest(language, url.searchParams.get("locale") ?? undefined);
-    const { socket } = upgrade;
-    const tried: VoiceKeyRefusal[] = [];
-    const fellBack: VoiceKeyRefusal[] = [];
-    const ordered = refusals.order(who, usable).map((entry) => entry.candidate);
-    for (let i = 0; i >= 0 && i < ordered.length;) {
-      const candidate = ordered[i]!;
-      const provider = candidateProvider(candidate);
-      const adapter = adapterOf(provider)!;
-      const openTranscription = adapter.openTranscription!;
-      const key = candidate.key;
-      const usage = usageFor(candidate);
-      const book = () => {
-        if (heard > 0) usage(usageModel(provider, "stt"), heard);
-        heard = 0;
-      };
-      adapter.warm?.(key);
-      let warmedAt = now();
-      // the provider's socket is reopened behind the page's when it drops,
-      // and rotated before its session limit (voice-listen-session.ts)
-      const ears = createListenSession({
-        // the page's own detector ends turns (and sends finalize); the
-        // provider's endpointing is only a backstop for a very long pause
-        open: (handlers) => openTranscription(key, { ...stt, endpointingMs: 1500, keyterms }, handlers),
-        sendText: (frame) => {
-          // the end of speech (the page's finalize) to the final words:
-          // the person's wait for their text, in the Events lens
-          if (frame.type === "transcript" && frame.speechFinal && finalizedAt !== null) {
-            const waited = now() - finalizedAt;
-            finalizedAt = null;
-            deps.notice?.(threadId, streamedTranscriptNotice(waited, VOICE_PROVIDER_LABELS[provider]));
-          }
-          session?.sendText(JSON.stringify(frame));
-        },
-        closePage: (code) => session?.close(code),
-        log: (line) => (deps.log ?? console.warn)(line),
-        onUpstreamClosed: book,
-        scrub: (message) => scrub(message, key),
-        now,
-      });
-      const opened = await Promise.race([
-        ears.ready,
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), LISTEN_READY_MS).unref()),
-      ]);
-      if (!opened || socket.destroyed) {
-        ears.close();
-        if (socket.destroyed) return;
-        const failure = grokVoiceFailure(ears.lastError ?? "not reachable");
-        const next = ears.lastError ? nextCandidateIndex(ordered, i, failure) : -1;
-        if (ears.lastError && voiceKeyFailureIsFinal(failure)) refusals.remember(who, voiceKeyRef(candidate), failure);
-        else if (next >= 0) refusals.remember(who, voiceKeyRef(candidate), failure, VOICE_PROVIDER_REFUSAL_TTL_MS);
-        if (next >= 0) {
-          const refusal = { ...voiceKeyRef(candidate), failure };
-          if (candidateProvider(ordered[next]!) === provider) tried.push(refusal);
-          else fellBack.push(refusal);
-          (deps.log ?? console.warn)(`[voice-mode] ${VOICE_PROVIDER_LABELS[provider]} listen socket refused the ${describeVoiceKey(candidate)} (${failure}): trying the ${describeVoiceKey(ordered[next]!)}`);
-          i = next;
-          continue;
-        }
-        json(res, 502, socketRefusal("listen", ears.lastError, `${VOICE_PROVIDER_LABELS[provider]} speech to text is not reachable. Try again.`, candidate, tried));
-        return;
-      }
-      refusals.forget(who, voiceKeyRef(candidate));
-      sayFallback(threadId, "speech to text", fellBack, candidate);
-      upgrade.release();
-      const head = upgrade.head;
-      res.detachSocket(socket as import("node:net").Socket);
-      socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${websocketAccept(wsKey)}\r\n\r\n`);
-      session = webSocketSession(socket, {
-        onBinary: (data) => {
-          total += data.byteLength;
-          if (total > VOICE_LISTEN_MAX_BYTES) { session?.close(1009); return; }
-          heard += data.byteLength;
-          ears.audio(new Uint8Array(data));
-        },
-        onText: (text) => {
-          let message: { type?: unknown; requestId?: unknown } | null = null;
-          try { message = JSON.parse(text) as { type?: unknown; requestId?: unknown }; } catch { /* ignored */ }
-          // The page's keepalive keeps a proxy from dropping the listen
-          // socket. It is never forwarded to the provider.
-          if (message?.type === "keepalive") return;
-          if (message?.type === "finalize") {
-            finalizedAt = now();
-            const requestId = typeof message.requestId === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(message.requestId) ? message.requestId : undefined;
-            ears.finalize(requestId);
-            book();
-            // the answer's first sentence goes to the voice a second or
-            // two from now: have a connection open by then (a pooled one
-            // idles out in a few seconds, and the person spoke longer)
-            const at = now();
-            if (at - warmedAt >= LISTEN_WARM_EVERY_MS) {
-              warmedAt = at;
-              adapter.warm?.(key);
-            }
-          }
-        },
-        onClose: () => { book(); ears.close(); },
-      });
-      if (head.length) socket.unshift(head);
-      const sameProvider = tried.filter((entry) => candidateProvider(entry) === provider);
-      session.sendText(JSON.stringify({ type: "ready", key: voiceKeyRef(candidate), ...(sameProvider.length ? { skipped: sameProvider } : {}) }));
-      return;
-    }
-    json(res, 502, { error: "no voice key" });
-  }
-
   const hits = new Map<string, number[]>();
   const limited = (who: string): boolean => {
     const at = now();
@@ -823,333 +1166,11 @@ export function createVoiceModeRoutes(deps: VoiceModeDeps): RouteHandler {
     return false;
   };
 
-  return async ({ req, res, url, path, method, auth, json, readBody }) => {
-    // Settings > Voice (2026-10-29): the person's providers, a provider's
-    // voices and "Test the voice", for no bot in particular
-    const legacy = LEGACY_ROUTE.exec(path);
-    const own = OWN_ROUTE.exec(path) ?? legacy;
-    const match = own ? [path, "", own[1]] : ROUTE.exec(path);
-    if (!match) return PASS;
-    const [, botId, action] = match as unknown as [string, string, Action];
-    res.setHeader("cache-control", "no-store");
-    const expected = action === "status" || action === "voices" || action === "listen" || action === "speech" || action === "realtime" ? "GET" : "POST";
-    if (method !== expected) return json(res, 405, { error: "method not allowed" });
-
-    const speaker = deps.speaker(auth);
-    if (!speaker || (deps.organization && !speaker.principalId)) return json(res, 403, { error: "sign in as a person first", code: "sign_in" });
-
-    const jsonBody = action === "prepare" || action === "speak" || action === "stream" || action === "call";
-    const body = jsonBody ? await readBody(req).catch(() => null) : null;
-    if (jsonBody && (!body || typeof body !== "object")) return json(res, 400, { error: "a JSON body is required" });
-    // The installed TTS choice remains the default for an older client,
-    // while key resolution, fallback and synthesis use this one path.
-    const preference = deps.preference?.(speaker);
-    if (legacy && preference == null) {
-      const installed = deps.legacyChoice?.(speaker);
-      if (installed) {
-        if (!url.searchParams.has("tts")) url.searchParams.set("tts", installed.provider);
-        if (action === "voices" && !url.searchParams.has("provider")) url.searchParams.set("provider", installed.provider);
-        if (body) {
-          const record = body as Record<string, unknown>;
-          record.tts ??= installed.provider;
-          record.voice ??= record.voiceId ?? installed.voice;
-        }
-      }
-    }
-    const rawThread = action === "transcribe" || action === "listen" || action === "speech" || action === "realtime" ? url.searchParams.get("threadId") ?? undefined : (body as Record<string, unknown> | null)?.threadId;
-    if (rawThread !== undefined && rawThread !== null && (typeof rawThread !== "string" || !THREAD_ID.test(rawThread))) return json(res, 400, { error: "threadId must be a task id" });
-    const target: VoiceTarget | { status: number; error: string } = own
-      ? { botId: "", botName: "", threadId: "" }
-      : deps.target(auth, botId, typeof rawThread === "string" ? rawThread : undefined);
-    if ("status" in target) return json(res, target.status, { error: target.error });
-
-    // the call's start and end need no key: they only say the thread is on a call
-    if (action === "call") {
-      const record = body as Record<string, unknown>;
-      const callId = record.callId;
-      const state = record.state;
-      if (typeof callId !== "string" || !CALL_ID.test(callId)) return json(res, 400, { error: "callId must be a call id" });
-      if (state !== "start" && state !== "alive" && state !== "end" && state !== "heard") return json(res, 400, { error: "state must be start, alive, end or heard" });
-      if (state === "heard") {
-        const audio = parseVoiceAudioTiming(record.audio);
-        if (!audio) return json(res, 400, { error: "audio must carry the stages in milliseconds" });
-        deps.callSession?.heard?.(target, callId, audio);
-        return json(res, 200, { ok: true });
-      }
-      const language = record.language === undefined ? undefined : record.language;
-      if (language !== undefined && !isVoiceModeLanguage(language)) return json(res, 400, { error: "unknown language" });
-      if (!deps.callSession) return json(res, 404, { error: "call sessions are not available" });
-      if (state === "end") deps.callSession.end(target, callId, auth);
-      else deps.callSession.start(target, callId, language as string | undefined, auth, state === "alive");
-      if (state !== "start") return json(res, 200, { ok: true });
-      // the phone recognizes speech itself: the same words the server's
-      // speech to text expects, for its own recognizer (target() already
-      // checked this person may use this thread)
-      let keyterms: string[] = [];
-      try { keyterms = (deps.keyterms?.(target, speaker) ?? []).slice(0, VOICE_CALL_KEYTERM_MAX); } catch { keyterms = []; }
-      return json(res, 200, { ok: true, keyterms });
-    }
-
-    const keysUrl = deps.keysUrl?.();
-    const admin = deps.isAdmin?.(auth) === true;
-    const resolved = await resolveVoiceKeys(deps, speaker);
-    const who = speaker.principalId || "operator";
-    // every provider's keys for this person: xAI's in the order above, then
-    // OpenAI's and ElevenLabs' (2026-10-29), none for a person turned off
-    const byProvider = new Map<VoiceProviderId, VoiceKeyCandidate[]>();
-    if (resolved.ok) byProvider.set("xai", resolved.keys);
-    if (resolved.ok || resolved.cause !== "payer_disabled") {
-      for (const provider of VOICE_TTS_PROVIDERS.filter((id): id is Exclude<VoiceTtsProvider, "xai"> => id !== "xai")) {
-        if (!adapterOf(provider) || !deps.providerKeys) continue;
-        let found: VoiceKeyCandidate[] = [];
-        try { found = await deps.providerKeys(provider, speaker); } catch { found = []; }
-        const tagged = found.filter((candidate) => candidate.key).map((candidate) => ({ ...candidate, provider }));
-        if (tagged.length) byProvider.set(provider, tagged);
-      }
-    }
-    const choice = requestedChoice(action, url, body as Record<string, unknown> | null, preference, target.botId);
-    /** a role's keys, the chosen provider first, then the other providers */
-    const roleKeys = <P extends VoiceProviderId>(role: "tts" | "stt", picked: "auto" | P, all: readonly P[]): VoiceKeyCandidate[] => {
-      const serving = all.filter((provider) => {
-        const adapter = adapterOf(provider);
-        return (byProvider.get(provider)?.length ?? 0) > 0 && Boolean(role === "tts" ? adapter?.synthesize || adapter?.synthesizeStream : adapter?.transcribe || adapter?.openTranscription);
-      });
-      return providerOrder(picked, serving, all).flatMap((provider) => byProvider.get(provider) ?? []);
-    };
-    const ttsKeys = roleKeys("tts", choice.tts, VOICE_TTS_PROVIDERS);
-    const sttKeys = roleKeys("stt", choice.stt, VOICE_STT_PROVIDERS);
-    const voiceFor = (provider: VoiceProviderId): string | undefined => choice.voices[provider as VoiceTtsProvider] || undefined;
-    const refusedCause: VoiceModeRefusalCause | null = ttsKeys.length && sttKeys.length
-      ? null
-      : resolved.ok ? "no_credentials" : resolved.cause === "payer_disabled" || (!ttsKeys.length && !sttKeys.length) ? resolved.cause : "no_credentials";
-    if (action === "status") {
-      const org = deps.organization ? { organization: true } : {};
-      let status: VoiceModeStatus;
-      if (!refusedCause) {
-        const ordered = refusals.order(who, ttsKeys);
-        const first = ordered[0]!.candidate;
-        const keys: VoiceKeyState[] = ordered.map((entry) => ({ ...voiceKeyRef(entry.candidate), ...(entry.refused ? { refused: entry.refused } : {}) }));
-        // a provider is offered while one of its keys is not refused for itself
-        const offered = <P extends VoiceProviderId>(list: VoiceKeyCandidate[]): P[] => [...new Set(list
-          .filter((candidate) => refusals.failure(who, voiceKeyRef(candidate)) !== "key")
-          .map((candidate) => candidateProvider(candidate) as P))];
-        const firstStt = refusals.order(who, sttKeys)[0]!.candidate;
-        status = {
-          provider: "xai", available: true, ...org, via: first.via, key: voiceKeyRef(first), keys,
-          // a call is a realtime voice session (xAI's Voice Agent API)
-          ...(deps.realtime && (byProvider.get("xai")?.length ?? 0) > 0 ? { realtime: true } : {}),
-          providers: {
-            tts: VOICE_TTS_PROVIDERS.filter((provider) => offered<VoiceTtsProvider>(ttsKeys).includes(provider)),
-            stt: VOICE_STT_PROVIDERS.filter((provider) => offered<VoiceSttProvider>(sttKeys).includes(provider)),
-          },
-          tts: candidateProvider(first) as VoiceTtsProvider,
-          stt: candidateProvider(firstStt) as VoiceSttProvider,
-        };
-      } else {
-        status = { provider: "xai", available: false, ...org, refusal: { cause: refusedCause, ...(admin ? { admin: true } : {}), ...(keysUrl ? { keysUrl } : {}) } };
-        // what the person could still pick (a voice without ears, say)
-        if (ttsKeys.length || sttKeys.length) {
-          status.providers = {
-            tts: VOICE_TTS_PROVIDERS.filter((provider) => ttsKeys.some((candidate) => candidateProvider(candidate) === provider)),
-            stt: VOICE_STT_PROVIDERS.filter((provider) => sttKeys.some((candidate) => candidateProvider(candidate) === provider)),
-          };
-        }
-      }
-      return json(res, 200, status);
-    }
-    if (action === "realtime") {
-      let blocked: string | undefined;
-      try { deps.assertWithinBudget?.(); } catch (error) { blocked = error instanceof Error ? error.message : String(error); }
-      const usageFor: UsageFor = (candidate) => (model, input) => deps.recordUsage({
-        target, speaker, via: candidate.via, model, input,
-        ...(candidate.payerPrincipalId ? { payerPrincipalId: candidate.payerPrincipalId } : {}),
-      });
-      const xaiKeys = speaker.disabled ? [] : byProvider.get("xai") ?? [];
-      return realtime(req, res, url, json, xaiKeys, refusals, who, usageFor, target, auth, blocked);
-    }
-    const roleOf = action === "transcribe" || action === "listen" ? "stt" : "tts";
-    const keys = roleOf === "stt" ? sttKeys : ttsKeys;
-    if (legacy && action === "prepare") {
-      return json(res, 200, { ready: keys.length > 0 && !speaker.disabled, utterances: deps.utterances(String((body as Record<string, unknown>).text ?? "")) });
-    }
-    // a voice alone (read aloud, the voice test) needs no ears
-    if (!keys.length || (refusedCause && (action === "listen" || action === "transcribe" || !ttsKeys.length))) {
-      return json(res, 403, refusalBody(refusedCause ?? "no_credentials", keysUrl, target, speaker, admin));
-    }
-    /** a provider error without any of this person's keys */
-    const allKeys = [...byProvider.values()].flat();
-    const scrubAll = (message: string): string => allKeys.reduce((out, candidate) => scrub(out, candidate.key), message);
-    /** the provider refused or failed this request on every key it could:
-     * logged (the kind of key, never the key) and answered with its
-     * reason, its kind and the key it is about. */
-    const failed = (what: string, error: unknown) => {
-      if (error instanceof VoiceKeyFailure) {
-        (deps.log ?? console.warn)(`[voice-mode] ${VOICE_PROVIDER_LABELS[candidateProvider(error.used)]} ${what} failed (${error.used.via}, ${describeVoiceKey(error.used)}): ${error.message}`);
-        return providerFailureBody(error.message, { key: voiceKeyRef(error.used), tried: error.tried });
-      }
-      const message = scrubAll(error instanceof Error ? error.message : String(error));
-      (deps.log ?? console.warn)(`[voice-mode] ${VOICE_PROVIDER_LABELS[candidateProvider(keys[0]!)]} ${what} failed (${keys[0]!.via}): ${message}`);
-      return providerFailureBody(message, { key: voiceKeyRef(keys[0]!) });
-    };
-    /** run `attempt` on the first key that takes it (server/voice/voice-keys.ts),
-     * another provider taking over silently when one fails */
-    const tryKeys = async <T,>(what: string, list: VoiceKeyCandidate[], attempt: (candidate: VoiceKeyCandidate) => Promise<T>) => {
-      const out = await withVoiceKeys(who, list, refusals, attempt, { log: deps.log ?? console.warn, what, scrub: scrubAll });
-      sayFallback(target.threadId, roleOf === "stt" ? "speech to text" : "voice", out.fellBack, out.used);
-      return out;
-    };
-    /** which key answered, for the page: a header on an HTTP answer */
-    const keyHeaders = (used: VoiceKeyCandidate, skipped: VoiceKeyRefusal[]): Record<string, string> => ({
-      "x-voice-key": voiceKeyHeader(voiceKeyRef(used)),
-      "x-voice-provider": candidateProvider(used),
-      ...(skipped.length ? { "x-voice-key-skipped": skipped.map((entry) => `${voiceKeyHeader(entry)}:${entry.failure}`).join(",") } : {}),
-    });
-
-    if (action === "prepare") {
-      const text = String((body as Record<string, unknown>).text ?? "");
-      return json(res, 200, { ready: true, utterances: deps.utterances(text) });
-    }
-    if (limited(who)) return json(res, 429, { error: "Too many voice requests. Wait a moment." });
-    // Voice costs money like a turn does: a reached spend limit stops it too.
-    try {
-      deps.assertWithinBudget?.();
-    } catch (error) {
-      return json(res, 409, { error: error instanceof Error ? error.message : String(error), code: "spend_cap" });
-    }
-
-    if (action === "voices") {
-      // one provider's voices: the one asked, else the one the voice starts with
-      const asked = url.searchParams.get("provider");
-      const provider = (cleanTtsChoice(asked) && asked !== "auto" ? asked : candidateProvider(refusals.order(who, ttsKeys)[0]!.candidate)) as VoiceTtsProvider;
-      const listing = adapterOf(provider)?.listVoices;
-      const own = ttsKeys.filter((candidate) => candidateProvider(candidate) === provider);
-      if (!listing || !own.length) return json(res, 404, { voices: [], provider, error: `No ${VOICE_PROVIDER_LABELS[provider]} key serves you.` });
-      try {
-        const { value, used, skipped } = await withVoiceKeys(who, own, refusals, (candidate) => listing(candidate.key), { log: deps.log ?? console.warn, what: "voices", scrub: scrubAll });
-        for (const [name, value_] of Object.entries(keyHeaders(used, skipped))) res.setHeader(name, value_);
-        return json(res, 200, { voices: value, provider, key: voiceKeyRef(used), ...(skipped.length ? { skipped } : {}) });
-      } catch (error) {
-        return json(res, 502, { voices: [], provider, ...failed("voices", error) });
-      }
-    }
-
-    const usageFor: UsageFor = (candidate) => (model, input) => deps.recordUsage({
-      target, speaker, via: candidate.via, model, input,
-      ...(candidate.payerPrincipalId ? { payerPrincipalId: candidate.payerPrincipalId } : {}),
-      ...(candidateProvider(candidate) !== "xai" ? { provider: candidateProvider(candidate) } : {}),
-    });
-
-    const keyterms = (): string[] => {
-      try { return deps.keyterms?.(target, speaker) ?? []; } catch { return []; }
-    };
-    if (choice.badVoice && action !== "listen") return json(res, 400, { error: "voice must be a voice id" });
-    if (action === "listen") return listen(req, res, url, json, sttKeys, refusals, who, usageFor, keyterms(), target.threadId);
-    if (action === "speech") return speech(req, res, url, json, ttsKeys, refusals, who, usageFor, voiceFor, target.threadId, { speed: target.speed, language: target.language });
-
-    if (action === "speak" || action === "stream") {
-      const record = body as Record<string, unknown>;
-      const raw = String(record.text ?? "").trim();
-      if (!raw) return json(res, 400, { error: "text required" });
-      // a live call sends the bot's own sentence: made speakable here, like /prepare
-      let text = action === "stream" ? deps.utterances(raw).join(" ").trim() : raw;
-      if (action === "stream" && raw.length > VOICE_MODE_MAX_TEXT * 4) return json(res, 413, { error: `voice sentences are limited to ${VOICE_MODE_MAX_TEXT * 4} characters` });
-      if (text.length > VOICE_MODE_MAX_TEXT) return json(res, 413, { error: `voice utterances are limited to ${VOICE_MODE_MAX_TEXT} characters` });
-      const speed = target.speed ?? (record.speed === undefined ? 1 : record.speed);
-      if (typeof speed !== "number" || !Number.isFinite(speed) || speed < VOICE_MODE_MIN_SPEED || speed > VOICE_MODE_MAX_SPEED) {
-        return json(res, 400, { error: `speed must be between ${VOICE_MODE_MIN_SPEED} and ${VOICE_MODE_MAX_SPEED}` });
-      }
-      const language = target.language ?? (record.language === undefined ? "auto" : record.language);
-      if (!isVoiceModeLanguage(language)) return json(res, 400, { error: "unknown language" });
-      if (action === "stream") {
-        text = readForVoice(language, text);
-        if (text.length > VOICE_MODE_MAX_TEXT) return json(res, 413, { error: `voice utterances are limited to ${VOICE_MODE_MAX_TEXT} characters` });
-      }
-      const options = { speed, language: ttsLanguage(language) };
-      if (action === "stream") {
-        // nothing to say once made speakable (a code block, a link): silence
-        if (!text) { res.writeHead(204, { "cache-control": "no-store" }); res.end(); return; }
-        const streaming = ttsKeys.filter((candidate) => Boolean(adapterOf(candidateProvider(candidate))?.synthesizeStream));
-        if (!streaming.length) return json(res, 404, { error: "streaming speech is not available" });
-        const controller = new AbortController();
-        res.once("close", () => controller.abort());
-        let audio: { body: ReadableStream<Uint8Array>; sampleRate: number };
-        let used: VoiceKeyCandidate;
-        let skipped: VoiceKeyRefusal[];
-        const askedAt = now();
-        try {
-          ({ value: audio, used, skipped } = await tryKeys(action, streaming, (candidate) => {
-            const provider = candidateProvider(candidate);
-            return adapterOf(provider)!.synthesizeStream!(text, voiceFor(provider), candidate.key, options, controller.signal);
-          }));
-        } catch (error) {
-          if (controller.signal.aborted) { if (!res.destroyed) res.end(); return; }
-          return json(res, 502, failed(action, error));
-        }
-        const provider = candidateProvider(used);
-        usageFor(used)(usageModel(provider, "tts"), text.length);
-        res.writeHead(200, { "content-type": "audio/pcm", "x-voice-sample-rate": String(audio.sampleRate), "cache-control": "no-store", ...keyHeaders(used, skipped) });
-        // flush every chunk at once: the first one is the first thing heard
-        res.flushHeaders?.();
-        let first = true;
-        try {
-          for await (const chunk of audio.body as unknown as AsyncIterable<Uint8Array>) {
-            if (res.destroyed) break;
-            if (first) {
-              first = false;
-              // xAI's own timing stays with the call turn's line; another
-              // provider's first audio is said, so a slow one shows
-              if (provider !== "xai") deps.notice?.(target.threadId, firstAudioNotice(now() - askedAt, VOICE_PROVIDER_LABELS[provider]));
-            }
-            res.write(Buffer.from(chunk));
-          }
-        } catch {
-          // the person interrupted (aborted), or the provider cut the stream: what was heard stays heard
-        } finally {
-          controller.abort();
-          if (!res.destroyed) res.end();
-        }
-        return;
-      }
-      const speaking = ttsKeys.filter((candidate) => Boolean(adapterOf(candidateProvider(candidate))?.synthesize));
-      try {
-        const { value: audio, used, skipped } = await tryKeys(action, speaking, (candidate) => {
-          const provider = candidateProvider(candidate);
-          return adapterOf(provider)!.synthesize!(text, voiceFor(provider), candidate.key, options);
-        });
-        usageFor(used)(usageModel(candidateProvider(used), "tts"), text.length);
-        res.writeHead(200, { "content-type": audio.mime, "content-length": String(audio.bytes.byteLength), "cache-control": "no-store", ...keyHeaders(used, skipped) });
-        res.end(Buffer.from(audio.bytes));
-        return;
-      } catch (error) {
-        return json(res, 502, failed(action, error));
-      }
-    }
-
-    // transcribe
-    const language = url.searchParams.get("language") ?? "auto";
-    if (!isVoiceModeLanguage(language)) return json(res, 400, { error: "unknown language" });
-    const audio = await readRaw(req, VOICE_MODE_MAX_AUDIO_BYTES);
-    if (!audio) return json(res, 413, { error: "the recording is too long" });
-    if (!audio.byteLength) return json(res, 400, { error: "audio required" });
-    const mime = audioMime(audio, String(req.headers["content-type"] ?? ""));
-    if (!mime) return json(res, 415, { error: "send WAV, Ogg or WebM audio" });
-    const hearing = sttKeys.filter((candidate) => Boolean(adapterOf(candidateProvider(candidate))?.transcribe));
-    if (!hearing.length) return json(res, 403, refusalBody("no_credentials", keysUrl, target, speaker, admin));
-    try {
-      const stt = sttRequest(language, url.searchParams.get("locale") ?? undefined);
-      const terms = keyterms();
-      const askedAt = now();
-      const { value: heard, used, skipped } = await tryKeys(action, hearing, (candidate) => adapterOf(candidateProvider(candidate))!.transcribe!(new Uint8Array(audio), mime, candidate.key, stt.language, terms, { format: stt.format }));
-      const provider = candidateProvider(used);
-      deps.notice?.(target.threadId, uploadedTranscriptNotice({ bytes: audio.byteLength, mime, ms: now() - askedAt, provider: VOICE_PROVIDER_LABELS[provider] }));
-      usageFor(used)(usageModel(provider, "stt"), audio.byteLength);
-      for (const [name, value] of Object.entries(keyHeaders(used, skipped))) res.setHeader(name, value);
-      // the provider keeps fillers (filler_words); whoever reads this text does not need them
-      return json(res, 200, { text: stripFillers(heard.text), key: voiceKeyRef(used), ...(skipped.length ? { skipped } : {}) });
-    } catch (error) {
-      return json(res, 502, failed(action, error));
-    }
-  };
+  const env: any = { adapterOf, deps, sayFallback, now, refusals, socketRefusal, limited };
+  env.speech = createSpeechAction(env);
+  env.realtime = createRealtimeAction(env);
+  env.listen = createListenAction(env);
+  return (ctx) => handleVoiceModeRequest(env, ctx);
 }
 
 /** What one request asks for: the providers and the voices. A client that

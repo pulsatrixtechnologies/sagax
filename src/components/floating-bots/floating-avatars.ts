@@ -26,7 +26,8 @@ export function labelsFor(bot: Pick<Bot, "name">, liveliness: FloatingLiveliness
     approval: t("floatingBots.approval", { name }),
     errorTitle: t("floatingBots.error.title"),
     error: t("floatingBots.error"),
-    menuOpen: t("floatingBots.menu.openThread"),
+    // Open in <brand>: focuses the app on this bot (never "Open thread", #2086)
+    menuOpen: t("floatingBots.menu.openIn", { app: brand().name }),
     menuHide: t("floatingBots.menu.hide"),
     menuShow: t("floatingBots.menu.show"),
     menuTop: t("floatingBots.menu.top"),
@@ -51,8 +52,7 @@ export function labelsFor(bot: Pick<Bot, "name">, liveliness: FloatingLiveliness
     menuSettings: t("floatingBots.menu.settings"),
     attach: t("composer.attach"),
   };
-  // "Open in Sagax" (the brand's name), the item that focuses the app on this bot
-  return { ...labels, menuOpen: t("floatingBots.menu.openIn", { app: brand().name }) };
+  return labels;
 }
 
 export function useReducedMotion(): boolean {

@@ -25,6 +25,7 @@ import {
 import { createBotRulesRoutes, type BotRulesAuditRow } from "../routes/bot-rules.ts";
 import { PASS } from "../routes/table.ts";
 import { updateRules } from "../workspace/workspace-tools.ts";
+import { resetMtimePromptCache } from "../workspace/mtime-prompt-cache.ts";
 import { promptSectionPaths, resetWorkspaceUsageCache, USAGE_DIR } from "../workspace/workspace-usage.ts";
 import { workspaceTree } from "../workspace/workspace-files.ts";
 import { ensureWorkspace, workspaceDir } from "../workspace/workspace.ts";
@@ -46,11 +47,13 @@ beforeEach(() => {
   rmSync(USAGE_DIR, { recursive: true, force: true });
   resetMemoryJournalState();
   resetWorkspaceUsageCache();
+  resetMtimePromptCache();
   ensureWorkspace(BOT);
 });
 afterEach(() => {
   resetMemoryJournalState();
   resetWorkspaceUsageCache();
+  resetMtimePromptCache();
 });
 
 describe("the sets on disk", () => {

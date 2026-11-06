@@ -3,15 +3,14 @@
 // chat column (ExchangeSheet shell), drawn for development. A routine run
 // no longer opens a sheet: it opens in the chat (#2098).
 //
-// Drawn like the Claude Code terminal (JC, 2026-11-05, #2099):
-// - Header (#2149, JC 2026-11-06): the X of a page Sagax opens (same icon,
-//   same place as the bot's profile page; it brings the chat back), the
-//   bot's pill (a click closes or reopens the right panel, like the chat's),
-//   the </> button of the dev pods, the task's title, its folder (name only) and branch, and the
-//   status ONCE: state · elapsed · the current step as a sentence, Stop beside
-//   it while it runs.
-// - Transcript: the task's own thread (useSideTranscript: the newest page,
-//   older pages on demand, then the live frames). A person's words are a
+// Drawn like the Claude Code terminal (JC, 2026-11-05, #2099 + #2108):
+// - Header (#2108 + #2149): compact, left-aligned. Back arrow (the chat is one
+//   chat: no thread to close), small mascot + bot name, task title truncated
+//   on one line (click or chevron expands it), Stop at the right of the title
+//   line, the </> button of the dev pods, then a muted meta line: folder ·
+//   branch · status glyph + human phrase · duration · tokens when known.
+// - Transcript (#2099): the task's own thread (useSideTranscript: the newest
+//   page, older pages on demand, then the live frames). A person's words are a
 //   highlighted row with "›", the bot's plain text; every tool call is one
 //   ToolLine (`● Bash(pnpm vitest run …)` then `⎿` the first lines of its
 //   result and "… +N lines"; an edit `⎿ +2 -0` with its diff folded). A task
@@ -32,7 +31,7 @@
 // screen, so a status change never blanks the sheet.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ArrowUp, ChevronDown, ChevronUp, Folder, GitBranch, GitCommitHorizontal, GitPullRequest, Loader2, Square } from "lucide-react";
+import { ArrowUp, ChevronDown, ChevronLeft, ChevronUp, GitCommitHorizontal, GitPullRequest, Loader2, Square } from "lucide-react";
 
 import { api, useStore, type Bot, type Message } from "@/state/store";
 import {
@@ -49,6 +48,7 @@ import {
   codingPlace,
   codingRoot,
   codingRows,
+  codingTokens,
   humanStep,
   latestTests,
   stepMessages,
@@ -64,16 +64,14 @@ import { useChatColumnClass } from "@/lib/chat-bubble-width";
 import { mausInk } from "@/lib/mascot";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { formatTokens } from "@/lib/usage";
 import { avatarBot, useExchangePortalHost } from "../BotExchangeChip";
-import { WindowHeaderPill } from "../BotHeaderPill";
 import { Composer } from "../Composer";
 import { DevPods, DevPodsToggle } from "../dev-pods/DevPods";
-import { WindowCloseButton } from "../WindowCloseButton";
 import { ChatMarkdown } from "../ChatMarkdown";
 import { MessageBoundary } from "../MessageBoundary";
 import { PartyAvatar } from "../PartyAvatar";
 import { WaitingOnYou } from "../task/WaitingOnYou";
-import { ActivityStatusIcon } from "../bot-settings/ActivityCard";
 import { TestCounts, ToolLine } from "./ToolLine";
 
 const POLL_MS = 3_000;
@@ -279,6 +277,8 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
   const place = codingPlace(detail ?? item, root);
   const party = avatarBot({ id: bot?.id ?? shown.botId, name: bot?.name ?? shown.botName ?? t("codingChat.bot"), color: bot?.color }, bots);
   const [reveal, setReveal] = useState<Reveal | undefined>();
+  const [titleOpen, setTitleOpen] = useState(false);
+  const tokens = useMemo(() => codingTokens(messages), [messages]);
   const scroller = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
 
@@ -320,52 +320,95 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
 
   const elapsed = formatActivityDuration((shown.endedAt ?? now) - shown.startedAt);
   const folderText = place.folder ?? place.repo;
-  const step = live ? humanStep(shown.currentStep) : undefined;
+  const title = activityTitle(shown);
+  const statusGlyph = live ? "○" : "●";
+  // Prefer the humanized step from #2099; fall back to the raw step or Working.
+  const statusLead = live
+    ? (humanStep(shown.currentStep) || shown.currentStep?.trim() || t("codingChat.working"))
+    : activityStatusLabel(shown.status);
+  const tokensLabel = tokens !== undefined && tokens > 0 ? t("chat.usage.cardTokens", { tokens: formatTokens(tokens) }) : undefined;
 
   const sheet = (
     <div
       className="absolute inset-0 z-20 flex min-h-0 flex-col bg-app"
       role="dialog"
       aria-modal="false"
-      aria-label={t("codingChat.aria", { title: activityTitle(shown) })}
+      aria-label={t("codingChat.aria", { title })}
       data-testid="coding-chat"
       data-coding-status={shown.status}
     >
-      <header className="relative flex shrink-0 flex-col items-center gap-1.5 px-12 pb-2 pt-6">
-        <WindowCloseButton onClose={onClose} data-testid="bot-exchange-close" data-coding-close="" />
-        {headerTools && <div data-coding-tools className="absolute right-3 top-3 flex items-center gap-1">{headerTools}</div>}
-        <WindowHeaderPill label={party.name}>
-          <PartyAvatar id={party.id} bot={party} size={18} />
-          <span className="text-[13px] font-medium" style={{ color: mausInk(party.color) }}>{party.name}</span>
-        </WindowHeaderPill>
-        <h2 data-coding-title dir="auto" className="line-clamp-2 max-w-[min(92%,40rem)] text-center text-[14px] font-medium leading-5 text-ink">{activityTitle(shown)}</h2>
-        <div data-coding-meta className="flex max-w-[min(92%,40rem)] flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[12px] text-ink-secondary">
-          {folderText && (
-            <span data-coding-folder className="inline-flex min-w-0 items-center gap-1" title={place.repo ?? place.folder}>
-              <Folder size={12} aria-hidden="true" className="shrink-0" />
-              <span className="truncate">{folderText}</span>
-            </span>
-          )}
-          {place.branch && (
-            <span className="inline-flex min-w-0 items-center gap-1" title={place.branch}>
-              <GitBranch size={12} aria-hidden="true" className="shrink-0" />
-              <span className="truncate font-mono text-[11.5px]">{place.branch}</span>
-            </span>
-          )}
-          <span data-coding-state={shown.status} className="inline-flex min-w-0 items-center gap-1.5">
-            <ActivityStatusIcon status={shown.status} size={13} />
-            <span>{activityStatusLabel(shown.status)}</span>
-            <span aria-hidden="true">·</span>
-            <span data-coding-elapsed className="tabular-nums">{elapsed}</span>
-            {step && <span aria-hidden="true">·</span>}
-            {step && <span data-coding-step-now className="truncate text-ink" title={shown.currentStep}>{step}</span>}
-          </span>
+      <header data-coding-header className="relative flex shrink-0 flex-col gap-0.5 border-b border-hairline/40 px-3 py-2">
+        {headerTools && <div data-coding-tools className="absolute right-3 top-2 z-10 flex items-center gap-1">{headerTools}</div>}
+        <div className="flex min-w-0 items-center gap-1.5 pe-10">
+          <button
+            type="button"
+            data-testid="bot-exchange-close"
+            data-coding-close
+            data-coding-back
+            onClick={onClose}
+            aria-label={t("codingChat.back")}
+            title={t("codingChat.back")}
+            className="-ms-1 flex size-7 shrink-0 items-center justify-center rounded-md text-ink-secondary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+          >
+            <ChevronLeft size={16} aria-hidden="true" />
+          </button>
+          <PartyAvatar id={party.id} bot={party} size={16} />
+          <span data-coding-bot className="shrink-0 text-[13px] font-medium leading-5" style={{ color: mausInk(party.color) }}>{party.name}</span>
+          <button
+            type="button"
+            data-coding-title-toggle
+            aria-expanded={titleOpen}
+            aria-label={titleOpen ? t("codingChat.title.collapse") : t("codingChat.title.expand")}
+            title={title}
+            onClick={() => setTitleOpen((value) => !value)}
+            className={cn(
+              "flex min-w-0 flex-1 items-center gap-1 overflow-hidden rounded-md px-1 py-0.5 text-start hover:bg-hover/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+              titleOpen && "items-start",
+            )}
+          >
+            <h2
+              data-coding-title
+              dir="auto"
+              className={cn(
+                "min-w-0 flex-1 text-[13px] font-medium leading-5 text-ink",
+                titleOpen ? "whitespace-normal break-words" : "truncate",
+              )}
+            >{title}</h2>
+            <ChevronDown size={13} aria-hidden="true" className={cn("mt-0.5 shrink-0 text-ink-tertiary transition-transform", titleOpen && "rotate-180")} />
+          </button>
           {canStop && (
-            <button type="button" data-coding-stop onClick={onStop} disabled={stopping} className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[12px] text-danger hover:bg-danger/10 disabled:opacity-50">
-              {stopping ? <Loader2 size={11} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Square size={10} fill="currentColor" aria-hidden="true" />}
-              {t("routineRun.stop")}
+            <button
+              type="button"
+              data-coding-stop
+              data-coding-stop-header
+              onClick={onStop}
+              disabled={stopping}
+              aria-label={t("routineRun.stop")}
+              title={t("routineRun.stop")}
+              className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-[12px] text-ink-secondary hover:bg-hover hover:text-ink disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+            >
+              {stopping ? <Loader2 size={12} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Square size={11} fill="currentColor" aria-hidden="true" />}
+              <span className="hidden sm:inline">{t("routineRun.stop")}</span>
             </button>
           )}
+        </div>
+        <div data-coding-meta className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 ps-8 text-[12px] leading-4 text-ink-secondary">
+          {folderText && <span data-coding-folder className="min-w-0 truncate" title={place.repo ?? place.folder}>{folderText}</span>}
+          {folderText && place.branch && <span aria-hidden="true">·</span>}
+          {place.branch && <span data-coding-branch className="min-w-0 truncate font-mono text-[11.5px]" title={place.branch}>{place.branch}</span>}
+          {(folderText || place.branch) && <span aria-hidden="true">·</span>}
+          <span data-coding-state={shown.status} className="inline-flex min-w-0 items-center gap-1.5">
+            <span data-coding-glyph aria-hidden="true">{statusGlyph}</span>
+            <span className={cn("min-w-0 truncate", live && "thinking-shimmer animate-shimmer motion-reduce:animate-none")}>{statusLead}</span>
+            <span aria-hidden="true">·</span>
+            <span data-coding-elapsed className="tabular-nums">{elapsed}</span>
+            {tokensLabel && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span data-coding-tokens className="tabular-nums">{tokensLabel}</span>
+              </>
+            )}
+          </span>
         </div>
       </header>
 

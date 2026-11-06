@@ -1,6 +1,6 @@
 // Markdown and MDX into short knowledge sections (sagax_help). Pure text
 // work: no I/O.
-import type { KnowledgeKind, KnowledgeSection } from "../../server/self-knowledge-types.ts";
+import type { KnowledgeKind, KnowledgeSection } from "../../server/self-knowledge/self-knowledge-types.ts";
 
 /** At most this many characters of one section's text are kept: the search
  * picks its best sentences, never the whole text. */

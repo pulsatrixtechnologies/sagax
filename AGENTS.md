@@ -3430,7 +3430,7 @@ labels), who may do it, limits. The system prompt only says to call it
   the server's routes, the last 12 release notes, `apps/docs/content`,
   `docs/` and this file. `pnpm build:server` regenerates it before every
   build, and `scripts/bundle-server.mjs` copies it beside the bundle; the
-  server reads it on the first question only (`server/self-knowledge.ts`).
+  server reads it on the first question only (`server/self-knowledge/self-knowledge.ts`).
 - Perspicax's part comes from `server/self-knowledge/perspicax.snapshot.json`
   (console menu and Settings window: labels, addresses, roles; nothing else,
   since Perspicax is private and this repository public), written by
@@ -3448,7 +3448,7 @@ labels), who may do it, limits. The system prompt only says to call it
   the user docs; infrastructure docs are left out (`DOCS_LEFT_OUT`).
 - `scripts/self-knowledge/knowledge.test.ts` fails when the tools,
   permissions, Settings, menus, engines or guides changed without
-  regenerating. `server/self-knowledge.test.ts` holds the 20 bench questions
+  regenerating. `server/self-knowledge/self-knowledge.test.ts` holds the 20 bench questions
   (`server/self-knowledge/bench-questions.json`). Adding a tool or a
   Settings card: rerun `pnpm gen:self-knowledge` and commit the JSON.
 

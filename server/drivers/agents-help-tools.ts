@@ -1,5 +1,5 @@
 // sagax_help, the bots' window on what Sagax and Perspicax can do
-// (server/self-knowledge.ts), spread into TOOL_DEFINITIONS in
+// (server/self-knowledge/self-knowledge.ts), spread into TOOL_DEFINITIONS in
 // agents-catalog.ts. Definition only; agents-call.ts carries a call to
 // /api/internal/self-knowledge. Every word here is sent to the model on
 // every turn and pinned by agents-catalog-wire.test.ts: keep it short.

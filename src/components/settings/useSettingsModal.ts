@@ -42,7 +42,7 @@ export function useSettingsModal() {
   // 2026-10-14, so it lands on Appearance.
   const current = currentSettingsSection(state.appSettingsSection);
   const requested: AppSettingsSection =
-    remoteActive && current !== "appearance" && current !== "organization" && current !== "notifications" && current !== "about"
+    remoteActive && current !== "appearance" && current !== "organization" && current !== "notifications" && current !== "updates" && current !== "about"
       ? "appearance"
       : current;
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -76,6 +76,8 @@ export function useSettingsModal() {
   const allowed = (id: AppSettingsSection): boolean => {
     // a remote client shows the pages that are about this desktop
     if (remoteActive && !["appearance", "organization", "privacy", "notifications", "memory", "updates", "about"].includes(id)) return false;
+    // this app's own updates: where the desktop app answers
+    if (id === "updates" && !window.ogb?.updater) return false;
     // the organization memory's local cache is the desktop app's (main
     // process), set up by itself on an organization server signed in with
     // Perspicax: nothing to show anywhere else
@@ -126,6 +128,7 @@ export function useSettingsModal() {
   // A page this viewer cannot see (an old link to Email where People is not
   // shown, a hidden page) draws the first page they can, at once.
   const section: AppSettingsSection = availableSections.some((entry) => entry.id === requested) ? requested : availableSections[0]?.id ?? requested;
+  // #2080 L2: App (about) stays searchable; org-advanced keywords match there on a solo desktop.
   const visibleSections = availableSections.filter((entry) => sectionMatches(entry, q, soloDesktop && entry.id === "about" ? ORGANIZATION_ADVANCED_KEYWORDS : []));
   const pagesHit = Boolean(q) && publishedPagesMatch(q);
   const sectionLabelKey = SECTIONS.find((entry) => entry.id === section)?.labelKey;

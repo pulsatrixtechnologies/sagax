@@ -174,7 +174,7 @@ const catalogSnapshot = join(root, "dist-server", "model-catalog", "models-dev.s
 mkdirSync(dirname(catalogSnapshot), { recursive: true });
 copyFileSync(join(server, "model-catalog", "models-dev.snapshot.json"), catalogSnapshot);
 
-// The sagax_help knowledge base (server/self-knowledge.ts), read from disk
+// The sagax_help knowledge base (server/self-knowledge/self-knowledge.ts), read from disk
 // on the first question, like the catalog snapshot: never inlined.
 // `pnpm build:server` regenerates it first (scripts/self-knowledge/generate.ts).
 const knowledge = join(root, "dist-server", "self-knowledge", "knowledge.generated.json");

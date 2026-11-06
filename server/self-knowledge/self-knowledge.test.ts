@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { bundledKnowledgeIndex, excerpt, HELP_CALLS_PER_TURN, HelpCallCounter, helpAnswer, queryTerms, searchKnowledge } from "./self-knowledge.ts";
 
 const index = (await bundledKnowledgeIndex())!;
-const bench = JSON.parse(readFileSync(join(import.meta.dirname, "self-knowledge", "bench-questions.json"), "utf8")) as Array<{ q: string; expect: string[] }>;
+const bench = JSON.parse(readFileSync(join(import.meta.dirname, "bench-questions.json"), "utf8")) as Array<{ q: string; expect: string[] }>;
 
 describe("sagax_help", () => {
   it("reads the bundled base", () => {

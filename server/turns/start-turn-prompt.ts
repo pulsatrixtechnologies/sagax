@@ -98,7 +98,6 @@ export function createPromptStartTurn(host: StartTurnHost) {
     teamComputerPrompt,
     teamMemory,
     toolDefinitionBytes,
-    turnConnectorsFor,
     turnContextBuckets,
     turnPromptBytes,
     turnReachPrompt,
@@ -265,9 +264,8 @@ export function createPromptStartTurn(host: StartTurnHost) {
     });
     if (buckets) turnContextBuckets.set(state.threadId, buckets);
     else turnContextBuckets.delete(state.threadId);
-    // the dev panel's Connectors card: what this turn really reached
-    if (!state.warmOnly) store.patchTask(state.bot.id, state.threadId, { connectors: turnConnectorsFor(state.liveBot ?? state.bot, state.instance, state.speaker, state.integrations, state.turnPlace.principal, state.instance.adapter.capabilities.customMcp === true) });
-    if (!state.warmOnly) turnTrace(state.threadId, "connectors-patched");
+    // Connectors card write is deferred past send in dispatch (fsync'd bots
+    // save must stay off accept→send; #1950 leftover on #1971).
     if (!state.warmOnly) turnTrace(state.threadId, "state.prompt-built");
     // the Files list's "last used": what this turn's prompt carried
     markWorkspaceUse(state.bot.id, promptSectionPaths(state.prompt.sections));

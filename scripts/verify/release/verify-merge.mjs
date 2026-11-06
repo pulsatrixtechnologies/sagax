@@ -63,7 +63,8 @@ export function stampPathFor(commonDir, sha, root = ROOT) {
  * so every PR runs them. */
 const GUARD_TESTS = [
   "scripts/testing/index-route-ratchet.test.ts",
-  // the operator's rules (#2081/#2096/#2098 chat, #2091 Always allow, #2086 settings-driven guards)
+  // #2086: JC product rules (unified chat, Always allow, no unrequested caution, fr dashes/UUIDs)
+  // also #2081 / #2096 / #2098 / #2106 chat rules; #2091 Always allow / settings-driven guards
   "scripts/testing/jc-rules.guard.test.ts",
   "scripts/tool-policy/tool-policy-coverage.test.ts",
   "scripts/self-knowledge/knowledge.test.ts",
@@ -84,7 +85,7 @@ const GUARD_TESTS = [
   "server/approvals/full-access-gate.guard.test.ts",
   // #1386: docs/ media must be cited; no large GIF; PR proofs on pr-assets
   "scripts/testing/docs-media.guard.test.ts",
-  // #2086: the bot panel has only Details, Library and Computer (no Roles tab)
+  // #2085 / #2125 (Refs #2086): the bot panel has only Activity and Library (no Roles tab)
   "src/components/bot-settings/panel-tabs.guard.test.ts",
 ];
 

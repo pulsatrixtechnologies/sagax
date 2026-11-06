@@ -82,7 +82,7 @@ describe("4 levels x a rule Deny / Ask / Allow / none", () => {
     expect(line).not.toContain("!baseVerdict?.approve");
     // and both turn launches hand the engine its native level; they left
     // index.ts for server/turns/ (9fe511cdb startTurn, 062d7c42e group member)
-    const launches = ["../turns/start-turn-dispatch.ts", "../turns/group-member-turn-launch.ts"]
+    const launches = ["../turns/start-turn-dispatch.ts", "../turns/group-member-turn-launch-dispatch.ts"]
       .map((path) => readFileSync(new URL(path, import.meta.url), "utf8").match(/approvalMode: engineTurnLevel\(/g)?.length ?? 0);
     expect(launches).toEqual([1, 1]);
   });

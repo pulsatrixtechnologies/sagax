@@ -284,90 +284,11 @@ for (;;) {
   break;
 }
 await restoreEffort();
-if (pendingSplitReceipt) {
-  // session/prompt resolving is the acceptance boundary: a
-  // rejected prompt leaves the receipt unwritten, so the next
-  // turn redelivers what this one never received. After a
-  // compaction, drop it so the next turn re-sends the full prompt.
-  if (state.usageCompacted) {
-    deletePromptSplitReceipt(DRIVER_KIND, pendingSplitReceipt.key);
-  } else {
-    const previousLastUsed = typeof pendingSplitReceipt.previous?.lastUsed === "number"
-      ? pendingSplitReceipt.previous.lastUsed
-      : undefined;
-    const lastUsed = state.usageLast ?? previousLastUsed;
-    writePromptSplitReceipt(
-      DRIVER_KIND,
-      pendingSplitReceipt.key,
-      {
-        ...pendingSplitReceipt.receipt,
-        ...(lastUsed === undefined ? {} : { lastUsed }),
-        ...(state.usagePeak === null ? {} : { peakUsed: state.usagePeak }),
-      },
-    );
-  }
-}
-// opencode 1.18.18 reports usage at the result root; grok and
-// gemini put it under _meta. Read both rather than lose the count.
-const usage = result?.usage ?? result?._meta ?? {};
-if (typeof usage.inputTokens === "number" || typeof usage.outputTokens === "number") {
-  // opencode 1.18.25 keeps only the uncached share in inputTokens
-  // and reports cache reads beside it (omitted when 0); some
-  // agents count them inside inputTokens. `input` is the whole
-  // prompt with `cachedInput` naming its cached part — the same
-  // convention as the Claude driver and the store — and
-  // totalTokens tells the two wire shapes apart. Cache writes
-  // stay out of `input`, exactly as in the Claude driver, and an
-  // absent cache count emits the bare shape with no cachedInput
-  // key: absent is not zero.
-  const input = usage.inputTokens ?? 0;
-  const output = usage.outputTokens ?? 0;
-  latency.inputTokens = input;
-  if (typeof usage.cachedReadTokens === "number") latency.cachedTokens = usage.cachedReadTokens;
-  const cachedRead = typeof usage.cachedReadTokens === "number" && usage.cachedReadTokens > 0
-    ? usage.cachedReadTokens
-    : null;
-  const exclusive = cachedRead !== null
-    && (typeof usage.totalTokens !== "number"
-      || usage.totalTokens >= input + output + cachedRead);
-  emit({
-    ...base(threadId, turnId),
-    type: "thread.token-usage.updated",
-    input: cachedRead !== null && exclusive ? input + cachedRead : input,
-    output,
-    ...(cachedRead !== null
-      ? { cachedInput: exclusive ? cachedRead : Math.min(cachedRead, input) }
-      : {}),
-    // What fills the window now, so Sagax folds the thread before
-    // the agent compacts it on its own (server/context/context-budget.ts).
-    ...(state.usageLast !== null && state.usageLast > 0 ? { contextTokens: state.usageLast } : {}),
-    ...(state.usageSize ? { contextWindow: state.usageSize } : {}),
-  });
-}
-const reason = result?.stopReason;
-if (reason === "end_turn") settle(threadId, session, true, null);
-// After Stop, whatever reason the agent gives is the stop.
-else if (reason === "cancelled" || state.stopped) settle(threadId, session, true, "cancelled");
-else {
-  const errorMessage = typeof result?.error === "string" && result.error
-    ? result.error
-    : typeof result?.message === "string" && result.message
-      ? result.message
-      : `Model turn failed: ${reason ?? "unknown error"}`;
-  if (engineFailureKind(errorMessage) === "context_full") {
-    freshNextTurn.add(threadId);
-    if (session.child.exitCode === null && !session.closing) closeSession(threadId, "context-full");
-  }
-  emit({
-    ...base(threadId, turnId),
-    type: "runtime.error",
-    message: engineFailureMessage(support.displayName, errorMessage) ?? errorMessage,
-  });
-  settle(threadId, session, false, engineFailureKind(errorMessage) === "context_full" ? "context_full" : (reason ?? "failed"));
-}
-// The nudge's lower effort could not be put back: never let the next turn
-// run on it in this pooled process.
-if (effortRestoreFailed && session.child.exitCode === null && !session.closing) closeSession(threadId, "effort-restore");
+settleAcpPromptOutcome({
+  pendingSplitReceipt, state, DRIVER_KIND, result, latency, emit, base,
+  threadId, turnId, session, settle, freshNextTurn, closeSession, support,
+  effortRestoreFailed,
+});
 
   ctx.session = session;
   ctx.state = state;
@@ -386,4 +307,100 @@ if (effortRestoreFailed && session.child.exitCode === null && !session.closing) 
   ctx.selectedModel = selectedModel;
   ctx.rebuiltFromReplay = rebuiltFromReplay;
   setAccountModels(accountModels);
+}
+
+/** Receipt, token usage and stop reason after session/prompt resolves. */
+function settleAcpPromptOutcome(input: Pick<AcpTurnCtx,
+  "pendingSplitReceipt" | "state" | "DRIVER_KIND" | "latency" | "emit" | "base" |
+  "threadId" | "turnId" | "session" | "settle" | "freshNextTurn" | "closeSession" | "support"
+> & { result: any; effortRestoreFailed: boolean }): void {
+  const {
+    pendingSplitReceipt, state, DRIVER_KIND, result, latency, emit, base,
+    threadId, turnId, session, settle, freshNextTurn, closeSession, support,
+    effortRestoreFailed,
+  } = input;
+  if (pendingSplitReceipt) {
+    // session/prompt resolving is the acceptance boundary: a
+    // rejected prompt leaves the receipt unwritten, so the next
+    // turn redelivers what this one never received. After a
+    // compaction, drop it so the next turn re-sends the full prompt.
+    if (state.usageCompacted) {
+      deletePromptSplitReceipt(DRIVER_KIND, pendingSplitReceipt.key);
+    } else {
+      const previousLastUsed = typeof pendingSplitReceipt.previous?.lastUsed === "number"
+        ? pendingSplitReceipt.previous.lastUsed
+        : undefined;
+      const lastUsed = state.usageLast ?? previousLastUsed;
+      writePromptSplitReceipt(
+        DRIVER_KIND,
+        pendingSplitReceipt.key,
+        {
+          ...pendingSplitReceipt.receipt,
+          ...(lastUsed === undefined ? {} : { lastUsed }),
+          ...(state.usagePeak === null ? {} : { peakUsed: state.usagePeak }),
+        },
+      );
+    }
+  }
+  // opencode 1.18.18 reports usage at the result root; grok and
+  // gemini put it under _meta. Read both rather than lose the count.
+  const usage = result?.usage ?? result?._meta ?? {};
+  if (typeof usage.inputTokens === "number" || typeof usage.outputTokens === "number") {
+    // opencode 1.18.25 keeps only the uncached share in inputTokens
+    // and reports cache reads beside it (omitted when 0); some
+    // agents count them inside inputTokens. `input` is the whole
+    // prompt with `cachedInput` naming its cached part — the same
+    // convention as the Claude driver and the store — and
+    // totalTokens tells the two wire shapes apart. Cache writes
+    // stay out of `input`, exactly as in the Claude driver, and an
+    // absent cache count emits the bare shape with no cachedInput
+    // key: absent is not zero.
+    const input = usage.inputTokens ?? 0;
+    const output = usage.outputTokens ?? 0;
+    latency.inputTokens = input;
+    if (typeof usage.cachedReadTokens === "number") latency.cachedTokens = usage.cachedReadTokens;
+    const cachedRead = typeof usage.cachedReadTokens === "number" && usage.cachedReadTokens > 0
+      ? usage.cachedReadTokens
+      : null;
+    const exclusive = cachedRead !== null
+      && (typeof usage.totalTokens !== "number"
+        || usage.totalTokens >= input + output + cachedRead);
+    emit({
+      ...base(threadId, turnId),
+      type: "thread.token-usage.updated",
+      input: cachedRead !== null && exclusive ? input + cachedRead : input,
+      output,
+      ...(cachedRead !== null
+        ? { cachedInput: exclusive ? cachedRead : Math.min(cachedRead, input) }
+        : {}),
+      // What fills the window now, so Sagax folds the thread before
+      // the agent compacts it on its own (server/context/context-budget.ts).
+      ...(state.usageLast !== null && state.usageLast > 0 ? { contextTokens: state.usageLast } : {}),
+      ...(state.usageSize ? { contextWindow: state.usageSize } : {}),
+    });
+  }
+  const reason = result?.stopReason;
+  if (reason === "end_turn") settle(threadId, session, true, null);
+  // After Stop, whatever reason the agent gives is the stop.
+  else if (reason === "cancelled" || state.stopped) settle(threadId, session, true, "cancelled");
+  else {
+    const errorMessage = typeof result?.error === "string" && result.error
+      ? result.error
+      : typeof result?.message === "string" && result.message
+        ? result.message
+        : `Model turn failed: ${reason ?? "unknown error"}`;
+    if (engineFailureKind(errorMessage) === "context_full") {
+      freshNextTurn.add(threadId);
+      if (session.child.exitCode === null && !session.closing) closeSession(threadId, "context-full");
+    }
+    emit({
+      ...base(threadId, turnId),
+      type: "runtime.error",
+      message: engineFailureMessage(support.displayName, errorMessage) ?? errorMessage,
+    });
+    settle(threadId, session, false, engineFailureKind(errorMessage) === "context_full" ? "context_full" : (reason ?? "failed"));
+  }
+  // The nudge's lower effort could not be put back: never let the next turn
+  // run on it in this pooled process.
+  if (effortRestoreFailed && session.child.exitCode === null && !session.closing) closeSession(threadId, "effort-restore");
 }

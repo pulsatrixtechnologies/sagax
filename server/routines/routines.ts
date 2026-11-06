@@ -3233,67 +3233,7 @@ export class RoutineManager {
       const stillDue = dueRoutines.filter((routine) => this.routines.includes(routine) && routine.enabled &&
         !routine.suspended && routine.nextRunAt != null && routine.nextRunAt <= now);
       dueRoutines.splice(0, dueRoutines.length, ...stillDue);
-      const scheduledRuns: RoutineRun[] = [];
-      const allocations: ResultsThreadAllocation[] = [];
-      if (dueRoutines.length > 0) {
-        this.commitMutation(() => {
-          for (const routine of dueRoutines) {
-            const pendingAt = routine.nextRunAt!;
-            const late = now - pendingAt;
-            const flexible = isFlexibleSchedule(routine.schedule);
-            let scheduledFor: number;
-            let firedNominal = routine.nominalRunAt;
-            if (!flexible) {
-              scheduledFor = routine.schedule.type === "interval" && late <= CATCH_UP_MS
-                ? latestIntervalOccurrence(routine.schedule, now, this.zoneOf(routine)) ?? pendingAt
-                : pendingAt;
-            } else {
-              scheduledFor = pendingAt;
-              if (routine.schedule.type === "interval" && late <= CATCH_UP_MS && firedNominal != null) {
-                const latest = latestIntervalOccurrence(routine.schedule, now, this.zoneOf(routine));
-                if (latest != null && latest > firedNominal) {
-                  firedNominal = latest;
-                  const window = cappedWindow(routine.schedule, now);
-                  const earlyMs = window.early * 60_000;
-                  const picked = flexibleStartAt(routine.id, latest, window.early, window.late);
-                  scheduledFor = Math.min(now, Math.max(picked, latest - earlyMs));
-                }
-              }
-            }
-            // Frequent recurring work must not build an unbounded queue of stale
-            // copies. Elapsed intervals keep their phase; cron keeps its calendar.
-            const overlapping = routine.schedule.type !== "once" && this.runs.some(
-              (run) => run.routineId === routine.id && ["queued", "running", "waiting"].includes(run.status),
-            );
-            const scheduledQueued = this.runs.some(run => run.routineId === routine.id && run.status === "queued" &&
-              (run.triggerSource ?? (run.manual ? "manual" : "schedule")) === "schedule");
-            if (!overlapping || (routine.overlap === "queue" && !scheduledQueued)) {
-              const run = this.newRun(routine, scheduledFor, false, allocations);
-              // A one-time routine held while its person was away runs late
-              // on their return rather than being written off as missed.
-              if (late > CATCH_UP_MS && !(routine.onlyWhenPresent && routine.schedule.type === "once")) {
-                run.status = "missed";
-                run.finishedAt = now;
-                run.error = "This computer was offline for more than 12 hours after the scheduled time";
-              }
-              scheduledRuns.push(run);
-            } else {
-              const waiting = this.runs.find((run) => run.routineId === routine.id && run.status === "waiting" && run.waitingSince !== undefined);
-              // Once per wait, an occurrence skipped behind it leaves a missed receipt, so the owner is told.
-              if (waiting && skipNeedsNotice(scheduledFor, waiting.waitingSince!, routine.lastSkippedAt)) {
-                const missed = this.newRun(routine, scheduledFor, false, allocations);
-                missed.status = "missed";
-                missed.finishedAt = now;
-                missed.error = ROUTINE_SKIPPED_WHILE_WAITING;
-                scheduledRuns.push(missed);
-              }
-              routine.skippedRuns = Math.min(Number.MAX_SAFE_INTEGER, (routine.skippedRuns ?? 0) + 1);
-              routine.lastSkippedAt = scheduledFor;
-            }
-            this.advancePastOccurrence(routine, now, scheduledFor, firedNominal);
-          }
-        }, () => this.discardResultsThreads(allocations));
-      }
+      const scheduledRuns = this.scheduleDueRuns(dueRoutines, now);
       // Reporting may persist transcript cards, so publish only after the
       // scheduler batch (including each destination) is durable.
       for (const routine of dueRoutines) this.emitRoutine(routine);
@@ -3622,6 +3562,71 @@ export class RoutineManager {
         this.tickInBackground();
       }
     }
+  }
+
+  /** Commit the due routines' next runs in one mutation. Same cursor rules as before. */
+  private scheduleDueRuns(dueRoutines: Routine[], now: number): RoutineRun[] {
+    const scheduledRuns: RoutineRun[] = [];
+    const allocations: ResultsThreadAllocation[] = [];
+    if (dueRoutines.length === 0) return scheduledRuns;
+    this.commitMutation(() => {
+      for (const routine of dueRoutines) {
+        const pendingAt = routine.nextRunAt!;
+        const late = now - pendingAt;
+        const flexible = isFlexibleSchedule(routine.schedule);
+        let scheduledFor: number;
+        let firedNominal = routine.nominalRunAt;
+        if (!flexible) {
+          scheduledFor = routine.schedule.type === "interval" && late <= CATCH_UP_MS
+            ? latestIntervalOccurrence(routine.schedule, now, this.zoneOf(routine)) ?? pendingAt
+            : pendingAt;
+        } else {
+          scheduledFor = pendingAt;
+          if (routine.schedule.type === "interval" && late <= CATCH_UP_MS && firedNominal != null) {
+            const latest = latestIntervalOccurrence(routine.schedule, now, this.zoneOf(routine));
+            if (latest != null && latest > firedNominal) {
+              firedNominal = latest;
+              const window = cappedWindow(routine.schedule, now);
+              const earlyMs = window.early * 60_000;
+              const picked = flexibleStartAt(routine.id, latest, window.early, window.late);
+              scheduledFor = Math.min(now, Math.max(picked, latest - earlyMs));
+            }
+          }
+        }
+        // Frequent recurring work must not build an unbounded queue of stale
+        // copies. Elapsed intervals keep their phase; cron keeps its calendar.
+        const overlapping = routine.schedule.type !== "once" && this.runs.some(
+          (run) => run.routineId === routine.id && ["queued", "running", "waiting"].includes(run.status),
+        );
+        const scheduledQueued = this.runs.some(run => run.routineId === routine.id && run.status === "queued" &&
+          (run.triggerSource ?? (run.manual ? "manual" : "schedule")) === "schedule");
+        if (!overlapping || (routine.overlap === "queue" && !scheduledQueued)) {
+          const run = this.newRun(routine, scheduledFor, false, allocations);
+          // A one-time routine held while its person was away runs late
+          // on their return rather than being written off as missed.
+          if (late > CATCH_UP_MS && !(routine.onlyWhenPresent && routine.schedule.type === "once")) {
+            run.status = "missed";
+            run.finishedAt = now;
+            run.error = "This computer was offline for more than 12 hours after the scheduled time";
+          }
+          scheduledRuns.push(run);
+        } else {
+          const waiting = this.runs.find((run) => run.routineId === routine.id && run.status === "waiting" && run.waitingSince !== undefined);
+          // Once per wait, an occurrence skipped behind it leaves a missed receipt, so the owner is told.
+          if (waiting && skipNeedsNotice(scheduledFor, waiting.waitingSince!, routine.lastSkippedAt)) {
+            const missed = this.newRun(routine, scheduledFor, false, allocations);
+            missed.status = "missed";
+            missed.finishedAt = now;
+            missed.error = ROUTINE_SKIPPED_WHILE_WAITING;
+            scheduledRuns.push(missed);
+          }
+          routine.skippedRuns = Math.min(Number.MAX_SAFE_INTEGER, (routine.skippedRuns ?? 0) + 1);
+          routine.lastSkippedAt = scheduledFor;
+        }
+        this.advancePastOccurrence(routine, now, scheduledFor, firedNominal);
+      }
+    }, () => this.discardResultsThreads(allocations));
+    return scheduledRuns;
   }
 
   /** A queued run behind a busy target is deferred, not silent. The wait is

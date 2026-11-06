@@ -193,6 +193,13 @@ export const approvalChime = localSwitch("omb-approval-chime");
  * the Perspicax connector is unreachable (src/lib/connection-notice.ts). */
 export const connectionNotices = localSwitch("omb-connection-notices");
 
+/** Settings > Notifications: per-type toggles, all on by default (#2120). */
+export const notifyBots = localSwitch("omb-notify-bots");
+export const notifyPeople = localSwitch("omb-notify-people");
+export const notifyGroups = localSwitch("omb-notify-groups");
+export const notifyApprovals = localSwitch("omb-notify-approvals");
+export const notifyRoutines = localSwitch("omb-notify-routines");
+
 /** Everything the attention rules read, as this computer has it now. */
 export interface AttentionSettings {
   sound: boolean;
@@ -200,6 +207,11 @@ export interface AttentionSettings {
   badge: boolean;
   nudgeSound: boolean;
   nudgeShake: boolean;
+  bots: boolean;
+  people: boolean;
+  groups: boolean;
+  approvals: boolean;
+  routines: boolean;
 }
 
 export function attentionSettings(): AttentionSettings {
@@ -209,5 +221,10 @@ export function attentionSettings(): AttentionSettings {
     badge: dockBadge.enabled(),
     nudgeSound: nudgeSoundEnabled(),
     nudgeShake: nudgeShake.enabled(),
+    bots: notifyBots.enabled(),
+    people: notifyPeople.enabled(),
+    groups: notifyGroups.enabled(),
+    approvals: notifyApprovals.enabled(),
+    routines: notifyRoutines.enabled(),
   };
 }

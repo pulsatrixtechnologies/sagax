@@ -44,6 +44,7 @@ const NOT_MIGRATED: Record<Rule, string[]> = {
     "WorkspaceBackupSettings.tsx",
   ],
   cardImport: [
+    "settings/LinkedGrokBotSettings.tsx",
     "settings/MyConnectionsSettings.tsx",
     "settings/OrgSharing.tsx",
     "settings/LinkedGrokBotSettings.tsx",

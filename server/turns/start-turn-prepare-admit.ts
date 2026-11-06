@@ -116,14 +116,18 @@ export function createPrepareAdmitStartTurn(
   // files in parallel with the rest of the setup, awaited before the engine
   // starts (below).
   if (!state.warmOnly && supportsWorkspaceFiles(state.instance.driverKind)) void holdBotMemoryPlain(state.bot.id, turnHolder(state.threadId));
-  const attachmentsHold = state.warmOnly ? undefined : holdTurnAttachments(state.threadId, [state.text], state.resolvedImages.images, { picturesByPath: state.instance.driverKind === "codex" });
+  const usesNativeImageInput = state.instance.adapter.capabilities.nativeImageInput === true;
+  const attachmentsHold = state.warmOnly ? undefined : holdTurnAttachments(state.threadId, [state.text], state.resolvedImages.images, {
+    picturesByPath: state.instance.driverKind === "codex",
+    // ffmpeg needs the plain video before frames are sampled after the claim.
+    ...(usesNativeImageInput && state.resolvedImages.videos?.length ? { videos: state.resolvedImages.videos } : {}),
+  });
   if (attachmentsHold) {
     await attachmentsHold;
     // The wait yielded: another start may have taken this slot since the
     // checks above. From here to the dispatch claim nothing yields again.
     assertTurnAdmission(state.botId, state.threadId);
   }
-  const usesNativeImageInput = state.instance.adapter.capabilities.nativeImageInput === true;
   state.providerText = promptWithDataContext(usesNativeImageInput ? state.resolvedImages.text : state.text, state.opts?.dataContext);
   state.turnImages = usesNativeImageInput ? state.resolvedImages.images : [];
   state.commsDepth = state.opts?.commsDepth ?? 0;

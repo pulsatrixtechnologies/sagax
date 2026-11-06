@@ -154,6 +154,9 @@ export function ModelPicker({
     for (const action of batchModelActions(others, next)) dispatch(action);
   };
   const [menu, setMenu] = useState(windowOnly);
+  /** #2106: Auto Edit panel (Intelligence / Balance / Cost); owned here so
+   * ModelPickerMenu stays hook-free for the function-call interaction harness. */
+  const [autoEditOpen, setAutoEditOpen] = useState(false);
   const menuMotion = useMenuMotion(menu && !bot.busy);
   const [menuAt, setMenuAt] = useState<{ left?: number; right?: number; top?: number; bottom?: number } | null>(() => (
     windowOnly && typeof window !== "undefined" ? windowOnlyMenuPlace() : null
@@ -199,6 +202,7 @@ export function ModelPicker({
   const displayedInstanceId = active?.instanceId;
   const closeMenu = (refocus = false) => {
     setMenu(false);
+    setAutoEditOpen(false);
     if (windowOnly) onWindowClose?.();
     if (refocus) (anchorRef.current?.isConnected ? anchorRef.current : triggerRef.current ?? (headless ? fallbackAnchor?.() : null))?.focus();
   };
@@ -293,8 +297,27 @@ export function ModelPicker({
     if ((bot.busy && !alsoApplyTo?.length) || (viewerLocal && !alsoApplyTo?.length)) return;
     closeAll();
     if (autoOn && !alsoApplyTo?.length) return;
-    const next = { ...selection, auto: true as const };
+    const next = {
+      ...selection,
+      auto: true as const,
+      autoOptimize: selection.autoOptimize ?? "balance",
+    };
     if (!bot.busy && !viewerLocal && !autoOn) {
+      dispatch({
+        type: "setModel",
+        botId: bot.id,
+        threadId: threadId ?? bot.threadId,
+        updateBotDefault: true,
+        selection: next,
+      });
+    }
+    applyToOthers(next);
+  };
+
+  const setAutoOptimize = (autoOptimize: "intelligence" | "balance" | "cost") => {
+    if ((bot.busy && !alsoApplyTo?.length) || (viewerLocal && !alsoApplyTo?.length)) return;
+    const next = { ...selection, auto: true as const, autoOptimize };
+    if (!bot.busy && !viewerLocal) {
       dispatch({
         type: "setModel",
         botId: bot.id,
@@ -326,6 +349,7 @@ export function ModelPicker({
     health,
     myEngines,
     ranOnName,
+    favoriteKeys,
   });
   const onRow = (row: ModelMenuRow) => {
     if (row.kind === "auto") return chooseAuto();
@@ -443,10 +467,14 @@ export function ModelPicker({
         active,
         autoOn,
         setEffort,
+        setAutoOptimize,
+        autoEditOpen,
+        setAutoEditOpen,
         pick,
         effortTitle,
         // Settings > Models list: hang off the chip, inside the Settings window.
-        anchorRef: listChip && !headless && !windowOnly ? triggerRef : undefined,
+        // Chat bar chip (#2106): hang the menu off the visible trigger.
+        anchorRef: (!headless && !windowOnly && (listChip || inComposer)) ? triggerRef : undefined,
         panes,
         turnedOff,
         openActiveModels: panes ? openActiveModels : undefined,

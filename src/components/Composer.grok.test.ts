@@ -142,11 +142,12 @@ describe("composer controls (Grok Bot's prompt bar)", () => {
     expect($("[data-composer-plus]")!.getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("has no model chip and no emoji button in the bar; the headless picker stays for the mascot's chip", () => {
+  it("shows the model chip in the chat bar (#2106) and keeps no emoji button", () => {
     render(createElement(Composer, { bot: bot("teal") }));
-    expect(fixture.picker?.headless).toBe(true);
     expect(fixture.picker?.inComposer).toBe(true);
-    expect($('[data-tour="model"]')).toBeNull();
+    // Visible chip: ComposerActionBar no longer passes headless (#2106).
+    expect(fixture.picker?.headless).not.toBe(true);
+    expect($("[data-model-picker-mock]")).not.toBeNull();
     expect($('[aria-label="Insert an emoji"]')).toBeNull();
     expect($("[data-composer-emoji]")).toBeNull();
   });

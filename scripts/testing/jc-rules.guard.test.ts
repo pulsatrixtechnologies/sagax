@@ -1,4 +1,5 @@
-// the operator's rules for the chat, held as guard tests (2026-11-05). Each section
+// the operator's rules for the chat, held as guard tests (2026-11-05),
+// plus #2106 model-picker / composer surface guards. Each section
 // names the issue and quotes the rule. They run for every PR
 // (scripts/verify/release/verify-merge.mjs, GUARD_TESTS) and fail for the PR
 // that merged last, so the line holds on main.
@@ -6,7 +7,7 @@
 // Every guardrail here follows the app's own settings (the threads setting,
 // useShowThreads), never a hard-coded value: the tests check that the
 // gate reads the setting, and that nothing bypasses it.
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createElement } from "react";
@@ -212,5 +213,76 @@ describe("unified chat mode: zero threads, following the threads setting", () =>
     const hardCoded = files.filter((file) => /const showThreads = (true|false)\b|showThreads=\{(true|false)\}/.test(file.text)).map((file) => file.name);
     expect(hardCoded).toEqual([]);
     for (const name of ["components/ChatView.tsx", "App.tsx-parts/ShellLayout.tsx"]) expect(read(name), name).toContain("useShowThreads()");
+  });
+});
+
+/** Surfaces #2106 owns or sits next to: must stay unified-chat clean. */
+const MODEL_PICKER_OWNED = [
+  "src/components/Composer.tsx-parts/ComposerActionBar.tsx",
+  "src/components/ModelPicker.tsx",
+  "src/components/ModelPicker.tsx-parts",
+  "src/components/ModelMenu.tsx",
+  "src/lib/model-menu.ts",
+  "shared/model-account-pool.ts",
+  "shared/model-provider-unify.ts",
+  "shared/model-auto-optimize.ts",
+  "server/models/resolve-model-account.ts",
+];
+
+const MODEL_PICKER_FORBIDDEN = [
+  /Open thread/i,
+  /Go to conversation/i,
+  /Continue in the conversation/i,
+  /["']Close Chat["']/,
+  /data-run-continue/,
+  /routineRun\.continue/,
+];
+
+function walkTs(dir: string, out: string[] = []): string[] {
+  for (const name of readdirSync(dir)) {
+    const path = join(dir, name);
+    const st = statSync(path);
+    if (st.isDirectory()) walkTs(path, out);
+    else if (/\.(ts|tsx)$/.test(name)) out.push(path);
+  }
+  return out;
+}
+
+function modelPickerOwnedFiles(): string[] {
+  const files: string[] = [];
+  for (const entry of MODEL_PICKER_OWNED) {
+    const path = join(ROOT, entry);
+    const st = statSync(path);
+    if (st.isDirectory()) files.push(...walkTs(path));
+    else files.push(path);
+  }
+  return files;
+}
+
+describe("JC unified chat guards (#2106)", () => {
+  const owned = modelPickerOwnedFiles();
+
+  it("owned model-picker / composer surfaces keep no side-thread or run-continue copy", () => {
+    const offenders: string[] = [];
+    for (const file of owned) {
+      const text = readFileSync(file, "utf8");
+      for (const pattern of MODEL_PICKER_FORBIDDEN) {
+        if (pattern.test(text)) offenders.push(`${relative(ROOT, file)} :: ${pattern}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("ComposerActionBar restores a visible model chip (no headless chat-bar picker)", () => {
+    const bar = readFileSync(join(ROOT, "src/components/Composer.tsx-parts/ComposerActionBar.tsx"), "utf8");
+    expect(bar).toMatch(/#2106/);
+    expect(bar).toMatch(/<ModelPicker inComposer/);
+    expect(bar).not.toMatch(/headless/);
+  });
+
+  it("picking writes the bot default for every thread (updateBotDefault)", () => {
+    const picker = readFileSync(join(ROOT, "src/components/ModelPicker.tsx"), "utf8");
+    expect(picker).toMatch(/updateBotDefault:\s*true/);
+    expect(picker).not.toMatch(/confirm.*model|toast.*model|warn.*model/i);
   });
 });

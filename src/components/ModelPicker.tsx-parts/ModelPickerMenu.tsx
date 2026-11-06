@@ -1,7 +1,7 @@
 // Composer model menu (extracted from ModelPicker.tsx, #1383).
 import { type KeyboardEvent, type RefObject } from "react";
 import type { MenuMotion } from "../MenuMotion";
-import { ChevronRight } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 import type { Bot, InstanceInfo, ModelSelection } from "@/state/store";
 import { ModelMenuItem, ModelSearchList, type ModelMenuRow, type ModelMenuSection } from "../ModelMenu";
 import { cn } from "@/lib/cn";
@@ -14,6 +14,7 @@ import { fastBaseOf, fastTwinOf, modelDefaultEffort, modelEffortLevels } from ".
 import type { EffortLevel } from "../../../shared/wire";
 import { MENU_WIDTH, PANES_MENU_WIDTH } from "./helpers";
 import { AnchoredPopover, enclosingWindowBounds } from "../AnchoredPopover";
+import { AUTO_OPTIMIZE_VALUES, autoOptimizeOf, type AutoOptimize } from "../../../shared/model-auto-optimize";
 
 function menuViewportHeight(fallback = 800): number {
   if (typeof window === "undefined") return fallback;
@@ -60,6 +61,9 @@ export function ModelPickerMenu({
   active,
   autoOn,
   setEffort,
+  setAutoOptimize,
+  autoEditOpen = false,
+  setAutoEditOpen,
   pick,
   effortTitle,
   anchorRef,
@@ -85,6 +89,12 @@ export function ModelPickerMenu({
   active: InstanceInfo | undefined;
   autoOn: boolean;
   setEffort: (effort: EffortLevel | undefined) => void;
+  /** #2106: Auto Edit submenu (Intelligence / Balance / Cost). */
+  setAutoOptimize?: (value: AutoOptimize) => void;
+  /** #2106: Auto Edit panel open state lives on ModelPicker (no hooks here:
+   * the interaction harness calls this menu as a function). */
+  autoEditOpen?: boolean;
+  setAutoEditOpen?: (open: boolean | ((prev: boolean) => boolean)) => void;
   pick: (instance: InstanceInfo, model: string, keepOpen?: boolean) => void;
   effortTitle: string;
   /** Hang the menu off this chip (Settings > Models list): under it or over
@@ -98,6 +108,7 @@ export function ModelPickerMenu({
   openActiveModels?: () => void;
 }) {
   const width = panes ? PANES_MENU_WIDTH : MENU_WIDTH;
+  const currentOptimize = autoOptimizeOf(selection.autoOptimize);
   // The settings of the model in use, under the composer's list (the maintainer,
   // 2026-10-13, Cursor's second panel): Fast when it has a fast twin and
   // Effort › with only the levels it takes. The maintainer, 2026-10-14: Model › (the
@@ -146,7 +157,35 @@ export function ModelPickerMenu({
   const content = (
     <>
       <ModelSearchList variant="popover" autoFocus sections={menuSections} onPick={onRow} onEscape={() => closeMenu(true)} disabled={Boolean(bot.busy)} panes={panes}
-        favorites={{ keys: favoriteKeys, onToggle: (row) => toggleModelFavorite(row.key) }} />
+        favorites={{ keys: favoriteKeys, onToggle: (row) => toggleModelFavorite(row.key) }}
+        onAutoEdit={setAutoOptimize && setAutoEditOpen && !viewerLocal ? () => setAutoEditOpen((open) => !open) : undefined} />
+      {autoEditOpen && setAutoOptimize && setAutoEditOpen && (
+        <div role="group" aria-label={t("model.auto.optimizeTitle")} data-model-auto-optimize
+          className="border-t border-popover-hairline px-1.5 py-1">
+          <div className="px-2 pb-1 pt-1 text-[11.5px] text-popover-ink-secondary">{t("model.auto.optimizeTitle")}</div>
+          {AUTO_OPTIMIZE_VALUES.map((value) => (
+            <button
+              key={value}
+              type="button"
+              data-model-auto-optimize-option={value}
+              aria-checked={currentOptimize === value}
+              role="menuitemradio"
+              disabled={Boolean(bot.busy)}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                setAutoOptimize(value);
+                setAutoEditOpen(false);
+              }}
+              className={cn(
+                "flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-popover-ink outline-none hover:bg-popover-hover focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50",
+              )}
+            >
+              <span>{t(`model.auto.optimize.${value}`)}</span>
+              {currentOptimize === value && <Check size={14} aria-hidden="true" className="text-popover-accent" />}
+            </button>
+          ))}
+        </div>
+      )}
       {!viewerLocal && <ModelNoEngineNotice className="border-t border-popover-hairline px-3 py-2" onConnect={() => closeMenu()} />}
       {/* #2050: the two-pane selector always shows the effort bar (the
           global Simple/Advanced mode hides nothing on these pages). */}

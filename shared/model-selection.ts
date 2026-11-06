@@ -37,4 +37,7 @@ export interface ModelSelection {
    * server (a part handed to the other account with run_with_engine, or a
    * request moved there for its connector); the pickers never set it. */
   account?: "second";
+  /** #2106: when Auto is on, how Auto ranks models (Intelligence / Balance /
+   * Cost). Absent means Balance. Cleared when a model is pinned. */
+  autoOptimize?: "intelligence" | "balance" | "cost";
 }

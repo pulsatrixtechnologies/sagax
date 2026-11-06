@@ -443,6 +443,9 @@ export interface ModelSelection {
   /** Auto (docs/plans/2026-10-08-auto-model.md): each turn picks its model;
    * instanceId and model stay the bot's engine and fallback. */
   auto?: true;
+  /** #2106: when Auto is on, how Auto ranks models (Intelligence / Balance /
+   * Cost). Absent means Balance. Cleared when a model is pinned. */
+  autoOptimize?: "intelligence" | "balance" | "cost";
   fast?: { instanceId: string; model: string };
 }
 

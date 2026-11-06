@@ -734,7 +734,7 @@ describe("the flat model picker", () => {
     expect(lists(opened)[0]!.props.sections[0]!.rows[0]!.kind).toBe("auto");
     row(opened, "auto").props.onPick();
     expect(fixture.dispatch).toHaveBeenLastCalledWith({ type: "setModel", botId: "atlas", threadId: "thread-atlas", updateBotDefault: true,
-      selection: { instanceId: "claude", model: "claude-sonnet-5", auto: true } });
+      selection: { instanceId: "claude", model: "claude-sonnet-5", auto: true, autoOptimize: "balance" } });
   });
 
   it("shows Auto's last real pick on the chip; chain status lives in Settings", () => {

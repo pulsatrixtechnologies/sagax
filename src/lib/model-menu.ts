@@ -38,8 +38,12 @@ export interface ModelMenuSection {
   key: string;
   /** The heading (an engine, Cloud, Local); none for the top rows. */
   label?: string;
-  /** A muted note beside the heading (an engine's state). */
+  /** A muted note beside the heading (an engine's state, or Account / API). */
   note?: string;
+  /** #2106: subscription login vs pasted API key, for grouping and tags. */
+  access?: "subscription" | "api";
+  /** #2106: sign-in family key used to unify several accounts into one section. */
+  family?: string;
   rows: ModelMenuRow[];
 }
 

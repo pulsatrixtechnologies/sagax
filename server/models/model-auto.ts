@@ -11,6 +11,7 @@
 import type { EffortLevel, ModelSelection } from "../../shared/wire.ts";
 import { effortAcceptedByEngine } from "../../shared/ultracode-effort.ts";
 import type { AutoModelRecord, AutoPayerVia, AutoReason, AutoTaskClass, AutoTier } from "../../shared/auto-model.ts";
+import { autoOptimizeOf } from "../../shared/model-auto-optimize.ts";
 
 export type { AutoPayerVia, AutoReason } from "../../shared/auto-model.ts";
 export type TaskClass = AutoTaskClass;
@@ -595,6 +596,14 @@ function pickFast(request: AutoRequest, role: AutoPick["role"], tier: Tier, task
   };
 }
 
+/** #2106: Auto Edit preference nudges the tier (Cost → fast, Intelligence → top). */
+function tierForOptimize(tier: Tier, selection: ModelSelection): Tier {
+  const optimize = autoOptimizeOf(selection.autoOptimize);
+  if (optimize === "cost" && (tier === "top" || tier === "coding")) return "fast";
+  if (optimize === "intelligence" && (tier === "fast" || tier === "coding")) return "top";
+  return tier;
+}
+
 /** The bot's own turns: the tier the words ask for (ORCHESTRATION_TIER), on
  * the bot's own engine when it can. A quick turn (a short message with
  * nothing heavier in it) runs on the fast model set for the bot when it has
@@ -604,13 +613,13 @@ function pickFast(request: AutoRequest, role: AutoPick["role"], tier: Tier, task
  * the next turn), the strongest general model. A refusal climbs the chain
  * toward the strongest model, never the other way. */
 export function pickOrchestrationModel(request: AutoRequest, task?: TaskInput): AutoPick {
-  if (!task) return pickTier(request, "top", "orchestration");
+  if (!task) return pickTier(request, tierForOptimize("top", request.base), "orchestration");
   const { taskClass } = classifyTask(task);
   if (taskClass === "quick") {
     const fast = pickFast(request, "orchestration", "top", "quick");
     if (fast) return fast;
   }
-  return pickTier(request, ORCHESTRATION_TIER[taskClass], "orchestration", taskClass);
+  return pickTier(request, tierForOptimize(ORCHESTRATION_TIER[taskClass], request.base), "orchestration", taskClass);
 }
 
 /** A turn said on a live call (server/voice/voice-turn.ts): a fast model, so the
@@ -674,7 +683,7 @@ export function pickWorkerModel(request: AutoRequest & { task: TaskInput }): Aut
     const fast = pickFast(request, "worker", CLASS_TIER[taskClass], taskClass);
     if (fast) return fast;
   }
-  return pickTier(request, CLASS_TIER[taskClass], "worker", taskClass);
+  return pickTier(request, tierForOptimize(CLASS_TIER[taskClass], request.base), "worker", taskClass);
 }
 
 /** #1154: the tier a model stands for on its engine (the first pattern of

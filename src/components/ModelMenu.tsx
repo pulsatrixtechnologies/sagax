@@ -155,7 +155,7 @@ export function defaultPaneKey(groups: readonly PaneGroup[]): string | undefined
   return (groups.find((group) => group.current) ?? groups.find((group) => group.key === PANE_FAVORITES_KEY && group.count > 0) ?? groups.find((group) => group.key !== PANE_FAVORITES_KEY) ?? groups[0])?.key;
 }
 
-export function ModelSearchList({ sections, onPick, variant, autoFocus = false, onEscape, disabled = false, label, favorites, submenus = false, groupProviders = false, panes = false, onPreview }: {
+export function ModelSearchList({ sections, onPick, variant, autoFocus = false, onEscape, disabled = false, label, favorites, submenus = false, groupProviders = false, panes = false, onPreview, onAutoEdit }: {
   sections: ModelMenuSection[];
   onPick: (row: ModelMenuRow) => void;
   onPreview?: (row: ModelMenuRow) => void;
@@ -175,6 +175,8 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
   /** Two columns while the search is empty: Favorites and the providers
    * on the left, the chosen one's models on the right. Wins over `submenus`. */
   panes?: boolean;
+  /** #2106: Edit on the Auto row opens Optimize for Intelligence / Balance / Cost. */
+  onAutoEdit?: () => void;
 }) {
   const style = STYLE[variant];
   const [query, setQuery] = useState("");
@@ -350,6 +352,7 @@ export function ModelSearchList({ sections, onPick, variant, autoFocus = false, 
     disabled,
     nested,
     favorite: favorites ? { on: favorites.keys.includes(row.key), onToggle: () => favorites.onToggle(row) } : undefined,
+    onAutoEdit: row.kind === "auto" ? onAutoEdit : undefined,
     onHover: () => {
       setMoved(key);
       onPreview?.(row);
@@ -721,7 +724,7 @@ function ModelSubmenu({ provider, placement, focus, style, disabled, favorites, 
   );
 }
 
-function ModelSearchRow({ row, id, domKey, active, style, disabled, nested = false, submenu = false, favorite, onHover, onPick }: {
+function ModelSearchRow({ row, id, domKey, active, style, disabled, nested = false, submenu = false, favorite, onAutoEdit, onHover, onPick }: {
   row: ModelMenuRow;
   id?: string;
   /** The key this row is drawn under (a favorite repeats a provider's row). */
@@ -734,6 +737,8 @@ function ModelSearchRow({ row, id, domKey, active, style, disabled, nested = fal
   /** In a submenu: the row itself takes the focus. */
   submenu?: boolean;
   favorite?: { on: boolean; onToggle: () => void };
+  /** #2106: Edit on the Auto row. */
+  onAutoEdit?: () => void;
   onHover: () => void;
   onPick: () => void;
 }) {
@@ -782,6 +787,26 @@ function ModelSearchRow({ row, id, domKey, active, style, disabled, nested = fal
       {row.subtext && <span data-model-row-sub className={cn("min-w-0 break-words text-[11.5px]", style.detail)}>{row.subtext}</span>}
       </span>
       <span className="flex shrink-0 items-center gap-1">
+        {onAutoEdit && row.kind === "auto" && (
+          <button
+            type="button"
+            tabIndex={-1}
+            data-model-auto-edit=""
+            aria-label={t("model.auto.edit")}
+            title={t("model.auto.edit")}
+            onMouseDown={submenu ? undefined : (event) => event.preventDefault()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onAutoEdit();
+            }}
+            className={cn(
+              "rounded px-1.5 py-0.5 text-[11.5px] outline-none hover:bg-popover-hover focus-visible:ring-2 focus-visible:ring-focus",
+              style.detail,
+            )}
+          >
+            {t("model.auto.edit")}
+          </button>
+        )}
         {row.current && <Check size={14} aria-hidden="true" className={style.check} />}
         {favorite && row.kind === "model" && (
           <button

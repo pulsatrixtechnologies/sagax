@@ -13822,7 +13822,6 @@
   "organization.rules.pages": "Published pages",
   "organization.rules.pages.count": "{count} public pages",
   "organization.rules.pages.unknown": "Published pages",
-  "organization.openInPerspicax": "Open in Perspicax",
   "organization.group.botRules": "Bot rules",
   "organization.group.server": "Server",
   "organization.group.memory": "Memory",

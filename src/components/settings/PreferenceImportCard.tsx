@@ -14,7 +14,7 @@ interface PreviewLine {
   existing?: string;
 }
 
-export function PreferenceImportCard() {
+export function PreferenceImportCard({ bare = false }: { bare?: boolean } = {}) {
   const { state } = useStore();
   const primaries = state.bots.filter((bot) => bot.chiefOfStaff);
   const [botId, setBotId] = useState(primaries[0]?.id ?? "");
@@ -54,10 +54,9 @@ export function PreferenceImportCard() {
     }).catch(() => setMessage(t("prefImport.error"))).finally(() => setBusy(false));
   };
 
-  return (
-    <SettingsGroup title={t("prefImport.title")} groupId="preference-import" advanced>
-      <div className="flex flex-col gap-2 px-3.5 py-3" data-preference-import="">
-        <p className="text-[12.5px] text-ink-secondary">{t("prefImport.intro")}</p>
+  const body = (
+      <div className={`flex flex-col gap-2 ${bare ? "px-0 py-0" : "px-3.5 py-3"}`} data-preference-import="">
+        {!bare && <p className="text-[12.5px] text-ink-secondary">{t("prefImport.intro")}</p>}
         {primaries.length === 0 ? <p className="text-[12.5px] text-ink">{t("prefImport.noPrimary")}</p> : null}
         {primaries.length > 1 ? (
           <select aria-label={t("prefImport.bot")} value={chosen} onChange={(event) => { setBotId(event.target.value); setLines(null); }}
@@ -68,7 +67,7 @@ export function PreferenceImportCard() {
         <textarea value={text} onChange={(event) => setText(event.target.value)} rows={6} aria-label={t("prefImport.lines")}
           className="w-full rounded border border-hairline/60 bg-raised px-2 py-1.5 text-[12.5px] text-ink" />
         <button type="button" disabled={busy || !chosen || !text.trim()} onClick={preview}
-          className="self-start rounded px-2 py-1 text-[12.5px] text-accent hover:bg-hover disabled:opacity-40">{t("prefImport.preview")}</button>
+          className="self-start rounded px-2 py-1 text-[12.5px] text-ink hover:bg-hover disabled:opacity-40">{t("prefImport.preview")}</button>
         {lines && lines.length === 0 ? <p className="text-[12.5px] text-ink-secondary">{t("prefImport.none")}</p> : null}
         {lines && lines.length > 0 ? (
           <ul className="flex flex-col gap-1.5" data-preference-card="">
@@ -89,12 +88,18 @@ export function PreferenceImportCard() {
               </li>
             ))}
             <li>
-              <button type="button" disabled={busy} onClick={apply} className="rounded px-2 py-1 text-[12.5px] text-accent hover:bg-hover disabled:opacity-40">{t("prefImport.apply")}</button>
+              <button type="button" disabled={busy} onClick={apply} className="rounded px-2 py-1 text-[12.5px] text-ink hover:bg-hover disabled:opacity-40">{t("prefImport.apply")}</button>
             </li>
           </ul>
         ) : null}
         {message ? <p role="status" className="text-[12.5px] text-ink">{message}</p> : null}
       </div>
+  );
+
+  if (bare) return body;
+  return (
+    <SettingsGroup title={t("prefImport.title")} groupId="preference-import">
+      {body}
     </SettingsGroup>
   );
 }

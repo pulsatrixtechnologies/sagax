@@ -112986,6 +112986,7 @@
         }
       }
     },
+<<<<<<< HEAD
     "Balance": {
       "localizations": {
         "en": {
@@ -112998,10 +112999,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Équilibre"
+=======
+    "Your organization's server, and what it decides for your bots.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le serveur de ton organisation, et ce qu'elle décide pour tes bots."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your organization's server, and what it decides for your bots."
+>>>>>>> 0ec776a4c1 (feat(settings): L3 Organization, Computer, Backups and import (Refs #2080))
           }
         }
       }
     },
+<<<<<<< HEAD
     "Intelligence": {
       "localizations": {
         "en": {
@@ -113014,10 +113031,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Intelligence"
+=======
+    "Where your bots work and what they can do on this computer.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Où tes bots travaillent et ce qu'ils peuvent faire sur cet ordinateur."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Where your bots work and what they can do on this computer."
+>>>>>>> 0ec776a4c1 (feat(settings): L3 Organization, Computer, Backups and import (Refs #2080))
           }
         }
       }
     },
+<<<<<<< HEAD
     "Optimize for": {
       "localizations": {
         "en": {
@@ -113030,6 +113063,21 @@
           "stringUnit": {
             "state": "translated",
             "value": "Optimiser pour"
+=======
+    "Take a full copy out, restore it, or bring a bot in from elsewhere.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sors une copie complète, restaure-la, ou importe un bot d'ailleurs."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Take a full copy out, restore it, or bring a bot in from elsewhere."
+>>>>>>> 0ec776a4c1 (feat(settings): L3 Organization, Computer, Backups and import (Refs #2080))
           }
         }
       }

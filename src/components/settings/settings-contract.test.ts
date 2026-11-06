@@ -5,8 +5,10 @@
 // - no accent-coloured text on a link or a button (ExternalLinkPill, PILL);
 // - no legacy Card (SettingsGroup, GROUP_CARD);
 // - no hand-made "rounded-xl border" card;
-// - no "{admin &&" variant (org settings are read-only with a Perspicax link
-//   for everyone, solo keeps its editable row).
+// - no "{admin &&" variant (org rules are read-only for everyone, with no
+//   shortcut to Perspicax since 2026-11-05; solo keeps its editable row).
+//   A server setting only an admin can save (the GitHub OAuth App's client
+//   id) is the one exception, listed in ADMIN_SERVER_SETTINGS.
 // The pages not migrated yet (lots L1 to L4) are listed below; a file that no
 // longer offends must leave its list, so the lists only shrink.
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -39,7 +41,6 @@ type Rule = keyof typeof RULES;
 /** The pages not migrated yet, by rule. Remove a file once its lot lands. */
 const NOT_MIGRATED: Record<Rule, string[]> = {
   accentLink: [
-    "MessagesSettings.tsx",
     "WorkspaceBackupSettings.tsx",
   ],
   cardImport: [
@@ -59,12 +60,16 @@ const NOT_MIGRATED: Record<Rule, string[]> = {
     "settings/ProviderKeys.tsx",
     "ConnectedWorkspacesSettings.tsx",
     "LiveCallSettings.tsx",
-    "MessagesSettings.tsx",
   ],
   adminGate: [
     "settings/OrgSharing.tsx",
-    "PerspicaxOrgSettings.tsx",
   ],
+};
+
+/** Server settings only an admin can save: drawn for admins, never a
+ * read-only copy of an org rule. */
+const ADMIN_SERVER_SETTINGS: Partial<Record<Rule, string[]>> = {
+  adminGate: ["PerspicaxOrgSettings.tsx"],
 };
 
 const offenders = (rule: Rule) => FILES.filter((file) => RULES[rule].test(readFileSync(join(components, file), "utf8")));
@@ -78,7 +83,8 @@ describe("Settings contract", () => {
 
   it.each(Object.keys(RULES) as Rule[])("%s: no page outside the not-migrated list breaks it", (rule) => {
     const found = offenders(rule);
-    expect(found.filter((file) => !NOT_MIGRATED[rule].includes(file)), rule).toEqual([]);
+    const allowed = [...NOT_MIGRATED[rule], ...(ADMIN_SERVER_SETTINGS[rule] ?? [])];
+    expect(found.filter((file) => !allowed.includes(file)), rule).toEqual([]);
     // a migrated page leaves the list
     expect(NOT_MIGRATED[rule].filter((file) => !found.includes(file)), `${rule}: no longer offends, remove it`).toEqual([]);
   });

@@ -16,9 +16,7 @@ vi.mock("@/state/store", () => ({
 }));
 vi.mock("@/lib/analytics", () => ({ track: () => {} }));
 
-import { ImportSettings } from "./ImportSettings";
-import { PreferenceImportCard } from "./PreferenceImportCard";
-import { SettingsAdvancedScope } from "../SettingsPrimitives";
+import { GrokImportPanel } from "./ImportSettings";
 
 const EXPORT = readFileSync(join(import.meta.dirname, "..", "..", "..", "shared", "fixtures", "grok-import", "shared-grok-bot.json"), "utf8");
 
@@ -39,7 +37,7 @@ const flush = async () => { await act(async () => { await new Promise((resolve) 
 describe("Settings > Import a Grok Bot", () => {
   it("turns a shared Grok Bot's file into the team preview, lists what was left out, and adds it", async () => {
     fixture.api.mockResolvedValue({ bots: [{ id: "b1", name: "Inbox Triage" }], routines: [] });
-    act(() => root.render(createElement(ImportSettings)));
+    act(() => root.render(createElement(GrokImportPanel)));
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     const file = new File([EXPORT], "inbox-triage.json", { type: "application/json" });
     Object.defineProperty(input, "files", { value: [file], configurable: true });
@@ -66,7 +64,7 @@ describe("Settings > Import a Grok Bot", () => {
 
   it("reads a link through the server and offers to start from the description", async () => {
     fixture.api.mockResolvedValue({ shareId: "d8OshqLZvtcKDcNluPuyo", name: "DOGE", creator: "Avid", description: "Audits bots.", url: "https://x.ai/bot/d8OshqLZvtcKDcNluPuyo" });
-    act(() => root.render(createElement(ImportSettings)));
+    act(() => root.render(createElement(GrokImportPanel)));
     const link = container.querySelector("#grok-import-link") as HTMLInputElement;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(link, "https://x.ai/bot/d8OshqLZvtcKDcNluPuyo");
@@ -82,7 +80,7 @@ describe("Settings > Import a Grok Bot", () => {
   });
 
   it("refuses a link that is not Grok Bot's without calling the server", async () => {
-    act(() => root.render(createElement(ImportSettings)));
+    act(() => root.render(createElement(GrokImportPanel)));
     const link = container.querySelector("#grok-import-link") as HTMLInputElement;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(link, "https://evil.example/bot/x");
@@ -91,34 +89,5 @@ describe("Settings > Import a Grok Bot", () => {
     await act(async () => { (link.form as HTMLFormElement).requestSubmit(); });
     expect(fixture.api).not.toHaveBeenCalled();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("Paste a Grok Bot link");
-  });
-});
-
-// #2090: the two import cards are not on the page by default (Simple mode):
-// they sit in the page's Advanced fold, and Advanced mode or a search shows them.
-describe("Backups and import: the import cards are in the Advanced fold", () => {
-  const page = (fold: boolean, searching = false) => act(() => root.render(createElement(SettingsAdvancedScope, {
-    pageId: "backups", fold, searching,
-    children: [createElement(ImportSettings, { key: "grok" }), createElement(PreferenceImportCard, { key: "pref" })],
-  })));
-  const body = () => {
-    const pill = container.querySelector('[data-settings-card="backups.advancedFold"] button[aria-controls]')!;
-    return document.getElementById(pill.getAttribute("aria-controls")!)!;
-  };
-
-  it("by default both cards are inside the closed fold", () => {
-    page(true);
-    expect(body().hidden).toBe(true);
-    expect(body().querySelector('[data-settings-group="import"]')).not.toBeNull();
-    expect(body().querySelector('[data-settings-group="preference-import"]')).not.toBeNull();
-  });
-
-  it("a search opens the fold, and Advanced mode draws the cards in place", () => {
-    page(true, true);
-    expect(body().hidden).toBe(false);
-    page(false);
-    expect(container.querySelector('[data-settings-card="backups.advancedFold"]')).toBeNull();
-    expect(container.querySelector('[data-settings-group="import"]')).not.toBeNull();
-    expect(container.querySelector('[data-settings-group="preference-import"]')).not.toBeNull();
   });
 });

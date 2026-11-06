@@ -98,22 +98,20 @@ describe("Settings > Experimental gated on server.experimental", () => {
     expect(html).toContain('data-experimental-feature="dataWindow"');
   });
 
-  it("hides the installation's browser profiles from an experimental-only member (no config edit), never their own Chrome", async () => {
+  it("keeps Experimental free of the browser card (moved to Computer, #2080 L3)", async () => {
     fixture.viewer = { role: "member", operator: false, permissions: ["server.experimental"] };
     const html = await render();
-    // the browser switch shows, and My Chrome is the person's own wherever
-    // the server offers the browser (#1294); the installation's profiles
-    // manager stays with a config editor
-    expect(html).toContain('data-experimental-feature="browser"');
-    expect(html).toContain("MY_CHROME_MARKER");
+    expect(html).toContain('data-settings-card="experimental.features"');
+    expect(html).not.toContain('data-experimental-feature="browser"');
+    expect(html).not.toContain("MY_CHROME_MARKER");
     expect(html).not.toContain('data-settings-card="experimental.browserProfiles"');
   });
 
-  it("shows the deeper browser controls to a config editor", async () => {
+  it("still shows Experimental feature switches to a config editor", async () => {
     fixture.viewer = { role: "member", operator: false, permissions: ["server.experimental"], capabilities: { editConfig: true, manageKeys: true, manageComputers: true, viewUsage: true, manageBackups: true, pairDevices: true } };
     const html = await render();
-    expect(html).toContain("MY_CHROME_MARKER");
-    expect(html).toContain('data-settings-card="experimental.browserProfiles"');
+    expect(html).toContain('data-experimental-feature="dataWindow"');
+    expect(html).not.toContain('data-experimental-feature="browser"');
   });
 
   it("keeps the section for an admin", async () => {

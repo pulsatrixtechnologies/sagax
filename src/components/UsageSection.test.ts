@@ -195,19 +195,14 @@ describe("the headline", () => {
     expect(html).not.toContain("data-usage-unavailable");
   });
 
-  it("shows the spending limit as a thin bar and a row, and Manage usage when there is a console", () => {
+  it("shows the spending limit as a thin bar and a row", () => {
     setLocale("fr");
     const cap = { supported: true, minUsd: 1, cap: { month: "2026-10", monthlyUsd: 50, spentUsd: 12, percent: 24, warn: false, exceeded: false } };
     const html = renderToStaticMarkup(createElement(UsageHeadline, {
       usage: usage(12, 10), error: null, now: NOW.getTime(), cap,
-      manage: { href: "https://px.example.test/console", label: "Ouvrir Sagax Business" },
     }));
     expect(html).toContain('data-usage-bar="cap"');
     expect(html).toContain('data-settings-row="cap-state"');
-    expect(html).toContain('data-settings-row="manage"');
-    expect(html).toContain("Gérer l&#x27;utilisation");
-    expect(html).toContain('href="https://px.example.test/console"');
-    expect(renderToStaticMarkup(createElement(UsageHeadline, { usage: usage(1, 1), error: null }))).not.toContain("data-usage-org-link");
   });
 });
 
@@ -295,7 +290,16 @@ describe("Detail", () => {
     expect(html).toContain("Voir");
   });
 
-  it("draws the plan inside Detail without its own heading, refresh first, keys link left to Manage usage", () => {
+  it("has no shortcut to the organization's console", () => {
+    setLocale("fr");
+    // no shortcut to Perspicax in the Settings (2026-11-05)
+    const html = renderToStaticMarkup(createElement(UsageHeadline, { usage, error: null, now: NOW.getTime() }));
+    expect(html).not.toContain('data-settings-row="manage"');
+    expect(html).not.toContain("data-usage-org-link");
+    expect(html).not.toContain("Ouvrir Sagax Business");
+  });
+
+  it("draws the plan inside Detail without its own heading, refresh first, no keys link", () => {
     setLocale("fr");
     const html = renderToStaticMarkup(createElement(PlanUsageView, {
       report: { providers: [{ id: "claude", name: "Claude", driver: "claude", plan: "Max", ok: true, error: null, state: "no-windows" }] },

@@ -391,7 +391,7 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
               name={party.name}
               panelOpen={chat?.panelOpen ?? false}
               onToggle={() => chat?.onTogglePanel()}
-              avatar={<PartyAvatar id={party.id} bot={party} size={20} />}
+              avatar={<PartyAvatar id={party.id} bot={party} size={22} />}
             />
           </div>
           <button

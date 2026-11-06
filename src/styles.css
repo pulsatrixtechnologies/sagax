@@ -546,16 +546,17 @@
   --color-control: #282828;
   --color-hairline: #353535;
   --color-sidebar: #0e0e0e;
-  --color-sidebar-ink: #f5f5f5;             /* = ink */
-  --color-sidebar-ink-secondary: #f5f5f5a8; /* = ink-secondary */
+  --color-sidebar-ink: #e4e4e7;             /* = ink */
+  --color-sidebar-ink-secondary: #9e9ea3; /* = ink-secondary */
   --color-sidebar-hover: #f5f5f50f;         /* 6% white */
   --color-sidebar-selected: #4f86f729;      /* accent wash on the selected row */
   --color-sidebar-hairline: #333333;
   --sidebar-mark-on-dark: inline-block;
   --sidebar-mark-on-light: none;
 
-  --color-ink: #f5f5f5;
-  --color-ink-secondary: #f5f5f5a8;   /* 66%, as Midnight */
+  /* #2298: the reference's soft off-white and grey, never pure white */
+  --color-ink: #e4e4e7;
+  --color-ink-secondary: #9e9ea3;
   --color-ink-tertiary: #f5f5f58a;    /* 54%, as Midnight */
 
   --color-accent: #3c76f4;
@@ -565,7 +566,7 @@
   --color-focus: #4f86f7;
   --color-accent-ink: #121212;
   --color-bubble-user: #3b3b3b;       /* neutral grey, not a blue plate */
-  --color-bubble-user-ink: #f5f5f5;   /* = ink */
+  --color-bubble-user-ink: #e4e4e7;   /* = ink */
 
   --color-success: #38d591;
   --color-danger: #fb6364;   /* #f25a64 was 4.16:1 on its 15% tint over the neutral card */

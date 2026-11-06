@@ -321,7 +321,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
                     panel header (#2196): ~17px semibold, ~65px under the
                     mascot centre. */}
                 <div
-                  className="mt-5 flex max-w-full items-center justify-center gap-1 text-[17px] font-semibold leading-[22px] text-ink"
+                  className="mt-5 flex max-w-full items-center justify-center gap-1 text-[17px] font-medium leading-[22px] text-ink"
                   // the bot's menu on the name too, as on the mascot
                   onContextMenu={openActionsAt}
                 >
@@ -333,7 +333,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
                     ariaLabel={t("botPanel.name.edit")}
                     onSave={canEditBotField(state.config, bot, "name") ? (name) => derived.patch({ name }) : undefined}
                     editRequest={renameRequest}
-                    className="min-w-0 shrink gap-0 px-0.5 text-[17px] font-semibold leading-[22px] text-ink [&>svg]:absolute [&>svg]:-left-3.5"
+                    className="min-w-0 shrink gap-0 px-0.5 text-[17px] font-medium leading-[22px] text-ink [&>svg]:absolute [&>svg]:-left-3.5"
                   />
                   {bot.title?.trim() && (
                     <>
@@ -344,7 +344,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
                         placeholder={t("botPanel.label.add")}
                         ariaLabel={t("botPanel.label.edit")}
                         onSave={canEditBotField(state.config, bot, "title") ? (title) => derived.patch({ title }) : undefined}
-                        className="min-w-0 shrink gap-0 px-0.5 text-[17px] font-semibold leading-[22px] text-ink [&>svg]:absolute [&>svg]:-right-3.5"
+                        className="min-w-0 shrink gap-0 px-0.5 text-[17px] font-medium leading-[22px] text-ink [&>svg]:absolute [&>svg]:-right-3.5"
                       />
                     </>
                   )}

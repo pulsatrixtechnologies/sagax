@@ -20,7 +20,7 @@ final class PhoneBotPanelTests: XCTestCase {
     func testEveryPairingGetsTheDesktopTabsInOrder() {
         for gate in [SurfaceGate(scope: .serverAdmin), SurfaceGate(scope: .serverClient), SurfaceGate(scope: .sidecar),
                      SurfaceGate(scope: .sidecar, sidecarRoutes: []), SurfaceGate(scope: .serverAdmin, organization: true)] {
-            XCTAssertEqual(DesktopPanelTab.visible(gate: gate), [.details, .library, .computer], "\(gate)")
+            XCTAssertEqual(DesktopPanelTab.visible(gate: gate), [.activity, .library], "\(gate)")
             XCTAssertTrue(DesktopPersonaEditor.offered(gate: gate), "\(gate)")
         }
     }
@@ -54,10 +54,14 @@ final class PhoneBotPanelTests: XCTestCase {
     // MARK: Doors
 
     func testDoorsOpenTheirTab() {
-        XCTAssertEqual(BotPanelDoor.nameCapsule.tab, .details)
-        XCTAssertEqual(BotPanelDoor.plusSettings.tab, .details)
-        XCTAssertEqual(BotPanelDoor.computerButton.tab, .computer)
-        XCTAssertEqual(BotPanelDoor.plusComputer.tab, .computer)
+        XCTAssertEqual(BotPanelDoor.nameCapsule.tab, .activity)
+        XCTAssertEqual(BotPanelDoor.plusSettings.tab, .activity)
+        // Computer doors open Activity: the Computer card lives there (#2127).
+        XCTAssertEqual(BotPanelDoor.computerButton.tab, .activity)
+        XCTAssertEqual(BotPanelDoor.plusComputer.tab, .activity)
+        XCTAssertEqual(DesktopPanelTab.parse("details"), .activity)
+        XCTAssertEqual(DesktopPanelTab.parse("computer"), .activity)
+        XCTAssertEqual(DesktopPanelTab.resolve(.computer), .activity)
     }
 
     // MARK: Actions

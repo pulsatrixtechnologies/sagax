@@ -3,25 +3,46 @@ import Foundation
 // The bot panel (iPad docked, iPhone full screen): which tabs a pairing
 // shows and which sections its persona editor lists, in the desktop's order,
 // and that list's search. The desktop's own rules are
-// `bot-settings/panel-tabs.ts` (Details, Library, Computer; no More tab
-// since the persona editor) and `lib/persona-sections.ts` with
+// `bot-settings/panel-tabs.ts` (Activity, Library; Computer is a card in
+// Activity since #2127) and `lib/persona-sections.ts` with
 // `bot-settings/sections.ts` (the order, the labels' keywords): every other
-// section opens from the panel's "Edit persona" button. What a pairing may
+// section opens from the panel's profile page (gear). What a pairing may
 // reach comes from `SurfaceGate`: a section the computer can only refuse is
 // not listed.
 
 /// A tab of the bot panel.
 public enum DesktopPanelTab: String, CaseIterable, Hashable, Sendable {
-    /// Coding and Activity (live work), then the routines.
-    case details
+    /// Upcoming, Suggested, Computer card, Voice chat (was Details).
+    case activity
     /// The bot's files (was Files).
     case library
+    /// Kept for deep-link doors only; `resolve` sends them to Activity.
     case computer
 
-    /// The tabs this pairing shows, in order: the desktop's three, for
-    /// every pairing (the persona editor holds the rest).
+    /// The tabs the panel shows: Activity and Library. Computer is a card
+    /// inside Activity (Grok Bot parity, #2127); the persona editor holds
+    /// everything else.
     public static func visible(gate: SurfaceGate, slack: Bool = false) -> [DesktopPanelTab] {
-        [.details, .library, .computer]
+        [.activity, .library]
+    }
+
+    /// Map a stored, deep-linked or legacy tab onto a shown one. Legacy
+    /// `details` and `computer` both open Activity.
+    public static func resolve(_ tab: DesktopPanelTab) -> DesktopPanelTab {
+        switch tab {
+        case .activity, .computer: .activity
+        case .library: .library
+        }
+    }
+
+    /// Parse a panel tab id from a deep link or parity screen.
+    public static func parse(_ raw: String) -> DesktopPanelTab? {
+        switch raw {
+        case "activity", "details": .activity
+        case "library": .library
+        case "computer": .activity
+        default: nil
+        }
     }
 }
 
@@ -712,9 +733,9 @@ public enum BotPanelDoor: String, CaseIterable, Hashable, Sendable {
     case plusComputer
 
     public var tab: DesktopPanelTab {
+        // Computer doors open Activity: the Computer card lives there (#2127).
         switch self {
-        case .nameCapsule, .plusSettings: .details
-        case .computerButton, .plusComputer: .computer
+        case .nameCapsule, .plusSettings, .computerButton, .plusComputer: .activity
         }
     }
 }

@@ -11,6 +11,13 @@ const finite = (value) => (typeof value === "number" && Number.isFinite(value) ?
 contextBridge.exposeInMainWorld("artifactWindowSelf", {
   isAlwaysOnTop: () => ipcRenderer.invoke("artifact-window:get-top"),
   setAlwaysOnTop: (on) => ipcRenderer.invoke("artifact-window:set-top", { on: on === true }),
+  // The cursor entered (true) or left (false) this window: its content frame
+  // swallows pointer events, so main watches the cursor (#2336).
+  onPointer: (cb) => {
+    const handler = (_event, inside) => cb(inside === true);
+    ipcRenderer.on("artifact-window:pointer", handler);
+    return () => ipcRenderer.removeListener("artifact-window:pointer", handler);
+  },
   fitContent: (size) => ipcRenderer.invoke("artifact-window:fit-content", {
     width: finite(size && size.width),
     height: finite(size && size.height),

@@ -17008,6 +17008,8 @@
       "botPanel.permissions.pageTarget.ask": "7b61f537e09296b2f9468825561fe30f4be6100cfd16d2f36109b1284ba44c6e",
       "botPanel.permissions.pageTarget.askEachTime": "3be0feca7417d0316b6ee31ad0a8055f5131c62a448052cf5d67af5f4cccbbfc",
       "botPanel.permissions.pageTarget.set": "a8ac3345ccddc01569fb447a06cf9ef30eec3e418a6852518d8de15a4427af6f",
+      "pages.lastRefresh": "f0a6d28abcbc45fc5d1f6371f8ecab9b67674b94e20f64bace4a5aeb3a5d3eb2",
+      "pages.lastRefreshAt": "80376909b4a27e03e8e706622e0d38c6596d3348f73e663b170e0d770fa59d32",
       "pages.alwaysOnTop": "56130e653e13cf2f810dd6385f09a040b9ffef59b92dec472e73df74ed4ef90d",
       "pages.fullscreen": "674fe2acd0d5f47b46180dd66e26e349cd9c9db215046f5e86ea2f5728d18117",
       "pages.exitFullscreen": "897e0cf78b808eddc424bd97c46c1730f6dd19c8c11e7bd6ed6b6e559dc41981",

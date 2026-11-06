@@ -13697,6 +13697,8 @@
   "botModels.bulk.setModelForOne": "Choisir le modèle de 1 bot",
   "botModels.defaults.perspicax": "Choisi dans Perspicax",
   "pages.alwaysOnTop": "Toujours au-dessus",
+  "pages.lastRefresh": "Mis à jour {when}",
+  "pages.lastRefreshAt": "Dernière actualisation : {at}",
   "botAccess.tools.native": "Outils du moteur",
   "botAccess.tools.groupAll": "Tous les outils",
   "botAccess.tools.groupOff": "Désactivé",

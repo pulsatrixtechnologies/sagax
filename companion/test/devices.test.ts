@@ -315,6 +315,32 @@ describe("authenticate under a failing disk", () => {
   });
 });
 
+
+describe("a removal that cannot be saved", () => {
+  beforeEach(() => {
+    rmSync(DATA_DIR, { recursive: true, force: true });
+  });
+
+  it("keeps the device in memory, matching the file, and lets the removal be retried", () => {
+    const registry = new DeviceRegistry();
+    const { token, device } = pair(registry);
+    const writable = registry as unknown as { persist: () => void };
+    const persist = writable.persist;
+    writable.persist = () => {
+      throw Object.assign(new Error("ENOSPC: no space left on device"), { code: "ENOSPC" });
+    };
+
+    expect(() => registry.revoke(device.id)).toThrow(/ENOSPC/);
+    expect(registry.authenticate(token)?.id).toBe(device.id);
+    expect(new DeviceRegistry().authenticate(token)?.id).toBe(device.id);
+
+    writable.persist = persist;
+    expect(registry.revoke(device.id)).toBe(true);
+    expect(registry.authenticate(token)).toBeNull();
+    expect(new DeviceRegistry().authenticate(token)).toBeNull();
+  });
+});
+
 describe("a pairing that cannot be saved", () => {
   // Same throwaway state as the suite above — a registry built on a leftover
   // devices.json would start with a device already in it.

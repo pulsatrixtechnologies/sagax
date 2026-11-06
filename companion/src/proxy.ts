@@ -31,7 +31,7 @@ import {
 } from "./routes.ts";
 import { attachRelayErrorHandlers } from "./relay-sockets.ts";
 import { sendTunnelJson } from "./tunnel-gzip.ts";
-import { CompanionViewerRelay } from "./viewer-relay.ts";
+import { CompanionViewerRelay, requestTarget } from "./viewer-relay.ts";
 import { createSseScrubber, isJson, scrub } from "./wire.ts";
 
 /** How long a phone may wait while the harness restarts on this machine.
@@ -138,6 +138,9 @@ const readJson = (req: IncomingMessage, limit = 64 * 1024): Promise<Record<strin
       }
     });
   });
+
+const isPlainValue = (value: unknown): value is string | number | null | undefined =>
+  value == null || typeof value === "string" || typeof value === "number";
 
 /** Answer with JSON the sidecar wrote itself — a refusal, or a pairing
  * result. Anything from the harness goes out through the proxy path instead.
@@ -354,6 +357,8 @@ export function createProxyHandler(options: ProxyOptions) {
    * keyed by device, so revoking the capability can close them. */
   const capabilityStreams = new Map<string, Set<() => void>>();
   const handle = function handle(req: IncomingMessage, res: ServerResponse): void {
+    const target = requestTarget(req.url);
+    if (!target) return sendJson(res, 400, { error: "invalid request target" });
     const path = (req.url ?? "/").split("?")[0];
     const method = req.method ?? "GET";
 
@@ -423,8 +428,12 @@ export function createProxyHandler(options: ProxyOptions) {
         (body) => {
           // New clients redeem the high-entropy credential carried by the QR.
           // `code` remains accepted for manual entry and older mobile builds.
+          const credential = body.credential ?? body.code;
+          if (!isPlainValue(credential) || !isPlainValue(body.deviceName)) {
+            return sendJson(res, 400, { error: "invalid pairing request" });
+          }
           const result = options.redeem(
-            String(body.credential ?? body.code ?? ""),
+            String(credential ?? ""),
             body.deviceName,
             body.pairRequestId,
           );
@@ -449,7 +458,10 @@ export function createProxyHandler(options: ProxyOptions) {
           return sendJson(res, 201, response);
         },
         (error: Error) => sendJson(res, 400, { error: error.message }),
-      );
+      ).catch((error: unknown) => {
+        console.error("companion: pairing failed", error);
+        sendJson(res, 500, { error: "could not complete the pairing" });
+      });
       return;
     }
 
@@ -710,7 +722,7 @@ export function createProxyHandler(options: ProxyOptions) {
               path,
               parsed,
               device?.id,
-              new URL(req.url ?? "/", "http://companion.invalid").searchParams.get("controlLeaseId"),
+              target.searchParams.get("controlLeaseId"),
             );
             text = JSON.stringify(scrub(parsed));
           } catch {

@@ -58,6 +58,15 @@ function safeLoopbackViewer(raw: unknown): URL | null {
   return url;
 }
 
+/** Null for a target the WHATWG parser rejects, such as `//[`. */
+export function requestTarget(rawUrl: string | undefined): URL | null {
+  try {
+    return new URL(rawUrl ?? "/", "http://companion.invalid");
+  } catch {
+    return null;
+  }
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   const text = JSON.stringify(body);
   res.writeHead(status, {
@@ -114,6 +123,7 @@ function acceptUpgrade(socket: Duplex, response: IncomingMessage): void {
 
 export class CompanionViewerRelay {
   readonly #sessions = new Map<string, ViewerSession>();
+  readonly #upgrades = new Set<Duplex>();
   readonly #checkControl?: ControlCheck;
   readonly #checkMs: number;
 
@@ -157,13 +167,17 @@ export class CompanionViewerRelay {
     }
   }
 
-  /** Drop every open viewer (upgraded WebSockets included) so shutdown can exit. */
+  /** Drop every open viewer (upgraded WebSockets included) so shutdown can exit.
+   * `server.close()` never resolves while an upgraded socket is open, and
+   * `closeAllConnections()` does not reach one. */
   closeAll(): void {
     while (this.#sessions.size > 0) {
       const session = this.#sessions.values().next().value as ViewerSession | undefined;
       if (!session) break;
       this.#remove(session);
     }
+    for (const socket of this.#upgrades) socket.destroy();
+    this.#upgrades.clear();
   }
 
   rewriteJoinResponse(path: string, value: unknown, deviceId?: string, controlLeaseId?: string | null): unknown {
@@ -222,25 +236,34 @@ export class CompanionViewerRelay {
   #target(rawUrl: string | undefined, device: ViewerDevice | null): { session: ViewerSession; target: URL } | null {
     this.#prune();
     if (!device?.id || !device.cloudDesktopAccess) return null;
-    const incoming = new URL(rawUrl ?? "/", "http://companion.invalid");
-    const match = VIEWER_PATH.exec(incoming.pathname);
+    const incoming = requestTarget(rawUrl);
+    const match = incoming && VIEWER_PATH.exec(incoming.pathname);
     if (!match) return null;
     const session = this.#sessions.get(match[1]);
     if (!session || session.deviceId !== device.id || session.expiresAt <= Date.now()) return null;
-    // The host always comes from the session; the request only supplies a
-    // path and a query, set on a copy of that origin so neither can name
-    // another host (a `//host` path stays a path).
-    const target = new URL(session.origin);
-    target.pathname = match[2] || "/";
-    target.search = incoming.search;
+    // The host always comes from the session. A `//host` path stays a path on
+    // this viewer; a target the parser rejects (such as `//[`) returns null.
+    const suffix = match[2] || "/";
+    let target: URL;
+    try {
+      const relative = new URL(`${suffix}${incoming.search}`, session.origin);
+      if (relative.origin === session.origin) {
+        target = relative;
+      } else {
+        target = new URL(session.origin);
+        target.pathname = suffix;
+        target.search = incoming.search;
+      }
+    } catch {
+      return null;
+    }
     if (target.origin !== session.origin) return null;
     session.expiresAt = Date.now() + SESSION_TTL_MS;
     return { session, target };
   }
 
   isViewerPath(rawUrl: string | undefined): boolean {
-    const pathname = new URL(rawUrl ?? "/", "http://companion.invalid").pathname;
-    return pathname.startsWith("/vps-viewer/");
+    return requestTarget(rawUrl)?.pathname.startsWith("/vps-viewer/") ?? false;
   }
 
   handleHttp(req: IncomingMessage, res: ServerResponse, device: ViewerDevice | null): void {
@@ -285,6 +308,10 @@ export class CompanionViewerRelay {
   }
 
   handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer, device: ViewerDevice | null): void {
+    // Node removes its own error listener from a socket it hands to `upgrade`.
+    socket.on("error", () => socket.destroy());
+    this.#upgrades.add(socket);
+    socket.once("close", () => this.#upgrades.delete(socket));
     if (!device) return socketError(socket, 401, "pair this device first");
     if (!device.cloudDesktopAccess) return socketError(socket, 403, "cloud desktop access is off for this device");
     const resolved = this.#target(req.url, device);
@@ -314,6 +341,7 @@ export class CompanionViewerRelay {
       };
       socket.once("close", release);
       remote.once("close", release);
+      // `pipe` forwards no error, so a reset on one end must end the other.
       attachRelayErrorHandlers(socket, remote);
       if (head.length) remote.write(head);
       if (remoteHead.length) socket.write(remoteHead);

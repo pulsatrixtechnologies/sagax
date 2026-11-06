@@ -45,8 +45,13 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
       const open = action.open ?? (action.botId !== undefined || !state.settingsOpen);
       const freshOpen = open && !state.settingsOpen;
       const named = action.section !== undefined;
+      const expand = open ? named || (freshOpen && state.botSettingsSectionStored) : false;
       return {
         ...state,
+        // #2149: a fresh opening, or one that expands a row, lands on Activity
+        // (restoreBotPanel then puts the closed tab back).
+        botPanelTab: open && (freshOpen || expand) ? null : state.botPanelTab,
+        botPanelRestored: false,
         selectedId,
         settingsOpen: open,
         panelOwner: open ? owner : null,
@@ -56,7 +61,7 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         botSettingsSection: action.section ?? state.botSettingsSection,
         // A bare fresh open re-expands the section this device last viewed;
         // a deep link expands the row it names.
-        botSettingsExpandAccordion: open ? named || (freshOpen && state.botSettingsSectionStored) : false,
+        botSettingsExpandAccordion: expand,
         // Only an opening that expanded the remembered row sets this; a deep
         // link forces the full view for sections Simple skips.
         botSettingsExpandRemembered: open ? !named && freshOpen && state.botSettingsSectionStored : false,
@@ -171,6 +176,7 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
       const open = action.open ?? !state.computerOpen;
       return {
         ...state,
+        botPanelRestored: false,
         computerOpen: open,
         personPanelId: open ? null : state.personPanelId,
         settingsOpen: open ? false : state.settingsOpen,
@@ -178,6 +184,47 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         activityOpen: open ? false : state.activityOpen,
         appSettingsOpen: open ? false : state.appSettingsOpen,
         personaEditor: open ? null : state.personaEditor,
+      };
+    }
+    case "pickBotPanelTab":
+      return state.botPanelTab?.botId === action.botId && state.botPanelTab.tab === action.tab
+        ? state
+        : { ...state, botPanelTab: { botId: action.botId, tab: action.tab } };
+    case "rememberBotPanel": {
+      // #2149 (JC 2026-11-06): the header pill closes the panel; its next
+      // click reopens exactly this one.
+      const botId = state.panelOwner?.botId ?? state.selectedId;
+      if (!botId || !(state.settingsOpen || state.computerOpen)) return state;
+      return {
+        ...state,
+        lastBotPanel: {
+          botId,
+          computer: state.computerOpen,
+          tab: state.botPanelTab?.botId === botId ? state.botPanelTab.tab : "activity",
+          section: state.botSettingsSection,
+          expand: state.botSettingsExpandAccordion,
+        },
+      };
+    }
+    case "restoreBotPanel": {
+      const botId = action.botId ?? state.panelOwner?.botId ?? state.selectedId;
+      const last = state.lastBotPanel;
+      if (!last || !botId || last.botId !== botId) {
+        return reduce(state, { type: "toggleSettings", open: true, ...(action.botId ? { botId: action.botId } : {}) });
+      }
+      if (last.computer) {
+        const opened = reduce(state, { type: "toggleComputer", open: true });
+        return { ...opened, botPanelTab: { botId, tab: last.tab }, botPanelRestored: true };
+      }
+      const opened = reduce(state, { type: "toggleSettings", open: true, ...(action.botId ? { botId: action.botId } : {}) });
+      if (opened === state) return state;
+      return {
+        ...opened,
+        botSettingsSection: last.section,
+        botSettingsExpandAccordion: last.expand,
+        botSettingsExpandRemembered: false,
+        botPanelTab: { botId, tab: last.tab },
+        botPanelRestored: true,
       };
     }
     case "toggleInspector": {

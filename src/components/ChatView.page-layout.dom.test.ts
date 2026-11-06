@@ -239,7 +239,7 @@ describe("exchange sheet stays on the chat column", () => {
     expect(sheet).not.toBeNull();
     expect(chatColumn.contains(sheet)).toBe(true);
     expect(pagePanel.contains(sheet)).toBe(false);
-    expect(sheet.className).toContain("absolute inset-0");
+    expect(sheet.className).toContain("absolute inset-x-0 top-0");
     expect(pagePanel.querySelector("[data-page-close]")).not.toBeNull();
     expect(pagePanel.querySelector("[data-page-body]")?.textContent).toBe("Page body");
   });

@@ -12,6 +12,7 @@ import type { ModelListIssue } from "../../../shared/azure-openai";
 import type { TurnDigest } from "../../../shared/digest";
 import type { MessageReaction } from "../../../shared/reactions";
 import type { AutoModelRecord } from "../../../shared/auto-model";
+import type { PanelTab } from "@/components/bot-settings/panel-tabs";
 import type { BusySendRequest, ParallelTaskRef, TaskParallelOf } from "../../../shared/parallel-tasks";
 import type { ToolScope } from "../../../shared/tool-scope";
 import type { AchievementCategory } from "../../../shared/achievements";
@@ -1283,6 +1284,18 @@ export interface ModelVariantSession {
   variants?: { options: ModelVariantOption[]; currentValue?: string };
 }
 
+/** #2149: the bot panel tabs a person picks (Computer is the computer view). */
+export type BotPanelPickedTab = PanelTab;
+
+/** #2149: what the bot panel showed when the header pill closed it. */
+export interface LastBotPanel {
+  botId: string;
+  computer: boolean;
+  tab: BotPanelPickedTab;
+  section: BotSettingsSection;
+  expand: boolean;
+}
+
 export interface AppState {
   bots: Bot[];
   groups: Group[];
@@ -1427,6 +1440,15 @@ export interface AppState {
   botSettingsSection: BotSettingsSection;
   /** True only when the open action named a section — accordion expands that row. */
   botSettingsExpandAccordion: boolean;
+  /** #2149: the tab the bot panel shows for that bot (Computer is
+   * computerOpen). Any other bot, or none, shows Details. */
+  botPanelTab: { botId: string; tab: BotPanelPickedTab } | null;
+  /** #2149: the bot panel the chat header pill closed; its next click
+   * reopens exactly that one (same tab, same section). */
+  lastBotPanel: LastBotPanel | null;
+  /** #2149: true on the opening restoreBotPanel made, so the panel puts its
+   * scroll back where it was; any other opening clears it. */
+  botPanelRestored: boolean;
   /** A Coding activity item the bot panel opens once (openBotActivity);
    * cleared by the panel when it shows it. */
   botActivityTarget: { botId: string; itemId: string } | null;
@@ -1835,6 +1857,12 @@ export type Action =
   | { type: "openBotWizard"; botId?: string | null; redo?: boolean }
   | { type: "closeBotWizard" }
   | { type: "toggleComputer"; open?: boolean }
+  /** #2149: the bot panel's Details or Library tab, picked by the person. */
+  | { type: "pickBotPanelTab"; botId: string; tab: BotPanelPickedTab }
+  /** #2149: the header pill closes the panel: note what it showed. */
+  | { type: "rememberBotPanel" }
+  /** #2149: the header pill reopens the panel it closed, as it was. */
+  | { type: "restoreBotPanel"; botId?: string }
   | { type: "toggleInspector"; open?: boolean }
   | { type: "toggleActivity"; open?: boolean }
   | { type: "focusMessage"; threadId: string; messageId: string; matchText?: string; segment?: true }
@@ -2554,6 +2582,9 @@ export const initialState: AppState = {
   tourOpen: false,
   botSettingsSection: "overview",
   botSettingsExpandAccordion: false,
+  botPanelTab: null,
+  lastBotPanel: null,
+  botPanelRestored: false,
   botActivityTarget: null,
   botSettingsSectionStored: false,
   botSettingsExpandRemembered: false,

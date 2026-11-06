@@ -1,5 +1,5 @@
-// The pods are a pure overlay: the transcript column (its scroll pane and
-// its centered log) is the same markup with the pods on or off.
+// The dev pods live only in a coding window (#2149, JC 2026-11-06): the
+// normal chat is the same markup with the Experimental switch on or off.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, describe, expect, it, vi } from "vitest";
@@ -63,35 +63,19 @@ function transcriptShell(markup: string): string[] {
   return [scroll!, log!];
 }
 
-/** The markup without the pods' overlay (its anchor and its rail). */
-function withoutPods(markup: string): string {
-  const start = markup.indexOf('<span hidden=""></span><div data-dev-pods=""');
-  if (start < 0) return markup;
-  const tag = /<(\/?)div\b[^>]*>/g;
-  tag.lastIndex = markup.indexOf("<div data-dev-pods", start);
-  let depth = 0;
-  for (let match = tag.exec(markup); match; match = tag.exec(markup)) {
-    depth += match[1] ? -1 : 1;
-    if (depth === 0) return markup.slice(0, start) + markup.slice(tag.lastIndex);
-  }
-  throw new Error("unbalanced rail markup");
-}
-
-describe("ChatView with dev pods", () => {
-  it("keeps the transcript column identical with the pods off and on", () => {
+describe("ChatView never shows the dev pods (#2149)", () => {
+  it("draws no pods in the normal chat, the Experimental switch on or off", () => {
     resetDevPodPrefsForTest({ ...DEFAULT_PREFS, enabled: false });
     const off = renderToStaticMarkup(createElement(ChatView, { bot: bot("t-layout") }));
     expect(off).not.toContain("data-dev-pods");
 
     resetDevPodPrefsForTest({ ...DEFAULT_PREFS, enabled: true });
     const on = renderToStaticMarkup(createElement(ChatView, { bot: bot("t-layout") }));
-    expect(on).toContain("data-dev-pods");
-    // positioned absolutely in the pane, never in the transcript's flow
-    expect(on).toMatch(/<div data-dev-pods=""[^>]*class="dev-pods-rail absolute /);
-
+    // the </> panel (Environment, Connectors, Context, Changes) and its
+    // toggle live only in a coding window, never in the chat
+    expect(on).not.toContain("data-dev-pods");
+    expect(on).not.toContain("data-dev-pods-toggle");
     expect(transcriptShell(on)).toEqual(transcriptShell(off));
-    // everything else, the transcript and the composer included, is the
-    // same markup: the pods only add their own overlay
-    expect(withoutPods(on)).toBe(off);
+    expect(on).toBe(off);
   });
 });

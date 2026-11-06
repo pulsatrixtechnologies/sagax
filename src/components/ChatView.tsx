@@ -90,7 +90,7 @@ import { isProviderReplyCut } from "../../shared/provider-reply-cut";
 import { isProviderSafetyBlock, PROVIDER_SAFETY_GUIDANCE, PROVIDER_SAFETY_HELP_URL } from "../../shared/provider-safety";
 import { isCancelledTranscriptRow } from "../../shared/client-cancel";
 import { BotAvatar } from "./Avatar";
-import { BotChatHeader, BotHeaderPill, botPillActions } from "./BotHeaderPill";
+import { BotChatHeader, BotHeaderPill, ChatWindowProvider, botPillActions, type ChatWindowContextValue } from "./BotHeaderPill";
 import { personaSharingSummary } from "@/lib/bot-sharing";
 import { TurnPresence } from "./TurnPresence";
 import { LiveReply } from "./LiveReply";
@@ -190,12 +190,12 @@ import { JumpToLatestPill } from "./JumpToLatestPill";
 import { collapseGotoLines, gotoGroupFromConversations, silentChatItem, type GotoGroup, type GotoTarget } from "@/lib/goto-lines";
 import { StatusActivityRow } from "@/components/StatusActivityRow";
 import { CancelledTurnRow } from "./CancelledTurnRow";
-import { DevPods, DevPodsToggle, RailAligned } from "./dev-pods/DevPods";
+import { RailAligned } from "./dev-pods/DevPods";
 import { ActivityRun } from "./ActivityRun";
 import { CwActivityWidgets, CwWidgetView, shownCwWidget } from "./cw/CwWidgetView";
 import { webhookMessageView } from "@/lib/webhook-message";
 import { splitTranscriptAttachments } from "@/lib/composer-attachments";
-import { useComposerDockPad, useMeasuredHeight } from "@/lib/composer-dock";
+import { useComposerDockPad } from "@/lib/composer-dock";
 import { useTranscriptViewport } from "@/hooks/use-transcript-viewport";
 import { offscreenAnchorShift, useOffscreenRowAnchor } from "@/hooks/use-offscreen-row-anchor";
 import { claimMessageEntrance } from "@/lib/message-entrance";
@@ -2252,7 +2252,6 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   const runCardOpen = Boolean(
     lastRunStep && showRun(recordedRun) && showRunCard && runDismissed.get(transcriptKey) !== lastRunStep.id,
   );
-  const runCardHeight = useMeasuredHeight(runOverlayRef, runCardOpen);
   // Rows drawn for the first time above the viewport (.transcript-row) keep
   // the reader still.
   useOffscreenRowAnchor(scrollRef, transcriptRef, followRef, transcriptKey);
@@ -2476,14 +2475,16 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   const Root = side ? "section" : "main";
   // The bot pill: mascot, name, chevron. The main chat's opens the panel
   // at the right; a split-view section's opens its own (side.panel).
+  const panelPillOpen = side ? side.panel?.open === true : pillPanelOpen;
+  const togglePanelFromPill = side?.panel ? side.panel.onToggle : () => {
+    if (state.panelOwner) dispatch({ type: "toggleSettings", open: true, owner: null });
+    else for (const action of botPillActions(pillPanelOpen)) dispatch(action);
+  };
   const botPill = (
     <BotHeaderPill
       name={bot.name}
-      panelOpen={side ? side.panel?.open === true : pillPanelOpen}
-      onToggle={side?.panel ? side.panel.onToggle : () => {
-        if (state.panelOwner) dispatch({ type: "toggleSettings", open: true, owner: null });
-        else for (const action of botPillActions(pillPanelOpen)) dispatch(action);
-      }}
+      panelOpen={panelPillOpen}
+      onToggle={togglePanelFromPill}
       avatar={
         <BotAvatar
           bot={bot}
@@ -2530,8 +2531,21 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   // My bubble (and its inline editor) in the bot's colour, whatever the
   // skin's accent (src/lib/bubble-colors.ts, botBubbleVars).
   const bubbleStyle = botBubbleVars(MAUS_COLORS[bot.color]) as React.CSSProperties;
+  // #2149: a window over this chat (coding, a bot-to-bot or routine
+  // conversation) toggles the same panel from its pill, ends above this
+  // composer, and closes when the person sends here.
+  const togglePanelRef = useRef(togglePanelFromPill);
+  togglePanelRef.current = togglePanelFromPill;
+  const windowSentKey = lastUserMessage?.id;
+  const chatWindow = useMemo<ChatWindowContextValue | null>(() => (side && !side.panel ? null : {
+    panelOpen: panelPillOpen,
+    onTogglePanel: () => togglePanelRef.current(),
+    composerInset: pageStage ? 0 : composerDock.height,
+    sentKey: windowSentKey,
+  }), [side, panelPillOpen, pageStage, composerDock.height, windowSentKey]);
   return (
     <ThreadLinkContext value={threadLink}>
+    <ChatWindowProvider value={chatWindow}>
     <ExchangeColumnProvider node={exchangeColumnNode}>
     <Root
       ref={pageHostRef}
@@ -2606,7 +2620,6 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
             {...(dataItem ? { data: dataItem } : {})}
             onSplit={(edge) => splitBesideMain(showThreads ? { kind: "bot", botId: bot.id, threadId: bot.threadId } : { kind: "bot", botId: bot.id }, edge)}
           />}
-          <DevPodsToggle bot={bot} />
           {!showThreads && <NewTopicButton bot={bot} />}
           <TaskPicker bot={bot} />
         </div>
@@ -2785,9 +2798,8 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
 
       <TranscriptAnnouncer threadKey={transcriptKey} snapshot={announcement} />
 
-      {/* Dev context pods (Settings > Experimental): an overlay in the
-          pane's top-right corner; the transcript above never moves. */}
-      <DevPods bot={bot} messages={messages} composerHeight={composerDock.height + runCardHeight} computerStart={computerStart} dispatch={dispatch} />
+      {/* #2149: the dev context pods (</>) live only in a coding window
+          (CodingChat), never in the plain chat. */}
 
       {/* Reading scrollback — one tap back to the end, streaming or not.
           Hidden only while a phone page covers the chat; desktop keeps it
@@ -2962,6 +2974,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
       />
     )}
     </ExchangeColumnProvider>
+    </ChatWindowProvider>
     </ThreadLinkContext>
   );
 }

@@ -4,8 +4,10 @@
 // no longer opens a sheet: it opens in the chat (#2098).
 //
 // Drawn like the Claude Code terminal (JC, 2026-11-05, #2099):
-// - Header: a back arrow (the chat is one chat: no thread to close), the
-//   bot's pill, the task's title, its folder (name only) and branch, and the
+// - Header (#2149, JC 2026-11-06): the X of a page Sagax opens (same icon,
+//   same place as the bot's profile page; it brings the chat back), the
+//   bot's pill (a click closes or reopens the right panel, like the chat's),
+//   the </> button of the dev pods, the task's title, its folder (name only) and branch, and the
 //   status ONCE: state · elapsed · the current step as a sentence, Stop beside
 //   it while it runs.
 // - Transcript: the task's own thread (useSideTranscript: the newest page,
@@ -18,16 +20,19 @@
 // - Changes band, above the composer: files changed with their counts (a
 //   click jumps to the file's diff and opens it), the newest test run, the
 //   commit and pull request its own calls made (the branch is in the header).
-// - Footer: the composer, always there like Claude Code's prompt; a follow-up
-//   goes to the task's thread, joining the turn while it runs. No Continue,
-//   no Close Chat, no Open thread.
+// - Footer: the chat's own composer ("Message <bot>", with +, the microphone
+//   and voice), always there like Claude Code's prompt; a message goes to the
+//   task's thread, joining the turn while it runs. No Continue, no Close
+//   Chat, no Open thread.
+// - The dev pods (</>: Environment, Connectors, Context, Changes) live here
+//   only, never in the plain chat (#2149).
 //
 // The activity entry is polled every 3 s while the task runs (and a while
 // after a follow-up, until the new turn shows); a reload keeps what is on
 // screen, so a status change never blanks the sheet.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, ArrowUp, ChevronDown, ChevronUp, Folder, GitBranch, GitCommitHorizontal, GitPullRequest, Loader2, Square } from "lucide-react";
+import { ArrowUp, ChevronDown, ChevronUp, Folder, GitBranch, GitCommitHorizontal, GitPullRequest, Loader2, Square } from "lucide-react";
 
 import { api, useStore, type Bot, type Message } from "@/state/store";
 import {
@@ -60,6 +65,10 @@ import { mausInk } from "@/lib/mascot";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { avatarBot, useExchangePortalHost } from "../BotExchangeChip";
+import { WindowHeaderPill } from "../BotHeaderPill";
+import { Composer } from "../Composer";
+import { DevPods, DevPodsToggle } from "../dev-pods/DevPods";
+import { WindowCloseButton } from "../WindowCloseButton";
 import { ChatMarkdown } from "../ChatMarkdown";
 import { MessageBoundary } from "../MessageBoundary";
 import { PartyAvatar } from "../PartyAvatar";
@@ -247,10 +256,17 @@ export interface CodingChatSheetProps {
   onSend?: (text: string) => Promise<void>;
   /** What the task waits on from the person, drawn above the footer. */
   waiting?: ReactNode;
+  /** The chat's composer aimed at the task's thread (CodingChat); the plain
+   * follow-up field stands in without it (tests, galleries). */
+  composer?: ReactNode;
+  /** The dev pods' rail, anchored in the transcript pane. */
+  pods?: ReactNode;
+  /** Controls at the header's right end (the </> button). */
+  headerTools?: ReactNode;
 }
 
 /** The sheet, without fetching: tests and galleries draw it with fixed data. */
-export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMore = false, loadingOlder = false, onLoadOlder, onRetry, now, bot, bots, onClose, onStop, stopping = false, onSend, waiting }: CodingChatSheetProps) {
+export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMore = false, loadingOlder = false, onLoadOlder, onRetry, now, bot, bots, onClose, onStop, stopping = false, onSend, waiting, composer, pods, headerTools }: CodingChatSheetProps) {
   const chatColumnClassName = useChatColumnClass();
   const column = useExchangePortalHost();
   const shown = detail ?? item;
@@ -279,10 +295,15 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
   }, [onClose]);
 
   // Follow the bottom while the person is there; a scroll up holds.
+  // A message the person just sent (from the composer) brings the end back.
+  const mine = useMemo(() => messages.filter((message) => message.role === "user").length, [messages]);
+  const mineSeen = useRef(mine);
   useLayoutEffect(() => {
     const node = scroller.current;
+    if (mine > mineSeen.current) pinned.current = true;
+    mineSeen.current = mine;
     if (node && pinned.current) node.scrollTop = node.scrollHeight;
-  }, [rows]);
+  }, [rows, mine]);
   const onScroll = () => {
     const node = scroller.current;
     if (node) pinned.current = node.scrollHeight - node.scrollTop - node.clientHeight < 48;
@@ -311,21 +332,12 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
       data-coding-status={shown.status}
     >
       <header className="relative flex shrink-0 flex-col items-center gap-1.5 px-12 pb-2 pt-6">
-        <button
-          type="button"
-          data-testid="bot-exchange-close"
-          data-coding-close
-          onClick={onClose}
-          aria-label={t("codingChat.back")}
-          title={t("codingChat.back")}
-          className="ui-icon-button absolute start-3 top-3 flex size-8 items-center justify-center rounded-full text-ink-secondary hover:bg-hover hover:text-ink"
-        >
-          <ArrowLeft size={16} aria-hidden="true" />
-        </button>
-        <div className="flex items-center gap-1.5 rounded-full bg-elevated px-3 py-1.5">
+        <WindowCloseButton onClose={onClose} data-testid="bot-exchange-close" data-coding-close="" />
+        {headerTools && <div data-coding-tools className="absolute right-3 top-3 flex items-center gap-1">{headerTools}</div>}
+        <WindowHeaderPill label={party.name}>
           <PartyAvatar id={party.id} bot={party} size={18} />
           <span className="text-[13px] font-medium" style={{ color: mausInk(party.color) }}>{party.name}</span>
-        </div>
+        </WindowHeaderPill>
         <h2 data-coding-title dir="auto" className="line-clamp-2 max-w-[min(92%,40rem)] text-center text-[14px] font-medium leading-5 text-ink">{activityTitle(shown)}</h2>
         <div data-coding-meta className="flex max-w-[min(92%,40rem)] flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[12px] text-ink-secondary">
           {folderText && (
@@ -357,6 +369,7 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
         </div>
       </header>
 
+      <div data-coding-pane className="relative flex min-h-0 flex-1 flex-col">
       <div ref={scroller} onScroll={onScroll} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-5" data-testid="coding-chat-scroll">
         <div className={cn(chatColumnClassName, "flex flex-col gap-2 py-6")} role="log" aria-live="off">
           {hasMore && onLoadOlder && (
@@ -380,12 +393,18 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
           {rows.map((row) => <Row key={row.id} row={row} bot={party} bots={bots} reveal={reveal} />)}
         </div>
       </div>
+      {pods}
+      </div>
 
       {waiting && <div className="max-h-[40%] shrink-0 overflow-y-auto overscroll-contain px-5 pb-2"><div className={chatColumnClassName}>{waiting}</div></div>}
 
       <ChangesBand files={files} tests={tests} place={place} onJump={jump} />
 
-      {onSend && (
+      {composer ? (
+        <div data-exchange-footer="" data-coding-actions data-coding-composer className="relative shrink-0 bg-app">
+          {composer}
+        </div>
+      ) : onSend && (
         <div data-exchange-footer="" data-coding-actions className="flex shrink-0 justify-center bg-app px-4 py-3">
           <FollowUp
             botName={party.name}
@@ -402,8 +421,15 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
 }
 
 /** The task's thread, read and followed (a child so the hook runs only with a thread). */
-function ThreadTranscript({ threadId, children }: { threadId: string; children: (transcript: ReturnType<typeof useSideTranscript>) => ReactNode }) {
+function ThreadTranscript({ threadId, onGrow, children }: { threadId: string; onGrow: () => void; children: (transcript: ReturnType<typeof useSideTranscript>) => ReactNode }) {
   const transcript = useSideTranscript(threadId);
+  // A message sent from the composer: keep reading the entry so the new turn shows.
+  const count = transcript.messages.length;
+  const seen = useRef(count);
+  useEffect(() => {
+    if (count > seen.current) onGrow();
+    seen.current = count;
+  }, [count, onGrow]);
   return <>{children(transcript)}</>;
 }
 
@@ -466,6 +492,17 @@ export function CodingChat({ target, onClose }: { target: CodingChatTarget; onCl
     ? <WaitingOnYou items={waitingCards} threadId={threadId} botFor={botFor} onCancel={stop} />
     : undefined;
 
+  const follow = useCallback(() => setFollowUntil(Date.now() + FOLLOW_MS), []);
+  const computerStart = state.computerStarts[target.botId];
+  const taskBot = bot && threadId ? { ...bot, threadId } : undefined;
+  const headerTools = taskBot ? <DevPodsToggle bot={taskBot} /> : undefined;
+  const pods = (messages: readonly Message[]) => taskBot
+    ? <DevPods bot={taskBot} messages={messages} composerHeight={0} headerHeight={0} computerStart={computerStart} dispatch={dispatch} forced />
+    : undefined;
+  // The chat's own composer ("Message <bot>", +, microphone, voice) aimed at
+  // the task's thread; a person who may not write there keeps the plain field.
+  const composer = taskBot ? <Composer key={threadId} bot={{ ...taskBot, busy: live }} /> : undefined;
+
   const common = {
     item,
     detail,
@@ -477,15 +514,18 @@ export function CodingChat({ target, onClose }: { target: CodingChatTarget; onCl
     stopping,
     onSend: send,
     waiting,
+    headerTools,
   };
   if (!threadId) {
     const messages = detail ? stepMessages(detail.steps, item.botId, bot?.name ?? item.botName ?? "") : [];
     return <CodingChatSheet {...common} messages={messages} loaded={detail !== null} failed={error} onRetry={() => void load()} />;
   }
   return (
-    <ThreadTranscript threadId={threadId}>{(transcript) => (
+    <ThreadTranscript threadId={threadId} onGrow={follow}>{(transcript) => (
       <CodingChatSheet
         {...common}
+        composer={composer}
+        pods={pods(transcript.messages)}
         messages={transcript.messages}
         loaded={transcript.loaded}
         failed={transcript.failed}

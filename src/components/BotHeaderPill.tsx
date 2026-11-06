@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { ChevronRight, Lock, Settings, Users } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -12,9 +12,52 @@ import type { Action } from "@/state/store";
  * panel's own close button.
  */
 export function botPillActions(panelOpen: boolean): Action[] {
+  // #2149 (JC 2026-11-06): a click closes the panel, the next one reopens
+  // exactly the panel it closed (same tab, same section, same scroll).
   return panelOpen
-    ? [{ type: "toggleSettings", open: false }, { type: "toggleComputer", open: false }]
-    : [{ type: "toggleSettings", open: true }];
+    ? [{ type: "rememberBotPanel" }, { type: "toggleSettings", open: false }, { type: "toggleComputer", open: false }]
+    : [{ type: "restoreBotPanel" }];
+}
+
+/** #2149: what a window over the chat (coding, a bot-to-bot or routine
+ * conversation) needs from the chat under it: its header pill toggles the
+ * bot panel like the chat's own pill, and the chat's composer stays below.
+ * Null outside a chat (tests, galleries): the pill is a plain label. */
+export interface ChatWindowContextValue {
+  panelOpen: boolean;
+  onTogglePanel: () => void;
+  /** Height of the chat's composer dock: a window ends above it. */
+  composerInset: number;
+  /** The newest message the person sent in the chat; a window that is not
+   * a chat of its own closes when it changes. */
+  sentKey?: string;
+}
+
+const ChatWindowContext = createContext<ChatWindowContextValue | null>(null);
+export const ChatWindowProvider = ChatWindowContext.Provider;
+export function useChatWindow(): ChatWindowContextValue | null {
+  return useContext(ChatWindowContext);
+}
+
+/** The pill in a window's header (CodingChat, ExchangeSheet): a button that
+ * toggles the bot panel when the window sits over a chat, a label otherwise. */
+export function WindowHeaderPill({ children, label }: { children: ReactNode; label: string }) {
+  const chat = useChatWindow();
+  const className = "flex items-center gap-1.5 rounded-full bg-elevated px-3 py-1.5";
+  if (!chat) return <div data-window-pill="" className={className}>{children}</div>;
+  return (
+    <button
+      type="button"
+      data-window-pill=""
+      onClick={(event) => { event.stopPropagation(); chat.onTogglePanel(); }}
+      aria-expanded={chat.panelOpen}
+      aria-label={chat.panelOpen ? t("chat.closePanelAria", { name: label }) : t("chat.openPanelAria", { name: label })}
+      title={chat.panelOpen ? t("chat.closePanel") : t("chat.openPanel")}
+      className={cn(className, "transition-colors duration-[120ms] hover:bg-elevated-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60")}
+    >
+      {children}
+    </button>
+  );
 }
 
 /**

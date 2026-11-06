@@ -1,5 +1,6 @@
-// Dev context pods: stacked cards in the chat's top-right corner while a bot
-// works as a developer (Settings > Experimental, off by default).
+// Dev context pods: stacked cards in the coding window's top-right corner
+// (Settings > Experimental, off by default). #2149 (JC 2026-11-06): the </>
+// panel shows only in a coding window, never in the plain chat.
 //
 // A pure overlay: the transcript keeps its centered column, width and
 // padding whether the pods show or not. They sit in the free gutter right of
@@ -119,8 +120,8 @@ export function threadKeyOf(bot: Pick<Bot, "id" | "threadId">): string {
   return `${bot.id}:${bot.threadId}`;
 }
 
-/** The single mount in ChatView, inside the messages pane. Nothing at all
- * while the Experimental switch is off. */
+/** The single mount, in the coding window (#2149: CodingChat), inside its
+ * transcript pane. Nothing at all while the Experimental switch is off. */
 export interface DevPodsProps {
   bot: Bot;
   messages: readonly Message[];
@@ -128,6 +129,11 @@ export interface DevPodsProps {
   /** The bot's computer while it starts for a turn (state.computerStarts). */
   computerStart: ComputerStart | undefined;
   dispatch: Dispatch<Action>;
+  /** #2149: a coding window shows the pods for its task whatever the
+   * detector says; the pods live only there, never in the plain chat. */
+  forced?: boolean;
+  /** Height of the header the pane starts under (0: the pane starts below it). */
+  headerHeight?: number;
 }
 
 export function DevPods(props: DevPodsProps) {
@@ -139,7 +145,7 @@ export function DevPods(props: DevPodsProps) {
   return <DevPodsRail {...props} />;
 }
 
-function DevPodsRail({ bot, messages, composerHeight, computerStart, dispatch }: DevPodsProps) {
+function DevPodsRail({ bot, messages, composerHeight, computerStart, dispatch, forced = false, headerHeight = HEADER_HEIGHT }: DevPodsProps) {
   const prefs = useDevPodPrefs();
   const live = useDevPodsLive();
   const threadKey = threadKeyOf(bot);
@@ -152,7 +158,8 @@ function DevPodsRail({ bot, messages, composerHeight, computerStart, dispatch }:
   }, [computerStart, bot, task, messages]);
   const signals = useMemo(() => devSignals({ messages, computerActive }), [messages, computerActive]);
   const last = messages.at(-1);
-  const active = useDevMode(threadKey, signals.score, `${messages.length}:${last?.id ?? ""}:${last?.tool?.ok ?? ""}:${computerActive}`, signals.request?.mode === "off");
+  const detected = useDevMode(threadKey, signals.score, `${messages.length}:${last?.id ?? ""}:${last?.tool?.ok ?? ""}:${computerActive}`, signals.request?.mode === "off");
+  const active = forced || detected;
   const mounted = useHeld(active, EXIT_MS);
 
   const version = useSyncExternalStore(subscribeDevPods, devPodsVersion, devPodsVersion);
@@ -192,7 +199,7 @@ function DevPodsRail({ bot, messages, composerHeight, computerStart, dispatch }:
     return () => observer.disconnect();
   }, [mounted]);
   const geometry = railGeometry(pane.width);
-  const top = Math.max(RAIL_EDGE, HEADER_HEIGHT + RAIL_EDGE - pane.top);
+  const top = Math.max(RAIL_EDGE, headerHeight + RAIL_EDGE - pane.top);
   const maxHeight = Math.max(0, pane.height - top - composerHeight - RAIL_EDGE);
 
   useEffect(() => {

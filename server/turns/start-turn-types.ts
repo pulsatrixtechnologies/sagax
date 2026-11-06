@@ -48,6 +48,8 @@ export type StartTurnHost = {
   applyViewerModelOverride: any,
   approvalLevelPrompt: any,
   approvalModeForTurn: any,
+  handoffOpener: any,
+  personForJoin: any,
   liveApprovalMode: any,
   asPlaceFailure: any,
   assertModelVariantSupported: any,

@@ -62,7 +62,30 @@ async function runInternal(req: IncomingMessage, res: ServerResponse, url: URL, 
       json(res, 400, { error: "invalid test capability" });
       return true;
     }
-    const generation = host.beginInternalCapabilityGeneration(parsed.data.threadId);
+    // A turn running in that thread lends the capability its own
+    // generation and root: what the capability does belongs to that turn,
+    // whose end settles it (a card it leaves parks that root). Otherwise
+    // the capability stands in for a turn of that bot in that thread, so
+    // the hand-offs it makes need what any turn's have: the turn's root,
+    // begun as a person's turn there would begin it, and ended when a
+    // newer generation revokes it (standInRoots).
+    const live = host.activeInternalGenerationByThread.get(parsed.data.threadId);
+    const liveRoot = live ? host.coordinator.node(live) : undefined;
+    const generation = live && liveRoot && !host.ENDED.has(liveRoot.status) && !host.standInRoots.has(live)
+      ? live : host.beginInternalCapabilityGeneration(parsed.data.threadId);
+    if (generation !== live) {
+      host.standInRoots.add(generation);
+      const minted = host.store.bot(parsed.data.botId)!;
+      const threadId = parsed.data.threadId;
+      const owner = host.connectorThread(minted.id, threadId);
+      const latestUser = [...host.store.activePath(threadId)].reverse().find((message) => message.role === "user" && message.kind === "text" && message.text);
+      const opener = host.handoffOpener({ botId: minted.id, threadId }, threadId);
+      host.coordinator.beginTurn({
+        id: generation, address: { botId: minted.id, threadId, ...(owner?.group ? { groupId: owner.group.id } : {}) }, brief: latestUser?.text ?? "",
+        level: owner?.group ? host.delegatedLevel.roomTurn(minted, threadId, undefined) : host.approvalModeForTurn(host.store.projectBotForTask(minted.id, threadId) ?? minted, false, threadId),
+        ...(opener ? { opener } : {}), origin: host.requestWorkOrigin({ line: latestUser }), ...host.personForJoin(threadId),
+      });
+    }
     const { deliversSavedFiles, speakerPrincipalId, ...grants } = parsed.data;
     if (speakerPrincipalId) {
       host.turnSpeakers.set(parsed.data.threadId, { origin: "person", principalId: speakerPrincipalId });

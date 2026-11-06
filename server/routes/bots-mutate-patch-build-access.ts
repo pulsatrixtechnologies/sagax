@@ -182,13 +182,8 @@ export async function buildBotPatchAccess(env: BotsMutateEnv, state: BotPatchSta
     env.json(env.res, 409, env.MEMBER_BOT_FULL_ACCESS);
     return true;
   }
-  if (existingBot?.busy && approvalChangeRequested && requestedApprovalMode !== currentApprovalMode && !env.primaryAskedReplay()
-    && !env.liveApprovalChange(currentApprovalMode, requestedApprovalMode)) {
-    env.json(env.res, 409, {
-      error: "stop this bot's turn before changing its approval level"
-    });
-    return true;
-  }
+  // omb #3627: any level may change while the bot works; liveApprovalMode
+  // reads the saved level on the next Sagax decision.
   if (approvalChangeRequested && existingBot && env.memberAutoRefused(existingBot, [currentApprovalMode], requestedApprovalMode)) {
     env.json(env.res, 403, env.MEMBER_AUTO_NOT_ALLOWED);
     return true;

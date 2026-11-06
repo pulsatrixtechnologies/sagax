@@ -119,24 +119,25 @@ export function approvalModeFor(bot: {
   return bot.approvalMode === undefined ? defaultApprovalMode : "ask";
 }
 
-/** Ask, Edits and Auto can change while the bot is working. The next
- * approval in that turn reads the new level. A stricter one also reaches the
- * running engine, or stops the turn when the engine cannot take it (#1373,
- * applyStricterApprovalLive). Full and Custom still wait. */
-const LIVE_APPROVAL_LEVELS = new Set<ApprovalMode>(["ask", "edits", "auto"]);
+/** Any saved level may change while the bot is working (omb #3627). The next
+ * Sagax decision (request.opened, API tool gate) reads it. A stricter Ask /
+ * Edits / Auto change also reaches the running engine, or stops the turn when
+ * the engine cannot take it (#1373, applyStricterApprovalLive). Engine-native
+ * Full (bypass, sandbox) still applies from the next turn. */
+const LIVE_ENGINE_LEVELS = new Set<ApprovalMode>(["ask", "edits", "auto"]);
 
-export function liveApprovalChange(current: ApprovalMode, next: ApprovalMode): boolean {
-  return LIVE_APPROVAL_LEVELS.has(current) && LIVE_APPROVAL_LEVELS.has(next);
+export function liveApprovalChange(_current: ApprovalMode, _next: ApprovalMode): boolean {
+  return true;
 }
 
 /** #1373: Auto to Edits or Ask, or Edits to Ask, while a turn runs. */
 export function liveApprovalTightens(current: ApprovalMode, next: ApprovalMode): boolean {
-  return liveApprovalChange(current, next) && APPROVAL_RANK[next] < APPROVAL_RANK[current];
+  return LIVE_ENGINE_LEVELS.has(current) && LIVE_ENGINE_LEVELS.has(next) && APPROVAL_RANK[next] < APPROVAL_RANK[current];
 }
 
 /** A private late-grant recovery may revoke an elevated mode even after a
- * turn began. It can only move to the fail-closed Ask mode. Ask, Edits and
- * Auto use liveApprovalChange instead. */
+ * turn began. It can only move to the fail-closed Ask mode, and it also stops
+ * the running turn, which a native engine would otherwise finish elevated. */
 export function isEmergencyApprovalDowngrade(
   current: ApprovalMode,
   next: ApprovalMode,

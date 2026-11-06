@@ -1295,6 +1295,7 @@ import {
 } from "./host/loop-guard-wiring.ts";
 import { correctiveRounds, loopGuardSettings } from "./host/loop-guard.ts";
 import { createDelegatedLevel } from "./host/delegated-level.ts";
+import { createLiveApprovalMode } from "./host/live-approval.ts";
 import { createWaitsBootstrap, cancelWaitFromCard, waitRunChat } from "./waits/wait-host.ts";
 import { findWaitPeer, hostWaitRefusal, waitSourceRefusal } from "./routes/waits.ts";
 import { createReadAndDraft } from "./read-and-draft.ts";
@@ -11561,6 +11562,10 @@ const delegatedLevel = createDelegatedLevel({
   memberRoomTurnLevel: (level) => memberRoomTurnLevel(level, memberAutoApprovalAllowed(cfg.organization)),
 });
 
+/** A running turn's Sagax decisions read the conversation's saved level now
+ * (omb #3627), never the copy frozen on directTurnBots at dispatch. */
+const liveApprovalMode = createLiveApprovalMode({ store, turnLevel: approvalModeForTurn });
+
 /** Compatibility wrapper: callers that have no hand-off node still raise the
  * first hop when `from` itself is a Primary Bot. */
 function applyDelegatedLevel(
@@ -20018,7 +20023,7 @@ bus.subscribe((event: RuntimeEvent) => {
       // A mail-woken routine run (S2) is held the same way: Ask, and no rule
       // the owner saved answers for it.
       const guestDriven = cloudGuestDriven(event.threadId) || botmailConfined(event.threadId);
-      const ownApprovalMode = (who: BotRecord) => approvalModeForTurn(who, isInternalTurn(event.threadId), event.threadId);
+      const ownApprovalMode = (who: BotRecord) => liveApprovalMode(who, event.threadId, isInternalTurn(event.threadId));
       // A room turn runs at the level it was sent with, which a Chief's
       // handoff may have raised (roomTurnApprovalMode). The bot's own level
       // would make a Full room turn ask on engines that leave requests to us.
@@ -48859,6 +48864,7 @@ const startTurnRunner = createStartTurn({
   applyViewerModelOverride,
   approvalLevelPrompt,
   approvalModeForTurn,
+  liveApprovalMode,
   asPlaceFailure,
   assertModelVariantSupported,
   assertTurnAdmission,

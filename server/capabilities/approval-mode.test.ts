@@ -130,9 +130,10 @@ describe("approval modes", () => {
     expect(liveApprovalChange("ask", "auto")).toBe(true);
     expect(liveApprovalChange("auto", "edits")).toBe(true);
     expect(liveApprovalChange("edits", "ask")).toBe(true);
-    expect(liveApprovalChange("ask", "full")).toBe(false);
-    expect(liveApprovalChange("full", "ask")).toBe(false);
-    expect(liveApprovalChange("custom", "auto")).toBe(false);
+    // omb #3627: Full and Custom may change while the bot works too
+    expect(liveApprovalChange("ask", "full")).toBe(true);
+    expect(liveApprovalChange("full", "ask")).toBe(true);
+    expect(liveApprovalChange("custom", "auto")).toBe(true);
   });
 
   it("names the live changes that must reach the running engine (#1373)", () => {

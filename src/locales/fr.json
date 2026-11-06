@@ -316,6 +316,7 @@
   "approvalMode.auto.chip": "Auto",
   "approvalMode.auto.label": "Approuver à ma place",
   "approvalMode.busy": "Arrête le tour de ce bot avant de changer son niveau d'autorisation",
+  "approvalMode.whileWorking": "Le bot est en train de travailler. Un changement s'applique dès sa prochaine étape si son IA le permet, sinon dès son prochain tour.",
   "approvalMode.custom.chip": "Personnalisé",
   "approvalMode.custom.desc": "Utilise les permissions définies dans config.toml",
   "approvalMode.custom.label": "Personnalisé (config.toml)",

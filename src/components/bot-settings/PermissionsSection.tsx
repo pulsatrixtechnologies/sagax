@@ -28,7 +28,7 @@ import { EMPTY_PERSONAL_SECTIONS, personalSectionNames, usePersonalSections } fr
 import { viewerActorId } from "@/lib/viewer";
 import { viewerOwnTeamNames } from "@/lib/viewer-teams";
 import { api, useStore, type Bot } from "@/state/store";
-import { liveApprovalChange, type ApprovalMode } from "../../../shared/approval-mode";
+import { type ApprovalMode } from "../../../shared/approval-mode";
 import { AppliedLevelNote } from "./AppliedLevelNote";
 import { proactiveModeFor, type ProactiveMode } from "../../../shared/proactive-mode";
 import { builtInPageTargets } from "../../../shared/page-targets";
@@ -124,7 +124,6 @@ export function PermissionsSection({
     }
     dispatch({ type: "updateBot", botId: target, patch: { approvalMode: "full" } });
   };
-  const levelNow = approvalMode;
   const approvalMixed = Boolean(bulk && mixedFields?.has("approvalMode"));
   const proactiveMixed = Boolean(bulk && mixedFields?.has("proactiveMode"));
   const peerMixed = Boolean(bulk && mixedFields?.has("approvePeerComms"));
@@ -132,11 +131,7 @@ export function PermissionsSection({
     // Mixed bulk: the draft has no shared level, but botApprovalSetting may
     // still read as Ask; allow picking that level explicitly (#1701).
     if (mode === approvalMode && !approvalMixed) return;
-    if (bot.busy && !liveApprovalChange(levelNow, mode)) {
-      setApprovalNotice(t("approvalMode.busy"));
-      return;
-    }
-    setApprovalNotice(null);
+    setApprovalNotice(bot.busy ? t("approvalMode.whileWorking") : null);
     if (mode === "full") {
       applyFull(bot.id);
       return;
@@ -199,7 +194,7 @@ export function PermissionsSection({
       align="right"
       wide
       mixed={approvalMixed}
-      disabled={Boolean(bot.busy) && !liveApprovalChange(levelNow, "ask")}
+      busy={Boolean(bot.busy)}
       trustedModesAvailable={trustedModesAvailable}
       orgFullAccess={orgFullAccess}
       onManageCommandAllowlist={advanced && !draft && ownerOrAdmin === true ? () => setCommandAllowlistTarget({ botId: bot.id, botName: bot.name }) : undefined}

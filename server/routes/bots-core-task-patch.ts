@@ -110,7 +110,8 @@ export function createBotsCoreTaskPatchRoutes(deps: BotsCoreRouteDeps): RouteHan
         const profile = store.bot(m[1]);
         if (!profile) return json(res, 404, { error: "no such bot" });
         if (profile.approvalGrant) return json(res, 409, { error: "the bot's approval mode is still being confirmed" });
-        if (threadBusy(profile.id, m[2])) return json(res, 409, { error: "stop this thread before changing its approval mode" });
+        // omb #3627: refresh while the thread works; liveApprovalMode reads the
+        // bot default on the next Sagax decision.
         const nextMode = approvalModeFor({ ...profile, approvalGrant: undefined });
         // Full and Custom never travel over the bot-reachable HTTP surface.
         // The desktop's private channel copies those levels, and it is also

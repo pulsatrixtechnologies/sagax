@@ -90,10 +90,8 @@ export async function admitBotPatch(env: BotsMutateEnv, state: BotPatchState): P
       env.json(env.res, refusal.status, { error: refusal.error, code: refusal.code, ...("permission" in refusal ? env.permissionRefusal(refusal.permission) : {}) });
       return true;
     }
-    if (target.busy && !env.primaryAskedReplay()) {
-      env.json(env.res, 409, { error: "stop this bot's turn before changing its approval level" });
-      return true;
-    }
+    // omb #3627: Full may turn on while the bot works; the next request.opened
+    // reads the saved level. Keep the pending-grant lock below.
     if (target.approvalGrant) {
       env.json(env.res, 409, { error: "the bot's approval mode is still being confirmed" });
       return true;

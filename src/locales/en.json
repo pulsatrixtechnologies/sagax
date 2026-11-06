@@ -419,6 +419,7 @@
   "approvalMode.auto.desc": "Uses the engine's automatic review to approve routine actions, and asks about deletions, bulk changes and messages sent on your behalf. Your rules come first: \"Ask every time\" always shows a card, \"Deny\" always refuses.",
   "approvalMode.auto.label": "Approve for me",
   "approvalMode.busy": "Stop this bot's turn before changing its approval level",
+  "approvalMode.whileWorking": "The bot is working. A change applies from its next step where its AI allows it, otherwise from its next turn.",
   "approvalMode.custom.chip": "Custom",
   "approvalMode.custom.desc": "Uses permissions defined in config.toml",
   "approvalMode.custom.label": "Custom (config.toml)",

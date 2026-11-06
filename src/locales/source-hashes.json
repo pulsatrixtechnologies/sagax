@@ -17553,7 +17553,8 @@
       "botPanel.memeReplies.auto": "cafc3785b70b0bc25160f6017d8558c42cdb34289ca65636164c3bfe2a780358",
       "botPanel.memeReplies.off": "447a21f0fc84d9870de675f98ba48bc9e3ee05b1385cf7f70e5b8d271358d1c8",
       "botPanel.memeReplies.autoLabel": "0286249762f7c94349cdc0ba3bb2255baf9a80036e2193ead1d77696f888582f",
-      "botPanel.memeReplies.offLabel": "ca7981b46ecf2c1787b6d76d81d9fd7fa0ca95842e2fcc2a452869891a9334d1"
+      "botPanel.memeReplies.offLabel": "ca7981b46ecf2c1787b6d76d81d9fd7fa0ca95842e2fcc2a452869891a9334d1",
+      "approvalMode.whileWorking": "7d02ed7620d489fd6d5c37cd1e5e9011491c93bf938baf10f7100bde257ee3f6"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

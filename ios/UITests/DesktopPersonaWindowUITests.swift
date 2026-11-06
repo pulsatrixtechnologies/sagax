@@ -1,10 +1,8 @@
 import XCTest
 
-/// The bot editor ("Edit bot", PersonaEditorModal.tsx) on the iPad desktop
-/// shell, against the parity fixture: a tap on the bot panel's mascot opens
-/// the centred window on Appearance (the mascot gallery), a nav entry
-/// switches the page, a pick saves the look on the server, and the panel's
-/// "..." Edit bot opens it on Identity.
+/// The bot's profile page in the main column (#2136 / #1939): a tap on the
+/// bot panel's mascot opens Appearance there, X returns to the chat, and
+/// the panel's "..." Edit bot opens the profile root (General | Knowledge).
 ///
 ///   bash ipad-uitests-<prefix>.sh DesktopPersonaWindowUITests
 final class DesktopPersonaWindowUITests: XCTestCase {
@@ -78,7 +76,7 @@ final class DesktopPersonaWindowUITests: XCTestCase {
     }
 
     @MainActor
-    func testAvatarTapOpensEditBotOnAppearanceAndTheNavSwitchesPages() throws {
+    func testAvatarTapOpensProfileOnAppearanceAndEditBotOpensRoot() throws {
         let before = try XCTUnwrap(try ara())
         let id = try XCTUnwrap(before["id"] as? String)
         defer { _ = try? api("PATCH", "/api/bots/\(id)", ["color": "purple", "mascotLook": ["character": "owl"], "mascotSkin": "none"]) }
@@ -89,14 +87,13 @@ final class DesktopPersonaWindowUITests: XCTestCase {
         XCTAssertTrue(avatar.waitForExistence(timeout: 30), "the panel's mascot")
         avatar.tap()
 
-        let window = element(app, "desktop-persona-window")
-        XCTAssertTrue(window.waitForExistence(timeout: 10), "the Edit bot window")
-        XCTAssertTrue(element(app, "desktop-persona-window.bot").exists, "the bot's name under Edit bot")
-        XCTAssertTrue(element(app, "desktop-persona-window.page.appearance").waitForExistence(timeout: 5), "opened on Appearance")
-        XCTAssertTrue(element(app, "desktop-persona-window.nav.appearance").isSelected, "Appearance is the current entry")
-        for page in ["overview", "summary", "soul", "rules", "skills", "files", "model", "worksOn", "access", "voice", "permissions", "perspicax"] {
-            XCTAssertTrue(element(app, "desktop-persona-window.nav.\(page)").exists, "the \(page) entry")
+        let host = element(app, "desktop-bot-profile-host")
+        let appearancePage = element(app, "desktop-persona-window.page.appearance")
+        let appearanceHero = element(app, "persona-appearance.hero")
+        try eventually("the profile fills the main column on Appearance", timeout: 15) {
+            host.exists || appearancePage.exists || appearanceHero.exists
         }
+        XCTAssertFalse(element(app, "desktop-persona-window").exists, "no centred Edit bot window")
 
         // the Appearance page: the modes, the hero and the gallery
         XCTAssertTrue(element(app, "persona-appearance.mode.mascot").isSelected, "Mascot is the source")
@@ -118,32 +115,33 @@ final class DesktopPersonaWindowUITests: XCTestCase {
         }
         XCTAssertTrue(element(app, "persona-appearance.tab.shape").waitForExistence(timeout: 5), "Shapes offers its Shape tab")
 
-        // the nav switches the page
-        element(app, "desktop-persona-window.nav.skills").tap()
-        XCTAssertTrue(element(app, "desktop-persona-window.page.skills").waitForExistence(timeout: 5), "the Skills page")
-        XCTAssertTrue(element(app, "desktop-persona-window.nav.skills").isSelected)
-        XCTAssertFalse(element(app, "persona-appearance").exists, "Appearance left the pane")
-        element(app, "desktop-persona-window.nav.overview").tap()
-        XCTAssertTrue(element(app, "desktop-persona-window.page.overview").waitForExistence(timeout: 5), "the Identity page")
-        XCTAssertTrue(element(app, "persona-overview.name").waitForExistence(timeout: 5), "Identity edits the name in place")
+        // X closes the profile and brings the chat back (panel stays closed, #2136)
+        let close = element(app, "window-close")
+        XCTAssertTrue(close.waitForExistence(timeout: 10), "the page X")
+        close.tap()
+        try eventually("X returns to the chat", timeout: 5) {
+            !host.exists && !appearanceHero.exists
+        }
 
-        // the search narrows the column
-        let search = element(app, "desktop-persona-window.search")
-        search.tap()
-        search.typeText("rules")
-        XCTAssertTrue(element(app, "desktop-persona-window.nav.rules").waitForExistence(timeout: 5))
-        XCTAssertFalse(element(app, "desktop-persona-window.nav.model").exists, "Model is filtered out")
-
-        element(app, "desktop-persona-close").tap()
-        XCTAssertFalse(window.waitForExistence(timeout: 2), "Close closes the window")
-
-        // the panel's ... Edit bot opens it on Identity
+        // Re-open the panel from the chat pill, then ... Edit bot opens the profile root
+        let pill = element(app, "desktop-chat-pill")
+        XCTAssertTrue(pill.waitForExistence(timeout: 10), "the chat pill after X")
+        pill.tap()
         let more = element(app, "desktop-panel-menu")
-        XCTAssertTrue(more.waitForExistence(timeout: 5), "the panel's ... menu")
+        XCTAssertTrue(more.waitForExistence(timeout: 10), "the panel's ... menu")
         more.tap()
         let editBot = element(app, "desktop-panel-action.editBot")
         XCTAssertTrue(editBot.waitForExistence(timeout: 5), "Edit bot in the menu")
         editBot.tap()
-        XCTAssertTrue(element(app, "desktop-persona-window.page.overview").waitForExistence(timeout: 10), "Edit bot opens on Identity")
+        XCTAssertTrue(element(app, "desktop-bot-profile-host").waitForExistence(timeout: 10), "Edit bot opens the profile")
+        XCTAssertTrue(element(app, "bot-profile-page").waitForExistence(timeout: 5), "the Grok Bot profile page")
+        let general = element(app, "bot-profile-tab.general")
+        let knowledge = element(app, "bot-profile-tab.knowledge")
+        let settingsToggle = element(app, "bot-profile-settings-toggle")
+        let name = element(app, "bot-profile-name")
+        try eventually("profile root shows General / Knowledge (or the Settings fold)", timeout: 10) {
+            (general.exists && knowledge.exists) || settingsToggle.exists || name.exists
+        }
+        XCTAssertFalse(element(app, "bot-profile-tab.settings").exists, "Settings is folded into General")
     }
 }

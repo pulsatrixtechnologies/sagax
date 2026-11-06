@@ -1,15 +1,14 @@
 // iPad I4/I4b: the bot panel (`BotSettingsDialog.tsx`), docked at the
 // trailing edge from 1024 pt, over the leading edge below
 // (`max-lg:absolute`). Its tabs are the current desktop's
-// (`bot-settings/panel-tabs.ts`): Details (Coding, Activity, Routines),
-// Library (Files, Skills, Plugins: BotPanelLibrary.swift), Computer; no More
-// tab. Edit bot is a pencil on the mascot and the first entry of the
-// bot's one "..." menu (`BotActionsMenu.tsx`, #518), which also holds
-// Rename, the Primary Bot, the export and Archive. Edit bot is the
-// desktop's centred window (PersonaEditorWindow.swift, 2026-11-03), on
-// Identity from the menu and on Appearance from a tap on the mascot. The name and label are edited where they
-// show, under the mascot (`InlineEditableText.tsx`). Which tabs and sections a pairing shows is
-// `DesktopPanelTab` / `DesktopPanelSection` / `DesktopPersonaEditor`
+// (`bot-settings/panel-tabs.ts`): Activity | Library. Edit bot is a
+// pencil on the mascot and the first entry of the bot's one "..." menu
+// (`BotActionsMenu.tsx`, #518), which also holds Rename, the Primary Bot,
+// the export and Archive. Edit bot / the gear open the bot's profile page
+// in the main column (#2136 / #1939), on Identity from the menu and on
+// Appearance from a tap on the mascot. The name and label are edited where
+// they show, under the mascot (`InlineEditableText.tsx`). Which tabs and
+// sections a pairing shows is `DesktopPanelTab` / `DesktopPanelSection`
 // (CompanionCore), from `SurfaceGate`.
 //
 // Sizes from desktop-1366x1024-33-panel-details.json: top bar 48 with 36 pt

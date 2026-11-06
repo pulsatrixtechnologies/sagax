@@ -101,6 +101,8 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
   const selectedApprovals = new Map<string, McpApprovalMode>();
   /** Mounts whose big catalog is searched (URL directories and the account bridge). */
   const directoryMounts = new Set<string>();
+  /** Mounts on argv that are not also recorded in selectedMcp (phone, messages, workplace). */
+  const directMounts: string[] = [];
   /** Each mount's settings that are not secret (mountMcpServer's literalEnv). */
   const literalEnvs = new Map<string, Record<string, string>>();
   /** A selected mount's own `env` table, as Codex reports it back (#2013). */
@@ -227,6 +229,8 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
         selectedApprovals.set(name, "prompt");
         selectedLiterals.set(name, mounted.literal);
         appServerArgs.push("-c", `mcp_servers.${name}.default_tools_approval_mode="prompt"`);
+      } else {
+        directMounts.push(name);
       }
       continue;
     }
@@ -242,6 +246,7 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
     Object.assign(env, bridge.env);
     for (const name of Object.keys(bridge.env)) mountedNames.add(name);
     const prefix = "mcp_servers.openmausbot_phone";
+    directMounts.push("openmausbot_phone");
     appServerArgs.push(
       "-c", `${prefix}.command=${JSON.stringify(bridge.command)}`,
       "-c", `${prefix}.args=${JSON.stringify(bridge.args)}`,
@@ -259,6 +264,7 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
     Object.assign(env, bridge.env);
     for (const name of Object.keys(bridge.env)) mountedNames.add(name);
     const prefix = "mcp_servers.sagax_messages";
+    directMounts.push("sagax_messages");
     appServerArgs.push(
       "-c", `${prefix}.command=${JSON.stringify(bridge.command)}`,
       "-c", `${prefix}.args=${JSON.stringify(bridge.args)}`,
@@ -322,7 +328,7 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
   const previous = process?.session;
   if (previous) return {
     env, launchedLogin, appServerArgs, privateEnv, provenPrivateEnv, selectedMcp, selectedApprovals, selectedLiterals,
-    directoryMounts, selectionConfig, commandCwd, releaseSlot: () => {}, child: previous.child,
+    directMounts, directoryMounts, selectionConfig, commandCwd, releaseSlot: () => {}, child: previous.child,
     process: process!, previous,
   };
   const releaseSlot = tryCodexLaunchSlot() ?? await waitForLaunchSlot(attempt);
@@ -343,6 +349,7 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
     selectedMcp,
     selectedApprovals,
     selectedLiterals,
+    directMounts,
     directoryMounts,
     selectionConfig,
     commandCwd,

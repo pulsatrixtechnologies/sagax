@@ -7,6 +7,7 @@ import type { RenewalStep } from "../../context/context-renewal.ts";
 import type { ClaudeLimit } from "./limits.ts";
 import type { TurnModelUsage } from "../../../shared/runtime-events.ts";
 import type { ClaudeCostSnapshot } from "./cost.ts";
+import type { ClaudeElicitations } from "./elicitation.ts";
 
 export type ClaudeChild = ChildProcessByStdio<Writable, Readable, Readable>;
 
@@ -73,6 +74,8 @@ export const steerSilenceScale = () => fakeTimerScale("FAKE_CLAUDE_STEER_SILENCE
 export type ClaudeSession = {
   child: ClaudeChild;
   broker?: ClaudePermissionBroker;
+  /** MCP elicitation control_request cards answered on stdin. */
+  elicit: ClaudeElicitations;
   mcpConfigPath: string | null;
   systemPromptPath: string | null;
   /** the spawn contract — a different one means a fresh process */

@@ -11,6 +11,7 @@ import { ensureDirs, NATIVE_DIR } from "../config.ts";
 import type { RuntimeEvent, SendTurnInput } from "../contracts.ts";
 import { GrokDriver } from "./grok.ts";
 import { MinimaxDriver } from "./minimax.ts";
+import { flushNativeLog } from "./native.ts";
 import { OpenAICompatDriver } from "./openai-compat.ts";
 import { MistralDriver } from "./mistral.ts";
 
@@ -427,8 +428,11 @@ describe("createOpenAIChatRuntime tool approvals", () => {
         .toEqual({ requests: 5, corrective: 1, ok: false, stopReason: "tool_error" });
     }, 20_000);
 
-    it("without rounds, a later call that succeeds does not clear the failure", async () => {
+    it("without rounds, a bot that went on to run tools after a failure ends ok; one whose last calls failed does not", async () => {
+      // Seen on a hosted model: many turns ended failed for one bad query the bot had already worked around.
       expect(await run([toolCall("c1", "nope"), toolCall("c2", "fx_write"), answer], undefined, { custom: { fx: toolServer() } }))
+        .toEqual({ requests: 3, corrective: 0, ok: true, stopReason: null });
+      expect(await run([toolCall("c1", "fx_write"), toolCall("c2", "nope"), answer], undefined, { custom: { fx: toolServer() } }))
         .toEqual({ requests: 3, corrective: 0, ok: false, stopReason: "tool_error" });
     }, 20_000);
   });
@@ -944,6 +948,8 @@ describe("createOpenAIChatRuntime refused tool calls", () => {
   it("stops after three refusals, says what happened and what to do, and logs each refusal whole", async () => {
     ensureDirs();
     const log = join(NATIVE_DIR, "thread.ndjson");
+    // Drop held lines from earlier tests on the same threadId, then clear the file.
+    flushNativeLog("thread");
     rmSync(log, { force: true });
     let requests = 0;
     const events = await runTurn(() => (requests++, refusedStream()));
@@ -953,6 +959,8 @@ describe("createOpenAIChatRuntime refused tool calls", () => {
       message: `The model tried to use a tool it was not given ("JSON"). Nothing ran. Retry; if it keeps happening, rephrase the request or choose another model. Provider: ${refusal.message}`,
     });
     expect(events.at(-1)).toMatchObject({ type: "turn.completed", ok: false, stopReason: "error" });
+    // Refusal lines are dir "in": appendNative holds them briefly; flush before reading.
+    flushNativeLog("thread");
     const refusals = readFileSync(log, "utf8").trim().split("\n").map((line) => JSON.parse(line)).filter((entry) => entry.msg?.refused);
     expect(refusals.map((entry) => entry.msg)).toEqual([1, 2, 3].map((attempt) => ({ refused: "tool_use_failed", attempt, error: refusal })));
   });

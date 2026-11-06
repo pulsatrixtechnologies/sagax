@@ -15,6 +15,7 @@ import { CODEX_MISSING_CREDENTIALS, codexContextFull, codexSignInExpired, codexS
 import { classifyError, RETRY_MAX_ATTEMPTS } from "../retry.ts";
 import { renewalPrompt } from "../../context/context-renewal.ts";
 import { codexQuestionReply } from "./questions.ts";
+import { boundedLabel } from "./plain.ts";
 
 export const DENY_TIMEOUT_NOTE =
   "Sagax: nobody answered this permission request in time. Skip this action and finish what you can without it.";
@@ -46,11 +47,11 @@ s.handleServerRequest = (msg: any) => {
   }
   // A normal MCP elicitation is a form or URL asking for real user input,
   // not a permission. We cannot safely synthesize its structured answer.
-  // Unknown future server requests also fail closed instead of being
-  // mistaken for commands and accepted by Full Access.
+  // Unknown future server requests also fail closed instead of being accepted by Full Access.
   if (!isQuestion && !isPermission) {
     if (isMcpElicitation) {
       s.send({ jsonrpc: "2.0", id: msg.id, result: { action: "decline" } });
+      s.emit({ ...s.base(s.threadId, s.turnId), type: "runtime.notice", message: `${boundedLabel(params.serverName) ?? "An MCP server"} asked for input Sagax can't show yet, so the request was declined.` });
     } else {
       s.send({
         jsonrpc: "2.0",

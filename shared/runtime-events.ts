@@ -274,7 +274,9 @@ export type RuntimeEvent = RuntimeEventBase &
       limitResetsAt?: number;
       /** The refusal binds this model only (its extra-usage credits, or its
        * own weekly window): the engine stays free for its other models. */
-      limitScope?: "model" }
+      limitScope?: "model";
+      /** The refusal binds the whole engine (every model of it). */
+      limit?: "engine" }
     /** Something the person should know that did not fail the turn — for
      * example, a saved model the engine no longer offers was replaced. */
     | { type: "runtime.notice"; message: string }

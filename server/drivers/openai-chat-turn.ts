@@ -37,9 +37,14 @@ import {
   refusedToolCallFailure,
   stoppedAfter,
 } from "./openai-chat-shared.ts";
+import { ChatRepeatGuard } from "./chat-repeat-guard.ts";
+import { TextCallHoldback, textToolCalls } from "./chat-text-tool-calls.ts";
 import { turnTrace } from "../turns/turn-trace.ts";
 import { chatToolsFingerprint, chatToolsTurnLimit, withWarmTokens, type WarmToolSessions } from "./openai-chat-tools-warm.ts";
 import { reportBackgroundError } from "../background-error.ts";
+
+const UNREADABLE_CALL = "[Sagax: your last tool call could not be read, so nothing ran. Call the tool again using only the tools you were given, with valid JSON arguments.]";
+const LOCAL_CORRECTIVE_ROUNDS = 2;
 
 export type OpenAIChatActiveTurn = {
   abort: AbortController;
@@ -286,6 +291,8 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
   const denials: string[] = [];
   const seenCalls = new Set<string>();
   let nudged = false;
+  const repeats = options.localModel ? new ChatRepeatGuard() : undefined;
+  let unreadable = false, askedAgain = false;
   // Asides spliced into the request that is in flight. Cleared once the
   // model answers that request. Still set when the turn ends means the
   // model never read them.
@@ -319,6 +326,7 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
         let streamed = false;
         let answerStreamed = false;
         let firstDeltaTraced = false;
+        const holdback = options.localModel && tools.definitions.length ? new TextCallHoldback() : undefined;
         const pending = { assistant_text: "", reasoning_text: "" };
         const delta = (text: string, streamKind: keyof typeof pending, flush = false) => {
           let combined = pending[streamKind] + text;
@@ -348,8 +356,22 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
           completion = await complete(messages, model, true, abort.signal, (text: string, streamKind: "assistant_text" | "reasoning_text") => {
             streamed = true;
             if (streamKind === "assistant_text") answerStreamed = true;
-            delta(text, streamKind);
+            const shown = holdback && streamKind === "assistant_text" ? holdback.feed(text) : text;
+            if (shown) delta(shown, streamKind);
           }, tools.definitions, undefined, undefined, apiKey, turn.effort);
+          // A reply cut off at the token limit may be a call cut short; running half of one is worse than saying so.
+          const written = holdback && !completion.toolCalls.length && completion.finishReason !== "length" ? textToolCalls(completion.text, tools.definitions) : null;
+          unreadable = written?.kind === "unreadable" && !askedAgain;
+          if (written?.kind === "calls") {
+            completion = { ...completion, text: written.text, toolCalls: written.calls, finishReason: "tool_calls" };
+            native("in", { recovered: "text_tool_calls", calls: written.calls.map((call) => call.function.name) });
+          } else if (unreadable) {
+            completion = { ...completion, text: written!.text };
+            native("in", { recovered: "unreadable_tool_call" });
+          } else {
+            const rest = holdback?.rest();
+            if (rest) delta(rest, "assistant_text");
+          }
           delta("", "assistant_text", true);
           delta("", "reasoning_text", true);
           break;
@@ -448,9 +470,14 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
         emit({ ...base(turn.threadId, turnId), type: "thread.token-usage.updated", ...usage });
       }
       // Reasoning on a tool-call round belongs to the protocol, not a final reply.
-      const reply = completion.text.trim() ? completion.text : completion.toolCalls.length ? "" : completion.reasoning;
+      const reply = completion.text.trim() ? completion.text : completion.toolCalls.length || unreadable ? "" : completion.reasoning;
       if (reply.trim()) emit({ ...base(turn.threadId, turnId), type: "item.completed", itemType: "assistant_text", text: safeText(reply) });
       abort.signal.throwIfAborted();
+      if (unreadable) {
+        askedAgain = true;
+        messages.push({ role: "assistant", content: completion.text }, { role: "user", content: UNREADABLE_CALL });
+        continue;
+      }
       if (!completion.toolCalls.length) {
         const cut = providerReplyCutReason(completion.finishReason);
         if (!reply.trim()) {
@@ -478,9 +505,10 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
         if (toolFailed) {
           // A person's "no" is never answered with another attempt; a
           // failure may first get the configured corrective rounds.
-          // The stop is recorded on the turn (stopReason) and the tool rows
-          // carry the detail; no banner is added to the chat for it.
-          if (!denials.length && !turnEntry.ending && correctiveRounds < (turn.toolErrorCorrectiveRounds ?? 0)) {
+          // Local models get at least LOCAL_CORRECTIVE_ROUNDS without being
+          // configured. The stop is recorded on the turn (stopReason) and
+          // the tool rows carry the detail; no banner is added to the chat.
+          if (!denials.length && !turnEntry.ending && correctiveRounds < Math.max(turn.toolErrorCorrectiveRounds ?? 0, options.localModel ? LOCAL_CORRECTIVE_ROUNDS : 0)) {
             correctiveRounds += 1;
             messages.push({ role: "user", content: CORRECTIVE_ROUND });
             continue;
@@ -506,15 +534,18 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
       }
       // The whole batch is refused before any of it runs.
       if (seenCalls.size > MAX_TURN_TOOL_CALLS) throw new ChatProtocolError(stoppedAfter(`${MAX_TURN_TOOL_CALLS} tool calls`));
-      messages.push({ ...assistantReply(completion, completion.text || null), tool_calls: completion.toolCalls });
-      // After a corrective round, the failure stays pending only until the bot runs tools again.
-      if (correctiveRounds && !denials.length) toolFailed = false;
+messages.push({ ...assistantReply(completion, completion.text || null), tool_calls: completion.toolCalls });
+      // A failure stays pending only until the bot runs tools again: one that went on to use more tools has read the error
+      // and reacted (a wrong guess, a bad query, then the right call), so its turn is not failed for it, on any model. The
+      // failed step still shows as failed; a failure in the last calls before the answer, or a person's no, still ends it.
+      if (!denials.length) toolFailed = false;
       const screenshotParts: ChatContentPart[] = [];
       for (const call of completion.toolCalls) {
         abort.signal.throwIfAborted();
         let result: ChatToolResult;
         let started = false;
         let fatal: Error | undefined;
+        let skipRepeatCount = false;
         try {
           let args: unknown;
           try { args = JSON.parse(call.function.arguments); }
@@ -553,6 +584,8 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
               }
             }
           } else {
+            const refused = repeats?.refuses(call.function.name, call.function.arguments);
+            if (refused) { skipRepeatCount = true; throw new Error(refused); }
             tools.validate(call.function.name, args);
             // A searched server's call_tool is shown as the tool it runs;
             // its catalog reads ask nothing, as listing tools never did.
@@ -597,6 +630,7 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
             : safeText(asError(error).message).slice(0, 2_000) };
         }
         if (!started) emit({ ...base(turn.threadId, turnId), type: "item.started", itemType: "tool", itemId: call.id, title: call.function.name });
+        const repeatNote = skipRepeatCount ? undefined : repeats?.noteAfter(call.function.name, call.function.arguments, result);
         const text = safeText(result.text);
         // a phone's answer reaches the model, never the event log or the chat (phone_tool)
         // a failure reads as its words, not the { ok, result } envelope the model gets
@@ -607,10 +641,11 @@ async function executeOpenAIChatTurn(ctx: OpenAIChatTurnCtx): Promise<void> {
           ...(result.ok ? cwToolResult(call.function.name, text) : {}),
         });
         if (!result.ok) toolFailed = true;
-        messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify({ ok: result.ok, result: text }) });
+        messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify({ ok: result.ok, result: repeatNote ? `${text}\n\n${repeatNote}` : text }) });
         screenshotParts.push(...chatToolImages(call.id, result.images));
         abort.signal.throwIfAborted();
         if (fatal) throw fatal;
+        if (repeats?.stopped) { stopReason = "incomplete_action"; throw new ChatProtocolError(repeats.stopped); }
       }
       if (screenshotParts.length) messages.push({ role: "user", content: screenshotParts });
     }
@@ -702,10 +737,12 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
     if (sessionGrants.size > MAX_DELIVERED_THREADS) sessionGrants.delete(sessionGrants.keys().next().value!);
     const approval = createChatToolApproval({
       signal: abort.signal,
-      // #2091 (decided 2026-11-05): a guest's turn meets the same grants as any
-      // other; what answers it is decided in index.ts request.opened (the
-      // owner's rules, situation "origin"), never a strip added here
-      granted,
+      // Session "Always allow this session" stays with the owner of the
+      // conversation. A guest must not inherit or keep those grants (person
+      // isolation). #2091's Always allow on every card still applies through
+      // index.ts request.opened (ownerRule); this set is only the driver's
+      // in-conversation memory.
+      granted: turn.guestConfined ? undefined : granted,
       // #1982: always emit; Full is answered in index.ts request.opened
       // (org/person rules, safety, isolation still hold). Never short-
       // circuit MCP asks in this driver the way Codex #1977 used to.

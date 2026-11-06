@@ -69,10 +69,12 @@
 //                     is running)
 //                   | quiet-then-answer (send nothing for FAKE_ACP_QUIET_MS,
 //                     default 600, then answer — a slow model or a rate-limit
-//                     wait. With QWEN_HOME set, appends FAKE_ACP_QWEN_LOG
-//                     (a JSON array of lines) to Qwen's debug log for this
-//                     session, one line every FAKE_ACP_LOG_EVERY_MS (default
-//                     100), repeating the last, as Qwen does while it retries)
+//                     wait. With QWEN_HOME set, appends FAKE_ACP_QWEN_LOG (a JSON
+//                     array of lines) to Qwen's debug log for this session, one
+//                     line every FAKE_ACP_LOG_EVERY_MS (default 100), repeating
+//                     the last, as Qwen does while it retries; with XDG_DATA_HOME,
+//                     appends FAKE_ACP_OPENCODE_LOG once to OpenCode's shared log,
+//                     {session} replaced by the session id)
 //                   | voice (a spoken answer with a real CLI's timing,
 //                     docs/voice-mode-xai.md "Latency": initialize answers
 //                     FAKE_ACP_COLD_MS after process boot, session/new and
@@ -1288,6 +1290,15 @@ function handle(msg: any) {
           let i = 0;
           logTimer = setInterval(() => {
             appendFileSync(`${dir}/${liveSession}.txt`, `${new Date().toISOString()} ${lines[Math.min(i++, lines.length - 1)]}\n`);
+          }, Number(process.env.FAKE_ACP_LOG_EVERY_MS ?? 100));
+        }
+        const openCodeLines: string[] = process.env.FAKE_ACP_OPENCODE_LOG ? JSON.parse(process.env.FAKE_ACP_OPENCODE_LOG) : [];
+        if (openCodeLines.length && process.env.XDG_DATA_HOME && liveSession) {
+          const dir = `${process.env.XDG_DATA_HOME}/opencode/log`;
+          mkdirSync(dir, { recursive: true });
+          const session = liveSession;
+          setTimeout(() => {
+            appendFileSync(`${dir}/opencode.log`, openCodeLines.map((line) => `${line.replaceAll("{session}", session)}\n`).join(""));
           }, Number(process.env.FAKE_ACP_LOG_EVERY_MS ?? 100));
         }
         setTimeout(() => {

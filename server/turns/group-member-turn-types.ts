@@ -262,6 +262,7 @@ export type GroupMemberTurnHost = {
   usesCompactPrompt: any,
   usesStablePrompt: any,
   vaultPrincipalForThread: any,
+  videoFramesWithin: any,
   vps: any,
   vpsThreadEnded: any,
   vpsThreadStarted: any,

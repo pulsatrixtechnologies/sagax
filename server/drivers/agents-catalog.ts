@@ -108,7 +108,7 @@ export interface CatalogProfile {
    * but may create bots for its person is shown create_bot (without the
    * Primary Bot's suggestion). Absent is off, so the wire goldens stay. */
   createBots?: boolean;
-  /** Written into start_thread's schema in a coordinating turn. */
+  /** Watcher's own tool only. Never written into a schema: a list that names its bot can't share a prompt cache with other bots of the same role. */
   botId: string;
   /** The agent-to-agent tools (server/agent-api.ts), in direct turns. */
   agentApi?: boolean;
@@ -634,12 +634,15 @@ function coreCatalogTools(profile: CatalogProfile) {
     ? BOT_SCOPED_TOOLS.filter(tool => EXTERNAL_TOOL_NAMES.has(tool.name))
     : profile.coordinating
     ? PLACE_TOOLS.filter(tool => !ROOM_REPLACED_TOOLS.has(tool.name) || (tool.name === "start_thread" && profile.ownThreadCreation))
-      .map(tool => tool.name === "start_thread" ? {
-        ...tool,
-        description: "Open a separate job on yourself with its own history and run, without switching the person's selected conversation. Use only when the user requests independent jobs (for example one review per pull request). Give a short specific title and complete instructions; you can open at most five per turn. This is not a teammate handoff: use coordinate_bots for teammates and their automatic replies. Self-opened jobs cannot recursively open more jobs. If refused, do not retry; explain what remains.",
-        inputSchema: { ...tool.inputSchema, properties: { ...tool.inputSchema.properties,
-          bot_id: { type: "string", enum: [profile.botId], description: "Leave out, or use your own bot ID. For teammates use coordinate_bots." },
-        } },
-      } : tool)
+      .map(tool => {
+        if (tool.name !== "start_thread") return tool;
+        // No bot_id in the schema: an id here made every bot of the role rewrite the whole tool list (prompt cache).
+        const properties = Object.fromEntries(Object.entries(tool.inputSchema.properties).filter(([key]) => key !== "bot_id"));
+        return {
+          ...tool,
+          description: "Open a separate job on yourself with its own history and run, without switching the person's selected conversation. Use only when the user requests independent jobs (for example one review per pull request). Give a short specific title and complete instructions; you can open at most five per turn. This is not a teammate handoff: use coordinate_bots for teammates and their automatic replies. Self-opened jobs cannot recursively open more jobs. If refused, do not retry; explain what remains.",
+          inputSchema: { ...tool.inputSchema, properties },
+        };
+      })
     : PLACE_TOOLS.filter(tool => !ROOM_ONLY_TOOLS.has(tool.name));
 }

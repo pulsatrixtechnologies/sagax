@@ -342,11 +342,19 @@ it("stops after one failed backup instead of looping between engines", async () 
     expect(calls().filter((call) => call.method === "initialize.error")).toHaveLength(1);
     const { messages } = await control("messages", "--bot", bot.id, "--task", threadId, "--limit", "20");
     expect(messages.filter((message: any) => message.role === "user" && message.text === "ONLY_ONE_BACKUP_4T")).toHaveLength(1);
-    // the backup's sign-in failure is the one failed-turn row every client
-    // reads (shared/failed-turn.ts): whole, with the flag its sign-in needs
-    expect(messages.map((message: any) => message.tool).filter((tool: any) => tool?.ok === false))
-      // 84841aeed gives an expired sign-in its Reconnect guidance and keeps the provider's words.
-      .toEqual([{ name: `error: ${CLAUDE_SIGN_IN_EXPIRED} Claude said: Not logged in · Please run /login`, ok: false, setup: true }]);
+    // #2013: a pre-send sign-in refusal is not a red card in chat. The
+    // composer keeps the engine's words (GET send-state) with Sign in.
+    expect(messages.map((message: any) => message.tool).filter((tool: any) => tool?.ok === false)).toEqual([]);
+    expect(await api("GET", `/api/bots/${bot.id}/send-state?threadId=${threadId}`)).toMatchObject({
+      block: {
+        reason: "engine_signed_out",
+        advisory: true,
+        refusal: {
+          kind: "signed_out",
+          cause: `${CLAUDE_SIGN_IN_EXPIRED} Claude said: Not logged in · Please run /login`,
+        },
+      },
+    });
   });
 }, 90_000);
 
@@ -392,13 +400,24 @@ it("preserves the sign-in error when automatic recovery is disabled", async () =
     await codexModelsListed(api);
     await api("PUT", "/api/config", { automaticRecovery: { enabled: false, backup: { instanceId: "codex", model: "gpt-fake-default" } } });
     const { bot } = await control("new-bot", "--name", "Sign in manually");
-    await api("PATCH", `/api/bots/${bot.id}/tasks/${bot.activeTaskId}`, { modelSelection: backup, approvalMode: "ask" });
+    const threadId = bot.activeTaskId;
+    await api("PATCH", `/api/bots/${bot.id}/tasks/${threadId}`, { modelSelection: backup, approvalMode: "ask" });
     await control("send", "--bot", bot.id, "--text", "NO_SIGN_OUT_RECOVERY_4B");
     expect((await control("wait", "--bot", bot.id, "--timeout", "30")).status).toBe("failed");
     const { messages } = await control("messages", "--bot", bot.id, "--limit", "30");
     expect(messages.filter((message: any) => message.tool?.name?.startsWith("recovery:"))).toHaveLength(0);
-    expect(messages.map((message: any) => message.tool).filter((tool: any) => tool?.ok === false))
-      .toEqual([{ name: `error: ${CLAUDE_SIGN_IN_EXPIRED} Claude said: Not logged in · Please run /login`, ok: false, setup: true }]);
+    // #2013: no red card; the sign-in error stays on the composer send-state.
+    expect(messages.map((message: any) => message.tool).filter((tool: any) => tool?.ok === false)).toEqual([]);
+    expect(await api("GET", `/api/bots/${bot.id}/send-state?threadId=${threadId}`)).toMatchObject({
+      block: {
+        reason: "engine_signed_out",
+        advisory: true,
+        refusal: {
+          kind: "signed_out",
+          cause: `${CLAUDE_SIGN_IN_EXPIRED} Claude said: Not logged in · Please run /login`,
+        },
+      },
+    });
   });
 }, 90_000);
 

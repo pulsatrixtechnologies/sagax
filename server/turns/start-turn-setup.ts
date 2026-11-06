@@ -75,6 +75,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     turnTrace,
     unseenMessages,
     vaultPrincipalForThread,
+    videoFramesWithin,
     voiceBriefText,
     voiceCalls,
     voiceSessions,
@@ -118,6 +119,11 @@ export function createSetupStartTurn(host: StartTurnHost) {
         throw new DirectTurnSetupCancelled("turn stopped during cloud readiness");
       }
       if (!readiness.ready) throw new Error(readiness.reason ?? "The cloud computer is not ready");
+    }
+    // Sample video frames after the turn is claimed so an ffmpeg run never
+    // opens a window before the turn registers. Videos were held plain during admit.
+    if (state.instance.adapter.capabilities.nativeImageInput === true && !state.opts?.compactOnly) {
+      state.turnImages.push(...await videoFramesWithin(state.turnImages.length, state.resolvedImages.videos ?? []));
     }
     // A call turn starts its own short session: the conversation's fold
     // waits for its next written turn, off the person's silence.

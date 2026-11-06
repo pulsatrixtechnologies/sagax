@@ -65,6 +65,8 @@ export interface AcpTurn {
   latency?: TurnLatency;
   state: {
     settled: boolean; promptSent: boolean; text: string; producedItem: boolean;
+    /** Assistant text was flushed as a reply item (not only tools or images). */
+    repliedText?: boolean;
     /** A reply or an image went out (not only tool calls): a nudge could repeat it. */
     producedReply?: boolean; startupActivity: boolean; stopped: boolean;
     /** Stop's cancel-timeout is ending the process; child close must not settle as exit_before_result. */
@@ -336,10 +338,13 @@ export interface AcpSupport {
   /** The agent's own debug log for a native session, read while a prompt is
    * quiet: any new line proves the process alive, and `parse` picks out what
    * is worth telling the person (a retry, a compression). Return null when
-   * this process keeps no log. */
+   * this process keeps no log. A `shared` log holds every session's and
+   * process's lines, so its lines prove nothing about this turn and only
+   * `parse` reads them. */
   statusLog?: {
     path(env: Record<string, string | undefined>, sessionId: string): string | null;
-    parse(line: string): LogSignal | null;
+    parse(line: string, sessionId: string): LogSignal | null;
+    shared?: true;
   };
   /** Bound provider-native tool payloads before writing diagnostic logs. */
   sanitizeToolPayload?: boolean;

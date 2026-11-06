@@ -457,6 +457,9 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     delete process.env.FAKE_CODEX_RESOLVED_SANDBOX;
     delete process.env.FAKE_CODEX_MCP_START;
     delete process.env.FAKE_CODEX_MCP_HANDSHAKE;
+    delete process.env.FAKE_CODEX_MCP_READY_MS;
+    delete process.env.FAKE_CODEX_MCP_STAGGER;
+    delete process.env.FAKE_CODEX_USER_AGENT;
     delete process.env.FAKE_CODEX_STEER_ERROR;
     delete process.env.FAKE_CODEX_STEER_ERROR_FILE;
     delete process.env.FAKE_CODEX_STEER_HANG;
@@ -1295,10 +1298,15 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     const seen = JSON.parse(readFileSync(dump, "utf8"));
     const argv = seen.argv.join(" ");
     expect(argv).toContain("mcp_servers.notes.command");
-    // env value stays in the child env; argv carries names only
-    expect(argv).toContain("NOTES_TOKEN");
+    // #2189: agents is mounted, so notes goes through the gate (withhold of agents' bare names).
+    // The token stays in the gate record, never on argv.
+    expect(argv).toContain("SAGAX_GATE_CONFIG_");
+    expect(argv).toContain("mcp-gate.ts");
     expect(argv).not.toContain("tok-notes");
-    expect(seen.env.NOTES_TOKEN).toBe("tok-notes");
+    expect(argv).not.toContain("NOTES_TOKEN");
+    const gateKey = Object.keys(seen.env).find((name) => name.startsWith("SAGAX_GATE_CONFIG_"));
+    expect(gateKey).toBeTruthy();
+    expect(JSON.parse(JSON.parse(seen.env[gateKey!]).SAGAX_GATE_UPSTREAM).env.NOTES_TOKEN).toBe("tok-notes");
   });
 
   it("mounts a custom server under its own name when the user's config.toml already has one by that name", async () => {
@@ -1362,6 +1370,57 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(seen.argv).toContain("features.shell_snapshot=false");
     const thread = seen.calls.find((call: { method: string }) => call.method === "thread/start");
     expect(thread.params.config["shell_environment_policy.exclude"]).toEqual(["SAGAX_REMOTE_MCP_CONFIG_*", "ELECTRON_RUN_AS_NODE"]);
+  });
+
+  const startupMounts = {
+    custom: {
+      composio: { command: process.execPath, args: ["connector-proxy.js"], env: {} },
+      agents: { command: process.execPath, args: ["agents-proxy.js"], env: {} },
+    },
+  };
+
+  it("starts a new thread's turn only once the MCP servers it mounted finished starting", async () => {
+    const dump = join(scratch, "mcp-ready.json"); process.env.FAKE_CODEX_DUMP = dump;
+    await create({ environment: { HOME: scratch, CODEX_HOME: join(scratch, ".codex"), FAKE_CODEX_MCP_READY_MS: "400", FAKE_CODEX_MCP_STAGGER: "1" } });
+    await instance.adapter.sendTurn({ threadId: "mcp-ready", text: "Fixture", integrations: startupMounts });
+    await recorder.until((event) => event.type === "turn.completed");
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.argv).toContain(`mcp_servers.composio.command=${JSON.stringify(process.execPath)}`);
+    expect(seen.mcpReadyAtTurnStart).toBe(true);
+    expect(recorder.events.find((event) => event.type === "turn.completed")).toMatchObject({ ok: true });
+  });
+
+  it("does not wait for startup notifications on older Codex", async () => {
+    const dump = join(scratch, "mcp-old.json"); process.env.FAKE_CODEX_DUMP = dump;
+    await create({ environment: { HOME: scratch, CODEX_HOME: join(scratch, ".codex"), FAKE_CODEX_USER_AGENT: "codex_cli_rs/0.116.0", FAKE_CODEX_MCP_READY_MS: "600000" } });
+    await instance.adapter.sendTurn({ threadId: "mcp-old", text: "Fixture", integrations: startupMounts });
+    await recorder.until((event) => event.type === "turn.completed");
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.mcpReadyAtTurnStart).toBe(false);
+  });
+
+  it("waits for the MCP servers of a resumed thread too", async () => {
+    const dump = join(scratch, "mcp-ready-resume.json"); process.env.FAKE_CODEX_DUMP = dump;
+    await create({ mode: "resume", environment: { HOME: scratch, CODEX_HOME: join(scratch, ".codex"), FAKE_CODEX_MCP_READY_MS: "400" } });
+    await instance.adapter.sendTurn({ threadId: "mcp-ready-resume", text: "Continue", resumeCursor: "codex-thread-1", integrations: startupMounts });
+    await recorder.until((event) => event.type === "turn.completed");
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.calls.map((call: { method: string }) => call.method)).toContain("thread/resume");
+    expect(seen.mcpReadyAtTurnStart).toBe(true);
+  });
+
+  it("stops a turn still waiting for its MCP servers without starting it", async () => {
+    mkdirSync(NATIVE_DIR, { recursive: true });
+    await create({ environment: { HOME: scratch, CODEX_HOME: join(scratch, ".codex"), FAKE_CODEX_MCP_READY_MS: "600000" } });
+    await instance.adapter.sendTurn({ threadId: "mcp-stop", text: "Fixture", integrations: startupMounts });
+    await recorder.until((event) => event.type === "session.started");
+    await instance.adapter.interruptTurn("mcp-stop");
+    await recorder.until((event) => event.type === "turn.completed");
+    expect(recorder.events.find((event) => event.type === "turn.completed")).toMatchObject({ ok: false, stopReason: "interrupted" });
+    const sent = readFileSync(join(NATIVE_DIR, "mcp-stop.ndjson"), "utf8").trim().split("\n").map((line) => JSON.parse(line))
+      .filter((entry) => entry.dir === "out").map((entry) => entry.msg?.method);
+    expect(sent).toContain("thread/start");
+    expect(sent).not.toContain("turn/start");
   });
 
   // A server that deserializes initialize strictly refuses the field
@@ -1469,10 +1528,12 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(await recorder.until((event) => event.type === "turn.completed")).toMatchObject({ ok: true });
     const seen = JSON.parse(readFileSync(dump, "utf8"));
     expect(seen.argv).toContain("features.shell_snapshot=false");
+    // #2189: agents is mounted, so custom notes and the URL docs server both go through the gate;
+    // their secrets (GITHUB_PERSONAL_ACCESS_TOKEN, OVERRIDDEN, docs Authorization) stay inside
+    // SAGAX_GATE_CONFIG_* records and never appear as separate shell exclusions.
     expect(seen.calls.find((call: { method: string }) => call.method === "thread/start").params.config["shell_environment_policy.exclude"]).toEqual([
-      "USER_SECRET_*", "SAGAX_REMOTE_MCP_CONFIG_*",
-      // sorted: the Sagax names sort after OVERRIDDEN (upstream's SAGAX_ names sorted before it)
-      "ELECTRON_RUN_AS_NODE", "GITHUB_PERSONAL_ACCESS_TOKEN", "OVERRIDDEN", "SAGAX_COMMS_TOKEN", "SAGAX_COMMS_TOKEN_FILE",
+      "USER_SECRET_*", "SAGAX_GATE_CONFIG_*",
+      "ELECTRON_RUN_AS_NODE", "SAGAX_COMMS_TOKEN", "SAGAX_COMMS_TOKEN_FILE",
       // the agents mount asks for the tools merged by family (#1604)
       "SAGAX_MERGED_TOOLS", "SAGAX_PHONE_TOKEN",
     ]);
@@ -2977,6 +3038,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
 
     expect(recorder.events.some((event) => event.type === "request.opened")).toBe(false);
     expect(JSON.parse(readFileSync(dump, "utf8")).decision).toEqual({ action: "decline" });
+    expect(recorder.events.find((event) => event.type === "runtime.notice")?.message).toBe("example asked for input Sagax can't show yet, so the request was declined.");
   });
 
   it("grants Codex additional permissions with their native response shape", async () => {

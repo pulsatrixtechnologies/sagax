@@ -11,6 +11,7 @@ import { UNDELIVERED_VOLATILE } from "./messages.ts";
 import { PERM_PROXY_PATH, removePrivateTempDir } from "./helpers.ts";
 import { resolveClaudeConfigDir } from "./config.ts";
 import { readToolPaths } from "../../own-file-reads.ts";
+import { claudeElicitations } from "./elicitation.ts";
 import type { ClaudeSession } from "./session-types.ts";
 import type { ClaudeTurnCtx, ClaudeTurnEarly } from "./turn-ctx.ts";
 
@@ -188,6 +189,13 @@ const session: ClaudeSession = {
   closed: new Promise<void>((resolve) => { markClosed = resolve; }),
   child,
   broker,
+  // A CLI that already exited needs no answer: the write is skipped, like writeUser's.
+  elicit: claudeElicitations((frame) => new Promise<boolean>((resolve) => {
+    const { stdin } = session.child;
+    if (!stdin.writable || stdin.destroyed) return resolve(false);
+    try { stdin.write(`${JSON.stringify(frame)}\n`, (err) => resolve(!err)); } catch { resolve(false); }
+  }),
+    (event) => emit({ ...base(threadId, session.turn?.turnId ?? turnId), ...event })),
   mcpConfigPath,
   systemPromptPath,
   argsKey,

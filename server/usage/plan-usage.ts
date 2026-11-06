@@ -503,6 +503,13 @@ export function newPlanUsageAlerts(report: PlanUsageReport, scope: string, thres
  * past the plan), a credit balance. */
 const EXTRA_ALLOWANCE = /^(?:extra usage|credits?)$/i;
 
+/** Whether Claude's paid extra usage is on and not used up, on a plan with rolling windows: sends then go on past a
+ * full window and are paid from it. */
+export function claudeHasExtraUsageRoom(row: Pick<PlanProviderRow, "driver" | "fiveHour" | "weekly" | "extra">): boolean {
+  if (row.driver !== "claude" || !(row.fiveHour.available || row.weekly.available)) return false;
+  return !!row.extra?.some((line) => EXTRA_ALLOWANCE.test(line.label.trim()) && line.usedPercent < 100);
+}
+
 /** 2026-11-02: until when this row's plan is spent, as its provider said:
  * the latest reset among its windows used at 100 % (each must reset before
  * a turn runs on it again). Null when none is spent, when a spent one gave

@@ -34,7 +34,7 @@ export function createSendTurn(deps: SendTurnDeps) {
     turn = preparedTurn;
     void env;
 
-        const state: AcpTurn["state"] = { settled: false, promptSent: false, text: "", producedItem: false, startupActivity: false, stopped: false, usagePeak: null, usageLast: null, usageCompacted: false };
+        const state: AcpTurn["state"] = { settled: false, promptSent: false, text: "", producedItem: false, repliedText: false, startupActivity: false, stopped: false, usagePeak: null, usageLast: null, usageCompacted: false };
         let acknowledge = () => {};
         let rejectStartup = (_error: TurnNotStartedError) => {};
         const started = { turnId, ...(reused ? { reused: true } : {}) };
@@ -75,6 +75,7 @@ export function createSendTurn(deps: SendTurnDeps) {
           const text = stripLeakedSystemHarnessMessages(raw);
           if (!text.trim()) return;
           state.producedItem = true;
+          state.repliedText = true;
           state.producedReply = true;
           emit({ ...base(threadId, turnId), type: "item.completed", itemType: "assistant_text", text });
         };

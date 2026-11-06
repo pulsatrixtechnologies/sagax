@@ -479,8 +479,9 @@ export async function probeGrokReach(cli: string, env: Record<string, string | u
     void (async () => {
       const init = await send("initialize", { protocolVersion: 1, clientCapabilities: {} });
       const methods = (init.result as { authMethods?: Array<{ id?: string }> } | undefined)?.authMethods ?? [];
-      if (init.error || !methods.some((method) => method.id === "cached_token")) return finish(null);
-      const auth = await send("authenticate", { methodId: "cached_token" });
+      const methodId = ["cached_token", "grok.com"].find((id) => methods.some((method) => method.id === id));
+      if (init.error || !methodId) return finish(null);
+      const auth = await send("authenticate", { methodId });
       if (auth.error) return finish(null);
       const created = await send("session/new", { cwd: dirname(home), mcpServers: [] });
       const sessionId = (created.result as { sessionId?: unknown } | undefined)?.sessionId;
@@ -755,10 +756,12 @@ export function grokApplyAccess(
   if (key) env.XAI_API_KEY = key;
 }
 
-/** The subscription's cached token when the CLI has one; else the key the
- * turn was given (organization server only). */
+/** The subscription's cached token when the CLI has one; else current CLI's
+ * `grok.com` method for an already-signed-in session; else the key the turn
+ * was given (organization server only). */
 export function grokPickAuthMethod(methods: Array<{ id?: string }>, env?: Record<string, string | undefined>): string | null {
-  if (methods.some((m) => m.id === "cached_token")) return "cached_token";
+  const subscription = ["cached_token", "grok.com"].find((id) => methods.some((m) => m.id === id));
+  if (subscription) return subscription;
   return env?.XAI_API_KEY?.trim() ? "xai.api_key" : null;
 }
 

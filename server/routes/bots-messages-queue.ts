@@ -96,7 +96,10 @@ async function handleQueueSteer(deps: BotsMessagesRouteDeps, ctx: RouteContext):
     if (!held) return json(res, 404, { error: "no such queued message" });
     // A live steer has no image side channel. Attachment words wait for a
     // real turn where central admission can hand the images to the engine.
-    if (held.items.some((item: any) => extractTurnImages(item.text).images.length > 0)) {
+    if (held.items.some((item: any) => {
+      const resolved = extractTurnImages(item.text);
+      return resolved.images.length > 0 || resolved.videos.length > 0;
+    })) {
       restoreHeldSteeredQueue(held);
       return json(res, 200, { ok: true, queued: true, threadId: bot.threadId });
     }

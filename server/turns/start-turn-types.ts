@@ -466,6 +466,7 @@ export type StartTurnHost = {
   usesCompactPrompt: any,
   usesStablePrompt: any,
   vaultPrincipalForThread: any,
+  videoFramesWithin: any,
   viewerBotOverrideStore: any,
   voiceBriefText: any,
   voiceCallSection: any,

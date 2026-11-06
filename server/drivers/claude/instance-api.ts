@@ -271,6 +271,9 @@ export function buildClaudeInstanceApi(bag: Record<string, any>): ProviderInstan
       interruptTurn: async (threadId) => active.get(threadId)?.stop(),
       applyApprovalMode,
       respondToRequest: async (threadId, requestId, decision) => {
+        const elicited = await sessions.get(threadId)?.elicit.answer(requestId, decision.behavior);
+        if (elicited === "failed") return "unavailable";
+        if (elicited === "sent") return decision.behavior === "allow" ? "allowed-once" : "rejected";
         // fail-closed by construction: no broker, or an ask that already
         // timed out / settled, is `unavailable` — the caller denies
         const broker = sessions.get(threadId)?.broker ?? active.get(threadId)?.broker;

@@ -99,3 +99,27 @@ describe("streamed tool calls without an index (Gemini's OpenAI-compatible endpo
     expect(() => calls.add([whole("call_32", "f")], true)).toThrow(/invalid tool-call index/);
   });
 });
+
+describe("Gemini thought signatures on tool calls", () => {
+  it("keeps each call's thought signature", () => {
+    const calls = new ChatToolCalls();
+    const extra_content = { google: { thought_signature: "c2ln" } };
+    calls.add([{ index: 0, ...completeCall, extra_content }, { index: 1, ...completeCall, id: "call_two" }], true);
+    expect(calls.finish("stop", false)).toEqual([{ ...completeCall, extra_content }, { ...completeCall, id: "call_two" }]);
+  });
+
+  it("ignores extra content that is not an object", () => {
+    const calls = new ChatToolCalls();
+    calls.add([{ index: 0, ...completeCall, extra_content: "sig" }], true);
+    expect(calls.finish("stop", false)).toEqual([completeCall]);
+  });
+
+  it("counts a signature repeated on every chunk once toward the size limit", () => {
+    const calls = new ChatToolCalls();
+    const extra_content = { google: { thought_signature: "s".repeat(100_000) } };
+    calls.add([{ index: 0, ...completeCall, extra_content }], true);
+    calls.add([{ index: 0, extra_content }], true);
+    calls.add([{ index: 0, extra_content }], true);
+    expect(calls.finish("stop", false)).toEqual([{ ...completeCall, extra_content }]);
+  });
+});

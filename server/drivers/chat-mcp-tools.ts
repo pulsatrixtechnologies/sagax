@@ -10,6 +10,7 @@ import { redactSecretsInText } from "../redact.ts";
 import { MESSAGE_FILE_MAX_BYTES } from "../messages/message-file.ts";
 import { augmentedPath } from "../env-path.ts";
 import { killCliTree, spawnCli } from "../procs.ts";
+import { listsComputerTool } from "../computer/computer-tool-list.ts";
 import { chatImage, type ChatImagePart } from "./chat-images.ts";
 import { CALL_TOOL, bm25Ranker, directoryCallTarget, inputSignature, isDirectoryTool, oneLine, type CatalogTool } from "../mcp/mcp-directory.ts";
 import { mcpStdioServer } from "../mcp/mcp-gate-config.ts";
@@ -392,6 +393,7 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
   if (integrations?.agents && eligible("agents")) servers.push(["agents", integrations.agents]);
   if (integrations?.data && eligible("data")) servers.push(["data", integrations.data]);
   if (integrations?.messages && eligible("messages")) servers.push(["messages", integrations.messages]);
+  const besideBrowser = servers.some(([, descriptor]) => descriptor === integrations?.browser);
   for (const [name, server] of Object.entries(integrations?.custom ?? {})) {
     if (!eligible(name)) continue;
     const remote = remoteMcpSpec(server) !== undefined;
@@ -442,8 +444,14 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
     agents: boolean; data: boolean; computer: boolean; tools: unknown[]; revision: number;
   };
   const catalogs = new Map<string, CatalogMount>();
-  const includeTool = (server: string, tool: unknown) => scope === undefined || (object(tool) && typeof tool.name === "string"
-    && ((searchable.has(server) && isDirectoryTool(tool.name)) || allowsTool(scope, { kind: "mcp", server, name: tool.name })));
+  const includeTool = (server: string, tool: unknown) => {
+    // #3811: Filter Cua upkeep (and the driver's own browser when the built-in browser is also mounted) before scope checks.
+    if (server === "computer" && object(tool) && typeof tool.name === "string" && !listsComputerTool(tool.name, besideBrowser)) {
+      return false;
+    }
+    return scope === undefined || (object(tool) && typeof tool.name === "string"
+      && ((searchable.has(server) && isDirectoryTool(tool.name)) || allowsTool(scope, { kind: "mcp", server, name: tool.name })));
+  };
   // #2189: agents bare names win over the same name on a connector.
   const agentsPreferred = new Set(integrations?.agents ? agentsPreferredToolNames((integrations.agents as { env?: Record<string, string> }).env) : []);
   const registerCatalog = (mount: CatalogMount) => {

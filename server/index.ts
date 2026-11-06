@@ -1158,7 +1158,8 @@ import {
   withUnseenMessages,
   type ContextMessage
 } from "./context/delta-context.ts";
-import { extractTurnImages } from "./turns/turn-images.ts";
+import { extractTurnImages, videoFramesWithin } from "./turns/turn-images.ts";
+
 import { fitTurnImagesForModel, modelImageCopyPath } from "./models/model-image.ts";
 import {
   callTitleExcerpt,
@@ -7323,7 +7324,7 @@ function storedFamily(name: string): string[] {
 // to wait for never yields here, so the admission checks of startTurn stay
 // synchronous up to its slot claim (a drain starts several waiting turns
 // in one pass; a yield between check and claim lets them all through).
-function holdTurnAttachments(threadId: string, texts: readonly (string | undefined)[], images: readonly TurnImageInput[], options: { picturesByPath?: boolean } = {}): Promise<void> | undefined {
+function holdTurnAttachments(threadId: string, texts: readonly (string | undefined)[], images: readonly TurnImageInput[], options: { picturesByPath?: boolean; videos?: readonly { path: string }[] } = {}): Promise<void> | undefined {
   const solo = IDENTITY.kind !== "perspicax";
   const open = async (): Promise<void> => {
     const holder = turnHolder(threadId);
@@ -7333,6 +7334,11 @@ function holdTurnAttachments(threadId: string, texts: readonly (string | undefin
       now.add(image.path);
       if (options.picturesByPath) wait.add(image.path);
       try { now.add(modelImageCopyPath(ATTACHMENTS_DIR, image.path)); } catch { /* not in the attachments folder */ }
+    }
+    // ffmpeg samples frames from the plain file: wait for each video before the turn reads it.
+    for (const video of options.videos ?? []) {
+      now.add(video.path);
+      wait.add(video.path);
     }
     if (solo) {
       for (const text of texts) for (const name of storedNamesIn(text)) {
@@ -7349,7 +7355,8 @@ function holdTurnAttachments(threadId: string, texts: readonly (string | undefin
     void opening.catch(reportBackgroundError);
   };
   // the turn waits only when something is read by path before the engine starts
-  const mustWait = Boolean(options.picturesByPath && images.length) || (solo && texts.some((text) => storedNamesIn(text).some(isArchiveAttachment)));
+  const mustWait = Boolean(options.picturesByPath && images.length) || Boolean(options.videos?.length)
+    || (solo && texts.some((text) => storedNamesIn(text).some(isArchiveAttachment)));
   if (mustWait) return open();
   setImmediate(() => { void open().catch(() => undefined); });
   return undefined;
@@ -24616,8 +24623,9 @@ async function acceptDirectSend(
         // Elsewhere an attachment message stays intact for the next ordinary
         // turn, where central image admission hands it over natively.
         // Over-limit attachments still refuse the send here (413), as before.
+        // #4169: videos count as attachments too (frames are sampled later).
         const steerInput = extractTurnImages(text);
-        const carriesImages = steerInput.images.length > 0;
+        const carriesImages = steerInput.images.length > 0 || steerInput.videos.length > 0;
         const steerTarget = handoffs.current(threadId);
         const busyAdmission = admit("direct-busy", {
           carriesImages,
@@ -48928,6 +48936,7 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   usesCompactPrompt,
   usesStablePrompt,
   vaultPrincipalForThread,
+  videoFramesWithin,
   vps,
   vpsThreadEnded,
   vpsThreadStarted,
@@ -49408,6 +49417,7 @@ const startTurnRunner = createStartTurn({
   usesCompactPrompt,
   usesStablePrompt,
   vaultPrincipalForThread,
+  videoFramesWithin,
   viewerBotOverrideStore,
   voiceBriefText,
   voiceCallSection,

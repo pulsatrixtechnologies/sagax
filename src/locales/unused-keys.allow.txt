@@ -684,7 +684,6 @@ voice.grok.ready
 voice.grok.sharedKey
 voiceMode.collapse
 voiceMode.expand
-voiceProviders.loading
 whop.disconnect
 whop.otherAppsSetup
 worksOn.browserTitle

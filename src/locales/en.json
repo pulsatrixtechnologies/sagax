@@ -12524,7 +12524,6 @@
   "voiceProviders.inherit": "Same as my settings ({provider})",
   "voiceProviders.noKey": "{provider} (no key)",
   "voiceProviders.default": "Provider's default voice",
-  "voiceProviders.loading": "Loading voices…",
   "voiceProviders.test": "Test the voice",
   "voiceProviders.sample": "Hello, this is how I sound on a call.",
   "voiceProviders.testFailed": "The voice test did not play: {error}",

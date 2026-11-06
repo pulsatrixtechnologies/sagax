@@ -14,7 +14,7 @@ import { join } from "node:path";
 
 import { writeFileAtomic } from "../atomic.ts";
 import { describeHandle, holdPlain, isAtRestRefusal, noteAtRestWrite, plainSizeFor, readAllFromHandle, readAtRest, readAtRestTextSync, registerAtRestRoot } from "../encryption/content-at-rest.ts";
-import { alwaysCore, isExpired, isMemoryDate, parseMemoryEntries, untilMark, withoutExpired, type MemoryEntryLine } from "../memory/memory-entries.ts";
+import { alwaysCore, isExpired, isMemoryDate, parseMemoryEntries, untilMark, withoutExpired, withoutSuperseded, type MemoryEntryLine } from "../memory/memory-entries.ts";
 import { readersToken, withoutWiderAudience, type MemoryDestination, type MemoryReaders } from "../memory/memory-audience.ts";
 import { parseTopicHeader, readTopicHead, renderTopicIndex } from "../memory/memory-topics.ts";
 import { indexMemoryFile, indexedMemoryFiles, recallMemory, removeMemoryFile, type MemoryHit, type SearchMode } from "../messages/message-db.ts";
@@ -373,7 +373,7 @@ function searchableMemoryText(path: string, text: string): string {
   if (path === "MEMORY.md" && text === MEMORY_SEED) return "";
   // Keep historical records searchable, but do not recall expired current facts.
   if (path === "memory/archive.md" || path.startsWith(`memory/${MEMORY_LOG_DIR}/`) || path.startsWith(`${DOCS_DIR}/`)) return text;
-  return withoutExpired(text, memoryDate()).text;
+  return withoutSuperseded(withoutExpired(text, memoryDate()).text);
 }
 
 /** Sync edits and deletions from disk; refresh unchanged files once a day

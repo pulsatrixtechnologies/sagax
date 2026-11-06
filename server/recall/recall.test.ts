@@ -5,7 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DATA_DIR } from "../config.ts";
 import { closeMessageDb, recallMatchTerm, recallTerms } from "../messages/message-db.ts";
-import { buildRecall, CALL_RECALL_BUDGET, enoughMatches, LOCAL_RECALL_BUDGET, memoryPassages, RECALL_CLOSE, RECALL_OPEN, recallQuery, renderRecall, sessionMemoryHitFor, sessionMemoryHitMayShow, topicPassages } from "./recall.ts";
+import { buildRecall, CALL_RECALL_BUDGET, enoughMatches, LOCAL_RECALL_BUDGET, memoryPassages, RECALL_CLOSE, RECALL_OPEN, recallQuery, renderRecall, selectMemoryPassages, sessionMemoryHitFor, sessionMemoryHitMayShow, topicPassages } from "./recall.ts";
+import type { RecallPassage } from "./recall-types.ts";
 import { appendMemoryLog, searchMemoryFiles, writeMemoryFile, writeMemoryTopic, WORKSPACES_DIR } from "../workspace/workspace.ts";
 
 const BOT = "bot-recall-test";
@@ -115,6 +116,29 @@ describe("recall from memory files", () => {
     const block = buildRecall({ botId: BOT, message: "book a table, any restaurants?", threadIds: [], label: () => "", author: () => "" });
     expect(block?.text).toContain("memory/dining.md");
     expect(block?.text).toContain("Loves pasta");
+  });
+
+  it("keeps a matching answer late in a named topic instead of replacing it with the introduction", () => {
+    writeMemoryTopic(BOT, "tapa.md", `---\ntitle: Tapa\n---\n${"Earlier draft background. ".repeat(40)}\nThe approved amber test is version SEVEN.\n`);
+    const result = buildRecall({ botId: BOT, message: "Tapa approved amber test", threadIds: [], label: () => "", author: () => "" });
+    expect(result?.text).toContain("SEVEN");
+  });
+
+  it("keeps a named topic's matching answer when better-ranked matches fill the recall budget", () => {
+    writeMemoryTopic(BOT, "tapa.md", `---\ntitle: Tapa\n---\n${"Earlier draft background. ".repeat(40)}\nThe approved amber test is version SEVEN.\n`);
+    for (let n = 0; n < 5; n++) writeMemoryTopic(BOT, `decoy-${n}.md`, `- Tapa approved amber test, Tapa amber test ${n}\n`);
+    const result = buildRecall({ botId: BOT, message: "Tapa approved amber test", threadIds: [], label: () => "", author: () => "" });
+    expect(result?.text).toContain("SEVEN");
+  });
+
+  it("reserves named topics while preferring their actual matching passage", () => {
+    const passage = (label: string, snippet: string): RecallPassage => ({ source: "memory", label, snippet });
+    const unrelated = [1, 2, 3, 4].map((n) => passage(`memory/${n}.md`, "matching words"));
+    const named = passage("memory/tapa.md", "topic opening");
+    expect(selectMemoryPassages(unrelated, [named])).toContainEqual(named);
+    const answer = passage(named.label, "the answer deep in the topic");
+    expect(selectMemoryPassages([...unrelated, answer], [named])[0]).toEqual(answer);
+    expect(selectMemoryPassages(unrelated, [named])).toHaveLength(4);
   });
 
   it("matches singular and plural, but never turns a symbol into a prefix", () => {

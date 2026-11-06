@@ -47,6 +47,8 @@ export const CAPTURE_CALL_MAX_BYTES = 24_000;
  * go quiet within this long. */
 export const CAPTURE_GATHER_MS = 15_000;
 export const MODEL_TIMEOUT_MS = 60_000;
+/** At most this many topic files get a model contradiction check per tidy. */
+export const MAX_TOPIC_CHECKS = 4;
 export const TIDY_CHECK_MS = 10 * 60_000;
 /** Below this many live entries there is nothing a contradiction pass may change. */
 export const MIN_ENTRIES_FOR_CONTRADICTIONS = 5;
@@ -111,6 +113,10 @@ export interface TidyReport {
   organized?: number;
   /** Whether the contradiction step ran (needs a text engine and five entries). */
   contradictionsChecked: boolean;
+  /** Topic files that received a model contradiction check this pass. */
+  topicChecks?: number;
+  /** Topic checks skipped for budget, timeout or concurrent edits. */
+  topicsDeferred?: number;
   /** Why it did not run, in the person's words. */
   note?: string;
   /** The dream pass, when it changed a file. Absent when there was nothing to do. */
@@ -141,7 +147,7 @@ export interface CaptureReport {
 }
 
 interface UpkeepState {
-  bots: Record<string, { lastTidy?: TidyReport; lastCapture?: CaptureReport; core?: string[] }>;
+  bots: Record<string, { lastTidy?: TidyReport; lastCapture?: CaptureReport; core?: string[]; topicCursor?: string }>;
 }
 
 /** How many "this entry is core" judgements are remembered per bot. */
@@ -230,9 +236,9 @@ function readRaw(botId: string, relative: string): string | null {
   }
 }
 
-async function askModel(engine: UpkeepEngine, prompt: string): Promise<string | null> {
+async function askModel(engine: UpkeepEngine, prompt: string, timeoutMs = MODEL_TIMEOUT_MS): Promise<string | null> {
   if (!engine.generateText) return null;
-  const expiry = AbortSignal.timeout(MODEL_TIMEOUT_MS);
+  const expiry = AbortSignal.timeout(timeoutMs);
   try {
     const answer = await Promise.race([
       engine.generateText(prompt, { signal: expiry, noThinking: true }),
@@ -305,7 +311,7 @@ export function createMemoryUpkeep(deps: UpkeepDeps): MemoryUpkeep {
   let calling: CaptureBatch[] = [];
   let worker: Promise<void> | null = null;
 
-  const record = (botId: string, patch: { lastTidy?: TidyReport; lastCapture?: CaptureReport }) => {
+  const record = (botId: string, patch: { lastTidy?: TidyReport; lastCapture?: CaptureReport; topicCursor?: string }) => {
     // a capture or tidy still out when its bot was deleted leaves nothing behind
     if (!deps.bot(botId)) return;
     const state = loadState();
@@ -723,16 +729,45 @@ export function createMemoryUpkeep(deps: UpkeepDeps): MemoryUpkeep {
       });
       recordMemoryChange(botId, { path: "MEMORY.md", actor: "upkeep", via: "tidy", before, after: readRaw(botId, "MEMORY.md") });
     }
-    // Topic files get the two steps that need no model: expired lines to the
-    // archive (written first, as above) and exact duplicates merged.
+    // Project topics also reconcile contradictory decisions; re-read after every model call.
     let topicExpired = 0;
     let topicDuplicates = 0;
-    for (const topic of listMemoryTopics(botId)) {
-      if (topic.name === ARCHIVE_TOPIC) continue;
+    let topicSuperseded = 0;
+    let topicDeferred = 0;
+    let topicChecks = 0;
+    let topicsDeferred = 0;
+    let topicCursor = loadState().bots[botId]?.topicCursor;
+    const deadline = Date.now() + MODEL_TIMEOUT_MS;
+    const topics = listMemoryTopics(botId).filter((topic) => topic.name !== ARCHIVE_TOPIC).sort((a, b) => a.name.localeCompare(b.name));
+    const cursorAt = topics.findIndex((topic) => topic.name === topicCursor) + 1;
+    for (const topic of [...topics.slice(cursorAt), ...topics.slice(0, cursorAt)]) {
       const path = `memory/${topic.name}`;
       const topicBefore = readRaw(botId, path);
       if (topicBefore === null) continue;
-      const topicPlan = planTidy(topicBefore, today);
+      const topicCandidates = contradictionCandidates(topicBefore, today);
+      let topicContradictions: Contradiction[] = [];
+      if (engine?.generateText && topicCandidates.length >= 2) {
+        const remaining = deadline - Date.now();
+        if (topicChecks >= MAX_TOPIC_CHECKS || remaining <= 0) topicsDeferred++;
+        else {
+          topicChecks++;
+          topicCursor = topic.name;
+          const answer = await askModel(engine, contradictionPrompt(topicCandidates), remaining);
+          if (paused || !upkeepEnabled(deps.bot(botId))) return stopped;
+          if (readRaw(botId, path) !== topicBefore) {
+            topicsDeferred++;
+            continue;
+          }
+          if (answer !== null) {
+            topicContradictions = parseContradictions(answer, topicCandidates.length);
+            contradictionsChecked = true;
+            if (note?.startsWith("Contradictions are checked from")) note = undefined;
+          } else topicsDeferred++;
+        }
+      }
+      const topicPlan = planTidy(topicBefore, today, topicContradictions, 1);
+      topicSuperseded += topicPlan.superseded.length;
+      topicDeferred += topicPlan.deferred;
       if (!planChanges(topicPlan)) continue;
       const tidied = applyTidy(topicBefore, topicPlan, today);
       writing(botId, () => {
@@ -743,6 +778,7 @@ export function createMemoryUpkeep(deps: UpkeepDeps): MemoryUpkeep {
       topicExpired += topicPlan.expired.length;
       topicDuplicates += topicPlan.duplicates.length;
     }
+    if (topicsDeferred) note = [note, `${topicsDeferred} topic checks deferred because of the budget, a timeout or concurrent edits.`].filter(Boolean).join(" ");
     let dream: DreamReport | undefined;
     try {
       const dreamed = runDream(botId);
@@ -754,14 +790,16 @@ export function createMemoryUpkeep(deps: UpkeepDeps): MemoryUpkeep {
       at,
       expired: plan.expired.length + topicExpired,
       duplicates: plan.duplicates.length + topicDuplicates,
-      superseded: plan.superseded.length,
-      deferred: plan.deferred,
+      superseded: plan.superseded.length + topicSuperseded,
+      deferred: plan.deferred + topicDeferred,
       ...(organized ? { organized } : {}),
       contradictionsChecked,
+      topicChecks,
+      topicsDeferred,
       ...(note ? { note } : {}),
       ...(dream ? { dream } : {}),
     };
-    record(botId, { lastTidy: report });
+    record(botId, { lastTidy: report, topicCursor });
     if (report.expired || report.duplicates || report.superseded || organized) log(`memory upkeep: tidied ${bot?.name ?? botId} — ${report.expired} expired, ${report.duplicates} duplicate(s), ${report.superseded} contradicted`);
     return report;
   }

@@ -16,6 +16,8 @@ import type { TurnLatency } from "./turn-latency.ts";
 import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
 import type { WarmResourceLease } from "../../resources/warm-resources.ts";
+import type { AcpModelSelection } from "./session-model-controls.ts";
+export type { AcpModelSelection };
 
 /** Failures the person fixes on their provider account, not by retrying:
  * the process that reported one is healthy and stays pooled. */
@@ -248,8 +250,10 @@ export interface AcpSupport {
   /** Select the model through a session config option instead of argv, for
    *  harnesses whose ACP subcommand takes no -m (opencode). The agent must
    *  CONFIRM the requested model before we prompt: silently running a model
-   *  other than the one the picker shows is the failure this guards. */
-  selectModel?: { configId: string };
+   *  other than the one the picker shows is the failure this guards.
+   *  `agentDefault` leaves the native session unchanged; `allowLegacy` also
+   *  accepts ACP's models state and session/set_model (custom ACP). */
+  selectModel?: AcpModelSelection;
   /** With `selectModel`: the model a turn runs when it asked for none, or for
    * one this live session does not offer (a retired id saved on an old bot).
    * Receives the session's config snapshot and the instance catalog default;

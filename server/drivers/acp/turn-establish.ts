@@ -4,7 +4,7 @@ import { contextRenewedNotice } from "../../context/context-renewal.ts";
 import {
   INIT_TIMEOUT, LOAD_SESSION_TIMEOUT, NEW_SESSION_TIMEOUT, SESSION_CONFIG_TIMEOUT,
 } from "./constants.ts";
-import { acpVariantOption, offeredModels, skipSubscriptionAuthForLocalInject } from "./helpers.ts";
+import { offeredModels, skipSubscriptionAuthForLocalInject } from "./helpers.ts";
 import type { AcpTurnCtx } from "./turn-context.ts";
 
 export async function establishAcpTurn(ctx: AcpTurnCtx): Promise<void> {
@@ -14,7 +14,7 @@ export async function establishAcpTurn(ctx: AcpTurnCtx): Promise<void> {
     retiring, retireChild, closeSession, sessions, sessionAllows, emit, base,
     request, initialize, authenticateOnce, sessionInputs, launchSession, settle,
     active, freshNextTurn, threadNotices, startQuietWatch, setAccountModels, asks,
-    acknowledge, rejectStartup, startupAck, started,
+    acknowledge, rejectStartup, startupAck, started, modelControls, modelLive,
   } = ctx;
   let session = ctx.session;
   const sessionRef = ctx.sessionRef;
@@ -37,36 +37,17 @@ export async function establishAcpTurn(ctx: AcpTurnCtx): Promise<void> {
   void startQuietWatch; void asks; void acknowledge; void rejectStartup; void startupAck; void started;
   void spawnEnv;
 
-  const modelOf = (result: any): string | null => {
-    const option = (Array.isArray(result?.configOptions) ? result.configOptions : []).find(
-      (entry: any) => entry?.id === (support.selectModel?.configId ?? "model"),
-    );
-    return typeof option?.currentValue === "string" ? option.currentValue : null;
+  const syncModelLive = () => {
+    modelLive.model = cliTurn.model;
+    modelLive.reported = reportedModel;
   };
-  const receiveModelVariants = (result: any) => {
-    session.sessionConfigResult = result;
-    if (!support.modelVariants) return;
-    const nativeModel = modelOf(result) ?? cliTurn.model;
-    if (!nativeModel) return;
-    const option = acpVariantOption(result);
-    emit({
-      ...base(threadId, turnId),
-      type: "session.model-variants",
-      model: nativeModel === cliTurn.model ? (reportedModel ?? nativeModel) : nativeModel,
-      variants: {
-        options: option?.options ?? [],
-        ...(option?.currentValue !== undefined ? { currentValue: option.currentValue } : {}),
-      },
-    });
+  const receiveModelVariants = (result: any, replace = false) => {
+    syncModelLive();
+    modelControls.receive(result, replace);
   };
-  const requestedVariantOption = () => {
-    if (!support.modelVariants) throw new Error(`${support.displayName} does not support model variants`);
-    const option = acpVariantOption(session.sessionConfigResult);
-    if (!option || !option.options.some((entry) => entry.id === variant)) {
-      throw new Error(`${support.displayName} does not advertise variant ${variant} for this model`);
-    }
-    return option;
-  };
+  // session-stream notifications use the same controls
+  current.receiveModelVariants = (result) => receiveModelVariants(result);
+  const requestedVariantOption = () => modelControls.variant(variant);
 
 // The handshake is paid once per process, not once per turn. It
 // is a function so the establishment retry below can pay it
@@ -218,7 +199,7 @@ const emitSessionStarted = () => {
 try {
   if (support.selectModel) {
     const { configId } = support.selectModel;
-    selectedModel = modelOf(session.sessionConfigResult);
+    selectedModel = modelControls.modelOf(session.sessionConfigResult);
     const wanted = cliTurn.model;
     const offered = offeredModels(session.sessionConfigResult, configId);
     // A process started without a default model lists exactly
@@ -266,7 +247,7 @@ try {
         INIT_TIMEOUT,
         receiveModelVariants,
       );
-      selectedModel = modelOf(session.sessionConfigResult);
+      selectedModel = modelControls.modelOf(session.sessionConfigResult);
       // an agent that answers OK but keeps its old model is worse than
       // one that errors: it burns a paid turn on the wrong thing
       if (selectedModel !== cliTurn.model) {

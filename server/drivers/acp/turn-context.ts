@@ -4,10 +4,15 @@ import type { PromptSplitReceipt } from "../prompt-split.ts";
 import type { TurnLatency } from "./turn-latency.ts";
 import type { AcpAskFinish, AcpConfig, AcpSession, AcpSupport, AcpTurn } from "./types.ts";
 import type { ModelCatalog } from "../../contracts.ts";
+import type { SessionModelControls } from "./session-model-controls.ts";
 
 export type AcpTurnCtx = {
   support: AcpSupport;
   DRIVER_KIND: string;
+  /** Per-turn model/variant controls (selectModel + modelVariants). */
+  modelControls: SessionModelControls;
+  /** Live targets SessionModelControls reads; establish keeps them current. */
+  modelLive: { model: string | undefined; reported: string | undefined };
   turn: SendTurnInput;
   turnId: string;
   threadId: string;

@@ -3,6 +3,9 @@
  * (scripts/capture/page-chat-real.mjs). No server: /api/pages answers from
  * this file, the preview frame is routed by the capture script. Every name
  * and text is synthetic. ?skin=<id>&lang=en|fr&busy=1
+ * &ask=1 ends on the person's message, so a busy bot shows its working line;
+ * &wait=1 adds the "finishing another conversation" wait chip after it
+ * (tool details on), which the working line names instead of a row.
  * The script drives it like a person: open the card, Show conversation,
  * send, Back to chat. window.__pageChatReal reports what it saw. */
 import { StrictMode, useCallback, useMemo, useReducer, useState } from "react";
@@ -66,15 +69,24 @@ const messages: Message[] = [
     line("p2", "bot", title, 23, "ask2", { pagePublish: { pageId, version: 2, title } }),
   ] : []),
 ];
+if (params.get("ask") === "1") messages.push(line("ask3", "user", fr ? "Sors les billets ouverts de la semaine." : "Pull the open tickets for the week.", 24, messages.at(-1)!.id));
+const wait = params.get("wait") === "1";
+if (wait) messages.push({
+  id: "wait", role: "bot", kind: "activity", at: at + 25 * 60_000, parentId: messages.at(-1)!.id,
+  from: { botId: "scout", name: "Scout", color: "green" },
+  tool: { name: "Scout is finishing another conversation \u2014 will reply here when free", spoken: "Scout is finishing another conversation" },
+} as Message);
 const scout: Bot = {
   id: "scout", threadId: "scout-thread", name: "Scout", title: "", description: "", color: "green",
   notifications: true, unread: false, busy: params.get("busy") === "1", messages, activeLeafId: messages.at(-1)?.id,
   modelSelection: { instanceId: "gallery", model: "m" },
-  tasks: [{ threadId: "scout-thread", title: fr ? "Rapport mensuel" : "Monthly report", createdAt: at, busy: false, activity: "idle", unread: false, modelSelection: { instanceId: "gallery", model: "m" }, approvalMode: "ask" }],
+  tasks: [{ threadId: "scout-thread", title: fr ? "Rapport mensuel" : "Monthly report", createdAt: at, busy: params.get("ask") === "1", activity: params.get("ask") === "1" ? "working" : "idle", turnStartedAt: Date.now() - 25_000, unread: false, modelSelection: { instanceId: "gallery", model: "m" }, approvalMode: "ask" }],
+  ...(params.get("ask") === "1" ? { activity: "working", turnStartedAt: Date.now() - 25_000 } : {}),
 } as Bot;
 const start: AppState = {
   ...initialState,
   connected: true,
+  ...(wait ? { config: { features: { showToolCalls: true } } as AppState["config"] } : {}),
   selectedId: "scout",
   bots: [scout],
   instances: [{ instanceId: "gallery", driverKind: "codex", displayName: "Gallery", snapshot: { state: "available" }, models: { options: [{ id: "m", label: "Gallery model" }] } } as unknown as InstanceInfo],

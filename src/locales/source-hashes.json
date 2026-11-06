@@ -4926,6 +4926,7 @@
       "chat.sandboxWakeTimeout": "e0ab0ab216b2bf7dbe13ff634fc47823de5f9abc844da4a6832568d9339b6e41",
       "chat.sandboxWaking": "4c52665572371f1b1697c82082de6a3215c96fc17822898239e2d4a149d88645",
       "chat.sandboxWakingAsleep": "ac5387350457d63b6e63b3b0d6d5246fd4036f43c40090f092da1e719fceef3c",
+      "chat.presence.busyElsewhere": "d5287a89d4b88d571b3dba425105f25ebca27e0cab4d86cfac74972d8d683e93",
       "chat.activity.working": "a92f0449a9f7235bf69dc2e8ff7070bfae3f00ec8f8f26e5457a9beac53466ac",
       "chat.activity.writeFile": "8820b22786d9abcc296be16a94a88d97dee3a501491e8548d4724a9b9e8fd423",
       "chat.assistant": "391e405152779acc6b0f9429f3a4e27baf2af0deab2c37ba792311efa767d676",

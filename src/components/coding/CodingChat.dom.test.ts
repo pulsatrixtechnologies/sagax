@@ -312,6 +312,15 @@ describe("CodingChatSheet", () => {
     }
   });
 
+  it("puts the working line just above the composer while the task runs, never in the transcript (JC 2026-11-06)", () => {
+    mountSheet("running", { composer: createElement("div", { "data-test-given-composer": "" }) });
+    const lines = column.querySelectorAll(".turn-presence");
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!.closest("[role=log]")).toBeNull();
+    const slot = lines[0]!.closest("[data-turn-presence-slot]")!;
+    expect(slot.nextElementSibling?.hasAttribute("data-coding-composer")).toBe(true);
+  });
+
   it("draws nothing in a panel when the bot panel is closed", () => {
     setCodingPanelHost("wren", null);
     mountSheet("finished", { side: createElement("div", { "data-test-given-pods": "" }) });

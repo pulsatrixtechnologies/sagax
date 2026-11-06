@@ -173,3 +173,37 @@ export function groupedModelMenuEntries(root: ModelMenuRoot, allOpen: boolean): 
     ? [...rest, { key: ALL_MODELS_KEY, current: false, all: true }]
     : rest;
 }
+
+/** Cap on models shown per provider before "Show more" (#2181). */
+export const PROVIDER_MODEL_PREVIEW = 4;
+
+/** The models a provider section shows before "Show more": up to
+ * {@link PROVIDER_MODEL_PREVIEW} in list order, always keeping the current
+ * model and any favorite that lives in that provider. Expanded or a short
+ * list returns every row. */
+export function previewProviderRows(
+  rows: readonly ModelMenuRow[],
+  options: { expanded: boolean; favoriteKeys?: readonly string[] } = { expanded: false },
+): { rows: ModelMenuRow[]; hidden: number } {
+  if (options.expanded || rows.length <= PROVIDER_MODEL_PREVIEW) {
+    return { rows: [...rows], hidden: 0 };
+  }
+  const favorites = new Set(options.favoriteKeys ?? []);
+  const picked = new Set<string>();
+  for (const row of rows) {
+    if (row.current) {
+      picked.add(row.key);
+      break;
+    }
+  }
+  for (const row of rows) {
+    if (picked.size >= PROVIDER_MODEL_PREVIEW) break;
+    if (favorites.has(row.key)) picked.add(row.key);
+  }
+  for (const row of rows) {
+    if (picked.size >= PROVIDER_MODEL_PREVIEW) break;
+    picked.add(row.key);
+  }
+  const visible = rows.filter((row) => picked.has(row.key));
+  return { rows: visible, hidden: rows.length - visible.length };
+}

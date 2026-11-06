@@ -1,6 +1,6 @@
-// The bot panel's Computer row thumbnail (2026-11-06, JC: "the desktop
-// picture need to be a screenshot of the bot's pc"; "I am switching to my
-// mac, it should be my mac"). One small, recent picture per bot and per
+// The bot panel's Computer row thumbnail (2026-11-06: the desktop picture
+// is a screenshot of the bot's own computer, and switching the row to the
+// user's own computer shows that computer). One small, recent picture per bot and per
 // computer, so switching the row to another computer shows that computer at
 // once and never the previous one.
 //

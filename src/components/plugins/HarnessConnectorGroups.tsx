@@ -21,7 +21,6 @@ import type { LocaleKey } from "@/locales";
 import { providerMark } from "@/lib/plugins-model";
 import { GROK_CONNECTORS_URL } from "../../../shared/grok-cloud-connectors";
 import { CATEGORY_MODAL } from "../category-modal";
-import { ConnectFromEngine } from "../ConnectFromEngine";
 import { ClaudeMark, GrokMark, CodexMark } from "../ProviderIcons";
 import { PluginIcon } from "./PluginParts";
 import { CapabilityTags } from "./EngineCapabilities";
@@ -133,6 +132,7 @@ export function connectorGroups(input: {
 export function HarnessConnectorGroups({ groups, refreshing, onRefresh, onSetUp }: {
   groups: HarnessConnectorGroup[];
   refreshing?: boolean;
+  /** the retry of a failed load (GroupNotice); the tab row holds the refresh */
   onRefresh?: () => void;
   /** set an engine up (Settings > Models and voice); absent: not offered */
   onSetUp?: (engine: HarnessEngine) => void;
@@ -147,11 +147,9 @@ export function HarnessConnectorGroups({ groups, refreshing, onRefresh, onSetUp 
             <h3 className="min-w-0 truncate text-[13px] font-semibold text-ink">{t("connectApps.accounts.harness", { provider: group.name })}</h3>
             {group.account && <span className="min-w-0 truncate text-[11.5px] text-ink-secondary">{group.account}</span>}
             <span className="flex-1" />
-            {group.id !== "grok" && onRefresh && (
-              <button type="button" onClick={onRefresh} disabled={refreshing} className="ui-icon-button disabled:opacity-50" aria-label={t("harnessConnectors.refresh")} title={t("harnessConnectors.refresh")}>
-                <RefreshCw size={14} className={cn(refreshing && "animate-spin")} />
-              </button>
-            )}
+            {/* the one way out per engine (#2104): the tab row's refresh
+                reloads these too, and a connector to finish is finished on
+                the same manage page, so no row button */}
             <button
               type="button"
               data-harness-manage={group.id}
@@ -182,7 +180,6 @@ export function HarnessConnectorGroups({ groups, refreshing, onRefresh, onSetUp 
                       {connector.status ? t(STATUS_KEY[connector.status] ?? STATUS_KEY.unknown) : t("connectApps.grok.description")}
                     </span>
                   </span>
-                  {missing && <ConnectFromEngine missing manageUrl={group.manageUrl} />}
                 </div>
               );
             })}

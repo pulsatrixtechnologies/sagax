@@ -1,19 +1,19 @@
 // Plugins: one panel, after the "Connect apps" screens people know from
 // desktop assistants.
 //
-//   - Connect apps (2026-10-27, the owner: one place per subject): one page with
-//     its title, the scope, one search that looks everywhere (2026-10-29,
-//     ConnectAppsSearch.tsx) and six tabs. Discover (where a person lands:
-//     the catalog, the category pills and a link to Bots), Bots (Browse
-//     Bots, a tab of its own since 2026-10-29: every link to Browse Bots
-//     opens it),
-//     Installed (one line per thing, deduplicated, with a "..." menu:
-//     Update, For which bots, Remove; the private skills), Providers (the
-//     connectors of their engine accounts and their own MCP servers, with a
-//     pill per service), Pages (their published pages) and Sources (a
-//     GitHub connection row, the marketplaces, and for an organization
-//     admin the allowed marketplaces). "N connected" opens Installed, or
-//     Providers when only engine connectors are connected (#1194).
+//   - Plugins (#2104, 2026-11-05; "Capabilities" with five tabs before): one
+//     page with its title, one scope (This bot / Me / Organization, always
+//     live), one search that looks everywhere (ConnectAppsSearch.tsx), one
+//     refresh and three tabs, Installed first (where a person lands): one
+//     line per thing, deduplicated, with a "..." menu (Update, For which
+//     bots, Remove), one "+ Add" menu (an MCP server, a pasted config, a
+//     skill), the private skills, "This Mac" (the Messages row opens its
+//     setup directly) and the connectors of their engine accounts in one
+//     list with one "Manage on <engine>" each; Discover (the catalog and the
+//     category pills); Sources (a GitHub connection row, the marketplaces,
+//     and for an organization admin the allowed marketplaces). Bots (Browse
+//     Bots) and Pages (their published pages) are no tabs: every old link
+//     to them opens that pane alone, with its own title and a back arrow.
 //   - Detail: one plugin's accounts, tools (a switch per MCP tool, applied to
 //     every bot) and details, with Uninstall.
 //   - GitHub (owner, 2026-10-29: "Why is GitHub listed as a provider?"):

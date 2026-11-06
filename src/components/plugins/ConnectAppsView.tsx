@@ -1,14 +1,12 @@
-// Connect Apps: one page (2026-10-27, the owner: one place per subject). The
-// title, the install scope, the one search (2026-10-29: it looks everywhere,
-// ConnectAppsSearch.tsx), then the tabs: Discover (the catalog; the view a
-// person lands on, first since 2026-10-28), Bots (Browse Bots, a tab of its
-// own right after Discover since 2026-10-29), Installed (which also lists
-// the Providers, the engine accounts Claude, Codex, Grok, once "My
-// accounts", a tab of their own until 2026-10-29), Pages (the published
-// pages, which used to sit under My accounts) and Sources (with the organization's
-// part for an admin). The "N connected" button is gone (2026-10-28): its
-// count sits on Installed and Providers, which list them with their logos. No sub-page repeats a tab: "Manage plugins and skills" and
-// a section opened alone are gone, View all filters Discover in place.
+// Plugins (#2104, 2026-11-05: once Capabilities / Connect apps): one large
+// modal, one title, one install scope (this bot, me, organization) beside the
+// one search (it looks everywhere, ConnectAppsSearch.tsx), then three tabs:
+// Installed (what is here: plugins, skills, MCP servers, the Mac apps and the
+// connectors of the engine accounts, with one "+ Add" menu), Discover (the
+// catalog) and Sources (the marketplaces and the GitHub connection, with the
+// organization's part for an admin). One refresh, on the tab row, reloads it
+// all. Bots (Browse Bots) and Pages (the published pages) are not plugins:
+// a link that asks for them opens this same window as a pane of its own.
 // A page opened from a tab (a plugin's detail, a skill, "For which bots")
 // opens inside that tab's panel, under the same title, scope and tabs, as a
 // Settings sub-page does: a back row, then the page (2026-10-28).
@@ -114,9 +112,13 @@ export function normalizeConnectAppsTab(value: string | null | undefined): Conne
   if (value === "browseBots" || value === "browse-bots" || value === "botCatalog" || value === "templates") return "bots";
   return value === "installed" || value === "discover" || value === "bots" || value === "pages" || value === "sources" ? value : null;
 }
-/** Discover first (2026-10-28, the owner): it is where Connect Apps opens,
- * unless a link asks for another tab. Bots right after it (2026-10-29). */
-export const CONNECT_APPS_TABS: readonly ConnectAppsTab[] = ["discover", "bots", "installed", "pages", "sources"];
+/** Plugins (#2104, 2026-11-05): three tabs, Installed first (what a person
+ * has), then Discover (the catalog) and Sources (where plugins come from).
+ * Bots (Browse Bots) and Pages (the published pages) are not plugins: a
+ * link that asks for them opens the same window as a pane of its own, with
+ * its own title and no tab row (STANDALONE_PANES). */
+export const CONNECT_APPS_TABS: readonly ConnectAppsTab[] = ["installed", "discover", "sources"];
+export const STANDALONE_PANES: readonly ConnectAppsTab[] = ["bots", "pages"];
 
 const TAB_KEY = {
   installed: "connectApps.manage.tab.installed",
@@ -181,27 +183,29 @@ export interface ConnectAppsViewProps {
 
 export function ConnectAppsView(props: ConnectAppsViewProps) {
   const { tab, onTab, onBack, tabs = CONNECT_APPS_TABS, counts = {}, scope, scopeNote, search, results, page, notices, refreshing, onRefresh } = props;
-  const shown = tabs.includes(tab) ? tab : tabs.includes("discover") ? "discover" : tabs[0] ?? "discover";
+  // Bots and Pages open alone (a link asked for them): their own title, no
+  // tab row, no install scope (neither depends on it)
+  const standalone = STANDALONE_PANES.includes(tab) && !tabs.includes(tab);
+  const shown = standalone || tabs.includes(tab) ? tab : tabs.includes("installed") ? "installed" : tabs[0] ?? "installed";
   // Bots is a pane of its own (its list scrolls, its pages have a back row),
   // laid out as a page opened from a tab
   const pane = !results && (page !== undefined || shown === "bots");
   const titleBlock = (
     <>
-      <h2 id="plugins-title" className={CATEGORY_MODAL.title}>{t("connectApps.title")}</h2>
+      <h2 id="plugins-title" className={CATEGORY_MODAL.title}>{standalone ? connectAppsTabLabel(shown) : t("connectApps.title")}</h2>
       {/* the scope and the one search share a line (2026-10-29, the owner):
           the search, compact, on the scope's right; narrow, it wraps under it */}
-      {(scope || search) && (
+      {!standalone && (scope || search) && (
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2" data-plugins-scope-row>
-          {/* on every tab, so nothing below it moves (Pages and Bots turn it off) */}
           {scope && <div className="shrink-0" data-plugins-scope-slot>{scope}</div>}
           {search && <div className="min-w-[200px] flex-1 sm:ml-auto sm:max-w-[320px]" data-plugins-search-slot>{search}</div>}
         </div>
       )}
-      {scopeNote}
+      {!standalone && scopeNote}
     </>
   );
   return (
-    <div className="flex min-h-0 flex-1 flex-col" data-plugins-main={shown}>
+    <div className="flex min-h-0 flex-1 flex-col" data-plugins-main={shown} data-plugins-standalone={standalone ? shown : undefined}>
       <header className={cn(CATEGORY_MODAL.titleBar, onBack && "flex items-start gap-2")}>
         {onBack ? (
           <>
@@ -210,7 +214,7 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
           </>
         ) : titleBlock}
       </header>
-      <div className="flex shrink-0 items-end gap-2 border-b border-hairline-weak px-4 sm:px-8" data-plugins-manage-bar>
+      {!standalone && <div className="flex shrink-0 items-end gap-2 border-b border-hairline-weak px-4 sm:px-8" data-plugins-manage-bar>
         <div role="tablist" aria-label={t("connectApps.tabsAria")} className="flex min-w-0 flex-1 gap-5 overflow-x-auto" data-plugins-manage-tabs>
           {tabs.map((id) => {
             const count = counts[id] ?? 0;
@@ -245,12 +249,12 @@ export function ConnectAppsView(props: ConnectAppsViewProps) {
         <button type="button" onClick={onRefresh} disabled={refreshing} className="ui-icon-button mb-1 disabled:opacity-50" aria-label={t("connectors.refreshTitle")} title={t("connectors.refreshTitle")}>
           <RefreshCw size={15} className={cn(refreshing && "animate-spin")} />
         </button>
-      </div>
+      </div>}
       {notices}
       <div
         role="tabpanel"
         id={`plugins-tabpanel-${shown}`}
-        aria-labelledby={`plugins-tab-${shown}`}
+        aria-labelledby={standalone ? "plugins-title" : `plugins-tab-${shown}`}
         tabIndex={-1}
         className={pane ? "flex min-h-0 flex-1 flex-col outline-none" : `${CATEGORY_MODAL.pane} ${CATEGORY_MODAL.list} outline-none`}
         data-plugins-list={pane ? undefined : ""}

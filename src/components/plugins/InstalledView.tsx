@@ -1,15 +1,16 @@
-// Connect apps > Installed (2026-10-26, a tab of the one Connect apps page
-// since 2026-10-27): one line per thing the person has (installedEntries
-// folds a server added by hand, the same address brought by a plugin and
-// the plugin itself into one), its real logo, a readable name, what it
-// brings, its state and a "..." menu (Update, For which bots, Remove); then
-// the private skills, only when there are some. In a bot's scope (lot 1b,
+// Plugins > Installed (2026-10-26; the first tab since #2104): one line per
+// thing the person has (installedEntries folds a server added by hand, the
+// same address brought by a plugin and the plugin itself into one), its real
+// logo, a readable name, what it brings, its state and a "..." menu (Update,
+// For which bots, Remove); one "+ Add" menu for everything added by hand
+// (#2104: an MCP server, a pasted config, a skill); then the private skills,
+// only when there are some; "This Mac"; the engine accounts' connectors. In a bot's scope (lot 1b,
 // 2026-10-30), what the organization and Perspicax put on the bot, read
 // from the bot's one resolved list (GET /api/bots/:id/capabilities): the
 // organization's Flow ("imposed by the organization") and its Perspicax
 // Roles ("held" / "not held"). Every empty section is hidden.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { BookOpen, Building2, ClipboardPaste, KeyRound, MoreHorizontal, Plus, RotateCw, Settings2, Trash2, Users } from "lucide-react";
+import { BookOpen, Building2, KeyRound, MoreHorizontal, Plus, RotateCw, Settings2, Trash2, Users } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -47,11 +48,9 @@ export interface InstalledViewProps {
   onOpenEntry: (entry: InstalledEntry) => void;
   onOpenSkill: (skill: PluginItem) => void;
   entryActions: (entry: InstalledEntry) => EntryActions;
-  /** add an MCP server by hand, paste a config (absent: not offered) */
-  onAddServer?: () => void;
-  onPasteConfig?: () => void;
-  addDisabled?: boolean;
-  onNewSkill?: () => void;
+  /** the one "+ Add" menu (#2104): add an MCP server, paste a config, write
+   * a skill; empty or absent: no button */
+  add?: AddAction[];
   /** the add and paste forms, reserved-name warnings and messages */
   forms?: ReactNode;
   loading?: boolean;
@@ -80,6 +79,50 @@ export interface InstalledViewProps {
   macApps?: ReactNode;
 }
 
+/** one entry of the "+ Add" menu */
+export interface AddAction {
+  id: string;
+  label: string;
+  icon?: ReactNode;
+  onPick: () => void;
+  disabled?: boolean;
+}
+
+/** The one "+ Add" button of Installed (#2104): a menu with every way to add
+ * something by hand, where three buttons stood side by side. */
+export function AddMenu({ actions }: { actions: AddAction[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (event: MouseEvent) => { if (!ref.current?.contains(event.target as Node)) setOpen(false); };
+    const esc = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", esc, true);
+    return () => { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", esc, true); };
+  }, [open]);
+  return (
+    <div ref={ref} className="relative">
+      <button type="button" onClick={() => setOpen((value) => !value)} aria-haspopup="menu" aria-expanded={open} data-plugins-add
+        className="flex items-center gap-1.5 rounded-lg bg-control px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">
+        <Plus size={14} /> {t("connectApps.add")}
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 top-9 z-20 min-w-52 rounded-xl border border-border bg-card p-1 shadow-lg">
+          {actions.map((action) => (
+            <button key={action.id} type="button" role="menuitem" data-plugins-add-action={action.id} disabled={action.disabled}
+              onClick={() => { setOpen(false); action.onPick(); }}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-[12.5px] text-ink hover:bg-hover disabled:opacity-40">
+              {action.icon}
+              {action.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EmptyLine({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-inset px-4 py-3 text-[12.5px] text-ink-secondary" data-plugins-empty>
@@ -89,28 +132,12 @@ function EmptyLine({ children, action }: { children: ReactNode; action?: ReactNo
   );
 }
 
-export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, onAddServer, onPasteConfig, addDisabled, onNewSkill, forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization, onRemoveSuperseded, removingSuperseded = null, macApps }: InstalledViewProps) {
-  const tools = onAddServer || onPasteConfig || onNewSkill;
+export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, add = [], forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization, onRemoveSuperseded, removingSuperseded = null, macApps }: InstalledViewProps) {
   return (
     <div data-plugins-installed-tab>
-      {macApps}
-      {tools && (
-        <div className="mb-3 flex flex-wrap items-center gap-2" data-plugins-installed-tools>
-          {onAddServer && (
-            <button type="button" onClick={onAddServer} disabled={addDisabled} data-plugins-add-server className="flex items-center gap-1.5 rounded-lg bg-control px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised-hover disabled:opacity-40">
-              <Plus size={14} /> {t("connectApps.manage.addServer")}
-            </button>
-          )}
-          {onPasteConfig && (
-            <button type="button" onClick={onPasteConfig} disabled={addDisabled} data-plugins-paste-config className="flex items-center gap-1.5 rounded-lg bg-control px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised-hover disabled:opacity-40">
-              <ClipboardPaste size={14} /> {t("mcp.import")}
-            </button>
-          )}
-          {onNewSkill && (
-            <button type="button" onClick={onNewSkill} data-plugins-new-skill className="flex items-center gap-1.5 rounded-lg bg-control px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-raised-hover">
-              <Plus size={14} /> {t("connectApps.skill.new")}
-            </button>
-          )}
+      {add.length > 0 && (
+        <div className="mb-3 flex items-center justify-end" data-plugins-installed-tools>
+          <AddMenu actions={add} />
         </div>
       )}
       {forms}
@@ -166,6 +193,7 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
           </ul>
         </section>
       )}
+      {macApps}
       {resolved === undefined && skills.length > 0 && (
         <section className="mt-6" data-plugins-skills>
           <h3 className="mb-2 text-[13px] font-semibold text-ink">{t("connectApps.manage.skills")}</h3>
@@ -189,9 +217,7 @@ export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpe
         </section>
       )}
       {providers && (
-        <section className="mt-6 first:mt-0" id="plugins-providers" data-plugins-providers aria-labelledby="plugins-providers-title">
-          <h3 id="plugins-providers-title" className="mb-2 text-[13px] font-semibold text-ink">{t("connectApps.manage.tab.providers")}</h3>
-          <p className="-mt-1 mb-3 text-[12px] leading-[18px] text-ink-secondary" data-plugins-providers-note>{t("connectApps.providers.note")}</p>
+        <section className="mt-6 first:mt-0" id="plugins-providers" data-plugins-providers>
           {providers}
         </section>
       )}

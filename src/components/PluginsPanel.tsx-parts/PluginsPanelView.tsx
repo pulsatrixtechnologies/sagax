@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { X } from "lucide-react";
+import { BookOpen, ClipboardPaste, KeyRound, X } from "lucide-react";
 
 import { confirmAsync } from "@/components/ConfirmProvider";
 import { api } from "@/state/store";
@@ -20,7 +20,7 @@ import {
   McpServerEditor,
 } from "../McpServersPanel";
 import { MyGithubSummary, MyMcpServers } from "../settings/MyConnectionsSettings";
-import { ConnectAppsView, connectAppsTabLabel, connectedCounts, type ConnectAppsTab } from "../plugins/ConnectAppsView";
+import { ConnectAppsView, connectAppsTabLabel, connectedCounts, STANDALONE_PANES, type ConnectAppsTab } from "../plugins/ConnectAppsView";
 import type { Crumb } from "../Breadcrumb";
 import { CATEGORY_MODAL } from "../category-modal";
 import { BotCatalogPane } from "../lazy-bot-catalog";
@@ -47,12 +47,12 @@ import { pageLabel, PluginsPanelSubpage } from "./PluginsPanelSubpage";
 import type { PluginsPanelState } from "./usePluginsPanelState";
 import type { PluginsPanelActions } from "./usePluginsPanelActions";
 
-/** Connect apps shell, search, tabs and dialog frame for PluginsPanel. */
+/** Plugins shell: title, scope, search, tabs and dialog frame for PluginsPanel. */
 export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPanelActions }) {
   const {
     state, dispatch, dialogRef, mcp, stack, page, push, popTo, botsBack, botSources, botFocus, setBotFocus,
     search, setSearch, openedGroups, setOpenedGroups, activeResult, setActiveResult, filter, setFilter,
-    type, setType, tab, setTab, accountService, setAccountService, harness, claudeConnectors,
+    type, setType, tab, setTab, harness, claudeConnectors,
     ownerOrAdmin, libraryEditor, perspicaxOrg, organization, dataCenterFor, setDataCenterFor,
     messagesSetup, skills, setInstalling, panelError, setPanelError, panelNotice,
     scopeBot, setScopeChoice, scope, scopedPluginView, orgRevision, botCapabilities, botView,
@@ -81,30 +81,26 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
   // does not apply there, so it shows turned off with the reason in the
   // note's place. Every line keeps its room on every tab (a bot-only notice
   // is kept invisible on Providers), so the tabs never move.
-  // Pages are the person's own too: the same turned-off scope
-  // Bots too (2026-10-29): bots and templates are the same in both scopes
-  const botsTab = tab === "bots" && page.page === "main" && search.trim() === "";
-  const accountsTab = (tab === "pages" && page.page === "main") || botsTab;
+  // the one install scope (this bot, me, organization), always live (#2104):
+  // Bots and Pages open alone and never show it
   const scopeToggle = (
-    <div data-plugins-scope-bar data-plugins-scope-tab={botsTab ? "bots" : accountsTab ? "accounts" : "plugins"}>
-      <ScopeToggle scope={scope} botName={scopeBot?.name} organization={s.workspaceMarkets && s.mayManageOrganization} onScope={(next) => { setScopeChoice(next); setPanelError(null); }} disabled={accountsTab} describedBy={accountsTab ? "plugins-scope-note" : undefined} />
+    <div data-plugins-scope-bar>
+      <ScopeToggle scope={scope} botName={scopeBot?.name} organization={s.workspaceMarkets && s.mayManageOrganization} onScope={(next) => { setScopeChoice(next); setPanelError(null); }} describedBy="plugins-scope-note" />
     </div>
   );
   const scopeControl = (
     <div data-plugins-scope-notes>
-      <p id="plugins-scope-note" className="mt-2 min-h-[36px] text-[12px] leading-[18px] text-ink-secondary" data-plugins-scope-note={botsTab ? "bots" : accountsTab ? "accounts" : scope}>
-        {botsTab ? t("connectApps.scope.botsNote") : accountsTab ? t("connectApps.scope.accountsNote") : scope === "bot" && scopeBot ? (
+      <p id="plugins-scope-note" className="mt-2 text-[12px] leading-[18px] text-ink-secondary" data-plugins-scope-note={scope}>
+        {scope === "bot" && scopeBot ? (
           <>
             {t("connectApps.scope.botNote", { name: scopeBot.name })}
             {botView && !botView.canChange && <> {t("plugins.readOnly")}</>}
           </>
         ) : t(scope === "me" ? "connectApps.scope.meNote" : "connectApps.scope.workspaceNote")}
       </p>
-      <div className={cn(accountsTab && "invisible")} aria-hidden={accountsTab || undefined}>
-        {scope !== "workspace" && scopedPluginView && scopedPluginView.marketplaces.length === 0 && (
-          <p className="mt-2 rounded-lg bg-inset px-3 py-2 text-[12px] text-ink-secondary" data-plugins-scope-empty>{t("connectApps.scope.noMarketplaces")}</p>
-        )}
-      </div>
+      {scope !== "workspace" && scopedPluginView && scopedPluginView.marketplaces.length === 0 && (
+        <p className="mt-2 rounded-lg bg-inset px-3 py-2 text-[12px] text-ink-secondary" data-plugins-scope-empty>{t("connectApps.scope.noMarketplaces")}</p>
+      )}
     </div>
   );
 
@@ -280,8 +276,9 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
 
   const isOrgAdmin = perspicaxOrg?.viewerRole === "admin";
   const orgHere = isOrgAdmin && scope === "workspace" && perspicaxOrg !== null;
-  // Sources: the GitHub connection row and the marketplaces (2026-10-29)
-  const tabs: ConnectAppsTab[] = ["discover", "bots", "installed", "pages",
+  // Sources: the GitHub connection row and the marketplaces (2026-10-29).
+  // Bots and Pages are not tabs any more (#2104): a link opens them alone.
+  const tabs: ConnectAppsTab[] = ["installed", "discover",
     ...(githubHere || marketRoute !== null || (marketSummaries?.length ?? 0) > 0 || orgHere ? ["sources" as const] : [])];
   const groups = connectorGroups({
     claude: harness.answer?.claude ? { available: harness.answer.claude.available, reason: harness.answer.claude.reason, connectors: harness.answer.claude.connectors ?? [], manageUrl: harness.answer.manageUrl } : null,
@@ -303,6 +300,8 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
         <ConnectAppsView
           tab={tab}
           onTab={chooseTab}
+          // Bots or Pages opened alone (#2104): a back arrow returns to Plugins
+          onBack={STANDALONE_PANES.includes(tab) && !tabs.includes(tab) ? () => chooseTab("installed") : undefined}
           page={subpage ?? undefined}
           tabs={tabs}
           // what "N connected" counted, on the tabs that list them (2026-10-28):
@@ -314,8 +313,10 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
           search={searchField}
           results={searchResults}
           notices={notices}
-          refreshing={refreshing}
-          onRefresh={refreshAll}
+          // the one refresh (#2104): plugins, servers, skills, and the engine
+          // accounts' connectors, together
+          refreshing={refreshing || harness.loading}
+          onRefresh={() => { refreshAll(); void harness.load(true); }}
           installed={(
             <InstalledView
               loading={mcp.servers === null}
@@ -336,14 +337,20 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               onOpenEntry={(entry) => openItem(entry.primary)}
               onOpenSkill={openItem}
               entryActions={entryActions}
-              onAddServer={scope === "workspace" && !mcp.restricted ? mcp.startAdd : undefined}
-              onPasteConfig={scope === "workspace" && !mcp.restricted ? mcp.toggleImport : undefined}
-              addDisabled={mcp.busy !== null}
-              onNewSkill={scope !== "bot" && skillsOn && (scope === "me" || ownerOrAdmin !== false || libraryEditor) ? () => push({ page: "skill" }) : undefined}
+              // one "+ Add" menu (#2104): the server, the pasted config, the
+              // skill; an entry shows only where it may act
+              add={[
+                ...(scope === "workspace" && !mcp.restricted ? [
+                  { id: "server", label: t("connectApps.manage.addServer"), icon: <KeyRound size={14} />, onPick: mcp.startAdd, disabled: mcp.busy !== null },
+                  { id: "paste", label: t("mcp.import"), icon: <ClipboardPaste size={14} />, onPick: mcp.toggleImport, disabled: mcp.busy !== null },
+                ] : []),
+                ...(scope !== "bot" && skillsOn && (scope === "me" || ownerOrAdmin !== false || libraryEditor) ? [
+                  { id: "skill", label: t("connectApps.skill.new"), icon: <BookOpen size={14} />, onPick: () => push({ page: "skill" }) },
+                ] : []),
+              ]}
               onDiscover={() => setTab("discover")}
               macApps={scope !== "bot" ? (
                 <MacAppsInstalledSection
-                  onOpenMac={() => { setTab("installed"); push({ page: "mac" }); }}
                   onOpenMessages={() => { setTab("installed"); push({ page: "mac-messages" }); }}
                   messagesEnabled={messagesSetup?.useMessages}
                 />
@@ -351,8 +358,6 @@ export function PluginsPanelView({ s, a }: { s: PluginsPanelState; a: PluginsPan
               providers={(
             <AccountsView
               groups={groups}
-              service={accountService}
-              onService={setAccountService}
               refreshing={harness.loading}
               onRefresh={() => void harness.load(true)}
               servers={organization ? <MyMcpServers /> : undefined}
@@ -448,7 +453,7 @@ function PluginsPanelFrame({
       className={CATEGORY_MODAL.backdrop}
       onMouseDown={(event) => event.target === event.currentTarget && close()}
     >
-      {/* Capabilities centred modal (decided exception like Settings): same
+      {/* Plugins centred modal (decided exception like Settings): same
           size and close button as Browse Bots used to share. */}
       <div
         ref={dialogRef}

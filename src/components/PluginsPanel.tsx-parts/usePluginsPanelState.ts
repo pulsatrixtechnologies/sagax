@@ -21,7 +21,6 @@ import { botScopeMarketplaces, initialPluginScope, pluginScopeBot, type PluginSc
 import { useMcpServers } from "../McpServersPanel";
 import { useServerMode } from "../ServerModeSettings";
 import { isProvidersLink, normalizeConnectAppsTab, type ConnectAppsTab } from "../plugins/ConnectAppsView";
-import type { AccountService } from "../plugins/AccountsView";
 import { useBotCatalogSources } from "../bot-catalog/use-bot-catalog-sources";
 import type { SearchGroupId } from "@/lib/connect-apps-search";
 import { isBackShortcut, pageKeyAction } from "@/lib/back-shortcut";
@@ -63,11 +62,9 @@ export function usePluginsPanelState() {
   const [activeResult, setActiveResult] = useState(-1);
   const [filter, setFilter] = useState<PluginFilter>("all");
   const [type, setType] = useState<PluginTypeFilter>("any");
-  // Discover is where a person lands; the MCP surface (a bot's connectors,
-  // the retro assistant) opens Installed, where the servers are.
-  const [tab, setTab] = useState<ConnectAppsTab>(state.pluginsSurface === "mcp" ? "installed" : "discover");
-  /** the pill Providers shows */
-  const [accountService, setAccountService] = useState<AccountService>("all");
+  // Installed is where a person lands (#2104, 2026-11-05: what they have,
+  // then Discover to add; Discover was first from 2026-10-28 to then).
+  const [tab, setTab] = useState<ConnectAppsTab>("installed");
   const harness = useHarnessConnectors();
   const claudeConnectors = harness.connected;
   const ownerOrAdmin = useOwnerOrAdmin();
@@ -88,7 +85,7 @@ export function usePluginsPanelState() {
   useEffect(() => {
     const openMacMessages = () => {
       setTab("installed");
-      setStack([{ page: "main" }, { page: "mac" }, { page: "mac-messages" }]);
+      setStack([{ page: "main" }, { page: "mac-messages" }]);
     };
     window.addEventListener("sagax:open-mac-messages", openMacMessages);
     return () => window.removeEventListener("sagax:open-mac-messages", openMacMessages);
@@ -327,7 +324,7 @@ export function usePluginsPanelState() {
     state, dispatch, dialogRef, mcp, stack, setStack, page, push, popTo, showDetail, botsBack,
     botSources, botFocus, setBotFocus, search, setSearch, openedGroups, setOpenedGroups,
     activeResult, setActiveResult, filter, setFilter, type, setType, tab, setTab,
-    accountService, setAccountService, harness, claudeConnectors, ownerOrAdmin, libraryEditor,
+    harness, claudeConnectors, ownerOrAdmin, libraryEditor,
     perspicaxOrg, organization, mayManageOrganization, featured, setFeatured, dataCenterFor, setDataCenterFor,
     messagesSetup, skills, setSkills, installing, setInstalling, panelError, setPanelError,
     mcpAccountDraft, setMcpAccountDraft, marketplaces, setMarketplaces, marketBusy, setMarketBusy,

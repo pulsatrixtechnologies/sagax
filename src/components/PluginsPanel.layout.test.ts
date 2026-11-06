@@ -33,16 +33,16 @@ describe("Plugins panel views", () => {
     discover: createElement(DiscoverView, discoverProps), installed: "INSTALLED", pages: "PAGES", sources: "SOURCES", ...overrides,
   }));
 
-  it("one page: Capabilities, then the five tabs (no Providers tab since 2026-10-29) with Discover first and open, the count on Installed", () => {
+  it("one page: Plugins, then the three tabs (Installed, Discover, Sources; #2104) with Installed first, the count on Installed", () => {
     const html = page();
-    expect(html).toMatch(/id="plugins-title"[^>]*>Capabilities<\/h2>/);
+    expect(html).toMatch(/id="plugins-title"[^>]*>Plugins<\/h2>/);
     expect(html).not.toContain("data-plugins-connected");
     // no breadcrumb and no "Manage plugins and skills" page
     expect(html).not.toContain("data-breadcrumb");
     expect(html).not.toContain("Manage plugins and skills");
     expect(html).toMatch(/aria-label="Installed, 2 connected"[^>]*data-plugins-tab="installed"/);
     const tabs = [...html.matchAll(/role="tab"[^>]*data-plugins-tab="([a-z]+)"[^>]*><span data-plugins-tab-label="[^"]*">([^<]+)</g)].map((match) => [match[1], match[2]]);
-    expect(tabs).toEqual([["discover", "Discover"], ["bots", "Bots"], ["installed", "Installed"], ["pages", "Pages"], ["sources", "Sources"]]);
+    expect(tabs).toEqual([["installed", "Installed"], ["discover", "Discover"], ["sources", "Sources"]]);
     expect(html).toMatch(/aria-selected="true"[^>]*data-plugins-tab="discover"/);
     // one search (2026-10-29): under the title, above the tabs; none in Discover
     const searched = page({ search: createElement("input", { "data-plugins-search": "", placeholder: "ONE SEARCH" }) });
@@ -56,17 +56,20 @@ describe("Plugins panel views", () => {
     expect(results).toContain("data-plugins-results");
     expect(results).toContain("RESULTS");
     expect(results).not.toContain("data-plugins-discover");
-    // Bots: a pane of its own, like a page opened from a tab
-    const bots = page({ tab: "bots", bots: "BOTS" });
+    // Bots: a pane of its own, with its own title and no tab row (#2104)
+    const bots = page({ tab: "bots", bots: "BOTS", onBack: noop });
     expect(bots).toContain("BOTS");
+    expect(bots).toMatch(/id="plugins-title"[^>]*>Bots<\/h2>/);
     expect(bots).toMatch(/data-plugins-manage="bots"/);
+    expect(bots).not.toContain('role="tablist"');
+    expect(bots).toContain("data-apps-back");
     expect(bots).not.toMatch(/data-plugins-list=""[^>]*data-plugins-manage="bots"/);
     expect(html).not.toContain("INSTALLED");
     expect(page({ tab: "sources" })).toContain("SOURCES");
-    // a tab left out is not drawn; a tab not offered falls back to Discover
-    const noSources = page({ tabs: ["discover", "installed", "pages"], tab: "sources" });
+    // a tab left out is not drawn; a tab not offered falls back to Installed
+    const noSources = page({ tabs: ["installed", "discover"], tab: "sources" });
     expect(noSources).not.toContain('data-plugins-tab="sources"');
-    expect(noSources).toMatch(/aria-selected="true"[^>]*data-plugins-tab="discover"/);
+    expect(noSources).toMatch(/aria-selected="true"[^>]*data-plugins-tab="installed"/);
   });
 
   it("Discover: no search of its own, every category pill and no Browse Bots button, sections of two-column rows", () => {

@@ -59,12 +59,23 @@ export function OrgCapabilitiesForMe() {
   const [items, setItems] = useState<MemberOrgCapability[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let alive = true;
+    setError(null);
     void loadMine().then((answer) => { if (alive) setItems(answer.items); }, (failure) => { if (alive) setError(readableError(failure)); });
     return () => { alive = false; };
-  }, []);
-  if (error) return <p role="alert" className="mb-3 text-[12px] text-danger">{error}</p>;
+  }, [attempt]);
+  // #2104: a failure says what did not load and offers to try again (a bare
+  // error code stood alone in red before)
+  if (error) {
+    return (
+      <p role="alert" className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-inset px-4 py-3 text-[12.5px] text-ink-secondary" data-org-capabilities-failed>
+        <span>{t("orgCapabilities.member.loadFailed", { error })}</span>
+        <button type="button" onClick={() => setAttempt((n) => n + 1)} className="text-[12.5px] font-medium text-accent-text hover:underline">{t("orgCapabilities.member.retry")}</button>
+      </p>
+    );
+  }
   if (!items || items.length === 0) return null;
   const toggle = async (item: MemberOrgCapability) => {
     setBusy(item.id);

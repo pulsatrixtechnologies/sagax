@@ -13,7 +13,6 @@ import { PluginPageHeader } from "../plugins/PluginParts";
 import { PluginDetailView } from "../plugins/PluginDetailView";
 import { SkillPage } from "../plugins/SkillPage";
 import { BotsForView } from "../plugins/BotsForView";
-import { MacAppsView } from "../plugins/MacAppsView";
 import { MessagesSetupView } from "../plugins/MessagesSetupView";
 import { detailProps } from "./detailBuilders";
 import type { Page } from "./types";
@@ -41,7 +40,7 @@ export function PluginsPanelSubpage({
 }): ReactNode {
   const {
     page, skills, skillsRoute, scope, ownerOrAdmin, libraryEditor, perspicaxOrg, marketplaces,
-    back, push, setStack, loadSkills, messagesSetup, items, mcp, mcpAccountDraft, setMcpAccountDraft,
+    back, setStack, loadSkills, items, mcp, mcpAccountDraft, setMcpAccountDraft,
     shownMarketplaces, installing,
   } = s;
   const {
@@ -78,7 +77,8 @@ export function PluginsPanelSubpage({
   };
 
   // A page opened from a tab (2026-10-28): inside that tab's panel, under
-  // the title, scope and tabs. Browse Bots is the Bots tab (2026-10-29).
+  // the title, scope and tabs. Browse Bots is the Bots pane, opened alone
+  // from its links (#2104).
   if (page.page === "skill" && (pageSkill || !page.name)) {
     return (
       <SkillPage
@@ -118,17 +118,6 @@ export function PluginsPanelSubpage({
           {githubSection ?? <p className="rounded-xl bg-inset px-4 py-3 text-[12.5px] text-ink-secondary">{t("connectApps.manage.accountsEmpty")}</p>}
         </div>
       </>
-    );
-  }
-  if (page.page === "mac") {
-    return (
-      <MacAppsView
-        onBack={back}
-        trail={trail}
-        onOpenMessages={() => push({ page: "mac-messages" })}
-        messagesEnabled={messagesSetup?.useMessages}
-        messagesAvailable={messagesSetup?.available}
-      />
     );
   }
   if (page.page === "mac-messages") {
@@ -188,7 +177,6 @@ export function pageLabel(entry: Page, tab: ConnectAppsTab, items: readonly Plug
     }
     case "skill": return entry.name ?? t("connectApps.skill.new");
     case "github": return t("myConnections.github.title");
-    case "mac": return t("connectApps.mac.title");
     case "mac-messages": return t("connectApps.mac.messages.rowTitle");
     case "tailscale": return t("connectApps.tailscale.title");
   }

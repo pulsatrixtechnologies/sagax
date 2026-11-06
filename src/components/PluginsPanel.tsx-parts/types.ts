@@ -44,9 +44,7 @@ export type Page =
   | { page: "skill"; name?: string }
   /** the GitHub connection, when no marketplace has the GitHub plugin */
   | { page: "github" }
-  /** Connect apps > Mac: native apps on this person's Mac */
-  | { page: "mac" }
-  /** Connect apps > Mac > Messages setup */
+  /** Plugins > Installed > This Mac > Messages setup (the one Mac row opens it directly, #2104) */
   | { page: "mac-messages" }
   /** Connect apps > Tailscale: join a bot computer to the person's tailnet */
   | { page: "tailscale" };

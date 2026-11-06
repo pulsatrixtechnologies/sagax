@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Capabilities opens as a centred modal (decided exception like Settings).
+// Plugins (Capabilities before #2104) opens as a centred modal (decided exception like Settings).
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -133,7 +133,7 @@ describe("PluginsPanel modal", () => {
     host.remove();
   });
 
-  it("opens Capabilities as a centred modal dialog", async () => {
+  it("opens Plugins as a centred modal dialog", async () => {
     await act(async () => {
       root.render(createElement(PluginsPanel));
     });
@@ -145,7 +145,7 @@ describe("PluginsPanel modal", () => {
     expect(dialog?.className).toContain(CATEGORY_MODAL.frame.split(" ")[0]!);
     expect(host.querySelector("[data-tour=\"apps-close\"]")).not.toBeNull();
     expect(host.querySelector("[data-apps-back]")).toBeNull();
-    expect(host.textContent).toMatch(/Capabilities|Connect/);
+    expect(host.textContent).toMatch(/Plugins/);
   });
 
   it.each(["en", "fr"])("a member removes only the obsolete bot copy in one click (%s)", async (lang) => {

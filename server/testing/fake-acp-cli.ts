@@ -1534,7 +1534,7 @@ function handle(msg: any) {
         return;
       }
       if (mode === "mcp-tools") {
-        const handshake = process.env.FAKE_ACP_MCP_HANDSHAKE ? JSON.parse(process.env.FAKE_ACP_MCP_HANDSHAKE; FAKE_ACP_MCP_SCHEMA_BYTES=1 adds each schema\'s length) : GROK_MCP_HANDSHAKE;
+        const handshake = process.env.FAKE_ACP_MCP_HANDSHAKE ? JSON.parse(process.env.FAKE_ACP_MCP_HANDSHAKE) : GROK_MCP_HANDSHAKE;
         void Promise.all(sessionMcp.map((entry) => listMcpTools(entry, handshake).then(
           (tools) => `${entry.name}: ${tools.join(",")}`,
           (error: Error) => `${entry.name} failed: ${error.message}`,

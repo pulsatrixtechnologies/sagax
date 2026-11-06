@@ -1332,19 +1332,24 @@ from the run's detail and Run logs; they are not merged into the stream
 
 When a model or engine reaches its usage limit (or runs out of credits, or
 hits a rate limit) the person sees nothing: the same turn goes on at once on
-a model that works. On Auto, `limit-failover-host.ts` (`failed`, `auto`)
-skips the limited model until its reset (`autoRefuse`, and `autoExcluded`
-for an engine-wide limit and any other sign-in to the same subscription)
-and sends the message again; Auto picks the next model. A chosen model
-moves to a backup as before. Either way the next engine is told the steps
-the turn already took (`limitResumeText`, `renewalPrompt` with
-`cause: "limit"`) so it never runs them again, the failure row becomes a
-hidden `notice:` row, and the words go to the Events lens
-(`limitFailoverRow`, a `runtime.notice`). Only when nothing else can answer
-does the chat say when it comes back (`waiting`). Stored `recovery:` switch
-rows are hidden too (`isHiddenStatusActivity`). Test:
-`server/auto-limit-continue.e2e.test.ts` (fake CLI
-`FAKE_CLAUDE_LIMIT_MID_TURN_FILE`).
+a model that works. Accounts of the same provider are a silent pool (#2192):
+Sagax rotates to the next account (more headroom first) before trying another
+provider, and before the turn when a plan report shows the account near its
+limit (`NEAR_LIMIT_PERCENT`). On Auto, `limit-failover-host.ts` (`failed`,
+`auto`) skips the limited model until its reset (`autoRefuse`, and
+`autoExcluded` for an engine-wide limit) and sends the message again; Auto
+picks the next model. A chosen model moves to a backup as before. Either way
+the next engine is told the steps the turn already took (`limitResumeText`,
+`renewalPrompt` with `cause: "limit"`) so it never runs them again, the
+failure row becomes a hidden `notice:` row, and the words go to the Events
+lens (`limitFailoverRow`, a `runtime.notice`). An empty reply right after a
+limit or provider error retries once on the next pool member
+(`emptyReplyRetry`). Only when every account of every allowed engine is
+spent does the chat say when it comes back (`waiting` / `exhausted`).
+Stored `recovery:` switch rows are hidden too (`isHiddenStatusActivity`).
+Test: `server/auto-limit-continue.e2e.test.ts` (fake CLI
+`FAKE_CLAUDE_LIMIT_MID_TURN_FILE`), `server/usage/limit-failover-host.test.ts`
+(account rotation).
 
 ## OpenAI's API runs on /v1/responses (2026-10-29)
 
@@ -1430,18 +1435,18 @@ the two takeovers: it is no other engine; `takeOver` then ends the takeover
 with no second line); with no taker it waits for the earlier real reset
 under 12 h of the two (the bot's own engine on a tie, its next start naming
 no takeover model, so `beforeTurn` brings the conversation back), else
-fails with the bot's own engine and its reset. A backup never is another
-sign-in to a subscription engine this payer is held on, whatever engine
-refused (`outOf`, as `autoExcluded`): a chat backup, `beforeTurn` and a run's
-takeover agree, and the conversation's own engine is never a backup for its
-own refused model. With no taker the words say why (`noTaker`: no other
-engine this person may use, the two moves already made, or switching off
-with `SAGAX_LIMIT_FAILOVER=0`); they advise choosing another engine for the
-bot only when switching is off. A failed run's own error is those words
-(its row, any tool reading runs); the engine's raw words stay in its
-thread. Every line names the engine (its model on a detour) and gives the
-real reset or says the engine gave none, in English or Quebec French ("2 nov.
-à 15 h 16") by the person's language and zone
+fails with the bot's own engine and its reset. Sibling accounts of the same
+provider are tried first (#2192, `pickLimitBackup`, `outOf` /
+`autoExcluded`): a chat backup, `beforeTurn` and a run's takeover agree, and
+the conversation's own engine is never a backup for its own refused model.
+With no taker the words say why (`noTaker`: no other engine this person may
+use, the two moves already made, or switching off with
+`SAGAX_LIMIT_FAILOVER=0`); they advise choosing another engine for the bot
+only when switching is off. A failed run's own error is those words (its
+row, any tool reading runs); the engine's raw words stay in its thread.
+Every line names the engine (its model on a detour) and gives the real
+reset or says the engine gave none, in English or Quebec French ("2 nov. à
+15 h 16") by the person's language and zone
 (`server/routines/routine-limit-words.ts`); a rate limit is called one. The
 thread's notice names a backup standing in (`LimitFailoverLine.home`,
 `limitFailover.switchedStandIn`) and a return after its refusal
@@ -9487,10 +9492,10 @@ the rule: no card, the turn continues at once.
 - Candidates are `autoEnginesFor` (the same filter Auto uses): enabled,
   organization policy and `allowedEngines`, sign-ins and keys of this
   speaker (`resolveEngineAccess`), approval mode, tools the thread needs.
-  Never another sign-in to the same subscription engine
-  (`limitBackupAllowed`). Order: the bot's own backups, then the default
-  model of new bots, then the catalog. Engines blocked for this payer are
-  skipped: no ping-pong, at most 3 takeovers per message.
+  Same-provider accounts rotate first (`limitBackupAllowed`, #2192). Order:
+  same-provider pool (more headroom first), then the bot's own backups, then
+  the default model of new bots, then the catalog. Engines blocked for this
+  payer are skipped: no ping-pong, at most 3 takeovers per message.
 - Only the thread moves (`switchTaskModel`, `rewound`), never the bot. The
   failover is kept in `DATA_DIR/limit-failovers.json`; the first turn after
   the reset plus `AFTER_RESET_MS` goes back to the engine the thread started

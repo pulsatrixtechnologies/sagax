@@ -6,9 +6,10 @@
 //   - Which engines may take over is the host's (server/usage/limit-failover-host.ts):
 //     the engines a turn of this speaker could run on (sign-ins, keys,
 //     the organization's engines, allowedEngines, the approval mode and the
-//     organization's policy), never another account of the same subscription.
-//   - The order is deterministic: the bot's own backups (Settings, automatic
-//     recovery), then the organization's default engine, then the catalog.
+//     organization's policy). Accounts of the same provider are a pool (#2192).
+//   - The order is deterministic: same-provider accounts (more headroom
+//     first), then the bot's own backups (Settings, automatic recovery), then
+//     the organization's default engine, then the catalog.
 //   - An engine known to be at its limit for this payer is skipped, so two
 //     spent engines never pass a turn back and forth.
 //   - The thread's choice is not changed for good: once the reset has passed
@@ -22,18 +23,16 @@ import { AFTER_RESET_MS } from "../../shared/limit-failover.ts";
 import type { ModelSelection } from "../../shared/wire.ts";
 import { writeFileAtomic } from "../atomic.ts";
 
-/** Engines a person signs in to with a subscription whose usage limit refuses turns. */
-const SUBSCRIPTION_DRIVERS = new Set(["claudeAgent", "codex", "grokAgent", "kimiAgent", "cursorAgent", "geminiAgent", "antigravityAgent"]);
 /** An engine instance with one of these keys bills each use instead of drawing on a subscription's limit. */
 const PAY_PER_USE_KEYS = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY", "CODEX_API_KEY", "XAI_API_KEY", "GEMINI_API_KEY", "CURSOR_API_KEY"];
 
 export type LimitEngine = { instanceId: string; driverKind: string };
 
-/** Whether `to` may take over a turn `from`'s usage limit refused. Never the
- * same engine, and never another sign-in to the same subscription engine:
- * rotating accounts to get past a provider's usage limit breaks its terms
- * and can get the accounts closed. Another engine, or a pay-per-use key on
- * the same one, is fine (upstream limitBackupAllowed). */
+/** True when both engines are accounts of the same provider (same driver). */
+export function sameProvider(from: LimitEngine, to: LimitEngine): boolean {
+  return from.driverKind === to.driverKind;
+}
+
 /** An engine instance that bills each use (a pay-per-use key, as its access
  * or in its environment) instead of drawing on a plan's limit. Port of
  * OpenMausBot 3ed90a037 `billsEachUse`. */
@@ -41,10 +40,12 @@ export function billsEachUse(config?: { environment?: Record<string, string>; ac
   return config?.access === "api" || PAY_PER_USE_KEYS.some((key) => Boolean(config?.environment?.[key]?.trim()));
 }
 
-export function limitBackupAllowed(from: LimitEngine, to: LimitEngine, toConfig?: { environment?: Record<string, string>; access?: string }): boolean {
-  if (to.instanceId === from.instanceId) return false;
-  if (to.driverKind !== from.driverKind || !SUBSCRIPTION_DRIVERS.has(from.driverKind)) return true;
-  return billsEachUse(toConfig);
+/** Whether `to` may take over a turn `from`'s usage limit refused. Never the
+ * same engine instance. Other accounts of the same provider (subscriptions
+ * or keys the payer holds) are a rotation pool (#2192): try them before
+ * another provider. A pay-per-use key on the same driver stays allowed. */
+export function limitBackupAllowed(from: LimitEngine, to: LimitEngine, _toConfig?: { environment?: Record<string, string>; access?: string }): boolean {
+  return to.instanceId !== from.instanceId;
 }
 
 /** An engine a turn of this speaker may run on, as the host checked it. */
@@ -54,27 +55,53 @@ export interface LimitCandidate extends LimitEngine {
   defaultModel?: string;
 }
 
-/** The engine that takes over, or null. `preferred` is the bot's own
- * backups then the organization's default, in order; `candidates` is every
- * allowed engine in catalog order. A catalog fallthrough never picks a
- * pay-per-use engine the person did not choose as a backup (3ed90a037). */
+/** The engine that takes over, or null. Same-provider accounts first (#2192),
+ * then the bot's own backups and the organization's default, then the catalog.
+ * Within a pool, lower plan used-percent (more headroom) wins when known.
+ * A catalog fallthrough never picks a pay-per-use engine the person did not
+ * choose as a backup (3ed90a037). */
 export function pickLimitBackup(input: {
   from: LimitEngine;
   preferred: ReadonlyArray<{ instanceId: string; model?: string }>;
   candidates: readonly LimitCandidate[];
   blocked: (instanceId: string) => boolean;
   config: (instanceId: string) => { environment?: Record<string, string>; access?: string } | undefined;
+  /** Plan used percent 0–100 for this instance when known; null when unknown. */
+  usedPercent?: (instanceId: string) => number | null;
+  /** Instance ids to skip even when not blocked (empty-reply next-pool pick). */
+  skip?: readonly string[];
+  /** Only same-provider accounts (proactive near-limit rotation). */
+  sameProviderOnly?: boolean;
 }): ModelSelection | null {
-  const usable = (candidate: LimitCandidate) => !input.blocked(candidate.instanceId) &&
-    limitBackupAllowed(input.from, candidate, input.config(candidate.instanceId)) && candidate.models.length > 0;
+  const skip = new Set(input.skip ?? []);
+  const usable = (candidate: LimitCandidate) => !skip.has(candidate.instanceId) && !input.blocked(candidate.instanceId) &&
+    limitBackupAllowed(input.from, candidate, input.config(candidate.instanceId)) && candidate.models.length > 0 &&
+    (!input.sameProviderOnly || sameProvider(input.from, candidate));
   const modelOf = (candidate: LimitCandidate, wanted?: string) => wanted && candidate.models.includes(wanted) ? wanted
     : candidate.defaultModel && candidate.models.includes(candidate.defaultModel) ? candidate.defaultModel : candidate.models[0]!;
-  for (const entry of input.preferred) {
-    const candidate = input.candidates.find((engine) => engine.instanceId === entry.instanceId);
-    if (candidate && usable(candidate)) return { instanceId: candidate.instanceId, model: modelOf(candidate, entry.model) };
-  }
-  const next = input.candidates.find((candidate) => usable(candidate) && !billsEachUse(input.config(candidate.instanceId)));
-  return next ? { instanceId: next.instanceId, model: modelOf(next) } : null;
+  const selectionOf = (candidate: LimitCandidate, wanted?: string): ModelSelection =>
+    ({ instanceId: candidate.instanceId, model: modelOf(candidate, wanted) });
+  const headroom = (instanceId: string): number => {
+    const used = input.usedPercent?.(instanceId);
+    return used === null || used === undefined ? 50 : used;
+  };
+  const byHeadroom = (left: LimitCandidate, right: LimitCandidate) => headroom(left.instanceId) - headroom(right.instanceId);
+  const pickPool = (preferSame: boolean): ModelSelection | null => {
+    for (const entry of input.preferred) {
+      const candidate = input.candidates.find((engine) => engine.instanceId === entry.instanceId);
+      if (candidate && usable(candidate) && (!preferSame || sameProvider(input.from, candidate))) {
+        return selectionOf(candidate, entry.model);
+      }
+    }
+    const catalog = input.candidates
+      .filter((candidate) => usable(candidate) && !billsEachUse(input.config(candidate.instanceId))
+        && (!preferSame || sameProvider(input.from, candidate)))
+      .sort(byHeadroom);
+    const next = catalog[0];
+    return next ? selectionOf(next) : null;
+  };
+  if (input.sameProviderOnly) return pickPool(true);
+  return pickPool(true) ?? pickPool(false);
 }
 
 /** A thread moved to `to` because `from`'s usage limit refused it. */

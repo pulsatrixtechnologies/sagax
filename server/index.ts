@@ -670,7 +670,7 @@ import {
   type UsageTrigger
 } from "./usage/usage-ledger.ts";
 import type { PlanUsageReport } from "./usage/plan-usage.ts";
-import { newPlanUsageAlerts, orgPlanAccounts, planAccountsFromInstances, planUsageAlertText, spentPlanUntil, type PlanAccount } from "./usage/plan-usage.ts";
+import { newPlanUsageAlerts, orgPlanAccounts, planAccountsFromInstances, planUsageAlertText, planUsedPercent, spentPlanUntil, type PlanAccount } from "./usage/plan-usage.ts";
 import { GroupUsageReader } from "./groups/group-thread-usage.ts";
 import { ledgerCost, listPriceFor } from "./models/model-prices.ts";
 import type { PriceList } from "./usage/prices.ts";
@@ -16830,9 +16830,12 @@ function limitResumeText(threadId: string, turnId: string, text: string): string
  * hint only: Sagax's quick pick (a wake's or a call's fast model) skips a
  * spent engine. A real refusal on it that names no reset is still held for
  * Sagax's one-hour estimate, never until this reset: a top-up shows only in a
- * later report, which clears this hint, never a hold (2026-11-02). Auto, a
- * backup and a run's takeover read only real refusals. */
+ * later report, which clears this hint, never a hold (2026-11-02). Auto and
+ * other-provider backups read only real refusals; same-provider accounts also
+ * rotate from the report's used percent (#2192). */
 const spentPlans = new Map<string, number>();
+/** #2192: fullest window used-percent per payer and engine, from the last report. */
+const planUsedPercents = new Map<string, number>();
 function notePlanLimits(report: PlanUsageReport, scope: string): void {
   const payer = scope.toLowerCase();
   const now = Date.now();
@@ -16841,12 +16844,19 @@ function notePlanLimits(report: PlanUsageReport, scope: string): void {
     const until = spentPlanUntil(row);
     if (until !== null && until > now) spentPlans.set(key, until);
     else spentPlans.delete(key);
+    const used = planUsedPercent(row);
+    if (used !== null) planUsedPercents.set(key, used);
+    else planUsedPercents.delete(key);
   }
   while (spentPlans.size > 2_000) spentPlans.delete(spentPlans.keys().next().value as string);
+  while (planUsedPercents.size > 2_000) planUsedPercents.delete(planUsedPercents.keys().next().value as string);
 }
 function planLimitUntil(payer: string, instanceId: string): number | null {
   const until = spentPlans.get(`${payer}\u0000${instanceId}`);
   return until !== undefined && until > Date.now() ? until : null;
+}
+function planUsedPercentOf(payer: string, instanceId: string): number | null {
+  return planUsedPercents.get(`${payer}\u0000${instanceId}`) ?? null;
 }
 /** The engines a turn of this speaker may run on, from what is known now
  * (the probe cache on a solo server is not read again). */
@@ -16887,7 +16897,12 @@ const limitFailover = createLimitFailoverHost({
   // A plan window the person's usage report showed spent (J4), until a turn
   // on that engine works for them again: only Sagax's quick pick skips it.
   planLimitUntil: (payer, instanceId) => planLimitUntil(payer, instanceId),
-  planWorked: (payer, instanceId) => { spentPlans.delete(`${payer}\u0000${instanceId}`); },
+  // #2192: used percent for silent same-provider rotation before the limit.
+  planUsedPercent: (payer, instanceId) => planUsedPercentOf(payer, instanceId),
+  planWorked: (payer, instanceId) => {
+    spentPlans.delete(`${payer}\u0000${instanceId}`);
+    planUsedPercents.delete(`${payer}\u0000${instanceId}`);
+  },
   preferred: (botId, threadId) => {
     const bot = threadId ? store.projectBotForTask(botId, threadId) : store.bot(botId);
     const orgDefault = cfg.newBotDefaults?.profile.modelSelection ?? cfg.defaultModelSelection;
@@ -21333,18 +21348,28 @@ bus.subscribe((event: RuntimeEvent) => {
           routineRun: routineForFailover });
       // reasoning_only / empty model on a chat turn: one automatic resend of
       // the same user message before an incident (server/empty-response-retry.ts).
+      // #2192: after a limit or provider error, try the next pool member first.
       const emptyDetail = failureCause ?? event.stopReason;
-      const emptyRetried = shouldEmptyResponseRetry({
+      const emptyIsEngine = isEngineEmptyFailure(emptyDetail);
+      const emptyRequest = directRequestOwners.get(event.threadId);
+      const emptyPoolRetried = Boolean(bot) && !event.ok && !stopped && !limitTaken && !lazyClaimAlreadyReported && !computerParked
+        && emptyIsEngine && emptyRequest?.messageId && !emptyRequest.stopped && emptyRequest.origin?.kind === "user"
+        && !routines?.runForThread(event.threadId) && !routineRun
+        && limitFailover.emptyReplyRetry({
+          botId: bot!.id, threadId: event.threadId, speaker: turnSpeakers.get(event.threadId),
+          messageId: emptyRequest.messageId, turnId: completedTurnId, trigger: "empty-reply-pool",
+        });
+      const emptyRetried = emptyPoolRetried || shouldEmptyResponseRetry({
         ok: event.ok,
         stopped,
         limitTaken,
         alreadyReported: lazyClaimAlreadyReported || computerParked,
         isRoutine: Boolean(routines?.runForThread(event.threadId) || routineRun),
-        empty: isEngineEmptyFailure(emptyDetail),
+        empty: emptyIsEngine,
         detail: emptyDetail,
         take: () => emptyResponseRetry.take(event.threadId),
       });
-      if (emptyRetried && bot) {
+      if (emptyRetried && !emptyPoolRetried && bot) {
         const request = directRequestOwners.get(event.threadId);
         const messageId = request?.messageId;
         if (messageId && !request?.stopped && request?.origin?.kind === "user") {

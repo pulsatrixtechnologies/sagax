@@ -22,6 +22,8 @@ export type TeamFeedback = {
 
 export type TeamMapEntry = {
   key: string;
+  /** Displayed team label (#2045 / #2083). Sidebar slots and sub-teams use this. */
+  name: string;
   chiefs: Bot[];
   members: Bot[];
   /** Sub-team level (#2045), 0 or absent at the top. */

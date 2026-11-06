@@ -100,3 +100,27 @@ describe("Primary Bot per person (#2045)", () => {
     expect(parts.sectionedBots.map((bot) => bot.id)).toEqual(["mine"]);
   });
 });
+
+describe("sub-teams stay aligned when bots carry sectionId (#2045)", () => {
+  it("nests Team map columns by display name when bots carry sectionId", () => {
+    const tree = nest(EMPTY_SECTION_PARENTS, "Support", "Ops");
+    const bots = [
+      { id: "a", name: "Ada", section: "Ops", sectionId: "sec_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" },
+      { id: "b", name: "Bea", section: "Support", sectionId: "sec_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" },
+    ];
+    const names = ["Ops", "Support"];
+    const rows = orderSectionTree(names, tree);
+    const place = new Map(rows.map((row, index) => [row.name, { index, row }]));
+    const sections = buildTeamMapSections(bots, names)
+      .map((section) => {
+        const row = place.get(section.key)?.row ?? place.get(section.name)?.row;
+        return row && row.depth > 0 ? { ...section, depth: row.depth, parent: row.parent } : section;
+      })
+      .sort((a, b) => (place.get(a.name)?.index ?? 99) - (place.get(b.name)?.index ?? 99));
+    expect(sections.map((section) => ({ key: section.key, name: section.name, depth: section.depth ?? 0, parent: section.parent }))).toEqual([
+      { key: "Ops", name: "Ops", depth: 0, parent: undefined },
+      { key: "Support", name: "Support", depth: 1, parent: "Ops" },
+    ]);
+  });
+});
+

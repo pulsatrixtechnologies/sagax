@@ -96,9 +96,12 @@ export function useSidebarRoster({
     ...sectionNames,
     ...sectionedRooms.map((group) => group.section!),
   ])];
-  const teamOrder = (key: string) => key === "" ? -1 : teamNames.includes(key) ? teamNames.indexOf(key) : teamNames.length;
+  // Sidebar slots stay keyed by the displayed team name so layout prefs and
+  // sub-teams keep working when bots also carry a stable sectionId (#2045 / #2083).
+  const teamLabel = (team: { key: string; name: string }) => (team.key ? team.name : "");
+  const teamOrder = (label: string) => label === "" ? -1 : teamNames.includes(label) ? teamNames.indexOf(label) : teamNames.length;
   const teamMap = buildTeamMapSections(teamBots, teamNames, { general: unsectionedRooms.length > 0, viewerId: orgMode ? viewerId : undefined })
-    .sort((a, b) => teamOrder(a.key) - teamOrder(b.key))
+    .sort((a, b) => teamOrder(teamLabel(a)) - teamOrder(teamLabel(b)))
     .filter((team) => {
       if (team.key) return true;
       // Pinned bots already sit in the pin grid, so they are not rows here.
@@ -107,7 +110,7 @@ export function useSidebarRoster({
       return botRows + unsectionedRooms.length > 0;
     });
   const naturalSectionIds = [
-    ...teamMap.map((team) => (team.key ? userSectionId(team.key) : GENERAL_SECTION_ID)),
+    ...teamMap.map((team) => (team.key ? userSectionId(team.name) : GENERAL_SECTION_ID)),
     ...(peopleDms.length > 0 ? [PEOPLE_SECTION_ID] : []),
     ...(botChats.length > 0 ? [BOT_CHATS_SECTION_ID] : []),
   ];
@@ -118,8 +121,8 @@ export function useSidebarRoster({
   // Sub-teams (#2045): each one follows its parent, a level further in, the
   // same tree as the Team map. The team slots keep their place among the
   // automatic sections; only the order of the teams in them changes.
-  const teamById = new Map(teamMap.filter((team) => team.key).map((team) => [userSectionId(team.key), team]));
-  const treeRows = orderSectionTree(flatSectionIds.flatMap((id) => teamById.get(id)?.key ?? []), sectionParents);
+  const teamById = new Map(teamMap.filter((team) => team.key).map((team) => [userSectionId(team.name), team]));
+  const treeRows = orderSectionTree(flatSectionIds.flatMap((id) => teamById.get(id)?.name ?? []), sectionParents);
   for (const row of treeRows) {
     const team = teamById.get(userSectionId(row.name));
     if (team && row.depth > 0) Object.assign(team, { depth: row.depth, parent: row.parent });

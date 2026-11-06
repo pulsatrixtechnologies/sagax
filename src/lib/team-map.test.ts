@@ -22,6 +22,22 @@ describe("team map projection", () => {
     ]);
   });
 
+  it("keeps one column per display name when section ids differ only as stamps (#2045)", () => {
+    const bots = [
+      { id: "a", name: "Ada", section: "Ops", sectionId: "sec_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" },
+      { id: "b", name: "Bea", section: "Ops", sectionId: "sec_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" },
+      { id: "c", name: "Cid", section: "Sales", sectionId: "sec_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" },
+    ];
+    expect(buildTeamMapSections(bots, ["Ops", "Sales"]).map(({ key, name, members }) => ({
+      key,
+      name,
+      ids: members.map((bot) => bot.id),
+    }))).toEqual([
+      { key: "Ops", name: "Ops", ids: ["a", "b"] },
+      { key: "Sales", name: "Sales", ids: ["c"] },
+    ]);
+  });
+
   it("splits same display names when section ids differ (#2045)", () => {
     const aliceOps = { id: "a", name: "Ada", section: "Ops", sectionId: "sec_a" };
     const bobOps = { id: "b", name: "Bea", section: "Ops", sectionId: "sec_b" };

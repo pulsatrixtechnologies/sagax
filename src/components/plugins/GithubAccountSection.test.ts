@@ -37,10 +37,21 @@ const view = (canManageOrg: boolean): GithubCredentialsView => ({
 });
 
 describe("the GitHub plugin's page", () => {
-  it("shows the connection, then one list with the organization's marked, and no token", () => {
+  // #2109: Connect GitHub (link plus code) leads; the tokens wait under Advanced.
+  it("shows the connection first and keeps the other tokens under a closed Advanced", () => {
     setGithubCredentialsForTest(view(false));
     const html = renderToStaticMarkup(createElement(GithubAccountSection, { connection: createElement("div", { "data-test-connection": "" }) }));
-    expect(html).toMatch(/data-accounts-github[\s\S]*data-github-connection[\s\S]*data-test-connection[\s\S]*data-github-credentials/);
+    expect(html).toMatch(/data-accounts-github[\s\S]*data-github-connection[\s\S]*data-test-connection[\s\S]*data-github-credentials-advanced/);
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain("Advanced: tokens for other organizations or hosts");
+    expect(html).not.toContain("More credentials");
+  });
+
+  it("shows one list with the organization's marked, and no token", () => {
+    setGithubCredentialsForTest(view(false));
+    const html = renderToStaticMarkup(createElement(GithubAccountSection, {}));
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).toMatch(/data-accounts-github[\s\S]*data-github-credentials/);
     expect(html).toContain("private marketplaces, gh and git in your bots, and the GitHub plugin");
     expect(html).toContain("More credentials");
     expect(html).toContain('data-github-credential-owner="org"');
@@ -90,7 +101,8 @@ describe("the GitHub plugin's page", () => {
     expect(member).not.toContain("Use a token");
     const withApp = renderToStaticMarkup(createElement(MyGithubConnection, { initial: { ...initial, github: { state: "none" as const, deviceFlow: true } } }));
     expect(withApp).toContain('data-github-connect="device"');
-    expect(withApp).toContain("Use a token");
+    expect(withApp).not.toContain("Use a token");
+    expect(withApp).toContain("Advanced: use a personal access token");
     expect(withApp).not.toMatch(/admin/i);
   });
 
